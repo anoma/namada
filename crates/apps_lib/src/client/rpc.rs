@@ -626,17 +626,6 @@ pub async fn query_protocol_parameters(
         epoch_duration.min_num_of_blocks
     );
 
-    let key = param_storage::get_max_expected_time_per_block_key();
-    let max_block_duration: u64 = query_storage_value(context.client(), &key)
-        .await
-        .expect("Parameter should be defined.");
-    display_line!(
-        context.io(),
-        "{:4}Max. block duration: {}",
-        "",
-        max_block_duration
-    );
-
     let key = param_storage::get_tx_allowlist_storage_key();
     let vp_allowlist: Vec<String> = query_storage_value(context.client(), &key)
         .await

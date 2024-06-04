@@ -22,9 +22,10 @@ mod wasm_allowlist;
 use std::collections::BTreeMap;
 
 use namada_core::address::{Address, InternalAddress};
+use namada_core::arith::checked;
 use namada_core::chain::ProposalBytes;
 pub use namada_core::parameters::*;
-use namada_core::storage::Key;
+use namada_core::storage::{BlockHeight, Key};
 use namada_core::time::DurationSecs;
 use namada_core::token;
 use namada_storage::{ResultExt, StorageRead, StorageWrite};
@@ -67,7 +68,6 @@ where
     let Parameters {
         max_tx_bytes,
         epoch_duration,
-        max_expected_time_per_block,
         max_proposal_bytes,
         max_block_gas,
         vp_allowlist,
@@ -118,14 +118,6 @@ where
         .collect::<Vec<String>>();
     storage.write(&tx_allowlist_key, tx_allowlist)?;
 
-    // write max expected time per block
-    let max_expected_time_per_block_key =
-        storage::get_max_expected_time_per_block_key();
-    storage.write(
-        &max_expected_time_per_block_key,
-        max_expected_time_per_block,
-    )?;
-
     // write implicit vp parameter
     let implicit_vp_key = storage::get_implicit_vp_key();
     // Using `fn write_bytes` here, because implicit_vp code hash doesn't
@@ -166,19 +158,6 @@ where
 {
     let key = storage::get_max_signatures_per_transaction_key();
     storage.read(&key)
-}
-
-/// Update the max_expected_time_per_block parameter in storage. Returns the
-/// parameters and gas cost.
-pub fn update_max_expected_time_per_block_parameter<S>(
-    storage: &mut S,
-    value: &DurationSecs,
-) -> namada_storage::Result<()>
-where
-    S: StorageRead + StorageWrite,
-{
-    let key = storage::get_max_expected_time_per_block_key();
-    storage.write(&key, value)
 }
 
 /// Update the vp allowlist parameter in storage. Returns the parameters and gas
@@ -371,14 +350,6 @@ where
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
 
-    // read max expected block time
-    let max_expected_time_per_block_key =
-        storage::get_max_expected_time_per_block_key();
-    let value = storage.read(&max_expected_time_per_block_key)?;
-    let max_expected_time_per_block: DurationSecs = value
-        .ok_or(ReadError::ParametersMissing)
-        .into_storage_result()?;
-
     let implicit_vp_key = storage::get_implicit_vp_key();
     let implicit_vp_code_hash = storage
         .read(&implicit_vp_key)?
@@ -436,7 +407,6 @@ where
     Ok(Parameters {
         max_tx_bytes,
         epoch_duration,
-        max_expected_time_per_block,
         max_proposal_bytes,
         max_block_gas,
         vp_allowlist,
@@ -482,7 +452,6 @@ where
             min_num_of_blocks: 1,
             min_duration: DurationSecs(3600),
         },
-        max_expected_time_per_block: DurationSecs(3600),
         max_proposal_bytes: Default::default(),
         max_block_gas: 100,
         vp_allowlist: vec![],
@@ -496,4 +465,106 @@ where
         is_native_token_transferable: true,
     };
     init_storage(&params, storage)
+}
+
+/// Return an estimate of the maximum time taken to decide a block,
+/// by sourcing block headers from up to `num_blocks_to_read`.
+pub fn estimate_max_block_time_from_blocks<S>(
+    storage: &S,
+    last_block_height: BlockHeight,
+    num_blocks_to_read: u64,
+) -> namada_storage::Result<Option<DurationSecs>>
+where
+    S: StorageRead,
+{
+    let ending_height = last_block_height.0;
+    let beginning_height = ending_height.saturating_sub(num_blocks_to_read);
+
+    let block_timestamps = {
+        let vec_size = checked!(ending_height - beginning_height + 1)
+            .into_storage_result()?;
+
+        let mut ts = Vec::with_capacity(
+            usize::try_from(vec_size).into_storage_result()?,
+        );
+
+        for height in beginning_height..=ending_height {
+            let Some(block_header) =
+                storage.get_block_header(BlockHeight(height))?
+            else {
+                break;
+            };
+            ts.push(block_header.time);
+        }
+
+        ts
+    };
+
+    Ok(block_timestamps
+        .windows(2)
+        // NB: compute block time
+        .map(|ts| {
+            #[allow(clippy::arithmetic_side_effects)]
+            {
+                ts[1] - ts[0]
+            }
+        })
+        .max())
+}
+
+/// Return an estimate of the maximum time taken to decide a block,
+/// by sourcing block headers from up to `num_blocks_to_read`, and
+/// from chain parameters.
+pub fn estimate_max_block_time_from_blocks_and_params<S>(
+    storage: &S,
+    last_block_height: BlockHeight,
+    num_blocks_to_read: u64,
+) -> namada_storage::Result<DurationSecs>
+where
+    S: StorageRead,
+{
+    let maybe_max_block_time = estimate_max_block_time_from_blocks(
+        storage,
+        last_block_height,
+        num_blocks_to_read,
+    )?;
+
+    // NB: estimate max block time
+    let max_block_time_estimate = {
+        let EpochDuration {
+            min_num_of_blocks,
+            min_duration: DurationSecs(min_duration),
+        } = read_epoch_duration_parameter(storage)?;
+
+        let block_time_via_min_duration = DurationSecs(
+            checked!(min_duration / min_num_of_blocks).into_storage_result()?,
+        );
+        let block_time_via_epochs_per_year = {
+            const ONE_YEAR: DurationSecs = DurationSecs(365 * 24 * 60 * 60);
+
+            let epochs_per_year = read_epochs_per_year_parameter(storage)?;
+            let epoch_duration =
+                checked!(ONE_YEAR.0 / epochs_per_year).into_storage_result()?;
+
+            DurationSecs(
+                checked!(epoch_duration / min_num_of_blocks)
+                    .into_storage_result()?,
+            )
+        };
+
+        std::cmp::max(
+            block_time_via_min_duration,
+            block_time_via_epochs_per_year,
+        )
+    };
+
+    Ok(maybe_max_block_time.map_or(
+        max_block_time_estimate,
+        |max_block_time_over_num_blocks_to_read| {
+            std::cmp::max(
+                max_block_time_over_num_blocks_to_read,
+                max_block_time_estimate,
+            )
+        },
+    ))
 }

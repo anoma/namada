@@ -2717,7 +2717,6 @@ pub mod test_utils {
                 min_num_of_blocks: 2,
                 min_duration: DurationSecs(4),
             },
-            max_expected_time_per_block: DurationSecs(2),
             max_proposal_bytes: ProposalBytes::default(),
             max_block_gas: 10000000,
             vp_allowlist: vec![],

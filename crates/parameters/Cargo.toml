@@ -24,4 +24,5 @@ namada_core = { path = "../core" }
 namada_macros = { path = "../macros" }
 namada_storage = { path = "../storage" }
 
+smooth-operator.workspace = true
 thiserror.workspace = true
