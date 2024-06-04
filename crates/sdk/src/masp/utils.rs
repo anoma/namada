@@ -536,6 +536,7 @@ pub struct TaskManager<U: ShieldedUtils> {
     ctx: Arc<futures_locks::Mutex<ShieldedContext<U>>>,
     // for testing purposes
     callback: Option<fn(&Action)>,
+    saves: u64,
 }
 
 #[derive(Clone)]
@@ -566,6 +567,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> TaskManager<U> {
                 latest_idx: Default::default(),
                 ctx: Arc::new(futures_locks::Mutex::new(ctx)),
                 callback,
+                saves: 0,
             },
         )
     }
@@ -607,7 +609,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> TaskManager<U> {
                     }
                     // updated the spent notes and balances
                     locked.nullify_spent_notes()?;
-                    _ = locked.save().await;
+                    locked.save().await.unwrap();
+                    println!("\n\n\n\n\n\n\n\n Number of saves {}\n\n\n\n\n\n", self.saves);
                 }
                 Ok(true)
             }
@@ -620,7 +623,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> TaskManager<U> {
                 let mut locked = self.ctx.lock().await;
                 scanned.apply_to(&mut locked);
                 // persist the changes
-                _ = locked.save().await;
+                locked.save().await.unwrap();
+                self.saves += 1;
                 Ok(false)
             }
         }

@@ -3,6 +3,7 @@
 use std::cmp::Ordering;
 use std::collections::{btree_map, BTreeMap, BTreeSet};
 use std::convert::TryInto;
+use std::sync::atomic::AtomicU64;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
@@ -1489,7 +1490,7 @@ where
     // scheduled by the scheduler.
     let (task_scheduler, mut task_manager) =
         TaskManager::<U>::new(ctx.clone(), callback);
-
+    let counter = AtomicU64::default();
     // The main loop that performs
     // * fetching and caching MASP txs in sequence
     // * trial decryption of each note to determine if it is owned by a viewing
@@ -1511,6 +1512,7 @@ where
                 // YOU COULD ACCIDENTALLY FREEZE EVERYTHING
                 let txs = progress.scan(fetch_recv);
                 txs.par_bridge().try_for_each(|(indexed_tx, stx)| {
+                    counter.fetch_add(1, core::sync::atomic::Ordering::SeqCst);
                     let decrypted_note_cache = ctx.decrypted_note_cache.clone();
                     let mut new_scanned_data = ScannedData::default();
 
@@ -1574,6 +1576,7 @@ where
             });
             // shut down the scanning thread.
             decryption_handle.join().unwrap()?;
+            println!("\n\n\n\n\nNUMBER OF SCANNED TXS {}\n\n\n\n\n", counter.load(core::sync::atomic::Ordering::SeqCst));
             // if the scanning process errored, return that error here and
             // exit.
             decrypt_res?;

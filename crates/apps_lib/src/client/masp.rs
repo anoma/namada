@@ -44,7 +44,7 @@ pub async fn syncing<
             shielded_utils,
             client,
             &logger,
-            RetryStrategy::Forever,
+            RetryStrategy::Times(1),
             start_query_height,
             last_query_height,
             batch_size,
