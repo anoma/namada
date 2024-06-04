@@ -271,6 +271,20 @@ where
     storage.write(&key, value)
 }
 
+/// Read the epochs per year parameter from store
+pub fn read_epochs_per_year_parameter<S>(
+    storage: &S,
+) -> namada_storage::Result<u64>
+where
+    S: StorageRead,
+{
+    let key = storage::get_epochs_per_year_key();
+    let epochs_per_year = storage.read(&key)?;
+    epochs_per_year
+        .ok_or(ReadError::ParametersMissing)
+        .into_storage_result()
+}
+
 /// Read the the epoch duration parameter from store
 pub fn read_epoch_duration_parameter<S>(
     storage: &S,
