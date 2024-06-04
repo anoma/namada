@@ -2330,6 +2330,9 @@ fn rollback() -> Result<()> {
 /// 4. Assert BTC balance at VK(A) is 13
 /// 5. Unshield 5 BTC from SK(B) to Bertha
 /// 6. Assert BTC balance at VK(B) is 2
+///
+/// NOTE: We need this test to verify the correctness of the proofs generation
+/// and verification process because integration tests use mocks.
 #[test]
 fn masp_txs_and_queries() -> Result<()> {
     // Lengthen epoch to ensure that a transaction can be constructed and
