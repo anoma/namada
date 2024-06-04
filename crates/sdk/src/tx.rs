@@ -2846,15 +2846,22 @@ pub async fn build_transparent_transfer<N: Namada>(
 
     // Evaluate signer and fees
     let (signing_data, fee_amount, updated_balance) = {
+        let source = if args.data.len() == 1 {
+            // If only one transfer take its source as the signer
+            args.data
+                .first()
+                .map(|transfer_data| transfer_data.source.clone())
+        } else {
+            // Otherwise the caller is required to pass the public keys in the
+            // argument
+            None
+        };
+
         let signing_data = signing::aux_signing_data(
             context,
             &args.tx,
-            None,
-            // If signing keys arg is not provided assume a single transfer and
-            // take the source
-            args.data
-                .first()
-                .map(|transfer_data| transfer_data.source.clone()),
+            source.clone(),
+            source,
         )
         .await?;
 
@@ -3031,15 +3038,19 @@ pub async fn build_shielding_transfer<N: Namada>(
     context: &N,
     args: &mut args::TxShieldingTransfer,
 ) -> Result<(Tx, SigningTxData, MaspEpoch)> {
-    let signing_data = signing::aux_signing_data(
-        context,
-        &args.tx,
-        None,
+    let source = if args.data.len() == 1 {
+        // If only one transfer take its source as the signer
         args.data
             .first()
-            .map(|transfer_data| transfer_data.source.clone()),
-    )
-    .await?;
+            .map(|transfer_data| transfer_data.source.clone())
+    } else {
+        // Otherwise the caller is required to pass the public keys in the
+        // argument
+        None
+    };
+    let signing_data =
+        signing::aux_signing_data(context, &args.tx, source.clone(), source)
+            .await?;
 
     // Transparent fee payment
     let (fee_amount, updated_balance) =
