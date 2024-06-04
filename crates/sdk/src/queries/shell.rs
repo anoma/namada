@@ -14,12 +14,17 @@ use namada_core::dec::Dec;
 use namada_core::hash::Hash;
 use namada_core::hints;
 use namada_core::masp::{MaspEpoch, TokenMap};
+use namada_core::parameters::EpochDuration;
 use namada_core::storage::{
     self, BlockHeight, BlockResults, Epoch, Header, KeySeg, PrefixValue,
 };
+use namada_core::time::DurationSecs;
 use namada_core::token::{Denomination, MaspDigitPos};
 use namada_core::uint::Uint;
 use namada_ibc::event::IbcEventType;
+use namada_parameters::{
+    read_epoch_duration_parameter, read_epochs_per_year_parameter,
+};
 use namada_state::{DBIter, LastBlock, StateRead, StorageHasher, DB};
 use namada_storage::{ResultExt, StorageRead};
 use namada_token::storage_key::masp_token_map_key;
@@ -122,6 +127,9 @@ router! {SHELL,
 
     // Get the block header associated with the requested height
     ( "block_header" / [height: BlockHeight] ) -> Option<Header> = block_header,
+
+    // Return an estimate of the maximum time taken to decide a block
+    ( "max_block_time" ) -> DurationSecs = max_block_time,
 }
 
 // Handlers:
@@ -135,6 +143,77 @@ where
     H: 'static + StorageHasher + Sync,
 {
     unimplemented!("Dry running tx requires \"wasm-runtime\" feature.")
+}
+
+/// Return an estimate of the maximum time taken to decide a block
+fn max_block_time<D, H, V, T>(
+    ctx: RequestCtx<'_, D, H, V, T>,
+) -> namada_storage::Result<DurationSecs>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    // NB: get max time over this num of blocks
+    const NUM_BLOCKS_TO_READ: u64 = 5;
+
+    let ending_height = ctx.state.in_mem().get_last_block_height().0;
+    let beginning_height = ending_height.saturating_sub(NUM_BLOCKS_TO_READ);
+
+    let block_timestamps = {
+        let mut ts =
+            Vec::with_capacity((ending_height - beginning_height + 1) as usize);
+
+        for height in beginning_height..=ending_height {
+            let Some(block_header) =
+                StorageRead::get_block_header(ctx.state, BlockHeight(height))?
+            else {
+                break;
+            };
+            ts.push(block_header.time);
+        }
+
+        ts
+    };
+
+    let maybe_max_block_time = block_timestamps
+        .windows(2)
+        // NB: compute block time
+        .map(|ts| ts[1] - ts[0])
+        .max();
+
+    // NB: estimate max block time
+    let max_block_time_estimate = {
+        let EpochDuration {
+            min_num_of_blocks,
+            min_duration: DurationSecs(min_duration),
+        } = read_epoch_duration_parameter(ctx.state)?;
+
+        let block_time_via_min_duration =
+            DurationSecs(min_duration / min_num_of_blocks);
+        let block_time_via_epochs_per_year = {
+            const ONE_YEAR: DurationSecs = DurationSecs(365 * 24 * 60 * 60);
+
+            let epochs_per_year = read_epochs_per_year_parameter(ctx.state)?;
+            let epoch_duration = ONE_YEAR.0 / epochs_per_year;
+
+            DurationSecs(epoch_duration / min_num_of_blocks)
+        };
+
+        std::cmp::max(
+            block_time_via_min_duration,
+            block_time_via_epochs_per_year,
+        )
+    };
+
+    Ok(maybe_max_block_time.map_or(
+        max_block_time_estimate,
+        |max_block_time_over_num_blocks_to_read| {
+            std::cmp::max(
+                max_block_time_over_num_blocks_to_read,
+                max_block_time_estimate,
+            )
+        },
+    ))
 }
 
 /// Get the block header associated with the requested height
