@@ -256,7 +256,7 @@ impl Default for BenchShell {
         );
 
         bench_shell.execute_tx(&signed_tx.to_ref());
-        bench_shell.state.commit_tx();
+        bench_shell.state.commit_tx_batch();
 
         // Initialize governance proposal
         let content_section = Section::ExtraData(Code::new(
@@ -281,7 +281,7 @@ impl Default for BenchShell {
         );
 
         bench_shell.execute_tx(&signed_tx.to_ref());
-        bench_shell.state.commit_tx();
+        bench_shell.state.commit_tx_batch();
         bench_shell.commit_block();
 
         // Advance epoch for pos benches
@@ -627,7 +627,7 @@ impl BenchShell {
         );
         self.last_block_masp_txs
             .push((masp_tx, self.state.write_log().get_keys()));
-        self.state.commit_tx();
+        self.state.commit_tx_batch();
     }
 }
 

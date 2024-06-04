@@ -306,7 +306,8 @@ impl WriteLog {
                     // wasm environment without the need for cooperation from
                     // the wasm code (tx or vp), so there's no need to return
                     // gas in case of an error because execution will terminate
-                    // anyway and this cannot be exploited to keep the vm running
+                    // anyway and this cannot be exploited to keep the vm
+                    // running
                     return Err(Error::UpdateVpOfNewAccount);
                 }
             },
@@ -596,7 +597,9 @@ impl WriteLog {
         self.tx_write_log.events.tree.values().flatten()
     }
 
-    /// Commit the current transaction's write log to the batch when it's accepted by all the triggered validity predicates. Starts a new transaction write log.
+    /// Commit the current transaction's write log to the batch when it's
+    /// accepted by all the triggered validity predicates. Starts a new
+    /// transaction write log.
     pub fn commit_tx_to_batch(&mut self) {
         let tx_write_log = std::mem::take(&mut self.tx_write_log);
         let batched_log = BatchedTxWriteLog {
@@ -607,32 +610,27 @@ impl WriteLog {
         self.batch_write_log.push(batched_log);
     }
 
-    /// Drop the current transaction's write log and IBC events when it's declined by any of the triggered validity predicates.
-    /// Starts a new transaction write log a clears the temp write log.
+    /// Drop the current transaction's write log and IBC events when it's
+    /// declined by any of the triggered validity predicates. Starts a new
+    /// transaction write log and clears the temp write log.
     pub fn drop_tx(&mut self) {
         self.tx_write_log = Default::default();
     }
 
-    /// Commit the entire batch to the block log.
+    /// Commit the current tx and the entire batch to the block log.
     pub fn commit_batch(&mut self) {
+        self.commit_tx_to_batch();
+
         for log in std::mem::take(&mut self.batch_write_log) {
             self.block_write_log.extend(log.write_log);
             self.block_address_gen = log.address_gen;
         }
     }
 
-    /// Drop the entire batch log.
-    //FIXME: should this also drop the tx?
+    /// Drop the current tx and the entire batch log.
     pub fn drop_batch(&mut self) {
+        self.drop_tx();
         self.batch_write_log = Default::default();
-    }
-
-    /// Commit the tx write log to the block write log.
-    //FIXME: shoul this pass through the batch?
-    pub fn commit_tx(&mut self) {
-        let tx_write_log = std::mem::take(&mut self.tx_write_log);
-        self.block_write_log.extend(tx_write_log.write_log);
-        self.block_address_gen = tx_write_log.address_gen;
     }
 
     /// Get the verifiers set whose validity predicates should validate the
@@ -763,7 +761,7 @@ mod tests {
 
         // delete a non-existing key
         let (gas, diff) = write_log.delete(&key).unwrap();
-        assert_eq!(gas, key.len() as u64 * STORAGE_WRITE_GAS_PER_BYTE);
+        assert_eq!(gas, key.len() as u64 * STORAGE_DELETE_GAS_PER_BYTE);
         assert_eq!(diff, 0);
 
         // insert a value
@@ -801,13 +799,13 @@ mod tests {
         let (gas, diff) = write_log.delete(&key).unwrap();
         assert_eq!(
             gas,
-            (key.len() + updated.len()) as u64 * STORAGE_WRITE_GAS_PER_BYTE
+            (key.len() + updated.len()) as u64 * STORAGE_DELETE_GAS_PER_BYTE
         );
         assert_eq!(diff, -(updated.len() as i64));
 
         // delete the deleted key again
         let (gas, diff) = write_log.delete(&key).unwrap();
-        assert_eq!(gas, key.len() as u64 * STORAGE_WRITE_GAS_PER_BYTE);
+        assert_eq!(gas, key.len() as u64 * STORAGE_DELETE_GAS_PER_BYTE);
         assert_eq!(diff, 0);
 
         // read the deleted key
@@ -924,7 +922,7 @@ mod tests {
         // initialize an account
         let vp1 = Hash::sha256("vp1".as_bytes());
         let (addr1, _) = state.write_log.init_account(&address_gen, vp1, &[]);
-        state.write_log.commit_tx();
+        state.write_log.commit_batch();
 
         // write values
         let val1 = "val1".as_bytes().to_vec();
@@ -932,7 +930,7 @@ mod tests {
         state.write_log.write(&key2, val1.clone()).unwrap();
         state.write_log.write(&key3, val1.clone()).unwrap();
         state.write_log.write_temp(&key4, val1.clone()).unwrap();
-        state.write_log.commit_tx();
+        state.write_log.commit_batch();
 
         // these values are not written due to drop_tx
         let val2 = "val2".as_bytes().to_vec();
@@ -945,7 +943,7 @@ mod tests {
         let val3 = "val3".as_bytes().to_vec();
         state.write_log.delete(&key2).unwrap();
         state.write_log.write(&key3, val3.clone()).unwrap();
-        state.write_log.commit_tx();
+        state.write_log.commit_batch();
 
         // commit a block
         state.commit_block().expect("commit failed");
@@ -987,9 +985,11 @@ mod tests {
         assert!(state.write_log.replay_protection.is_empty());
         for tx in ["tx1", "tx2", "tx3"] {
             let hash = Hash::sha256(tx.as_bytes());
-            assert!(state
-                .has_replay_protection_entry(&hash)
-                .expect("read failed"));
+            assert!(
+                state
+                    .has_replay_protection_entry(&hash)
+                    .expect("read failed")
+            );
         }
 
         {
@@ -1016,13 +1016,17 @@ mod tests {
 
         assert!(state.write_log.replay_protection.is_empty());
         for tx in ["tx1", "tx2", "tx3", "tx5", "tx6"] {
-            assert!(state
-                .has_replay_protection_entry(&Hash::sha256(tx.as_bytes()))
-                .expect("read failed"));
+            assert!(
+                state
+                    .has_replay_protection_entry(&Hash::sha256(tx.as_bytes()))
+                    .expect("read failed")
+            );
         }
-        assert!(!state
-            .has_replay_protection_entry(&Hash::sha256("tx4".as_bytes()))
-            .expect("read failed"));
+        assert!(
+            !state
+                .has_replay_protection_entry(&Hash::sha256("tx4".as_bytes()))
+                .expect("read failed")
+        );
         {
             let write_log = state.write_log_mut();
             write_log
@@ -1030,10 +1034,12 @@ mod tests {
                 .unwrap();
 
             // mark as redundant a missing hash and check that it fails
-            assert!(state
-                .write_log
-                .redundant_tx_hash(&Hash::sha256("tx8".as_bytes()))
-                .is_err());
+            assert!(
+                state
+                    .write_log
+                    .redundant_tx_hash(&Hash::sha256("tx8".as_bytes()))
+                    .is_err()
+            );
 
             // Do not assert the state of replay protection because this
             // error will actually trigger a shut down of the node. Also, since

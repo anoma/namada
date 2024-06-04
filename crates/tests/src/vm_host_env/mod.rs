@@ -397,7 +397,7 @@ mod tests {
         let existing_value = vec![2_u8; 1000];
         tx_env.state.write(&existing_key, &existing_value).unwrap();
         // ... and commit it
-        tx_env.state.commit_tx();
+        tx_env.state.commit_tx_batch();
 
         // In a transaction, write override the existing key's value and add
         // another key-value
@@ -483,7 +483,7 @@ mod tests {
             tx_env.state.write(&key, i).unwrap();
         }
         // ... and commit them
-        tx_env.state.commit_tx();
+        tx_env.state.commit_tx_batch();
 
         // In a transaction, write override the existing key's value and add
         // another key-value

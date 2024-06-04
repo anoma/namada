@@ -651,16 +651,17 @@ where
         }
     }
 
-    /// Commit the current transaction's write log to the block. Starts a new
-    /// transaction write log.
-    pub fn commit_tx(&mut self) {
-        self.write_log.commit_tx()
+    /// Commit the current transaction's write log and the entire batch to the
+    /// block. Starts a new transaction and batch write log.
+    pub fn commit_tx_batch(&mut self) {
+        self.write_log.commit_batch()
     }
 
     /// Drop the current transaction's write log when it's declined by any of
-    /// the triggered validity predicates. Starts a new transaction write log.
-    pub fn drop_tx(&mut self) {
-        self.write_log.drop_tx()
+    /// the triggered validity predicates together with the entire batch. Starts
+    /// new transaction and batch write logs.
+    pub fn drop_tx_batch(&mut self) {
+        self.write_log.drop_batch()
     }
 
     /// Mark the provided transaction's hash as redundant to prevent committing

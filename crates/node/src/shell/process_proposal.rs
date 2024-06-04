@@ -150,7 +150,6 @@ where
                 );
                 let error_code = ResultCode::from_u32(result.code).unwrap();
                 if let ResultCode::Ok = error_code {
-                    temp_state.write_log_mut().commit_tx_to_batch();
                     temp_state.write_log_mut().commit_batch();
                 } else {
                     tracing::info!(
@@ -159,7 +158,7 @@ where
                         error_code,
                         result.info
                     );
-                    temp_state.write_log_mut().drop_tx();
+                    temp_state.write_log_mut().drop_batch();
                 }
                 result
             })
@@ -1025,7 +1024,8 @@ mod test_process_proposal {
                 "Error trying to apply a transaction: Error while processing \
                  transaction's fees: Transparent balance of wrapper's signer \
                  was insufficient to pay fee. All the available transparent \
-                 funds have been moved to the block proposer. This shouldn't happen."
+                 funds have been moved to the block proposer. This shouldn't \
+                 happen."
             )
         );
     }
@@ -1091,7 +1091,8 @@ mod test_process_proposal {
                 "Error trying to apply a transaction: Error while processing \
                  transaction's fees: Transparent balance of wrapper's signer \
                  was insufficient to pay fee. All the available transparent \
-                 funds have been moved to the block proposer. This shouldn't happen."
+                 funds have been moved to the block proposer. This shouldn't \
+                 happen."
             )
         );
     }

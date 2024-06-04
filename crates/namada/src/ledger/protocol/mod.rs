@@ -456,12 +456,11 @@ where
         None => check_fees(shell_params, tx, wrapper),
     };
 
-    // Commit tx and batch write log even in case of subsequent errors (if the fee payment
-    // failed instead, than the previous two functions must have already
-    // dropped the write log, leading this function call to be essentially a
-    // no-op)
+    // Commit tx to the batch write log even in case of subsequent errors (if
+    // the fee payment failed instead, than the previous two functions must
+    // have already dropped the write log, leading this function call to be
+    // essentially a no-op)
     shell_params.state.write_log_mut().commit_tx_to_batch();
-    shell_params.state.write_log_mut().commit_batch();
 
     let (batch_results, masp_tx_refs) = payment_result?.map_or_else(
         || (BatchResults::default(), None),
@@ -525,61 +524,62 @@ where
             )
             .map_err(Error::StorageError)?;
 
-            let (post_bal, valid_batched_tx_result) =
-                if let Some(post_bal) = balance.checked_sub(fees) {
-                    fee_token_transfer(
+            let (post_bal, valid_batched_tx_result) = if let Some(post_bal) =
+                balance.checked_sub(fees)
+            {
+                fee_token_transfer(
+                    shell_params.state,
+                    &wrapper.fee.token,
+                    &wrapper.fee_payer(),
+                    block_proposer,
+                    fees,
+                )?;
+
+                (Some(post_bal), None)
+            } else {
+                // See if the first inner transaction of the batch pays the fees
+                // with a masp unshield
+                if let Ok(Some(valid_batched_tx_result)) =
+                    try_masp_fee_payment(shell_params, tx, tx_index)
+                {
+                    // NOTE: Even if the unshielding was succesfull we could
+                    // still fail in the transfer (e.g. cause the unshielded
+                    // amount is not enough to cover the fees). In this case we
+                    // want do drop the changes applied by the masp transaction
+                    // and try to drain the fees from the transparent balance.
+                    // Because of this we must NOT propagate errors from within
+                    // this branch
+                    let balance = crate::token::read_balance(
                         shell_params.state,
                         &wrapper.fee.token,
                         &wrapper.fee_payer(),
-                        block_proposer,
-                        fees,
-                    )?;
+                    );
 
-                    (Some(post_bal), None)
+                    // Ok to unwrap_or_default. In the default case, the only
+                    // way the checked op can return Some is if fees are 0, but
+                    // if that's the case then we would have never reached this
+                    // branch of execution
+                    let post_bal = balance
+                        .unwrap_or_default()
+                        .checked_sub(fees)
+                        .filter(|_| {
+                            fee_token_transfer(
+                                shell_params.state,
+                                &wrapper.fee.token,
+                                &wrapper.fee_payer(),
+                                block_proposer,
+                                fees,
+                            )
+                            .is_ok()
+                        });
+
+                    // Batched tx result must be returned (and considered) only
+                    // if fee payment was successful
+                    (post_bal, post_bal.map(|_| valid_batched_tx_result))
                 } else {
-                    // See if the first inner transaction of the batch pays the fees
-                    // with a masp unshield
-                    if let Ok(Some(valid_batched_tx_result)) =
-                        try_masp_fee_payment(shell_params, tx, tx_index)
-                    {
-                        // NOTE: Even if the unshielding was succesfull we could
-                        // still fail in the transfer (e.g. cause the unshielded
-                        // amount is not enough to cover the fees). In this case we
-                        // want do drop the changes applied by the masp transaction
-                        // and try to drain the fees from the transparent balance.
-                        // Because of this we must NOT propagate errors from within
-                        // this branch
-                        let balance = crate::token::read_balance(
-                            shell_params.state,
-                            &wrapper.fee.token,
-                            &wrapper.fee_payer(),
-                        );
-
-                        // Ok to unwrap_or_default. In the default case, the only
-                        // way the checked op can return Some is if fees are 0, but
-                        // if that's the case then we would have never reached this
-                        // branch of execution
-                        let post_bal = balance
-                            .unwrap_or_default()
-                            .checked_sub(fees)
-                            .filter(|_| {
-                                fee_token_transfer(
-                                    shell_params.state,
-                                    &wrapper.fee.token,
-                                    &wrapper.fee_payer(),
-                                    block_proposer,
-                                    fees,
-                                )
-                                .is_ok()
-                            });
-
-                        // Batched tx result must be returned (and considered) only
-                        // if fee payment was successful
-                        (post_bal, post_bal.map(|_| valid_batched_tx_result))
-                    } else {
-                        (None, None)
-                    }
-                };
+                    (None, None)
+                }
+            };
 
             if post_bal.is_none() {
                 // Balance was insufficient for fee payment, move all the
@@ -654,7 +654,7 @@ where
                 "Transfer of tx fee cannot be applied to due to fee overflow. \
                  This shouldn't happen."
             );
-            shell_params.state.write_log_mut().drop_tx();
+            shell_params.state.write_log_mut().drop_batch();
 
             Err(Error::FeeError(format!("{}", e)))
         }
@@ -704,7 +704,10 @@ where
         // NOTE: A clean tx write log must be provided to this call
         // for a correct vp validation. Block and batch write logs, instead,
         // should contain any prior changes (if any). This is to simulate
-        // the fee-paying tx (to prevent the already written keys from being passed/triggering VPs) but we cannot commit the tx write log yet cause the tx could still be invalid. So we use the batch write log to dump the current modifications.
+        // the fee-paying tx (to prevent the already written keys from being
+        // passed/triggering VPs) but we cannot commit the tx write log yet
+        // cause the tx could still be invalid. So we use the batch write log to
+        // dump the current modifications.
         state.write_log_mut().commit_tx_to_batch();
         match apply_wasm_tx(
             tx.batch_ref_first_tx()
@@ -720,10 +723,10 @@ where
             Ok(result) => {
                 // NOTE: do not commit yet cause this could be exploited to get
                 // free masp operations. We can commit only after the entire fee
-                // payment has been deemed valid. Also, do not commit to batch cause
-                // we might need to discard the effects of this valid unshield
-                // (e.g. if it unshield an amount which is not enough to pay the
-                // fees)
+                // payment has been deemed valid. Also, do not commit to batch
+                // cause we might need to discard the effects of
+                // this valid unshield (e.g. if it unshield an
+                // amount which is not enough to pay the fees)
                 if !result.is_accepted() {
                     state.write_log_mut().drop_tx();
                     tracing::error!(
@@ -1570,7 +1573,7 @@ mod tests {
 
         // commit storage changes. this will act as the
         // initial state of the chain
-        state.commit_tx();
+        state.commit_tx_batch();
         state.commit_block().unwrap();
 
         // "execute" a dummy tx, by manually performing its state changes

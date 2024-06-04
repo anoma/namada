@@ -77,7 +77,7 @@ mod dry_run_tx {
                 )
                 .into_storage_result()?;
 
-                temp_state.write_log_mut().commit_tx();
+                temp_state.write_log_mut().commit_tx_to_batch();
                 let available_gas = tx_gas_meter.borrow().get_available_gas();
                 (tx_result, TxGasMeter::new_from_sub_limit(available_gas))
             }
@@ -274,8 +274,8 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_shell_queries_router_with_client(
-    ) -> namada_state::StorageResult<()> {
+    async fn test_shell_queries_router_with_client()
+    -> namada_state::StorageResult<()> {
         // Initialize the `TestClient`
         let mut client = TestClient::new(RPC);
         // store the wasm code
@@ -309,15 +309,17 @@ mod test {
             .dry_run_tx(&client, Some(tx_bytes), None, false)
             .await
             .unwrap();
-        assert!(result
-            .data
-            .batch_results
-            .0
-            .get(&cmt.get_hash())
-            .unwrap()
-            .as_ref()
-            .unwrap()
-            .is_accepted());
+        assert!(
+            result
+                .data
+                .batch_results
+                .0
+                .get(&cmt.get_hash())
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .is_accepted()
+        );
 
         // Request storage value for a balance key ...
         let token_addr = address::testing::established_address_1();
@@ -352,7 +354,7 @@ mod test {
         let balance = token::Amount::native_whole(1000);
         StorageWrite::write(&mut client.state, &balance_key, balance)?;
         // It has to be committed to be visible in a query
-        client.state.commit_tx();
+        client.state.commit_tx_batch();
         client.state.commit_block().unwrap();
         // ... there should be the same value now
         let read_balance = RPC
