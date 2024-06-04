@@ -15,7 +15,7 @@ use namada_core::hash::Hash;
 use namada_core::hints;
 use namada_core::masp::{MaspEpoch, TokenMap};
 use namada_core::storage::{
-    self, BlockHeight, BlockResults, Epoch, KeySeg, PrefixValue,
+    self, BlockHeight, BlockResults, Epoch, Header, KeySeg, PrefixValue,
 };
 use namada_core::token::{Denomination, MaspDigitPos};
 use namada_core::uint::Uint;
@@ -119,6 +119,9 @@ router! {SHELL,
 
     // IBC packet event
     ( "ibc_packet" / [event_type: IbcEventType] / [source_port: PortId] / [source_channel: ChannelId] / [destination_port: PortId] / [destination_channel: ChannelId] / [sequence: Sequence]) -> Option<Event> = ibc_packet,
+
+    // Get the block header associated with the requested height
+    ( "block_header" / [height: BlockHeight] ) -> Option<Header> = block_header,
 }
 
 // Handlers:
@@ -132,6 +135,18 @@ where
     H: 'static + StorageHasher + Sync,
 {
     unimplemented!("Dry running tx requires \"wasm-runtime\" feature.")
+}
+
+/// Get the block header associated with the requested height
+fn block_header<D, H, V, T>(
+    ctx: RequestCtx<'_, D, H, V, T>,
+    height: BlockHeight,
+) -> namada_storage::Result<Option<Header>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    StorageRead::get_block_header(ctx.state, height)
 }
 
 /// Query to read block results from storage
