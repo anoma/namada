@@ -2,7 +2,7 @@
 
 use namada_controller::PDController;
 use namada_core::address::{Address, MASP};
-use namada_core::arith::checked;
+use namada_core::arith::{checked, CheckedAdd};
 #[cfg(any(feature = "multicore", test))]
 use namada_core::borsh::BorshSerializeExt;
 use namada_core::dec::Dec;
@@ -232,7 +232,6 @@ where
     Ok(())
 }
 
-#[allow(clippy::arithmetic_side_effects)]
 #[cfg(any(feature = "multicore", test))]
 /// Update the MASP's allowed conversions
 pub fn update_allowed_conversions<S>(
@@ -253,7 +252,7 @@ where
     use namada_core::masp::{encode_asset_type, MaspEpoch};
     use namada_parameters as parameters;
     use namada_storage::conversion_state::ConversionLeaf;
-    use namada_storage::{Error, ResultExt};
+    use namada_storage::{Error, OptionExt, ResultExt};
     use namada_trans_token::storage_key::balance_key;
     use namada_trans_token::{MaspDigitPos, NATIVE_MAX_DECIMAL_PLACES};
     use rayon::iter::{
@@ -345,7 +344,7 @@ where
     let masp_epochs_per_year =
         checked!(epochs_per_year / masp_epoch_multiplier)?;
     for token in &masp_reward_keys {
-        let (reward, denom) =
+        let ((reward, precision), denom) =
             calculate_masp_rewards(storage, token, masp_epochs_per_year)?;
         masp_reward_denoms.insert(token.clone(), denom);
         // Dispense a transparent reward in parallel to the shielded rewards
@@ -379,15 +378,17 @@ where
                 // The amount that will be given of the new native token for
                 // every amount of the native token given in the
                 // previous epoch
-                let new_normed_inflation = Uint::from(normed_inflation)
-                    .checked_add(
-                        (Uint::from(normed_inflation) * Uint::from(reward.0))
-                            / reward.1,
-                    )
-                    .and_then(|x| x.try_into().ok())
-                    .unwrap_or_else(|| {
+                let inflation_uint = Uint::from(normed_inflation);
+                let reward = Uint::from(reward);
+                let precision = Uint::from(precision);
+                let new_normed_inflation = checked!(
+                    inflation_uint + (inflation_uint * reward) / precision
+                )?;
+                let new_normed_inflation = u128::try_from(new_normed_inflation)
+                    .unwrap_or_else(|_| {
                         tracing::warn!(
-                            "MASP reward for {} assumed to be 0 because the \
+                            "MASP inflation for the native token {} is kept \
+                             the same as in the last epoch because the \
                              computed value is too large. Please check the \
                              inflation parameters.",
                             token
@@ -398,18 +399,21 @@ where
                 // conversions are added together, the
                 // intermediate native tokens cancel/
                 // telescope out
+                let cur_conv = MaspAmount::from_pair(
+                    old_asset,
+                    i128::try_from(normed_inflation)
+                        .ok()
+                        .and_then(i128::checked_neg)
+                        .ok_or_err_msg("Current inflation overflow")?,
+                );
+                let new_conv = MaspAmount::from_pair(
+                    new_asset,
+                    i128::try_from(new_normed_inflation)
+                        .into_storage_result()?,
+                );
                 current_convs.insert(
                     (token.clone(), denom, digit),
-                    (MaspAmount::from_pair(
-                        old_asset,
-                        -i128::try_from(normed_inflation)
-                            .into_storage_result()?,
-                    ) + MaspAmount::from_pair(
-                        new_asset,
-                        i128::try_from(new_normed_inflation)
-                            .into_storage_result()?,
-                    ))
-                    .into(),
+                    checked!(cur_conv + &new_conv)?.into(),
                 );
                 // Operations that happen exactly once for each token
                 if digit == MaspDigitPos::Three {
@@ -448,33 +452,39 @@ where
                 // Express the inflation reward in real terms, that is, with
                 // respect to the native asset in the zeroth
                 // epoch
-                let real_reward = ((Uint::from(reward.0)
-                    * Uint::from(ref_inflation))
-                    / normed_inflation)
-                    .try_into()
-                    .unwrap_or_else(|_| {
-                        tracing::warn!(
-                            "MASP reward for {} assumed to be 0 because the \
-                             computed value is too large. Please check the \
-                             inflation parameters.",
-                            token
-                        );
-                        0u128
-                    });
+                let reward_uint = Uint::from(reward);
+                let ref_inflation_uint = Uint::from(ref_inflation);
+                let inflation_uint = Uint::from(normed_inflation);
+                let real_reward = checked!(
+                    (reward_uint * ref_inflation_uint) / inflation_uint
+                )?
+                .try_into()
+                .unwrap_or_else(|_| {
+                    tracing::warn!(
+                        "MASP reward for {} assumed to be 0 because the \
+                         computed value is too large. Please check the \
+                         inflation parameters.",
+                        token
+                    );
+                    0u128
+                });
                 // The conversion is computed such that if consecutive
                 // conversions are added together, the
                 // intermediate tokens cancel/ telescope out
-                let reward_i128 =
-                    i128::try_from(reward.1).into_storage_result()?;
+                let precision_i128 =
+                    i128::try_from(precision).into_storage_result()?;
+                let real_reward_i128 =
+                    i128::try_from(real_reward).into_storage_result()?;
                 current_convs.insert(
                     (token.clone(), denom, digit),
-                    (MaspAmount::from_pair(old_asset, -reward_i128)
-                        + MaspAmount::from_pair(new_asset, reward_i128)
-                        + MaspAmount::from_pair(
-                            reward_assets[digit as usize],
-                            i128::try_from(real_reward)
-                                .into_storage_result()?,
-                        ))
+                    checked!(
+                        MaspAmount::from_pair(old_asset, -precision_i128)
+                            + &MaspAmount::from_pair(new_asset, precision_i128)
+                            + &MaspAmount::from_pair(
+                                reward_assets[digit as usize],
+                                real_reward_i128,
+                            )
+                    )?
                     .into(),
                 );
                 // Operations that happen exactly once for each token
@@ -484,7 +494,7 @@ where
                     total_reward = total_reward
                         .checked_add(
                             addr_bal
-                                .u128_eucl_div_rem(reward)
+                                .u128_eucl_div_rem((reward, precision))
                                 .ok_or_else(|| {
                                     Error::new_const(
                                         "Total reward calculation overflow",
@@ -523,9 +533,13 @@ where
         .enumerate()
         .collect();
     // ceil(assets.len() / num_threads)
+
+    #[allow(clippy::arithmetic_side_effects)]
     let notes_per_thread_max = (assets.len() + num_threads - 1) / num_threads;
     // floor(assets.len() / num_threads)
+    #[allow(clippy::arithmetic_side_effects)]
     let notes_per_thread_min = assets.len() / num_threads;
+
     // Now on each core, add the latest conversion to each conversion
     let conv_notes: Vec<Node> = assets
         .into_par_iter()
@@ -536,7 +550,10 @@ where
             let cur_conv_key = (leaf.token.clone(), leaf.denom, leaf.digit_pos);
             if let Some(current_conv) = current_convs.get(&cur_conv_key) {
                 // Use transitivity to update conversion
-                leaf.conversion += current_conv.clone();
+                #[allow(clippy::arithmetic_side_effects)]
+                {
+                    leaf.conversion += current_conv.clone();
+                }
             }
             // Update conversion position to leaf we are about to create
             leaf.leaf_pos = idx;
@@ -558,7 +575,9 @@ where
     // across multiple cores
     // Merkle trees must have exactly 2^n leaves to be mergeable
     let mut notes_per_thread_rounded = 1;
+
     // Cannot overflow
+    #[allow(clippy::arithmetic_side_effects)]
     while notes_per_thread_max > notes_per_thread_rounded * 4 {
         notes_per_thread_rounded *= 2;
     }
