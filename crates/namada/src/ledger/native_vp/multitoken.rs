@@ -74,38 +74,32 @@ where
         let is_allowed_inc = |token: &Address, bal_owner: &Address| -> bool {
             *token != native_token
                 || is_native_token_transferable
-                || actions.iter().all(|action| {
-                    has_bal_inc_protocol_action_or_else(
-                        action,
-                        Owner::Account(bal_owner),
-                        || {
-                            (*bal_owner == POS || *bal_owner == GOV)
-                                && has_bal_dec_protocol_action_or_else(
-                                    action,
-                                    Owner::Protocol,
-                                    || false,
-                                )
-                        },
-                    )
-                })
+                || (!actions.is_empty()
+                    && actions.iter().all(|action| {
+                        has_bal_inc_protocol_action(
+                            action,
+                            if *bal_owner == POS || *bal_owner == GOV {
+                                Owner::Protocol
+                            } else {
+                                Owner::Account(bal_owner)
+                            },
+                        )
+                    }))
         };
         let is_allowed_dec = |token: &Address, bal_owner: &Address| -> bool {
             *token != native_token
                 || is_native_token_transferable
-                || actions.iter().all(|action| {
-                    has_bal_dec_protocol_action_or_else(
-                        action,
-                        Owner::Account(bal_owner),
-                        || {
-                            (*bal_owner == POS || *bal_owner == GOV)
-                                && has_bal_inc_protocol_action_or_else(
-                                    action,
-                                    Owner::Protocol,
-                                    || false,
-                                )
-                        },
-                    )
-                })
+                || (!actions.is_empty()
+                    && actions.iter().all(|action| {
+                        has_bal_dec_protocol_action(
+                            action,
+                            if *bal_owner == POS || *bal_owner == GOV {
+                                Owner::Protocol
+                            } else {
+                                Owner::Account(bal_owner)
+                            },
+                        )
+                    }))
         };
 
         let mut inc_changes: HashMap<Address, Amount> = HashMap::new();
@@ -342,14 +336,7 @@ where
     }
 }
 
-fn has_bal_inc_protocol_action_or_else<F>(
-    action: &Action,
-    owner: Owner<'_>,
-    or_else: F,
-) -> bool
-where
-    F: FnOnce() -> bool,
-{
+fn has_bal_inc_protocol_action(action: &Action, owner: Owner<'_>) -> bool {
     match action {
         Action::Pos(
             PosAction::ClaimRewards(ClaimRewards { validator, source })
@@ -361,18 +348,17 @@ where
             // NB: pos or gov's balance can increase
             Owner::Protocol => true,
         },
-        _ => or_else(),
+        // NB: only pos or gov balances can decrease with these actions
+        Action::Pos(PosAction::Bond(Bond { .. }))
+        | Action::Gov(GovAction::InitProposal { .. }) => {
+            owner == Owner::Protocol
+        }
+        // NB: every other case is invalid
+        _ => false,
     }
 }
 
-fn has_bal_dec_protocol_action_or_else<F>(
-    action: &Action,
-    owner: Owner<'_>,
-    or_else: F,
-) -> bool
-where
-    F: FnOnce() -> bool,
-{
+fn has_bal_dec_protocol_action(action: &Action, owner: Owner<'_>) -> bool {
     match action {
         Action::Pos(PosAction::Bond(Bond {
             validator, source, ..
@@ -390,7 +376,13 @@ where
                 Owner::Protocol => true,
             }
         }
-        _ => or_else(),
+        // NB: only pos or gov balances can decrease with these actions
+        Action::Pos(
+            PosAction::ClaimRewards(ClaimRewards { .. })
+            | PosAction::Withdraw(Withdraw { .. }),
+        ) => owner == Owner::Protocol,
+        // NB: every other case is invalid
+        _ => false,
     }
 }
 
