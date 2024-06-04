@@ -21,7 +21,6 @@ use namada_state::{
     StorageResult, StorageWrite, WlState, DB,
 };
 use namada_token as token;
-use token::DenominatedAmount;
 
 use crate::event::IbcEvent;
 use crate::{

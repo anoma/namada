@@ -48,6 +48,7 @@ use crate::args::InputAmount;
 use crate::control_flow::time;
 use crate::error::{EncodingError, Error, QueryError, TxSubmitError};
 use crate::events::{extend, Event};
+use crate::ibc::is_ibc_denom;
 use crate::internal_macros::echo_error;
 use crate::io::Io;
 use crate::masp::MaspTokenRewardData;
@@ -59,7 +60,6 @@ use crate::tendermint::block::Height;
 use crate::tendermint::merkle::proof::ProofOps;
 use crate::tendermint_rpc::query::Query;
 use crate::{display_line, edisplay_line, error, Namada, Tx};
-use crate::ibc::is_ibc_denom;
 
 /// Identical to [`query_tx_status`], but does not need a [`Namada`]
 /// context.
@@ -1159,17 +1159,23 @@ pub async fn validate_amount<N: Namada>(
         InputAmount::Unvalidated(amt) => amt.canonical(),
         InputAmount::Validated(amt) => return Ok(amt),
     };
-    let token = if let Address::Internal(InternalAddress::IbcToken(ibc_token_hash)) = token  {
-        extract_base_token(context, ibc_token_hash.clone(), None).await.ok_or(
-            Error::from(QueryError::General(format!(
-                "cannot extract base token for {token}"
-            )))
-        )?
-    } else {
-        token.clone()
-    };
+    let token =
+        if let Address::Internal(InternalAddress::IbcToken(ibc_token_hash)) =
+            token
+        {
+            extract_base_token(context, ibc_token_hash.clone(), None)
+                .await
+                .ok_or(Error::from(QueryError::General(format!(
+                    "cannot extract base token for {token}"
+                ))))?
+        } else {
+            token.clone()
+        };
     let denom = match convert_response::<N::Client, Option<Denomination>>(
-        RPC.vp().token().denomination(context.client(), &token).await,
+        RPC.vp()
+            .token()
+            .denomination(context.client(), &token)
+            .await,
     )? {
         Some(denom) => Ok(denom),
         None => {
@@ -1365,16 +1371,22 @@ pub async fn extract_base_token<N: Namada>(
     // First obtain the IBC denomination
     let ibc_denom = query_ibc_denom(
         context,
-        Address::Internal(InternalAddress::IbcToken(ibc_token_hash)).to_string(),
+        Address::Internal(InternalAddress::IbcToken(ibc_token_hash))
+            .to_string(),
         owner,
-    ).await;
+    )
+    .await;
     // Then try to extract the base token
     if let Some((_trace_path, base_token)) = is_ibc_denom(ibc_denom) {
         match Address::decode(&base_token) {
             // If the base token successfully decoded into an Address
             Ok(base_token) => Some(base_token),
             // Otherwise find the Address associated with the base token's alias
-            Err(_) => context.wallet().await.find_address(&base_token).map(|x| x.into_owned()),
+            Err(_) => context
+                .wallet()
+                .await
+                .find_address(&base_token)
+                .map(|x| x.into_owned()),
         }
     } else {
         // Otherwise the base token Address is unknown to this client

@@ -483,21 +483,6 @@ impl EventAttributeEntry<'static> for Info {
     }
 }
 
-/// Extend an [`Event`] with `packet_ack` data, indicating the success or
-/// failure of processing a received packet.
-pub struct PacketAck(pub Vec<u8>);
-
-impl EventAttributeEntry<'static> for PacketAck {
-    type Value = Vec<u8>;
-    type ValueOwned = Self::Value;
-
-    const KEY: &'static str = "packet_ack";
-
-    fn into_value(self) -> Self::Value {
-        self.0
-    }
-}
-
 /// Extend an [`Event`] with `masp_tx_block_index` data, indicating that the tx
 /// at the specified index in the block contains a valid masp transaction.
 pub struct MaspTxBlockIndex(pub TxIndex);
