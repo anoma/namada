@@ -513,6 +513,41 @@ where
 }
 
 /// Return an estimate of the maximum time taken to decide a block,
+/// based on chain parameters.
+pub fn estimate_max_block_time_from_parameters<S>(
+    storage: &S,
+) -> namada_storage::Result<DurationSecs>
+where
+    S: StorageRead,
+{
+    let EpochDuration {
+        min_num_of_blocks,
+        min_duration: DurationSecs(min_duration),
+    } = read_epoch_duration_parameter(storage)?;
+
+    let block_time_via_min_duration = DurationSecs(
+        checked!(min_duration / min_num_of_blocks).into_storage_result()?,
+    );
+    let block_time_via_epochs_per_year = {
+        const ONE_YEAR: DurationSecs = DurationSecs(365 * 24 * 60 * 60);
+
+        let epochs_per_year = read_epochs_per_year_parameter(storage)?;
+        let epoch_duration =
+            checked!(ONE_YEAR.0 / epochs_per_year).into_storage_result()?;
+
+        DurationSecs(
+            checked!(epoch_duration / min_num_of_blocks)
+                .into_storage_result()?,
+        )
+    };
+
+    Ok(std::cmp::max(
+        block_time_via_min_duration,
+        block_time_via_epochs_per_year,
+    ))
+}
+
+/// Return an estimate of the maximum time taken to decide a block,
 /// by sourcing block headers from up to `num_blocks_to_read`, and
 /// from chain parameters.
 pub fn estimate_max_block_time_from_blocks_and_params<S>(
@@ -528,35 +563,8 @@ where
         last_block_height,
         num_blocks_to_read,
     )?;
-
-    // NB: estimate max block time
-    let max_block_time_estimate = {
-        let EpochDuration {
-            min_num_of_blocks,
-            min_duration: DurationSecs(min_duration),
-        } = read_epoch_duration_parameter(storage)?;
-
-        let block_time_via_min_duration = DurationSecs(
-            checked!(min_duration / min_num_of_blocks).into_storage_result()?,
-        );
-        let block_time_via_epochs_per_year = {
-            const ONE_YEAR: DurationSecs = DurationSecs(365 * 24 * 60 * 60);
-
-            let epochs_per_year = read_epochs_per_year_parameter(storage)?;
-            let epoch_duration =
-                checked!(ONE_YEAR.0 / epochs_per_year).into_storage_result()?;
-
-            DurationSecs(
-                checked!(epoch_duration / min_num_of_blocks)
-                    .into_storage_result()?,
-            )
-        };
-
-        std::cmp::max(
-            block_time_via_min_duration,
-            block_time_via_epochs_per_year,
-        )
-    };
+    let max_block_time_estimate =
+        estimate_max_block_time_from_parameters(storage)?;
 
     Ok(maybe_max_block_time.map_or(
         max_block_time_estimate,
