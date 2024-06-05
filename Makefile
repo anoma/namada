@@ -63,6 +63,7 @@ crates += namada_tx_prelude
 crates += namada_vm
 crates += namada_vm_env
 crates += namada_vote_ext
+crates += namada_vp
 crates += namada_vp_env
 crates += namada_vp_prelude
 
