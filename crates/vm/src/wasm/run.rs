@@ -9,11 +9,16 @@ use std::num::NonZeroU32;
 use std::rc::Rc;
 
 use borsh::BorshDeserialize;
+use namada_core::address::Address;
+use namada_core::hash::{Error as TxHashError, Hash};
+use namada_core::internal::HostEnvResult;
+use namada_core::storage::{Key, TxIndex};
 use namada_core::validity_predicate::VpError;
-use namada_gas::{GasMetering, TxGasMeter, WASM_MEMORY_PAGE_GAS};
+use namada_gas::{GasMetering, TxGasMeter, VpGasMeter, WASM_MEMORY_PAGE_GAS};
 use namada_state::{DBIter, State, StateRead, StorageHasher, StorageRead, DB};
 use namada_tx::data::{TxSentinel, TxType};
 use namada_tx::{BatchedTxRef, Commitment, Section, Tx, TxCommitments};
+use namada_vp::vp_host_fns;
 use parity_wasm::elements::Instruction::*;
 use parity_wasm::elements::{self, SignExtInstruction};
 use thiserror::Error;
@@ -22,18 +27,12 @@ use wasmer::{Engine, Module, NativeEngineExt, Store, Target};
 
 use super::memory::{Limit, WasmMemory};
 use super::TxCache;
-use crate::address::Address;
-use crate::hash::{Error as TxHashError, Hash};
-use crate::internal::HostEnvResult;
-use crate::ledger::gas::VpGasMeter;
-use crate::ledger::vp_host_fns;
-use crate::storage::{Key, TxIndex};
-use crate::vm::host_env::{TxVmEnv, VpCtx, VpEvaluator, VpVmEnv};
-use crate::vm::prefix_iter::PrefixIterators;
-use crate::vm::types::VpInput;
-use crate::vm::wasm::host_env::{tx_imports, vp_imports};
-use crate::vm::wasm::{memory, Cache, CacheName, VpCache};
-use crate::vm::{
+use crate::host_env::{TxVmEnv, VpCtx, VpEvaluator, VpVmEnv};
+use crate::prefix_iter::PrefixIterators;
+use crate::types::VpInput;
+use crate::wasm::host_env::{tx_imports, vp_imports};
+use crate::wasm::{memory, Cache, CacheName, VpCache};
+use crate::{
     validate_untrusted_wasm, HostRef, RwAccess, WasmCacheAccess,
     WasmValidationError,
 };
@@ -123,7 +122,7 @@ where
             .get_section(cmt.code_sechash())
             .and_then(|x| Section::code_sec(&x))
         {
-            if crate::parameters::is_tx_allowed(storage, &code_sec.code.hash())
+            if namada_parameters::is_tx_allowed(storage, &code_sec.code.hash())
                 .map_err(|e| Error::StorageError(e.to_string()))?
             {
                 return Ok(());
@@ -945,12 +944,15 @@ mod tests {
     use std::collections::BTreeMap;
     use std::error::Error as StdErrorTrait;
 
-    use borsh_ext::BorshSerializeExt;
+    use assert_matches::assert_matches;
     use itertools::Either;
+    use namada_core::borsh::BorshSerializeExt;
     use namada_sdk::arith::checked;
+    use namada_state::testing::TestState;
     use namada_state::StorageWrite;
     use namada_test_utils::TestWasms;
     use namada_token::DenominatedAmount;
+    use namada_tx::data::eval_vp::EvalVp;
     use namada_tx::data::{Fee, TxType};
     use namada_tx::{Code, Data};
     use test_log::test;
@@ -959,10 +961,8 @@ mod tests {
 
     use super::memory::{TX_MEMORY_INIT_PAGES, VP_MEMORY_INIT_PAGES};
     use super::*;
-    use crate::state::testing::TestState;
-    use crate::tx::data::eval_vp::EvalVp;
-    use crate::vm::host_env::TxRuntimeError;
-    use crate::vm::wasm;
+    use crate::host_env::TxRuntimeError;
+    use crate::wasm;
 
     const TX_GAS_LIMIT: u64 = 10_000_000_000_000;
     const OUT_OF_GAS_LIMIT: u64 = 10_000;
@@ -1682,7 +1682,7 @@ mod tests {
         // tx is ok even if not allowlisted
         {
             let allowlist = vec![format!("{}-bad", read_code_hash)];
-            crate::parameters::update_tx_allowlist_parameter(
+            namada_parameters::update_tx_allowlist_parameter(
                 &mut state, allowlist,
             )
             .unwrap();
@@ -1701,7 +1701,7 @@ mod tests {
         // `Error::DisallowedTx`
         {
             let allowlist = vec![read_code_hash.to_string()];
-            crate::parameters::update_tx_allowlist_parameter(
+            namada_parameters::update_tx_allowlist_parameter(
                 &mut state, allowlist,
             )
             .unwrap();
