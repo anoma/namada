@@ -46,6 +46,9 @@ pub struct Parameters {
     pub implicit_vp_code_hash: Option<Hash>,
     /// Expected number of epochs per year (read only)
     pub epochs_per_year: u64,
+    /// The multiplier for masp epochs (it requires this amount of epochs to
+    /// transition to the next masp epoch)
+    pub masp_epoch_multiplier: u64,
     /// Maximum number of signature per transaction
     pub max_signatures_per_transaction: u8,
     /// Fee unshielding gas limit

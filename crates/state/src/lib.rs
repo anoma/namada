@@ -758,6 +758,7 @@ mod tests {
                 tx_allowlist: vec![],
                 implicit_vp_code_hash: Some(Hash::zero()),
                 epochs_per_year: 100,
+                masp_epoch_multiplier: 2,
                 max_signatures_per_transaction: 15,
                 fee_unshielding_gas_limit: 20_000,
                 minimum_gas_price: BTreeMap::default(),

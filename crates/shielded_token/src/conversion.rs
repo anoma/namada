@@ -9,7 +9,6 @@ use namada_core::dec::Dec;
 #[cfg(any(feature = "multicore", test))]
 use namada_core::hash::Hash;
 use namada_core::uint::Uint;
-use namada_parameters as parameters;
 use namada_storage::{StorageRead, StorageWrite};
 use namada_trans_token::{
     get_effective_total_native_supply, read_balance, read_denom, Amount,
@@ -93,6 +92,7 @@ where
 pub fn calculate_masp_rewards<S>(
     storage: &mut S,
     token: &Address,
+    masp_epochs_per_year: u64,
 ) -> namada_storage::Result<((u128, u128), Denomination)>
 where
     S: StorageWrite + StorageRead,
@@ -109,10 +109,6 @@ where
 
     // total locked amount in the Shielded pool
     let total_tokens_in_masp = read_balance(storage, token, &masp_addr)?;
-
-    let epochs_per_year: u64 = storage
-        .read(&parameters::storage::get_epochs_per_year_key())?
-        .expect("epochs per year should properly decode");
 
     //// Values from the last epoch
     let last_inflation: Amount = storage
@@ -153,7 +149,7 @@ where
         last_inflation.raw_amount(),
         kp_gain_nom,
         kd_gain_nom,
-        epochs_per_year,
+        masp_epochs_per_year,
         target_locked_dec,
         last_locked_dec,
     );
@@ -205,7 +201,7 @@ where
         last_inflation,
         kp_gain_nom,
         kd_gain_nom,
-        epochs_per_year,
+        masp_epochs_per_year,
     );
     tracing::debug!("Token address: {:?}", token);
     tracing::debug!("inflation from the pd controller {:?}", inflation);
@@ -254,8 +250,8 @@ where
     use masp_primitives::merkle_tree::FrozenCommitmentTree;
     use masp_primitives::sapling::Node;
     use masp_primitives::transaction::components::I128Sum as MaspAmount;
-    use namada_core::masp::encode_asset_type;
-    use namada_core::storage::Epoch;
+    use namada_core::masp::{encode_asset_type, MaspEpoch};
+    use namada_parameters as parameters;
     use namada_storage::conversion_state::ConversionLeaf;
     use namada_storage::{Error, ResultExt};
     use namada_trans_token::storage_key::balance_key;
@@ -297,28 +293,28 @@ where
             native_token.clone(),
             NATIVE_MAX_DECIMAL_PLACES.into(),
             MaspDigitPos::Zero,
-            Some(Epoch(0)),
+            Some(MaspEpoch::zero()),
         )
         .into_storage_result()?,
         encode_asset_type(
             native_token.clone(),
             NATIVE_MAX_DECIMAL_PLACES.into(),
             MaspDigitPos::One,
-            Some(Epoch(0)),
+            Some(MaspEpoch::zero()),
         )
         .into_storage_result()?,
         encode_asset_type(
             native_token.clone(),
             NATIVE_MAX_DECIMAL_PLACES.into(),
             MaspDigitPos::Two,
-            Some(Epoch(0)),
+            Some(MaspEpoch::zero()),
         )
         .into_storage_result()?,
         encode_asset_type(
             native_token.clone(),
             NATIVE_MAX_DECIMAL_PLACES.into(),
             MaspDigitPos::Three,
-            Some(Epoch(0)),
+            Some(MaspEpoch::zero()),
         )
         .into_storage_result()?,
     ];
@@ -332,13 +328,25 @@ where
         calculate_masp_rewards_precision(storage, &native_token)?.0;
 
     // Reward all tokens according to above reward rates
-    let epoch = storage.get_block_epoch()?;
-    let prev_epoch = match epoch.prev() {
+    let masp_epoch_multiplier =
+        parameters::read_masp_epoch_multiplier_parameter(storage)?;
+    let masp_epoch = MaspEpoch::try_from_epoch(
+        storage.get_block_epoch()?,
+        masp_epoch_multiplier,
+    )
+    .map_err(namada_storage::Error::new_const)?;
+    let prev_masp_epoch = match masp_epoch.prev() {
         Some(epoch) => epoch,
         None => return Ok(()),
     };
+    let epochs_per_year = storage
+        .read::<u64>(&parameters::storage::get_epochs_per_year_key())?
+        .expect("epochs per year should properly decode");
+    let masp_epochs_per_year =
+        checked!(epochs_per_year / masp_epoch_multiplier)?;
     for token in &masp_reward_keys {
-        let (reward, denom) = calculate_masp_rewards(storage, token)?;
+        let (reward, denom) =
+            calculate_masp_rewards(storage, token, masp_epochs_per_year)?;
         masp_reward_denoms.insert(token.clone(), denom);
         // Dispense a transparent reward in parallel to the shielded rewards
         let addr_bal = read_balance(storage, token, &masp_addr)?;
@@ -357,12 +365,16 @@ where
                 token.clone(),
                 denom,
                 digit,
-                Some(prev_epoch),
+                Some(prev_masp_epoch),
             )
             .into_storage_result()?;
-            let new_asset =
-                encode_asset_type(token.clone(), denom, digit, Some(epoch))
-                    .into_storage_result()?;
+            let new_asset = encode_asset_type(
+                token.clone(),
+                denom,
+                digit,
+                Some(masp_epoch),
+            )
+            .into_storage_result()?;
             if *token == native_token {
                 // The amount that will be given of the new native token for
                 // every amount of the native token given in the
@@ -492,7 +504,7 @@ where
                     token: token.clone(),
                     denom,
                     digit_pos: digit,
-                    epoch: prev_epoch,
+                    epoch: prev_masp_epoch,
                     conversion: MaspAmount::zero().into(),
                     leaf_pos: 0,
                 },
@@ -581,7 +593,7 @@ where
             // Add the decoding entry for the new asset type. An uncommitted
             // node position is used since this is not a conversion.
             let new_asset =
-                encode_asset_type(addr.clone(), denom, digit, Some(epoch))
+                encode_asset_type(addr.clone(), denom, digit, Some(masp_epoch))
                     .into_storage_result()?;
             let tree_size = storage.conversion_state().tree.size();
             storage.conversion_state_mut().assets.insert(
@@ -590,7 +602,7 @@ where
                     token: addr.clone(),
                     denom,
                     digit_pos: digit,
-                    epoch,
+                    epoch: masp_epoch,
                     conversion: MaspAmount::zero().into(),
                     leaf_pos: tree_size,
                 },
