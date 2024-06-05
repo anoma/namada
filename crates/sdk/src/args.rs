@@ -1,6 +1,8 @@
 //! Structures encapsulating SDK arguments
 
+use std::fmt::Display;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::time::Duration as StdDuration;
 
 use namada_core::address::Address;
@@ -1254,6 +1256,77 @@ impl RevealPk {
         context: &impl Namada,
     ) -> crate::error::Result<(namada_tx::Tx, SigningTxData)> {
         tx::build_reveal_pk(context, &self.tx, &self.public_key).await
+    }
+}
+
+/// Generate shell completions
+#[derive(Clone, Debug)]
+pub struct Complete {
+    /// Which shell
+    pub shell: Shell,
+}
+
+/// Supported shell types
+#[allow(missing_docs)]
+#[derive(Clone, Copy, Debug)]
+pub enum Shell {
+    Bash,
+    Elvish,
+    Fish,
+    PowerShell,
+    Zsh,
+    Nushell,
+}
+
+impl Display for Shell {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.possible_value().get_name().fmt(f)
+    }
+}
+
+impl FromStr for Shell {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        use clap::ValueEnum;
+
+        for variant in Self::value_variants() {
+            if variant.possible_value().matches(s, false) {
+                return Ok(*variant);
+            }
+        }
+        Err(format!("invalid variant: {s}"))
+    }
+}
+
+impl Shell {
+    fn possible_value(&self) -> clap::builder::PossibleValue {
+        use clap::builder::PossibleValue;
+        match self {
+            Shell::Bash => PossibleValue::new("bash"),
+            Shell::Elvish => PossibleValue::new("elvish"),
+            Shell::Fish => PossibleValue::new("fish"),
+            Shell::PowerShell => PossibleValue::new("powershell"),
+            Shell::Zsh => PossibleValue::new("zsh"),
+            Shell::Nushell => PossibleValue::new("nushell"),
+        }
+    }
+}
+
+impl clap::ValueEnum for Shell {
+    fn value_variants<'a>() -> &'a [Self] {
+        &[
+            Shell::Bash,
+            Shell::Elvish,
+            Shell::Fish,
+            Shell::PowerShell,
+            Shell::Zsh,
+            Shell::Nushell,
+        ]
+    }
+
+    fn to_possible_value<'a>(&self) -> Option<clap::builder::PossibleValue> {
+        Some(self.possible_value())
     }
 }
 
