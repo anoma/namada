@@ -19,7 +19,6 @@ use namada_core::booleans::BoolResultUnitExt;
 use namada_core::collections::HashSet;
 use namada_core::masp::{encode_asset_type, MaspEpoch};
 use namada_core::storage::Key;
-use namada_gas::GasMetering;
 use namada_governance::storage::is_proposal_accepted;
 use namada_sdk::masp::verify_shielded_tx;
 use namada_state::{ConversionState, OptionExt, ResultExt, StateRead};
@@ -346,6 +345,7 @@ where
         &self,
         tx_data: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
+        verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
         let masp_epoch_multiplier =
             namada_parameters::read_masp_epoch_multiplier_parameter(
@@ -486,32 +486,15 @@ where
                     }
                 }
             } else if let Some(signer) = changed_balances.decoder.get(&signer) {
-                // Otherwise the signer must be decodable so that we can
-                // manually check the signatures
-                let public_keys_index_map =
-                    crate::account::public_keys_index_map(
-                        &self.ctx.pre(),
-                        signer,
-                    )?;
-                let threshold =
-                    crate::account::threshold(&self.ctx.pre(), signer)?
-                        .unwrap_or(1);
-                let max_signatures_per_transaction =
-                    crate::parameters::max_signatures_per_transaction(
-                        &self.ctx.pre(),
-                    )?;
-                let mut gas_meter = self.ctx.gas_meter.borrow_mut();
-                tx_data
-                    .tx
-                    .verify_signatures(
-                        &[tx_data.tx.raw_header_hash()],
-                        public_keys_index_map,
-                        &Some(signer.clone()),
-                        threshold,
-                        max_signatures_per_transaction,
-                        || gas_meter.consume(crate::gas::VERIFY_TX_SIG_GAS),
-                    )
-                    .map_err(native_vp::Error::new)?;
+                // Otherwise the owner's vp must have been triggered
+                if !verifiers.contains(signer) {
+                    let error = native_vp::Error::new_alloc(format!(
+                        "The required vp of address {signer} was not triggered"
+                    ))
+                    .into();
+                    tracing::debug!("{error}");
+                    return Err(error);
+                }
             } else {
                 // We are not able to decode the signer, so just fail
                 let error = native_vp::Error::new_const(
@@ -841,7 +824,7 @@ where
         &self,
         tx_data: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
-        _verifiers: &BTreeSet<Address>,
+        verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
         let masp_keys_changed: Vec<&Key> =
             keys_changed.iter().filter(|key| is_masp_key(key)).collect();
@@ -871,7 +854,7 @@ where
             self.is_valid_parameter_change(tx_data)
         } else if masp_transfer_changes {
             // The MASP transfer keys can only be changed by a valid Transaction
-            self.is_valid_masp_transfer(tx_data, keys_changed)
+            self.is_valid_masp_transfer(tx_data, keys_changed, verifiers)
         } else {
             // Changing no MASP keys at all is also fine
             Ok(())
