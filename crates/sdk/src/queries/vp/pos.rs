@@ -33,7 +33,7 @@ use namada_proof_of_stake::types::{
     Slash, ValidatorMetaData, WeightedValidator,
 };
 use namada_proof_of_stake::{bond_amount, query_reward_tokens};
-use namada_state::{DBIter, StorageHasher, DB};
+use namada_state::{DBIter, KeySeg, StorageHasher, DB};
 use namada_storage::collections::lazy_map;
 use namada_storage::OptionExt;
 
@@ -643,6 +643,13 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
+    // Sanitize the input to make sure it doesn't crash in
+    // `namada_proof_of_stake::storage_key::validator_address_raw_hash_key`
+    if namada_storage::DbKeySeg::parse(tm_addr.clone()).is_err() {
+        return Err(namada_storage::Error::new_const(
+            "Invalid Tendermint address",
+        ));
+    }
     namada_proof_of_stake::storage::find_validator_by_raw_hash(
         ctx.state, tm_addr,
     )
@@ -775,4 +782,44 @@ fn enrich_bonds_and_unbonds(
         unbonds_total_slashed,
         total_withdrawable,
     })
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::queries::testing::TestClient;
+    use crate::queries::{RequestCtx, RequestQuery, Router};
+
+    #[tokio::test]
+    async fn test_validator_by_tm_addr_sanitized_input() {
+        let client = TestClient::new(POS);
+
+        // Test request with an invalid path - the trailing slash ends up being
+        // part of the input where in `fn validator_by_tm_addr` the
+        // parameter will be:
+        // `tm_addr = "52894D2ABA1614EF24CC1DDAE127A7A2386DE3BB/"`
+        let request = RequestQuery {
+            path: "/validator_by_tm_addr/\
+                   52894D2ABA1614EF24CC1DDAE127A7A2386DE3BB/"
+                .to_owned(),
+            data: Default::default(),
+            height: 0_u32.into(),
+            prove: Default::default(),
+        };
+        let ctx = RequestCtx {
+            event_log: &client.event_log,
+            state: &client.state,
+            vp_wasm_cache: (),
+            tx_wasm_cache: (),
+            storage_read_past_height_limit: None,
+        };
+        let result = POS.handle(ctx, &request);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid Tendermint address")
+        )
+    }
 }
