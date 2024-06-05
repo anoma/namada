@@ -20,7 +20,9 @@
 pub mod arith;
 pub mod bytes;
 pub mod hints;
+mod wasm_cache;
 
+pub use wasm_cache::{WasmCacheAccess, WasmCacheRoAccess, WasmCacheRwAccess};
 // TODO(namada#3248): only re-export v037 `tendermint-rs`
 pub use {masp_primitives, tendermint, tendermint_proto};
 /// Borsh binary encoding (re-exported) from official crate with custom ext.
