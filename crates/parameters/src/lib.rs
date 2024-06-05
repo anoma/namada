@@ -27,7 +27,7 @@ use namada_core::chain::ProposalBytes;
 pub use namada_core::parameters::*;
 use namada_core::storage::{BlockHeight, Key};
 use namada_core::time::DurationSecs;
-use namada_core::token;
+use namada_core::{hints, token};
 use namada_storage::{ResultExt, StorageRead, StorageWrite};
 pub use storage::get_max_block_gas;
 use thiserror::Error;
@@ -524,7 +524,15 @@ where
     } = read_epoch_duration_parameter(storage)?;
 
     checked!(min_duration / min_num_of_blocks)
-        .map(DurationSecs)
+        .map(|block_time| {
+            // NB: fallback to one block per epoch
+            // if the time to decide a block is zero
+            DurationSecs(if hints::unlikely(block_time == 0) {
+                min_duration
+            } else {
+                block_time
+            })
+        })
         .into_storage_result()
 }
 
@@ -583,6 +591,25 @@ mod tests {
             estimate_max_block_time_from_parameters(&storage).unwrap();
 
         assert_eq!(max_block_time, DurationSecs(2));
+    }
+
+    #[test]
+    fn test_estimate_max_block_time_from_parameters_short_epoch() {
+        let mut storage = TestStorage::default();
+
+        update_epoch_parameter(
+            &mut storage,
+            &EpochDuration {
+                min_duration: DurationSecs(4),
+                min_num_of_blocks: 5,
+            },
+        )
+        .unwrap();
+
+        let max_block_time =
+            estimate_max_block_time_from_parameters(&storage).unwrap();
+
+        assert_eq!(max_block_time, DurationSecs(4));
     }
 
     #[test]
