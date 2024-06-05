@@ -32,6 +32,7 @@ version = "0.38.1"
 namada_test_utils = { path = "../crates/test_utils" }
 namada_tx_prelude = { path = "../crates/tx_prelude" }
 namada_vp_prelude = { path = "../crates/vp_prelude" }
+namada_proof_of_stake = { path = "../crates/proof_of_stake" }
 rlsf = "0.2.1"
 getrandom = { version = "0.2.15", features = ["custom"] }
 

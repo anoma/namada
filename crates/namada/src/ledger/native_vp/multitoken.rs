@@ -25,6 +25,8 @@ use crate::vm::WasmCacheAccess;
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
+    #[error("Multitoken VP error: governance proposal change is invalid")]
+    InvalidGovernanceChange,
     #[error("Multitoken VP error: Native VP error: {0}")]
     NativeVpError(#[from] native_vp::Error),
 }
@@ -55,6 +57,16 @@ where
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
+        // Is VP triggered by a governance proposal?
+        if is_proposal_accepted(
+            &self.ctx.pre(),
+            tx_data.tx.data(tx_data.cmt).unwrap_or_default().as_ref(),
+        )
+        .unwrap_or_default()
+        {
+            return Ok(());
+        }
+
         let native_token = self.ctx.pre().ctx.get_native_token()?;
         let is_native_token_transferable =
             is_native_token_transferable(&self.ctx.pre())?;
