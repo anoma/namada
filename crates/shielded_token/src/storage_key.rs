@@ -32,6 +32,8 @@ pub const MASP_KD_GAIN_KEY: &str = "derivative_gain";
 pub const MASP_LOCKED_AMOUNT_TARGET_KEY: &str = "locked_amount_target";
 /// The key for the max reward rate for a given asset
 pub const MASP_MAX_REWARD_RATE_KEY: &str = "max_reward_rate";
+/// The key for the total inflation rewards minted by MASP
+pub const MASP_TOTAL_REWARDS: &str = "max_total_rewards";
 
 /// Obtain the nominal proportional key for the given token
 pub fn masp_kp_gain_key(token_addr: &Address) -> storage::Key {
@@ -161,5 +163,12 @@ pub fn masp_token_map_key() -> storage::Key {
 pub fn masp_assets_hash_key() -> storage::Key {
     storage::Key::from(address::MASP.to_db_key())
         .push(&MASP_ASSETS_HASH_KEY.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// The max reward rate key for the given token
+pub fn masp_total_rewards() -> storage::Key {
+    storage::Key::from(address::MASP.to_db_key())
+        .push(&MASP_TOTAL_REWARDS.to_owned())
         .expect("Cannot obtain a storage key")
 }
