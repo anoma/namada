@@ -13,7 +13,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
         ibc::ibc_actions(ctx).execute(&data).into_storage_result()?;
 
     if let Some(masp_section_ref) =
-        transfer.and_then(|transfer| transfer.shielded)
+        transfer.map(|transfer| transfer.shielded_section_hash)
     {
         let shielded = tx_data
             .tx

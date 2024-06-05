@@ -1,25 +1,23 @@
 //! ExecutionContext implementation for IBC
 
-use namada_core::ibc::core::channel::types::channel::ChannelEnd;
-use namada_core::ibc::core::channel::types::commitment::{
+use ibc::core::channel::types::channel::ChannelEnd;
+use ibc::core::channel::types::commitment::{
     AcknowledgementCommitment, PacketCommitment,
 };
-use namada_core::ibc::core::channel::types::packet::Receipt;
-use namada_core::ibc::core::client::context::ClientExecutionContext;
-use namada_core::ibc::core::client::types::Height;
-use namada_core::ibc::core::connection::types::ConnectionEnd;
-use namada_core::ibc::core::handler::types::error::ContextError;
-use namada_core::ibc::core::handler::types::events::IbcEvent;
-use namada_core::ibc::core::host::types::identifiers::{
-    ClientId, ConnectionId, Sequence,
-};
-use namada_core::ibc::core::host::types::path::{
+use ibc::core::channel::types::packet::Receipt;
+use ibc::core::client::context::ClientExecutionContext;
+use ibc::core::client::types::Height;
+use ibc::core::connection::types::ConnectionEnd;
+use ibc::core::handler::types::error::ContextError;
+use ibc::core::handler::types::events::IbcEvent;
+use ibc::core::host::types::identifiers::{ClientId, ConnectionId, Sequence};
+use ibc::core::host::types::path::{
     AckPath, ChannelEndPath, ClientConnectionPath, ClientConsensusStatePath,
     ClientStatePath, CommitmentPath, ConnectionPath, ReceiptPath, SeqAckPath,
     SeqRecvPath, SeqSendPath,
 };
-use namada_core::ibc::core::host::ExecutionContext;
-use namada_core::ibc::primitives::Timestamp;
+use ibc::core::host::ExecutionContext;
+use ibc::primitives::Timestamp;
 
 use super::client::AnyClientState;
 use super::common::IbcCommonContext;

@@ -151,7 +151,15 @@ fn run_ledger_ibc() -> Result<()> {
 
     // Transfer 50000 received over IBC on Chain B
     let token = format!("{port_id_b}/{channel_id_b}/nam");
-    transfer_on_chain(&test_b, BERTHA, ALBERT, token, 50000, BERTHA_KEY)?;
+    transfer_on_chain(
+        &test_b,
+        "transparent-transfer",
+        BERTHA,
+        ALBERT,
+        token,
+        50000,
+        BERTHA_KEY,
+    )?;
     check_balances_after_non_ibc(&port_id_b, &channel_id_b, &test_b)?;
 
     // Transfer 50000 back from the origin-specific account on Chain B to Chain
@@ -234,7 +242,15 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
 
     // Transfer 50000 received over IBC on Chain B
     let token = format!("{port_id_b}/{channel_id_b}/nam");
-    transfer_on_chain(&test_b, BERTHA, ALBERT, token, 50000, BERTHA_KEY)?;
+    transfer_on_chain(
+        &test_b,
+        "transparent-transfer",
+        BERTHA,
+        ALBERT,
+        token,
+        50000,
+        BERTHA_KEY,
+    )?;
     check_balances_after_non_ibc(&port_id_b, &channel_id_b, &test_b)?;
 
     // Transfer 50000 back from the origin-specific account on Chain B to Chain
@@ -263,6 +279,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
     // Send a token to the shielded address on Chain A
     transfer_on_chain(
         &test_a,
+        "shield",
         ALBERT,
         AA_PAYMENT_ADDRESS,
         BTC,
@@ -466,6 +483,7 @@ fn ibc_namada_gaia() -> Result<()> {
     // Shielded transfer on Namada
     transfer_on_chain(
         &test,
+        "transfer",
         A_SPENDING_KEY,
         AB_PAYMENT_ADDRESS,
         &ibc_denom,
@@ -536,6 +554,7 @@ fn pgf_over_ibc_with_hermes() -> Result<()> {
     // Transfer to PGF account
     transfer_on_chain(
         &test_a,
+        "transparent-transfer",
         ALBERT,
         PGF_ADDRESS.to_string(),
         NAM,
@@ -1656,6 +1675,7 @@ fn try_invalid_transfers(
 
 fn transfer_on_chain(
     test: &Test,
+    kind: impl AsRef<str>,
     sender: impl AsRef<str>,
     receiver: impl AsRef<str>,
     token: impl AsRef<str>,
@@ -1665,7 +1685,7 @@ fn transfer_on_chain(
     std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let rpc = get_actor_rpc(test, Who::Validator(0));
     let tx_args = [
-        "transfer",
+        kind.as_ref(),
         "--source",
         sender.as_ref(),
         "--target",

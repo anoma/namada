@@ -1,17 +1,17 @@
 //! AnyClientState and AnyConsensusState for IBC context
 
+use ibc::clients::tendermint::client_state::ClientState as TmClientState;
+use ibc::clients::tendermint::consensus_state::ConsensusState as TmConsensusState;
+use ibc::clients::tendermint::types::{
+    ClientState as TmClientStateType, ConsensusState as TmConsensusStateType,
+};
+use ibc::core::client::types::error::ClientError;
+use ibc::primitives::proto::Any;
 use ibc_derive::{IbcClientState, IbcConsensusState};
 #[cfg(feature = "testing")]
 use ibc_testkit::testapp::ibc::clients::mock::client_state::MockClientState;
 #[cfg(feature = "testing")]
 use ibc_testkit::testapp::ibc::clients::mock::consensus_state::MockConsensusState;
-use namada_core::ibc::clients::tendermint::client_state::ClientState as TmClientState;
-use namada_core::ibc::clients::tendermint::consensus_state::ConsensusState as TmConsensusState;
-use namada_core::ibc::clients::tendermint::types::{
-    ClientState as TmClientStateType, ConsensusState as TmConsensusStateType,
-};
-use namada_core::ibc::core::client::types::error::ClientError;
-use namada_core::ibc::primitives::proto::Any;
 use prost::Message;
 
 use super::common::IbcCommonContext;

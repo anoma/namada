@@ -16,9 +16,9 @@ use std::fmt::Debug;
 use std::rc::Rc;
 use std::time::Duration;
 
+use ibc::core::commitment_types::specs::ProofSpecs;
+use ibc::core::host::types::identifiers::ChainId as IbcChainId;
 use namada_core::hash::Sha256Hasher;
-use namada_core::ibc::core::commitment_types::specs::ProofSpecs;
-use namada_core::ibc::core::host::types::identifiers::ChainId as IbcChainId;
 use namada_state::merkle_tree::ics23_specs::proof_specs;
 
 /// IBC context to handle IBC-related data

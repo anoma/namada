@@ -3,22 +3,21 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use namada_core::address::Address;
-use namada_core::ibc::apps::nft_transfer::context::{
+use ibc::apps::nft_transfer::context::{
     NftTransferExecutionContext, NftTransferValidationContext,
 };
-use namada_core::ibc::apps::nft_transfer::types::error::NftTransferError;
-use namada_core::ibc::apps::nft_transfer::types::{
+use ibc::apps::nft_transfer::types::error::NftTransferError;
+use ibc::apps::nft_transfer::types::{
     ClassData, ClassUri, Memo, PrefixedClassId, TokenData, TokenId, TokenUri,
     PORT_ID_STR,
 };
-use namada_core::ibc::core::handler::types::error::ContextError;
-use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
-use namada_core::ibc::{NftClass, NftMetadata, IBC_ESCROW_ADDRESS};
+use ibc::core::handler::types::error::ContextError;
+use ibc::core::host::types::identifiers::{ChannelId, PortId};
+use namada_core::address::Address;
 use namada_core::token::Amount;
 
 use super::common::IbcCommonContext;
-use crate::storage;
+use crate::{storage, NftClass, NftMetadata, IBC_ESCROW_ADDRESS};
 
 /// NFT transfer context to handle tokens
 #[derive(Debug)]
