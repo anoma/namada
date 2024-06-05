@@ -478,14 +478,12 @@ where
     S: StorageRead,
 {
     let ending_height = last_block_height.0;
-    let beginning_height = ending_height.saturating_sub(num_blocks_to_read);
+    let beginning_height =
+        ending_height.saturating_sub(num_blocks_to_read.saturating_sub(1));
 
     let block_timestamps = {
-        let vec_size = checked!(ending_height - beginning_height + 1)
-            .into_storage_result()?;
-
         let mut ts = Vec::with_capacity(
-            usize::try_from(vec_size).into_storage_result()?,
+            usize::try_from(num_blocks_to_read).into_storage_result()?,
         );
 
         for height in beginning_height..=ending_height {
@@ -525,26 +523,9 @@ where
         min_duration: DurationSecs(min_duration),
     } = read_epoch_duration_parameter(storage)?;
 
-    let block_time_via_min_duration = DurationSecs(
-        checked!(min_duration / min_num_of_blocks).into_storage_result()?,
-    );
-    let block_time_via_epochs_per_year = {
-        const ONE_YEAR: DurationSecs = DurationSecs(365 * 24 * 60 * 60);
-
-        let epochs_per_year = read_epochs_per_year_parameter(storage)?;
-        let epoch_duration =
-            checked!(ONE_YEAR.0 / epochs_per_year).into_storage_result()?;
-
-        DurationSecs(
-            checked!(epoch_duration / min_num_of_blocks)
-                .into_storage_result()?,
-        )
-    };
-
-    Ok(std::cmp::max(
-        block_time_via_min_duration,
-        block_time_via_epochs_per_year,
-    ))
+    checked!(min_duration / min_num_of_blocks)
+        .map(DurationSecs)
+        .into_storage_result()
 }
 
 /// Return an estimate of the maximum time taken to decide a block,
@@ -575,4 +556,91 @@ where
             )
         },
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use namada_core::storage::Header;
+    use namada_core::time::DateTimeUtc;
+    use namada_storage::testing::TestStorage;
+
+    use super::*;
+
+    #[test]
+    fn test_estimate_max_block_time_from_parameters() {
+        let mut storage = TestStorage::default();
+
+        update_epoch_parameter(
+            &mut storage,
+            &EpochDuration {
+                min_duration: DurationSecs(10),
+                min_num_of_blocks: 5,
+            },
+        )
+        .unwrap();
+
+        let max_block_time =
+            estimate_max_block_time_from_parameters(&storage).unwrap();
+
+        assert_eq!(max_block_time, DurationSecs(2));
+    }
+
+    #[test]
+    fn test_estimate_max_block_time_from_blocks() {
+        let mut storage = TestStorage::default();
+
+        for i in 1i64..10 {
+            let height = BlockHeight(u64::try_from(i).unwrap());
+            let timestamp = checked!((10i64 + i) * i).unwrap();
+
+            storage.set_mock_block_header(
+                height,
+                Header {
+                    time: DateTimeUtc::from_unix_timestamp(timestamp).unwrap(),
+                    ..Default::default()
+                },
+            );
+        }
+
+        let max_block_time =
+            estimate_max_block_time_from_blocks(&storage, 9.into(), 5).unwrap();
+
+        assert_eq!(max_block_time, Some(DurationSecs(27)));
+    }
+
+    #[test]
+    fn test_estimate_max_block_time_from_blocks_and_params() {
+        let mut storage = TestStorage::default();
+
+        update_epoch_parameter(
+            &mut storage,
+            &EpochDuration {
+                min_duration: DurationSecs(10),
+                min_num_of_blocks: 5,
+            },
+        )
+        .unwrap();
+
+        for i in 1i64..10 {
+            let height = BlockHeight(u64::try_from(i).unwrap());
+            let timestamp = checked!((10i64 + i) * i).unwrap();
+
+            storage.set_mock_block_header(
+                height,
+                Header {
+                    time: DateTimeUtc::from_unix_timestamp(timestamp).unwrap(),
+                    ..Default::default()
+                },
+            );
+        }
+
+        let max_block_time = estimate_max_block_time_from_blocks_and_params(
+            &storage,
+            9.into(),
+            5,
+        )
+        .unwrap();
+
+        assert_eq!(max_block_time, DurationSecs(27));
+    }
 }
