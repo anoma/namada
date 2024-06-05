@@ -347,6 +347,13 @@ pub async fn query_conversions<C: crate::queries::Client + Sync>(
     convert_response::<C, _>(RPC.shell().read_conversions(client).await)
 }
 
+/// Query the total rewards minted by MASP
+pub async fn query_masp_total_rewards<C: crate::queries::Client + Sync>(
+    client: &C,
+) -> Result<token::Amount, error::Error> {
+    convert_response::<C, _>(RPC.vp().token().masp_total_rewards(client).await)
+}
+
 /// Query to read the tokens that earn masp rewards.
 pub async fn query_masp_reward_tokens<C: crate::queries::Client + Sync>(
     client: &C,
