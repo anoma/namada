@@ -11,14 +11,12 @@ use namada_core::storage::{
     BlockHeight, Epoch, Epochs, Header, Key, TxIndex, TX_INDEX_LENGTH,
 };
 use namada_events::{Event, EventTypeBuilder};
-use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
+use namada_gas as gas;
+use namada_gas::{GasMetering, VpGasMeter, MEMORY_ACCESS_GAS_PER_BYTE};
 use namada_state::write_log::WriteLog;
 use namada_state::{write_log, DBIter, ResultExt, StateRead, DB};
 use namada_tx::{BatchedTxRef, Section};
 use thiserror::Error;
-
-use crate::ledger::gas;
-use crate::ledger::gas::{GasMetering, VpGasMeter};
 
 /// These runtime errors will abort VP execution immediately
 #[allow(missing_docs)]
@@ -31,7 +29,7 @@ pub enum RuntimeError {
     #[error("Storage error: {0}")]
     StorageError(#[from] namada_state::StorageError),
     #[error("Storage data error: {0}")]
-    StorageDataError(crate::storage::Error),
+    StorageDataError(namada_core::storage::Error),
     #[error("Encoding error: {0}")]
     EncodingError(std::io::Error),
     #[error("Numeric conversion error: {0}")]
