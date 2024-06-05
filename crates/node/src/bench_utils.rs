@@ -5,12 +5,12 @@
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
-use std::fs::{File, OpenOptions};
-use std::io::{Read, Write};
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::sync::Once;
+use std::sync::{Arc, Once};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
@@ -90,9 +90,8 @@ use namada_apps_lib::cli;
 use namada_apps_lib::cli::context::FromContext;
 use namada_apps_lib::cli::Context;
 use namada_apps_lib::wallet::{defaults, CliWalletUtils};
-use namada_sdk::masp::{
-    self, ContextSyncStatus, ShieldedContext, ShieldedTransfer, ShieldedUtils,
-};
+use namada_sdk::masp::types::{ContextSyncStatus, ShieldedTransfer};
+use namada_sdk::masp::{self, ShieldedContext, ShieldedUtils};
 pub use namada_sdk::tx::{
     TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
     TX_CHANGE_COMMISSION_WASM as TX_CHANGE_VALIDATOR_COMMISSION_WASM,
@@ -337,7 +336,7 @@ impl BenchShell {
             )));
         }
 
-        let cmt = tx.first_commitments().unwrap().clone();
+        let cmt = *tx.first_commitments().unwrap();
         tx.batch_tx(cmt)
     }
 
@@ -358,7 +357,7 @@ impl BenchShell {
 
         tx.set_data(Data::new(data));
         // NOTE: the Ibc VP doesn't actually check the signature
-        let cmt = tx.first_commitments().unwrap().clone();
+        let cmt = *tx.first_commitments().unwrap();
         tx.batch_tx(cmt)
     }
 
@@ -641,7 +640,7 @@ pub fn generate_foreign_key_tx(signer: &SecretKey) -> BatchedTx {
         None,
     )));
 
-    let cmt = tx.first_commitments().unwrap().clone();
+    let cmt = *tx.first_commitments().unwrap();
     tx.batch_tx(cmt)
 }
 
@@ -651,20 +650,14 @@ pub struct BenchShieldedCtx {
     pub wallet: Wallet<CliWalletUtils>,
 }
 
-#[derive(Debug)]
-struct WrapperTempDir(TempDir);
+#[derive(Debug, Clone)]
+struct WrapperTempDir(Arc<TempDir>);
 
 // Mock the required traits for ShieldedUtils
 
 impl Default for WrapperTempDir {
     fn default() -> Self {
-        Self(TempDir::new().unwrap())
-    }
-}
-
-impl Clone for WrapperTempDir {
-    fn clone(&self) -> Self {
-        Self(TempDir::new().unwrap())
+        Self(Arc::new(TempDir::new().unwrap()))
     }
 }
 
@@ -689,40 +682,30 @@ impl ShieldedUtils for BenchShieldedUtils {
         }
     }
 
-    /// Try to load the last saved shielded context from the given context
-    /// directory. If this fails, then leave the current context unchanged.
-    async fn load<U: ShieldedUtils>(
+    async fn load(
         &self,
-        ctx: &mut ShieldedContext<U>,
+        sync_status: ContextSyncStatus,
         force_confirmed: bool,
-    ) -> std::io::Result<()> {
+    ) -> std::io::Result<ShieldedContext<Self>> {
         // Try to load shielded context from file
         let file_name = if force_confirmed {
             FILE_NAME
         } else {
-            match ctx.sync_status {
+            match sync_status {
                 ContextSyncStatus::Confirmed => FILE_NAME,
                 ContextSyncStatus::Speculative => SPECULATIVE_FILE_NAME,
             }
         };
-        let mut ctx_file = File::open(
+        let bytes = std::fs::read(
             self.context_dir.0.path().to_path_buf().join(file_name),
         )?;
-        let mut bytes = Vec::new();
-        ctx_file.read_to_end(&mut bytes)?;
-        // Fill the supplied context with the deserialized object
-        *ctx = ShieldedContext {
-            utils: ctx.utils.clone(),
+        Ok(ShieldedContext {
+            utils: self.clone(),
             ..ShieldedContext::deserialize(&mut &bytes[..])?
-        };
-        Ok(())
+        })
     }
 
-    /// Save this shielded context into its associated context directory
-    async fn save<U: ShieldedUtils>(
-        &self,
-        ctx: &ShieldedContext<U>,
-    ) -> std::io::Result<()> {
+    async fn save(&self, ctx: &ShieldedContext<Self>) -> std::io::Result<()> {
         let (tmp_file_name, file_name) = match ctx.sync_status {
             ContextSyncStatus::Confirmed => (TMP_FILE_NAME, FILE_NAME),
             ContextSyncStatus::Speculative => {
@@ -1052,18 +1035,27 @@ impl BenchShieldedCtx {
             .wallet
             .find_spending_key(ALBERT_SPENDING_KEY, None)
             .unwrap();
-        self.shielded = async_runtime
-            .block_on(namada_apps_lib::client::masp::syncing(
-                self.shielded,
-                &self.shell,
+        let shielded_utils_ref = &self.shielded.utils;
+        let shell_ref = &self.shell;
+        self.shielded = async_runtime.block_on(async move {
+            namada_apps_lib::client::masp::syncing(
+                shielded_utils_ref,
+                shell_ref,
                 &StdIo,
                 1,
                 None,
                 None,
                 &[spending_key.into()],
                 &[],
-            ))
+            )
+            .await
             .unwrap();
+
+            shielded_utils_ref
+                .load(ContextSyncStatus::Confirmed, true)
+                .await
+                .unwrap()
+        });
         let native_token = self.shell.state.in_mem().native_token.clone();
         let namada = NamadaImpl::native_new(
             self.shell,

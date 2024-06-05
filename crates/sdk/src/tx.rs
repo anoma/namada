@@ -68,8 +68,9 @@ use rand_core::{OsRng, RngCore};
 use crate::control_flow::time;
 use crate::error::{EncodingError, Error, QueryError, Result, TxSubmitError};
 use crate::io::Io;
-use crate::masp::TransferErr::Build;
-use crate::masp::{ShieldedContext, ShieldedTransfer};
+use crate::masp::types::ShieldedTransfer;
+use crate::masp::types::TransferErr::Build;
+use crate::masp::ShieldedContext;
 use crate::queries::Client;
 use crate::rpc::{
     self, get_validator_stake, query_wasm_code_hash, validate_amount,
@@ -2805,7 +2806,7 @@ pub fn build_batch(
         }
 
         let cmt = tx.first_commitments().unwrap().to_owned();
-        if !batched_tx.add_inner_tx(tx, cmt.clone()) {
+        if !batched_tx.add_inner_tx(tx, cmt) {
             return Err(Error::Other(format!(
                 "The transaction batch already contains inner tx: {}",
                 cmt.get_hash()

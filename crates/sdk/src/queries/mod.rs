@@ -95,7 +95,7 @@ pub fn require_no_data(request: &RequestQuery) -> namada_storage::Result<()> {
 
 /// Queries testing helpers
 #[cfg(any(test, feature = "testing"))]
-mod testing {
+pub(crate) mod testing {
     use borsh_ext::BorshSerializeExt;
     use namada_state::testing::TestState;
     use tendermint_rpc::Response;
@@ -423,7 +423,9 @@ pub trait Client {
 
 #[cfg_attr(feature = "async-send", async_trait::async_trait)]
 #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
-impl<C: tendermint_rpc::client::Client + std::marker::Sync> Client for C {
+impl<C: tendermint_rpc::client::Client + std::marker::Sync + Clone> Client
+    for C
+{
     type Error = Error;
 
     async fn request(

@@ -16,7 +16,7 @@ use namada::core::address::{Address, DecodeError};
 use namada::core::key::*;
 use namada::core::masp::{ExtendedSpendingKey, MaspValue, PaymentAddress};
 use namada::io::Io;
-use namada_sdk::masp::find_valid_diversifier;
+use namada_sdk::masp::utils::find_valid_diversifier;
 use namada_sdk::wallet::{
     DecryptionError, DerivationPath, DerivationPathError, FindKeyError, Wallet,
 };

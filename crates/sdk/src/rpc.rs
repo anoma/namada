@@ -50,7 +50,7 @@ use crate::error::{EncodingError, Error, QueryError, TxSubmitError};
 use crate::events::{extend, Event};
 use crate::internal_macros::echo_error;
 use crate::io::Io;
-use crate::masp::MaspTokenRewardData;
+use crate::masp::types::MaspTokenRewardData;
 use crate::queries::vp::pos::{
     EnrichedBondsAndUnbondsDetails, ValidatorStateInfo,
 };

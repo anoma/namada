@@ -1,25 +1,28 @@
 use std::fmt::Debug;
+use std::sync::{Arc, Mutex};
 
-use color_eyre::owo_colors::OwoColorize;
 use masp_primitives::sapling::ViewingKey;
 use masp_primitives::zip32::ExtendedSpendingKey;
 use namada_sdk::error::Error;
 use namada_sdk::io::Io;
-use namada_sdk::masp::{
-    IndexedNoteEntry, ProgressLogger, ProgressType, ShieldedContext,
-    ShieldedUtils,
+use namada_sdk::masp::shielded_ctx::fetch_shielded_ctx;
+use namada_sdk::masp::types::IndexedNoteEntry;
+use namada_sdk::masp::utils::{
+    LedgerMaspClient, PeekableIter, ProgressTracker, ProgressType,
+    RetryStrategy,
 };
+use namada_sdk::masp::ShieldedUtils;
 use namada_sdk::queries::Client;
 use namada_sdk::storage::BlockHeight;
-use namada_sdk::{display, display_line, MaybeSend, MaybeSync};
+use namada_sdk::{display, display_line};
 
 #[allow(clippy::too_many_arguments)]
 pub async fn syncing<
-    U: ShieldedUtils + MaybeSend + MaybeSync,
+    U: ShieldedUtils + Send + Sync,
     C: Client + Sync,
-    IO: Io,
+    IO: Io + Sync + Send,
 >(
-    mut shielded: ShieldedContext<U>,
+    shielded_utils: &U,
     client: &C,
     io: &IO,
     batch_size: u64,
@@ -27,138 +30,313 @@ pub async fn syncing<
     last_query_height: Option<BlockHeight>,
     sks: &[ExtendedSpendingKey],
     fvks: &[ViewingKey],
-) -> Result<ShieldedContext<U>, Error> {
+) -> Result<(), Error> {
     let shutdown_signal = async {
         let (tx, rx) = tokio::sync::oneshot::channel();
         namada_sdk::control_flow::shutdown_send(tx).await;
         rx.await
     };
 
-    display_line!(io, "{}", "==== Shielded sync started ====".on_white());
     display_line!(io, "\n\n");
-    let logger = CliLogger::new(io);
-    let sync = async move {
-        shielded
-            .fetch(
-                client,
-                &logger,
-                start_query_height,
-                last_query_height,
-                batch_size,
-                sks,
-                fvks,
-            )
-            .await
-            .map(|_| shielded)
+    let logger = CliProgressTracker::new(io);
+    let sync_result_fut = async move {
+        fetch_shielded_ctx::<_, _, _, _, LedgerMaspClient<'_, C>>(
+            shielded_utils,
+            client,
+            &logger,
+            RetryStrategy::Times(1),
+            start_query_height,
+            last_query_height,
+            batch_size,
+            sks,
+            fvks,
+        )
+        .await
     };
     tokio::select! {
-        sync = sync => {
-            let shielded = sync?;
-            display!(io, "Syncing finished\n");
-            Ok(shielded)
+        sync_result = sync_result_fut => {
+            sync_result?;
+            display!(io, "\nSyncing finished\n");
+            Ok(())
         },
         sig = shutdown_signal => {
             sig.map_err(|e| Error::Other(e.to_string()))?;
             display!(io, "\n");
-            Ok(ShieldedContext::default())
+            Ok(())
         },
     }
 }
 
-pub struct CliLogging<'io, T, IO: Io> {
-    items: Vec<T>,
+/// The amount of progress a shielded sync sub-process has made
+#[derive(Default, Copy, Clone)]
+struct IterProgress {
     index: usize,
     length: usize,
-    io: &'io IO,
-    r#type: ProgressType,
 }
 
-impl<'io, T: Debug, IO: Io> CliLogging<'io, T, IO> {
-    fn new<I>(items: I, io: &'io IO, r#type: ProgressType) -> Self
-    where
-        I: IntoIterator<Item = T>,
-    {
-        let items: Vec<_> = items.into_iter().collect();
-        Self {
-            length: items.len(),
-            items,
-            index: 0,
-            io,
-            r#type,
+/// A type that can track progress for
+/// shielded sync and draw corresponding
+/// progress bars to hte provided I/O
+struct StdoutDrawer<'io, IO: Io> {
+    io: &'io IO,
+    fetch: IterProgress,
+    scan: IterProgress,
+}
+
+impl<'io, IO: Io> StdoutDrawer<'io, IO> {
+    /// Given the current progress, print progress bars to the provided I/O
+    fn draw(&self) {
+        let (fetch_percent, fetch_completed) = (self.fetch.length > 0)
+            .then(|| {
+                let fetch_percent = std::cmp::min(
+                    100,
+                    (100 * self.fetch.index) / self.fetch.length,
+                );
+                let fetch_completed: String =
+                    vec!['#'; fetch_percent].iter().collect();
+                (fetch_percent, fetch_completed)
+            })
+            .unzip();
+        let fetch_incomplete = fetch_percent
+            .as_ref()
+            .map(|p| vec!['.'; 100 - *p].iter().collect::<String>());
+
+        let (scan_percent, scan_completed) = (self.scan.length > 0)
+            .then(|| {
+                let scan_percent = std::cmp::min(
+                    100,
+                    (100 * self.scan.index) / self.scan.length,
+                );
+                let scan_completed: String =
+                    vec!['#'; scan_percent].iter().collect();
+                (scan_percent, scan_completed)
+            })
+            .unzip();
+        let scan_incomplete = scan_percent
+            .as_ref()
+            .map(|p| vec!['.'; 100 - *p].iter().collect::<String>());
+
+        match (fetch_percent, scan_percent) {
+            (Some(fp), Some(sp)) => {
+                display_line!(self.io, "\x1b[4A\x1b[J");
+                display_line!(
+                    self.io,
+                    "Fetched block {:?} of {:?}",
+                    self.fetch.index,
+                    self.fetch.length
+                );
+                display_line!(
+                    self.io,
+                    "[{}{}] ~~ {} %",
+                    fetch_completed.unwrap(),
+                    fetch_incomplete.unwrap(),
+                    fp
+                );
+                display_line!(
+                    self.io,
+                    "Scanned {} of {}",
+                    self.scan.index,
+                    self.scan.length
+                );
+                display!(
+                    self.io,
+                    "[{}{}] ~~ {} %",
+                    scan_completed.unwrap(),
+                    scan_incomplete.unwrap(),
+                    sp
+                );
+                self.io.flush()
+            }
+            (Some(fp), None) => {
+                display_line!(self.io, "\x1b[4A\x1b[J");
+                display_line!(self.io, "\x1b[4A\x1b[J");
+                display_line!(
+                    self.io,
+                    "Fetched block {:?} of {:?}",
+                    self.fetch.index,
+                    self.fetch.length
+                );
+                display!(
+                    self.io,
+                    "[{}{}] ~~ {} %\n\n",
+                    fetch_completed.unwrap(),
+                    fetch_incomplete.unwrap(),
+                    fp
+                );
+                self.io.flush()
+            }
+            (None, Some(sp)) => {
+                display_line!(self.io, "\x1b[4A\x1b[J");
+                display_line!(self.io, "\x1b[4A\x1b[J");
+                display_line!(
+                    self.io,
+                    "Scanned {} of {}",
+                    self.scan.index,
+                    self.scan.length
+                );
+                display!(
+                    self.io,
+                    "[{}{}] ~~ {} %\n\n",
+                    scan_completed.unwrap(),
+                    scan_incomplete.unwrap(),
+                    sp
+                );
+                self.io.flush()
+            }
+            _ => {}
         }
     }
 }
 
-impl<'io, T: Debug, IO: Io> Iterator for CliLogging<'io, T, IO> {
+impl<'io, IO: Io> Drop for StdoutDrawer<'io, IO> {
+    fn drop(&mut self) {
+        display_line!(self.io, "\n\n");
+    }
+}
+
+/// An iterator that logs to screen the progress it tracks
+pub struct LoggingIterator<'io, T, I, IO>
+where
+    T: Debug,
+    I: Iterator<Item = T>,
+    IO: Io,
+{
+    items: I,
+    drawer: Arc<Mutex<StdoutDrawer<'io, IO>>>,
+    r#type: ProgressType,
+    peeked: Option<T>,
+}
+
+impl<'io, T, I, IO> LoggingIterator<'io, T, I, IO>
+where
+    T: Debug,
+    I: Iterator<Item = T>,
+    IO: Io,
+{
+    fn new(
+        items: I,
+        r#type: ProgressType,
+        drawer: Arc<Mutex<StdoutDrawer<'io, IO>>>,
+    ) -> Self {
+        let (size, _) = items.size_hint();
+        {
+            let mut locked = drawer.lock().unwrap();
+            match r#type {
+                ProgressType::Fetch => {
+                    locked.fetch.length = size;
+                }
+                ProgressType::Scan => {
+                    locked.scan.length = size;
+                }
+            }
+        }
+        Self {
+            items,
+            drawer,
+            r#type,
+            peeked: None,
+        }
+    }
+
+    fn advance_index(&self) {
+        let mut locked = self.drawer.lock().unwrap();
+        match self.r#type {
+            ProgressType::Fetch => {
+                locked.fetch.index += 1;
+            }
+            ProgressType::Scan => {
+                locked.scan.index += 1;
+                locked.scan.length = self.items.size_hint().0;
+            }
+        }
+    }
+
+    fn draw(&self) {
+        let locked = self.drawer.lock().unwrap();
+        locked.draw();
+    }
+}
+
+impl<'io, T, I, IO> PeekableIter<T> for LoggingIterator<'io, T, I, IO>
+where
+    T: Debug,
+    I: Iterator<Item = T>,
+    IO: Io,
+{
+    fn peek(&mut self) -> Option<&T> {
+        if self.peeked.is_none() {
+            self.peeked = self.items.next();
+        }
+        self.peeked.as_ref()
+    }
+
+    fn next(&mut self) -> Option<T> {
+        self.peek();
+        let next_item = self.peeked.take()?;
+        self.advance_index();
+        self.draw();
+        Some(next_item)
+    }
+}
+
+impl<'io, T, I, IO> Iterator for LoggingIterator<'io, T, I, IO>
+where
+    T: Debug,
+    I: Iterator<Item = T>,
+    IO: Io,
+{
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.index == 0 {
-            self.items = {
-                let mut new_items = vec![];
-                std::mem::swap(&mut new_items, &mut self.items);
-                new_items.into_iter().rev().collect()
-            };
-        }
-        if self.items.is_empty() {
-            return None;
-        }
-        self.index += 1;
-        let percent = (100 * self.index) / self.length;
-        let completed: String = vec!['#'; percent].iter().collect();
-        let incomplete: String = vec!['.'; 100 - percent].iter().collect();
-        display_line!(self.io, "\x1b[2A\x1b[J");
-        match self.r#type {
-            ProgressType::Fetch => display_line!(
-                self.io,
-                "Fetched block {:?} of {:?}",
-                self.items.last().unwrap(),
-                self.items[0]
-            ),
-            ProgressType::Scan => display_line!(
-                self.io,
-                "Scanning {} of {}",
-                self.index,
-                self.length
-            ),
-        }
-        display!(self.io, "[{}{}] ~~ {} %", completed, incomplete, percent);
-        self.io.flush();
-        self.items.pop()
+        <Self as PeekableIter<T>>::next(self)
     }
 }
 
-/// A progress logger for the CLI
-#[derive(Debug, Clone)]
-pub struct CliLogger<'io, IO: Io> {
-    io: &'io IO,
+/// A progress tracker for the CLI
+#[derive(Clone)]
+pub struct CliProgressTracker<'io, IO: Io> {
+    drawer: Arc<Mutex<StdoutDrawer<'io, IO>>>,
 }
 
-impl<'io, IO: Io> CliLogger<'io, IO> {
+impl<'io, IO: Io> CliProgressTracker<'io, IO> {
     pub fn new(io: &'io IO) -> Self {
-        Self { io }
+        Self {
+            drawer: Arc::new(Mutex::new(StdoutDrawer {
+                io,
+                fetch: Default::default(),
+                scan: Default::default(),
+            })),
+        }
     }
 }
 
-impl<'io, IO: Io> ProgressLogger<IO> for CliLogger<'io, IO> {
-    type Fetch = CliLogging<'io, u64, IO>;
-    type Scan = CliLogging<'io, IndexedNoteEntry, IO>;
-
+impl<'io, IO: Io + Send + Sync> ProgressTracker<IO>
+    for CliProgressTracker<'io, IO>
+{
     fn io(&self) -> &IO {
-        self.io
+        let io = {
+            let locked = self.drawer.lock().unwrap();
+            locked.io
+        };
+        io
     }
 
-    fn fetch<I>(&self, items: I) -> Self::Fetch
+    fn fetch<I>(&self, items: I) -> impl PeekableIter<u64>
     where
-        I: IntoIterator<Item = u64>,
+        I: Iterator<Item = u64>,
     {
-        CliLogging::new(items, self.io, ProgressType::Fetch)
+        LoggingIterator::new(items, ProgressType::Fetch, self.drawer.clone())
     }
 
-    fn scan<I>(&self, items: I) -> Self::Scan
+    fn scan<I>(&self, items: I) -> impl Iterator<Item = IndexedNoteEntry> + Send
     where
-        I: IntoIterator<Item = IndexedNoteEntry>,
+        I: Iterator<Item = IndexedNoteEntry> + Send,
     {
-        CliLogging::new(items, self.io, ProgressType::Scan)
+        LoggingIterator::new(items, ProgressType::Scan, self.drawer.clone())
+    }
+
+    fn left_to_fetch(&self) -> usize {
+        let locked = self.drawer.lock().unwrap().fetch;
+        locked.length - locked.index
     }
 }
