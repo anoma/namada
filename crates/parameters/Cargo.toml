@@ -26,3 +26,6 @@ namada_storage = { path = "../storage" }
 
 smooth-operator.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+namada_storage = { path = "../storage", features = ["testing"] }
