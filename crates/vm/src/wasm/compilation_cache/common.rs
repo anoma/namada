@@ -14,14 +14,14 @@ use std::time::Duration;
 
 use clru::{CLruCache, CLruCacheConfig, WeightScale};
 use namada_core::collections::HashMap;
+use namada_core::hash::Hash;
+use namada_sdk::control_flow::time::{ExponentialBackoff, SleepStrategy};
 use wasmer::{Module, Store};
 use wasmer_cache::{FileSystemCache, Hash as CacheHash};
 
-use crate::control_flow::time::{ExponentialBackoff, SleepStrategy};
-use crate::core::hash::Hash;
-use crate::vm::wasm::run::untrusted_wasm_store;
-use crate::vm::wasm::{self, memory};
-use crate::vm::{WasmCacheAccess, WasmCacheRoAccess};
+use crate::wasm::run::untrusted_wasm_store;
+use crate::wasm::{self, memory};
+use crate::{WasmCacheAccess, WasmCacheRoAccess};
 
 /// Cache handle. Thread-safe.
 #[derive(Debug, Clone)]
@@ -104,7 +104,7 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
     }
 
     /// Get a WASM module from LRU cache, from a file or compile it and cache
-    /// it. If the cache access is set to [`crate::vm::WasmCacheRwAccess`], it
+    /// it. If the cache access is set to [`crate::WasmCacheRwAccess`], it
     /// updates the position in the LRU cache. Otherwise, the compiled
     /// module will not be be cached, if it's not already.
     pub fn fetch(
@@ -583,7 +583,7 @@ pub mod testing {
     use tempfile::{tempdir, TempDir};
 
     use super::*;
-    use crate::vm::WasmCacheRwAccess;
+    use crate::WasmCacheRwAccess;
 
     /// Cache with a temp dir for testing
     pub fn cache<N: CacheName>() -> (Cache<N, WasmCacheRwAccess>, TempDir) {
@@ -601,13 +601,14 @@ pub mod testing {
 mod test {
     use std::cmp::max;
 
+    use assert_matches::assert_matches;
     use byte_unit::Byte;
     use namada_test_utils::TestWasms;
     use tempfile::{tempdir, TempDir};
     use test_log::test;
 
     use super::*;
-    use crate::vm::WasmCacheRwAccess;
+    use crate::WasmCacheRwAccess;
 
     #[test]
     fn test_fetch_or_compile_valid_wasm() {

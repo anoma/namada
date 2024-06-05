@@ -9,10 +9,9 @@
 
 use std::collections::BTreeSet;
 
+use namada_core::address::Address;
+use namada_core::storage;
 use namada_tx::BatchedTxRef;
-
-use crate::address::Address;
-use crate::storage;
 
 /// Input for validity predicate wasm module call
 pub struct VpInput<'a> {

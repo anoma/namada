@@ -6,13 +6,12 @@ use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::num::TryFromIntError;
 
-use borsh::BorshDeserialize;
-use borsh_ext::BorshSerializeExt;
-use masp_primitives::transaction::Transaction;
-use namada_core::address::ESTABLISHED_ADDRESS_BYTES_LEN;
+use namada_core::address::{self, Address, ESTABLISHED_ADDRESS_BYTES_LEN};
 use namada_core::arith::{self, checked};
-use namada_core::internal::KeyVal;
-use namada_core::storage::TX_INDEX_LENGTH;
+use namada_core::borsh::{BorshDeserialize, BorshSerializeExt};
+use namada_core::hash::Hash;
+use namada_core::internal::{HostEnvResult, KeyVal};
+use namada_core::storage::{BlockHeight, Key, TxIndex, TX_INDEX_LENGTH};
 use namada_events::{Event, EventTypeBuilder};
 use namada_gas::{
     self as gas, GasMetering, TxGasMeter, VpGasMeter,
@@ -24,9 +23,14 @@ use namada_state::{
     StorageHasher, StorageRead, StorageWrite, TxHostEnvState, VpHostEnvState,
     DB,
 };
-use namada_token::storage_key::is_any_token_parameter_key;
+use namada_token::storage_key::{
+    is_any_minted_balance_key, is_any_minter_key, is_any_token_balance_key,
+    is_any_token_parameter_key,
+};
+use namada_token::transaction::Transaction;
 use namada_tx::data::TxSentinel;
 use namada_tx::{BatchedTx, BatchedTxRef, Tx, TxCommitments};
+use namada_vp::vp_host_fns;
 use thiserror::Error;
 
 #[cfg(feature = "wasm-runtime")]
@@ -34,17 +38,9 @@ use super::wasm::TxCache;
 #[cfg(feature = "wasm-runtime")]
 use super::wasm::VpCache;
 use super::WasmCacheAccess;
-use crate::address::{self, Address};
-use crate::hash::Hash;
-use crate::internal::HostEnvResult;
-use crate::ledger::vp_host_fns;
-use crate::storage::{BlockHeight, Key, TxIndex};
-use crate::token::storage_key::{
-    is_any_minted_balance_key, is_any_minter_key, is_any_token_balance_key,
-};
-use crate::vm::memory::VmMemory;
-use crate::vm::prefix_iter::{PrefixIteratorId, PrefixIterators};
-use crate::vm::{HostRef, RoAccess, RoHostRef, RwAccess, RwHostRef};
+use crate::memory::VmMemory;
+use crate::prefix_iter::{PrefixIteratorId, PrefixIterators};
+use crate::{HostRef, RoAccess, RoHostRef, RwAccess, RwHostRef};
 
 /// These runtime errors will abort tx WASM execution immediately
 #[allow(missing_docs)]
@@ -70,7 +66,7 @@ pub enum TxRuntimeError {
     #[error("Storage error: {0}")]
     StorageError(#[from] StorageError),
     #[error("Storage data error: {0}")]
-    StorageDataError(crate::storage::Error),
+    StorageDataError(namada_core::storage::Error),
     #[error("Encoding error: {0}")]
     EncodingError(std::io::Error),
     #[error("Address error: {0}")]
@@ -2097,7 +2093,7 @@ where
     }
 
     // Then check that VP code hash is in the allowlist.
-    if !crate::parameters::is_vp_allowed(&env.ctx.state(), &code_hash)
+    if !namada_parameters::is_vp_allowed(&env.ctx.state(), &code_hash)
         .map_err(TxRuntimeError::StorageError)?
     {
         return Err(TxRuntimeError::DisallowedVp);
@@ -2223,7 +2219,7 @@ where
     let transaction = Transaction::try_from_slice(&serialized_transaction)
         .map_err(TxRuntimeError::EncodingError)?;
 
-    match crate::token::utils::update_note_commitment_tree(
+    match namada_token::utils::update_note_commitment_tree(
         &mut env.state(),
         &transaction,
     ) {
@@ -2386,8 +2382,8 @@ pub mod testing {
     use std::rc::Rc;
 
     use super::*;
-    use crate::vm::memory::testing::NativeMemory;
-    use crate::vm::wasm::memory::WasmMemory;
+    use crate::memory::testing::NativeMemory;
+    use crate::wasm::memory::WasmMemory;
 
     /// Setup a transaction environment
     #[allow(clippy::too_many_arguments)]
@@ -2451,10 +2447,10 @@ pub mod testing {
         S: State,
         CA: WasmCacheAccess,
     {
-        let mut store = crate::vm::wasm::compilation_cache::common::store();
+        let mut store = crate::wasm::compilation_cache::common::store();
 
         let wasm_memory =
-            crate::vm::wasm::memory::prepare_tx_memory(&mut store).unwrap();
+            crate::wasm::memory::prepare_tx_memory(&mut store).unwrap();
 
         let (write_log, in_mem, db) = state.split_borrow();
         let mut env = TxVmEnv::new(
