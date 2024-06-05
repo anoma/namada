@@ -6,7 +6,7 @@ use std::ptr::NonNull;
 use std::rc::{self, Rc};
 use std::str::Utf8Error;
 
-use borsh_ext::BorshSerializeExt;
+use namada_core::borsh::BorshSerializeExt;
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
 use namada_sdk::arith::{self, checked};
 use namada_tx::BatchedTxRef;
@@ -20,8 +20,8 @@ use wasmer_vm::{
     MemoryStyle, TableStyle, VMMemoryDefinition, VMTableDefinition,
 };
 
-use crate::vm::memory::VmMemory;
-use crate::vm::types::VpInput;
+use crate::memory::VmMemory;
+use crate::types::VpInput;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
