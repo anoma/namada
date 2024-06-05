@@ -65,7 +65,9 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
         update_masp_note_commitment_tree(&shielded)
             .wrap_err("Failed to update the MASP commitment tree")?;
         if let Some(masp_section_ref) = masp_section_ref {
-            ctx.push_action(Action::Masp(MaspAction { masp_section_ref }))?;
+            ctx.push_action(Action::Masp(MaspAction::MaspSectionRef(
+                masp_section_ref,
+            )))?;
         } else {
             ctx.push_action(Action::IbcShielding)?;
         }
