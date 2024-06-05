@@ -16,5 +16,9 @@ version.workspace = true
 namada_core = { path = "../core" }
 namada_events = { path = "../events", default-features = false }
 namada_gas = { path = "../gas" }
-namada_storage = { path = "../storage" }
+namada_state = { path = "../state" }
 namada_tx = { path = "../tx" }
+
+smooth-operator.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
