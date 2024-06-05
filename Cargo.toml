@@ -37,6 +37,7 @@ members = [
   "crates/vm",
   "crates/vm_env",
   "crates/vote_ext",
+  "crates/vp",
   "crates/vp_env",
   "crates/vp_prelude",
   "examples",
