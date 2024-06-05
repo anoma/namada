@@ -98,6 +98,12 @@ mod dry_run_tx {
                     &mut ctx.tx_wasm_cache,
                 ),
             );
+            let is_accepted = matches!(&batched_tx_result, Ok(result) if result.is_accepted());
+            if is_accepted {
+                temp_state.write_log_mut().commit_tx_to_batch();
+            } else {
+                temp_state.write_log_mut().drop_tx();
+            }
             tx_result
                 .batch_results
                 .0
