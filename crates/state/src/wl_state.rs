@@ -6,11 +6,11 @@ use namada_core::arith::checked;
 use namada_core::borsh::BorshSerializeExt;
 use namada_core::chain::ChainId;
 use namada_core::masp::MaspEpoch;
+use namada_core::parameters::{EpochDuration, Parameters};
 use namada_core::storage;
 use namada_core::time::DateTimeUtc;
 use namada_events::{EmitEvents, EventToEmit};
 use namada_merkle_tree::NO_DIFF_KEY_PREFIX;
-use namada_parameters::EpochDuration;
 use namada_replay_protection as replay_protection;
 use namada_storage::conversion_state::{ConversionState, WithConversionState};
 use namada_storage::{
@@ -153,10 +153,8 @@ where
         &mut self,
         height: BlockHeight,
         time: DateTimeUtc,
+        parameters: &Parameters,
     ) -> StorageResult<bool> {
-        let parameters = namada_parameters::read(self)
-            .expect("Couldn't read protocol parameters");
-
         match self.in_mem.update_epoch_blocks_delay.as_mut() {
             None => {
                 // Check if the new epoch minimum start height and start time
@@ -207,9 +205,11 @@ where
     }
 
     /// Returns `true` if a new masp epoch has begun
-    pub fn is_masp_new_epoch(&self, is_new_epoch: bool) -> StorageResult<bool> {
-        let masp_epoch_multiplier =
-            namada_parameters::read_masp_epoch_multiplier_parameter(self)?;
+    pub fn is_masp_new_epoch(
+        &self,
+        is_new_epoch: bool,
+        masp_epoch_multiplier: u64,
+    ) -> StorageResult<bool> {
         let masp_new_epoch = is_new_epoch
             && matches!(
                 self.in_mem.block.epoch.checked_rem(masp_epoch_multiplier),

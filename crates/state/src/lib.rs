@@ -19,6 +19,7 @@
 
 mod host_env;
 mod in_memory;
+pub mod prefix_iter;
 mod wl_state;
 pub mod write_log;
 
@@ -34,6 +35,7 @@ use namada_core::arith::{self, checked};
 use namada_core::eth_bridge_pool::is_pending_transfer_key;
 pub use namada_core::hash::Sha256Hasher;
 use namada_core::hash::{Error as HashError, Hash};
+use namada_core::parameters;
 pub use namada_core::storage::{
     BlockHash, BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue,
     Header, Key, KeySeg, TxIndex, BLOCK_HASH_LENGTH, BLOCK_HEIGHT_LENGTH,
@@ -140,12 +142,13 @@ pub trait StateRead: StorageRead + Debug {
 
     /// Get the hash of a validity predicate for the given account address and
     /// the gas cost for reading it.
-    fn validity_predicate(
+    fn validity_predicate<ParamsKey: parameters::Keys>(
         &self,
         addr: &Address,
+        _: &ParamsKey,
     ) -> Result<(Option<Hash>, u64)> {
         let key = if let Address::Implicit(_) = addr {
-            namada_parameters::storage::get_implicit_vp_key()
+            ParamsKey::implicit_vp()
         } else {
             Key::validity_predicate(addr)
         };
@@ -691,9 +694,9 @@ mod tests {
     use merkle_tree::NO_DIFF_KEY_PREFIX;
     use namada_core::address::InternalAddress;
     use namada_core::borsh::{BorshDeserialize, BorshSerializeExt};
+    use namada_core::parameters::{EpochDuration, Parameters};
     use namada_core::storage::DbKeySeg;
     use namada_core::time::{self, DateTimeUtc, Duration};
-    use namada_parameters::{EpochDuration, Parameters};
     use proptest::prelude::*;
     use proptest::test_runner::Config;
     // Use `RUST_LOG=info` (or another tracing level) and `--nocapture` to
@@ -776,7 +779,6 @@ mod tests {
                 minimum_gas_price: BTreeMap::default(),
                 is_native_token_transferable: true,
             };
-            namada_parameters::init_storage(&parameters, &mut state).unwrap();
             // Initialize pred_epochs to the current height
             let height = state.in_mem().block.height;
             state
@@ -789,7 +791,7 @@ mod tests {
             assert_eq!(epoch_before, state.in_mem().block.epoch);
 
             // Try to apply the epoch update
-            state.update_epoch(block_height, block_time).unwrap();
+            state.update_epoch(block_height, block_time, &parameters).unwrap();
 
             // Test for 1.
             if block_height.0 - start_height.0
@@ -806,13 +808,13 @@ mod tests {
 
                 let block_height = block_height + 1;
                 let block_time = block_time + Duration::seconds(1);
-                state.update_epoch(block_height, block_time).unwrap();
+                state.update_epoch(block_height, block_time, &parameters).unwrap();
                 assert_eq!(state.in_mem().block.epoch, epoch_before);
                 assert_eq!(state.in_mem().update_epoch_blocks_delay, Some(1));
 
                 let block_height = block_height + 1;
                 let block_time = block_time + Duration::seconds(1);
-                state.update_epoch(block_height, block_time).unwrap();
+                state.update_epoch(block_height, block_time, &parameters).unwrap();
                 assert_eq!(state.in_mem().block.epoch, epoch_before.next());
                 assert!(state.in_mem().update_epoch_blocks_delay.is_none());
 
@@ -845,7 +847,6 @@ mod tests {
             let min_duration: i64 = parameters.epoch_duration.min_duration.0 as _;
             parameters.epoch_duration.min_duration =
                 Duration::seconds(min_duration + min_duration_delta).into();
-            namada_parameters::update_epoch_parameter(&mut state, &parameters.epoch_duration).unwrap();
 
             // Test for 2.
             let epoch_before = state.in_mem().block.epoch;
@@ -857,31 +858,31 @@ mod tests {
 
             // No update should happen before both epoch duration conditions are
             // satisfied
-            state.update_epoch(height_before_update, time_before_update).unwrap();
+            state.update_epoch(height_before_update, time_before_update, &parameters).unwrap();
             assert_eq!(state.in_mem().block.epoch, epoch_before);
             assert!(state.in_mem().update_epoch_blocks_delay.is_none());
-            state.update_epoch(height_of_update, time_before_update).unwrap();
+            state.update_epoch(height_of_update, time_before_update, &parameters).unwrap();
             assert_eq!(state.in_mem().block.epoch, epoch_before);
             assert!(state.in_mem().update_epoch_blocks_delay.is_none());
-            state.update_epoch(height_before_update, time_of_update).unwrap();
+            state.update_epoch(height_before_update, time_of_update, &parameters).unwrap();
             assert_eq!(state.in_mem().block.epoch, epoch_before);
             assert!(state.in_mem().update_epoch_blocks_delay.is_none());
 
             // Update should be enqueued for 2 blocks in the future starting at or after this height and time
-            state.update_epoch(height_of_update, time_of_update).unwrap();
+            state.update_epoch(height_of_update, time_of_update, &parameters).unwrap();
             assert_eq!(state.in_mem().block.epoch, epoch_before);
             assert_eq!(state.in_mem().update_epoch_blocks_delay, Some(2));
 
             // Increment the block height and time to simulate new blocks now
             let height_of_update = height_of_update + 1;
             let time_of_update = time_of_update + Duration::seconds(1);
-            state.update_epoch(height_of_update, time_of_update).unwrap();
+            state.update_epoch(height_of_update, time_of_update, &parameters).unwrap();
             assert_eq!(state.in_mem().block.epoch, epoch_before);
             assert_eq!(state.in_mem().update_epoch_blocks_delay, Some(1));
 
             let height_of_update = height_of_update + 1;
             let time_of_update = time_of_update + Duration::seconds(1);
-            state.update_epoch(height_of_update, time_of_update).unwrap();
+            state.update_epoch(height_of_update, time_of_update, &parameters).unwrap();
             assert_eq!(state.in_mem().block.epoch, epoch_before.next());
             assert!(state.in_mem().update_epoch_blocks_delay.is_none());
             // The next epoch's minimum duration should change
@@ -893,7 +894,7 @@ mod tests {
             // Increment the block height and time once more to make sure things reset
             let height_of_update = height_of_update + 1;
             let time_of_update = time_of_update + Duration::seconds(1);
-            state.update_epoch(height_of_update, time_of_update).unwrap();
+            state.update_epoch(height_of_update, time_of_update, &parameters).unwrap();
             assert_eq!(state.in_mem().block.epoch, epoch_before.next());
         }
     }
