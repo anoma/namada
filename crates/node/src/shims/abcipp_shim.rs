@@ -8,6 +8,7 @@ use namada::core::hash::Hash;
 use namada::core::key::tm_raw_hash_to_string;
 use namada::core::storage::BlockHeight;
 use namada::proof_of_stake::storage::find_validator_by_raw_hash;
+use namada::state::DB;
 use namada::time::{DateTimeUtc, Utc};
 use namada::tx::data::hash_tx;
 use namada_sdk::migrations::ScheduledMigration;
@@ -26,7 +27,7 @@ use crate::facade::tendermint::v0_37::abci::{
 };
 use crate::facade::tower_abci::BoxError;
 use crate::shell::{EthereumOracleChannels, Shell};
-use crate::storage::SnapshotCreator;
+use crate::storage::DbSnapshot;
 
 /// The shim wraps the shell, which implements ABCI++.
 /// The shim makes a crude translation between the ABCI interface currently used
@@ -210,23 +211,40 @@ impl AbcippShim {
                 ),
                 _ => {}
             }
-
         }
         let TakeSnapshot::Yes(db_path) = take_snapshot else {
             return;
         };
-        // it's important that this block the thread although it will
-        // be incredibly fast.
-        let Ok(snapshot_creator) = SnapshotCreator::new(db_path) else {
-            tracing::error!("Could not open the DB in order to take a snapshot");
-            return
-        };
+        let base_dir = self.service.base_dir.clone();
+
+        let (snap_send, snap_recv) = tokio::sync::oneshot::channel();
         let snapshot_task = std::thread::spawn(move || {
-            snapshot_creator.write_to_file()
-            // do stuff with snapshot;
+            let db = crate::storage::open(db_path, true, None)
+                .expect("Could not open DB");
+            let snapshot = db.snapshot();
+            // signal to main thread that the snapshot has finished
+            snap_send.send(()).unwrap();
+
+            let last_height = db
+                .read_last_block()
+                .expect("Could not read database")
+                .expect("Last block should exists")
+                .height;
+            let cfs = db.column_families();
+            let path = DbSnapshot::path(last_height, base_dir.clone());
+
+            snapshot.write_to_file(cfs, &path)?;
+            DbSnapshot::cleanup(last_height, &base_dir)
         });
-        // TODO: What to do if an old snapshot task is still running?
-        self.snapshot_task.replace(snapshot_task);
+
+        // it's important that the thread is
+        // blocked until the snapshot is created
+        if snap_recv.blocking_recv().is_err() {
+            tracing::error!("Failed to start snapshot task.")
+        } else {
+            // TODO: What to do if an old snapshot task is still running?
+            self.snapshot_task.replace(snapshot_task);
+        }
     }
 }
 
