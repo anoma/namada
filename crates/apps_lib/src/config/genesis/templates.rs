@@ -295,8 +295,6 @@ pub struct ChainParams<T: TemplateValidation> {
     pub epochs_per_year: u64,
     /// How many epochs it takes to transition to the next masp epoch
     pub masp_epoch_multiplier: u64,
-    /// Maximum number of signature per transaction
-    pub max_signatures_per_transaction: u8,
     /// Max gas for block
     pub max_block_gas: u64,
     /// Fee unshielding gas limit
@@ -322,7 +320,6 @@ impl ChainParams<Unvalidated> {
             implicit_vp,
             epochs_per_year,
             masp_epoch_multiplier,
-            max_signatures_per_transaction,
             max_block_gas,
             fee_unshielding_gas_limit,
             minimum_gas_price,
@@ -368,7 +365,6 @@ impl ChainParams<Unvalidated> {
             implicit_vp,
             epochs_per_year,
             masp_epoch_multiplier,
-            max_signatures_per_transaction,
             max_block_gas,
             fee_unshielding_gas_limit,
             minimum_gas_price: min_gas_prices,

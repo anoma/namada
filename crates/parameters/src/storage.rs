@@ -39,7 +39,6 @@ struct Keys {
     max_block_gas: &'static str,
     minimum_gas_price: &'static str,
     fee_unshielding_gas_limit: &'static str,
-    max_signatures_per_transaction: &'static str,
     native_token_transferable: &'static str,
 }
 
@@ -159,11 +158,6 @@ pub fn get_max_block_gas_key() -> Key {
 /// Storage key used for the gas cost table
 pub fn get_gas_cost_key() -> Key {
     get_minimum_gas_price_key_at_addr(ADDRESS)
-}
-
-/// Storage key used for the max signatures per transaction key
-pub fn get_max_signatures_per_transaction_key() -> Key {
-    get_max_signatures_per_transaction_key_at_addr(ADDRESS)
 }
 
 /// Helper function to retrieve the `max_block_gas` protocol parameter from

@@ -81,10 +81,6 @@ pub fn is_proposal_accepted(ctx: &Ctx, proposal_id: u64) -> VpEnvResult<bool> {
 #[cold]
 #[inline(never)]
 fn verify_signatures(ctx: &Ctx, tx: &Tx, owner: &Address) -> VpResult {
-    let max_signatures_per_transaction =
-        parameters::max_signatures_per_transaction(&ctx.pre())
-            .into_vp_error()?;
-
     let public_keys_index_map =
         account::public_keys_index_map(&ctx.pre(), owner).into_vp_error()?;
     let threshold = account::threshold(&ctx.pre(), owner)
@@ -92,7 +88,6 @@ fn verify_signatures(ctx: &Ctx, tx: &Tx, owner: &Address) -> VpResult {
         .unwrap_or(1);
 
     // Serialize parameters
-    let max_signatures = max_signatures_per_transaction.serialize_to_vec();
     let public_keys_map = public_keys_index_map.serialize_to_vec();
     let targets = [tx.raw_header_hash()].serialize_to_vec();
     let signer = owner.serialize_to_vec();
@@ -106,8 +101,6 @@ fn verify_signatures(ctx: &Ctx, tx: &Tx, owner: &Address) -> VpResult {
             signer.as_ptr() as _,
             signer.len() as _,
             threshold,
-            max_signatures.as_ptr() as _,
-            max_signatures.len() as _,
         );
     }
     Ok(())
