@@ -613,8 +613,8 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
         args: &args::Tx,
         signing_data: SigningTxData,
         with: impl Fn(Tx, common::PublicKey, HashSet<signing::Signable>, D) -> F
-            + MaybeSend
-            + MaybeSync,
+        + MaybeSend
+        + MaybeSync,
         user_data: D,
     ) -> crate::error::Result<()>
     where
