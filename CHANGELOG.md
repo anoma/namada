@@ -1,5 +1,41 @@
 # CHANGELOG
 
+## v0.39.0
+
+Namada 0.39.0 is a minor release that primarily abstracts the different kinds of transfer transactions and makes upgrades to the MASP and VPs.
+
+### BUG FIXES
+
+- Fixes an issue with unsanitized input to a PoS query to find
+  a validator by TM address which may cause a node to panic.
+  ([\#3340](https://github.com/anoma/namada/pull/3340))
+- Fix to clear the write log when dry-run batched transaction
+  ([\#3358](https://github.com/anoma/namada/issues/3358))
+
+### IMPROVEMENTS
+
+- The transfer command has been split into:
+  - `transfer` (shielded transfer)
+  - `transparent-transfer`
+  - `shield` (from transparent to shielded)
+  - `unshield` (from shielded to transparent)
+  ([\#3297](https://github.com/anoma/namada/pull/3297))
+- Avoid growing wasm memory when performing read-only accesses.
+  ([\#3315](https://github.com/anoma/namada/pull/3315))
+- Added a separate epoch tracker for masp to decouple its logic from the rest of
+  the protocol. ([\#3318](https://github.com/anoma/namada/pull/3318))
+- Default to the address from local config when the `--node`
+  argument is not specified for `shielded-sync` command
+  ([\#3333](https://github.com/anoma/namada/pull/3333))
+- Allow NAM transfers for protocol actions.
+  ([\#3348](https://github.com/anoma/namada/pull/3348))
+- Select gas payer from implicit address in the Namada CLI.
+  ([\#3349](https://github.com/anoma/namada/pull/3349))
+- Remove old disposable keys from the wallet.
+  ([\#3350](https://github.com/anoma/namada/pull/3350))
+- Addressed some minor issues in the shielded token code.
+  ([\#3351](https://github.com/anoma/namada/pull/3351))
+
 ## v0.38.1
 
 Namada 0.38.1 is a patch release that fixes a license issue with the last minor release needed to build binaries in CI.
@@ -383,9 +419,6 @@ Namada 0.33.0 is a minor release that contains various new features, improvement
 
 - move query_ibc_tokens and lookup_ibc_token_alias to sdk
   ([\#2729](https://github.com/anoma/namada/issues/2729))
-
-### SDK
-
 - Add a new method to the sdk to change a validator consensus key.
   ([\#3037](https://github.com/anoma/namada/pull/3037))
 - Improve the function to update an enstablished address via the sdk.
