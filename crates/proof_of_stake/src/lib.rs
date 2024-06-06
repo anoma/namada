@@ -2727,6 +2727,7 @@ pub mod test_utils {
             masp_epoch_multiplier: 2,
             max_signatures_per_transaction: 15,
             fee_unshielding_gas_limit: 10000,
+            gas_scale: 100_000_000,
             minimum_gas_price: BTreeMap::new(),
             is_native_token_transferable: true,
         };
