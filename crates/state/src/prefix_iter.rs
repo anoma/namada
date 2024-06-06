@@ -2,28 +2,29 @@
 //! storage keys.
 
 use namada_core::collections::HashMap;
-use namada_state::PrefixIter;
+
+use crate::{DBIter, PrefixIter, DB};
 
 /// A temporary iterators storage, used during a wasm run after which it's
 /// dropped. Each iterator is assigned a [`PrefixIteratorId`].
 #[derive(Debug)]
-pub struct PrefixIterators<'iter, DB>
+pub struct PrefixIterators<'iter, D>
 where
-    DB: namada_state::DB + namada_state::DBIter<'iter>,
+    D: DB + DBIter<'iter>,
 {
     index: PrefixIteratorId,
-    iterators: HashMap<PrefixIteratorId, PrefixIter<'iter, DB>>,
+    iterators: HashMap<PrefixIteratorId, PrefixIter<'iter, D>>,
 }
 
-impl<'iter, DB> PrefixIterators<'iter, DB>
+impl<'iter, D> PrefixIterators<'iter, D>
 where
-    DB: namada_state::DB + namada_state::DBIter<'iter>,
+    D: DB + DBIter<'iter>,
 {
     /// Insert a new prefix iterator to the temporary storage. Returns `None` on
     /// prefix iterator ID overflow
     pub fn insert(
         &mut self,
-        iter: PrefixIter<'iter, DB>,
+        iter: PrefixIter<'iter, D>,
     ) -> Option<PrefixIteratorId> {
         let id = self.index;
         self.iterators.insert(id, iter);
@@ -35,7 +36,7 @@ where
     pub fn next(
         &mut self,
         id: PrefixIteratorId,
-    ) -> Option<<PrefixIter<'iter, DB> as Iterator>::Item> {
+    ) -> Option<<PrefixIter<'iter, D> as Iterator>::Item> {
         self.iterators.get_mut(&id).and_then(|i| i.next())
     }
 
@@ -43,14 +44,14 @@ where
     pub fn get_mut(
         &mut self,
         id: PrefixIteratorId,
-    ) -> Option<&mut PrefixIter<'iter, DB>> {
+    ) -> Option<&mut PrefixIter<'iter, D>> {
         self.iterators.get_mut(&id)
     }
 }
 
-impl<'iter, DB> Default for PrefixIterators<'iter, DB>
+impl<'iter, D> Default for PrefixIterators<'iter, D>
 where
-    DB: namada_state::DB + namada_state::DBIter<'iter>,
+    D: DB + DBIter<'iter>,
 {
     fn default() -> Self {
         Self {

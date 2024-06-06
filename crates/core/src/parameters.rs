@@ -12,6 +12,32 @@ use super::hash::Hash;
 use super::time::DurationSecs;
 use super::token;
 use crate::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use crate::storage;
+
+/// Abstract parameters storage keys interface
+pub trait Keys {
+    /// Key for implicit VP
+    fn implicit_vp() -> storage::Key;
+}
+
+/// Abstract parameters storage read interface
+pub trait Read<S> {
+    /// Storage error
+    type Err;
+
+    /// Read all parameters
+    fn read(storage: &S) -> Result<Parameters, Self::Err>;
+
+    /// Read MASP epoch multiplier
+    fn read_masp_epoch_multiplier(storage: &S) -> Result<u64, Self::Err>;
+}
+
+/// Abstract parameters storage write interface
+pub trait Write<S>: Read<S> {
+    /// Write all parameters
+    fn write(storage: &mut S, parameters: &Parameters)
+    -> Result<(), Self::Err>;
+}
 
 /// Protocol parameters
 #[derive(
