@@ -741,7 +741,7 @@ impl WriteLog {
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
-    use namada_core::address;
+    use namada_core::{address, parameters};
     use pretty_assertions::assert_eq;
     use proptest::prelude::*;
 
@@ -948,8 +948,9 @@ mod tests {
         // commit a block
         state.commit_block().expect("commit failed");
 
-        let (vp_code_hash, _gas) =
-            state.validity_predicate(&addr1).expect("vp read failed");
+        let (vp_code_hash, _gas) = state
+            .validity_predicate(&addr1, &namada_parameters::Key)
+            .expect("vp read failed");
         assert_eq!(vp_code_hash, Some(vp1));
         let (value, _) = state.db_read(&key1).expect("read failed");
         assert_eq!(value.expect("no read value"), val1);

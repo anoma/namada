@@ -20,18 +20,60 @@
 pub mod storage;
 mod wasm_allowlist;
 use std::collections::BTreeMap;
+use std::marker::PhantomData;
 
 use namada_core::address::{Address, InternalAddress};
 use namada_core::arith::checked;
 use namada_core::chain::ProposalBytes;
 pub use namada_core::parameters::*;
-use namada_core::storage::{BlockHeight, Key};
+use namada_core::storage::BlockHeight;
 use namada_core::time::DurationSecs;
 use namada_core::{hints, token};
 use namada_storage::{ResultExt, StorageRead, StorageWrite};
 pub use storage::{get_gas_scale, get_max_block_gas};
 use thiserror::Error;
 pub use wasm_allowlist::{is_tx_allowed, is_vp_allowed};
+
+/// Parameters storage keys implementation
+#[derive(Debug)]
+pub struct Key;
+
+/// Parameters storage `Read/Write` implementation
+#[derive(Debug)]
+pub struct Store<S>(PhantomData<S>);
+
+impl Keys for Key {
+    fn implicit_vp() -> namada_core::storage::Key {
+        storage::get_implicit_vp_key()
+    }
+}
+
+impl<S> Read<S> for Store<S>
+where
+    S: StorageRead,
+{
+    type Err = namada_storage::Error;
+
+    fn read(storage: &S) -> Result<Parameters, Self::Err> {
+        read(storage)
+    }
+
+    fn read_masp_epoch_multiplier(storage: &S) -> Result<u64, Self::Err> {
+        read_masp_epoch_multiplier_parameter(storage)
+    }
+}
+
+impl<S> Write<S> for Store<S>
+where
+    S: StorageRead + StorageWrite,
+{
+    fn write(
+        storage: &mut S,
+        parameters: &Parameters,
+    ) -> Result<(), Self::Err> {
+        init_storage(parameters, storage)
+    }
+}
 
 /// The internal address for storage keys representing parameters than
 /// can be changed via governance.
@@ -409,7 +451,7 @@ where
 }
 
 /// Storage key for the Ethereum address of wNam.
-pub fn native_erc20_key() -> Key {
+pub fn native_erc20_key() -> storage::Key {
     storage::get_native_erc20_key_at_addr(ADDRESS)
 }
 
