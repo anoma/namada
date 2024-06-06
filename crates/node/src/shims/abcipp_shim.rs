@@ -242,7 +242,8 @@ impl AbcippShim {
         if snap_recv.blocking_recv().is_err() {
             tracing::error!("Failed to start snapshot task.")
         } else {
-            // TODO: What to do if an old snapshot task is still running?
+            // N.B. If a task is still running, it will continue
+            // in the background but we will forget about it.
             self.snapshot_task.replace(snapshot_task);
         }
     }

@@ -25,6 +25,7 @@ mod vote_extensions;
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
+use std::num::NonZeroU64;
 use std::path::{Path, PathBuf};
 #[allow(unused_imports)]
 use std::rc::Rc;
@@ -77,6 +78,7 @@ use crate::facade::tendermint::{self, validator};
 use crate::facade::tendermint_proto::v0_37::crypto::public_key;
 use crate::shims::abcipp_shim_types::shim;
 use crate::shims::abcipp_shim_types::shim::response::TxResult;
+use crate::shims::abcipp_shim_types::shim::TakeSnapshot;
 use crate::{storage, tendermint_node};
 
 fn key_to_tendermint(
@@ -355,6 +357,9 @@ where
     event_log: EventLog,
     /// A migration that can be scheduled at a given block height
     pub scheduled_migration: Option<ScheduledMigration<D::Migrator>>,
+    /// When set, indicates after how many blocks a new snapshot
+    /// will be taken (counting from the first block)
+    pub blocks_between_snapshots: Option<NonZeroU64>,
 }
 
 /// Storage key filter to store the diffs into the storage. Return `false` for
@@ -548,6 +553,7 @@ where
             // TODO(namada#3237): config event log params
             event_log: EventLog::default(),
             scheduled_migration,
+            blocks_between_snapshots: config.shell.blocks_between_snapshots,
         };
         shell.update_eth_oracle(&Default::default());
         shell
@@ -679,6 +685,16 @@ where
 
         self.broadcast_queued_txs();
 
+        let take_snapshot = match self.blocks_between_snapshots {
+            Some(b) => committed_height.0 % b == 0,
+            _ => false,
+        };
+        let take_snapshot = if take_snapshot {
+            self.state.db().path().into()
+        } else {
+            TakeSnapshot::No
+        };
+
         shim::Response::Commit(
             response::Commit {
                 // NB: by passing 0, we forbid CometBFT from deleting
@@ -687,7 +703,7 @@ where
                 // NB: current application hash
                 data: merkle_root.0.to_vec().into(),
             },
-            self.state.db().path().into(),
+            take_snapshot,
         )
     }
 
