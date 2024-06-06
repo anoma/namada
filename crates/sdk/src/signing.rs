@@ -759,27 +759,28 @@ impl TokenTransfer<'_> {
                 let mut map: HashMap<&Address, DenominatedAmount> =
                     HashMap::new();
 
-                for transfer in &transfers.0 {
-                    match address {
-                        TransferSide::Source(source)
-                            if source == &transfer.source =>
-                        {
-                            Self::update_token_amount_map(
-                                &mut map,
-                                &transfer.token,
-                                transfer.amount,
-                            )?;
+                match address {
+                    TransferSide::Source(source) => {
+                        for transfer in &transfers.0 {
+                            if source == &transfer.source {
+                                Self::update_token_amount_map(
+                                    &mut map,
+                                    &transfer.token,
+                                    transfer.amount,
+                                )?;
+                            }
                         }
-                        TransferSide::Target(target)
-                            if target == &transfer.target =>
-                        {
-                            Self::update_token_amount_map(
-                                &mut map,
-                                &transfer.token,
-                                transfer.amount,
-                            )?;
+                    }
+                    TransferSide::Target(target) => {
+                        for transfer in &transfers.0 {
+                            if target == &transfer.target {
+                                Self::update_token_amount_map(
+                                    &mut map,
+                                    &transfer.token,
+                                    transfer.amount,
+                                )?;
+                            }
                         }
-                        _ => (),
                     }
                 }
 
@@ -832,10 +833,7 @@ impl TokenTransfer<'_> {
     ) -> Result<(), Error> {
         match map.get_mut(token) {
             Some(prev_amount) => {
-                *prev_amount =
-                    prev_amount.checked_add(amount).ok_or_else(|| {
-                        Error::Other("Overflow in amount".to_string())
-                    })?;
+                *prev_amount = checked!(prev_amount + amount)?;
             }
             None => {
                 map.insert(token, amount);
