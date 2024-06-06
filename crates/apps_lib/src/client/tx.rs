@@ -743,6 +743,14 @@ pub async fn submit_transparent_transfer(
     namada: &impl Namada,
     args: args::TxTransparentTransfer,
 ) -> Result<(), error::Error> {
+    if args.data.len() > 1 {
+        // TODO(namada#3379): Vectorized transfers are not yet supported in the
+        // CLI
+        return Err(error::Error::Other(
+            "Unexpected vectorized transparent transfer".to_string(),
+        ));
+    }
+
     submit_reveal_aux(
         namada,
         args.tx.clone(),
