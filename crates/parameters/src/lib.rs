@@ -467,6 +467,8 @@ where
     init_storage(&params, storage)
 }
 
+const BLOCK_TIME_ESTIMATE_UPPER_BOUND: DurationSecs = DurationSecs(120);
+
 /// Return an estimate of the maximum time taken to decide a block,
 /// by sourcing block headers from up to `num_blocks_to_read`.
 pub fn estimate_max_block_time_from_blocks<S>(
@@ -478,12 +480,19 @@ where
     S: StorageRead,
 {
     let ending_height = last_block_height.0;
-    let beginning_height =
-        ending_height.saturating_sub(num_blocks_to_read.saturating_sub(1));
+    let beginning_height = ending_height.saturating_sub(
+        num_blocks_to_read
+            .min(last_block_height.0)
+            .saturating_sub(1),
+    );
 
     let block_timestamps = {
         let mut ts = Vec::with_capacity(
-            usize::try_from(num_blocks_to_read).into_storage_result()?,
+            usize::try_from({
+                // NB: cap the allocation to 16
+                num_blocks_to_read.min(16)
+            })
+            .into_storage_result()?,
         );
 
         for height in beginning_height..=ending_height {
@@ -507,7 +516,10 @@ where
                 ts[1] - ts[0]
             }
         })
-        .max())
+        .max()
+        .map(|block_time| {
+            block_time.clamp(DurationSecs(1), BLOCK_TIME_ESTIMATE_UPPER_BOUND)
+        }))
 }
 
 /// Return an estimate of the maximum time taken to decide a block,
@@ -523,17 +535,18 @@ where
         min_duration: DurationSecs(min_duration),
     } = read_epoch_duration_parameter(storage)?;
 
-    checked!(min_duration / min_num_of_blocks)
-        .map(|block_time| {
-            // NB: fallback to one block per epoch
-            // if the time to decide a block is zero
-            DurationSecs(if hints::unlikely(block_time == 0) {
-                min_duration
-            } else {
-                block_time
-            })
-        })
-        .into_storage_result()
+    let block_time =
+        checked!(min_duration / min_num_of_blocks).into_storage_result()?;
+
+    // NB: fallback to one block per epoch
+    // if the time to decide a block is zero
+    let block_time = DurationSecs(if hints::unlikely(block_time == 0) {
+        min_duration
+    } else {
+        block_time
+    });
+
+    Ok(block_time.clamp(DurationSecs(1), BLOCK_TIME_ESTIMATE_UPPER_BOUND))
 }
 
 /// Return an estimate of the maximum time taken to decide a block,
@@ -573,6 +586,44 @@ mod tests {
     use namada_storage::testing::TestStorage;
 
     use super::*;
+
+    #[test]
+    fn test_estimate_max_block_time_from_parameters_lower_bound() {
+        let mut storage = TestStorage::default();
+
+        update_epoch_parameter(
+            &mut storage,
+            &EpochDuration {
+                min_duration: DurationSecs(0),
+                min_num_of_blocks: 5,
+            },
+        )
+        .unwrap();
+
+        let max_block_time =
+            estimate_max_block_time_from_parameters(&storage).unwrap();
+
+        assert_eq!(max_block_time, DurationSecs(1));
+    }
+
+    #[test]
+    fn test_estimate_max_block_time_from_parameters_upper_bound() {
+        let mut storage = TestStorage::default();
+
+        update_epoch_parameter(
+            &mut storage,
+            &EpochDuration {
+                min_duration: DurationSecs(1200),
+                min_num_of_blocks: 2,
+            },
+        )
+        .unwrap();
+
+        let max_block_time =
+            estimate_max_block_time_from_parameters(&storage).unwrap();
+
+        assert_eq!(max_block_time, BLOCK_TIME_ESTIMATE_UPPER_BOUND);
+    }
 
     #[test]
     fn test_estimate_max_block_time_from_parameters() {
@@ -636,6 +687,30 @@ mod tests {
     }
 
     #[test]
+    fn test_estimate_max_block_time_from_blocks_read_past_limit() {
+        let mut storage = TestStorage::default();
+
+        for i in 1i64..10 {
+            let height = BlockHeight(u64::try_from(i).unwrap());
+            let timestamp = checked!((10i64 + i) * i).unwrap();
+
+            storage.set_mock_block_header(
+                height,
+                Header {
+                    time: DateTimeUtc::from_unix_timestamp(timestamp).unwrap(),
+                    ..Default::default()
+                },
+            );
+        }
+
+        let max_block_time =
+            estimate_max_block_time_from_blocks(&storage, 9.into(), u64::MAX)
+                .unwrap();
+
+        assert_eq!(max_block_time, Some(DurationSecs(27)));
+    }
+
+    #[test]
     fn test_estimate_max_block_time_from_blocks_and_params() {
         let mut storage = TestStorage::default();
 
@@ -669,5 +744,48 @@ mod tests {
         .unwrap();
 
         assert_eq!(max_block_time, DurationSecs(27));
+    }
+
+    #[test]
+    fn test_estimate_max_block_time_from_blocks_lower_bound() {
+        let mut storage = TestStorage::default();
+
+        for height in 1u64..=2 {
+            storage.set_mock_block_header(
+                BlockHeight(height),
+                Header {
+                    time: DateTimeUtc::unix_epoch(),
+                    ..Default::default()
+                },
+            );
+        }
+
+        let max_block_time =
+            estimate_max_block_time_from_blocks(&storage, 2.into(), 2).unwrap();
+
+        assert_eq!(max_block_time, Some(DurationSecs(1)));
+    }
+
+    #[test]
+    fn test_estimate_max_block_time_from_blocks_upper_bound() {
+        let mut storage = TestStorage::default();
+
+        for i in 1i64..10 {
+            let height = BlockHeight(u64::try_from(i).unwrap());
+            let timestamp = checked!((400i64 + i) * i).unwrap();
+
+            storage.set_mock_block_header(
+                height,
+                Header {
+                    time: DateTimeUtc::from_unix_timestamp(timestamp).unwrap(),
+                    ..Default::default()
+                },
+            );
+        }
+
+        let max_block_time =
+            estimate_max_block_time_from_blocks(&storage, 9.into(), 5).unwrap();
+
+        assert_eq!(max_block_time, Some(BLOCK_TIME_ESTIMATE_UPPER_BOUND));
     }
 }
