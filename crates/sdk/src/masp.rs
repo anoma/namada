@@ -1612,6 +1612,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         // Determine epoch in which to submit potential shielded transaction
         let epoch = rpc::query_masp_epoch(context.client()).await?;
 
+        let mut is_context_loaded = false;
         for MaspTransferData {
             source,
             target,
@@ -1629,10 +1630,13 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             // We want to fund our transaction solely from supplied spending key
             let spending_key = spending_key.map(|x| x.into());
             {
-                // Load the current shielded context given the spending key we
-                // possess
-                let mut shielded = context.shielded_mut().await;
-                let _ = shielded.load().await;
+                if !is_context_loaded {
+                    // Load the current shielded context (at most once) given
+                    // the spending key we possess
+                    let mut shielded = context.shielded_mut().await;
+                    let _ = shielded.load().await;
+                    is_context_loaded = true;
+                }
             }
             // Context required for storing which notes are in the source's
             // possession
