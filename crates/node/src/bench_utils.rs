@@ -1092,6 +1092,7 @@ impl BenchShieldedCtx {
                 ShieldedContext::<BenchShieldedUtils>::gen_shielded_transfer(
                     &namada,
                     vec![masp_transfer_data],
+                    None,
                     true,
                 ),
             )
@@ -1119,6 +1120,7 @@ impl BenchShieldedCtx {
             namada.client().generate_tx(
                 TX_SHIELDED_TRANSFER_WASM,
                 ShieldedTransfer {
+                    fee_payer: None,
                     section_hash: shielded_section_hash,
                 },
                 Some(shielded),

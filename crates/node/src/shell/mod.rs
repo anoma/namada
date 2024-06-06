@@ -1129,8 +1129,7 @@ where
                     return response;
                 }
 
-                // TODO(namada#2597): validate masp fee payment if normal fee
-                // payment fails Validate wrapper fees
+                // Validate wrapper fees
                 if let Err(e) = mempool_fee_check(
                     &mut ShellParams::new(
                         &RefCell::new(gas_meter),

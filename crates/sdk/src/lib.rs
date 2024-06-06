@@ -189,9 +189,11 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     fn new_shielded_transfer(
         &self,
         data: Vec<args::TxShieldedTransferData>,
+        gas_spending_keys: Vec<ExtendedSpendingKey>,
     ) -> args::TxShieldedTransfer {
         args::TxShieldedTransfer {
             data,
+            gas_spending_keys,
             tx_code_path: PathBuf::from(TX_SHIELDED_TRANSFER_WASM),
             tx: self.tx_builder(),
         }
@@ -218,10 +220,12 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
         &self,
         source: ExtendedSpendingKey,
         data: Vec<args::TxUnshieldingTransferData>,
+        gas_spending_keys: Vec<ExtendedSpendingKey>,
     ) -> args::TxUnshieldingTransfer {
         args::TxUnshieldingTransfer {
             source,
             data,
+            gas_spending_keys,
             tx_code_path: PathBuf::from(TX_UNSHIELDING_TRANSFER_WASM),
             tx: self.tx_builder(),
         }
@@ -1130,7 +1134,7 @@ pub mod testing {
             let tx_data = match masp_tx_type {
                 MaspTxType::Shielded => {
                     tx.add_code_from_hash(code_hash, Some(TX_SHIELDED_TRANSFER_WASM.to_owned()));
-                    let data = ShieldedTransfer { section_hash: shielded_section_hash };
+                    let data = ShieldedTransfer { fee_payer: transfers.0.first().map(|transfer| transfer.target.clone()), section_hash: shielded_section_hash };
                     tx.add_data(data.clone());
                     TxData::ShieldedTransfer(data, (build_params, build_param_bytes))
                 },

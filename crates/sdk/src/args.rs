@@ -327,6 +327,8 @@ pub struct TxShieldedTransfer<C: NamadaTypes = SdkTypes> {
     pub tx: Tx<C>,
     /// Transfer-specific data
     pub data: Vec<TxShieldedTransferData<C>>,
+    /// Optional additional keys for gas pyament
+    pub gas_spending_keys: Vec<C::SpendingKey>,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -395,6 +397,8 @@ pub struct TxUnshieldingTransfer<C: NamadaTypes = SdkTypes> {
     pub source: C::SpendingKey,
     /// Transfer-specific data
     pub data: Vec<TxUnshieldingTransferData<C>>,
+    /// Optional additional keys for gas payment
+    pub gas_spending_keys: Vec<C::SpendingKey>,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -2134,6 +2138,9 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     pub gas_limit: GasLimit,
     /// The optional expiration of the transaction
     pub expiration: TxExpiration,
+    // FIXME: maybe should move this out of here, it's only needed for txs that
+    // pay the fees via the masp, so it should go together with the optional
+    // gas spending keys
     /// Generate an ephimeral signing key to be used only once to sign a
     /// wrapper tx
     pub disposable_signing_key: bool,

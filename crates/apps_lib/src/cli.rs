@@ -3221,6 +3221,8 @@ pub mod args {
         "gas-limit",
         DefaultFn(|| GasLimit::from(DEFAULT_GAS_LIMIT)),
     );
+    pub const GAS_SPENDING_KEY: ArgOpt<WalletSpendingKey> =
+        arg_opt("gas-spending-key");
     pub const FEE_TOKEN: ArgDefaultFromCtx<WalletAddrOrNativeToken> =
         arg_default_from_ctx("gas-token", DefaultFn(|| "".parse().unwrap()));
     pub const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
@@ -4416,9 +4418,16 @@ pub mod args {
                 });
             }
 
+            let gas_spending_keys = self
+                .gas_spending_keys
+                .iter()
+                .map(|key| chain_ctx.get_cached(key))
+                .collect();
+
             Ok(TxShieldedTransfer::<SdkTypes> {
                 tx,
                 data,
+                gas_spending_keys,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -4438,10 +4447,15 @@ pub mod args {
                 token,
                 amount,
             }];
+            let mut gas_spending_keys = vec![];
+            if let Some(key) = GAS_SPENDING_KEY.parse(matches) {
+                gas_spending_keys.push(key);
+            }
 
             Self {
                 tx,
                 data,
+                gas_spending_keys,
                 tx_code_path,
             }
         }
@@ -4464,6 +4478,10 @@ pub mod args {
                         .def()
                         .help(wrap!("The amount to transfer in decimal.")),
                 )
+                .arg(GAS_SPENDING_KEY.def().help(wrap!(
+                    "The optional spending key that will be used in addition \
+                     to the source for gas payment."
+                )))
         }
     }
 
@@ -4557,10 +4575,16 @@ pub mod args {
                     amount: transfer_data.amount,
                 });
             }
+            let gas_spending_keys = self
+                .gas_spending_keys
+                .iter()
+                .map(|key| chain_ctx.get_cached(key))
+                .collect();
 
             Ok(TxUnshieldingTransfer::<SdkTypes> {
                 tx,
                 data,
+                gas_spending_keys,
                 source: chain_ctx.get_cached(&self.source),
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
@@ -4580,11 +4604,16 @@ pub mod args {
                 token,
                 amount,
             }];
+            let mut gas_spending_keys = vec![];
+            if let Some(key) = GAS_SPENDING_KEY.parse(matches) {
+                gas_spending_keys.push(key);
+            }
 
             Self {
                 tx,
                 source,
                 data,
+                gas_spending_keys,
                 tx_code_path,
             }
         }
@@ -4607,6 +4636,10 @@ pub mod args {
                         .def()
                         .help(wrap!("The amount to transfer in decimal.")),
                 )
+                .arg(GAS_SPENDING_KEY.def().help(wrap!(
+                    "The optional spending key that will be used in addition \
+                     to the source for gas payment."
+                )))
         }
     }
 

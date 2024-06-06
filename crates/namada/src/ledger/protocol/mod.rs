@@ -233,8 +233,6 @@ where
             tx_wasm_cache,
         } => {
             if let Some(tx_result) = wrapper_tx_result {
-                // TODO(namada#2597): handle masp fee payment in the first inner
-                // tx if necessary
                 // Replay protection check on the batch
                 let tx_hash = tx.raw_header_hash();
                 if state.write_log().has_replay_protection_entry(&tx_hash) {
@@ -661,7 +659,6 @@ where
     }
 }
 
-// FIXME: search for all the TODOS for 2596 and 2597 and remove them
 fn try_masp_fee_payment<S, D, H, CA>(
     ShellParams {
         tx_gas_meter,

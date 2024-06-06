@@ -63,10 +63,10 @@ pub fn handle_masp_tx(
     ctx: &mut (impl StorageRead + StorageWrite),
     shielded: &Transaction,
 ) -> Result<()> {
-    // TODO: temporarily disabled because of the node aggregation issue in WASM.
-    // Using the host env tx_update_masp_note_commitment_tree or directly the
-    // update_note_commitment_tree function as a  workaround instead
-    // update_note_commitment_tree(ctx, shielded)?;
+    // TODO(masp#73): temporarily disabled because of the node aggregation issue
+    // in WASM. Using the host env tx_update_masp_note_commitment_tree or
+    // directly the update_note_commitment_tree function as a  workaround
+    // instead update_note_commitment_tree(ctx, shielded)?;
     reveal_nullifiers(ctx, shielded)?;
 
     Ok(())

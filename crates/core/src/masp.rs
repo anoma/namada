@@ -368,7 +368,15 @@ impl<'de> serde::Deserialize<'de> for PaymentAddress {
 
 /// Wrapper for masp_primitive's ExtendedSpendingKey
 #[derive(
-    Clone, Debug, Copy, BorshSerialize, BorshDeserialize, BorshDeserializer,
+    Clone,
+    Debug,
+    Copy,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    Hash,
+    Eq,
+    PartialEq,
 )]
 pub struct ExtendedSpendingKey(masp_primitives::zip32::ExtendedSpendingKey);
 
@@ -433,7 +441,7 @@ impl<'de> serde::Deserialize<'de> for ExtendedSpendingKey {
 }
 
 /// Represents a source of funds for a transfer
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum TransferSource {
     /// A transfer coming from a transparent address
     Address(Address),
@@ -479,7 +487,7 @@ impl Display for TransferSource {
 }
 
 /// Represents a target for the funds of a transfer
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum TransferTarget {
     /// A transfer going to a transparent address
     Address(Address),
