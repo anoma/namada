@@ -82,7 +82,9 @@ borsh = {version = "1.2.0", features = ["unstable__schema", "derive"]}
 borsh-ext = { git = "https://github.com/heliaxdev/borsh-ext", tag = "v1.2.0" }
 chrono = {version = "0.4.22", default-features = false, features = ["clock", "std"]}
 circular-queue = "0.2.6"
-clap = "4.3.4"
+clap = "4.5"
+clap_complete = "4.5"
+clap_complete_nushell = "4.5"
 clru = {git = "https://github.com/marmeladema/clru-rs.git", rev = "71ca566"}
 color-eyre = "0.6.2"
 concat-idents = "1.1.2"
