@@ -1098,7 +1098,7 @@ impl DB for RocksDB {
                         // Read from latest height
                         return self.read_subspace_val(key);
                     } else {
-                        raw_height = checked!(raw_height + 1)?
+                        checked!(raw_height += 1)?
                     }
                 }
             }

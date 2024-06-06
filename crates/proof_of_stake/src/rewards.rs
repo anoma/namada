@@ -325,21 +325,19 @@ where
 
         // Proposer reward
         if address == *proposer_address {
-            rewards_frac = checked!(rewards_frac + coeffs.proposer_coeff)?;
+            checked!(rewards_frac += coeffs.proposer_coeff)?;
         }
 
         // Signer reward
         if signer_set.contains(&address) {
             let signing_frac =
                 checked!(stake_unscaled / signing_stake_unscaled)?;
-            rewards_frac =
-                checked!(rewards_frac + (coeffs.signer_coeff * signing_frac))?;
+            checked!(rewards_frac += (coeffs.signer_coeff * signing_frac))?;
         }
         // Consensus validator reward
-        rewards_frac = checked!(
-            rewards_frac
-                + (coeffs.active_val_coeff
-                    * (stake_unscaled / consensus_stake_unscaled))
+        checked!(
+            rewards_frac += (coeffs.active_val_coeff
+                * (stake_unscaled / consensus_stake_unscaled))
         )?;
 
         // To be added to the rewards accumulator
@@ -598,7 +596,7 @@ where
         debug_assert!(ep <= claim_end);
         let rp = rewards_products.get(storage, &ep)?.unwrap_or_default();
         let reward = bond_amount.mul_floor(rp)?;
-        reward_tokens = checked!(reward_tokens + reward)?;
+        checked!(reward_tokens += reward)?;
     }
 
     Ok(reward_tokens)
