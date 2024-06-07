@@ -923,19 +923,6 @@ impl MaspDigitPos {
         let amount = amount.into();
         amount.raw.0[*self as usize]
     }
-
-    /// Get the corresponding u64 word from the input uint256.
-    // FIXME: remove if unused?
-    pub fn denominate_i128(&self, amount: &Change) -> i128 {
-        let val = i128::from(amount.abs().0[*self as usize]);
-        if Change::is_negative(amount) {
-            // Cannot panic as the value is limited to `u64` range
-            #[allow(clippy::arithmetic_side_effects)]
-            -val
-        } else {
-            val
-        }
-    }
 }
 
 impl From<Amount> for IbcAmount {
