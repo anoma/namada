@@ -231,9 +231,7 @@ impl AbcippShim {
                 .expect("Last block should exists")
                 .height;
             let cfs = db.column_families();
-            let path = DbSnapshot::path(last_height, base_dir.clone());
-
-            snapshot.write_to_file(cfs, &path)?;
+            snapshot.write_to_file(cfs, base_dir.clone(), last_height)?;
             DbSnapshot::cleanup(last_height, &base_dir)
         });
 
