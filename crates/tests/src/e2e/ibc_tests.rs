@@ -151,7 +151,7 @@ fn run_ledger_ibc() -> Result<()> {
 
     // Transfer 50000 received over IBC on Chain B
     let token = format!("{port_id_b}/{channel_id_b}/nam");
-    transfer_on_chain(&test_b, BERTHA, ALBERT, token, 50000, BERTHA_KEY)?;
+    transfer_on_chain(&test_b, BERTHA, ALBERT, token, 50000, BERTHA_KEY, true)?;
     check_balances_after_non_ibc(&port_id_b, &channel_id_b, &test_b)?;
 
     // Transfer 50000 back from the origin-specific account on Chain B to Chain
@@ -225,6 +225,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
+        false,
         None,
         None,
         false,
@@ -234,7 +235,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
 
     // Transfer 50000 received over IBC on Chain B
     let token = format!("{port_id_b}/{channel_id_b}/nam");
-    transfer_on_chain(&test_b, BERTHA, ALBERT, token, 50000, BERTHA_KEY)?;
+    transfer_on_chain(&test_b, BERTHA, ALBERT, token, 50000, BERTHA_KEY, true)?;
     check_balances_after_non_ibc(&port_id_b, &channel_id_b, &test_b)?;
 
     // Transfer 50000 back from the origin-specific account on Chain B to Chain
@@ -253,6 +254,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         BERTHA_KEY,
         &port_id_b,
         &channel_id_b,
+        true,
         None,
         None,
         false,
@@ -268,6 +270,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         BTC,
         100,
         ALBERT_KEY,
+        false,
     )?;
     shielded_sync(&test_a, AA_VIEWING_KEY)?;
     // Shieded transfer from Chain A to Chain B
@@ -280,6 +283,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
+        false,
         None,
         None,
         false,
@@ -297,6 +301,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
+        false,
         None,
         None,
         false,
@@ -319,6 +324,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
+        false,
         Some(Duration::new(10, 0)),
         None,
         false,
@@ -384,6 +390,7 @@ fn ibc_namada_gaia() -> Result<()> {
         ALBERT_KEY,
         &port_id_namada,
         &channel_id_namada,
+        false,
         None,
         None,
         false,
@@ -393,7 +400,7 @@ fn ibc_namada_gaia() -> Result<()> {
     // Check the received token on Gaia
     let token_addr = find_address(&test, APFEL)?;
     let ibc_denom = format!("{port_id_gaia}/{channel_id_gaia}/{token_addr}");
-    check_gaia_balance(&test_gaia, GAIA_USER, &ibc_denom, 200)?;
+    check_gaia_balance(&test_gaia, GAIA_USER, &ibc_denom, 200000000)?;
 
     // Transfer back from Gaia to Namada
     let receiver = find_address(&test, ALBERT)?.to_string();
@@ -402,7 +409,7 @@ fn ibc_namada_gaia() -> Result<()> {
         GAIA_USER,
         receiver,
         get_gaia_denom_hash(ibc_denom),
-        100,
+        100000000,
         &port_id_gaia,
         &channel_id_gaia,
     )?;
@@ -439,6 +446,7 @@ fn ibc_namada_gaia() -> Result<()> {
         ALBERT_KEY,
         &port_id_namada,
         &channel_id_namada,
+        true,
         None,
         None,
         false,
@@ -471,6 +479,7 @@ fn ibc_namada_gaia() -> Result<()> {
         &ibc_denom,
         50,
         ALBERT_KEY,
+        true,
     )?;
     check_balance(&test, AA_VIEWING_KEY, &ibc_denom, 50)?;
     check_balance(&test, AB_VIEWING_KEY, &ibc_denom, 50)?;
@@ -485,6 +494,7 @@ fn ibc_namada_gaia() -> Result<()> {
         BERTHA_KEY,
         &port_id_namada,
         &channel_id_namada,
+        true,
         None,
         None,
         false,
@@ -541,6 +551,7 @@ fn pgf_over_ibc_with_hermes() -> Result<()> {
         NAM,
         100,
         ALBERT_KEY,
+        false,
     )?;
 
     // Proposal on Chain A
@@ -641,6 +652,7 @@ fn proposal_ibc_token_inflation() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
+        false,
         None,
         None,
         false,
@@ -708,6 +720,7 @@ fn ibc_rate_limit() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
+        false,
         None,
         None,
         false,
@@ -723,6 +736,7 @@ fn ibc_rate_limit() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
+        false,
         None,
         // expect an error of the throughput limit
         Some(
@@ -749,6 +763,7 @@ fn ibc_rate_limit() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
+        false,
         None,
         None,
         false,
@@ -773,6 +788,7 @@ fn ibc_rate_limit() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
+        false,
         Some(Duration::new(20, 0)),
         None,
         false,
@@ -1539,6 +1555,7 @@ fn transfer_token(
         ALBERT_KEY,
         port_id_a,
         channel_id_a,
+        false,
         None,
         None,
         false,
@@ -1604,21 +1621,6 @@ fn try_invalid_transfers(
     std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
     let receiver = find_address(test_b, BERTHA)?;
 
-    // invalid amount
-    transfer(
-        test_a,
-        ALBERT,
-        receiver.to_string(),
-        NAM,
-        10.1,
-        ALBERT_KEY,
-        port_id_a,
-        channel_id_a,
-        None,
-        Some("The amount for the IBC transfer should be an integer"),
-        false,
-    )?;
-
     // invalid port
     let nam_addr = find_address(test_a, NAM)?;
     transfer(
@@ -1630,6 +1632,7 @@ fn try_invalid_transfers(
         ALBERT_KEY,
         &"port".parse().unwrap(),
         channel_id_a,
+        false,
         None,
         // the IBC denom can't be parsed when using an invalid port
         Some(&format!("Invalid IBC denom: {nam_addr}")),
@@ -1646,6 +1649,7 @@ fn try_invalid_transfers(
         ALBERT_KEY,
         port_id_a,
         &"channel-42".parse().unwrap(),
+        false,
         None,
         Some("IBC token transfer error: context error: `ICS04 Channel error"),
         false,
@@ -1661,10 +1665,12 @@ fn transfer_on_chain(
     token: impl AsRef<str>,
     amount: u64,
     signer: impl AsRef<str>,
+    force: bool,
 ) -> Result<()> {
     std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let rpc = get_actor_rpc(test, Who::Validator(0));
-    let tx_args = [
+    let amount = amount.to_string();
+    let mut tx_args = vec![
         "transfer",
         "--source",
         sender.as_ref(),
@@ -1673,12 +1679,15 @@ fn transfer_on_chain(
         "--token",
         token.as_ref(),
         "--amount",
-        &amount.to_string(),
+        &amount,
         "--signing-keys",
         signer.as_ref(),
         "--node",
         &rpc,
     ];
+    if force {
+        tx_args.push("--force");
+    }
     let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
@@ -1710,6 +1719,7 @@ fn transfer_back(
         BERTHA_KEY,
         port_id_b,
         channel_id_b,
+        true,
         None,
         None,
         false,
@@ -1783,6 +1793,7 @@ fn transfer_timeout(
         ALBERT_KEY,
         port_id_a,
         channel_id_a,
+        false,
         Some(Duration::new(5, 0)),
         None,
         false,
@@ -1917,6 +1928,7 @@ fn transfer(
     signer: impl AsRef<str>,
     port_id: &PortId,
     channel_id: &ChannelId,
+    force: bool,
     timeout_sec: Option<Duration>,
     expected_err: Option<&str>,
     wait_reveal_pk: bool,
@@ -1946,6 +1958,9 @@ fn transfer(
         "--node",
         &rpc,
     ];
+    if force {
+        tx_args.push("--force");
+    }
 
     let timeout = timeout_sec.unwrap_or_default().as_secs().to_string();
     if timeout_sec.is_some() {

@@ -19,6 +19,7 @@ use namada_core::arith::{checked, CheckedAdd, CheckedSub};
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::collections::HashSet;
 use namada_core::ibc::apps::transfer::types::packet::PacketData;
+use namada_core::ibc::core::channel::types::packet::Packet;
 use namada_core::masp::encode_asset_type;
 use namada_core::storage::Key;
 use namada_gas::GasMetering;
@@ -42,6 +43,7 @@ use token::storage_key::{
 use token::Amount;
 
 use crate::address::{InternalAddress, IBC};
+use crate::events::Event;
 use crate::ledger::ibc::storage;
 use crate::ledger::ibc::storage::{
     ibc_trace_key, ibc_trace_key_prefix, is_ibc_trace_key,
@@ -59,6 +61,24 @@ use crate::vm::WasmCacheAccess;
 /// Packet event types
 const SEND_PACKET_EVENT: &str = "send_packet";
 const WRITE_ACK_EVENT: &str = "write_acknowledgement";
+
+/// Convert a receiver string to a TransparentAddress
+fn receiver_addr(receiver: String) -> TransparentAddress {
+    let ibc_addr = MaybeIbcAddress::Ibc(receiver);
+    // Public keys must be the hash of the sources/targets
+    TransparentAddress(<[u8; 20]>::from(ripemd::Ripemd160::digest(
+        sha2::Sha256::digest(&ibc_addr.serialize_to_vec()),
+    )))
+}
+
+/// Convert a Namada Address to a TransparentAddress
+fn namada_addr(addr: Address) -> TransparentAddress {
+    let addr = MaybeIbcAddress::Address(addr);
+    // Public keys must be the hash of the sources/targets
+    TransparentAddress(<[u8; 20]>::from(ripemd::Ripemd160::digest(
+        sha2::Sha256::digest(&addr.serialize_to_vec()),
+    )))
+}
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -334,6 +354,246 @@ where
         Ok(token.as_ref().to_string())
     }
 
+    // Apply the given send packet to the changed balances structure
+    fn apply_send_packet(
+        &self,
+        acc: &mut ChangedBalances,
+        msg: Packet,
+        packet_data: PacketData,
+        keys_changed: &BTreeSet<Key>,
+    ) -> Result<()> {
+        // Ensure that the event corresponds to the current changes
+        // to storage
+        let commitment_key = storage::commitment_key(
+            &msg.port_id_on_a,
+            &msg.chan_id_on_a,
+            msg.seq_on_a,
+        );
+        if !keys_changed.contains(&commitment_key) {
+            // Otherwise ignore this event
+            return Ok(());
+        }
+        let Some(storage_commitment): Option<PacketCommitment> =
+            self.ctx.read_bytes_post(&commitment_key)?.map(Into::into)
+        else {
+            // Ignore this event if it does not exist
+            return Ok(());
+        };
+        // Check that the packet commitment in storage is the same
+        // as that derived from this event
+        let packet_commitment =
+            VpValidationContext::<'a, 'a, S, CA>::compute_packet_commitment(
+                &msg.data,
+                &msg.timeout_height_on_b,
+                &msg.timeout_timestamp_on_b,
+            );
+        if packet_commitment != storage_commitment {
+            // Ignore this event if the commitments are not equal
+            return Ok(());
+        }
+        // Since IBC denominations are derived from Addresses
+        // when sending, we have to do a reverse look-up of the
+        // relevant token Address
+        let token = acc
+            .ibc_denoms
+            .get(&packet_data.token.denom.to_string())
+            .cloned()
+            // If the reverse lookup failed, then guess the Address
+            // that might have yielded the IBC denom. However,
+            // guessing an IBC token address cannot possibly be
+            // correct due to the structure of query_ibc_denom
+            .or_else(|| {
+                Address::decode(packet_data.token.denom.to_string())
+                    .ok()
+                    .filter(|x| {
+                        !matches!(
+                            x,
+                            Address::Internal(InternalAddress::IbcToken(_))
+                        )
+                    })
+            })
+            .ok_or_err_msg("Unable to decode IBC token")?;
+        let delta = ValueSum::from_pair(
+            token.clone(),
+            Amount::from_uint(Uint(*packet_data.token.amount), 0).unwrap(),
+        );
+        // Required for the packet's receiver to get funds
+        let post_entry = acc
+            .post
+            .entry(receiver_addr(packet_data.receiver.to_string()))
+            .or_insert(ValueSum::zero());
+        // Enable funds to be received by the receiver in the
+        // IBC packet
+        *post_entry =
+            checked!(post_entry + &delta).map_err(native_vp::Error::new)?;
+        Ok(())
+    }
+
+    // Apply the given write acknowledge to the changed balances structure
+    fn apply_write_ack(
+        &self,
+        acc: &mut ChangedBalances,
+        ibc_event: &Event,
+        msg: Packet,
+        packet_data: PacketData,
+        keys_changed: &BTreeSet<Key>,
+    ) -> Result<()> {
+        // Ensure that the event corresponds to the current changes
+        // to storage
+        let ack_key = storage::ack_key(
+            &msg.port_id_on_a,
+            &msg.chan_id_on_a,
+            msg.seq_on_a,
+        );
+        if !keys_changed.contains(&ack_key) {
+            // Otherwise ignore this event
+            return Ok(());
+        }
+        let acknowledgement = ibc_event
+            .raw_read_attribute::<PacketAck<'_>>()
+            .ok_or_err_msg(
+            "packet_ack attribute missing from write_acknowledgement",
+        )?;
+        let acknowledgement: AcknowledgementStatus =
+            serde_json::from_slice(acknowledgement.as_ref())
+                .wrap_err("Decoding acknowledment failed")?;
+        // If the transfer was a failure, then enable funds to
+        // be withdrawn from the IBC internal address
+        if acknowledgement.is_successful() {
+            // Mirror how the IBC token is derived in
+            // gen_ibc_shielded_transfer in the non-refund case
+            let ibc_denom = self.query_ibc_denom(
+                packet_data.token.denom.to_string(),
+                Some(&Address::Internal(InternalAddress::Ibc)),
+            )?;
+            let token = namada_ibc::received_ibc_token(
+                ibc_denom,
+                &msg.port_id_on_a,
+                &msg.chan_id_on_a,
+                &msg.port_id_on_b,
+                &msg.chan_id_on_b,
+            )
+            .into_storage_result()
+            .map_err(Error::NativeVpError)?;
+            let delta = ValueSum::from_pair(
+                token.clone(),
+                Amount::from_uint(Uint(*packet_data.token.amount), 0).unwrap(),
+            );
+            // Enable funds to be taken from the IBC internal
+            // address and be deposited elsewhere
+            // Required for the IBC internal Address to release
+            // funds
+            let pre_entry =
+                acc.pre.entry(namada_addr(IBC)).or_insert(ValueSum::zero());
+            *pre_entry =
+                checked!(pre_entry + &delta).map_err(native_vp::Error::new)?;
+        }
+        Ok(())
+    }
+
+    // Apply relevant IBC packets to the changed balances structure
+    fn apply_ibc_packet(
+        &self,
+        mut acc: ChangedBalances,
+        ibc_event: &Event,
+        keys_changed: &BTreeSet<Key>,
+    ) -> Result<ChangedBalances> {
+        // Try to extract an IBC packet from this event
+        let Ok(msg) = ibc_events::packet_from_event_attributes(
+            &ibc_event.clone().into_attributes(),
+        ) else {
+            return Ok(acc);
+        };
+        // Check if this is a Transfer packet
+        let Ok(packet_data) = serde_json::from_slice::<PacketData>(&msg.data)
+        else {
+            return Ok(acc);
+        };
+
+        // Get the packet commitment from post-storage that corresponds
+        // to this event
+        let addr = MaybeIbcAddress::Ibc(packet_data.receiver.to_string());
+        acc.decoder
+            .insert(receiver_addr(packet_data.receiver.to_string()), addr);
+
+        match ibc_event.kind().sub_domain() {
+            // This event is emitted on the sender
+            SEND_PACKET_EVENT => {
+                self.apply_send_packet(
+                    &mut acc,
+                    msg,
+                    packet_data,
+                    keys_changed,
+                )?;
+            }
+            // This event is emitted on the receiver
+            WRITE_ACK_EVENT => {
+                self.apply_write_ack(
+                    &mut acc,
+                    ibc_event,
+                    msg,
+                    packet_data,
+                    keys_changed,
+                )?;
+            }
+            // Ignore all other IBC events
+            _ => {}
+        }
+        Result::<_>::Ok(acc)
+    }
+
+    // Apply the balance change to the changed balances structure
+    fn apply_balance_change(
+        &self,
+        mut result: ChangedBalances,
+        [token, counterpart]: [&Address; 2],
+    ) -> Result<ChangedBalances> {
+        let denom = read_denom(&self.ctx.pre(), token)?.ok_or_err_msg(
+            "No denomination found in storage for the given token",
+        )?;
+        unepoched_tokens(token, denom, &mut result.tokens)?;
+        let counterpart_balance_key = balance_key(token, counterpart);
+        let pre_balance: Amount = self
+            .ctx
+            .read_pre(&counterpart_balance_key)?
+            .unwrap_or_default();
+        let post_balance: Amount = self
+            .ctx
+            .read_post(&counterpart_balance_key)?
+            .unwrap_or_default();
+        // Make it possible to decode IBC tokens
+        result.ibc_denoms.insert(
+            self.query_ibc_denom(token.to_string(), Some(counterpart))
+                .map_err(native_vp::Error::new)?,
+            token.clone(),
+        );
+        // Public keys must be the hash of the sources/targets
+        let address_hash = TransparentAddress(<[u8; 20]>::from(
+            ripemd::Ripemd160::digest(sha2::Sha256::digest(
+                &MaybeIbcAddress::Address(counterpart.clone())
+                    .serialize_to_vec(),
+            )),
+        ));
+        // Enable the decoding of these counterpart addresses
+        result.decoder.insert(
+            address_hash,
+            MaybeIbcAddress::Address(counterpart.clone()),
+        );
+        let pre_entry =
+            result.pre.entry(address_hash).or_insert(ValueSum::zero());
+        let post_entry =
+            result.post.entry(address_hash).or_insert(ValueSum::zero());
+        *pre_entry = checked!(
+            pre_entry + &ValueSum::from_pair((*token).clone(), pre_balance)
+        )
+        .map_err(native_vp::Error::new)?;
+        *post_entry = checked!(
+            post_entry + &ValueSum::from_pair((*token).clone(), post_balance)
+        )
+        .map_err(native_vp::Error::new)?;
+        Result::<_>::Ok(result)
+    }
+
     // Check that transfer is pinned correctly and record the balance changes
     fn validate_state_and_get_transfer_data(
         &self,
@@ -343,260 +603,24 @@ where
         let mut counterparts_balances =
             keys_changed.iter().filter_map(is_any_token_balance_key);
 
-        let mut changed_balances = counterparts_balances.try_fold(
-            ChangedBalances::default(),
-            |mut result, [token, counterpart]| {
-                let denom = read_denom(&self.ctx.pre(), token)?.ok_or_err_msg(
-                    "No denomination found in storage for the given token",
-                )?;
-                unepoched_tokens(token, denom, &mut result.tokens)?;
-                let counterpart_balance_key = balance_key(token, counterpart);
-                let pre_balance: Amount = self
-                    .ctx
-                    .read_pre(&counterpart_balance_key)?
-                    .unwrap_or_default();
-                let post_balance: Amount = self
-                    .ctx
-                    .read_post(&counterpart_balance_key)?
-                    .unwrap_or_default();
-                // Make it possible to decode IBC tokens
-                result.ibc_denoms.insert(
-                    self.query_ibc_denom(token.to_string(), Some(counterpart))
-                        .map_err(native_vp::Error::new)?,
-                    token.clone(),
-                );
-                // Public keys must be the hash of the sources/targets
-                let address_hash = TransparentAddress(<[u8; 20]>::from(
-                    ripemd::Ripemd160::digest(sha2::Sha256::digest(
-                        &MaybeIbcAddress::Address(counterpart.clone())
-                            .serialize_to_vec(),
-                    )),
-                ));
-                // Enable the decoding of these counterpart addresses
-                result.decoder.insert(
-                    address_hash,
-                    MaybeIbcAddress::Address(counterpart.clone()),
-                );
-                let pre_entry =
-                    result.pre.entry(address_hash).or_insert(ValueSum::zero());
-                let post_entry =
-                    result.post.entry(address_hash).or_insert(ValueSum::zero());
-                *pre_entry = checked!(
-                    pre_entry
-                        + &ValueSum::from_pair((*token).clone(), pre_balance)
-                )
-                .map_err(native_vp::Error::new)?;
-                *post_entry = checked!(
-                    post_entry
-                        + &ValueSum::from_pair((*token).clone(), post_balance)
-                )
-                .map_err(native_vp::Error::new)?;
-                Result::<_>::Ok(result)
-            },
-        )?;
-
+        // Apply the balance changes to the changed balances structure
+        let mut changed_balances = counterparts_balances
+            .try_fold(ChangedBalances::default(), |acc, account| {
+                self.apply_balance_change(acc, account)
+            })?;
         let ibc_addr = MaybeIbcAddress::Address(IBC);
-        // Public keys must be the hash of the sources/targets
-        let ibc_addr_hash =
-            TransparentAddress(<[u8; 20]>::from(ripemd::Ripemd160::digest(
-                sha2::Sha256::digest(&ibc_addr.serialize_to_vec()),
-            )));
         // Enable decoding the IBC address hash
-        changed_balances.decoder.insert(ibc_addr_hash, ibc_addr);
+        changed_balances.decoder.insert(namada_addr(IBC), ibc_addr);
 
         // Extract the IBC events
-        let ibc_events: BTreeSet<_> = self
-            .ctx
-            .state
-            .write_log()
-            .get_events_of::<IbcEvent>()
-            .collect();
-
-        changed_balances
-            .post
-            .entry(ibc_addr_hash)
-            .or_insert(ValueSum::zero());
-        // Required for the IBC internal Address to release funds
-        changed_balances
-            .pre
-            .entry(ibc_addr_hash)
-            .or_insert(ValueSum::zero());
-
+        let mut ibc_events =
+            self.ctx.state.write_log().get_events_of::<IbcEvent>();
         // Go through the IBC events and note the balance chages they imply
-        for ibc_event in ibc_events {
-            // Try to extract an IBC packet from this event
-            let Ok(msg) = ibc_events::packet_from_event_attributes(
-                &ibc_event.clone().into_attributes(),
-            ) else {
-                continue;
-            };
-            // Check if this is a Transfer packet
-            let Ok(packet_data) =
-                serde_json::from_slice::<PacketData>(&msg.data)
-            else {
-                continue;
-            };
-
-            // Get the packet commitment from post-storage that corresponds
-            // to this event
-            let address =
-                MaybeIbcAddress::Ibc(packet_data.receiver.to_string());
-            // Public keys must be the hash of the sources/targets
-            let address_hash = TransparentAddress(<[u8; 20]>::from(
-                ripemd::Ripemd160::digest(sha2::Sha256::digest(
-                    &address.serialize_to_vec(),
-                )),
-            ));
-            changed_balances.decoder.insert(address_hash, address);
-            changed_balances
-                .pre
-                .entry(address_hash)
-                .or_insert(ValueSum::zero());
-
-            match ibc_event.kind().sub_domain() {
-                // This event is emitted on the sender
-                SEND_PACKET_EVENT => {
-                    // Ensure that the event corresponds to the current changes
-                    // to storage
-                    let commitment_key = storage::commitment_key(
-                        &msg.port_id_on_a,
-                        &msg.chan_id_on_a,
-                        msg.seq_on_a,
-                    );
-                    if !keys_changed.contains(&commitment_key) {
-                        // Otherwise ignore this event
-                        continue;
-                    }
-                    let Some(storage_commitment): Option<PacketCommitment> =
-                        self.ctx
-                            .read_bytes_post(&commitment_key)?
-                            .map(Into::into)
-                    else {
-                        // Ignore this event if it does not exist
-                        continue;
-                    };
-                    // Check that the packet commitment in storage is the same
-                    // as that derived from this event
-                    let packet_commitment = VpValidationContext::<'a, 'a, S, CA>::compute_packet_commitment(
-                        &msg.data,
-                        &msg.timeout_height_on_b,
-                        &msg.timeout_timestamp_on_b,
-                    );
-                    if packet_commitment != storage_commitment {
-                        // Ignore this event if the commitments are not equal
-                        continue;
-                    }
-                    // Since IBC denominations are derived from Addresses
-                    // when sending, we have to do a reverse look-up of the
-                    // relevant token Address
-                    let token = changed_balances
-                        .ibc_denoms
-                        .get(&packet_data.token.denom.to_string())
-                        .cloned()
-                        // If the reverse lookup failed, then guess the Address
-                        // that might have yielded the IBC denom. However,
-                        // guessing an IBC token address cannot possibly be
-                        // correct due to the structure of query_ibc_denom
-                        .or_else(|| {
-                            Address::decode(packet_data.token.denom.to_string())
-                                .ok()
-                                .filter(|x| {
-                                    !matches!(
-                                        x,
-                                        Address::Internal(
-                                            InternalAddress::IbcToken(_)
-                                        )
-                                    )
-                                })
-                        })
-                        .ok_or_err_msg("Unable to decode IBC token")?;
-                    let delta = ValueSum::from_pair(
-                        token.clone(),
-                        Amount::from_uint(Uint(*packet_data.token.amount), 0)
-                            .unwrap(),
-                    );
-                    // Move the funds from the IBC internal address to a
-                    // specific receiver
-                    let ibc_post_entry = changed_balances
-                        .post
-                        .entry(ibc_addr_hash)
-                        .or_insert(ValueSum::zero());
-                    *ibc_post_entry = checked!(ibc_post_entry - &delta)
-                        .map_err(native_vp::Error::new)?;
-                    // Required for the packet's receiver to get funds
-                    let post_entry = changed_balances
-                        .post
-                        .entry(address_hash)
-                        .or_insert(ValueSum::zero());
-                    // Enable funds to be received by the receiver in the
-                    // IBC packet
-                    *post_entry = checked!(post_entry + &delta)
-                        .map_err(native_vp::Error::new)?;
-                }
-                // This event is emitted on the receiver
-                WRITE_ACK_EVENT => {
-                    // Ensure that the event corresponds to the current changes
-                    // to storage
-                    let ack_key = storage::ack_key(
-                        &msg.port_id_on_a,
-                        &msg.chan_id_on_a,
-                        msg.seq_on_a,
-                    );
-                    if !keys_changed.contains(&ack_key) {
-                        // Otherwise ignore this event
-                        continue;
-                    }
-                    let acknowledgement = ibc_event
-                        .raw_read_attribute::<PacketAck<'_>>()
-                        .ok_or_err_msg(
-                            "packet_ack attribute missing from \
-                             write_acknowledgement",
-                        )?;
-                    let acknowledgement: AcknowledgementStatus =
-                        serde_json::from_slice(acknowledgement.as_ref())
-                            .wrap_err("Decoding acknowledment failed")?;
-                    // If the transfer was a failure, then enable funds to
-                    // be withdrawn from the IBC internal address
-                    if acknowledgement.is_successful() {
-                        // Mirror how the IBC token is derived in
-                        // gen_ibc_shielded_transfer in the non-refund case
-                        let ibc_denom = self.query_ibc_denom(
-                            &packet_data.token.denom.to_string(),
-                            Some(&Address::Internal(InternalAddress::Ibc)),
-                        )?;
-                        let token = namada_ibc::received_ibc_token(
-                            ibc_denom,
-                            &msg.port_id_on_a,
-                            &msg.chan_id_on_a,
-                            &msg.port_id_on_b,
-                            &msg.chan_id_on_b,
-                        )
-                        .into_storage_result()
-                        .map_err(Error::NativeVpError)?;
-                        let delta = ValueSum::from_pair(
-                            token.clone(),
-                            Amount::from_uint(
-                                Uint(*packet_data.token.amount),
-                                0,
-                            )
-                            .unwrap(),
-                        );
-                        // Enable funds to be taken from the IBC internal
-                        // address and be deposited elsewhere
-                        // Required for the IBC internal Address to release
-                        // funds
-                        let pre_entry = changed_balances
-                            .pre
-                            .entry(ibc_addr_hash)
-                            .or_insert(ValueSum::zero());
-                        *pre_entry = checked!(pre_entry + &delta)
-                            .map_err(native_vp::Error::new)?;
-                    }
-                }
-                // Ignore all other IBC events
-                _ => {}
-            }
-        }
+        let changed_balances =
+            ibc_events.try_fold(changed_balances, |acc, ibc_event| {
+                // Apply all IBC packets to the changed balances structure
+                self.apply_ibc_packet(acc, ibc_event, keys_changed)
+            })?;
 
         Ok(changed_balances)
     }
@@ -690,9 +714,7 @@ where
 
         // Ensure that this transaction is authorized by all involved parties
         for signer in signers {
-            if let Some(MaybeIbcAddress::Address(Address::Internal(
-                InternalAddress::Ibc,
-            ))) = changed_balances.decoder.get(&signer)
+            if let Some(MaybeIbcAddress::Address(IBC)) = changed_balances.decoder.get(&signer)
             {
                 // If the IBC address is a signatory, then it means that either
                 // Tx - Transaction(s) causes a decrease in the IBC balance or

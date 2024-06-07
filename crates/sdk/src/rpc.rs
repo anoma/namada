@@ -1159,24 +1159,26 @@ pub async fn validate_amount<N: Namada>(
         InputAmount::Unvalidated(amt) => amt.canonical(),
         InputAmount::Validated(amt) => return Ok(amt),
     };
-    let token =
+    let base_token =
         if let Address::Internal(InternalAddress::IbcToken(ibc_token_hash)) =
             token
         {
             extract_base_token(context, ibc_token_hash.clone(), None)
                 .await
-                .ok_or(Error::from(QueryError::General(format!(
-                    "cannot extract base token for {token}"
-                ))))?
         } else {
-            token.clone()
+            Some(token.clone())
         };
-    let denom = match convert_response::<N::Client, Option<Denomination>>(
-        RPC.vp()
-            .token()
-            .denomination(context.client(), &token)
-            .await,
-    )? {
+    let denom = if let Some(token) = base_token {
+        convert_response::<N::Client, Option<Denomination>>(
+            RPC.vp()
+                .token()
+                .denomination(context.client(), &token)
+                .await,
+        )?
+    } else {
+        None
+    };
+    let denom = match denom {
         Some(denom) => Ok(denom),
         None => {
             if force {

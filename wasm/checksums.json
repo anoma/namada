@@ -7,7 +7,7 @@
     "tx_change_validator_metadata.wasm": "tx_change_validator_metadata.47fe67380d405e03d8679e377597a896af1cd7c9ef300ae040dabbd81676aa8c.wasm",
     "tx_claim_rewards.wasm": "tx_claim_rewards.35d701950d32f690360340e93bb2572770786f79d981d07c4f96d16bbbc94cfa.wasm",
     "tx_deactivate_validator.wasm": "tx_deactivate_validator.d0efd18607dc18870590a504cc63d8c24c606894b932efda5ee0913f3666cec8.wasm",
-    "tx_ibc.wasm": "tx_ibc.2186350118f45fb09ce3c98cff777fc6864d8c32eb0ca86c25103597ba5d0b81.wasm",
+    "tx_ibc.wasm": "tx_ibc.2689804a893046f0fc0f63354c7592b66d2c65d6a4f31e8efbc11ef9b9a2237a.wasm",
     "tx_init_account.wasm": "tx_init_account.36b2792c03d9a4ca35de5e61ca59a3cb9695e1dbffd5860ac90feddb07671e9a.wasm",
     "tx_init_proposal.wasm": "tx_init_proposal.2de4c2cf0b3362e4171ffbf10617991b5a414eb901fe0adab9bec49b229d5b5c.wasm",
     "tx_reactivate_validator.wasm": "tx_reactivate_validator.2d612d040562276a3117a7a697223be7ddea4523df5c7facbc04b9abb2100f20.wasm",

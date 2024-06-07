@@ -89,7 +89,7 @@ use namada_tx_prelude::BorshSerializeExt;
 use crate::tx::*;
 
 const ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
-pub const ANY_DENOMINATION: u8 = 4;
+pub const ANY_DENOMINATION: u8 = token::NATIVE_MAX_DECIMAL_PLACES;
 const COMMITMENT_PREFIX: &[u8] = b"ibc";
 
 pub struct TestIbcVp<'a> {
