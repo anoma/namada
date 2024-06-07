@@ -496,10 +496,6 @@ where
                 let threshold =
                     crate::account::threshold(&self.ctx.pre(), signer)?
                         .unwrap_or(1);
-                let max_signatures_per_transaction =
-                    crate::parameters::max_signatures_per_transaction(
-                        &self.ctx.pre(),
-                    )?;
                 let mut gas_meter = self.ctx.gas_meter.borrow_mut();
                 tx_data
                     .tx
@@ -508,7 +504,6 @@ where
                         public_keys_index_map,
                         &Some(signer.clone()),
                         threshold,
-                        max_signatures_per_transaction,
                         || gas_meter.consume(crate::gas::VERIFY_TX_SIG_GAS),
                     )
                     .map_err(native_vp::Error::new)?;

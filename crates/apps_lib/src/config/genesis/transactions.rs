@@ -863,7 +863,6 @@ impl<T> Signed<T> {
                 AccountPublicKeysMap::from_iter(public_keys.into_iter()),
                 &None,
                 threshold,
-                None,
                 || Ok(()),
             )
             .map_err(|err| err.to_string())?;

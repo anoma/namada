@@ -75,7 +75,6 @@ where
         implicit_vp_code_hash,
         epochs_per_year,
         masp_epoch_multiplier,
-        max_signatures_per_transaction,
         minimum_gas_price,
         fee_unshielding_gas_limit,
         is_native_token_transferable,
@@ -139,13 +138,6 @@ where
     let masp_epoch_multiplier_key = storage::get_masp_epoch_multiplier_key();
     storage.write(&masp_epoch_multiplier_key, masp_epoch_multiplier)?;
 
-    let max_signatures_per_transaction_key =
-        storage::get_max_signatures_per_transaction_key();
-    storage.write(
-        &max_signatures_per_transaction_key,
-        max_signatures_per_transaction,
-    )?;
-
     let gas_cost_key = storage::get_gas_cost_key();
     storage.write(&gas_cost_key, minimum_gas_price)?;
 
@@ -155,17 +147,6 @@ where
         .write(&native_token_transferable_key, is_native_token_transferable)?;
 
     Ok(())
-}
-
-/// Get the max signatures per transactio parameter
-pub fn max_signatures_per_transaction<S>(
-    storage: &S,
-) -> namada_storage::Result<Option<u8>>
-where
-    S: StorageRead,
-{
-    let key = storage::get_max_signatures_per_transaction_key();
-    storage.read(&key)
 }
 
 /// Update the max_expected_time_per_block parameter in storage. Returns the
@@ -257,18 +238,6 @@ where
     // Using `fn write_bytes` here, because implicit_vp doesn't need to be
     // encoded, it's bytes already.
     storage.write(&key, implicit_vp)
-}
-
-/// Update the max signatures per transaction storage parameter
-pub fn update_max_signature_per_tx<S>(
-    storage: &mut S,
-    value: u8,
-) -> namada_storage::Result<()>
-where
-    S: StorageRead + StorageWrite,
-{
-    let key = storage::get_max_signatures_per_transaction_key();
-    storage.write(&key, value)
 }
 
 /// Read the the epoch duration parameter from store
@@ -389,15 +358,6 @@ where
     // read masp epoch multiplier
     let masp_epoch_multiplier = read_masp_epoch_multiplier_parameter(storage)?;
 
-    // read the maximum signatures per transaction
-    let max_signatures_per_transaction_key =
-        storage::get_max_signatures_per_transaction_key();
-    let value: Option<u8> =
-        storage.read(&max_signatures_per_transaction_key)?;
-    let max_signatures_per_transaction: u8 = value
-        .ok_or(ReadError::ParametersMissing)
-        .into_storage_result()?;
-
     // read gas cost
     let gas_cost_key = storage::get_gas_cost_key();
     let value = storage.read(&gas_cost_key)?;
@@ -430,7 +390,6 @@ where
         implicit_vp_code_hash: Some(implicit_vp_code_hash),
         epochs_per_year,
         masp_epoch_multiplier,
-        max_signatures_per_transaction,
         minimum_gas_price,
         fee_unshielding_gas_limit,
         is_native_token_transferable,
@@ -476,7 +435,6 @@ where
         implicit_vp_code_hash: Default::default(),
         epochs_per_year: 365,
         masp_epoch_multiplier: 2,
-        max_signatures_per_transaction: 10,
         fee_unshielding_gas_limit: 0,
         minimum_gas_price: Default::default(),
         is_native_token_transferable: true,
