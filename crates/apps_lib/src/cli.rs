@@ -3475,12 +3475,10 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.arg(NAMADA_START_TIME.def().help(wrap!(
-                "The start time of the ledger. Accepts a relaxed form of \
-                 RFC3339. A space or a 'T' are accepted as the separator \
-                 between the date and time components. Additional spaces are \
-                 allowed between each component.\nAll of these examples are \
-                 equivalent:\n2023-01-20T12:12:12Z\n2023-01-20 \
-                 12:12:12Z\n2023-  01-20T12:  12:12Z"
+                "The start time of the ledger. Accepts a strict subset of \
+                 RFC3339. A 'T' is accepted as the separator between the date \
+                 and time components.\nHere is a valid timestamp: \
+                 2023-01-20T12:12:12Z"
             )))
             .arg(
                 PATH_OPT
