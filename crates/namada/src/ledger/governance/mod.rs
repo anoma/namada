@@ -1844,7 +1844,7 @@ mod test {
             proposal_id,
             509,
             3,
-            8,
+            4,
             19,
             &signer_address,
             false,
