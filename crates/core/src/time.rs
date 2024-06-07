@@ -253,7 +253,7 @@ impl BorshSerialize for DateTimeUtc {
         &self,
         writer: &mut W,
     ) -> std::io::Result<()> {
-        let raw = self.0.to_rfc3339();
+        let raw = self.to_rfc3339();
         BorshSerialize::serialize(&raw, writer)
     }
 }
@@ -344,7 +344,7 @@ impl TryFrom<Rfc3339String> for DateTimeUtc {
 
 impl From<DateTimeUtc> for Rfc3339String {
     fn from(dt: DateTimeUtc) -> Self {
-        Self(DateTime::to_rfc3339(&dt.0))
+        Self(dt.to_rfc3339())
     }
 }
 
@@ -352,7 +352,7 @@ impl TryFrom<DateTimeUtc> for crate::tendermint::time::Time {
     type Error = crate::tendermint::Error;
 
     fn try_from(dt: DateTimeUtc) -> Result<Self, Self::Error> {
-        Self::parse_from_rfc3339(&DateTime::to_rfc3339(&dt.0))
+        Self::parse_from_rfc3339(&dt.to_rfc3339())
     }
 }
 
