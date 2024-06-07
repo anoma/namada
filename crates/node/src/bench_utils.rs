@@ -913,6 +913,7 @@ impl Client for BenchShell {
                     .map(|(idx, (tx, changed_keys))| {
                         let tx_result = TxResult::<String> {
                             gas_used: 0.into(),
+                            gas_scale: 0_u64, // TODO: is this correct?
                             batch_results: BatchResults(
                                 [(
                                     tx.first_commitments().unwrap().get_hash(),

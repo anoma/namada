@@ -23,7 +23,7 @@ use namada_core::token::{
     Amount, DenominatedAmount, Denomination, MaspDigitPos,
 };
 use namada_core::{storage, token};
-use namada_gas::event::GasUsed as GasUsedAttr;
+use namada_gas::event::{GasScale as GasScaleAttr, GasUsed as GasUsedAttr};
 use namada_gas::Gas;
 use namada_governance::parameters::GovernanceParameters;
 use namada_governance::pgf::parameters::PgfParameters;
@@ -539,7 +539,10 @@ pub async fn dry_run_tx<N: Namada>(
             .await,
     )?
     .data;
-    let result_str = format!("Transaction consumed {} gas", result.gas_used);
+    let result_str = format!(
+        "Transaction consumed {} gas",
+        result.gas_used.get_whole_gas_units(result.gas_scale)
+    );
     let mut cmt_result_str = String::new();
     for (cmt_hash, cmt_result) in &result.batch_results.0 {
         match cmt_result {
@@ -648,6 +651,12 @@ impl TryFrom<Event> for TxResponse {
         let gas_used = event
             .read_attribute::<GasUsedAttr>()
             .map_err(|err| err.to_string())?;
+        let gas_scale = event
+            .read_attribute::<GasScaleAttr>()
+            .map_err(|err| err.to_string())?;
+
+        let gas_used =
+            Gas::from_whole_units(gas_used.into(), gas_scale).expect("temp");
 
         Ok(TxResponse {
             batch,

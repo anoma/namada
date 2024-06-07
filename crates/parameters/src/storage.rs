@@ -184,6 +184,18 @@ pub fn get_max_block_gas(
     )
 }
 
+/// Helper function to retrieve the `gas_scale` protocol parameter from
+/// storage
+pub fn get_gas_scale(
+    storage: &impl StorageRead,
+) -> std::result::Result<u64, namada_storage::Error> {
+    storage.read(&get_gas_scale_key())?.ok_or(
+        namada_storage::Error::SimpleMessage(
+            "Missing gas_scale parameter from storage",
+        ),
+    )
+}
+
 /// Storage key used for the flag to enable the native token transfer
 pub fn get_native_token_transferable_key() -> Key {
     get_native_token_transferable_key_at_addr(ADDRESS)

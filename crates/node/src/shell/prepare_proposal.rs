@@ -4,9 +4,10 @@ use std::cell::RefCell;
 
 use namada::core::address::Address;
 use namada::core::key::tm_raw_hash_to_string;
-use namada::gas::{Gas, TxGasMeter};
+use namada::gas::TxGasMeter;
 use namada::hash::Hash;
 use namada::ledger::protocol::{self, ShellParams};
+use namada::parameters::get_gas_scale;
 use namada::proof_of_stake::storage::find_validator_by_raw_hash;
 use namada::state::{DBIter, StorageHasher, TempWlState, DB};
 use namada::token::{Amount, DenominatedAmount};
@@ -288,7 +289,9 @@ where
     tx.validate_tx().map_err(|_| ())?;
     if let TxType::Wrapper(wrapper) = tx.header().tx_type {
         // Check tx gas limit for tx size
-        let gas_limit = Gas::try_from(wrapper.gas_limit).map_err(|_| ())?;
+        let gas_scale = get_gas_scale(temp_state).unwrap();
+        let gas_limit =
+            wrapper.gas_limit.as_scaled_gas(gas_scale).map_err(|_| ())?;
         let mut tx_gas_meter = TxGasMeter::new(gas_limit);
         tx_gas_meter.add_wrapper_gas(tx_bytes).map_err(|_| ())?;
 

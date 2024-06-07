@@ -17,3 +17,17 @@ impl EventAttributeEntry<'static> for GasUsed {
         self.0
     }
 }
+
+/// Extend a [`namada_events::Event`] with the gas scale data.
+pub struct GasScale(pub u64);
+
+impl EventAttributeEntry<'static> for GasScale {
+    type Value = u64;
+    type ValueOwned = Self::Value;
+
+    const KEY: &'static str = "gas_scale";
+
+    fn into_value(self) -> Self::Value {
+        self.0
+    }
+}

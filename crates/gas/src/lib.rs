@@ -113,9 +113,6 @@ pub const MASP_PARALLEL_GAS_DIVIDER: u64 = PARALLEL_GAS_DIVIDER / 2;
 /// Gas module result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Decimal scale of Gas units
-const SCALE: u64 = 100_000_000;
-
 /// Representation of gas in sub-units. This effectively decouples gas metering
 /// from fee payment, allowing higher resolution when accounting for gas while,
 /// at the same time, providing a contained gas value when paying fees.
@@ -155,9 +152,10 @@ impl Gas {
 
     /// Converts the sub gas units to whole ones. If the sub units are not a
     /// multiple of the `SCALE` than ceil the quotient
-    fn get_whole_gas_units(&self) -> u64 {
-        let quotient = self.sub / SCALE;
-        if self.sub % SCALE == 0 {
+    #[allow(clippy::arithmetic_side_effects)]
+    pub fn get_whole_gas_units(&self, scale: u64) -> u64 {
+        let quotient = self.sub / scale;
+        if self.sub % scale == 0 {
             quotient
         } else {
             quotient
@@ -167,8 +165,8 @@ impl Gas {
     }
 
     /// Generates a `Gas` instance from a whole amount
-    pub fn from_whole_units(whole: u64) -> Option<Self> {
-        let sub = whole.checked_mul(SCALE)?;
+    pub fn from_whole_units(whole: u64, scale: u64) -> Option<Self> {
+        let sub = whole.checked_mul(scale)?;
         Some(Self { sub })
     }
 }
@@ -188,7 +186,7 @@ impl From<Gas> for u64 {
 impl Display for Gas {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // Display the gas in whole amounts
-        write!(f, "{}", self.get_whole_gas_units())
+        write!(f, "{}", self.sub)
     }
 }
 
@@ -197,8 +195,8 @@ impl FromStr for Gas {
 
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         let raw: u64 = s.parse().map_err(GasParseError::Parse)?;
-        let gas = Gas::from_whole_units(raw).ok_or(GasParseError::Overflow)?;
-        Ok(gas)
+        // let gas = Gas::from_whole_units(raw).ok_or(GasParseError::Overflow)?;
+        Ok(Self { sub: raw })
     }
 }
 

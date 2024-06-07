@@ -261,8 +261,11 @@ where
                         tx_wasm_cache,
                     },
                 )?;
+                let gas_scale =
+                    namada_parameters::get_gas_scale(state).unwrap();
                 Ok(TxResult {
                     gas_used: tx_gas_meter.borrow().get_tx_consumed_gas(),
+                    gas_scale,
                     batch_results: BatchResults(
                         [(cmt.get_hash(), Ok(batched_tx_result))]
                             .into_iter()
@@ -430,8 +433,11 @@ where
         .add_wrapper_gas(tx_bytes)
         .map_err(|err| Error::GasError(err.to_string()))?;
 
+    let gas_scale = namada_parameters::get_gas_scale(state).unwrap();
+
     Ok(TxResult {
         gas_used: tx_gas_meter.borrow().get_tx_consumed_gas(),
+        gas_scale,
         batch_results: BatchResults::default(),
     })
 }
