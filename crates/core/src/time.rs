@@ -375,3 +375,34 @@ impl From<DurationNanos> for crate::tendermint::Timeout {
         Self::from(std::time::Duration::from(val))
     }
 }
+
+#[cfg(test)]
+mod core_time_tests {
+    use super::*;
+
+    // TODO: if someone wants to take this on, convert this test
+    // into a proptest
+    #[test]
+    fn test_valid_reverse_datetime_utc_encoding_roundtrip() {
+        const TIMESTAMP: &str = "1966-03-03T00:06:56Z";
+
+        let datetime = DateTimeUtc::from_rfc3339(TIMESTAMP).unwrap();
+        let encoded = datetime.to_rfc3339();
+
+        assert_eq!(encoded, TIMESTAMP);
+    }
+
+    #[test]
+    fn test_invalid_datetime_utc_encoding() {
+        // NB: this is a valid rfc3339 string, but we enforce
+        // a subset of the format to get deterministic encoding
+        // results
+        const TIMESTAMP: &str = "1966-03-03T00:06:56.520+00:00";
+
+        // this is a valid rfc3339 string
+        assert!(DateTime::parse_from_rfc3339(TIMESTAMP).is_ok());
+
+        // but it cannot be parsed as a `DateTimeUtc`
+        assert!(DateTimeUtc::from_rfc3339(TIMESTAMP).is_err());
+    }
+}
