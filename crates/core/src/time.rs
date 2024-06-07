@@ -154,6 +154,8 @@ impl Display for DateTimeUtc {
 }
 
 impl DateTimeUtc {
+    const FORMAT: &'static str = "%Y-%m-%dT%H:%M:%SZ";
+
     /// Returns a DateTimeUtc which corresponds to the current date.
     pub fn now() -> Self {
         Self(
@@ -183,7 +185,19 @@ impl DateTimeUtc {
 
     /// Returns an rfc3339 string or an error.
     pub fn to_rfc3339(&self) -> String {
-        chrono::DateTime::to_rfc3339(&self.0)
+        self.0.format(DateTimeUtc::FORMAT).to_string()
+    }
+
+    /// Parses a rfc3339 string, or returns an error.
+    pub fn from_rfc3339(s: &str) -> Result<Self, ParseError> {
+        use chrono::format;
+        use chrono::format::strftime::StrftimeItems;
+
+        let format = StrftimeItems::new(Self::FORMAT);
+        let mut parsed = format::Parsed::new();
+        format::parse(&mut parsed, s, format)?;
+
+        parsed.to_datetime_with_timezone(&chrono::Utc).map(Self)
     }
 
     /// Returns the DateTimeUtc corresponding to one second in the future
@@ -196,8 +210,9 @@ impl DateTimeUtc {
 impl FromStr for DateTimeUtc {
     type Err = ParseError;
 
+    #[inline]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(s.parse::<DateTime<Utc>>()?))
+        Self::from_rfc3339(s)
     }
 }
 
@@ -247,9 +262,8 @@ impl BorshDeserialize for DateTimeUtc {
     fn deserialize_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
         use std::io::{Error, ErrorKind};
         let raw: String = BorshDeserialize::deserialize_reader(reader)?;
-        let actual = DateTime::parse_from_rfc3339(&raw)
-            .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
-        Ok(Self(actual.into()))
+        Self::from_rfc3339(&raw)
+            .map_err(|err| Error::new(ErrorKind::InvalidData, err))
     }
 }
 
@@ -324,8 +338,7 @@ impl TryFrom<Rfc3339String> for DateTimeUtc {
     type Error = chrono::ParseError;
 
     fn try_from(str: Rfc3339String) -> Result<Self, Self::Error> {
-        let utc = DateTime::parse_from_rfc3339(&str.0)?;
-        Ok(Self(utc.into()))
+        Self::from_rfc3339(&str.0)
     }
 }
 
