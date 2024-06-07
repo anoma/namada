@@ -1,10 +1,11 @@
-use namada_core::address::Address;
+use namada_core::address::{self, Address};
 use namada_core::arith::checked;
 use namada_core::token;
 use namada_core::token::Amount;
 use namada_core::uint::Uint;
 use namada_storage as storage;
 use namada_storage::{StorageRead, StorageWrite};
+use namada_trans_token::credit_tokens;
 use storage::ResultExt;
 
 use crate::storage_key::*;
@@ -39,4 +40,32 @@ where
     let raw_target = Amount::from_uint(raw_target, 0).into_storage_result()?;
     storage.write(&masp_locked_amount_target_key(address), raw_target)?;
     Ok(())
+}
+
+/// Mint MASP rewards tokens and increment the stored total rewards.
+pub fn mint_rewards<S>(
+    storage: &mut S,
+    amount: token::Amount,
+) -> storage::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    let native_token = storage.get_native_token()?;
+    credit_tokens(storage, &native_token, &address::MASP, amount)?;
+
+    let total_rewards_key = masp_total_rewards();
+    let mut total_rewards = read_total_rewards(storage)?;
+    checked!(total_rewards += amount)?;
+    storage.write(&total_rewards_key, total_rewards)
+}
+
+/// Read the total rewards minted by MASP.
+pub fn read_total_rewards<S>(storage: &S) -> storage::Result<token::Amount>
+where
+    S: StorageRead,
+{
+    let total_rewards_key = masp_total_rewards();
+    let total_rewards: token::Amount =
+        storage.read(&total_rewards_key)?.unwrap_or_default();
+    Ok(total_rewards)
 }
