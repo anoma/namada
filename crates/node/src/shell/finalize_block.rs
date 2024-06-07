@@ -386,7 +386,8 @@ where
                         .unwrap_or("<unknown>"),
                     msg,
                 );
-                let gas_scale = get_gas_scale(&self.state).unwrap();
+                let gas_scale = get_gas_scale(&self.state)
+                    .expect("Failed to get gas scale from parameters");
                 let scaled_gas = Gas::from(
                     tx_data
                         .tx_gas_meter

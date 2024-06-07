@@ -152,10 +152,17 @@ impl Gas {
 
     /// Converts the sub gas units to whole ones. If the sub units are not a
     /// multiple of the `SCALE` than ceil the quotient
-    #[allow(clippy::arithmetic_side_effects)]
     pub fn get_whole_gas_units(&self, scale: u64) -> u64 {
-        let quotient = self.sub / scale;
-        if self.sub % scale == 0 {
+        let quotient = self
+            .sub
+            .checked_div(scale)
+            .expect("Gas quotient should not overflow on checked division");
+        if self
+            .sub
+            .checked_rem(scale)
+            .expect("Gas quotient remainder should not overflow")
+            == 0
+        {
             quotient
         } else {
             quotient
