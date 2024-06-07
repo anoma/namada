@@ -764,21 +764,6 @@ where
             .into());
         }
 
-        let proposal_period_multiple_of_min_period =
-            checked!((end_epoch - start_epoch) % min_period)
-                .map_err(|e| Error::NativeVpError(e.into()))?
-                .0
-                == 0;
-        if !proposal_period_multiple_of_min_period {
-            return Err(native_vp::Error::new_alloc(format!(
-                "Proposal with id {proposal_id} does not have a voting period \
-                 that is a multiple of the minimum voting period \
-                 {min_period}. Starting epoch is {start_epoch}, and ending \
-                 epoch is {end_epoch}.",
-            ))
-            .into());
-        }
-
         let proposal_meets_min_period = checked!(end_epoch - start_epoch)
             .map_err(|e| Error::NativeVpError(e.into()))?
             .0
@@ -847,21 +832,6 @@ where
             .into();
             tracing::info!("{error}");
             return Err(error);
-        }
-
-        let proposal_period_multiple_of_min_period =
-            checked!((end_epoch - start_epoch) % min_period)
-                .map_err(|e| Error::NativeVpError(e.into()))?
-                .0
-                == 0;
-        if !proposal_period_multiple_of_min_period {
-            return Err(native_vp::Error::new_alloc(format!(
-                "Proposal with id {proposal_id} does not have a voting period \
-                 that is a multiple of the minimum voting period \
-                 {min_period}. Starting epoch is {start_epoch}, and ending \
-                 epoch is {end_epoch}.",
-            ))
-            .into());
         }
 
         let diff = checked!(end_epoch - start_epoch)
