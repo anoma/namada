@@ -702,61 +702,168 @@ fn format_outputs(output: &mut Vec<String>) {
     }
 }
 
+enum TransferSide<'a> {
+    Source(&'a Address),
+    Target(&'a Address),
+}
+
 enum TokenTransfer<'a> {
     Transparent(&'a token::TransparentTransfer),
     Shielded,
-    Shielding(&'a token::ShieldingTransfer),
-    Unshielding(&'a token::UnshieldingTransfer),
+    Shielding(&'a token::ShieldingMultiTransfer),
+    Unshielding(&'a token::UnshieldingMultiTransfer),
 }
 
 impl TokenTransfer<'_> {
-    fn source(&self) -> Option<&Address> {
+    fn sources(&self) -> Vec<&Address> {
         match self {
-            TokenTransfer::Transparent(transfer) => Some(&transfer.source),
-            TokenTransfer::Shielded => None,
-            TokenTransfer::Shielding(transfer) => Some(&transfer.source),
-            TokenTransfer::Unshielding(_) => None,
+            TokenTransfer::Transparent(transfers) => transfers
+                .0
+                .iter()
+                .map(|transfer| &transfer.source)
+                .collect(),
+            TokenTransfer::Shielded => Default::default(),
+            TokenTransfer::Shielding(transfers) => transfers
+                .data
+                .iter()
+                .map(|transfer| &transfer.source)
+                .collect(),
+            TokenTransfer::Unshielding(_) => Default::default(),
         }
     }
 
-    fn target(&self) -> Option<&Address> {
+    fn targets(&self) -> Vec<&Address> {
         match self {
-            TokenTransfer::Transparent(transfer) => Some(&transfer.target),
-            TokenTransfer::Shielded => None,
-            TokenTransfer::Shielding(_) => None,
-            TokenTransfer::Unshielding(transfer) => Some(&transfer.target),
+            TokenTransfer::Transparent(transfers) => transfers
+                .0
+                .iter()
+                .map(|transfer| &transfer.target)
+                .collect(),
+
+            TokenTransfer::Shielded => Default::default(),
+            TokenTransfer::Shielding(_) => Default::default(),
+            TokenTransfer::Unshielding(transfers) => transfers
+                .data
+                .iter()
+                .map(|transfer| &transfer.target)
+                .collect(),
         }
     }
 
-    fn token_and_amount(&self) -> Option<(&Address, DenominatedAmount)> {
-        match self {
-            TokenTransfer::Transparent(transfer) => {
-                Some((&transfer.token, transfer.amount))
+    fn tokens_and_amounts(
+        &self,
+        address: TransferSide<'_>,
+    ) -> Result<HashMap<&Address, DenominatedAmount>, Error> {
+        Ok(match self {
+            TokenTransfer::Transparent(transfers) => {
+                let mut map: HashMap<&Address, DenominatedAmount> =
+                    HashMap::new();
+
+                match address {
+                    TransferSide::Source(source) => {
+                        for transfer in &transfers.0 {
+                            if source == &transfer.source {
+                                Self::update_token_amount_map(
+                                    &mut map,
+                                    &transfer.token,
+                                    transfer.amount,
+                                )?;
+                            }
+                        }
+                    }
+                    TransferSide::Target(target) => {
+                        for transfer in &transfers.0 {
+                            if target == &transfer.target {
+                                Self::update_token_amount_map(
+                                    &mut map,
+                                    &transfer.token,
+                                    transfer.amount,
+                                )?;
+                            }
+                        }
+                    }
+                }
+
+                map
             }
-            TokenTransfer::Shielded => None,
-            TokenTransfer::Shielding(transfer) => {
-                Some((&transfer.token, transfer.amount))
+            TokenTransfer::Shielded => Default::default(),
+            TokenTransfer::Shielding(transfers) => {
+                let mut map: HashMap<&Address, DenominatedAmount> =
+                    HashMap::new();
+
+                if let TransferSide::Source(source_addr) = address {
+                    for transfer in &transfers.data {
+                        if &transfer.source == source_addr {
+                            Self::update_token_amount_map(
+                                &mut map,
+                                &transfer.token,
+                                transfer.amount,
+                            )?;
+                        }
+                    }
+                }
+
+                map
             }
-            TokenTransfer::Unshielding(transfer) => {
-                Some((&transfer.token, transfer.amount))
+            TokenTransfer::Unshielding(transfers) => {
+                let mut map: HashMap<&Address, DenominatedAmount> =
+                    HashMap::new();
+
+                if let TransferSide::Target(target_addr) = address {
+                    for transfer in &transfers.data {
+                        if &transfer.target == target_addr {
+                            Self::update_token_amount_map(
+                                &mut map,
+                                &transfer.token,
+                                transfer.amount,
+                            )?;
+                        }
+                    }
+                }
+
+                map
+            }
+        })
+    }
+
+    fn update_token_amount_map<'a>(
+        map: &mut HashMap<&'a Address, DenominatedAmount>,
+        token: &'a Address,
+        amount: DenominatedAmount,
+    ) -> Result<(), Error> {
+        match map.get_mut(token) {
+            Some(prev_amount) => {
+                *prev_amount = checked!(prev_amount + amount)?;
+            }
+            None => {
+                map.insert(token, amount);
             }
         }
+
+        Ok(())
     }
 }
 
-/// Adds a Ledger output for the sender and destination for transparent and MASP
-/// transactions
+/// Adds a Ledger output for the senders and destinations for transparent and
+/// MASP transactions
 async fn make_ledger_token_transfer_endpoints(
     tokens: &HashMap<Address, String>,
     output: &mut Vec<String>,
     transfer: TokenTransfer<'_>,
     builder: Option<&MaspBuilder>,
     assets: &HashMap<AssetType, AssetData>,
-) {
-    if let Some(source) = transfer.source() {
-        output.push(format!("Sender : {}", source));
-        if let Some((token, amount)) = transfer.token_and_amount() {
-            make_ledger_amount_addr(tokens, output, amount, token, "Sending ");
+) -> Result<(), Error> {
+    let sources = transfer.sources();
+    if !sources.is_empty() {
+        for source in transfer.sources() {
+            output.push(format!("Sender : {}", source));
+            for (token, amount) in
+                transfer.tokens_and_amounts(TransferSide::Source(source))?
+            {
+                make_ledger_amount_addr(
+                    tokens, output, amount, token, "Sending ",
+                );
+            }
         }
     } else if let Some(builder) = builder {
         for sapling_input in builder.builder.sapling_inputs() {
@@ -773,16 +880,21 @@ async fn make_ledger_token_transfer_endpoints(
             .await;
         }
     }
-    if let Some(target) = transfer.target() {
-        output.push(format!("Destination : {}", target));
-        if let Some((token, amount)) = transfer.token_and_amount() {
-            make_ledger_amount_addr(
-                tokens,
-                output,
-                amount,
-                token,
-                "Receiving ",
-            );
+    let targets = transfer.targets();
+    if !targets.is_empty() {
+        for target in targets {
+            output.push(format!("Destination : {}", target));
+            for (token, amount) in
+                transfer.tokens_and_amounts(TransferSide::Target(target))?
+            {
+                make_ledger_amount_addr(
+                    tokens,
+                    output,
+                    amount,
+                    token,
+                    "Receiving ",
+                );
+            }
         }
     } else if let Some(builder) = builder {
         for sapling_output in builder.builder.sapling_outputs() {
@@ -799,6 +911,8 @@ async fn make_ledger_token_transfer_endpoints(
             .await;
         }
     }
+
+    Ok(())
 }
 
 /// Convert decimal numbers into the format used by Ledger. Specifically remove
@@ -1294,7 +1408,7 @@ pub async fn to_ledger_vector(
                 None,
                 &HashMap::default(),
             )
-            .await;
+            .await?;
             make_ledger_token_transfer_endpoints(
                 &tokens,
                 &mut tv.output_expert,
@@ -1302,7 +1416,7 @@ pub async fn to_ledger_vector(
                 None,
                 &HashMap::default(),
             )
-            .await;
+            .await?;
         } else if code_sec.tag == Some(TX_SHIELDED_TRANSFER_WASM.to_string()) {
             let transfer = token::ShieldedTransfer::try_from_slice(
                 &tx.data(cmt)
@@ -1341,7 +1455,7 @@ pub async fn to_ledger_vector(
                 builder,
                 &asset_types,
             )
-            .await;
+            .await?;
             make_ledger_token_transfer_endpoints(
                 &tokens,
                 &mut tv.output_expert,
@@ -1349,9 +1463,9 @@ pub async fn to_ledger_vector(
                 builder,
                 &asset_types,
             )
-            .await;
+            .await?;
         } else if code_sec.tag == Some(TX_SHIELDING_TRANSFER_WASM.to_string()) {
-            let transfer = token::ShieldingTransfer::try_from_slice(
+            let transfer = token::ShieldingMultiTransfer::try_from_slice(
                 &tx.data(cmt)
                     .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
             )
@@ -1388,7 +1502,7 @@ pub async fn to_ledger_vector(
                 builder,
                 &asset_types,
             )
-            .await;
+            .await?;
             make_ledger_token_transfer_endpoints(
                 &tokens,
                 &mut tv.output_expert,
@@ -1396,10 +1510,10 @@ pub async fn to_ledger_vector(
                 builder,
                 &asset_types,
             )
-            .await;
+            .await?;
         } else if code_sec.tag == Some(TX_UNSHIELDING_TRANSFER_WASM.to_string())
         {
-            let transfer = token::UnshieldingTransfer::try_from_slice(
+            let transfer = token::UnshieldingMultiTransfer::try_from_slice(
                 &tx.data(cmt)
                     .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
             )
@@ -1436,7 +1550,7 @@ pub async fn to_ledger_vector(
                 builder,
                 &asset_types,
             )
-            .await;
+            .await?;
             make_ledger_token_transfer_endpoints(
                 &tokens,
                 &mut tv.output_expert,
@@ -1444,7 +1558,7 @@ pub async fn to_ledger_vector(
                 builder,
                 &asset_types,
             )
-            .await;
+            .await?;
         } else if code_sec.tag == Some(TX_IBC_WASM.to_string()) {
             let any_msg = Any::decode(
                 tx.data(cmt)
