@@ -1120,7 +1120,7 @@ impl BenchShieldedCtx {
             namada.client().generate_tx(
                 TX_SHIELDED_TRANSFER_WASM,
                 ShieldedTransfer {
-                    fee_payer: None,
+                    fee_unshield: None,
                     section_hash: shielded_section_hash,
                 },
                 Some(shielded),

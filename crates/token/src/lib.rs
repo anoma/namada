@@ -126,8 +126,8 @@ pub struct TransparentTransferData {
     Deserialize,
 )]
 pub struct ShieldedTransfer {
-    /// Optional target of unshielding for fee payment
-    pub fee_payer: Option<Address>,
+    /// Optional unshield for fee payment
+    pub fee_unshield: Option<UnshieldingTransferData>,
     /// Hash of tx section that contains the MASP transaction
     pub section_hash: Hash,
 }

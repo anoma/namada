@@ -2990,9 +2990,14 @@ pub async fn build_shielded_transfer<N: Namada>(
         args.gas_spending_keys.clone(),
     )
     .await?;
-    let data_fee_payer = masp_fee_data
-        .as_ref()
-        .map(|fee_data| fee_data.target.to_owned());
+    let fee_unshield =
+        masp_fee_data
+            .as_ref()
+            .map(|fee_data| token::UnshieldingTransferData {
+                target: fee_data.target.to_owned(),
+                token: fee_data.token.to_owned(),
+                amount: fee_amount,
+            });
 
     let shielded_parts = construct_shielded_parts(
         context,
@@ -3035,7 +3040,7 @@ pub async fn build_shielded_transfer<N: Namada>(
 
     // Construct the tx data with a placeholder shielded section hash
     let data = token::ShieldedTransfer {
-        fee_payer: data_fee_payer,
+        fee_unshield,
         section_hash: Hash::zero(),
     };
     let tx = build_pow_flag(

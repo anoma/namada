@@ -35,13 +35,13 @@ impl Transfer {
 
     /// Build a shielded transfer transaction from the given parameters
     pub fn shielded(
-        fee_payer: Option<Address>,
+        fee_unshield: Option<UnshieldingTransferData>,
         shielded_section_hash: Hash,
         transaction: Transaction,
         args: GlobalArgs,
     ) -> Self {
         let data = namada_sdk::token::ShieldedTransfer {
-            fee_payer,
+            fee_unshield,
             section_hash: shielded_section_hash,
         };
 

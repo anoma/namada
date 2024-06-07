@@ -1134,7 +1134,7 @@ pub mod testing {
             let tx_data = match masp_tx_type {
                 MaspTxType::Shielded => {
                     tx.add_code_from_hash(code_hash, Some(TX_SHIELDED_TRANSFER_WASM.to_owned()));
-                    let data = ShieldedTransfer { fee_payer: transfers.0.first().map(|transfer| transfer.target.clone()), section_hash: shielded_section_hash };
+                    let data = ShieldedTransfer { fee_unshield: transfers.0.first().map(|transfer| UnshieldingTransferData { target: transfer.target.to_owned(), token: transfer.token.to_owned(), amount: transfer.amount }), section_hash: shielded_section_hash };
                     tx.add_data(data.clone());
                     TxData::ShieldedTransfer(data, (build_params, build_param_bytes))
                 },
