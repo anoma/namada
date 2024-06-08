@@ -7,7 +7,6 @@ use crate::facade::tendermint::abci::types::Snapshot;
 use crate::facade::tendermint::v0_37::abci::{
     request as tm_request, response as tm_response,
 };
-// use crate::facade::tendermint_proto::v0_37::abci::Snapshot;
 use crate::shell::Shell;
 use crate::storage;
 use crate::storage::{DbSnapshot, SnapshotMetadata};
@@ -27,8 +26,7 @@ impl Shell<storage::PersistentDB, Sha256Hasher> {
                 .map(|SnapshotMetadata { height, chunks, .. }| {
                     let hash = Hash::sha256(chunks.serialize_to_vec()).0;
                     Snapshot {
-                        #[allow(clippy::cast_possible_truncation)]
-                        height: (height.0 as u32).into(),
+                        height: u32::try_from(height.0).unwrap().into(),
                         format: 0,
                         #[allow(clippy::cast_possible_truncation)]
                         chunks: chunks.len() as u32,
