@@ -86,8 +86,6 @@ mod dry_run_tx {
                 let gas_limit = GasLimit::from(max_block_gas)
                     .as_scaled_gas(gas_scale)
                     .into_storage_result()?;
-                // let gas_limit = Gas::try_from(GasLimit::from(max_block_gas))
-                //     .into_storage_result()?;
                 (TxResult::default(), TxGasMeter::new(gas_limit))
             }
         };

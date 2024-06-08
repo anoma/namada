@@ -265,8 +265,6 @@ impl<T> Default for ExtendedTxResult<T> {
 pub struct TxResult<T> {
     /// Total gas used by the transaction (includes the gas used by VPs)
     pub gas_used: Gas,
-    /// bing
-    pub gas_scale: u64,
     /// The results of the batch, indexed by the hash of the specific
     /// [`crate::types::TxCommitments`]
     pub batch_results: BatchResults<T>,
@@ -276,7 +274,6 @@ impl<T> Default for TxResult<T> {
     fn default() -> Self {
         Self {
             gas_used: Default::default(),
-            gas_scale: 100_000_000_u64,
             batch_results: Default::default(),
         }
     }
@@ -298,7 +295,6 @@ impl<T: Display> TxResult<T> {
 
         TxResult {
             gas_used: self.gas_used,
-            gas_scale: self.gas_scale,
             batch_results: BatchResults(batch_results),
         }
     }
@@ -415,11 +411,7 @@ pub struct VpsResult {
 impl<T: Serialize> fmt::Display for TxResult<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if f.alternate() {
-            write!(
-                f,
-                "Transaction is valid. Gas used: {}",
-                self.gas_used.get_whole_gas_units(self.gas_scale)
-            )
+            write!(f, "Transaction is valid. Gas used: {}", self.gas_used)
         } else {
             write!(f, "{}", serde_json::to_string(self).unwrap())
         }

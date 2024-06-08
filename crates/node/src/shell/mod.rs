@@ -1069,7 +1069,8 @@ where
             TxType::Wrapper(wrapper) => {
                 // Validate wrapper first
                 // Tx gas limit
-                let gas_scale = get_gas_scale(&self.state).unwrap();
+                let gas_scale = get_gas_scale(&self.state)
+                    .expect("Failed to get gas scale from parameters");
                 let gas_limit = match wrapper.gas_limit.as_scaled_gas(gas_scale)
                 {
                     Ok(value) => value,
@@ -1091,8 +1092,8 @@ where
                 }
 
                 // Max block gas
-                let gas_scale =
-                    namada::parameters::get_gas_scale(&self.state).unwrap();
+                let gas_scale = namada::parameters::get_gas_scale(&self.state)
+                    .expect("Failed to get gas scale from parameters");
                 let block_gas_limit: Gas = Gas::from_whole_units(
                     namada::parameters::get_max_block_gas(&self.state).unwrap(),
                     gas_scale,

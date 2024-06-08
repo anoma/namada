@@ -419,7 +419,8 @@ where
                     msg
                 );
 
-                let gas_scale = get_gas_scale(&self.state).unwrap();
+                let gas_scale = get_gas_scale(&self.state)
+                    .expect("Failed to get gas scale from parameters");
                 let scaled_gas = Gas::from(
                     tx_data
                         .tx_gas_meter
@@ -504,7 +505,8 @@ where
             self.commit_batch_hash(tx_data.replay_protection_hashes);
         }
 
-        let gas_scale = get_gas_scale(&self.state).unwrap();
+        let gas_scale = get_gas_scale(&self.state)
+            .expect("Failed to get gas scale from parameters");
         let scaled_gas = Gas::from(
             tx_data
                 .tx_gas_meter
@@ -694,7 +696,8 @@ where
                 TxType::Wrapper(wrapper) => {
                     stats.increment_wrapper_txs();
 
-                    let gas_scale = get_gas_scale(&self.state).unwrap();
+                    let gas_scale = get_gas_scale(&self.state)
+                        .expect("Failed to get gas scale from parameters");
                     let gas_limit =
                         match wrapper.gas_limit.as_scaled_gas(gas_scale) {
                             Ok(value) => value,

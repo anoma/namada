@@ -202,7 +202,6 @@ impl FromStr for Gas {
 
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         let raw: u64 = s.parse().map_err(GasParseError::Parse)?;
-        // let gas = Gas::from_whole_units(raw).ok_or(GasParseError::Overflow)?;
         Ok(Self { sub: raw })
     }
 }
