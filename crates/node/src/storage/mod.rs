@@ -11,7 +11,9 @@ use arse_merkle_tree::H256;
 use blake2b_rs::{Blake2b, Blake2bBuilder};
 use namada::state::StorageHasher;
 use namada_sdk::state::FullAccessState;
-pub use rocksdb::{open, DbSnapshot, RocksDBUpdateVisitor, SnapshotMetadata};
+pub use rocksdb::{
+    open, Chunk, DbSnapshot, RocksDBUpdateVisitor, SnapshotMetadata,
+};
 
 #[derive(Default)]
 pub struct PersistentStorageHasher(Blake2bHasher);

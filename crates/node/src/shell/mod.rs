@@ -43,6 +43,7 @@ use namada::core::time::DateTimeUtc;
 use namada::ethereum_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
 use namada::ethereum_bridge::protocol::validation::ethereum_events::validate_eth_events_vext;
 use namada::ethereum_bridge::protocol::validation::validator_set_update::validate_valset_upd_vext;
+use namada::hash::Hash;
 use namada::ledger::events::log::EventLog;
 use namada::ledger::gas::{Gas, TxGasMeter};
 use namada::ledger::pos::namada_proof_of_stake::types::{
@@ -331,6 +332,14 @@ pub enum MempoolTxType {
 }
 
 #[derive(Debug)]
+pub struct SnapshotSync {
+    pub next_chunk: u64,
+    pub height: BlockHeight,
+    pub expected: Vec<Hash>,
+    pub strikes: u64,
+}
+
+#[derive(Debug)]
 pub struct Shell<D = storage::PersistentDB, H = Sha256Hasher>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -363,6 +372,9 @@ where
     /// When set, indicates after how many blocks a new snapshot
     /// will be taken (counting from the first block)
     pub blocks_between_snapshots: Option<NonZeroU64>,
+    /// Data for a node downloading and apply snapshots as part of
+    /// the fast sync protocol.
+    pub syncing: Option<SnapshotSync>,
 }
 
 /// Storage key filter to store the diffs into the storage. Return `false` for
@@ -557,6 +569,7 @@ where
             event_log: EventLog::default(),
             scheduled_migration,
             blocks_between_snapshots: config.shell.blocks_between_snapshots,
+            syncing: None,
         };
         shell.update_eth_oracle(&Default::default());
         shell
