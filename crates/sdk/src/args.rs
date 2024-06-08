@@ -2138,9 +2138,6 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     pub gas_limit: GasLimit,
     /// The optional expiration of the transaction
     pub expiration: TxExpiration,
-    // FIXME: maybe should move this out of here, it's only needed for txs that
-    // pay the fees via the masp, so it should go together with the optional
-    // gas spending keys
     /// Generate an ephimeral signing key to be used only once to sign a
     /// wrapper tx
     pub disposable_signing_key: bool,

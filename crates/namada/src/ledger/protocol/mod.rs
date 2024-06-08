@@ -691,7 +691,11 @@ where
         .expect("Missing masp fee payment gas limit in storage")
         .min(tx_gas_meter.borrow().tx_gas_limit.into());
 
-    let mut gas_meter = TxGasMeter::new(min_gas_limit);
+    let mut gas_meter = TxGasMeter::new(
+        namada_gas::Gas::from_whole_units(min_gas_limit).ok_or_else(|| {
+            Error::GasError("Overflow in gas expansion".to_string())
+        })?,
+    );
     gas_meter
         .copy_consumed_gas_from(&tx_gas_meter.borrow())
         .map_err(|e| Error::GasError(e.to_string()))?;

@@ -2466,7 +2466,7 @@ pub async fn build_ibc_transfer(
         Some(source.clone()),
     )
     .await?;
-    let (fee_amount, updated_balance) =
+    let (fee_per_gas_unit, updated_balance) =
         if let TransferSource::ExtendedSpendingKey(_) = args.source {
             // MASP fee payment
             (validate_fee(context, &args.tx).await?, None)
@@ -2684,7 +2684,7 @@ pub async fn build_ibc_transfer(
     prepare_tx(
         &args.tx,
         &mut tx,
-        fee_amount,
+        fee_per_gas_unit,
         signing_data.fee_payer.clone(),
     )
     .await?;
@@ -2958,7 +2958,7 @@ pub async fn build_shielded_transfer<N: Namada>(
             .await?;
 
     // Shielded fee payment
-    let fee_amount = validate_fee(context, &args.tx).await?;
+    let fee_per_gas_unit = validate_fee(context, &args.tx).await?;
 
     let mut transfer_data = vec![];
     for TxShieldedTransferData {
@@ -2985,7 +2985,7 @@ pub async fn build_shielded_transfer<N: Namada>(
     let masp_fee_data = get_masp_fee_payment_amount(
         context,
         &args.tx,
-        fee_amount,
+        fee_per_gas_unit,
         &signing_data.fee_payer,
         args.gas_spending_keys.clone(),
     )
@@ -2996,7 +2996,7 @@ pub async fn build_shielded_transfer<N: Namada>(
             .map(|fee_data| token::UnshieldingTransferData {
                 target: fee_data.target.to_owned(),
                 token: fee_data.token.to_owned(),
-                amount: fee_amount,
+                amount: fee_data.amount,
             });
 
     let shielded_parts = construct_shielded_parts(
@@ -3049,7 +3049,7 @@ pub async fn build_shielded_transfer<N: Namada>(
         args.tx_code_path.clone(),
         data,
         add_shielded_parts,
-        fee_amount,
+        fee_per_gas_unit,
         &signing_data.fee_payer,
     )
     .await?;
@@ -3230,7 +3230,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
             .await?;
 
     // Shielded fee payment
-    let fee_amount = validate_fee(context, &args.tx).await?;
+    let fee_per_gas_unit = validate_fee(context, &args.tx).await?;
 
     let mut transfer_data = vec![];
     let mut data = vec![];
@@ -3263,7 +3263,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
     let masp_fee_data = get_masp_fee_payment_amount(
         context,
         &args.tx,
-        fee_amount,
+        fee_per_gas_unit,
         &signing_data.fee_payer,
         args.gas_spending_keys.clone(),
     )
@@ -3328,7 +3328,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
         args.tx_code_path.clone(),
         data,
         add_shielded_parts,
-        fee_amount,
+        fee_per_gas_unit,
         &signing_data.fee_payer,
     )
     .await?;
