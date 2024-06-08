@@ -1429,7 +1429,7 @@ mod test {
         funds: u64,
         start_epoch: u64,
         end_epoch: u64,
-        grace_epoch: u64,
+        activation_epoch: u64,
         signer_address: &Address,
         no_commiting_key: bool,
     ) where
@@ -1444,7 +1444,7 @@ mod test {
         let proposal_type_key = get_proposal_type_key(proposal_id);
         let funds_key = get_funds_key(proposal_id);
         let commiting_key =
-            get_committing_proposals_key(proposal_id, grace_epoch);
+            get_committing_proposals_key(proposal_id, activation_epoch);
 
         transfer(state, signer_address, &ADDRESS, funds);
 
@@ -1471,7 +1471,10 @@ mod test {
             .unwrap();
         state
             .write_log_mut()
-            .write(&activation_epoch_key, Epoch(grace_epoch).serialize_to_vec())
+            .write(
+                &activation_epoch_key,
+                Epoch(activation_epoch).serialize_to_vec(),
+            )
             .unwrap();
         state
             .write_log_mut()
@@ -1798,9 +1801,9 @@ mod test {
         let mut state = init_storage();
 
         let proposal_id = 0;
-        let grace_epoch = 19;
+        let activation_epoch = 19;
 
-        let keys_changed = get_proposal_keys(proposal_id, grace_epoch);
+        let keys_changed = get_proposal_keys(proposal_id, activation_epoch);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
@@ -1845,7 +1848,7 @@ mod test {
             509,
             3,
             4,
-            19,
+            activation_epoch,
             &signer_address,
             false,
         );
@@ -1876,9 +1879,9 @@ mod test {
         let mut state = init_storage();
 
         let proposal_id = 0;
-        let grace_epoch = 12;
+        let activation_epoch = 12;
 
-        let keys_changed = get_proposal_keys(proposal_id, grace_epoch);
+        let keys_changed = get_proposal_keys(proposal_id, activation_epoch);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
@@ -1923,7 +1926,7 @@ mod test {
             509,
             3,
             9,
-            12,
+            activation_epoch,
             &signer_address,
             false,
         );
@@ -1954,9 +1957,9 @@ mod test {
         let mut state = init_storage();
 
         let proposal_id = 0;
-        let grace_epoch = 40;
+        let activation_epoch = 40;
 
-        let keys_changed = get_proposal_keys(proposal_id, grace_epoch);
+        let keys_changed = get_proposal_keys(proposal_id, activation_epoch);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
@@ -2001,7 +2004,7 @@ mod test {
             509,
             3,
             9,
-            40,
+            activation_epoch,
             &signer_address,
             false,
         );
