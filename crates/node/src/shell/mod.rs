@@ -1067,10 +1067,20 @@ where
                 }
             },
             TxType::Wrapper(wrapper) => {
+                // Get the gas scale first
+                let gas_scale = match get_gas_scale(&self.state) {
+                    Ok(scale) => scale,
+                    Err(_) => {
+                        response.code = ResultCode::InvalidTx.into();
+                        response.log = "The gas scale could not be found in \
+                                        the parameters storage"
+                            .to_string();
+                        return response;
+                    }
+                };
+
                 // Validate wrapper first
                 // Tx gas limit
-                let gas_scale = get_gas_scale(&self.state)
-                    .expect("Failed to get gas scale from parameters");
                 let gas_limit = match wrapper.gas_limit.as_scaled_gas(gas_scale)
                 {
                     Ok(value) => value,
@@ -1092,8 +1102,6 @@ where
                 }
 
                 // Max block gas
-                let gas_scale = namada::parameters::get_gas_scale(&self.state)
-                    .expect("Failed to get gas scale from parameters");
                 let block_gas_limit: Gas = Gas::from_whole_units(
                     namada::parameters::get_max_block_gas(&self.state).unwrap(),
                     gas_scale,

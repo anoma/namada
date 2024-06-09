@@ -53,10 +53,11 @@ mod dry_run_tx {
         let tx = Tx::try_from(&request.data[..]).into_storage_result()?;
         tx.validate_tx().into_storage_result()?;
 
+        let gas_scale = namada_parameters::get_gas_scale(ctx.state)?;
+
         // Wrapper dry run to allow estimating the gas cost of a transaction
         let (mut tx_result, tx_gas_meter) = match tx.header().tx_type {
             TxType::Wrapper(wrapper) => {
-                let gas_scale = namada_parameters::get_gas_scale(ctx.state)?;
                 let gas_limit = wrapper
                     .gas_limit
                     .as_scaled_gas(gas_scale)
@@ -79,8 +80,6 @@ mod dry_run_tx {
             _ => {
                 // If dry run only the inner tx, use the max block gas as
                 // the gas limit
-                let gas_scale = namada_parameters::get_gas_scale(ctx.state)?;
-
                 let max_block_gas =
                     namada_parameters::get_max_block_gas(ctx.state)?;
                 let gas_limit = GasLimit::from(max_block_gas)

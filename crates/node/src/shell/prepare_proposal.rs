@@ -289,8 +289,7 @@ where
     tx.validate_tx().map_err(|_| ())?;
     if let TxType::Wrapper(wrapper) = tx.header().tx_type {
         // Check tx gas limit for tx size
-        let gas_scale = get_gas_scale(temp_state)
-            .expect("Failed to get gas scale from parameters");
+        let gas_scale = get_gas_scale(temp_state).map_err(|_| ())?;
         let gas_limit =
             wrapper.gas_limit.as_scaled_gas(gas_scale).map_err(|_| ())?;
         let mut tx_gas_meter = TxGasMeter::new(gas_limit);
