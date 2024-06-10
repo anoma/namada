@@ -697,12 +697,10 @@ mod tests {
             start_time in 0..10000_i64,
             min_num_of_blocks in 1..10_u64,
             min_duration in 1..100_i64,
-            max_expected_time_per_block in 1..100_i64,
         )
         (
             min_num_of_blocks in Just(min_num_of_blocks),
             min_duration in Just(min_duration),
-            max_expected_time_per_block in Just(max_expected_time_per_block),
             start_height in Just(start_height),
             start_time in Just(start_time),
             block_height in start_height + 1..(start_height + 2 * min_num_of_blocks),
@@ -711,18 +709,16 @@ mod tests {
             min_blocks_delta in -(min_num_of_blocks as i64 - 1)..5,
             // Delta will be applied on the `min_duration` parameter
             min_duration_delta in -(min_duration - 1)..50,
-            // Delta will be applied on the `max_expected_time_per_block` parameter
-            max_time_per_block_delta in -(max_expected_time_per_block - 1)..50,
-        ) -> (EpochDuration, i64, BlockHeight, DateTimeUtc, BlockHeight, DateTimeUtc,
-                i64, i64, i64) {
+        ) -> (EpochDuration, BlockHeight, DateTimeUtc, BlockHeight, DateTimeUtc,
+                i64, i64) {
             let epoch_duration = EpochDuration {
                 min_num_of_blocks,
                 min_duration: Duration::seconds(min_duration).into(),
             };
-            (epoch_duration, max_expected_time_per_block,
+            (epoch_duration,
                 BlockHeight(start_height), Utc.timestamp_opt(start_time, 0).single().expect("expected valid timestamp").into(),
                 BlockHeight(block_height), Utc.timestamp_opt(block_time, 0).single().expect("expected valid timestamp").into(),
-                min_blocks_delta, min_duration_delta, max_time_per_block_delta)
+                min_blocks_delta, min_duration_delta)
         }
     }
 
@@ -739,8 +735,8 @@ mod tests {
         ///    duration doesn't change, but the next one does.
         #[test]
         fn update_epoch_after_its_duration(
-            (epoch_duration, max_expected_time_per_block, start_height, start_time, block_height, block_time,
-            min_blocks_delta, min_duration_delta, max_time_per_block_delta)
+            (epoch_duration, start_height, start_time, block_height, block_time,
+            min_blocks_delta, min_duration_delta)
             in arb_and_epoch_duration_start_and_block())
         {
             let mut state =TestState::default();
@@ -753,7 +749,6 @@ mod tests {
                 max_proposal_bytes: Default::default(),
                 max_block_gas: 20_000_000,
                 epoch_duration: epoch_duration.clone(),
-                max_expected_time_per_block: Duration::seconds(max_expected_time_per_block).into(),
                 vp_allowlist: vec![],
                 tx_allowlist: vec![],
                 implicit_vp_code_hash: Some(Hash::zero()),
@@ -832,9 +827,6 @@ mod tests {
             let min_duration: i64 = parameters.epoch_duration.min_duration.0 as _;
             parameters.epoch_duration.min_duration =
                 Duration::seconds(min_duration + min_duration_delta).into();
-            parameters.max_expected_time_per_block =
-                Duration::seconds(max_expected_time_per_block + max_time_per_block_delta).into();
-            namada_parameters::update_max_expected_time_per_block_parameter(&mut state, &parameters.max_expected_time_per_block).unwrap();
             namada_parameters::update_epoch_parameter(&mut state, &parameters.epoch_duration).unwrap();
 
             // Test for 2.

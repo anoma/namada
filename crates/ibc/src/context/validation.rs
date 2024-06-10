@@ -26,6 +26,7 @@ use ibc::cosmos_host::ValidateSelfClientContext;
 use ibc::primitives::{Signer, Timestamp};
 #[cfg(feature = "testing")]
 use ibc_testkit::testapp::ibc::clients::mock::client_state::MockClientState;
+use namada_core::time::DurationSecs;
 
 use super::client::{AnyClientState, AnyConsensusState};
 use super::common::IbcCommonContext;
@@ -263,10 +264,20 @@ where
     }
 
     fn max_expected_time_per_block(&self) -> core::time::Duration {
-        self.inner
+        let height = self
+            .inner
             .borrow()
-            .max_expected_time_per_block()
-            .expect("Error cannot be returned")
+            .get_block_height()
+            .expect("The height should exist");
+
+        namada_parameters::estimate_max_block_time_from_blocks(
+            &*self.inner.borrow(),
+            height,
+            5, // estimate max height with up to 5 blocks in the past
+        )
+        .expect("Failed to estimate max block time")
+        .unwrap_or(DurationSecs(30))
+        .into()
     }
 
     fn validate_message_signer(
