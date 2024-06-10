@@ -2725,6 +2725,7 @@ pub mod test_utils {
             epochs_per_year: 10000000,
             masp_epoch_multiplier: 2,
             fee_unshielding_gas_limit: 10000,
+            gas_scale: 100_000_000,
             minimum_gas_price: BTreeMap::new(),
             is_native_token_transferable: true,
         };
