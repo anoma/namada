@@ -192,7 +192,8 @@ impl From<Gas> for u64 {
 
 impl Display for Gas {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // Display the gas in whole amounts
+        // Need to do this now that the gas scale is a parameter. Should
+        // manually scale gas first before calling this
         write!(f, "{}", self.sub)
     }
 }
