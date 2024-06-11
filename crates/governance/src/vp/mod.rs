@@ -3,30 +3,26 @@
 pub mod utils;
 
 use std::collections::BTreeSet;
+use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
 use namada_core::arith::{self, checked};
 use namada_core::booleans::{BoolResultUnitExt, ResultBoolExt};
-use namada_governance::storage::proposal::{
-    AddRemove, PGFAction, ProposalType,
-};
-use namada_governance::storage::{is_proposal_accepted, keys as gov_storage};
-use namada_governance::utils::is_valid_validator_voting_period;
-use namada_governance::ProposalVote;
-use namada_proof_of_stake::is_validator;
+use namada_core::storage::Epoch;
+use namada_core::{proof_of_stake, storage, token};
 use namada_state::{StateRead, StorageRead};
 use namada_tx::action::{Action, GovAction, Read};
 use namada_tx::BatchedTxRef;
-use namada_vp_env::VpEnv;
+use namada_vp::native_vp::{Ctx, CtxPreStorageRead, NativeVp, VpEvaluator};
+use namada_vp::{native_vp, VpEnv};
 use thiserror::Error;
 
 use self::utils::ReadType;
 use crate::address::{Address, InternalAddress};
-use crate::ledger::native_vp::{Ctx, NativeVp};
-use crate::ledger::{native_vp, pos};
-use crate::storage::{Epoch, Key};
-use crate::token;
-use crate::vm::WasmCacheAccess;
+use crate::storage::proposal::{AddRemove, PGFAction, ProposalType};
+use crate::storage::{is_proposal_accepted, keys as gov_storage};
+use crate::utils::is_valid_validator_voting_period;
+use crate::ProposalVote;
 
 /// for handling Governance NativeVP errors
 pub type Result<T> = std::result::Result<T, Error>;
@@ -51,26 +47,39 @@ pub enum Error {
 }
 
 /// Governance VP
-pub struct GovernanceVp<'a, S, CA>
+pub struct GovernanceVp<'a, S, CA: 'a, EVAL, PoS, TokenKeys>
 where
-    S: StateRead,
-    CA: WasmCacheAccess,
+    S: 'static + StateRead,
+    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    PoS: proof_of_stake::Read<CtxPreStorageRead<'a, 'a, S, CA, EVAL>>,
+    TokenKeys: token::Keys,
 {
     /// Context to interact with the host structures.
-    pub ctx: Ctx<'a, S, CA>,
+    pub ctx: Ctx<'a, S, CA, EVAL>,
+    /// Read PoS storage
+    pub pos: PhantomData<PoS>,
+    /// Token keys
+    pub token_keys: PhantomData<TokenKeys>,
 }
 
-impl<'a, S, CA> NativeVp for GovernanceVp<'a, S, CA>
+impl<'a, S, CA, EVAL, PoS, TokenKeys> NativeVp<'a>
+    for GovernanceVp<'a, S, CA, EVAL, PoS, TokenKeys>
 where
     S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    EVAL: VpEvaluator<'a, S, CA, EVAL>,
+    CA: 'static + Clone,
+    PoS: proof_of_stake::Read<
+            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            Err = namada_state::StorageError,
+        >,
+    TokenKeys: token::Keys,
 {
     type Error = Error;
 
     fn validate_tx(
-        &self,
+        &'a self,
         tx_data: &BatchedTxRef<'_>,
-        keys_changed: &BTreeSet<Key>,
+        keys_changed: &BTreeSet<storage::Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
         let (is_valid_keys_set, set_count) =
@@ -145,9 +154,10 @@ where
             }
         }
 
-        keys_changed.iter().try_for_each(|key| {
+        // keys_changed.iter().try_for_each(|key| {
+        for key in keys_changed.iter() {
             let proposal_id = gov_storage::get_proposal_id(key);
-            let key_type = KeyType::from_key(key, &native_token);
+            let key_type = KeyType::from_key::<TokenKeys>(key, &native_token);
 
             let result = match (key_type, proposal_id) {
                 (KeyType::VOTE, Some(proposal_id)) => {
@@ -201,20 +211,35 @@ where
                     "Key {key_type:?} rejected with error: {err:#?}."
                 )
             })?;
-
-            Ok(())
-        })
+        }
+        Ok(())
     }
 }
 
-impl<'a, S, CA> GovernanceVp<'a, S, CA>
+impl<'a, S, CA, EVAL, PoS, TokenKeys>
+    GovernanceVp<'a, S, CA, EVAL, PoS, TokenKeys>
 where
     S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    EVAL: VpEvaluator<'a, S, CA, EVAL>,
+    CA: 'static + Clone,
+    PoS: proof_of_stake::Read<
+            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            Err = namada_state::StorageError,
+        >,
+    TokenKeys: token::Keys,
 {
+    /// Instantiate a Governance VP
+    pub fn new(ctx: Ctx<'a, S, CA, EVAL>) -> Self {
+        Self {
+            ctx,
+            pos: PhantomData,
+            token_keys: PhantomData,
+        }
+    }
+
     fn is_valid_init_proposal_key_set(
         &self,
-        keys: &BTreeSet<Key>,
+        keys: &BTreeSet<storage::Key>,
     ) -> Result<(bool, u64)> {
         let counter_key = gov_storage::get_counter_key();
         let pre_counter: u64 = self.force_read(&counter_key, ReadType::Pre)?;
@@ -250,9 +275,9 @@ where
     }
 
     fn is_valid_vote_key(
-        &self,
+        &'a self,
         proposal_id: u64,
-        key: &Key,
+        key: &storage::Key,
         verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
         let counter_key = gov_storage::get_counter_key();
@@ -368,7 +393,8 @@ where
 
     /// Validate a content key
     pub fn is_valid_content_key(&self, proposal_id: u64) -> Result<()> {
-        let content_key: Key = gov_storage::get_content_key(proposal_id);
+        let content_key: storage::Key =
+            gov_storage::get_content_key(proposal_id);
         let max_content_length_parameter_key =
             gov_storage::get_max_proposal_content_key();
 
@@ -888,10 +914,8 @@ where
         native_token_address: &Address,
     ) -> Result<()> {
         let funds_key = gov_storage::get_funds_key(proposal_id);
-        let balance_key = token::storage_key::balance_key(
-            native_token_address,
-            self.ctx.address,
-        );
+        let balance_key =
+            TokenKeys::balance(native_token_address, self.ctx.address);
         let min_funds_parameter_key = gov_storage::get_min_proposal_fund_key();
 
         let min_funds_parameter: token::Amount =
@@ -955,10 +979,8 @@ where
 
     /// Validate a balance key
     fn is_valid_balance(&self, native_token_address: &Address) -> Result<()> {
-        let balance_key = token::storage_key::balance_key(
-            native_token_address,
-            self.ctx.address,
-        );
+        let balance_key =
+            TokenKeys::balance(native_token_address, self.ctx.address);
         let min_funds_parameter_key = gov_storage::get_min_proposal_fund_key();
 
         let pre_balance: Option<token::Amount> =
@@ -1095,26 +1117,26 @@ where
 
     /// Check if a vote is from a validator
     pub fn is_validator(
-        &self,
+        &'a self,
         verifiers: &BTreeSet<Address>,
         voter: &Address,
         validator: &Address,
-    ) -> Result<bool>
-    where
-        S: StateRead,
-        CA: 'static + WasmCacheAccess,
-    {
+    ) -> Result<bool> {
         if !voter.eq(validator) {
             return Ok(false);
         }
 
-        let is_validator = is_validator(&self.ctx.pre(), voter)?;
+        let is_validator = PoS::is_validator(&self.ctx.pre(), voter)?;
 
         Ok(is_validator && verifiers.contains(voter))
     }
 
     /// Private method to read from storage data that are 100% in storage.
-    fn force_read<T>(&self, key: &Key, read_type: ReadType) -> Result<T>
+    fn force_read<T>(
+        &self,
+        key: &storage::Key,
+        read_type: ReadType,
+    ) -> Result<T>
     where
         T: BorshDeserialize,
     {
@@ -1153,7 +1175,7 @@ where
 
     /// Check if a vote is from a delegator
     pub fn is_delegator(
-        &self,
+        &'a self,
         epoch: Epoch,
         verifiers: &BTreeSet<Address>,
         address: &Address,
@@ -1161,11 +1183,7 @@ where
     ) -> Result<bool> {
         Ok(address != delegation_address
             && verifiers.contains(address)
-            && pos::namada_proof_of_stake::is_delegator(
-                &self.ctx.pre(),
-                address,
-                Some(epoch),
-            )?)
+            && PoS::is_delegator(&self.ctx.pre(), address, Some(epoch))?)
     }
 }
 
@@ -1205,7 +1223,10 @@ enum KeyType {
 }
 
 impl KeyType {
-    fn from_key(key: &Key, native_token: &Address) -> Self {
+    fn from_key<TokenKeys>(key: &storage::Key, native_token: &Address) -> Self
+    where
+        TokenKeys: token::Keys,
+    {
         if gov_storage::is_vote_key(key) {
             Self::VOTE
         } else if gov_storage::is_content_key(key) {
@@ -1230,9 +1251,7 @@ impl KeyType {
             KeyType::COUNTER
         } else if gov_storage::is_parameter_key(key) {
             KeyType::PARAMETER
-        } else if token::storage_key::is_balance_key(native_token, key)
-            .is_some()
-        {
+        } else if TokenKeys::is_balance(native_token, key).is_some() {
             KeyType::BALANCE
         } else if gov_storage::is_governance_key(key) {
             KeyType::UNKNOWN_GOVERNANCE
@@ -1248,47 +1267,61 @@ mod test {
     use std::cell::RefCell;
     use std::collections::BTreeSet;
 
-    use borsh_ext::BorshSerializeExt;
-    use namada_gas::{TxGasMeter, VpGasMeter};
-    use namada_governance::storage::keys::{
-        get_activation_epoch_key, get_author_key, get_committing_proposals_key,
-        get_content_key, get_counter_key, get_funds_key, get_proposal_type_key,
-        get_vote_proposal_key, get_voting_end_epoch_key,
-        get_voting_start_epoch_key,
-    };
-    use namada_governance::{ProposalType, ProposalVote, ADDRESS};
-    use namada_proof_of_stake::bond_tokens;
-    use namada_sdk::address::testing::{
+    use assert_matches::assert_matches;
+    use namada_core::address::testing::{
         established_address_1, established_address_3, nam,
     };
-    use namada_sdk::key::testing::keypair_1;
-    use namada_sdk::key::RefTo;
-    use namada_sdk::time::DateTimeUtc;
-    use namada_sdk::token;
+    use namada_core::address::Address;
+    use namada_core::borsh::BorshSerializeExt;
+    use namada_core::key::testing::keypair_1;
+    use namada_core::key::RefTo;
+    use namada_core::storage::testing::get_dummy_header;
+    use namada_core::time::DateTimeUtc;
+    use namada_core::{token, WasmCacheRwAccess};
+    use namada_gas::{TxGasMeter, VpGasMeter};
+    use namada_parameters::Parameters;
+    use namada_proof_of_stake::bond_tokens;
+    use namada_proof_of_stake::test_utils::get_dummy_genesis_validator;
     use namada_state::mockdb::MockDB;
     use namada_state::testing::TestState;
     use namada_state::{
         BlockHeight, Epoch, FullAccessState, Key, Sha256Hasher, State,
-        StorageRead, TxIndex,
+        StateRead, StorageRead, TxIndex,
     };
     use namada_token::storage_key::balance_key;
     use namada_tx::action::{Action, GovAction, Write};
     use namada_tx::data::TxType;
     use namada_tx::{Authorization, Code, Data, Section, Tx};
+    use namada_vm::wasm;
+    use namada_vm::wasm::run::VpEvalWasm;
+    use namada_vm::wasm::VpCache;
+    use namada_vp::native_vp::{Ctx, CtxPreStorageRead, NativeVp};
 
-    use crate::core::address::Address;
-    use crate::ledger::governance::GovernanceVp;
-    use crate::ledger::native_vp::ibc::{
-        get_dummy_genesis_validator, get_dummy_header,
+    use crate::storage::keys::{
+        get_activation_epoch_key, get_author_key, get_committing_proposals_key,
+        get_content_key, get_counter_key, get_funds_key, get_proposal_type_key,
+        get_vote_proposal_key, get_voting_end_epoch_key,
+        get_voting_start_epoch_key,
     };
-    use crate::ledger::native_vp::{Ctx, NativeVp};
-    use crate::ledger::pos;
-    use crate::vm::wasm;
+    use crate::{ProposalType, ProposalVote, ADDRESS};
+
+    type CA = WasmCacheRwAccess;
+    type Eval<S> = VpEvalWasm<<S as StateRead>::D, <S as StateRead>::H, CA>;
+    type GovernanceVp<'a, S> = super::GovernanceVp<
+        'a,
+        S,
+        VpCache<CA>,
+        Eval<S>,
+        namada_proof_of_stake::Store<
+            CtxPreStorageRead<'a, 'a, S, VpCache<CA>, Eval<S>>,
+        >,
+        namada_token::Store<()>,
+    >;
 
     fn init_storage() -> TestState {
         let mut state = TestState::default();
 
-        pos::test_utils::test_init_genesis(
+        namada_proof_of_stake::test_utils::test_init_genesis(
             &mut state,
             namada_proof_of_stake::OwnedPosParams::default(),
             vec![get_dummy_genesis_validator()].into_iter(),
@@ -1314,7 +1347,7 @@ mod test {
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let tx_index = TxIndex::default();
 
@@ -1348,7 +1381,7 @@ mod test {
             vp_wasm_cache,
         );
 
-        let governance_vp = GovernanceVp { ctx };
+        let governance_vp = GovernanceVp::new(ctx);
         // this should return true because state has been stored
         assert_matches!(
             governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
@@ -1378,6 +1411,7 @@ mod test {
         height: BlockHeight,
     ) {
         state.in_mem_mut().update_epoch_blocks_delay = Some(1);
+        let parameters = Parameters::default();
         for _ in 0..total_epochs {
             state.in_mem_mut().update_epoch_blocks_delay = Some(1);
             state
@@ -1390,6 +1424,7 @@ mod test {
                         .next_second()
                         .next_second()
                         .next_second(),
+                    &parameters,
                 )
                 .unwrap();
         }
@@ -1545,7 +1580,7 @@ mod test {
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let tx_index = TxIndex::default();
 
@@ -1602,7 +1637,7 @@ mod test {
             vp_wasm_cache,
         );
 
-        let governance_vp = GovernanceVp { ctx };
+        let governance_vp = GovernanceVp::new(ctx);
         // this should return true because state has been stored
         assert_matches!(
             governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
@@ -1641,7 +1676,7 @@ mod test {
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let tx_index = TxIndex::default();
 
@@ -1698,10 +1733,9 @@ mod test {
             vp_wasm_cache,
         );
 
-        let governance_vp = GovernanceVp { ctx };
+        let governance_vp = GovernanceVp::new(ctx);
         let result =
-            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers);
-        // this should fail
+            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers); // this should fail
         assert_matches!(&result, Err(_));
 
         if result.is_err() {
@@ -1740,7 +1774,7 @@ mod test {
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let tx_index = TxIndex::default();
 
@@ -1797,7 +1831,7 @@ mod test {
             vp_wasm_cache,
         );
 
-        let governance_vp = GovernanceVp { ctx };
+        let governance_vp = GovernanceVp::new(ctx);
         let result =
             governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers);
         assert_matches!(&result, Ok(_));
@@ -1838,7 +1872,7 @@ mod test {
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let tx_index = TxIndex::default();
 
@@ -1895,7 +1929,7 @@ mod test {
             vp_wasm_cache,
         );
 
-        let governance_vp = GovernanceVp { ctx };
+        let governance_vp = GovernanceVp::new(ctx);
         // this should return true because state has been stored
         assert_matches!(
             governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
@@ -1916,7 +1950,7 @@ mod test {
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let tx_index = TxIndex::default();
 
@@ -1973,7 +2007,7 @@ mod test {
             vp_wasm_cache,
         );
 
-        let governance_vp = GovernanceVp { ctx };
+        let governance_vp = GovernanceVp::new(ctx);
         // this should return true because state has been stored
         assert_matches!(
             governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
@@ -1994,7 +2028,7 @@ mod test {
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let tx_index = TxIndex::default();
 
@@ -2051,7 +2085,7 @@ mod test {
             vp_wasm_cache,
         );
 
-        let governance_vp = GovernanceVp { ctx };
+        let governance_vp = GovernanceVp::new(ctx);
         // this should return true because state has been stored
         assert_matches!(
             governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
@@ -2090,7 +2124,7 @@ mod test {
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let tx_index = TxIndex::default();
 
@@ -2147,7 +2181,7 @@ mod test {
             vp_wasm_cache,
         );
 
-        let governance_vp = GovernanceVp { ctx };
+        let governance_vp = GovernanceVp::new(ctx);
         // this should return true because state has been stored
         assert_matches!(
             governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
@@ -2186,7 +2220,7 @@ mod test {
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let tx_index = TxIndex::default();
 
@@ -2243,7 +2277,7 @@ mod test {
             vp_wasm_cache,
         );
 
-        let governance_vp = GovernanceVp { ctx };
+        let governance_vp = GovernanceVp::new(ctx);
         // this should return true because state has been stored
         assert_matches!(
             governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
@@ -2264,7 +2298,7 @@ mod test {
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let tx_index = TxIndex::default();
 
@@ -2321,7 +2355,7 @@ mod test {
             vp_wasm_cache.clone(),
         );
 
-        let governance_vp = GovernanceVp { ctx };
+        let governance_vp = GovernanceVp::new(ctx);
         // this should return true because state has been stored
         assert_matches!(
             governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
@@ -2372,7 +2406,7 @@ mod test {
             vp_wasm_cache,
         );
 
-        let governance_vp = GovernanceVp { ctx };
+        let governance_vp = GovernanceVp::new(ctx);
 
         assert_matches!(
             governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
@@ -2393,7 +2427,7 @@ mod test {
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let tx_index = TxIndex::default();
 
@@ -2450,7 +2484,7 @@ mod test {
             vp_wasm_cache.clone(),
         );
 
-        let governance_vp = GovernanceVp { ctx };
+        let governance_vp = GovernanceVp::new(ctx);
         // this should return true because state has been stored
         assert_matches!(
             governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
@@ -2501,7 +2535,7 @@ mod test {
             vp_wasm_cache,
         );
 
-        let governance_vp = GovernanceVp { ctx };
+        let governance_vp = GovernanceVp::new(ctx);
 
         assert_matches!(
             governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
@@ -2522,7 +2556,7 @@ mod test {
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let tx_index = TxIndex::default();
 
@@ -2579,7 +2613,7 @@ mod test {
             vp_wasm_cache.clone(),
         );
 
-        let governance_vp = GovernanceVp { ctx };
+        let governance_vp = GovernanceVp::new(ctx);
         // this should return true because state has been stored
         assert_matches!(
             governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
@@ -2630,7 +2664,7 @@ mod test {
             vp_wasm_cache,
         );
 
-        let governance_vp = GovernanceVp { ctx };
+        let governance_vp = GovernanceVp::new(ctx);
 
         assert_matches!(
             governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
@@ -2651,7 +2685,7 @@ mod test {
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let tx_index = TxIndex::default();
 
@@ -2708,7 +2742,7 @@ mod test {
             vp_wasm_cache.clone(),
         );
 
-        let governance_vp = GovernanceVp { ctx };
+        let governance_vp = GovernanceVp::new(ctx);
 
         assert_matches!(
             governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
@@ -2776,7 +2810,7 @@ mod test {
             vp_wasm_cache,
         );
 
-        let governance_vp = GovernanceVp { ctx };
+        let governance_vp = GovernanceVp::new(ctx);
 
         assert_matches!(
             governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
@@ -2797,7 +2831,7 @@ mod test {
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let tx_index = TxIndex::default();
 
@@ -2854,7 +2888,7 @@ mod test {
             vp_wasm_cache.clone(),
         );
 
-        let governance_vp = GovernanceVp { ctx };
+        let governance_vp = GovernanceVp::new(ctx);
 
         assert_matches!(
             governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
@@ -2922,7 +2956,7 @@ mod test {
             vp_wasm_cache,
         );
 
-        let governance_vp = GovernanceVp { ctx };
+        let governance_vp = GovernanceVp::new(ctx);
 
         assert_matches!(
             governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
@@ -2943,7 +2977,7 @@ mod test {
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let tx_index = TxIndex::default();
 
@@ -3000,7 +3034,7 @@ mod test {
             vp_wasm_cache.clone(),
         );
 
-        let governance_vp = GovernanceVp { ctx };
+        let governance_vp = GovernanceVp::new(ctx);
 
         assert_matches!(
             governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
@@ -3068,7 +3102,7 @@ mod test {
             vp_wasm_cache,
         );
 
-        let governance_vp = GovernanceVp { ctx };
+        let governance_vp = GovernanceVp::new(ctx);
 
         assert_matches!(
             governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),

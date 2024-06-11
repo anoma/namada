@@ -7,7 +7,6 @@ use wasmparser::{Validator, WasmFeatures};
 
 pub mod host_env;
 pub mod memory;
-pub mod prefix_iter;
 pub mod types;
 #[cfg(feature = "wasm-runtime")]
 pub mod wasm;

@@ -12,12 +12,16 @@ readme.workspace = true
 repository.workspace = true
 version.workspace = true
 
+[features]
+testing = ["namada_core/testing"]
+
 [dependencies]
 namada_core = { path = "../core" }
 namada_events = { path = "../events", default-features = false }
 namada_gas = { path = "../gas" }
 namada_state = { path = "../state" }
 namada_tx = { path = "../tx" }
+namada_vp_env = { path = "../vp_env" }
 
 smooth-operator.workspace = true
 thiserror.workspace = true

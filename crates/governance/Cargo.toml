@@ -20,13 +20,16 @@ migrations = [
 ]
 
 [dependencies]
+namada_account = { path = "../account" }
 namada_core = { path = "../core" }
 namada_events = { path = "../events", default-features = false }
-namada_macros = {path = "../macros"}
+namada_macros = { path = "../macros" }
 namada_migrations = { path= "../migrations", optional = true }
-namada_parameters = {path = "../parameters"}
-namada_storage = {path = "../storage"}
-namada_trans_token = {path = "../trans_token"}
+namada_parameters = { path = "../parameters" }
+namada_state = { path = "../state" }
+namada_trans_token = { path = "../trans_token" }
+namada_tx = { path = "../tx" }
+namada_vp = { path = "../vp" }
 
 borsh.workspace = true
 itertools.workspace = true
@@ -41,6 +44,13 @@ tracing.workspace = true
 
 
 [dev-dependencies]
-namada_core = {path = "../core", default-features = false, features = ["testing"]}
+namada_core = { path = "../core", default-features = false, features = ["testing"] }
+namada_gas = { path = "../gas" }
+namada_proof_of_stake = { path = "../proof_of_stake", features = ["testing"] }
+namada_state = { path = "../state", features = ["testing"] }
+namada_token = { path = "../token", features = ["testing"] }
+namada_tx = { path = "../tx", features = ["testing"] }
+namada_vm = { path = "../vm", features = ["testing"] }
 
+assert_matches.workspace = true
 proptest.workspace = true

@@ -14,11 +14,25 @@ use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::address::Address;
 use crate::arith::{self, checked, CheckedAdd, CheckedSub};
 use crate::dec::{Dec, POS_DECIMAL_PRECISION};
 use crate::storage;
 use crate::storage::{DbKeySeg, KeySeg};
 use crate::uint::{self, Uint, I256};
+
+/// Abstract parameters token keys interface
+pub trait Keys {
+    /// Key for transparent token balance
+    fn balance(token: &Address, owner: &Address) -> storage::Key;
+
+    /// Returns the owner address if the given storage key is a balance key for
+    /// the given token.
+    fn is_balance<'a>(
+        token_addr: &Address,
+        key: &'a storage::Key,
+    ) -> Option<&'a Address>;
+}
 
 /// Amount in micro units. For different granularity another representation
 /// might be more appropriate.

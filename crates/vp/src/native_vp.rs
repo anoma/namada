@@ -2,34 +2,29 @@
 //! Native validity predicate interface associated with internal accounts such
 //! as the PoS and IBC modules.
 
-pub mod ethereum_bridge;
-pub mod ibc;
-pub mod masp;
-pub mod multitoken;
-pub mod parameters;
-
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::fmt::Debug;
+use std::marker::PhantomData;
 
-use borsh::BorshDeserialize;
-use namada_core::storage;
+use namada_core::address::Address;
+use namada_core::borsh::BorshDeserialize;
+use namada_core::hash::Hash;
 use namada_core::storage::Epochs;
+use namada_core::{borsh, storage};
 use namada_events::{Event, EventType};
-use namada_gas::GasMetering;
+use namada_gas::{GasMetering, VpGasMeter};
+use namada_state as state;
+use namada_state::prefix_iter::PrefixIterators;
+use namada_state::{
+    BlockHeight, Epoch, Header, Key, ResultExt, StorageRead, StorageResult,
+    TxIndex,
+};
 use namada_tx::{BatchedTxRef, Tx, TxCommitments};
 pub use namada_vp_env::VpEnv;
 use state::StateRead;
 
 use super::vp_host_fns;
-use crate::address::Address;
-use crate::hash::Hash;
-use crate::ledger::gas::VpGasMeter;
-use crate::state;
-use crate::state::{ResultExt, StorageRead};
-use crate::storage::{BlockHeight, Epoch, Header, Key, TxIndex};
-use crate::vm::prefix_iter::PrefixIterators;
-use crate::vm::WasmCacheAccess;
 
 /// Possible error in a native VP host function call
 /// The `state::StorageError` may wrap the `vp_host_fns::RuntimeError`
@@ -37,13 +32,13 @@ use crate::vm::WasmCacheAccess;
 pub type Error = state::StorageError;
 
 /// A native VP module should implement its validation logic using this trait.
-pub trait NativeVp {
+pub trait NativeVp<'a> {
     /// Error type for the methods' results.
     type Error: std::error::Error;
 
     /// Run the validity predicate
     fn validate_tx(
-        &self,
+        &'a self,
         batched_tx: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
@@ -56,10 +51,10 @@ pub trait NativeVp {
 /// wrapper types and `eval_runner` field. The references must not be changed
 /// when [`Ctx`] is mutable.
 #[derive(Debug)]
-pub struct Ctx<'a, S, CA>
+pub struct Ctx<'a, S, CA, EVAL>
 where
-    S: StateRead,
-    CA: WasmCacheAccess,
+    S: 'static + StateRead,
+    EVAL: VpEvaluator<'a, S, CA, EVAL>,
 {
     /// The address of the account that owns the VP
     pub address: &'a Address,
@@ -82,39 +77,56 @@ where
     /// calls to `eval`.
     pub verifiers: &'a BTreeSet<Address>,
     /// VP WASM compilation cache
-    #[cfg(feature = "wasm-runtime")]
-    pub vp_wasm_cache: crate::vm::wasm::VpCache<CA>,
-    /// To avoid unused parameter without "wasm-runtime" feature
-    #[cfg(not(feature = "wasm-runtime"))]
-    pub cache_access: std::marker::PhantomData<CA>,
+    pub vp_wasm_cache: CA,
+    /// VP evaluator type
+    pub eval: PhantomData<EVAL>,
+}
+
+/// A Validity predicate runner for calls from the [`vp_eval`] function.
+pub trait VpEvaluator<'a, S, CA, EVAL>
+where
+    S: 'static + StateRead,
+    EVAL: VpEvaluator<'a, S, CA, EVAL>,
+{
+    /// Evaluate a given validity predicate code with the given input data.
+    /// Currently, we can only evaluate VPs using WASM runner with WASM memory.
+    ///
+    /// Invariant: Calling `VpEvalRunner::eval` from the VP is synchronous as it
+    /// shares mutable access to the host context with the VP.
+    fn eval(
+        ctx: &Ctx<'a, S, CA, EVAL>,
+        vp_code_hash: Hash,
+        input_data: BatchedTxRef<'_>,
+    ) -> StorageResult<()>;
 }
 
 /// Read access to the prior storage (state before tx execution) via
 /// [`trait@StorageRead`].
 #[derive(Debug)]
-pub struct CtxPreStorageRead<'view, 'a, S, CA>
+pub struct CtxPreStorageRead<'view, 'a, S, CA, EVAL>
 where
-    S: StateRead,
-    CA: WasmCacheAccess,
+    S: 'static + StateRead,
+    EVAL: VpEvaluator<'a, S, CA, EVAL>,
 {
-    pub(crate) ctx: &'view Ctx<'a, S, CA>,
+    pub(crate) ctx: &'view Ctx<'a, S, CA, EVAL>,
 }
 
 /// Read access to the posterior storage (state after tx execution) via
 /// [`trait@StorageRead`].
 #[derive(Debug)]
-pub struct CtxPostStorageRead<'view, 'a, S, CA>
+pub struct CtxPostStorageRead<'view, 'a, S, CA, EVAL>
 where
-    S: StateRead,
-    CA: WasmCacheAccess,
+    S: 'static + StateRead,
+    EVAL: VpEvaluator<'a, S, CA, EVAL>,
 {
-    ctx: &'view Ctx<'a, S, CA>,
+    ctx: &'view Ctx<'a, S, CA, EVAL>,
 }
 
-impl<'a, S, CA> Ctx<'a, S, CA>
+impl<'a, S, CA, EVAL> Ctx<'a, S, CA, EVAL>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    EVAL: VpEvaluator<'a, S, CA, EVAL>,
+    CA: 'static + Clone,
 {
     /// Initialize a new context for native VP call
     #[allow(clippy::too_many_arguments)]
@@ -127,8 +139,7 @@ where
         gas_meter: &'a RefCell<VpGasMeter>,
         keys_changed: &'a BTreeSet<Key>,
         verifiers: &'a BTreeSet<Address>,
-        #[cfg(feature = "wasm-runtime")]
-        vp_wasm_cache: crate::vm::wasm::VpCache<CA>,
+        vp_wasm_cache: CA,
     ) -> Self {
         Self {
             address,
@@ -140,31 +151,34 @@ where
             tx_index,
             keys_changed,
             verifiers,
-            #[cfg(feature = "wasm-runtime")]
             vp_wasm_cache,
-            #[cfg(not(feature = "wasm-runtime"))]
-            cache_access: std::marker::PhantomData,
+            eval: PhantomData,
         }
     }
 
     /// Read access to the prior storage (state before tx execution)
     /// via [`trait@StorageRead`].
-    pub fn pre<'view>(&'view self) -> CtxPreStorageRead<'view, 'a, S, CA> {
+    pub fn pre<'view>(
+        &'view self,
+    ) -> CtxPreStorageRead<'view, 'a, S, CA, EVAL> {
         CtxPreStorageRead { ctx: self }
     }
 
     /// Read access to the posterior storage (state after tx execution)
     /// via [`trait@StorageRead`].
-    pub fn post<'view>(&'view self) -> CtxPostStorageRead<'view, 'a, S, CA> {
+    pub fn post<'view>(
+        &'view self,
+    ) -> CtxPostStorageRead<'view, 'a, S, CA, EVAL> {
         CtxPostStorageRead { ctx: self }
     }
 }
 
-impl<'view, 'a: 'view, S, CA> StorageRead
-    for CtxPreStorageRead<'view, 'a, S, CA>
+impl<'view, 'a: 'view, S, CA, EVAL> StorageRead
+    for CtxPreStorageRead<'view, 'a, S, CA, EVAL>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    CA: 'static + Clone,
 {
     type PrefixIter<'iter> = state::PrefixIter<'iter,<S as StateRead>:: D> where Self: 'iter;
 
@@ -232,16 +246,17 @@ where
         self.ctx.get_native_token()
     }
 
-    fn get_pred_epochs(&self) -> state::StorageResult<Epochs> {
+    fn get_pred_epochs(&self) -> StorageResult<Epochs> {
         self.ctx.get_pred_epochs()
     }
 }
 
-impl<'view, 'a: 'view, S, CA> StorageRead
-    for CtxPostStorageRead<'view, 'a, S, CA>
+impl<'view, 'a: 'view, S, CA, EVAL> StorageRead
+    for CtxPostStorageRead<'view, 'a, S, CA, EVAL>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    CA: 'static + Clone,
 {
     type PrefixIter<'iter> = state::PrefixIter<'iter, <S as StateRead>::D> where Self: 'iter;
 
@@ -309,18 +324,19 @@ where
         Ok(self.ctx.state.in_mem().native_token.clone())
     }
 
-    fn get_pred_epochs(&self) -> state::StorageResult<Epochs> {
+    fn get_pred_epochs(&self) -> StorageResult<Epochs> {
         self.ctx.get_pred_epochs()
     }
 }
 
-impl<'view, 'a: 'view, S, CA> VpEnv<'view> for Ctx<'a, S, CA>
+impl<'view, 'a: 'view, S, CA, EVAL> VpEnv<'view> for Ctx<'a, S, CA, EVAL>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    CA: 'static + Clone,
 {
-    type Post = CtxPostStorageRead<'view, 'a, S, CA>;
-    type Pre = CtxPreStorageRead<'view, 'a, S, CA>;
+    type Post = CtxPostStorageRead<'view, 'a, S, CA, EVAL>;
+    type Pre = CtxPreStorageRead<'view, 'a, S, CA, EVAL>;
     type PrefixIter<'iter> = state::PrefixIter<'iter, <S as StateRead>::D> where Self: 'iter;
 
     fn pre(&'view self) -> Self::Pre {
@@ -381,7 +397,7 @@ where
             .into_storage_result()
     }
 
-    fn get_pred_epochs(&self) -> state::StorageResult<Epochs> {
+    fn get_pred_epochs(&self) -> StorageResult<Epochs> {
         vp_host_fns::get_pred_epochs(self.gas_meter, self.state)
             .into_storage_result()
     }
@@ -415,62 +431,8 @@ where
         &self,
         vp_code_hash: Hash,
         input_data: BatchedTxRef<'_>,
-    ) -> Result<(), state::StorageError> {
-        #[cfg(feature = "wasm-runtime")]
-        {
-            use std::marker::PhantomData;
-
-            use crate::vm::host_env::VpCtx;
-            use crate::vm::wasm::run::VpEvalWasm;
-
-            let eval_runner =
-                VpEvalWasm::<<S as StateRead>::D, <S as StateRead>::H, CA> {
-                    db: PhantomData,
-                    hasher: PhantomData,
-                    cache_access: PhantomData,
-                };
-            let mut iterators: PrefixIterators<'_, <S as StateRead>::D> =
-                PrefixIterators::default();
-            let mut result_buffer: Option<Vec<u8>> = None;
-            let mut yielded_value: Option<Vec<u8>> = None;
-            let mut vp_wasm_cache = self.vp_wasm_cache.clone();
-
-            let ctx = VpCtx::new(
-                self.address,
-                self.state.write_log(),
-                self.state.in_mem(),
-                self.state.db(),
-                self.gas_meter,
-                self.tx,
-                self.cmt,
-                self.tx_index,
-                &mut iterators,
-                self.verifiers,
-                &mut result_buffer,
-                &mut yielded_value,
-                self.keys_changed,
-                &eval_runner,
-                &mut vp_wasm_cache,
-            );
-            eval_runner
-                .eval_native_result(ctx, vp_code_hash, input_data)
-                .inspect_err(|err| {
-                    tracing::warn!(
-                        "VP eval from a native VP failed with: {err}",
-                    );
-                })
-                .into_storage_result()
-        }
-
-        #[cfg(not(feature = "wasm-runtime"))]
-        {
-            // This line is here to prevent unused var clippy warning
-            let _ = (vp_code_hash, input_data);
-            unimplemented!(
-                "The \"wasm-runtime\" feature must be enabled to use the \
-                 `eval` function."
-            )
-        }
+    ) -> StorageResult<()> {
+        EVAL::eval(self, vp_code_hash, input_data)
     }
 
     fn charge_gas(&self, used_gas: u64) -> Result<(), state::StorageError> {
@@ -524,10 +486,11 @@ where
     }
 }
 
-impl<S, CA> namada_tx::action::Read for Ctx<'_, S, CA>
+impl<'a, S, CA, EVAL> namada_tx::action::Read for Ctx<'a, S, CA, EVAL>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    CA: 'static + Clone,
 {
     type Err = Error;
 
@@ -586,10 +549,11 @@ pub trait StorageReader {
     }
 }
 
-impl<'a, S, CA> StorageReader for &Ctx<'a, S, CA>
+impl<'a, S, CA, EVAL> StorageReader for &Ctx<'a, S, CA, EVAL>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    CA: 'static + Clone,
 {
     /// Helper function. After reading posterior state,
     /// borsh deserialize to specified type

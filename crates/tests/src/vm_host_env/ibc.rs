@@ -62,9 +62,7 @@ pub use namada::ledger::ibc::storage::{
     consensus_state_key, ibc_token, next_sequence_ack_key,
     next_sequence_recv_key, next_sequence_send_key, port_key, receipt_key,
 };
-use namada::ledger::native_vp::ibc::{
-    get_dummy_genesis_validator, get_dummy_header as tm_dummy_header, Ibc,
-};
+use namada::ledger::native_vp::ibc::Ibc;
 use namada::ledger::native_vp::multitoken::{
     Error as MultitokenVpError, MultitokenVp,
 };
@@ -82,6 +80,8 @@ use namada::token::{self, Amount, DenominatedAmount};
 use namada::tx::BatchedTxRef;
 use namada::vm::{wasm, WasmCacheRwAccess};
 use namada_core::collections::HashMap;
+use namada_core::storage::testing::get_dummy_header;
+use namada_proof_of_stake::test_utils::get_dummy_genesis_validator;
 use namada_sdk::state::StateRead;
 use namada_test_utils::TestWasms;
 use namada_tx_prelude::BorshSerializeExt;
@@ -233,7 +233,7 @@ pub fn init_storage() -> (Address, Address) {
         // block header to check timeout timestamp
         env.state
             .in_mem_mut()
-            .set_header(tm_dummy_header())
+            .set_header(get_dummy_header())
             .unwrap();
         env.state.in_mem_mut().begin_block(BlockHeight(1)).unwrap();
     });
@@ -286,7 +286,7 @@ pub fn init_storage() -> (Address, Address) {
         // block header to check timeout timestamp
         env.state
             .in_mem_mut()
-            .set_header(tm_dummy_header())
+            .set_header(get_dummy_header())
             .unwrap();
         env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
     });
