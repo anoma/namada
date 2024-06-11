@@ -4,7 +4,6 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 
 use borsh::BorshDeserialize;
-use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
@@ -14,26 +13,23 @@ use masp_primitives::transaction::components::{
 };
 use masp_primitives::transaction::{Transaction, TransparentAddress};
 use namada_core::address::Address;
-use namada_core::address::InternalAddress::Masp;
 use namada_core::arith::{checked, CheckedAdd, CheckedSub};
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::collections::HashSet;
 use namada_core::ibc::apps::transfer::types::packet::PacketData;
 use namada_core::ibc::core::channel::types::packet::Packet;
-use namada_core::masp::encode_asset_type;
+use namada_core::masp::{addr_taddr, encode_asset_type, ibc_taddr};
 use namada_core::storage::Key;
 use namada_gas::GasMetering;
 use namada_governance::storage::is_proposal_accepted;
 use namada_ibc::event::{IbcEvent, PacketAck};
 use namada_ibc::{event as ibc_events, IbcCommonContext};
 use namada_proof_of_stake::Epoch;
-use namada_sdk::masp::{verify_shielded_tx, MaybeIbcAddress};
+use namada_sdk::masp::{verify_shielded_tx, TAddrData};
 use namada_state::{ConversionState, OptionExt, ResultExt, StateRead};
 use namada_token::read_denom;
 use namada_tx::BatchedTxRef;
 use namada_vp_env::VpEnv;
-use ripemd::Digest as RipemdDigest;
-use sha2::Digest as Sha2Digest;
 use thiserror::Error;
 use token::storage_key::{
     balance_key, is_any_token_balance_key, is_masp_key, is_masp_nullifier_key,
@@ -42,7 +38,7 @@ use token::storage_key::{
 };
 use token::Amount;
 
-use crate::address::{InternalAddress, IBC};
+use crate::address::{InternalAddress, IBC, MASP};
 use crate::events::Event;
 use crate::ledger::ibc::storage;
 use crate::ledger::ibc::storage::{
@@ -61,24 +57,6 @@ use crate::vm::WasmCacheAccess;
 /// Packet event types
 const SEND_PACKET_EVENT: &str = "send_packet";
 const WRITE_ACK_EVENT: &str = "write_acknowledgement";
-
-/// Convert a receiver string to a TransparentAddress
-fn receiver_addr(receiver: String) -> TransparentAddress {
-    let ibc_addr = MaybeIbcAddress::Ibc(receiver);
-    // Public keys must be the hash of the sources/targets
-    TransparentAddress(<[u8; 20]>::from(ripemd::Ripemd160::digest(
-        sha2::Sha256::digest(&ibc_addr.serialize_to_vec()),
-    )))
-}
-
-/// Convert a Namada Address to a TransparentAddress
-fn namada_addr(addr: Address) -> TransparentAddress {
-    let addr = MaybeIbcAddress::Address(addr);
-    // Public keys must be the hash of the sources/targets
-    TransparentAddress(<[u8; 20]>::from(ripemd::Ripemd160::digest(
-        sha2::Sha256::digest(&addr.serialize_to_vec()),
-    )))
-}
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -108,7 +86,7 @@ where
 #[derive(Default, Debug, Clone)]
 struct ChangedBalances {
     tokens: BTreeMap<AssetType, (Address, token::Denomination, MaspDigitPos)>,
-    decoder: BTreeMap<TransparentAddress, MaybeIbcAddress>,
+    decoder: BTreeMap<TransparentAddress, TAddrData>,
     ibc_denoms: BTreeMap<String, Address>,
     pre: BTreeMap<TransparentAddress, ValueSum<Address, Amount>>,
     post: BTreeMap<TransparentAddress, ValueSum<Address, Amount>>,
@@ -420,7 +398,7 @@ where
         // Required for the packet's receiver to get funds
         let post_entry = acc
             .post
-            .entry(receiver_addr(packet_data.receiver.to_string()))
+            .entry(ibc_taddr(packet_data.receiver.to_string()))
             .or_insert(ValueSum::zero());
         // Enable funds to be received by the receiver in the
         // IBC packet
@@ -484,7 +462,7 @@ where
             // Required for the IBC internal Address to release
             // funds
             let pre_entry =
-                acc.pre.entry(namada_addr(IBC)).or_insert(ValueSum::zero());
+                acc.pre.entry(addr_taddr(IBC)).or_insert(ValueSum::zero());
             *pre_entry =
                 checked!(pre_entry + &delta).map_err(native_vp::Error::new)?;
         }
@@ -512,9 +490,9 @@ where
 
         // Get the packet commitment from post-storage that corresponds
         // to this event
-        let addr = MaybeIbcAddress::Ibc(packet_data.receiver.to_string());
+        let addr = TAddrData::Ibc(packet_data.receiver.to_string());
         acc.decoder
-            .insert(receiver_addr(packet_data.receiver.to_string()), addr);
+            .insert(ibc_taddr(packet_data.receiver.to_string()), addr);
 
         match ibc_event.kind().sub_domain() {
             // This event is emitted on the sender
@@ -568,17 +546,11 @@ where
             token.clone(),
         );
         // Public keys must be the hash of the sources/targets
-        let address_hash = TransparentAddress(<[u8; 20]>::from(
-            ripemd::Ripemd160::digest(sha2::Sha256::digest(
-                &MaybeIbcAddress::Address(counterpart.clone())
-                    .serialize_to_vec(),
-            )),
-        ));
+        let address_hash = addr_taddr(counterpart.clone());
         // Enable the decoding of these counterpart addresses
-        result.decoder.insert(
-            address_hash,
-            MaybeIbcAddress::Address(counterpart.clone()),
-        );
+        result
+            .decoder
+            .insert(address_hash, TAddrData::Addr(counterpart.clone()));
         let pre_entry =
             result.pre.entry(address_hash).or_insert(ValueSum::zero());
         let post_entry =
@@ -608,9 +580,9 @@ where
             .try_fold(ChangedBalances::default(), |acc, account| {
                 self.apply_balance_change(acc, account)
             })?;
-        let ibc_addr = MaybeIbcAddress::Address(IBC);
+        let ibc_addr = TAddrData::Addr(IBC);
         // Enable decoding the IBC address hash
-        changed_balances.decoder.insert(namada_addr(IBC), ibc_addr);
+        changed_balances.decoder.insert(addr_taddr(IBC), ibc_addr);
 
         // Extract the IBC events
         let mut ibc_events =
@@ -651,12 +623,7 @@ where
         let mut changed_balances =
             self.validate_state_and_get_transfer_data(keys_changed)?;
 
-        let masp_address_hash = TransparentAddress(<[u8; 20]>::from(
-            ripemd::Ripemd160::digest(sha2::Sha256::digest(
-                &MaybeIbcAddress::Address(Address::Internal(Masp))
-                    .serialize_to_vec(),
-            )),
-        ));
+        let masp_address_hash = addr_taddr(MASP);
         verify_sapling_balancing_value(
             changed_balances
                 .pre
@@ -714,7 +681,8 @@ where
 
         // Ensure that this transaction is authorized by all involved parties
         for signer in signers {
-            if let Some(MaybeIbcAddress::Address(IBC)) = changed_balances.decoder.get(&signer)
+            if let Some(TAddrData::Addr(IBC)) =
+                changed_balances.decoder.get(&signer)
             {
                 // If the IBC address is a signatory, then it means that either
                 // Tx - Transaction(s) causes a decrease in the IBC balance or
@@ -730,7 +698,7 @@ where
                 // Transaction(s).
                 if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
                     for vout in transp_bundle.vout.iter() {
-                        if let Some(MaybeIbcAddress::Ibc(_)) =
+                        if let Some(TAddrData::Ibc(_)) =
                             changed_balances.decoder.get(&vout.address)
                         {
                             let error = native_vp::Error::new_const(
@@ -743,10 +711,10 @@ where
                         }
                     }
                 }
-            } else if let Some(MaybeIbcAddress::Ibc(_)) =
+            } else if let Some(TAddrData::Ibc(_)) =
                 changed_balances.decoder.get(&signer)
             {
-            } else if let Some(MaybeIbcAddress::Address(signer)) =
+            } else if let Some(TAddrData::Addr(signer)) =
                 changed_balances.decoder.get(&signer)
             {
                 // Otherwise the signer must be decodable so that we can

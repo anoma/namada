@@ -7,9 +7,11 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
+use masp_primitives::transaction::TransparentAddress;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
+use ripemd::Digest as RipemdDigest;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -401,9 +403,9 @@ impl TransferSource {
     }
 
     /// Get the contained MaybeIbcAddress, if any
-    pub fn maybe_ibc_address(&self) -> Option<MaybeIbcAddress> {
+    pub fn t_addr_data(&self) -> Option<TAddrData> {
         match self {
-            Self::Address(x) => Some(MaybeIbcAddress::Address(x.clone())),
+            Self::Address(x) => Some(TAddrData::Addr(x.clone())),
             _ => None,
         }
     }
@@ -418,20 +420,20 @@ impl Display for TransferSource {
     }
 }
 
-/// Represents either a Namada address or some IBC address
+/// Represents the pre-image to a TransparentAddress
 #[derive(Debug, Clone, BorshDeserialize, BorshSerialize, BorshDeserializer)]
-pub enum MaybeIbcAddress {
+pub enum TAddrData {
     /// A transparent address
-    Address(Address),
+    Addr(Address),
     /// An IBC address
     Ibc(String),
 }
 
-impl MaybeIbcAddress {
+impl TAddrData {
     /// Get the transparent address that this target would effectively go to
     pub fn effective_address(&self) -> Address {
         match self {
-            Self::Address(x) => x.clone(),
+            Self::Addr(x) => x.clone(),
             // An IBC signer address effectively means that assets are
             // associated with the IBC internal address
             Self::Ibc(_) => IBC,
@@ -449,10 +451,27 @@ impl MaybeIbcAddress {
     /// Get the contained Address, if any
     pub fn address(&self) -> Option<Address> {
         match self {
-            Self::Address(x) => Some(x.clone()),
+            Self::Addr(x) => Some(x.clone()),
             _ => None,
         }
     }
+
+    /// Convert transparent address data into a transparent address
+    pub fn taddress(&self) -> TransparentAddress {
+        TransparentAddress(<[u8; 20]>::from(ripemd::Ripemd160::digest(
+            sha2::Sha256::digest(&self.serialize_to_vec()),
+        )))
+    }
+}
+
+/// Convert a receiver string to a TransparentAddress
+pub fn ibc_taddr(receiver: String) -> TransparentAddress {
+    TAddrData::Ibc(receiver).taddress()
+}
+
+/// Convert a Namada Address to a TransparentAddress
+pub fn addr_taddr(addr: Address) -> TransparentAddress {
+    TAddrData::Addr(addr).taddress()
 }
 
 /// Represents a target for the funds of a transfer
@@ -497,10 +516,10 @@ impl TransferTarget {
     }
 
     /// Get the contained MaybeIbcAddress, if any
-    pub fn maybe_ibc_address(&self) -> Option<MaybeIbcAddress> {
+    pub fn t_addr_data(&self) -> Option<TAddrData> {
         match self {
-            Self::Address(x) => Some(MaybeIbcAddress::Address(x.clone())),
-            Self::Ibc(x) => Some(MaybeIbcAddress::Ibc(x.clone())),
+            Self::Address(x) => Some(TAddrData::Addr(x.clone())),
+            Self::Ibc(x) => Some(TAddrData::Ibc(x.clone())),
             _ => None,
         }
     }

@@ -1163,8 +1163,7 @@ pub async fn validate_amount<N: Namada>(
         if let Address::Internal(InternalAddress::IbcToken(ibc_token_hash)) =
             token
         {
-            extract_base_token(context, ibc_token_hash.clone(), None)
-                .await
+            extract_base_token(context, ibc_token_hash.clone(), None).await
         } else {
             Some(token.clone())
         };

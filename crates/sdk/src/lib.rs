@@ -798,10 +798,8 @@ where
 /// Tests and strategies for transactions
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
-    use borsh_ext::BorshSerializeExt;
     use governance::ProposalType;
     use ibc::primitives::proto::Any;
-    use masp_primitives::transaction::TransparentAddress;
     use namada_account::{InitAccount, UpdateAccount};
     use namada_core::address::testing::{
         arb_established_address, arb_non_internal_address,
@@ -810,7 +808,7 @@ pub mod testing {
     use namada_core::eth_bridge_pool::PendingTransfer;
     use namada_core::hash::testing::arb_hash;
     use namada_core::key::testing::arb_common_keypair;
-    use namada_core::masp::MaybeIbcAddress;
+    use namada_core::masp::addr_taddr;
     use namada_core::token::testing::{arb_denominated_amount, arb_transfer};
     use namada_core::token::Transfer;
     use namada_governance::storage::proposal::testing::{
@@ -827,8 +825,6 @@ pub mod testing {
     use proptest::prelude::{Just, Strategy};
     use proptest::{arbitrary, collection, option, prop_compose, prop_oneof};
     use prost::Message;
-    use ripemd::Digest as RipemdDigest;
-    use sha2::Digest;
 
     use super::*;
     use crate::account::tests::{arb_init_account, arb_update_account};
@@ -1040,16 +1036,6 @@ pub mod testing {
         }
     }
 
-    // Encode the given Address into TransparentAddress
-    fn encode_address(source: &Address) -> TransparentAddress {
-        let hash = ripemd::Ripemd160::digest(sha2::Sha256::digest(
-            MaybeIbcAddress::Address(source.clone())
-                .serialize_to_vec()
-                .as_ref(),
-        ));
-        TransparentAddress(hash.into())
-    }
-
     // Maximum number of notes to include in a transaction
     const MAX_ASSETS: usize = 2;
 
@@ -1072,8 +1058,8 @@ pub mod testing {
             code_hash in arb_hash(),
             (masp_tx_type, (shielded_transfer, asset_types)) in prop_oneof![
                 (Just(MaspTxType::Shielded), arb_shielded_transfer(0..MAX_ASSETS)),
-                (Just(MaspTxType::Shielding), arb_shielding_transfer(encode_address(&transfer.source), 1)),
-                (Just(MaspTxType::Deshielding), arb_deshielding_transfer(encode_address(&transfer.target), 1)),
+                (Just(MaspTxType::Shielding), arb_shielding_transfer(addr_taddr(transfer.source.clone()), 1)),
+                (Just(MaspTxType::Deshielding), arb_deshielding_transfer(addr_taddr(transfer.target.clone()), 1)),
             ],
             mut transfer in Just(transfer),
         ) -> (Tx, TxData) {
