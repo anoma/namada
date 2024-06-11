@@ -671,19 +671,19 @@ fn proposal_ibc_token_inflation() -> Result<()> {
 #[test]
 fn ibc_rate_limit() -> Result<()> {
     // Mint limit 2 transfer/channel-0/nam, per-epoch throughput limit 1 NAM
-    let update_genesis = |mut genesis: templates::All<
-        templates::Unvalidated,
-    >,
-                          base_dir: &_| {
-        genesis.parameters.parameters.epochs_per_year =
-            epochs_per_year_from_min_duration(50);
-        genesis.parameters.ibc_params.default_mint_limit = Amount::from_u64(2);
-        genesis
-            .parameters
-            .ibc_params
-            .default_per_epoch_throughput_limit = Amount::from_u64(1_000_000);
-        setup::set_validators(1, genesis, base_dir, |_| 0)
-    };
+    let update_genesis =
+        |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
+            genesis.parameters.parameters.epochs_per_year =
+                epochs_per_year_from_min_duration(50);
+            genesis.parameters.ibc_params.default_mint_limit =
+                Amount::from_u64(2_000_000);
+            genesis
+                .parameters
+                .ibc_params
+                .default_per_epoch_throughput_limit =
+                Amount::from_u64(1_000_000);
+            setup::set_validators(1, genesis, base_dir, |_| 0)
+        };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
     let _bg_ledger_a = ledger_a.background();
     let _bg_ledger_b = ledger_b.background();
@@ -1622,6 +1622,7 @@ fn try_invalid_transfers(
     let receiver = find_address(test_b, BERTHA)?;
 
     // invalid port
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
     let nam_addr = find_address(test_a, NAM)?;
     transfer(
         test_a,

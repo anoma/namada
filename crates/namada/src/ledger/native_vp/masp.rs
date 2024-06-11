@@ -16,6 +16,7 @@ use namada_core::address::Address;
 use namada_core::arith::{checked, CheckedAdd, CheckedSub};
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::collections::HashSet;
+use namada_core::ibc::apps::transfer::types::is_sender_chain_source;
 use namada_core::ibc::apps::transfer::types::packet::PacketData;
 use namada_core::ibc::core::channel::types::packet::Packet;
 use namada_core::masp::{addr_taddr, encode_asset_type, ibc_taddr};
@@ -404,6 +405,19 @@ where
         // IBC packet
         *post_entry =
             checked!(post_entry + &delta).map_err(native_vp::Error::new)?;
+
+        // If there is a transfer to the IBC account, then deduplicate the
+        // balance increase since we already accounted for it above
+        if is_sender_chain_source(
+            msg.port_id_on_a.clone(),
+            msg.chan_id_on_a.clone(),
+            &packet_data.token.denom,
+        ) {
+            let post_entry =
+                acc.post.entry(addr_taddr(IBC)).or_insert(ValueSum::zero());
+            *post_entry =
+                checked!(post_entry - &delta).map_err(native_vp::Error::new)?;
+        }
         Ok(())
     }
 
