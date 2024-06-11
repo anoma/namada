@@ -104,3 +104,26 @@ pub struct EpochDuration {
     /// Minimum duration of an epoch
     pub min_duration: DurationSecs,
 }
+
+impl Default for Parameters {
+    fn default() -> Self {
+        Parameters {
+            max_tx_bytes: 1024 * 1024,
+            epoch_duration: EpochDuration {
+                min_num_of_blocks: 1,
+                min_duration: DurationSecs(3600),
+            },
+            max_proposal_bytes: Default::default(),
+            max_block_gas: 100,
+            vp_allowlist: vec![],
+            tx_allowlist: vec![],
+            implicit_vp_code_hash: Default::default(),
+            epochs_per_year: 365,
+            masp_epoch_multiplier: 2,
+            masp_fee_payment_gas_limit: 0,
+            gas_scale: 100_000_000,
+            minimum_gas_price: Default::default(),
+            is_native_token_transferable: true,
+        }
+    }
+}

@@ -741,7 +741,7 @@ impl WriteLog {
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
-    use namada_core::{address, parameters};
+    use namada_core::address;
     use pretty_assertions::assert_eq;
     use proptest::prelude::*;
 

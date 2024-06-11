@@ -3,12 +3,13 @@
 //! Here, we expose the host functions into wasm's
 //! imports, so they can be called from inside the wasm.
 
+use namada_core::WasmCacheAccess;
 use namada_state::{DBIter, StorageHasher, DB};
 use wasmer::{Function, FunctionEnv, Imports};
 
+use crate::host_env;
 use crate::host_env::{TxVmEnv, VpEvaluator, VpVmEnv};
 use crate::wasm::memory::WasmMemory;
-use crate::{host_env, WasmCacheAccess};
 
 /// Prepare imports (memory and host functions) exposed to the vm guest running
 /// transaction code
@@ -113,12 +114,12 @@ mod wrap_tx {
 
     #![allow(missing_docs)]
 
+    use namada_core::WasmCacheAccess;
     use namada_state::{DBIter, StorageHasher, DB};
     use wasmer::FunctionEnvMut;
 
     use crate::host_env::TxVmEnv;
     use crate::wasm::memory::WasmMemory;
-    use crate::WasmCacheAccess;
 
     pub(super) fn _0<F, RET, D, H, CA>(
         f: F,
@@ -294,12 +295,12 @@ mod wrap_vp {
 
     #![allow(missing_docs)]
 
+    use namada_core::WasmCacheAccess;
     use namada_state::{DBIter, StorageHasher, DB};
     use wasmer::FunctionEnvMut;
 
     use crate::host_env::{VpEvaluator, VpVmEnv};
     use crate::wasm::memory::WasmMemory;
-    use crate::WasmCacheAccess;
 
     pub(super) fn _0<F, RET, D, H, EVAL, CA>(
         f: F,

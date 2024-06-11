@@ -30,6 +30,7 @@ pub mod pgf;
 pub mod storage;
 /// Governance utility functions/structs
 pub mod utils;
+pub mod vp;
 
 pub use storage::proposal::{InitProposalData, ProposalType, VoteProposalData};
 pub use storage::vote::ProposalVote;

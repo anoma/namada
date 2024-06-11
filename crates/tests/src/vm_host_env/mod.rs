@@ -33,13 +33,14 @@ mod tests {
     use namada::ibc::context::transfer_mod::testing::DummyTransferModule;
     use namada::ibc::primitives::ToProto;
     use namada::ibc::Error as IbcActionError;
-    use namada::ledger::ibc::{storage as ibc_storage, trace as ibc_trace};
-    use namada::ledger::native_vp::ibc::{
-        get_dummy_header as tm_dummy_header, Error as IbcError,
+    use namada::ledger::ibc::{
+        storage as ibc_storage, storage as ibc_storage, trace as ibc_trace,
     };
+    use namada::ledger::native_vp::ibc::Error as IbcError;
     use namada::ledger::tx_env::TxEnv;
     use namada::token::{self, Amount};
     use namada::tx::Tx;
+    use namada_core::storage::testing::get_dummy_header;
     use namada_test_utils::TestWasms;
     use namada_tx_prelude::address::InternalAddress;
     use namada_tx_prelude::chain::ChainId;
@@ -714,7 +715,7 @@ mod tests {
         env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
         env.state
             .in_mem_mut()
-            .set_header(tm_dummy_header())
+            .set_header(get_dummy_header())
             .unwrap();
 
         // Start a transaction to update the client
@@ -790,7 +791,7 @@ mod tests {
         env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
         env.state
             .in_mem_mut()
-            .set_header(tm_dummy_header())
+            .set_header(get_dummy_header())
             .unwrap();
         tx_host_env::set(env);
 
@@ -867,7 +868,7 @@ mod tests {
         env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
         env.state
             .in_mem_mut()
-            .set_header(tm_dummy_header())
+            .set_header(get_dummy_header())
             .unwrap();
         tx_host_env::set(env);
 
@@ -946,7 +947,7 @@ mod tests {
         env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
         env.state
             .in_mem_mut()
-            .set_header(tm_dummy_header())
+            .set_header(get_dummy_header())
             .unwrap();
         tx_host_env::set(env);
 
@@ -1025,7 +1026,7 @@ mod tests {
         env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
         env.state
             .in_mem_mut()
-            .set_header(tm_dummy_header())
+            .set_header(get_dummy_header())
             .unwrap();
         tx_host_env::set(env);
 
@@ -1228,7 +1229,7 @@ mod tests {
         env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
         env.state
             .in_mem_mut()
-            .set_header(tm_dummy_header())
+            .set_header(get_dummy_header())
             .unwrap();
         tx_host_env::set(env);
 
@@ -1789,7 +1790,7 @@ mod tests {
         env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
         env.state
             .in_mem_mut()
-            .set_header(tm_dummy_header())
+            .set_header(get_dummy_header())
             .unwrap();
         tx_host_env::set(env);
 
@@ -1875,7 +1876,7 @@ mod tests {
         env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
         env.state
             .in_mem_mut()
-            .set_header(tm_dummy_header())
+            .set_header(get_dummy_header())
             .unwrap();
         tx_host_env::set(env);
 
