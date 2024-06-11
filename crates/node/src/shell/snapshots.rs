@@ -24,6 +24,7 @@ impl Shell<storage::PersistentDB, Sha256Hasher> {
         if self.blocks_between_snapshots.is_none() {
             Ok(Default::default())
         } else {
+            tracing::info!("Request for snapshots received.");
             let snapshots = DbSnapshot::files(&self.base_dir)
                 .map_err(Error::Snapshot)?
                 .into_iter()
@@ -58,6 +59,11 @@ impl Shell<storage::PersistentDB, Sha256Hasher> {
             &self.base_dir,
         )
         .map_err(Error::Snapshot)?;
+        tracing::info!(
+            "Loading snapshot at height {}, chunk number {}",
+            req.height,
+            req.chunk
+        );
         Ok(tm_response::LoadSnapshotChunk {
             chunk: chunk.into_iter().collect(),
         })
@@ -84,8 +90,10 @@ impl Shell<storage::PersistentDB, Sha256Hasher> {
                         expected: chunks,
                         strikes: 0,
                     });
+                    tracing::info!("Accepting snapshot offer");
                     tm_response::OfferSnapshot::Accept
                 } else {
+                    tracing::info!("Rejecting snapshot offer");
                     tm_response::OfferSnapshot::Reject
                 }
             }
@@ -94,6 +102,7 @@ impl Shell<storage::PersistentDB, Sha256Hasher> {
                     let Ok(chunks) =
                         Vec::<Hash>::try_from_slice(&req.snapshot.metadata)
                     else {
+                        tracing::info!("Rejecting snapshot offer");
                         return tm_response::OfferSnapshot::Reject;
                     };
                     self.syncing = Some(SnapshotSync {
@@ -102,8 +111,10 @@ impl Shell<storage::PersistentDB, Sha256Hasher> {
                         expected: chunks,
                         strikes: 0,
                     });
+                    tracing::info!("Accepting snapshot offer");
                     tm_response::OfferSnapshot::Accept
                 } else {
+                    tracing::info!("Rejecting snapshot offer");
                     tm_response::OfferSnapshot::Reject
                 }
             }
@@ -116,6 +127,7 @@ impl Shell<storage::PersistentDB, Sha256Hasher> {
         req: tm_request::ApplySnapshotChunk,
     ) -> tm_response::ApplySnapshotChunk {
         let Some(snapshot_sync) = self.syncing.as_mut() else {
+            tracing::warn!("Received as snapshot although none were requested");
             // if we are not currently syncing, abort this sync protocol
             // the syncing status is set by `OfferSnapshot`.
             return tm_response::ApplySnapshotChunk {
@@ -127,6 +139,11 @@ impl Shell<storage::PersistentDB, Sha256Hasher> {
 
         // make sure we have been given the correct chunk
         if u64::from(req.index) != snapshot_sync.next_chunk {
+            tracing::error!(
+                "Received wrong chunk, expected {} , got {}",
+                snapshot_sync.next_chunk,
+                req.index
+            );
             return tm_response::ApplySnapshotChunk {
                 result: ApplySnapshotChunkResult::Unknown,
                 refetch_chunks: vec![
@@ -139,6 +156,9 @@ impl Shell<storage::PersistentDB, Sha256Hasher> {
         let Some(expected_hash) =
             snapshot_sync.expected.get(req.index as usize)
         else {
+            tracing::error!(
+                "Received more chunks, than expected; rejecting snapshot"
+            );
             self.syncing = None;
             // if we get more chunks than expected, there is something wrong
             // with this snapshot and we should reject it.
@@ -154,12 +174,20 @@ impl Shell<storage::PersistentDB, Sha256Hasher> {
         // to validate too many times, we reject the snapshot and sender.
         let chunk_hash = Hash::sha256(&req.chunk);
         if *expected_hash != chunk_hash {
+            tracing::error!(
+                "Hash of chunk did not match, expeected {}, got {}",
+                expected_hash,
+                chunk_hash
+            );
             snapshot_sync.strikes =
                 checked!(snapshot_sync.strikes + 1).unwrap();
             if snapshot_sync.strikes == MAX_SENDER_STRIKES {
                 snapshot_sync.strikes = 0;
                 self.syncing = None;
-
+                tracing::info!(
+                    "Max number of strikes reached on chunk, rejecting \
+                     snapshot"
+                );
                 return tm_response::ApplySnapshotChunk {
                     result: ApplySnapshotChunkResult::RejectSnapshot,
                     refetch_chunks: vec![],
@@ -172,6 +200,8 @@ impl Shell<storage::PersistentDB, Sha256Hasher> {
                     reject_senders: vec![],
                 };
             }
+        } else {
+            snapshot_sync.strikes = 0;
         };
         // when we first start applying a snapshot,
         // clear the existing db.
@@ -202,17 +232,18 @@ impl Shell<storage::PersistentDB, Sha256Hasher> {
                 reject_senders: vec![],
             };
         }
+        tracing::info!("Applied snapshot chunk #{}", snapshot_sync.next_chunk);
 
         // increment the chunk counter
         snapshot_sync.next_chunk =
             checked!(snapshot_sync.next_chunk + 1).unwrap();
         // check if all chunks have been applied
         if snapshot_sync.next_chunk == snapshot_sync.expected.len() as u64 {
+            tracing::info!("Snapshot completely applied");
             self.syncing = None;
             // rebuild the in-memory state
             self.state.load_last_state();
         }
-
         tm_response::ApplySnapshotChunk {
             result: ApplySnapshotChunkResult::Accept,
             refetch_chunks: vec![],
