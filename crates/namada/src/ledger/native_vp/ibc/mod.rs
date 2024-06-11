@@ -351,68 +351,10 @@ fn match_value(
     }
 }
 
-/// A dummy header used for testing
-#[cfg(any(test, feature = "testing", feature = "benches"))]
-pub fn get_dummy_header() -> crate::storage::Header {
-    use namada_sdk::time::{DateTimeUtc, DurationSecs};
-    crate::storage::Header {
-        hash: crate::hash::Hash([0; 32]),
-        #[allow(clippy::disallowed_methods, clippy::arithmetic_side_effects)]
-        time: DateTimeUtc::now() + DurationSecs(5),
-        next_validators_hash: crate::hash::Hash([0; 32]),
-    }
-}
-
-/// A dummy validator used for testing
-#[cfg(any(test, feature = "testing"))]
-pub fn get_dummy_genesis_validator()
--> namada_proof_of_stake::types::GenesisValidator {
-    use crate::core::address::testing::established_address_1;
-    use crate::core::dec::Dec;
-    use crate::core::key::testing::common_sk_from_simple_seed;
-    use crate::key;
-
-    let address = established_address_1();
-    let tokens = Amount::native_whole(1);
-    let consensus_sk = common_sk_from_simple_seed(0);
-    let consensus_key = consensus_sk.to_public();
-
-    let protocol_sk = common_sk_from_simple_seed(1);
-    let protocol_key = protocol_sk.to_public();
-
-    let commission_rate =
-        Dec::new(1, 1).expect("expected 0.1 to be a valid decimal");
-    let max_commission_rate_change =
-        Dec::new(1, 1).expect("expected 0.1 to be a valid decimal");
-
-    let eth_hot_sk =
-        key::common::SecretKey::Secp256k1(key::testing::gen_keypair::<
-            key::secp256k1::SigScheme,
-        >());
-    let eth_hot_key = eth_hot_sk.to_public();
-
-    let eth_cold_sk =
-        key::common::SecretKey::Secp256k1(key::testing::gen_keypair::<
-            key::secp256k1::SigScheme,
-        >());
-    let eth_cold_key = eth_cold_sk.to_public();
-
-    namada_proof_of_stake::types::GenesisValidator {
-        address,
-        tokens,
-        consensus_key,
-        protocol_key,
-        eth_cold_key,
-        eth_hot_key,
-        commission_rate,
-        max_commission_rate_change,
-        metadata: Default::default(),
-    }
-}
-
 #[allow(clippy::arithmetic_side_effects)]
 #[cfg(test)]
 mod tests {
+
     use std::str::FromStr;
 
     use borsh::BorshDeserialize;
@@ -423,9 +365,11 @@ mod tests {
     use ibc_testkit::testapp::ibc::clients::mock::consensus_state::MockConsensusState;
     use ibc_testkit::testapp::ibc::clients::mock::header::MockHeader;
     use namada_core::address::InternalAddress;
+    use namada_core::storage::testing::get_dummy_header;
     use namada_gas::TxGasMeter;
     use namada_governance::parameters::GovernanceParameters;
     use namada_ibc::event::IbcEventType;
+    use namada_proof_of_stake::test_utils::get_dummy_genesis_validator;
     use namada_state::testing::TestState;
     use namada_state::StorageRead;
     use namada_tx::data::TxType;

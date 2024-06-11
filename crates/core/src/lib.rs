@@ -20,6 +20,7 @@
 pub mod arith;
 pub mod bytes;
 pub mod hints;
+pub mod proof_of_stake;
 mod wasm_cache;
 
 pub use wasm_cache::{WasmCacheAccess, WasmCacheRoAccess, WasmCacheRwAccess};

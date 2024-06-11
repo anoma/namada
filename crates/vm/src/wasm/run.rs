@@ -14,7 +14,9 @@ use namada_core::hash::{Error as TxHashError, Hash};
 use namada_core::internal::HostEnvResult;
 use namada_core::storage::{Key, TxIndex};
 use namada_core::validity_predicate::VpError;
+use namada_core::WasmCacheAccess;
 use namada_gas::{GasMetering, TxGasMeter, VpGasMeter, WASM_MEMORY_PAGE_GAS};
+use namada_state::prefix_iter::PrefixIterators;
 use namada_state::{DBIter, State, StateRead, StorageHasher, StorageRead, DB};
 use namada_tx::data::{TxSentinel, TxType};
 use namada_tx::{BatchedTxRef, Commitment, Section, Tx, TxCommitments};
@@ -28,14 +30,10 @@ use wasmer::{Engine, Module, NativeEngineExt, Store, Target};
 use super::memory::{Limit, WasmMemory};
 use super::TxCache;
 use crate::host_env::{TxVmEnv, VpCtx, VpEvaluator, VpVmEnv};
-use crate::prefix_iter::PrefixIterators;
 use crate::types::VpInput;
 use crate::wasm::host_env::{tx_imports, vp_imports};
 use crate::wasm::{memory, Cache, CacheName, VpCache};
-use crate::{
-    validate_untrusted_wasm, HostRef, RwAccess, WasmCacheAccess,
-    WasmValidationError,
-};
+use crate::{validate_untrusted_wasm, HostRef, RwAccess, WasmValidationError};
 
 const TX_ENTRYPOINT: &str = "_apply_tx";
 const VP_ENTRYPOINT: &str = "_validate_tx";
@@ -522,6 +520,65 @@ where
     pub hasher: PhantomData<*const H>,
     /// Phantom type for WASM compilation cache access
     pub cache_access: PhantomData<*const CA>,
+}
+
+impl<'a, S, CA> namada_vp::native_vp::VpEvaluator<'a, S, VpCache<CA>, Self>
+    for VpEvalWasm<<S as StateRead>::D, <S as StateRead>::H, CA>
+where
+    S: 'static + StateRead,
+    CA: WasmCacheAccess,
+{
+    fn eval(
+        ctx: &namada_vp::native_vp::Ctx<'a, S, VpCache<CA>, Self>,
+        vp_code_hash: Hash,
+        input_data: BatchedTxRef<'_>,
+    ) -> namada_state::StorageResult<()> {
+        use std::marker::PhantomData;
+
+        use namada_state::ResultExt;
+
+        use crate::host_env::VpCtx;
+        use crate::wasm::run::VpEvalWasm;
+
+        let eval_runner =
+            VpEvalWasm::<<S as StateRead>::D, <S as StateRead>::H, CA> {
+                db: PhantomData,
+                hasher: PhantomData,
+                cache_access: PhantomData,
+            };
+        let mut iterators: PrefixIterators<'_, <S as StateRead>::D> =
+            PrefixIterators::default();
+        let mut result_buffer: Option<Vec<u8>> = None;
+        let mut yielded_value: Option<Vec<u8>> = None;
+        let mut vp_wasm_cache = ctx.vp_wasm_cache.clone();
+
+        let ctx = VpCtx::new(
+            ctx.address,
+            ctx.state.write_log(),
+            ctx.state.in_mem(),
+            ctx.state.db(),
+            ctx.gas_meter,
+            ctx.tx,
+            ctx.cmt,
+            ctx.tx_index,
+            &mut iterators,
+            ctx.verifiers,
+            &mut result_buffer,
+            &mut yielded_value,
+            ctx.keys_changed,
+            &eval_runner,
+            &mut vp_wasm_cache,
+        );
+        eval_runner
+            .eval_native_result(ctx, vp_code_hash, input_data)
+            .inspect_err(|err| {
+                tracing::warn!(
+                    "VP eval from a native VP failed with:
+            {err}",
+                );
+            })
+            .into_storage_result()
+    }
 }
 
 impl<D, H, CA> VpEvaluator for VpEvalWasm<D, H, CA>
@@ -1120,9 +1177,9 @@ mod tests {
         // shouldn't fail
         let tx_data = 2_usize.pow(23).serialize_to_vec();
         let (mut vp_cache, _) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
         let (mut tx_cache, _) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::tx_cache();
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.set_code(Code::new(tx_code.clone(), None));
         outer_tx.set_data(Data::new(tx_data));
@@ -1210,7 +1267,8 @@ mod tests {
         let mut outer_tx = Tx::new(state.in_mem().chain_id.clone(), None);
         outer_tx.add_code(vec![], None).add_data(eval_vp);
 
-        let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
+        let (vp_cache, _) =
+            wasm::compilation_cache::common::testing::vp_cache();
         // When the `eval`ed VP doesn't run out of memory, it should return
         // `true`
         assert!(
@@ -1294,7 +1352,8 @@ mod tests {
         outer_tx.header.chain_id = state.in_mem().chain_id.clone();
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.set_code(Code::new(vec![], None));
-        let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
+        let (vp_cache, _) =
+            wasm::compilation_cache::common::testing::vp_cache();
         let result = vp(
             code_hash,
             &outer_tx.batch_ref_first_tx().unwrap(),
@@ -1358,9 +1417,9 @@ mod tests {
         let len = 2_usize.pow(24);
         let tx_data: Vec<u8> = vec![6_u8; len];
         let (mut vp_cache, _) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
         let (mut tx_cache, _) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::tx_cache();
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.set_code(Code::new(tx_no_op, None));
         outer_tx.set_data(Data::new(tx_data));
@@ -1426,7 +1485,8 @@ mod tests {
         outer_tx.header.chain_id = state.in_mem().chain_id.clone();
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.set_code(Code::new(vec![], None));
-        let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
+        let (vp_cache, _) =
+            wasm::compilation_cache::common::testing::vp_cache();
         let result = vp(
             code_hash,
             &outer_tx.batch_ref_first_tx().unwrap(),
@@ -1493,9 +1553,9 @@ mod tests {
         state.write(&key, value).unwrap();
         let tx_data = key.serialize_to_vec();
         let (mut vp_cache, _) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
         let (mut tx_cache, _) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::tx_cache();
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.set_code(Code::new(tx_read_key, None));
         outer_tx.set_data(Data::new(tx_data));
@@ -1553,7 +1613,8 @@ mod tests {
         outer_tx.header.chain_id = state.in_mem().chain_id.clone();
         outer_tx.set_data(Data::new(tx_data));
         outer_tx.set_code(Code::new(vec![], None));
-        let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
+        let (vp_cache, _) =
+            wasm::compilation_cache::common::testing::vp_cache();
         let error = vp(
             code_hash,
             &outer_tx.batch_ref_first_tx().unwrap(),
@@ -1628,7 +1689,8 @@ mod tests {
         let mut outer_tx = Tx::new(state.in_mem().chain_id.clone(), None);
         outer_tx.add_code(vec![], None).add_data(eval_vp);
 
-        let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
+        let (vp_cache, _) =
+            wasm::compilation_cache::common::testing::vp_cache();
         assert!(
             vp(
                 code_hash,
@@ -1733,9 +1795,9 @@ mod tests {
         state.write_log_mut().write(&len_key, code_len).unwrap();
 
         let (mut vp_cache, _) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
         let (mut tx_cache, _) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::tx_cache();
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.set_code(Code::new(tx_code.clone(), None));
         outer_tx.set_data(Data::new(vec![]));
@@ -1772,9 +1834,9 @@ mod tests {
         state.write_log_mut().write(&len_key, code_len).unwrap();
 
         let (mut vp_cache, _) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
         let (mut tx_cache, _) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::tx_cache();
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.set_code(Code::new(tx_code.clone(), None));
         outer_tx.set_data(Data::new(vec![]));
@@ -1815,7 +1877,8 @@ mod tests {
         state.write_log_mut().write(&key, tx_code.clone()).unwrap();
         state.write_log_mut().write(&len_key, code_len).unwrap();
 
-        let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
+        let (vp_cache, _) =
+            wasm::compilation_cache::common::testing::vp_cache();
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.set_code(Code::new(tx_code.clone(), None));
         outer_tx.set_data(Data::new(vec![]));
@@ -1858,7 +1921,8 @@ mod tests {
         state.write_log_mut().write(&key, tx_code.clone()).unwrap();
         state.write_log_mut().write(&len_key, code_len).unwrap();
 
-        let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
+        let (vp_cache, _) =
+            wasm::compilation_cache::common::testing::vp_cache();
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.set_code(Code::new(tx_code.clone(), None));
         outer_tx.set_data(Data::new(vec![]));
