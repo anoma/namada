@@ -338,12 +338,11 @@ pub fn compute_proposal_result(
         let vote_type = votes.validators_vote.get(&address);
         if let Some(vote) = vote_type {
             if vote.is_yay() {
-                yay_voting_power = checked!(yay_voting_power + vote_power)?;
+                checked!(yay_voting_power += vote_power)?;
             } else if vote.is_nay() {
-                nay_voting_power = checked!(nay_voting_power + vote_power)?;
+                checked!(nay_voting_power += vote_power)?;
             } else if vote.is_abstain() {
-                abstain_voting_power =
-                    checked!(abstain_voting_power + vote_power)?;
+                checked!(abstain_voting_power += vote_power)?;
             }
         }
     }
@@ -393,12 +392,11 @@ pub fn compute_proposal_result(
                     }
                 }
             } else if delegator_vote.is_yay() {
-                yay_voting_power = checked!(yay_voting_power + vote_power)?;
+                checked!(yay_voting_power += vote_power)?;
             } else if delegator_vote.is_nay() {
-                nay_voting_power = checked!(nay_voting_power + vote_power)?;
+                checked!(nay_voting_power += vote_power)?;
             } else if delegator_vote.is_abstain() {
-                abstain_voting_power =
-                    checked!(abstain_voting_power + vote_power)?;
+                checked!(abstain_voting_power += vote_power)?;
             }
         }
     }

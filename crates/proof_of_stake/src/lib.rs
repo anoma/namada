@@ -801,7 +801,7 @@ where
                 let rp =
                     rewards_products.get(storage, &ep)?.unwrap_or_default();
                 let slashed_rewards = slashed_amount.mul_floor(rp)?;
-                rewards = checked!(rewards + slashed_rewards)?;
+                checked!(rewards += slashed_rewards)?;
             }
         }
 
@@ -905,7 +905,7 @@ where
             bonds_for_removal.new_entry =
                 Some((bond_epoch, checked!(bond_amount - to_unbond)?));
         }
-        remaining = checked!(remaining - to_unbond)?;
+        checked!(remaining -= to_unbond)?;
         if remaining.is_zero() {
             break;
         }
@@ -2810,7 +2810,7 @@ where
     // Add reward tokens tallied during previous withdrawals
     let counter_rewards =
         take_rewards_from_counter(storage, &source, validator)?;
-    reward_tokens = checked!(reward_tokens + counter_rewards)?;
+    checked!(reward_tokens += counter_rewards)?;
 
     // Update the last claim epoch in storage
     write_last_reward_claim_epoch(storage, &source, validator, current_epoch)?;

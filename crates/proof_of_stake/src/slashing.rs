@@ -334,7 +334,7 @@ where
         // Then update validator and total deltas
         for (epoch, slash_amount) in slash_amounts {
             let slash_delta = checked!(slash_amount - slash_acc)?;
-            slash_acc = checked!(slash_acc + slash_delta)?;
+            checked!(slash_acc += slash_delta)?;
 
             let neg_slash_delta = checked!(-slash_delta.change())?;
             update_validator_deltas(
@@ -681,7 +681,7 @@ where
         redelegated_bonds = new_redelegated_bonds;
 
         // `newSum`
-        sum = checked!(sum + amount)?;
+        checked!(sum += amount)?;
 
         // `newSlashesMap`
         let cur = slashed_amounts.entry(epoch).or_default();
