@@ -1,4 +1,4 @@
-name: Triggerable Antithesis workflow
+name: Triggerable Antithesis
 
 on: 
   workflow_dispatch:
@@ -11,6 +11,10 @@ on:
         description: 'The docker tag of the scenario tester image'
         required: true
         type: string
+      with_instrumentation:
+        description: 'Use instrumented images'
+        required: true
+        type: boolean
       workload_type:
         type: choice
         description: The type of workload to use (namada__pr__customer 3h, namada__nightly__customer 8h)
@@ -24,10 +28,20 @@ jobs:
 
     steps:
       - uses: antithesishq/antithesis-trigger-action@v0.2
+        if: ${{ github.event.inputs.with_instrumentation }}
         with:
           notebook_name: ${{ github.event.inputs.workload_type }}
           tenant: heliax
           username: ${{ secrets.ANTITHESIS_USER_NAME }}
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          images: namada-config:${{ github.event.inputs.namada_docker_tag }},namada-genesis:${{ github.event.inputs.namada_docker_tag }},namada:${{ github.event.inputs.namada_docker_tag }},namada:${{ github.event.inputs.namada_docker_tag }}-inst,namada-scenario-tester:${{ github.event.inputs.scenario_tester_docker_tag }}
+          images: namada-config:${{ github.event.inputs.namada_docker_tag }},namada-genesis:${{ github.event.inputs.namada_docker_tag }},namada:${{ github.event.inputs.namada_docker_tag }}-inst,namada-scenario-tester:${{ github.event.inputs.scenario_tester_docker_tag }}
+      - uses: antithesishq/antithesis-trigger-action@v0.2
+        if: ${{ !github.event.inputs.with_instrumentation }}
+        with:
+          notebook_name: ${{ github.event.inputs.workload_type }}
+          tenant: heliax
+          username: ${{ secrets.ANTITHESIS_USER_NAME }}
+          password: ${{ secrets.ANTITHESIS_PASSWORD }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          images: namada-config:${{ github.event.inputs.namada_docker_tag }},namada-genesis:${{ github.event.inputs.namada_docker_tag }},namada:${{ github.event.inputs.namada_docker_tag }},namada-scenario-tester:${{ github.event.inputs.scenario_tester_docker_tag }}
