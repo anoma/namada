@@ -908,11 +908,12 @@ impl<'a> DbSnapshot<'a> {
                     // for a given block height
                     if entry_ext == Some(meta) {
                         let metadata = std::fs::read_to_string(entry_path)?;
-                        let metadata_bytes = HEXLOWER
-                            .decode(metadata.as_bytes())
-                            .map_err(|e| {
-                                std::io::Error::new(ErrorKind::InvalidData, e)
-                            })?;
+                        let metadata_bytes = base64::decode(
+                            metadata.as_bytes(),
+                        )
+                        .map_err(|e| {
+                            std::io::Error::new(ErrorKind::InvalidData, e)
+                        })?;
                         let chunks: Vec<Chunk> =
                             BorshDeserialize::try_from_slice(
                                 &metadata_bytes[..],
@@ -1028,7 +1029,7 @@ impl<'a> Iterator for ChunkIterator<'a> {
         let value = iter.next()?;
         let cf = DbColFam::from_str(cf).ok()?;
         let key = Key::parse(key).ok()?;
-        let value = HEXLOWER.decode(value.as_bytes()).ok()?;
+        let value = base64::decode(value.as_bytes()).ok()?;
         Some((cf, key, value))
     }
 }
@@ -2963,7 +2964,7 @@ mod test {
         let temp = tempfile::tempdir().expect("Test failed");
         let base_dir = temp.path().to_path_buf();
         let chunks = vec![Chunk::default()];
-        let chunk_bytes = HEXLOWER.encode(&chunks.serialize_to_vec());
+        let chunk_bytes = base64::encode(chunks.serialize_to_vec());
         for i in 0..4 {
             let mut path = base_dir.clone();
             path.push(format!("snapshot_{}.snap", i));
@@ -3172,7 +3173,7 @@ mod test {
             "fffffggggghh\naaaa\nbbbbb\ncc\ndddddddd\n".as_bytes(),
         )
         .expect("Test failed");
-        std::fs::write(meta_file, HEXLOWER.encode(&chunks.serialize_to_vec()))
+        std::fs::write(meta_file, base64::encode(chunks.serialize_to_vec()))
             .expect("Test failed");
         let chunks: Vec<_> = (0..3)
             .filter_map(|i| {
@@ -3194,7 +3195,7 @@ mod test {
 
     #[test]
     fn test_chunk_iterator() {
-        let chunk = "state:bing/fucking/bong=01\nsubspace:I/AM/BATMAN=02\n";
+        let chunk = "state:bing/fucking/bong=AQ==\nsubspace:I/AM/BATMAN=Ag==\n";
         let iterator = DbSnapshot::parse_chunk(chunk.as_bytes());
         let expected = vec![
             (
@@ -3211,12 +3212,12 @@ mod test {
         let parsed: Vec<_> = iterator.collect();
         assert_eq!(parsed, expected);
         let bad_chunks = [
-            "bloop:bing/fucking/bong=01\n",
-            "bing/fucking/bong=01\n",
-            "state:bing/fucking/bong:01\n",
-            "state=bing/fucking/bong=01\n",
+            "bloop:bing/fucking/bong=AQ==\n",
+            "bing/fucking/bong=AQ==\n",
+            "state:bing/fucking/bong:AQ==\n",
+            "state=bing/fucking/bong=AQ==\n",
             "state:bing/fucking/bong\n",
-            "state:#bing/fucking/bong=01\n",
+            "state:#bing/fucking/bong=AQ==\n",
             "state:bing/fucking/bong=0Z\n",
         ];
         for chunk in bad_chunks {
