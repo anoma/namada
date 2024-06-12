@@ -22,7 +22,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum Error {
     /// Key Retrieval Errors
     #[error("Key Error: {0}")]
-    KeyRetrival(#[from] storage::Error),
+    KeyRetrieval(#[from] storage::Error),
     /// Transaction Errors
     #[error("{0}")]
     Tx(#[from] TxSubmitError),
@@ -44,6 +44,9 @@ pub enum Error {
     /// Any Other errors that are uncategorized
     #[error("{0}")]
     Other(String),
+    /// An interrupt was called
+    #[error("Process {0} received an interrupt signal")]
+    Interrupt(String),
 }
 
 /// Errors that deal with querying some kind of data

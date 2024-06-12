@@ -95,7 +95,7 @@ pub fn require_no_data(request: &RequestQuery) -> namada_storage::Result<()> {
 
 /// Queries testing helpers
 #[cfg(any(test, feature = "testing"))]
-mod testing {
+pub(crate) mod testing {
     use borsh_ext::BorshSerializeExt;
     use namada_state::testing::TestState;
     use tendermint_rpc::Response;

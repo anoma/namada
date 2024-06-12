@@ -103,6 +103,7 @@ ethbridge-bridge-contract.workspace = true
 ethers.workspace = true
 eyre.workspace = true
 fd-lock = { workspace = true, optional = true }
+flume = "0.11.0"
 futures.workspace = true
 itertools.workspace = true
 jubjub = { workspace = true, optional = true }
