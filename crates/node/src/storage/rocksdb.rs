@@ -764,7 +764,7 @@ impl<'a> DbSnapshot<'a> {
                 // Empty string to prevent prefix stripping, the prefix is
                 // already in the enclosed iterator
             ) {
-                let val = HEXLOWER.encode(&raw_val);
+                let val = base64::encode(raw_val);
                 let bytes = format!("{cf_name}:{key}={val}\n");
                 chunker.add_line(&bytes);
                 buf.write_all(bytes.as_bytes())?;
@@ -772,7 +772,7 @@ impl<'a> DbSnapshot<'a> {
             buf.flush()?;
         }
         let chunks = chunker.finalize();
-        let val = HEXLOWER.encode(&chunks.serialize_to_vec());
+        let val = base64::encode(chunks.serialize_to_vec());
         let bytes = format!("chunks:{val}");
         buf.write_all(bytes.as_bytes())?;
         buf.flush()?;
@@ -2803,16 +2803,16 @@ mod test {
         let chunks = vec![Chunk {
             boundary: 2,
             hash: Hash::sha256(
-                "subspace:bing/fucking/bong=01\nrollback:0000000000002/new/\
-                 bing/fucking/bong=01\n"
+                "subspace:bing/fucking/bong=AQ==\nrollback:0000000000002/new/\
+                 bing/fucking/bong=AQ==\n"
                     .as_bytes(),
             ),
         }];
         let chunk_val =
-            format!("chunks:{}", HEXLOWER.encode(&chunks.serialize_to_vec()));
+            format!("chunks:{}", base64::encode(chunks.serialize_to_vec()));
         let expected = [
-            "subspace:bing/fucking/bong=01".to_string(),
-            "rollback:0000000000002/new/bing/fucking/bong=01".to_string(),
+            "subspace:bing/fucking/bong=AQ==".to_string(),
+            "rollback:0000000000002/new/bing/fucking/bong=AQ==".to_string(),
             chunk_val,
         ];
 

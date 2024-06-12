@@ -238,7 +238,9 @@ impl AbcippShim {
         });
 
         // it's important that the thread is
-        // blocked until the snapshot is created
+        // blocked until the snapshot is created so that no writes
+        // happen to the db while snapshotting. We want the db frozen
+        // at this specific point in time.
         if snap_recv.blocking_recv().is_err() {
             tracing::error!("Failed to start snapshot task.")
         } else {

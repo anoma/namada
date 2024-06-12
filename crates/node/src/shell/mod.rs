@@ -684,16 +684,7 @@ where
         );
 
         self.broadcast_queued_txs();
-
-        let take_snapshot = match self.blocks_between_snapshots {
-            Some(b) => committed_height.0 % b == 0,
-            _ => false,
-        };
-        let take_snapshot = if take_snapshot {
-            self.state.db().path().into()
-        } else {
-            TakeSnapshot::No
-        };
+        let take_snapshot = self.check_snapshot_required();
 
         shim::Response::Commit(
             response::Commit {
@@ -705,6 +696,21 @@ where
             },
             take_snapshot,
         )
+    }
+
+    /// Check if we have reached a block height at which we should take a
+    /// snapshot
+    fn check_snapshot_required(&self) -> TakeSnapshot {
+        let committed_height = self.state.in_mem().get_last_block_height();
+        let take_snapshot = match self.blocks_between_snapshots {
+            Some(b) => committed_height.0 % b == 0,
+            _ => false,
+        };
+        if take_snapshot {
+            self.state.db().path().into()
+        } else {
+            TakeSnapshot::No
+        }
     }
 
     /// Updates the Ethereum oracle's last processed block.
