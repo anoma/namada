@@ -191,6 +191,12 @@ mod test {
                 .expect(
                     "Max block gas parameter must be initialized in storage",
                 );
+            // Initialize mock gas scale
+            let gas_scale_key = namada_parameters::storage::get_gas_scale_key();
+            state
+                .db_write(&gas_scale_key, 100_000_000_u64.serialize_to_vec())
+                .expect("Gas scale parameter must be initialized in storage");
+
             let event_log = EventLog::default();
             let (vp_wasm_cache, vp_cache_dir) =
                 wasm::compilation_cache::common::testing::cache();
