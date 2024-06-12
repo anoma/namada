@@ -863,7 +863,7 @@ impl Chunker {
         self.current_size =
             checked!(self.current_size + line.as_bytes().len()).unwrap();
         self.hasher.update(line.as_bytes());
-        self.current_boundary = checked!(self.current_boundary + 1).unwrap();
+        checked!(self.current_boundary += 1).unwrap();
     }
 
     fn finalize(mut self) -> Vec<Chunk> {
