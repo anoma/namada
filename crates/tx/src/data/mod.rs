@@ -258,7 +258,6 @@ impl<T> Default for ExtendedTxResult<T> {
 }
 
 /// Transaction application result
-// TODO derive BorshSchema after <https://github.com/near/borsh-rs/issues/82>
 #[derive(
     Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
 )]
