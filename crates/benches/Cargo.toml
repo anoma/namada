@@ -46,6 +46,7 @@ namada = { path = "../namada", features = ["rand", "benches"] }
 namada_apps_lib = { path = "../apps_lib" }
 namada_node = { path = "../node", features = ["benches"] }
 masp_primitives.workspace = true
+masp_proofs = { workspace = true, features = ["benchmarks"] }
 borsh.workspace = true
 borsh-ext.workspace = true
 criterion = { version = "0.5", features = ["html_reports"] }
@@ -57,5 +58,4 @@ tempfile.workspace = true
 sha2.workspace = true
 wasm-instrument.workspace = true
 wasmer-compiler-singlepass.workspace = true
-wasmer-engine-universal.workspace = true
 wasmer.workspace = true

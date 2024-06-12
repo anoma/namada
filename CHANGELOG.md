@@ -1,5 +1,80 @@
 # CHANGELOG
 
+## v0.39.0
+
+Namada 0.39.0 is a minor release that primarily abstracts the different kinds of transfer transactions and makes upgrades to the MASP and VPs.
+
+### BUG FIXES
+
+- Fixes an issue with unsanitized input to a PoS query to find
+  a validator by TM address which may cause a node to panic.
+  ([\#3340](https://github.com/anoma/namada/pull/3340))
+- Fix to clear the write log when dry-run batched transaction
+  ([\#3358](https://github.com/anoma/namada/issues/3358))
+
+### IMPROVEMENTS
+
+- The transfer command has been split into:
+  - `transfer` (shielded transfer)
+  - `transparent-transfer`
+  - `shield` (from transparent to shielded)
+  - `unshield` (from shielded to transparent)
+  ([\#3297](https://github.com/anoma/namada/pull/3297))
+- Avoid growing wasm memory when performing read-only accesses.
+  ([\#3315](https://github.com/anoma/namada/pull/3315))
+- Added a separate epoch tracker for masp to decouple its logic from the rest of
+  the protocol. ([\#3318](https://github.com/anoma/namada/pull/3318))
+- Default to the address from local config when the `--node`
+  argument is not specified for `shielded-sync` command
+  ([\#3333](https://github.com/anoma/namada/pull/3333))
+- Allow NAM transfers for protocol actions.
+  ([\#3348](https://github.com/anoma/namada/pull/3348))
+- Select gas payer from implicit address in the Namada CLI.
+  ([\#3349](https://github.com/anoma/namada/pull/3349))
+- Remove old disposable keys from the wallet.
+  ([\#3350](https://github.com/anoma/namada/pull/3350))
+- Addressed some minor issues in the shielded token code.
+  ([\#3351](https://github.com/anoma/namada/pull/3351))
+
+## v0.38.1
+
+Namada 0.38.1 is a patch release that fixes a license issue with the last minor release needed to build binaries in CI.
+
+## v0.38.0
+
+Namada 0.38.0 is a minor release that upgrades the MASP and events and also cleans up dependencies.
+
+### BUG FIXES
+
+- Fixed the fee collection logic in `finalize_block` to match that of
+  `process_proposal`. ([\#3075](https://github.com/anoma/namada/issues/3075))
+
+### IMPROVEMENTS
+
+- Improved masp vp verification to run in parallel.
+  ([\#2972](https://github.com/anoma/namada/pull/2972))
+- Removed any dependency on the specific transaction data from the masp vp.
+  ([\#3232](https://github.com/anoma/namada/pull/3232))
+- Add a new event attribute facility to track events to their origin
+  in Namada's source code. This is useful for debugging purposes.
+  ([\#3268](https://github.com/anoma/namada/pull/3268))
+- Include the used MASP randomness parameters in the test vectors.
+  ([\#3296](https://github.com/anoma/namada/pull/3296))
+- Replaced unmaintained config-rs to an unreleased version
+  that replaces its also unmaintained yaml dependency.
+  ([\#3305](https://github.com/anoma/namada/pull/3305))
+- Upgrade `wasmer` vm to upstream version `4.3.1`,
+  moving away from the [forked code based on version
+  `2.3.0`](https://github.com/heliaxdev/wasmer/tree/255054f7f58b7b4a525f2fee6b9b86422d1ca15b).
+  ([\#3308](https://github.com/anoma/namada/pull/3308))
+- Allow nodes to schedule a migrations json to be read and run to facilitate hard-forking. This is done by 
+  taking a migrations json and passing the path, a hash of the contents, and a block height to the node when 
+  starting the ledger. ([\#3310](https://github.com/anoma/namada/pull/3310))
+- Store IBC denom when minting the IBC token
+  ([\#3317](https://github.com/anoma/namada/issues/3317))
+- Switched from wee allocator to rlsf for WASM.
+  ([\#3331](https://github.com/anoma/namada/pull/3331))
+
 ## v0.37.0
 
 Namada 0.37.0 is a minor release that adds replay protection entries to consensus and enables merklizing data without diffs.

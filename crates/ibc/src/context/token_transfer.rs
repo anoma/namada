@@ -4,23 +4,20 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
-use namada_core::address::{Address, InternalAddress};
-use namada_core::ibc::apps::transfer::context::{
+use ibc::apps::transfer::context::{
     TokenTransferExecutionContext, TokenTransferValidationContext,
 };
-use namada_core::ibc::apps::transfer::types::error::TokenTransferError;
-use namada_core::ibc::apps::transfer::types::{
-    Memo, PrefixedCoin, PrefixedDenom,
-};
-use namada_core::ibc::core::channel::types::error::ChannelError;
-use namada_core::ibc::core::handler::types::error::ContextError;
-use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
-use namada_core::ibc::IBC_ESCROW_ADDRESS;
+use ibc::apps::transfer::types::error::TokenTransferError;
+use ibc::apps::transfer::types::{Memo, PrefixedCoin, PrefixedDenom};
+use ibc::core::channel::types::error::ChannelError;
+use ibc::core::handler::types::error::ContextError;
+use ibc::core::host::types::identifiers::{ChannelId, PortId};
+use namada_core::address::{Address, InternalAddress};
 use namada_core::uint::Uint;
 use namada_token::Amount;
 
 use super::common::IbcCommonContext;
-use crate::storage;
+use crate::{storage, IBC_ESCROW_ADDRESS};
 
 /// Token transfer context to handle tokens
 #[derive(Debug)]
@@ -136,6 +133,32 @@ where
         self.inner
             .borrow_mut()
             .store_withdraw(token, added_withdraw)
+            .map_err(TokenTransferError::from)
+    }
+
+    fn maybe_store_ibc_denom(
+        &self,
+        owner: &Address,
+        coin: &PrefixedCoin,
+    ) -> Result<(), TokenTransferError> {
+        if coin.denom.trace_path.is_empty() {
+            // It isn't an IBC denom
+            return Ok(());
+        }
+        let ibc_denom = coin.denom.to_string();
+        let trace_hash = storage::calc_hash(&ibc_denom);
+
+        self.inner
+            .borrow_mut()
+            .store_ibc_trace(owner.to_string(), &trace_hash, &ibc_denom)
+            .map_err(TokenTransferError::from)?;
+
+        let base_token = Address::decode(coin.denom.base_denom.as_str())
+            .map(|a| a.to_string())
+            .unwrap_or(coin.denom.base_denom.to_string());
+        self.inner
+            .borrow_mut()
+            .store_ibc_trace(base_token, &trace_hash, &ibc_denom)
             .map_err(TokenTransferError::from)
     }
 }
@@ -273,6 +296,10 @@ where
         {
             self.insert_verifier(&ibc_token);
         }
+
+        // Store the IBC denom with the token hash to be able to retrieve it
+        // later
+        self.maybe_store_ibc_denom(account, coin)?;
 
         self.inner
             .borrow_mut()

@@ -26,14 +26,15 @@ members = [
 authors = ["Heliax AG <hello@heliax.dev>"]
 edition = "2021"
 license = "GPL-3.0"
-version = "0.37.0"
+version = "0.39.0"
 
 [workspace.dependencies]
 namada_test_utils = { path = "../crates/test_utils" }
 namada_tx_prelude = { path = "../crates/tx_prelude" }
 namada_vp_prelude = { path = "../crates/vp_prelude" }
-wee_alloc = "0.4.5"
-getrandom = { version = "0.2", features = ["custom"] }
+namada_proof_of_stake = { path = "../crates/proof_of_stake" }
+rlsf = "0.2.1"
+getrandom = { version = "0.2.15", features = ["custom"] }
 
 [profile.release]
 # smaller and faster wasm (https://rustwasm.github.io/book/reference/code-size.html#compiling-with-link-time-optimizations-lto)

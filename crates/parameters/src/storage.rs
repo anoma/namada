@@ -29,6 +29,7 @@ struct Keys {
     // ========================================
     epoch_duration: &'static str,
     epochs_per_year: &'static str,
+    masp_epoch_multiplier: &'static str,
     implicit_vp: &'static str,
     max_expected_time_per_block: &'static str,
     tx_allowlist: &'static str,
@@ -133,6 +134,11 @@ pub fn get_implicit_vp_key() -> Key {
 /// Storage key used for epochs_per_year parameter.
 pub fn get_epochs_per_year_key() -> Key {
     get_epochs_per_year_key_at_addr(ADDRESS)
+}
+
+/// Storage key used for masp_epoch_multiplier parameter.
+pub fn get_masp_epoch_multiplier_key() -> Key {
+    get_masp_epoch_multiplier_key_at_addr(ADDRESS)
 }
 
 /// Storage key used for the max proposal bytes.

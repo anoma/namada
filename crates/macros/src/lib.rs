@@ -28,9 +28,9 @@ pub fn transaction(_attr: TokenStream, input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as ItemFn);
     let ident = &ast.sig.ident;
     let gen = quote! {
-        // Use `wee_alloc` as the global allocator.
+        // Use `rlsf` as the global allocator.
         #[global_allocator]
-        static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+        static ALLOC: rlsf::SmallGlobalTlsf = rlsf::SmallGlobalTlsf::new();
 
         #ast
 
@@ -88,9 +88,9 @@ pub fn validity_predicate(
     let ast = parse_macro_input!(input as ItemFn);
     let ident = &ast.sig.ident;
     let gen = quote! {
-        // Use `wee_alloc` as the global allocator.
+        // Use `rlsf` as the global allocator.
         #[global_allocator]
-        static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+        static ALLOC: rlsf::SmallGlobalTlsf = rlsf::SmallGlobalTlsf::new();
 
         #ast
 

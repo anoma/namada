@@ -19,7 +19,6 @@
     "e2e::ledger_tests::test_genesis_validators": 14,
     "e2e::ledger_tests::test_node_connectivity_and_consensus": 28,
     "e2e::ledger_tests::test_epoch_sleep": 12,
-    "e2e::ledger_tests::wrapper_disposable_signer": 28,
     "e2e::ledger_tests::deactivate_and_reactivate_validator": 67,
     "e2e::ledger_tests::test_invalid_validator_txs": 73,
     "e2e::ledger_tests::suspend_ledger": 30,

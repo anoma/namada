@@ -1,31 +1,31 @@
 //! ValidationContext implementation for IBC
 
-#[cfg(feature = "testing")]
-use ibc_testkit::testapp::ibc::clients::mock::client_state::MockClientState;
-use namada_core::ibc::clients::tendermint::client_state::ClientState as TmClientState;
-use namada_core::ibc::core::channel::types::channel::ChannelEnd;
-use namada_core::ibc::core::channel::types::commitment::{
+use ibc::clients::tendermint::client_state::ClientState as TmClientState;
+use ibc::core::channel::types::channel::ChannelEnd;
+use ibc::core::channel::types::commitment::{
     AcknowledgementCommitment, PacketCommitment,
 };
-use namada_core::ibc::core::channel::types::packet::Receipt;
-use namada_core::ibc::core::client::context::{
+use ibc::core::channel::types::packet::Receipt;
+use ibc::core::client::context::{
     ClientValidationContext, ExtClientValidationContext,
 };
-use namada_core::ibc::core::client::types::Height;
-use namada_core::ibc::core::commitment_types::commitment::CommitmentPrefix;
-use namada_core::ibc::core::commitment_types::specs::ProofSpecs;
-use namada_core::ibc::core::connection::types::ConnectionEnd;
-use namada_core::ibc::core::handler::types::error::ContextError;
-use namada_core::ibc::core::host::types::identifiers::{
+use ibc::core::client::types::Height;
+use ibc::core::commitment_types::commitment::CommitmentPrefix;
+use ibc::core::commitment_types::specs::ProofSpecs;
+use ibc::core::connection::types::ConnectionEnd;
+use ibc::core::handler::types::error::ContextError;
+use ibc::core::host::types::identifiers::{
     ChainId, ClientId, ConnectionId, Sequence,
 };
-use namada_core::ibc::core::host::types::path::{
+use ibc::core::host::types::path::{
     AckPath, ChannelEndPath, ClientConsensusStatePath, CommitmentPath,
     ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath,
 };
-use namada_core::ibc::core::host::ValidationContext;
-use namada_core::ibc::cosmos_host::ValidateSelfClientContext;
-use namada_core::ibc::primitives::{Signer, Timestamp};
+use ibc::core::host::ValidationContext;
+use ibc::cosmos_host::ValidateSelfClientContext;
+use ibc::primitives::{Signer, Timestamp};
+#[cfg(feature = "testing")]
+use ibc_testkit::testapp::ibc::clients::mock::client_state::MockClientState;
 
 use super::client::{AnyClientState, AnyConsensusState};
 use super::common::IbcCommonContext;

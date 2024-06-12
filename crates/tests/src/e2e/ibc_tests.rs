@@ -151,7 +151,16 @@ fn run_ledger_ibc() -> Result<()> {
 
     // Transfer 50000 received over IBC on Chain B
     let token = format!("{port_id_b}/{channel_id_b}/nam");
-    transfer_on_chain(&test_b, BERTHA, ALBERT, token, 50000, BERTHA_KEY, true)?;
+    transfer_on_chain(
+        &test_b,
+        "transparent-transfer",
+        BERTHA,
+        ALBERT,
+        token,
+        50000,
+        BERTHA_KEY,
+        true,
+    )?;
     check_balances_after_non_ibc(&port_id_b, &channel_id_b, &test_b)?;
 
     // Transfer 50000 back from the origin-specific account on Chain B to Chain
@@ -235,7 +244,16 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
 
     // Transfer 50000 received over IBC on Chain B
     let token = format!("{port_id_b}/{channel_id_b}/nam");
-    transfer_on_chain(&test_b, BERTHA, ALBERT, token, 50000, BERTHA_KEY, true)?;
+    transfer_on_chain(
+        &test_b,
+        "transparent-transfer",
+        BERTHA,
+        ALBERT,
+        token,
+        50000,
+        BERTHA_KEY,
+        true,
+    )?;
     check_balances_after_non_ibc(&port_id_b, &channel_id_b, &test_b)?;
 
     // Transfer 50000 back from the origin-specific account on Chain B to Chain
@@ -265,6 +283,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
     // Send a token to the shielded address on Chain A
     transfer_on_chain(
         &test_a,
+        "shield",
         ALBERT,
         AA_PAYMENT_ADDRESS,
         BTC,
@@ -474,6 +493,7 @@ fn ibc_namada_gaia() -> Result<()> {
     // Shielded transfer on Namada
     transfer_on_chain(
         &test,
+        "transfer",
         A_SPENDING_KEY,
         AB_PAYMENT_ADDRESS,
         &ibc_denom,
@@ -546,6 +566,7 @@ fn pgf_over_ibc_with_hermes() -> Result<()> {
     // Transfer to PGF account
     transfer_on_chain(
         &test_a,
+        "transparent-transfer",
         ALBERT,
         PGF_ADDRESS.to_string(),
         NAM,
@@ -590,10 +611,13 @@ fn pgf_over_ibc_with_hermes() -> Result<()> {
 
 #[test]
 fn proposal_ibc_token_inflation() -> Result<()> {
+    const MASP_EPOCH_MULTIPLIER: u64 = 2;
     let update_genesis =
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
             genesis.parameters.parameters.epochs_per_year =
                 epochs_per_year_from_min_duration(60);
+            genesis.parameters.parameters.masp_epoch_multiplier =
+                MASP_EPOCH_MULTIPLIER;
             genesis.parameters.gov_params.min_proposal_grace_epochs = 3;
             genesis.parameters.ibc_params.default_mint_limit =
                 Amount::max_signed();
@@ -659,8 +683,8 @@ fn proposal_ibc_token_inflation() -> Result<()> {
     )?;
     wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
 
-    // wait the next epoch to dispense the rewrad
-    wait_epochs(&test_b, 1)?;
+    // wait the next masp epoch to dispense the reward
+    wait_epochs(&test_b, MASP_EPOCH_MULTIPLIER)?;
 
     // Check balances
     check_inflated_balance(&test_b)?;
@@ -1659,8 +1683,10 @@ fn try_invalid_transfers(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn transfer_on_chain(
     test: &Test,
+    kind: impl AsRef<str>,
     sender: impl AsRef<str>,
     receiver: impl AsRef<str>,
     token: impl AsRef<str>,
@@ -1672,7 +1698,7 @@ fn transfer_on_chain(
     let rpc = get_actor_rpc(test, Who::Validator(0));
     let amount = amount.to_string();
     let mut tx_args = vec![
-        "transfer",
+        kind.as_ref(),
         "--source",
         sender.as_ref(),
         "--target",

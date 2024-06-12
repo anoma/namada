@@ -9,9 +9,9 @@ use color_eyre::eyre::Result;
 use namada::core::address::{Address, InternalAddress};
 use namada::core::chain::ChainId;
 use namada::core::ethereum_events::EthAddress;
-use namada::core::ibc::{is_ibc_denom, is_nft_trace};
 use namada::core::key::*;
 use namada::core::masp::*;
+use namada::ibc::{is_ibc_denom, is_nft_trace};
 use namada::io::Io;
 use namada::ledger::ibc::storage::ibc_token;
 use namada_sdk::masp::fs::FsShieldedUtils;
@@ -25,6 +25,9 @@ use crate::config::global::GlobalConfig;
 use crate::config::{genesis, Config};
 use crate::wallet::CliWalletUtils;
 use crate::{wallet, wasm_loader};
+
+/// Skip errors encountered while parsing raw string values.
+struct SkipErr;
 
 /// Env. var to set wasm directory
 pub const ENV_VAR_WASM_DIR: &str = "NAMADA_WASM_DIR";
@@ -423,7 +426,6 @@ impl ArgFromContext for Address {
         ctx: &ChainContext,
         raw: impl AsRef<str>,
     ) -> Result<Self, String> {
-        struct Skip;
         let raw = raw.as_ref();
         // An address can be either raw (bech32m encoding)
         FromStr::from_str(raw)
@@ -435,9 +437,9 @@ impl ArgFromContext for Address {
                             .map(|addr| {
                                 Address::Internal(InternalAddress::Erc20(addr))
                             })
-                            .map_err(|_| Skip)
+                            .map_err(|_| SkipErr)
                     })
-                    .unwrap_or(Err(Skip))
+                    .unwrap_or(Err(SkipErr))
             })
             // An IBC token
             .or_else(|_| {
@@ -451,19 +453,19 @@ impl ArgFromContext for Address {
                         let ibc_denom = format!("{trace_path}/{base_token}");
                         ibc_token(ibc_denom)
                     })
-                    .ok_or(Skip)
+                    .ok_or(SkipErr)
             })
             .or_else(|_| {
                 is_nft_trace(raw)
                     .map(|(_, _, _)| ibc_token(raw))
-                    .ok_or(Skip)
+                    .ok_or(SkipErr)
             })
             // Or it can be an alias that may be found in the wallet
             .or_else(|_| {
                 ctx.wallet
                     .find_address(raw)
                     .map(|x| x.into_owned())
-                    .ok_or(Skip)
+                    .ok_or(SkipErr)
             })
             .map_err(|_| format!("Unknown address {raw}"))
     }
@@ -526,18 +528,37 @@ impl ArgFromContext for common::PublicKey {
         raw: impl AsRef<str>,
     ) -> Result<Self, String> {
         let raw = raw.as_ref();
-        // A public key can be either a raw public key in hex string
-        FromStr::from_str(raw).or_else(|_parse_err| {
-            // Or it can be a public key hash in hex string
-            FromStr::from_str(raw)
-                .map(|pkh: PublicKeyHash| {
-                    ctx.wallet.find_public_key_by_pkh(&pkh).unwrap()
-                })
-                // Or it can be an alias that may be found in the wallet
-                .or_else(|_parse_err| {
-                    ctx.wallet.find_public_key(raw).map_err(|x| x.to_string())
-                })
-        })
+        // A public key can either be a bech32 encoded (tpknam1...) string
+        FromStr::from_str(raw)
+            .map_err(|_| SkipErr)
+            // Or it can be a hex encoded public key hash
+            .or_else(|SkipErr| {
+                FromStr::from_str(raw).map_err(|_| SkipErr).and_then(
+                    |pkh: PublicKeyHash| {
+                        ctx.wallet
+                            .find_public_key_by_pkh(&pkh)
+                            .map_err(|_| SkipErr)
+                    },
+                )
+            })
+            // Or it can be an alias that may be found in the wallet
+            .or_else(|SkipErr| {
+                ctx.wallet.find_public_key(raw).map_err(|_| SkipErr)
+            })
+            // Or it can be an implicit address
+            .or_else(|SkipErr| {
+                let Address::Implicit(implicit_addr) =
+                    Address::decode(raw).map_err(|_| SkipErr)?
+                else {
+                    return Err(SkipErr);
+                };
+                ctx.wallet
+                    .find_public_key_from_implicit_addr(&implicit_addr)
+                    .map_err(|_| SkipErr)
+            })
+            .map_err(|SkipErr| {
+                format!("Couldn't look-up public key associated with {raw:?}")
+            })
     }
 }
 

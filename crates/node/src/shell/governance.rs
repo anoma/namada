@@ -403,33 +403,51 @@ where
     let cmt = tx.first_commitments().unwrap().to_owned();
 
     let dispatch_result = protocol::dispatch_tx(
-        tx,
-        &[], /*  this is used to compute the fee
-              * based on the code size. We dont
-              * need it here. */
-        TxIndex::default(),
-        &RefCell::new(TxGasMeter::new_from_sub_limit(u64::MAX.into())), /* No gas limit for governance proposal */
+        &tx,
+        protocol::DispatchArgs::Raw {
+            tx_index: TxIndex::default(),
+            wrapper_tx_result: None,
+            vp_wasm_cache: &mut shell.vp_wasm_cache,
+            tx_wasm_cache: &mut shell.tx_wasm_cache,
+        },
+        // No gas limit for governance proposal
+        &RefCell::new(TxGasMeter::new_from_sub_limit(u64::MAX.into())),
         &mut shell.state,
-        &mut shell.vp_wasm_cache,
-        &mut shell.tx_wasm_cache,
-        None,
     );
     shell
         .state
         .delete(&pending_execution_key)
         .expect("Should be able to delete the storage.");
     match dispatch_result {
-        Ok(tx_result) => match tx_result.batch_results.0.get(&cmt.get_hash()) {
+        Ok(extended_tx_result) => match extended_tx_result
+            .tx_result
+            .batch_results
+            .0
+            .get(&cmt.get_hash())
+        {
             Some(Ok(batched_result)) if batched_result.is_accepted() => {
                 shell.state.commit_tx();
                 Ok(true)
             }
+            Some(Err(e)) => {
+                tracing::warn!(
+                    "Error executing governance proposal {}",
+                    e.to_string()
+                );
+                shell.state.drop_tx();
+                Ok(false)
+            }
             _ => {
+                tracing::warn!("not sure what happen");
                 shell.state.drop_tx();
                 Ok(false)
             }
         },
-        Err(_) => {
+        Err(e) => {
+            tracing::warn!(
+                "Error executing governance proposal {}",
+                e.error.to_string()
+            );
             shell.state.drop_tx();
             Ok(false)
         }

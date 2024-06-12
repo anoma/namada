@@ -8,6 +8,7 @@ use std::fmt;
 
 use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::hash::Hash;
 use namada_core::storage::KeySeg;
 use namada_core::{address, storage};
 
@@ -25,6 +26,7 @@ pub enum Action {
     Pos(PosAction),
     Gov(GovAction),
     Pgf(PgfAction),
+    Masp(MaspAction),
 }
 
 /// PoS tx actions.
@@ -59,6 +61,13 @@ pub enum GovAction {
 pub enum PgfAction {
     ResignSteward(Address),
     UpdateStewardCommission(Address),
+}
+
+/// MASP tx action.
+#[derive(Clone, Debug, BorshDeserialize, BorshSerialize)]
+pub struct MaspAction {
+    /// The hash of the masp [`crate::types::Section`]
+    pub masp_section_ref: Hash,
 }
 
 /// Read actions from temporary storage
@@ -107,4 +116,20 @@ fn storage_key() -> storage::Key {
     storage::Key::from(address::TEMP_STORAGE.to_db_key())
         .push(&TX_ACTIONS_KEY.to_owned())
         .expect("Cannot obtain a storage key")
+}
+
+/// Helper function to get the optional masp section reference from the
+/// [`Actions`]. If more than one [`MaspAction`] has been found we return the
+/// first one
+pub fn get_masp_section_ref<T: Read>(
+    reader: &T,
+) -> Result<Option<Hash>, <T as Read>::Err> {
+    Ok(reader.read_actions()?.into_iter().find_map(|action| {
+        // In case of multiple masp actions we get the first one
+        if let Action::Masp(MaspAction { masp_section_ref }) = action {
+            Some(masp_section_ref)
+        } else {
+            None
+        }
+    }))
 }

@@ -5,6 +5,7 @@ use namada_core::address::Address;
 use namada_core::arith::checked;
 use namada_core::borsh::BorshSerializeExt;
 use namada_core::chain::ChainId;
+use namada_core::masp::MaspEpoch;
 use namada_core::storage;
 use namada_core::time::DateTimeUtc;
 use namada_events::{EmitEvents, EventToEmit};
@@ -185,7 +186,30 @@ where
             self.in_mem.block.pred_epochs.new_epoch(height);
             tracing::info!("Began a new epoch {}", self.in_mem.block.epoch);
         }
+
         Ok(new_epoch)
+    }
+
+    /// Returns `true` if a new masp epoch has begun
+    pub fn is_masp_new_epoch(&self, is_new_epoch: bool) -> StorageResult<bool> {
+        let masp_epoch_multiplier =
+            namada_parameters::read_masp_epoch_multiplier_parameter(self)?;
+        let masp_new_epoch = is_new_epoch
+            && matches!(
+                self.in_mem.block.epoch.checked_rem(masp_epoch_multiplier),
+                Some(Epoch(0))
+            );
+
+        if masp_new_epoch {
+            let masp_epoch = MaspEpoch::try_from_epoch(
+                self.in_mem.block.epoch,
+                masp_epoch_multiplier,
+            )
+            .map_err(namada_storage::Error::new_const)?;
+            tracing::info!("Began a new masp epoch {masp_epoch}");
+        }
+
+        Ok(masp_new_epoch)
     }
 
     /// Commit the current block's write log to the storage and commit the block
@@ -1342,5 +1366,29 @@ where
                 error: err.to_string(),
             })?;
         Ok(())
+    }
+}
+
+impl<D, H> namada_tx::action::Read for WlState<D, H>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
+{
+    type Err = Error;
+
+    fn read_temp<T: namada_core::borsh::BorshDeserialize>(
+        &self,
+        key: &storage::Key,
+    ) -> Result<Option<T>> {
+        let (log_val, _) = self.write_log().read_temp(key).unwrap();
+        match log_val {
+            Some(value) => {
+                let value =
+                    namada_core::borsh::BorshDeserialize::try_from_slice(value)
+                        .map_err(Error::BorshCodingError)?;
+                Ok(Some(value))
+            }
+            None => Ok(None),
+        }
     }
 }

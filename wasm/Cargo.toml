@@ -16,12 +16,15 @@ members = [
     "tx_reactivate_validator",
     "tx_redelegate",
     "tx_resign_steward",
-    "tx_transfer",
-    "tx_unbond",
-    "tx_update_account",
     "tx_reveal_pk",
-    "tx_update_steward_commission",
+    "tx_shielded_transfer",
+    "tx_shielding_transfer",
+    "tx_transparent_transfer",
+    "tx_unbond",
     "tx_unjail_validator",
+    "tx_unshielding_transfer",
+    "tx_update_account",
+    "tx_update_steward_commission",
     "tx_vote_proposal",
     "tx_withdraw",
     "vp_implicit",
@@ -32,15 +35,15 @@ members = [
 authors = ["Heliax AG <hello@heliax.dev>"]
 edition = "2021"
 license = "GPL-3.0"
-version = "0.37.0"
+version = "0.39.0"
 
 [workspace.dependencies]
 namada_tx_prelude = { path = "../crates/tx_prelude" }
 namada_vp_prelude = { path = "../crates/vp_prelude" }
 
 once_cell = { version = "1.8.0" }
-wee_alloc = "0.4.5"
-getrandom = { version = "0.2", features = ["custom"] }
+rlsf = "0.2.1"
+getrandom = { version = "0.2.15", features = ["custom"] }
 
 [profile.release]
 # smaller and faster wasm (https://rustwasm.github.io/book/reference/code-size.html#compiling-with-link-time-optimizations-lto)

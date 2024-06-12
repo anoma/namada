@@ -2,6 +2,7 @@
 
 use std::collections::BTreeMap;
 use std::fmt::Display;
+use std::num::ParseIntError;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -16,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::address::{Address, DecodeError, HASH_HEX_LEN, IBC, MASP};
+use crate::hash::Hash;
 use crate::impl_display_and_from_str_via_format;
 use crate::storage::Epoch;
 use crate::string_encoding::{
@@ -23,6 +25,72 @@ use crate::string_encoding::{
     MASP_PAYMENT_ADDRESS_HRP,
 };
 use crate::token::{Denomination, MaspDigitPos};
+
+/// Wrapper type around `Epoch` for type safe operations involving the masp
+/// epoch
+#[derive(
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    BorshSchema,
+    Clone,
+    Copy,
+    Debug,
+    PartialOrd,
+    Ord,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+)]
+pub struct MaspEpoch(Epoch);
+
+impl Display for MaspEpoch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl FromStr for MaspEpoch {
+    type Err = ParseIntError;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        let raw: u64 = u64::from_str(s)?;
+        Ok(Self(Epoch(raw)))
+    }
+}
+
+impl MaspEpoch {
+    /// Converts and `Epoch` into a `MaspEpoch` based on the provided conversion
+    /// rate
+    pub fn try_from_epoch(
+        epoch: Epoch,
+        masp_epoch_multiplier: u64,
+    ) -> Result<Self, &'static str> {
+        Ok(Self(
+            epoch
+                .checked_div(masp_epoch_multiplier)
+                .ok_or("Masp epoch multiplier cannot be 0")?,
+        ))
+    }
+
+    /// Returns a 0 masp epoch
+    pub const fn zero() -> Self {
+        Self(Epoch(0))
+    }
+
+    /// Change to the previous masp epoch.
+    pub fn prev(&self) -> Option<Self> {
+        Some(Self(self.0.checked_sub(1)?))
+    }
+
+    /// Initialize a new masp epoch from the provided one
+    #[cfg(any(test, feature = "testing"))]
+    pub const fn new(epoch: u64) -> Self {
+        Self(Epoch(epoch))
+    }
+}
 
 /// The plain representation of a MASP aaset
 #[derive(
@@ -48,7 +116,7 @@ pub struct AssetData {
     /// The digit position covered by this asset type
     pub position: MaspDigitPos,
     /// The epoch of the asset type, if any
-    pub epoch: Option<Epoch>,
+    pub epoch: Option<MaspEpoch>,
 }
 
 impl AssetData {
@@ -67,7 +135,7 @@ impl AssetData {
 
     /// Give this pre-asset type the given epoch if already has an epoch. Return
     /// the replaced value.
-    pub fn redate(&mut self, to: Epoch) -> Option<Epoch> {
+    pub fn redate(&mut self, to: MaspEpoch) -> Option<MaspEpoch> {
         if self.epoch.is_some() {
             self.epoch.replace(to)
         } else {
@@ -86,7 +154,7 @@ pub fn encode_asset_type(
     token: Address,
     denom: Denomination,
     position: MaspDigitPos,
-    epoch: Option<Epoch>,
+    epoch: Option<MaspEpoch>,
 ) -> Result<AssetType, std::io::Error> {
     AssetData {
         token,
@@ -609,5 +677,23 @@ impl FromStr for MaspValue {
             .or_else(|_err| {
                 ExtendedViewingKey::from_str(s).map(Self::FullViewingKey)
             })
+    }
+}
+
+/// The masp transactions' references of a given batch
+#[derive(Default, Clone, Serialize, Deserialize)]
+pub struct MaspTxRefs(pub Vec<Hash>);
+
+impl Display for MaspTxRefs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", serde_json::to_string(self).unwrap())
+    }
+}
+
+impl FromStr for MaspTxRefs {
+    type Err = serde_json::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_json::from_str(s)
     }
 }

@@ -6,11 +6,15 @@ use core::fmt::Formatter;
 use core::fmt::{Display, Formatter};
 #[cfg(feature = "migrations")]
 use core::str::FromStr;
+use std::marker::PhantomData;
+use std::path::{Path, PathBuf};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXUPPER;
-use namada_core::storage::Key;
+use eyre::eyre;
+use namada_core::hash::Hash;
+use namada_core::storage::{BlockHeight, Key};
 #[cfg(feature = "migrations")]
 use namada_macros::derive_borshdeserializer;
 #[cfg(feature = "migrations")]
@@ -19,9 +23,9 @@ use namada_macros::typehash;
 use namada_migrations::TypeHash;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
-use namada_storage::DbColFam;
+use namada_storage::{DbColFam, DbMigration, DB};
 use regex::Regex;
-use serde::de::{Error, Visitor};
+use serde::de::{DeserializeOwned, Error, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 #[cfg(feature = "migrations")]
@@ -35,7 +39,7 @@ pub trait DBUpdateVisitor {
     fn get_pattern(&self, pattern: Regex) -> Vec<(String, Vec<u8>)>;
 }
 
-#[derive(Clone, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 enum UpdateBytes {
     Raw {
         to_write: Vec<u8>,
@@ -46,7 +50,7 @@ enum UpdateBytes {
     },
 }
 
-#[derive(Clone, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 /// A value to be added to the database that can be
 /// validated.
 pub struct UpdateValue {
@@ -171,7 +175,7 @@ impl<'de> Deserialize<'de> for UpdateValue {
         deserializer.deserialize_any(UpdateValueVisitor)
     }
 }
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 /// An update to the database
 pub enum DbUpdateType {
     Add {
@@ -189,6 +193,8 @@ pub enum DbUpdateType {
     },
     RepeatDelete(String, DbColFam),
 }
+
+impl DbMigration for DbUpdateType {}
 
 #[cfg(feature = "migrations")]
 impl DbUpdateType {
@@ -280,7 +286,6 @@ impl DbUpdateType {
 
     /// Validate a DB change and persist it if so. The debug representation of
     /// the new value is returned for logging purposes.
-    #[allow(dead_code)]
     pub fn update<DB: DBUpdateVisitor>(
         &self,
         db: &mut DB,
@@ -352,11 +357,81 @@ impl DbUpdateType {
     }
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct DbChanges {
-    pub changes: Vec<DbUpdateType>,
+/// A set of key-value changes to be applied to
+/// the db at a specified height.
+#[derive(Debug, Clone)]
+pub struct ScheduledMigration<D: DbMigration = DbUpdateType> {
+    /// The height at which to perform the changes
+    pub height: BlockHeight,
+    /// The actual set of changes
+    pub path: PathBuf,
+    /// A hash of the expected contents in the file
+    pub hash: Hash,
+    /// For keeping track of what data type we deserialize the
+    /// contents of the file to.
+    phantom: PhantomData<D>,
 }
 
+impl<D> ScheduledMigration<D>
+where
+    D: DbMigration + DeserializeOwned,
+{
+    /// Read in a migrations json and a hash to verify the contents
+    /// against. Also needs a height for which the changes are scheduled.
+    pub fn from_path(
+        path: impl AsRef<Path>,
+        hash: Hash,
+        height: BlockHeight,
+    ) -> eyre::Result<Self> {
+        let scheduled_migration = Self {
+            height,
+            path: path.as_ref().to_path_buf(),
+            hash,
+            phantom: Default::default(),
+        };
+        scheduled_migration.validate()?;
+        Ok(scheduled_migration)
+    }
+
+    fn load(&self) -> eyre::Result<DbChanges<D>> {
+        let update_json = self.validate()?;
+        serde_json::from_str(&update_json)
+            .map_err(|_| eyre!("Could not parse the updates file as json"))
+    }
+
+    fn validate(&self) -> eyre::Result<String> {
+        let update_json =
+            std::fs::read_to_string(&self.path).map_err(|_| {
+                eyre!(
+                    "Could not find or read updates file at the specified \
+                     path."
+                )
+            })?;
+        // validate contents against provided hash
+        if Hash::sha256(update_json.as_bytes()) != self.hash {
+            Err(eyre!(
+                "Provided hash did not match the contents at the specified \
+                 path."
+            ))
+        } else {
+            Ok(update_json)
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct DbChanges<D: DbMigration = DbUpdateType> {
+    pub changes: Vec<D>,
+}
+
+impl<D: DbMigration> IntoIterator for DbChanges<D> {
+    type IntoIter = std::vec::IntoIter<D>;
+    type Item = D;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.changes.into_iter()
+    }
+}
 #[cfg(feature = "migrations")]
 impl Display for DbUpdateType {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
@@ -431,6 +506,43 @@ impl Display for UpdateStatus {
     }
 }
 
+/// Check if a scheduled migration should take place at this block height.
+/// If so, apply it to the DB.
+pub fn commit<D: DB>(
+    db: &D,
+    height: BlockHeight,
+    migration: &mut Option<ScheduledMigration<D::Migrator>>,
+) where
+    D::Migrator: DeserializeOwned,
+{
+    let maybe_migration = migration;
+    let migration = match maybe_migration.as_ref() {
+        Some(migration) if height == migration.height => {
+            maybe_migration.take().unwrap().load().unwrap()
+        }
+        _ => return,
+    };
+
+    tracing::info!(
+        "A migration is scheduled to take place at this block height. \
+         Starting..."
+    );
+
+    match db.apply_migration_to_batch(migration) {
+        Ok(batch) => {
+            tracing::info!("Persisting DB changes...");
+            db.exec_batch(batch).expect("Failed to execute write batch");
+        }
+        Err(e) => {
+            panic!(
+                "Failed to execute migration, no changes persisted. \
+                 Encountered error: {}",
+                e
+            );
+        }
+    }
+}
+
 #[cfg(feature = "migrations")]
 derive_borshdeserializer!(Vec::<u8>);
 #[cfg(feature = "migrations")]
@@ -467,3 +579,35 @@ static BTREEMAP_STRING_ADDRESS: fn() = || {
         },
     );
 };
+
+#[cfg(test)]
+mod test_migrations {
+    use namada_core::token::Amount;
+
+    use super::*;
+
+    /// Check that if the hash of the file is wrong, the scheduled
+    /// migration will not load.
+    #[test]
+    fn test_scheduled_migration_validate() {
+        let file = tempfile::Builder::new().tempfile().expect("Test failed");
+        let updates = [DbUpdateType::Add {
+            key: Key::parse("bing/fucking/bong").expect("Test failed"),
+            cf: DbColFam::SUBSPACE,
+            value: Amount::native_whole(1337).into(),
+            force: false,
+        }];
+        let changes = DbChanges {
+            changes: updates.into_iter().collect(),
+        };
+        let json = serde_json::to_string(&changes).expect("Test failed");
+        let hash = Hash::sha256("derpy derp".as_bytes());
+        std::fs::write(file.path(), json).expect("Test failed");
+        let migration = ScheduledMigration::<DbUpdateType>::from_path(
+            file.path(),
+            hash,
+            Default::default(),
+        );
+        assert!(migration.is_err());
+    }
+}

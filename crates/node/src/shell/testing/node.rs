@@ -333,6 +333,15 @@ impl MockNode {
         self.genesis_dir().join("wallet.toml")
     }
 
+    pub fn block_height(&self) -> BlockHeight {
+        self.shell
+            .lock()
+            .unwrap()
+            .state
+            .get_block_height()
+            .unwrap_or_default()
+    }
+
     pub fn current_epoch(&self) -> Epoch {
         self.shell.lock().unwrap().state.in_mem().last_epoch
     }
@@ -369,6 +378,21 @@ impl MockNode {
             .in_mem()
             .get_current_epoch()
             .0
+    }
+
+    pub fn next_masp_epoch(&mut self) -> Epoch {
+        let masp_epoch_multiplier =
+            namada::parameters::read_masp_epoch_multiplier_parameter(
+                &self.shell.lock().unwrap().state,
+            )
+            .unwrap();
+        let mut epoch = Epoch::default();
+
+        for _ in 0..masp_epoch_multiplier {
+            epoch = self.next_epoch();
+        }
+
+        epoch
     }
 
     pub fn native_token(&self) -> Address {

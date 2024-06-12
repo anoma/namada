@@ -13,6 +13,7 @@ use namada_core::arith::{self, checked};
 use namada_core::collections::HashSet;
 use namada_core::storage::Key;
 use namada_gas::{IBC_ACTION_EXECUTE_GAS, IBC_ACTION_VALIDATE_GAS};
+use namada_governance::is_proposal_accepted;
 use namada_ibc::event::IbcEvent;
 use namada_ibc::{
     Error as ActionError, IbcActions, NftTransferModule, TransferModule,
@@ -43,6 +44,8 @@ pub enum Error {
     NativeVpError(#[from] native_vp::Error),
     #[error("IBC VP error: Decoding error: {0}")]
     Decoding(#[from] std::io::Error),
+    #[error("IBC VP error: governance proposal change is invalid")]
+    InvalidGovernanceChange,
     #[error("IBC VP error: IBC message is required as transaction data")]
     NoTxData,
     #[error("IBC VP error: IBC action error: {0}")]
@@ -83,6 +86,20 @@ where
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
     ) -> VpResult<()> {
+        // Is VP triggered by a governance proposal?
+        if is_proposal_accepted(
+            &self.ctx.pre(),
+            batched_tx
+                .tx
+                .data(batched_tx.cmt)
+                .unwrap_or_default()
+                .as_ref(),
+        )
+        .unwrap_or_default()
+        {
+            return Ok(());
+        }
+
         let tx_data =
             batched_tx.tx.data(batched_tx.cmt).ok_or(Error::NoTxData)?;
 
@@ -418,7 +435,6 @@ mod tests {
     use crate::core::address::testing::{
         established_address_1, established_address_2, nam,
     };
-    use crate::core::ibc::{MsgNftTransfer, MsgTransfer};
     use crate::core::storage::Epoch;
     use crate::ibc::apps::nft_transfer::types::events::{
         RecvEvent as NftRecvEvent, TokenTraceEvent,
@@ -498,7 +514,7 @@ mod tests {
         next_sequence_recv_key, next_sequence_send_key, nft_class_key,
         nft_metadata_key, receipt_key,
     };
-    use crate::ibc::{NftClass, NftMetadata};
+    use crate::ibc::{MsgNftTransfer, MsgTransfer, NftClass, NftMetadata};
     use crate::key::testing::keypair_1;
     use crate::ledger::gas::VpGasMeter;
     use crate::ledger::parameters::storage::{

@@ -9,6 +9,7 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::HEXUPPER;
+use ibc::primitives::Signer;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
@@ -16,7 +17,6 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::ethereum_events::EthAddress;
-use crate::ibc::primitives::Signer;
 use crate::ibc::IbcTokenHash;
 use crate::key::PublicKeyHash;
 use crate::{impl_display_and_from_str_via_format, key, string_encoding};

@@ -61,9 +61,6 @@ tokio = {workspace = true, features = ["full"]}
 toml.workspace = true
 tracing-subscriber = { workspace = true, features = ["std", "json", "ansi", "tracing-log"]}
 tracing.workspace = true
-zeroize.workspace = true
-warp = "0.3.2"
-bytes = "1.1.0"
 
 [target.'cfg(windows)'.dependencies]
 winapi.workspace = true

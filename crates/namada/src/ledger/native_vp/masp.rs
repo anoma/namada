@@ -18,13 +18,12 @@ use namada_core::booleans::BoolResultUnitExt;
 use namada_core::collections::HashSet;
 use namada_core::ibc::apps::transfer::types::is_sender_chain_source;
 use namada_core::ibc::apps::transfer::types::packet::PacketData;
-use namada_core::masp::{addr_taddr, encode_asset_type, ibc_taddr};
+use namada_core::masp::{addr_taddr, encode_asset_type, ibc_taddr, MaspEpoch};
 use namada_core::storage::Key;
 use namada_gas::GasMetering;
 use namada_governance::storage::is_proposal_accepted;
 use namada_ibc::event::{IbcEvent, PacketAck};
-use namada_ibc::IbcCommonContext;
-use namada_proof_of_stake::Epoch;
+use namada_ibc::{IbcCommonContext, IbcMessage};
 use namada_sdk::masp::{verify_shielded_tx, TAddrData};
 use namada_state::{ConversionState, OptionExt, ResultExt, StateRead};
 use namada_token::read_denom;
@@ -39,6 +38,7 @@ use token::storage_key::{
 use token::Amount;
 
 use crate::address::{InternalAddress, IBC, MASP};
+use crate::ibc::{MsgRecvPacket, MsgTransfer};
 use crate::ledger::ibc::storage;
 use crate::ledger::ibc::storage::{
     ibc_trace_key, ibc_trace_key_prefix, is_ibc_commitment_key,
@@ -51,7 +51,6 @@ use crate::sdk::ibc::core::channel::types::acknowledgement::AcknowledgementStatu
 use crate::sdk::ibc::core::channel::types::commitment::{
     compute_ack_commitment, AcknowledgementCommitment, PacketCommitment,
 };
-use crate::sdk::ibc::{IbcMessage, MsgRecvPacket, MsgTransfer};
 use crate::token;
 use crate::token::MaspDigitPos;
 use crate::uint::{Uint, I320};
@@ -641,9 +640,38 @@ where
         tx_data: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
     ) -> Result<()> {
-        let epoch = self.ctx.get_block_epoch()?;
+        let masp_epoch_multiplier =
+            namada_parameters::read_masp_epoch_multiplier_parameter(
+                self.ctx.state,
+            )?;
+        let masp_epoch = MaspEpoch::try_from_epoch(
+            self.ctx.get_block_epoch()?,
+            masp_epoch_multiplier,
+        )
+        .map_err(|msg| {
+            Error::NativeVpError(native_vp::Error::new_const(msg))
+        })?;
         let conversion_state = self.ctx.state.in_mem().get_conversion_state();
-        let (shielded_tx, ibc_msgs) = self.ctx.get_shielded_action(tx_data)?;
+        let ibc_msgs = self.ctx.get_shielded_action(tx_data)?;
+
+        // Get the Transaction object from the actions
+        let masp_section_ref = namada_tx::action::get_masp_section_ref(
+            &self.ctx,
+        )?
+        .ok_or_else(|| {
+            native_vp::Error::new_const(
+                "Missing MASP section reference in action",
+            )
+        })?;
+        let shielded_tx = tx_data
+            .tx
+            .get_section(&masp_section_ref)
+            .and_then(|section| section.masp_tx())
+            .ok_or_else(|| {
+                native_vp::Error::new_const(
+                    "Missing MASP section in transaction",
+                )
+            })?;
 
         if u64::from(self.ctx.get_block_height()?)
             > u64::from(shielded_tx.expiry_height())
@@ -672,7 +700,7 @@ where
                 .get(&masp_address_hash)
                 .unwrap_or(&ValueSum::zero()),
             &shielded_tx.sapling_value_balance(),
-            epoch,
+            masp_epoch,
             &changed_balances.tokens,
             conversion_state,
         )?;
@@ -698,7 +726,7 @@ where
             &shielded_tx,
             &mut changed_balances,
             &mut transparent_tx_pool,
-            epoch,
+            masp_epoch,
             conversion_state,
             &mut signers,
         )?;
@@ -845,7 +873,7 @@ fn validate_transparent_input<A: Authorization>(
     vin: &TxIn<A>,
     changed_balances: &mut ChangedBalances,
     transparent_tx_pool: &mut I128Sum,
-    epoch: Epoch,
+    epoch: MaspEpoch,
     conversion_state: &ConversionState,
     signers: &mut BTreeSet<TransparentAddress>,
 ) -> Result<()> {
@@ -932,7 +960,7 @@ fn validate_transparent_output(
     out: &TxOut,
     changed_balances: &mut ChangedBalances,
     transparent_tx_pool: &mut I128Sum,
-    epoch: Epoch,
+    epoch: MaspEpoch,
     conversion_state: &ConversionState,
 ) -> Result<()> {
     // Non-masp destinations subtract from transparent tx pool
@@ -998,7 +1026,7 @@ fn validate_transparent_bundle(
     shielded_tx: &Transaction,
     changed_balances: &mut ChangedBalances,
     transparent_tx_pool: &mut I128Sum,
-    epoch: Epoch,
+    epoch: MaspEpoch,
     conversion_state: &ConversionState,
     signers: &mut BTreeSet<TransparentAddress>,
 ) -> Result<()> {
@@ -1057,7 +1085,7 @@ fn verify_sapling_balancing_value(
     pre: &ValueSum<Address, Amount>,
     post: &ValueSum<Address, Amount>,
     sapling_value_balance: &I128Sum,
-    target_epoch: Epoch,
+    target_epoch: MaspEpoch,
     tokens: &BTreeMap<AssetType, (Address, token::Denomination, MaspDigitPos)>,
     conversion_state: &ConversionState,
 ) -> Result<()> {
@@ -1117,6 +1145,7 @@ where
         let non_allowed_changes = masp_keys_changed.iter().any(|key| {
             !is_masp_transfer_key(key) && !is_masp_token_map_key(key)
         });
+
         let masp_token_map_changed = masp_keys_changed
             .iter()
             .any(|key| is_masp_token_map_key(key));

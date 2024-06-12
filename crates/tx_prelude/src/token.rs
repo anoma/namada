@@ -5,13 +5,14 @@ use namada_events::{EmitEvents, EventLevel};
 #[cfg(any(test, feature = "testing"))]
 pub use namada_token::testing;
 pub use namada_token::{
-    storage_key, utils, Amount, DenominatedAmount, Transfer,
+    storage_key, utils, Amount, DenominatedAmount, ShieldedTransfer,
+    ShieldingTransfer, TransparentTransfer, UnshieldingTransfer,
 };
 use namada_tx_env::TxEnv;
 
 use crate::{Ctx, TxResult};
 
-/// A token transfer that can be used in a transaction.
+/// A transparent token transfer that can be used in a transaction.
 pub fn transfer(
     ctx: &mut Ctx,
     src: &Address,

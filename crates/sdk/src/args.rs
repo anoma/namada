@@ -10,7 +10,7 @@ use namada_core::dec::Dec;
 use namada_core::ethereum_events::EthAddress;
 use namada_core::keccak::KeccakHash;
 use namada_core::key::{common, SchemeType};
-use namada_core::masp::PaymentAddress;
+use namada_core::masp::{MaspEpoch, PaymentAddress};
 use namada_core::storage::{BlockHeight, Epoch};
 use namada_core::time::DateTimeUtc;
 use namada_core::{storage, token};
@@ -59,10 +59,12 @@ pub trait NamadaTypes: Clone + std::fmt::Debug {
         + From<Self::TendermintAddress>;
     /// Represents the address of an Ethereum endpoint
     type EthereumAddress: Clone + std::fmt::Debug;
-    /// Represents a viewing key
+    /// Represents a shielded viewing key
     type ViewingKey: Clone + std::fmt::Debug;
-    /// Represents a spending key
+    /// Represents a shielded spending key
     type SpendingKey: Clone + std::fmt::Debug;
+    /// Represents a shielded payment address
+    type PaymentAddress: Clone + std::fmt::Debug;
     /// Represents the owner of a balance
     type BalanceOwner: Clone + std::fmt::Debug;
     /// Represents a public key
@@ -101,6 +103,7 @@ impl NamadaTypes for SdkTypes {
     type Data = Vec<u8>;
     type EthereumAddress = ();
     type Keypair = namada_core::key::common::SecretKey;
+    type PaymentAddress = namada_core::masp::PaymentAddress;
     type PublicKey = namada_core::key::common::PublicKey;
     type SpendingKey = namada_core::masp::ExtendedSpendingKey;
     type TendermintAddress = tendermint_rpc::Url;
@@ -226,15 +229,15 @@ impl From<token::DenominatedAmount> for InputAmount {
     }
 }
 
-/// Transfer transaction arguments
+/// Transparent transfer transaction arguments
 #[derive(Clone, Debug)]
-pub struct TxTransfer<C: NamadaTypes = SdkTypes> {
+pub struct TxTransparentTransfer<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
     pub tx: Tx<C>,
     /// Transfer source address
-    pub source: C::TransferSource,
+    pub source: C::Address,
     /// Transfer target address
-    pub target: C::TransferTarget,
+    pub target: C::Address,
     /// Transferred token address
     pub token: C::Address,
     /// Transferred token amount
@@ -243,26 +246,26 @@ pub struct TxTransfer<C: NamadaTypes = SdkTypes> {
     pub tx_code_path: PathBuf,
 }
 
-impl<C: NamadaTypes> TxBuilder<C> for TxTransfer<C> {
+impl<C: NamadaTypes> TxBuilder<C> for TxTransparentTransfer<C> {
     fn tx<F>(self, func: F) -> Self
     where
         F: FnOnce(Tx<C>) -> Tx<C>,
     {
-        TxTransfer {
+        TxTransparentTransfer {
             tx: func(self.tx),
             ..self
         }
     }
 }
 
-impl<C: NamadaTypes> TxTransfer<C> {
+impl<C: NamadaTypes> TxTransparentTransfer<C> {
     /// Transfer source address
-    pub fn source(self, source: C::TransferSource) -> Self {
+    pub fn source(self, source: C::Address) -> Self {
         Self { source, ..self }
     }
 
     /// Transfer target address
-    pub fn receiver(self, target: C::TransferTarget) -> Self {
+    pub fn receiver(self, target: C::Address) -> Self {
         Self { target, ..self }
     }
 
@@ -285,14 +288,94 @@ impl<C: NamadaTypes> TxTransfer<C> {
     }
 }
 
-impl TxTransfer {
+impl TxTransparentTransfer {
     /// Build a transaction from this builder
     pub async fn build(
         &mut self,
         context: &impl Namada,
-    ) -> crate::error::Result<(namada_tx::Tx, SigningTxData, Option<Epoch>)>
-    {
-        tx::build_transfer(context, self).await
+    ) -> crate::error::Result<(namada_tx::Tx, SigningTxData)> {
+        tx::build_transparent_transfer(context, self).await
+    }
+}
+
+/// Shielded transfer transaction arguments
+#[derive(Clone, Debug)]
+pub struct TxShieldedTransfer<C: NamadaTypes = SdkTypes> {
+    /// Common tx arguments
+    pub tx: Tx<C>,
+    /// Transfer source spending key
+    pub source: C::SpendingKey,
+    /// Transfer target address
+    pub target: C::PaymentAddress,
+    /// Transferred token address
+    pub token: C::Address,
+    /// Transferred token amount
+    pub amount: InputAmount,
+    /// Path to the TX WASM code file
+    pub tx_code_path: PathBuf,
+}
+
+impl TxShieldedTransfer {
+    /// Build a transaction from this builder
+    pub async fn build(
+        &mut self,
+        context: &impl Namada,
+    ) -> crate::error::Result<(namada_tx::Tx, SigningTxData)> {
+        tx::build_shielded_transfer(context, self).await
+    }
+}
+
+/// Shielding transfer transaction arguments
+#[derive(Clone, Debug)]
+pub struct TxShieldingTransfer<C: NamadaTypes = SdkTypes> {
+    /// Common tx arguments
+    pub tx: Tx<C>,
+    /// Transfer source address
+    pub source: C::Address,
+    /// Transfer target address
+    pub target: C::PaymentAddress,
+    /// Transferred token address
+    pub token: C::Address,
+    /// Transferred token amount
+    pub amount: InputAmount,
+    /// Path to the TX WASM code file
+    pub tx_code_path: PathBuf,
+}
+
+impl TxShieldingTransfer {
+    /// Build a transaction from this builder
+    pub async fn build(
+        &mut self,
+        context: &impl Namada,
+    ) -> crate::error::Result<(namada_tx::Tx, SigningTxData, MaspEpoch)> {
+        tx::build_shielding_transfer(context, self).await
+    }
+}
+
+/// Unshielding transfer transaction arguments
+#[derive(Clone, Debug)]
+pub struct TxUnshieldingTransfer<C: NamadaTypes = SdkTypes> {
+    /// Common tx arguments
+    pub tx: Tx<C>,
+    /// Transfer source spending key
+    pub source: C::SpendingKey,
+    /// Transfer target address
+    pub target: C::Address,
+    /// Transferred token address
+    pub token: C::Address,
+    /// Transferred token amount
+    pub amount: InputAmount,
+    /// Path to the TX WASM code file
+    pub tx_code_path: PathBuf,
+}
+
+impl TxUnshieldingTransfer {
+    /// Build a transaction from this builder
+    pub async fn build(
+        &mut self,
+        context: &impl Namada,
+    ) -> crate::error::Result<(namada_tx::Tx, SigningTxData)> {
+        tx::build_unshielding_transfer(context, self).await
     }
 }
 
@@ -414,7 +497,7 @@ impl TxIbcTransfer {
     pub async fn build(
         &self,
         context: &impl Namada,
-    ) -> crate::error::Result<(namada_tx::Tx, SigningTxData, Option<Epoch>)>
+    ) -> crate::error::Result<(namada_tx::Tx, SigningTxData, Option<MaspEpoch>)>
     {
         tx::build_ibc_transfer(context, self).await
     }
@@ -1312,7 +1395,7 @@ pub struct QueryConversions<C: NamadaTypes = SdkTypes> {
     /// Address of a token
     pub token: Option<C::Address>,
     /// Epoch of the asset
-    pub epoch: Option<Epoch>,
+    pub epoch: Option<MaspEpoch>,
 }
 
 /// Query token balance(s)
@@ -1878,7 +1961,7 @@ pub struct SignTx<C: NamadaTypes = SdkTypes> {
 /// block height.
 pub struct ShieldedSync<C: NamadaTypes = SdkTypes> {
     /// The ledger address
-    pub ledger_address: C::TendermintAddress,
+    pub ledger_address: C::ConfigRpcTendermintAddress,
     /// The number of txs to fetch before caching
     pub batch_size: u64,
     /// Height to start syncing from. Defaults to the correct one.

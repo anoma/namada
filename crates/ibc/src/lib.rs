@@ -20,6 +20,8 @@
 mod actions;
 pub mod context;
 pub mod event;
+mod msg;
+mod nft;
 pub mod parameters;
 pub mod storage;
 
@@ -27,6 +29,7 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::rc::Rc;
+use std::str::FromStr;
 
 pub use actions::transfer_over_ibc;
 use borsh::BorshDeserialize;
@@ -39,44 +42,51 @@ pub use context::token_transfer::TokenTransferContext;
 pub use context::transfer_mod::{ModuleWrapper, TransferModule};
 use context::IbcContext;
 pub use context::ValidationParams;
-use namada_core::address::{Address, MASP};
-use namada_core::ibc::apps::nft_transfer::handler::{
+use ibc::apps::nft_transfer::handler::{
     send_nft_transfer_execute, send_nft_transfer_validate,
 };
-use namada_core::ibc::apps::nft_transfer::types::error::NftTransferError;
-use namada_core::ibc::apps::nft_transfer::types::packet::PacketData as NftPacketData;
-use namada_core::ibc::apps::nft_transfer::types::{
-    is_receiver_chain_source as is_nft_receiver_chain_source, PrefixedClassId,
-    TokenId, TracePrefix as NftTracePrefix,
+use ibc::apps::nft_transfer::types::error::NftTransferError;
+use ibc::apps::nft_transfer::types::{
+    ack_success_b64, is_receiver_chain_source as is_nft_receiver_chain_source,
+    PrefixedClassId, TokenId, TracePath as NftTracePath,
+    TracePrefix as NftTracePrefix,
 };
-use namada_core::ibc::apps::transfer::handler::{
+use ibc::apps::transfer::handler::{
     send_transfer_execute, send_transfer_validate,
 };
-use namada_core::ibc::apps::transfer::types::error::TokenTransferError;
-use namada_core::ibc::apps::transfer::types::packet::PacketData;
-use namada_core::ibc::apps::transfer::types::{
-    is_receiver_chain_source, TracePrefix,
+use ibc::apps::transfer::types::error::TokenTransferError;
+use ibc::apps::transfer::types::{
+    is_receiver_chain_source, PrefixedDenom, TracePath, TracePrefix,
 };
-use namada_core::ibc::core::channel::types::acknowledgement::{
+use ibc::core::channel::types::acknowledgement::{
     Acknowledgement, AcknowledgementStatus,
 };
-use namada_core::ibc::core::channel::types::msgs::{
+use ibc::core::channel::types::commitment::compute_ack_commitment;
+use ibc::core::channel::types::msgs::{
     MsgRecvPacket as IbcMsgRecvPacket, PacketMsg,
 };
-use namada_core::ibc::core::entrypoint::{execute, validate};
-use namada_core::ibc::core::handler::types::error::ContextError;
-use namada_core::ibc::core::handler::types::events::Error as RawIbcEventError;
-use namada_core::ibc::core::handler::types::msgs::MsgEnvelope;
-use namada_core::ibc::core::host::types::error::IdentifierError;
-use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
-use namada_core::ibc::core::router::types::error::RouterError;
-use namada_core::ibc::primitives::proto::Any;
-pub use namada_core::ibc::*;
-use namada_core::masp::PaymentAddress;
-use namada_events::extend::{ReadFromEventAttributes, Success as SuccessAttr};
-use namada_token::Transfer;
+use ibc::core::entrypoint::{execute, validate};
+use ibc::core::handler::types::error::ContextError;
+use ibc::core::handler::types::events::Error as RawIbcEventError;
+use ibc::core::handler::types::msgs::MsgEnvelope;
+use ibc::core::host::types::error::IdentifierError;
+use ibc::core::host::types::identifiers::{ChannelId, PortId};
+use ibc::core::router::types::error::RouterError;
+use ibc::primitives::proto::Any;
+pub use ibc::*;
+pub use msg::*;
+use namada_core::address::{self, Address};
+use namada_token::ShieldingTransfer;
+pub use nft::*;
 use prost::Message;
 use thiserror::Error;
+
+/// The event type defined in ibc-rs for receiving a token
+pub const EVENT_TYPE_PACKET: &str = "fungible_token_packet";
+/// The event type defined in ibc-rs for receiving an NFT
+pub const EVENT_TYPE_NFT_PACKET: &str = "non_fungible_token_packet";
+/// The escrow address for IBC transfer
+pub const IBC_ESCROW_ADDRESS: Address = address::IBC;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -142,7 +152,7 @@ where
     pub fn execute(
         &mut self,
         tx_data: &[u8],
-    ) -> Result<Option<Transfer>, Error> {
+    ) -> Result<Option<ShieldingTransfer>, Error> {
         let message = decode_message(tx_data)?;
         match &message {
             IbcMessage::Transfer(msg) => {
@@ -175,10 +185,7 @@ where
                     MsgEnvelope::Packet(PacketMsg::Recv(msg.message.clone()));
                 execute(&mut self.ctx, &mut self.router, envelope)
                     .map_err(|e| Error::Context(Box::new(e)))?;
-                let transfer = if self.is_receiving_success()? {
-                    // the current ibc-rs execution doesn't store the denom
-                    // for the token hash when transfer with MsgRecvPacket
-                    self.store_trace(&msg.message)?;
+                let transfer = if self.is_receiving_success(&msg.message)? {
                     // For receiving the token to a shielded address
                     msg.transfer.clone()
                 } else {
@@ -211,147 +218,31 @@ where
             IbcMessage::Envelope(envelope) => {
                 execute(&mut self.ctx, &mut self.router, *envelope.clone())
                     .map_err(|e| Error::Context(Box::new(e)))?;
-                if let MsgEnvelope::Packet(PacketMsg::Recv(msg)) = &**envelope {
-                    if self.is_receiving_success()? {
-                        // the current ibc-rs execution doesn't store the denom
-                        // for the token hash when transfer with MsgRecvPacket
-                        self.store_trace(msg)?;
-                    }
-                }
                 Ok(None)
             }
         }
     }
 
-    /// Store the trace path when transfer with MsgRecvPacket
-    fn store_trace(&mut self, msg: &IbcMsgRecvPacket) -> Result<(), Error> {
-        // Get the IBC trace, and the receiver from the packet data
-        let minted_token_info = if let Ok(data) =
-            serde_json::from_slice::<PacketData>(&msg.packet.data)
-        {
-            let ibc_denom = received_ibc_trace(
-                data.token.denom.to_string(),
-                &msg.packet.port_id_on_a,
-                &msg.packet.chan_id_on_a,
-                &msg.packet.port_id_on_b,
-                &msg.packet.chan_id_on_b,
-            )?;
-            if !ibc_denom.contains('/') {
-                // Skip to store it because the token has been redeemed
-                return Ok(());
-            }
-            let receiver =
-                if data.receiver.as_ref().parse::<PaymentAddress>().is_ok() {
-                    MASP.to_string()
-                } else {
-                    data.receiver.to_string()
-                };
-            Some((vec![ibc_denom], receiver))
-        } else if let Ok(data) =
-            serde_json::from_slice::<NftPacketData>(&msg.packet.data)
-        {
-            let ibc_traces: Result<Vec<String>, _> = data
-                .token_ids
-                .0
-                .iter()
-                .map(|id| {
-                    let trace = format!("{}/{id}", data.class_id);
-                    received_ibc_trace(
-                        trace,
-                        &msg.packet.port_id_on_a,
-                        &msg.packet.chan_id_on_a,
-                        &msg.packet.port_id_on_b,
-                        &msg.packet.chan_id_on_b,
-                    )
-                })
-                .collect();
-            let receiver =
-                if data.receiver.as_ref().parse::<PaymentAddress>().is_ok() {
-                    MASP.to_string()
-                } else {
-                    data.receiver.to_string()
-                };
-            Some((ibc_traces?, receiver))
-        } else {
-            None
-        };
-
-        if let Some((ibc_traces, receiver)) = minted_token_info {
-            // If the trace event has the trace hash and the IBC denom or NFT
-            // IDs, a token has been minted. The raw IBC trace including the
-            // port ID, the channel ID and the base token is stored to be
-            // restored from the trace hash.
-            for ibc_trace in ibc_traces {
-                let trace_hash = storage::calc_hash(&ibc_trace);
-                self.ctx
-                    .inner
-                    .borrow_mut()
-                    .store_ibc_trace(&receiver, &trace_hash, &ibc_trace)
-                    .map_err(|e| {
-                        Error::Trace(format!(
-                            "Writing the IBC trace failed: {}",
-                            e
-                        ))
-                    })?;
-                let base_token = if let Some((_, base_token)) =
-                    is_ibc_denom(&ibc_trace)
-                {
-                    base_token
-                } else if let Some((_, _, token_id)) = is_nft_trace(&ibc_trace)
-                {
-                    token_id
-                } else {
-                    // non-prefixed denom
-                    continue;
-                };
-                self.ctx
-                    .inner
-                    .borrow_mut()
-                    .store_ibc_trace(base_token, trace_hash, &ibc_trace)
-                    .map_err(|e| {
-                        Error::Trace(format!(
-                            "Writing the IBC trace failed: {}",
-                            e
-                        ))
-                    })?;
-            }
-        }
-        Ok(())
-    }
-
-    /// Check the result of receiving the packet from IBC events
-    fn is_receiving_success(&self) -> Result<bool, Error> {
-        let mut receive_event = self
+    /// Check the result of receiving the packet by checking the packet
+    /// acknowledgement
+    fn is_receiving_success(
+        &self,
+        msg: &IbcMsgRecvPacket,
+    ) -> Result<bool, Error> {
+        let packet_ack = self
             .ctx
             .inner
             .borrow()
-            .get_ibc_events(EVENT_TYPE_PACKET)
-            .map_err(|_| {
-                Error::Trace("Reading the IBC event failed".to_string())
-            })?;
-        if receive_event.is_empty() {
-            // check the packet is for an NFT
-            receive_event = self
-                .ctx
-                .inner
-                .borrow()
-                .get_ibc_events(EVENT_TYPE_NFT_PACKET)
-                .map_err(|_| {
-                    Error::Trace("Reading the IBC event failed".to_string())
-                })?;
-        }
-        receive_event.first().as_ref().map_or_else(
-            || Ok(false),
-            |event| {
-                let success = SuccessAttr::read_opt_from_event_attributes(
-                    &event.attributes,
-                )
-                .map_err(|err| {
-                    Error::Trace(format!("Reading the IBC event failed: {err}"))
-                })?;
-                Ok(success.unwrap_or(false))
-            },
-        )
+            .packet_ack(
+                &msg.packet.port_id_on_b,
+                &msg.packet.chan_id_on_b,
+                msg.packet.seq_on_a,
+            )
+            .map_err(|e| Error::Context(Box::new(e)))?;
+        let success_ack_commitment = compute_ack_commitment(
+            &AcknowledgementStatus::success(ack_success_b64()).into(),
+        );
+        Ok(packet_ack == success_ack_commitment)
     }
 
     /// Validate according to the message in IBC VP
@@ -547,6 +438,37 @@ pub fn received_ibc_token(
     } else {
         Address::decode(ibc_trace)
             .map_err(|e| Error::Trace(format!("Invalid base token: {e}")))
+    }
+}
+
+/// Returns the trace path and the token string if the denom is an IBC
+/// denom.
+pub fn is_ibc_denom(denom: impl AsRef<str>) -> Option<(TracePath, String)> {
+    let prefixed_denom = PrefixedDenom::from_str(denom.as_ref()).ok()?;
+    let base_denom = prefixed_denom.base_denom.to_string();
+    if prefixed_denom.trace_path.is_empty() || base_denom.contains('/') {
+        // The denom is just a token or an NFT trace
+        return None;
+    }
+    // The base token isn't decoded because it could be non Namada token
+    Some((prefixed_denom.trace_path, base_denom))
+}
+
+/// Returns the trace path and the token string if the trace is an NFT one
+pub fn is_nft_trace(
+    trace: impl AsRef<str>,
+) -> Option<(NftTracePath, String, String)> {
+    // The trace should be {port}/{channel}/.../{class_id}/{token_id}
+    if let Some((class_id, token_id)) = trace.as_ref().rsplit_once('/') {
+        let prefixed_class_id = PrefixedClassId::from_str(class_id).ok()?;
+        // The base token isn't decoded because it could be non Namada token
+        Some((
+            prefixed_class_id.trace_path,
+            prefixed_class_id.base_class_id.to_string(),
+            token_id.to_string(),
+        ))
+    } else {
+        None
     }
 }
 

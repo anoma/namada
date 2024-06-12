@@ -16,14 +16,12 @@ use masp_primitives::consensus::MainNetwork as Network;
 use masp_primitives::consensus::TestNetwork as Network;
 use masp_primitives::convert::AllowedConversion;
 use masp_primitives::ff::PrimeField;
-use masp_primitives::group::GroupEncoding;
 use masp_primitives::memo::MemoBytes;
 use masp_primitives::merkle_tree::{
     CommitmentTree, IncrementalWitness, MerklePath,
 };
 use masp_primitives::sapling::keys::FullViewingKey;
 use masp_primitives::sapling::note_encryption::*;
-use masp_primitives::sapling::redjubjub::PublicKey;
 use masp_primitives::sapling::{
     Diversifier, Node, Note, Nullifier, ViewingKey,
 };
@@ -31,10 +29,12 @@ use masp_primitives::transaction::builder::{self, *};
 use masp_primitives::transaction::components::sapling::builder::{
     RngBuildParams, SaplingMetadata,
 };
+use masp_primitives::transaction::components::sapling::{
+    Authorized as SaplingAuthorized, Bundle as SaplingBundle,
+};
 use masp_primitives::transaction::components::transparent::builder::TransparentBuilder;
 use masp_primitives::transaction::components::{
-    ConvertDescription, I128Sum, OutputDescription, SpendDescription, TxOut,
-    U64Sum, ValueSum,
+    I128Sum, OutputDescription, TxOut, U64Sum, ValueSum,
 };
 use masp_primitives::transaction::fees::fixed::FeeRule;
 use masp_primitives::transaction::sighash::{signature_hash, SignableInput};
@@ -43,11 +43,10 @@ use masp_primitives::transaction::{
     Authorization, Authorized, Transaction, TransactionData, Unauthorized,
 };
 use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
-use masp_proofs::bellman::groth16::PreparedVerifyingKey;
+use masp_proofs::bellman::groth16::VerifyingKey;
 use masp_proofs::bls12_381::Bls12;
 use masp_proofs::prover::LocalTxProver;
-#[cfg(not(feature = "testing"))]
-use masp_proofs::sapling::SaplingVerificationContext;
+use masp_proofs::sapling::BatchValidator;
 use namada_core::address::Address;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::dec::Dec;
@@ -55,20 +54,23 @@ pub use namada_core::masp::{
     encode_asset_type, AssetData, BalanceOwner, ExtendedViewingKey,
     PaymentAddress, TAddrData, TransferSource, TransferTarget,
 };
-use namada_core::storage::{BlockHeight, Epoch, TxIndex};
+use namada_core::masp::{MaspEpoch, MaspTxRefs};
+use namada_core::storage::{BlockHeight, TxIndex};
 use namada_core::time::{DateTimeUtc, DurationSecs};
 use namada_core::uint::Uint;
 use namada_events::extend::{
+    MaspTxBatchRefs as MaspTxBatchRefsAttr,
     MaspTxBlockIndex as MaspTxBlockIndexAttr, ReadFromEventAttributes,
 };
-use namada_ibc::IbcMessage;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
 use namada_state::StorageError;
-use namada_token::{self as token, Denomination, MaspDigitPos, Transfer};
-use namada_tx::{IndexedTx, Tx, TxCommitments};
-use rand_core::{CryptoRng, OsRng, RngCore};
+use namada_token::{self as token, Denomination, MaspDigitPos};
+use namada_tx::{IndexedTx, Tx};
+use rand::rngs::StdRng;
+use rand_core::{CryptoRng, OsRng, RngCore, SeedableRng};
+use smooth_operator::checked;
 use thiserror::Error;
 
 use crate::error::{Error, QueryError};
@@ -97,10 +99,10 @@ pub const OUTPUT_NAME: &str = "masp-output.params";
 pub const CONVERT_NAME: &str = "masp-convert.params";
 
 /// Type alias for convenience and profit
-pub type IndexedNoteData = BTreeMap<IndexedTx, Transaction>;
+pub type IndexedNoteData = BTreeMap<IndexedTx, Vec<Transaction>>;
 
 /// Type alias for the entries of [`IndexedNoteData`] iterators
-pub type IndexedNoteEntry = (IndexedTx, Transaction);
+pub type IndexedNoteEntry = (IndexedTx, Vec<Transaction>);
 
 /// Shielded transfer
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshDeserializer)]
@@ -112,7 +114,7 @@ pub struct ShieldedTransfer {
     /// Metadata
     pub metadata: SaplingMetadata,
     /// Epoch in which the transaction was created
-    pub epoch: Epoch,
+    pub epoch: MaspEpoch,
 }
 
 /// Shielded pool data for a token
@@ -138,17 +140,14 @@ pub enum TransferErr {
     General(#[from] Error),
 }
 
-#[derive(Debug, Clone)]
-struct ExtractedMaspTxs(Vec<(TxCommitments, Transaction)>);
-
 /// MASP verifying keys
 pub struct PVKs {
     /// spend verifying key
-    pub spend_vk: PreparedVerifyingKey<Bls12>,
+    pub spend_vk: VerifyingKey<Bls12>,
     /// convert verifying key
-    pub convert_vk: PreparedVerifyingKey<Bls12>,
+    pub convert_vk: VerifyingKey<Bls12>,
     /// output verifying key
-    pub output_vk: PreparedVerifyingKey<Bls12>,
+    pub output_vk: VerifyingKey<Bls12>,
 }
 
 lazy_static! {
@@ -182,9 +181,9 @@ lazy_static! {
             convert_path.as_path(),
         );
         PVKs {
-            spend_vk: params.spend_vk,
-            convert_vk: params.convert_vk,
-            output_vk: params.output_vk
+            spend_vk: params.spend_params.vk,
+            convert_vk: params.convert_params.vk,
+            output_vk: params.output_params.vk
         }
     };
 }
@@ -196,76 +195,6 @@ pub fn preload_verifying_keys() -> &'static PVKs {
 
 fn load_pvks() -> &'static PVKs {
     &VERIFIYING_KEYS
-}
-
-/// check_spend wrapper
-pub fn check_spend(
-    spend: &SpendDescription<<Authorized as Authorization>::SaplingAuth>,
-    sighash: &[u8; 32],
-    #[cfg(not(feature = "testing"))] ctx: &mut SaplingVerificationContext,
-    #[cfg(feature = "testing")]
-    ctx: &mut testing::MockSaplingVerificationContext,
-    parameters: &PreparedVerifyingKey<Bls12>,
-) -> bool {
-    let zkproof =
-        masp_proofs::bellman::groth16::Proof::read(spend.zkproof.as_slice());
-    let zkproof = match zkproof {
-        Ok(zkproof) => zkproof,
-        _ => return false,
-    };
-
-    ctx.check_spend(
-        spend.cv,
-        spend.anchor,
-        &spend.nullifier.0,
-        PublicKey(spend.rk.0),
-        sighash,
-        spend.spend_auth_sig,
-        zkproof,
-        parameters,
-    )
-}
-
-/// check_output wrapper
-pub fn check_output(
-    output: &OutputDescription<<<Authorized as Authorization>::SaplingAuth as masp_primitives::transaction::components::sapling::Authorization>::Proof>,
-    #[cfg(not(feature = "testing"))] ctx: &mut SaplingVerificationContext,
-    #[cfg(feature = "testing")]
-    ctx: &mut testing::MockSaplingVerificationContext,
-    parameters: &PreparedVerifyingKey<Bls12>,
-) -> bool {
-    let zkproof =
-        masp_proofs::bellman::groth16::Proof::read(output.zkproof.as_slice());
-    let zkproof = match zkproof {
-        Ok(zkproof) => zkproof,
-        _ => return false,
-    };
-    let epk =
-        masp_proofs::jubjub::ExtendedPoint::from_bytes(&output.ephemeral_key.0);
-    let epk = match epk.into() {
-        Some(p) => p,
-        None => return false,
-    };
-
-    ctx.check_output(output.cv, output.cmu, epk, zkproof, parameters)
-}
-
-/// check convert wrapper
-pub fn check_convert(
-    convert: &ConvertDescription<<<Authorized as Authorization>::SaplingAuth as masp_primitives::transaction::components::sapling::Authorization>::Proof>,
-    #[cfg(not(feature = "testing"))] ctx: &mut SaplingVerificationContext,
-    #[cfg(feature = "testing")]
-    ctx: &mut testing::MockSaplingVerificationContext,
-    parameters: &PreparedVerifyingKey<Bls12>,
-) -> bool {
-    let zkproof =
-        masp_proofs::bellman::groth16::Proof::read(convert.zkproof.as_slice());
-    let zkproof = match zkproof {
-        Ok(zkproof) => zkproof,
-        _ => return false,
-    };
-
-    ctx.check_convert(convert.cv, convert.anchor, zkproof, parameters)
 }
 
 /// Represents an authorization where the Sapling bundle is authorized and the
@@ -313,12 +242,12 @@ pub fn partial_deauthorize(
 /// Verify a shielded transaction.
 pub fn verify_shielded_tx<F>(
     transaction: &Transaction,
-    mut consume_verify_gas: F,
+    consume_verify_gas: F,
 ) -> Result<(), StorageError>
 where
-    F: FnMut(u64) -> std::result::Result<(), StorageError>,
+    F: Fn(u64) -> std::result::Result<(), StorageError>,
 {
-    tracing::info!("entered verify_shielded_tx()");
+    tracing::debug!("entered verify_shielded_tx()");
 
     let sapling_bundle = if let Some(bundle) = transaction.sapling_bundle() {
         bundle
@@ -343,8 +272,7 @@ where
     // for now we need to continue to compute it here.
     let sighash =
         signature_hash(&unauth_tx_data, &SignableInput::Shielded, &txid_parts);
-
-    tracing::info!("sighash computed");
+    tracing::debug!("sighash computed");
 
     let PVKs {
         spend_vk,
@@ -353,49 +281,103 @@ where
     } = load_pvks();
 
     #[cfg(not(feature = "testing"))]
-    let mut ctx = SaplingVerificationContext::new(true);
+    let mut ctx = BatchValidator::new();
     #[cfg(feature = "testing")]
-    let mut ctx = testing::MockSaplingVerificationContext::new(true);
-    for spend in &sapling_bundle.shielded_spends {
-        consume_verify_gas(namada_gas::MASP_VERIFY_SPEND_GAS)?;
-        if !check_spend(spend, sighash.as_ref(), &mut ctx, spend_vk) {
-            return Err(StorageError::SimpleMessage("Invalid shielded spend"));
-        }
+    let mut ctx = testing::MockBatchValidator::default();
+
+    // Charge gas before check bundle
+    charge_masp_check_bundle_gas(sapling_bundle, &consume_verify_gas)?;
+
+    if !ctx.check_bundle(sapling_bundle.to_owned(), sighash.as_ref().to_owned())
+    {
+        tracing::debug!("failed check bundle");
+        return Err(StorageError::SimpleMessage("Invalid sapling bundle"));
     }
-    for convert in &sapling_bundle.shielded_converts {
-        consume_verify_gas(namada_gas::MASP_VERIFY_CONVERT_GAS)?;
-        if !check_convert(convert, &mut ctx, convert_vk) {
-            return Err(StorageError::SimpleMessage(
-                "Invalid shielded conversion",
-            ));
-        }
+    tracing::debug!("passed check bundle");
+
+    // Charge gas before final validation
+    charge_masp_validate_gas(sapling_bundle, consume_verify_gas)?;
+    if !ctx.validate(spend_vk, convert_vk, output_vk, OsRng) {
+        return Err(StorageError::SimpleMessage(
+            "Invalid proofs or signatures",
+        ));
     }
-    for output in &sapling_bundle.shielded_outputs {
-        consume_verify_gas(namada_gas::MASP_VERIFY_OUTPUT_GAS)?;
-        if !check_output(output, &mut ctx, output_vk) {
-            return Err(StorageError::SimpleMessage("Invalid shielded output"));
-        }
+    Ok(())
+}
+
+// Charge gas for the check_bundle operation which does not leverage concurrency
+fn charge_masp_check_bundle_gas<F>(
+    sapling_bundle: &SaplingBundle<SaplingAuthorized>,
+    consume_verify_gas: F,
+) -> Result<(), namada_state::StorageError>
+where
+    F: Fn(u64) -> std::result::Result<(), namada_state::StorageError>,
+{
+    consume_verify_gas(checked!(
+        (sapling_bundle.shielded_spends.len() as u64)
+            * namada_gas::MASP_SPEND_CHECK_GAS
+    )?)?;
+
+    consume_verify_gas(checked!(
+        (sapling_bundle.shielded_converts.len() as u64)
+            * namada_gas::MASP_CONVERT_CHECK_GAS
+    )?)?;
+
+    consume_verify_gas(checked!(
+        (sapling_bundle.shielded_outputs.len() as u64)
+            * namada_gas::MASP_OUTPUT_CHECK_GAS
+    )?)
+}
+
+// Charge gas for the final validation, taking advtange of concurrency for
+// proofs verification but not for signatures
+fn charge_masp_validate_gas<F>(
+    sapling_bundle: &SaplingBundle<SaplingAuthorized>,
+    consume_verify_gas: F,
+) -> Result<(), namada_state::StorageError>
+where
+    F: Fn(u64) -> std::result::Result<(), namada_state::StorageError>,
+{
+    // Signatures gas
+    consume_verify_gas(checked!(
+        // Add one for the binding signature
+        ((sapling_bundle.shielded_spends.len() as u64) + 1)
+            * namada_gas::MASP_VERIFY_SIG_GAS
+    )?)?;
+
+    // If at least one note is present charge the fixed costs. Then charge the
+    // variable cost for every other note, amortized on the fixed expected
+    // number of cores
+    if let Some(remaining_notes) =
+        sapling_bundle.shielded_spends.len().checked_sub(1)
+    {
+        consume_verify_gas(namada_gas::MASP_FIXED_SPEND_GAS)?;
+        consume_verify_gas(checked!(
+            namada_gas::MASP_VARIABLE_SPEND_GAS * remaining_notes as u64
+                / namada_gas::MASP_PARALLEL_GAS_DIVIDER
+        )?)?;
     }
 
-    tracing::info!("passed spend/output verification");
-
-    let assets_and_values: I128Sum = sapling_bundle.value_balance.clone();
-
-    tracing::info!(
-        "accumulated {} assets/values",
-        assets_and_values.components().len()
-    );
-
-    consume_verify_gas(namada_gas::MASP_VERIFY_FINAL_GAS)?;
-    let result = ctx.final_check(
-        assets_and_values,
-        sighash.as_ref(),
-        sapling_bundle.authorization.binding_sig,
-    );
-    tracing::info!("final check result {result}");
-    if !result {
-        return Err(StorageError::SimpleMessage("MASP final check failed"));
+    if let Some(remaining_notes) =
+        sapling_bundle.shielded_converts.len().checked_sub(1)
+    {
+        consume_verify_gas(namada_gas::MASP_FIXED_CONVERT_GAS)?;
+        consume_verify_gas(checked!(
+            namada_gas::MASP_VARIABLE_CONVERT_GAS * remaining_notes as u64
+                / namada_gas::MASP_PARALLEL_GAS_DIVIDER
+        )?)?;
     }
+
+    if let Some(remaining_notes) =
+        sapling_bundle.shielded_outputs.len().checked_sub(1)
+    {
+        consume_verify_gas(namada_gas::MASP_FIXED_OUTPUT_GAS)?;
+        consume_verify_gas(checked!(
+            namada_gas::MASP_VARIABLE_OUTPUT_GAS * remaining_notes as u64
+                / namada_gas::MASP_PARALLEL_GAS_DIVIDER
+        )?)?;
+    }
+
     Ok(())
 }
 
@@ -510,7 +492,7 @@ pub struct MaspChange {
 }
 
 /// a masp amount
-pub type MaspAmount = ValueSum<(Option<Epoch>, Address), token::Change>;
+pub type MaspAmount = ValueSum<(Option<MaspEpoch>, Address), token::Change>;
 
 /// An extension of Option's cloned method for pair types
 fn cloned_pair<T: Clone, U: Clone>((a, b): (&T, &U)) -> (T, U) {
@@ -662,35 +644,37 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     }
 
     /// Update the merkle tree of witnesses the first time we
-    /// scan a new MASP transaction.
+    /// scan new MASP transactions.
     fn update_witness_map(
         &mut self,
         indexed_tx: IndexedTx,
-        shielded: &Transaction,
+        shielded: &[Transaction],
     ) -> Result<(), Error> {
         let mut note_pos = self.tree.size();
         self.tx_note_map.insert(indexed_tx, note_pos);
-        for so in shielded
-            .sapling_bundle()
-            .map_or(&vec![], |x| &x.shielded_outputs)
-        {
-            // Create merkle tree leaf node from note commitment
-            let node = Node::new(so.cmu.to_repr());
-            // Update each merkle tree in the witness map with the latest
-            // addition
-            for (_, witness) in self.witness_map.iter_mut() {
-                witness.append(node).map_err(|()| {
+
+        for tx in shielded {
+            for so in
+                tx.sapling_bundle().map_or(&vec![], |x| &x.shielded_outputs)
+            {
+                // Create merkle tree leaf node from note commitment
+                let node = Node::new(so.cmu.to_repr());
+                // Update each merkle tree in the witness map with the latest
+                // addition
+                for (_, witness) in self.witness_map.iter_mut() {
+                    witness.append(node).map_err(|()| {
+                        Error::Other("note commitment tree is full".to_string())
+                    })?;
+                }
+                self.tree.append(node).map_err(|()| {
                     Error::Other("note commitment tree is full".to_string())
                 })?;
+                // Finally, make it easier to construct merkle paths to this new
+                // note
+                let witness = IncrementalWitness::<Node>::from_tree(&self.tree);
+                self.witness_map.insert(note_pos, witness);
+                note_pos += 1;
             }
-            self.tree.append(node).map_err(|()| {
-                Error::Other("note commitment tree is full".to_string())
-            })?;
-            // Finally, make it easier to construct merkle paths to this new
-            // note
-            let witness = IncrementalWitness::<Node>::from_tree(&self.tree);
-            self.witness_map.insert(note_pos, witness);
-            note_pos += 1;
         }
         Ok(())
     }
@@ -829,21 +813,19 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 .block
                 .data;
 
-            for idx in txs_results {
+            for (idx, masp_sections_refs) in txs_results {
                 let tx = Tx::try_from(block[idx.0 as usize].as_ref())
                     .map_err(|e| Error::Other(e.to_string()))?;
-                let extracted_masp_txs = Self::extract_masp_tx(&tx).await?;
+                let extracted_masp_txs =
+                    Self::extract_masp_tx(&tx, &masp_sections_refs).await?;
                 // Collect the current transactions
-                for (inner_tx, transaction) in extracted_masp_txs.0 {
-                    shielded_txs.insert(
-                        IndexedTx {
-                            height: height.into(),
-                            index: idx,
-                            inner_tx,
-                        },
-                        transaction,
-                    );
-                }
+                shielded_txs.insert(
+                    IndexedTx {
+                        height: height.into(),
+                        index: idx,
+                    },
+                    extracted_masp_txs,
+                );
             }
         }
 
@@ -851,58 +833,35 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     }
 
     /// Extract the relevant shield portions of a [`Tx`], if any.
-    async fn extract_masp_tx(tx: &Tx) -> Result<ExtractedMaspTxs, Error> {
+    async fn extract_masp_tx(
+        tx: &Tx,
+        masp_section_refs: &MaspTxRefs,
+    ) -> Result<Vec<Transaction>, Error> {
         // NOTE: simply looking for masp sections attached to the tx
         // is not safe. We don't validate the sections attached to a
         // transaction se we could end up with transactions carrying
         // an unnecessary masp section. We must instead look for the
-        // required masp sections in the signed commitments (hashes)
-        // of the transactions' data sections
-        let mut txs = vec![];
+        // required masp sections coming from the events
 
-        // Expect transaction
-        for cmt in tx.commitments() {
-            let tx_data = tx.data(cmt).ok_or_else(|| {
-                Error::Other("Missing data section".to_string())
-            })?;
-            let maybe_masp_tx = match Transfer::try_from_slice(&tx_data) {
-                Ok(transfer) => Some(transfer),
-                Err(_) => {
-                    // This should be a MASP over IBC transaction, it
-                    // could be a ShieldedTransfer or an Envelope
-                    // message, need to try both
-                    extract_payload_from_shielded_action(&tx_data).await.ok()
-                }
-            }
-            .map(|transfer| {
-                if let Some(hash) = transfer.shielded {
-                    let masp_tx = tx
-                        .get_section(&hash)
-                        .ok_or_else(|| {
-                            Error::Other(
-                                "Missing masp section in transaction"
-                                    .to_string(),
-                            )
-                        })?
-                        .masp_tx()
-                        .ok_or_else(|| {
-                            Error::Other("Missing masp transaction".to_string())
-                        })?;
-
-                    Ok::<_, Error>(Some(masp_tx))
-                } else {
-                    Ok(None)
+        masp_section_refs
+            .0
+            .iter()
+            .try_fold(vec![], |mut acc, hash| {
+                match tx
+                    .get_section(hash)
+                    .and_then(|section| section.masp_tx())
+                    .ok_or_else(|| {
+                        Error::Other(
+                            "Missing expected masp transaction".to_string(),
+                        )
+                    }) {
+                    Ok(transaction) => {
+                        acc.push(transaction);
+                        Ok(acc)
+                    }
+                    Err(e) => Err(e),
                 }
             })
-            .transpose()?
-            .flatten();
-
-            if let Some(transaction) = maybe_masp_tx {
-                txs.push((cmt.to_owned(), transaction));
-            }
-        }
-
-        Ok(ExtractedMaspTxs(txs))
     }
 
     /// Applies the given transaction to the supplied context. More precisely,
@@ -916,7 +875,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     pub fn scan_tx(
         &mut self,
         indexed_tx: IndexedTx,
-        shielded: &Transaction,
+        shielded: &[Transaction],
         vk: &ViewingKey,
     ) -> Result<(), Error> {
         // For tracking the account changes caused by this Transaction
@@ -925,42 +884,78 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             let mut note_pos = self.tx_note_map[&indexed_tx];
             // Listen for notes sent to our viewing keys, only if we are syncing
             // (i.e. in a confirmed status)
-            for so in shielded
-                .sapling_bundle()
-                .map_or(&vec![], |x| &x.shielded_outputs)
-            {
-                // Let's try to see if this viewing key can decrypt latest
-                // note
-                let notes = self.pos_map.entry(*vk).or_default();
-                let decres = try_sapling_note_decryption::<_, OutputDescription<<<Authorized as Authorization>::SaplingAuth as masp_primitives::transaction::components::sapling::Authorization>::Proof>>(
+            for tx in shielded {
+                for so in
+                    tx.sapling_bundle().map_or(&vec![], |x| &x.shielded_outputs)
+                {
+                    // Let's try to see if this viewing key can decrypt latest
+                    // note
+                    let notes = self.pos_map.entry(*vk).or_default();
+                    let decres = try_sapling_note_decryption::<_, OutputDescription<<<Authorized as Authorization>::SaplingAuth as masp_primitives::transaction::components::sapling::Authorization>::Proof>>(
                 &NETWORK,
                 1.into(),
                 &PreparedIncomingViewingKey::new(&vk.ivk()),
                 so,
             );
-                // So this current viewing key does decrypt this current note...
-                if let Some((note, pa, memo)) = decres {
-                    // Add this note to list of notes decrypted by this viewing
-                    // key
-                    notes.insert(note_pos);
-                    // Compute the nullifier now to quickly recognize when spent
-                    let nf = note.nf(
-                        &vk.nk,
-                        note_pos.try_into().map_err(|_| {
-                            Error::Other("Can not get nullifier".to_string())
-                        })?,
-                    );
-                    self.note_map.insert(note_pos, note);
-                    self.memo_map.insert(note_pos, memo);
-                    // The payment address' diversifier is required to spend
-                    // note
-                    self.div_map.insert(note_pos, *pa.diversifier());
-                    self.nf_map.insert(nf, note_pos);
+                    // So this current viewing key does decrypt this current
+                    // note...
+                    if let Some((note, pa, memo)) = decres {
+                        // Add this note to list of notes decrypted by this
+                        // viewing key
+                        notes.insert(note_pos);
+                        // Compute the nullifier now to quickly recognize when
+                        // spent
+                        let nf = note.nf(
+                            &vk.nk,
+                            note_pos.try_into().map_err(|_| {
+                                Error::Other(
+                                    "Can not get nullifier".to_string(),
+                                )
+                            })?,
+                        );
+                        self.note_map.insert(note_pos, note);
+                        self.memo_map.insert(note_pos, memo);
+                        // The payment address' diversifier is required to spend
+                        // note
+                        self.div_map.insert(note_pos, *pa.diversifier());
+                        self.nf_map.insert(nf, note_pos);
+                        // Note the account changes
+                        let balance = transaction_delta
+                            .entry(*vk)
+                            .or_insert_with(I128Sum::zero);
+                        *balance += I128Sum::from_nonnegative(
+                            note.asset_type,
+                            note.value as i128,
+                        )
+                        .map_err(|()| {
+                            Error::Other(
+                                "found note with invalid value or asset type"
+                                    .to_string(),
+                            )
+                        })?;
+                        self.vk_map.insert(note_pos, *vk);
+                    }
+                    note_pos += 1;
+                }
+            }
+        }
+
+        // Cancel out those of our notes that have been spent
+        for tx in shielded {
+            for ss in
+                tx.sapling_bundle().map_or(&vec![], |x| &x.shielded_spends)
+            {
+                // If the shielded spend's nullifier is in our map, then target
+                // note is rendered unusable
+                if let Some(note_pos) = self.nf_map.get(&ss.nullifier) {
+                    self.spents.insert(*note_pos);
                     // Note the account changes
                     let balance = transaction_delta
-                        .entry(*vk)
+                        .entry(self.vk_map[note_pos])
                         .or_insert_with(I128Sum::zero);
-                    *balance += I128Sum::from_nonnegative(
+                    let note = self.note_map[note_pos];
+
+                    *balance -= I128Sum::from_nonnegative(
                         note.asset_type,
                         note.value as i128,
                     )
@@ -970,37 +965,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                                 .to_string(),
                         )
                     })?;
-                    self.vk_map.insert(note_pos, *vk);
                 }
-                note_pos += 1;
-            }
-        }
-
-        // Cancel out those of our notes that have been spent
-        for ss in shielded
-            .sapling_bundle()
-            .map_or(&vec![], |x| &x.shielded_spends)
-        {
-            // If the shielded spend's nullifier is in our map, then target note
-            // is rendered unusable
-            if let Some(note_pos) = self.nf_map.get(&ss.nullifier) {
-                self.spents.insert(*note_pos);
-                // Note the account changes
-                let balance = transaction_delta
-                    .entry(self.vk_map[note_pos])
-                    .or_insert_with(I128Sum::zero);
-                let note = self.note_map[note_pos];
-
-                *balance -= I128Sum::from_nonnegative(
-                    note.asset_type,
-                    note.value as i128,
-                )
-                .map_err(|()| {
-                    Error::Other(
-                        "found note with invalid value or asset type"
-                            .to_string(),
-                    )
-                })?;
             }
         }
 
@@ -1154,7 +1119,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         client: &(impl Client + Sync),
         io: &impl Io,
         vk: &ViewingKey,
-        target_epoch: Epoch,
+        target_epoch: MaspEpoch,
     ) -> Result<Option<I128Sum>, Error> {
         // First get the unexchanged balance
         if let Some(balance) = self.compute_shielded_balance(vk).await? {
@@ -1235,7 +1200,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         client: &(impl Client + Sync),
         io: &impl Io,
         mut input: I128Sum,
-        target_epoch: Epoch,
+        target_epoch: MaspEpoch,
         mut conversions: Conversions,
     ) -> Result<(I128Sum, I128Sum, Conversions), Error> {
         // Where we will store our exchanged value
@@ -1361,7 +1326,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         context: &impl Namada,
         vk: &ViewingKey,
         target: I128Sum,
-        target_epoch: Epoch,
+        target_epoch: MaspEpoch,
     ) -> Result<
         (
             I128Sum,
@@ -1455,7 +1420,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         &mut self,
         client: &C,
         amt: I128Sum,
-        target_epoch: Epoch,
+        target_epoch: MaspEpoch,
     ) -> (ValueSum<Address, token::Change>, I128Sum) {
         let mut res = ValueSum::zero();
         let mut undecoded = ValueSum::zero();
@@ -1555,9 +1520,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         // No shielded components are needed when neither source nor destination
         // are shielded
 
-        use rand::rngs::StdRng;
-        use rand_core::SeedableRng;
-
         let spending_key = source.spending_key();
         let payment_address = target.payment_address();
         // No shielded components are needed when neither source nor
@@ -1574,7 +1536,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             let _ = shielded.load().await;
         }
         // Determine epoch in which to submit potential shielded transaction
-        let epoch = rpc::query_epoch(context.client()).await?;
+        let epoch = rpc::query_masp_epoch(context.client()).await?;
         // Context required for storing which notes are in the source's
         // possession
         let memo = MemoBytes::empty();
@@ -1881,7 +1843,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             // Cache the generated transfer
             let mut shielded_ctx = context.shielded_mut().await;
             shielded_ctx
-                .pre_cache_transaction(context, &masp_tx)
+                .pre_cache_transaction(context, &[masp_tx.clone()])
                 .await?;
         }
 
@@ -1900,7 +1862,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     async fn pre_cache_transaction(
         &mut self,
         context: &impl Namada,
-        masp_tx: &Transaction,
+        masp_tx: &[Transaction],
     ) -> Result<(), Error> {
         let vks: Vec<_> = context
             .wallet()
@@ -1920,7 +1882,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                         .index
                         .checked_add(1)
                         .expect("Tx index shouldn't overflow"),
-                    inner_tx: TxCommitments::default(),
                 }
             });
         self.sync_status = ContextSyncStatus::Speculative;
@@ -1962,7 +1923,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     async fn convert_amount<C: Client + Sync>(
         &mut self,
         client: &C,
-        epoch: Epoch,
+        epoch: MaspEpoch,
         token: &Address,
         denom: Denomination,
         val: token::Amount,
@@ -2002,7 +1963,7 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
     client: &C,
     height: BlockHeight,
     first_idx_to_query: Option<TxIndex>,
-) -> Result<Option<Vec<TxIndex>>, Error> {
+) -> Result<Option<Vec<(TxIndex, MaspTxRefs)>>, Error> {
     let first_idx_to_query = first_idx_to_query.unwrap_or_default();
 
     Ok(client
@@ -2021,52 +1982,20 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
                         .ok()?;
 
                     if tx_index >= first_idx_to_query {
-                        Some(tx_index)
+                        // Extract the references to the correct masp sections
+                        let masp_section_refs =
+                            MaspTxBatchRefsAttr::read_from_event_attributes(
+                                &event.attributes,
+                            )
+                            .ok()?;
+
+                        Some((tx_index, masp_section_refs))
                     } else {
                         None
                     }
                 })
                 .collect::<Vec<_>>()
         }))
-}
-
-// Extract the Transaction hash from a masp over ibc message
-async fn extract_payload_from_shielded_action(
-    tx_data: &[u8],
-) -> Result<Transfer, Error> {
-    let message = namada_ibc::decode_message(tx_data)
-        .map_err(|e| Error::Other(e.to_string()))?;
-
-    let result = match message {
-        IbcMessage::Transfer(msg) => msg.transfer.ok_or_else(|| {
-            Error::Other("Missing masp tx in the ibc message".to_string())
-        })?,
-        IbcMessage::NftTransfer(msg) => msg.transfer.ok_or_else(|| {
-            Error::Other("Missing masp tx in the ibc message".to_string())
-        })?,
-        IbcMessage::RecvPacket(msg) => msg.transfer.ok_or_else(|| {
-            Error::Other("Missing masp tx in the ibc message".to_string())
-        })?,
-        IbcMessage::AckPacket(msg) => {
-            // Refund tokens by the ack message
-            msg.transfer.ok_or_else(|| {
-                Error::Other("Missing masp tx in the ibc message".to_string())
-            })?
-        }
-        IbcMessage::Timeout(msg) => {
-            // Refund tokens by the timeout message
-            msg.transfer.ok_or_else(|| {
-                Error::Other("Missing masp tx in the ibc message".to_string())
-            })?
-        }
-        IbcMessage::Envelope(_) => {
-            return Err(Error::Other(
-                "Unexpected ibc message for masp".to_string(),
-            ));
-        }
-    };
-
-    Ok(result)
 }
 
 mod tests {
@@ -2189,12 +2118,15 @@ pub mod testing {
     use bls12_381::{G1Affine, G2Affine};
     use masp_primitives::consensus::testing::arb_height;
     use masp_primitives::constants::SPENDING_KEY_GENERATOR;
+    use masp_primitives::group::GroupEncoding;
     use masp_primitives::sapling::prover::TxProver;
-    use masp_primitives::sapling::redjubjub::Signature;
+    use masp_primitives::sapling::redjubjub::{PublicKey, Signature};
     use masp_primitives::sapling::{ProofGenerationKey, Rseed};
+    use masp_primitives::transaction::components::sapling::builder::StoredBuildParams;
+    use masp_primitives::transaction::components::sapling::Bundle;
     use masp_primitives::transaction::components::GROTH_PROOF_SIZE;
     use masp_primitives::transaction::TransparentAddress;
-    use masp_proofs::bellman::groth16::Proof;
+    use masp_proofs::bellman::groth16::{self, Proof};
     use proptest::prelude::*;
     use proptest::sample::SizeRange;
     use proptest::test_runner::TestRng;
@@ -2208,129 +2140,58 @@ pub mod testing {
     use crate::masp_primitives::sapling::keys::OutgoingViewingKey;
     use crate::masp_primitives::sapling::redjubjub::PrivateKey;
     use crate::masp_primitives::transaction::components::transparent::testing::arb_transparent_address;
-    use crate::masp_proofs::sapling::SaplingVerificationContextInner;
-    use crate::storage::testing::arb_epoch;
     use crate::token::testing::arb_denomination;
 
-    /// A context object for verifying the Sapling components of a single Zcash
-    /// transaction. Same as SaplingVerificationContext, but always assumes the
-    /// proofs to be valid.
-    pub struct MockSaplingVerificationContext {
-        inner: SaplingVerificationContextInner,
-        zip216_enabled: bool,
+    /// A context object for verifying the Sapling components of MASP
+    /// transactions. Same as BatchValidator, but always assumes the
+    /// proofs and signatures to be valid.
+    pub struct MockBatchValidator {
+        inner: BatchValidator,
     }
 
-    impl MockSaplingVerificationContext {
-        /// Construct a new context to be used with a single transaction.
-        pub fn new(zip216_enabled: bool) -> Self {
-            MockSaplingVerificationContext {
-                inner: SaplingVerificationContextInner::new(),
-                zip216_enabled,
+    impl Default for MockBatchValidator {
+        fn default() -> Self {
+            MockBatchValidator {
+                inner: BatchValidator::new(),
             }
         }
+    }
 
-        /// Perform consensus checks on a Sapling SpendDescription, while
-        /// accumulating its value commitment inside the context for later use.
-        #[allow(clippy::too_many_arguments)]
-        pub fn check_spend(
+    impl MockBatchValidator {
+        /// Checks the bundle against Sapling-specific consensus rules, and adds
+        /// its proof and signatures to the validator.
+        ///
+        /// Returns `false` if the bundle doesn't satisfy all of the consensus
+        /// rules. This `BatchValidator` can continue to be used
+        /// regardless, but some or all of the proofs and signatures
+        /// from this bundle may have already been added to the batch even if
+        /// it fails other consensus rules.
+        pub fn check_bundle(
             &mut self,
-            cv: jubjub::ExtendedPoint,
-            anchor: bls12_381::Scalar,
-            nullifier: &[u8; 32],
-            rk: PublicKey,
-            sighash_value: &[u8; 32],
-            spend_auth_sig: Signature,
-            zkproof: Proof<Bls12>,
-            _verifying_key: &PreparedVerifyingKey<Bls12>,
+            bundle: Bundle<
+                masp_primitives::transaction::components::sapling::Authorized,
+            >,
+            sighash: [u8; 32],
         ) -> bool {
-            let zip216_enabled = true;
-            self.inner.check_spend(
-                cv,
-                anchor,
-                nullifier,
-                rk,
-                sighash_value,
-                spend_auth_sig,
-                zkproof,
-                &mut (),
-                |_, rk, msg, spend_auth_sig| {
-                    rk.verify_with_zip216(
-                        &msg,
-                        &spend_auth_sig,
-                        SPENDING_KEY_GENERATOR,
-                        zip216_enabled,
-                    )
-                },
-                |_, _proof, _public_inputs| true,
-            )
+            self.inner.check_bundle(bundle, sighash)
         }
 
-        /// Perform consensus checks on a Sapling SpendDescription, while
-        /// accumulating its value commitment inside the context for later use.
-        #[allow(clippy::too_many_arguments)]
-        pub fn check_convert(
-            &mut self,
-            cv: jubjub::ExtendedPoint,
-            anchor: bls12_381::Scalar,
-            zkproof: Proof<Bls12>,
-            _verifying_key: &PreparedVerifyingKey<Bls12>,
+        /// Batch-validates the accumulated bundles.
+        ///
+        /// Returns `true` if every proof and signature in every bundle added to
+        /// the batch validator is valid, or `false` if one or more are
+        /// invalid. No attempt is made to figure out which of the
+        /// accumulated bundles might be invalid; if that information is
+        /// desired, construct separate [`BatchValidator`]s for sub-batches of
+        /// the bundles.
+        pub fn validate<R: RngCore + CryptoRng>(
+            self,
+            _spend_vk: &groth16::VerifyingKey<Bls12>,
+            _convert_vk: &groth16::VerifyingKey<Bls12>,
+            _output_vk: &groth16::VerifyingKey<Bls12>,
+            mut _rng: R,
         ) -> bool {
-            self.inner.check_convert(
-                cv,
-                anchor,
-                zkproof,
-                &mut (),
-                |_, _proof, _public_inputs| true,
-            )
-        }
-
-        /// Perform consensus checks on a Sapling OutputDescription, while
-        /// accumulating its value commitment inside the context for later use.
-        pub fn check_output(
-            &mut self,
-            cv: jubjub::ExtendedPoint,
-            cmu: bls12_381::Scalar,
-            epk: jubjub::ExtendedPoint,
-            zkproof: Proof<Bls12>,
-            _verifying_key: &PreparedVerifyingKey<Bls12>,
-        ) -> bool {
-            self.inner.check_output(
-                cv,
-                cmu,
-                epk,
-                zkproof,
-                |_proof, _public_inputs| true,
-            )
-        }
-
-        /// Perform consensus checks on the valueBalance and bindingSig parts of
-        /// a Sapling transaction. All SpendDescriptions and
-        /// OutputDescriptions must have been checked before calling
-        /// this function.
-        pub fn final_check(
-            &self,
-            value_balance: I128Sum,
-            sighash_value: &[u8; 32],
-            binding_sig: Signature,
-        ) -> bool {
-            self.inner.final_check(
-                value_balance,
-                sighash_value,
-                binding_sig,
-                |bvk, msg, binding_sig| {
-                    // Compute the signature's message for bvk/binding_sig
-                    let mut data_to_be_signed = [0u8; 64];
-                    data_to_be_signed[0..32].copy_from_slice(&bvk.0.to_bytes());
-                    data_to_be_signed[32..64].copy_from_slice(msg);
-
-                    bvk.verify_with_zip216(
-                        &data_to_be_signed,
-                        &binding_sig,
-                        VALUE_COMMITMENT_RANDOMNESS_GENERATOR,
-                        self.zip216_enabled,
-                    )
-                },
-            )
+            true
         }
     }
 
@@ -2845,12 +2706,19 @@ pub mod testing {
     }
 
     prop_compose! {
+        /// Generate an arbitrary masp epoch
+        pub fn arb_masp_epoch()(epoch: u64) -> MaspEpoch{
+            MaspEpoch::new(epoch)
+        }
+    }
+
+    prop_compose! {
         /// Generate an arbitrary pre-asset type
         pub fn arb_pre_asset_type()(
             token in arb_address(),
             denom in arb_denomination(),
             position in arb_masp_digit_pos(),
-            epoch in option::of(arb_epoch()),
+            epoch in option::of(arb_masp_epoch()),
         ) -> AssetData {
             AssetData {
                 token,
@@ -2960,23 +2828,24 @@ pub mod testing {
             asset_range: impl Into<SizeRange>,
         )(asset_range in Just(asset_range.into()))(
             (builder, asset_types) in arb_shielded_builder(asset_range),
-            epoch in arb_epoch(),
+            epoch in arb_masp_epoch(),
             prover_rng in arb_rng().prop_map(TestCsprng),
             mut rng in arb_rng().prop_map(TestCsprng),
             bparams_rng in arb_rng().prop_map(TestCsprng),
-        ) -> (ShieldedTransfer, HashMap<AssetData, u64>) {
+        ) -> (ShieldedTransfer, HashMap<AssetData, u64>, StoredBuildParams) {
+            let mut rng_build_params = RngBuildParams::new(bparams_rng);
             let (masp_tx, metadata) = builder.clone().build(
                 &MockTxProver(Mutex::new(prover_rng)),
                 &FeeRule::non_standard(U64Sum::zero()),
                 &mut rng,
-                &mut RngBuildParams::new(bparams_rng),
+                &mut rng_build_params,
             ).unwrap();
             (ShieldedTransfer {
                 builder: builder.map_builder(WalletMap),
                 metadata,
                 masp_tx,
                 epoch,
-            }, asset_types)
+            }, asset_types, rng_build_params.to_stored().unwrap())
         }
     }
 
@@ -2990,23 +2859,24 @@ pub mod testing {
                 source,
                 asset_range,
             ),
-            epoch in arb_epoch(),
+            epoch in arb_masp_epoch(),
             prover_rng in arb_rng().prop_map(TestCsprng),
             mut rng in arb_rng().prop_map(TestCsprng),
             bparams_rng in arb_rng().prop_map(TestCsprng),
-        ) -> (ShieldedTransfer, HashMap<AssetData, u64>) {
+        ) -> (ShieldedTransfer, HashMap<AssetData, u64>, StoredBuildParams) {
+            let mut rng_build_params = RngBuildParams::new(bparams_rng);
             let (masp_tx, metadata) = builder.clone().build(
                 &MockTxProver(Mutex::new(prover_rng)),
                 &FeeRule::non_standard(U64Sum::zero()),
                 &mut rng,
-                &mut RngBuildParams::new(bparams_rng),
+                &mut rng_build_params,
             ).unwrap();
             (ShieldedTransfer {
                 builder: builder.map_builder(WalletMap),
                 metadata,
                 masp_tx,
                 epoch,
-            }, asset_types)
+            }, asset_types, rng_build_params.to_stored().unwrap())
         }
     }
 
@@ -3020,23 +2890,24 @@ pub mod testing {
                 target,
                 asset_range,
             ),
-            epoch in arb_epoch(),
+            epoch in arb_masp_epoch(),
             prover_rng in arb_rng().prop_map(TestCsprng),
             mut rng in arb_rng().prop_map(TestCsprng),
             bparams_rng in arb_rng().prop_map(TestCsprng),
-        ) -> (ShieldedTransfer, HashMap<AssetData, u64>) {
+        ) -> (ShieldedTransfer, HashMap<AssetData, u64>, StoredBuildParams) {
+            let mut rng_build_params = RngBuildParams::new(bparams_rng);
             let (masp_tx, metadata) = builder.clone().build(
                 &MockTxProver(Mutex::new(prover_rng)),
                 &FeeRule::non_standard(U64Sum::zero()),
                 &mut rng,
-                &mut RngBuildParams::new(bparams_rng),
+                &mut rng_build_params,
             ).unwrap();
             (ShieldedTransfer {
                 builder: builder.map_builder(WalletMap),
                 metadata,
                 masp_tx,
                 epoch,
-            }, asset_types)
+            }, asset_types, rng_build_params.to_stored().unwrap())
         }
     }
 }

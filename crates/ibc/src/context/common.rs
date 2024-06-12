@@ -2,30 +2,27 @@
 
 use core::time::Duration;
 
-use namada_core::address::Address;
-use namada_core::ibc::apps::nft_transfer::types::{PrefixedClassId, TokenId};
-use namada_core::ibc::clients::tendermint::consensus_state::ConsensusState as TmConsensusState;
-use namada_core::ibc::clients::tendermint::types::ConsensusState as TmConsensusStateType;
-use namada_core::ibc::core::channel::types::channel::ChannelEnd;
-use namada_core::ibc::core::channel::types::commitment::{
+use ibc::apps::nft_transfer::types::{PrefixedClassId, TokenId};
+use ibc::clients::tendermint::consensus_state::ConsensusState as TmConsensusState;
+use ibc::clients::tendermint::types::ConsensusState as TmConsensusStateType;
+use ibc::core::channel::types::channel::ChannelEnd;
+use ibc::core::channel::types::commitment::{
     AcknowledgementCommitment, PacketCommitment,
 };
-use namada_core::ibc::core::channel::types::error::{
-    ChannelError, PacketError,
-};
-use namada_core::ibc::core::channel::types::packet::Receipt;
-use namada_core::ibc::core::channel::types::timeout::TimeoutHeight;
-use namada_core::ibc::core::client::types::error::ClientError;
-use namada_core::ibc::core::client::types::Height;
-use namada_core::ibc::core::connection::types::error::ConnectionError;
-use namada_core::ibc::core::connection::types::ConnectionEnd;
-use namada_core::ibc::core::handler::types::error::ContextError;
-use namada_core::ibc::core::host::types::identifiers::{
+use ibc::core::channel::types::error::{ChannelError, PacketError};
+use ibc::core::channel::types::packet::Receipt;
+use ibc::core::channel::types::timeout::TimeoutHeight;
+use ibc::core::client::types::error::ClientError;
+use ibc::core::client::types::Height;
+use ibc::core::connection::types::error::ConnectionError;
+use ibc::core::connection::types::ConnectionEnd;
+use ibc::core::handler::types::error::ContextError;
+use ibc::core::host::types::identifiers::{
     ChannelId, ClientId, ConnectionId, PortId, Sequence,
 };
-use namada_core::ibc::primitives::proto::{Any, Protobuf};
-use namada_core::ibc::primitives::Timestamp;
-use namada_core::ibc::{NftClass, NftMetadata};
+use ibc::primitives::proto::{Any, Protobuf};
+use ibc::primitives::Timestamp;
+use namada_core::address::Address;
 use namada_core::storage::{BlockHeight, Key};
 use namada_core::tendermint::Time as TmTime;
 use namada_core::time::DurationSecs;
@@ -37,7 +34,7 @@ use sha2::Digest;
 
 use super::client::{AnyClientState, AnyConsensusState};
 use super::storage::IbcStorageContext;
-use crate::storage;
+use crate::{storage, NftClass, NftMetadata};
 
 /// Result of IBC common function call
 pub type Result<T> = std::result::Result<T, ContextError>;

@@ -57,7 +57,7 @@ keywords = ["blockchain", "privacy", "crypto", "protocol", "network"]
 license = "GPL-3.0"
 readme = "README.md"
 repository = "https://github.com/anoma/namada"
-version = "0.37.0"
+version = "0.39.0"
 
 [workspace.dependencies]
 ark-bls12-381 = {version = "0.3"}
@@ -86,7 +86,7 @@ clap = "4.3.4"
 clru = {git = "https://github.com/marmeladema/clru-rs.git", rev = "71ca566"}
 color-eyre = "0.6.2"
 concat-idents = "1.1.2"
-config = "0.11.0"
+config = { git = "https://github.com/mehcode/config-rs.git", rev = "e3c1d0b452639478662a44f15ef6d5b6d969bf9b" }
 data-encoding = "2.3.2"
 derivation-path = "0.2.0"
 derivative = "2.2.0"
@@ -125,8 +125,8 @@ libc = "0.2.97"
 libloading = "0.7.2"
 linkme = "0.3.24"
 # branch = "main"
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "3aacc707c5948e7423589ac617305448bead9842" }
-masp_proofs = { git = "https://github.com/anoma/masp", rev = "3aacc707c5948e7423589ac617305448bead9842", default-features = false, features = ["local-prover"] }
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "4ede1c42d76d6348af8224bc8bfac4404321fe82" }
+masp_proofs = { git = "https://github.com/anoma/masp", rev = "4ede1c42d76d6348af8224bc8bfac4404321fe82", default-features = false, features = ["local-prover"] }
 num256 = "0.3.5"
 num_cpus = "1.13.0"
 num-derive = "0.4"
@@ -161,7 +161,7 @@ sha2 = "0.9.3"
 sha2-const = "0.1.2"
 signal-hook = "0.3.9"
 slip10_ed25519 = "0.1.3"
-smooth-operator = {git = "https://github.com/heliaxdev/smooth-operator", tag = "v0.6.0"}
+smooth-operator = {git = "https://github.com/heliaxdev/smooth-operator", tag = "v0.7.0"}
 # sysinfo with disabled multithread feature
 sysinfo = {version = "0.27.8", default-features = false}
 tar = "0.4.37"
@@ -189,12 +189,17 @@ tracing-log = "0.2.0"
 tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
 wasmparser = "0.107.0"
 wasm-instrument = {version = "0.4.0", features = ["sign_ext"]}
-wasmer = {git = "https://github.com/heliaxdev/wasmer", rev = "255054f7f58b7b4a525f2fee6b9b86422d1ca15b"}
-wasmer-compiler-singlepass = { git = "https://github.com/heliaxdev/wasmer", rev = "255054f7f58b7b4a525f2fee6b9b86422d1ca15b" }
-wasmer-engine-universal = { git = "https://github.com/heliaxdev/wasmer", rev = "255054f7f58b7b4a525f2fee6b9b86422d1ca15b" }
+wasmer = "4.3.1"
+wasmer-cache = "4.3.1"
+wasmer-compiler-singlepass = "4.3.1"
+wasmer-vm = "4.3.1"
 winapi = "0.3.9"
 yansi = "0.5.1"
 zeroize = { version = "1.5.5", features = ["zeroize_derive"] }
+
+[patch.crates-io]
+# Patch to the fork containing the correct personalization and basepoints for masp
+reddsa = { git = "https://github.com/heliaxdev/reddsa", rev = "46d363b929e1b940688fa0c53d637e304a755185" }
 
 [profile.release]
 lto = true

@@ -3,22 +3,21 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use namada_core::address::Address;
-use namada_core::ibc::apps::nft_transfer::context::{
+use ibc::apps::nft_transfer::context::{
     NftTransferExecutionContext, NftTransferValidationContext,
 };
-use namada_core::ibc::apps::nft_transfer::types::error::NftTransferError;
-use namada_core::ibc::apps::nft_transfer::types::{
+use ibc::apps::nft_transfer::types::error::NftTransferError;
+use ibc::apps::nft_transfer::types::{
     ClassData, ClassUri, Memo, PrefixedClassId, TokenData, TokenId, TokenUri,
     PORT_ID_STR,
 };
-use namada_core::ibc::core::handler::types::error::ContextError;
-use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
-use namada_core::ibc::{NftClass, NftMetadata, IBC_ESCROW_ADDRESS};
+use ibc::core::handler::types::error::ContextError;
+use ibc::core::host::types::identifiers::{ChannelId, PortId};
+use namada_core::address::Address;
 use namada_core::token::Amount;
 
 use super::common::IbcCommonContext;
-use crate::storage;
+use crate::{storage, NftClass, NftMetadata, IBC_ESCROW_ADDRESS};
 
 /// NFT transfer context to handle tokens
 #[derive(Debug)]
@@ -87,6 +86,26 @@ where
         self.inner
             .borrow_mut()
             .store_withdraw(token, added_withdraw)
+            .map_err(NftTransferError::from)
+    }
+
+    fn store_ibc_trace(
+        &self,
+        owner: &Address,
+        class_id: &PrefixedClassId,
+        token_id: &TokenId,
+    ) -> Result<(), NftTransferError> {
+        let ibc_trace = format!("{class_id}/{token_id}");
+        let trace_hash = storage::calc_hash(&ibc_trace);
+
+        self.inner
+            .borrow_mut()
+            .store_ibc_trace(owner.to_string(), &trace_hash, &ibc_trace)
+            .map_err(NftTransferError::from)?;
+
+        self.inner
+            .borrow_mut()
+            .store_ibc_trace(token_id, &trace_hash, &ibc_trace)
             .map_err(NftTransferError::from)
     }
 }
@@ -341,6 +360,10 @@ where
 
         self.update_mint_amount(&ibc_token, true)?;
         self.add_deposit(&ibc_token)?;
+
+        // Store the IBC trace with the token hash to be able to retrieve it
+        // later
+        self.store_ibc_trace(account, class_id, token_id)?;
 
         self.inner
             .borrow_mut()

@@ -20,12 +20,10 @@
 
 pub mod collection_validation;
 
-use masp_primitives::transaction::Transaction;
 use namada_core::address::Address;
 use namada_core::borsh::BorshDeserialize;
 use namada_core::hash::Hash;
 use namada_core::storage::{BlockHeight, Epoch, Epochs, Header, Key, TxIndex};
-use namada_core::token::Transfer;
 use namada_events::{Event, EventType};
 use namada_ibc::{decode_message, IbcMessage};
 use namada_storage::{OptionExt, StorageRead};
@@ -126,40 +124,12 @@ where
     fn get_shielded_action(
         &self,
         batched_tx: &BatchedTxRef<'_>,
-    ) -> Result<(Transaction, Vec<IbcMessage>), namada_storage::Error> {
+    ) -> Result<Vec<IbcMessage>, namada_storage::Error> {
         let data = batched_tx
             .tx
             .data(batched_tx.cmt)
             .ok_or_err_msg("No transaction data")?;
-        let mut msgs = vec![];
-        let transfer = match Transfer::try_from_slice(&data) {
-            Ok(transfer) => Some(transfer),
-            Err(_) => {
-                let msg = decode_message(&data).map_err(|_| {
-                    namada_storage::Error::new_const("Unknown IBC message")
-                })?;
-                msgs.push(msg.clone());
-                match msg {
-                    IbcMessage::Transfer(msg) => msg.transfer,
-                    IbcMessage::NftTransfer(msg) => msg.transfer,
-                    IbcMessage::RecvPacket(msg) => msg.transfer,
-                    IbcMessage::AckPacket(msg) => msg.transfer,
-                    IbcMessage::Timeout(msg) => msg.transfer,
-                    IbcMessage::Envelope(_) => None,
-                }
-            }
-        };
-
-        let shielded_hash = transfer
-            .ok_or_err_msg("Missing transfer")?
-            .shielded
-            .ok_or_err_msg("unable to find shielded hash")?;
-        let masp_tx = batched_tx
-            .tx
-            .get_section(&shielded_hash)
-            .and_then(|x| x.as_ref().masp_tx())
-            .ok_or_err_msg("unable to find shielded section")?;
-        Ok((masp_tx, msgs))
+        Ok(decode_message(&data).into_iter().collect())
     }
 
     /// Charge the provided gas for the current vp

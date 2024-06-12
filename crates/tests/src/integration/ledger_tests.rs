@@ -2,18 +2,24 @@ use std::collections::BTreeSet;
 use std::str::FromStr;
 
 use assert_matches::assert_matches;
+use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use color_eyre::eyre::Result;
 use data_encoding::HEXLOWER;
+use namada::account::AccountPublicKeysMap;
 use namada::core::collections::HashMap;
-use namada::token;
-use namada_apps_lib::wallet::defaults;
+use namada::token::{self, Amount, DenominatedAmount};
+use namada_apps_lib::wallet::defaults::{self, albert_keypair};
 use namada_core::dec::Dec;
-use namada_core::storage::Epoch;
+use namada_core::hash::Hash;
+use namada_core::storage::{DbColFam, Epoch, Key};
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_node::shell::testing::client::run;
+use namada_node::shell::testing::node::NodeResults;
 use namada_node::shell::testing::utils::{Bin, CapturedOutput};
-use namada_sdk::tx::{TX_TRANSFER_WASM, VP_USER_WASM};
+use namada_sdk::migrations;
+use namada_sdk::queries::RPC;
+use namada_sdk::tx::{TX_TRANSPARENT_TRANSFER_WASM, VP_USER_WASM};
 use namada_test_utils::TestWasms;
 use test_log::test;
 
@@ -53,7 +59,7 @@ fn ledger_txs_and_queries() -> Result<()> {
     let validator_one_rpc = "http://127.0.0.1:26567";
 
     let (node, _services) = setup::setup()?;
-    let transfer = token::Transfer {
+    let transfer = token::TransparentTransfer {
         source: defaults::bertha_address(),
         target: defaults::albert_address(),
         token: node.native_token(),
@@ -61,7 +67,6 @@ fn ledger_txs_and_queries() -> Result<()> {
             token::Amount::native_whole(10),
             token::NATIVE_MAX_DECIMAL_PLACES.into(),
         ),
-        shielded: None,
     }
     .serialize_to_vec();
     let tx_data_path = node.test_dir.path().join("tx.data");
@@ -74,7 +79,7 @@ fn ledger_txs_and_queries() -> Result<()> {
     let txs_args = vec![
         // 2. Submit a token transfer tx (from an established account)
         vec![
-            "transfer",
+            "transparent-transfer",
             "--source",
             BERTHA,
             "--target",
@@ -90,7 +95,7 @@ fn ledger_txs_and_queries() -> Result<()> {
         ],
         // Submit a token transfer tx (from an ed25519 implicit account)
         vec![
-            "transfer",
+            "transparent-transfer",
             "--source",
             DAEWON,
             "--target",
@@ -106,7 +111,7 @@ fn ledger_txs_and_queries() -> Result<()> {
         ],
         // Submit a token transfer tx (from a secp256k1 implicit account)
         vec![
-            "transfer",
+            "transparent-transfer",
             "--source",
             ESTER,
             "--target",
@@ -135,7 +140,7 @@ fn ledger_txs_and_queries() -> Result<()> {
         vec![
             "tx",
             "--code-path",
-            TX_TRANSFER_WASM,
+            TX_TRANSPARENT_TRANSFER_WASM,
             "--data-path",
             &tx_data_path,
             "--owner",
@@ -352,7 +357,7 @@ fn invalid_transactions() -> Result<()> {
     // 2. Submit an invalid transaction (trying to transfer tokens should fail
     // in the user's VP due to the wrong signer)
     let tx_args = vec![
-        "transfer",
+        "transparent-transfer",
         "--source",
         BERTHA,
         "--target",
@@ -381,7 +386,7 @@ fn invalid_transactions() -> Result<()> {
 
     let daewon_lower = DAEWON.to_lowercase();
     let tx_args = vec![
-        "transfer",
+        "transparent-transfer",
         "--source",
         DAEWON,
         "--signing-keys",
@@ -970,7 +975,7 @@ fn proposal_submission() -> Result<()> {
     //     vp and verify that the transaction succeeds, i.e. the non allowlisted
     //     vp can still run
     let transfer = vec![
-        "transfer",
+        "transparent-transfer",
         "--source",
         BERTHA,
         "--target",
@@ -1381,7 +1386,7 @@ fn implicit_account_reveal_pk() -> Result<()> {
         // A token transfer tx
         Box::new(|source| {
             [
-                "transfer",
+                "transparent-transfer",
                 "--source",
                 source,
                 "--target",
@@ -1438,7 +1443,7 @@ fn implicit_account_reveal_pk() -> Result<()> {
         let tx_args = tx_args(&key_alias);
         // 2b. Send some funds to the implicit account.
         let credit_args = vec![
-            "transfer",
+            "transparent-transfer",
             "--source",
             BERTHA,
             "--target",
@@ -1577,4 +1582,296 @@ fn change_validator_metadata() -> Result<()> {
     assert!(captured.contains("max change per epoch:"));
 
     Ok(())
+}
+
+// Test that fee payment is enforced and aligned with process proposal. The test
+// generates a tx that subtract funds from the fee payer of a following tx. Test
+// that wrappers (and fee payments) are evaluated before the inner transactions.
+#[test]
+fn enforce_fee_payment() -> Result<()> {
+    // This address doesn't matter for tests. But an argument is required.
+    let validator_one_rpc = "http://127.0.0.1:26567";
+    // 1. start the ledger node
+    let (node, _services) = setup::setup()?;
+
+    let tempdir = tempfile::tempdir().unwrap();
+    let mut txs_bytes = vec![];
+
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                ALBERT_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 2000000"));
+
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transparent-transfer",
+            "--source",
+            ALBERT_KEY,
+            "--target",
+            BERTHA,
+            "--token",
+            NAM,
+            "--amount",
+            // We want this transaction to consume all the remaining available
+            // balance. If we executed the inner txs right after the
+            // corresponding wrapper's fee payment this would succeed (but
+            // this is not the case)
+            "1900000",
+            "--output-folder-path",
+            tempdir.path().to_str().unwrap(),
+            "--dump-tx",
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+    let file_path = tempdir
+        .path()
+        .read_dir()
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    txs_bytes.push(std::fs::read(&file_path).unwrap());
+    std::fs::remove_file(&file_path).unwrap();
+
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transparent-transfer",
+            "--source",
+            ALBERT_KEY,
+            "--target",
+            CHRISTEL,
+            "--token",
+            NAM,
+            "--amount",
+            "50",
+            "--gas-payer",
+            ALBERT_KEY,
+            "--output-folder-path",
+            tempdir.path().to_str().unwrap(),
+            "--dump-tx",
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+    let file_path = tempdir
+        .path()
+        .read_dir()
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    txs_bytes.push(std::fs::read(&file_path).unwrap());
+    std::fs::remove_file(&file_path).unwrap();
+
+    let sk = albert_keypair();
+    let pk = sk.to_public();
+
+    let native_token = node
+        .shell
+        .lock()
+        .unwrap()
+        .state
+        .in_mem()
+        .native_token
+        .clone();
+
+    let mut txs = vec![];
+    for bytes in txs_bytes {
+        let mut tx = namada::tx::Tx::deserialize(&bytes).unwrap();
+        tx.add_wrapper(
+            namada::tx::data::wrapper::Fee {
+                amount_per_gas_unit: DenominatedAmount::native(
+                    Amount::native_whole(1),
+                ),
+                token: native_token.clone(),
+            },
+            pk.clone(),
+            100_000.into(),
+        );
+        tx.sign_raw(vec![sk.clone()], AccountPublicKeysMap::default(), None);
+        tx.sign_wrapper(sk.clone());
+
+        txs.push(tx.to_bytes());
+    }
+
+    node.clear_results();
+    node.submit_txs(txs);
+    {
+        let results = node.results.lock().unwrap();
+        // If empty than failed in process proposal
+        assert!(!results.is_empty());
+
+        for result in results.iter() {
+            assert!(matches!(result, NodeResults::Ok));
+        }
+    }
+    // Finalize the next block to execute the txs
+    node.clear_results();
+    node.finalize_and_commit();
+    {
+        let results = node.results.lock().unwrap();
+        for result in results.iter() {
+            assert!(matches!(result, NodeResults::Ok));
+        }
+    }
+
+    // Assert balances
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                ALBERT_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    // This is the result of the two fee payemnts and the successful transfer to
+    // Christel
+    assert!(captured.contains("nam: 1799950"));
+
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                BERTHA,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    // Bertha must not receive anything because the transaction fails. This is
+    // because we evaluate fee payments before the inner transactions, so by the
+    // time we execute the transfer, Albert doesn't have enough funds anynmore
+    assert!(captured.contains("nam: 2000000"));
+
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                CHRISTEL,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 2000050"));
+    Ok(())
+}
+
+/// Test that a scheduled migration actually makes changes
+/// to storage at the scheduled height.
+#[test]
+fn scheduled_migration() -> Result<()> {
+    let (node, _services) = setup::setup()?;
+
+    // schedule a migration
+    let (hash, migrations_file) = make_migration_json();
+    let scheduled_migration = migrations::ScheduledMigration::from_path(
+        migrations_file.path(),
+        hash,
+        5.into(),
+    )
+    .expect("Test failed");
+    {
+        let mut locked = node.shell.lock().unwrap();
+        locked.scheduled_migration = Some(scheduled_migration);
+    }
+
+    while node.block_height().0 != 4 {
+        node.finalize_and_commit()
+    }
+    // check that the key doesn't exist before the scheduled block
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let bytes = rt
+        .block_on(RPC.shell().storage_value(
+            &&node,
+            None,
+            None,
+            false,
+            &Key::parse("bing/fucking/bong").expect("Test failed"),
+        ))
+        .expect("Test failed")
+        .data;
+    assert!(bytes.is_empty());
+
+    // check that the key now exists and has the expected value
+    node.finalize_and_commit();
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let bytes = rt
+        .block_on(RPC.shell().storage_value(
+            &&node,
+            None,
+            None,
+            false,
+            &Key::parse("bing/fucking/bong").expect("Test failed"),
+        ))
+        .expect("Test failed")
+        .data;
+    let amount = Amount::try_from_slice(&bytes).expect("Test failed");
+    assert_eq!(amount, Amount::native_whole(1337));
+
+    // check that no migration is scheduled
+    {
+        let locked = node.shell.lock().unwrap();
+        assert!(locked.scheduled_migration.is_none());
+    }
+    Ok(())
+}
+
+fn make_migration_json() -> (Hash, tempfile::NamedTempFile) {
+    let file = tempfile::Builder::new().tempfile().expect("Test failed");
+    let updates = [migrations::DbUpdateType::Add {
+        key: Key::parse("bing/fucking/bong").expect("Test failed"),
+        cf: DbColFam::SUBSPACE,
+        value: Amount::native_whole(1337).into(),
+        force: false,
+    }];
+    let changes = migrations::DbChanges {
+        changes: updates.into_iter().collect(),
+    };
+    let json = serde_json::to_string(&changes).expect("Test failed");
+    let hash = Hash::sha256(json.as_bytes());
+    std::fs::write(file.path(), json).expect("Test failed");
+    (hash, file)
 }

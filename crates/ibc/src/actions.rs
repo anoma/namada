@@ -4,16 +4,15 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
+use ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
+use ibc::apps::transfer::types::packet::PacketData;
+use ibc::apps::transfer::types::PrefixedCoin;
+use ibc::core::channel::types::timeout::TimeoutHeight;
 use namada_core::address::Address;
 use namada_core::borsh::BorshSerializeExt;
-use namada_core::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
-use namada_core::ibc::apps::transfer::types::packet::PacketData;
-use namada_core::ibc::apps::transfer::types::PrefixedCoin;
-use namada_core::ibc::core::channel::types::timeout::TimeoutHeight;
-use namada_core::ibc::MsgTransfer;
 use namada_core::tendermint::Time as TmTime;
 use namada_core::token::Amount;
-use namada_events::{EmitEvents, EventTypeBuilder};
+use namada_events::EmitEvents;
 use namada_governance::storage::proposal::PGFIbcTarget;
 use namada_parameters::read_epoch_duration_parameter;
 use namada_state::{
@@ -25,6 +24,7 @@ use namada_token as token;
 use crate::event::IbcEvent;
 use crate::{
     storage as ibc_storage, IbcActions, IbcCommonContext, IbcStorageContext,
+    MsgTransfer,
 };
 
 /// IBC protocol context
@@ -121,23 +121,6 @@ where
         // There's no gas cost for protocol, we can ignore result
         self.state.write_log_mut().emit_event(event);
         Ok(())
-    }
-
-    /// Get IBC events
-    fn get_ibc_events(
-        &self,
-        event_type: impl AsRef<str>,
-    ) -> Result<Vec<IbcEvent>, StorageError> {
-        let event_type = EventTypeBuilder::new_of::<IbcEvent>()
-            .with_segment(event_type)
-            .build();
-
-        Ok(self
-            .state
-            .write_log()
-            .lookup_events_with_prefix(&event_type)
-            .filter_map(|event| IbcEvent::try_from(event).ok())
-            .collect())
     }
 
     /// Transfer token

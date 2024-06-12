@@ -9,8 +9,7 @@ use namada_core::storage::Epochs;
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
 use namada_ibc::event::IbcEvent;
 use namada_ibc::{IbcCommonContext, IbcStorageContext};
-use namada_sdk::events::log::dumb_queries;
-use namada_sdk::events::{Event, EventTypeBuilder};
+use namada_sdk::events::Event;
 use namada_state::{StateRead, StorageError, StorageRead, StorageWrite};
 use namada_vp_env::VpEnv;
 
@@ -195,28 +194,6 @@ where
         Ok(())
     }
 
-    fn get_ibc_events(
-        &self,
-        event_type: impl AsRef<str>,
-    ) -> Result<Vec<IbcEvent>> {
-        let matcher = dumb_queries::QueryMatcher::with_prefix(
-            EventTypeBuilder::new_of::<IbcEvent>()
-                .with_segment(event_type)
-                .build(),
-        );
-        Ok(self
-            .event
-            .iter()
-            .filter_map(|event| {
-                if matcher.matches(event) {
-                    IbcEvent::try_from(event).ok()
-                } else {
-                    None
-                }
-            })
-            .collect())
-    }
-
     fn transfer_token(
         &mut self,
         src: &Address,
@@ -374,13 +351,6 @@ where
 {
     fn emit_ibc_event(&mut self, _event: IbcEvent) -> Result<()> {
         unimplemented!("Validation doesn't emit an event")
-    }
-
-    fn get_ibc_events(
-        &self,
-        _event_type: impl AsRef<str>,
-    ) -> Result<Vec<IbcEvent>> {
-        unimplemented!("Validation doesn't get an event")
     }
 
     fn transfer_token(

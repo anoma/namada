@@ -15,4 +15,5 @@ accepted = [
     "Apache-2.0",
     "NOASSERTION",
     "Zlib",
+    "BSL-1.0",
 ]

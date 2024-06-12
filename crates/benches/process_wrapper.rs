@@ -3,11 +3,11 @@ use namada::core::address;
 use namada::core::key::RefTo;
 use namada::core::storage::BlockHeight;
 use namada::core::time::DateTimeUtc;
-use namada::token::{Amount, DenominatedAmount, Transfer};
+use namada::token::{Amount, DenominatedAmount, TransparentTransfer};
 use namada::tx::data::{Fee, WrapperTx};
 use namada::tx::Authorization;
 use namada_apps_lib::wallet::defaults;
-use namada_node::bench_utils::{BenchShell, TX_TRANSFER_WASM};
+use namada_node::bench_utils::{BenchShell, TX_TRANSPARENT_TRANSFER_WASM};
 use namada_node::shell::process_proposal::ValidationMeta;
 
 fn process_tx(c: &mut Criterion) {
@@ -18,13 +18,12 @@ fn process_tx(c: &mut Criterion) {
         BlockHeight(2);
 
     let mut batched_tx = shell.generate_tx(
-        TX_TRANSFER_WASM,
-        Transfer {
+        TX_TRANSPARENT_TRANSFER_WASM,
+        TransparentTransfer {
             source: defaults::albert_address(),
             target: defaults::bertha_address(),
             token: address::testing::nam(),
             amount: Amount::native_whole(1).native_denominated(),
-            shielded: None,
         },
         None,
         None,
@@ -56,7 +55,7 @@ fn process_tx(c: &mut Criterion) {
     let datetime = DateTimeUtc::now();
 
     c.bench_function("wrapper_tx_validation", |b| {
-        b.iter_batched(
+        b.iter_batched_ref(
             || {
                 (
                     // Prevent block out of gas and replay protection
@@ -68,10 +67,10 @@ fn process_tx(c: &mut Criterion) {
                 )
             },
             |(
-                mut temp_state,
-                mut validation_meta,
-                mut vp_wasm_cache,
-                mut tx_wasm_cache,
+                temp_state,
+                validation_meta,
+                vp_wasm_cache,
+                tx_wasm_cache,
                 block_proposer,
             )| {
                 assert_eq!(
@@ -79,12 +78,12 @@ fn process_tx(c: &mut Criterion) {
                     shell
                         .check_proposal_tx(
                             &wrapper,
-                            &mut validation_meta,
-                            &mut temp_state,
+                            validation_meta,
+                            temp_state,
                             datetime,
-                            &mut vp_wasm_cache,
-                            &mut tx_wasm_cache,
-                            &block_proposer
+                            vp_wasm_cache,
+                            tx_wasm_cache,
+                            block_proposer
                         )
                         .code,
                     0

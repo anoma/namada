@@ -46,6 +46,7 @@ testing = [
   "namada_ibc/testing",
   "namada_proof_of_stake/testing",
   "namada_storage/testing",
+  "namada_token/testing",
   "namada_tx/testing",
   "async-client",
   "proptest",
@@ -125,7 +126,6 @@ serde_json.workspace = true
 sha2.workspace = true
 slip10_ed25519.workspace = true
 smooth-operator.workspace = true
-tendermint-config.workspace = true
 tendermint-rpc = { workspace = true, optional = true }
 thiserror.workspace = true
 tiny-bip39.workspace = true
@@ -159,6 +159,7 @@ namada_proof_of_stake = { path = "../proof_of_stake", default-features = false, 
 namada_state = { path = "../state", features = ["testing"] }
 namada_storage = { path = "../storage", features = ["testing"] }
 namada_test_utils = { path = "../test_utils" }
+namada_token = { path = "../token", features = ["testing"] }
 namada_tx = { path = "../tx", features = ["testing"]}
 namada_vote_ext = {path = "../vote_ext"}
 

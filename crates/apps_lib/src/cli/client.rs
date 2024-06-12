@@ -52,7 +52,7 @@ impl CliApi {
                             )
                         }
                     }
-                    Sub::TxTransfer(TxTransfer(args)) => {
+                    Sub::TxTransparentTransfer(TxTransparentTransfer(args)) => {
                         let chain_ctx = ctx.borrow_mut_chain_or_exit();
                         let ledger_address =
                             chain_ctx.get(&args.tx.ledger_address);
@@ -62,7 +62,43 @@ impl CliApi {
                         client.wait_until_node_is_synced(&io).await?;
                         let args = args.to_sdk(&mut ctx)?;
                         let namada = ctx.to_sdk(client, io);
-                        tx::submit_transfer(&namada, args).await?;
+                        tx::submit_transparent_transfer(&namada, args).await?;
+                    }
+                    Sub::TxShieldedTransfer(TxShieldedTransfer(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.tx.ledger_address);
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(&ledger_address)
+                        });
+                        client.wait_until_node_is_synced(&io).await?;
+                        let args = args.to_sdk(&mut ctx)?;
+                        let namada = ctx.to_sdk(client, io);
+                        tx::submit_shielded_transfer(&namada, args).await?;
+                    }
+                    Sub::TxShieldingTransfer(TxShieldingTransfer(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.tx.ledger_address);
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(&ledger_address)
+                        });
+                        client.wait_until_node_is_synced(&io).await?;
+                        let args = args.to_sdk(&mut ctx)?;
+                        let namada = ctx.to_sdk(client, io);
+                        tx::submit_shielding_transfer(&namada, args).await?;
+                    }
+                    Sub::TxUnshieldingTransfer(TxUnshieldingTransfer(args)) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.tx.ledger_address);
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(&ledger_address)
+                        });
+                        client.wait_until_node_is_synced(&io).await?;
+                        let args = args.to_sdk(&mut ctx)?;
+                        let namada = ctx.to_sdk(client, io);
+                        tx::submit_unshielding_transfer(&namada, args).await?;
                     }
                     Sub::TxIbcTransfer(TxIbcTransfer(args)) => {
                         let chain_ctx = ctx.borrow_mut_chain_or_exit();
@@ -301,12 +337,12 @@ impl CliApi {
                             .await?;
                     }
                     Sub::ShieldedSync(ShieldedSync(args)) => {
+                        let args = args.to_sdk(&mut ctx)?;
+                        let chain_ctx = ctx.take_chain_or_exit();
                         let client = client.unwrap_or_else(|| {
                             C::from_tendermint_address(&args.ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
-                        let args = args.to_sdk(&mut ctx)?;
-                        let chain_ctx = ctx.take_chain_or_exit();
                         let vks = chain_ctx
                             .wallet
                             .get_viewing_keys()

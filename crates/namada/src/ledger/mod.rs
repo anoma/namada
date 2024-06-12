@@ -61,15 +61,11 @@ mod dry_run_tx {
                     Gas::try_from(wrapper.gas_limit).into_storage_result()?;
                 let tx_gas_meter = RefCell::new(TxGasMeter::new(gas_limit));
                 let tx_result = protocol::apply_wrapper_tx(
-                    tx.clone(),
+                    &tx,
                     &wrapper,
                     &request.data,
-                    ShellParams::new(
-                        &tx_gas_meter,
-                        &mut temp_state,
-                        &mut ctx.vp_wasm_cache,
-                        &mut ctx.tx_wasm_cache,
-                    ),
+                    &tx_gas_meter,
+                    &mut temp_state,
                     None,
                 )
                 .into_storage_result()?;
@@ -102,6 +98,12 @@ mod dry_run_tx {
                     &mut ctx.tx_wasm_cache,
                 ),
             );
+            let is_accepted = matches!(&batched_tx_result, Ok(result) if result.is_accepted());
+            if is_accepted {
+                temp_state.write_log_mut().commit_tx_to_batch();
+            } else {
+                temp_state.write_log_mut().drop_tx();
+            }
             tx_result
                 .batch_results
                 .0
