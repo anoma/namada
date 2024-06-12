@@ -303,7 +303,6 @@ impl Finalized {
             implicit_vp,
             epochs_per_year,
             masp_epoch_multiplier,
-            max_signatures_per_transaction,
             fee_unshielding_gas_limit,
             max_block_gas,
             minimum_gas_price,
@@ -349,7 +348,6 @@ impl Finalized {
             epochs_per_year,
             masp_epoch_multiplier,
             max_proposal_bytes,
-            max_signatures_per_transaction,
             fee_unshielding_gas_limit,
             max_block_gas,
             minimum_gas_price: minimum_gas_price

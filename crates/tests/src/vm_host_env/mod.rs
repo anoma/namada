@@ -253,7 +253,6 @@ mod tests {
                 None,
                 Some(vec!["some_hash".to_string()]),
                 None,
-                None,
             );
 
             // Spawn the accounts to be able to modify their storage
@@ -288,7 +287,6 @@ mod tests {
                 None,
                 Some(vec!["some_hash".to_string()]),
                 None,
-                None,
             );
 
             // Spawn the accounts to be able to modify their storage
@@ -320,7 +318,6 @@ mod tests {
             tx_env.init_parameters(
                 None,
                 Some(vec!["some_hash".to_string()]),
-                None,
                 None,
             );
 
@@ -572,7 +569,6 @@ mod tests {
                     pks_map,
                     &None,
                     1,
-                    None,
                     || Ok(())
                 )
                 .is_ok()
@@ -585,7 +581,6 @@ mod tests {
                     AccountPublicKeysMap::from_iter([other_keypair.ref_to()]),
                     &None,
                     1,
-                    None,
                     || Ok(())
                 )
                 .is_err()
