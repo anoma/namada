@@ -558,6 +558,7 @@ pub async fn dry_run_tx<N: Namada>(
     )?
     .data;
     let result_str = format!("Transaction consumed {} gas", result.gas_used);
+
     let mut cmt_result_str = String::new();
     for (cmt_hash, cmt_result) in &result.batch_results.0 {
         match cmt_result {
