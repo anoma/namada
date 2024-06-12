@@ -32,6 +32,10 @@ pub trait Keys {
         token_addr: &Address,
         key: &'a storage::Key,
     ) -> Option<&'a Address>;
+
+    /// Check if the given storage key is a balance key for an unspecified
+    /// token. If it is, return the token and owner address.
+    fn is_any_token_balance(key: &storage::Key) -> Option<[&Address; 2]>;
 }
 
 /// Amount in micro units. For different granularity another representation

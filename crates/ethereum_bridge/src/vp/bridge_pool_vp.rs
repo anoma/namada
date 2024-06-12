@@ -17,29 +17,28 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
+use namada_core::address::{Address, InternalAddress};
 use namada_core::arith::{checked, CheckedAdd, CheckedNeg, CheckedSub};
 use namada_core::booleans::BoolResultUnitExt;
-use namada_core::eth_bridge_pool::erc20_token_address;
-use namada_core::hints;
-use namada_ethereum_bridge::storage::bridge_pool::{
-    get_pending_key, is_bridge_pool_key, BRIDGE_POOL_ADDRESS,
+use namada_core::eth_bridge_pool::{
+    erc20_token_address, PendingTransfer, TransferToEthereumKind,
 };
-use namada_ethereum_bridge::storage::eth_bridge_queries::is_bridge_active_at;
-use namada_ethereum_bridge::storage::parameters::read_native_erc20_address;
-use namada_ethereum_bridge::storage::whitelist;
-use namada_ethereum_bridge::ADDRESS as BRIDGE_ADDRESS;
+use namada_core::ethereum_events::EthAddress;
+use namada_core::hints;
+use namada_core::storage::Key;
+use namada_core::token::{self, Amount};
+use namada_core::uint::I320;
 use namada_state::{ResultExt, StateRead};
 use namada_tx::BatchedTxRef;
+use namada_vp::native_vp::{self, Ctx, NativeVp, StorageReader, VpEvaluator};
 
-use crate::address::{Address, InternalAddress};
-use crate::eth_bridge_pool::{PendingTransfer, TransferToEthereumKind};
-use crate::ethereum_events::EthAddress;
-use crate::ledger::native_vp::{self, Ctx, NativeVp, StorageReader};
-use crate::storage::Key;
-use crate::token::storage_key::balance_key;
-use crate::token::Amount;
-use crate::uint::I320;
-use crate::vm::WasmCacheAccess;
+use crate::storage::bridge_pool::{
+    get_pending_key, is_bridge_pool_key, BRIDGE_POOL_ADDRESS,
+};
+use crate::storage::eth_bridge_queries::is_bridge_active_at;
+use crate::storage::parameters::read_native_erc20_address;
+use crate::storage::whitelist;
+use crate::ADDRESS as BRIDGE_ADDRESS;
 
 #[derive(thiserror::Error, Debug)]
 #[error("Bridge Pool VP error: {0}")]
@@ -65,19 +64,23 @@ impl AmountDelta {
 }
 
 /// Validity predicate for the Ethereum bridge
-pub struct BridgePoolVp<'ctx, S, CA>
+pub struct BridgePool<'ctx, S, CA, EVAL, TokenKeys>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
 {
     /// Context to interact with the host structures.
-    pub ctx: Ctx<'ctx, S, CA>,
+    pub ctx: Ctx<'ctx, S, CA, EVAL>,
+    /// Token keys type
+    pub token_keys: PhantomData<TokenKeys>,
 }
 
-impl<'a, S, CA> BridgePoolVp<'a, S, CA>
+impl<'a, S, CA, EVAL, TokenKeys> BridgePool<'a, S, CA, EVAL, TokenKeys>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    CA: 'static + Clone,
+    TokenKeys: token::Keys,
 {
     /// Get the change in the balance of an account
     /// associated with an address
@@ -86,7 +89,7 @@ where
         token: &Address,
         address: &Address,
     ) -> Result<Option<AmountDelta>, Error> {
-        let account_key = balance_key(token, address);
+        let account_key = TokenKeys::balance(token, address);
         let before: Amount = (&self.ctx)
             .read_pre_value(&account_key)
             .map_err(|error| {
@@ -410,33 +413,20 @@ impl<KIND> EscrowDelta<'_, KIND> {
     /// amount is greater than zero, then the appropriate escrow
     /// keys must have been written to by some wasm tx.
     #[inline]
-    fn validate(&self, changed_keys: &BTreeSet<Key>) -> bool {
+    fn validate<TokenKeys: token::Keys>(
+        &self,
+        changed_keys: &BTreeSet<Key>,
+    ) -> bool {
         if hints::unlikely(self.transferred_amount_is_nil()) {
-            self.check_escrow_keys_unchanged(changed_keys)
+            self.check_escrow_keys_unchanged::<TokenKeys>(changed_keys)
         } else {
-            self.check_escrow_keys_changed(changed_keys)
+            self.check_escrow_keys_changed::<TokenKeys>(changed_keys)
         }
     }
 
     /// Check if all required escrow keys in `changed_keys` were modified.
     #[inline]
-    fn check_escrow_keys_changed(&self, changed_keys: &BTreeSet<Key>) -> bool {
-        let EscrowDelta {
-            token,
-            payer_account,
-            escrow_account,
-            ..
-        } = self;
-
-        let owner_key = balance_key(token, payer_account);
-        let escrow_key = balance_key(token, escrow_account);
-
-        changed_keys.contains(&owner_key) && changed_keys.contains(&escrow_key)
-    }
-
-    /// Check if no escrow keys in `changed_keys` were modified.
-    #[inline]
-    fn check_escrow_keys_unchanged(
+    fn check_escrow_keys_changed<TokenKeys: token::Keys>(
         &self,
         changed_keys: &BTreeSet<Key>,
     ) -> bool {
@@ -447,8 +437,27 @@ impl<KIND> EscrowDelta<'_, KIND> {
             ..
         } = self;
 
-        let owner_key = balance_key(token, payer_account);
-        let escrow_key = balance_key(token, escrow_account);
+        let owner_key = TokenKeys::balance(token, payer_account);
+        let escrow_key = TokenKeys::balance(token, escrow_account);
+
+        changed_keys.contains(&owner_key) && changed_keys.contains(&escrow_key)
+    }
+
+    /// Check if no escrow keys in `changed_keys` were modified.
+    #[inline]
+    fn check_escrow_keys_unchanged<TokenKeys: token::Keys>(
+        &self,
+        changed_keys: &BTreeSet<Key>,
+    ) -> bool {
+        let EscrowDelta {
+            token,
+            payer_account,
+            escrow_account,
+            ..
+        } = self;
+
+        let owner_key = TokenKeys::balance(token, payer_account);
+        let escrow_key = TokenKeys::balance(token, escrow_account);
 
         !changed_keys.contains(&owner_key)
             && !changed_keys.contains(&escrow_key)
@@ -475,9 +484,12 @@ struct EscrowCheck<'a> {
 
 impl EscrowCheck<'_> {
     #[inline]
-    fn validate(&self, changed_keys: &BTreeSet<Key>) -> bool {
-        self.gas_check.validate(changed_keys)
-            && self.token_check.validate(changed_keys)
+    fn validate<TokenKeys: token::Keys>(
+        &self,
+        changed_keys: &BTreeSet<Key>,
+    ) -> bool {
+        self.gas_check.validate::<TokenKeys>(changed_keys)
+            && self.token_check.validate::<TokenKeys>(changed_keys)
     }
 }
 
@@ -503,10 +515,13 @@ fn sum_gas_and_token_amounts(
         })
 }
 
-impl<'a, S, CA> NativeVp for BridgePoolVp<'a, S, CA>
+impl<'a, S, CA, EVAL, TokenKeys> NativeVp<'a>
+    for BridgePool<'a, S, CA, EVAL, TokenKeys>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    CA: 'static + Clone,
+    TokenKeys: token::Keys,
 {
     type Error = Error;
 
@@ -596,7 +611,7 @@ where
             read_native_erc20_address(&self.ctx.pre()).map_err(Error)?;
         let escrow_checks =
             self.determine_escrow_checks(&wnam_address, &transfer)?;
-        if !escrow_checks.validate(keys_changed) {
+        if !escrow_checks.validate::<TokenKeys>(keys_changed) {
             let error = native_vp::Error::new_const(
                 // TODO(namada#3247): specify which storage changes are missing
                 // or which ones are invalid
@@ -657,31 +672,41 @@ where
     }
 }
 
-#[cfg(all(test, feature = "namada-eth-bridge"))]
+#[allow(clippy::arithmetic_side_effects)]
+#[cfg(test)]
 mod test_bridge_pool_vp {
     use std::cell::RefCell;
     use std::env::temp_dir;
 
+    use namada_core::address::testing::{nam, wnam};
     use namada_core::borsh::BorshSerializeExt;
-    use namada_ethereum_bridge::storage::bridge_pool::get_signed_root_key;
-    use namada_ethereum_bridge::storage::parameters::{
-        Contracts, EthereumBridgeParams, UpgradeableContract,
-    };
-    use namada_ethereum_bridge::storage::wrapped_erc20s;
-    use namada_gas::TxGasMeter;
+    use namada_core::eth_bridge_pool::{GasFee, TransferToEthereum};
+    use namada_core::hash::Hash;
+    use namada_core::WasmCacheRwAccess;
+    use namada_gas::{TxGasMeter, VpGasMeter};
     use namada_state::testing::TestState;
-    use namada_state::StorageWrite;
+    use namada_state::write_log::WriteLog;
+    use namada_state::{StorageWrite, TxIndex};
+    use namada_trans_token::storage_key::balance_key;
     use namada_tx::data::TxType;
+    use namada_tx::Tx;
+    use namada_vm::wasm::run::VpEvalWasm;
+    use namada_vm::wasm::VpCache;
 
     use super::*;
-    use crate::address::testing::{nam, wnam};
-    use crate::eth_bridge_pool::{GasFee, TransferToEthereum};
-    use crate::hash::Hash;
-    use crate::ledger::gas::VpGasMeter;
-    use crate::state::write_log::WriteLog;
-    use crate::storage::TxIndex;
-    use crate::vm::wasm::VpCache;
-    use crate::vm::WasmCacheRwAccess;
+    use crate::storage::bridge_pool::get_signed_root_key;
+    use crate::storage::parameters::{
+        Contracts, EthereumBridgeParams, UpgradeableContract,
+    };
+    use crate::storage::wrapped_erc20s;
+
+    type CA = WasmCacheRwAccess;
+    type Eval = VpEvalWasm<
+        <TestState as StateRead>::D,
+        <TestState as StateRead>::H,
+        CA,
+    >;
+    type TokenKeys = namada_token::Store<()>;
 
     /// The amount of NAM Bertha has
     const ASSET: EthAddress = EthAddress([0; 20]);
@@ -731,7 +756,7 @@ mod test_bridge_pool_vp {
     /// An implicit user address for testing & development
     #[allow(dead_code)]
     pub fn daewon_address() -> Address {
-        use crate::key::*;
+        use namada_core::key::*;
         pub fn daewon_keypair() -> common::SecretKey {
             let bytes = [
                 235, 250, 15, 1, 145, 250, 172, 218, 247, 27, 63, 212, 60, 47,
@@ -938,11 +963,13 @@ mod test_bridge_pool_vp {
         gas_meter: &'a RefCell<VpGasMeter>,
         keys_changed: &'a BTreeSet<Key>,
         verifiers: &'a BTreeSet<Address>,
-    ) -> Ctx<'a, TestState, WasmCacheRwAccess> {
+    ) -> Ctx<'a, TestState, VpCache<WasmCacheRwAccess>, Eval> {
+        let batched_tx = tx.batch_ref_first_tx();
         Ctx::new(
             &BRIDGE_POOL_ADDRESS,
             state,
-            tx,
+            batched_tx.tx,
+            batched_tx.cmt,
             &TxIndex(0),
             gas_meter,
             keys_changed,
@@ -970,7 +997,8 @@ mod test_bridge_pool_vp {
     {
         // setup
         let mut state = setup_storage();
-        let tx = Tx::from_type(TxType::Raw);
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.push_default_inner_tx();
 
         // the transfer to be added to the pool
         let mut transfer = PendingTransfer {
@@ -1025,13 +1053,15 @@ mod test_bridge_pool_vp {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let vp = BridgePoolVp {
+        let vp = BridgePool {
             ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
+            token_keys: PhantomData::<TokenKeys>,
         };
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
 
+        let tx = tx.batch_ref_first_tx();
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
         match (expect, res) {
             (Expect::Accepted, Ok(())) => (),
@@ -1321,7 +1351,8 @@ mod test_bridge_pool_vp {
     fn test_adding_transfer_twice_fails() {
         // setup
         let mut state = setup_storage();
-        let tx = Tx::from_type(TxType::Raw);
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.push_default_inner_tx();
 
         // the transfer to be added to the pool
         let transfer = initial_pool();
@@ -1370,13 +1401,15 @@ mod test_bridge_pool_vp {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let vp = BridgePoolVp {
+        let vp = BridgePool {
             ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
+            token_keys: PhantomData::<TokenKeys>,
         };
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
 
+        let tx = tx.batch_ref_first_tx();
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
         assert!(res.is_err());
     }
@@ -1387,7 +1420,8 @@ mod test_bridge_pool_vp {
     fn test_zero_gas_fees_rejected() {
         // setup
         let mut state = setup_storage();
-        let tx = Tx::from_type(TxType::Raw);
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.push_default_inner_tx();
 
         // the transfer to be added to the pool
         let transfer = PendingTransfer {
@@ -1428,13 +1462,15 @@ mod test_bridge_pool_vp {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let vp = BridgePoolVp {
+        let vp = BridgePool {
             ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
+            token_keys: PhantomData::<TokenKeys>,
         };
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
 
+        let tx = tx.batch_ref_first_tx();
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
         assert!(res.is_err());
     }
@@ -1447,7 +1483,8 @@ mod test_bridge_pool_vp {
         let mut state = setup_storage();
         let eb_account_key =
             balance_key(&nam(), &Address::Internal(InternalAddress::EthBridge));
-        let tx = Tx::from_type(TxType::Raw);
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.push_default_inner_tx();
 
         // the transfer to be added to the pool
         let transfer = PendingTransfer {
@@ -1507,13 +1544,15 @@ mod test_bridge_pool_vp {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let vp = BridgePoolVp {
+        let vp = BridgePool {
             ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
+            token_keys: PhantomData::<TokenKeys>,
         };
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
 
+        let tx = tx.batch_ref_first_tx();
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
         assert!(res.is_ok());
     }
@@ -1525,7 +1564,8 @@ mod test_bridge_pool_vp {
     fn test_reject_mint_wnam() {
         // setup
         let mut state = setup_storage();
-        let tx = Tx::from_type(TxType::Raw);
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.push_default_inner_tx();
         let eb_account_key =
             balance_key(&nam(), &Address::Internal(InternalAddress::EthBridge));
 
@@ -1581,13 +1621,15 @@ mod test_bridge_pool_vp {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let vp = BridgePoolVp {
+        let vp = BridgePool {
             ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
+            token_keys: PhantomData::<TokenKeys>,
         };
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
 
+        let tx = tx.batch_ref_first_tx();
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
         assert!(res.is_err());
     }
@@ -1612,7 +1654,8 @@ mod test_bridge_pool_vp {
             .write(&gas_payer_balance_key, Amount::from(BERTHA_WEALTH))
             .expect("Test failed");
         state.write_log_mut().commit_tx();
-        let tx = Tx::from_type(TxType::Raw);
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.push_default_inner_tx();
 
         // the transfer to be added to the pool
         let transfer = PendingTransfer {
@@ -1672,13 +1715,15 @@ mod test_bridge_pool_vp {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let vp = BridgePoolVp {
+        let vp = BridgePool {
             ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
+            token_keys: PhantomData::<TokenKeys>,
         };
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
 
+        let tx = tx.batch_ref_first_tx();
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
         assert!(res.is_err());
     }
@@ -1687,7 +1732,8 @@ mod test_bridge_pool_vp {
     fn test_nut_aux(kind: TransferToEthereumKind, expect: Expect) {
         // setup
         let mut state = setup_storage();
-        let tx = Tx::from_type(TxType::Raw);
+        let mut tx = Tx::from_type(TxType::Raw);
+        tx.push_default_inner_tx();
 
         // the transfer to be added to the pool
         let transfer = PendingTransfer {
@@ -1749,13 +1795,16 @@ mod test_bridge_pool_vp {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let vp = BridgePoolVp {
+        let vp = BridgePool {
             ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
+            token_keys: PhantomData::<TokenKeys>,
         };
 
         let mut tx = Tx::from_type(TxType::Raw);
+        tx.push_default_inner_tx();
         tx.add_data(transfer);
 
+        let tx = tx.batch_ref_first_tx();
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
         match (expect, res) {
             (Expect::Accepted, Ok(())) => (),
@@ -1846,7 +1895,7 @@ mod test_bridge_pool_vp {
         // NOTE: testing no changed keys
         let empty_keys = BTreeSet::new();
 
-        assert!(delta.validate(&empty_keys));
+        assert!(delta.validate::<TokenKeys>(&empty_keys));
     }
 
     /// Test that the Bridge pool native VP rejects transfers that
@@ -1869,7 +1918,7 @@ mod test_bridge_pool_vp {
         // NOTE: testing changed keys
         let some_changed_keys = BTreeSet::from([owner_key]);
 
-        assert!(!delta.validate(&some_changed_keys));
+        assert!(!delta.validate::<TokenKeys>(&some_changed_keys));
     }
 
     /// Test that the Bridge pool native VP validates transfers
@@ -1891,7 +1940,7 @@ mod test_bridge_pool_vp {
         // NOTE: testing no changed keys
         let empty_keys = BTreeSet::new();
 
-        assert!(delta.validate(&empty_keys));
+        assert!(delta.validate::<TokenKeys>(&empty_keys));
     }
 
     /// Test that the Bridge pool native VP rejects transfers
@@ -1914,6 +1963,6 @@ mod test_bridge_pool_vp {
         // NOTE: testing changed keys
         let some_changed_keys = BTreeSet::from([owner_key]);
 
-        assert!(!delta.validate(&some_changed_keys));
+        assert!(!delta.validate::<TokenKeys>(&some_changed_keys));
     }
 }

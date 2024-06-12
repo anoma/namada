@@ -42,4 +42,10 @@ impl<S> Keys for Store<S> {
     ) -> Option<&'a Address> {
         storage_key::is_balance_key(token_addr, key)
     }
+
+    fn is_any_token_balance(
+        key: &namada_core::storage::Key,
+    ) -> Option<[&Address; 2]> {
+        storage_key::is_any_token_balance_key(key)
+    }
 }
