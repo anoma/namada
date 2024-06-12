@@ -1,18 +1,16 @@
 //! Validity predicate for Non Usable Tokens (NUTs).
 
 use std::collections::BTreeSet;
+use std::marker::PhantomData;
 
 use namada_core::address::{Address, InternalAddress};
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::storage::Key;
+use namada_core::token::{self, Amount};
 use namada_state::StateRead;
 use namada_tx::BatchedTxRef;
-use namada_vp_env::VpEnv;
-
-use crate::ledger::native_vp::{self, Ctx, NativeVp};
-use crate::token::storage_key::is_any_token_balance_key;
-use crate::token::Amount;
-use crate::vm::WasmCacheAccess;
+use namada_vp::native_vp::{self, Ctx, NativeVp, VpEvaluator};
+use namada_vp::VpEnv;
 
 /// Generic error that may be returned by the validity predicate
 #[derive(thiserror::Error, Debug)]
@@ -23,19 +21,24 @@ pub struct Error(#[from] native_vp::Error);
 ///
 /// All this VP does is reject NUT transfers whose destination
 /// address is not the Bridge pool escrow address.
-pub struct NonUsableTokens<'ctx, S, CA>
+pub struct NonUsableTokens<'ctx, S, CA, EVAL, TokenKeys>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
 {
     /// Context to interact with the host structures.
-    pub ctx: Ctx<'ctx, S, CA>,
+    pub ctx: Ctx<'ctx, S, CA, EVAL>,
+    /// Token keys type
+    pub token_keys: PhantomData<TokenKeys>,
 }
 
-impl<'a, S, CA> NativeVp for NonUsableTokens<'a, S, CA>
+impl<'a, S, CA, EVAL, TokenKeys> NativeVp<'a>
+    for NonUsableTokens<'a, S, CA, EVAL, TokenKeys>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    CA: 'static + Clone,
+    TokenKeys: token::Keys,
 {
     type Error = Error;
 
@@ -61,15 +64,14 @@ where
                 error
             })?;
 
-        let nut_owners =
-            keys_changed.iter().filter_map(
-                |key| match is_any_token_balance_key(key) {
-                    Some(
-                        [Address::Internal(InternalAddress::Nut(_)), owner],
-                    ) => Some((key, owner)),
-                    _ => None,
-                },
-            );
+        let nut_owners = keys_changed.iter().filter_map(|key| {
+            match TokenKeys::is_any_token_balance(key) {
+                Some([Address::Internal(InternalAddress::Nut(_)), owner]) => {
+                    Some((key, owner))
+                }
+                _ => None,
+            }
+        });
 
         for (changed_key, token_owner) in nut_owners {
             let pre: Amount = self
@@ -134,18 +136,27 @@ mod test_nuts {
     use namada_core::borsh::BorshSerializeExt;
     use namada_core::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
     use namada_core::storage::TxIndex;
-    use namada_ethereum_bridge::storage::wrapped_erc20s;
+    use namada_core::WasmCacheRwAccess;
+    use namada_gas::{TxGasMeter, VpGasMeter};
     use namada_state::testing::TestState;
     use namada_state::StorageWrite;
+    use namada_trans_token::storage_key::balance_key;
     use namada_tx::data::TxType;
     use namada_tx::Tx;
+    use namada_vm::wasm::run::VpEvalWasm;
+    use namada_vm::wasm::VpCache;
     use proptest::prelude::*;
 
     use super::*;
-    use crate::ledger::gas::{TxGasMeter, VpGasMeter};
-    use crate::token::storage_key::balance_key;
-    use crate::vm::wasm::VpCache;
-    use crate::vm::WasmCacheRwAccess;
+    use crate::storage::wrapped_erc20s;
+
+    type CA = WasmCacheRwAccess;
+    type Eval = VpEvalWasm<
+        <TestState as StateRead>::D,
+        <TestState as StateRead>::H,
+        CA,
+    >;
+    type TokenKeys = namada_token::Store<()>;
 
     /// Run a VP check on a NUT transfer between the two provided addresses.
     fn check_nut_transfer(src: Address, dst: Address) -> bool {
@@ -203,7 +214,7 @@ mod test_nuts {
             &TxGasMeter::new(u64::MAX),
         ));
         let batched_tx = tx.batch_ref_first_tx().unwrap();
-        let ctx = Ctx::<_, WasmCacheRwAccess>::new(
+        let ctx = Ctx::<_, VpCache<WasmCacheRwAccess>, Eval>::new(
             &Address::Internal(InternalAddress::Nut(DAI_ERC20_ETH_ADDRESS)),
             &state,
             batched_tx.tx,
@@ -214,7 +225,10 @@ mod test_nuts {
             &verifiers,
             VpCache::new(temp_dir(), 100usize),
         );
-        let vp = NonUsableTokens { ctx };
+        let vp = NonUsableTokens {
+            ctx,
+            token_keys: PhantomData::<TokenKeys>,
+        };
 
         // print debug info in case we run into failures
         for key in &keys_changed {

@@ -1,20 +1,19 @@
 //! Validity predicate for the Ethereum bridge
 
 use std::collections::BTreeSet;
+use std::marker::PhantomData;
 
 use namada_core::address::Address;
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::collections::HashSet;
 use namada_core::storage::Key;
-use namada_ethereum_bridge::storage;
-use namada_ethereum_bridge::storage::escrow_key;
+use namada_core::token::{self, Amount};
+use namada_state::StateRead;
 use namada_tx::BatchedTxRef;
+use namada_vp::native_vp::{self, Ctx, NativeVp, StorageReader, VpEvaluator};
 
-use crate::ledger::native_vp::{self, Ctx, NativeVp, StorageReader};
-use crate::state::StateRead;
-use crate::token::storage_key::{balance_key, is_balance_key};
-use crate::token::Amount;
-use crate::vm::WasmCacheAccess;
+use crate::storage;
+use crate::storage::escrow_key;
 
 /// Generic error that may be returned by the validity predicate
 #[derive(thiserror::Error, Debug)]
@@ -22,27 +21,31 @@ use crate::vm::WasmCacheAccess;
 pub struct Error(#[from] native_vp::Error);
 
 /// Validity predicate for the Ethereum bridge
-pub struct EthBridge<'ctx, S, CA>
+pub struct EthBridge<'ctx, S, CA, EVAL, TokenKeys>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
 {
     /// Context to interact with the host structures.
-    pub ctx: Ctx<'ctx, S, CA>,
+    pub ctx: Ctx<'ctx, S, CA, EVAL>,
+    /// Token keys type
+    pub token_keys: PhantomData<TokenKeys>,
 }
 
-impl<'ctx, S, CA> EthBridge<'ctx, S, CA>
+impl<'ctx, S, CA, EVAL, TokenKeys> EthBridge<'ctx, S, CA, EVAL, TokenKeys>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    CA: 'static + Clone,
+    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
+    TokenKeys: token::Keys,
 {
     /// If the Ethereum bridge's escrow key was written to, we check
     /// that the NAM balance increased and that the Bridge pool VP has
     /// been triggered.
     fn check_escrow(&self, verifiers: &BTreeSet<Address>) -> Result<(), Error> {
-        let escrow_key = balance_key(
+        let escrow_key = TokenKeys::balance(
             &self.ctx.state.in_mem().native_token,
-            &crate::ethereum_bridge::ADDRESS,
+            &crate::ADDRESS,
         );
 
         let escrow_pre: Amount =
@@ -74,10 +77,13 @@ where
     }
 }
 
-impl<'a, S, CA> NativeVp for EthBridge<'a, S, CA>
+impl<'a, S, CA, EVAL, TokenKeys> NativeVp<'a>
+    for EthBridge<'a, S, CA, EVAL, TokenKeys>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    CA: 'static + Clone,
+    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    TokenKeys: token::Keys,
 {
     type Error = Error;
 
@@ -103,7 +109,7 @@ where
             "Ethereum Bridge VP triggered",
         );
 
-        validate_changed_keys(
+        validate_changed_keys::<TokenKeys>(
             &self.ctx.state.in_mem().native_token,
             keys_changed,
         )?;
@@ -121,7 +127,7 @@ where
 ///
 /// Any other keys changed under the Ethereum bridge account
 /// are rejected.
-fn validate_changed_keys(
+fn validate_changed_keys<TokenKeys: token::Keys>(
     nam_addr: &Address,
     keys_changed: &BTreeSet<Key>,
 ) -> Result<(), Error> {
@@ -131,7 +137,8 @@ fn validate_changed_keys(
         .iter()
         .filter(|&key| {
             let changes_eth_storage = storage::has_eth_addr_segment(key);
-            let changes_nam_balance = is_balance_key(nam_addr, key).is_some();
+            let changes_nam_balance =
+                TokenKeys::is_balance(nam_addr, key).is_some();
             changes_nam_balance || changes_eth_storage
         })
         .collect();
@@ -157,7 +164,7 @@ fn validate_changed_keys(
     }
     let all_keys_are_nam_balance = keys_changed
         .iter()
-        .all(|key| is_balance_key(nam_addr, key).is_some());
+        .all(|key| TokenKeys::is_balance(nam_addr, key).is_some());
     if !all_keys_are_nam_balance {
         let error = native_vp::Error::new_const(
             "Some modified keys were not a native token's balance key",
@@ -174,34 +181,40 @@ mod tests {
     use std::cell::RefCell;
     use std::env::temp_dir;
 
+    use namada_core::address::testing::{established_address_1, nam, wnam};
     use namada_core::borsh::BorshSerializeExt;
-    use namada_gas::TxGasMeter;
+    use namada_core::ethereum_events::EthAddress;
+    use namada_core::{ethereum_events, WasmCacheRwAccess};
+    use namada_gas::{TxGasMeter, VpGasMeter};
     use namada_state::testing::TestState;
-    use namada_state::StorageWrite;
+    use namada_state::{StorageWrite, TxIndex};
+    use namada_trans_token::storage_key::{balance_key, minted_balance_key};
     use namada_tx::data::TxType;
     use namada_tx::{Tx, TxCommitments};
+    use namada_vm::wasm::run::VpEvalWasm;
+    use namada_vm::wasm::VpCache;
     use rand::Rng;
 
     use super::*;
-    use crate::address::testing::{established_address_1, nam, wnam};
-    use crate::ethereum_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
-    use crate::ethereum_bridge::storage::parameters::{
+    use crate::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
+    use crate::storage::parameters::{
         Contracts, EthereumBridgeParams, UpgradeableContract,
     };
-    use crate::ethereum_bridge::storage::wrapped_erc20s;
-    use crate::ethereum_events;
-    use crate::ethereum_events::EthAddress;
-    use crate::ledger::gas::VpGasMeter;
-    use crate::storage::TxIndex;
-    use crate::token::storage_key::minted_balance_key;
-    use crate::vm::wasm::VpCache;
-    use crate::vm::WasmCacheRwAccess;
+    use crate::storage::wrapped_erc20s;
 
     const ARBITRARY_OWNER_A_ADDRESS: &str =
         "tnam1qqwuj7aart6ackjfkk7486jwm2ufr4t7cq4535u4";
     const ARBITRARY_OWNER_A_INITIAL_BALANCE: u64 = 100;
     const ESCROW_AMOUNT: u64 = 100;
     const BRIDGE_POOL_ESCROW_INITIAL_BALANCE: u64 = 0;
+
+    type CA = WasmCacheRwAccess;
+    type Eval = VpEvalWasm<
+        <TestState as StateRead>::D,
+        <TestState as StateRead>::H,
+        CA,
+    >;
+    type TokenKeys = namada_token::Store<()>;
 
     /// Return some arbitrary random key belonging to this account
     fn arbitrary_key() -> Key {
@@ -254,9 +267,9 @@ mod tests {
         gas_meter: &'a RefCell<VpGasMeter>,
         keys_changed: &'a BTreeSet<Key>,
         verifiers: &'a BTreeSet<Address>,
-    ) -> Ctx<'a, TestState, WasmCacheRwAccess> {
+    ) -> Ctx<'a, TestState, VpCache<WasmCacheRwAccess>, Eval> {
         Ctx::new(
-            &crate::ethereum_bridge::ADDRESS,
+            &crate::ADDRESS,
             state,
             tx,
             cmt,
@@ -272,10 +285,10 @@ mod tests {
     fn test_accepts_expected_keys_changed() {
         let keys_changed = BTreeSet::from([
             balance_key(&nam(), &established_address_1()),
-            balance_key(&nam(), &crate::ethereum_bridge::ADDRESS),
+            balance_key(&nam(), &crate::ADDRESS),
         ]);
 
-        let result = validate_changed_keys(&nam(), &keys_changed);
+        let result = validate_changed_keys::<TokenKeys>(&nam(), &keys_changed);
 
         assert!(result.is_ok());
     }
@@ -284,7 +297,7 @@ mod tests {
     fn test_error_if_triggered_without_keys_changed() {
         let keys_changed = BTreeSet::new();
 
-        let result = validate_changed_keys(&nam(), &keys_changed);
+        let result = validate_changed_keys::<TokenKeys>(&nam(), &keys_changed);
 
         assert!(result.is_err());
     }
@@ -294,7 +307,8 @@ mod tests {
         {
             let keys_changed = BTreeSet::from_iter(vec![arbitrary_key(); 3]);
 
-            let result = validate_changed_keys(&nam(), &keys_changed);
+            let result =
+                validate_changed_keys::<TokenKeys>(&nam(), &keys_changed);
 
             assert!(result.is_err());
         }
@@ -305,7 +319,8 @@ mod tests {
                 arbitrary_key(),
             ]);
 
-            let result = validate_changed_keys(&nam(), &keys_changed);
+            let result =
+                validate_changed_keys::<TokenKeys>(&nam(), &keys_changed);
 
             assert!(result.is_err());
         }
@@ -317,7 +332,8 @@ mod tests {
             let keys_changed =
                 BTreeSet::from_iter(vec![arbitrary_key(), arbitrary_key()]);
 
-            let result = validate_changed_keys(&nam(), &keys_changed);
+            let result =
+                validate_changed_keys::<TokenKeys>(&nam(), &keys_changed);
 
             assert!(result.is_err());
         }
@@ -330,7 +346,8 @@ mod tests {
                 )),
             ]);
 
-            let result = validate_changed_keys(&nam(), &keys_changed);
+            let result =
+                validate_changed_keys::<TokenKeys>(&nam(), &keys_changed);
 
             assert!(result.is_err());
         }
@@ -347,7 +364,8 @@ mod tests {
                 ),
             ]);
 
-            let result = validate_changed_keys(&nam(), &keys_changed);
+            let result =
+                validate_changed_keys::<TokenKeys>(&nam(), &keys_changed);
 
             assert!(result.is_err());
         }
@@ -372,7 +390,7 @@ mod tests {
             .expect("Test failed");
 
         // credit the balance to the escrow
-        let escrow_key = balance_key(&nam(), &crate::ethereum_bridge::ADDRESS);
+        let escrow_key = balance_key(&nam(), &crate::ADDRESS);
         state
             .write_log_mut()
             .write(
@@ -403,6 +421,7 @@ mod tests {
                 &keys_changed,
                 &verifiers,
             ),
+            token_keys: PhantomData::<TokenKeys>,
         };
 
         let res = vp.validate_tx(&batched_tx, &keys_changed, &verifiers);
@@ -428,7 +447,7 @@ mod tests {
             .expect("Test failed");
 
         // do not credit the balance to the escrow
-        let escrow_key = balance_key(&nam(), &crate::ethereum_bridge::ADDRESS);
+        let escrow_key = balance_key(&nam(), &crate::ADDRESS);
         state
             .write_log_mut()
             .write(
@@ -457,6 +476,7 @@ mod tests {
                 &keys_changed,
                 &verifiers,
             ),
+            token_keys: PhantomData::<TokenKeys>,
         };
 
         let res = vp.validate_tx(&batched_tx, &keys_changed, &verifiers);
@@ -483,7 +503,7 @@ mod tests {
             .expect("Test failed");
 
         // credit the balance to the escrow
-        let escrow_key = balance_key(&nam(), &crate::ethereum_bridge::ADDRESS);
+        let escrow_key = balance_key(&nam(), &crate::ADDRESS);
         state
             .write_log_mut()
             .write(
@@ -514,6 +534,7 @@ mod tests {
                 &keys_changed,
                 &verifiers,
             ),
+            token_keys: PhantomData::<TokenKeys>,
         };
 
         let res = vp.validate_tx(&batched_tx, &keys_changed, &verifiers);
