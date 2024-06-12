@@ -38,6 +38,7 @@ namada_storage = {path = "../storage"}
 namada_trans_token = {path = "../trans_token"}
 namada_tx = {path = "../tx"}
 namada_vote_ext = {path = "../vote_ext"}
+namada_vp = {path = "../vp"}
 
 borsh.workspace = true
 ethers.workspace = true
@@ -46,6 +47,7 @@ itertools.workspace = true
 konst.workspace = true
 linkme = {workspace = true, optional = true}
 serde.workspace = true
+smooth-operator.workspace = true
 thiserror.workspace = true
 tracing = "0.1.30"
 
@@ -53,10 +55,16 @@ tracing = "0.1.30"
 # Added "testing" feature.
 namada_account = {path = "../account"}
 namada_core = {path = "../core", default-features = false, features = ["ethers-derive", "testing"]}
+namada_gas = {path = "../gas"}
 namada_proof_of_stake = {path = "../proof_of_stake", default-features = false, features = ["testing"]}
 namada_state = { path = "../state", features = ["testing"] }
+namada_token = {path = "../token", features = ["testing"]}
+namada_tx = {path = "../tx", features = ["testing"]}
+namada_vm = {path = "../vm", features = ["testing"]}
 
 assert_matches.workspace = true
 data-encoding.workspace = true
 ethabi.workspace = true
+proptest.workspace = true
+rand.workspace = true
 toml.workspace = true
