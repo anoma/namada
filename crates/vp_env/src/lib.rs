@@ -126,17 +126,20 @@ where
     fn get_shielded_action(
         &self,
         batched_tx: &BatchedTxRef<'_>,
-    ) -> Result<Transaction, namada_storage::Error> {
+    ) -> Result<(Transaction, Vec<IbcMessage>), namada_storage::Error> {
         let data = batched_tx
             .tx
             .data(batched_tx.cmt)
             .ok_or_err_msg("No transaction data")?;
+        let mut msgs = vec![];
         let transfer = match Transfer::try_from_slice(&data) {
             Ok(transfer) => Some(transfer),
             Err(_) => {
-                match decode_message(&data).map_err(|_| {
+                let msg = decode_message(&data).map_err(|_| {
                     namada_storage::Error::new_const("Unknown IBC message")
-                })? {
+                })?;
+                msgs.push(msg.clone());
+                match msg {
                     IbcMessage::Transfer(msg) => msg.transfer,
                     IbcMessage::NftTransfer(msg) => msg.transfer,
                     IbcMessage::RecvPacket(msg) => msg.transfer,
@@ -156,7 +159,7 @@ where
             .get_section(&shielded_hash)
             .and_then(|x| x.as_ref().masp_tx())
             .ok_or_err_msg("unable to find shielded section")?;
-        Ok(masp_tx)
+        Ok((masp_tx, msgs))
     }
 
     /// Charge the provided gas for the current vp

@@ -521,6 +521,18 @@ pub fn is_ibc_key(key: &Key) -> bool {
              DbKeySeg::AddressSeg(addr) if *addr == Address::Internal(InternalAddress::Ibc))
 }
 
+/// Checks if the key is an IBC commitment key
+pub fn is_ibc_commitment_key(key: &Key) -> Option<CommitmentPath> {
+    let addr = Address::Internal(InternalAddress::Ibc);
+    let ibc_addr_key = Key::from(addr.to_db_key());
+    let suffix = key.split_prefix(&ibc_addr_key)??;
+    if let Ok(Path::Commitment(path)) = Path::from_str(&suffix.to_string()) {
+        Some(path)
+    } else {
+        None
+    }
+}
+
 /// Returns the owner and the token hash if the given key is the denom key
 pub fn is_ibc_trace_key(key: &Key) -> Option<(String, String)> {
     match &key.segments[..] {

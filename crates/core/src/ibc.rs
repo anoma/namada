@@ -73,6 +73,7 @@ impl FromStr for IbcTokenHash {
 }
 
 /// The different variants of an Ibc message
+#[derive(Debug, Clone)]
 pub enum IbcMessage {
     /// Ibc Envelop
     Envelope(Box<MsgEnvelope>),
