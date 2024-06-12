@@ -405,6 +405,7 @@ impl BenchShell {
         let msg = MsgTransfer {
             message,
             transfer: None,
+            fee_unshield: None,
         };
 
         self.generate_ibc_tx(TX_IBC_WASM, msg.serialize_to_vec())
@@ -1233,6 +1234,7 @@ impl BenchShieldedCtx {
         let msg = MsgTransfer {
             message: msg,
             transfer: Some(transfer),
+            fee_unshield: None,
         };
 
         let mut ibc_tx = ctx

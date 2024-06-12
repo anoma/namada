@@ -658,6 +658,7 @@ pub fn msg_transfer(
     MsgTransfer {
         message,
         transfer: None,
+        fee_unshield: None,
     }
 }
 

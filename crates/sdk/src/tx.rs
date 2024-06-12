@@ -2531,11 +2531,29 @@ pub async fn build_ibc_transfer(
         amount: validated_amount,
     }];
 
+    // Add masp fee payment if necessary
+    let masp_fee_data = get_masp_fee_payment_amount(
+        context,
+        &args.tx,
+        fee_per_gas_unit,
+        &signing_data.fee_payer,
+        args.gas_spending_keys.clone(),
+    )
+    .await?;
+    let fee_unshield =
+        masp_fee_data
+            .as_ref()
+            .map(|fee_data| token::UnshieldingTransferData {
+                target: fee_data.target.to_owned(),
+                token: fee_data.token.to_owned(),
+                amount: fee_data.amount,
+            });
+
     // For transfer from a spending key
     let shielded_parts = construct_shielded_parts(
         context,
         masp_transfer_data,
-        None,
+        masp_fee_data,
         !(args.tx.dry_run || args.tx.dry_run_wrapper),
     )
     .await?;
@@ -2639,7 +2657,12 @@ pub async fn build_ibc_transfer(
             timeout_height_on_b: timeout_height,
             timeout_timestamp_on_b: timeout_timestamp,
         };
-        MsgTransfer { message, transfer }.serialize_to_vec()
+        MsgTransfer {
+            message,
+            transfer,
+            fee_unshield,
+        }
+        .serialize_to_vec()
     } else if let Some((trace_path, base_class_id, token_id)) =
         is_nft_trace(&ibc_denom)
     {
@@ -2670,7 +2693,12 @@ pub async fn build_ibc_transfer(
             timeout_height_on_b: timeout_height,
             timeout_timestamp_on_b: timeout_timestamp,
         };
-        MsgNftTransfer { message, transfer }.serialize_to_vec()
+        MsgNftTransfer {
+            message,
+            transfer,
+            fee_unshield,
+        }
+        .serialize_to_vec()
     } else {
         return Err(Error::Other(format!("Invalid IBC denom: {ibc_denom}")));
     };

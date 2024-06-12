@@ -4,13 +4,30 @@
 //! `key::ed25519::SignedTxData` as its input as declared in `ibc` crate.
 
 use namada_tx_prelude::action::{Action, MaspAction, Write};
+use namada_tx_prelude::token::UnshieldingTransferData;
 use namada_tx_prelude::*;
 
 #[transaction]
 fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
     let data = ctx.get_tx_data(&tx_data)?;
-    let transfer =
+    let (transfer, masp_fee_payment) =
         ibc::ibc_actions(ctx).execute(&data).into_storage_result()?;
+
+    if let Some(UnshieldingTransferData {
+        token,
+        amount,
+        target,
+    }) = &masp_fee_payment
+    {
+        // Transparent unshield for fee payment
+        token::transfer(
+            ctx,
+            &Address::Internal(address::InternalAddress::Masp),
+            target,
+            token,
+            amount.amount(),
+        )?;
+    }
 
     if let Some(masp_section_ref) =
         transfer.map(|transfer| transfer.shielded_section_hash)

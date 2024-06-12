@@ -327,6 +327,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             timeout_sec_offset: None,
             refund_target: None,
             memo: None,
+            gas_spending_keys: Default::default(),
             tx: self.tx_builder(),
             tx_code_path: PathBuf::from(TX_IBC_WASM),
         }

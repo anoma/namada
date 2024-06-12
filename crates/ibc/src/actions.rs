@@ -222,6 +222,7 @@ where
     let data = MsgTransfer {
         message,
         transfer: None,
+        fee_unshield: None,
     }
     .serialize_to_vec();
 

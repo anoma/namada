@@ -4652,6 +4652,11 @@ pub mod args {
         ) -> Result<TxIbcTransfer<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx)?;
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
+            let gas_spending_keys = self
+                .gas_spending_keys
+                .iter()
+                .map(|key| chain_ctx.get_cached(key))
+                .collect();
 
             Ok(TxIbcTransfer::<SdkTypes> {
                 tx,
@@ -4665,6 +4670,7 @@ pub mod args {
                 timeout_sec_offset: self.timeout_sec_offset,
                 refund_target: chain_ctx.get_opt(&self.refund_target),
                 memo: self.memo,
+                gas_spending_keys,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -4686,6 +4692,10 @@ pub mod args {
                 std::fs::read_to_string(path)
                     .expect("Expected a file at given path")
             });
+            let mut gas_spending_keys = vec![];
+            if let Some(key) = GAS_SPENDING_KEY.parse(matches) {
+                gas_spending_keys.push(key);
+            }
             let tx_code_path = PathBuf::from(TX_IBC_WASM);
             Self {
                 tx,
@@ -4699,6 +4709,7 @@ pub mod args {
                 timeout_sec_offset,
                 refund_target,
                 memo,
+                gas_spending_keys,
                 tx_code_path,
             }
         }
