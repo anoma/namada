@@ -860,8 +860,7 @@ impl Chunker {
             self.current_size = 0;
         }
 
-        self.current_size =
-            checked!(self.current_size + line.as_bytes().len()).unwrap();
+        checked!(self.current_size += line.as_bytes().len()).unwrap();
         self.hasher.update(line.as_bytes());
         checked!(self.current_boundary += 1).unwrap();
     }
