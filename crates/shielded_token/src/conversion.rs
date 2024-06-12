@@ -572,7 +572,8 @@ where
     if !masp_reward_keys.contains(&native_token) {
         // Since MASP rewards are denominated in NAM tokens, ensure that clients
         // are able to decode them.
-        masp_reward_keys.push(native_token.clone());
+        masp_reward_denoms
+            .insert(native_token.clone(), NATIVE_MAX_DECIMAL_PLACES.into());
     }
     // Add purely decoding entries to the assets map. These will be
     // overwritten before the creation of the next commitment tree
