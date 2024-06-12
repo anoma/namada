@@ -2945,12 +2945,11 @@ mod test {
                     .as_bytes(),
             ),
         }];
-        let chunk_val =
-            format!("chunks:{}", base64::encode(chunks.serialize_to_vec()));
+        let chunk_val = base64::encode(chunks.serialize_to_vec());
         let expected = [
             "subspace:bing/fucking/bong=AQ==".to_string(),
             "rollback:0000000000002/new/bing/fucking/bong=AQ==".to_string(),
-            chunk_val,
+            "".to_string(),
         ];
 
         let lines: Vec<&str> = snapshot.split('\n').collect();
