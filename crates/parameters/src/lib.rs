@@ -467,7 +467,7 @@ where
     init_storage(&params, storage)
 }
 
-const BLOCK_TIME_ESTIMATE_UPPER_BOUND: DurationSecs = DurationSecs(120);
+const BLOCK_TIME_ESTIMATE_UPPER_BOUND: DurationSecs = DurationSecs(60);
 
 /// Return an estimate of the maximum time taken to decide a block,
 /// by sourcing block headers from up to `num_blocks_to_read`.
