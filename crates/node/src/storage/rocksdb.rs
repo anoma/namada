@@ -44,19 +44,22 @@
 //!     - `current/{hash}`: a hash included in the current block
 //!     - `{hash}`: a hash included in previous blocks
 
+use std::ffi::OsStr;
 use std::fs::File;
 use std::io::{BufWriter, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Mutex;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXLOWER;
 use itertools::Either;
 use namada::core::collections::HashSet;
 use namada::core::storage::{BlockHeight, Epoch, Header, Key, KeySeg};
 use namada::core::{decode, encode, ethereum_events};
 use namada::eth_bridge::storage::proof::BridgePoolRootProof;
+use namada::hash::Hash;
 use namada::ledger::eth_bridge::storage::bridge_pool;
 use namada::replay_protection;
 use namada::state::merkle_tree::{
@@ -80,6 +83,7 @@ use rocksdb::{
     DBCompressionType, Direction, FlushOptions, IteratorMode, Options,
     ReadOptions, WriteBatch,
 };
+use sha2::{Digest, Sha256};
 
 use crate::config::utils::num_of_threads;
 use crate::storage;
@@ -111,10 +115,16 @@ const ADDRESS_GEN_KEY_SEGMENT: &str = "address_gen";
 
 const OLD_DIFF_PREFIX: &str = "old";
 const NEW_DIFF_PREFIX: &str = "new";
+const MAX_CHUNK_SIZE: usize = 10_000_000;
 
 /// RocksDB handle
 #[derive(Debug)]
-pub struct RocksDB(rocksdb::DB);
+pub struct RocksDB {
+    /// Handle to the db
+    inner: rocksdb::DB,
+    /// Indicates if read only
+    read_only: bool,
+}
 
 /// DB Handle for batch writes.
 #[derive(Default)]
@@ -123,6 +133,7 @@ pub struct RocksDBWriteBatch(WriteBatch);
 /// Open RocksDB for the DB
 pub fn open(
     path: impl AsRef<Path>,
+    read_only: bool,
     cache: Option<&rocksdb::Cache>,
 ) -> Result<RocksDB> {
     let logical_cores = num_cpus::get();
@@ -218,21 +229,34 @@ pub fn open(
         REPLAY_PROTECTION_CF,
         replay_protection_cf_opts,
     ));
-
-    rocksdb::DB::open_cf_descriptors(&db_opts, path, cfs)
-        .map(RocksDB)
-        .map_err(|e| Error::DBError(e.into_string()))
+    Ok(if read_only {
+        RocksDB {
+            inner: rocksdb::DB::open_cf_descriptors_read_only(
+                &db_opts, path, cfs, false,
+            )
+            .map_err(|e| Error::DBError(e.into_string()))?,
+            read_only: true,
+        }
+    } else {
+        RocksDB {
+            inner: rocksdb::DB::open_cf_descriptors(&db_opts, path, cfs)
+                .map_err(|e| Error::DBError(e.into_string()))?,
+            read_only: false,
+        }
+    })
 }
 
 impl Drop for RocksDB {
     fn drop(&mut self) {
-        self.flush(true).expect("flush failed");
+        if !self.read_only {
+            self.flush(true).expect("flush failed");
+        }
     }
 }
 
 impl RocksDB {
     fn get_column_family(&self, cf_name: &str) -> Result<&ColumnFamily> {
-        self.0
+        self.inner
             .cf_handle(cf_name)
             .ok_or(Error::DBError("No {cf_name} column family".to_string()))
     }
@@ -255,7 +279,7 @@ impl RocksDB {
         cf: &ColumnFamily,
         key: impl AsRef<str>,
     ) -> Result<Option<Vec<u8>>> {
-        self.0
+        self.inner
             .get_cf(cf, key.as_ref())
             .map_err(|e| Error::DBError(e.into_string()))
     }
@@ -271,7 +295,7 @@ impl RocksDB {
         T: BorshSerialize,
     {
         if let Some(current_value) = self
-            .0
+            .inner
             .get_cf(cf, key.as_ref())
             .map_err(|e| Error::DBError(e.into_string()))?
         {
@@ -453,13 +477,14 @@ impl RocksDB {
     ) {
         let read_opts = make_iter_read_opts(prefix.clone());
         let iter = if let Some(prefix) = prefix {
-            self.0.iterator_cf_opt(
+            self.inner.iterator_cf_opt(
                 cf,
                 read_opts,
                 IteratorMode::From(prefix.as_bytes(), Direction::Forward),
             )
         } else {
-            self.0.iterator_cf_opt(cf, read_opts, IteratorMode::Start)
+            self.inner
+                .iterator_cf_opt(cf, read_opts, IteratorMode::Start)
         };
 
         let mut buf = BufWriter::new(file);
@@ -474,6 +499,10 @@ impl RocksDB {
                 .expect("Unable to write to buffer");
         }
         buf.flush().expect("Unable to write to output file");
+    }
+
+    pub fn snapshot(&self) -> DbSnapshot<'_> {
+        DbSnapshot(self.inner.snapshot())
     }
 
     /// Rollback to previous block. Given the inner working of tendermint
@@ -649,7 +678,7 @@ impl RocksDB {
         let prefix = last_block.height.to_string();
         let mut delete_keys = |cf: &ColumnFamily| {
             let read_opts = make_iter_read_opts(Some(prefix.clone()));
-            let iter = self.0.iterator_cf_opt(
+            let iter = self.inner.iterator_cf_opt(
                 cf,
                 read_opts,
                 IteratorMode::From(prefix.as_bytes(), Direction::Forward),
@@ -672,6 +701,23 @@ impl RocksDB {
         self.exec_batch(batch)
     }
 
+    #[inline]
+    pub fn column_families(&self) -> [(&'static str, &ColumnFamily); 6] {
+        DbColFam::all()
+            .iter()
+            .map(|cf| {
+                (
+                    *cf,
+                    self.get_column_family(cf)
+                        .expect("Failed to read column family"),
+                )
+            })
+            .collect::<Vec<_>>()
+            .try_into()
+            .map_err(|_| "There should be exactly six column families")
+            .unwrap()
+    }
+
     /// Read diffs of non-persisted key-vals that are only kept for rollback of
     /// one block height.
     #[cfg(test)]
@@ -688,9 +734,144 @@ impl RocksDB {
             old_and_new_diff_key(key, height)?.1
         };
 
-        self.0
+        self.inner
             .get_cf(rollback_cf, key)
             .map_err(|e| Error::DBError(e.into_string()))
+    }
+}
+
+pub struct DbSnapshot<'a>(pub rocksdb::Snapshot<'a>);
+
+impl<'a> DbSnapshot<'a> {
+    /// Write a snapshot of the database out to file. The last line
+    /// of the file contains metadata about how to break the file into
+    /// chunks.
+    pub fn write_to_file(
+        &self,
+        cfs: [(&'static str, &'a ColumnFamily); 6],
+        path: &Path,
+    ) -> std::io::Result<()> {
+        let file = File::create(path)?;
+        let mut buf = BufWriter::new(file);
+        let mut chunker = Chunker::new(MAX_CHUNK_SIZE);
+        for (cf_name, cf) in cfs {
+            let read_opts = make_iter_read_opts(None);
+            let iter =
+                self.0.iterator_cf_opt(cf, read_opts, IteratorMode::Start);
+
+            for (key, raw_val, _gas) in PersistentPrefixIterator(
+                PrefixIterator::new(iter, String::default()),
+                // Empty string to prevent prefix stripping, the prefix is
+                // already in the enclosed iterator
+            ) {
+                let val = base64::encode(raw_val);
+                let bytes = format!("{cf_name}:{key}={val}\n");
+                chunker.add_line(&bytes);
+                buf.write_all(bytes.as_bytes())?;
+            }
+            buf.flush()?;
+        }
+        let chunks = chunker.finalize();
+        let val = base64::encode(chunks.serialize_to_vec());
+        let bytes = format!("chunks:{val}");
+        buf.write_all(bytes.as_bytes())?;
+        buf.flush()?;
+        Ok(())
+    }
+
+    /// Remove snapshots older than the latest
+    pub fn cleanup(
+        latest_height: BlockHeight,
+        base_dir: &Path,
+    ) -> std::io::Result<()> {
+        let toml = OsStr::new("toml");
+        for entry in std::fs::read_dir(base_dir)? {
+            let entry = entry?;
+            if entry.path().is_file() && Some(toml) == entry.path().extension()
+            {
+                if let Some(name) = entry.path().file_name() {
+                    let Some(height) = name
+                        .to_string_lossy()
+                        .strip_prefix("snapshot_")
+                        .and_then(|n| n.strip_suffix(".toml"))
+                        .and_then(|h| BlockHeight::from_str(h).ok())
+                    else {
+                        continue;
+                    };
+                    if height < latest_height {
+                        _ = std::fs::remove_file(entry.path());
+                    }
+                };
+            }
+        }
+        Ok(())
+    }
+
+    /// Create a path to save a snapshot at a specific block height.
+    pub fn path(height: BlockHeight, mut base_dir: PathBuf) -> PathBuf {
+        base_dir.push(format!("snapshot_{}.toml", height));
+        base_dir
+    }
+}
+
+/// A chunk of a snapshot. Includes the last line number in the file
+/// for this chunk and a hash of the chunk contents.
+#[derive(
+    Debug, Clone, Default, PartialEq, Eq, BorshSerialize, BorshDeserialize,
+)]
+struct Chunk {
+    boundary: u64,
+    hash: Hash,
+}
+
+/// Builds a set of chunks from a stream of lines to be
+/// written to a file.
+#[derive(Debug, Clone)]
+struct Chunker {
+    chunks: Vec<Chunk>,
+    max_size: usize,
+    current_boundary: u64,
+    current_size: usize,
+    hasher: Sha256,
+}
+impl Chunker {
+    fn new(max_size: usize) -> Self {
+        Self {
+            chunks: vec![],
+            max_size,
+            current_boundary: 0,
+            current_size: 0,
+            hasher: Sha256::default(),
+        }
+    }
+
+    fn add_line(&mut self, line: &str) {
+        if checked!(self.current_size + line.as_bytes().len()).unwrap()
+            > self.max_size
+            && self.current_boundary != 0
+        {
+            let mut hasher = Sha256::default();
+            std::mem::swap(&mut hasher, &mut self.hasher);
+            let hash: [u8; 32] = hasher.finalize().into();
+            self.chunks.push(Chunk {
+                boundary: self.current_boundary,
+                hash: Hash(hash),
+            });
+            self.current_size = 0;
+        }
+
+        checked!(self.current_size += line.as_bytes().len()).unwrap();
+        self.hasher.update(line.as_bytes());
+        checked!(self.current_boundary += 1).unwrap();
+    }
+
+    fn finalize(mut self) -> Vec<Chunk> {
+        let hash: [u8; 32] = self.hasher.finalize().into();
+        self.chunks.push(Chunk {
+            boundary: self.current_boundary,
+            hash: Hash(hash),
+        });
+        self.chunks
     }
 }
 
@@ -703,13 +884,17 @@ impl DB for RocksDB {
         db_path: impl AsRef<std::path::Path>,
         cache: Option<&Self::Cache>,
     ) -> Self {
-        open(db_path, cache).expect("cannot open the DB")
+        open(db_path, false, cache).expect("cannot open the DB")
+    }
+
+    fn path(&self) -> Option<&Path> {
+        Some(self.inner.path())
     }
 
     fn flush(&self, wait: bool) -> Result<()> {
         let mut flush_opts = FlushOptions::default();
         flush_opts.set_wait(wait);
-        self.0
+        self.inner
             .flush_opt(&flush_opts)
             .map_err(|e| Error::DBError(e.into_string()))
     }
@@ -1013,7 +1198,7 @@ impl DB for RocksDB {
             replay_protection::key(hash),
         ] {
             if self
-                .0
+                .inner
                 .get_pinned_cf(replay_protection_cf, key.to_string())
                 .map_err(|e| Error::DBError(e.into_string()))?
                 .is_some()
@@ -1061,7 +1246,7 @@ impl DB for RocksDB {
             }
             None => {
                 // If it has an "old" val, it was deleted at this height
-                if self.0.key_may_exist_cf(diffs_cf, &old_val_key) {
+                if self.inner.key_may_exist_cf(diffs_cf, &old_val_key) {
                     // check if it actually exists
                     if self.read_value_bytes(diffs_cf, old_val_key)?.is_some() {
                         return Ok(None);
@@ -1084,7 +1269,7 @@ impl DB for RocksDB {
                 None => {
                     // Check if the value was created at this height instead,
                     // which would mean that it wasn't present before
-                    if self.0.key_may_exist_cf(diffs_cf, &new_val_key) {
+                    if self.inner.key_may_exist_cf(diffs_cf, &new_val_key) {
                         // check if it actually exists
                         if self
                             .read_value_bytes(diffs_cf, new_val_key)?
@@ -1146,7 +1331,7 @@ impl DB for RocksDB {
     }
 
     fn exec_batch(&self, batch: Self::WriteBatch) -> Result<()> {
-        self.0
+        self.inner
             .write(batch.0)
             .map_err(|e| Error::DBError(e.into_string()))
     }
@@ -1541,7 +1726,7 @@ impl<'iter> DBIter<'iter> for RocksDB {
             .get_column_family(BLOCK_CF)
             .expect("{BLOCK_CF} column family should exist");
         let read_opts = make_iter_read_opts(Some(prefix.clone()));
-        let iter = self.0.iterator_cf_opt(
+        let iter = self.inner.iterator_cf_opt(
             block_cf,
             read_opts,
             IteratorMode::From(prefix.as_bytes(), Direction::Forward),
@@ -1646,7 +1831,7 @@ fn iter_prefix<'a>(
         _ => stripped_prefix.clone(),
     };
     let read_opts = make_iter_read_opts(Some(prefix.clone()));
-    let iter = db.0.iterator_cf_opt(
+    let iter = db.inner.iterator_cf_opt(
         cf,
         read_opts,
         IteratorMode::From(prefix.as_bytes(), Direction::Forward),
@@ -1820,6 +2005,7 @@ mod imp {
 #[cfg(test)]
 mod test {
     use namada::address::EstablishedAddressGen;
+    use namada::core::collections::HashMap;
     use namada::core::hash::Hash;
     use namada::core::storage::Epochs;
     use namada::ledger::storage::ConversionState;
@@ -1836,7 +2022,7 @@ mod test {
     #[test]
     fn test_load_state() {
         let dir = tempdir().unwrap();
-        let db = open(dir.path(), None).unwrap();
+        let db = RocksDB::open(dir.path(), None);
 
         let mut batch = RocksDB::batch();
         let last_height = BlockHeight::default();
@@ -1869,7 +2055,7 @@ mod test {
     #[test]
     fn test_read() {
         let dir = tempdir().unwrap();
-        let mut db = open(dir.path(), None).unwrap();
+        let mut db = RocksDB::open(dir.path(), None);
 
         let key = Key::parse("test").unwrap();
         let batch_key = Key::parse("batch").unwrap();
@@ -1971,7 +2157,7 @@ mod test {
     #[test]
     fn test_prefix_iter() {
         let dir = tempdir().unwrap();
-        let db = open(dir.path(), None).unwrap();
+        let db = RocksDB::open(dir.path(), None);
 
         let prefix_0 = Key::parse("0").unwrap();
         let key_0_a = prefix_0.push(&"a".to_string()).unwrap();
@@ -2024,7 +2210,7 @@ mod test {
             println!("Running with persist_diffs: {persist_diffs}");
 
             let dir = tempdir().unwrap();
-            let mut db = open(dir.path(), None).unwrap();
+            let mut db = RocksDB::open(dir.path(), None);
 
             // A key that's gonna be added on a second block
             let add_key = Key::parse("add").unwrap();
@@ -2163,10 +2349,11 @@ mod test {
             assert_eq!(deleted, Some(to_delete_val));
             // Check the conversion state
             let state_cf = db.get_column_family(STATE_CF).unwrap();
-            let conversion_state =
-                db.0.get_cf(state_cf, "conversion_state".as_bytes())
-                    .unwrap()
-                    .unwrap();
+            let conversion_state = db
+                .inner
+                .get_cf(state_cf, "conversion_state".as_bytes())
+                .unwrap()
+                .unwrap();
             assert_eq!(conversion_state, encode(&conversion_state_0));
             for tx in [b"tx1", b"tx2", b"tx3", b"tx4"] {
                 assert!(
@@ -2185,7 +2372,7 @@ mod test {
     #[test]
     fn test_diffs() {
         let dir = tempdir().unwrap();
-        let mut db = open(dir.path(), None).unwrap();
+        let mut db = RocksDB::open(dir.path(), None);
 
         let key_with_diffs = Key::parse("with_diffs").unwrap();
         let key_without_diffs = Key::parse("without_diffs").unwrap();
@@ -2222,15 +2409,15 @@ mod test {
             // present
             let (old_with_h0, new_with_h0) =
                 old_and_new_diff_key(&key_with_diffs, height_0).unwrap();
-            assert!(db.0.get_cf(diffs_cf, old_with_h0).unwrap().is_none());
-            assert!(db.0.get_cf(diffs_cf, new_with_h0).unwrap().is_some());
+            assert!(db.inner.get_cf(diffs_cf, old_with_h0).unwrap().is_none());
+            assert!(db.inner.get_cf(diffs_cf, new_with_h0).unwrap().is_some());
 
             // Diffs new key for `key_without_diffs` at height_0 must be
             // present
             let (old_wo_h0, new_wo_h0) =
                 old_and_new_diff_key(&key_without_diffs, height_0).unwrap();
-            assert!(db.0.get_cf(rollback_cf, old_wo_h0).unwrap().is_none());
-            assert!(db.0.get_cf(rollback_cf, new_wo_h0).unwrap().is_some());
+            assert!(db.inner.get_cf(rollback_cf, old_wo_h0).unwrap().is_none());
+            assert!(db.inner.get_cf(rollback_cf, new_wo_h0).unwrap().is_some());
         }
 
         // Write second block
@@ -2262,27 +2449,27 @@ mod test {
             // Diffs keys for `key_with_diffs` at height_0 must be present
             let (old_with_h0, new_with_h0) =
                 old_and_new_diff_key(&key_with_diffs, height_0).unwrap();
-            assert!(db.0.get_cf(diffs_cf, old_with_h0).unwrap().is_none());
-            assert!(db.0.get_cf(diffs_cf, new_with_h0).unwrap().is_some());
+            assert!(db.inner.get_cf(diffs_cf, old_with_h0).unwrap().is_none());
+            assert!(db.inner.get_cf(diffs_cf, new_with_h0).unwrap().is_some());
 
             // Diffs keys for `key_without_diffs` at height_0 must be gone
             let (old_wo_h0, new_wo_h0) =
                 old_and_new_diff_key(&key_without_diffs, height_0).unwrap();
-            assert!(db.0.get_cf(rollback_cf, old_wo_h0).unwrap().is_none());
-            assert!(db.0.get_cf(rollback_cf, new_wo_h0).unwrap().is_none());
+            assert!(db.inner.get_cf(rollback_cf, old_wo_h0).unwrap().is_none());
+            assert!(db.inner.get_cf(rollback_cf, new_wo_h0).unwrap().is_none());
 
             // Diffs keys for `key_with_diffs` at height_1 must be present
             let (old_with_h1, new_with_h1) =
                 old_and_new_diff_key(&key_with_diffs, height_1).unwrap();
-            assert!(db.0.get_cf(diffs_cf, old_with_h1).unwrap().is_some());
-            assert!(db.0.get_cf(diffs_cf, new_with_h1).unwrap().is_some());
+            assert!(db.inner.get_cf(diffs_cf, old_with_h1).unwrap().is_some());
+            assert!(db.inner.get_cf(diffs_cf, new_with_h1).unwrap().is_some());
 
             // Diffs keys for `key_without_diffs` at height_1 must be
             // present
             let (old_wo_h1, new_wo_h1) =
                 old_and_new_diff_key(&key_without_diffs, height_1).unwrap();
-            assert!(db.0.get_cf(rollback_cf, old_wo_h1).unwrap().is_some());
-            assert!(db.0.get_cf(rollback_cf, new_wo_h1).unwrap().is_some());
+            assert!(db.inner.get_cf(rollback_cf, old_wo_h1).unwrap().is_some());
+            assert!(db.inner.get_cf(rollback_cf, new_wo_h1).unwrap().is_some());
         }
 
         // Write third block
@@ -2314,27 +2501,27 @@ mod test {
             // Diffs keys for `key_with_diffs` at height_1 must be present
             let (old_with_h1, new_with_h1) =
                 old_and_new_diff_key(&key_with_diffs, height_1).unwrap();
-            assert!(db.0.get_cf(diffs_cf, old_with_h1).unwrap().is_some());
-            assert!(db.0.get_cf(diffs_cf, new_with_h1).unwrap().is_some());
+            assert!(db.inner.get_cf(diffs_cf, old_with_h1).unwrap().is_some());
+            assert!(db.inner.get_cf(diffs_cf, new_with_h1).unwrap().is_some());
 
             // Diffs keys for `key_without_diffs` at height_1 must be gone
             let (old_wo_h1, new_wo_h1) =
                 old_and_new_diff_key(&key_without_diffs, height_1).unwrap();
-            assert!(db.0.get_cf(rollback_cf, old_wo_h1).unwrap().is_none());
-            assert!(db.0.get_cf(rollback_cf, new_wo_h1).unwrap().is_none());
+            assert!(db.inner.get_cf(rollback_cf, old_wo_h1).unwrap().is_none());
+            assert!(db.inner.get_cf(rollback_cf, new_wo_h1).unwrap().is_none());
 
             // Diffs keys for `key_with_diffs` at height_2 must be present
             let (old_with_h2, new_with_h2) =
                 old_and_new_diff_key(&key_with_diffs, height_2).unwrap();
-            assert!(db.0.get_cf(diffs_cf, old_with_h2).unwrap().is_some());
-            assert!(db.0.get_cf(diffs_cf, new_with_h2).unwrap().is_some());
+            assert!(db.inner.get_cf(diffs_cf, old_with_h2).unwrap().is_some());
+            assert!(db.inner.get_cf(diffs_cf, new_with_h2).unwrap().is_some());
 
             // Diffs keys for `key_without_diffs` at height_2 must be
             // present
             let (old_wo_h2, new_wo_h2) =
                 old_and_new_diff_key(&key_without_diffs, height_2).unwrap();
-            assert!(db.0.get_cf(rollback_cf, old_wo_h2).unwrap().is_some());
-            assert!(db.0.get_cf(rollback_cf, new_wo_h2).unwrap().is_some());
+            assert!(db.inner.get_cf(rollback_cf, old_wo_h2).unwrap().is_some());
+            assert!(db.inner.get_cf(rollback_cf, new_wo_h2).unwrap().is_some());
         }
     }
 
@@ -2378,5 +2565,258 @@ mod test {
         };
 
         db.add_block_to_batch(block, batch, true)
+    }
+
+    /// Test that we chunk a series of lines
+    /// up correctly based on a max chunk size.
+    #[test]
+    fn test_chunker() {
+        let mut chunker = Chunker::new(10);
+        let lines = vec![
+            "fffffggggghh",
+            "aaaa",
+            "bbbbb",
+            "fffffggggghh",
+            "cc",
+            "dddddddd",
+            "eeeeeeeeee",
+            "ab",
+        ];
+        for l in lines {
+            chunker.add_line(l);
+        }
+        let chunks = chunker.finalize();
+        let expected = vec![
+            Chunk {
+                boundary: 1,
+                hash: Hash::sha256("fffffggggghh"),
+            },
+            Chunk {
+                boundary: 3,
+                hash: Hash::sha256("aaaabbbbb".as_bytes()),
+            },
+            Chunk {
+                boundary: 4,
+                hash: Hash::sha256("fffffggggghh"),
+            },
+            Chunk {
+                boundary: 6,
+                hash: Hash::sha256("ccdddddddd".as_bytes()),
+            },
+            Chunk {
+                boundary: 7,
+                hash: Hash::sha256("eeeeeeeeee".as_bytes()),
+            },
+            Chunk {
+                boundary: 8,
+                hash: Hash::sha256("ab".as_bytes()),
+            },
+        ];
+        assert_eq!(expected, chunks);
+        let mut chunker = Chunker::new(10);
+        let lines = vec![
+            "aaaa",
+            "bbbbb",
+            "fffffggggghh",
+            "cc",
+            "dddddddd",
+            "eeeeeeeeee",
+            "ab",
+        ];
+        for l in lines {
+            chunker.add_line(l);
+        }
+        let chunks = chunker.finalize();
+        let expected = vec![
+            Chunk {
+                boundary: 2,
+                hash: Hash::sha256("aaaabbbbb".as_bytes()),
+            },
+            Chunk {
+                boundary: 3,
+                hash: Hash::sha256("fffffggggghh"),
+            },
+            Chunk {
+                boundary: 5,
+                hash: Hash::sha256("ccdddddddd".as_bytes()),
+            },
+            Chunk {
+                boundary: 6,
+                hash: Hash::sha256("eeeeeeeeee".as_bytes()),
+            },
+            Chunk {
+                boundary: 7,
+                hash: Hash::sha256("ab".as_bytes()),
+            },
+        ];
+        assert_eq!(expected, chunks);
+    }
+
+    /// Test that we correctly delete snapshots
+    /// older than a given block height
+    #[test]
+    fn test_snapshot_cleanup() {
+        let temp = tempfile::tempdir().expect("Test failed");
+        let base_dir = temp.path().to_path_buf();
+        for i in 0..4 {
+            let mut path = base_dir.clone();
+            path.push(format!("snapshot_{}.toml", i));
+            _ = File::create(path).expect("Test failed")
+        }
+        let mut path = base_dir.clone();
+        path.push("snapshot_0_backup.toml");
+        _ = File::create(path).expect("Test failed");
+        let mut path = base_dir.clone();
+        path.push("snapshot_0.bak");
+        _ = File::create(path).expect("Test failed");
+        DbSnapshot::cleanup(2.into(), &base_dir).expect("Test failed");
+        let mut expected = HashSet::from([
+            "snapshot_2.toml",
+            "snapshot_3.toml",
+            "snapshot_0_backup.toml",
+            "snapshot_0.bak",
+        ]);
+        for entry in std::fs::read_dir(base_dir).expect("Test failed") {
+            let entry = entry.expect("Test failed");
+            assert!(entry.path().is_file());
+            let path = entry.path();
+            let path = path.file_name().expect("Test failed");
+            assert!(expected.swap_remove(path.to_str().unwrap()));
+        }
+        assert!(expected.is_empty());
+    }
+
+    /// Test that taking a snapshot actually
+    /// freezes the database in time even if
+    /// it is written to.
+    #[test]
+    fn test_snapshot_creation() {
+        let temp = tempfile::tempdir().expect("Test failed");
+        let mut db = open(&temp, false, None).expect("Test failed");
+        db.write_subspace_val(
+            1.into(),
+            &Key::parse("bing/fucking/bong").expect("Test failed"),
+            [1u8; 64],
+            false,
+        )
+        .expect("Test failed");
+        // we need to persist the changes and restart in read-only mode
+        // as rocksdb doesn't allow multiple read/write instances
+        drop(db);
+        let db = open(&temp, true, None).expect("Test failed");
+        // freeze the database at this point in time
+        let snapshot = db.snapshot();
+
+        // write a new entry to the db
+        let mut db2 = open(&temp, false, None).expect("Test failed");
+        db2.write_subspace_val(
+            2.into(),
+            &Key::parse("I/AM/BATMAN").expect("Test failed"),
+            [2u8; 32],
+            false,
+        )
+        .expect("Test failed");
+        // flush the data
+        drop(db2);
+        let db2 = open(&temp, false, None).expect("Test failed");
+
+        // collect all entries in the snapshot
+        let mut snapshot_entries = HashMap::new();
+        for (_, cf) in db.column_families() {
+            let read_opts = make_iter_read_opts(None);
+            let iter =
+                snapshot
+                    .0
+                    .iterator_cf_opt(cf, read_opts, IteratorMode::Start);
+
+            for (key, raw_val, _gas) in PersistentPrefixIterator(
+                PrefixIterator::new(iter, String::default()),
+                // Empty string to prevent prefix stripping, the prefix is
+                // already in the enclosed iterator
+            ) {
+                snapshot_entries.insert(key, raw_val);
+            }
+        }
+
+        // collect ALL entries in the db
+        let mut db_entries = HashMap::new();
+        for (_, cf) in db2.column_families() {
+            let read_opts = make_iter_read_opts(None);
+            let iter =
+                db2.inner
+                    .iterator_cf_opt(cf, read_opts, IteratorMode::Start);
+
+            for (key, raw_val, _gas) in PersistentPrefixIterator(
+                PrefixIterator::new(iter, String::default()),
+                // Empty string to prevent prefix stripping, the prefix is
+                // already in the enclosed iterator
+            ) {
+                db_entries.insert(key, raw_val);
+            }
+        }
+
+        let expected_snap = HashMap::from([
+            ("bing/fucking/bong".to_string(), vec![1u8; 64]),
+            (
+                "0000000000002/new/bing/fucking/bong".to_string(),
+                vec![1u8; 64],
+            ),
+        ]);
+        assert_eq!(expected_snap, snapshot_entries);
+        let expected_db = HashMap::from([
+            ("bing/fucking/bong".to_string(), vec![1u8; 64]),
+            (
+                "0000000000002/new/bing/fucking/bong".to_string(),
+                vec![1u8; 64],
+            ),
+            ("I/AM/BATMAN".to_string(), vec![2u8; 32]),
+            ("0000000000004/new/I/AM/BATMAN".to_string(), vec![2u8; 32]),
+        ]);
+        assert_eq!(expected_db, db_entries);
+    }
+
+    /// Test that [`DbSnapshot`] writes a snapshot
+    /// to disk correctly.
+    #[test]
+    fn test_db_snapshot() {
+        let temp = tempfile::tempdir().expect("Test failed");
+        let mut db = open(&temp, false, None).expect("Test failed");
+        db.write_subspace_val(
+            1.into(),
+            &Key::parse("bing/fucking/bong").expect("Test failed"),
+            [1u8; 1],
+            false,
+        )
+        .expect("Test failed");
+        // we need to persist the changes and restart in read-only mode
+        // as rocksdb doesn't allow multiple read/write instances
+        drop(db);
+        let db = open(&temp, true, None).expect("Test failed");
+        // freeze the database at this point in time
+        let snapshot = db.snapshot();
+        let mut path = temp.path().to_path_buf();
+        path.push("snapshot_0.toml");
+        snapshot
+            .write_to_file(db.column_families(), &path)
+            .expect("Test failed");
+        let snapshot = std::fs::read_to_string(path).expect("Test failed");
+        let chunks = vec![Chunk {
+            boundary: 2,
+            hash: Hash::sha256(
+                "subspace:bing/fucking/bong=AQ==\nrollback:0000000000002/new/\
+                 bing/fucking/bong=AQ==\n"
+                    .as_bytes(),
+            ),
+        }];
+        let chunk_val =
+            format!("chunks:{}", base64::encode(chunks.serialize_to_vec()));
+        let expected = [
+            "subspace:bing/fucking/bong=AQ==".to_string(),
+            "rollback:0000000000002/new/bing/fucking/bong=AQ==".to_string(),
+            chunk_val,
+        ];
+
+        let lines: Vec<&str> = snapshot.split('\n').collect();
+        assert_eq!(lines, expected);
     }
 }
