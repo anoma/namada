@@ -378,18 +378,42 @@ impl From<DurationNanos> for crate::tendermint::Timeout {
 
 #[cfg(test)]
 mod core_time_tests {
+    use proptest::prelude::*;
+
     use super::*;
 
-    // TODO: if someone wants to take this on, convert this test
-    // into a proptest
-    #[test]
-    fn test_valid_reverse_datetime_utc_encoding_roundtrip() {
-        const TIMESTAMP: &str = "1966-03-03T00:06:56Z";
+    proptest! {
+        #[test]
+        fn test_valid_reverse_datetime_utc_encoding_roundtrip(
+            year in 1974..=3000,
+            month in 1..=12,
+            day in 1..=28,
+            hour in 0..=23,
+            min in 0..=59,
+            sec in 0..=59,
+        )
+        {
+            let timestamp = format!("{year:04}-{month:02}-{day:02}T{hour:02}:{min:02}:{sec:02}Z");
+            test_valid_reverse_datetime_utc_encoding_roundtrip_inner(&timestamp);
+        }
+    }
 
-        let datetime = DateTimeUtc::from_rfc3339(TIMESTAMP).unwrap();
+    fn test_valid_reverse_datetime_utc_encoding_roundtrip_inner(
+        timestamp: &str,
+    ) {
+        // we should be able to parse our custom datetime
+        let datetime = DateTimeUtc::from_rfc3339(timestamp).unwrap();
+
+        // the chrono datetime, which uses a superset of
+        // our datetime format should also be parsable
+        let datetime_inner = DateTime::parse_from_rfc3339(timestamp)
+            .unwrap()
+            .with_timezone(&Utc);
+        assert_eq!(datetime, DateTimeUtc(datetime_inner));
+
         let encoded = datetime.to_rfc3339();
 
-        assert_eq!(encoded, TIMESTAMP);
+        assert_eq!(encoded, timestamp);
     }
 
     #[test]
