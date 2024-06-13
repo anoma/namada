@@ -1707,6 +1707,19 @@ pub async fn query_conversions(
 ) {
     // The chosen token type of the conversions
     let target_token = args.token;
+
+    if target_token.as_ref().is_none() {
+        // Query and print the total rewards first
+        let total_rewards = rpc::query_masp_total_rewards(context.client())
+            .await
+            .expect("MASP total rewards should be present");
+        display!(
+            context.io(),
+            "Total rewards of native token minted for shielded pool: {}",
+            total_rewards.to_string_native()
+        );
+    }
+
     // To facilitate human readable token addresses
     let tokens = context
         .wallet()
