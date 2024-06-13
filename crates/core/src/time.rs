@@ -376,6 +376,14 @@ impl From<DurationNanos> for crate::tendermint::Timeout {
     }
 }
 
+#[cfg(any(test, feature = "testing"))]
+pub mod test_utils {
+    //! Time related test utilities.
+
+    /// Genesis time used during tests.
+    pub const GENESIS_TIME: &str = "2023-08-30T00:00:00.000000+00:00";
+}
+
 #[cfg(test)]
 mod core_time_tests {
     use proptest::prelude::*;
@@ -430,5 +438,10 @@ mod core_time_tests {
 
         // but it cannot be parsed as a `DateTimeUtc`
         assert!(DateTimeUtc::from_rfc3339(TIMESTAMP).is_err());
+    }
+
+    #[test]
+    fn test_valid_test_utils_genesis_time() {
+        assert!(DateTimeUtc::from_rfc3339(test_utils::GENESIS_TIME).is_ok());
     }
 }
