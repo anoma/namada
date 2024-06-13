@@ -4746,6 +4746,11 @@ pub mod args {
                 .arg(IBC_TRANSFER_MEMO_PATH.def().help(wrap!(
                     "The path for the memo field of ICS20 transfer."
                 )))
+                .arg(GAS_SPENDING_KEY.def().help(wrap!(
+                    "The optional spending key that will be used in addition \
+                     to the source for gas payment (if this is a shielded \
+                     action)."
+                )))
         }
     }
 
