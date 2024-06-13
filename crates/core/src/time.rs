@@ -359,8 +359,8 @@ impl TryFrom<DateTimeUtc> for crate::tendermint::time::Time {
 impl TryFrom<crate::tendermint::time::Time> for DateTimeUtc {
     type Error = prost_types::TimestampError;
 
-    fn try_from(t: crate::tendermint::time::Time) -> Result<Self, ()> {
-        DateTimeUtc::from_unix_timestamp(t.unix_timestamp()).ok_or(())
+    fn try_from(t: crate::tendermint::time::Time) -> Result<Self, Self::Error> {
+        crate::tendermint_proto::google::protobuf::Timestamp::from(t).try_into()
     }
 }
 
