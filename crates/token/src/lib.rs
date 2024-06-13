@@ -67,6 +67,23 @@ where
     Ok(())
 }
 
+/// Arguments for a multi-party transparent token transfer
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    BorshSchema,
+    Hash,
+    Eq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+)]
+pub struct TransparentTransfer(pub Vec<TransparentTransferData>);
+
 /// Arguments for a transparent token transfer
 #[derive(
     Debug,
@@ -82,7 +99,7 @@ where
     Serialize,
     Deserialize,
 )]
-pub struct TransparentTransfer {
+pub struct TransparentTransferData {
     /// Source address will spend the tokens
     pub source: Address,
     /// Target address will receive the tokens
@@ -129,13 +146,57 @@ pub struct ShieldedTransfer {
     Serialize,
     Deserialize,
 )]
-pub struct ShieldingTransfer {
+pub struct ShieldingTransferData {
     /// Source address will spend the tokens
     pub source: Address,
     /// Token's address
     pub token: Address,
     /// The amount of tokens
     pub amount: DenominatedAmount,
+}
+
+/// Arguments for a shielding transfer (from a transparent token to a shielded
+/// token)
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    BorshSchema,
+    Hash,
+    Eq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+)]
+pub struct ShieldingTransfer {
+    /// Transfer-specific data
+    pub data: ShieldingTransferData,
+    /// Hash of tx section that contains the MASP transaction
+    pub shielded_section_hash: Hash,
+}
+
+/// Arguments for a shielding transfer (from a transparent token to a shielded
+/// token)
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    BorshSchema,
+    Hash,
+    Eq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+)]
+pub struct ShieldingMultiTransfer {
+    /// Transfer-specific data
+    pub data: Vec<ShieldingTransferData>,
     /// Hash of tx section that contains the MASP transaction
     pub shielded_section_hash: Hash,
 }
@@ -156,13 +217,57 @@ pub struct ShieldingTransfer {
     Serialize,
     Deserialize,
 )]
-pub struct UnshieldingTransfer {
+pub struct UnshieldingTransferData {
     /// Target address will receive the tokens
     pub target: Address,
     /// Token's address
     pub token: Address,
     /// The amount of tokens
     pub amount: DenominatedAmount,
+}
+
+/// Arguments for an unshielding transfer (from a shielded token to a
+/// transparent token)
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    BorshSchema,
+    Hash,
+    Eq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+)]
+pub struct UnshieldingTransfer {
+    /// Transfer-specific data
+    pub data: UnshieldingTransferData,
+    /// Hash of tx section that contains the MASP transaction
+    pub shielded_section_hash: Hash,
+}
+
+/// Arguments for a multi-source unshielding transfer (from a shielded token to
+/// a transparent token)
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    BorshSchema,
+    Hash,
+    Eq,
+    PartialOrd,
+    Serialize,
+    Deserialize,
+)]
+pub struct UnshieldingMultiTransfer {
+    /// Transfer-specific data
+    pub data: Vec<UnshieldingTransferData>,
     /// Hash of tx section that contains the MASP transaction
     pub shielded_section_hash: Hash,
 }
@@ -178,22 +283,30 @@ pub mod testing {
     pub use namada_trans_token::testing::*;
     use proptest::prelude::*;
 
-    use super::TransparentTransfer;
+    use super::{TransparentTransfer, TransparentTransferData};
 
     prop_compose! {
         /// Generate a transparent transfer
-        pub fn arb_transparent_transfer()(
+        fn arb_transparent_transfer()(
             source in arb_non_internal_address(),
             target in arb_non_internal_address(),
             token in arb_established_address().prop_map(Address::Established),
             amount in arb_denominated_amount(),
-        ) -> TransparentTransfer {
-            TransparentTransfer {
+        ) -> TransparentTransferData{
+            TransparentTransferData {
                 source,
                 target,
                 token,
                 amount,
             }
         }
+    }
+
+    /// Generate a vectorized transparent transfer
+    pub fn arb_vectorized_transparent_transfer(
+        number_of_txs: usize,
+    ) -> impl Strategy<Value = TransparentTransfer> {
+        proptest::collection::vec(arb_transparent_transfer(), 0..number_of_txs)
+            .prop_map(TransparentTransfer)
     }
 }

@@ -4338,14 +4338,21 @@ pub mod args {
             ctx: &mut Context,
         ) -> Result<TxTransparentTransfer<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx)?;
+            let mut data = vec![];
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
+
+            for transfer_data in self.data {
+                data.push(TxTransparentTransferData {
+                    source: chain_ctx.get(&transfer_data.source),
+                    target: chain_ctx.get(&transfer_data.target),
+                    token: chain_ctx.get(&transfer_data.token),
+                    amount: transfer_data.amount,
+                });
+            }
 
             Ok(TxTransparentTransfer::<SdkTypes> {
                 tx,
-                source: chain_ctx.get(&self.source),
-                target: chain_ctx.get(&self.target),
-                token: chain_ctx.get(&self.token),
-                amount: self.amount,
+                data,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -4359,12 +4366,16 @@ pub mod args {
             let token = TOKEN.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let tx_code_path = PathBuf::from(TX_TRANSPARENT_TRANSFER_WASM);
-            Self {
-                tx,
+            let data = vec![TxTransparentTransferData {
                 source,
                 target,
                 token,
                 amount,
+            }];
+
+            Self {
+                tx,
+                data,
                 tx_code_path,
             }
         }
@@ -4393,14 +4404,21 @@ pub mod args {
             ctx: &mut Context,
         ) -> Result<TxShieldedTransfer<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx)?;
+            let mut data = vec![];
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
+
+            for transfer_data in self.data {
+                data.push(TxShieldedTransferData {
+                    source: chain_ctx.get_cached(&transfer_data.source),
+                    target: chain_ctx.get(&transfer_data.target),
+                    token: chain_ctx.get(&transfer_data.token),
+                    amount: transfer_data.amount,
+                });
+            }
 
             Ok(TxShieldedTransfer::<SdkTypes> {
                 tx,
-                source: chain_ctx.get_cached(&self.source),
-                target: chain_ctx.get(&self.target),
-                token: chain_ctx.get(&self.token),
-                amount: self.amount,
+                data,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -4414,12 +4432,16 @@ pub mod args {
             let token = TOKEN.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let tx_code_path = PathBuf::from(TX_SHIELDED_TRANSFER_WASM);
-            Self {
-                tx,
+            let data = vec![TxShieldedTransferData {
                 source,
                 target,
                 token,
                 amount,
+            }];
+
+            Self {
+                tx,
+                data,
                 tx_code_path,
             }
         }
@@ -4453,14 +4475,21 @@ pub mod args {
             ctx: &mut Context,
         ) -> Result<TxShieldingTransfer<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx)?;
+            let mut data = vec![];
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
+
+            for transfer_data in self.data {
+                data.push(TxShieldingTransferData {
+                    source: chain_ctx.get(&transfer_data.source),
+                    token: chain_ctx.get(&transfer_data.token),
+                    amount: transfer_data.amount,
+                });
+            }
 
             Ok(TxShieldingTransfer::<SdkTypes> {
                 tx,
-                source: chain_ctx.get(&self.source),
+                data,
                 target: chain_ctx.get(&self.target),
-                token: chain_ctx.get(&self.token),
-                amount: self.amount,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -4474,12 +4503,16 @@ pub mod args {
             let token = TOKEN.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let tx_code_path = PathBuf::from(TX_SHIELDING_TRANSFER_WASM);
-            Self {
-                tx,
+            let data = vec![TxShieldingTransferData {
                 source,
-                target,
                 token,
                 amount,
+            }];
+
+            Self {
+                tx,
+                data,
+                target,
                 tx_code_path,
             }
         }
@@ -4514,14 +4547,21 @@ pub mod args {
             ctx: &mut Context,
         ) -> Result<TxUnshieldingTransfer<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx)?;
+            let mut data = vec![];
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
+
+            for transfer_data in self.data {
+                data.push(TxUnshieldingTransferData {
+                    target: chain_ctx.get(&transfer_data.target),
+                    token: chain_ctx.get(&transfer_data.token),
+                    amount: transfer_data.amount,
+                });
+            }
 
             Ok(TxUnshieldingTransfer::<SdkTypes> {
                 tx,
+                data,
                 source: chain_ctx.get_cached(&self.source),
-                target: chain_ctx.get(&self.target),
-                token: chain_ctx.get(&self.token),
-                amount: self.amount,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -4535,12 +4575,16 @@ pub mod args {
             let token = TOKEN.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let tx_code_path = PathBuf::from(TX_UNSHIELDING_TRANSFER_WASM);
-            Self {
-                tx,
-                source,
+            let data = vec![TxUnshieldingTransferData {
                 target,
                 token,
                 amount,
+            }];
+
+            Self {
+                tx,
+                source,
+                data,
                 tx_code_path,
             }
         }

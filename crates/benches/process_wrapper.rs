@@ -3,7 +3,9 @@ use namada::core::address;
 use namada::core::key::RefTo;
 use namada::core::storage::BlockHeight;
 use namada::core::time::DateTimeUtc;
-use namada::token::{Amount, DenominatedAmount, TransparentTransfer};
+use namada::token::{
+    Amount, DenominatedAmount, TransparentTransfer, TransparentTransferData,
+};
 use namada::tx::data::{Fee, WrapperTx};
 use namada::tx::Authorization;
 use namada_apps_lib::wallet::defaults;
@@ -19,12 +21,12 @@ fn process_tx(c: &mut Criterion) {
 
     let mut batched_tx = shell.generate_tx(
         TX_TRANSPARENT_TRANSFER_WASM,
-        TransparentTransfer {
+        TransparentTransfer(vec![TransparentTransferData {
             source: defaults::albert_address(),
             target: defaults::bertha_address(),
             token: address::testing::nam(),
             amount: Amount::native_whole(1).native_denominated(),
-        },
+        }]),
         None,
         None,
         vec![&defaults::albert_keypair()],
