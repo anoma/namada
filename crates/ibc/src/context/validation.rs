@@ -26,7 +26,6 @@ use ibc::cosmos_host::ValidateSelfClientContext;
 use ibc::primitives::{Signer, Timestamp};
 #[cfg(feature = "testing")]
 use ibc_testkit::testapp::ibc::clients::mock::client_state::MockClientState;
-use namada_core::time::DurationSecs;
 
 use super::client::{AnyClientState, AnyConsensusState};
 use super::common::IbcCommonContext;
@@ -270,13 +269,12 @@ where
             .get_block_height()
             .expect("The height should exist");
 
-        namada_parameters::estimate_max_block_time_from_blocks(
+        namada_parameters::estimate_max_block_time_from_blocks_and_params(
             &*self.inner.borrow(),
             height,
             5, // estimate max height with up to 5 blocks in the past
         )
         .expect("Failed to estimate max block time")
-        .unwrap_or(DurationSecs(30))
         .into()
     }
 
