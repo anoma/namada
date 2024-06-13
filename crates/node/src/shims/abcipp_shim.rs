@@ -193,12 +193,12 @@ impl AbcippShim {
     }
 
     fn update_snapshot_task(&mut self, take_snapshot: TakeSnapshot) {
-        if self
+        let snapshot_taken = self
             .snapshot_task
             .as_ref()
             .map(|t| t.is_finished())
-            .unwrap_or_default()
-        {
+            .unwrap_or_default();
+        if snapshot_taken {
             let task = self.snapshot_task.take().unwrap();
             match task.join() {
                 Ok(Err(e)) => tracing::error!(
