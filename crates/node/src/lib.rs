@@ -138,7 +138,7 @@ impl Shell {
             }
             Request::Commit => {
                 tracing::debug!("Request Commit");
-                Ok(Response::Commit(self.commit()))
+                Ok(self.commit())
             }
             Request::Flush => Ok(Response::Flush),
             Request::Echo(msg) => Ok(Response::Echo(response::Echo {
@@ -153,16 +153,16 @@ impl Shell {
                 Ok(Response::CheckTx(self.mempool_validate(&tx.tx, r#type)))
             }
             Request::ListSnapshots => {
-                Ok(Response::ListSnapshots(Default::default()))
+                self.list_snapshots().map(Response::ListSnapshots)
             }
-            Request::OfferSnapshot(_) => {
-                Ok(Response::OfferSnapshot(Default::default()))
+            Request::OfferSnapshot(req) => {
+                Ok(Response::OfferSnapshot(self.offer_snapshot(req)))
             }
-            Request::LoadSnapshotChunk(_) => {
-                Ok(Response::LoadSnapshotChunk(Default::default()))
-            }
-            Request::ApplySnapshotChunk(_) => {
-                Ok(Response::ApplySnapshotChunk(Default::default()))
+            Request::LoadSnapshotChunk(req) => self
+                .load_snapshot_chunk(req)
+                .map(Response::LoadSnapshotChunk),
+            Request::ApplySnapshotChunk(req) => {
+                Ok(Response::ApplySnapshotChunk(self.apply_snapshot_chunk(req)))
             }
         }
     }

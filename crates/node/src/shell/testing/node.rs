@@ -33,7 +33,7 @@ use namada::proof_of_stake::types::WeightedValidator;
 use namada::sdk::events::extend::Height as HeightAttr;
 use namada::sdk::events::Event;
 use namada::state::{
-    LastBlock, Sha256Hasher, StorageRead, EPOCH_SWITCH_BLOCKS_DELAY,
+    LastBlock, Sha256Hasher, StorageRead, DB, EPOCH_SWITCH_BLOCKS_DELAY,
 };
 use namada::tendermint::abci::response::Info;
 use namada::tendermint::abci::types::VoteInfo;
@@ -331,6 +331,11 @@ impl MockNode {
 
     pub fn wallet_path(&self) -> PathBuf {
         self.genesis_dir().join("wallet.toml")
+    }
+
+    pub fn db_path(&self) -> PathBuf {
+        let locked = self.shell.lock().unwrap();
+        locked.state.db().path().unwrap().to_path_buf()
     }
 
     pub fn block_height(&self) -> BlockHeight {

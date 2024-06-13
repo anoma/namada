@@ -795,7 +795,7 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
 }
 
 /// The root hash of the merkle tree as bytes
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct MerkleRoot(pub [u8; 32]);
 
 impl From<H256> for MerkleRoot {
