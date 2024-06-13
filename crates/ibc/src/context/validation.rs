@@ -269,13 +269,22 @@ where
             .get_block_height()
             .expect("The height should exist");
 
-        namada_parameters::estimate_max_block_time_from_blocks_and_params(
-            &*self.inner.borrow(),
-            height,
-            5, // estimate max height with up to 5 blocks in the past
-        )
-        .expect("Failed to estimate max block time")
-        .into()
+        let estimate =
+            namada_parameters::estimate_max_block_time_from_blocks_and_params(
+                &*self.inner.borrow(),
+                height,
+                // NB: estimate max height with up to 5 blocks in the past,
+                // which will not result in too many reads
+                5,
+            )
+            .expect("Failed to estimate max block time");
+
+        // NB: pick a lower max blocktime estimate during tests,
+        // to avoid flakes in CI
+        #[cfg(any(test, feature = "testing"))]
+        let estimate = estimate.min(namada_core::time::DurationSecs(5));
+
+        estimate.into()
     }
 
     fn validate_message_signer(
