@@ -763,6 +763,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     /// Fetch the current state of the multi-asset shielded pool into a
     /// ShieldedContext
     #[allow(clippy::too_many_arguments)]
+    #[cfg(not(target_family = "wasm"))]
     pub async fn fetch<'client, C, IO, M>(
         &mut self,
         client: &'client C,
@@ -797,6 +798,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[cfg(not(target_family = "wasm"))]
     async fn fetch_aux<'client, C, IO, M>(
         &mut self,
         client: &'client C,
