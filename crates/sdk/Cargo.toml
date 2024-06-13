@@ -96,6 +96,7 @@ bls12_381 = { workspace = true, optional = true }
 borsh.workspace = true
 borsh-ext.workspace = true
 circular-queue.workspace = true
+clap = { version = "4.3", default-features = false, features = ["std"] }
 data-encoding.workspace = true
 derivation-path.workspace = true
 duration-str.workspace = true
