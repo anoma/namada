@@ -154,7 +154,7 @@ impl Display for DateTimeUtc {
 }
 
 impl DateTimeUtc {
-    const FORMAT: &'static str = "%Y-%m-%dT%H:%M:%SZ";
+    const FORMAT: &'static str = "%Y-%m-%dT%H:%M:%S%.6f+00:00";
 
     /// Returns a DateTimeUtc which corresponds to the current date.
     pub fn now() -> Self {
@@ -385,15 +385,16 @@ mod core_time_tests {
     proptest! {
         #[test]
         fn test_valid_reverse_datetime_utc_encoding_roundtrip(
-            year in 1974..=3000,
+            year in 1974..=3_000,
             month in 1..=12,
             day in 1..=28,
             hour in 0..=23,
             min in 0..=59,
             sec in 0..=59,
+            nanos in 0..=999_999,
         )
         {
-            let timestamp = format!("{year:04}-{month:02}-{day:02}T{hour:02}:{min:02}:{sec:02}Z");
+            let timestamp = format!("{year:04}-{month:02}-{day:02}T{hour:02}:{min:02}:{sec:02}.{nanos:06}+00:00");
             test_valid_reverse_datetime_utc_encoding_roundtrip_inner(&timestamp);
         }
     }
@@ -421,7 +422,8 @@ mod core_time_tests {
         // NB: this is a valid rfc3339 string, but we enforce
         // a subset of the format to get deterministic encoding
         // results
-        const TIMESTAMP: &str = "1966-03-03T00:06:56.520+00:00";
+        const TIMESTAMP: &str = "1966-03-03T00:06:56.520Z";
+        // const TIMESTAMP: &str = "1966-03-03T00:06:56.520+00:00";
 
         // this is a valid rfc3339 string
         assert!(DateTime::parse_from_rfc3339(TIMESTAMP).is_ok());
