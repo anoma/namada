@@ -850,6 +850,8 @@ pub struct Metadata<ID> {
 mod test {
     use std::path::PathBuf;
 
+    use namada::core::time::test_utils::GENESIS_TIME;
+
     use super::*;
 
     /// Test that the [`finalize`] returns deterministic output with the same
@@ -868,8 +870,7 @@ mod test {
         let chain_id_prefix: ChainIdPrefix =
             FromStr::from_str("test-prefix").unwrap();
 
-        let genesis_time =
-            DateTimeUtc::from_str("2021-12-31T00:00:00Z").unwrap();
+        let genesis_time = DateTimeUtc::from_str(GENESIS_TIME).unwrap();
 
         let consensus_timeout_commit =
             crate::facade::tendermint::Timeout::from_str("1s").unwrap();
