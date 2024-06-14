@@ -31,7 +31,6 @@ struct Keys {
     epochs_per_year: &'static str,
     masp_epoch_multiplier: &'static str,
     implicit_vp: &'static str,
-    max_expected_time_per_block: &'static str,
     tx_allowlist: &'static str,
     vp_allowlist: &'static str,
     max_proposal_bytes: &'static str,
@@ -63,11 +62,6 @@ pub fn is_protocol_parameter_key(key: &Key) -> bool {
 /// Returns if the key is an epoch storage key.
 pub fn is_epoch_duration_storage_key(key: &Key) -> bool {
     is_epoch_duration_key_at_addr(key, &ADDRESS)
-}
-
-/// Returns if the key is the max_expected_time_per_block key.
-pub fn is_max_expected_time_per_block_key(key: &Key) -> bool {
-    is_max_expected_time_per_block_key_at_addr(key, &ADDRESS)
 }
 
 /// Returns if the key is the tx_allowlist key.
@@ -118,11 +112,6 @@ pub fn get_tx_allowlist_storage_key() -> Key {
 /// Storage key used for the fee unshielding gas limit
 pub fn get_fee_unshielding_gas_limit_key() -> Key {
     get_fee_unshielding_gas_limit_key_at_addr(ADDRESS)
-}
-
-/// Storage key used for max_epected_time_per_block parameter.
-pub fn get_max_expected_time_per_block_key() -> Key {
-    get_max_expected_time_per_block_key_at_addr(ADDRESS)
 }
 
 /// Storage key used for implicit VP parameter.
