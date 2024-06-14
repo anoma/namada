@@ -12,7 +12,7 @@ use crate::cli::cmds::*;
 use crate::client::{rpc, tx, utils};
 
 impl CliApi {
-    pub async fn handle_client_command<C, IO: Io>(
+    pub async fn handle_client_command<C, IO: Io + Send + Sync>(
         client: Option<C>,
         cmd: cli::NamadaClient,
         io: IO,
