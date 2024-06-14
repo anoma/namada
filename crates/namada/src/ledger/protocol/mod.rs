@@ -3,7 +3,6 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::fmt::Debug;
 
-use borsh_ext::BorshSerializeExt;
 use eyre::{eyre, WrapErr};
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::hash::Hash;
@@ -13,6 +12,7 @@ use namada_events::extend::{
 };
 use namada_events::EventLevel;
 use namada_gas::TxGasMeter;
+use namada_state::TxWrites;
 use namada_token::event::{TokenEvent, TokenOperation, UserAccount};
 use namada_token::utils::is_masp_transfer;
 use namada_tx::action::Read;
@@ -434,7 +434,7 @@ pub(crate) fn apply_wrapper_tx<S, D, H, CA>(
     block_proposer: Option<&Address>,
 ) -> Result<ExtendedTxResult<Error>>
 where
-    S: State<D = D, H = H> + Read<Err = namada_state::Error> + Sync,
+    S: State<D = D, H = H> + Read<Err = namada_state::Error> + TxWrites + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
@@ -500,6 +500,7 @@ pub fn transfer_fee<S, D, H, CA>(
 where
     S: State<D = D, H = H>
         + StorageRead
+        + TxWrites
         + Read<Err = namada_state::Error>
         + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
@@ -781,69 +782,19 @@ fn fee_token_transfer<WLS>(
     amount: Amount,
 ) -> Result<()>
 where
-    WLS: State + StorageRead,
+    WLS: State + StorageRead + TxWrites,
 {
-    // Transfer `token` from `src` to `dest`. Returns an `Err` if `src` has
-    // insufficient balance or if the transfer the `dest` would overflow (This
-    // can only happen if the total supply doesn't fit in `token::Amount`).
-    // Contrary to `crate::token::transfer` this function updates the tx
-    // write log and not the block write log.
-    fn inner_fee_token_transfer<WLS>(
-        state: &mut WLS,
-        token: &Address,
-        src: &Address,
-        dest: &Address,
-        amount: Amount,
-    ) -> Result<()>
-    where
-        WLS: State + StorageRead,
-    {
-        if amount.is_zero() {
-            return Ok(());
-        }
-        let src_key = crate::token::storage_key::balance_key(token, src);
-        let src_balance = crate::token::read_balance(state, token, src)
-            .map_err(Error::StorageError)?;
-        match src_balance.checked_sub(amount) {
-            Some(new_src_balance) => {
-                let dest_key =
-                    crate::token::storage_key::balance_key(token, dest);
-                let dest_balance =
-                    crate::token::read_balance(state, token, dest)
-                        .map_err(Error::StorageError)?;
-                match dest_balance.checked_add(amount) {
-                    Some(new_dest_balance) => {
-                        state
-                            .write_log_mut()
-                            .write(&src_key, new_src_balance.serialize_to_vec())
-                            .map_err(|e| Error::FeeError(e.to_string()))?;
-                        match state.write_log_mut().write(
-                            &dest_key,
-                            new_dest_balance.serialize_to_vec(),
-                        ) {
-                            Ok(_) => Ok(()),
-                            Err(e) => Err(Error::FeeError(e.to_string())),
-                        }
-                    }
-                    None => Err(Error::StorageError(
-                        namada_state::StorageError::new_alloc(format!(
-                            "The transfer would overflow balance of {dest}"
-                        )),
-                    )),
-                }
-            }
-            None => {
-                Err(Error::StorageError(namada_state::StorageError::new_alloc(
-                    format!("{src} has insufficient balance"),
-                )))
-            }
-        }
-    }
-
-    inner_fee_token_transfer(state, token, src, dest, amount).map_err(|err| {
+    crate::token::transfer(
+        &mut state.with_tx_writes(),
+        token,
+        src,
+        dest,
+        amount,
+    )
+    .map_err(|err| {
         state.write_log_mut().drop_tx();
 
-        err
+        Error::StorageError(err)
     })
 }
 
