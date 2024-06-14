@@ -34,16 +34,12 @@ pub use storage::{get_gas_scale, get_max_block_gas};
 use thiserror::Error;
 pub use wasm_allowlist::{is_tx_allowed, is_vp_allowed};
 
-/// Parameters storage keys implementation
-#[derive(Debug)]
-pub struct Key;
-
-/// Parameters storage `Read/Write` implementation
+/// Parameters storage `Keys/Read/Write` implementation
 #[derive(Debug)]
 pub struct Store<S>(PhantomData<S>);
 
-impl Keys for Key {
-    fn implicit_vp() -> namada_core::storage::Key {
+impl<S> Keys for Store<S> {
+    fn implicit_vp_key() -> namada_core::storage::Key {
         storage::get_implicit_vp_key()
     }
 }
@@ -58,8 +54,14 @@ where
         read(storage)
     }
 
-    fn read_masp_epoch_multiplier(storage: &S) -> Result<u64, Self::Err> {
+    fn masp_epoch_multiplier(storage: &S) -> Result<u64, Self::Err> {
         read_masp_epoch_multiplier_parameter(storage)
+    }
+
+    fn epoch_duration_parameter(
+        storage: &S,
+    ) -> Result<EpochDuration, Self::Err> {
+        read_epoch_duration_parameter(storage)
     }
 }
 

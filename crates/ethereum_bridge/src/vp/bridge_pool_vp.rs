@@ -89,7 +89,7 @@ where
         token: &Address,
         address: &Address,
     ) -> Result<Option<AmountDelta>, Error> {
-        let account_key = TokenKeys::balance(token, address);
+        let account_key = TokenKeys::balance_key(token, address);
         let before: Amount = (&self.ctx)
             .read_pre_value(&account_key)
             .map_err(|error| {
@@ -437,8 +437,8 @@ impl<KIND> EscrowDelta<'_, KIND> {
             ..
         } = self;
 
-        let owner_key = TokenKeys::balance(token, payer_account);
-        let escrow_key = TokenKeys::balance(token, escrow_account);
+        let owner_key = TokenKeys::balance_key(token, payer_account);
+        let escrow_key = TokenKeys::balance_key(token, escrow_account);
 
         changed_keys.contains(&owner_key) && changed_keys.contains(&escrow_key)
     }
@@ -456,8 +456,8 @@ impl<KIND> EscrowDelta<'_, KIND> {
             ..
         } = self;
 
-        let owner_key = TokenKeys::balance(token, payer_account);
-        let escrow_key = TokenKeys::balance(token, escrow_account);
+        let owner_key = TokenKeys::balance_key(token, payer_account);
+        let escrow_key = TokenKeys::balance_key(token, escrow_account);
 
         !changed_keys.contains(&owner_key)
             && !changed_keys.contains(&escrow_key)

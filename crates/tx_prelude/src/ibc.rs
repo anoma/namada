@@ -34,7 +34,21 @@ pub fn ibc_actions(ctx: &mut Ctx) -> IbcActions<'_, Ctx> {
     actions
 }
 
-impl IbcStorageContext for Ctx {
+impl<'s> IbcStorageContext for Ctx {
+    type Storage = Self;
+
+    fn storage(&self) -> &Self::Storage {
+        self
+    }
+
+    fn storage_mut(&mut self) -> &mut Self::Storage {
+        self
+    }
+
+    fn log_string(&self, message: String) {
+        super::log_string(message);
+    }
+
     fn emit_ibc_event(
         &mut self,
         event: IbcEvent,
@@ -72,10 +86,6 @@ impl IbcStorageContext for Ctx {
 
     fn insert_verifier(&mut self, addr: &Address) -> Result<(), Error> {
         TxEnv::insert_verifier(self, addr)
-    }
-
-    fn log_string(&self, message: String) {
-        super::log_string(message);
     }
 }
 

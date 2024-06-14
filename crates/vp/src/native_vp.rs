@@ -108,7 +108,7 @@ where
     S: 'static + StateRead,
     EVAL: VpEvaluator<'a, S, CA, EVAL>,
 {
-    pub(crate) ctx: &'view Ctx<'a, S, CA, EVAL>,
+    pub ctx: &'view Ctx<'a, S, CA, EVAL>,
 }
 
 /// Read access to the posterior storage (state after tx execution) via

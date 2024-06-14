@@ -24,8 +24,9 @@ use ibc::core::host::types::path::{
 use ibc::core::host::ValidationContext;
 use ibc::cosmos_host::ValidateSelfClientContext;
 use ibc::primitives::{Signer, Timestamp};
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 use ibc_testkit::testapp::ibc::clients::mock::client_state::MockClientState;
+use namada_state::StorageRead;
 
 use super::client::{AnyClientState, AnyConsensusState};
 use super::common::IbcCommonContext;
@@ -70,9 +71,9 @@ where
     }
 }
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 use ibc_testkit::testapp::ibc::clients::mock::client_state::MockClientContext;
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 impl<C> MockClientContext for IbcContext<C>
 where
     C: IbcCommonContext,
@@ -135,7 +136,7 @@ where
     }
 
     fn host_height(&self) -> Result<Height, ContextError> {
-        let height = self.inner.borrow().get_block_height()?;
+        let height = self.inner.borrow().storage().get_block_height()?;
         // the revision number is always 0
         Height::new(0, height.0).map_err(ContextError::ClientError)
     }
@@ -167,7 +168,7 @@ where
         &self,
         client_state_of_host_on_counterparty: Self::HostClientState,
     ) -> Result<(), ContextError> {
-        #[cfg(feature = "testing")]
+        #[cfg(any(test, feature = "testing"))]
         {
             if MockClientState::try_from(
                 client_state_of_host_on_counterparty.clone(),
@@ -308,6 +309,7 @@ where
         let height = self
             .inner
             .borrow()
+            .storage()
             .get_block_height()
             .expect("The height should exist");
         Height::new(0, height.0).expect("The conversion shouldn't fail")
