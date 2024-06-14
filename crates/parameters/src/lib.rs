@@ -29,7 +29,7 @@ use namada_core::storage::{BlockHeight, Key};
 use namada_core::time::DurationSecs;
 use namada_core::{hints, token};
 use namada_storage::{ResultExt, StorageRead, StorageWrite};
-pub use storage::get_max_block_gas;
+pub use storage::{get_gas_scale, get_max_block_gas};
 use thiserror::Error;
 pub use wasm_allowlist::{is_tx_allowed, is_vp_allowed};
 
@@ -77,6 +77,7 @@ where
         masp_epoch_multiplier,
         minimum_gas_price,
         fee_unshielding_gas_limit,
+        gas_scale,
         is_native_token_transferable,
     } = parameters;
 
@@ -100,6 +101,10 @@ where
     let fee_unshielding_gas_limit_key =
         storage::get_fee_unshielding_gas_limit_key();
     storage.write(&fee_unshielding_gas_limit_key, fee_unshielding_gas_limit)?;
+
+    // write the gas scale
+    let gas_scale_key = storage::get_gas_scale_key();
+    storage.write(&gas_scale_key, gas_scale)?;
 
     // write vp allowlist parameter
     let vp_allowlist_key = storage::get_vp_allowlist_storage_key();
@@ -333,6 +338,13 @@ where
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
 
+    // read gas scale
+    let gas_scale_key = storage::get_gas_scale_key();
+    let value = storage.read(&gas_scale_key)?;
+    let gas_scale: u64 = value
+        .ok_or(ReadError::ParametersMissing)
+        .into_storage_result()?;
+
     // read epochs per year
     let epochs_per_year_key = storage::get_epochs_per_year_key();
     let value = storage.read(&epochs_per_year_key)?;
@@ -376,6 +388,7 @@ where
         masp_epoch_multiplier,
         minimum_gas_price,
         fee_unshielding_gas_limit,
+        gas_scale,
         is_native_token_transferable,
     })
 }
@@ -419,6 +432,7 @@ where
         epochs_per_year: 365,
         masp_epoch_multiplier: 2,
         fee_unshielding_gas_limit: 0,
+        gas_scale: 100_000_000,
         minimum_gas_price: Default::default(),
         is_native_token_transferable: true,
     };

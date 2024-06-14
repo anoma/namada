@@ -296,6 +296,8 @@ pub struct ChainParams<T: TemplateValidation> {
     pub max_block_gas: u64,
     /// Fee unshielding gas limit
     pub fee_unshielding_gas_limit: u64,
+    /// Gas scale
+    pub gas_scale: u64,
     /// Map of the cost per gas unit for every token allowed for fee payment
     pub minimum_gas_price: T::GasMinimums,
 }
@@ -318,6 +320,7 @@ impl ChainParams<Unvalidated> {
             masp_epoch_multiplier,
             max_block_gas,
             fee_unshielding_gas_limit,
+            gas_scale,
             minimum_gas_price,
         } = self;
         let mut min_gas_prices = BTreeMap::default();
@@ -362,6 +365,7 @@ impl ChainParams<Unvalidated> {
             masp_epoch_multiplier,
             max_block_gas,
             fee_unshielding_gas_limit,
+            gas_scale,
             minimum_gas_price: min_gas_prices,
         })
     }
