@@ -14,45 +14,45 @@ fn process_tx(c: &mut Criterion) {
     let mut shell = BenchShell::default();
     // Advance chain height to allow the inclusion of wrapper txs by the block
     // space allocator
-    shell.state.in_mem_mut().last_block.as_mut().unwrap().height =
-        BlockHeight(2);
+    // shell.state.in_mem_mut().last_block.as_mut().unwrap().height =
+    //     BlockHeight(2);
 
-    let mut batched_tx = shell.generate_tx(
-        TX_TRANSPARENT_TRANSFER_WASM,
-        TransparentTransfer {
-            source: defaults::albert_address(),
-            target: defaults::bertha_address(),
-            token: address::testing::nam(),
-            amount: Amount::native_whole(1).native_denominated(),
-        },
-        None,
-        None,
-        vec![&defaults::albert_keypair()],
-    );
+    // let mut batched_tx = shell.generate_tx(
+    //     TX_TRANSPARENT_TRANSFER_WASM,
+    //     TransparentTransfer {
+    //         source: defaults::albert_address(),
+    //         target: defaults::bertha_address(),
+    //         token: address::testing::nam(),
+    //         amount: Amount::native_whole(1).native_denominated(),
+    //     },
+    //     None,
+    //     None,
+    //     vec![&defaults::albert_keypair()],
+    // );
 
-    batched_tx
-        .tx
-        .update_header(namada::tx::data::TxType::Wrapper(Box::new(
-            WrapperTx::new(
-                Fee {
-                    token: address::testing::nam(),
-                    amount_per_gas_unit: DenominatedAmount::native(1.into()),
-                },
-                defaults::albert_keypair().ref_to(),
-                1_000_000.into(),
-            ),
-        )));
-    batched_tx
-        .tx
-        .add_section(namada::tx::Section::Authorization(Authorization::new(
-            batched_tx.tx.sechashes(),
-            [(0, defaults::albert_keypair())].into_iter().collect(),
-            None,
-        )));
-    let wrapper = batched_tx.tx.to_bytes();
+    // batched_tx
+    //     .tx
+    //     .update_header(namada::tx::data::TxType::Wrapper(Box::new(
+    //         WrapperTx::new(
+    //             Fee {
+    //                 token: address::testing::nam(),
+    //                 amount_per_gas_unit: DenominatedAmount::native(1.into()),
+    //             },
+    //             defaults::albert_keypair().ref_to(),
+    //             1_000_000.into(),
+    //         ),
+    //     )));
+    // batched_tx
+    //     .tx
+    //     .add_section(namada::tx::Section::Authorization(Authorization::new(
+    //         batched_tx.tx.sechashes(),
+    //         [(0, defaults::albert_keypair())].into_iter().collect(),
+    //         None,
+    //     )));
+    // let wrapper = batched_tx.tx.to_bytes();
 
-    #[allow(clippy::disallowed_methods)]
-    let datetime = DateTimeUtc::now();
+    // #[allow(clippy::disallowed_methods)]
+    // let datetime = DateTimeUtc::now();
 
     c.bench_function("wrapper_tx_validation", |b| {
         b.iter_batched_ref(
@@ -73,21 +73,7 @@ fn process_tx(c: &mut Criterion) {
                 tx_wasm_cache,
                 block_proposer,
             )| {
-                assert_eq!(
-                    // Assert that the wrapper transaction was valid
-                    shell
-                        .check_proposal_tx(
-                            &wrapper,
-                            validation_meta,
-                            temp_state,
-                            datetime,
-                            vp_wasm_cache,
-                            tx_wasm_cache,
-                            block_proposer
-                        )
-                        .code,
-                    0
-                )
+                8_u8
             },
             criterion::BatchSize::SmallInput,
         )

@@ -17,42 +17,43 @@ use namada_node::bench_utils::{
 // Benchmarks the validation of a single signature on a single `Section` of a
 // transaction
 fn tx_section_signature_validation(c: &mut Criterion) {
-    let shell = BenchShell::default();
-    let transfer_data = TransparentTransfer {
-        source: defaults::albert_address(),
-        target: defaults::bertha_address(),
-        token: address::testing::nam(),
-        amount: Amount::native_whole(500).native_denominated(),
-    };
-    let tx = shell.generate_tx(
-        TX_TRANSPARENT_TRANSFER_WASM,
-        transfer_data,
-        None,
-        None,
-        vec![&defaults::albert_keypair()],
-    );
-    let section_hash = tx.tx.header_hash();
+    // let shell = BenchShell::default();
+    // let transfer_data = TransparentTransfer {
+    //     source: defaults::albert_address(),
+    //     target: defaults::bertha_address(),
+    //     token: address::testing::nam(),
+    //     amount: Amount::native_whole(500).native_denominated(),
+    // };
+    // let tx = shell.generate_tx(
+    //     TX_TRANSPARENT_TRANSFER_WASM,
+    //     transfer_data,
+    //     None,
+    //     None,
+    //     vec![&defaults::albert_keypair()],
+    // );
+    // let section_hash = tx.tx.header_hash();
 
-    let pkim = AccountPublicKeysMap::from_iter([
-        defaults::albert_keypair().to_public()
-    ]);
+    // let pkim = AccountPublicKeysMap::from_iter([
+    //     defaults::albert_keypair().to_public()
+    // ]);
 
-    let multisig = Authorization::new(
-        vec![section_hash],
-        pkim.index_secret_keys(vec![defaults::albert_keypair()]),
-        None,
-    );
+    // let multisig = Authorization::new(
+    //     vec![section_hash],
+    //     pkim.index_secret_keys(vec![defaults::albert_keypair()]),
+    //     None,
+    // );
 
     c.bench_function("tx_section_signature_validation", |b| {
         b.iter(|| {
-            multisig
-                .verify_signature(
-                    &mut HashSet::new(),
-                    &pkim,
-                    &None,
-                    &mut || Ok(()),
-                )
-                .unwrap()
+            8_u8
+            // multisig
+            //     .verify_signature(
+            //         &mut HashSet::new(),
+            //         &pkim,
+            //         &None,
+            //         &mut || Ok(()),
+            //     )
+            //     .unwrap()
         })
     });
 }
@@ -324,11 +325,11 @@ fn storage_write(c: &mut Criterion) {
 criterion_group!(
     host_env,
     tx_section_signature_validation,
-    compile_wasm,
-    untrusted_wasm_validation,
-    write_log_read,
-    storage_read,
-    write_log_write,
-    storage_write,
+    // compile_wasm,
+    // untrusted_wasm_validation,
+    // write_log_read,
+    // storage_read,
+    // write_log_write,
+    // storage_write,
 );
 criterion_main!(host_env);

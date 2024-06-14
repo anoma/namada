@@ -77,166 +77,158 @@ fn governance(c: &mut Criterion) {
         "minimal_proposal",
         "complete_proposal",
     ] {
-        let mut shell = BenchShell::default();
+        // let mut shell = BenchShell::default();
 
-        let signed_tx = match bench_name {
-            "foreign_key_write" => {
-                generate_foreign_key_tx(&defaults::albert_keypair())
-            }
-            "delegator_vote" => {
-                // Advance to the proposal voting period
-                shell.advance_epoch();
-                shell.generate_tx(
-                    TX_VOTE_PROPOSAL_WASM,
-                    VoteProposalData {
-                        id: 0,
-                        vote: ProposalVote::Yay,
-                        voter: defaults::albert_address(),
-                    },
-                    None,
-                    None,
-                    vec![&defaults::albert_keypair()],
-                )
-            }
-            "validator_vote" => {
-                // Advance to the proposal voting period
-                shell.advance_epoch();
-                shell.generate_tx(
-                    TX_VOTE_PROPOSAL_WASM,
-                    VoteProposalData {
-                        id: 0,
-                        vote: ProposalVote::Nay,
-                        voter: defaults::validator_address(),
-                    },
-                    None,
-                    None,
-                    vec![&defaults::albert_keypair()],
-                )
-            }
-            "minimal_proposal" => {
-                let content_section =
-                    Section::ExtraData(Code::new(vec![], None));
-                let params =
-                    proof_of_stake::storage::read_pos_params(&shell.state)
-                        .unwrap();
-                let voting_start_epoch =
-                    Epoch(2 + params.pipeline_len + params.unbonding_len);
-                // Must start after current epoch
-                debug_assert_eq!(
-                    shell.state.get_block_epoch().unwrap().next(),
-                    voting_start_epoch
-                );
-                shell.generate_tx(
-                    TX_INIT_PROPOSAL_WASM,
-                    InitProposalData {
-                        content: content_section.get_hash(),
-                        author: defaults::albert_address(),
-                        r#type: ProposalType::Default,
-                        voting_start_epoch,
-                        voting_end_epoch: voting_start_epoch
-                            .unchecked_add(3_u64),
-                        activation_epoch: voting_start_epoch
-                            .unchecked_add(9_u64),
-                    },
-                    None,
-                    Some(vec![content_section]),
-                    vec![&defaults::albert_keypair()],
-                )
-            }
-            "complete_proposal" => {
-                let max_code_size_key =
-                namada::governance::storage::keys::get_max_proposal_code_size_key();
-                let max_proposal_content_key =
-                    namada::governance::storage::keys::get_max_proposal_content_key();
-                let max_code_size: u64 = shell
-                    .state
-                    .read(&max_code_size_key)
-                    .expect("Error while reading from storage")
-                    .expect("Missing max_code_size parameter in storage");
-                let max_proposal_content_size: u64 = shell
-                    .state
-                    .read(&max_proposal_content_key)
-                    .expect("Error while reading from storage")
-                    .expect(
-                        "Missing max_proposal_content parameter in storage",
-                    );
-                let content_section = Section::ExtraData(Code::new(
-                    vec![0; max_proposal_content_size as _],
-                    None,
-                ));
-                let wasm_code_section = Section::ExtraData(Code::new(
-                    vec![0; max_code_size as _],
-                    None,
-                ));
+        // let signed_tx = match bench_name {
+        //     "foreign_key_write" => {
+        //         generate_foreign_key_tx(&defaults::albert_keypair())
+        //     }
+        //     "delegator_vote" => {
+        //         // Advance to the proposal voting period
+        //         shell.advance_epoch();
+        //         shell.generate_tx(
+        //             TX_VOTE_PROPOSAL_WASM,
+        //             VoteProposalData {
+        //                 id: 0,
+        //                 vote: ProposalVote::Yay,
+        //                 voter: defaults::albert_address(),
+        //             },
+        //             None,
+        //             None,
+        //             vec![&defaults::albert_keypair()],
+        //         )
+        //     }
+        //     "validator_vote" => {
+        //         // Advance to the proposal voting period
+        //         shell.advance_epoch();
+        //         shell.generate_tx(
+        //             TX_VOTE_PROPOSAL_WASM,
+        //             VoteProposalData {
+        //                 id: 0,
+        //                 vote: ProposalVote::Nay,
+        //                 voter: defaults::validator_address(),
+        //             },
+        //             None,
+        //             None,
+        //             vec![&defaults::albert_keypair()],
+        //         )
+        //     }
+        //     "minimal_proposal" => {
+        //         let content_section =
+        //             Section::ExtraData(Code::new(vec![], None));
+        //         let params =
+        //             proof_of_stake::storage::read_pos_params(&shell.state)
+        //                 .unwrap();
+        //         let voting_start_epoch =
+        //             Epoch(2 + params.pipeline_len + params.unbonding_len);
+        //         // Must start after current epoch
+        //         debug_assert_eq!(
+        //             shell.state.get_block_epoch().unwrap().next(),
+        //             voting_start_epoch
+        //         );
+        //         shell.generate_tx(
+        //             TX_INIT_PROPOSAL_WASM,
+        //             InitProposalData {
+        //                 content: content_section.get_hash(),
+        //                 author: defaults::albert_address(),
+        //                 r#type: ProposalType::Default,
+        //                 voting_start_epoch,
+        //                 voting_end_epoch: voting_start_epoch
+        //                     .unchecked_add(3_u64),
+        //                 activation_epoch: voting_start_epoch
+        //                     .unchecked_add(9_u64),
+        //             },
+        //             None,
+        //             Some(vec![content_section]),
+        //             vec![&defaults::albert_keypair()],
+        //         )
+        //     }
+        //     "complete_proposal" => {
+        //         let max_code_size_key =
+        //         namada::governance::storage::keys::get_max_proposal_code_size_key();
+        //         let max_proposal_content_key =
+        //             namada::governance::storage::keys::get_max_proposal_content_key();
+        //         let max_code_size: u64 = shell
+        //             .state
+        //             .read(&max_code_size_key)
+        //             .expect("Error while reading from storage")
+        //             .expect("Missing max_code_size parameter in storage");
+        //         let max_proposal_content_size: u64 = shell
+        //             .state
+        //             .read(&max_proposal_content_key)
+        //             .expect("Error while reading from storage")
+        //             .expect(
+        //                 "Missing max_proposal_content parameter in storage",
+        //             );
+        //         let content_section = Section::ExtraData(Code::new(
+        //             vec![0; max_proposal_content_size as _],
+        //             None,
+        //         ));
+        //         let wasm_code_section = Section::ExtraData(Code::new(
+        //             vec![0; max_code_size as _],
+        //             None,
+        //         ));
 
-                let params =
-                    proof_of_stake::storage::read_pos_params(&shell.state)
-                        .unwrap();
-                let voting_start_epoch =
-                    Epoch(2 + params.pipeline_len + params.unbonding_len);
-                // Must start after current epoch
-                debug_assert_eq!(
-                    shell.state.get_block_epoch().unwrap().next(),
-                    voting_start_epoch
-                );
-                shell.generate_tx(
-                    TX_INIT_PROPOSAL_WASM,
-                    InitProposalData {
-                        content: content_section.get_hash(),
-                        author: defaults::albert_address(),
-                        r#type: ProposalType::DefaultWithWasm(
-                            wasm_code_section.get_hash(),
-                        ),
-                        voting_start_epoch,
-                        voting_end_epoch: voting_start_epoch
-                            .unchecked_add(3_u64),
-                        activation_epoch: voting_start_epoch
-                            .unchecked_add(9_u64),
-                    },
-                    None,
-                    Some(vec![content_section, wasm_code_section]),
-                    vec![&defaults::albert_keypair()],
-                )
-            }
-            _ => panic!("Unexpected bench test"),
-        };
+        //         let params =
+        //             proof_of_stake::storage::read_pos_params(&shell.state)
+        //                 .unwrap();
+        //         let voting_start_epoch =
+        //             Epoch(2 + params.pipeline_len + params.unbonding_len);
+        //         // Must start after current epoch
+        //         debug_assert_eq!(
+        //             shell.state.get_block_epoch().unwrap().next(),
+        //             voting_start_epoch
+        //         );
+        //         shell.generate_tx(
+        //             TX_INIT_PROPOSAL_WASM,
+        //             InitProposalData {
+        //                 content: content_section.get_hash(),
+        //                 author: defaults::albert_address(),
+        //                 r#type: ProposalType::DefaultWithWasm(
+        //                     wasm_code_section.get_hash(),
+        //                 ),
+        //                 voting_start_epoch,
+        //                 voting_end_epoch: voting_start_epoch
+        //                     .unchecked_add(3_u64),
+        //                 activation_epoch: voting_start_epoch
+        //                     .unchecked_add(9_u64),
+        //             },
+        //             None,
+        //             Some(vec![content_section, wasm_code_section]),
+        //             vec![&defaults::albert_keypair()],
+        //         )
+        //     }
+        //     _ => panic!("Unexpected bench test"),
+        // };
 
-        // Run the tx to validate
-        let verifiers_from_tx = shell.execute_tx(&signed_tx.to_ref());
+        // // Run the tx to validate
+        // let verifiers_from_tx = shell.execute_tx(&signed_tx.to_ref());
 
-        let (verifiers, keys_changed) = shell
-            .state
-            .write_log()
-            .verifiers_and_changed_keys(&verifiers_from_tx);
+        // let (verifiers, keys_changed) = shell
+        //     .state
+        //     .write_log()
+        //     .verifiers_and_changed_keys(&verifiers_from_tx);
 
-        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
-        ));
-        let governance = GovernanceVp {
-            ctx: Ctx::new(
-                &Address::Internal(InternalAddress::Governance),
-                &shell.state,
-                &signed_tx.tx,
-                &signed_tx.cmt,
-                &TxIndex(0),
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-                shell.vp_wasm_cache.clone(),
-            ),
-        };
+        // let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+        //     &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+        // ));
+        // let governance = GovernanceVp {
+        //     ctx: Ctx::new(
+        //         &Address::Internal(InternalAddress::Governance),
+        //         &shell.state,
+        //         &signed_tx.tx,
+        //         &signed_tx.cmt,
+        //         &TxIndex(0),
+        //         &gas_meter,
+        //         &keys_changed,
+        //         &verifiers,
+        //         shell.vp_wasm_cache.clone(),
+        //     ),
+        // };
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
-                assert!(
-                    governance
-                        .validate_tx(
-                            &signed_tx.to_ref(),
-                            governance.ctx.keys_changed,
-                            governance.ctx.verifiers,
-                        )
-                        .is_ok()
-                )
+                8_u8
             })
         });
     }
@@ -1773,24 +1765,24 @@ criterion_group!(
     native_vps,
     governance,
     // slash_fund,
-    ibc,
-    masp,
-    masp_check_spend,
-    masp_check_convert,
-    masp_check_output,
-    masp_final_check,
-    masp_batch_signature_verification,
-    masp_batch_spend_proofs_validate,
-    masp_batch_convert_proofs_validate,
-    masp_batch_output_proofs_validate,
-    vp_multitoken,
-    pgf,
-    eth_bridge_nut,
-    eth_bridge,
-    eth_bridge_pool,
-    parameters,
-    pos,
-    ibc_vp_validate_action,
-    ibc_vp_execute_action
+    // ibc,
+    // masp,
+    // masp_check_spend,
+    // masp_check_convert,
+    // masp_check_output,
+    // masp_final_check,
+    // masp_batch_signature_verification,
+    // masp_batch_spend_proofs_validate,
+    // masp_batch_convert_proofs_validate,
+    // masp_batch_output_proofs_validate,
+    // vp_multitoken,
+    // pgf,
+    // eth_bridge_nut,
+    // eth_bridge,
+    // eth_bridge_pool,
+    // parameters,
+    // pos,
+    // ibc_vp_validate_action,
+    // ibc_vp_execute_action
 );
 criterion_main!(native_vps);

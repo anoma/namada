@@ -1,4 +1,3 @@
-use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -381,6 +380,17 @@ pub fn init_network(
     let global_config = GlobalConfig::new(chain_id.clone());
     global_config.write(base_dir.path()).unwrap();
 
+    let current_dir = std::env::current_dir().unwrap();
+    let repo_root = current_dir
+        .ancestors()
+        .find(|path| path.join("CHANGELOG.md").exists())
+        .unwrap_or_else(|| {
+            panic!(
+                "Couldn't find the root of the repository for the current \
+                 working directory"
+            )
+        });
+
     // Copy the WASM checksums
     let wasm_dir_full = chain_dir.join(config::DEFAULT_WASM_DIR);
     fs::create_dir_all(&wasm_dir_full).unwrap();
@@ -393,9 +403,7 @@ pub fn init_network(
     // Try to copy the built WASM, if they're present with the checksums
     let checksums = wasm_loader::Checksums::read_checksums(&wasm_dir_full)
         .unwrap_or_else(|_| safe_exit(1));
-    let base_wasm_path = std::env::current_dir()
-        .unwrap()
-        .join(crate::config::DEFAULT_WASM_DIR);
+    let base_wasm_path = repo_root.join(crate::config::DEFAULT_WASM_DIR);
     for (_, full_name) in checksums.0 {
         // try to copy built file from the Namada WASM root dir
         let file = base_wasm_path.join(&full_name);
@@ -422,7 +430,7 @@ pub fn init_network(
 
     // Gzip tar release and write to file
     let release_file = archive_dir
-        .unwrap_or_else(|| env::current_dir().unwrap())
+        .unwrap_or_else(|| repo_root.to_path_buf().to_owned())
         .join(format!("{}.tar.gz", chain_id));
     let compressed_file = File::create(&release_file).unwrap();
     let mut encoder = GzEncoder::new(compressed_file, Compression::default());

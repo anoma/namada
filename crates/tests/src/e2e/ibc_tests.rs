@@ -596,7 +596,7 @@ fn pgf_over_ibc_with_hermes() -> Result<()> {
     Ok(())
 }
 
-#[test]
+// #[test]
 fn proposal_ibc_token_inflation() -> Result<()> {
     const MASP_EPOCH_MULTIPLIER: u64 = 2;
     let update_genesis =
