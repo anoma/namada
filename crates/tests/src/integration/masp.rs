@@ -2714,7 +2714,7 @@ fn masp_fee_payment_with_non_disposable() -> Result<()> {
 }
 
 // Test masp fee payement with a custom provided spending key. Check that fees
-// are splitted between the actual source of the payment and this gas spending
+// are split between the actual source of the payment and this gas spending
 // key
 #[test]
 fn masp_fee_payment_with_custom_spending_key() -> Result<()> {
