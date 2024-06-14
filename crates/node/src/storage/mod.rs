@@ -166,7 +166,6 @@ mod tests {
                 min_num_of_blocks: 1,
                 min_duration: DurationSecs(3600),
             },
-            max_expected_time_per_block: DurationSecs(3600),
             max_proposal_bytes: Default::default(),
             max_block_gas: 100,
             vp_allowlist: vec![],

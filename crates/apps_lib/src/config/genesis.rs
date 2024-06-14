@@ -18,7 +18,7 @@ use namada::core::collections::HashMap;
 use namada::core::key::*;
 use namada::core::storage;
 use namada::core::string_encoding::StringEncoded;
-use namada::core::time::{DateTimeUtc, DurationSecs};
+use namada::core::time::DateTimeUtc;
 use namada::core::token::Denomination;
 use namada::governance::parameters::GovernanceParameters;
 use namada::governance::pgf::parameters::PgfParameters;
@@ -297,8 +297,6 @@ pub struct Parameters {
     pub max_block_gas: u64,
     /// Epoch duration
     pub epoch_duration: EpochDuration,
-    /// Maximum expected time per block
-    pub max_expected_time_per_block: DurationSecs,
     /// Allowed validity predicate hashes
     pub vp_allowlist: Vec<String>,
     /// Allowed tx hashes

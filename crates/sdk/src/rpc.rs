@@ -19,6 +19,7 @@ use namada_core::masp::MaspEpoch;
 use namada_core::storage::{
     BlockHeight, BlockResults, Epoch, Key, PrefixValue,
 };
+use namada_core::time::DurationSecs;
 use namada_core::token::{
     Amount, DenominatedAmount, Denomination, MaspDigitPos,
 };
@@ -60,6 +61,16 @@ use crate::tendermint::block::Height;
 use crate::tendermint::merkle::proof::ProofOps;
 use crate::tendermint_rpc::query::Query;
 use crate::{display_line, edisplay_line, error, Namada, Tx};
+
+/// Query an estimate of the maximum block time.
+pub async fn query_max_block_time_estimate(
+    context: &impl Namada,
+) -> Result<DurationSecs, Error> {
+    RPC.shell()
+        .max_block_time(context.client())
+        .await
+        .map_err(|err| Error::from(QueryError::NoResponse(err.to_string())))
+}
 
 /// Identical to [`query_tx_status`], but does not need a [`Namada`]
 /// context.

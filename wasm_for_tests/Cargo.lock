@@ -3994,6 +3994,7 @@ dependencies = [
  "namada_core",
  "namada_macros",
  "namada_storage",
+ "smooth-operator",
  "thiserror",
 ]
 

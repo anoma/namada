@@ -32,8 +32,6 @@ pub struct Parameters {
     pub max_tx_bytes: u32,
     /// Epoch duration (read only)
     pub epoch_duration: EpochDuration,
-    /// Maximum expected time per block (read only)
-    pub max_expected_time_per_block: DurationSecs,
     /// Max payload size, in bytes, for a tx batch proposal.
     pub max_proposal_bytes: ProposalBytes,
     /// Max gas for block
