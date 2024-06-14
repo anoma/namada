@@ -25,6 +25,7 @@ use std::marker::PhantomData;
 
 use namada_core::address::Address;
 pub use namada_core::token::*;
+use namada_storage::{StorageRead, StorageWrite};
 pub use storage::*;
 
 /// Transparent token storage `Keys/Read/Write` implementation
@@ -32,20 +33,67 @@ pub use storage::*;
 pub struct Store<S>(PhantomData<S>);
 
 impl<S> Keys for Store<S> {
-    fn balance(token: &Address, owner: &Address) -> namada_core::storage::Key {
+    fn balance_key(
+        token: &Address,
+        owner: &Address,
+    ) -> namada_core::storage::Key {
         storage_key::balance_key(token, owner)
     }
 
-    fn is_balance<'a>(
+    fn is_balance_key<'a>(
         token_addr: &Address,
         key: &'a namada_core::storage::Key,
     ) -> Option<&'a Address> {
         storage_key::is_balance_key(token_addr, key)
     }
 
-    fn is_any_token_balance(
+    fn is_any_token_balance_key(
         key: &namada_core::storage::Key,
     ) -> Option<[&Address; 2]> {
         storage_key::is_any_token_balance_key(key)
+    }
+
+    fn minter_key(token_addr: &Address) -> namada_core::storage::Key {
+        storage_key::minter_key(token_addr)
+    }
+}
+
+impl<S> namada_core::token::Read<S> for Store<S>
+where
+    S: StorageRead,
+{
+    type Err = namada_storage::Error;
+}
+
+impl<S> namada_core::token::Write<S> for Store<S>
+where
+    S: StorageWrite + StorageRead,
+{
+    fn transfer(
+        storage: &mut S,
+        token: &Address,
+        src: &Address,
+        dest: &Address,
+        amount: Amount,
+    ) -> Result<(), Self::Err> {
+        storage::transfer(storage, token, src, dest, amount)
+    }
+
+    fn burn_tokens(
+        storage: &mut S,
+        token: &Address,
+        source: &Address,
+        amount: Amount,
+    ) -> Result<(), Self::Err> {
+        storage::burn_tokens(storage, token, source, amount)
+    }
+
+    fn credit_tokens(
+        storage: &mut S,
+        token: &Address,
+        dest: &Address,
+        amount: Amount,
+    ) -> Result<(), Self::Err> {
+        storage::credit_tokens(storage, token, dest, amount)
     }
 }

@@ -17,7 +17,7 @@ use crate::storage;
 /// Abstract parameters storage keys interface
 pub trait Keys {
     /// Key for implicit VP
-    fn implicit_vp() -> storage::Key;
+    fn implicit_vp_key() -> storage::Key;
 }
 
 /// Abstract parameters storage read interface
@@ -29,7 +29,12 @@ pub trait Read<S> {
     fn read(storage: &S) -> Result<Parameters, Self::Err>;
 
     /// Read MASP epoch multiplier
-    fn read_masp_epoch_multiplier(storage: &S) -> Result<u64, Self::Err>;
+    fn masp_epoch_multiplier(storage: &S) -> Result<u64, Self::Err>;
+
+    /// Read the the epoch duration parameter from store
+    fn epoch_duration_parameter(
+        storage: &S,
+    ) -> Result<EpochDuration, Self::Err>;
 }
 
 /// Abstract parameters storage write interface

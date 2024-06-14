@@ -3657,7 +3657,9 @@ dependencies = [
  "namada_trans_token",
  "namada_tx",
  "namada_vote_ext",
+ "namada_vp",
  "serde",
+ "smooth-operator",
  "thiserror",
  "tracing",
 ]
@@ -3699,13 +3701,16 @@ dependencies = [
  "itertools 0.12.1",
  "konst",
  "linkme",
+ "namada_account",
  "namada_core",
  "namada_events",
  "namada_macros",
  "namada_migrations",
  "namada_parameters",
- "namada_storage",
+ "namada_state",
  "namada_trans_token",
+ "namada_tx",
+ "namada_vp",
  "proptest",
  "serde",
  "serde_json",
@@ -3728,12 +3733,15 @@ dependencies = [
  "masp_primitives",
  "namada_core",
  "namada_events",
+ "namada_gas",
  "namada_governance",
  "namada_macros",
  "namada_parameters",
  "namada_state",
  "namada_storage",
  "namada_token",
+ "namada_tx",
+ "namada_vp",
  "primitive-types",
  "proptest",
  "prost",
@@ -3927,7 +3935,6 @@ dependencies = [
  "namada_macros",
  "namada_merkle_tree",
  "namada_migrations",
- "namada_parameters",
  "namada_replay_protection",
  "namada_storage",
  "namada_tx",
@@ -4102,6 +4109,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "namada_vp"
+version = "0.39.0"
+dependencies = [
+ "namada_core",
+ "namada_events",
+ "namada_gas",
+ "namada_state",
+ "namada_tx",
+ "namada_vp_env",
+ "smooth-operator",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
 name = "namada_vp_env"
 version = "0.41.0"
 dependencies = [
@@ -4109,7 +4131,6 @@ dependencies = [
  "masp_primitives",
  "namada_core",
  "namada_events",
- "namada_ibc",
  "namada_storage",
  "namada_tx",
  "smooth-operator",

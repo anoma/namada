@@ -142,13 +142,13 @@ pub trait StateRead: StorageRead + Debug {
 
     /// Get the hash of a validity predicate for the given account address and
     /// the gas cost for reading it.
-    fn validity_predicate<ParamsKey: parameters::Keys>(
+    fn validity_predicate<Params: parameters::Keys>(
         &self,
         addr: &Address,
-        _: &ParamsKey,
+        _: &Params,
     ) -> Result<(Option<Hash>, u64)> {
         let key = if let Address::Implicit(_) = addr {
-            ParamsKey::implicit_vp()
+            Params::implicit_vp_key()
         } else {
             Key::validity_predicate(addr)
         };

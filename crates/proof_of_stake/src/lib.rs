@@ -127,6 +127,11 @@ where
     ) -> Result<bool, Self::Err> {
         is_delegator(storage, address, epoch)
     }
+
+    fn pipeline_len(storage: &S) -> Result<u64, Self::Err> {
+        let params = storage::read_owned_pos_params(storage)?;
+        Ok(params.pipeline_len)
+    }
 }
 
 /// Address of the PoS account implemented as a native VP

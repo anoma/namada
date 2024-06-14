@@ -43,7 +43,7 @@ where
     /// that the NAM balance increased and that the Bridge pool VP has
     /// been triggered.
     fn check_escrow(&self, verifiers: &BTreeSet<Address>) -> Result<(), Error> {
-        let escrow_key = TokenKeys::balance(
+        let escrow_key = TokenKeys::balance_key(
             &self.ctx.state.in_mem().native_token,
             &crate::ADDRESS,
         );
@@ -138,7 +138,7 @@ fn validate_changed_keys<TokenKeys: token::Keys>(
         .filter(|&key| {
             let changes_eth_storage = storage::has_eth_addr_segment(key);
             let changes_nam_balance =
-                TokenKeys::is_balance(nam_addr, key).is_some();
+                TokenKeys::is_balance_key(nam_addr, key).is_some();
             changes_nam_balance || changes_eth_storage
         })
         .collect();
@@ -164,7 +164,7 @@ fn validate_changed_keys<TokenKeys: token::Keys>(
     }
     let all_keys_are_nam_balance = keys_changed
         .iter()
-        .all(|key| TokenKeys::is_balance(nam_addr, key).is_some());
+        .all(|key| TokenKeys::is_balance_key(nam_addr, key).is_some());
     if !all_keys_are_nam_balance {
         let error = native_vp::Error::new_const(
             "Some modified keys were not a native token's balance key",
