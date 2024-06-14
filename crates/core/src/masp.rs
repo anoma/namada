@@ -491,7 +491,7 @@ impl Display for TransferSource {
 /// Represents the pre-image to a TransparentAddress
 #[derive(Debug, Clone, BorshDeserialize, BorshSerialize, BorshDeserializer)]
 pub enum TAddrData {
-    /// A transparent address
+    /// A transparent address within Namada
     Addr(Address),
     /// An IBC address
     Ibc(String),
@@ -509,7 +509,7 @@ impl TAddrData {
     }
 
     /// Get the contained IBC receiver, if any
-    pub fn payment_address(&self) -> Option<String> {
+    pub fn ibc_receiver_address(&self) -> Option<String> {
         match self {
             Self::Ibc(address) => Some(address.clone()),
             _ => None,
@@ -583,7 +583,7 @@ impl TransferTarget {
         }
     }
 
-    /// Get the contained MaybeIbcAddress, if any
+    /// Get the contained TAddrData, if any
     pub fn t_addr_data(&self) -> Option<TAddrData> {
         match self {
             Self::Address(x) => Some(TAddrData::Addr(x.clone())),
