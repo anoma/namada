@@ -540,7 +540,7 @@ where
                 if let Ok(Some(valid_batched_tx_result)) =
                     try_masp_fee_payment(shell_params, tx, tx_index)
                 {
-                    // NOTE: Even if the unshielding was succesfull we could
+                    // NOTE: Even if the unshielding was successful we could
                     // still fail in the transfer (e.g. cause the unshielded
                     // amount is not enough to cover the fees). In this case we
                     // want do drop the changes applied by the masp transaction
@@ -551,25 +551,23 @@ where
                         shell_params.state,
                         &wrapper.fee.token,
                         &wrapper.fee_payer(),
-                    );
+                    )
+                    .expect("Could not read balance key from storage");
 
                     // Ok to unwrap_or_default. In the default case, the only
                     // way the checked op can return Some is if fees are 0, but
                     // if that's the case then we would have never reached this
                     // branch of execution
-                    let post_bal = balance
-                        .unwrap_or_default()
-                        .checked_sub(fees)
-                        .filter(|_| {
-                            fee_token_transfer(
-                                shell_params.state,
-                                &wrapper.fee.token,
-                                &wrapper.fee_payer(),
-                                block_proposer,
-                                fees,
-                            )
-                            .is_ok()
-                        });
+                    let post_bal = balance.checked_sub(fees).filter(|_| {
+                        fee_token_transfer(
+                            shell_params.state,
+                            &wrapper.fee.token,
+                            &wrapper.fee_payer(),
+                            block_proposer,
+                            fees,
+                        )
+                        .is_ok()
+                    });
 
                     // Batched tx result must be returned (and considered) only
                     // if fee payment was successful
