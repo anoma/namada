@@ -406,15 +406,15 @@ pub fn is_debug_mode() -> bool {
 }
 
 pub fn generate_bin_command(bin_name: &str, manifest_path: &Path) -> Command {
-    let use_prebuilt_binaries = match env::var(ENV_VAR_USE_PREBUILT_BINARIES) {
-        Ok(var) => var.to_ascii_lowercase() != "false",
-        Err(_) => false,
+    let prebuild_binaries_path = match env::var(ENV_VAR_USE_PREBUILT_BINARIES) {
+        Ok(path) => Some(path),
+        Err(_) => None,
     };
 
     // Allow to run in debug
     let run_debug = is_debug_mode();
 
-    if !use_prebuilt_binaries {
+    if prebuild_binaries_path.is_none() {
         let build_cmd = CargoBuild::new()
             .package(APPS_PACKAGE)
             .manifest_path(manifest_path)
@@ -446,17 +446,14 @@ pub fn generate_bin_command(bin_name: &str, manifest_path: &Path) -> Command {
 
         command.command()
     } else {
-        let dir = if run_debug {
-            format!("target/debug/{}", bin_name)
-        } else {
-            format!("target/release/{}", bin_name)
-        };
+        let binary_path = prebuild_binaries_path.unwrap();
+        let binary_name = format!("{}/{}", binary_path, bin_name);
         println!(
             "\n{}: {}",
             "Running prebuilt binaries from".underline().green(),
-            dir
+            &binary_path
         );
-        std::process::Command::new(dir)
+        std::process::Command::new(binary_name)
     }
 }
 

@@ -789,7 +789,6 @@ fn proposal_submission() -> Result<()> {
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, submit_proposal_args));
     assert!(captured.result.is_err());
-    println!("{:?}", captured.result);
     assert!(captured.err_contains(
         "Proposal data are invalid: Invalid proposal start epoch: 1 must be \
          greater than current epoch .* and a multiple of 3"

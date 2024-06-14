@@ -78,6 +78,7 @@ build-release:
 		--features jemalloc \
 		--features migrations
 
+
 build-debug:
 	$(cargo) build --package namada_apps --manifest-path Cargo.toml
 

@@ -1,0 +1,13 @@
+target
+.changelog
+.github
+.vscode
+audit
+documentation
+scripts
+wasm/target
+wasm_for_tests/target
+.changelog
+wasm/checksums.json
+wasm/*.wasm
+Earthfile

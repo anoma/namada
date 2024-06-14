@@ -208,3 +208,9 @@ lto = true
 opt-level = 3
 panic = "unwind"
 overflow-checks = true
+
+[profile.ci]
+inherits = "release"
+opt-level = 2
+codegen-units = 32
+lto = "thin"

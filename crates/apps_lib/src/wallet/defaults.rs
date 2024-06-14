@@ -10,6 +10,8 @@ pub use dev::{
 
 #[cfg(any(test, feature = "testing", feature = "benches"))]
 mod dev {
+    use std::env;
+
     use lazy_static::lazy_static;
     use namada::core::address::testing::{
         apfel, btc, dot, eth, kartoffel, nam, schnitzel,
@@ -181,38 +183,39 @@ mod dev {
         get_unencrypted_keypair("validator-0-account-key")
     }
 
-    /// The name of a file that is unique to the project's root directory.
-    const PROJECT_ROOT_UNIQUE_FILE: &str = "rust-toolchain.toml";
-
     /// The pre-genesis directory of `validator-0`.
     const VALIDATOR_0_PREGENESIS_DIR: &str =
         "genesis/localnet/src/pre-genesis/validator-0";
 
     lazy_static! {
         static ref PREGENESIS_WALLET: Wallet<CliWalletUtils> = {
-            let mut root_dir = std::env::current_dir()
-                .expect("Current directory should exist")
-                .canonicalize()
-                .expect("Current directory should exist");
-            // Find the project root dir
-            while !root_dir.join(PROJECT_ROOT_UNIQUE_FILE).exists() {
-                root_dir.pop();
-            }
+            let current_dir = env::current_dir()
+                .expect("Couldn't get current working directory");
+            let root_dir = current_dir
+                .ancestors()
+                .find(|path| path.join("CHANGELOG.md").exists())
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Couldn't find the root of the repository for the \
+                         current working directory"
+                    )
+                });
             let path = root_dir.join("genesis/localnet/src/pre-genesis");
             crate::wallet::load(&path).unwrap()
         };
-
         static ref VALIDATOR_WALLET: ValidatorWallet = {
-            let mut root_dir = std::env::current_dir()
-                .expect("Current directory should exist")
-                .canonicalize()
-                .expect("Current directory should exist");
-            // Find the project root dir
-            while !root_dir.join(PROJECT_ROOT_UNIQUE_FILE).exists() {
-                root_dir.pop();
-            }
-            let path =
-                root_dir.join(VALIDATOR_0_PREGENESIS_DIR);
+            let current_dir = env::current_dir()
+                .expect("Couldn't get current working directory");
+            let root_dir = current_dir
+                .ancestors()
+                .find(|path| path.join("CHANGELOG.md").exists())
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Couldn't find the root of the repository for the \
+                         current working directory"
+                    )
+                });
+            let path = root_dir.join(VALIDATOR_0_PREGENESIS_DIR);
             crate::wallet::pre_genesis::load(&path).unwrap()
         };
     }

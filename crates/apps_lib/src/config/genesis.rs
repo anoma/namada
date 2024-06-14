@@ -353,7 +353,7 @@ pub fn make_dev_genesis(
         .canonicalize()
         .expect("Current directory should exist");
     // Find the project root dir
-    while !current_path.join("rust-toolchain.toml").exists() {
+    while !current_path.join("CHANGELOG.md").exists() {
         current_path.pop();
     }
     let chain_dir = current_path.join("genesis").join("localnet");

@@ -63,21 +63,18 @@ impl TestWasms {
             TestWasms::VpMemoryLimit => "vp_memory_limit.wasm",
             TestWasms::VpReadStorageKey => "vp_read_storage_key.wasm",
         };
-        let cwd =
+        let current_dir =
             env::current_dir().expect("Couldn't get current working directory");
-        // crudely find the root of the repo, we can't rely on the `.git`
-        // directory being present, so look instead for the presence of a
-        // CHANGELOG.md file
-        let repo_root = cwd
+        let repo_root = current_dir
             .ancestors()
             .find(|path| path.join("CHANGELOG.md").exists())
             .unwrap_or_else(|| {
                 panic!(
                     "Couldn't find the root of the repository for the current \
-                     working directory {}",
-                    cwd.to_string_lossy()
+                     working directory"
                 )
             });
+
         repo_root.join(WASM_FOR_TESTS_DIR).join(filename)
     }
 
