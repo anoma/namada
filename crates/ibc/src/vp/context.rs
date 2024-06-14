@@ -1,64 +1,83 @@
 //! Contexts for IBC validity predicate
 
 use std::collections::BTreeSet;
+use std::marker::PhantomData;
 
-use borsh_ext::BorshSerializeExt;
+use namada_core::address::{Address, InternalAddress};
 use namada_core::arith::checked;
+use namada_core::borsh::BorshSerializeExt;
 use namada_core::collections::{HashMap, HashSet};
-use namada_core::storage::Epochs;
+use namada_core::storage::{BlockHeight, Epoch, Epochs, Header, Key, TxIndex};
+use namada_core::token::{self, Amount};
+use namada_events::Event;
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
-use namada_ibc::event::IbcEvent;
-use namada_ibc::{IbcCommonContext, IbcStorageContext};
-use namada_sdk::events::Event;
-use namada_state::{StateRead, StorageError, StorageRead, StorageWrite};
-use namada_vp_env::VpEnv;
-
-use crate::address::{Address, InternalAddress};
-use crate::ledger::ibc::storage::is_ibc_key;
-use crate::ledger::native_vp::CtxPreStorageRead;
-use crate::state::write_log::StorageModification;
-use crate::state::PrefixIter;
-use crate::storage::{BlockHeight, Epoch, Header, Key, TxIndex};
-use crate::token::{
-    self as token, burn_tokens, credit_tokens, transfer, Amount,
+use namada_state::write_log::StorageModification;
+use namada_state::{
+    PrefixIter, StateRead, StorageError, StorageRead, StorageWrite,
 };
-use crate::vm::WasmCacheAccess;
+use namada_vp::native_vp::{CtxPreStorageRead, VpEvaluator};
+use namada_vp::VpEnv;
+
+use crate::event::IbcEvent;
+use crate::storage::is_ibc_key;
+use crate::{IbcCommonContext, IbcStorageContext};
 
 /// Result of a storage API call.
 pub type Result<T> = std::result::Result<T, namada_state::StorageError>;
 
 /// Pseudo execution environment context for ibc native vp
 #[derive(Debug)]
-pub struct PseudoExecutionContext<'view, 'a, S, CA>
+pub struct PseudoExecutionContext<'view, 'a, S, CA, EVAL, Token>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    EVAL: VpEvaluator<'a, S, CA, EVAL>,
+{
+    /// Execution context and storage
+    pub storage: PseudoExecutionStorage<'view, 'a, S, CA, EVAL>,
+    /// Token type
+    pub token: PhantomData<Token>,
+}
+
+/// Pseudo execution environment context storage for ibc native vp
+#[derive(Debug)]
+pub struct PseudoExecutionStorage<'view, 'a, S, CA, EVAL>
+where
+    S: 'static + StateRead,
+    EVAL: VpEvaluator<'a, S, CA, EVAL>,
 {
     /// Temporary store for pseudo execution
     store: HashMap<Key, StorageModification>,
     /// Context to read the previous value
-    ctx: CtxPreStorageRead<'view, 'a, S, CA>,
+    ctx: CtxPreStorageRead<'view, 'a, S, CA, EVAL>,
     /// IBC event
     pub event: BTreeSet<Event>,
 }
 
-impl<'view, 'a, S, CA> PseudoExecutionContext<'view, 'a, S, CA>
+impl<'view, 'a, S, CA, EVAL, Token>
+    PseudoExecutionContext<'view, 'a, S, CA, EVAL, Token>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    EVAL: VpEvaluator<'a, S, CA, EVAL>,
 {
     /// Generate new pseudo execution context
-    pub fn new(ctx: CtxPreStorageRead<'view, 'a, S, CA>) -> Self {
+    pub fn new(ctx: CtxPreStorageRead<'view, 'a, S, CA, EVAL>) -> Self {
         Self {
-            store: HashMap::new(),
-            ctx,
-            event: BTreeSet::new(),
+            storage: PseudoExecutionStorage {
+                store: HashMap::new(),
+                ctx,
+                event: BTreeSet::new(),
+            },
+            token: PhantomData,
         }
     }
 
     /// Get the set of changed keys
     pub(crate) fn get_changed_keys(&self) -> HashSet<&Key> {
-        self.store.keys().filter(|k| is_ibc_key(k)).collect()
+        self.storage
+            .store
+            .keys()
+            .filter(|k| is_ibc_key(k))
+            .collect()
     }
 
     /// Get the changed value
@@ -66,16 +85,19 @@ where
         &self,
         key: &Key,
     ) -> Option<&StorageModification> {
-        self.store.get(key)
+        self.storage.store.get(key)
     }
 }
 
-impl<'view, 'a, S, CA> StorageRead for PseudoExecutionContext<'view, 'a, S, CA>
+impl<'view, 'a, S, CA, EVAL> StorageRead
+    for PseudoExecutionStorage<'view, 'a, S, CA, EVAL>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    CA: 'static + Clone,
+    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
 {
-    type PrefixIter<'iter> = PrefixIter<'iter, <S as StateRead>::D> where Self: 'iter;
+    type PrefixIter<'iter> = PrefixIter<'iter, <S as StateRead>::D> where
+Self: 'iter;
 
     fn read_bytes(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         match self.store.get(key) {
@@ -155,10 +177,12 @@ where
     }
 }
 
-impl<'view, 'a, S, CA> StorageWrite for PseudoExecutionContext<'view, 'a, S, CA>
+impl<'view, 'a, S, CA, EVAL> StorageWrite
+    for PseudoExecutionStorage<'view, 'a, S, CA, EVAL>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    CA: 'static + Clone,
+    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
 {
     fn write_bytes(
         &mut self,
@@ -183,14 +207,30 @@ where
     }
 }
 
-impl<'view, 'a, S, CA> IbcStorageContext
-    for PseudoExecutionContext<'view, 'a, S, CA>
+impl<'view, 'a, S, CA, EVAL, Token> IbcStorageContext
+    for PseudoExecutionContext<'view, 'a, S, CA, EVAL, Token>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    CA: 'static + Clone,
+    Token: token::Keys
+        + token::Write<
+            PseudoExecutionStorage<'view, 'a, S, CA, EVAL>,
+            Err = StorageError,
+        >,
 {
+    type Storage = PseudoExecutionStorage<'view, 'a, S, CA, EVAL>;
+
+    fn storage(&self) -> &Self::Storage {
+        &self.storage
+    }
+
+    fn storage_mut(&mut self) -> &mut Self::Storage {
+        &mut self.storage
+    }
+
     fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<()> {
-        self.event.insert(event.into());
+        self.storage.event.insert(event.into());
         Ok(())
     }
 
@@ -201,7 +241,8 @@ where
         token: &Address,
         amount: Amount,
     ) -> Result<()> {
-        transfer(self, token, src, dest, amount)
+        let storage = self.storage_mut();
+        Token::transfer(storage, token, src, dest, amount)
     }
 
     fn mint_token(
@@ -210,10 +251,12 @@ where
         token: &Address,
         amount: Amount,
     ) -> Result<()> {
-        credit_tokens(self, token, target, amount)?;
+        let storage = self.storage_mut();
+        Token::credit_tokens(storage, token, target, amount)?;
 
-        let minter_key = token::storage_key::minter_key(token);
-        self.write(
+        let minter_key = Token::minter_key(token);
+        StorageWrite::write(
+            storage,
             &minter_key,
             Address::Internal(InternalAddress::Ibc).serialize_to_vec(),
         )
@@ -225,7 +268,8 @@ where
         token: &Address,
         amount: Amount,
     ) -> Result<()> {
-        burn_tokens(self, token, target, amount)
+        let storage = self.storage_mut();
+        Token::burn_tokens(storage, token, target, amount)
     }
 
     fn insert_verifier(&mut self, _verifier: &Address) -> Result<()> {
@@ -237,40 +281,48 @@ where
     }
 }
 
-impl<'view, 'a, S, CA> IbcCommonContext
-    for PseudoExecutionContext<'view, 'a, S, CA>
+impl<'view, 'a, S, CA, EVAL, Token> IbcCommonContext
+    for PseudoExecutionContext<'view, 'a, S, CA, EVAL, Token>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    CA: 'static + Clone,
+    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    Token: token::Keys
+        + token::Write<
+            PseudoExecutionStorage<'view, 'a, S, CA, EVAL>,
+            Err = StorageError,
+        >,
 {
 }
 
 /// Ibc native vp validation context
 #[derive(Debug)]
-pub struct VpValidationContext<'view, 'a, S, CA>
+pub struct VpValidationContext<'view, 'a, S, CA, EVAL>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    EVAL: VpEvaluator<'a, S, CA, EVAL>,
 {
     /// Context to read the post value
-    ctx: CtxPreStorageRead<'view, 'a, S, CA>,
+    ctx: CtxPreStorageRead<'view, 'a, S, CA, EVAL>,
 }
 
-impl<'view, 'a, S, CA> VpValidationContext<'view, 'a, S, CA>
+impl<'view, 'a, S, CA, EVAL> VpValidationContext<'view, 'a, S, CA, EVAL>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    EVAL: VpEvaluator<'a, S, CA, EVAL>,
 {
     /// Generate a new ibc vp validation context
-    pub fn new(ctx: CtxPreStorageRead<'view, 'a, S, CA>) -> Self {
+    pub fn new(ctx: CtxPreStorageRead<'view, 'a, S, CA, EVAL>) -> Self {
         Self { ctx }
     }
 }
 
-impl<'view, 'a, S, CA> StorageRead for VpValidationContext<'view, 'a, S, CA>
+impl<'view, 'a, S, CA, EVAL> StorageRead
+    for VpValidationContext<'view, 'a, S, CA, EVAL>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    CA: 'static + Clone,
+    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
 {
     type PrefixIter<'iter> = PrefixIter<'iter, <S as StateRead>::D> where Self: 'iter;
 
@@ -325,10 +377,12 @@ where
     }
 }
 
-impl<'view, 'a, S, CA> StorageWrite for VpValidationContext<'view, 'a, S, CA>
+impl<'view, 'a, S, CA, EVAL> StorageWrite
+    for VpValidationContext<'view, 'a, S, CA, EVAL>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    CA: 'static + Clone,
+    EVAL: VpEvaluator<'a, S, CA, EVAL>,
 {
     fn write_bytes(
         &mut self,
@@ -343,12 +397,23 @@ where
     }
 }
 
-impl<'view, 'a, S, CA> IbcStorageContext
-    for VpValidationContext<'view, 'a, S, CA>
+impl<'view, 'a, S, CA, EVAL> IbcStorageContext
+    for VpValidationContext<'view, 'a, S, CA, EVAL>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    CA: 'static + Clone,
+    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
 {
+    type Storage = Self;
+
+    fn storage(&self) -> &Self::Storage {
+        self
+    }
+
+    fn storage_mut(&mut self) -> &mut Self::Storage {
+        self
+    }
+
     fn emit_ibc_event(&mut self, _event: IbcEvent) -> Result<()> {
         unimplemented!("Validation doesn't emit an event")
     }
@@ -391,10 +456,11 @@ where
     }
 }
 
-impl<'view, 'a, S, CA> IbcCommonContext
-    for VpValidationContext<'view, 'a, S, CA>
+impl<'view, 'a, S, CA, EVAL> IbcCommonContext
+    for VpValidationContext<'view, 'a, S, CA, EVAL>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    CA: 'static + Clone,
+    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
 {
 }

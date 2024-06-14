@@ -4,38 +4,40 @@ pub mod context;
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
+use std::fmt::Debug;
+use std::marker::PhantomData;
 use std::rc::Rc;
 use std::time::Duration;
 
-use context::{PseudoExecutionContext, VpValidationContext};
+use context::{
+    PseudoExecutionContext, PseudoExecutionStorage, VpValidationContext,
+};
 use namada_core::address::Address;
 use namada_core::arith::{self, checked};
 use namada_core::collections::HashSet;
 use namada_core::storage::Key;
+use namada_core::token::{self, Amount};
+use namada_core::{governance, parameters, proof_of_stake};
 use namada_gas::{IBC_ACTION_EXECUTE_GAS, IBC_ACTION_VALIDATE_GAS};
-use namada_governance::is_proposal_accepted;
-use namada_ibc::event::IbcEvent;
-use namada_ibc::{
-    Error as ActionError, IbcActions, NftTransferModule, TransferModule,
-    ValidationParams,
-};
-use namada_proof_of_stake::storage::read_pos_params;
 use namada_state::write_log::StorageModification;
-use namada_state::StateRead;
+use namada_state::{StateRead, StorageError};
 use namada_tx::BatchedTxRef;
-use namada_vp_env::VpEnv;
+use namada_vp::native_vp::{
+    self, Ctx, CtxPreStorageRead, NativeVp, VpEvaluator,
+};
+use namada_vp::VpEnv;
 use thiserror::Error;
 
-use crate::ibc::core::host::types::identifiers::ChainId as IbcChainId;
-use crate::ledger::ibc::storage::{
+use crate::core::host::types::identifiers::ChainId as IbcChainId;
+use crate::event::IbcEvent;
+use crate::storage::{
     calc_hash, deposit_key, get_limits, is_ibc_key, is_ibc_trace_key,
     mint_amount_key, withdraw_key,
 };
-use crate::ledger::native_vp::{self, Ctx, NativeVp};
-use crate::ledger::parameters::read_epoch_duration_parameter;
-use crate::token::storage_key::is_any_token_balance_key;
-use crate::token::Amount;
-use crate::vm::WasmCacheAccess;
+use crate::{
+    Error as ActionError, IbcActions, NftTransferModule, TransferModule,
+    ValidationParams,
+};
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -64,30 +66,58 @@ pub enum Error {
 pub type VpResult<T> = std::result::Result<T, Error>;
 
 /// IBC VP
-pub struct Ibc<'a, S, CA>
+pub struct Ibc<'a, S, CA, EVAL, Params, Gov, Token, PoS>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    EVAL: VpEvaluator<'a, S, CA, EVAL>,
 {
     /// Context to interact with the host structures.
-    pub ctx: Ctx<'a, S, CA>,
+    pub ctx: Ctx<'a, S, CA, EVAL>,
+    /// Parameters type
+    pub params: PhantomData<Params>,
+    /// Governance type
+    pub gov: PhantomData<Gov>,
+    /// Token type
+    pub token: PhantomData<Token>,
+    /// PoS type
+    pub pos: PhantomData<PoS>,
 }
 
-impl<'a, S, CA> NativeVp for Ibc<'a, S, CA>
+impl<'a, S, CA, EVAL, Params, Gov, Token, PoS> NativeVp<'a>
+    for Ibc<'a, S, CA, EVAL, Params, Gov, Token, PoS>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL> + Debug,
+    CA: 'static + Clone + Debug,
+    Gov: governance::Read<
+            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            Err = StorageError,
+        >,
+    Params: parameters::Keys
+        + parameters::Read<
+            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            Err = StorageError,
+        >,
+    Token: token::Keys
+        + token::Write<
+            PseudoExecutionStorage<'a, 'a, S, CA, EVAL>,
+            Err = StorageError,
+        > + Debug,
+    PoS: proof_of_stake::Read<
+            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            Err = StorageError,
+        >,
 {
     type Error = Error;
 
     fn validate_tx(
-        &self,
+        &'a self,
         batched_tx: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
     ) -> VpResult<()> {
         // Is VP triggered by a governance proposal?
-        if is_proposal_accepted(
+        if Gov::is_proposal_accepted(
             &self.ctx.pre(),
             batched_tx
                 .tx
@@ -119,17 +149,47 @@ where
     }
 }
 
-impl<'a, S, CA> Ibc<'a, S, CA>
+impl<'a, S, CA, EVAL, Params, Gov, Token, PoS>
+    Ibc<'a, S, CA, EVAL, Params, Gov, Token, PoS>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL> + Debug,
+    CA: 'static + Clone + Debug,
+    Params: parameters::Keys
+        + parameters::Read<
+            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            Err = StorageError,
+        >,
+    Token: token::Keys
+        + token::Write<
+            PseudoExecutionStorage<'a, 'a, S, CA, EVAL>,
+            Err = StorageError,
+        > + Debug,
+    PoS: proof_of_stake::Read<
+            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            Err = StorageError,
+        >,
 {
+    /// Instantiate IBC VP
+    pub fn new(ctx: Ctx<'a, S, CA, EVAL>) -> Self {
+        Self {
+            ctx,
+            params: PhantomData,
+            gov: PhantomData,
+            token: PhantomData,
+            pos: PhantomData,
+        }
+    }
+
     fn validate_state(
-        &self,
+        &'a self,
         tx_data: &[u8],
         keys_changed: &BTreeSet<Key>,
     ) -> VpResult<()> {
-        let exec_ctx = PseudoExecutionContext::new(self.ctx.pre());
+        let exec_ctx =
+            PseudoExecutionContext::<'_, '_, S, CA, EVAL, Token>::new(
+                self.ctx.pre(),
+            );
         let ctx = Rc::new(RefCell::new(exec_ctx));
         // Use an empty verifiers set placeholder for validation, this is only
         // needed in actual txs to addresses whose VPs should be triggered
@@ -172,7 +232,7 @@ where
             .get_events_of::<IbcEvent>()
             .collect();
         let ctx_borrow = ctx.borrow();
-        let expected: BTreeSet<_> = ctx_borrow.event.iter().collect();
+        let expected: BTreeSet<_> = ctx_borrow.storage.event.iter().collect();
         if actual != expected {
             return Err(Error::IbcEvent(format!(
                 "The IBC event is invalid: Actual {actual:?}, Expected \
@@ -183,7 +243,7 @@ where
         Ok(())
     }
 
-    fn validate_with_msg(&self, tx_data: &[u8]) -> VpResult<()> {
+    fn validate_with_msg(&'a self, tx_data: &[u8]) -> VpResult<()> {
         let validation_ctx = VpValidationContext::new(self.ctx.pre());
         let ctx = Rc::new(RefCell::new(validation_ctx));
         // Use an empty verifiers set placeholder for validation, this is only
@@ -205,15 +265,14 @@ where
     }
 
     /// Retrieve the validation params
-    pub fn validation_params(&self) -> VpResult<ValidationParams> {
+    pub fn validation_params(&'a self) -> VpResult<ValidationParams> {
         use std::str::FromStr;
         let chain_id = self.ctx.get_chain_id().map_err(Error::NativeVpError)?;
         let proof_specs =
             namada_state::ics23_specs::ibc_proof_specs::<<S as StateRead>::H>();
-        let pos_params =
-            read_pos_params(&self.ctx.post()).map_err(Error::NativeVpError)?;
-        let pipeline_len = pos_params.pipeline_len;
-        let epoch_duration = read_epoch_duration_parameter(&self.ctx.post())
+        let pipeline_len =
+            PoS::pipeline_len(&self.ctx.pre()).map_err(Error::NativeVpError)?;
+        let epoch_duration = Params::epoch_duration_parameter(&self.ctx.pre())
             .map_err(Error::NativeVpError)?;
         let unbonding_period_secs =
             checked!(pipeline_len * epoch_duration.min_duration.0)?;
@@ -262,7 +321,9 @@ where
     fn check_limits(&self, keys_changed: &BTreeSet<Key>) -> VpResult<bool> {
         let tokens: BTreeSet<&Address> = keys_changed
             .iter()
-            .filter_map(|k| is_any_token_balance_key(k).map(|[key, _]| key))
+            .filter_map(|k| {
+                Token::is_any_token_balance_key(k).map(|[key, _]| key)
+            })
             .collect();
         for token in tokens {
             let (mint_limit, throughput_limit) =
@@ -356,103 +417,113 @@ mod tests {
 
     use std::str::FromStr;
 
-    use borsh::BorshDeserialize;
-    use borsh_ext::BorshSerializeExt;
+    use assert_matches::assert_matches;
     use ibc_testkit::testapp::ibc::clients::mock::client_state::{
         client_type, MockClientState, MOCK_CLIENT_TYPE,
     };
     use ibc_testkit::testapp::ibc::clients::mock::consensus_state::MockConsensusState;
     use ibc_testkit::testapp::ibc::clients::mock::header::MockHeader;
+    use namada_core::address::testing::{
+        established_address_1, established_address_2, nam,
+    };
     use namada_core::address::InternalAddress;
+    use namada_core::borsh::{BorshDeserialize, BorshSerializeExt};
+    use namada_core::key::testing::keypair_1;
     use namada_core::storage::testing::get_dummy_header;
-    use namada_gas::TxGasMeter;
+    use namada_core::storage::{BlockHeight, Epoch, TxIndex};
+    use namada_core::tendermint::time::Time as TmTime;
+    use namada_core::time::DurationSecs;
+    use namada_core::WasmCacheRwAccess;
+    use namada_gas::{TxGasMeter, VpGasMeter};
     use namada_governance::parameters::GovernanceParameters;
-    use namada_ibc::event::IbcEventType;
+    use namada_parameters::storage::{
+        get_epoch_duration_storage_key, get_max_expected_time_per_block_key,
+    };
+    use namada_parameters::EpochDuration;
     use namada_proof_of_stake::test_utils::get_dummy_genesis_validator;
     use namada_state::testing::TestState;
     use namada_state::StorageRead;
+    use namada_token::storage_key::balance_key;
     use namada_token::NATIVE_MAX_DECIMAL_PLACES;
     use namada_tx::data::TxType;
     use namada_tx::{Authorization, Code, Data, Section, Tx};
+    use namada_vm::wasm;
+    use namada_vm::wasm::run::VpEvalWasm;
+    use namada_vm::wasm::VpCache;
     use prost::Message;
     use sha2::Digest;
 
     use super::*;
-    use crate::core::address::testing::{
-        established_address_1, established_address_2, nam,
-    };
-    use crate::core::storage::Epoch;
-    use crate::ibc::apps::nft_transfer::types::events::{
+    use crate::apps::nft_transfer::types::events::{
         RecvEvent as NftRecvEvent, TokenTraceEvent,
         TransferEvent as NftTransferEvent,
     };
-    use crate::ibc::apps::nft_transfer::types::msgs::transfer::MsgTransfer as IbcMsgNftTransfer;
-    use crate::ibc::apps::nft_transfer::types::packet::PacketData as NftPacketData;
-    use crate::ibc::apps::nft_transfer::types::{
+    use crate::apps::nft_transfer::types::msgs::transfer::MsgTransfer as IbcMsgNftTransfer;
+    use crate::apps::nft_transfer::types::packet::PacketData as NftPacketData;
+    use crate::apps::nft_transfer::types::{
         self as nft_types, PrefixedClassId, TokenId, TokenIds,
         VERSION as NFT_VERSION,
     };
-    use crate::ibc::apps::transfer::types::events::{
+    use crate::apps::transfer::types::events::{
         AckEvent, DenomTraceEvent, RecvEvent, TimeoutEvent, TransferEvent,
     };
-    use crate::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
-    use crate::ibc::apps::transfer::types::packet::PacketData;
-    use crate::ibc::apps::transfer::types::{
+    use crate::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
+    use crate::apps::transfer::types::packet::PacketData;
+    use crate::apps::transfer::types::{
         ack_success_b64, PrefixedCoin, TracePrefix, VERSION,
     };
-    use crate::ibc::core::channel::types::acknowledgement::{
+    use crate::core::channel::types::acknowledgement::{
         Acknowledgement, AcknowledgementStatus,
     };
-    use crate::ibc::core::channel::types::channel::{
+    use crate::core::channel::types::channel::{
         ChannelEnd, Counterparty as ChanCounterparty, Order, State as ChanState,
     };
-    use crate::ibc::core::channel::types::commitment::PacketCommitment;
-    use crate::ibc::core::channel::types::events::{
+    use crate::core::channel::types::commitment::PacketCommitment;
+    use crate::core::channel::types::events::{
         AcknowledgePacket, OpenAck as ChanOpenAck,
         OpenConfirm as ChanOpenConfirm, OpenInit as ChanOpenInit,
         OpenTry as ChanOpenTry, ReceivePacket, SendPacket, TimeoutPacket,
         WriteAcknowledgement,
     };
-    use crate::ibc::core::channel::types::msgs::{
+    use crate::core::channel::types::msgs::{
         MsgAcknowledgement, MsgChannelOpenAck, MsgChannelOpenConfirm,
         MsgChannelOpenInit, MsgChannelOpenTry, MsgRecvPacket, MsgTimeout,
         MsgTimeoutOnClose,
     };
-    use crate::ibc::core::channel::types::packet::Packet;
-    use crate::ibc::core::channel::types::timeout::TimeoutHeight;
-    use crate::ibc::core::channel::types::Version as ChanVersion;
-    use crate::ibc::core::client::types::events::{CreateClient, UpdateClient};
-    use crate::ibc::core::client::types::msgs::{
-        MsgCreateClient, MsgUpdateClient,
-    };
-    use crate::ibc::core::client::types::Height;
-    use crate::ibc::core::commitment_types::commitment::{
+    use crate::core::channel::types::packet::Packet;
+    use crate::core::channel::types::timeout::TimeoutHeight;
+    use crate::core::channel::types::Version as ChanVersion;
+    use crate::core::client::types::events::{CreateClient, UpdateClient};
+    use crate::core::client::types::msgs::{MsgCreateClient, MsgUpdateClient};
+    use crate::core::client::types::Height;
+    use crate::core::commitment_types::commitment::{
         CommitmentPrefix, CommitmentProofBytes,
     };
-    use crate::ibc::core::connection::types::events::{
+    use crate::core::connection::types::events::{
         OpenAck as ConnOpenAck, OpenConfirm as ConnOpenConfirm,
         OpenInit as ConnOpenInit, OpenTry as ConnOpenTry,
     };
-    use crate::ibc::core::connection::types::msgs::{
+    use crate::core::connection::types::msgs::{
         MsgConnectionOpenAck, MsgConnectionOpenConfirm, MsgConnectionOpenInit,
         MsgConnectionOpenTry,
     };
-    use crate::ibc::core::connection::types::version::Version as ConnVersion;
-    use crate::ibc::core::connection::types::{
+    use crate::core::connection::types::version::Version as ConnVersion;
+    use crate::core::connection::types::{
         ConnectionEnd, Counterparty as ConnCounterparty, State as ConnState,
     };
-    use crate::ibc::core::handler::types::events::{
+    use crate::core::handler::types::events::{
         IbcEvent as RawIbcEvent, MessageEvent,
     };
-    use crate::ibc::core::host::types::identifiers::{
+    use crate::core::host::types::identifiers::{
         ChannelId, ClientId, ConnectionId, PortId, Sequence,
     };
-    use crate::ibc::core::router::types::event::ModuleEvent;
-    use crate::ibc::parameters::IbcParameters;
-    use crate::ibc::primitives::proto::{Any, Protobuf};
-    use crate::ibc::primitives::{Timestamp, ToProto};
-    use crate::ibc::storage::{
-        ack_key, calc_hash, channel_counter_key, channel_key,
+    use crate::core::router::types::event::ModuleEvent;
+    use crate::event::IbcEventType;
+    use crate::parameters::IbcParameters;
+    use crate::primitives::proto::{Any, Protobuf};
+    use crate::primitives::{Timestamp, ToProto};
+    use crate::storage::{
+        self, ack_key, calc_hash, channel_counter_key, channel_key,
         client_connections_key, client_counter_key, client_state_key,
         client_update_height_key, client_update_timestamp_key, commitment_key,
         connection_counter_key, connection_key, consensus_state_key, ibc_token,
@@ -460,19 +531,36 @@ mod tests {
         next_sequence_recv_key, next_sequence_send_key, nft_class_key,
         nft_metadata_key, receipt_key,
     };
-    use crate::ibc::{MsgNftTransfer, MsgTransfer, NftClass, NftMetadata};
-    use crate::key::testing::keypair_1;
-    use crate::ledger::gas::VpGasMeter;
-    use crate::ledger::parameters::storage::{
-        get_epoch_duration_storage_key, get_max_expected_time_per_block_key,
+    use crate::{
+        init_genesis_storage, MsgNftTransfer, MsgTransfer, NftClass,
+        NftMetadata,
     };
-    use crate::ledger::parameters::EpochDuration;
-    use crate::ledger::{ibc, pos};
-    use crate::storage::{BlockHeight, TxIndex};
-    use crate::tendermint::time::Time as TmTime;
-    use crate::time::DurationSecs;
-    use crate::token::storage_key::balance_key;
-    use crate::vm::wasm;
+
+    type CA = WasmCacheRwAccess;
+    type Eval = VpEvalWasm<
+        <TestState as StateRead>::D,
+        <TestState as StateRead>::H,
+        CA,
+    >;
+    type Ctx<'a> = super::Ctx<'a, TestState, VpCache<CA>, Eval>;
+    type Ibc<'a> = super::Ibc<
+        'a,
+        TestState,
+        VpCache<CA>,
+        Eval,
+        namada_parameters::Store<
+            CtxPreStorageRead<'a, 'a, TestState, VpCache<CA>, Eval>,
+        >,
+        namada_governance::Store<
+            CtxPreStorageRead<'a, 'a, TestState, VpCache<CA>, Eval>,
+        >,
+        namada_token::Store<
+            PseudoExecutionStorage<'a, 'a, TestState, VpCache<CA>, Eval>,
+        >,
+        namada_proof_of_stake::Store<
+            CtxPreStorageRead<'a, 'a, TestState, VpCache<CA>, Eval>,
+        >,
+    >;
 
     const ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
     const COMMITMENT_PREFIX: &[u8] = b"ibc";
@@ -487,7 +575,7 @@ mod tests {
         let mut state = TestState::default();
 
         // initialize the storage
-        ibc::init_genesis_storage(&mut state);
+        init_genesis_storage(&mut state);
         let gov_params = GovernanceParameters::default();
         gov_params.init_storage(&mut state).unwrap();
         let ibc_params = IbcParameters {
@@ -495,7 +583,7 @@ mod tests {
             default_per_epoch_throughput_limit: Amount::native_whole(100),
         };
         ibc_params.init_storage(&mut state).unwrap();
-        pos::test_utils::test_init_genesis(
+        namada_proof_of_stake::test_utils::test_init_genesis(
             &mut state,
             namada_proof_of_stake::OwnedPosParams::default(),
             vec![get_dummy_genesis_validator()].into_iter(),
@@ -585,8 +673,7 @@ mod tests {
     }
 
     fn get_nft_port_id() -> PortId {
-        PortId::from_str(crate::ibc::apps::nft_transfer::types::PORT_ID_STR)
-            .unwrap()
+        PortId::from_str(crate::apps::nft_transfer::types::PORT_ID_STR).unwrap()
     }
 
     fn get_channel_id() -> ChannelId {
@@ -885,7 +972,7 @@ mod tests {
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let verifiers = BTreeSet::new();
         let mut outer_tx = Tx::from_type(TxType::Raw);
@@ -910,7 +997,7 @@ mod tests {
             vp_wasm_cache,
         );
 
-        let ibc = Ibc { ctx };
+        let ibc = Ibc::new(ctx);
         // this should return true because state has been stored
         assert_matches!(
             ibc.validate_tx(&batched_tx, &keys_changed, &verifiers),
@@ -925,7 +1012,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
 
         // initialize the storage
-        ibc::init_genesis_storage(&mut state);
+        init_genesis_storage(&mut state);
         // set a dummy header
         state
             .in_mem_mut()
@@ -970,7 +1057,7 @@ mod tests {
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let verifiers = BTreeSet::new();
         let batched_tx = tx.batch_ref_first_tx();
@@ -986,7 +1073,7 @@ mod tests {
             vp_wasm_cache,
         );
 
-        let ibc = Ibc { ctx };
+        let ibc = Ibc::new(ctx);
         // this should fail because no state is stored
         let result = ibc
             .validate_tx(&batched_tx, &keys_changed, &verifiers)
@@ -1095,7 +1182,7 @@ mod tests {
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let verifiers = BTreeSet::new();
         let batched_tx = tx.batch_ref_first_tx();
@@ -1110,7 +1197,7 @@ mod tests {
             &verifiers,
             vp_wasm_cache,
         );
-        let ibc = Ibc { ctx };
+        let ibc = Ibc::new(ctx);
         // this should return true because state has been stored
         assert_matches!(
             ibc.validate_tx(&batched_tx, &keys_changed, &verifiers),
@@ -1204,7 +1291,7 @@ mod tests {
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let verifiers = BTreeSet::new();
         let batched_tx = outer_tx.batch_ref_first_tx();
@@ -1219,7 +1306,7 @@ mod tests {
             &verifiers,
             vp_wasm_cache,
         );
-        let ibc = Ibc { ctx };
+        let ibc = Ibc::new(ctx);
         // this should return true because state has been stored
         assert!(
             ibc.validate_tx(&batched_tx, &keys_changed, &verifiers)
@@ -1233,7 +1320,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
 
         // initialize the storage
-        ibc::init_genesis_storage(&mut state);
+        init_genesis_storage(&mut state);
         // set a dummy header
         state
             .in_mem_mut()
@@ -1298,7 +1385,7 @@ mod tests {
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let verifiers = BTreeSet::new();
         let batched_tx = tx.batch_ref_first_tx();
@@ -1313,7 +1400,7 @@ mod tests {
             &verifiers,
             vp_wasm_cache,
         );
-        let ibc = Ibc { ctx };
+        let ibc = Ibc::new(ctx);
         // this should fail because no event
         let result = ibc
             .validate_tx(&batched_tx, &keys_changed, &verifiers)
@@ -1418,7 +1505,7 @@ mod tests {
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let verifiers = BTreeSet::new();
         let batched_tx = tx.batch_ref_first_tx();
@@ -1433,7 +1520,7 @@ mod tests {
             &verifiers,
             vp_wasm_cache,
         );
-        let ibc = Ibc { ctx };
+        let ibc = Ibc::new(ctx);
         // this should return true because state has been stored
         assert_matches!(
             ibc.validate_tx(&batched_tx, &keys_changed, &verifiers),
@@ -1528,7 +1615,7 @@ mod tests {
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let verifiers = BTreeSet::new();
         let batched_tx = outer_tx.batch_ref_first_tx();
@@ -1543,7 +1630,7 @@ mod tests {
             &verifiers,
             vp_wasm_cache,
         );
-        let ibc = Ibc { ctx };
+        let ibc = Ibc::new(ctx);
         assert_matches!(
             ibc.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Ok(_)
@@ -1623,7 +1710,7 @@ mod tests {
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let verifiers = BTreeSet::new();
         let batched_tx = outer_tx.batch_ref_first_tx();
@@ -1638,7 +1725,7 @@ mod tests {
             &verifiers,
             vp_wasm_cache,
         );
-        let ibc = Ibc { ctx };
+        let ibc = Ibc::new(ctx);
         assert_matches!(
             ibc.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Ok(_)
@@ -1746,7 +1833,7 @@ mod tests {
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let verifiers = BTreeSet::new();
         let batched_tx = outer_tx.batch_ref_first_tx();
@@ -1761,7 +1848,7 @@ mod tests {
             &verifiers,
             vp_wasm_cache,
         );
-        let ibc = Ibc { ctx };
+        let ibc = Ibc::new(ctx);
         assert_matches!(
             ibc.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Ok(_)
@@ -1868,7 +1955,7 @@ mod tests {
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let verifiers = BTreeSet::new();
         let batched_tx = outer_tx.batch_ref_first_tx();
@@ -1883,7 +1970,7 @@ mod tests {
             &verifiers,
             vp_wasm_cache,
         );
-        let ibc = Ibc { ctx };
+        let ibc = Ibc::new(ctx);
         assert_matches!(
             ibc.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Ok(_)
@@ -1975,7 +2062,7 @@ mod tests {
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let verifiers = BTreeSet::new();
         let batched_tx = outer_tx.batch_ref_first_tx();
@@ -1990,7 +2077,7 @@ mod tests {
             &verifiers,
             vp_wasm_cache,
         );
-        let ibc = Ibc { ctx };
+        let ibc = Ibc::new(ctx);
         assert_matches!(
             ibc.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Ok(_)
@@ -2077,7 +2164,7 @@ mod tests {
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let verifiers = BTreeSet::new();
         let batched_tx = tx.batch_ref_first_tx();
@@ -2092,7 +2179,7 @@ mod tests {
             &verifiers,
             vp_wasm_cache,
         );
-        let ibc = Ibc { ctx };
+        let ibc = Ibc::new(ctx);
         assert_matches!(
             ibc.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Ok(_)
@@ -2238,7 +2325,7 @@ mod tests {
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let verifiers = BTreeSet::new();
         let batched_tx = tx.batch_ref_first_tx();
@@ -2253,7 +2340,7 @@ mod tests {
             &verifiers,
             vp_wasm_cache,
         );
-        let ibc = Ibc { ctx };
+        let ibc = Ibc::new(ctx);
         assert_matches!(
             ibc.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Ok(_)
@@ -2449,7 +2536,7 @@ mod tests {
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let verifiers = BTreeSet::new();
         let batched_tx = tx.batch_ref_first_tx();
@@ -2464,7 +2551,7 @@ mod tests {
             &verifiers,
             vp_wasm_cache,
         );
-        let ibc = Ibc { ctx };
+        let ibc = Ibc::new(ctx);
         assert_matches!(
             ibc.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Ok(_)
@@ -2604,7 +2691,7 @@ mod tests {
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let verifiers = BTreeSet::new();
         let batched_tx = tx.batch_ref_first_tx();
@@ -2619,7 +2706,7 @@ mod tests {
             &verifiers,
             vp_wasm_cache,
         );
-        let ibc = Ibc { ctx };
+        let ibc = Ibc::new(ctx);
         assert_matches!(
             ibc.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Ok(_)
@@ -2766,7 +2853,7 @@ mod tests {
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let verifiers = BTreeSet::new();
         let batched_tx = tx.batch_ref_first_tx();
@@ -2781,7 +2868,7 @@ mod tests {
             &verifiers,
             vp_wasm_cache,
         );
-        let ibc = Ibc { ctx };
+        let ibc = Ibc::new(ctx);
         assert_matches!(
             ibc.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Ok(_)
@@ -2929,7 +3016,7 @@ mod tests {
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let verifiers = BTreeSet::new();
         let batched_tx = tx.batch_ref_first_tx();
@@ -2944,7 +3031,7 @@ mod tests {
             &verifiers,
             vp_wasm_cache,
         );
-        let ibc = Ibc { ctx };
+        let ibc = Ibc::new(ctx);
         assert_matches!(
             ibc.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Ok(_)
@@ -2977,7 +3064,7 @@ mod tests {
         let class_id = get_nft_class_id();
         let token_id = get_nft_id();
         let sender = established_address_1();
-        let ibc_token = ibc::storage::ibc_token_for_nft(&class_id, &token_id);
+        let ibc_token = storage::ibc_token_for_nft(&class_id, &token_id);
         let balance_key = balance_key(&ibc_token, &sender);
         let amount = Amount::from_u64(1);
         state
@@ -2986,14 +3073,14 @@ mod tests {
             .expect("write failed");
         // nft class
         let class = dummy_nft_class();
-        let class_key = ibc::storage::nft_class_key(&class_id);
+        let class_key = storage::nft_class_key(&class_id);
         state
             .write_log_mut()
             .write(&class_key, class.serialize_to_vec())
             .expect("write failed");
         // nft metadata
         let metadata = dummy_nft_metadata();
-        let metadata_key = ibc::storage::nft_metadata_key(&class_id, &token_id);
+        let metadata_key = storage::nft_metadata_key(&class_id, &token_id);
         state
             .write_log_mut()
             .write(&metadata_key, metadata.serialize_to_vec())
@@ -3107,7 +3194,7 @@ mod tests {
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let verifiers = BTreeSet::new();
         let batched_tx = tx.batch_ref_first_tx();
@@ -3122,7 +3209,7 @@ mod tests {
             &verifiers,
             vp_wasm_cache,
         );
-        let ibc = Ibc { ctx };
+        let ibc = Ibc::new(ctx);
         assert_matches!(
             ibc.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Ok(_)
@@ -3341,7 +3428,7 @@ mod tests {
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         ));
         let (vp_wasm_cache, _vp_cache_dir) =
-            wasm::compilation_cache::common::testing::cache();
+            wasm::compilation_cache::common::testing::vp_cache();
 
         let verifiers = BTreeSet::new();
         let batched_tx = tx.batch_ref_first_tx();
@@ -3356,7 +3443,7 @@ mod tests {
             &verifiers,
             vp_wasm_cache,
         );
-        let ibc = Ibc { ctx };
+        let ibc = Ibc::new(ctx);
         assert_matches!(
             ibc.validate_tx(&batched_tx, &keys_changed, &verifiers),
             Ok(_)

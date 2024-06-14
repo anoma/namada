@@ -65,7 +65,7 @@ where
             })?;
 
         let nut_owners = keys_changed.iter().filter_map(|key| {
-            match TokenKeys::is_any_token_balance(key) {
+            match TokenKeys::is_any_token_balance_key(key) {
                 Some([Address::Internal(InternalAddress::Nut(_)), owner]) => {
                     Some((key, owner))
                 }

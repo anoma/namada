@@ -19,6 +19,7 @@
 
 pub mod arith;
 pub mod bytes;
+pub mod governance;
 pub mod hints;
 pub mod proof_of_stake;
 mod wasm_cache;

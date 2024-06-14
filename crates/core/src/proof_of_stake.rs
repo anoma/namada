@@ -18,4 +18,7 @@ pub trait Read<S> {
         address: &Address,
         epoch: Option<storage::Epoch>,
     ) -> Result<bool, Self::Err>;
+
+    /// Read PoS pipeline length parameter
+    fn pipeline_len(storage: &S) -> Result<u64, Self::Err>;
 }

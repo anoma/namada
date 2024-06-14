@@ -915,7 +915,7 @@ where
     ) -> Result<()> {
         let funds_key = gov_storage::get_funds_key(proposal_id);
         let balance_key =
-            TokenKeys::balance(native_token_address, self.ctx.address);
+            TokenKeys::balance_key(native_token_address, self.ctx.address);
         let min_funds_parameter_key = gov_storage::get_min_proposal_fund_key();
 
         let min_funds_parameter: token::Amount =
@@ -980,7 +980,7 @@ where
     /// Validate a balance key
     fn is_valid_balance(&self, native_token_address: &Address) -> Result<()> {
         let balance_key =
-            TokenKeys::balance(native_token_address, self.ctx.address);
+            TokenKeys::balance_key(native_token_address, self.ctx.address);
         let min_funds_parameter_key = gov_storage::get_min_proposal_fund_key();
 
         let pre_balance: Option<token::Amount> =
@@ -1251,7 +1251,7 @@ impl KeyType {
             KeyType::COUNTER
         } else if gov_storage::is_parameter_key(key) {
             KeyType::PARAMETER
-        } else if TokenKeys::is_balance(native_token, key).is_some() {
+        } else if TokenKeys::is_balance_key(native_token, key).is_some() {
             KeyType::BALANCE
         } else if gov_storage::is_governance_key(key) {
             KeyType::UNKNOWN_GOVERNANCE
