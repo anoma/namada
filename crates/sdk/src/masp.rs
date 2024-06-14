@@ -621,10 +621,10 @@ impl IntoIterator for Unscanned {
 
     fn into_iter(self) -> Self::IntoIter {
         let txs = {
-            let mut txs: IndexedNoteData = Default::default();
+
             let mut locked = self.txs.lock().unwrap();
-            std::mem::swap(&mut txs, &mut locked);
-            txs
+            std::mem::take(&mut *locked)
+
         };
         txs.into_iter()
     }
