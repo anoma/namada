@@ -208,9 +208,7 @@ pub trait State: StateRead + StorageWrite {
 
 /// Perform storage writes and deletions to write-log at tx level.
 pub trait TxWrites: StateRead {
-    /// Instead of performing protocol writes to block level write-log,
-    /// [`TxWlState`] storage writes at tx level write-log similarly to
-    /// [`TxHostEnvState`].
+    /// Performs storage writes at the tx level of the write-log.
     fn with_tx_writes(&mut self) -> TxWlState<'_, Self::D, Self::H>;
 }
 
