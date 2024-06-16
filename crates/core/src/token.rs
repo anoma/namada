@@ -237,7 +237,9 @@ impl Amount {
         val: i128,
         denom: MaspDigitPos,
     ) -> Option<Self> {
-        let lo = u64::try_from(val).ok()?;
+        #[allow(clippy::cast_sign_loss)]
+        #[allow(clippy::cast_possible_truncation)]
+        let lo = val as u64;
         #[allow(clippy::cast_sign_loss)]
         let hi = (val >> 64) as u64;
         let lo_pos = denom as usize;
