@@ -5001,7 +5001,10 @@ version = "0.41.0"
 dependencies = [
  "namada_core",
  "namada_macros",
+ "namada_state",
  "namada_storage",
+ "namada_tx",
+ "namada_vp",
  "smooth-operator",
  "thiserror",
 ]
