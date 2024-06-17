@@ -22,6 +22,8 @@ mod storage;
 pub mod storage_key;
 pub mod utils;
 pub mod validation;
+#[cfg(any(test, feature = "validation", feature = "testing"))]
+pub mod vp;
 
 use std::str::FromStr;
 

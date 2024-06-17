@@ -35,6 +35,11 @@ pub trait Read<S> {
     fn epoch_duration_parameter(
         storage: &S,
     ) -> Result<EpochDuration, Self::Err>;
+
+    /// Get the max signatures per transactio parameter
+    fn max_signatures_per_transaction(
+        storage: &S,
+    ) -> Result<Option<u8>, Self::Err>;
 }
 
 /// Abstract parameters storage write interface

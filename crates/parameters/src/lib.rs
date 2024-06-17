@@ -63,6 +63,12 @@ where
     ) -> Result<EpochDuration, Self::Err> {
         read_epoch_duration_parameter(storage)
     }
+
+    fn max_signatures_per_transaction(
+        storage: &S,
+    ) -> Result<Option<u8>, Self::Err> {
+        max_signatures_per_transaction(storage)
+    }
 }
 
 impl<S> Write<S> for Store<S>
