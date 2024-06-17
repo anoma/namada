@@ -3,18 +3,16 @@
 use std::collections::BTreeSet;
 
 use namada_core::booleans::BoolResultUnitExt;
-use namada_governance::pgf::storage::keys as pgf_storage;
-use namada_governance::{is_proposal_accepted, pgf};
+use namada_core::storage::Key;
 use namada_state::StateRead;
 use namada_tx::action::{Action, PgfAction, Read};
 use namada_tx::BatchedTxRef;
+use namada_vp::native_vp::{self, Ctx, NativeVp, VpEvaluator};
 use thiserror::Error;
 
 use crate::address::{Address, InternalAddress};
-use crate::ledger::native_vp;
-use crate::ledger::native_vp::{Ctx, NativeVp};
-use crate::storage::Key;
-use crate::vm::WasmCacheAccess;
+use crate::pgf::storage::keys as pgf_storage;
+use crate::{is_proposal_accepted, pgf};
 
 /// for handling Pgf NativeVP errors
 pub type Result<T> = std::result::Result<T, Error>;
@@ -34,24 +32,25 @@ pub enum Error {
 }
 
 /// Pgf VP
-pub struct PgfVp<'a, S, CA>
+pub struct PgfVp<'a, S, CA, EVAL>
 where
-    S: StateRead,
-    CA: WasmCacheAccess,
+    S: 'static + StateRead,
+    EVAL: VpEvaluator<'a, S, CA, EVAL>,
 {
     /// Context to interact with the host structures.
-    pub ctx: Ctx<'a, S, CA>,
+    pub ctx: Ctx<'a, S, CA, EVAL>,
 }
 
-impl<'a, S, CA> NativeVp for PgfVp<'a, S, CA>
+impl<'a, S, CA, EVAL> NativeVp<'a> for PgfVp<'a, S, CA, EVAL>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    CA: 'static + Clone,
+    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
 {
     type Error = Error;
 
     fn validate_tx(
-        &self,
+        &'a self,
         batched_tx: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
@@ -208,14 +207,15 @@ where
     }
 }
 
-impl<'a, S, CA> PgfVp<'a, S, CA>
+impl<'a, S, CA, EVAL> PgfVp<'a, S, CA, EVAL>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    CA: 'static + Clone,
+    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
 {
     /// Validate a governance parameter
     pub fn is_valid_parameter_change(
-        &self,
+        &'a self,
         batched_tx: &BatchedTxRef<'_>,
     ) -> Result<()> {
         batched_tx.tx.data(batched_tx.cmt).map_or_else(
