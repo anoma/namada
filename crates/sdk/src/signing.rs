@@ -702,45 +702,88 @@ fn format_outputs(output: &mut Vec<String>) {
     }
 }
 
-enum TokenTransfer<'a> {
-    Transparent(&'a token::TransparentTransfer),
-    Shielded,
-    Shielding(&'a token::ShieldingTransfer),
-    Unshielding(&'a token::UnshieldingTransfer),
+// Represents a transfer of tokens
+trait TokenTransfer {
+    // The source address of the transfer
+    fn source(&self) -> &Address;
+    // The target address of the transfer
+    fn target(&self) -> &Address;
+    // The token being transferred
+    fn token(&self) -> &Address;
+    // The amount of token being transferred
+    fn amount(&self) -> DenominatedAmount;
 }
 
-impl TokenTransfer<'_> {
-    fn source(&self) -> Option<&Address> {
-        match self {
-            TokenTransfer::Transparent(transfer) => Some(&transfer.source),
-            TokenTransfer::Shielded => None,
-            TokenTransfer::Shielding(transfer) => Some(&transfer.source),
-            TokenTransfer::Unshielding(_) => None,
-        }
+impl TokenTransfer for token::TransparentTransfer {
+    fn source(&self) -> &Address {
+        &self.source
     }
 
-    fn target(&self) -> Option<&Address> {
-        match self {
-            TokenTransfer::Transparent(transfer) => Some(&transfer.target),
-            TokenTransfer::Shielded => None,
-            TokenTransfer::Shielding(_) => None,
-            TokenTransfer::Unshielding(transfer) => Some(&transfer.target),
-        }
+    fn target(&self) -> &Address {
+        &self.target
     }
 
-    fn token_and_amount(&self) -> Option<(&Address, DenominatedAmount)> {
-        match self {
-            TokenTransfer::Transparent(transfer) => {
-                Some((&transfer.token, transfer.amount))
-            }
-            TokenTransfer::Shielded => None,
-            TokenTransfer::Shielding(transfer) => {
-                Some((&transfer.token, transfer.amount))
-            }
-            TokenTransfer::Unshielding(transfer) => {
-                Some((&transfer.token, transfer.amount))
-            }
-        }
+    fn token(&self) -> &Address {
+        &self.token
+    }
+
+    fn amount(&self) -> DenominatedAmount {
+        self.amount
+    }
+}
+
+impl TokenTransfer for token::ShieldingTransfer {
+    fn source(&self) -> &Address {
+        &self.source
+    }
+
+    fn target(&self) -> &Address {
+        &MASP // A shielding transfer effectively goes to MASP address
+    }
+
+    fn token(&self) -> &Address {
+        &self.token
+    }
+
+    fn amount(&self) -> DenominatedAmount {
+        self.amount
+    }
+}
+
+impl TokenTransfer for token::ShieldedTransfer {
+    fn source(&self) -> &Address {
+        &MASP // A shielded transfer effectively comes from MASP address
+    }
+
+    fn target(&self) -> &Address {
+        &MASP // A shielded transfer effectively goes to MASP address
+    }
+
+    fn token(&self) -> &Address {
+        &MASP // This token is inconsequential since the amount is zero
+    }
+
+    fn amount(&self) -> DenominatedAmount {
+        // A shielded transfer has effectively no transparent balance changes
+        DenominatedAmount::native(Amount::zero())
+    }
+}
+
+impl TokenTransfer for token::UnshieldingTransfer {
+    fn source(&self) -> &Address {
+        &MASP // An unshielding transfer effectively comes from MASP address
+    }
+
+    fn target(&self) -> &Address {
+        &self.target
+    }
+
+    fn token(&self) -> &Address {
+        &self.token
+    }
+
+    fn amount(&self) -> DenominatedAmount {
+        self.amount
     }
 }
 
@@ -749,14 +792,20 @@ impl TokenTransfer<'_> {
 async fn make_ledger_token_transfer_endpoints(
     tokens: &HashMap<Address, String>,
     output: &mut Vec<String>,
-    transfer: TokenTransfer<'_>,
+    transfer: &impl TokenTransfer,
     builder: Option<&MaspBuilder>,
     assets: &HashMap<AssetType, AssetData>,
 ) {
-    if let Some(source) = transfer.source() {
-        output.push(format!("Sender : {}", source));
-        if let Some((token, amount)) = transfer.token_and_amount() {
-            make_ledger_amount_addr(tokens, output, amount, token, "Sending ");
+    if *transfer.source() != MASP {
+        output.push(format!("Sender : {}", transfer.source()));
+        if *transfer.target() == MASP {
+            make_ledger_amount_addr(
+                tokens,
+                output,
+                transfer.amount(),
+                transfer.token(),
+                "Sending ",
+            );
         }
     } else if let Some(builder) = builder {
         for sapling_input in builder.builder.sapling_inputs() {
@@ -773,14 +822,14 @@ async fn make_ledger_token_transfer_endpoints(
             .await;
         }
     }
-    if let Some(target) = transfer.target() {
-        output.push(format!("Destination : {}", target));
-        if let Some((token, amount)) = transfer.token_and_amount() {
+    if *transfer.target() != MASP {
+        output.push(format!("Destination : {}", transfer.target()));
+        if *transfer.source() == MASP {
             make_ledger_amount_addr(
                 tokens,
                 output,
-                amount,
-                token,
+                transfer.amount(),
+                transfer.token(),
                 "Receiving ",
             );
         }
@@ -798,6 +847,15 @@ async fn make_ledger_token_transfer_endpoints(
             )
             .await;
         }
+    }
+    if *transfer.source() != MASP && *transfer.target() != MASP {
+        make_ledger_amount_addr(
+            tokens,
+            output,
+            transfer.amount(),
+            transfer.token(),
+            "",
+        );
     }
 }
 
@@ -1286,11 +1344,11 @@ pub async fn to_ledger_vector(
 
             tv.name = "Transfer_0".to_string();
 
-            tv.output.push("Type : TransparentTransfer".to_string());
+            tv.output.push("Type : Transparent Transfer".to_string());
             make_ledger_token_transfer_endpoints(
                 &tokens,
                 &mut tv.output,
-                TokenTransfer::Transparent(&transfer),
+                &transfer,
                 None,
                 &HashMap::default(),
             )
@@ -1298,7 +1356,7 @@ pub async fn to_ledger_vector(
             make_ledger_token_transfer_endpoints(
                 &tokens,
                 &mut tv.output_expert,
-                TokenTransfer::Transparent(&transfer),
+                &transfer,
                 None,
                 &HashMap::default(),
             )
@@ -1333,11 +1391,11 @@ pub async fn to_ledger_vector(
 
             tv.name = "ShieldedTransfer_0".to_string();
 
-            tv.output.push("Type : ShieldedTransfer".to_string());
+            tv.output.push("Type : Shielded Transfer".to_string());
             make_ledger_token_transfer_endpoints(
                 &tokens,
                 &mut tv.output,
-                TokenTransfer::Shielded,
+                &transfer,
                 builder,
                 &asset_types,
             )
@@ -1345,7 +1403,7 @@ pub async fn to_ledger_vector(
             make_ledger_token_transfer_endpoints(
                 &tokens,
                 &mut tv.output_expert,
-                TokenTransfer::Shielded,
+                &transfer,
                 builder,
                 &asset_types,
             )
@@ -1380,11 +1438,11 @@ pub async fn to_ledger_vector(
 
             tv.name = "ShieldingTransfer_0".to_string();
 
-            tv.output.push("Type : ShieldingTransfer".to_string());
+            tv.output.push("Type : Shielding Transfer".to_string());
             make_ledger_token_transfer_endpoints(
                 &tokens,
                 &mut tv.output,
-                TokenTransfer::Shielding(&transfer),
+                &transfer,
                 builder,
                 &asset_types,
             )
@@ -1392,7 +1450,7 @@ pub async fn to_ledger_vector(
             make_ledger_token_transfer_endpoints(
                 &tokens,
                 &mut tv.output_expert,
-                TokenTransfer::Shielding(&transfer),
+                &transfer,
                 builder,
                 &asset_types,
             )
@@ -1428,11 +1486,11 @@ pub async fn to_ledger_vector(
 
             tv.name = "UnshieldingTransfer_0".to_string();
 
-            tv.output.push("Type : UnshieldingTransfer".to_string());
+            tv.output.push("Type : Unshielding Transfer".to_string());
             make_ledger_token_transfer_endpoints(
                 &tokens,
                 &mut tv.output,
-                TokenTransfer::Unshielding(&transfer),
+                &transfer,
                 builder,
                 &asset_types,
             )
@@ -1440,7 +1498,7 @@ pub async fn to_ledger_vector(
             make_ledger_token_transfer_endpoints(
                 &tokens,
                 &mut tv.output_expert,
-                TokenTransfer::Unshielding(&transfer),
+                &transfer,
                 builder,
                 &asset_types,
             )
