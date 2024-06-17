@@ -5030,6 +5030,8 @@ dependencies = [
  "namada_state",
  "namada_storage",
  "namada_trans_token",
+ "namada_tx",
+ "namada_vp",
  "once_cell",
  "pretty_assertions",
  "proptest",
