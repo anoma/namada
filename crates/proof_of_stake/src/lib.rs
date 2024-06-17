@@ -28,7 +28,7 @@ pub mod storage;
 pub mod storage_key;
 pub mod types;
 pub mod validator_set_update;
-// pub mod validation;
+pub mod vp;
 
 mod error;
 #[cfg(test)]

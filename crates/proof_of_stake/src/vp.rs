@@ -1,26 +1,26 @@
 //! Proof-of-Stake native validity predicate.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::marker::PhantomData;
 
+use namada_core::address::Address;
 use namada_core::booleans::BoolResultUnitExt;
-pub use namada_proof_of_stake;
-pub use namada_proof_of_stake::parameters::PosParams;
-use namada_proof_of_stake::storage::read_pos_params;
-use namada_proof_of_stake::storage_key::is_params_key;
-pub use namada_proof_of_stake::types;
-use namada_proof_of_stake::types::BondId;
-use namada_proof_of_stake::{storage_key, token};
-use namada_state::StateRead;
+use namada_core::governance;
+use namada_core::storage::Key;
+use namada_state::{StateRead, StorageError};
 use namada_tx::action::{
     Action, Bond, ClaimRewards, PosAction, Read, Redelegation, Unbond, Withdraw,
 };
 use namada_tx::BatchedTxRef;
+use namada_vp::native_vp::{
+    self, Ctx, CtxPreStorageRead, NativeVp, VpEvaluator,
+};
 use thiserror::Error;
 
-use crate::address::Address;
-use crate::ledger::native_vp::{self, Ctx, NativeVp};
-use crate::storage::Key;
-use crate::vm::WasmCacheAccess;
+use crate::storage::read_pos_params;
+use crate::storage_key::is_params_key;
+use crate::types::BondId;
+use crate::{storage_key, token};
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -37,24 +37,31 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Proof-of-Stake validity predicate
-pub struct PosVP<'a, S, CA>
+pub struct PosVP<'a, S, CA, EVAL, Gov>
 where
-    S: StateRead,
-    CA: WasmCacheAccess,
+    S: 'static + StateRead,
+    EVAL: VpEvaluator<'a, S, CA, EVAL>,
 {
     /// Context to interact with the host structures.
-    pub ctx: Ctx<'a, S, CA>,
+    pub ctx: Ctx<'a, S, CA, EVAL>,
+    /// Governance type
+    pub gov: PhantomData<Gov>,
 }
 
-impl<'a, S, CA> NativeVp for PosVP<'a, S, CA>
+impl<'a, S, CA, EVAL, Gov> NativeVp<'a> for PosVP<'a, S, CA, EVAL, Gov>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    CA: 'static + Clone,
+    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    Gov: governance::Read<
+            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            Err = StorageError,
+        >,
 {
     type Error = Error;
 
     fn validate_tx(
-        &self,
+        &'a self,
         batched_tx: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
@@ -65,12 +72,7 @@ where
         if batched_tx
             .tx
             .data(batched_tx.cmt)
-            .map(|tx_data| {
-                namada_governance::is_proposal_accepted(
-                    &self.ctx.pre(),
-                    &tx_data,
-                )
-            })
+            .map(|tx_data| Gov::is_proposal_accepted(&self.ctx.pre(), &tx_data))
             .transpose()
             .map_err(Error::NativeVpError)?
             .unwrap_or(false)
@@ -314,14 +316,18 @@ where
     }
 }
 
-impl<'a, S, CA> PosVP<'a, S, CA>
+impl<'a, S, CA, EVAL, Gov> PosVP<'a, S, CA, EVAL, Gov>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    CA: 'static + Clone,
+    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
 {
     /// Instantiate a `PosVP`.
-    pub fn new(ctx: Ctx<'a, S, CA>) -> Self {
-        Self { ctx }
+    pub fn new(ctx: Ctx<'a, S, CA, EVAL>) -> Self {
+        Self {
+            ctx,
+            gov: PhantomData,
+        }
     }
 
     /// Return `Ok` if the changed parameters are valid
