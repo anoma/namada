@@ -18,6 +18,7 @@
 )]
 
 pub mod storage;
+pub mod vp;
 mod wasm_allowlist;
 use std::collections::BTreeMap;
 use std::marker::PhantomData;

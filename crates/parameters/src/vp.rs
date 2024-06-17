@@ -1,16 +1,20 @@
 //! Native VP for protocol parameters
 
 use std::collections::BTreeSet;
+use std::marker::PhantomData;
 
 use namada_core::address::Address;
 use namada_core::booleans::BoolResultUnitExt;
+use namada_core::governance;
 use namada_core::storage::Key;
-use namada_state::StateRead;
+use namada_state::{StateRead, StorageError};
 use namada_tx::BatchedTxRef;
+use namada_vp::native_vp::{
+    self, Ctx, CtxPreStorageRead, NativeVp, VpEvaluator,
+};
 use thiserror::Error;
 
-use crate::ledger::native_vp::{self, Ctx, NativeVp};
-use crate::vm::WasmCacheAccess;
+use crate::storage;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -23,24 +27,31 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Parameters VP
-pub struct ParametersVp<'a, S, CA>
+pub struct ParametersVp<'a, S, CA, EVAL, Gov>
 where
-    S: StateRead,
-    CA: WasmCacheAccess,
+    S: 'static + StateRead,
+    EVAL: VpEvaluator<'a, S, CA, EVAL>,
 {
     /// Context to interact with the host structures.
-    pub ctx: Ctx<'a, S, CA>,
+    pub ctx: Ctx<'a, S, CA, EVAL>,
+    /// Governance type
+    pub gov: PhantomData<Gov>,
 }
 
-impl<'a, S, CA> NativeVp for ParametersVp<'a, S, CA>
+impl<'a, S, CA, EVAL, Gov> NativeVp<'a> for ParametersVp<'a, S, CA, EVAL, Gov>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    CA: 'static + Clone,
+    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    Gov: governance::Read<
+            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            Err = StorageError,
+        >,
 {
     type Error = Error;
 
     fn validate_tx(
-        &self,
+        &'a self,
         batched_tx: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
@@ -57,19 +68,17 @@ where
             };
             match key_type {
                 KeyType::PARAMETER | KeyType::UNKNOWN_PARAMETER => {
-                    namada_governance::storage::is_proposal_accepted(
-                        &self.ctx.pre(),
-                        &data,
-                    )
-                    .map_err(Error::NativeVpError)?
-                    .ok_or_else(|| {
-                        native_vp::Error::new_alloc(format!(
-                            "Attempted to change a protocol parameter from \
-                             outside of a governance proposal, or from a \
-                             non-accepted governance proposal: {key}",
-                        ))
-                        .into()
-                    })
+                    Gov::is_proposal_accepted(&self.ctx.pre(), &data)
+                        .map_err(Error::NativeVpError)?
+                        .ok_or_else(|| {
+                            native_vp::Error::new_alloc(format!(
+                                "Attempted to change a protocol parameter \
+                                 from outside of a governance proposal, or \
+                                 from a non-accepted governance proposal: \
+                                 {key}",
+                            ))
+                            .into()
+                        })
                 }
                 KeyType::UNKNOWN => Ok(()),
             }
@@ -90,9 +99,9 @@ enum KeyType {
 
 impl From<&Key> for KeyType {
     fn from(value: &Key) -> Self {
-        if namada_parameters::storage::is_protocol_parameter_key(value) {
+        if storage::is_protocol_parameter_key(value) {
             KeyType::PARAMETER
-        } else if namada_parameters::storage::is_parameter_key(value) {
+        } else if storage::is_parameter_key(value) {
             KeyType::UNKNOWN_PARAMETER
         } else {
             KeyType::UNKNOWN
