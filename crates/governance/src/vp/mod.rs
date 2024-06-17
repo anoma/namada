@@ -1,5 +1,6 @@
 //! Governance VP
 
+pub mod pgf;
 pub mod utils;
 
 use std::collections::BTreeSet;
