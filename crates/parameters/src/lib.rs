@@ -69,6 +69,10 @@ where
     ) -> Result<Option<u8>, Self::Err> {
         max_signatures_per_transaction(storage)
     }
+
+    fn is_native_token_transferable(storage: &S) -> Result<bool, Self::Err> {
+        storage::is_native_token_transferable(storage)
+    }
 }
 
 impl<S> Write<S> for Store<S>
