@@ -1149,7 +1149,7 @@ fn make_consensus_state(
 ) -> Result<TmConsensusState> {
     let header = query_header(test, height)?;
     let cs = TmConsensusState::from(header);
-    println!("DEBUG: consensus state with queried header: {cs:?}");
+    println!("DEBUG: consensus state with queried header: {cs:?}, at height {height}");
     Ok(cs)
 }
 
