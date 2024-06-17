@@ -2,6 +2,7 @@
 
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
+use std::marker::PhantomData;
 
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::CommitmentTree;
@@ -14,6 +15,7 @@ use masp_primitives::transaction::{Transaction, TransparentAddress};
 use namada_core::address::Address;
 use namada_core::arith::{checked, CheckedAdd, CheckedSub};
 use namada_core::booleans::BoolResultUnitExt;
+use namada_core::borsh::BorshSerializeExt;
 use namada_core::collections::HashSet;
 use namada_core::ibc::apps::nft_transfer::types::msgs::transfer::MsgTransfer as IbcMsgNftTransfer;
 use namada_core::ibc::apps::nft_transfer::types::packet::PacketData as NftPacketData;
@@ -21,52 +23,31 @@ use namada_core::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcM
 use namada_core::ibc::apps::transfer::types::packet::PacketData;
 use namada_core::masp::{addr_taddr, encode_asset_type, ibc_taddr, MaspEpoch};
 use namada_core::storage::Key;
-use namada_governance::storage::is_proposal_accepted;
-use namada_ibc::core::channel::types::commitment::{
-    compute_packet_commitment, PacketCommitment,
+use namada_core::token::MaspDigitPos;
+use namada_core::uint::I320;
+use namada_core::{governance, parameters, token};
+use namada_state::{
+    ConversionState, OptionExt, ResultExt, StateRead, StorageError,
 };
-use namada_ibc::core::channel::types::msgs::{
-    MsgRecvPacket as IbcMsgRecvPacket, PacketMsg,
+use namada_trans_token::read_denom;
+use namada_trans_token::storage_key::{
+    is_any_shielded_action_balance_key, ShieldedActionOwner,
 };
-use namada_ibc::core::channel::types::timeout::TimeoutHeight;
-use namada_ibc::core::handler::types::msgs::MsgEnvelope;
-use namada_ibc::core::host::types::identifiers::{ChannelId, PortId, Sequence};
-use namada_ibc::primitives::Timestamp;
-use namada_ibc::trace::{
-    convert_to_address, ibc_trace_for_nft, is_sender_chain_source,
-};
-use namada_ibc::{
-    extract_masp_tx_from_envelope, get_last_sequence_send, IbcMessage,
-};
-use namada_sdk::masp::TAddrData;
-use namada_state::{ConversionState, OptionExt, ResultExt, StateRead};
-use namada_token::read_denom;
-use namada_token::validation::verify_shielded_tx;
 use namada_tx::action::Read;
 use namada_tx::BatchedTxRef;
-use namada_vp_env::VpEnv;
+use namada_vp::native_vp::{Ctx, CtxPreStorageRead, NativeVp, VpEvaluator};
+use namada_vp::{native_vp, VpEnv};
+use ripemd::Digest as RipemdDigest;
+use sha2::Digest as Sha2Digest;
 use thiserror::Error;
-use token::storage_key::{
-    balance_key, is_any_token_balance_key, is_masp_key, is_masp_nullifier_key,
-    is_masp_token_map_key, is_masp_transfer_key, masp_commitment_anchor_key,
-    masp_commitment_tree_key, masp_convert_anchor_key, masp_nullifier_key,
-};
 use token::Amount;
 
-use crate::address::{IBC, MASP};
-use crate::ledger::ibc::storage;
-use crate::ledger::ibc::storage::{commitment_key, receipt_key};
-use crate::ledger::native_vp;
-use crate::ledger::native_vp::{Ctx, NativeVp};
-use crate::sdk::ibc::apps::transfer::types::{ack_success_b64, PORT_ID_STR};
-use crate::sdk::ibc::core::channel::types::acknowledgement::AcknowledgementStatus;
-use crate::sdk::ibc::core::channel::types::commitment::{
-    compute_ack_commitment, AcknowledgementCommitment,
+use crate::storage_key::{
+    is_masp_key, is_masp_nullifier_key, is_masp_token_map_key,
+    is_masp_transfer_key, masp_commitment_anchor_key, masp_commitment_tree_key,
+    masp_convert_anchor_key, masp_nullifier_key,
 };
-use crate::token;
-use crate::token::MaspDigitPos;
-use crate::uint::I320;
-use crate::vm::WasmCacheAccess;
+use crate::validation::verify_shielded_tx;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -79,13 +60,17 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// MASP VP
-pub struct MaspVp<'a, S, CA>
+pub struct MaspVp<'a, S, CA, EVAL, Params, Gov>
 where
-    S: StateRead,
-    CA: WasmCacheAccess,
+    S: 'static + StateRead,
+    EVAL: VpEvaluator<'a, S, CA, EVAL>,
 {
     /// Context to interact with the host structures.
-    pub ctx: Ctx<'a, S, CA>,
+    pub ctx: Ctx<'a, S, CA, EVAL>,
+    /// Governance type
+    pub gov: PhantomData<Params>,
+    /// Parameters type
+    pub params: PhantomData<Gov>,
 }
 
 // The balances changed by the transaction, split between masp and non-masp
@@ -101,7 +86,6 @@ struct ChangedBalances {
     post: BTreeMap<TransparentAddress, ValueSum<Address, Amount>>,
 }
 
-/// IBC transfer info
 struct IbcTransferInfo {
     src_port_id: PortId,
     src_channel_id: ChannelId,
@@ -173,14 +157,23 @@ impl TryFrom<IbcMsgNftTransfer> for IbcTransferInfo {
     }
 }
 
-impl<'a, S, CA> MaspVp<'a, S, CA>
+impl<'a, S, CA, EVAL, Params, Gov> MaspVp<'a, S, CA, EVAL, Params, Gov>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    CA: 'static + Clone,
+    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    Params: parameters::Read<
+            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            Err = StorageError,
+        >,
+    Gov: governance::Read<
+            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            Err = StorageError,
+        >,
 {
     /// Return if the parameter change was done via a governance proposal
     pub fn is_valid_parameter_change(
-        &self,
+        &'a self,
         tx: &BatchedTxRef<'_>,
     ) -> Result<()> {
         tx.tx.data(tx.cmt).map_or_else(
@@ -191,7 +184,7 @@ where
                 .into())
             },
             |data| {
-                is_proposal_accepted(&self.ctx.pre(), data.as_ref())
+                Gov::is_proposal_accepted(&self.ctx.pre(), data.as_ref())
                     .map_err(Error::NativeVpError)?
                     .ok_or_else(|| {
                         native_vp::Error::new_const(
@@ -340,7 +333,7 @@ where
 
     // Check that the convert descriptions anchors of a transaction are valid
     fn valid_convert_descriptions_anchor(
-        &self,
+        &'a self,
         transaction: &Transaction,
     ) -> Result<()> {
         if let Some(bundle) = transaction.sapling_bundle() {
@@ -747,7 +740,7 @@ where
 
     // Check that MASP Transaction and state changes are valid
     fn is_valid_masp_transfer(
-        &self,
+        &'a self,
         tx_data: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
@@ -1275,15 +1268,25 @@ fn verify_sapling_balancing_value(
     }
 }
 
-impl<'a, S, CA> NativeVp for MaspVp<'a, S, CA>
+impl<'a, S, CA, EVAL, Params, Gov> NativeVp<'a>
+    for MaspVp<'a, S, CA, EVAL, Params, Gov>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    CA: 'static + Clone,
+    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    Params: parameters::Read<
+            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            Err = StorageError,
+        >,
+    Gov: governance::Read<
+            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            Err = StorageError,
+        >,
 {
     type Error = Error;
 
     fn validate_tx(
-        &self,
+        &'a self,
         tx_data: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
