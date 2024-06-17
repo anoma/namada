@@ -108,6 +108,7 @@ where
     S: 'static + StateRead,
     EVAL: VpEvaluator<'a, S, CA, EVAL>,
 {
+    /// The inner context
     pub ctx: &'view Ctx<'a, S, CA, EVAL>,
 }
 
@@ -119,7 +120,8 @@ where
     S: 'static + StateRead,
     EVAL: VpEvaluator<'a, S, CA, EVAL>,
 {
-    ctx: &'view Ctx<'a, S, CA, EVAL>,
+    /// The inner context
+    pub ctx: &'view Ctx<'a, S, CA, EVAL>,
 }
 
 impl<'a, S, CA, EVAL> Ctx<'a, S, CA, EVAL>
