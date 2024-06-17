@@ -40,6 +40,10 @@ pub trait Read<S> {
     fn max_signatures_per_transaction(
         storage: &S,
     ) -> Result<Option<u8>, Self::Err>;
+
+    /// Helper function to retrieve the `is_native_token_transferable` protocol
+    /// parameter from storage
+    fn is_native_token_transferable(storage: &S) -> Result<bool, Self::Err>;
 }
 
 /// Abstract parameters storage write interface

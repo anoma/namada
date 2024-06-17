@@ -20,6 +20,7 @@
 pub mod event;
 mod storage;
 pub mod storage_key;
+pub mod vp;
 
 use std::marker::PhantomData;
 
