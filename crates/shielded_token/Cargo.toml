@@ -15,13 +15,12 @@ version.workspace = true
 [features]
 default = []
 multicore = ["dep:rayon"]
-# Download MASP params if they're not present
-download-params = ["masp_proofs/download-params"]
 testing = [
   "multicore",
   "namada_core/testing",
   "masp_primitives/test-dependencies",
 ]
+download-params = ["masp_proofs/download-params"]
 
 [dependencies]
 namada_controller = { path = "../controller" }
@@ -34,7 +33,7 @@ namada_trans_token = { path = "../trans_token" }
 borsh.workspace = true
 lazy_static.workspace = true
 masp_primitives.workspace = true
-masp_proofs.workspace = true
+masp_proofs = { workspace = true }
 rand_core.workspace = true
 rayon = { workspace = true, optional = true }
 serde.workspace = true

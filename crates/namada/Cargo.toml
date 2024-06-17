@@ -73,8 +73,6 @@ multicore = [
   "namada_sdk/multicore",
   "namada_token/multicore",
 ]
-# Download MASP params if they're not present
-download-params = ["namada_sdk/download-params"]
 rand = ["namada_sdk/rand"]
 migrations = [
   "namada_migrations",
