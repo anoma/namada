@@ -17,6 +17,7 @@ mod abortable;
 #[cfg(feature = "benches")]
 pub mod bench_utils;
 mod broadcaster;
+mod dry_run_tx;
 pub mod ethereum_oracle;
 pub mod shell;
 pub mod shims;
@@ -31,6 +32,7 @@ use std::thread;
 
 use byte_unit::Byte;
 use data_encoding::HEXUPPER;
+pub use dry_run_tx::dry_run_tx;
 use futures::future::TryFutureExt;
 use namada::core::storage::BlockHeight;
 use namada::core::time::DateTimeUtc;
