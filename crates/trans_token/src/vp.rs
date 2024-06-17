@@ -1,29 +1,30 @@
 //! Native VP for multitokens
 
 use std::collections::BTreeSet;
+use std::marker::PhantomData;
 
+use namada_core::address::{Address, InternalAddress, GOV, POS};
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::collections::HashMap;
-use namada_governance::is_proposal_accepted;
-use namada_parameters::storage::is_native_token_transferable;
-use namada_state::StateRead;
-use namada_token::storage_key::is_any_token_parameter_key;
+use namada_core::storage::{Key, KeySeg};
+use namada_core::token::Amount;
+use namada_core::{governance, parameters};
+use namada_state::{StateRead, StorageError};
+use namada_storage::StorageRead;
 use namada_tx::action::{
     Action, Bond, ClaimRewards, GovAction, PosAction, Read, Withdraw,
 };
 use namada_tx::BatchedTxRef;
-use namada_vp_env::VpEnv;
+use namada_vp::native_vp::{
+    self, Ctx, CtxPreStorageRead, NativeVp, VpEvaluator,
+};
+use namada_vp::VpEnv;
 use thiserror::Error;
 
-use crate::address::{Address, InternalAddress, GOV, POS};
-use crate::ledger::native_vp::{self, Ctx, NativeVp};
-use crate::storage::{Key, KeySeg};
-use crate::token::storage_key::{
+use crate::storage_key::{
     is_any_minted_balance_key, is_any_minter_key, is_any_token_balance_key,
-    minter_key,
+    is_any_token_parameter_key, minter_key,
 };
-use crate::token::Amount;
-use crate::vm::WasmCacheAccess;
 
 /// The owner of some balance change.
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -45,30 +46,44 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Multitoken VP
-pub struct MultitokenVp<'a, S, CA>
+pub struct MultitokenVp<'a, S, CA, EVAL, Params, Gov>
 where
-    S: StateRead,
-    CA: WasmCacheAccess,
+    S: 'static + StateRead,
+    EVAL: VpEvaluator<'a, S, CA, EVAL>,
 {
     /// Context to interact with the host structures.
-    pub ctx: Ctx<'a, S, CA>,
+    pub ctx: Ctx<'a, S, CA, EVAL>,
+    /// Parameters type
+    pub params: PhantomData<Params>,
+    /// Governance type
+    pub gov: PhantomData<Gov>,
 }
 
-impl<'a, S, CA> NativeVp for MultitokenVp<'a, S, CA>
+impl<'a, S, CA, EVAL, Params, Gov> NativeVp<'a>
+    for MultitokenVp<'a, S, CA, EVAL, Params, Gov>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    CA: 'static + Clone,
+    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    Params: parameters::Read<
+            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            Err = StorageError,
+        >,
+    Gov: governance::Read<
+            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            Err = StorageError,
+        >,
 {
     type Error = Error;
 
     fn validate_tx(
-        &self,
+        &'a self,
         tx_data: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
         // Is VP triggered by a governance proposal?
-        if is_proposal_accepted(
+        if Gov::is_proposal_accepted(
             &self.ctx.pre(),
             tx_data.tx.data(tx_data.cmt).unwrap_or_default().as_ref(),
         )
@@ -77,9 +92,9 @@ where
             return Ok(());
         }
 
-        let native_token = self.ctx.pre().ctx.get_native_token()?;
+        let native_token = self.ctx.pre().get_native_token()?;
         let is_native_token_transferable =
-            is_native_token_transferable(&self.ctx.pre())?;
+            Params::is_native_token_transferable(&self.ctx.pre())?;
         let actions = self.ctx.read_actions()?;
         // The native token can be transferred to and out of the `PoS` and `Gov`
         // accounts, even if `is_native_token_transferable` is false
@@ -281,11 +296,29 @@ where
     }
 }
 
-impl<'a, S, CA> MultitokenVp<'a, S, CA>
+impl<'a, S, CA, EVAL, Params, Gov> MultitokenVp<'a, S, CA, EVAL, Params, Gov>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    CA: 'static + Clone,
+    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    Params: parameters::Read<
+            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            Err = StorageError,
+        >,
+    Gov: governance::Read<
+            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            Err = StorageError,
+        >,
 {
+    /// Instantiate token VP
+    pub fn new(ctx: Ctx<'a, S, CA, EVAL>) -> Self {
+        Self {
+            ctx,
+            params: PhantomData,
+            gov: PhantomData,
+        }
+    }
+
     /// Return the minter if the minter is valid and the minter VP exists
     pub fn is_valid_minter(
         &self,
@@ -323,7 +356,7 @@ where
 
     /// Return if the parameter change was done via a governance proposal
     pub fn is_valid_parameter(
-        &self,
+        &'a self,
         batched_tx: &BatchedTxRef<'_>,
     ) -> Result<()> {
         batched_tx.tx.data(batched_tx.cmt).map_or_else(
@@ -334,7 +367,7 @@ where
                 .into())
             },
             |data| {
-                is_proposal_accepted(&self.ctx.pre(), data.as_ref())
+                Gov::is_proposal_accepted(&self.ctx.pre(), data.as_ref())
                     .map_err(Error::NativeVpError)?
                     .ok_or_else(|| {
                         native_vp::Error::new_const(
@@ -403,27 +436,49 @@ mod tests {
     use std::cell::RefCell;
 
     use assert_matches::assert_matches;
-    use borsh_ext::BorshSerializeExt;
-    use namada_gas::TxGasMeter;
+    use namada_core::address::testing::{
+        established_address_1, established_address_2, nam,
+    };
+    use namada_core::borsh::BorshSerializeExt;
+    use namada_core::key::testing::keypair_1;
+    use namada_core::WasmCacheRwAccess;
+    use namada_gas::{TxGasMeter, VpGasMeter};
+    use namada_ibc::storage::ibc_token;
     use namada_parameters::storage::get_native_token_transferable_key;
     use namada_state::testing::TestState;
     use namada_state::StorageWrite;
+    use namada_storage::TxIndex;
     use namada_tx::action::Write;
     use namada_tx::data::TxType;
     use namada_tx::{Authorization, BatchedTx, Code, Data, Section, Tx};
+    use namada_vm::wasm::compilation_cache::common::testing::vp_cache;
+    use namada_vm::wasm::run::VpEvalWasm;
+    use namada_vm::wasm::VpCache;
 
     use super::*;
-    use crate::core::address::testing::{
-        established_address_1, established_address_2, nam,
-    };
-    use crate::key::testing::keypair_1;
-    use crate::ledger::gas::VpGasMeter;
-    use crate::ledger::ibc::trace::ibc_token;
-    use crate::storage::TxIndex;
-    use crate::token::storage_key::{balance_key, minted_balance_key};
-    use crate::vm::wasm::compilation_cache::common::testing::cache as wasm_cache;
+    use crate::storage_key::{balance_key, minted_balance_key};
 
     const ADDRESS: Address = Address::Internal(InternalAddress::Multitoken);
+
+    type CA = WasmCacheRwAccess;
+    type Eval = VpEvalWasm<
+        <TestState as StateRead>::D,
+        <TestState as StateRead>::H,
+        CA,
+    >;
+    type Ctx<'a> = super::Ctx<'a, TestState, VpCache<CA>, Eval>;
+    type MultitokenVp<'a> = super::MultitokenVp<
+        'a,
+        TestState,
+        VpCache<CA>,
+        Eval,
+        namada_parameters::Store<
+            CtxPreStorageRead<'a, 'a, TestState, VpCache<CA>, Eval>,
+        >,
+        namada_governance::Store<
+            CtxPreStorageRead<'a, 'a, TestState, VpCache<CA>, Eval>,
+        >,
+    >;
 
     fn init_state() -> TestState {
         let mut state = TestState::default();
@@ -490,7 +545,7 @@ mod tests {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new(u64::MAX),
         ));
-        let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
+        let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let mut verifiers = BTreeSet::new();
         verifiers.insert(src);
         let ctx = Ctx::new(
@@ -502,10 +557,10 @@ mod tests {
             &gas_meter,
             &keys_changed,
             &verifiers,
-            vp_wasm_cache,
+            vp_vp_cache,
         );
 
-        let vp = MultitokenVp { ctx };
+        let vp = MultitokenVp::new(ctx);
         assert!(
             vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
                 .is_ok()
@@ -532,7 +587,7 @@ mod tests {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new(u64::MAX),
         ));
-        let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
+        let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let verifiers = BTreeSet::new();
         let ctx = Ctx::new(
             &ADDRESS,
@@ -543,10 +598,10 @@ mod tests {
             &gas_meter,
             &keys_changed,
             &verifiers,
-            vp_wasm_cache,
+            vp_vp_cache,
         );
 
-        let vp = MultitokenVp { ctx };
+        let vp = MultitokenVp::new(ctx);
         assert!(
             vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
                 .is_err()
@@ -592,7 +647,7 @@ mod tests {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new(u64::MAX),
         ));
-        let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
+        let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let mut verifiers = BTreeSet::new();
         // for the minter
         verifiers.insert(minter);
@@ -607,10 +662,10 @@ mod tests {
             &gas_meter,
             &keys_changed,
             &verifiers,
-            vp_wasm_cache,
+            vp_vp_cache,
         );
 
-        let vp = MultitokenVp { ctx };
+        let vp = MultitokenVp::new(ctx);
         assert!(
             vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
                 .is_ok()
@@ -654,7 +709,7 @@ mod tests {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new(u64::MAX),
         ));
-        let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
+        let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let mut verifiers = BTreeSet::new();
         // for the minter
         verifiers.insert(minter);
@@ -667,10 +722,10 @@ mod tests {
             &gas_meter,
             &keys_changed,
             &verifiers,
-            vp_wasm_cache,
+            vp_vp_cache,
         );
 
-        let vp = MultitokenVp { ctx };
+        let vp = MultitokenVp::new(ctx);
         assert!(
             vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
                 .is_err()
@@ -709,7 +764,7 @@ mod tests {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new(u64::MAX),
         ));
-        let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
+        let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let verifiers = BTreeSet::new();
         let ctx = Ctx::new(
             &ADDRESS,
@@ -720,10 +775,10 @@ mod tests {
             &gas_meter,
             &keys_changed,
             &verifiers,
-            vp_wasm_cache,
+            vp_vp_cache,
         );
 
-        let vp = MultitokenVp { ctx };
+        let vp = MultitokenVp::new(ctx);
         assert!(
             vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
                 .is_err()
@@ -769,7 +824,7 @@ mod tests {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new(u64::MAX),
         ));
-        let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
+        let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let mut verifiers = BTreeSet::new();
         // for the minter
         verifiers.insert(minter);
@@ -782,10 +837,10 @@ mod tests {
             &gas_meter,
             &keys_changed,
             &verifiers,
-            vp_wasm_cache,
+            vp_vp_cache,
         );
 
-        let vp = MultitokenVp { ctx };
+        let vp = MultitokenVp::new(ctx);
         assert!(
             vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
                 .is_err()
@@ -811,7 +866,7 @@ mod tests {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new(u64::MAX),
         ));
-        let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
+        let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let mut verifiers = BTreeSet::new();
         // for the minter
         verifiers.insert(minter);
@@ -824,10 +879,10 @@ mod tests {
             &gas_meter,
             &keys_changed,
             &verifiers,
-            vp_wasm_cache,
+            vp_vp_cache,
         );
 
-        let vp = MultitokenVp { ctx };
+        let vp = MultitokenVp::new(ctx);
         assert!(
             vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
                 .is_err()
@@ -856,7 +911,7 @@ mod tests {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new(u64::MAX),
         ));
-        let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
+        let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let verifiers = BTreeSet::new();
         let ctx = Ctx::new(
             &ADDRESS,
@@ -867,10 +922,10 @@ mod tests {
             &gas_meter,
             &keys_changed,
             &verifiers,
-            vp_wasm_cache,
+            vp_vp_cache,
         );
 
-        let vp = MultitokenVp { ctx };
+        let vp = MultitokenVp::new(ctx);
         assert!(
             vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
                 .is_err()
@@ -893,7 +948,7 @@ mod tests {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new(u64::MAX),
         ));
-        let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
+        let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let mut verifiers = BTreeSet::new();
         verifiers.insert(src);
         let ctx = Ctx::new(
@@ -905,10 +960,10 @@ mod tests {
             &gas_meter,
             &keys_changed,
             &verifiers,
-            vp_wasm_cache,
+            vp_vp_cache,
         );
 
-        let vp = MultitokenVp { ctx };
+        let vp = MultitokenVp::new(ctx);
         assert_matches!(
             vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers),
             Err(_)
@@ -938,7 +993,7 @@ mod tests {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new(u64::MAX),
         ));
-        let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
+        let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let mut verifiers = BTreeSet::new();
         verifiers.insert(src);
         let ctx = Ctx::new(
@@ -950,10 +1005,10 @@ mod tests {
             &gas_meter,
             &keys_changed,
             &verifiers,
-            vp_wasm_cache,
+            vp_vp_cache,
         );
 
-        let vp = MultitokenVp { ctx };
+        let vp = MultitokenVp::new(ctx);
         assert_matches!(
             vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers),
             Ok(_)
@@ -981,7 +1036,7 @@ mod tests {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new(u64::MAX),
         ));
-        let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
+        let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let mut verifiers = BTreeSet::new();
         verifiers.insert(src);
         let ctx = Ctx::new(
@@ -993,10 +1048,10 @@ mod tests {
             &gas_meter,
             &keys_changed,
             &verifiers,
-            vp_wasm_cache,
+            vp_vp_cache,
         );
 
-        let vp = MultitokenVp { ctx };
+        let vp = MultitokenVp::new(ctx);
         assert_matches!(
             vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers),
             Err(_)
@@ -1024,7 +1079,7 @@ mod tests {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new(u64::MAX),
         ));
-        let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
+        let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let mut verifiers = BTreeSet::new();
         verifiers.insert(src);
         let ctx = Ctx::new(
@@ -1036,10 +1091,10 @@ mod tests {
             &gas_meter,
             &keys_changed,
             &verifiers,
-            vp_wasm_cache,
+            vp_vp_cache,
         );
 
-        let vp = MultitokenVp { ctx };
+        let vp = MultitokenVp::new(ctx);
         assert_matches!(
             vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers),
             Ok(_)
@@ -1072,7 +1127,7 @@ mod tests {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new(u64::MAX),
         ));
-        let (vp_wasm_cache, _vp_cache_dir) = wasm_cache();
+        let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let mut verifiers = BTreeSet::new();
         verifiers.insert(src);
         let ctx = Ctx::new(
@@ -1084,10 +1139,10 @@ mod tests {
             &gas_meter,
             &keys_changed,
             &verifiers,
-            vp_wasm_cache,
+            vp_vp_cache,
         );
 
-        let vp = MultitokenVp { ctx };
+        let vp = MultitokenVp::new(ctx);
         assert_matches!(
             vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers),
             Ok(_)

@@ -5276,11 +5276,22 @@ dependencies = [
 name = "namada_trans_token"
 version = "0.41.0"
 dependencies = [
+ "assert_matches",
  "konst",
  "linkme",
  "namada_core",
  "namada_events",
+ "namada_gas",
+ "namada_governance",
+ "namada_ibc",
+ "namada_parameters",
+ "namada_state",
  "namada_storage",
+ "namada_tx",
+ "namada_vm",
+ "namada_vp",
+ "thiserror",
+ "tracing",
 ]
 
 [[package]]
