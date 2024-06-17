@@ -117,8 +117,12 @@ fn run_ledger_ibc() -> Result<()> {
             setup::set_validators(1, genesis, base_dir, |_| 0)
         };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
+
     let _bg_ledger_a = ledger_a.background();
     let _bg_ledger_b = ledger_b.background();
+
+    wait_height(&test_a, 2, std::time::Duration::from_secs(40))?;
+    wait_height(&test_b, 2, std::time::Duration::from_secs(40))?;
 
     let (client_id_a, client_id_b) = create_client(&test_a, &test_b)?;
 
@@ -208,8 +212,12 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
             setup::set_validators(1, genesis, base_dir, |_| 0)
         };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
+
     let _bg_ledger_a = ledger_a.background();
     let _bg_ledger_b = ledger_b.background();
+
+    wait_height(&test_a, 2, std::time::Duration::from_secs(40))?;
+    wait_height(&test_b, 2, std::time::Duration::from_secs(40))?;
 
     setup_hermes(&test_a, &test_b)?;
     let port_id_a = "transfer".parse().unwrap();
@@ -370,9 +378,12 @@ fn ibc_namada_gaia() -> Result<()> {
             setup::set_validators(1, genesis, base_dir, |_| 0)
         };
     let (ledger, mut ledger_b, test, _test_b) = run_two_nets(update_genesis)?;
-    let _bg_ledger = ledger.background();
     // chain B isn't used
     ledger_b.interrupt()?;
+
+    let _bg_ledger = ledger.background();
+
+    wait_height(&test, 2, std::time::Duration::from_secs(40))?;
 
     // gaia
     let test_gaia = setup_gaia()?;
@@ -538,8 +549,12 @@ fn pgf_over_ibc_with_hermes() -> Result<()> {
         setup::set_validators(1, genesis, base_dir, |_| 0)
     };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
+
     let _bg_ledger_a = ledger_a.background();
     let _bg_ledger_b = ledger_b.background();
+
+    wait_height(&test_a, 2, std::time::Duration::from_secs(40))?;
+    wait_height(&test_b, 2, std::time::Duration::from_secs(40))?;
 
     setup_hermes(&test_a, &test_b)?;
     let port_id_a = "transfer".parse().unwrap();
@@ -615,8 +630,12 @@ fn proposal_ibc_token_inflation() -> Result<()> {
             setup::set_validators(1, genesis, base_dir, |_| 0)
         };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
+
     let _bg_ledger_a = ledger_a.background();
     let _bg_ledger_b = ledger_b.background();
+
+    wait_height(&test_a, 2, std::time::Duration::from_secs(40))?;
+    wait_height(&test_b, 2, std::time::Duration::from_secs(40))?;
 
     // Proposal on the destination (Chain B)
     // Delegate some token
@@ -695,8 +714,12 @@ fn ibc_rate_limit() -> Result<()> {
         setup::set_validators(1, genesis, base_dir, |_| 0)
     };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
+
     let _bg_ledger_a = ledger_a.background();
     let _bg_ledger_b = ledger_b.background();
+
+    wait_height(&test_a, 2, std::time::Duration::from_secs(40))?;
+    wait_height(&test_b, 2, std::time::Duration::from_secs(40))?;
 
     setup_hermes(&test_a, &test_b)?;
     let port_id_a = "transfer".parse().unwrap();
@@ -2220,6 +2243,22 @@ fn make_ibc_data(message: Any) -> Vec<u8> {
     prost::Message::encode(&message, &mut tx_data)
         .expect("encoding IBC message shouldn't fail");
     tx_data
+}
+
+fn wait_height(
+    test: &Test,
+    height_to_wait_for: u64,
+    timeout: std::time::Duration,
+) -> Result<()> {
+    #[allow(clippy::disallowed_methods)]
+    let then = std::time::Instant::now();
+    while then.elapsed() <= timeout {
+        let curr_height = query_height(test)?.revision_height();
+        if curr_height >= height_to_wait_for {
+            return Ok(());
+        }
+    }
+    Err(eyre!("Timed out waiting for height {height_to_wait_for}"))
 }
 
 fn query_height(test: &Test) -> Result<Height> {
