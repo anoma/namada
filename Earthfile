@@ -24,10 +24,10 @@ install:
   RUN curl -o .masp-params/masp-convert.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-convert.params?raw=true
 
   # install rocksdb
-  GIT CLONE --branch 54d628602706c0c718cf81f87202e0b8f6615faf git@github.com:facebook/rocksdb.git rocksdb # v8.10.0 
-  RUN cd rocksdb && make shared_lib
-  RUN echo /rocksdb | tee /etc/ld.so.conf.d/rocksdb.conf
-  RUN ldconfig
+  # GIT CLONE --branch v8.10.0 git@github.com:facebook/rocksdb.git rocksdb # v8.10.0 
+  # RUN cd rocksdb && make shared_lib
+  # RUN echo /rocksdb | tee /etc/ld.so.conf.d/rocksdb.conf
+  # RUN ldconfig
 
   # download mold
   RUN curl -o mold.tar.gz -LO https://github.com/rui314/mold/releases/download/v2.32.0/mold-2.32.0-aarch64-linux.tar.gz
@@ -91,17 +91,16 @@ save-wasm:
 build-release:
   FROM +source
 
-  ENV ROCKSDB_LIB_DIR="/rocksdb"
+  # ENV ROCKSDB_LIB_DIR="/rocksdb"
   ENV RUSTFLAGS="-C linker=clang -C link-arg=-fuse-ld=/mold-2.32.0-aarch64-linux/bin/mold"
   DO rust+CARGO --args="build --release --package namada_apps --manifest-path Cargo.toml --no-default-features --features jemalloc --features migrations" --output="release/[^/\.]+"
-
-  RUN false
 
   SAVE ARTIFACT target
 
 build-ci:
   FROM +source
-  
+
+  # ENV ROCKSDB_LIB_DIR="/rocksdb"
   ENV RUSTFLAGS="-C linker=clang -C link-arg=-fuse-ld=/mold-2.32.0-aarch64-linux/bin/mold"
   DO rust+CARGO --args="build --profile ci --package namada_apps --manifest-path Cargo.toml --no-default-features --features jemalloc --features migrations" --output="release/[^/\.]+"
 
@@ -110,6 +109,7 @@ build-ci:
 build-debug:
   FROM +source
 
+  # ENV ROCKSDB_LIB_DIR="/rocksdb"
   ENV RUSTFLAGS="-C linker=clang -C link-arg=-fuse-ld=/mold-2.32.0-aarch64-linux/bin/mold"
   DO rust+CARGO --args="build --package namada_apps --manifest-path Cargo.toml --no-default-features --features jemalloc --features migrations" --output="debug/[^/\.]+"
   
@@ -120,7 +120,7 @@ test-unit:
   FROM +save-wasm-for-test
 
   COPY +save-wasm/wasm/ wasm
-  COPY +save-wasm-for-test/save-wasm-for-test/ wasm_for_tests
+  COPY +save-wasm-for-test/wasm_for_tests/ wasm_for_tests
 
   ARG filter=""
 
@@ -131,7 +131,7 @@ test-integration:
   FROM +save-wasm-for-test
 
   COPY +save-wasm/wasm/ wasm
-  COPY +save-wasm-for-test/save-wasm-for-test/ wasm_for_tests
+  COPY +save-wasm-for-test/wasm_for_tests/ wasm_for_tests
 
   ARG filter=""
 
@@ -141,19 +141,19 @@ test-integration:
   DO rust+CARGO --args="+nightly-2024-05-15 test --lib integration::$filter --features integration -- --test-threads=1"
 
 test-e2e:
-  FROM +download-hermes
-  FROM +download-gaia
-  FROM +download-cometbft
-
   FROM +build-release
 
   FROM +save-wasm
   FROM +save-wasm-for-test
 
+  FROM +download-gaia
+  FROM +download-cometbft
+  FROM +build-hermes
+
   COPY +save-wasm/wasm/ wasm
   COPY +save-wasm-for-test/wasm_for_tests/ wasm_for_tests
 
-  COPY --chmod 777 +download-hermes/target /usr/local/bin
+  COPY --chmod 777 +build-hermes/target /usr/local/bin
   COPY --chmod 777 +download-gaia/gaiad /usr/local/bin
   COPY --chmod 777 +download-cometbft/cometbft /usr/local/bin
   COPY --chmod 777 +build-release/target /binaries
@@ -192,10 +192,13 @@ download-cometbft:
 
   SAVE ARTIFACT cometbft
 
-download-hermes:
+build-hermes:
   FROM +source
+  
+  # tag or branch, no sha
+  GIT CLONE --branch v1.8.2-namada-beta11 git@github.com:heliaxdev/hermes.git hermes
 
-  GIT CLONE --branch cf29e32d955cabfb79fd3086de33fb4e814c7a70 git@github.com:heliaxdev/hermes.git hermes
+  ENV RUSTFLAGS="-C linker=clang -C link-arg=-fuse-ld=/mold-2.32.0-aarch64-linux/bin/mold"
   DO rust+CARGO --args="build --release --manifest-path hermes/Cargo.toml --bin hermes --target-dir target" --output="release/[^/\.]+"
 
   SAVE ARTIFACT target
