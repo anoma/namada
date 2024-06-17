@@ -15,7 +15,6 @@ rlsf.workspace = true
 getrandom.workspace = true
 
 [dev-dependencies]
-namada = {path = "../../crates/namada", default-features = false}
 namada_tests = {path = "../../crates/tests"}
 namada_test_utils = {path = "../../crates/test_utils"}
 namada_vp_prelude = {path = "../../crates/vp_prelude"}

@@ -15,7 +15,7 @@ version.workspace = true
 [features]
 default = ["migrations"]
 mainnet = [
-  "namada/mainnet",
+  "namada_sdk/mainnet",
 ]
 # for integration tests and test utilities
 testing = [
@@ -35,16 +35,13 @@ jemalloc = ["rocksdb/jemalloc"]
 migrations = [
   "namada_migrations",
   "namada_sdk/migrations",
-  "namada/migrations",
   "linkme",
 ]
 namada-eth-bridge = [
-  "namada/namada-eth-bridge",
   "namada_sdk/namada-eth-bridge",
 ]
 
 [dependencies]
-namada = {path = "../namada", features = ["multicore", "http-client", "tendermint-rpc", "std"]}
 namada_apps_lib = {path = "../apps_lib"}
 namada_migrations = {path = "../migrations", optional = true}
 namada_sdk = {path = "../sdk", default-features = false, features = ["download-params", "std", "rand"]}
@@ -99,7 +96,6 @@ tracing.workspace = true
 warp = "0.3.2"
 
 [dev-dependencies]
-namada = {path = "../namada", default-features = false, features = ["testing", "wasm-runtime"]}
 namada_apps_lib = {path = "../apps_lib", features = ["testing"]}
 namada_test_utils = {path = "../test_utils"}
 
