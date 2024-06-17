@@ -17,18 +17,23 @@ default = []
 multicore = ["dep:rayon"]
 testing = [
   "multicore",
+  "validation",
   "namada_core/testing",
   "masp_primitives/test-dependencies",
 ]
 download-params = ["masp_proofs/download-params"]
 
 [dependencies]
+namada_account = { path = "../account" }
 namada_controller = { path = "../controller" }
 namada_core = { path = "../core" }
 namada_gas = { path = "../gas" }
 namada_parameters = { path = "../parameters" }
+namada_state = { path = "../state" }
 namada_storage = { path = "../storage" }
 namada_trans_token = { path = "../trans_token" }
+namada_tx = { path = "../tx" }
+namada_vp = { path = "../vp" }
 
 borsh.workspace = true
 lazy_static.workspace = true
@@ -36,15 +41,22 @@ masp_primitives.workspace = true
 masp_proofs = { workspace = true }
 rand_core.workspace = true
 rayon = { workspace = true, optional = true }
+ripemd.workspace = true
 serde.workspace = true
+sha2.workspace = true
 smooth-operator.workspace = true
+thiserror.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
 namada_core = { path = "../core", features = ["testing"] }
+namada_gas = { path = "../gas" }
 namada_parameters = { path = "../parameters", features = ["testing"] }
 namada_storage = { path = "../storage", features = ["testing"] }
 
+lazy_static.workspace = true
+masp_proofs = { workspace = true, features = ["download-params"] }
 proptest.workspace = true
+rand_core.workspace = true
 rayon.workspace = true
 test-log.workspace = true

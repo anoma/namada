@@ -2,8 +2,8 @@
 
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
+use std::marker::PhantomData;
 
-use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
@@ -16,33 +16,35 @@ use namada_core::address::Address;
 use namada_core::address::InternalAddress::Masp;
 use namada_core::arith::{checked, CheckedAdd, CheckedSub};
 use namada_core::booleans::BoolResultUnitExt;
+use namada_core::borsh::BorshSerializeExt;
 use namada_core::collections::HashSet;
 use namada_core::masp::{encode_asset_type, MaspEpoch};
 use namada_core::storage::Key;
+use namada_core::token::MaspDigitPos;
+use namada_core::uint::I320;
+use namada_core::{governance, parameters, token};
 use namada_gas::GasMetering;
-use namada_governance::storage::is_proposal_accepted;
-use namada_state::{ConversionState, OptionExt, ResultExt, StateRead};
-use namada_token::read_denom;
-use namada_token::validation::verify_shielded_tx;
+use namada_state::{
+    ConversionState, OptionExt, ResultExt, StateRead, StorageError,
+};
+use namada_trans_token::read_denom;
+use namada_trans_token::storage_key::{
+    is_any_shielded_action_balance_key, ShieldedActionOwner,
+};
 use namada_tx::BatchedTxRef;
-use namada_vp_env::VpEnv;
+use namada_vp::native_vp::{Ctx, CtxPreStorageRead, NativeVp, VpEvaluator};
+use namada_vp::{native_vp, VpEnv};
 use ripemd::Digest as RipemdDigest;
 use sha2::Digest as Sha2Digest;
 use thiserror::Error;
-use token::storage_key::{
-    is_any_shielded_action_balance_key, is_masp_key, is_masp_nullifier_key,
-    is_masp_token_map_key, is_masp_transfer_key, masp_commitment_anchor_key,
-    masp_commitment_tree_key, masp_convert_anchor_key, masp_nullifier_key,
-    ShieldedActionOwner,
-};
 use token::Amount;
 
-use crate::ledger::native_vp;
-use crate::ledger::native_vp::{Ctx, NativeVp};
-use crate::token;
-use crate::token::MaspDigitPos;
-use crate::uint::I320;
-use crate::vm::WasmCacheAccess;
+use crate::storage_key::{
+    is_masp_key, is_masp_nullifier_key, is_masp_token_map_key,
+    is_masp_transfer_key, masp_commitment_anchor_key, masp_commitment_tree_key,
+    masp_convert_anchor_key, masp_nullifier_key,
+};
+use crate::validation::verify_shielded_tx;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -55,13 +57,17 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// MASP VP
-pub struct MaspVp<'a, S, CA>
+pub struct MaspVp<'a, S, CA, EVAL, Params, Gov>
 where
-    S: StateRead,
-    CA: WasmCacheAccess,
+    S: 'static + StateRead,
+    EVAL: VpEvaluator<'a, S, CA, EVAL>,
 {
     /// Context to interact with the host structures.
-    pub ctx: Ctx<'a, S, CA>,
+    pub ctx: Ctx<'a, S, CA, EVAL>,
+    /// Governance type
+    pub gov: PhantomData<Params>,
+    /// Parameters type
+    pub params: PhantomData<Gov>,
 }
 
 // The balances changed by the transaction, split between masp and non-masp
@@ -77,14 +83,23 @@ struct ChangedBalances {
     post: BTreeMap<TransparentAddress, ValueSum<Address, Amount>>,
 }
 
-impl<'a, S, CA> MaspVp<'a, S, CA>
+impl<'a, S, CA, EVAL, Params, Gov> MaspVp<'a, S, CA, EVAL, Params, Gov>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    CA: 'static + Clone,
+    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    Params: parameters::Read<
+            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            Err = StorageError,
+        >,
+    Gov: governance::Read<
+            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            Err = StorageError,
+        >,
 {
     /// Return if the parameter change was done via a governance proposal
     pub fn is_valid_parameter_change(
-        &self,
+        &'a self,
         tx: &BatchedTxRef<'_>,
     ) -> Result<()> {
         tx.tx.data(tx.cmt).map_or_else(
@@ -95,7 +110,7 @@ where
                 .into())
             },
             |data| {
-                is_proposal_accepted(&self.ctx.pre(), data.as_ref())
+                Gov::is_proposal_accepted(&self.ctx.pre(), data.as_ref())
                     .map_err(Error::NativeVpError)?
                     .ok_or_else(|| {
                         native_vp::Error::new_const(
@@ -244,7 +259,7 @@ where
 
     // Check that the convert descriptions anchors of a transaction are valid
     fn valid_convert_descriptions_anchor(
-        &self,
+        &'a self,
         transaction: &Transaction,
     ) -> Result<()> {
         if let Some(bundle) = transaction.sapling_bundle() {
@@ -343,7 +358,7 @@ where
 
     // Check that MASP Transaction and state changes are valid
     fn is_valid_masp_transfer(
-        &self,
+        &'a self,
         tx_data: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
     ) -> Result<()> {
@@ -489,17 +504,15 @@ where
                 // Otherwise the signer must be decodable so that we can
                 // manually check the signatures
                 let public_keys_index_map =
-                    crate::account::public_keys_index_map(
+                    namada_account::public_keys_index_map(
                         &self.ctx.pre(),
                         signer,
                     )?;
                 let threshold =
-                    crate::account::threshold(&self.ctx.pre(), signer)?
+                    namada_account::threshold(&self.ctx.pre(), signer)?
                         .unwrap_or(1);
                 let max_signatures_per_transaction =
-                    crate::parameters::max_signatures_per_transaction(
-                        &self.ctx.pre(),
-                    )?;
+                    Params::max_signatures_per_transaction(&self.ctx.pre())?;
                 let mut gas_meter = self.ctx.gas_meter.borrow_mut();
                 tx_data
                     .tx
@@ -509,7 +522,7 @@ where
                         &Some(signer.clone()),
                         threshold,
                         max_signatures_per_transaction,
-                        || gas_meter.consume(crate::gas::VERIFY_TX_SIG_GAS),
+                        || gas_meter.consume(namada_gas::VERIFY_TX_SIG_GAS),
                     )
                     .map_err(native_vp::Error::new)?;
             } else {
@@ -830,15 +843,25 @@ fn verify_sapling_balancing_value(
     }
 }
 
-impl<'a, S, CA> NativeVp for MaspVp<'a, S, CA>
+impl<'a, S, CA, EVAL, Params, Gov> NativeVp<'a>
+    for MaspVp<'a, S, CA, EVAL, Params, Gov>
 where
-    S: StateRead,
-    CA: 'static + WasmCacheAccess,
+    S: 'static + StateRead,
+    CA: 'static + Clone,
+    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    Params: parameters::Read<
+            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            Err = StorageError,
+        >,
+    Gov: governance::Read<
+            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            Err = StorageError,
+        >,
 {
     type Error = Error;
 
     fn validate_tx(
-        &self,
+        &'a self,
         tx_data: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
