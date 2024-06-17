@@ -1148,7 +1148,9 @@ fn make_consensus_state(
     height: Height,
 ) -> Result<TmConsensusState> {
     let header = query_header(test, height)?;
-    Ok(TmConsensusState::from(header))
+    let cs = TmConsensusState::from(header);
+    println!("DEBUG: consensus state with queried header: {cs:?}");
+    Ok(cs)
 }
 
 fn update_client_with_height(

@@ -312,6 +312,7 @@ pub trait IbcCommonContext: IbcStorageContext {
                 description: "No host header".to_string(),
             })
         })?;
+        self.log_string(format!("DEBUG: Namada block header {header:?}"));
         let commitment_root = header.hash.to_vec().into();
         let time = header
             .time
