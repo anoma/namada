@@ -293,13 +293,35 @@ impl From<DateTime<Utc>> for DateTimeUtc {
 }
 
 impl TryFrom<prost_types::Timestamp> for DateTimeUtc {
-    type Error = prost_types::TimestampError;
+    type Error = String;
 
     fn try_from(
         timestamp: prost_types::Timestamp,
     ) -> Result<Self, Self::Error> {
-        let system_time: std::time::SystemTime = timestamp.try_into()?;
-        Ok(Self(system_time.into()))
+        let seconds = timestamp.seconds;
+        let nanoseconds: u32 = timestamp.nanos.try_into().map_err(|err| {
+            format!(
+                "Failed to convert prost_types::Timestamp nanos {} to u32: \
+                 {err}",
+                timestamp.nanos
+            )
+        })?;
+
+        let parsed = {
+            use chrono::format;
+
+            let mut p = format::Parsed::new();
+
+            p.nanosecond = Some(nanoseconds);
+            p.timestamp = Some(seconds);
+            p
+        };
+
+        let dt = parsed.to_datetime_with_timezone(&Utc).map_err(|err| {
+            format!("Failed to parse {parsed:?} as a chrono::DateTime: {err}")
+        })?;
+
+        Ok(Self(dt))
     }
 }
 
@@ -316,7 +338,7 @@ impl From<DateTimeUtc> for prost_types::Timestamp {
 impl TryFrom<crate::tendermint_proto::google::protobuf::Timestamp>
     for DateTimeUtc
 {
-    type Error = prost_types::TimestampError;
+    type Error = String;
 
     fn try_from(
         timestamp: crate::tendermint_proto::google::protobuf::Timestamp,
@@ -357,7 +379,7 @@ impl TryFrom<DateTimeUtc> for crate::tendermint::time::Time {
 }
 
 impl TryFrom<crate::tendermint::time::Time> for DateTimeUtc {
-    type Error = prost_types::TimestampError;
+    type Error = String;
 
     fn try_from(t: crate::tendermint::time::Time) -> Result<Self, Self::Error> {
         crate::tendermint_proto::google::protobuf::Timestamp::from(t).try_into()
