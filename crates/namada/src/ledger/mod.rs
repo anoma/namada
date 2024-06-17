@@ -1,160 +1,128 @@
 //! The ledger modules
 
-pub use namada_sdk::{eth_bridge, events};
-pub mod governance;
-pub mod ibc;
-pub mod native_vp;
-pub mod pgf;
-pub mod pos;
-#[cfg(feature = "wasm-runtime")]
-pub mod protocol;
-pub use namada_sdk::queries;
-pub mod storage;
-pub mod vp_host_fns;
+use std::cell::RefCell;
 
-#[cfg(feature = "wasm-runtime")]
-pub use dry_run_tx::dry_run_tx;
-pub use {
-    namada_gas as gas, namada_parameters as parameters,
-    namada_tx_env as tx_env, namada_vp_env as vp_env,
-};
+use namada_gas::Gas;
+use namada_sdk::queries::{EncodedResponseQuery, RequestCtx, RequestQuery};
+use namada_state::{DBIter, ResultExt, StorageHasher, DB};
+use namada_tx::data::{DryRunResult, ExtendedTxResult, GasLimit, TxResult};
 
-#[cfg(feature = "wasm-runtime")]
-mod dry_run_tx {
-    use std::cell::RefCell;
+use super::protocol;
+use crate::vm::wasm::{TxCache, VpCache};
+use crate::vm::WasmCacheAccess;
 
-    use namada_sdk::queries::{EncodedResponseQuery, RequestCtx, RequestQuery};
-    use namada_state::{DBIter, ResultExt, StorageHasher, DB};
-    use namada_tx::data::{DryRunResult, ExtendedTxResult, GasLimit, TxResult};
+/// Dry run a transaction
+pub fn dry_run_tx<'a, D, H, CA>(
+    mut ctx: RequestCtx<'a, D, H, VpCache<CA>, TxCache<CA>>,
+    request: &RequestQuery,
+) -> namada_state::StorageResult<EncodedResponseQuery>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+    CA: 'static + WasmCacheAccess + Sync,
+{
+    use borsh_ext::BorshSerializeExt;
+    use namada_gas::{GasMetering, TxGasMeter};
+    use namada_tx::data::TxType;
+    use namada_tx::Tx;
 
-    use super::protocol;
-    use crate::vm::wasm::{TxCache, VpCache};
-    use crate::vm::WasmCacheAccess;
+    use crate::ledger::protocol::ShellParams;
+    use crate::storage::TxIndex;
 
-    /// Dry run a transaction
-    pub fn dry_run_tx<'a, D, H, CA>(
-        mut ctx: RequestCtx<'a, D, H, VpCache<CA>, TxCache<CA>>,
-        request: &RequestQuery,
-    ) -> namada_state::StorageResult<EncodedResponseQuery>
-    where
-        D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-        H: 'static + StorageHasher + Sync,
-        CA: 'static + WasmCacheAccess + Sync,
-    {
-        use borsh_ext::BorshSerializeExt;
-        use namada_gas::{GasMetering, TxGasMeter};
-        use namada_tx::data::TxType;
-        use namada_tx::Tx;
+    let mut temp_state = ctx.state.with_temp_write_log();
+    let tx = Tx::try_from(&request.data[..]).into_storage_result()?;
+    tx.validate_tx().into_storage_result()?;
 
-        use crate::ledger::protocol::ShellParams;
-        use crate::storage::TxIndex;
+    let gas_scale = namada_parameters::get_gas_scale(ctx.state)?;
 
-        let mut temp_state = ctx.state.with_temp_write_log();
-        let tx = Tx::try_from(&request.data[..]).into_storage_result()?;
-        tx.validate_tx().into_storage_result()?;
-
-        let gas_scale = namada_parameters::get_gas_scale(ctx.state)?;
-
-        // Wrapper dry run to allow estimating the gas cost of a transaction
-        let (wrapper_hash, extended_tx_result, tx_gas_meter) =
-            match tx.header().tx_type {
-                TxType::Wrapper(wrapper) => {
-                    let gas_limit = wrapper
-                        .gas_limit
-                        .as_scaled_gas(gas_scale)
-                        .into_storage_result()?;
-                    let tx_gas_meter = RefCell::new(TxGasMeter::new(gas_limit));
-                    let mut shell_params = ShellParams::new(
-                        &tx_gas_meter,
-                        &mut temp_state,
-                        &mut ctx.vp_wasm_cache,
-                        &mut ctx.tx_wasm_cache,
-                    );
-                    let tx_result = protocol::apply_wrapper_tx(
-                        &tx,
-                        &wrapper,
-                        &request.data,
-                        &TxIndex::default(),
-                        &tx_gas_meter,
-                        &mut shell_params,
-                        None,
-                    )
+    // Wrapper dry run to allow estimating the gas cost of a transaction
+    let (wrapper_hash, extended_tx_result, tx_gas_meter) =
+        match tx.header().tx_type {
+            TxType::Wrapper(wrapper) => {
+                let gas_limit = wrapper
+                    .gas_limit
+                    .as_scaled_gas(gas_scale)
                     .into_storage_result()?;
-
-                    temp_state.write_log_mut().commit_tx_to_batch();
-                    let available_gas =
-                        tx_gas_meter.borrow().get_available_gas();
-                    (
-                        Some(tx.header_hash()),
-                        tx_result,
-                        TxGasMeter::new(available_gas),
-                    )
-                }
-                _ => {
-                    // If dry run only the inner tx, use the max block gas as
-                    // the gas limit
-                    let max_block_gas =
-                        namada_parameters::get_max_block_gas(ctx.state)?;
-                    let gas_limit = GasLimit::from(max_block_gas)
-                        .as_scaled_gas(gas_scale)
-                        .into_storage_result()?;
-                    (
-                        None,
-                        TxResult::default().to_extended_result(None),
-                        TxGasMeter::new(gas_limit),
-                    )
-                }
-            };
-
-        let ExtendedTxResult {
-            mut tx_result,
-            ref masp_tx_refs,
-            ref ibc_tx_data_refs,
-        } = extended_tx_result;
-        let tx_gas_meter = RefCell::new(tx_gas_meter);
-        for cmt in crate::ledger::protocol::get_batch_txs_to_execute(
-            &tx,
-            masp_tx_refs,
-            ibc_tx_data_refs,
-        ) {
-            let batched_tx = tx.batch_ref_tx(cmt);
-            let batched_tx_result = protocol::apply_wasm_tx(
-                &batched_tx,
-                &TxIndex(0),
-                ShellParams::new(
+                let tx_gas_meter = RefCell::new(TxGasMeter::new(gas_limit));
+                let tx_result = protocol::apply_wrapper_tx(
+                    &tx,
+                    &wrapper,
+                    &request.data,
                     &tx_gas_meter,
                     &mut temp_state,
-                    &mut ctx.vp_wasm_cache,
-                    &mut ctx.tx_wasm_cache,
-                ),
-            );
-            let is_accepted = matches!(&batched_tx_result, Ok(result) if result.is_accepted());
-            if is_accepted {
-                temp_state.write_log_mut().commit_tx_to_batch();
-            } else {
-                temp_state.write_log_mut().drop_tx();
-            }
-            tx_result.insert_inner_tx_result(
-                wrapper_hash.as_ref(),
-                either::Right(cmt),
-                batched_tx_result,
-            );
-        }
-        // Account gas for both batch and wrapper
-        let gas_used = tx_gas_meter
-            .borrow()
-            .get_tx_consumed_gas()
-            .get_whole_gas_units(gas_scale);
-        let tx_result_string = tx_result.to_result_string();
-        let dry_run_result = DryRunResult(tx_result_string, gas_used);
+                    None,
+                )
+                .into_storage_result()?;
 
-        Ok(EncodedResponseQuery {
-            data: dry_run_result.serialize_to_vec(),
-            proof: None,
-            info: Default::default(),
-            height: ctx.state.in_mem().get_last_block_height(),
-        })
+                temp_state.write_log_mut().commit_tx_to_batch();
+                let available_gas = tx_gas_meter.borrow().get_available_gas();
+                (
+                    Some(tx.header_hash()),
+                    tx_result,
+                    TxGasMeter::new(available_gas),
+                )
+            }
+            _ => {
+                // If dry run only the inner tx, use the max block gas as
+                // the gas limit
+                let max_block_gas =
+                    namada_parameters::get_max_block_gas(ctx.state)?;
+                let gas_limit = GasLimit::from(max_block_gas)
+                    .as_scaled_gas(gas_scale)
+                    .into_storage_result()?;
+                (
+                    None,
+                    TxResult::default().to_extended_result(None),
+                    TxGasMeter::new(gas_limit),
+                )
+            }
+        };
+
+    let ExtendedTxResult {
+        mut tx_result,
+        ref masp_tx_refs,
+        ref ibc_tx_data_refs,
+    } = extended_tx_result;
+    let tx_gas_meter = RefCell::new(tx_gas_meter);
+    for cmt in tx.commitments() {
+        let batched_tx = tx.batch_ref_tx(cmt);
+        let batched_tx_result = protocol::apply_wasm_tx(
+            batched_tx,
+            &TxIndex(0),
+            ShellParams::new(
+                &tx_gas_meter,
+                &mut temp_state,
+                &mut ctx.vp_wasm_cache,
+                &mut ctx.tx_wasm_cache,
+            ),
+        );
+        let is_accepted =
+            matches!(&batched_tx_result, Ok(result) if result.is_accepted());
+        if is_accepted {
+            temp_state.write_log_mut().commit_tx_to_batch();
+        } else {
+            temp_state.write_log_mut().drop_tx();
+        }
+        tx_result.insert_inner_tx_result(
+            wrapper_hash.as_ref(),
+            either::Right(cmt),
+            batched_tx_result,
+        );
     }
+    // Account gas for both batch and wrapper
+    tx_result.gas_used = tx_gas_meter
+        .borrow()
+        .get_tx_consumed_gas()
+        .get_whole_gas_units(gas_scale);
+    let tx_result_string = tx_result.to_result_string();
+    let dry_run_result = DryRunResult(tx_result_string, gas_used);
+
+    Ok(EncodedResponseQuery {
+        data: dry_run_result.serialize_to_vec(),
+        proof: None,
+        info: Default::default(),
+        height: ctx.state.in_mem().get_last_block_height(),
+    })
 }
 
 #[cfg(test)]
