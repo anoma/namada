@@ -30,8 +30,7 @@ endif
 audit-ignores += RUSTSEC-2021-0076
 
 # Workspace crates
-crates := namada
-crates += namada_account
+crates := namada_account
 crates += namada_apps
 crates += namada_apps_lib
 crates += namada_benchmarks

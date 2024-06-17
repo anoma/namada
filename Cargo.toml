@@ -21,7 +21,6 @@ members = [
   "crates/parameters",
   "crates/proof_of_stake",
   "crates/replay_protection",
-  "crates/namada",
   "crates/node",
   "crates/sdk",
   "crates/shielded_token",
