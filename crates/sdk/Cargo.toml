@@ -51,11 +51,9 @@ testing = [
   "async-client",
   "proptest",
   "jubjub",
-  "bls12_381",
 ]
 
-# Download MASP params if they're not present
-download-params = ["masp_proofs/download-params"]
+download-params = ["namada_token/download-params"]
 migrations = [
   "namada_migrations",
   "namada_account/migrations",
@@ -92,7 +90,6 @@ namada_vote_ext = { path = "../vote_ext" }
 
 async-trait = { workspace = true, optional = true }
 bimap.workspace = true
-bls12_381 = { workspace = true, optional = true }
 borsh.workspace = true
 borsh-ext.workspace = true
 circular-queue.workspace = true
@@ -166,7 +163,6 @@ namada_vote_ext = {path = "../vote_ext"}
 
 assert_matches.workspace = true
 base58.workspace = true
-bls12_381.workspace = true
 jubjub.workspace = true
 masp_primitives = { workspace = true, features = ["test-dependencies"] }
 proptest.workspace = true

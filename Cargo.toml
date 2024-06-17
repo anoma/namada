@@ -75,7 +75,6 @@ bimap = {version = "0.6.2", features = ["serde"]}
 bit-set = "0.5.2"
 bitflags = { version = "2.5.0", features = ["serde"] }
 blake2b-rs = "0.2.0"
-bls12_381 = "0.8"
 byte-unit = "4.0.13"
 byteorder = "1.4.2"
 borsh = {version = "1.2.0", features = ["unstable__schema", "derive"]}

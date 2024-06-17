@@ -50,6 +50,7 @@ testing = [
   "namada_proof_of_stake/testing",
   "namada_sdk/testing",
   "namada_state/testing",
+  "namada_token/testing",
   "async-client",
   "proptest",
   "tempfile",

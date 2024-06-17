@@ -4033,7 +4033,6 @@ version = "0.39.0"
 dependencies = [
  "async-trait",
  "bimap",
- "bls12_381",
  "borsh 1.2.1",
  "borsh-ext",
  "circular-queue",
@@ -4098,12 +4097,17 @@ name = "namada_shielded_token"
 version = "0.39.0"
 dependencies = [
  "borsh 1.2.1",
+ "lazy_static",
  "masp_primitives",
+ "masp_proofs",
  "namada_controller",
  "namada_core",
+ "namada_gas",
  "namada_parameters",
  "namada_storage",
  "namada_trans_token",
+ "rand_core 0.6.4",
+ "rayon",
  "serde",
  "smooth-operator",
  "tracing",
