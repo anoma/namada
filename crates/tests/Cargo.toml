@@ -13,25 +13,21 @@ repository.workspace = true
 version.workspace = true
 
 [features]
-default = ["wasm-runtime", "migrations"]
+default = ["migrations"]
 mainnet = [
-  "namada/mainnet",
+  "namada_sdk/mainnet",
 ]
-wasm-runtime = ["namada/wasm-runtime", "wasmer"]
 integration = ["namada_node/integration", "namada_apps_lib/integration"]
 migrations = [
-  "namada/migrations",
   "namada_sdk/migrations",
   "namada_core/migrations",
 ]
 namada-eth-bridge = [
-  "namada/namada-eth-bridge",
   "namada_sdk/namada-eth-bridge",
   "namada_apps_lib/namada-eth-bridge",
 ]
 
 [dependencies]
-namada = {path = "../namada", features = ["testing"]}
 namada_core = {path = "../core", features = ["testing"]}
 namada_sdk = {path = "../sdk", default-features = false, features = ["tendermint-rpc", "download-params", "std", "rand"]}
 namada_test_utils = {path = "../test_utils"}
@@ -52,7 +48,7 @@ sha2.workspace = true
 tempfile.workspace = true
 test-log.workspace = true
 tokio = {workspace = true, features = ["full"]}
-wasmer = { workspace = true, optional = true }
+wasmer.workspace = true
 
 [dev-dependencies]
 namada_apps_lib = {path = "../apps_lib", features = ["testing"]}
