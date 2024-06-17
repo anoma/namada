@@ -357,10 +357,10 @@ impl TryFrom<DateTimeUtc> for crate::tendermint::time::Time {
 }
 
 impl TryFrom<crate::tendermint::time::Time> for DateTimeUtc {
-    type Error = prost_types::TimestampError;
+    type Error = ParseError;
 
     fn try_from(t: crate::tendermint::time::Time) -> Result<Self, Self::Error> {
-        crate::tendermint_proto::google::protobuf::Timestamp::from(t).try_into()
+        Self::from_rfc3339(&t.to_rfc3339())
     }
 }
 

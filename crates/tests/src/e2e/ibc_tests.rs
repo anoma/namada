@@ -854,7 +854,7 @@ fn run_two_nets(
     wait_for_wasm_pre_compile(&mut ledger_a)?;
     wait_for_wasm_pre_compile(&mut ledger_b)?;
 
-    sleep(30);
+    sleep(5);
 
     Ok((ledger_a, ledger_b, test_a, test_b))
 }
