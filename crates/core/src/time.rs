@@ -154,7 +154,7 @@ impl Display for DateTimeUtc {
 }
 
 impl DateTimeUtc {
-    const FORMAT: &'static str = "%Y-%m-%dT%H:%M:%S%.6f+00:00";
+    const FORMAT: &'static str = "%Y-%m-%dT%H:%M:%S%.9f+00:00";
 
     /// Returns a DateTimeUtc which corresponds to the current date.
     pub fn now() -> Self {
@@ -381,7 +381,7 @@ pub mod test_utils {
     //! Time related test utilities.
 
     /// Genesis time used during tests.
-    pub const GENESIS_TIME: &str = "2023-08-30T00:00:00.000000+00:00";
+    pub const GENESIS_TIME: &str = "2023-08-30T00:00:00.000000000+00:00";
 }
 
 #[cfg(test)]
@@ -399,10 +399,11 @@ mod core_time_tests {
             hour in 0..=23,
             min in 0..=59,
             sec in 0..=59,
-            nanos in 0..=999_999,
+            nanos in 0..=999_999_999,
         )
         {
-            let timestamp = format!("{year:04}-{month:02}-{day:02}T{hour:02}:{min:02}:{sec:02}.{nanos:06}+00:00");
+            let timestamp = format!("{year:04}-{month:02}-{day:02}T{hour:02}:{min:02}:{sec:02}.{nanos:09}+00:00");
+            println!("Testing timestamp: {timestamp}");
             test_valid_reverse_datetime_utc_encoding_roundtrip_inner(&timestamp);
         }
     }
