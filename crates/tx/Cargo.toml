@@ -13,8 +13,9 @@ repository.workspace = true
 version.workspace = true
 
 [features]
-default = []
+default = ["salt"]
 testing = ["proptest", "namada_core/testing"]
+salt = ["rand_core"]
 migrations = [
     "namada_migrations",
     "linkme",
@@ -39,8 +40,9 @@ num-traits.workspace = true
 proptest = { workspace = true, optional = true }
 prost-types.workspace = true
 prost.workspace = true
-serde_json.workspace = true
+rand_core = { workspace = true, optional = true, features = ["getrandom"] }
 serde.workspace = true
+serde_json.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
 
