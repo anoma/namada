@@ -55,7 +55,7 @@ All the fees that are charged in a transaction execution (DKG transaction wrappe
 
 The transactions are assumed to be applied in epoch `n`. Any transaction that modifies [epoched data](https://specs.namada.net/economics/proof-of-stake/bonding-mechanism.html#epoched-data) updates the structure as described in [epoched data storage](https://specs.namada.net/economics/proof-of-stake/bonding-mechanism.html#storage).
 
-For slashing tokens, we implement a [PoS slash pool account](vp.md#pos-slash-pool-vp). Slashed tokens should be credited to this account and, for now, no tokens can be be debited by anyone.
+For slashing tokens, we implement a [PoS slash pool account](vp.md#pos-slash-pool-vp). Slashed tokens should be credited to this account and, for now, no tokens can be debited by anyone.
 
 ### Validator transactions
 

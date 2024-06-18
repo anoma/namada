@@ -106,7 +106,7 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
     /// Get a WASM module from LRU cache, from a file or compile it and cache
     /// it. If the cache access is set to [`crate::vm::WasmCacheRwAccess`], it
     /// updates the position in the LRU cache. Otherwise, the compiled
-    /// module will not be be cached, if it's not already.
+    /// module will not be cached, if it's not already.
     pub fn fetch(
         &mut self,
         code_hash: &Hash,

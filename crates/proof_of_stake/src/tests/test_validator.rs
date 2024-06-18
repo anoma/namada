@@ -624,7 +624,7 @@ fn test_validator_sets() {
     );
     assert_eq!(tm_updates[1], ValidatorSetUpdate::Deactivated(pk2));
 
-    // Unbond some stake from val1, it should be be swapped with the greatest
+    // Unbond some stake from val1, it should be swapped with the greatest
     // below-capacity validator val2 into the below-capacity set. The stake of
     // val1 will go below 1 NAM, which is the validator_stake_threshold, so it
     // will enter the below-threshold validator set.
@@ -828,7 +828,7 @@ fn test_validator_sets() {
     );
     assert_eq!(tm_updates[1], ValidatorSetUpdate::Deactivated(pk1));
 
-    // Bond some stake to val6, it should be be swapped with the lowest
+    // Bond some stake to val6, it should be swapped with the lowest
     // consensus validator val2 into the consensus set
     let bond = token::Amount::from_uint(500_000, 0).unwrap();
     let stake6 = stake6 + bond;
