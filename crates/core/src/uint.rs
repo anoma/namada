@@ -472,7 +472,7 @@ impl Uint {
 }
 
 /// The maximum absolute value a [`I256`] may have.
-/// Note the the last digit is 2^63 - 1. We add this cap so
+/// Note the last digit is 2^63 - 1. We add this cap so
 /// we can use two's complement.
 pub const MAX_SIGNED_VALUE: Uint =
     Uint([u64::MAX, u64::MAX, u64::MAX, 9223372036854775807]);

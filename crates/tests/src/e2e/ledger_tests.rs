@@ -1060,7 +1060,7 @@ where
 /// 4. Run it to get it to double vote and sign blocks
 /// 5. Submit a valid token transfer tx to validator 0
 /// 6. Wait for double signing evidence
-/// 7. Make sure the the first validator can proceed to the next epoch
+/// 7. Make sure the first validator can proceed to the next epoch
 #[test]
 fn double_signing_gets_slashed() -> Result<()> {
     use std::net::SocketAddr;
@@ -1347,7 +1347,7 @@ fn double_signing_gets_slashed() -> Result<()> {
         .exp_regex(r"Validator [a-z0-9]+ is in the .* set")
         .unwrap();
 
-    // 7. Make sure the the first validator can proceed to the next epoch
+    // 7. Make sure the first validator can proceed to the next epoch
     epoch_sleep(&test, &validator_one_rpc, 120)?;
 
     // Make sure there are no errors

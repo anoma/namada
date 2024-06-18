@@ -271,7 +271,7 @@ where
     storage.write(&key, value)
 }
 
-/// Read the the epoch duration parameter from store
+/// Read the epoch duration parameter from store
 pub fn read_epoch_duration_parameter<S>(
     storage: &S,
 ) -> namada_storage::Result<EpochDuration>
@@ -286,7 +286,7 @@ where
         .into_storage_result()
 }
 
-/// Read the the masp epoch multiplier parameter from store
+/// Read the masp epoch multiplier parameter from store
 pub fn read_masp_epoch_multiplier_parameter<S>(
     storage: &S,
 ) -> namada_storage::Result<u64>
