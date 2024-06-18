@@ -1149,7 +1149,10 @@ fn make_consensus_state(
 ) -> Result<TmConsensusState> {
     let header = query_header(test, height)?;
     let cs = TmConsensusState::from(header);
-    println!("DEBUG: consensus state with queried header: {cs:?}, at height {height}");
+    println!(
+        "DEBUG: consensus state with queried header: {cs:?}, at height \
+         {height}"
+    );
     Ok(cs)
 }
 
@@ -1206,6 +1209,10 @@ fn update_client(
         .fetch_light_block(height.into())
         .expect("the light client couldn't get a light block");
 
+    println!(
+        "DEBUG: target block header {:?}",
+        target_block.signed_header.header
+    );
     let header = IbcTmHeader {
         signed_header: target_block.signed_header,
         validator_set: target_block.validators,

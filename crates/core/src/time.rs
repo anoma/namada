@@ -154,7 +154,7 @@ impl Display for DateTimeUtc {
 }
 
 impl DateTimeUtc {
-    const FORMAT: &'static str = "%Y-%m-%dT%H:%M:%S%.6f+00:00";
+    const FORMAT: &'static str = "%Y-%m-%dT%H:%M:%S%.9f+00:00";
 
     /// Returns a DateTimeUtc which corresponds to the current date.
     pub fn now() -> Self {
@@ -381,7 +381,7 @@ pub mod test_utils {
     //! Time related test utilities.
 
     /// Genesis time used during tests.
-    pub const GENESIS_TIME: &str = "2023-08-30T00:00:00.000000+00:00";
+    pub const GENESIS_TIME: &str = "2023-08-30T00:00:00.000000000+00:00";
 }
 
 #[cfg(test)]
