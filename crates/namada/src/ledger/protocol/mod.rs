@@ -544,7 +544,7 @@ where
                     // NOTE: Even if the unshielding was successful we could
                     // still fail in the transfer (e.g. cause the unshielded
                     // amount is not enough to cover the fees). In this case we
-                    // want do drop the changes applied by the masp transaction
+                    // want to drop the changes applied by the masp transaction
                     // and try to drain the fees from the transparent balance.
                     // Because of this we must NOT propagate errors from within
                     // this branch
@@ -754,7 +754,7 @@ where
                     e
                 );
                 if let Error::GasError(_) = e {
-                    // Popagate only if it is a gas error
+                    // Propagate only if it is a gas error
                     return Err(e);
                 }
 
