@@ -63,11 +63,13 @@ pub enum PgfAction {
     UpdateStewardCommission(Address),
 }
 
-/// MASP tx action.
+/// MASP tx actions.
 #[derive(Clone, Debug, BorshDeserialize, BorshSerialize)]
-pub struct MaspAction {
+pub enum MaspAction {
     /// The hash of the masp [`crate::types::Section`]
-    pub masp_section_ref: Hash,
+    MaspSectionRef(Hash),
+    /// A required signer for the transaction
+    MaspSigner(Address),
 }
 
 /// Read actions from temporary storage
@@ -126,7 +128,9 @@ pub fn get_masp_section_ref<T: Read>(
 ) -> Result<Option<Hash>, <T as Read>::Err> {
     Ok(reader.read_actions()?.into_iter().find_map(|action| {
         // In case of multiple masp actions we get the first one
-        if let Action::Masp(MaspAction { masp_section_ref }) = action {
+        if let Action::Masp(MaspAction::MaspSectionRef(masp_section_ref)) =
+            action
+        {
             Some(masp_section_ref)
         } else {
             None
