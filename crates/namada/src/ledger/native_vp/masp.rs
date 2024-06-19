@@ -55,6 +55,7 @@ use crate::sdk::ibc::core::channel::types::acknowledgement::AcknowledgementStatu
 use crate::sdk::ibc::core::channel::types::commitment::{
     compute_ack_commitment, AcknowledgementCommitment, PacketCommitment,
 };
+use crate::sdk::ibc::core::channel::types::packet::Packet;
 use crate::token;
 use crate::token::MaspDigitPos;
 use crate::uint::{Uint, I320};
@@ -372,73 +373,71 @@ where
         Ok(None)
     }
 
-    // Apply the given send packet to the changed balances structure
-    fn apply_send_packet(
+    // Apply the given transfer message to the changed balances structure
+    fn apply_transfer_msg(
         &self,
         mut acc: ChangedBalances,
-        msg: &MsgTransfer,
+        msg: &IbcMsgTransfer,
         keys_changed: &BTreeSet<Key>,
     ) -> Result<ChangedBalances> {
         // If a key change with the same port, channel, and commitment as this
-        // message cannot be found, then ignore this message
+        // message cannot be found, then ignore this message. Though this check
+        // is done in the IBC VP, the test is repeated here to avoid making
+        // assumptions about how the IBC VP interprets the given message.
         if self
-            .find_ibc_transfer_sequence(&msg.message, keys_changed)?
+            .find_ibc_transfer_sequence(&msg, keys_changed)?
             .is_none()
         {
             return Ok(acc);
         };
 
-        // Since IBC denominations are derived from Addresses
-        // when sending, we have to do a reverse look-up of the
-        // relevant token Address
-        let denom = msg.message.packet_data.token.denom.to_string();
+        // Obtain the address corresponding to the packet denomination
+        let denom = msg.packet_data.token.denom.to_string();
         let token = if denom.contains('/') {
             ibc_token(denom)
         } else {
             Address::decode(denom).into_storage_result()?
         };
+        // Add currency units to the amount in the packet
         let delta = ValueSum::from_pair(
             token.clone(),
-            Amount::from_uint(Uint(*msg.message.packet_data.token.amount), 0)
-                .unwrap(),
+            Amount::from_uint(Uint(*msg.packet_data.token.amount), 0).unwrap(),
         );
-        // If there is a transfer to the IBC account, then deduplicate the
-        // balance increase since we already accounted for it above
+        // Remove pre-existing balance increases to the IBC account since we
+        // want to record increases to specific receivers
         if is_sender_chain_source(
-            msg.message.port_id_on_a.clone(),
-            msg.message.chan_id_on_a.clone(),
-            &msg.message.packet_data.token.denom,
+            msg.port_id_on_a.clone(),
+            msg.chan_id_on_a.clone(),
+            &msg.packet_data.token.denom,
         ) {
             let post_entry =
                 acc.post.entry(addr_taddr(IBC)).or_insert(ValueSum::zero());
             *post_entry =
                 checked!(post_entry - &delta).map_err(native_vp::Error::new)?;
         }
-        // Required for the packet's receiver to get funds
+        // Record an increase to the balance of a specific IBC receiver
+        let receiver = msg.packet_data.receiver.to_string();
         let post_entry = acc
             .post
-            .entry(ibc_taddr(msg.message.packet_data.receiver.to_string()))
+            .entry(ibc_taddr(receiver))
             .or_insert(ValueSum::zero());
-        // Enable funds to be received by the receiver in the
-        // IBC packet
         *post_entry =
             checked!(post_entry + &delta).map_err(native_vp::Error::new)?;
 
         Ok(acc)
     }
 
-    // Get the acknowledgement status associated with the given message
+    // Check if IBC message was received successfully in this state transition
     fn is_receiving_success(
         &self,
-        message: &IbcMsgRecvPacket,
+        packet: &Packet,
         keys_changed: &BTreeSet<Key>,
     ) -> Result<bool> {
-        // Ensure that the event corresponds to the current changes
-        // to storage
+        // Ensure that the event corresponds to the current changes to storage
         let ack_key = storage::ack_key(
-            &message.packet.port_id_on_a,
-            &message.packet.chan_id_on_a,
-            message.packet.seq_on_a,
+            &packet.port_id_on_a,
+            &packet.chan_id_on_a,
+            packet.seq_on_a,
         );
         if !keys_changed.contains(&ack_key) {
             // Otherwise ignore this event
@@ -459,16 +458,16 @@ where
     }
 
     // Apply the given write acknowledge to the changed balances structure
-    fn apply_write_ack(
+    fn apply_recv_msg(
         &self,
         mut acc: ChangedBalances,
-        msg: &MsgRecvPacket,
+        msg: &IbcMsgRecvPacket,
         packet_data: &PacketData,
         keys_changed: &BTreeSet<Key>,
     ) -> Result<ChangedBalances> {
         // If the transfer was a failure, then enable funds to
         // be withdrawn from the IBC internal address
-        if self.is_receiving_success(&msg.message, keys_changed)? {
+        if self.is_receiving_success(&msg.packet, keys_changed)? {
             // Mirror how the IBC token is derived in
             // gen_ibc_shielded_transfer in the non-refund case
             let ibc_denom = self.query_ibc_denom(
@@ -477,10 +476,10 @@ where
             )?;
             let token = namada_ibc::received_ibc_token(
                 ibc_denom,
-                &msg.message.packet.port_id_on_a,
-                &msg.message.packet.chan_id_on_a,
-                &msg.message.packet.port_id_on_b,
-                &msg.message.packet.chan_id_on_b,
+                &msg.packet.port_id_on_a,
+                &msg.packet.chan_id_on_a,
+                &msg.packet.port_id_on_b,
+                &msg.packet.chan_id_on_b,
             )
             .into_storage_result()
             .map_err(Error::NativeVpError)?;
@@ -515,7 +514,8 @@ where
                 let receiver = msg.message.packet_data.receiver.to_string();
                 let addr = TAddrData::Ibc(receiver.clone());
                 acc.decoder.insert(ibc_taddr(receiver), addr);
-                acc = self.apply_send_packet(acc, msg, keys_changed)?;
+                acc =
+                    self.apply_transfer_msg(acc, &msg.message, keys_changed)?;
             }
             // This event is emitted on the receiver
             IbcMessage::RecvPacket(msg) => {
@@ -528,8 +528,12 @@ where
                 let receiver = packet_data.receiver.to_string();
                 let addr = TAddrData::Ibc(receiver.clone());
                 acc.decoder.insert(ibc_taddr(receiver), addr);
-                acc =
-                    self.apply_write_ack(acc, msg, &packet_data, keys_changed)?;
+                acc = self.apply_recv_msg(
+                    acc,
+                    &msg.message,
+                    &packet_data,
+                    keys_changed,
+                )?;
             }
             // Ignore all other IBC events
             _ => {}
@@ -629,7 +633,7 @@ where
             Error::NativeVpError(native_vp::Error::new_const(msg))
         })?;
         let conversion_state = self.ctx.state.in_mem().get_conversion_state();
-        let ibc_msgs = self.ctx.get_shielded_action(tx_data)?;
+        let ibc_msgs = self.ctx.get_ibc_message(tx_data)?;
 
         // Get the Transaction object from the actions
         let masp_section_ref = namada_tx::action::get_masp_section_ref(
@@ -663,8 +667,10 @@ where
         // The Sapling value balance adds to the transparent tx pool
         let mut transparent_tx_pool = shielded_tx.sapling_value_balance();
         // Check the validity of the keys and get the transfer data
-        let mut changed_balances =
-            self.validate_state_and_get_transfer_data(keys_changed, &ibc_msgs)?;
+        let mut changed_balances = self.validate_state_and_get_transfer_data(
+            keys_changed,
+            &ibc_msgs.as_slice(),
+        )?;
 
         let masp_address_hash = addr_taddr(MASP);
         verify_sapling_balancing_value(

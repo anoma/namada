@@ -121,15 +121,15 @@ where
     fn get_tx_code_hash(&self) -> Result<Option<Hash>, namada_storage::Error>;
 
     /// Get the masp tx part of the shielded action
-    fn get_shielded_action(
+    fn get_ibc_message(
         &self,
         batched_tx: &BatchedTxRef<'_>,
-    ) -> Result<Vec<IbcMessage>, namada_storage::Error> {
+    ) -> Result<Option<IbcMessage>, namada_storage::Error> {
         let data = batched_tx
             .tx
             .data(batched_tx.cmt)
             .ok_or_err_msg("No transaction data")?;
-        Ok(decode_message(&data).into_iter().collect())
+        Ok(decode_message(&data).ok())
     }
 
     /// Charge the provided gas for the current vp
