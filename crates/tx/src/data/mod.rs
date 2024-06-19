@@ -12,6 +12,7 @@ pub mod wrapper;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Display};
+use std::marker::PhantomData;
 use std::str::FromStr;
 
 use bitflags::bitflags;
@@ -29,6 +30,7 @@ use namada_macros::BorshDeserializer;
 use namada_migrations::*;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
+use serde::ser::SerializeMap;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 pub use wrapper::*;
@@ -162,69 +164,6 @@ pub fn hash_tx(tx_bytes: &[u8]) -> Hash {
     Hash(*digest.as_ref())
 }
 
-// FIXME: remove if not needed
-// impl<T: Serialize> Serialize for TxResult<T> {
-//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-//     where
-//         S: serde::Serializer,
-//     {
-//         let mut map = serializer.serialize_map(Some(self.0.len()))?;
-
-//         for (k, v) in &self.0 {
-//             map.serialize_entry(&k.to_string(), v)?;
-//         }
-//         map.end()
-//     }
-// }
-
-// struct TxResultVisitor<T> {
-//     _phantom: PhantomData<T>,
-// }
-
-// impl<T> TxResultVisitor<T> {
-//     fn new() -> Self {
-//         Self {
-//             _phantom: PhantomData,
-//         }
-//     }
-// }
-
-// impl<'de, T> serde::de::Visitor<'de> for TxResultVisitor<T>
-// where
-//     T: serde::Deserialize<'de>,
-// {
-//     type Value = TxResult<T>;
-
-//     fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         formatter.write_str("Txesult")
-//     }
-
-//     fn visit_map<V>(self, mut map: V) -> Result<Self::Value, V::Error>
-//     where
-//         V: serde::de::MapAccess<'de>,
-//     {
-//         let mut result = TxResults::<T>::default();
-
-//         while let Some((key, value)) = map.next_entry()? {
-//             result.0.insert(
-//                 Hash::from_str(key).map_err(serde::de::Error::custom)?,
-//                 value,
-//             );
-//         }
-
-//         Ok(result)
-//     }
-// }
-
-// impl<'de, T: Deserialize<'de>> serde::Deserialize<'de> for TxResult<T> {
-//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-//     where
-//         D: serde::Deserializer<'de>,
-//     {
-//         deserializer.deserialize_map(TxResultVisitor::new())
-//     }
-// }
-
 /// The extended transaction result, containing the references to masp
 /// sections (if any)
 pub struct ExtendedTxResult<T> {
@@ -254,14 +193,74 @@ pub struct DryRunResult(pub TxResult<String>, pub WholeGas);
 // management with regards to replay protection, whereas for logging we use
 // strings
 // TODO derive BorshSchema after <https://github.com/near/borsh-rs/issues/82>
-#[derive(
-    Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
-)]
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
 pub struct TxResult<T>(pub BTreeMap<Hash, Result<BatchedTxResult, T>>);
 
 impl<T> Default for TxResult<T> {
     fn default() -> Self {
         Self(Default::default())
+    }
+}
+
+impl<T: Serialize> Serialize for TxResult<T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut map = serializer.serialize_map(Some(self.0.len()))?;
+
+        for (k, v) in &self.0 {
+            map.serialize_entry(&k.to_string(), v)?;
+        }
+        map.end()
+    }
+}
+
+struct TxResultVisitor<T> {
+    _phantom: PhantomData<T>,
+}
+
+impl<T> TxResultVisitor<T> {
+    fn new() -> Self {
+        Self {
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<'de, T> serde::de::Visitor<'de> for TxResultVisitor<T>
+where
+    T: serde::Deserialize<'de>,
+{
+    type Value = TxResult<T>;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("a transaction's result")
+    }
+
+    fn visit_map<V>(self, mut map: V) -> Result<Self::Value, V::Error>
+    where
+        V: serde::de::MapAccess<'de>,
+    {
+        let mut result = TxResult::<T>::default();
+
+        while let Some((key, value)) = map.next_entry()? {
+            result.0.insert(
+                Hash::from_str(key).map_err(serde::de::Error::custom)?,
+                value,
+            );
+        }
+
+        Ok(result)
+    }
+}
+
+impl<'de, T: Deserialize<'de>> serde::Deserialize<'de> for TxResult<T> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_map(TxResultVisitor::new())
     }
 }
 
