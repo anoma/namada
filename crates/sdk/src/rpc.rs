@@ -41,7 +41,7 @@ use namada_proof_of_stake::types::{
     BondsAndUnbondsDetails, CommissionPair, ValidatorMetaData,
 };
 use namada_state::LastBlock;
-use namada_tx::data::{BatchedTxResult, ResultCode, TxResult};
+use namada_tx::data::{BatchedTxResult, DryRunResult, ResultCode, TxResult};
 use namada_tx::event::{Batch as BatchAttr, Code as CodeAttr};
 use serde::Serialize;
 
@@ -531,7 +531,7 @@ pub async fn query_tx_events<C: crate::queries::Client + Sync>(
 pub async fn dry_run_tx<N: Namada>(
     context: &N,
     tx_bytes: Vec<u8>,
-) -> Result<namada_tx::data::TxResult<String>, Error> {
+) -> Result<DryRunResult, Error> {
     let (data, height, prove) = (Some(tx_bytes), None, false);
     let result = convert_response::<N::Client, _>(
         RPC.shell()
@@ -539,10 +539,10 @@ pub async fn dry_run_tx<N: Namada>(
             .await,
     )?
     .data;
-    let result_str = format!("Transaction consumed {} gas", result.gas_used);
+    let result_str = format!("Transaction consumed {} gas", result.1);
 
     let mut cmt_result_str = String::new();
-    for (cmt_hash, cmt_result) in &result.batch_results.0 {
+    for (cmt_hash, cmt_result) in &result.0.batch_results.0 {
         match cmt_result {
             Ok(result) => {
                 if result.is_accepted() {

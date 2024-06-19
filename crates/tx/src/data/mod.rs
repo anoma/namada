@@ -24,7 +24,7 @@ use namada_core::hash::Hash;
 use namada_core::masp::MaspTxRefs;
 use namada_core::storage;
 use namada_events::Event;
-use namada_gas::{Gas, VpsGas};
+use namada_gas::{Gas, VpsGas, WholeGas};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
@@ -257,15 +257,17 @@ impl<T> Default for ExtendedTxResult<T> {
     }
 }
 
+#[derive(Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
+/// The result of a dry run, included the actual transaction result and the gas used
+pub struct DryRunResult(pub TxResult<String>, pub WholeGas);
+
 /// Transaction application result
 // TODO derive BorshSchema after <https://github.com/near/borsh-rs/issues/82>
 #[derive(
     Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
 )]
 pub struct TxResult<T> {
-    /// Total gas used by the transaction (includes the gas used by VPs)
-    //FIXME: this is effectively duplicated with the Gas event, should we remove it from here? Or change it to whole gas? Changing to whole gas doen't make much sense cause it's a duplication
-    pub gas_used: Gas,
+    //FIXME: just decompose her BatchResults
     /// The results of the batch, indexed by the hash of the specific
     /// [`crate::types::TxCommitments`]
     pub batch_results: BatchResults<T>,
@@ -274,7 +276,6 @@ pub struct TxResult<T> {
 impl<T> Default for TxResult<T> {
     fn default() -> Self {
         Self {
-            gas_used: Default::default(),
             batch_results: Default::default(),
         }
     }
@@ -295,7 +296,6 @@ impl<T: Display> TxResult<T> {
         }
 
         TxResult {
-            gas_used: self.gas_used,
             batch_results: BatchResults(batch_results),
         }
     }
@@ -412,7 +412,7 @@ pub struct VpsResult {
 impl<T: Serialize> fmt::Display for TxResult<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if f.alternate() {
-            write!(f, "Transaction is valid. Gas used: {}", self.gas_used)
+            write!(f, "Transaction is valid.")
         } else {
             write!(f, "{}", serde_json::to_string(self).unwrap())
         }

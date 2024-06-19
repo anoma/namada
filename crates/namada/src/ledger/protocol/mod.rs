@@ -263,7 +263,6 @@ where
                 )?;
 
                 Ok(TxResult {
-                    gas_used: tx_gas_meter.borrow().get_tx_consumed_gas(),
                     batch_results: BatchResults(
                         [(cmt.get_hash(), Ok(batched_tx_result))]
                             .into_iter()
@@ -340,8 +339,6 @@ where
         ) {
             Err(Error::GasError(ref msg)) => {
                 // Gas error aborts the execution of the entire batch
-                extended_tx_result.tx_result.gas_used =
-                    tx_gas_meter.borrow().get_tx_consumed_gas();
                 extended_tx_result.tx_result.batch_results.0.insert(
                     cmt.get_hash(),
                     Err(Error::GasError(msg.to_owned())),
@@ -361,8 +358,6 @@ where
                     .batch_results
                     .0
                     .insert(cmt.get_hash(), res);
-                extended_tx_result.tx_result.gas_used =
-                    tx_gas_meter.borrow().get_tx_consumed_gas();
                 if is_accepted {
                     // If the transaction was a masp one append the
                     // transaction refs for the events
@@ -432,7 +427,6 @@ where
         .map_err(|err| Error::GasError(err.to_string()))?;
 
     Ok(TxResult {
-        gas_used: tx_gas_meter.borrow().get_tx_consumed_gas(),
         batch_results: BatchResults::default(),
     })
 }

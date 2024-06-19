@@ -114,9 +114,10 @@ mod dry_run_tx {
                 .insert(cmt.get_hash(), batched_tx_result);
         }
         // Account gas for both batch and wrapper
-        tx_result.gas_used = tx_gas_meter.borrow().get_tx_consumed_gas();
+        let gas_used = tx_gas_meter.borrow().get_tx_consumed_gas();
         let tx_result_string = tx_result.to_result_string();
-        let data = tx_result_string.serialize_to_vec();
+        let data = (tx_result_string, gas_used).serialize_to_vec();
+
         Ok(EncodedResponseQuery {
             data,
             proof: None,
@@ -268,8 +269,8 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_shell_queries_router_with_client()
-    -> namada_state::StorageResult<()> {
+    async fn test_shell_queries_router_with_client(
+    ) -> namada_state::StorageResult<()> {
         // Initialize the `TestClient`
         let mut client = TestClient::new(RPC);
         // store the wasm code
@@ -303,17 +304,15 @@ mod test {
             .dry_run_tx(&client, Some(tx_bytes), None, false)
             .await
             .unwrap();
-        assert!(
-            result
-                .data
-                .batch_results
-                .0
-                .get(&cmt.get_hash())
-                .unwrap()
-                .as_ref()
-                .unwrap()
-                .is_accepted()
-        );
+        assert!(result
+            .data
+            .batch_results
+            .0
+            .get(&cmt.get_hash())
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .is_accepted());
 
         // Request storage value for a balance key ...
         let token_addr = address::testing::established_address_1();

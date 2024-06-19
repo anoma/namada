@@ -23,6 +23,7 @@ use namada_ibc::event::IbcEventType;
 use namada_state::{DBIter, LastBlock, StateRead, StorageHasher, DB};
 use namada_storage::{ResultExt, StorageRead};
 use namada_token::storage_key::masp_token_map_key;
+use namada_tx::data::DryRunResult;
 #[cfg(any(test, feature = "async-client"))]
 use namada_tx::data::TxResult;
 
@@ -83,7 +84,7 @@ router! {SHELL,
         -> Vec<u8> = (with_options storage_value),
 
     // Dry run a transaction
-    ( "dry_run_tx" ) -> TxResult<String> = (with_options dry_run_tx),
+    ( "dry_run_tx" ) -> DryRunResult = (with_options dry_run_tx),
 
     // Raw storage access - prefix iterator
     ( "prefix" / [storage_key: storage::Key] )

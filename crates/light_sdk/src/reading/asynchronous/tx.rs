@@ -1,6 +1,6 @@
 use namada_sdk::events::Event;
 use namada_sdk::rpc::{TxEventQuery, TxResponse};
-use namada_sdk::tx::data::TxResult;
+use namada_sdk::tx::data::{DryRunResult, TxResult};
 
 use super::*;
 
@@ -25,7 +25,7 @@ pub async fn query_tx_events(
 pub async fn dry_run_tx(
     tendermint_addr: &str,
     tx_bytes: Vec<u8>,
-) -> Result<TxResult<String>, Error> {
+) -> Result<DryRunResult, Error> {
     let client = HttpClient::new(
         TendermintAddress::from_str(tendermint_addr)
             .map_err(|e| Error::Other(e.to_string()))?,

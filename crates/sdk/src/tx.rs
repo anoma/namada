@@ -61,7 +61,9 @@ use namada_token::storage_key::balance_key;
 use namada_token::DenominatedAmount;
 use namada_tx::data::pgf::UpdateStewardCommission;
 use namada_tx::data::pos::{BecomeValidator, ConsensusKeyChange};
-use namada_tx::data::{pos, BatchedTxResult, ResultCode, TxResult};
+use namada_tx::data::{
+    pos, BatchedTxResult, DryRunResult, ResultCode, TxResult,
+};
 pub use namada_tx::{Authorization, *};
 use num_traits::Zero;
 use rand_core::{OsRng, RngCore};
@@ -151,7 +153,7 @@ pub enum ProcessTxResponse {
     /// Result of submitting a transaction to the mempool
     Broadcast(Response),
     /// Result of dry running transaction
-    DryRun(TxResult<String>),
+    DryRun(DryRunResult),
 }
 
 impl ProcessTxResponse {
