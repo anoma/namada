@@ -35,8 +35,8 @@ pub async fn syncing<
     let tracker = CliProgressTracker::new(io);
 
     let shielded = shielded
-        .fetch::<_, _, LedgerMaspClient<'_, C>>(
-            client,
+        .fetch(
+            LedgerMaspClient::new(client),
             &tracker,
             start_query_height,
             last_query_height,

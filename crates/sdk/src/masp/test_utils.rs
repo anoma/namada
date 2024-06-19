@@ -94,12 +94,17 @@ pub struct TestingMaspClient<'a> {
     client: &'a TestingClient,
 }
 
-impl<'a> MaspClient<'a, TestingClient> for TestingMaspClient<'a> {
-    fn new(client: &'a TestingClient) -> Self
-    where
-        Self: 'a,
-    {
+impl<'client> TestingMaspClient<'client> {
+    /// Create a new [`TestingMaspClient`] given an rpc client
+    /// [`TestingClient`].
+    pub const fn new(client: &'client TestingClient) -> Self {
         Self { client }
+    }
+}
+
+impl<'a> MaspClient<'a, TestingClient> for TestingMaspClient<'a> {
+    fn rpc_client(&self) -> &TestingClient {
+        self.client
     }
 
     async fn fetch_shielded_transfers<IO: Io>(

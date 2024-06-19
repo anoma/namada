@@ -46,12 +46,12 @@ impl Iterator for RetryStrategy {
 /// of how shielded-sync fetches the necessary data
 /// from a remote server.
 pub trait MaspClient<'client, C: Client> {
-    /// Create a new [`MaspClient`] given an rpc client.
-    fn new(client: &'client C) -> Self
-    where
-        Self: 'client;
+    /// Return the wrapped client.
+    fn rpc_client(&self) -> &C;
 
-    /// Fetches shielded transfers
+    /// Fetch shielded transfers from blocks heights in the range `[from, to]`,
+    /// keeping track of progress through `progress`. The fetched transfers
+    /// are sent over to a separate worker through `tx_sender`.
     #[allow(async_fn_in_trait)]
     async fn fetch_shielded_transfers<IO: Io>(
         &self,
@@ -65,8 +65,15 @@ pub trait MaspClient<'client, C: Client> {
 
 /// An inefficient MASP client which simply uses a
 /// client to the blockchain to query it directly.
-pub struct LedgerMaspClient<'client, C: Client> {
+pub struct LedgerMaspClient<'client, C> {
     client: &'client C,
+}
+
+impl<'client, C> LedgerMaspClient<'client, C> {
+    /// Create a new [`MaspClient`] given an rpc client.
+    pub const fn new(client: &'client C) -> Self {
+        Self { client }
+    }
 }
 
 #[cfg(not(target_family = "wasm"))]
@@ -75,11 +82,8 @@ impl<'client, C: Client + Sync> MaspClient<'client, C>
 where
     LedgerMaspClient<'client, C>: 'client,
 {
-    fn new(client: &'client C) -> Self
-    where
-        Self: 'client,
-    {
-        Self { client }
+    fn rpc_client(&self) -> &C {
+        self.client
     }
 
     async fn fetch_shielded_transfers<IO: Io>(

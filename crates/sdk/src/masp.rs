@@ -764,7 +764,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     #[cfg(not(target_family = "wasm"))]
     pub async fn fetch<'client, C, IO, M>(
         &mut self,
-        client: &'client C,
+        client: M,
         progress: &impl ProgressTracker<IO>,
         start_query_height: Option<BlockHeight>,
         last_query_height: Option<BlockHeight>,
@@ -781,7 +781,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         M: MaspClient<'client, C> + 'client,
     {
         let shutdown_signal = control_flow::install_shutdown_signal();
-        self.fetch_aux::<_, _, M>(
+        self.fetch_aux(
             client,
             progress,
             start_query_height,
@@ -799,7 +799,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     #[cfg(not(target_family = "wasm"))]
     async fn fetch_aux<'client, C, IO, M>(
         &mut self,
-        client: &'client C,
+        client: M,
         progress: &impl ProgressTracker<IO>,
         start_query_height: Option<BlockHeight>,
         last_query_height: Option<BlockHeight>,
@@ -854,7 +854,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 .map(|ix| ix.height);
         let start_height = start_query_height.or(start_height);
         // Query for the last produced block height
-        let last_block_height = query_block(client)
+        let last_block_height = query_block(client.rpc_client())
             .await?
             .map(|b| b.height)
             .unwrap_or_else(BlockHeight::first);
@@ -868,8 +868,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             let (fetch_send, fetch_recv) =
                 fetch_channel::new(self.unscanned.clone());
             let fetch_res = self
-                .fetch_shielded_transfers::<_, _, M>(
-                    client,
+                .fetch_shielded_transfers(
+                    &client,
                     progress,
                     &mut shutdown_signal,
                     fetch_send,
@@ -933,21 +933,20 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
     /// Obtain a chronologically-ordered list of all accepted shielded
     /// transactions from a node.
-    pub async fn fetch_shielded_transfers<
+    async fn fetch_shielded_transfers<
         'client,
         C: Client + Sync,
         IO: Io,
         M: MaspClient<'client, C> + 'client,
     >(
         &self,
-        client: &'client C,
+        client: &M,
         progress: &impl ProgressTracker<IO>,
         shutdown_signal: &mut ShutdownSignal,
         block_sender: FetchQueueSender,
         last_indexed_tx: Option<BlockHeight>,
         last_query_height: BlockHeight,
     ) -> Result<(), Error> {
-        let client = M::new(client);
         // Fetch all the transactions we do not have yet
         let first_height_to_query =
             last_indexed_tx.map_or_else(|| 1, |last| last.0);
@@ -3373,8 +3372,8 @@ mod test_shielded_sync {
         // we first test that with no retries, a fetching failure
         // stops process
         let result = shielded_ctx
-            .fetch::<_, _, TestingMaspClient<'_>>(
-                &client,
+            .fetch(
+                TestingMaspClient::new(&client),
                 &progress,
                 None,
                 None,
@@ -3418,8 +3417,8 @@ mod test_shielded_sync {
 
         // This should complete successfully
         shielded_ctx
-            .fetch::<_, _, TestingMaspClient<'_>>(
-                &client,
+            .fetch(
+                TestingMaspClient::new(&client),
                 &progress,
                 None,
                 None,
@@ -3479,8 +3478,8 @@ mod test_shielded_sync {
         // first fetch no blocks
         masp_tx_sender.send(None).expect("Test failed");
         shielded_ctx
-            .fetch::<_, _, TestingMaspClient<'_>>(
-                &client,
+            .fetch(
+                TestingMaspClient::new(&client),
                 &progress,
                 None,
                 None,
@@ -3505,8 +3504,8 @@ mod test_shielded_sync {
             .expect("Test failed");
         masp_tx_sender.send(None).expect("Test failed");
         shielded_ctx
-            .fetch::<_, _, TestingMaspClient<'_>>(
-                &client,
+            .fetch(
+                TestingMaspClient::new(&client),
                 &progress,
                 None,
                 None,
@@ -3522,8 +3521,8 @@ mod test_shielded_sync {
         // fetch no blocks
         masp_tx_sender.send(None).expect("Test failed");
         shielded_ctx
-            .fetch::<_, _, TestingMaspClient<'_>>(
-                &client,
+            .fetch(
+                TestingMaspClient::new(&client),
                 &progress,
                 None,
                 None,
@@ -3541,8 +3540,8 @@ mod test_shielded_sync {
         let (client, masp_tx_sender) = test_client(3.into());
         masp_tx_sender.send(None).expect("Test failed");
         shielded_ctx
-            .fetch::<_, _, TestingMaspClient<'_>>(
-                &client,
+            .fetch(
+                TestingMaspClient::new(&client),
                 &progress,
                 None,
                 None,
@@ -3578,8 +3577,8 @@ mod test_shielded_sync {
         // all expected blocks
         masp_tx_sender.send(None).expect("Test failed");
         shielded_ctx
-            .fetch::<_, _, TestingMaspClient<'_>>(
-                &client,
+            .fetch(
+                TestingMaspClient::new(&client),
                 &progress,
                 None,
                 None,
@@ -3632,8 +3631,8 @@ mod test_shielded_sync {
             .expect("Test failed");
 
         shielded_ctx
-            .fetch::<_, _, TestingMaspClient<'_>>(
-                &client,
+            .fetch(
+                TestingMaspClient::new(&client),
                 &progress,
                 None,
                 None,
@@ -3692,8 +3691,8 @@ mod test_shielded_sync {
             .expect("Test failed");
         shutdown_send.send(()).expect("Test failed");
         let Error::Interrupt(ref proc) = shielded_ctx
-            .fetch_aux::<_, _, TestingMaspClient<'_>>(
-                &client,
+            .fetch_aux(
+                TestingMaspClient::new(&client),
                 &progress,
                 None,
                 None,
