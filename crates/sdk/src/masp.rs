@@ -784,14 +784,14 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     ) -> Result<(), Error> {
         // Fetch all the transactions we do not have yet
         let first_height_to_query =
-            last_indexed_tx.map_or_else(|| 1, |last| last.0);
+            last_indexed_tx.unwrap_or(BlockHeight(1));
         let res = client
             .fetch_shielded_transfers(
                 progress,
                 shutdown_signal,
                 block_sender,
                 first_height_to_query,
-                last_query_height.0,
+                last_query_height,
             )
             .await;
         // persist fetched notes

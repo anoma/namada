@@ -73,8 +73,8 @@ pub trait MaspClient<'client, C: Client> {
         progress: &impl ProgressTracker<IO>,
         shutdown_signal: &mut ShutdownSignal,
         tx_sender: FetchQueueSender,
-        from: u64,
-        to: u64,
+        from: BlockHeight,
+        to: BlockHeight,
     ) -> Result<(), Error>;
 }
 
@@ -110,8 +110,8 @@ where
         progress: &impl ProgressTracker<IO>,
         shutdown_signal: &mut ShutdownSignal,
         mut tx_sender: FetchQueueSender,
-        from: u64,
-        to: u64,
+        BlockHeight(from): BlockHeight,
+        BlockHeight(to): BlockHeight,
     ) -> Result<(), Error> {
         // Fetch all the transactions we do not have yet
         let mut fetch_iter = progress.fetch(from..=to);
