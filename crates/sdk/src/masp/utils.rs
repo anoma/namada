@@ -30,7 +30,7 @@ impl Iterator for RetryStrategy {
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             Self::Forever => Some(()),
-            Self::Times(ref mut count) => {
+            Self::Times(count) => {
                 if *count == 0 {
                     None
                 } else {
