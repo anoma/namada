@@ -34,6 +34,12 @@ There is a single command to build and install Namada executables from source (t
 make install
 ```
 
+Or using [Nix Flakes](https://nixos.wiki/wiki/flakes) from the [Nix package manager](https://nixos.org/download/):
+
+```shell
+nix profile install
+```
+
 After installation, the main `namada` executable will be available on path.
 
 To find how to use it, check out the [User Guide section of the docs](https://docs.namada.net/user-guide/index.html).
@@ -47,6 +53,26 @@ Guide.
 ```shell
 # Build the provided validity predicate and transaction wasm modules
 make build-wasm-scripts-docker
+```
+
+### Using Nix
+
+Development shell with all dependencies:
+
+```shell
+nix develop
+```
+
+Build everything, output will be in `result/`
+
+```shell
+nix build
+```
+
+Run `namada` without installing it (also builds it if necessary):
+
+```shell
+nix run . -- help
 ```
 
 ### Before submitting a PR, pls make sure to run the following
