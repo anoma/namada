@@ -318,7 +318,8 @@ where
         // No owner is specified or the owner doesn't have the token
         let ibc_denom_prefix = ibc_trace_key_prefix(None);
         let ibc_denoms = self.ctx.iter_prefix(&ibc_denom_prefix)?;
-        for (key, ibc_denom, _gas) in ibc_denoms {
+        for (key, ibc_denom, gas) in ibc_denoms {
+            self.ctx.charge_gas(gas)?;
             if let Some((_, token_hash)) =
                 is_ibc_trace_key(&Key::parse(key).into_storage_result()?)
             {
