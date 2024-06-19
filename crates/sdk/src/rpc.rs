@@ -24,7 +24,7 @@ use namada_core::token::{
 };
 use namada_core::{storage, token};
 use namada_gas::event::GasUsed as GasUsedAttr;
-use namada_gas::Gas;
+use namada_gas::{Gas, WholeGas};
 use namada_governance::parameters::GovernanceParameters;
 use namada_governance::pgf::parameters::PgfParameters;
 use namada_governance::pgf::storage::steward::StewardDetail;
@@ -612,7 +612,7 @@ pub struct TxResponse {
     /// Response code
     pub code: ResultCode,
     /// Gas used.
-    pub gas_used: Gas,
+    pub gas_used: WholeGas,
 }
 
 /// Determines a result of an inner tx from

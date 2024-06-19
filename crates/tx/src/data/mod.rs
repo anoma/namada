@@ -264,6 +264,7 @@ impl<T> Default for ExtendedTxResult<T> {
 )]
 pub struct TxResult<T> {
     /// Total gas used by the transaction (includes the gas used by VPs)
+    //FIXME: this is effectively duplicated with the Gas event, should we remove it from here? Or change it to whole gas? Changing to whole gas doen't make much sense cause it's a duplication
     pub gas_used: Gas,
     /// The results of the batch, indexed by the hash of the specific
     /// [`crate::types::TxCommitments`]

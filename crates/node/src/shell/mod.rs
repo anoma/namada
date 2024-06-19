@@ -1103,7 +1103,9 @@ where
 
                 // Max block gas
                 let block_gas_limit: Gas = Gas::from_whole_units(
-                    namada::parameters::get_max_block_gas(&self.state).unwrap(),
+                    namada::parameters::get_max_block_gas(&self.state)
+                        .unwrap()
+                        .into(),
                     gas_scale,
                 )
                 .expect("Gas limit from parameter must not overflow");
