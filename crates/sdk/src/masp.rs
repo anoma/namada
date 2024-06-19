@@ -1761,10 +1761,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                         )
                         .map_err(builder::Error::TransparentBuild)?;
                 } else {
-                    unreachable!(
+                    return Result::Err(TransferErr::from(Error::Other(
                         "transaction target must be a payment address or \
                          Namada address or IBC address"
-                    )
+                            .to_string(),
+                    )));
                 }
                 // Lower what is required of the remaining contribution
                 *rem_amount -= contr;

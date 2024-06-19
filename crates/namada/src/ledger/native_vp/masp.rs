@@ -41,7 +41,6 @@ use token::storage_key::{
 use token::Amount;
 
 use crate::address::{InternalAddress, IBC, MASP};
-use crate::ibc::{MsgRecvPacket, MsgTransfer};
 use crate::ledger::ibc::storage;
 use crate::ledger::ibc::storage::{
     ibc_trace_key, ibc_trace_key_prefix, is_ibc_commitment_key,
@@ -50,7 +49,7 @@ use crate::ledger::ibc::storage::{
 use crate::ledger::native_vp;
 use crate::ledger::native_vp::ibc::context::VpValidationContext;
 use crate::ledger::native_vp::{Ctx, NativeVp};
-use crate::sdk::ibc::apps::transfer::types::ack_success_b64;
+use crate::sdk::ibc::apps::transfer::types::{ack_success_b64, PORT_ID_STR};
 use crate::sdk::ibc::core::channel::types::acknowledgement::AcknowledgementStatus;
 use crate::sdk::ibc::core::channel::types::commitment::{
     compute_ack_commitment, AcknowledgementCommitment, PacketCommitment,
@@ -385,7 +384,7 @@ where
         // is done in the IBC VP, the test is repeated here to avoid making
         // assumptions about how the IBC VP interprets the given message.
         if self
-            .find_ibc_transfer_sequence(&msg, keys_changed)?
+            .find_ibc_transfer_sequence(msg, keys_changed)?
             .is_none()
         {
             return Ok(acc);
@@ -440,7 +439,7 @@ where
             packet.seq_on_a,
         );
         if !keys_changed.contains(&ack_key) {
-            // Otherwise ignore this event
+            // Ignore packet if it was not acknowledged during this state change
             return Ok(false);
         }
         // If the receive is a success, then the commitment is unique
@@ -518,13 +517,13 @@ where
                     self.apply_transfer_msg(acc, &msg.message, keys_changed)?;
             }
             // This event is emitted on the receiver
-            IbcMessage::RecvPacket(msg) => {
-                // Check if this is a Transfer packet
-                let Ok(packet_data) = serde_json::from_slice::<PacketData>(
+            IbcMessage::RecvPacket(msg)
+                if msg.message.packet.port_id_on_b.as_str() == PORT_ID_STR =>
+            {
+                let packet_data = serde_json::from_slice::<PacketData>(
                     &msg.message.packet.data,
-                ) else {
-                    return Ok(acc);
-                };
+                )
+                .map_err(native_vp::Error::new)?;
                 let receiver = packet_data.receiver.to_string();
                 let addr = TAddrData::Ibc(receiver.clone());
                 acc.decoder.insert(ibc_taddr(receiver), addr);
@@ -633,7 +632,7 @@ where
             Error::NativeVpError(native_vp::Error::new_const(msg))
         })?;
         let conversion_state = self.ctx.state.in_mem().get_conversion_state();
-        let ibc_msgs = self.ctx.get_ibc_message(tx_data)?;
+        let ibc_msgs = self.ctx.get_ibc_message(tx_data).ok();
 
         // Get the Transaction object from the actions
         let masp_section_ref = namada_tx::action::get_masp_section_ref(
@@ -669,7 +668,7 @@ where
         // Check the validity of the keys and get the transfer data
         let mut changed_balances = self.validate_state_and_get_transfer_data(
             keys_changed,
-            &ibc_msgs.as_slice(),
+            ibc_msgs.as_slice(),
         )?;
 
         let masp_address_hash = addr_taddr(MASP);

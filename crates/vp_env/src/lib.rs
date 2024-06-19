@@ -26,7 +26,7 @@ use namada_core::hash::Hash;
 use namada_core::storage::{BlockHeight, Epoch, Epochs, Header, Key, TxIndex};
 use namada_events::{Event, EventType};
 use namada_ibc::{decode_message, IbcMessage};
-use namada_storage::{OptionExt, StorageRead};
+use namada_storage::{OptionExt, ResultExt, StorageRead};
 use namada_tx::BatchedTxRef;
 
 /// Validity predicate's environment is available for native VPs and WASM VPs
@@ -120,16 +120,16 @@ where
     /// Get a tx hash
     fn get_tx_code_hash(&self) -> Result<Option<Hash>, namada_storage::Error>;
 
-    /// Get the masp tx part of the shielded action
+    /// Get the IBC message from the data section
     fn get_ibc_message(
         &self,
         batched_tx: &BatchedTxRef<'_>,
-    ) -> Result<Option<IbcMessage>, namada_storage::Error> {
+    ) -> Result<IbcMessage, namada_storage::Error> {
         let data = batched_tx
             .tx
             .data(batched_tx.cmt)
             .ok_or_err_msg("No transaction data")?;
-        Ok(decode_message(&data).ok())
+        decode_message(&data).into_storage_result()
     }
 
     /// Charge the provided gas for the current vp
