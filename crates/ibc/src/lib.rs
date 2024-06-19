@@ -433,12 +433,8 @@ pub fn received_ibc_token(
         dest_port_id,
         dest_channel_id,
     )?;
-    if ibc_trace.contains('/') {
-        Ok(storage::ibc_token(ibc_trace))
-    } else {
-        Address::decode(ibc_trace)
-            .map_err(|e| Error::Trace(format!("Invalid base token: {e}")))
-    }
+    storage::convert_to_address(ibc_trace)
+        .map_err(|e| Error::Trace(format!("Invalid base token: {e}")))
 }
 
 /// Returns the trace path and the token string if the denom is an IBC
