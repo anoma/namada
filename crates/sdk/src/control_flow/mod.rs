@@ -10,6 +10,7 @@ use std::task::{Context, Poll};
 use futures::future::FutureExt;
 #[cfg(any(unix, windows))]
 use tokio::sync::oneshot;
+use tokio::sync::oneshot::error::TryRecvError;
 
 /// A shutdown signal receiver.
 pub struct ShutdownSignal {
@@ -17,6 +18,18 @@ pub struct ShutdownSignal {
     _inner: (),
     #[cfg(any(unix, windows))]
     rx: oneshot::Receiver<()>,
+}
+
+impl ShutdownSignal {
+    /// Checks if an interrupt signal was received.
+    #[cfg(any(unix, windows))]
+    pub fn received(&mut self) -> bool {
+        match self.rx.try_recv() {
+            Ok(_) => true,
+            Err(TryRecvError::Empty) => false,
+            Err(TryRecvError::Closed) => true,
+        }
+    }
 }
 
 #[cfg(any(unix, windows))]
@@ -63,6 +76,13 @@ pub fn install_shutdown_signal() -> ShutdownSignal {
     {
         ShutdownSignal { _inner: () }
     }
+}
+
+/// A manually triggerable shutdown signal used for testing
+#[cfg(any(test, feature = "testing"))]
+pub fn testing_shutdown_signal() -> (oneshot::Sender<()>, ShutdownSignal) {
+    let (tx, rx) = oneshot::channel();
+    (tx, ShutdownSignal { rx })
 }
 
 /// Shutdown signal receiver
