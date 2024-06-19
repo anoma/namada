@@ -53,7 +53,7 @@ pub trait MaspClient<'client, C: Client> {
 
     /// Fetches shielded transfers
     #[allow(async_fn_in_trait)]
-    async fn fetch_shielded_transfer<IO: Io>(
+    async fn fetch_shielded_transfers<IO: Io>(
         &self,
         progress: &impl ProgressTracker<IO>,
         shutdown_signal: &mut ShutdownSignal,
@@ -82,7 +82,7 @@ where
         Self { client }
     }
 
-    async fn fetch_shielded_transfer<IO: Io>(
+    async fn fetch_shielded_transfers<IO: Io>(
         &self,
         progress: &impl ProgressTracker<IO>,
         shutdown_signal: &mut ShutdownSignal,

@@ -952,7 +952,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let first_height_to_query =
             last_indexed_tx.map_or_else(|| 1, |last| last.0);
         let res = client
-            .fetch_shielded_transfer(
+            .fetch_shielded_transfers(
                 progress,
                 shutdown_signal,
                 block_sender,

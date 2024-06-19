@@ -102,7 +102,7 @@ impl<'a> MaspClient<'a, TestingClient> for TestingMaspClient<'a> {
         Self { client }
     }
 
-    async fn fetch_shielded_transfer<IO: Io>(
+    async fn fetch_shielded_transfers<IO: Io>(
         &self,
         progress: &impl ProgressTracker<IO>,
         shutdown_signal: &mut ShutdownSignal,
