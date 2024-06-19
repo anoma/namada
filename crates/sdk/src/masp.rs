@@ -978,6 +978,13 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         shielded: &[Transaction],
         vk: &ViewingKey,
     ) -> Result<(), Error> {
+        type Proof = OutputDescription<
+            <
+                <Authorized as Authorization>::SaplingAuth
+                as masp_primitives::transaction::components::sapling::Authorization
+            >::Proof
+        >;
+
         // For tracking the account changes caused by this Transaction
         let mut transaction_delta = TransactionDelta::new();
         if let ContextSyncStatus::Confirmed = self.sync_status {
@@ -991,12 +998,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     // Let's try to see if this viewing key can decrypt latest
                     // note
                     let notes = self.pos_map.entry(*vk).or_default();
-                    let decres = try_sapling_note_decryption::<_, OutputDescription<<<Authorized as Authorization>::SaplingAuth as masp_primitives::transaction::components::sapling::Authorization>::Proof>>(
-                &NETWORK,
-                1.into(),
-                &PreparedIncomingViewingKey::new(&vk.ivk()),
-                so,
-            );
+                    let decres = try_sapling_note_decryption::<_, Proof>(
+                        &NETWORK,
+                        1.into(),
+                        &PreparedIncomingViewingKey::new(&vk.ivk()),
+                        so,
+                    );
                     // So this current viewing key does decrypt this current
                     // note...
                     if let Some((note, pa, memo)) = decres {
