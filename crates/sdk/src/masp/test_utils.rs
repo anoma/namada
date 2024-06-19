@@ -117,8 +117,8 @@ impl<'a> MaspClient<'a, TestingClient> for TestingMaspClient<'a> {
         progress: &impl ProgressTracker<IO>,
         shutdown_signal: &mut ShutdownSignal,
         mut tx_sender: FetchQueueSender,
-        from: u64,
-        to: u64,
+        BlockHeight(from): BlockHeight,
+        BlockHeight(to): BlockHeight,
     ) -> Result<(), Error> {
         // N.B. this assumes one masp tx per block
         let mut fetch_iter = progress.fetch(from..=to);
