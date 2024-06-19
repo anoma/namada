@@ -630,6 +630,25 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         .await
     }
 
+    fn min_height_to_sync_from(&self) -> Result<BlockHeight, Error> {
+        let Some(maybe_least_synced_vk_height) =
+            self.vk_heights.values().min().cloned()
+        else {
+            return Err(Error::Other(
+                "No viewing keys are available in the shielded context to \
+                 decrypt notes with"
+                    .to_string(),
+            ));
+        };
+        let maybe_last_witnessed_tx = self.tx_note_map.keys().max().cloned();
+        let last_height_in_witnesses = std::cmp::min(
+            maybe_last_witnessed_tx.as_ref(),
+            maybe_least_synced_vk_height.as_ref(),
+        )
+        .map(|ix| ix.height);
+        Ok(last_height_in_witnesses.unwrap_or_else(BlockHeight::first))
+    }
+
     #[allow(clippy::too_many_arguments)]
     #[cfg(not(target_family = "wasm"))]
     async fn fetch_aux<'client, C, IO, M>(
@@ -651,6 +670,14 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         IO: Io,
         M: MaspClient<'client, C> + 'client,
     {
+        if start_query_height > last_query_height {
+            return Err(Error::Other(format!(
+                "The start height {start_query_height:?} cannot be higher \
+                 than the ending height {last_query_height:?} in the shielded \
+                 sync"
+            )));
+        }
+
         // add new viewing keys
         // Reload the state from file to get the last confirmed state and
         // discard any speculative data, we cannot fetch on top of a
@@ -676,28 +703,33 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         // Save the context to persist newly added keys
         let _ = self.save().await;
 
-        // the height of the key that is least synced
-        let Some(least_idx) = self.vk_heights.values().min().cloned() else {
-            return Ok(());
-        };
         // the latest block height which has been added to the witness Merkle
         // tree
         let last_witnessed_tx = self.tx_note_map.keys().max().cloned();
-        // get the bounds on the block heights to fetch
-        let start_height =
-            std::cmp::min(last_witnessed_tx.as_ref(), least_idx.as_ref())
-                .map(|ix| ix.height);
-        let start_height = start_query_height.or(start_height);
+
         // Query for the last produced block height
-        let last_block_height = query_block(client.rpc_client())
-            .await?
-            .map(|b| b.height)
-            .unwrap_or_else(BlockHeight::first);
-        let last_query_height = last_query_height.unwrap_or(last_block_height);
-        let last_query_height =
-            std::cmp::min(last_query_height, last_block_height);
+        let Some(last_block_height) =
+            query_block(client.rpc_client()).await?.map(|b| b.height)
+        else {
+            return Err(Error::Other(
+                "No block has been committed yet".to_string(),
+            ));
+        };
+
+        let last_query_height = last_query_height
+            .unwrap_or(last_block_height)
+            // NB: limit fetching until the last committed height
+            .min(last_block_height);
+
+        let mut start_height = start_query_height
+            .map_or_else(|| self.min_height_to_sync_from(), Ok)?
+            // NB: the start height cannot be greater than
+            // `last_query_height`
+            .min(last_query_height);
 
         for _ in retry {
+            debug_assert!(start_height <= last_query_height);
+
             // a stateful channel that communicates notes fetched to the trial
             // decryption process
             let (fetch_send, fetch_recv) =
@@ -749,11 +781,18 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     ));
                 }
             }
-            // if fetching failed for before completing, we restart
-            // the fetch process. Otherwise, we can break the loop.
+
+            // If fetching failed before completing, we restart
+            // the process from the height we managed to sync to.
+            // Otherwise, we can break the loop.
             if progress.left_to_fetch() == 0 {
                 break;
             }
+
+            start_height = self.min_height_to_sync_from()?.clamp(
+                start_query_height.unwrap_or_else(BlockHeight::first),
+                last_query_height,
+            );
         }
         _ = self.save().await;
 
@@ -779,12 +818,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         progress: &impl ProgressTracker<IO>,
         shutdown_signal: &mut ShutdownSignal,
         block_sender: FetchQueueSender,
-        last_indexed_tx: Option<BlockHeight>,
+        last_indexed_tx: BlockHeight,
         last_query_height: BlockHeight,
     ) -> Result<(), Error> {
         // Fetch all the transactions we do not have yet
-        let first_height_to_query =
-            last_indexed_tx.unwrap_or(BlockHeight(1));
+        let first_height_to_query = last_indexed_tx;
         let res = client
             .fetch_shielded_transfers(
                 progress,
@@ -3570,7 +3608,7 @@ mod test_shielded_sync {
     use masp_primitives::transaction::Transaction;
     use masp_primitives::zip32::ExtendedFullViewingKey;
     use namada_core::masp::ExtendedViewingKey;
-    use namada_core::storage::TxIndex;
+    use namada_core::storage::{BlockHeight, TxIndex};
     use namada_tx::IndexedTx;
     use tempfile::tempdir;
 
@@ -3799,6 +3837,63 @@ mod test_shielded_sync {
             }
         );
         assert_eq!(shielded_ctx.note_map.len(), 2);
+    }
+
+    /// Test that upon each retry, we either resume from the
+    /// latest height that had been previously stored in the
+    /// `tx_note_map`, or from the minimum height stored in
+    /// `vk_heights`.
+    #[test]
+    fn test_min_height_to_sync_from() {
+        let temp_dir = tempdir().unwrap();
+        let mut shielded_ctx =
+            FsShieldedUtils::new(temp_dir.path().to_path_buf());
+
+        let vk = ExtendedFullViewingKey::from(
+            ExtendedViewingKey::from_str(AA_VIEWING_KEY).expect("Test failed"),
+        )
+        .fvk
+        .vk;
+
+        // pretend we start with a tx observed at height 4 whose
+        // notes cannot be decrypted with `vk`
+        shielded_ctx.tx_note_map.insert(
+            IndexedTx {
+                height: 4.into(),
+                index: TxIndex(0),
+            },
+            0,
+        );
+
+        // the min height here should be 1, since
+        // this vk hasn't decrypted any note yet
+        shielded_ctx.vk_heights.insert(vk, None);
+
+        let height = shielded_ctx.min_height_to_sync_from().unwrap();
+        assert_eq!(height, BlockHeight(1));
+
+        // let's bump the vk height past 4
+        *shielded_ctx.vk_heights.get_mut(&vk).unwrap() = Some(IndexedTx {
+            height: 6.into(),
+            index: TxIndex(0),
+        });
+
+        // the min height should now be 4
+        let height = shielded_ctx.min_height_to_sync_from().unwrap();
+        assert_eq!(height, BlockHeight(4));
+
+        // and now we bump the last seen tx to height 8
+        shielded_ctx.tx_note_map.insert(
+            IndexedTx {
+                height: 8.into(),
+                index: TxIndex(0),
+            },
+            1,
+        );
+
+        // the min height should now be 6
+        let height = shielded_ctx.min_height_to_sync_from().unwrap();
+        assert_eq!(height, BlockHeight(6));
     }
 
     /// Test that the progress tracker correctly keeps
