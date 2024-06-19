@@ -1,6 +1,6 @@
 use namada_sdk::events::Event;
 use namada_sdk::rpc::{TxEventQuery, TxResponse};
-use namada_sdk::tx::data::{DryRunResult, TxResult};
+use namada_sdk::tx::data::DryRunResult;
 
 use super::*;
 

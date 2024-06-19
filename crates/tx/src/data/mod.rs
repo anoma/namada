@@ -12,7 +12,6 @@ pub mod wrapper;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::{self, Display};
-use std::marker::PhantomData;
 use std::str::FromStr;
 
 use bitflags::bitflags;
@@ -24,13 +23,12 @@ use namada_core::hash::Hash;
 use namada_core::masp::MaspTxRefs;
 use namada_core::storage;
 use namada_events::Event;
-use namada_gas::{Gas, VpsGas, WholeGas};
+use namada_gas::{VpsGas, WholeGas};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{FromPrimitive, ToPrimitive};
-use serde::ser::SerializeMap;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 pub use wrapper::*;
@@ -164,7 +162,7 @@ pub fn hash_tx(tx_bytes: &[u8]) -> Hash {
     Hash(*digest.as_ref())
 }
 
-//FIXME: remove if not needed
+// FIXME: remove if not needed
 // impl<T: Serialize> Serialize for TxResult<T> {
 //     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
 //     where
@@ -246,10 +244,12 @@ impl<T> Default for ExtendedTxResult<T> {
 }
 
 #[derive(Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
-/// The result of a dry run, included the actual transaction result and the gas used
+/// The result of a dry run, included the actual transaction result and the gas
+/// used
 pub struct DryRunResult(pub TxResult<String>, pub WholeGas);
 
-/// Transaction application result. More specifically the set of inner tx results indexed by the inner tx hash
+/// Transaction application result. More specifically the set of inner tx
+/// results indexed by the inner tx hash
 // The generic is only used to return typed errors in protocol for error
 // management with regards to replay protection, whereas for logging we use
 // strings

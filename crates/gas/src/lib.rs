@@ -24,8 +24,6 @@ use std::str::FromStr;
 
 use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::hints;
-use namada_core::token::Amount;
-use namada_core::uint::Uint;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
@@ -115,9 +113,10 @@ pub const MASP_PARALLEL_GAS_DIVIDER: u64 = PARALLEL_GAS_DIVIDER / 2;
 /// Gas module result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Representation of tracking gas in sub-units. This effectively decouples gas metering
-/// from fee payment, allowing higher resolution when accounting for gas while,
-/// at the same time, providing a contained gas value when paying fees.
+/// Representation of tracking gas in sub-units. This effectively decouples gas
+/// metering from fee payment, allowing higher resolution when accounting for
+/// gas while, at the same time, providing a contained gas value when paying
+/// fees.
 #[derive(
     Clone,
     Copy,
@@ -192,7 +191,8 @@ impl From<Gas> for u64 {
     }
 }
 
-/// Gas represented in whole units. Used for fee payment and to display information to the user.
+/// Gas represented in whole units. Used for fee payment and to display
+/// information to the user.
 #[derive(
     Debug,
     Clone,

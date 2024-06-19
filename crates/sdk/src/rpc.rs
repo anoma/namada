@@ -24,7 +24,7 @@ use namada_core::token::{
 };
 use namada_core::{storage, token};
 use namada_gas::event::GasUsed as GasUsedAttr;
-use namada_gas::{Gas, WholeGas};
+use namada_gas::WholeGas;
 use namada_governance::parameters::GovernanceParameters;
 use namada_governance::pgf::parameters::PgfParameters;
 use namada_governance::pgf::storage::steward::StewardDetail;
@@ -542,7 +542,7 @@ pub async fn dry_run_tx<N: Namada>(
     let result_str = format!("Transaction consumed {} gas", result.1);
 
     let mut cmt_result_str = String::new();
-    for (cmt_hash, cmt_result) in &result.0 .0 {
+    for (cmt_hash, cmt_result) in &result.0.0 {
         match cmt_result {
             Ok(result) => {
                 if result.is_accepted() {

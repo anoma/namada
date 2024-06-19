@@ -113,7 +113,7 @@ impl From<GasLimit> for Amount {
 
 impl From<GasLimit> for WholeGas {
     fn from(value: GasLimit) -> Self {
-        value.into()
+        value.0.into()
     }
 }
 

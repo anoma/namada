@@ -197,7 +197,7 @@ pub trait State: StateRead + StorageWrite {
     /// reference to the `InMemory` state and DB when in need of both (avoids
     /// complain from the borrow checker)
     fn split_borrow(&mut self)
-        -> (&mut WriteLog, &InMemory<Self::H>, &Self::D);
+    -> (&mut WriteLog, &InMemory<Self::H>, &Self::D);
 
     /// Write the provided tx hash to write log.
     fn write_tx_hash(&mut self, hash: Hash) -> write_log::Result<()> {
