@@ -192,22 +192,6 @@ impl From<Gas> for u64 {
     }
 }
 
-//FIXME: if we remove Gas from TxResult we don't need this anymore
-impl Display for Gas {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.sub)
-    }
-}
-
-impl FromStr for Gas {
-    type Err = GasParseError;
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        let raw: u64 = s.parse().map_err(GasParseError::Parse)?;
-        Ok(Self { sub: raw })
-    }
-}
-
 /// Gas represented in whole units. Used for fee payment and to display information to the user.
 #[derive(
     Debug,

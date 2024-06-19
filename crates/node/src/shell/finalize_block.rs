@@ -472,10 +472,8 @@ where
             let unrun_txs = tx_data
                 .commitments_len
                 .checked_sub(
-                    u64::try_from(
-                        extended_tx_result.tx_result.batch_results.0.len(),
-                    )
-                    .expect("Should be able to convert to u64"),
+                    u64::try_from(extended_tx_result.tx_result.0.len())
+                        .expect("Should be able to convert to u64"),
                 )
                 .expect("Shouldn't underflow");
             temp_log.stats.set_failing_atomic_batch(unrun_txs);
@@ -539,10 +537,8 @@ where
         let unrun_txs = tx_data
             .commitments_len
             .checked_sub(
-                u64::try_from(
-                    extended_tx_result.tx_result.batch_results.0.len(),
-                )
-                .expect("Should be able to convert to u64"),
+                u64::try_from(extended_tx_result.tx_result.0.len())
+                    .expect("Should be able to convert to u64"),
             )
             .expect("Shouldn't underflow");
 
@@ -996,7 +992,7 @@ impl<'finalize> TempTxLogs {
     ) -> ValidityFlags {
         let mut flags = ValidityFlags::default();
 
-        for (cmt_hash, batched_result) in &tx_result.batch_results.0 {
+        for (cmt_hash, batched_result) in &tx_result.0 {
             match batched_result {
                 Ok(result) => {
                     if result.is_accepted() {

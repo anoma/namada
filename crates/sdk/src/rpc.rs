@@ -542,7 +542,7 @@ pub async fn dry_run_tx<N: Namada>(
     let result_str = format!("Transaction consumed {} gas", result.1);
 
     let mut cmt_result_str = String::new();
-    for (cmt_hash, cmt_result) in &result.0.batch_results.0 {
+    for (cmt_hash, cmt_result) in &result.0 .0 {
         match cmt_result {
             Ok(result) => {
                 if result.is_accepted() {
@@ -673,9 +673,9 @@ impl TxResponse {
     /// Check the result of the batch. This should not be used with wrapper
     /// txs.
     pub fn batch_result(&self) -> HashMap<Hash, InnerTxResult<'_>> {
-        if let Some(tx) = self.batch.as_ref() {
+        if let Some(tx_result) = self.batch.as_ref() {
             let mut result = HashMap::default();
-            for (cmt_hash, cmt_result) in &tx.batch_results.0 {
+            for (cmt_hash, cmt_result) in &tx_result.0 {
                 let value = match cmt_result {
                     Ok(res) => {
                         if res.is_accepted() {

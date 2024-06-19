@@ -108,10 +108,7 @@ mod dry_run_tx {
             } else {
                 temp_state.write_log_mut().drop_tx();
             }
-            tx_result
-                .batch_results
-                .0
-                .insert(cmt.get_hash(), batched_tx_result);
+            tx_result.0.insert(cmt.get_hash(), batched_tx_result);
         }
         // Account gas for both batch and wrapper
         let gas_used = tx_gas_meter.borrow().get_tx_consumed_gas();

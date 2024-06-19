@@ -16,8 +16,8 @@ use namada_state::StorageWrite;
 use namada_token::event::{TokenEvent, TokenOperation, UserAccount};
 use namada_tx::data::protocol::{ProtocolTx, ProtocolTxType};
 use namada_tx::data::{
-    BatchResults, BatchedTxResult, ExtendedTxResult, TxResult, VpStatusFlags,
-    VpsResult, WrapperTx,
+    BatchedTxResult, ExtendedTxResult, TxResult, VpStatusFlags, VpsResult,
+    WrapperTx,
 };
 use namada_tx::{BatchedTxRef, Tx};
 use namada_vote_ext::EthereumTxData;
@@ -262,13 +262,11 @@ where
                     },
                 )?;
 
-                Ok(TxResult {
-                    batch_results: BatchResults(
-                        [(cmt.get_hash(), Ok(batched_tx_result))]
-                            .into_iter()
-                            .collect(),
-                    ),
-                }
+                Ok(TxResult(
+                    [(cmt.get_hash(), Ok(batched_tx_result))]
+                        .into_iter()
+                        .collect(),
+                )
                 .to_extended_result(None))
             }
         }
@@ -278,14 +276,11 @@ where
             let batched_tx_result =
                 apply_protocol_tx(protocol_tx.tx, tx.data(cmt), state)?;
 
-            Ok(TxResult {
-                batch_results: BatchResults(
-                    [(cmt.get_hash(), Ok(batched_tx_result))]
-                        .into_iter()
-                        .collect(),
-                ),
-                ..Default::default()
-            }
+            Ok(TxResult(
+                [(cmt.get_hash(), Ok(batched_tx_result))]
+                    .into_iter()
+                    .collect(),
+            )
             .to_extended_result(None))
         }
         DispatchArgs::Wrapper {
@@ -339,7 +334,7 @@ where
         ) {
             Err(Error::GasError(ref msg)) => {
                 // Gas error aborts the execution of the entire batch
-                extended_tx_result.tx_result.batch_results.0.insert(
+                extended_tx_result.tx_result.0.insert(
                     cmt.get_hash(),
                     Err(Error::GasError(msg.to_owned())),
                 );
@@ -353,11 +348,7 @@ where
                 let is_accepted =
                     matches!(&res, Ok(result) if result.is_accepted());
 
-                extended_tx_result
-                    .tx_result
-                    .batch_results
-                    .0
-                    .insert(cmt.get_hash(), res);
+                extended_tx_result.tx_result.0.insert(cmt.get_hash(), res);
                 if is_accepted {
                     // If the transaction was a masp one append the
                     // transaction refs for the events
@@ -426,9 +417,7 @@ where
         .add_wrapper_gas(tx_bytes)
         .map_err(|err| Error::GasError(err.to_string()))?;
 
-    Ok(TxResult {
-        batch_results: BatchResults::default(),
-    })
+    Ok(TxResult::default())
 }
 
 /// Charge fee for the provided wrapper transaction. Returns error if:
