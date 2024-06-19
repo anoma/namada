@@ -42,12 +42,27 @@ impl Iterator for RetryStrategy {
     }
 }
 
+/// Enumerates the capabilities of a [`MaspClient`] implementation.
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum MaspClientCapabilities {
+    /// The masp client implementation is only capable of fetching shielded
+    /// transfers.
+    OnlyTransfers,
+    /// The masp client implementation is capable of not only fetching shielded
+    /// transfers, but also of fetching commitment trees, witness maps, and
+    /// note maps.
+    AllData,
+}
+
 /// This abstracts away the implementation details
 /// of how shielded-sync fetches the necessary data
 /// from a remote server.
 pub trait MaspClient<'client, C: Client> {
     /// Return the wrapped client.
     fn rpc_client(&self) -> &C;
+
+    /// Return the capabilities of this client.
+    fn capabilities(&self) -> MaspClientCapabilities;
 
     /// Fetch shielded transfers from blocks heights in the range `[from, to]`,
     /// keeping track of progress through `progress`. The fetched transfers
@@ -84,6 +99,10 @@ where
 {
     fn rpc_client(&self) -> &C {
         self.client
+    }
+
+    fn capabilities(&self) -> MaspClientCapabilities {
+        MaspClientCapabilities::OnlyTransfers
     }
 
     async fn fetch_shielded_transfers<IO: Io>(
