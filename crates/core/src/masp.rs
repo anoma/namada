@@ -470,7 +470,7 @@ impl TransferSource {
         }
     }
 
-    /// Get the contained MaybeIbcAddress, if any
+    /// Get the contained transparent address data, if any
     pub fn t_addr_data(&self) -> Option<TAddrData> {
         match self {
             Self::Address(x) => Some(TAddrData::Addr(x.clone())),

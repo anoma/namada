@@ -362,7 +362,7 @@ where
                 let Some(storage_commitment): Option<PacketCommitment> =
                     self.ctx.read_bytes_post(key)?.map(Into::into)
                 else {
-                    // Ignore this event if it does not exist
+                    // Ignore this key if the value does not exist
                     continue;
                 };
                 if packet_commitment == storage_commitment {
@@ -410,19 +410,25 @@ where
             msg.chan_id_on_a.clone(),
             &msg.packet_data.token.denom,
         ) {
-            let post_entry =
-                acc.post.entry(addr_taddr(IBC)).or_insert(ValueSum::zero());
-            *post_entry =
-                checked!(post_entry - &delta).map_err(native_vp::Error::new)?;
+            let ibc_taddr = addr_taddr(IBC);
+            let post_entry = acc
+                .post
+                .get(&ibc_taddr)
+                .cloned()
+                .unwrap_or(ValueSum::zero());
+            acc.post.insert(
+                ibc_taddr,
+                checked!(post_entry - &delta).map_err(native_vp::Error::new)?,
+            );
         }
         // Record an increase to the balance of a specific IBC receiver
-        let receiver = msg.packet_data.receiver.to_string();
-        let post_entry = acc
-            .post
-            .entry(ibc_taddr(receiver))
-            .or_insert(ValueSum::zero());
-        *post_entry =
-            checked!(post_entry + &delta).map_err(native_vp::Error::new)?;
+        let receiver = ibc_taddr(msg.packet_data.receiver.to_string());
+        let post_entry =
+            acc.post.get(&receiver).cloned().unwrap_or(ValueSum::zero());
+        acc.post.insert(
+            receiver,
+            checked!(post_entry + &delta).map_err(native_vp::Error::new)?,
+        );
 
         Ok(acc)
     }
@@ -491,10 +497,13 @@ where
             // address and be deposited elsewhere
             // Required for the IBC internal Address to release
             // funds
+            let ibc_taddr = addr_taddr(IBC);
             let pre_entry =
-                acc.pre.entry(addr_taddr(IBC)).or_insert(ValueSum::zero());
-            *pre_entry =
-                checked!(pre_entry + &delta).map_err(native_vp::Error::new)?;
+                acc.pre.get(&ibc_taddr).cloned().unwrap_or(ValueSum::zero());
+            acc.pre.insert(
+                ibc_taddr,
+                checked!(pre_entry + &delta).map_err(native_vp::Error::new)?,
+            );
         }
         Ok(acc)
     }
@@ -569,19 +578,32 @@ where
             .insert(address_hash, TAddrData::Addr(counterpart.clone()));
         // Finally record the actual balance change starting with the initial
         // state
-        let pre_entry =
-            result.pre.entry(address_hash).or_insert(ValueSum::zero());
-        *pre_entry = checked!(
-            pre_entry + &ValueSum::from_pair((*token).clone(), pre_balance)
-        )
-        .map_err(native_vp::Error::new)?;
+        let pre_entry = result
+            .pre
+            .get(&address_hash)
+            .cloned()
+            .unwrap_or(ValueSum::zero());
+        result.pre.insert(
+            address_hash,
+            checked!(
+                pre_entry + &ValueSum::from_pair((*token).clone(), pre_balance)
+            )
+            .map_err(native_vp::Error::new)?,
+        );
         // And then record thee final state
-        let post_entry =
-            result.post.entry(address_hash).or_insert(ValueSum::zero());
-        *post_entry = checked!(
-            post_entry + &ValueSum::from_pair((*token).clone(), post_balance)
-        )
-        .map_err(native_vp::Error::new)?;
+        let post_entry = result
+            .post
+            .get(&address_hash)
+            .cloned()
+            .unwrap_or(ValueSum::zero());
+        result.post.insert(
+            address_hash,
+            checked!(
+                post_entry
+                    + &ValueSum::from_pair((*token).clone(), post_balance)
+            )
+            .map_err(native_vp::Error::new)?,
+        );
         Result::<_>::Ok(result)
     }
 
@@ -605,7 +627,7 @@ where
         // Enable decoding the IBC address hash
         changed_balances.decoder.insert(addr_taddr(IBC), ibc_addr);
 
-        // Go through the IBC events and note the balance chages they imply
+        // Go through the IBC events and note the balance changes they imply
         let changed_balances =
             ibc_msgs.iter().try_fold(changed_balances, |acc, ibc_msg| {
                 // Apply all IBC packets to the changed balances structure
