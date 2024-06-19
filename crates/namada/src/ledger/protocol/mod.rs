@@ -183,6 +183,9 @@ pub enum DispatchArgs<'a, CA: 'static + WasmCacheAccess + Sync> {
     Raw {
         /// The tx index
         tx_index: TxIndex,
+        /// Hash of the header of the wrapper tx containing
+        /// this raw tx
+        wrapper_hash: Option<&'a Hash>,
         /// The result of the corresponding wrapper tx (missing if governance
         /// transaction)
         wrapper_tx_result: Option<TxResult<Error>>,
@@ -219,6 +222,7 @@ where
     match dispatch_args {
         DispatchArgs::Raw {
             tx_index,
+            wrapper_hash,
             wrapper_tx_result,
             vp_wasm_cache,
             tx_wasm_cache,
@@ -239,6 +243,7 @@ where
 
                 dispatch_inner_txs(
                     tx,
+                    wrapper_hash,
                     tx_result,
                     tx_index,
                     tx_gas_meter,
@@ -263,11 +268,15 @@ where
                 )?;
                 Ok(TxResult {
                     gas_used: tx_gas_meter.borrow().get_tx_consumed_gas(),
-                    batch_results: BatchResults(
-                        [(cmt.get_hash(), Ok(batched_tx_result))]
-                            .into_iter()
-                            .collect(),
-                    ),
+                    batch_results: {
+                        let mut batch_results = BatchResults::new();
+                        batch_results.insert_inner_tx_result(
+                            wrapper_hash,
+                            either::Right(cmt),
+                            Ok(batched_tx_result),
+                        );
+                        batch_results
+                    },
                 }
                 .to_extended_result(None))
             }
@@ -279,11 +288,15 @@ where
                 apply_protocol_tx(protocol_tx.tx, tx.data(cmt), state)?;
 
             Ok(TxResult {
-                batch_results: BatchResults(
-                    [(cmt.get_hash(), Ok(batched_tx_result))]
-                        .into_iter()
-                        .collect(),
-                ),
+                batch_results: {
+                    let mut batch_results = BatchResults::new();
+                    batch_results.insert_inner_tx_result(
+                        None,
+                        either::Right(cmt),
+                        Ok(batched_tx_result),
+                    );
+                    batch_results
+                },
                 ..Default::default()
             }
             .to_extended_result(None))
@@ -308,8 +321,10 @@ where
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn dispatch_inner_txs<'a, D, H, CA>(
     tx: &Tx,
+    wrapper_hash: Option<&'a Hash>,
     tx_result: TxResult<Error>,
     tx_index: TxIndex,
     tx_gas_meter: &'a RefCell<TxGasMeter>,
@@ -341,10 +356,14 @@ where
                 // Gas error aborts the execution of the entire batch
                 extended_tx_result.tx_result.gas_used =
                     tx_gas_meter.borrow().get_tx_consumed_gas();
-                extended_tx_result.tx_result.batch_results.0.insert(
-                    cmt.get_hash(),
-                    Err(Error::GasError(msg.to_owned())),
-                );
+                extended_tx_result
+                    .tx_result
+                    .batch_results
+                    .insert_inner_tx_result(
+                        wrapper_hash,
+                        either::Right(cmt),
+                        Err(Error::GasError(msg.to_owned())),
+                    );
                 state.write_log_mut().drop_tx();
                 return Err(DispatchError {
                     error: Error::GasError(msg.to_owned()),
@@ -358,8 +377,11 @@ where
                 extended_tx_result
                     .tx_result
                     .batch_results
-                    .0
-                    .insert(cmt.get_hash(), res);
+                    .insert_inner_tx_result(
+                        wrapper_hash,
+                        either::Right(cmt),
+                        res,
+                    );
                 extended_tx_result.tx_result.gas_used =
                     tx_gas_meter.borrow().get_tx_consumed_gas();
                 if is_accepted {

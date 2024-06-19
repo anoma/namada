@@ -61,6 +61,7 @@ clap = { workspace = true, optional = true }
 color-eyre.workspace = true
 data-encoding.workspace = true
 drain_filter_polyfill.workspace = true
+either.workspace = true
 ethabi.workspace = true
 ethbridge-bridge-events.workspace = true
 ethbridge-events.workspace = true

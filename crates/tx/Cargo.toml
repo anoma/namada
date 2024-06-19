@@ -31,6 +31,7 @@ ark-bls12-381.workspace = true
 bitflags.workspace = true
 borsh.workspace = true
 data-encoding.workspace = true
+either.workspace = true
 konst.workspace = true
 linkme = {workspace = true, optional = true}
 masp_primitives.workspace = true

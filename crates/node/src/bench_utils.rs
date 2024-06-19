@@ -913,19 +913,22 @@ impl Client for BenchShell {
                     .map(|(idx, (tx, changed_keys))| {
                         let tx_result = TxResult::<String> {
                             gas_used: 0.into(),
-                            batch_results: BatchResults(
-                                [(
-                                    tx.first_commitments().unwrap().get_hash(),
+                            batch_results: {
+                                let mut batch_results = BatchResults::new();
+                                batch_results.insert_inner_tx_result(
+                                    tx.wrapper_hash().as_ref(),
+                                    either::Right(
+                                        tx.first_commitments().unwrap(),
+                                    ),
                                     Ok(BatchedTxResult {
                                         changed_keys: changed_keys.to_owned(),
                                         vps_result: VpsResult::default(),
                                         initialized_accounts: vec![],
                                         events: BTreeSet::default(),
                                     }),
-                                )]
-                                .into_iter()
-                                .collect(),
-                            ),
+                                );
+                                batch_results
+                            },
                         };
                         let event: Event = new_tx_event(tx, height.value())
                             .with(Batch(&tx_result))

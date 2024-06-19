@@ -541,18 +541,19 @@ pub async fn dry_run_tx<N: Namada>(
     .data;
     let result_str = format!("Transaction consumed {} gas", result.gas_used);
     let mut cmt_result_str = String::new();
-    for (cmt_hash, cmt_result) in &result.batch_results.0 {
+    for (inner_hash, cmt_result) in result.batch_results.iter() {
         match cmt_result {
             Ok(result) => {
                 if result.is_accepted() {
                     cmt_result_str.push_str(&format!(
-                        "Inner transaction {cmt_hash} was successfully applied",
+                        "Inner transaction {inner_hash} was successfully \
+                         applied",
                     ));
                 } else {
                     cmt_result_str.push_str(&format!(
                         "Inner transaction {} was rejected by VPs: \
                          {}\nErrors: {}\nChanged keys: {}",
-                        cmt_hash,
+                        inner_hash,
                         serde_json::to_string_pretty(
                             &result.vps_result.rejected_vps
                         )
@@ -565,7 +566,7 @@ pub async fn dry_run_tx<N: Namada>(
                 }
             }
             Err(msg) => cmt_result_str.push_str(&format!(
-                "Inner transaction {cmt_hash} failed with error: {msg}"
+                "Inner transaction {inner_hash} failed with error: {msg}"
             )),
         }
     }
@@ -674,7 +675,7 @@ impl TxResponse {
     pub fn batch_result(&self) -> HashMap<Hash, InnerTxResult<'_>> {
         if let Some(tx) = self.batch.as_ref() {
             let mut result = HashMap::default();
-            for (cmt_hash, cmt_result) in &tx.batch_results.0 {
+            for (inner_hash, cmt_result) in tx.batch_results.iter() {
                 let value = match cmt_result {
                     Ok(res) => {
                         if res.is_accepted() {
@@ -685,7 +686,7 @@ impl TxResponse {
                     }
                     Err(_) => InnerTxResult::OtherFailure,
                 };
-                result.insert(cmt_hash.to_owned(), value);
+                result.insert(inner_hash.to_owned(), value);
             }
             result
         } else {
