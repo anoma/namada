@@ -942,6 +942,15 @@ impl From<Amount> for IbcAmount {
     }
 }
 
+impl TryFrom<IbcAmount> for Amount {
+    type Error = AmountParseError;
+
+    fn try_from(amount: IbcAmount) -> Result<Self, Self::Error> {
+        let uint = Uint(primitive_types::U256::from(amount).0);
+        Self::from_uint(uint, 0)
+    }
+}
+
 impl From<DenominatedAmount> for IbcAmount {
     fn from(amount: DenominatedAmount) -> Self {
         amount.amount.into()

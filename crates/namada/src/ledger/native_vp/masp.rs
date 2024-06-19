@@ -23,10 +23,10 @@ use namada_core::masp::{addr_taddr, encode_asset_type, ibc_taddr, MaspEpoch};
 use namada_core::storage::Key;
 use namada_gas::GasMetering;
 use namada_governance::storage::is_proposal_accepted;
-use namada_ibc::apps::transfer::types::PrefixedDenom;
 use namada_ibc::core::channel::types::msgs::MsgRecvPacket as IbcMsgRecvPacket;
 use namada_ibc::core::host::types::identifiers::Sequence;
 use namada_ibc::event::{IbcEvent, PacketAck};
+use namada_ibc::storage::ibc_token;
 use namada_ibc::{IbcCommonContext, IbcMessage};
 use namada_sdk::masp::{verify_shielded_tx, TAddrData};
 use namada_state::{ConversionState, OptionExt, ResultExt, StateRead};
@@ -92,7 +92,6 @@ where
 struct ChangedBalances {
     tokens: BTreeMap<AssetType, (Address, token::Denomination, MaspDigitPos)>,
     decoder: BTreeMap<TransparentAddress, TAddrData>,
-    ibc_denoms: BTreeMap<String, Address>,
     pre: BTreeMap<TransparentAddress, ValueSum<Address, Amount>>,
     post: BTreeMap<TransparentAddress, ValueSum<Address, Amount>>,
 }
@@ -376,29 +375,6 @@ where
         Ok(None)
     }
 
-    // Try to determine which address would cause query_ibc_denom to yield the
-    // supplied denom
-    fn reverse_query_ibc_denom(
-        denom: &PrefixedDenom,
-        ibc_denoms: &BTreeMap<String, Address>,
-    ) -> Option<Address> {
-        ibc_denoms
-            .get(&denom.to_string())
-            .cloned()
-            // If the reverse lookup failed, then guess the Address
-            // that might have yielded the IBC denom. However,
-            // guessing an IBC token address cannot possibly be
-            // correct due to the structure of query_ibc_denom
-            .or_else(|| {
-                Address::decode(denom.to_string()).ok().filter(|x| {
-                    !matches!(
-                        x,
-                        Address::Internal(InternalAddress::IbcToken(_))
-                    )
-                })
-            })
-    }
-
     // Apply the given send packet to the changed balances structure
     fn apply_send_packet(
         &self,
@@ -418,11 +394,11 @@ where
         // Since IBC denominations are derived from Addresses
         // when sending, we have to do a reverse look-up of the
         // relevant token Address
-        let Some(token) = Self::reverse_query_ibc_denom(
-            &msg.message.packet_data.token.denom,
-            &acc.ibc_denoms,
-        ) else {
-            return Ok(acc);
+        let denom = msg.message.packet_data.token.denom.to_string();
+        let token = if denom.contains('/') {
+            ibc_token(denom)
+        } else {
+            Address::decode(denom).into_storage_result()?
         };
         let delta = ValueSum::from_pair(
             token.clone(),
@@ -586,12 +562,6 @@ where
             .ctx
             .read_post(&counterpart_balance_key)?
             .unwrap_or_default();
-        // Make it possible to decode IBC tokens
-        result.ibc_denoms.insert(
-            self.query_ibc_denom(token.to_string(), Some(counterpart))
-                .map_err(native_vp::Error::new)?,
-            token.clone(),
-        );
         // Public keys must be the hash of the sources/targets
         let address_hash = addr_taddr(counterpart.clone());
         // Enable the decoding of these counterpart addresses
