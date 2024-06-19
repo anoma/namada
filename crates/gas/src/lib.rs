@@ -115,8 +115,6 @@ pub const MASP_PARALLEL_GAS_DIVIDER: u64 = PARALLEL_GAS_DIVIDER / 2;
 /// Gas module result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;
 
-//FIXME: also reduce the scale and close the other issue
-
 /// Representation of tracking gas in sub-units. This effectively decouples gas metering
 /// from fee payment, allowing higher resolution when accounting for gas while,
 /// at the same time, providing a contained gas value when paying fees.
@@ -155,7 +153,7 @@ impl Gas {
     }
 
     /// Converts the sub gas units to whole ones. If the sub units are not a
-    /// multiple of the `SCALE` than ceil the quotient
+    /// multiple of the scale than ceil the quotient
     pub fn get_whole_gas_units(&self, scale: u64) -> WholeGas {
         let quotient = self
             .sub

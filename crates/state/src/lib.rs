@@ -197,7 +197,7 @@ pub trait State: StateRead + StorageWrite {
     /// reference to the `InMemory` state and DB when in need of both (avoids
     /// complain from the borrow checker)
     fn split_borrow(&mut self)
-    -> (&mut WriteLog, &InMemory<Self::H>, &Self::D);
+        -> (&mut WriteLog, &InMemory<Self::H>, &Self::D);
 
     /// Write the provided tx hash to write log.
     fn write_tx_hash(&mut self, hash: Hash) -> write_log::Result<()> {
@@ -761,7 +761,7 @@ mod tests {
                 masp_epoch_multiplier: 2,
                 max_signatures_per_transaction: 15,
                 fee_unshielding_gas_limit: 20_000,
-                gas_scale: 100_000_000,
+                gas_scale: 10_000_000,
                 minimum_gas_price: BTreeMap::default(),
                 is_native_token_transferable: true,
             };
