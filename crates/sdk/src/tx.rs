@@ -50,8 +50,9 @@ use namada_governance::storage::proposal::{
     InitProposalData, ProposalType, VoteProposalData,
 };
 use namada_governance::storage::vote::ProposalVote;
-use namada_ibc::storage::{channel_key, convert_to_address};
-use namada_ibc::{is_nft_trace, MsgNftTransfer, MsgTransfer};
+use namada_ibc::storage::channel_key;
+use namada_ibc::trace::{convert_to_address, is_nft_trace};
+use namada_ibc::{MsgNftTransfer, MsgTransfer};
 use namada_proof_of_stake::parameters::{
     PosParams, MAX_VALIDATOR_METADATA_LEN,
 };

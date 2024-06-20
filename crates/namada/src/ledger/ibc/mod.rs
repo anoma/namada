@@ -6,7 +6,7 @@ use namada_ibc::storage::{
     channel_counter_key, client_counter_key, connection_counter_key,
     deposit_prefix, withdraw_prefix,
 };
-pub use namada_ibc::{parameters, storage};
+pub use namada_ibc::{parameters, storage, trace};
 use namada_state::{
     DBIter, Key, State, StorageError, StorageHasher, StorageRead, StorageWrite,
     WlState, DB,

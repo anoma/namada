@@ -32,10 +32,10 @@ use namada_governance::storage::proposal::StorageProposal;
 use namada_governance::utils::{
     compute_proposal_result, ProposalResult, ProposalVotes, Vote,
 };
-use namada_ibc::is_ibc_denom;
 use namada_ibc::storage::{
     ibc_trace_key, ibc_trace_key_prefix, is_ibc_trace_key,
 };
+use namada_ibc::trace::is_ibc_denom;
 use namada_parameters::{storage as params_storage, EpochDuration};
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{

@@ -59,9 +59,10 @@ pub use namada::ledger::ibc::storage::{
     ack_key, channel_counter_key, channel_key, client_counter_key,
     client_state_key, client_update_height_key, client_update_timestamp_key,
     commitment_key, connection_counter_key, connection_key,
-    consensus_state_key, ibc_token, next_sequence_ack_key,
-    next_sequence_recv_key, next_sequence_send_key, port_key, receipt_key,
+    consensus_state_key, next_sequence_ack_key, next_sequence_recv_key,
+    next_sequence_send_key, port_key, receipt_key,
 };
+pub use namada::ledger::ibc::trace::ibc_token;
 use namada::ledger::native_vp::ibc::{
     get_dummy_genesis_validator, get_dummy_header as tm_dummy_header, Ibc,
 };

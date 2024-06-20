@@ -24,7 +24,7 @@ use namada_gas::GasMetering;
 use namada_governance::storage::is_proposal_accepted;
 use namada_ibc::core::channel::types::msgs::MsgRecvPacket as IbcMsgRecvPacket;
 use namada_ibc::core::host::types::identifiers::{ChannelId, PortId, Sequence};
-use namada_ibc::storage::{
+use namada_ibc::trace::{
     convert_to_address, ibc_trace_for_nft, is_sender_chain_source,
 };
 use namada_ibc::IbcMessage;

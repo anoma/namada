@@ -34,7 +34,7 @@ use sha2::Digest;
 
 use super::client::{AnyClientState, AnyConsensusState};
 use super::storage::IbcStorageContext;
-use crate::{storage, NftClass, NftMetadata};
+use crate::{storage, trace, NftClass, NftMetadata};
 
 /// Result of IBC common function call
 pub type Result<T> = std::result::Result<T, ContextError>;
@@ -716,7 +716,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         token_id: &TokenId,
         owner: &Address,
     ) -> Result<bool> {
-        let ibc_token = storage::ibc_token_for_nft(class_id, token_id);
+        let ibc_token = trace::ibc_token_for_nft(class_id, token_id);
         let balance_key = balance_key(&ibc_token, owner);
         let amount = self.read::<Amount>(&balance_key)?;
         Ok(amount == Some(Amount::from_u64(1)))

@@ -28,9 +28,10 @@ use thiserror::Error;
 
 use crate::ibc::core::host::types::identifiers::ChainId as IbcChainId;
 use crate::ledger::ibc::storage::{
-    calc_hash, deposit_key, get_limits, is_ibc_key, is_ibc_trace_key,
-    mint_amount_key, withdraw_key,
+    deposit_key, get_limits, is_ibc_key, is_ibc_trace_key, mint_amount_key,
+    withdraw_key,
 };
+use crate::ledger::ibc::trace::calc_hash;
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::ledger::parameters::read_epoch_duration_parameter;
 use crate::token::storage_key::is_any_token_balance_key;
@@ -506,14 +507,14 @@ mod tests {
     use crate::ibc::primitives::proto::{Any, Protobuf};
     use crate::ibc::primitives::{Timestamp, ToProto};
     use crate::ibc::storage::{
-        ack_key, calc_hash, channel_counter_key, channel_key,
-        client_connections_key, client_counter_key, client_state_key,
-        client_update_height_key, client_update_timestamp_key, commitment_key,
-        connection_counter_key, connection_key, consensus_state_key, ibc_token,
-        ibc_trace_key, mint_amount_key, next_sequence_ack_key,
-        next_sequence_recv_key, next_sequence_send_key, nft_class_key,
-        nft_metadata_key, receipt_key,
+        ack_key, channel_counter_key, channel_key, client_connections_key,
+        client_counter_key, client_state_key, client_update_height_key,
+        client_update_timestamp_key, commitment_key, connection_counter_key,
+        connection_key, consensus_state_key, ibc_trace_key, mint_amount_key,
+        next_sequence_ack_key, next_sequence_recv_key, next_sequence_send_key,
+        nft_class_key, nft_metadata_key, receipt_key,
     };
+    use crate::ibc::trace::{calc_hash, ibc_token};
     use crate::ibc::{MsgNftTransfer, MsgTransfer, NftClass, NftMetadata};
     use crate::key::testing::keypair_1;
     use crate::ledger::gas::VpGasMeter;
@@ -3016,7 +3017,7 @@ mod tests {
         let class_id = get_nft_class_id();
         let token_id = get_nft_id();
         let sender = established_address_1();
-        let ibc_token = ibc::storage::ibc_token_for_nft(&class_id, &token_id);
+        let ibc_token = ibc::trace::ibc_token_for_nft(&class_id, &token_id);
         let balance_key = balance_key(&ibc_token, &sender);
         let amount = Amount::from_u64(1);
         state

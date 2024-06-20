@@ -418,7 +418,7 @@ mod tests {
     };
     use crate::key::testing::keypair_1;
     use crate::ledger::gas::VpGasMeter;
-    use crate::ledger::ibc::storage::ibc_token;
+    use crate::ledger::ibc::trace::ibc_token;
     use crate::storage::TxIndex;
     use crate::token::storage_key::{balance_key, minted_balance_key};
     use crate::vm::wasm::compilation_cache::common::testing::cache as wasm_cache;

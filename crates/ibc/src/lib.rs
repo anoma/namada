@@ -24,12 +24,12 @@ mod msg;
 mod nft;
 pub mod parameters;
 pub mod storage;
+pub mod trace;
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::rc::Rc;
-use std::str::FromStr;
 
 pub use actions::transfer_over_ibc;
 use borsh::BorshDeserialize;
@@ -48,16 +48,13 @@ use ibc::apps::nft_transfer::handler::{
 use ibc::apps::nft_transfer::types::error::NftTransferError;
 use ibc::apps::nft_transfer::types::{
     ack_success_b64, is_receiver_chain_source as is_nft_receiver_chain_source,
-    PrefixedClassId, TokenId, TracePath as NftTracePath,
-    TracePrefix as NftTracePrefix,
+    PrefixedClassId, TokenId, TracePrefix as NftTracePrefix,
 };
 use ibc::apps::transfer::handler::{
     send_transfer_execute, send_transfer_validate,
 };
 use ibc::apps::transfer::types::error::TokenTransferError;
-use ibc::apps::transfer::types::{
-    is_receiver_chain_source, PrefixedDenom, TracePath, TracePrefix,
-};
+use ibc::apps::transfer::types::{is_receiver_chain_source, TracePrefix};
 use ibc::core::channel::types::acknowledgement::{
     Acknowledgement, AcknowledgementStatus,
 };
@@ -385,7 +382,7 @@ fn received_ibc_trace(
     }
 
     if let Some((trace_path, base_class_id, token_id)) =
-        is_nft_trace(&base_trace)
+        trace::is_nft_trace(&base_trace)
     {
         let mut class_id = PrefixedClassId {
             trace_path,
@@ -433,39 +430,8 @@ pub fn received_ibc_token(
         dest_port_id,
         dest_channel_id,
     )?;
-    storage::convert_to_address(ibc_trace)
+    trace::convert_to_address(ibc_trace)
         .map_err(|e| Error::Trace(format!("Invalid base token: {e}")))
-}
-
-/// Returns the trace path and the token string if the denom is an IBC
-/// denom.
-pub fn is_ibc_denom(denom: impl AsRef<str>) -> Option<(TracePath, String)> {
-    let prefixed_denom = PrefixedDenom::from_str(denom.as_ref()).ok()?;
-    let base_denom = prefixed_denom.base_denom.to_string();
-    if prefixed_denom.trace_path.is_empty() || base_denom.contains('/') {
-        // The denom is just a token or an NFT trace
-        return None;
-    }
-    // The base token isn't decoded because it could be non Namada token
-    Some((prefixed_denom.trace_path, base_denom))
-}
-
-/// Returns the trace path and the token string if the trace is an NFT one
-pub fn is_nft_trace(
-    trace: impl AsRef<str>,
-) -> Option<(NftTracePath, String, String)> {
-    // The trace should be {port}/{channel}/.../{class_id}/{token_id}
-    if let Some((class_id, token_id)) = trace.as_ref().rsplit_once('/') {
-        let prefixed_class_id = PrefixedClassId::from_str(class_id).ok()?;
-        // The base token isn't decoded because it could be non Namada token
-        Some((
-            prefixed_class_id.trace_path,
-            prefixed_class_id.base_class_id.to_string(),
-            token_id.to_string(),
-        ))
-    } else {
-        None
-    }
 }
 
 #[cfg(any(test, feature = "testing"))]
