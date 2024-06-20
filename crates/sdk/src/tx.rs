@@ -405,11 +405,9 @@ pub fn display_batch_resp(context: &impl Namada, resp: &TxResponse) {
             InnerTxResult::Success(_) => {
                 display_line!(
                     context.io(),
-                    "Transaction {} was successfully applied at height {}, \
-                     consuming {} gas units.",
+                    "Transaction {} was successfully applied at height {}.",
                     cmt_hash,
                     resp.height,
-                    resp.gas_used
                 );
             }
             InnerTxResult::VpsRejected(inner) => {

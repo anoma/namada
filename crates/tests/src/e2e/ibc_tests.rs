@@ -2204,7 +2204,7 @@ fn check_tx_height(test: &Test, client: &mut NamadaCmd) -> Result<u32> {
         .split_once(' ')
         .unwrap()
         .1
-        .split_once(',')
+        .split_once('.')
         .unwrap()
         .0;
     let height: u32 = height_str.parse().unwrap();
