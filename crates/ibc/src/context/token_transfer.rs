@@ -9,13 +9,15 @@ use ibc::apps::transfer::context::{
 };
 use ibc::apps::transfer::types::error::TokenTransferError;
 use ibc::apps::transfer::types::{Memo, PrefixedCoin, PrefixedDenom};
+use ibc::core::channel::types::error::ChannelError;
 use ibc::core::handler::types::error::ContextError;
 use ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::address::{Address, InternalAddress};
-use namada_token::Amount;
+use namada_core::uint::Uint;
+use namada_token::{read_denom, Amount, Denomination};
 
 use super::common::IbcCommonContext;
-use crate::{get_token_amount, storage, IBC_ESCROW_ADDRESS};
+use crate::{storage, IBC_ESCROW_ADDRESS};
 
 /// Token transfer context to handle tokens
 #[derive(Debug)]
@@ -42,6 +44,36 @@ where
     /// Insert a verifier address whose VP will verify the tx.
     fn insert_verifier(&mut self, addr: &Address) {
         self.verifiers.borrow_mut().insert(addr.clone());
+    }
+
+    /// Get the token address and the amount from PrefixedCoin. If the base
+    /// denom is not an address, it returns `IbcToken`
+    fn get_token_amount(
+        &self,
+        coin: &PrefixedCoin,
+    ) -> Result<(Address, Amount), TokenTransferError> {
+        let token = match Address::decode(coin.denom.base_denom.as_str()) {
+            Ok(token_addr) if coin.denom.trace_path.is_empty() => token_addr,
+            _ => storage::ibc_token(coin.denom.to_string()),
+        };
+
+        // Convert IBC amount to Namada amount for the token
+        let denom = read_denom(&*self.inner.borrow(), &token)
+            .map_err(ContextError::from)?
+            .unwrap_or(Denomination(0));
+        let uint_amount = Uint(primitive_types::U256::from(coin.amount).0);
+        let amount = Amount::from_uint(uint_amount, denom).map_err(|e| {
+            TokenTransferError::ContextError(
+                ChannelError::Other {
+                    description: format!(
+                        "The IBC amount is invalid: Coin {coin}, Error {e}",
+                    ),
+                }
+                .into(),
+            )
+        })?;
+
+        Ok((token, amount))
     }
 
     /// Update the mint amount of the token
@@ -211,8 +243,7 @@ where
         coin: &PrefixedCoin,
         _memo: &Memo,
     ) -> Result<(), TokenTransferError> {
-        let (ibc_token, amount) =
-            get_token_amount(&*self.inner.borrow(), coin)?;
+        let (ibc_token, amount) = self.get_token_amount(coin)?;
 
         self.add_withdraw(&ibc_token, amount)?;
 
@@ -241,8 +272,7 @@ where
         _channel_id: &ChannelId,
         coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
-        let (ibc_token, amount) =
-            get_token_amount(&*self.inner.borrow(), coin)?;
+        let (ibc_token, amount) = self.get_token_amount(coin)?;
 
         self.add_deposit(&ibc_token, amount)?;
 
@@ -258,8 +288,7 @@ where
         coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
         // The trace path of the denom is already updated if receiving the token
-        let (ibc_token, amount) =
-            get_token_amount(&*self.inner.borrow(), coin)?;
+        let (ibc_token, amount) = self.get_token_amount(coin)?;
 
         self.update_mint_amount(&ibc_token, amount, true)?;
         self.add_deposit(&ibc_token, amount)?;
@@ -287,8 +316,7 @@ where
         coin: &PrefixedCoin,
         _memo: &Memo,
     ) -> Result<(), TokenTransferError> {
-        let (ibc_token, amount) =
-            get_token_amount(&*self.inner.borrow(), coin)?;
+        let (ibc_token, amount) = self.get_token_amount(coin)?;
 
         self.update_mint_amount(&ibc_token, amount, false)?;
         self.add_withdraw(&ibc_token, amount)?;

@@ -58,8 +58,7 @@ use ibc::apps::transfer::handler::{
 use ibc::apps::transfer::types::error::TokenTransferError;
 use ibc::apps::transfer::types::packet::PacketData;
 use ibc::apps::transfer::types::{
-    is_receiver_chain_source, PrefixedCoin, PrefixedDenom, TracePath,
-    TracePrefix,
+    is_receiver_chain_source, PrefixedDenom, TracePath, TracePrefix,
 };
 use ibc::core::channel::types::acknowledgement::{
     Acknowledgement, AcknowledgementStatus,
@@ -81,8 +80,7 @@ pub use ibc::*;
 pub use msg::*;
 use namada_core::address::{self, Address};
 use namada_core::uint::Uint;
-use namada_storage::StorageRead;
-use namada_token::{read_denom, Amount, Denomination, ShieldingTransfer};
+use namada_token::{Amount, ShieldingTransfer};
 pub use nft::*;
 use prost::Message;
 use thiserror::Error;
@@ -361,47 +359,52 @@ where
         } else {
             &packet.port_id_on_b
         };
-        let (ibc_trace, amount) =
-            if *my_port_id == PortId::transfer() {
-                let packet_data =
-                    serde_json::from_slice::<PacketData>(&packet.data)
-                        .map_err(|e| {
-                            Error::TokenTransfer(TokenTransferError::Other(
-                                format!("Decoding the packet data failed: {e}"),
-                            ))
-                        })?;
-                let ibc_denom = packet_data.token.denom.to_string();
-                let (_, amount) = get_token_amount::<C>(
-                    &*self.ctx.inner.borrow(),
-                    &packet_data.token,
-                )
-                .map_err(Error::TokenTransfer)?;
-                (ibc_denom, amount)
-            } else {
-                let packet_data =
-                    serde_json::from_slice::<NftPacketData>(&packet.data)
-                        .map_err(|e| {
-                            Error::TokenTransfer(TokenTransferError::Other(
-                                format!("Decoding the packet data failed: {e}"),
-                            ))
-                        })?;
-                let ibc_trace = format!(
-                    "{}/{}",
-                    &packet_data.class_id,
-                    packet_data
-                        .token_ids
-                        .0
-                        .first()
-                        .expect("TokenID should exist"),
-                );
-                (ibc_trace, Amount::from_u64(1))
-            };
+        let (ibc_trace, amount) = if *my_port_id == PortId::transfer() {
+            let packet_data = serde_json::from_slice::<PacketData>(
+                &packet.data,
+            )
+            .map_err(|e| {
+                Error::TokenTransfer(TokenTransferError::Other(format!(
+                    "Decoding the packet data failed: {e}"
+                )))
+            })?;
+            let ibc_denom = packet_data.token.denom.to_string();
+            let uint_amount =
+                Uint(primitive_types::U256::from(packet_data.token.amount).0);
+            // amount should be canonical
+            let amount = Amount::from_uint(uint_amount, 0).map_err(|e| {
+                Error::TokenTransfer(TokenTransferError::Other(format!(
+                    "Invalid amount: {}, error {e}",
+                    packet_data.token.amount
+                )))
+            })?;
+            (ibc_denom, amount)
+        } else {
+            let packet_data = serde_json::from_slice::<NftPacketData>(
+                &packet.data,
+            )
+            .map_err(|e| {
+                Error::TokenTransfer(TokenTransferError::Other(format!(
+                    "Decoding the packet data failed: {e}"
+                )))
+            })?;
+            let ibc_trace = format!(
+                "{}/{}",
+                &packet_data.class_id,
+                packet_data
+                    .token_ids
+                    .0
+                    .first()
+                    .expect("TokenID should exist"),
+            );
+            (ibc_trace, Amount::from_u64(1))
+        };
 
         let ibc_token = if is_sender {
             if ibc_trace.contains('/') {
-                ibc_token(ibc_trace)
+                ibc_token(&ibc_trace)
             } else {
-                Address::decode(ibc_trace).map_err(|e| {
+                Address::decode(&ibc_trace).map_err(|e| {
                     Error::TokenTransfer(TokenTransferError::Other(format!(
                         "Invalid IBC trace: {e}"
                     )))
@@ -409,7 +412,7 @@ where
             }
         } else {
             received_ibc_token(
-                ibc_trace,
+                &ibc_trace,
                 &packet.port_id_on_a,
                 &packet.chan_id_on_a,
                 &packet.port_id_on_b,
@@ -473,33 +476,6 @@ pub fn decode_message(tx_data: &[u8]) -> Result<IbcMessage, Error> {
     }
 
     Err(Error::DecodingData)
-}
-
-/// Get the token address and the amount from `PrefixedCoin`
-pub fn get_token_amount<S>(
-    state: &S,
-    coin: &PrefixedCoin,
-) -> Result<(Address, Amount), TokenTransferError>
-where
-    S: StorageRead,
-{
-    let token = match Address::decode(coin.denom.base_denom.as_str()) {
-        Ok(token_addr) if coin.denom.trace_path.is_empty() => token_addr,
-        _ => storage::ibc_token(coin.denom.to_string()),
-    };
-
-    // Convert IBC amount to Namada amount for the token
-    let denom = read_denom(state, &token)
-        .map_err(ContextError::from)?
-        .unwrap_or(Denomination(0));
-    let uint_amount = Uint(primitive_types::U256::from(coin.amount).0);
-    let amount = Amount::from_uint(uint_amount, denom).map_err(|e| {
-        TokenTransferError::Other(format!(
-            "The IBC amount is invalid: Coin {coin}, Error {e}",
-        ))
-    })?;
-
-    Ok((token, amount))
 }
 
 fn received_ibc_trace(
