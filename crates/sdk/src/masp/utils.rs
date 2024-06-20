@@ -220,6 +220,7 @@ impl Iterator for FetchQueueReceiver {
                 if let Some(entry) = self.cache.pop_first() {
                     return Some(entry);
                 }
+                core::hint::spin_loop();
             }
             None
         }
