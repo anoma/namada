@@ -1966,6 +1966,8 @@ fn transfer(
         &channel_id,
         "--port-id",
         &port_id,
+        "--gas-limit",
+        "150000",
         "--node",
         &rpc,
     ];
