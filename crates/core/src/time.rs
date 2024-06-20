@@ -233,6 +233,18 @@ impl Sub<Duration> for DateTimeUtc {
     }
 }
 
+impl Sub<DateTimeUtc> for DateTimeUtc {
+    type Output = DurationSecs;
+
+    #[allow(clippy::arithmetic_side_effects)]
+    fn sub(self, rhs: DateTimeUtc) -> Self::Output {
+        (self.0 - rhs.0)
+            .to_std()
+            .map(DurationSecs::from)
+            .unwrap_or(DurationSecs(0))
+    }
+}
+
 impl BorshSerialize for DateTimeUtc {
     fn serialize<W: std::io::Write>(
         &self,

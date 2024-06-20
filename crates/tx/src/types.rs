@@ -1307,13 +1307,11 @@ impl Tx {
         public_keys_index_map: AccountPublicKeysMap,
         signer: &Option<Address>,
         threshold: u8,
-        max_signatures: Option<u8>,
         mut consume_verify_sig_gas: F,
     ) -> std::result::Result<Vec<&Authorization>, VerifySigError>
     where
         F: FnMut() -> std::result::Result<(), namada_gas::Error>,
     {
-        let max_signatures = max_signatures.unwrap_or(u8::MAX);
         // Records the public key indices used in successful signatures
         let mut verified_pks = HashSet::new();
         // Records the sections instrumental in verifying signatures
@@ -1331,15 +1329,6 @@ impl Tx {
                     .iter()
                     .all(|x| self.get_section(x).is_some())
                 {
-                    if signatures
-                        .total_signatures()
-                        .map_or(false, |len| len > max_signatures)
-                    {
-                        return Err(VerifySigError::InvalidSectionSignature(
-                            "too many signatures.".to_string(),
-                        ));
-                    }
-
                     // Finally verify that the signature itself is valid
                     let amt_verifieds = signatures
                         .verify_signature(
@@ -1386,7 +1375,6 @@ impl Tx {
             AccountPublicKeysMap::from_iter([public_key.clone()]),
             &None,
             1,
-            None,
             || Ok(()),
         )
         .map(|x| *x.first().unwrap())

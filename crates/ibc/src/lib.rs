@@ -225,7 +225,7 @@ where
 
     /// Check the result of receiving the packet by checking the packet
     /// acknowledgement
-    fn is_receiving_success(
+    pub fn is_receiving_success(
         &self,
         msg: &IbcMsgRecvPacket,
     ) -> Result<bool, Error> {

@@ -296,14 +296,12 @@ impl Finalized {
     ) -> namada::ledger::parameters::Parameters {
         let templates::ChainParams {
             min_num_of_blocks,
-            max_expected_time_per_block,
             max_proposal_bytes,
             vp_allowlist,
             tx_allowlist,
             implicit_vp,
             epochs_per_year,
             masp_epoch_multiplier,
-            max_signatures_per_transaction,
             fee_unshielding_gas_limit,
             max_block_gas,
             minimum_gas_price,
@@ -333,23 +331,18 @@ impl Finalized {
             min_duration: namada::core::time::Duration::seconds(min_duration)
                 .into(),
         };
-        let max_expected_time_per_block =
-            namada::core::time::Duration::seconds(max_expected_time_per_block)
-                .into();
         let vp_allowlist = vp_allowlist.unwrap_or_default();
         let tx_allowlist = tx_allowlist.unwrap_or_default();
 
         namada::ledger::parameters::Parameters {
             max_tx_bytes,
             epoch_duration,
-            max_expected_time_per_block,
             vp_allowlist,
             tx_allowlist,
             implicit_vp_code_hash,
             epochs_per_year,
             masp_epoch_multiplier,
             max_proposal_bytes,
-            max_signatures_per_transaction,
             fee_unshielding_gas_limit,
             max_block_gas,
             minimum_gas_price: minimum_gas_price

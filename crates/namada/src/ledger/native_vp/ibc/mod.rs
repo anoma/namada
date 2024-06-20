@@ -353,10 +353,12 @@ fn match_value(
 /// A dummy header used for testing
 #[cfg(any(test, feature = "testing", feature = "benches"))]
 pub fn get_dummy_header() -> crate::storage::Header {
-    use crate::tendermint::time::Time as TmTime;
+    use namada_sdk::time::DateTimeUtc;
+
     crate::storage::Header {
         hash: crate::hash::Hash([0; 32]),
-        time: TmTime::now().try_into().unwrap(),
+        #[allow(clippy::disallowed_methods)]
+        time: DateTimeUtc::now(),
         next_validators_hash: crate::hash::Hash([0; 32]),
     }
 }
@@ -426,7 +428,6 @@ mod tests {
     use namada_ibc::event::IbcEventType;
     use namada_state::testing::TestState;
     use namada_state::StorageRead;
-    use namada_token::NATIVE_MAX_DECIMAL_PLACES;
     use namada_tx::data::TxType;
     use namada_tx::{Authorization, Code, Data, Section, Tx};
     use prost::Message;
@@ -518,9 +519,7 @@ mod tests {
     use crate::ibc::{MsgNftTransfer, MsgTransfer, NftClass, NftMetadata};
     use crate::key::testing::keypair_1;
     use crate::ledger::gas::VpGasMeter;
-    use crate::ledger::parameters::storage::{
-        get_epoch_duration_storage_key, get_max_expected_time_per_block_key,
-    };
+    use crate::ledger::parameters::storage::get_epoch_duration_storage_key;
     use crate::ledger::parameters::EpochDuration;
     use crate::ledger::{ibc, pos};
     use crate::storage::{BlockHeight, TxIndex};
@@ -566,13 +565,6 @@ mod tests {
         state
             .write_log_mut()
             .write(&epoch_duration_key, epoch_duration.serialize_to_vec())
-            .expect("write failed");
-        // max_expected_time_per_block
-        let time = DurationSecs::from(Duration::new(60, 0));
-        let time_key = get_max_expected_time_per_block_key();
-        state
-            .write_log_mut()
-            .write(&time_key, namada_core::encode(&time))
             .expect("write failed");
         // set a dummy header
         state
@@ -2203,7 +2195,7 @@ mod tests {
             packet_data: PacketData {
                 token: PrefixedCoin {
                     denom: nam().to_string().parse().unwrap(),
-                    amount: 100.into(),
+                    amount: amount.into(),
                 },
                 sender: sender.to_string().into(),
                 receiver: "receiver".to_string().into(),
@@ -2235,12 +2227,7 @@ mod tests {
         keys_changed.insert(commitment_key);
         // withdraw
         let withdraw_key = withdraw_key(&nam());
-        let bytes = Amount::from_str(
-            msg.packet_data.token.amount.to_string(),
-            NATIVE_MAX_DECIMAL_PLACES,
-        )
-        .unwrap()
-        .serialize_to_vec();
+        let bytes = amount.serialize_to_vec();
         state
             .write_log_mut()
             .write(&withdraw_key, bytes)
@@ -2718,7 +2705,7 @@ mod tests {
             packet_data: PacketData {
                 token: PrefixedCoin {
                     denom: nam().to_string().parse().unwrap(),
-                    amount: 100u64.into(),
+                    amount: amount.into(),
                 },
                 sender: established_address_1().to_string().into(),
                 receiver: "receiver".to_string().into(),
@@ -2773,12 +2760,7 @@ mod tests {
         let data = serde_json::from_slice::<PacketData>(&packet.data)
             .expect("decoding packet data failed");
         let deposit_key = deposit_key(&nam());
-        let bytes = Amount::from_str(
-            data.token.amount.to_string(),
-            NATIVE_MAX_DECIMAL_PLACES,
-        )
-        .unwrap()
-        .serialize_to_vec();
+        let bytes = amount.serialize_to_vec();
         state
             .write_log_mut()
             .write(&deposit_key, bytes)
@@ -2881,7 +2863,7 @@ mod tests {
             packet_data: PacketData {
                 token: PrefixedCoin {
                     denom: nam().to_string().parse().unwrap(),
-                    amount: 100u64.into(),
+                    amount: amount.into(),
                 },
                 sender: sender.to_string().into(),
                 receiver: "receiver".to_string().into(),
@@ -2936,12 +2918,7 @@ mod tests {
         let data = serde_json::from_slice::<PacketData>(&packet.data)
             .expect("decoding packet data failed");
         let deposit_key = deposit_key(&nam());
-        let bytes = Amount::from_str(
-            data.token.amount.to_string(),
-            NATIVE_MAX_DECIMAL_PLACES,
-        )
-        .unwrap()
-        .serialize_to_vec();
+        let bytes = amount.serialize_to_vec();
         state
             .write_log_mut()
             .write(&deposit_key, bytes)

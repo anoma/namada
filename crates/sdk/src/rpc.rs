@@ -19,6 +19,7 @@ use namada_core::masp::MaspEpoch;
 use namada_core::storage::{
     BlockHeight, BlockResults, Epoch, Key, PrefixValue,
 };
+use namada_core::time::DurationSecs;
 use namada_core::token::{
     Amount, DenominatedAmount, Denomination, MaspDigitPos,
 };
@@ -32,6 +33,7 @@ use namada_governance::storage::proposal::StorageProposal;
 use namada_governance::utils::{
     compute_proposal_result, ProposalResult, ProposalVotes, Vote,
 };
+use namada_ibc::is_ibc_denom;
 use namada_ibc::storage::{
     ibc_trace_key, ibc_trace_key_prefix, is_ibc_trace_key,
 };
@@ -60,6 +62,16 @@ use crate::tendermint::block::Height;
 use crate::tendermint::merkle::proof::ProofOps;
 use crate::tendermint_rpc::query::Query;
 use crate::{display_line, edisplay_line, error, Namada, Tx};
+
+/// Query an estimate of the maximum block time.
+pub async fn query_max_block_time_estimate(
+    context: &impl Namada,
+) -> Result<DurationSecs, Error> {
+    RPC.shell()
+        .max_block_time(context.client())
+        .await
+        .map_err(|err| Error::from(QueryError::NoResponse(err.to_string())))
+}
 
 /// Identical to [`query_tx_status`], but does not need a [`Namada`]
 /// context.
@@ -345,6 +357,13 @@ pub async fn query_conversions<C: crate::queries::Client + Sync>(
     error::Error,
 > {
     convert_response::<C, _>(RPC.shell().read_conversions(client).await)
+}
+
+/// Query the total rewards minted by MASP
+pub async fn query_masp_total_rewards<C: crate::queries::Client + Sync>(
+    client: &C,
+) -> Result<token::Amount, error::Error> {
+    convert_response::<C, _>(RPC.vp().token().masp_total_rewards(client).await)
 }
 
 /// Query to read the tokens that earn masp rewards.
@@ -994,7 +1013,7 @@ pub async fn query_and_print_unbonds(
     let mut not_yet_withdrawable = HashMap::<Epoch, token::Amount>::new();
     for ((_start_epoch, withdraw_epoch), amount) in unbonds.into_iter() {
         if withdraw_epoch <= current_epoch {
-            total_withdrawable = checked!(total_withdrawable + amount)?;
+            checked!(total_withdrawable += amount)?;
         } else {
             let withdrawable_amount =
                 not_yet_withdrawable.entry(withdraw_epoch).or_default();
@@ -1166,9 +1185,25 @@ pub async fn validate_amount<N: Namada>(
         InputAmount::Unvalidated(amt) => amt.canonical(),
         InputAmount::Validated(amt) => return Ok(amt),
     };
-    let denom = match convert_response::<N::Client, Option<Denomination>>(
-        RPC.vp().token().denomination(context.client(), token).await,
-    )? {
+    let base_token =
+        if let Address::Internal(InternalAddress::IbcToken(ibc_token_hash)) =
+            token
+        {
+            extract_base_token(context, ibc_token_hash.clone(), None).await
+        } else {
+            Some(token.clone())
+        };
+    let denom = if let Some(token) = base_token {
+        convert_response::<N::Client, Option<Denomination>>(
+            RPC.vp()
+                .token()
+                .denomination(context.client(), &token)
+                .await,
+        )?
+    } else {
+        None
+    };
+    let denom = match denom {
         Some(denom) => Ok(denom),
         None => {
             if force {
@@ -1352,6 +1387,38 @@ pub async fn query_ibc_tokens<N: Namada>(
         }
     }
     Ok(tokens)
+}
+
+/// Obtain the base token of the given IBC token hash
+pub async fn extract_base_token<N: Namada>(
+    context: &N,
+    ibc_token_hash: IbcTokenHash,
+    owner: Option<&Address>,
+) -> Option<Address> {
+    // First obtain the IBC denomination
+    let ibc_denom = query_ibc_denom(
+        context,
+        Address::Internal(InternalAddress::IbcToken(ibc_token_hash))
+            .to_string(),
+        owner,
+    )
+    .await;
+    // Then try to extract the base token
+    if let Some((_trace_path, base_token)) = is_ibc_denom(ibc_denom) {
+        match Address::decode(&base_token) {
+            // If the base token successfully decoded into an Address
+            Ok(base_token) => Some(base_token),
+            // Otherwise find the Address associated with the base token's alias
+            Err(_) => context
+                .wallet()
+                .await
+                .find_address(&base_token)
+                .map(|x| x.into_owned()),
+        }
+    } else {
+        // Otherwise the base token Address is unknown to this client
+        None
+    }
 }
 
 /// Look up the IBC denomination from a IbcToken.

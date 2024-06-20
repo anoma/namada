@@ -253,7 +253,6 @@ mod tests {
                 None,
                 Some(vec!["some_hash".to_string()]),
                 None,
-                None,
             );
 
             // Spawn the accounts to be able to modify their storage
@@ -288,7 +287,6 @@ mod tests {
                 None,
                 Some(vec!["some_hash".to_string()]),
                 None,
-                None,
             );
 
             // Spawn the accounts to be able to modify their storage
@@ -320,7 +318,6 @@ mod tests {
             tx_env.init_parameters(
                 None,
                 Some(vec!["some_hash".to_string()]),
-                None,
                 None,
             );
 
@@ -572,7 +569,6 @@ mod tests {
                     pks_map,
                     &None,
                     1,
-                    None,
                     || Ok(())
                 )
                 .is_ok()
@@ -585,7 +581,6 @@ mod tests {
                     AccountPublicKeysMap::from_iter([other_keypair.ref_to()]),
                     &None,
                     1,
-                    None,
                     || Ok(())
                 )
                 .is_err()
@@ -1283,7 +1278,7 @@ mod tests {
         let denom = format!("{}/{}/{}", port_id, channel_id, token);
         let ibc_token = ibc_storage::ibc_token(&denom);
         let balance_key = token::storage_key::balance_key(&ibc_token, &sender);
-        let init_bal = Amount::from_u64(100);
+        let init_bal = Amount::native_whole(100);
         writes.insert(balance_key.clone(), init_bal.serialize_to_vec());
         let minted_key = token::storage_key::minted_balance_key(&ibc_token);
         writes.insert(minted_key.clone(), init_bal.serialize_to_vec());
@@ -1293,7 +1288,7 @@ mod tests {
             Address::Internal(InternalAddress::Ibc).serialize_to_vec(),
         );
         let mint_amount_key = ibc_storage::mint_amount_key(&ibc_token);
-        let init_bal = Amount::from_u64(100);
+        let init_bal = Amount::native_whole(100);
         writes.insert(mint_amount_key, init_bal.serialize_to_vec());
         writes.insert(minted_key.clone(), init_bal.serialize_to_vec());
         writes.into_iter().for_each(|(key, val)| {
@@ -1431,11 +1426,11 @@ mod tests {
         let key = ibc::balance_key_with_ibc_prefix(denom, &receiver);
         let balance: Option<Amount> =
             tx_host_env::with(|env| env.state.read(&key).expect("read error"));
-        assert_eq!(balance, Some(Amount::from_u64(100)));
+        assert_eq!(balance, Some(Amount::native_whole(100)));
         let minted: Option<Amount> = tx_host_env::with(|env| {
             env.state.read(&minted_key).expect("read error")
         });
-        assert_eq!(minted, Some(Amount::from_u64(100)));
+        assert_eq!(minted, Some(Amount::native_whole(100)));
     }
 
     #[test]
@@ -1646,7 +1641,7 @@ mod tests {
             denom,
             &address::Address::Internal(address::InternalAddress::Ibc),
         );
-        let val = Amount::from_u64(100);
+        let val = Amount::native_whole(100);
         tx_host_env::with(|env| {
             env.state.write(&escrow_key, val).expect("write error");
         });
@@ -1705,7 +1700,7 @@ mod tests {
         let key = ibc::balance_key_with_ibc_prefix(denom, &receiver);
         let balance: Option<Amount> =
             tx_host_env::with(|env| env.state.read(&key).expect("read error"));
-        assert_eq!(balance, Some(Amount::from_u64(100)));
+        assert_eq!(balance, Some(Amount::native_whole(100)));
         let escrow: Option<Amount> = tx_host_env::with(|env| {
             env.state.read(&escrow_key).expect("read error")
         });

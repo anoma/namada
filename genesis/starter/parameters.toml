@@ -4,8 +4,6 @@ native_token = "NAM"
 is_native_token_transferable = true
 # Minimum number of blocks in an epoch.
 min_num_of_blocks = 4
-# Maximum expected time per block (in seconds).
-max_expected_time_per_block = 30
 # Max payload size, in bytes, for a tx.
 max_tx_bytes = 1048576
 # Max payload size, in bytes, for a tx batch proposal.

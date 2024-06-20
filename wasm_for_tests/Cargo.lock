@@ -3848,6 +3848,7 @@ dependencies = [
  "prost-types",
  "rand 0.8.5",
  "rand_core 0.6.4",
+ "ripemd",
  "serde",
  "serde_json",
  "sha2 0.9.9",
@@ -3994,6 +3995,7 @@ dependencies = [
  "namada_core",
  "namada_macros",
  "namada_storage",
+ "smooth-operator",
  "thiserror",
 ]
 
@@ -4037,6 +4039,7 @@ dependencies = [
  "borsh 1.2.1",
  "borsh-ext",
  "circular-queue",
+ "clap",
  "data-encoding",
  "derivation-path",
  "duration-str",
@@ -4076,7 +4079,6 @@ dependencies = [
  "rand 0.8.5",
  "rand_core 0.6.4",
  "regex",
- "ripemd",
  "serde",
  "serde_json",
  "sha2 0.9.9",

@@ -49,7 +49,7 @@ pub mod client_only_methods {
     use borsh::BorshDeserialize;
     use namada_core::address::Address;
     use namada_core::token;
-    use namada_token::storage_key::balance_key;
+    use namada_token::storage_key::{balance_key, masp_total_rewards};
 
     use super::Token;
     use crate::queries::{Client, RPC};
@@ -78,6 +78,29 @@ pub mod client_only_methods {
                     .unwrap_or_default()
             };
             Ok(balance)
+        }
+
+        /// Get the total rewards minted by MASP.
+        pub async fn masp_total_rewards<CLIENT>(
+            &self,
+            client: &CLIENT,
+        ) -> Result<token::Amount, <CLIENT as Client>::Error>
+        where
+            CLIENT: Client + Sync,
+        {
+            let total_rewards_key = masp_total_rewards();
+            let response = RPC
+                .shell()
+                .storage_value(client, None, None, false, &total_rewards_key)
+                .await?;
+
+            let tokens = if response.data.is_empty() {
+                token::Amount::zero()
+            } else {
+                token::Amount::try_from_slice(&response.data)
+                    .unwrap_or_default()
+            };
+            Ok(tokens)
         }
     }
 }
