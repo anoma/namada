@@ -46,6 +46,7 @@ use ibc::apps::nft_transfer::handler::{
     send_nft_transfer_execute, send_nft_transfer_validate,
 };
 use ibc::apps::nft_transfer::types::error::NftTransferError;
+use ibc::apps::nft_transfer::types::packet::PacketData as NftPacketData;
 use ibc::apps::nft_transfer::types::{
     ack_success_b64, is_receiver_chain_source as is_nft_receiver_chain_source,
     PrefixedClassId, TokenId, TracePath as NftTracePath,
@@ -55,8 +56,10 @@ use ibc::apps::transfer::handler::{
     send_transfer_execute, send_transfer_validate,
 };
 use ibc::apps::transfer::types::error::TokenTransferError;
+use ibc::apps::transfer::types::packet::PacketData;
 use ibc::apps::transfer::types::{
-    is_receiver_chain_source, PrefixedDenom, TracePath, TracePrefix,
+    is_receiver_chain_source, PrefixedCoin, PrefixedDenom, TracePath,
+    TracePrefix,
 };
 use ibc::core::channel::types::acknowledgement::{
     Acknowledgement, AcknowledgementStatus,
@@ -65,6 +68,7 @@ use ibc::core::channel::types::commitment::compute_ack_commitment;
 use ibc::core::channel::types::msgs::{
     MsgRecvPacket as IbcMsgRecvPacket, PacketMsg,
 };
+use ibc::core::channel::types::packet::Packet;
 use ibc::core::entrypoint::{execute, validate};
 use ibc::core::handler::types::error::ContextError;
 use ibc::core::handler::types::events::Error as RawIbcEventError;
@@ -76,10 +80,14 @@ use ibc::primitives::proto::Any;
 pub use ibc::*;
 pub use msg::*;
 use namada_core::address::{self, Address};
-use namada_token::ShieldingTransfer;
+use namada_core::uint::Uint;
+use namada_storage::StorageRead;
+use namada_token::{read_denom, Amount, Denomination, ShieldingTransfer};
 pub use nft::*;
 use prost::Message;
 use thiserror::Error;
+
+use crate::storage::ibc_token;
 
 /// The event type defined in ibc-rs for receiving a token
 pub const EVENT_TYPE_PACKET: &str = "fungible_token_packet";
@@ -109,6 +117,8 @@ pub enum Error {
     ChainId(IdentifierError),
     #[error("Verifier insertion error: {0}")]
     Verifier(namada_storage::Error),
+    #[error("Invalid ShieldingTransfer")]
+    ShieldingTransfer,
 }
 
 /// IBC actions to handle IBC operations
@@ -276,24 +286,51 @@ where
                 )
                 .map_err(Error::NftTransfer)
             }
-            IbcMessage::RecvPacket(msg) => validate(
-                &self.ctx,
-                &self.router,
-                MsgEnvelope::Packet(PacketMsg::Recv(msg.message)),
-            )
-            .map_err(|e| Error::Context(Box::new(e))),
-            IbcMessage::AckPacket(msg) => validate(
-                &self.ctx,
-                &self.router,
-                MsgEnvelope::Packet(PacketMsg::Ack(msg.message)),
-            )
-            .map_err(|e| Error::Context(Box::new(e))),
-            IbcMessage::Timeout(msg) => validate(
-                &self.ctx,
-                &self.router,
-                MsgEnvelope::Packet(PacketMsg::Timeout(msg.message)),
-            )
-            .map_err(|e| Error::Context(Box::new(e))),
+            IbcMessage::RecvPacket(msg) => {
+                if let Some(shielding_transfer) = &msg.transfer {
+                    self.validate_shielding_transfer(
+                        shielding_transfer,
+                        &msg.message.packet,
+                        false,
+                    )?;
+                }
+                validate(
+                    &self.ctx,
+                    &self.router,
+                    MsgEnvelope::Packet(PacketMsg::Recv(msg.message)),
+                )
+                .map_err(|e| Error::Context(Box::new(e)))
+            }
+            IbcMessage::AckPacket(msg) => {
+                if let Some(shielding_transfer) = &msg.transfer {
+                    self.validate_shielding_transfer(
+                        shielding_transfer,
+                        &msg.message.packet,
+                        true,
+                    )?;
+                }
+                validate(
+                    &self.ctx,
+                    &self.router,
+                    MsgEnvelope::Packet(PacketMsg::Ack(msg.message)),
+                )
+                .map_err(|e| Error::Context(Box::new(e)))
+            }
+            IbcMessage::Timeout(msg) => {
+                if let Some(shielding_transfer) = &msg.transfer {
+                    self.validate_shielding_transfer(
+                        shielding_transfer,
+                        &msg.message.packet,
+                        true,
+                    )?;
+                }
+                validate(
+                    &self.ctx,
+                    &self.router,
+                    MsgEnvelope::Packet(PacketMsg::Timeout(msg.message)),
+                )
+                .map_err(|e| Error::Context(Box::new(e)))
+            }
             IbcMessage::Envelope(envelope) => {
                 validate(&self.ctx, &self.router, *envelope)
                     .map_err(|e| Error::Context(Box::new(e)))
@@ -306,6 +343,86 @@ where
         for verifier in self.verifiers.borrow().iter() {
             ctx.insert_verifier(verifier).map_err(Error::Verifier)?;
         }
+        Ok(())
+    }
+
+    fn validate_shielding_transfer(
+        &self,
+        shielding_transfer: &ShieldingTransfer,
+        packet: &Packet,
+        is_sender: bool,
+    ) -> Result<(), Error> {
+        if shielding_transfer.source != IBC_ESCROW_ADDRESS {
+            return Err(Error::ShieldingTransfer);
+        }
+
+        let my_port_id = if is_sender {
+            &packet.port_id_on_a
+        } else {
+            &packet.port_id_on_b
+        };
+        let (ibc_trace, amount) =
+            if *my_port_id == PortId::transfer() {
+                let packet_data =
+                    serde_json::from_slice::<PacketData>(&packet.data)
+                        .map_err(|e| {
+                            Error::TokenTransfer(TokenTransferError::Other(
+                                format!("Decoding the packet data failed: {e}"),
+                            ))
+                        })?;
+                let ibc_denom = packet_data.token.denom.to_string();
+                let (_, amount) = get_token_amount::<C>(
+                    &*self.ctx.inner.borrow(),
+                    &packet_data.token,
+                )
+                .map_err(Error::TokenTransfer)?;
+                (ibc_denom, amount)
+            } else {
+                let packet_data =
+                    serde_json::from_slice::<NftPacketData>(&packet.data)
+                        .map_err(|e| {
+                            Error::TokenTransfer(TokenTransferError::Other(
+                                format!("Decoding the packet data failed: {e}"),
+                            ))
+                        })?;
+                let ibc_trace = format!(
+                    "{}/{}",
+                    &packet_data.class_id,
+                    packet_data
+                        .token_ids
+                        .0
+                        .first()
+                        .expect("TokenID should exist"),
+                );
+                (ibc_trace, Amount::from_u64(1))
+            };
+
+        let ibc_token = if is_sender {
+            if ibc_trace.contains('/') {
+                ibc_token(ibc_trace)
+            } else {
+                Address::decode(ibc_trace).map_err(|e| {
+                    Error::TokenTransfer(TokenTransferError::Other(format!(
+                        "Invalid IBC trace: {e}"
+                    )))
+                })?
+            }
+        } else {
+            received_ibc_token(
+                ibc_trace,
+                &packet.port_id_on_a,
+                &packet.chan_id_on_a,
+                &packet.port_id_on_b,
+                &packet.chan_id_on_b,
+            )?
+        };
+
+        if shielding_transfer.token != ibc_token
+            || shielding_transfer.amount != amount.into()
+        {
+            return Err(Error::ShieldingTransfer);
+        }
+
         Ok(())
     }
 }
@@ -356,6 +473,33 @@ pub fn decode_message(tx_data: &[u8]) -> Result<IbcMessage, Error> {
     }
 
     Err(Error::DecodingData)
+}
+
+/// Get the token address and the amount from `PrefixedCoin`
+pub fn get_token_amount<S>(
+    state: &S,
+    coin: &PrefixedCoin,
+) -> Result<(Address, Amount), TokenTransferError>
+where
+    S: StorageRead,
+{
+    let token = match Address::decode(coin.denom.base_denom.as_str()) {
+        Ok(token_addr) if coin.denom.trace_path.is_empty() => token_addr,
+        _ => storage::ibc_token(coin.denom.to_string()),
+    };
+
+    // Convert IBC amount to Namada amount for the token
+    let denom = read_denom(state, &token)
+        .map_err(ContextError::from)?
+        .unwrap_or(Denomination(0));
+    let uint_amount = Uint(primitive_types::U256::from(coin.amount).0);
+    let amount = Amount::from_uint(uint_amount, denom).map_err(|e| {
+        TokenTransferError::Other(format!(
+            "The IBC amount is invalid: Coin {coin}, Error {e}",
+        ))
+    })?;
+
+    Ok((token, amount))
 }
 
 fn received_ibc_trace(
