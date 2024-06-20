@@ -494,7 +494,6 @@ pub trait IbcCommonContext: IbcStorageContext {
 
     /// Calculate the packet commitment
     fn compute_packet_commitment(
-        &self,
         packet_data: &[u8],
         timeout_height: &TimeoutHeight,
         timeout_timestamp: &Timestamp,

@@ -2485,12 +2485,6 @@ pub async fn build_ibc_transfer(
         validate_amount(context, args.amount, &args.token, args.tx.force)
             .await
             .expect("expected to validate amount");
-    if validated_amount.canonical().denom().0 != 0 {
-        return Err(Error::Other(format!(
-            "The amount for the IBC transfer should be an integer: {}",
-            validated_amount
-        )));
-    }
 
     // If source is transparent check the balance (MASP balance is checked when
     // constructing the shielded part)
@@ -2520,9 +2514,8 @@ pub async fn build_ibc_transfer(
             .map_err(|e| Error::from(QueryError::Wasm(e.to_string())))?;
     let masp_transfer_data = MaspTransferData {
         source: args.source.clone(),
-        target: TransferTarget::Address(Address::Internal(
-            InternalAddress::Ibc,
-        )),
+        // The token will be escrowed to IBC address
+        target: TransferTarget::Ibc(args.receiver.clone()),
         token: args.token.clone(),
         amount: validated_amount,
     };

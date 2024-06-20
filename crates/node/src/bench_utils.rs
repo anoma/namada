@@ -1174,12 +1174,12 @@ impl BenchShieldedCtx {
         self,
         amount: Amount,
         source: TransferSource,
-        target: TransferTarget,
+        target: String,
     ) -> (Self, BatchedTx) {
         let (ctx, tx) = self.generate_masp_tx(
             amount,
             source.clone(),
-            TransferTarget::Address(Address::Internal(InternalAddress::Ibc)),
+            TransferTarget::Ibc(target.clone()),
         );
 
         let token = PrefixedCoin {
@@ -1207,7 +1207,7 @@ impl BenchShieldedCtx {
             packet_data: PacketData {
                 token,
                 sender: source.effective_address().to_string().into(),
-                receiver: target.effective_address().to_string().into(),
+                receiver: target.into(),
                 memo: "".parse().unwrap(),
             },
             timeout_height_on_b: timeout_height,
