@@ -67,12 +67,14 @@ use ibc::core::handler::types::error::ContextError;
 use ibc::core::handler::types::events::Error as RawIbcEventError;
 use ibc::core::handler::types::msgs::MsgEnvelope;
 use ibc::core::host::types::error::IdentifierError;
-use ibc::core::host::types::identifiers::{ChannelId, PortId};
+use ibc::core::host::types::identifiers::{ChannelId, PortId, Sequence};
 use ibc::core::router::types::error::RouterError;
 use ibc::primitives::proto::Any;
 pub use ibc::*;
 pub use msg::*;
 use namada_core::address::{self, Address};
+use namada_core::arith::checked;
+use namada_storage::{Error as StorageError, StorageRead};
 use namada_token::ShieldingTransfer;
 pub use nft::*;
 use prost::Message;
@@ -353,6 +355,25 @@ pub fn decode_message(tx_data: &[u8]) -> Result<IbcMessage, Error> {
     }
 
     Err(Error::DecodingData)
+}
+
+/// Return the last sequence send
+pub fn get_last_sequence_send<S: StorageRead>(
+    storage: &S,
+    port_id: &PortId,
+    channel_id: &ChannelId,
+) -> Result<Sequence, StorageError> {
+    let seq_key = storage::next_sequence_send_key(port_id, channel_id);
+    let next_seq: u64 =
+        context::common::read_sequence(storage, &seq_key)?.into();
+    if next_seq <= 1 {
+        // No transfer heppened
+        return Err(StorageError::new_alloc(format!(
+            "No IBC transfer happened: Port ID {port_id}, Channel ID \
+             {channel_id}",
+        )));
+    }
+    Ok(checked!(next_seq - 1)?.into())
 }
 
 fn received_ibc_trace(
