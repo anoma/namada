@@ -71,17 +71,25 @@ where
 {
     /// Context to interact with the host structures.
     pub ctx: Ctx<'ctx, S, CA, EVAL>,
-    /// Token keys type
-    pub token_keys: PhantomData<TokenKeys>,
+    /// Generic types for DI
+    pub _marker: PhantomData<TokenKeys>,
 }
 
-impl<'a, S, CA, EVAL, TokenKeys> BridgePool<'a, S, CA, EVAL, TokenKeys>
+impl<'ctx, S, CA, EVAL, TokenKeys> BridgePool<'ctx, S, CA, EVAL, TokenKeys>
 where
     S: 'static + StateRead,
-    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
     CA: 'static + Clone,
     TokenKeys: token::Keys,
 {
+    /// Instantiate bridge pool VP
+    pub fn new(ctx: Ctx<'ctx, S, CA, EVAL>) -> Self {
+        Self {
+            ctx,
+            _marker: PhantomData,
+        }
+    }
+
     /// Get the change in the balance of an account
     /// associated with an address
     fn account_balance_delta(
@@ -393,13 +401,13 @@ where
 
 /// Helper struct for handling the different escrow
 /// checking scenarios.
-struct EscrowDelta<'a, KIND> {
-    token: Cow<'a, Address>,
-    payer_account: &'a Address,
-    escrow_account: &'a Address,
+struct EscrowDelta<'ctx, KIND> {
+    token: Cow<'ctx, Address>,
+    payer_account: &'ctx Address,
+    escrow_account: &'ctx Address,
     expected_debit: Amount,
     expected_credit: Amount,
-    transferred_amount: &'a Amount,
+    transferred_amount: &'ctx Amount,
     _kind: PhantomData<*const KIND>,
 }
 
@@ -477,9 +485,9 @@ impl<KIND> EscrowDelta<'_, KIND> {
 ///
 /// 1. Check that gas fees were escrowed.
 /// 2. Check that the Nam to back wNam was escrowed.
-struct EscrowCheck<'a> {
-    gas_check: EscrowDelta<'a, GasCheck>,
-    token_check: EscrowDelta<'a, TokenCheck>,
+struct EscrowCheck<'ctx> {
+    gas_check: EscrowDelta<'ctx, GasCheck>,
+    token_check: EscrowDelta<'ctx, TokenCheck>,
 }
 
 impl EscrowCheck<'_> {
@@ -515,18 +523,18 @@ fn sum_gas_and_token_amounts(
         })
 }
 
-impl<'a, S, CA, EVAL, TokenKeys> NativeVp<'a>
-    for BridgePool<'a, S, CA, EVAL, TokenKeys>
+impl<'view, 'ctx: 'view, S, CA, EVAL, TokenKeys> NativeVp<'view>
+    for BridgePool<'ctx, S, CA, EVAL, TokenKeys>
 where
     S: 'static + StateRead,
-    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
     CA: 'static + Clone,
     TokenKeys: token::Keys,
 {
     type Error = Error;
 
     fn validate_tx(
-        &self,
+        &'view self,
         batched_tx: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
@@ -682,7 +690,6 @@ mod test_bridge_pool_vp {
     use namada_core::borsh::BorshSerializeExt;
     use namada_core::eth_bridge_pool::{GasFee, TransferToEthereum};
     use namada_core::hash::Hash;
-    use namada_core::WasmCacheRwAccess;
     use namada_gas::{TxGasMeter, VpGasMeter};
     use namada_state::testing::TestState;
     use namada_state::write_log::WriteLog;
@@ -692,6 +699,7 @@ mod test_bridge_pool_vp {
     use namada_tx::Tx;
     use namada_vm::wasm::run::VpEvalWasm;
     use namada_vm::wasm::VpCache;
+    use namada_vm::WasmCacheRwAccess;
 
     use super::*;
     use crate::storage::bridge_pool::get_signed_root_key;
@@ -707,6 +715,8 @@ mod test_bridge_pool_vp {
         CA,
     >;
     type TokenKeys = namada_token::Store<()>;
+    type BridgePool<'a, S> =
+        super::BridgePool<'a, S, VpCache<CA>, Eval, TokenKeys>;
 
     /// The amount of NAM Bertha has
     const ASSET: EthAddress = EthAddress([0; 20]);
@@ -856,7 +866,7 @@ mod test_bridge_pool_vp {
             // we only care about escrowing NAM
             I320::from(0),
         );
-        write_log.commit_tx();
+        write_log.commit_tx_to_batch();
     }
 
     /// Update gas and token balances of an address and
@@ -957,14 +967,14 @@ mod test_bridge_pool_vp {
     }
 
     /// Setup a ctx for running native vps
-    fn setup_ctx<'a>(
-        tx: &'a Tx,
-        state: &'a TestState,
-        gas_meter: &'a RefCell<VpGasMeter>,
-        keys_changed: &'a BTreeSet<Key>,
-        verifiers: &'a BTreeSet<Address>,
-    ) -> Ctx<'a, TestState, VpCache<WasmCacheRwAccess>, Eval> {
-        let batched_tx = tx.batch_ref_first_tx();
+    fn setup_ctx<'ctx>(
+        tx: &'ctx Tx,
+        state: &'ctx TestState,
+        gas_meter: &'ctx RefCell<VpGasMeter>,
+        keys_changed: &'ctx BTreeSet<Key>,
+        verifiers: &'ctx BTreeSet<Address>,
+    ) -> Ctx<'ctx, TestState, VpCache<WasmCacheRwAccess>, Eval> {
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         Ctx::new(
             &BRIDGE_POOL_ADDRESS,
             state,
@@ -1051,17 +1061,20 @@ mod test_bridge_pool_vp {
         let verifiers = BTreeSet::default();
         // create the data to be given to the vp
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+            &TxGasMeter::new(u64::MAX),
         ));
-        let vp = BridgePool {
-            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
-            token_keys: PhantomData::<TokenKeys>,
-        };
+        let vp = BridgePool::new(setup_ctx(
+            &tx,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+        ));
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
 
-        let tx = tx.batch_ref_first_tx();
+        let tx = tx.batch_ref_first_tx().unwrap();
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
         match (expect, res) {
             (Expect::Accepted, Ok(())) => (),
@@ -1399,17 +1412,20 @@ mod test_bridge_pool_vp {
 
         // create the data to be given to the vp
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+            &TxGasMeter::new(u64::MAX),
         ));
-        let vp = BridgePool {
-            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
-            token_keys: PhantomData::<TokenKeys>,
-        };
+        let vp = BridgePool::new(setup_ctx(
+            &tx,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+        ));
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
 
-        let tx = tx.batch_ref_first_tx();
+        let tx = tx.batch_ref_first_tx().unwrap();
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
         assert!(res.is_err());
     }
@@ -1460,17 +1476,20 @@ mod test_bridge_pool_vp {
         let verifiers = BTreeSet::default();
         // create the data to be given to the vp
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+            &TxGasMeter::new(u64::MAX),
         ));
-        let vp = BridgePool {
-            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
-            token_keys: PhantomData::<TokenKeys>,
-        };
+        let vp = BridgePool::new(setup_ctx(
+            &tx,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+        ));
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
 
-        let tx = tx.batch_ref_first_tx();
+        let tx = tx.batch_ref_first_tx().unwrap();
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
         assert!(res.is_err());
     }
@@ -1542,17 +1561,20 @@ mod test_bridge_pool_vp {
         let verifiers = BTreeSet::default();
         // create the data to be given to the vp
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+            &TxGasMeter::new(u64::MAX),
         ));
-        let vp = BridgePool {
-            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
-            token_keys: PhantomData::<TokenKeys>,
-        };
+        let vp = BridgePool::new(setup_ctx(
+            &tx,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+        ));
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
 
-        let tx = tx.batch_ref_first_tx();
+        let tx = tx.batch_ref_first_tx().unwrap();
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
         assert!(res.is_ok());
     }
@@ -1619,17 +1641,20 @@ mod test_bridge_pool_vp {
 
         // create the data to be given to the vp
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+            &TxGasMeter::new(u64::MAX),
         ));
-        let vp = BridgePool {
-            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
-            token_keys: PhantomData::<TokenKeys>,
-        };
+        let vp = BridgePool::new(setup_ctx(
+            &tx,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+        ));
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
 
-        let tx = tx.batch_ref_first_tx();
+        let tx = tx.batch_ref_first_tx().unwrap();
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
         assert!(res.is_err());
     }
@@ -1653,7 +1678,7 @@ mod test_bridge_pool_vp {
         state
             .write(&gas_payer_balance_key, Amount::from(BERTHA_WEALTH))
             .expect("Test failed");
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_tx_to_batch();
         let mut tx = Tx::from_type(TxType::Raw);
         tx.push_default_inner_tx();
 
@@ -1713,17 +1738,20 @@ mod test_bridge_pool_vp {
         let verifiers = BTreeSet::default();
         // create the data to be given to the vp
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+            &TxGasMeter::new(u64::MAX),
         ));
-        let vp = BridgePool {
-            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
-            token_keys: PhantomData::<TokenKeys>,
-        };
+        let vp = BridgePool::new(setup_ctx(
+            &tx,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+        ));
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
 
-        let tx = tx.batch_ref_first_tx();
+        let tx = tx.batch_ref_first_tx().unwrap();
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
         assert!(res.is_err());
     }
@@ -1793,18 +1821,21 @@ mod test_bridge_pool_vp {
         // create the data to be given to the vp
         let verifiers = BTreeSet::default();
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+            &TxGasMeter::new(u64::MAX),
         ));
-        let vp = BridgePool {
-            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
-            token_keys: PhantomData::<TokenKeys>,
-        };
+        let vp = BridgePool::new(setup_ctx(
+            &tx,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+        ));
 
         let mut tx = Tx::from_type(TxType::Raw);
         tx.push_default_inner_tx();
         tx.add_data(transfer);
 
-        let tx = tx.batch_ref_first_tx();
+        let tx = tx.batch_ref_first_tx().unwrap();
         let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
         match (expect, res) {
             (Expect::Accepted, Ok(())) => (),

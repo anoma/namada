@@ -44,8 +44,12 @@ namada-eth-bridge = [
 [dependencies]
 namada_apps_lib = {path = "../apps_lib"}
 namada_migrations = {path = "../migrations", optional = true}
-namada_sdk = {path = "../sdk", default-features = false, features = ["download-params", "std", "rand"]}
+namada_replay_protection = {path = "../replay_protection"}
+namada_sdk = {path = "../sdk", features = ["wasm-runtime"]}
 namada_test_utils = {path = "../test_utils", optional = true}
+namada_vm = {path = "../vm"}
+namada_vote_ext = { path = "../vote_ext" }
+namada_vp = {path = "../vp"}
 
 arse-merkle-tree = { workspace = true, features = ["blake2b"] }
 async-trait.workspace = true
@@ -98,6 +102,7 @@ warp = "0.3.2"
 [dev-dependencies]
 namada_apps_lib = {path = "../apps_lib", features = ["testing"]}
 namada_test_utils = {path = "../test_utils"}
+namada_vm = {path = "../vm", features = ["testing"]}
 
 assert_matches.workspace = true
 clap.workspace = true

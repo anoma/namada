@@ -29,11 +29,10 @@ testing = [
 ]
 
 [dependencies]
-namada_core = { path = "../core" }
+namada_core = { path = "../core", features = ["control_flow"] }
 namada_events = { path = "../events", default-features = false }
 namada_gas = { path = "../gas" }
 namada_parameters = { path = "../parameters" }
-namada_sdk = { path = "../sdk" }
 namada_state = { path = "../state" }
 namada_token = { path = "../token" }
 namada_tx = { path = "../tx" }
@@ -67,3 +66,5 @@ byte-unit.workspace = true
 itertools.workspace = true
 tempfile.workspace = true
 test-log.workspace = true
+wasmer-compiler = { workspace = true }
+wasmer-types = { workspace = true }

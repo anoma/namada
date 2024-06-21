@@ -28,8 +28,8 @@ where
 {
     /// Context to interact with the host structures.
     pub ctx: Ctx<'ctx, S, CA, EVAL>,
-    /// Token keys type
-    pub token_keys: PhantomData<TokenKeys>,
+    /// Generic types for DI
+    pub _marker: PhantomData<TokenKeys>,
 }
 
 impl<'ctx, S, CA, EVAL, TokenKeys> EthBridge<'ctx, S, CA, EVAL, TokenKeys>
@@ -39,6 +39,14 @@ where
     EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
     TokenKeys: token::Keys,
 {
+    /// Instantiate eth bridge VP
+    pub fn new(ctx: Ctx<'ctx, S, CA, EVAL>) -> Self {
+        Self {
+            ctx,
+            _marker: PhantomData,
+        }
+    }
+
     /// If the Ethereum bridge's escrow key was written to, we check
     /// that the NAM balance increased and that the Bridge pool VP has
     /// been triggered.
@@ -77,12 +85,12 @@ where
     }
 }
 
-impl<'a, S, CA, EVAL, TokenKeys> NativeVp<'a>
-    for EthBridge<'a, S, CA, EVAL, TokenKeys>
+impl<'view, 'ctx: 'view, S, CA, EVAL, TokenKeys> NativeVp<'view>
+    for EthBridge<'ctx, S, CA, EVAL, TokenKeys>
 where
     S: 'static + StateRead,
     CA: 'static + Clone,
-    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
     TokenKeys: token::Keys,
 {
     type Error = Error;
@@ -98,7 +106,7 @@ where
     /// changes to the `eth_msgs/...` keys. For those cases, we reject here as
     /// no wasm transactions should be able to modify those keys.
     fn validate_tx(
-        &self,
+        &'view self,
         _: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
@@ -183,8 +191,8 @@ mod tests {
 
     use namada_core::address::testing::{established_address_1, nam, wnam};
     use namada_core::borsh::BorshSerializeExt;
+    use namada_core::ethereum_events;
     use namada_core::ethereum_events::EthAddress;
-    use namada_core::{ethereum_events, WasmCacheRwAccess};
     use namada_gas::{TxGasMeter, VpGasMeter};
     use namada_state::testing::TestState;
     use namada_state::{StorageWrite, TxIndex};
@@ -193,6 +201,7 @@ mod tests {
     use namada_tx::{Tx, TxCommitments};
     use namada_vm::wasm::run::VpEvalWasm;
     use namada_vm::wasm::VpCache;
+    use namada_vm::WasmCacheRwAccess;
     use rand::Rng;
 
     use super::*;
@@ -215,6 +224,8 @@ mod tests {
         CA,
     >;
     type TokenKeys = namada_token::Store<()>;
+    type EthBridge<'a, S> =
+        super::EthBridge<'a, S, VpCache<CA>, Eval, TokenKeys>;
 
     /// Return some arbitrary random key belonging to this account
     fn arbitrary_key() -> Key {
@@ -260,14 +271,14 @@ mod tests {
     }
 
     /// Setup a ctx for running native vps
-    fn setup_ctx<'a>(
-        tx: &'a Tx,
-        cmt: &'a TxCommitments,
-        state: &'a TestState,
-        gas_meter: &'a RefCell<VpGasMeter>,
-        keys_changed: &'a BTreeSet<Key>,
-        verifiers: &'a BTreeSet<Address>,
-    ) -> Ctx<'a, TestState, VpCache<WasmCacheRwAccess>, Eval> {
+    fn setup_ctx<'ctx>(
+        tx: &'ctx Tx,
+        cmt: &'ctx TxCommitments,
+        state: &'ctx TestState,
+        gas_meter: &'ctx RefCell<VpGasMeter>,
+        keys_changed: &'ctx BTreeSet<Key>,
+        verifiers: &'ctx BTreeSet<Address>,
+    ) -> Ctx<'ctx, TestState, VpCache<WasmCacheRwAccess>, Eval> {
         Ctx::new(
             &crate::ADDRESS,
             state,
@@ -412,17 +423,14 @@ mod tests {
             &TxGasMeter::new(u64::MAX),
         ));
         let batched_tx = tx.batch_ref_first_tx().unwrap();
-        let vp = EthBridge {
-            ctx: setup_ctx(
-                batched_tx.tx,
-                batched_tx.cmt,
-                &state,
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-            ),
-            token_keys: PhantomData::<TokenKeys>,
-        };
+        let vp = EthBridge::new(setup_ctx(
+            batched_tx.tx,
+            batched_tx.cmt,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+        ));
 
         let res = vp.validate_tx(&batched_tx, &keys_changed, &verifiers);
         assert!(res.is_ok());
@@ -467,17 +475,14 @@ mod tests {
             &TxGasMeter::new(u64::MAX),
         ));
         let batched_tx = tx.batch_ref_first_tx().unwrap();
-        let vp = EthBridge {
-            ctx: setup_ctx(
-                batched_tx.tx,
-                batched_tx.cmt,
-                &state,
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-            ),
-            token_keys: PhantomData::<TokenKeys>,
-        };
+        let vp = EthBridge::new(setup_ctx(
+            batched_tx.tx,
+            batched_tx.cmt,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+        ));
 
         let res = vp.validate_tx(&batched_tx, &keys_changed, &verifiers);
         assert!(res.is_err());
@@ -525,17 +530,14 @@ mod tests {
             &TxGasMeter::new(u64::MAX),
         ));
         let batched_tx = tx.batch_ref_first_tx().unwrap();
-        let vp = EthBridge {
-            ctx: setup_ctx(
-                batched_tx.tx,
-                batched_tx.cmt,
-                &state,
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-            ),
-            token_keys: PhantomData::<TokenKeys>,
-        };
+        let vp = EthBridge::new(setup_ctx(
+            batched_tx.tx,
+            batched_tx.cmt,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+        ));
 
         let res = vp.validate_tx(&batched_tx, &keys_changed, &verifiers);
         assert!(res.is_err());

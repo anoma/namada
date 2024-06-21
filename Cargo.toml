@@ -198,6 +198,7 @@ wasmer-compiler = "4.3.5"
 wasmer-compiler-singlepass = "4.3.5"
 wasmer-types = "4.3.5"
 wasmer-vm = "4.3.5"
+wasmtimer = "0.2.0"
 winapi = "0.3.9"
 yansi = "0.5.1"
 zeroize = { version = "1.5.5", features = ["zeroize_derive"] }

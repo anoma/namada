@@ -41,10 +41,13 @@ namada-eth-bridge = [
 
 # NOTE: this crate MUST NOT import any dependency with testing features to prevent benchmarking non-production code
 [dev-dependencies]
-namada_apps_lib = { path = "../apps_lib" }
+namada_apps_lib = { path = "../apps_lib", features = ["benches"] }
 namada_node = { path = "../node", features = ["benches"] }
+namada_vm = { path = "../vm", features = ["wasm-runtime"] }
+namada_vp = { path = "../vp" }
+
 masp_primitives.workspace = true
-masp_proofs = { workspace = true, features = ["benchmarks"] }
+masp_proofs = { workspace = true, features = ["benchmarks", "multicore"] }
 borsh.workspace = true
 borsh-ext.workspace = true
 criterion = { version = "0.5", features = ["html_reports"] }

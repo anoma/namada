@@ -267,12 +267,13 @@ where
         let height = self
             .inner
             .borrow()
+            .storage()
             .get_block_height()
             .expect("The height should exist");
 
         let estimate =
             namada_parameters::estimate_max_block_time_from_blocks_and_params(
-                &*self.inner.borrow(),
+                self.inner.borrow().storage(),
                 height,
                 // NB: estimate max height with up to 5 blocks in the past,
                 // which will not result in too many reads

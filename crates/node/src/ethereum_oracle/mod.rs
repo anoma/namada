@@ -8,13 +8,12 @@ use async_trait::async_trait;
 use ethabi::Address;
 use ethbridge_events::{event_codecs, EventKind};
 use itertools::Either;
-use namada::control_flow::time::{Constant, Duration, Instant, Sleep};
-use namada::core::ethereum_events::EthereumEvent;
-use namada::core::{ethereum_structs, hints};
-use namada::eth_bridge::ethers;
-use namada::eth_bridge::ethers::providers::{Http, Middleware, Provider};
-use namada::eth_bridge::oracle::config::Config;
-use namada_sdk::eth_bridge::{eth_syncing_status_timeout, SyncStatus};
+use namada_sdk::control_flow::time::{Constant, Duration, Instant, Sleep};
+use namada_sdk::eth_bridge::ethers::providers::{Http, Middleware, Provider};
+use namada_sdk::eth_bridge::oracle::config::Config;
+use namada_sdk::eth_bridge::{eth_syncing_status_timeout, ethers, SyncStatus};
+use namada_sdk::ethereum_events::EthereumEvent;
+use namada_sdk::{ethereum_structs, hints};
 use num256::Uint256;
 use thiserror::Error;
 use tokio::sync::mpsc::error::TryRecvError;
@@ -602,7 +601,7 @@ fn process_queue(
 
 pub mod last_processed_block {
     //! Functionality to do with publishing which blocks we have processed.
-    use namada::core::ethereum_structs;
+    use namada_sdk::ethereum_structs;
     use tokio::sync::watch;
 
     pub type Sender = watch::Sender<Option<ethereum_structs::BlockHeight>>;
@@ -621,11 +620,11 @@ mod test_oracle {
     use std::num::NonZeroU64;
 
     use ethbridge_bridge_events::{TransferToChainFilter, TransferToErcFilter};
-    use namada::core::address::testing::gen_established_address;
-    use namada::core::ethereum_events::{EthAddress, TransferToEthereum};
-    use namada::core::hash::Hash;
-    use namada::eth_bridge::ethers::types::H160;
-    use namada::eth_bridge::structs::Erc20Transfer;
+    use namada_sdk::address::testing::gen_established_address;
+    use namada_sdk::eth_bridge::ethers::types::H160;
+    use namada_sdk::eth_bridge::structs::Erc20Transfer;
+    use namada_sdk::ethereum_events::{EthAddress, TransferToEthereum};
+    use namada_sdk::hash::Hash;
     use tokio::sync::oneshot::channel;
     use tokio::time::timeout;
 

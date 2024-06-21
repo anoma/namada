@@ -426,7 +426,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         channel_id: &ChannelId,
     ) -> Result<Sequence> {
         let key = storage::next_sequence_send_key(port_id, channel_id);
-        read_sequence(self, &key).map_err(ContextError::from)
+        read_sequence(self.storage(), &key).map_err(ContextError::from)
     }
 
     /// Store the NextSequenceSend
@@ -447,7 +447,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         channel_id: &ChannelId,
     ) -> Result<Sequence> {
         let key = storage::next_sequence_recv_key(port_id, channel_id);
-        read_sequence(self, &key).map_err(ContextError::from)
+        read_sequence(self.storage(), &key).map_err(ContextError::from)
     }
 
     /// Store the NextSequenceRecv
@@ -468,7 +468,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         channel_id: &ChannelId,
     ) -> Result<Sequence> {
         let key = storage::next_sequence_ack_key(port_id, channel_id);
-        read_sequence(self, &key).map_err(ContextError::from)
+        read_sequence(self.storage(), &key).map_err(ContextError::from)
     }
 
     /// Store the NextSequenceAck

@@ -12,7 +12,7 @@ use namada_proof_of_stake::{
     claim_reward_tokens, deactivate_validator, reactivate_validator,
     redelegate_tokens, unbond_tokens, unjail_validator, withdraw_tokens,
 };
-pub use namada_proof_of_stake::{parameters, types};
+pub use namada_proof_of_stake::{parameters, storage, storage_key, types};
 use namada_tx::action::{
     Action, ClaimRewards, PosAction, Redelegation, Unbond, Withdraw, Write,
 };

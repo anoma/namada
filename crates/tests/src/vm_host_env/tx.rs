@@ -3,23 +3,23 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
-use namada::core::address::Address;
-use namada::core::hash::Hash;
-use namada::core::storage::{Key, TxIndex};
-use namada::core::time::DurationSecs;
-use namada::ledger::gas::TxGasMeter;
-use namada::ledger::parameters::{self, EpochDuration};
-use namada::ledger::storage::mockdb::MockDB;
-use namada::ledger::storage::testing::TestState;
-pub use namada::tx::data::TxType;
-use namada::tx::Tx;
-use namada::vm::prefix_iter::PrefixIterators;
-use namada::vm::wasm::run::Error;
-use namada::vm::wasm::{self, TxCache, VpCache};
-use namada::vm::{self, WasmCacheRwAccess};
-use namada::{account, token};
+use namada_sdk::address::Address;
+use namada_sdk::gas::TxGasMeter;
+use namada_sdk::hash::Hash;
+use namada_sdk::parameters::{self, EpochDuration};
+use namada_sdk::state::prefix_iter::PrefixIterators;
+use namada_sdk::state::testing::TestState;
+use namada_sdk::storage::mockdb::MockDB;
+use namada_sdk::storage::{Key, TxIndex};
+use namada_sdk::time::DurationSecs;
+pub use namada_sdk::tx::data::TxType;
+pub use namada_sdk::tx::*;
+use namada_sdk::{account, token};
 use namada_tx_prelude::transaction::TxSentinel;
-use namada_tx_prelude::{BatchedTx, BorshSerializeExt, Ctx};
+use namada_tx_prelude::{BorshSerializeExt, Ctx};
+use namada_vm::wasm::run::Error;
+use namada_vm::wasm::{self, TxCache, VpCache};
+use namada_vm::WasmCacheRwAccess;
 use namada_vp_prelude::key::common;
 use tempfile::TempDir;
 
@@ -246,7 +246,7 @@ mod native_tx_host_env {
 
     // TODO replace with `std::concat_idents` once stabilized (https://github.com/rust-lang/rust/issues/29599)
     use concat_idents::concat_idents;
-    use namada::vm::host_env::*;
+    use namada_vm::host_env::*;
 
     use super::*;
 
@@ -355,7 +355,7 @@ mod native_tx_host_env {
                                 wasmer_store: _,
                             }: &mut TestTxEnv| {
 
-                            let mut tx_env = vm::host_env::testing::tx_env(
+                            let mut tx_env = namada_vm::host_env::testing::tx_env(
                                 state,
                                 iterators,
                                 verifiers,
@@ -400,7 +400,7 @@ mod native_tx_host_env {
                                 wasmer_store: _,
                             }: &mut TestTxEnv| {
 
-                            let mut tx_env = vm::host_env::testing::tx_env(
+                            let mut tx_env = namada_vm::host_env::testing::tx_env(
                                 state,
                                 iterators,
                                 verifiers,
@@ -445,7 +445,7 @@ mod native_tx_host_env {
                                 wasmer_store: _,
                             }: &mut TestTxEnv| {
 
-                            let mut tx_env = vm::host_env::testing::tx_env(
+                            let mut tx_env = namada_vm::host_env::testing::tx_env(
                                 state,
                                 iterators,
                                 verifiers,
@@ -534,11 +534,11 @@ mod native_tx_host_env {
 
 #[cfg(test)]
 mod tests {
-    use namada::core::storage;
-    use namada::vm::host_env::{self, TxVmEnv};
-    use namada::vm::memory::VmMemory;
     use namada_core::hash::Sha256Hasher;
+    use namada_sdk::storage;
     use namada_tx_prelude::StorageWrite;
+    use namada_vm::host_env::{self, TxVmEnv};
+    use namada_vm::memory::VmMemory;
     use proptest::prelude::*;
     use test_log::test;
 
@@ -761,7 +761,7 @@ mod tests {
             wasmer_store,
         } = test_env;
 
-        let mut tx_env = vm::host_env::testing::tx_env_with_wasm_memory(
+        let mut tx_env = host_env::testing::tx_env_with_wasm_memory(
             state,
             iterators,
             verifiers,
@@ -793,7 +793,7 @@ mod tests {
             any::<bool>(),
             any::<bool>(),
             any::<bool>(),
-            namada::core::storage::testing::arb_key(),
+            namada_sdk::storage::testing::arb_key(),
             arb_u64(),
             arb_u64(),
             any::<Vec<u8>>(),

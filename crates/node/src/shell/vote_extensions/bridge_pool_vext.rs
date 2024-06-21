@@ -54,29 +54,31 @@ where
 #[allow(clippy::cast_possible_truncation)]
 #[cfg(test)]
 mod test_bp_vote_extensions {
-    use namada::core::ethereum_events::Uint;
-    use namada::core::keccak::{keccak_hash, KeccakHash};
-    use namada::core::key::*;
-    use namada::core::storage::BlockHeight;
-    use namada::core::token;
-    use namada::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
-    use namada::ethereum_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
-    use namada::ethereum_bridge::storage::bridge_pool::get_key_from_hash;
-    use namada::ethereum_bridge::storage::eth_bridge_queries::EthBridgeQueries;
-    use namada::ledger::pos::PosQueries;
-    use namada::proof_of_stake::storage::{
+    use namada_apps_lib::wallet::defaults::{bertha_address, bertha_keypair};
+    use namada_sdk::eth_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
+    use namada_sdk::eth_bridge::storage::bridge_pool::get_key_from_hash;
+    use namada_sdk::eth_bridge::storage::eth_bridge_queries::{
+        is_bridge_comptime_enabled, EthBridgeQueries,
+    };
+    use namada_sdk::ethereum_events::Uint;
+    use namada_sdk::keccak::{keccak_hash, KeccakHash};
+    use namada_sdk::key::*;
+    use namada_sdk::proof_of_stake::storage::{
         consensus_validator_set_handle,
         read_consensus_validator_set_addresses_with_stake,
     };
-    use namada::proof_of_stake::types::{
+    use namada_sdk::proof_of_stake::types::{
         Position as ValidatorPosition, WeightedValidator,
     };
-    use namada::proof_of_stake::{become_validator, BecomeValidator, Epoch};
-    use namada::state::StorageWrite;
-    use namada::tendermint::abci::types::VoteInfo;
-    use namada::tx::Signed;
-    use namada::vote_ext::bridge_pool_roots;
-    use namada_apps_lib::wallet::defaults::{bertha_address, bertha_keypair};
+    use namada_sdk::proof_of_stake::{
+        become_validator, BecomeValidator, Epoch, PosQueries,
+    };
+    use namada_sdk::state::StorageWrite;
+    use namada_sdk::storage::BlockHeight;
+    use namada_sdk::tendermint::abci::types::VoteInfo;
+    use namada_sdk::token;
+    use namada_sdk::tx::Signed;
+    use namada_vote_ext::bridge_pool_roots;
 
     use crate::shell::test_utils::*;
     use crate::shims::abcipp_shim_types::shim::request::FinalizeBlock;
@@ -145,10 +147,11 @@ mod test_bp_vote_extensions {
         }];
         let req = FinalizeBlock {
             proposer_address: pkh1.to_vec(),
-            decided_last_commit: namada::tendermint::abci::types::CommitInfo {
-                round: 0u8.into(),
-                votes,
-            },
+            decided_last_commit:
+                crate::facade::tendermint::abci::types::CommitInfo {
+                    round: 0u8.into(),
+                    votes,
+                },
             ..Default::default()
         };
         assert_eq!(shell.start_new_epoch(Some(req)).0, 1);

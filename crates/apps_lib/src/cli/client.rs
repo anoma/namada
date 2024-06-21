@@ -2,7 +2,7 @@ use std::io::Read;
 
 use color_eyre::eyre::Result;
 use masp_primitives::zip32::ExtendedFullViewingKey;
-use namada::io::Io;
+use namada_sdk::io::Io;
 use namada_sdk::{display_line, Namada, NamadaImpl};
 
 use crate::cli;

@@ -95,10 +95,10 @@
 //! - add slashes
 //! - add rewards
 
-use namada::core::storage::Epoch;
-use namada::proof_of_stake::parameters::{OwnedPosParams, PosParams};
-use namada::proof_of_stake::test_utils::test_init_genesis as init_genesis;
-use namada::proof_of_stake::types::GenesisValidator;
+use namada_sdk::proof_of_stake::parameters::{OwnedPosParams, PosParams};
+use namada_sdk::proof_of_stake::test_utils::test_init_genesis as init_genesis;
+use namada_sdk::proof_of_stake::types::GenesisValidator;
+use namada_sdk::storage::Epoch;
 
 use crate::tx::tx_host_env;
 
@@ -149,11 +149,10 @@ mod tests {
 
     use std::cell::RefCell;
 
-    use namada::core::address;
-    use namada::core::key::common::PublicKey;
-    use namada::gas::VpGasMeter;
-    use namada::ledger::pos::PosVP;
-    use namada::token;
+    use namada_sdk::gas::VpGasMeter;
+    use namada_sdk::key::common::PublicKey;
+    use namada_sdk::validation::PosVp;
+    use namada_sdk::{address, token};
     use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
     use namada_tx_prelude::Address;
     use proptest::prelude::*;
@@ -440,7 +439,8 @@ mod tests {
                 &tx_env.gas_meter.borrow(),
             ));
             let vp_env = TestNativeVpEnv::from_tx_env(tx_env, address::POS);
-            let result = vp_env.validate_tx(&gas_meter, PosVP::new);
+            let vp = vp_env.init_vp(&gas_meter, PosVp::new);
+            let result = vp_env.validate_tx(&vp);
 
             // Put the tx_env back before checking the result
             tx_host_env::set(vp_env.tx_env);
@@ -580,22 +580,21 @@ pub mod testing {
 
     use derivative::Derivative;
     use itertools::Either;
-    use namada::core::dec::Dec;
-    use namada::core::key::common::PublicKey;
-    use namada::core::key::RefTo;
-    use namada::core::storage::Epoch;
-    use namada::core::{address, key};
-    use namada::ledger::gas::TxGasMeter;
-    use namada::proof_of_stake::epoched::DynEpochOffset;
-    use namada::proof_of_stake::parameters::testing::arb_rate;
-    use namada::proof_of_stake::parameters::PosParams;
-    use namada::proof_of_stake::storage::{
+    use namada_sdk::dec::Dec;
+    use namada_sdk::gas::TxGasMeter;
+    use namada_sdk::key::common::PublicKey;
+    use namada_sdk::key::RefTo;
+    use namada_sdk::proof_of_stake::epoched::DynEpochOffset;
+    use namada_sdk::proof_of_stake::parameters::testing::arb_rate;
+    use namada_sdk::proof_of_stake::parameters::PosParams;
+    use namada_sdk::proof_of_stake::storage::{
         get_num_consensus_validators, read_pos_params, unbond_handle,
     };
-    use namada::proof_of_stake::types::{BondId, ValidatorState};
-    use namada::proof_of_stake::ADDRESS as POS_ADDRESS;
-    use namada::token;
-    use namada::token::{Amount, Change};
+    use namada_sdk::proof_of_stake::types::{BondId, ValidatorState};
+    use namada_sdk::proof_of_stake::ADDRESS as POS_ADDRESS;
+    use namada_sdk::storage::Epoch;
+    use namada_sdk::token::{Amount, Change};
+    use namada_sdk::{address, key, token};
     use namada_tx_prelude::{Address, StorageRead, StorageWrite};
     use proptest::prelude::*;
 

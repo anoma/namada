@@ -248,18 +248,20 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
 mod tests {
     use std::panic;
 
-    // Use this as `#[test]` annotation to enable logging
-    use namada::core::dec::Dec;
-    use namada::core::storage::Epoch;
-    use namada::ledger::pos::{GenesisValidator, PosParams};
-    use namada::tx::data::TxType;
-    use namada::tx::{Authorization, Code, Data};
     use namada_test_utils::TestWasms;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
-    use namada_tests::tx::{self, tx_host_env, TestTxEnv};
+    use namada_tests::tx::data::TxType;
+    use namada_tests::tx::{
+        self, tx_host_env, Authorization, Code, Data, TestTxEnv,
+    };
     use namada_tests::vp::vp_host_env::storage::Key;
     use namada_tests::vp::*;
+    // Use this as `#[test]` annotation to enable logging
+    use namada_tx_prelude::dec::Dec;
+    use namada_tx_prelude::proof_of_stake::parameters::PosParams;
+    use namada_tx_prelude::proof_of_stake::types::GenesisValidator;
+    use namada_tx_prelude::storage::Epoch;
     use namada_tx_prelude::{StorageWrite, TxEnv};
     use namada_vp_prelude::account::AccountPublicKeysMap;
     use namada_vp_prelude::key::RefTo;

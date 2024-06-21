@@ -20,6 +20,7 @@ testing = ["namada_core/testing", "namada_token/testing"]
 namada_account = { path = "../account" }
 namada_core = { path = "../core" }
 namada_events = { path = "../events", default-features = false }
+namada_gas = { path = "../gas" }
 namada_governance = { path = "../governance" }
 namada_ibc = { path = "../ibc" }
 namada_macros = { path = "../macros" }

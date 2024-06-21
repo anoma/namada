@@ -5,50 +5,46 @@ use std::fmt::Debug;
 
 use either::Either;
 use eyre::{eyre, WrapErr};
-use namada_core::booleans::BoolResultUnitExt;
-use namada_core::hash::Hash;
-use namada_core::ibc::{IbcTxDataHash, IbcTxDataRefs};
-use namada_core::masp::{MaspTxRefs, TxId};
-use namada_events::extend::{
+use namada_sdk::address::{Address, InternalAddress};
+use namada_sdk::booleans::BoolResultUnitExt;
+use namada_sdk::events::extend::{
     ComposeEvent, Height as HeightAttr, TxHash as TxHashAttr, UserAccount,
 };
-use namada_events::EventLevel;
-use namada_gas::TxGasMeter;
-use namada_parameters::get_gas_scale;
-use namada_state::TxWrites;
-use namada_token::event::{TokenEvent, TokenOperation};
-use namada_token::utils::is_masp_transfer;
-use namada_tx::action::{is_ibc_shielding_transfer, Read};
-use namada_tx::data::protocol::{ProtocolTx, ProtocolTxType};
-use namada_tx::data::{
+use namada_sdk::events::EventLevel;
+use namada_sdk::gas::{Gas, GasMetering, TxGasMeter, VpGasMeter};
+use namada_sdk::hash::Hash;
+use namada_sdk::ibc::{IbcTxDataHash, IbcTxDataRefs};
+use namada_sdk::masp::{MaspTxRefs, TxId};
+use namada_sdk::parameters::get_gas_scale;
+use namada_sdk::state::{
+    DBIter, State, StorageHasher, StorageRead, TxWrites, WlState, DB,
+};
+use namada_sdk::storage::TxIndex;
+use namada_sdk::token::event::{TokenEvent, TokenOperation};
+use namada_sdk::token::utils::is_masp_transfer;
+use namada_sdk::token::Amount;
+use namada_sdk::tx::action::{self, Read};
+use namada_sdk::tx::data::protocol::{ProtocolTx, ProtocolTxType};
+use namada_sdk::tx::data::{
     BatchedTxResult, ExtendedTxResult, TxResult, VpStatusFlags, VpsResult,
     WrapperTx,
 };
-use namada_tx::{BatchedTxRef, Tx, TxCommitments};
+use namada_sdk::tx::{BatchedTxRef, Tx, TxCommitments};
+use namada_sdk::validation::{
+    EthBridgeNutVp, EthBridgePoolVp, EthBridgeVp, GovernanceVp, IbcVp, MaspVp,
+    MultitokenVp, NativeVpCtx, ParametersVp, PgfVp, PosVp,
+};
+use namada_sdk::{
+    eth_bridge, governance, ibc, parameters, proof_of_stake, state, storage,
+    token,
+};
+use namada_vm::wasm::{TxCache, VpCache};
+use namada_vm::{self, wasm, WasmCacheAccess};
 use namada_vote_ext::EthereumTxData;
+use namada_vp::native_vp::NativeVp;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use smooth_operator::checked;
 use thiserror::Error;
-
-use crate::address::{Address, InternalAddress};
-use crate::ledger::gas::{GasMetering, VpGasMeter};
-use crate::ledger::governance::GovernanceVp;
-use crate::ledger::native_vp::ethereum_bridge::bridge_pool_vp::BridgePoolVp;
-use crate::ledger::native_vp::ethereum_bridge::nut::NonUsableTokens;
-use crate::ledger::native_vp::ethereum_bridge::vp::EthBridge;
-use crate::ledger::native_vp::ibc::Ibc;
-use crate::ledger::native_vp::masp::MaspVp;
-use crate::ledger::native_vp::multitoken::MultitokenVp;
-use crate::ledger::native_vp::parameters::{self, ParametersVp};
-use crate::ledger::native_vp::{self, NativeVp};
-use crate::ledger::pgf::PgfVp;
-use crate::ledger::pos::{self, PosVP};
-use crate::state::{DBIter, State, StorageHasher, StorageRead, WlState, DB};
-use crate::storage;
-use crate::storage::TxIndex;
-use crate::token::Amount;
-use crate::vm::wasm::{TxCache, VpCache};
-use crate::vm::{self, wasm, WasmCacheAccess};
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -58,13 +54,13 @@ pub enum Error {
     #[error("Missing tx section: {0}")]
     MissingSection(String),
     #[error("State error: {0}")]
-    StateError(namada_state::Error),
+    StateError(state::Error),
     #[error("Storage error: {0}")]
-    StorageError(namada_state::StorageError),
+    StorageError(state::StorageError),
     #[error("Wrapper tx runner error: {0}")]
     WrapperRunnerError(String),
     #[error("Transaction runner error: {0}")]
-    TxRunnerError(vm::wasm::run::Error),
+    TxRunnerError(wasm::run::Error),
     #[error("{0:?}")]
     ProtocolTxError(#[from] eyre::Error),
     #[error("The atomic batch failed at inner transaction {0}")]
@@ -80,31 +76,31 @@ pub enum Error {
     )]
     ReplayAttempt(Hash),
     #[error("Error executing VP for addresses: {0:?}")]
-    VpRunnerError(vm::wasm::run::Error),
+    VpRunnerError(wasm::run::Error),
     #[error("The address {0} doesn't exist")]
     MissingAddress(Address),
     #[error("IBC native VP: {0}")]
-    IbcNativeVpError(crate::ledger::native_vp::ibc::Error),
+    IbcNativeVpError(ibc::vp::Error),
     #[error("PoS native VP: {0}")]
-    PosNativeVpError(pos::vp::Error),
+    PosNativeVpError(proof_of_stake::vp::Error),
     #[error("PoS native VP panicked")]
     PosNativeVpRuntime,
     #[error("Parameters native VP: {0}")]
-    ParametersNativeVpError(parameters::Error),
+    ParametersNativeVpError(parameters::vp::Error),
     #[error("Multitoken native VP: {0}")]
-    MultitokenNativeVpError(crate::ledger::native_vp::multitoken::Error),
+    MultitokenNativeVpError(token::vp::MultitokenError),
     #[error("Governance native VP error: {0}")]
-    GovernanceNativeVpError(crate::ledger::governance::Error),
+    GovernanceNativeVpError(governance::vp::Error),
     #[error("Pgf native VP error: {0}")]
-    PgfNativeVpError(crate::ledger::pgf::Error),
+    PgfNativeVpError(governance::vp::pgf::Error),
     #[error("Ethereum bridge native VP error: {0:?}")]
-    EthBridgeNativeVpError(native_vp::ethereum_bridge::vp::Error),
+    EthBridgeNativeVpError(eth_bridge::vp::EthBridgeError),
     #[error("Ethereum bridge pool native VP error: {0:?}")]
-    BridgePoolNativeVpError(native_vp::ethereum_bridge::bridge_pool_vp::Error),
+    BridgePoolNativeVpError(eth_bridge::vp::BridgePoolError),
     #[error("Non usable tokens native VP error: {0:?}")]
-    NutNativeVpError(native_vp::ethereum_bridge::nut::Error),
+    NutNativeVpError(eth_bridge::vp::NutError),
     #[error("MASP native VP error: {0}")]
-    MaspNativeVpError(native_vp::masp::Error),
+    MaspNativeVpError(token::vp::MaspError),
     #[error("Access to an internal address {0:?} is forbidden")]
     AccessForbidden(InternalAddress),
 }
@@ -409,14 +405,14 @@ where
                     let actions =
                         state.read_actions().map_err(Error::StateError)?;
                     if let Some(masp_section_ref) =
-                        namada_tx::action::get_masp_section_ref(&actions)
+                        action::get_masp_section_ref(&actions)
                     {
                         extended_tx_result
                             .masp_tx_refs
                             .0
                             .push(masp_section_ref);
                     }
-                    if is_ibc_shielding_transfer(&*state)
+                    if action::is_ibc_shielding_transfer(&*state)
                         .map_err(Error::StateError)?
                     {
                         extended_tx_result
@@ -464,7 +460,11 @@ pub(crate) fn apply_wrapper_tx<S, D, H, CA>(
     block_proposer: Option<&Address>,
 ) -> Result<ExtendedTxResult<Error>>
 where
-    S: State<D = D, H = H> + Read<Err = namada_state::Error> + TxWrites + Sync,
+    S: 'static
+        + State<D = D, H = H>
+        + Read<Err = state::Error>
+        + TxWrites
+        + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
@@ -530,10 +530,11 @@ pub fn transfer_fee<S, D, H, CA>(
     tx_index: &TxIndex,
 ) -> Result<Option<MaspTxResult>>
 where
-    S: State<D = D, H = H>
+    S: 'static
+        + State<D = D, H = H>
         + StorageRead
         + TxWrites
-        + Read<Err = namada_state::Error>
+        + Read<Err = state::Error>
         + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -541,14 +542,14 @@ where
 {
     match wrapper.get_tx_fee() {
         Ok(fees) => {
-            let fees = crate::token::denom_to_amount(
+            let fees = token::denom_to_amount(
                 fees,
                 &wrapper.fee.token,
                 shell_params.state,
             )
             .map_err(Error::StorageError)?;
 
-            let balance = crate::token::read_balance(
+            let balance = token::read_balance(
                 shell_params.state,
                 &wrapper.fee.token,
                 &wrapper.fee_payer(),
@@ -573,7 +574,7 @@ where
                 if let Ok(Some(valid_batched_tx_result)) =
                     try_masp_fee_payment(shell_params, tx, tx_index)
                 {
-                    let balance = crate::token::read_balance(
+                    let balance = token::read_balance(
                         shell_params.state,
                         &wrapper.fee.token,
                         &wrapper.fee_payer(),
@@ -625,7 +626,7 @@ where
             };
 
             let target_post_balance = Some(
-                namada_token::read_balance(
+                token::read_balance(
                     shell_params.state,
                     &wrapper.fee.token,
                     block_proposer,
@@ -683,9 +684,10 @@ fn try_masp_fee_payment<S, D, H, CA>(
     tx_index: &TxIndex,
 ) -> Result<Option<MaspTxResult>>
 where
-    S: State<D = D, H = H>
+    S: 'static
+        + State<D = D, H = H>
         + StorageRead
-        + Read<Err = namada_state::Error>
+        + Read<Err = state::Error>
         + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -697,19 +699,16 @@ where
     // actually be the lowest between the protocol parameter and the actual gas
     // limit of the transaction
     let max_gas_limit = state
-        .read::<u64>(
-            &namada_parameters::storage::get_masp_fee_payment_gas_limit_key(),
-        )
+        .read::<u64>(&parameters::storage::get_masp_fee_payment_gas_limit_key())
         .expect("Error reading the storage")
         .expect("Missing masp fee payment gas limit in storage")
         .min(tx_gas_meter.borrow().tx_gas_limit.into());
     let gas_scale = get_gas_scale(&**state).map_err(Error::StorageError)?;
 
     let mut gas_meter = TxGasMeter::new(
-        namada_gas::Gas::from_whole_units(max_gas_limit.into(), gas_scale)
-            .ok_or_else(|| {
-                Error::GasError("Overflow in gas expansion".to_string())
-            })?,
+        Gas::from_whole_units(max_gas_limit.into(), gas_scale).ok_or_else(
+            || Error::GasError("Overflow in gas expansion".to_string()),
+        )?,
     );
     gas_meter
         .copy_consumed_gas_from(&tx_gas_meter.borrow())
@@ -755,14 +754,14 @@ where
                     && result.is_accepted()
                 {
                     if let Some(masp_tx_id) =
-                        namada_tx::action::get_masp_section_ref(&actions)
+                        action::get_masp_section_ref(&actions)
                     {
                         Some(MaspTxResult {
                             tx_result: result,
                             masp_section_ref: Either::Left(masp_tx_id),
                         })
                     } else {
-                        is_ibc_shielding_transfer(*state)
+                        action::is_ibc_shielding_transfer(*state)
                             .map_err(Error::StateError)?
                             .then_some(MaspTxResult {
                                 tx_result: result,
@@ -812,18 +811,12 @@ fn fee_token_transfer<WLS>(
 where
     WLS: State + StorageRead + TxWrites,
 {
-    crate::token::transfer(
-        &mut state.with_tx_writes(),
-        token,
-        src,
-        dest,
-        amount,
-    )
-    .map_err(|err| {
-        state.write_log_mut().drop_tx();
+    token::transfer(&mut state.with_tx_writes(), token, src, dest, amount)
+        .map_err(|err| {
+            state.write_log_mut().drop_tx();
 
-        Error::StorageError(err)
-    })
+            Error::StorageError(err)
+        })
 }
 
 /// Check if the fee payer has enough transparent balance to pay fees
@@ -833,9 +826,10 @@ pub fn check_fees<S, D, H, CA>(
     wrapper: &WrapperTx,
 ) -> Result<Option<MaspTxResult>>
 where
-    S: State<D = D, H = H>
+    S: 'static
+        + State<D = D, H = H>
         + StorageRead
-        + Read<Err = namada_state::Error>
+        + Read<Err = state::Error>
         + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -843,14 +837,14 @@ where
 {
     match wrapper.get_tx_fee() {
         Ok(fees) => {
-            let fees = crate::token::denom_to_amount(
+            let fees = token::denom_to_amount(
                 fees,
                 &wrapper.fee.token,
                 shell_params.state,
             )
             .map_err(Error::StorageError)?;
 
-            let balance = crate::token::read_balance(
+            let balance = token::read_balance(
                 shell_params.state,
                 &wrapper.fee.token,
                 &wrapper.fee_payer(),
@@ -868,7 +862,7 @@ where
                             &TxIndex::default(),
                         )
                     {
-                        let balance = crate::token::read_balance(
+                        let balance = token::read_balance(
                             shell_params.state,
                             &wrapper.fee.token,
                             &wrapper.fee_payer(),
@@ -900,13 +894,13 @@ where
 
 /// Apply a transaction going via the wasm environment. Gas will be metered and
 /// validity predicates will be triggered in the normal way.
-pub fn apply_wasm_tx<'a, S, D, H, CA>(
+pub fn apply_wasm_tx<S, D, H, CA>(
     batched_tx: &BatchedTxRef<'_>,
     tx_index: &TxIndex,
-    shell_params: ShellParams<'a, S, D, H, CA>,
+    shell_params: ShellParams<'_, S, D, H, CA>,
 ) -> Result<BatchedTxResult>
 where
-    S: State<D = D, H = H> + Sync,
+    S: 'static + State<D = D, H = H> + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
@@ -963,7 +957,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    use namada_ethereum_bridge::protocol::transactions;
+    use namada_sdk::eth_bridge::protocol::transactions;
     use namada_vote_ext::{ethereum_events, validator_set_update};
 
     let Some(data) = data else {
@@ -1078,7 +1072,7 @@ fn check_vps<S, CA>(
     }: CheckVps<'_, S, CA>,
 ) -> Result<VpsResult>
 where
-    S: State + Sync,
+    S: 'static + State + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
     let (verifiers, keys_changed) = state
@@ -1115,7 +1109,7 @@ fn execute_vps<S, CA>(
     vp_wasm_cache: &mut VpCache<CA>,
 ) -> Result<VpsResult>
 where
-    S: State + Sync,
+    S: 'static + State + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
     let vps_result = verifiers
@@ -1126,7 +1120,7 @@ where
             let tx_accepted = match &addr {
                 Address::Implicit(_) | Address::Established(_) => {
                     let (vp_hash, gas) = state
-                        .validity_predicate(addr)
+                        .validity_predicate::<parameters::Store<()>>(addr)
                         .map_err(Error::StateError)?;
                     gas_meter
                         .borrow_mut()
@@ -1156,7 +1150,7 @@ where
                     })
                 }
                 Address::Internal(internal_addr) => {
-                    let ctx = native_vp::Ctx::new(
+                    let ctx = NativeVpCtx::new(
                         addr,
                         state,
                         batched_tx.tx,
@@ -1170,7 +1164,7 @@ where
 
                     match internal_addr {
                         InternalAddress::PoS => {
-                            let pos = PosVP { ctx };
+                            let pos = PosVp::new(ctx);
                             pos.validate_tx(
                                 batched_tx,
                                 &keys_changed,
@@ -1179,7 +1173,7 @@ where
                             .map_err(Error::PosNativeVpError)
                         }
                         InternalAddress::Ibc => {
-                            let ibc = Ibc { ctx };
+                            let ibc = IbcVp::new(ctx);
                             ibc.validate_tx(
                                 batched_tx,
                                 &keys_changed,
@@ -1188,7 +1182,7 @@ where
                             .map_err(Error::IbcNativeVpError)
                         }
                         InternalAddress::Parameters => {
-                            let parameters = ParametersVp { ctx };
+                            let parameters = ParametersVp::new(ctx);
                             parameters
                                 .validate_tx(
                                     batched_tx,
@@ -1201,7 +1195,7 @@ where
                             Error::AccessForbidden((*internal_addr).clone()),
                         ),
                         InternalAddress::Governance => {
-                            let governance = GovernanceVp { ctx };
+                            let governance = GovernanceVp::new(ctx);
                             governance
                                 .validate_tx(
                                     batched_tx,
@@ -1210,8 +1204,18 @@ where
                                 )
                                 .map_err(Error::GovernanceNativeVpError)
                         }
+                        InternalAddress::Pgf => {
+                            let pgf_vp = PgfVp::new(ctx);
+                            pgf_vp
+                                .validate_tx(
+                                    batched_tx,
+                                    &keys_changed,
+                                    &verifiers,
+                                )
+                                .map_err(Error::PgfNativeVpError)
+                        }
                         InternalAddress::Multitoken => {
-                            let multitoken = MultitokenVp { ctx };
+                            let multitoken = MultitokenVp::new(ctx);
                             multitoken
                                 .validate_tx(
                                     batched_tx,
@@ -1220,8 +1224,17 @@ where
                                 )
                                 .map_err(Error::MultitokenNativeVpError)
                         }
+                        InternalAddress::Masp => {
+                            let masp = MaspVp::new(ctx);
+                            masp.validate_tx(
+                                batched_tx,
+                                &keys_changed,
+                                &verifiers,
+                            )
+                            .map_err(Error::MaspNativeVpError)
+                        }
                         InternalAddress::EthBridge => {
-                            let bridge = EthBridge { ctx };
+                            let bridge = EthBridgeVp::new(ctx);
                             bridge
                                 .validate_tx(
                                     batched_tx,
@@ -1231,7 +1244,7 @@ where
                                 .map_err(Error::EthBridgeNativeVpError)
                         }
                         InternalAddress::EthBridgePool => {
-                            let bridge_pool = BridgePoolVp { ctx };
+                            let bridge_pool = EthBridgePoolVp::new(ctx);
                             bridge_pool
                                 .validate_tx(
                                     batched_tx,
@@ -1240,18 +1253,8 @@ where
                                 )
                                 .map_err(Error::BridgePoolNativeVpError)
                         }
-                        InternalAddress::Pgf => {
-                            let pgf_vp = PgfVp { ctx };
-                            pgf_vp
-                                .validate_tx(
-                                    batched_tx,
-                                    &keys_changed,
-                                    &verifiers,
-                                )
-                                .map_err(Error::PgfNativeVpError)
-                        }
                         InternalAddress::Nut(_) => {
-                            let non_usable_tokens = NonUsableTokens { ctx };
+                            let non_usable_tokens = EthBridgeNutVp::new(ctx);
                             non_usable_tokens
                                 .validate_tx(
                                     batched_tx,
@@ -1273,15 +1276,6 @@ where
                                         internal_addr.clone(),
                                     )
                                 })
-                        }
-                        InternalAddress::Masp => {
-                            let masp = MaspVp { ctx };
-                            masp.validate_tx(
-                                batched_tx,
-                                &keys_changed,
-                                &verifiers,
-                            )
-                            .map_err(Error::MaspNativeVpError)
                         }
                         InternalAddress::TempStorage => Err(
                             // Temp storage changes must never be committed
@@ -1362,21 +1356,21 @@ fn merge_vp_results(
 #[cfg(test)]
 mod tests {
     use eyre::Result;
-    use namada_core::collections::HashMap;
-    use namada_core::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
-    use namada_core::ethereum_events::{EthereumEvent, TransferToNamada};
-    use namada_core::keccak::keccak_hash;
-    use namada_core::storage::BlockHeight;
-    use namada_core::voting_power::FractionalVotingPower;
-    use namada_core::{address, key};
-    use namada_ethereum_bridge::protocol::transactions::votes::{
+    use namada_sdk::collections::HashMap;
+    use namada_sdk::eth_bridge::protocol::transactions::votes::{
         EpochedVotingPower, Votes,
     };
-    use namada_ethereum_bridge::storage::eth_bridge_queries::EthBridgeQueries;
-    use namada_ethereum_bridge::storage::proof::EthereumProof;
-    use namada_ethereum_bridge::storage::{vote_tallies, vp};
-    use namada_ethereum_bridge::test_utils;
-    use namada_tx::{SignableEthMessage, Signed};
+    use namada_sdk::eth_bridge::storage::eth_bridge_queries::EthBridgeQueries;
+    use namada_sdk::eth_bridge::storage::proof::EthereumProof;
+    use namada_sdk::eth_bridge::storage::{vote_tallies, vp};
+    use namada_sdk::eth_bridge::test_utils;
+    use namada_sdk::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
+    use namada_sdk::ethereum_events::{EthereumEvent, TransferToNamada};
+    use namada_sdk::keccak::keccak_hash;
+    use namada_sdk::storage::BlockHeight;
+    use namada_sdk::tx::{SignableEthMessage, Signed};
+    use namada_sdk::voting_power::FractionalVotingPower;
+    use namada_sdk::{address, key};
     use namada_vote_ext::bridge_pool_roots::BridgePoolRootVext;
     use namada_vote_ext::ethereum_events::EthereumEventsVext;
 
@@ -1521,7 +1515,7 @@ mod tests {
         let dst_address = Address::Established([0xba; 20].into());
 
         // supply an address with 1000 of said token
-        namada_token::credit_tokens(
+        token::credit_tokens(
             &mut state,
             &token_address,
             &src_address,
@@ -1536,12 +1530,12 @@ mod tests {
 
         // "execute" a dummy tx, by manually performing its state changes
         let (dummy_tx, changed_keys, verifiers) = {
-            let mut tx = Tx::from_type(namada_tx::data::TxType::Raw);
-            tx.set_code(namada_tx::Code::new(vec![], None));
-            tx.set_data(namada_tx::Data::new(vec![]));
+            let mut tx = Tx::from_type(namada_sdk::tx::data::TxType::Raw);
+            tx.set_code(namada_sdk::tx::Code::new(vec![], None));
+            tx.set_data(namada_sdk::tx::Data::new(vec![]));
 
             // transfer half of the supply of src to dst
-            namada_token::transfer(
+            token::transfer(
                 &mut state,
                 &token_address,
                 &src_address,
@@ -1552,11 +1546,11 @@ mod tests {
 
             let changed_keys = {
                 let mut set = BTreeSet::new();
-                set.insert(namada_token::storage_key::balance_key(
+                set.insert(token::storage_key::balance_key(
                     &token_address,
                     &src_address,
                 ));
-                set.insert(namada_token::storage_key::balance_key(
+                set.insert(token::storage_key::balance_key(
                     &token_address,
                     &dst_address,
                 ));

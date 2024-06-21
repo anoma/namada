@@ -15,26 +15,14 @@ version.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["tendermint-rpc", "std", "rand", "migrations"]
-
+default = ["std"]
 mainnet = ["namada_core/mainnet", "namada_events/mainnet"]
-
-multicore = ["masp_proofs/multicore"]
-
-namada-sdk = ["tendermint-rpc", "masp_primitives/transparent-inputs"]
-
+multicore = ["masp_proofs/multicore", "namada_token/multicore"]
 std = ["fd-lock", "download-params"]
-rand = ["dep:rand", "rand_core", "namada_core/rand"]
-
-# tendermint-rpc support
-tendermint-rpc = ["async-client", "dep:tendermint-rpc"]
-
-# Enable queries support for an async client
-async-client = ["async-trait"]
-
 async-send = []
-
 namada-eth-bridge = ["namada_ethereum_bridge/namada-eth-bridge"]
+benches = ["namada_core/benches", "namada_core/testing", "namada_state/benches"]
+wasm-runtime = ["namada_vm/wasm-runtime"]
 
 # for integration tests and test utilities
 testing = [
@@ -44,11 +32,11 @@ testing = [
   "namada_ethereum_bridge/testing",
   "namada_governance/testing",
   "namada_ibc/testing",
+  "namada_parameters/testing",
   "namada_proof_of_stake/testing",
   "namada_storage/testing",
   "namada_token/testing",
   "namada_tx/testing",
-  "async-client",
   "proptest",
   "jubjub",
 ]
@@ -72,7 +60,7 @@ migrations = [
 
 [dependencies]
 namada_account = { path = "../account" }
-namada_core = { path = "../core" }
+namada_core = { path = "../core", features = ["control_flow", "rand"] }
 namada_ethereum_bridge = { path = "../ethereum_bridge", default-features = false }
 namada_events = { path = "../events" }
 namada_gas = { path = "../gas" }
@@ -86,9 +74,11 @@ namada_state = { path = "../state" }
 namada_storage = { path = "../storage" }
 namada_token = { path = "../token" }
 namada_tx = { path = "../tx" }
+namada_vm = { path = "../vm", default-features = false }
 namada_vote_ext = { path = "../vote_ext" }
+namada_vp = { path = "../vp" }
 
-async-trait = { workspace = true, optional = true }
+async-trait.workspace = true
 bimap.workspace = true
 borsh.workspace = true
 borsh-ext.workspace = true
@@ -118,15 +108,15 @@ paste.workspace = true
 patricia_tree.workspace = true
 proptest = { workspace = true, optional = true }
 prost.workspace = true
-rand = { workspace = true, optional = true }
-rand_core = { workspace = true, optional = true }
+rand.workspace = true
+rand_core.workspace = true
 regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 slip10_ed25519.workspace = true
 smooth-operator.workspace = true
-tendermint-rpc = { workspace = true, optional = true }
+tendermint-rpc.workspace = true
 thiserror.workspace = true
 tiny-bip39.workspace = true
 tiny-hderive.workspace = true
@@ -140,7 +130,6 @@ tokio = { workspace = true, features = ["full"] }
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 tokio = { workspace = true, default-features = false, features = ["sync"] }
-wasmtimer = "0.2.0"
 
 [dev-dependencies]
 namada_account = { path = "../account", features = ["testing"]}
@@ -162,7 +151,9 @@ namada_storage = { path = "../storage", features = ["testing"] }
 namada_test_utils = { path = "../test_utils" }
 namada_token = { path = "../token", features = ["testing"] }
 namada_tx = { path = "../tx", features = ["testing"]}
-namada_vote_ext = {path = "../vote_ext"}
+namada_vm = { path = "../vm" }
+namada_vote_ext = { path = "../vote_ext" }
+namada_vp = { path = "../vp" }
 
 assert_matches.workspace = true
 base58.workspace = true

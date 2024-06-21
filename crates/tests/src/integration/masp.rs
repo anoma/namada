@@ -3,9 +3,6 @@ use std::str::FromStr;
 
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
-use namada::state::{StorageRead, StorageWrite};
-use namada::token::storage_key::masp_token_map_key;
-use namada::token::{self, DenominatedAmount};
 use namada_apps_lib::wallet::defaults::christel_keypair;
 use namada_core::dec::Dec;
 use namada_core::masp::TokenMap;
@@ -13,6 +10,9 @@ use namada_node::shell::testing::client::run;
 use namada_node::shell::testing::node::NodeResults;
 use namada_node::shell::testing::utils::{Bin, CapturedOutput};
 use namada_sdk::masp::fs::FsShieldedUtils;
+use namada_sdk::state::{StorageRead, StorageWrite};
+use namada_sdk::token::storage_key::masp_token_map_key;
+use namada_sdk::token::{self, DenominatedAmount};
 use namada_sdk::DEFAULT_GAS_LIMIT;
 use test_log::test;
 
@@ -1498,9 +1498,9 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
         .clone();
     let mut txs = vec![];
     for bytes in txs_bytes {
-        let mut tx = namada::tx::Tx::deserialize(&bytes).unwrap();
+        let mut tx = namada_sdk::tx::Tx::deserialize(&bytes).unwrap();
         tx.add_wrapper(
-            namada::tx::data::wrapper::Fee {
+            namada_sdk::tx::data::wrapper::Fee {
                 amount_per_gas_unit: DenominatedAmount::native(1.into()),
                 token: native_token.clone(),
             },
@@ -2972,7 +2972,7 @@ fn masp_fee_payment_with_different_token() -> Result<()> {
         // Whitelist BTC for gas payment
         genesis.parameters.parameters.minimum_gas_price.insert(
             "btc".into(),
-            DenominatedAmount::new(1.into(), namada::token::Denomination(6)),
+            DenominatedAmount::new(1.into(), token::Denomination(6)),
         );
         genesis
     })?;

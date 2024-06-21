@@ -41,8 +41,9 @@ pub mod states;
 
 use std::marker::PhantomData;
 
-use namada::proof_of_stake::pos_queries::PosQueries;
-use namada::state::{self, WlState};
+use namada_sdk::parameters;
+use namada_sdk::proof_of_stake::pos_queries::PosQueries;
+use namada_sdk::state::{self, WlState};
 
 #[allow(unused_imports)]
 use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
@@ -135,7 +136,7 @@ where
     fn from(storage: &WlState<D, H>) -> Self {
         Self::init(
             storage.pos_queries().get_max_proposal_bytes().get(),
-            namada::parameters::get_max_block_gas(storage).unwrap(),
+            parameters::get_max_block_gas(storage).unwrap(),
         )
     }
 }

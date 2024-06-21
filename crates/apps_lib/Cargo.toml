@@ -18,8 +18,8 @@ mainnet = [
   "namada_sdk/mainnet",
 ]
 # for integration tests and test utilities
-testing = ["namada_test_utils", "lazy_static"]
-benches = ["namada_test_utils", "lazy_static"]
+testing = ["namada_test_utils", "lazy_static", "namada_sdk/testing"]
+benches = ["namada_test_utils", "lazy_static", "namada_sdk/benches"]
 integration = []
 migrations = [
   "namada_migrations",
@@ -31,10 +31,12 @@ namada-eth-bridge = [
 ]
 
 [dependencies]
+namada_core = {path = "../core"}
 namada_macros = {path = "../macros"}
 namada_migrations = {path = "../migrations", optional = true}
-namada_sdk = {path = "../sdk", default-features = false, features = ["download-params", "std", "rand"]}
+namada_sdk = {path = "../sdk", features = ["download-params", "multicore"]}
 namada_test_utils = {path = "../test_utils", optional = true}
+namada_vm = {path = "../vm"}
 
 async-trait.workspace = true
 base64.workspace = true
@@ -68,7 +70,7 @@ sha2.workspace = true
 tar.workspace = true
 tempfile.workspace = true
 tendermint-config.workspace = true
-tendermint-rpc.workspace = true
+tendermint-rpc = { workspace = true, features = ["http-client"] }
 textwrap-macros = "0.3.0"
 thiserror.workspace = true
 tokio = {workspace = true, features = ["full"]}
@@ -80,6 +82,7 @@ tracing.workspace = true
 zeroize.workspace = true
 
 [dev-dependencies]
+namada_sdk = {path = "../sdk", features = ["testing"]}
 namada_test_utils = {path = "../test_utils"}
 
 assert_matches.workspace = true

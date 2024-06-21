@@ -6,9 +6,6 @@ use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use color_eyre::eyre::Result;
 use data_encoding::HEXLOWER;
-use namada::account::AccountPublicKeysMap;
-use namada::core::collections::HashMap;
-use namada::token::{self, Amount, DenominatedAmount};
 use namada_apps_lib::wallet::defaults::{self, albert_keypair};
 use namada_core::dec::Dec;
 use namada_core::hash::Hash;
@@ -17,8 +14,11 @@ use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_node::shell::testing::client::run;
 use namada_node::shell::testing::node::NodeResults;
 use namada_node::shell::testing::utils::{Bin, CapturedOutput};
+use namada_sdk::account::AccountPublicKeysMap;
+use namada_sdk::collections::HashMap;
 use namada_sdk::migrations;
 use namada_sdk::queries::RPC;
+use namada_sdk::token::{self, DenominatedAmount};
 use namada_sdk::tx::{TX_TRANSFER_WASM, VP_USER_WASM};
 use namada_test_utils::TestWasms;
 use test_log::test;
@@ -156,7 +156,7 @@ fn ledger_txs_and_queries() -> Result<()> {
         vec![
             "init-account",
             "--public-keys",
-            // Value obtained from `namada::core::key::ed25519::tests::gen_keypair`
+            // Value obtained from `namada_sdk::key::ed25519::tests::gen_keypair`
             "tpknam1qpqfzxu3gt05jx2mvg82f4anf90psqerkwqhjey4zlqv0qfgwuvkzt5jhkp",
             "--threshold",
             "1",
@@ -952,7 +952,8 @@ fn proposal_submission() -> Result<()> {
     let init_account = vec![
         "init-account",
         "--public-keys",
-        // Value obtained from `namada::core::key::ed25519::tests::gen_keypair`
+        // Value obtained from
+        // `namada_sdk::key::ed25519::tests::gen_keypair`
         "tpknam1qpqfzxu3gt05jx2mvg82f4anf90psqerkwqhjey4zlqv0qfgwuvkzt5jhkp",
         "--threshold",
         "1",
@@ -1693,11 +1694,11 @@ fn enforce_fee_payment() -> Result<()> {
 
     let mut txs = vec![];
     for bytes in txs_bytes {
-        let mut tx = namada::tx::Tx::deserialize(&bytes).unwrap();
+        let mut tx = namada_sdk::tx::Tx::deserialize(&bytes).unwrap();
         tx.add_wrapper(
-            namada::tx::data::wrapper::Fee {
+            namada_sdk::tx::data::wrapper::Fee {
                 amount_per_gas_unit: DenominatedAmount::native(
-                    Amount::native_whole(1),
+                    token::Amount::native_whole(1),
                 ),
                 token: native_token.clone(),
             },
@@ -1842,8 +1843,8 @@ fn scheduled_migration() -> Result<()> {
         ))
         .expect("Test failed")
         .data;
-    let amount = Amount::try_from_slice(&bytes).expect("Test failed");
-    assert_eq!(amount, Amount::native_whole(1337));
+    let amount = token::Amount::try_from_slice(&bytes).expect("Test failed");
+    assert_eq!(amount, token::Amount::native_whole(1337));
 
     // check that no migration is scheduled
     {
@@ -1858,7 +1859,7 @@ fn make_migration_json() -> (Hash, tempfile::NamedTempFile) {
     let updates = [migrations::DbUpdateType::Add {
         key: Key::parse("bing/fucking/bong").expect("Test failed"),
         cf: DbColFam::SUBSPACE,
-        value: Amount::native_whole(1337).into(),
+        value: token::Amount::native_whole(1337).into(),
         force: false,
     }];
     let changes = migrations::DbChanges {

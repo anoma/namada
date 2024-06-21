@@ -34,7 +34,7 @@ pub fn ibc_actions(ctx: &mut Ctx) -> IbcActions<'_, Ctx> {
     actions
 }
 
-impl<'s> IbcStorageContext for Ctx {
+impl IbcStorageContext for Ctx {
     type Storage = Self;
 
     fn storage(&self) -> &Self::Storage {
