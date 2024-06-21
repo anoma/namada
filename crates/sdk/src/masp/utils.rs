@@ -62,9 +62,10 @@ pub enum MaspClientCapabilities {
 /// of how shielded-sync fetches the necessary data
 /// from a remote server.
 // TODO: redesign this api with progress bars in mind
-pub trait MaspClient<'client, C: Client> {
-    /// Return the wrapped client.
-    fn rpc_client(&self) -> &C;
+pub trait MaspClient {
+    /// Return the last block height we can retrieve data from.
+    #[allow(async_fn_in_trait)]
+    async fn last_block_height(&self) -> Result<Option<BlockHeight>, Error>;
 
     /// Fetch shielded transfers from blocks heights in the range `[from, to]`,
     /// keeping track of progress through `progress`. The fetched transfers
@@ -140,13 +141,10 @@ impl<'client, C> LedgerMaspClient<'client, C> {
 }
 
 #[cfg(not(target_family = "wasm"))]
-impl<'client, C: Client + Sync> MaspClient<'client, C>
-    for LedgerMaspClient<'client, C>
-where
-    LedgerMaspClient<'client, C>: 'client,
-{
-    fn rpc_client(&self) -> &C {
-        self.client
+impl<C: Client + Sync> MaspClient for LedgerMaspClient<'_, C> {
+    async fn last_block_height(&self) -> Result<Option<BlockHeight>, Error> {
+        let maybe_block = crate::rpc::query_block(self.client).await?;
+        Ok(maybe_block.map(|b| b.height))
     }
 
     async fn fetch_shielded_transfers<IO: Io>(

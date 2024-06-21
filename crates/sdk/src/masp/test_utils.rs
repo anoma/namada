@@ -102,9 +102,15 @@ impl<'client> TestingMaspClient<'client> {
     }
 }
 
-impl<'a> MaspClient<'a, TestingClient> for TestingMaspClient<'a> {
-    fn rpc_client(&self) -> &TestingClient {
-        self.client
+impl MaspClient for TestingMaspClient<'_> {
+    async fn last_block_height(&self) -> Result<Option<BlockHeight>, Error> {
+        Ok(self
+            .client
+            .state
+            .in_mem()
+            .last_block
+            .as_ref()
+            .map(|b| b.height))
     }
 
     async fn fetch_shielded_transfers<IO: Io>(

@@ -90,7 +90,7 @@ use crate::masp::utils::{
     fetch_channel, FetchQueueSender, MaspClient, ProgressTracker, RetryStrategy,
 };
 use crate::queries::Client;
-use crate::rpc::{query_block, query_conversion, query_denom};
+use crate::rpc::{query_conversion, query_denom};
 use crate::{
     control_flow, display_line, edisplay_line, rpc, MaybeSend, MaybeSync,
     Namada,
@@ -762,7 +762,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     /// ShieldedContext
     #[allow(clippy::too_many_arguments)]
     #[cfg(not(target_family = "wasm"))]
-    pub async fn fetch<'client, C, IO, M>(
+    pub async fn fetch<IO, M>(
         &mut self,
         client: M,
         progress: &impl ProgressTracker<IO>,
@@ -773,9 +773,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         fvks: &[ViewingKey],
     ) -> Result<(), Error>
     where
-        C: Client + Sync,
         IO: Io,
-        M: MaspClient<'client, C> + 'client,
+        M: MaspClient,
     {
         let shutdown_signal = control_flow::install_shutdown_signal();
         self.fetch_aux(
@@ -812,7 +811,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
     #[allow(clippy::too_many_arguments)]
     #[cfg(not(target_family = "wasm"))]
-    async fn fetch_aux<'client, C, IO, M>(
+    async fn fetch_aux<IO, M>(
         &mut self,
         client: M,
         progress: &impl ProgressTracker<IO>,
@@ -824,9 +823,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         mut shutdown_signal: ShutdownSignal,
     ) -> Result<(), Error>
     where
-        C: Client + Sync,
         IO: Io,
-        M: MaspClient<'client, C> + 'client,
+        M: MaspClient,
     {
         if start_query_height > last_query_height {
             return Err(Error::Other(format!(
@@ -866,9 +864,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let last_witnessed_tx = self.tx_note_map.keys().max().cloned();
 
         // Query for the last produced block height
-        let Some(last_block_height) =
-            query_block(client.rpc_client()).await?.map(|b| b.height)
-        else {
+        let Some(last_block_height) = client.last_block_height().await? else {
             return Err(Error::Other(
                 "No block has been committed yet".to_string(),
             ));
@@ -965,12 +961,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
     /// Obtain a chronologically-ordered list of all accepted shielded
     /// transactions from a node.
-    async fn fetch_shielded_transfers<
-        'client,
-        C: Client + Sync,
-        IO: Io,
-        M: MaspClient<'client, C> + 'client,
-    >(
+    async fn fetch_shielded_transfers<IO: Io, M: MaspClient>(
         &self,
         client: &M,
         progress: &impl ProgressTracker<IO>,
