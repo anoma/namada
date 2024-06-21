@@ -19,6 +19,8 @@
 
 pub mod arith;
 pub mod bytes;
+#[cfg(any(test, feature = "control_flow"))]
+pub mod control_flow;
 pub mod governance;
 pub mod hints;
 pub mod proof_of_stake;

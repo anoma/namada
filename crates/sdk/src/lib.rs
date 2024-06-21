@@ -34,7 +34,6 @@ pub mod signing;
 #[allow(clippy::result_large_err)]
 pub mod tx;
 
-pub mod control_flow;
 pub mod error;
 pub mod events;
 pub(crate) mod internal_macros;
@@ -55,6 +54,7 @@ use io::Io;
 use masp::{ShieldedContext, ShieldedUtils};
 use namada_core::address::Address;
 use namada_core::collections::HashSet;
+pub use namada_core::control_flow;
 use namada_core::dec::Dec;
 use namada_core::ethereum_events::EthAddress;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
