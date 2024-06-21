@@ -3,10 +3,11 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
+use borsh::BorshDeserialize;
 use masp_primitives::merkle_tree::{CommitmentTree, IncrementalWitness};
 use masp_primitives::sapling::Node;
 use namada_core::collections::HashMap;
-use namada_core::storage::BlockHeight;
+use namada_core::storage::{BlockHeight, TxIndex};
 use namada_tx::{IndexedTx, Tx};
 
 use crate::control_flow::ShutdownSignal;
@@ -218,6 +219,350 @@ impl<C: Client + Sync> MaspClient for LedgerMaspClient<'_, C> {
         }
 
         Ok(())
+    }
+}
+
+/// MASP client implementation that queries data from the
+/// [`namada-masp-indexer`].
+///
+/// [`namada-masp-indexer`]: <https://github.com/anoma/namada-masp-indexer>
+#[cfg(not(target_family = "wasm"))]
+#[derive(Clone, Debug)]
+pub struct IndexerMaspClient {
+    indexer_api: Arc<reqwest::Url>,
+    client: reqwest::Client,
+}
+
+#[cfg(not(target_family = "wasm"))]
+trait RequestBuilderExt {
+    fn keep_alive(self) -> reqwest::RequestBuilder;
+}
+
+#[cfg(not(target_family = "wasm"))]
+impl RequestBuilderExt for reqwest::RequestBuilder {
+    #[inline(always)]
+    fn keep_alive(self) -> reqwest::RequestBuilder {
+        self.header("Connection", "Keep-Alive")
+    }
+}
+
+#[cfg(not(target_family = "wasm"))]
+impl IndexerMaspClient {
+    /// Create a new [`IndexerMaspClient`].
+    #[inline]
+    pub fn new(client: reqwest::Client, indexer_api: reqwest::Url) -> Self {
+        let indexer_api = Arc::new(indexer_api);
+        Self {
+            client,
+            indexer_api,
+        }
+    }
+
+    fn endpoint(&self, which: &str) -> String {
+        format!("{}{which}", self.indexer_api)
+    }
+}
+
+#[cfg(not(target_family = "wasm"))]
+impl MaspClient for IndexerMaspClient {
+    fn capabilities(&self) -> MaspClientCapabilities {
+        MaspClientCapabilities::AllData
+    }
+
+    async fn last_block_height(&self) -> Result<Option<BlockHeight>, Error> {
+        use serde::Deserialize;
+
+        #[derive(Deserialize)]
+        struct Response {
+            block_height: u64,
+        }
+
+        let response = self
+            .client
+            .get(self.endpoint("/height"))
+            .keep_alive()
+            .send()
+            .await
+            .map_err(|err| {
+                Error::Other(format!(
+                    "Failed to fetch latest block height: {err}"
+                ))
+            })?;
+        let payload: Response = response.json().await.map_err(|err| {
+            Error::Other(format!(
+                "Could not deserialize latest block height JSON response: \
+                 {err}"
+            ))
+        })?;
+
+        Ok(if payload.block_height != 0 {
+            Some(BlockHeight(payload.block_height))
+        } else {
+            None
+        })
+    }
+
+    async fn fetch_shielded_transfers<IO: Io>(
+        &self,
+        progress: &impl ProgressTracker<IO>,
+        shutdown_signal: &mut ShutdownSignal,
+        mut tx_sender: FetchQueueSender,
+        BlockHeight(from): BlockHeight,
+        BlockHeight(to): BlockHeight,
+    ) -> Result<(), Error> {
+        use serde::Deserialize;
+
+        #[derive(Deserialize)]
+        struct TransactionBatch {
+            bytes: Vec<u8>,
+            index: u32,
+            block_height: u64,
+        }
+
+        #[derive(Deserialize)]
+        struct TxResponse {
+            transactions: Vec<TransactionBatch>,
+        }
+
+        let Some(off) = to.checked_sub(from) else {
+            return Err(Error::Other(format!(
+                "Invalid block range {from}-{to}: Beginning height {from} is \
+                 greater than ending height {to}"
+            )));
+        };
+
+        const MAX_RANGE_THRES: u64 = 30;
+        if off > MAX_RANGE_THRES {
+            return Err(Error::Other(format!(
+                "Invalid block range {from}-{to}: The maximum range of blocks \
+                 to fetch allowed by the indexer is {MAX_RANGE_THRES}"
+            )));
+        }
+
+        let txs_fut = async {
+            let response = self
+                .client
+                .get(self.endpoint("tx"))
+                .query(&[("height", from), ("height_offset", off)])
+                .send()
+                .await
+                .map_err(|err| {
+                    Error::Other(format!(
+                        "Failed to fetch transactions in the height range \
+                         {from}-{to}: {err}"
+                    ))
+                })?;
+            let payload: TxResponse = response.json().await.map_err(|err| {
+                Error::Other(format!(
+                    "Could not deserialize the transactions JSON response in \
+                     the height range {from}-{to}: {err}"
+                ))
+            })?;
+
+            Ok::<_, Error>(payload)
+        };
+        let payload = tokio::select! {
+            maybe_payload = txs_fut => {
+                maybe_payload?
+            }
+            _ = shutdown_signal => {
+                return Err(Error::Interrupt(
+                    "[ShieldedSync::Fetching]".to_string(),
+                ));
+            }
+        };
+
+        let mut fetch_iter = progress.fetch(from..=to);
+        let mut last_height = None;
+
+        for TransactionBatch {
+            bytes,
+            index,
+            block_height,
+        } in payload.transactions
+        {
+            type MaspTxBatch = Vec<masp_primitives::transaction::Transaction>;
+
+            let extracted_masp_txs = MaspTxBatch::try_from_slice(&bytes)
+                .map_err(|err| {
+                    Error::Other(format!(
+                        "Could not deserialize the masp txs borsh data at \
+                         height {block_height} and index {index}: {err}"
+                    ))
+                })?;
+            tx_sender.send((
+                IndexedTx {
+                    height: BlockHeight(block_height),
+                    index: TxIndex(index),
+                },
+                extracted_masp_txs,
+            ));
+
+            let curr_height = Some(block_height);
+            if curr_height > last_height {
+                last_height = curr_height;
+                _ = fetch_iter.next();
+            }
+        }
+
+        // NB: a hack to drain the iterator in case
+        // there were still some items left
+        // TODO: improve this lol
+        while fetch_iter.next().is_some() {}
+
+        Ok(())
+    }
+
+    async fn fetch_commitment_tree(
+        &self,
+        BlockHeight(height): BlockHeight,
+    ) -> Result<CommitmentTree<Node>, Error> {
+        use serde::Deserialize;
+
+        #[derive(Deserialize)]
+        struct Response {
+            commitment_tree: Vec<u8>,
+        }
+
+        let response = self
+            .client
+            .get(self.endpoint("/commitment-tree"))
+            .keep_alive()
+            .query(&[("height", height)])
+            .send()
+            .await
+            .map_err(|err| {
+                Error::Other(format!(
+                    "Failed to fetch commitment tree at height {height}: {err}"
+                ))
+            })?;
+        let payload: Response = response.json().await.map_err(|err| {
+            Error::Other(format!(
+                "Could not deserialize the commitment tree JSON response at \
+                 height {height}: {err}"
+            ))
+        })?;
+
+        BorshDeserialize::try_from_slice(&payload.commitment_tree).map_err(
+            |err| {
+                Error::Other(format!(
+                    "Could not deserialize the commitment tree borsh data at \
+                     height {height}: {err}"
+                ))
+            },
+        )
+    }
+
+    async fn fetch_tx_notes_map(
+        &self,
+        BlockHeight(height): BlockHeight,
+    ) -> Result<BTreeMap<IndexedTx, usize>, Error> {
+        use serde::Deserialize;
+
+        #[derive(Deserialize)]
+        struct Note {
+            // is_fee_unshielding: bool,
+            note_positon: usize,
+            index: u32,
+            block_height: u64,
+        }
+
+        #[derive(Deserialize)]
+        struct NotesMapResponse {
+            notes: Vec<Note>,
+        }
+
+        let response = self
+            .client
+            .get(self.endpoint("notes-map"))
+            .query(&[("height", height)])
+            .send()
+            .await
+            .map_err(|err| {
+                Error::Other(format!(
+                    "Failed to fetch notes map at height {height}: {err}"
+                ))
+            })?;
+
+        let notes_map: NotesMapResponse =
+            response.json().await.map_err(|err| {
+                Error::Other(format!(
+                    "Could not deserialize the notes map JSON response at \
+                     height {height}: {err}"
+                ))
+            })?;
+
+        Ok(notes_map
+            .notes
+            .into_iter()
+            .map(
+                |Note {
+                     index,
+                     block_height,
+                     note_positon,
+                 }| {
+                    (
+                        IndexedTx {
+                            index: TxIndex(index),
+                            height: BlockHeight(block_height),
+                        },
+                        note_positon,
+                    )
+                },
+            )
+            .collect())
+    }
+
+    async fn fetch_witness_map(
+        &self,
+        BlockHeight(height): BlockHeight,
+    ) -> Result<HashMap<usize, IncrementalWitness<Node>>, Error> {
+        use serde::Deserialize;
+
+        #[derive(Deserialize)]
+        struct Witness {
+            bytes: Vec<u8>,
+            index: usize,
+        }
+
+        #[derive(Deserialize)]
+        struct WitnessMapResponse {
+            witnesses: Vec<Witness>,
+        }
+
+        let response = self
+            .client
+            .get(self.endpoint("witness-map"))
+            .query(&[("height", height)])
+            .send()
+            .await
+            .map_err(|err| {
+                Error::Other(format!(
+                    "Failed to fetch witness map at height {height}: {err}"
+                ))
+            })?;
+        let payload: WitnessMapResponse =
+            response.json().await.map_err(|err| {
+                Error::Other(format!(
+                    "Could not deserialize the witness map JSON response at \
+                     height {height}: {err}"
+                ))
+            })?;
+
+        payload.witnesses.into_iter().try_fold(
+            HashMap::new(),
+            |mut accum, Witness { index, bytes }| {
+                let witness = BorshDeserialize::try_from_slice(&bytes)
+                    .map_err(|err| {
+                        Error::Other(format!(
+                            "Could not deserialize the witness borsh data at \
+                             height {height}: {err}"
+                        ))
+                    })?;
+                accum.insert(index, witness);
+                Ok(accum)
+            },
+        )
     }
 }
 
