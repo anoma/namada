@@ -1,5 +1,7 @@
 //! Time related logic for futures.
 
+#![allow(clippy::arithmetic_side_effects)]
+
 use std::future::Future;
 use std::ops::ControlFlow;
 
