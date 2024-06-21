@@ -33,6 +33,8 @@ pub mod masp;
 pub mod signing;
 #[allow(clippy::result_large_err)]
 pub mod tx;
+#[cfg(any(test, feature = "testing", feature = "validation"))]
+pub mod validation;
 
 pub mod error;
 pub mod events;
