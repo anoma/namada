@@ -701,14 +701,6 @@ where
     let ref_unshield_gas_meter = RefCell::new(gas_meter);
 
     let valid_batched_tx_result = {
-        // NOTE: A clean tx write log must be provided to this call
-        // for a correct vp validation. Block and batch write logs, instead,
-        // should contain any prior changes (if any). This is to simulate
-        // the fee-paying tx (to prevent the already written keys from being
-        // passed/triggering VPs) but we cannot commit the tx write log yet
-        // cause the tx could still be invalid. So we use the batch write log to
-        // dump the current modifications.
-        state.write_log_mut().commit_tx_to_batch();
         match apply_wasm_tx(
             tx.batch_ref_first_tx()
                 .ok_or_else(|| Error::MissingInnerTxs)?,
