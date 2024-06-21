@@ -5,25 +5,24 @@ mod test_bridge_pool_vp {
 
     use borsh::BorshDeserialize;
     use borsh_ext::BorshSerializeExt;
-    use namada::core::address::testing::{nam, wnam};
-    use namada::core::chain::ChainId;
-    use namada::core::eth_bridge_pool::{
-        GasFee, PendingTransfer, TransferToEthereum, TransferToEthereumKind,
-    };
-    use namada::core::ethereum_events::EthAddress;
-    use namada::core::key::{common, ed25519, SecretKey};
-    use namada::core::token::Amount;
-    use namada::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
-    use namada::gas::VpGasMeter;
-    use namada::ledger::native_vp::ethereum_bridge::bridge_pool_vp::BridgePoolVp;
-    use namada::tx::Tx;
     use namada_apps_lib::wallet::defaults::{albert_address, bertha_address};
     use namada_apps_lib::wasm_loader;
+    use namada_sdk::address::testing::{nam, wnam};
+    use namada_sdk::chain::ChainId;
+    use namada_sdk::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
     use namada_sdk::eth_bridge::{
         wrapped_erc20s, Contracts, Erc20WhitelistEntry, EthereumBridgeParams,
         UpgradeableContract,
     };
-    use namada_sdk::tx::TX_BRIDGE_POOL_WASM as ADD_TRANSFER_WASM;
+    use namada_sdk::eth_bridge_pool::{
+        GasFee, PendingTransfer, TransferToEthereum, TransferToEthereumKind,
+    };
+    use namada_sdk::ethereum_events::EthAddress;
+    use namada_sdk::gas::VpGasMeter;
+    use namada_sdk::key::{common, ed25519, SecretKey};
+    use namada_sdk::token::Amount;
+    use namada_sdk::tx::{Tx, TX_BRIDGE_POOL_WASM as ADD_TRANSFER_WASM};
+    use namada_sdk::validation::EthBridgePoolVp;
     use namada_tx_prelude::BatchedTx;
 
     use crate::native_vp::TestNativeVpEnv;
@@ -38,7 +37,7 @@ mod test_bridge_pool_vp {
     /// A signing keypair for good old Bertha.
     fn bertha_keypair() -> common::SecretKey {
         // generated from
-        // [`namada::core::key::ed25519::gen_keypair`]
+        // [`namada_sdk::key::ed25519::gen_keypair`]
         let bytes = [
             240, 3, 224, 69, 201, 148, 60, 53, 112, 79, 80, 107, 101, 127, 186,
             6, 176, 162, 113, 224, 62, 8, 183, 187, 124, 234, 244, 251, 92, 36,
@@ -118,9 +117,9 @@ mod test_bridge_pool_vp {
             &tx_env.gas_meter.borrow(),
         ));
         let vp_env = TestNativeVpEnv::from_tx_env(tx_env, BRIDGE_POOL_ADDRESS);
-        vp_env
-            .validate_tx(&gas_meter, |ctx| BridgePoolVp { ctx })
-            .is_ok()
+
+        let vp = vp_env.init_vp(&gas_meter, EthBridgePoolVp::new);
+        vp_env.validate_tx(&vp).is_ok()
     }
 
     fn validate_tx(tx: BatchedTx) {

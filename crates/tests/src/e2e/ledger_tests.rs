@@ -19,15 +19,15 @@ use std::time::{Duration, Instant};
 
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
-use namada::core::address::Address;
-use namada::core::storage::Epoch;
-use namada::token;
 use namada_apps_lib::cli::context::ENV_VAR_CHAIN_ID;
 use namada_apps_lib::config::ethereum_bridge;
 use namada_apps_lib::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps_lib::facade::tendermint_config::net::Address as TendermintAddress;
 use namada_core::chain::ChainId;
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
+use namada_sdk::address::Address;
+use namada_sdk::storage::Epoch;
+use namada_sdk::token;
 use namada_test_utils::TestWasms;
 use serde::Serialize;
 use serde_json::json;
@@ -1068,9 +1068,9 @@ fn double_signing_gets_slashed() -> Result<()> {
     use std::net::SocketAddr;
     use std::str::FromStr;
 
-    use namada::core::key::{self, ed25519, SigScheme};
     use namada_apps_lib::client;
     use namada_apps_lib::config::Config;
+    use namada_sdk::key::{self, ed25519, SigScheme};
 
     let mut pipeline_len = 0;
     let mut unbonding_len = 0;

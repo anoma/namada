@@ -67,52 +67,46 @@ pub enum Error {
 pub type VpResult<T> = std::result::Result<T, Error>;
 
 /// IBC VP
-pub struct Ibc<'a, S, CA, EVAL, Params, Gov, Token, PoS>
+pub struct Ibc<'ctx, S, CA, EVAL, Params, Gov, Token, PoS>
 where
     S: 'static + StateRead,
-    EVAL: VpEvaluator<'a, S, CA, EVAL>,
+    EVAL: VpEvaluator<'ctx, S, CA, EVAL>,
 {
     /// Context to interact with the host structures.
-    pub ctx: Ctx<'a, S, CA, EVAL>,
-    /// Parameters type
-    pub params: PhantomData<Params>,
-    /// Governance type
-    pub gov: PhantomData<Gov>,
-    /// Token type
-    pub token: PhantomData<Token>,
-    /// PoS type
-    pub pos: PhantomData<PoS>,
+    pub ctx: Ctx<'ctx, S, CA, EVAL>,
+    /// Generic types for DI
+    pub _marker: PhantomData<(Params, Gov, Token, PoS)>,
 }
 
-impl<'a, S, CA, EVAL, Params, Gov, Token, PoS> NativeVp<'a>
-    for Ibc<'a, S, CA, EVAL, Params, Gov, Token, PoS>
+impl<'view, 'ctx: 'view, S, CA, EVAL, Params, Gov, Token, PoS> NativeVp<'view>
+    for Ibc<'ctx, S, CA, EVAL, Params, Gov, Token, PoS>
 where
     S: 'static + StateRead,
-    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL> + Debug,
+    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL> + Debug,
     CA: 'static + Clone + Debug,
     Gov: governance::Read<
-            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
             Err = StorageError,
         >,
     Params: parameters::Keys
         + parameters::Read<
-            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
             Err = StorageError,
         >,
     Token: token::Keys
         + token::Write<
-            PseudoExecutionStorage<'a, 'a, S, CA, EVAL>,
+            PseudoExecutionStorage<'view, 'ctx, S, CA, EVAL>,
             Err = StorageError,
         > + Debug,
     PoS: proof_of_stake::Read<
-            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
             Err = StorageError,
         >,
 {
     type Error = Error;
 
     fn validate_tx(
-        &'a self,
+        &'view self,
         batched_tx: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
@@ -150,40 +144,37 @@ where
     }
 }
 
-impl<'a, S, CA, EVAL, Params, Gov, Token, PoS>
-    Ibc<'a, S, CA, EVAL, Params, Gov, Token, PoS>
+impl<'view, 'ctx: 'view, S, CA, EVAL, Params, Gov, Token, PoS>
+    Ibc<'ctx, S, CA, EVAL, Params, Gov, Token, PoS>
 where
     S: 'static + StateRead,
-    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL> + Debug,
+    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL> + Debug,
     CA: 'static + Clone + Debug,
     Params: parameters::Keys
         + parameters::Read<
-            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
             Err = StorageError,
         >,
     Token: token::Keys
         + token::Write<
-            PseudoExecutionStorage<'a, 'a, S, CA, EVAL>,
+            PseudoExecutionStorage<'view, 'ctx, S, CA, EVAL>,
             Err = StorageError,
         > + Debug,
     PoS: proof_of_stake::Read<
-            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
             Err = StorageError,
         >,
 {
     /// Instantiate IBC VP
-    pub fn new(ctx: Ctx<'a, S, CA, EVAL>) -> Self {
+    pub fn new(ctx: Ctx<'ctx, S, CA, EVAL>) -> Self {
         Self {
             ctx,
-            params: PhantomData,
-            gov: PhantomData,
-            token: PhantomData,
-            pos: PhantomData,
+            _marker: PhantomData,
         }
     }
 
     fn validate_state(
-        &'a self,
+        &'view self,
         tx_data: &[u8],
         keys_changed: &BTreeSet<Key>,
     ) -> VpResult<()> {
@@ -244,7 +235,7 @@ where
         Ok(())
     }
 
-    fn validate_with_msg(&'a self, tx_data: &[u8]) -> VpResult<()> {
+    fn validate_with_msg(&'view self, tx_data: &[u8]) -> VpResult<()> {
         let validation_ctx = VpValidationContext::new(self.ctx.pre());
         let ctx = Rc::new(RefCell::new(validation_ctx));
         // Use an empty verifiers set placeholder for validation, this is only
@@ -266,7 +257,7 @@ where
     }
 
     /// Retrieve the validation params
-    pub fn validation_params(&'a self) -> VpResult<ValidationParams> {
+    pub fn validation_params(&'view self) -> VpResult<ValidationParams> {
         use std::str::FromStr;
         let chain_id = self.ctx.get_chain_id().map_err(Error::NativeVpError)?;
         let proof_specs =
@@ -434,12 +425,9 @@ mod tests {
     use namada_core::storage::{BlockHeight, Epoch, TxIndex};
     use namada_core::tendermint::time::Time as TmTime;
     use namada_core::time::DurationSecs;
-    use namada_core::WasmCacheRwAccess;
     use namada_gas::{TxGasMeter, VpGasMeter};
     use namada_governance::parameters::GovernanceParameters;
-    use namada_parameters::storage::{
-        get_epoch_duration_storage_key, get_max_expected_time_per_block_key,
-    };
+    use namada_parameters::storage::get_epoch_duration_storage_key;
     use namada_parameters::EpochDuration;
     use namada_proof_of_stake::test_utils::get_dummy_genesis_validator;
     use namada_state::testing::TestState;
@@ -447,9 +435,9 @@ mod tests {
     use namada_token::storage_key::balance_key;
     use namada_tx::data::TxType;
     use namada_tx::{Authorization, Code, Data, Section, Tx};
-    use namada_vm::wasm;
     use namada_vm::wasm::run::VpEvalWasm;
     use namada_vm::wasm::VpCache;
+    use namada_vm::{wasm, WasmCacheRwAccess};
     use prost::Message;
     use sha2::Digest;
 
@@ -526,7 +514,7 @@ mod tests {
         self, ack_key, channel_counter_key, channel_key,
         client_connections_key, client_counter_key, client_state_key,
         client_update_height_key, client_update_timestamp_key, commitment_key,
-        connection_counter_key, connection_key, consensus_state_key, 
+        connection_counter_key, connection_key, consensus_state_key,
         ibc_trace_key, mint_amount_key, next_sequence_ack_key,
         next_sequence_recv_key, next_sequence_send_key, nft_class_key,
         nft_metadata_key, receipt_key,
@@ -543,23 +531,23 @@ mod tests {
         <TestState as StateRead>::H,
         CA,
     >;
-    type Ctx<'a> = super::Ctx<'a, TestState, VpCache<CA>, Eval>;
-    type Ibc<'a> = super::Ibc<
-        'a,
+    type Ctx<'ctx> = super::Ctx<'ctx, TestState, VpCache<CA>, Eval>;
+    type Ibc<'ctx> = super::Ibc<
+        'ctx,
         TestState,
         VpCache<CA>,
         Eval,
         namada_parameters::Store<
-            CtxPreStorageRead<'a, 'a, TestState, VpCache<CA>, Eval>,
+            CtxPreStorageRead<'ctx, 'ctx, TestState, VpCache<CA>, Eval>,
         >,
         namada_governance::Store<
-            CtxPreStorageRead<'a, 'a, TestState, VpCache<CA>, Eval>,
+            CtxPreStorageRead<'ctx, 'ctx, TestState, VpCache<CA>, Eval>,
         >,
         namada_token::Store<
-            PseudoExecutionStorage<'a, 'a, TestState, VpCache<CA>, Eval>,
+            PseudoExecutionStorage<'ctx, 'ctx, TestState, VpCache<CA>, Eval>,
         >,
         namada_proof_of_stake::Store<
-            CtxPreStorageRead<'a, 'a, TestState, VpCache<CA>, Eval>,
+            CtxPreStorageRead<'ctx, 'ctx, TestState, VpCache<CA>, Eval>,
         >,
     >;
 
@@ -3043,13 +3031,7 @@ mod tests {
         let class_id = get_nft_class_id();
         let token_id = get_nft_id();
         let sender = established_address_1();
-<<<<<<< HEAD
-        let ibc_token = ibc::trace::ibc_token_for_nft(&class_id, &token_id);
-||||||| parent of 9e9b323a5 (ibc: fix VP post move)
-        let ibc_token = ibc::storage::ibc_token_for_nft(&class_id, &token_id);
-=======
-        let ibc_token = storage::ibc_token_for_nft(&class_id, &token_id);
->>>>>>> 9e9b323a5 (ibc: fix VP post move)
+        let ibc_token = crate::trace::ibc_token_for_nft(&class_id, &token_id);
         let balance_key = balance_key(&ibc_token, &sender);
         let amount = Amount::from_u64(1);
         state

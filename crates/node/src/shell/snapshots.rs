@@ -1,6 +1,6 @@
 use borsh_ext::BorshSerializeExt;
-use namada::hash::{Hash, Sha256Hasher};
-use namada::state::BlockHeight;
+use namada_sdk::hash::{Hash, Sha256Hasher};
+use namada_sdk::state::BlockHeight;
 
 use super::{Error, Result};
 use crate::facade::tendermint::abci::types::Snapshot;

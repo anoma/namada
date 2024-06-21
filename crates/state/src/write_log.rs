@@ -949,7 +949,7 @@ mod tests {
         state.commit_block().expect("commit failed");
 
         let (vp_code_hash, _gas) = state
-            .validity_predicate(&addr1, &namada_parameters::Key)
+            .validity_predicate::<namada_parameters::Store<()>>(&addr1)
             .expect("vp read failed");
         assert_eq!(vp_code_hash, Some(vp1));
         let (value, _) = state.db_read(&key1).expect("read failed");

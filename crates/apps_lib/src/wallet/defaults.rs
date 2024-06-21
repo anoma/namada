@@ -11,16 +11,17 @@ pub use dev::{
 #[cfg(any(test, feature = "testing", feature = "benches"))]
 mod dev {
     use lazy_static::lazy_static;
-    use namada::core::address::testing::{
+    use namada_sdk::address::testing::{
         apfel, btc, dot, eth, kartoffel, nam, schnitzel,
     };
-    use namada::core::address::Address;
-    use namada::core::collections::HashMap;
-    use namada::core::key::*;
-    use namada::ledger::{governance, pgf, pos};
+    use namada_sdk::address::Address;
+    use namada_sdk::collections::HashMap;
+    use namada_sdk::governance::pgf;
+    use namada_sdk::key::*;
     use namada_sdk::wallet::alias::Alias;
     use namada_sdk::wallet::pre_genesis::ValidatorWallet;
     use namada_sdk::wallet::Wallet;
+    use namada_sdk::{governance, proof_of_stake};
 
     use crate::wallet::CliWalletUtils;
 
@@ -68,8 +69,8 @@ mod dev {
     /// The default addresses with their aliases.
     pub fn addresses() -> HashMap<Alias, Address> {
         let mut addresses: HashMap<Alias, Address> = vec![
-            ("pos".into(), pos::ADDRESS),
-            ("pos_slash_pool".into(), pos::SLASH_POOL_ADDRESS),
+            ("pos".into(), proof_of_stake::ADDRESS),
+            ("pos_slash_pool".into(), proof_of_stake::SLASH_POOL_ADDRESS),
             ("governance".into(), governance::ADDRESS),
             ("governance".into(), pgf::ADDRESS),
             ("validator".into(), validator_address()),
@@ -78,7 +79,7 @@ mod dev {
             ("christel".into(), christel_address()),
             ("daewon".into(), daewon_address()),
             ("ester".into(), ester_address()),
-            ("masp".into(), namada::core::address::MASP),
+            ("masp".into(), namada_sdk::address::MASP),
         ]
         .into_iter()
         .collect();

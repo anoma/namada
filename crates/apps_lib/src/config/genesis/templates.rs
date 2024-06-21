@@ -5,20 +5,19 @@ use std::marker::PhantomData;
 use std::path::Path;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use namada::core::address::Address;
-use namada::core::chain::ProposalBytes;
-use namada::core::dec::Dec;
-use namada::core::ethereum_structs;
-use namada::core::token::{
-    Amount, DenominatedAmount, Denomination, NATIVE_MAX_DECIMAL_PLACES,
-};
-use namada::eth_bridge::storage::parameters::{
-    Contracts, Erc20WhitelistEntry, MinimumConfirmations,
-};
-use namada::token;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
+use namada_sdk::address::Address;
+use namada_sdk::chain::ProposalBytes;
+use namada_sdk::dec::Dec;
+use namada_sdk::eth_bridge::storage::parameters::{
+    Contracts, Erc20WhitelistEntry, MinimumConfirmations,
+};
+use namada_sdk::token::{
+    Amount, DenominatedAmount, Denomination, NATIVE_MAX_DECIMAL_PLACES,
+};
+use namada_sdk::{ethereum_structs, token};
 use serde::{Deserialize, Serialize};
 
 use super::transactions::{self, Transactions};
@@ -990,9 +989,9 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
 
-    use namada::core::key;
-    use namada::core::key::RefTo;
-    use namada::core::string_encoding::StringEncoded;
+    use namada_sdk::key;
+    use namada_sdk::key::RefTo;
+    use namada_sdk::string_encoding::StringEncoded;
     use tempfile::tempdir;
 
     use super::*;

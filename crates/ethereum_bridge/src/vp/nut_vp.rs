@@ -28,22 +28,22 @@ where
 {
     /// Context to interact with the host structures.
     pub ctx: Ctx<'ctx, S, CA, EVAL>,
-    /// Token keys type
-    pub token_keys: PhantomData<TokenKeys>,
+    /// Generic types for DI
+    pub _marker: PhantomData<TokenKeys>,
 }
 
-impl<'a, S, CA, EVAL, TokenKeys> NativeVp<'a>
-    for NonUsableTokens<'a, S, CA, EVAL, TokenKeys>
+impl<'view, 'ctx: 'view, S, CA, EVAL, TokenKeys> NativeVp<'view>
+    for NonUsableTokens<'ctx, S, CA, EVAL, TokenKeys>
 where
     S: 'static + StateRead,
-    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
     CA: 'static + Clone,
     TokenKeys: token::Keys,
 {
     type Error = Error;
 
     fn validate_tx(
-        &self,
+        &'view self,
         _: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
@@ -127,6 +127,22 @@ where
     }
 }
 
+impl<'ctx, S, CA, EVAL, TokenKeys> NonUsableTokens<'ctx, S, CA, EVAL, TokenKeys>
+where
+    S: 'static + StateRead,
+    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
+    CA: 'static + Clone,
+    TokenKeys: token::Keys,
+{
+    /// Instantiate NUT VP
+    pub fn new(ctx: Ctx<'ctx, S, CA, EVAL>) -> Self {
+        Self {
+            ctx,
+            _marker: PhantomData,
+        }
+    }
+}
+
 #[cfg(test)]
 mod test_nuts {
     use std::cell::RefCell;
@@ -136,7 +152,6 @@ mod test_nuts {
     use namada_core::borsh::BorshSerializeExt;
     use namada_core::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
     use namada_core::storage::TxIndex;
-    use namada_core::WasmCacheRwAccess;
     use namada_gas::{TxGasMeter, VpGasMeter};
     use namada_state::testing::TestState;
     use namada_state::StorageWrite;
@@ -145,6 +160,7 @@ mod test_nuts {
     use namada_tx::Tx;
     use namada_vm::wasm::run::VpEvalWasm;
     use namada_vm::wasm::VpCache;
+    use namada_vm::WasmCacheRwAccess;
     use proptest::prelude::*;
 
     use super::*;
@@ -157,6 +173,8 @@ mod test_nuts {
         CA,
     >;
     type TokenKeys = namada_token::Store<()>;
+    type NonUsableTokens<'a, S> =
+        super::NonUsableTokens<'a, S, VpCache<CA>, Eval, TokenKeys>;
 
     /// Run a VP check on a NUT transfer between the two provided addresses.
     fn check_nut_transfer(src: Address, dst: Address) -> bool {
@@ -225,10 +243,7 @@ mod test_nuts {
             &verifiers,
             VpCache::new(temp_dir(), 100usize),
         );
-        let vp = NonUsableTokens {
-            ctx,
-            token_keys: PhantomData::<TokenKeys>,
-        };
+        let vp = NonUsableTokens::new(ctx);
 
         // print debug info in case we run into failures
         for key in &keys_changed {

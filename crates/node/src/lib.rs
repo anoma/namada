@@ -19,6 +19,7 @@ pub mod bench_utils;
 mod broadcaster;
 mod dry_run_tx;
 pub mod ethereum_oracle;
+pub mod protocol;
 pub mod shell;
 pub mod shims;
 pub mod storage;
@@ -34,20 +35,18 @@ use byte_unit::Byte;
 use data_encoding::HEXUPPER;
 pub use dry_run_tx::dry_run_tx;
 use futures::future::TryFutureExt;
-use namada::core::storage::BlockHeight;
-use namada::core::time::DateTimeUtc;
-use namada::eth_bridge::ethers::providers::{Http, Provider};
-use namada::state::{ProcessProposalCachedResult, DB};
-use namada::storage::DbColFam;
-use namada::tendermint::abci::request::CheckTxKind;
-use namada::tendermint::abci::response::ProcessProposal;
 use namada_apps_lib::cli::args;
 use namada_apps_lib::config::utils::{
     convert_tm_addr_to_socket_addr, num_of_threads,
 };
 use namada_apps_lib::{config, wasm_loader};
+use namada_sdk::eth_bridge::ethers::providers::{Http, Provider};
 use namada_sdk::migrations::ScheduledMigration;
-use namada_sdk::state::StateRead;
+use namada_sdk::state::{ProcessProposalCachedResult, StateRead, DB};
+use namada_sdk::storage::{BlockHeight, DbColFam};
+use namada_sdk::tendermint::abci::request::CheckTxKind;
+use namada_sdk::tendermint::abci::response::ProcessProposal;
+use namada_sdk::time::DateTimeUtc;
 use once_cell::unsync::Lazy;
 use sysinfo::{RefreshKind, System, SystemExt};
 use tokio::sync::mpsc;
@@ -354,7 +353,7 @@ pub fn dump_db(
 #[cfg(feature = "migrations")]
 pub fn query_db(
     config: config::Ledger,
-    key: &namada::core::storage::Key,
+    key: &namada_sdk::storage::Key,
     type_hash: &[u8; 32],
     cf: &DbColFam,
 ) {
@@ -461,7 +460,7 @@ async fn run_aux(
         };
 
     tracing::info!("Loading MASP verifying keys.");
-    let _ = namada::token::validation::preload_verifying_keys();
+    let _ = namada_sdk::token::validation::preload_verifying_keys();
     tracing::info!("Done loading MASP verifying keys.");
 
     // Start ABCI server and broadcaster (the latter only if we are a validator
@@ -960,8 +959,8 @@ pub fn test_genesis_files(
     genesis: config::genesis::chain::Finalized,
     wasm_dir: PathBuf,
 ) {
-    use namada::core::hash::Sha256Hasher;
-    use namada::state::mockdb::MockDB;
+    use namada_sdk::hash::Sha256Hasher;
+    use namada_sdk::state::mockdb::MockDB;
 
     // Channels for validators to send protocol txs to be broadcast to the
     // broadcaster service

@@ -10,44 +10,42 @@ use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::zip32::ExtendedFullViewingKey;
-use namada::core::address::{Address, InternalAddress, MASP};
-use namada::core::collections::{HashMap, HashSet};
-use namada::core::hash::Hash;
-use namada::core::key::*;
-use namada::core::masp::BalanceOwner;
-use namada::core::storage::{BlockHeight, BlockResults, Epoch};
-use namada::core::token::MaspDigitPos;
-use namada::governance::parameters::GovernanceParameters;
-use namada::governance::pgf::parameters::PgfParameters;
-use namada::governance::pgf::storage::steward::StewardDetail;
-use namada::governance::storage::keys as governance_storage;
-use namada::governance::storage::proposal::{
+use namada_sdk::address::{Address, InternalAddress, MASP};
+use namada_sdk::collections::{HashMap, HashSet};
+use namada_sdk::control_flow::time::{Duration, Instant};
+use namada_sdk::events::Event;
+use namada_sdk::governance::parameters::GovernanceParameters;
+use namada_sdk::governance::pgf::parameters::PgfParameters;
+use namada_sdk::governance::pgf::storage::steward::StewardDetail;
+use namada_sdk::governance::storage::keys as governance_storage;
+use namada_sdk::governance::storage::proposal::{
     StoragePgfFunding, StorageProposal,
 };
-use namada::governance::utils::{ProposalVotes, VotePower};
-use namada::governance::ProposalVote;
-use namada::io::Io;
-use namada::ledger::events::Event;
-use namada::ledger::parameters::{storage as param_storage, EpochDuration};
-use namada::ledger::pos::types::{CommissionPair, Slash};
-use namada::ledger::pos::PosParams;
-use namada::ledger::queries::RPC;
-use namada::masp::MaspEpoch;
-use namada::proof_of_stake::types::{
-    ValidatorState, ValidatorStateInfo, WeightedValidator,
+use namada_sdk::governance::utils::{ProposalVotes, VotePower};
+use namada_sdk::governance::ProposalVote;
+use namada_sdk::hash::Hash;
+use namada_sdk::io::Io;
+use namada_sdk::key::*;
+use namada_sdk::masp::{BalanceOwner, MaspEpoch, MaspTokenRewardData};
+use namada_sdk::parameters::{storage as param_storage, EpochDuration};
+use namada_sdk::proof_of_stake::types::{
+    CommissionPair, Slash, ValidatorMetaData, ValidatorState,
+    ValidatorStateInfo, WeightedValidator,
 };
-use namada::{state as storage, token};
-use namada_sdk::control_flow::time::{Duration, Instant};
-use namada_sdk::masp::MaspTokenRewardData;
-use namada_sdk::proof_of_stake::types::ValidatorMetaData;
-use namada_sdk::queries::Client;
+use namada_sdk::proof_of_stake::PosParams;
+use namada_sdk::queries::{Client, RPC};
 use namada_sdk::rpc::{
     self, enriched_bonds_and_unbonds, query_epoch, TxResponse,
 };
+use namada_sdk::storage::{BlockHeight, BlockResults, Epoch};
 use namada_sdk::tendermint_rpc::endpoint::status;
+use namada_sdk::token::MaspDigitPos;
 use namada_sdk::tx::display_batch_resp;
 use namada_sdk::wallet::AddressVpType;
-use namada_sdk::{display, display_line, edisplay_line, error, Namada};
+use namada_sdk::{
+    display, display_line, edisplay_line, error, state as storage, token,
+    Namada,
+};
 
 use crate::cli::{self, args};
 use crate::facade::tendermint::merkle::proof::ProofOps;
@@ -145,7 +143,7 @@ pub async fn query_block(context: &impl Namada) {
 }
 
 /// Query the results of the last committed block
-pub async fn query_results<C: namada::ledger::queries::Client + Sync>(
+pub async fn query_results<C: namada_sdk::queries::Client + Sync>(
     client: &C,
     _args: args::Query,
 ) -> Vec<BlockResults> {
@@ -338,7 +336,7 @@ pub async fn query_proposal(context: &impl Namada, args: args::QueryProposal) {
 }
 
 /// Query proposal by Id
-pub async fn query_proposal_by_id<C: namada::ledger::queries::Client + Sync>(
+pub async fn query_proposal_by_id<C: namada_sdk::queries::Client + Sync>(
     client: &C,
     proposal_id: u64,
 ) -> Result<Option<StorageProposal>, error::Error> {
@@ -771,7 +769,7 @@ pub async fn query_protocol_parameters(
     );
 }
 
-pub async fn query_bond<C: namada::ledger::queries::Client + Sync>(
+pub async fn query_bond<C: namada_sdk::queries::Client + Sync>(
     client: &C,
     source: &Address,
     validator: &Address,
@@ -783,7 +781,7 @@ pub async fn query_bond<C: namada::ledger::queries::Client + Sync>(
 }
 
 pub async fn query_unbond_with_slashing<
-    C: namada::ledger::queries::Client + Sync,
+    C: namada_sdk::queries::Client + Sync,
 >(
     client: &C,
     source: &Address,
@@ -797,7 +795,7 @@ pub async fn query_unbond_with_slashing<
     )
 }
 
-pub async fn query_pos_parameters<C: namada::ledger::queries::Client + Sync>(
+pub async fn query_pos_parameters<C: namada_sdk::queries::Client + Sync>(
     client: &C,
 ) -> PosParams {
     unwrap_client_response::<C, PosParams>(
@@ -805,7 +803,7 @@ pub async fn query_pos_parameters<C: namada::ledger::queries::Client + Sync>(
     )
 }
 
-pub async fn query_consensus_keys<C: namada::ledger::queries::Client + Sync>(
+pub async fn query_consensus_keys<C: namada_sdk::queries::Client + Sync>(
     client: &C,
 ) -> BTreeSet<common::PublicKey> {
     unwrap_client_response::<C, BTreeSet<common::PublicKey>>(
@@ -813,19 +811,19 @@ pub async fn query_consensus_keys<C: namada::ledger::queries::Client + Sync>(
     )
 }
 
-pub async fn query_pgf_stewards<C: namada::ledger::queries::Client + Sync>(
+pub async fn query_pgf_stewards<C: namada_sdk::queries::Client + Sync>(
     client: &C,
 ) -> Vec<StewardDetail> {
     unwrap_client_response::<C, _>(RPC.vp().pgf().stewards(client).await)
 }
 
-pub async fn query_pgf_fundings<C: namada::ledger::queries::Client + Sync>(
+pub async fn query_pgf_fundings<C: namada_sdk::queries::Client + Sync>(
     client: &C,
 ) -> Vec<StoragePgfFunding> {
     unwrap_client_response::<C, _>(RPC.vp().pgf().funding(client).await)
 }
 
-pub async fn query_pgf_parameters<C: namada::ledger::queries::Client + Sync>(
+pub async fn query_pgf_parameters<C: namada_sdk::queries::Client + Sync>(
     client: &C,
 ) -> PgfParameters {
     unwrap_client_response::<C, _>(RPC.vp().pgf().parameters(client).await)
@@ -873,7 +871,7 @@ pub async fn query_and_print_unbonds(
 }
 
 pub async fn query_withdrawable_tokens<
-    C: namada::ledger::queries::Client + Sync,
+    C: namada_sdk::queries::Client + Sync,
 >(
     client: &C,
     bond_source: &Address,
@@ -1129,9 +1127,7 @@ pub async fn query_bonded_stake<N: Namada>(
 
 /// Query and return validator's commission rate and max commission rate change
 /// per epoch
-pub async fn query_commission_rate<
-    C: namada::ledger::queries::Client + Sync,
->(
+pub async fn query_commission_rate<C: namada_sdk::queries::Client + Sync>(
     client: &C,
     validator: &Address,
     epoch: Option<Epoch>,
@@ -1145,7 +1141,7 @@ pub async fn query_commission_rate<
 }
 
 /// Query and return validator's metadata
-pub async fn query_metadata<C: namada::ledger::queries::Client + Sync>(
+pub async fn query_metadata<C: namada_sdk::queries::Client + Sync>(
     client: &C,
     validator: &Address,
 ) -> Option<ValidatorMetaData> {
@@ -1155,9 +1151,7 @@ pub async fn query_metadata<C: namada::ledger::queries::Client + Sync>(
 }
 
 /// Query and return validator's state
-pub async fn query_validator_state<
-    C: namada::ledger::queries::Client + Sync,
->(
+pub async fn query_validator_state<C: namada_sdk::queries::Client + Sync>(
     client: &C,
     validator: &Address,
     epoch: Option<Epoch>,
@@ -1171,7 +1165,7 @@ pub async fn query_validator_state<
 }
 
 /// Query and return the available reward tokens corresponding to the bond
-pub async fn query_rewards<C: namada::ledger::queries::Client + Sync>(
+pub async fn query_rewards<C: namada_sdk::queries::Client + Sync>(
     client: &C,
     source: &Option<Address>,
     validator: &Address,
@@ -1631,7 +1625,7 @@ pub async fn query_find_validator<N: Namada>(
 }
 
 /// Get account's public key stored in its storage sub-space
-pub async fn get_public_key<C: namada::ledger::queries::Client + Sync>(
+pub async fn get_public_key<C: namada_sdk::queries::Client + Sync>(
     client: &C,
     address: &Address,
     index: u8,
@@ -1640,7 +1634,7 @@ pub async fn get_public_key<C: namada::ledger::queries::Client + Sync>(
 }
 
 /// Check if the given address has any bonds.
-pub async fn is_validator<C: namada::ledger::queries::Client + Sync>(
+pub async fn is_validator<C: namada_sdk::queries::Client + Sync>(
     client: &C,
     address: &Address,
 ) -> bool {
@@ -1650,7 +1644,7 @@ pub async fn is_validator<C: namada::ledger::queries::Client + Sync>(
 }
 
 /// Check if a given address is a known delegator
-pub async fn is_delegator<C: namada::ledger::queries::Client + Sync>(
+pub async fn is_delegator<C: namada_sdk::queries::Client + Sync>(
     client: &C,
     address: &Address,
 ) -> bool {
@@ -1659,7 +1653,7 @@ pub async fn is_delegator<C: namada::ledger::queries::Client + Sync>(
         .unwrap()
 }
 
-pub async fn is_delegator_at<C: namada::ledger::queries::Client + Sync>(
+pub async fn is_delegator_at<C: namada_sdk::queries::Client + Sync>(
     client: &C,
     address: &Address,
     epoch: Epoch,
@@ -1670,7 +1664,7 @@ pub async fn is_delegator_at<C: namada::ledger::queries::Client + Sync>(
 }
 
 /// Check if the given address has any bonds.
-pub async fn has_bonds<C: namada::ledger::queries::Client + Sync>(
+pub async fn has_bonds<C: namada_sdk::queries::Client + Sync>(
     client: &C,
     address: &Address,
 ) -> bool {
@@ -1680,7 +1674,7 @@ pub async fn has_bonds<C: namada::ledger::queries::Client + Sync>(
 /// Check if the address exists on chain. Established address exists if it has a
 /// stored validity predicate. Implicit and internal addresses always return
 /// true.
-pub async fn known_address<C: namada::ledger::queries::Client + Sync>(
+pub async fn known_address<C: namada_sdk::queries::Client + Sync>(
     client: &C,
     address: &Address,
 ) -> bool {
@@ -1768,7 +1762,7 @@ pub async fn query_conversions(
 }
 
 /// Query a conversion.
-pub async fn query_conversion<C: namada::ledger::queries::Client + Sync>(
+pub async fn query_conversion<C: namada_sdk::queries::Client + Sync>(
     client: &C,
     asset_type: AssetType,
 ) -> Option<(
@@ -1818,7 +1812,7 @@ pub async fn query_wasm_code_hash(
 }
 
 /// Query a storage value and decode it with [`BorshDeserialize`].
-pub async fn query_storage_value<C: namada::ledger::queries::Client + Sync, T>(
+pub async fn query_storage_value<C: namada_sdk::queries::Client + Sync, T>(
     client: &C,
     key: &storage::Key,
 ) -> Result<T, error::Error>
@@ -1830,7 +1824,7 @@ where
 
 /// Query a storage value and the proof without decoding.
 pub async fn query_storage_value_bytes<
-    C: namada::ledger::queries::Client + Sync,
+    C: namada_sdk::queries::Client + Sync,
 >(
     client: &C,
     key: &storage::Key,
@@ -1856,9 +1850,7 @@ where
 }
 
 /// Query to check if the given storage key exists.
-pub async fn query_has_storage_key<
-    C: namada::ledger::queries::Client + Sync,
->(
+pub async fn query_has_storage_key<C: namada_sdk::queries::Client + Sync>(
     client: &C,
     key: &storage::Key,
 ) -> bool {
@@ -1869,13 +1861,11 @@ pub async fn query_has_storage_key<
 
 /// Call the corresponding `tx_event_query` RPC method, to fetch
 /// the current status of a transaction.
-pub async fn query_tx_events<C: namada::ledger::queries::Client + Sync>(
+pub async fn query_tx_events<C: namada_sdk::queries::Client + Sync>(
     client: &C,
     tx_event_query: namada_sdk::rpc::TxEventQuery<'_>,
-) -> std::result::Result<
-    Option<Event>,
-    <C as namada::ledger::queries::Client>::Error,
-> {
+) -> std::result::Result<Option<Event>, <C as namada_sdk::queries::Client>::Error>
+{
     namada_sdk::rpc::query_tx_events(client, tx_event_query).await
 }
 
@@ -1925,7 +1915,7 @@ pub async fn epoch_sleep(context: &impl Namada, _args: args::Query) {
     }
 }
 
-pub async fn get_bond_amount_at<C: namada::ledger::queries::Client + Sync>(
+pub async fn get_bond_amount_at<C: namada_sdk::queries::Client + Sync>(
     client: &C,
     delegator: &Address,
     validator: &Address,
@@ -1940,7 +1930,7 @@ pub async fn get_bond_amount_at<C: namada::ledger::queries::Client + Sync>(
     Some(total_active)
 }
 
-pub async fn get_all_validators<C: namada::ledger::queries::Client + Sync>(
+pub async fn get_all_validators<C: namada_sdk::queries::Client + Sync>(
     client: &C,
     epoch: Epoch,
 ) -> HashSet<Address> {
@@ -1949,9 +1939,7 @@ pub async fn get_all_validators<C: namada::ledger::queries::Client + Sync>(
         .unwrap()
 }
 
-pub async fn get_total_staked_tokens<
-    C: namada::ledger::queries::Client + Sync,
->(
+pub async fn get_total_staked_tokens<C: namada_sdk::queries::Client + Sync>(
     client: &C,
     epoch: Epoch,
 ) -> token::Amount {
@@ -1964,7 +1952,7 @@ pub async fn get_total_staked_tokens<
 /// sum of validator's self-bonds and delegations to their address.
 /// Returns `None` when the given address is not a validator address. For a
 /// validator with `0` stake, this returns `Ok(token::Amount::zero())`.
-async fn get_validator_stake<C: namada::ledger::queries::Client + Sync>(
+async fn get_validator_stake<C: namada_sdk::queries::Client + Sync>(
     client: &C,
     epoch: Epoch,
     validator: &Address,
@@ -1978,7 +1966,7 @@ async fn get_validator_stake<C: namada::ledger::queries::Client + Sync>(
 }
 
 pub async fn get_delegation_validators<
-    C: namada::ledger::queries::Client + Sync,
+    C: namada_sdk::queries::Client + Sync,
 >(
     client: &C,
     address: &Address,
@@ -1990,7 +1978,7 @@ pub async fn get_delegation_validators<
 }
 
 pub async fn get_delegations_of_delegator_at<
-    C: namada::ledger::queries::Client + Sync,
+    C: namada_sdk::queries::Client + Sync,
 >(
     client: &C,
     address: &Address,
@@ -2002,7 +1990,7 @@ pub async fn get_delegations_of_delegator_at<
 }
 
 pub async fn query_governance_parameters<
-    C: namada::ledger::queries::Client + Sync,
+    C: namada_sdk::queries::Client + Sync,
 >(
     client: &C,
 ) -> GovernanceParameters {
@@ -2010,7 +1998,7 @@ pub async fn query_governance_parameters<
 }
 
 /// A helper to unwrap client's response. Will shut down process on error.
-fn unwrap_client_response<C: namada::ledger::queries::Client, T>(
+fn unwrap_client_response<C: namada_sdk::queries::Client, T>(
     response: Result<T, C::Error>,
 ) -> T {
     response.unwrap_or_else(|err| {
@@ -2019,9 +2007,7 @@ fn unwrap_client_response<C: namada::ledger::queries::Client, T>(
     })
 }
 
-pub async fn compute_proposal_votes<
-    C: namada::ledger::queries::Client + Sync,
->(
+pub async fn compute_proposal_votes<C: namada_sdk::queries::Client + Sync>(
     client: &C,
     proposal_id: u64,
     epoch: Epoch,

@@ -46,38 +46,36 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Multitoken VP
-pub struct MultitokenVp<'a, S, CA, EVAL, Params, Gov>
+pub struct MultitokenVp<'ctx, S, CA, EVAL, Params, Gov>
 where
     S: 'static + StateRead,
-    EVAL: VpEvaluator<'a, S, CA, EVAL>,
+    EVAL: VpEvaluator<'ctx, S, CA, EVAL>,
 {
     /// Context to interact with the host structures.
-    pub ctx: Ctx<'a, S, CA, EVAL>,
-    /// Parameters type
-    pub params: PhantomData<Params>,
-    /// Governance type
-    pub gov: PhantomData<Gov>,
+    pub ctx: Ctx<'ctx, S, CA, EVAL>,
+    /// Generic types for DI
+    pub _marker: PhantomData<(Params, Gov)>,
 }
 
-impl<'a, S, CA, EVAL, Params, Gov> NativeVp<'a>
-    for MultitokenVp<'a, S, CA, EVAL, Params, Gov>
+impl<'view, 'ctx: 'view, S, CA, EVAL, Params, Gov> NativeVp<'view>
+    for MultitokenVp<'ctx, S, CA, EVAL, Params, Gov>
 where
     S: 'static + StateRead,
     CA: 'static + Clone,
-    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
     Params: parameters::Read<
-            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
             Err = StorageError,
         >,
     Gov: governance::Read<
-            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
             Err = StorageError,
         >,
 {
     type Error = Error;
 
     fn validate_tx(
-        &'a self,
+        &'view self,
         tx_data: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
@@ -296,26 +294,26 @@ where
     }
 }
 
-impl<'a, S, CA, EVAL, Params, Gov> MultitokenVp<'a, S, CA, EVAL, Params, Gov>
+impl<'view, 'ctx: 'view, S, CA, EVAL, Params, Gov>
+    MultitokenVp<'ctx, S, CA, EVAL, Params, Gov>
 where
     S: 'static + StateRead,
     CA: 'static + Clone,
-    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
     Params: parameters::Read<
-            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
             Err = StorageError,
         >,
     Gov: governance::Read<
-            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
             Err = StorageError,
         >,
 {
     /// Instantiate token VP
-    pub fn new(ctx: Ctx<'a, S, CA, EVAL>) -> Self {
+    pub fn new(ctx: Ctx<'ctx, S, CA, EVAL>) -> Self {
         Self {
             ctx,
-            params: PhantomData,
-            gov: PhantomData,
+            _marker: PhantomData,
         }
     }
 
@@ -356,7 +354,7 @@ where
 
     /// Return if the parameter change was done via a governance proposal
     pub fn is_valid_parameter(
-        &'a self,
+        &'view self,
         batched_tx: &BatchedTxRef<'_>,
     ) -> Result<()> {
         batched_tx.tx.data(batched_tx.cmt).map_or_else(
@@ -441,9 +439,8 @@ mod tests {
     };
     use namada_core::borsh::BorshSerializeExt;
     use namada_core::key::testing::keypair_1;
-    use namada_core::WasmCacheRwAccess;
     use namada_gas::{TxGasMeter, VpGasMeter};
-    use namada_ibc::storage::ibc_token;
+    use namada_ibc::trace::ibc_token;
     use namada_parameters::storage::get_native_token_transferable_key;
     use namada_state::testing::TestState;
     use namada_state::StorageWrite;
@@ -454,6 +451,7 @@ mod tests {
     use namada_vm::wasm::compilation_cache::common::testing::vp_cache;
     use namada_vm::wasm::run::VpEvalWasm;
     use namada_vm::wasm::VpCache;
+    use namada_vm::WasmCacheRwAccess;
 
     use super::*;
     use crate::storage_key::{balance_key, minted_balance_key};
@@ -466,17 +464,17 @@ mod tests {
         <TestState as StateRead>::H,
         CA,
     >;
-    type Ctx<'a> = super::Ctx<'a, TestState, VpCache<CA>, Eval>;
-    type MultitokenVp<'a> = super::MultitokenVp<
-        'a,
+    type Ctx<'ctx> = super::Ctx<'ctx, TestState, VpCache<CA>, Eval>;
+    type MultitokenVp<'ctx> = super::MultitokenVp<
+        'ctx,
         TestState,
         VpCache<CA>,
         Eval,
         namada_parameters::Store<
-            CtxPreStorageRead<'a, 'a, TestState, VpCache<CA>, Eval>,
+            CtxPreStorageRead<'ctx, 'ctx, TestState, VpCache<CA>, Eval>,
         >,
         namada_governance::Store<
-            CtxPreStorageRead<'a, 'a, TestState, VpCache<CA>, Eval>,
+            CtxPreStorageRead<'ctx, 'ctx, TestState, VpCache<CA>, Eval>,
         >,
     >;
 

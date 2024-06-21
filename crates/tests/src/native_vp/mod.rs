@@ -4,16 +4,28 @@ pub mod pos;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 
-use namada::core::address::Address;
-use namada::core::storage;
-use namada::ledger::gas::VpGasMeter;
-use namada::ledger::native_vp::{Ctx, NativeVp};
-use namada::state::testing::TestState;
-use namada::vm::WasmCacheRwAccess;
+use namada_sdk::address::Address;
+use namada_sdk::gas::VpGasMeter;
+use namada_sdk::state::testing::TestState;
+use namada_sdk::state::StateRead;
+use namada_sdk::storage;
+use namada_vm::wasm::run::VpEvalWasm;
+use namada_vm::wasm::VpCache;
+use namada_vm::WasmCacheRwAccess;
+use namada_vp::native_vp::{Ctx, NativeVp};
 
 use crate::tx::TestTxEnv;
 
-type NativeVpCtx<'a> = Ctx<'a, TestState, WasmCacheRwAccess>;
+type NativeVpCtx<'a> = Ctx<
+    'a,
+    TestState,
+    VpCache<WasmCacheRwAccess>,
+    VpEvalWasm<
+        <TestState as StateRead>::D,
+        <TestState as StateRead>::H,
+        WasmCacheRwAccess,
+    >,
+>;
 
 #[derive(Debug)]
 pub struct TestNativeVpEnv {
@@ -41,15 +53,15 @@ impl TestNativeVpEnv {
 
 impl TestNativeVpEnv {
     /// Run some transaction code `apply_tx` and validate it with a native VP
-    pub fn validate_tx<'a, T>(
-        &'a self,
-        gas_meter: &'a RefCell<VpGasMeter>,
-        init_native_vp: impl Fn(NativeVpCtx<'a>) -> T,
-    ) -> Result<(), <T as NativeVp>::Error>
+    pub fn init_vp<'view, 'ctx: 'view, T>(
+        &'ctx self,
+        gas_meter: &'ctx RefCell<VpGasMeter>,
+        init_native_vp: impl Fn(NativeVpCtx<'ctx>) -> T,
+    ) -> T
     where
-        T: NativeVp,
+        T: NativeVp<'view>,
     {
-        let ctx = Ctx::new(
+        let ctx = NativeVpCtx::new(
             &self.address,
             &self.tx_env.state,
             &self.tx_env.batched_tx.tx,
@@ -60,9 +72,18 @@ impl TestNativeVpEnv {
             &self.verifiers,
             self.tx_env.vp_wasm_cache.clone(),
         );
-        let native_vp = init_native_vp(ctx);
+        init_native_vp(ctx)
+    }
 
-        native_vp.validate_tx(
+    /// Run some transaction code `apply_tx` and validate it with a native VP
+    pub fn validate_tx<'view, 'ctx: 'view, T>(
+        &'ctx self,
+        vp: &'view T,
+    ) -> Result<(), <T as NativeVp<'view>>::Error>
+    where
+        T: 'view + NativeVp<'view>,
+    {
+        vp.validate_tx(
             &self.tx_env.batched_tx.to_ref(),
             &self.keys_changed,
             &self.verifiers,

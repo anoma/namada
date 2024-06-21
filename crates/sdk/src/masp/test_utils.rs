@@ -45,7 +45,6 @@ impl DerefMut for TestingClient {
     }
 }
 
-#[cfg(any(test, feature = "async-client"))]
 #[cfg_attr(feature = "async-send", async_trait::async_trait)]
 #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
 impl Client for TestingClient {

@@ -27,31 +27,32 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Parameters VP
-pub struct ParametersVp<'a, S, CA, EVAL, Gov>
+pub struct ParametersVp<'ctx, S, CA, EVAL, Gov>
 where
     S: 'static + StateRead,
-    EVAL: VpEvaluator<'a, S, CA, EVAL>,
+    EVAL: VpEvaluator<'ctx, S, CA, EVAL>,
 {
     /// Context to interact with the host structures.
-    pub ctx: Ctx<'a, S, CA, EVAL>,
-    /// Governance type
-    pub gov: PhantomData<Gov>,
+    pub ctx: Ctx<'ctx, S, CA, EVAL>,
+    /// Generic types for DI
+    pub _marker: PhantomData<Gov>,
 }
 
-impl<'a, S, CA, EVAL, Gov> NativeVp<'a> for ParametersVp<'a, S, CA, EVAL, Gov>
+impl<'view, 'ctx: 'view, S, CA, EVAL, Gov> NativeVp<'view>
+    for ParametersVp<'ctx, S, CA, EVAL, Gov>
 where
     S: 'static + StateRead,
     CA: 'static + Clone,
-    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
     Gov: governance::Read<
-            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
             Err = StorageError,
         >,
 {
     type Error = Error;
 
     fn validate_tx(
-        &'a self,
+        &'view self,
         batched_tx: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
@@ -83,6 +84,25 @@ where
                 KeyType::UNKNOWN => Ok(()),
             }
         })
+    }
+}
+
+impl<'ctx, S, CA, EVAL, Gov> ParametersVp<'ctx, S, CA, EVAL, Gov>
+where
+    S: 'static + StateRead,
+    CA: 'static + Clone,
+    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
+    Gov: governance::Read<
+            CtxPreStorageRead<'ctx, 'ctx, S, CA, EVAL>,
+            Err = StorageError,
+        >,
+{
+    /// Instantiate parameters VP
+    pub fn new(ctx: Ctx<'ctx, S, CA, EVAL>) -> Self {
+        Self {
+            ctx,
+            _marker: PhantomData,
+        }
     }
 }
 

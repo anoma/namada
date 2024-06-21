@@ -37,31 +37,32 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Proof-of-Stake validity predicate
-pub struct PosVP<'a, S, CA, EVAL, Gov>
+pub struct PosVp<'ctx, S, CA, EVAL, Gov>
 where
-    S: 'static + StateRead,
-    EVAL: VpEvaluator<'a, S, CA, EVAL>,
+    S: StateRead,
+    EVAL: VpEvaluator<'ctx, S, CA, EVAL>,
 {
     /// Context to interact with the host structures.
-    pub ctx: Ctx<'a, S, CA, EVAL>,
-    /// Governance type
-    pub gov: PhantomData<Gov>,
+    pub ctx: Ctx<'ctx, S, CA, EVAL>,
+    /// Generic types for DI
+    pub _marker: PhantomData<Gov>,
 }
 
-impl<'a, S, CA, EVAL, Gov> NativeVp<'a> for PosVP<'a, S, CA, EVAL, Gov>
+impl<'view, 'ctx: 'view, S, CA, EVAL, Gov> NativeVp<'view>
+    for PosVp<'ctx, S, CA, EVAL, Gov>
 where
-    S: 'static + StateRead,
+    S: StateRead,
     CA: 'static + Clone,
-    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
     Gov: governance::Read<
-            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
             Err = StorageError,
         >,
 {
     type Error = Error;
 
     fn validate_tx(
-        &'a self,
+        &'view self,
         batched_tx: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
@@ -316,26 +317,27 @@ where
     }
 }
 
-impl<'a, S, CA, EVAL, Gov> PosVP<'a, S, CA, EVAL, Gov>
+impl<'ctx, S, CA, EVAL, Gov> PosVp<'ctx, S, CA, EVAL, Gov>
 where
-    S: 'static + StateRead,
+    S: StateRead,
     CA: 'static + Clone,
-    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
 {
     /// Instantiate a `PosVP`.
-    pub fn new(ctx: Ctx<'a, S, CA, EVAL>) -> Self {
+    pub fn new(ctx: Ctx<'ctx, S, CA, EVAL>) -> Self {
         Self {
             ctx,
-            gov: PhantomData,
+            _marker: PhantomData,
         }
     }
 
     /// Return `Ok` if the changed parameters are valid
     fn is_valid_parameter_change(&self) -> Result<()> {
-        let validation_errors = read_pos_params(&self.ctx.post())
-            .map_err(Error::NativeVpError)?
-            .owned
-            .validate();
+        let validation_errors: Vec<crate::parameters::ValidationError> =
+            read_pos_params(&self.ctx.post())
+                .map_err(Error::NativeVpError)?
+                .owned
+                .validate();
         validation_errors.is_empty().ok_or_else(|| {
             let validation_errors_str =
                 itertools::join(validation_errors, ", ");

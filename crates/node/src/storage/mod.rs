@@ -9,8 +9,7 @@ use arse_merkle_tree::blake2b::Blake2bHasher;
 use arse_merkle_tree::traits::Hasher;
 use arse_merkle_tree::H256;
 use blake2b_rs::{Blake2b, Blake2bBuilder};
-use namada::state::StorageHasher;
-use namada_sdk::state::FullAccessState;
+use namada_sdk::state::{FullAccessState, StorageHasher};
 pub use rocksdb::{open, DbSnapshot, RocksDBUpdateVisitor, SnapshotMetadata};
 
 #[derive(Default)]
@@ -56,25 +55,25 @@ fn new_blake2b() -> Blake2b {
 mod tests {
     use borsh::BorshDeserialize;
     use itertools::Itertools;
-    use namada::core::chain::ChainId;
-    use namada::core::collections::HashMap;
-    use namada::core::ethereum_events::Uint;
-    use namada::core::hash::Hash;
-    use namada::core::keccak::KeccakHash;
-    use namada::core::storage::{BlockHeight, Key, KeySeg};
-    use namada::core::time::DurationSecs;
-    use namada::core::{address, storage};
-    use namada::eth_bridge::storage::proof::BridgePoolRootProof;
-    use namada::ibc::storage::is_ibc_key;
-    use namada::ledger::eth_bridge::storage::bridge_pool;
-    use namada::ledger::gas::STORAGE_ACCESS_GAS_PER_BYTE;
-    use namada::ledger::ibc::storage::{client_counter_key, ibc_key};
-    use namada::ledger::parameters::{EpochDuration, Parameters};
-    use namada::state::{self, StorageRead, StorageWrite, StoreType, DB};
-    use namada::token::conversion::update_allowed_conversions;
-    use namada::{decode, encode, parameters};
+    use namada_sdk::chain::ChainId;
+    use namada_sdk::collections::HashMap;
+    use namada_sdk::eth_bridge::storage::bridge_pool;
+    use namada_sdk::eth_bridge::storage::proof::BridgePoolRootProof;
+    use namada_sdk::ethereum_events::Uint;
+    use namada_sdk::gas::STORAGE_ACCESS_GAS_PER_BYTE;
+    use namada_sdk::hash::Hash;
+    use namada_sdk::ibc::storage::{client_counter_key, ibc_key, is_ibc_key};
+    use namada_sdk::keccak::KeccakHash;
+    use namada_sdk::parameters::Parameters;
     use namada_sdk::state::merkle_tree::NO_DIFF_KEY_PREFIX;
-    use namada_sdk::state::StateRead;
+    use namada_sdk::state::{
+        self, StateRead, StorageRead, StorageWrite, StoreType, DB,
+    };
+    use namada_sdk::storage::{BlockHeight, Key, KeySeg};
+    use namada_sdk::token::conversion::update_allowed_conversions;
+    use namada_sdk::{
+        address, decode, encode, parameters, storage, validation,
+    };
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest::test_runner::Config;
@@ -269,8 +268,9 @@ mod tests {
         let key = Key::validity_predicate(&addr);
 
         // not exist
-        let (vp, gas) =
-            state.validity_predicate(&addr).expect("VP load failed");
+        let (vp, gas) = state
+            .validity_predicate::<validation::ParamKeys>(&addr)
+            .expect("VP load failed");
         assert_eq!(vp, None);
         assert_eq!(gas, (key.len() as u64) * STORAGE_ACCESS_GAS_PER_BYTE);
 
@@ -279,8 +279,9 @@ mod tests {
         state.db_write(&key, vp1).expect("write failed");
 
         // check
-        let (vp_code_hash, gas) =
-            state.validity_predicate(&addr).expect("VP load failed");
+        let (vp_code_hash, gas) = state
+            .validity_predicate::<validation::ParamKeys>(&addr)
+            .expect("VP load failed");
         assert_eq!(vp_code_hash.expect("no VP"), vp1);
         assert_eq!(
             gas,
@@ -318,7 +319,7 @@ mod tests {
     ///    value, if any.
     fn test_read_with_height_aux(
         blocks_write_value: Vec<bool>,
-    ) -> namada::state::Result<()> {
+    ) -> namada_sdk::state::Result<()> {
         let db_path =
             TempDir::new().expect("Unable to create a temporary DB directory");
         let mut state = PersistentState::open(
@@ -412,7 +413,7 @@ mod tests {
     /// Test the restore of the merkle tree
     fn test_get_merkle_tree_aux(
         blocks_write_type: Vec<u64>,
-    ) -> namada::state::Result<()> {
+    ) -> namada_sdk::state::Result<()> {
         let db_path =
             TempDir::new().expect("Unable to create a temporary DB directory");
         let mut state = PersistentState::open(

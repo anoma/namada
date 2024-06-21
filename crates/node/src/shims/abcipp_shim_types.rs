@@ -169,13 +169,13 @@ pub mod shim {
     pub mod request {
 
         use bytes::Bytes;
-        use namada::core::hash::Hash;
-        use namada::core::storage::Header;
-        use namada::core::time::DateTimeUtc;
-        use namada::tendermint::abci::types::CommitInfo;
-        use namada::tendermint::account::Id;
-        use namada::tendermint::block::Height;
-        use namada::tendermint::time::Time;
+        use namada_sdk::hash::Hash;
+        use namada_sdk::storage::Header;
+        use namada_sdk::tendermint::abci::types::CommitInfo;
+        use namada_sdk::tendermint::account::Id;
+        use namada_sdk::tendermint::block::Height;
+        use namada_sdk::tendermint::time::Time;
+        use namada_sdk::time::DateTimeUtc;
 
         use crate::facade::tendermint::abci::types::Misbehavior;
         use crate::facade::tendermint::v0_37::abci::request as tm_request;
@@ -206,10 +206,10 @@ pub mod shim {
         pub(crate) struct CheckProcessProposal {
             proposed_last_commit: Option<CommitInfo>,
             misbehavior: Vec<Misbehavior>,
-            hash: namada::tendermint::Hash,
+            hash: namada_sdk::tendermint::Hash,
             height: Height,
             time: Time,
-            next_validators_hash: namada::tendermint::Hash,
+            next_validators_hash: namada_sdk::tendermint::Hash,
             proposer_address: Id,
         }
 
@@ -311,7 +311,7 @@ pub mod shim {
 
     /// Custom types for response payloads
     pub mod response {
-        use namada::ledger::events::Event;
+        use namada_sdk::events::Event;
 
         pub use crate::facade::tendermint::v0_37::abci::response::{
             PrepareProposal, ProcessProposal,

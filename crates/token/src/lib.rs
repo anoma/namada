@@ -24,7 +24,6 @@ pub use namada_shielded_token::*;
 pub use namada_trans_token::*;
 
 /// Validity predicates
-#[cfg(any(test, feature = "validation", feature = "testing"))]
 pub mod vp {
     pub use namada_shielded_token::vp::{
         Error as MaspError, MaspVp, Result as MaspResult,

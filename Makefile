@@ -100,13 +100,13 @@ check:
 check-mainnet:
 	$(cargo) check --workspace --features "mainnet"
 
-# Check that every crate can be built with default features and that namada crate
-# can be built for wasm
+# Check that every crate can be built with default features and that SDK crate
+# can be built for wasm and with all features enabled
 check-crates:
 	cargo +$(nightly) check -Z unstable-options --tests -p namada -p namada_account -p namada_apps -p namada_apps_lib -p namada_benchmarks -p namada_core -p namada_encoding_spec -p namada_ethereum_bridge -p namada_events -p namada_gas -p namada_governance -p namada_ibc -p namada_light_sdk -p namada_macros -p namada_merkle_tree -p namada_parameters -p namada_proof_of_stake -p namada_replay_protection -p namada_node -p namada_sdk -p namada_shielded_token -p namada_state -p namada_storage -p namada_test_utils -p namada_tests -p namada_token -p namada_trans_token -p namada_tx -p namada_tx_env -p namada_tx_prelude -p namada_vm_env -p namada_vote_ext -p namada_vp_env -p namada_vp_prelude && \
 		make -C $(wasms) check && \
 		make -C $(wasms_for_tests) check && \
-		cargo check --package namada --target wasm32-unknown-unknown --no-default-features --features "namada-sdk" && \
+		cargo check --package namada_sdk --target wasm32-unknown-unknown --no-default-features && \
 		cargo check --package namada_sdk --all-features
 
 clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets -- -D warnings
@@ -154,7 +154,6 @@ test-coverage:
 	# Run integration tests separately because they require `integration`
 	# feature (and without coverage)
 	$(cargo) +$(nightly) llvm-cov --output-path lcov.info \
-		--features namada/testing \
 		--lcov \
 		-- --skip e2e --skip pos_state_machine_test --skip integration \
 		-Z unstable-options --report-time && \
@@ -203,7 +202,6 @@ test-unit-with-eth-bridge:
 
 test-unit-with-coverage:
 	$(cargo) +$(nightly) llvm-cov --output-path lcov.info \
-		--features namada/testing \
 		--lcov \
 		-- --skip e2e --skip pos_state_machine_test --skip integration \
 		-Z unstable-options --report-time

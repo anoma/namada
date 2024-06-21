@@ -6,9 +6,9 @@ use std::ptr::NonNull;
 use std::rc::{self, Rc};
 use std::str::Utf8Error;
 
+use namada_core::arith::{self, checked};
 use namada_core::borsh::BorshSerializeExt;
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
-use namada_sdk::arith::{self, checked};
 use namada_tx::BatchedTxRef;
 use thiserror::Error;
 use wasmer::sys::BaseTunables;

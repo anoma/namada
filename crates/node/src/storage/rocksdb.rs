@@ -55,27 +55,26 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXLOWER;
 use itertools::Either;
-use namada::core::collections::{HashMap, HashSet};
-use namada::core::storage::{BlockHeight, Epoch, Header, Key, KeySeg};
-use namada::core::{decode, encode, ethereum_events};
-use namada::eth_bridge::storage::proof::BridgePoolRootProof;
-use namada::hash::Hash;
-use namada::ledger::eth_bridge::storage::bridge_pool;
-use namada::replay_protection;
-use namada::state::merkle_tree::{
+use namada_replay_protection as replay_protection;
+use namada_sdk::arith::checked;
+use namada_sdk::collections::{HashMap, HashSet};
+use namada_sdk::eth_bridge::storage::bridge_pool;
+use namada_sdk::eth_bridge::storage::proof::BridgePoolRootProof;
+use namada_sdk::hash::Hash;
+use namada_sdk::migrations::{DBUpdateVisitor, DbUpdateType};
+use namada_sdk::state::merkle_tree::{
     tree_key_prefix_with_epoch, tree_key_prefix_with_height,
 };
-use namada::state::{
+use namada_sdk::state::{
     BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, DbError as Error,
     DbResult as Result, MerkleTreeStoresRead, PatternIterator, PrefixIterator,
     StoreType, DB,
 };
-use namada::storage::{
-    DbColFam, BLOCK_CF, DIFFS_CF, REPLAY_PROTECTION_CF, ROLLBACK_CF, STATE_CF,
-    SUBSPACE_CF,
+use namada_sdk::storage::{
+    BlockHeight, DbColFam, Epoch, Header, Key, KeySeg, BLOCK_CF, DIFFS_CF,
+    REPLAY_PROTECTION_CF, ROLLBACK_CF, STATE_CF, SUBSPACE_CF,
 };
-use namada_sdk::arith::checked;
-use namada_sdk::migrations::{DBUpdateVisitor, DbUpdateType};
+use namada_sdk::{decode, encode, ethereum_events};
 use rayon::prelude::*;
 use regex::Regex;
 use rocksdb::{
@@ -1312,7 +1311,7 @@ impl DB for RocksDB {
 
     fn has_replay_protection_entry(
         &self,
-        hash: &namada::core::hash::Hash,
+        hash: &namada_sdk::hash::Hash,
     ) -> Result<bool> {
         let replay_protection_cf =
             self.get_column_family(REPLAY_PROTECTION_CF)?;
@@ -1608,7 +1607,7 @@ impl DB for RocksDB {
             stripped_prefix.as_ref(),
             None,
         ) {
-            let hash = namada::core::hash::Hash::from_str(hash_str)
+            let hash = namada_sdk::hash::Hash::from_str(hash_str)
                 .expect("Failed hash conversion");
             let current_key = replay_protection::current_key(&hash);
             let key = replay_protection::key(&hash);
@@ -2128,15 +2127,14 @@ mod imp {
 #[allow(clippy::arithmetic_side_effects)]
 #[cfg(test)]
 mod test {
-    use namada::address::EstablishedAddressGen;
-    use namada::core::collections::HashMap;
-    use namada::core::hash::Hash;
-    use namada::core::storage::Epochs;
-    use namada::ledger::storage::ConversionState;
-    use namada::state::{MerkleTree, Sha256Hasher};
-    use namada::storage::{BlockResults, EthEventsQueue};
-    use namada::time::DateTimeUtc;
+    use namada_sdk::address::EstablishedAddressGen;
+    use namada_sdk::collections::HashMap;
+    use namada_sdk::hash::Hash;
+    use namada_sdk::state::{MerkleTree, Sha256Hasher};
+    use namada_sdk::storage::conversion_state::ConversionState;
     use namada_sdk::storage::types::CommitOnlyData;
+    use namada_sdk::storage::{BlockResults, Epochs, EthEventsQueue};
+    use namada_sdk::time::DateTimeUtc;
     use tempfile::tempdir;
     use test_log::test;
 

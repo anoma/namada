@@ -13,7 +13,7 @@ repository.workspace = true
 version.workspace = true
 
 [features]
-default = ["migrations"]
+default = []
 mainnet = [
   "namada_sdk/mainnet",
 ]
@@ -29,10 +29,14 @@ namada-eth-bridge = [
 
 [dependencies]
 namada_core = {path = "../core", features = ["testing"]}
-namada_sdk = {path = "../sdk", default-features = false, features = ["tendermint-rpc", "download-params", "std", "rand"]}
+namada_sdk = {path = "../sdk", features = ["download-params", "testing", "wasm-runtime"]}
 namada_test_utils = {path = "../test_utils"}
+namada_tx_env = {path = "../tx_env"}
 namada_tx_prelude = {path = "../tx_prelude"}
+namada_vp = {path = "../vp"}
 namada_vp_prelude = {path = "../vp_prelude"}
+namada_vm = {path = "../vm", features = ["testing"]}
+
 concat-idents.workspace = true
 derivative.workspace = true
 hyper = {version = "0.14.20", features = ["full"]}
@@ -53,7 +57,11 @@ wasmer.workspace = true
 [dev-dependencies]
 namada_apps_lib = {path = "../apps_lib", features = ["testing"]}
 namada_node = { path = "../node", features = ["testing"] }
+namada_sdk = {path = "../sdk", default-features = false, features = [
+  "download-params", "testing", "migrations"
+]}
 namada_vm_env = {path = "../vm_env"}
+
 assert_cmd.workspace = true
 assert_matches.workspace = true
 borsh.workspace = true

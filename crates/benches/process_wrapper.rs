@@ -1,12 +1,12 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use namada::core::address;
-use namada::core::key::RefTo;
-use namada::core::storage::BlockHeight;
-use namada::core::time::DateTimeUtc;
-use namada::state::TxIndex;
-use namada::token::{Amount, DenominatedAmount, Transfer};
-use namada::tx::data::{Fee, WrapperTx};
-use namada::tx::Authorization;
+use namada_apps_lib::address;
+use namada_apps_lib::key::RefTo;
+use namada_apps_lib::state::TxIndex;
+use namada_apps_lib::storage::BlockHeight;
+use namada_apps_lib::time::DateTimeUtc;
+use namada_apps_lib::token::{Amount, DenominatedAmount, Transfer};
+use namada_apps_lib::tx::data::{Fee, WrapperTx};
+use namada_apps_lib::tx::Authorization;
 use namada_apps_lib::wallet::defaults;
 use namada_node::bench_utils::{BenchShell, TX_TRANSFER_WASM};
 use namada_node::shell::process_proposal::ValidationMeta;
@@ -35,7 +35,7 @@ fn process_tx(c: &mut Criterion) {
 
     batched_tx
         .tx
-        .update_header(namada::tx::data::TxType::Wrapper(Box::new(
+        .update_header(namada_apps_lib::tx::data::TxType::Wrapper(Box::new(
             WrapperTx::new(
                 Fee {
                     token: address::testing::nam(),
@@ -47,11 +47,13 @@ fn process_tx(c: &mut Criterion) {
         )));
     batched_tx
         .tx
-        .add_section(namada::tx::Section::Authorization(Authorization::new(
-            batched_tx.tx.sechashes(),
-            [(0, defaults::albert_keypair())].into_iter().collect(),
-            None,
-        )));
+        .add_section(namada_apps_lib::tx::Section::Authorization(
+            Authorization::new(
+                batched_tx.tx.sechashes(),
+                [(0, defaults::albert_keypair())].into_iter().collect(),
+                None,
+            ),
+        ));
     let wrapper = batched_tx.tx.to_bytes();
 
     #[allow(clippy::disallowed_methods)]
@@ -60,9 +62,13 @@ fn process_tx(c: &mut Criterion) {
     c.bench_function("wrapper_tx_validation", |b| {
         b.iter_batched_ref(
             || {
+                // This is safe because nothing else is using `shell.state`
+                // concurrently.
+                let temp_state =
+                    unsafe { shell.state.with_static_temp_write_log() };
                 (
                     // Prevent block out of gas and replay protection
-                    shell.state.with_temp_write_log(),
+                    temp_state,
                     ValidationMeta::from(shell.state.read_only()),
                     shell.vp_wasm_cache.clone(),
                     shell.tx_wasm_cache.clone(),

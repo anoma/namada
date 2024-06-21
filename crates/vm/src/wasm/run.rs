@@ -14,7 +14,6 @@ use namada_core::hash::{Error as TxHashError, Hash};
 use namada_core::internal::HostEnvResult;
 use namada_core::storage::{Key, TxIndex};
 use namada_core::validity_predicate::VpError;
-use namada_core::WasmCacheAccess;
 use namada_gas::{GasMetering, TxGasMeter, VpGasMeter, WASM_MEMORY_PAGE_GAS};
 use namada_state::prefix_iter::PrefixIterators;
 use namada_state::{DBIter, State, StateRead, StorageHasher, StorageRead, DB};
@@ -33,7 +32,10 @@ use crate::host_env::{TxVmEnv, VpCtx, VpEvaluator, VpVmEnv};
 use crate::types::VpInput;
 use crate::wasm::host_env::{tx_imports, vp_imports};
 use crate::wasm::{memory, Cache, CacheName, VpCache};
-use crate::{validate_untrusted_wasm, HostRef, RwAccess, WasmValidationError};
+use crate::{
+    validate_untrusted_wasm, HostRef, RwAccess, WasmCacheAccess,
+    WasmValidationError,
+};
 
 const TX_ENTRYPOINT: &str = "_apply_tx";
 const VP_ENTRYPOINT: &str = "_validate_tx";
@@ -533,12 +535,7 @@ where
         vp_code_hash: Hash,
         input_data: BatchedTxRef<'_>,
     ) -> namada_state::StorageResult<()> {
-        use std::marker::PhantomData;
-
         use namada_state::ResultExt;
-
-        use crate::host_env::VpCtx;
-        use crate::wasm::run::VpEvalWasm;
 
         let eval_runner =
             VpEvalWasm::<<S as StateRead>::D, <S as StateRead>::H, CA> {
@@ -572,10 +569,7 @@ where
         eval_runner
             .eval_native_result(ctx, vp_code_hash, input_data)
             .inspect_err(|err| {
-                tracing::warn!(
-                    "VP eval from a native VP failed with:
-            {err}",
-                );
+                tracing::warn!("VP eval from a native VP failed with: {err}");
             })
             .into_storage_result()
     }
@@ -1003,8 +997,8 @@ mod tests {
 
     use assert_matches::assert_matches;
     use itertools::Either;
+    use namada_core::arith::checked;
     use namada_core::borsh::BorshSerializeExt;
-    use namada_sdk::arith::checked;
     use namada_state::testing::TestState;
     use namada_state::StorageWrite;
     use namada_test_utils::TestWasms;

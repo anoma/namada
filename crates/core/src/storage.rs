@@ -2102,7 +2102,7 @@ pub mod testing {
 
     /// A dummy header used for testing
     pub fn get_dummy_header() -> Header {
-        use crate::time::{DateTimeUtc, DurationSecs};
+        use crate::time::DurationSecs;
         Header {
             hash: Hash([0; 32]),
             #[allow(

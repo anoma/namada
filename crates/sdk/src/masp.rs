@@ -37,18 +37,16 @@ use masp_primitives::transaction::components::{
 };
 use masp_primitives::transaction::fees::fixed::FeeRule;
 use masp_primitives::transaction::{Authorization, Authorized, Transaction};
-use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
+use masp_primitives::zip32::{
+    ExtendedFullViewingKey, ExtendedSpendingKey as MaspExtendedSpendingKey,
+};
 use masp_proofs::prover::LocalTxProver;
 use namada_core::address::Address;
 use namada_core::arith::CheckedAdd;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::dec::Dec;
 use namada_core::ibc::IbcTxDataRefs;
-pub use namada_core::masp::{
-    encode_asset_type, AssetData, BalanceOwner, ExtendedViewingKey,
-    PaymentAddress, TAddrData, TransferSource, TransferTarget, TxId,
-};
-use namada_core::masp::{MaspEpoch, MaspTxRefs};
+pub use namada_core::masp::*;
 use namada_core::storage::{BlockHeight, TxIndex};
 use namada_core::time::DateTimeUtc;
 use namada_core::uint::Uint;
@@ -61,7 +59,6 @@ use namada_ibc::{decode_message, extract_masp_tx_from_envelope, IbcMessage};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
-#[cfg(feature = "validation")]
 pub use namada_token::validation::{
     partial_deauthorize, preload_verifying_keys, PVKs, CONVERT_NAME,
     ENV_VAR_MASP_PARAMS_DIR, OUTPUT_NAME, SPEND_NAME,
@@ -203,20 +200,20 @@ struct WalletMap;
 impl<P1>
     masp_primitives::transaction::components::sapling::builder::MapBuilder<
         P1,
-        ExtendedSpendingKey,
+        MaspExtendedSpendingKey,
         (),
         ExtendedFullViewingKey,
     > for WalletMap
 {
     fn map_params(&self, _s: P1) {}
 
-    fn map_key(&self, s: ExtendedSpendingKey) -> ExtendedFullViewingKey {
+    fn map_key(&self, s: MaspExtendedSpendingKey) -> ExtendedFullViewingKey {
         (&s).into()
     }
 }
 
 impl<P1, N1>
-    MapBuilder<P1, ExtendedSpendingKey, N1, (), ExtendedFullViewingKey, ()>
+    MapBuilder<P1, MaspExtendedSpendingKey, N1, (), ExtendedFullViewingKey, ()>
     for WalletMap
 {
     fn map_notifier(&self, _s: N1) {}
@@ -247,7 +244,7 @@ pub trait ShieldedUtils:
 }
 
 /// Make a ViewingKey that can view notes encrypted by given ExtendedSpendingKey
-pub fn to_viewing_key(esk: &ExtendedSpendingKey) -> FullViewingKey {
+pub fn to_viewing_key(esk: &MaspExtendedSpendingKey) -> FullViewingKey {
     ExtendedFullViewingKey::from(esk).fvk
 }
 
@@ -605,7 +602,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         start_query_height: Option<BlockHeight>,
         last_query_height: Option<BlockHeight>,
         retry: RetryStrategy,
-        sks: &[ExtendedSpendingKey],
+        sks: &[MaspExtendedSpendingKey],
         fvks: &[ViewingKey],
     ) -> Result<(), Error>
     where
@@ -701,7 +698,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         start_query_height: Option<BlockHeight>,
         last_query_height: Option<BlockHeight>,
         retry: RetryStrategy,
-        sks: &[ExtendedSpendingKey],
+        sks: &[MaspExtendedSpendingKey],
         fvks: &[ViewingKey],
         mut shutdown_signal: ShutdownSignal,
     ) -> Result<(), Error>
@@ -1570,7 +1567,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         #[allow(unused_mut)]
         let mut rng = StdRng::from_rng(OsRng).unwrap();
         #[cfg(feature = "testing")]
-        let mut rng = if let Ok(seed) = env::var(ENV_VAR_MASP_TEST_SEED)
+        let mut rng = if let Ok(seed) = std::env::var(ENV_VAR_MASP_TEST_SEED)
             .map_err(|e| Error::Other(e.to_string()))
             .and_then(|seed| {
                 let exp_str =
@@ -2016,7 +2013,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 // viewing key in the following computations.
                 let ovk_opt = source
                     .spending_key()
-                    .map(|x| ExtendedSpendingKey::from(x).expsk.ovk);
+                    .map(|x| MaspExtendedSpendingKey::from(x).expsk.ovk);
                 // Make transaction output tied to the current token,
                 // denomination, and epoch.
                 if let Some(pa) = payment_address {
@@ -2351,7 +2348,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         for (sp, changes) in changes.into_iter() {
             for (asset_type, amt) in changes.components() {
                 if let Ordering::Greater = amt.cmp(&0) {
-                    let sk = ExtendedSpendingKey::from(sp.to_owned());
+                    let sk = MaspExtendedSpendingKey::from(sp.to_owned());
                     // Send the change in this asset type back to the sender
                     builder
                         .add_sapling_output(
@@ -3048,7 +3045,7 @@ pub mod testing {
         ) -> (Option<OutgoingViewingKey>, masp_primitives::sapling::PaymentAddress, AssetType, u64, MemoBytes) {
             let mut spending_key_seed = [0; 32];
             rng.fill_bytes(&mut spending_key_seed);
-            let spending_key = masp_primitives::zip32::ExtendedSpendingKey::master(spending_key_seed.as_ref());
+            let spending_key = MaspExtendedSpendingKey::master(spending_key_seed.as_ref());
 
             let viewing_key = ExtendedFullViewingKey::from(&spending_key).fvk.vk;
             let (div, _g_d) = find_valid_diversifier(&mut rng);
@@ -3071,10 +3068,10 @@ pub mod testing {
             mut rng in arb_rng().prop_map(TestCsprng),
             bparams_rng in arb_rng().prop_map(TestCsprng),
             prover_rng in arb_rng().prop_map(TestCsprng),
-        ) -> (ExtendedSpendingKey, Diversifier, Note, Node) {
+        ) -> (MaspExtendedSpendingKey, Diversifier, Note, Node) {
             let mut spending_key_seed = [0; 32];
             rng.fill_bytes(&mut spending_key_seed);
-            let spending_key = masp_primitives::zip32::ExtendedSpendingKey::master(spending_key_seed.as_ref());
+            let spending_key = MaspExtendedSpendingKey::master(spending_key_seed.as_ref());
 
             let viewing_key = ExtendedFullViewingKey::from(&spending_key).fvk.vk;
             let (div, _g_d) = find_valid_diversifier(&mut rng);
@@ -3166,7 +3163,7 @@ pub mod testing {
                     ).unwrap(),
                     *value,
                 )).collect::<Vec<_>>()
-        ) -> Vec<(ExtendedSpendingKey, Diversifier, Note, Node)> {
+        ) -> Vec<(MaspExtendedSpendingKey, Diversifier, Note, Node)> {
             spend_description
         }
     }
@@ -3373,7 +3370,7 @@ pub mod testing {
     }
 }
 
-#[cfg(all(feature = "std", feature = "validation"))]
+#[cfg(feature = "std")]
 /// Implementation of MASP functionality depending on a standard filesystem
 pub mod fs {
     use std::env;

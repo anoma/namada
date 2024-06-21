@@ -12,7 +12,6 @@ use namada_core::borsh::{BorshDeserialize, BorshSerializeExt};
 use namada_core::hash::Hash;
 use namada_core::internal::{HostEnvResult, KeyVal};
 use namada_core::storage::{BlockHeight, Key, TxIndex, TX_INDEX_LENGTH};
-use namada_core::WasmCacheAccess;
 use namada_events::{Event, EventTypeBuilder};
 use namada_gas::{
     self as gas, GasMetering, TxGasMeter, VpGasMeter,
@@ -35,9 +34,12 @@ use namada_tx::{BatchedTx, BatchedTxRef, Tx, TxCommitments};
 use namada_vp::vp_host_fns;
 use thiserror::Error;
 
+#[cfg(feature = "wasm-runtime")]
 use super::wasm::{TxCache, VpCache};
 use crate::memory::VmMemory;
-use crate::{HostRef, RoAccess, RoHostRef, RwAccess, RwHostRef};
+use crate::{
+    HostRef, RoAccess, RoHostRef, RwAccess, RwHostRef, WasmCacheAccess,
+};
 
 /// These runtime errors will abort tx WASM execution immediately
 #[allow(missing_docs)]
@@ -131,9 +133,14 @@ where
     pub yielded_value: HostRef<RwAccess, Option<Vec<u8>>>,
     /// VP WASM compilation cache (this is available in tx context, because
     /// we're pre-compiling VPs from [`tx_init_account`])
+    #[cfg(feature = "wasm-runtime")]
     pub vp_wasm_cache: HostRef<RwAccess, VpCache<CA>>,
     /// Tx WASM compilation cache
+    #[cfg(feature = "wasm-runtime")]
     pub tx_wasm_cache: HostRef<RwAccess, TxCache<CA>>,
+    /// To avoid unused parameter without "wasm-runtime" feature
+    #[cfg(not(feature = "wasm-runtime"))]
+    pub cache_access: std::marker::PhantomData<CA>,
 }
 
 impl<MEM, D, H, CA> TxVmEnv<MEM, D, H, CA>
@@ -164,8 +171,8 @@ where
         verifiers: &mut BTreeSet<Address>,
         result_buffer: &mut Option<Vec<u8>>,
         yielded_value: &mut Option<Vec<u8>>,
-        vp_wasm_cache: &mut VpCache<CA>,
-        tx_wasm_cache: &mut TxCache<CA>,
+        #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
+        #[cfg(feature = "wasm-runtime")] tx_wasm_cache: &mut TxCache<CA>,
     ) -> Self {
         let write_log = unsafe { RwHostRef::new(write_log) };
         let in_mem = unsafe { RoHostRef::new(in_mem) };
@@ -179,7 +186,9 @@ where
         let verifiers = unsafe { RwHostRef::new(verifiers) };
         let result_buffer = unsafe { RwHostRef::new(result_buffer) };
         let yielded_value = unsafe { RwHostRef::new(yielded_value) };
+        #[cfg(feature = "wasm-runtime")]
         let vp_wasm_cache = unsafe { RwHostRef::new(vp_wasm_cache) };
+        #[cfg(feature = "wasm-runtime")]
         let tx_wasm_cache = unsafe { RwHostRef::new(tx_wasm_cache) };
         let ctx = TxCtx {
             write_log,
@@ -194,8 +203,12 @@ where
             verifiers,
             result_buffer,
             yielded_value,
+            #[cfg(feature = "wasm-runtime")]
             vp_wasm_cache,
+            #[cfg(feature = "wasm-runtime")]
             tx_wasm_cache,
+            #[cfg(not(feature = "wasm-runtime"))]
+            cache_access: std::marker::PhantomData,
         };
 
         Self { memory, ctx }
@@ -274,8 +287,12 @@ where
             verifiers: self.verifiers,
             result_buffer: self.result_buffer,
             yielded_value: self.yielded_value,
+            #[cfg(feature = "wasm-runtime")]
             vp_wasm_cache: self.vp_wasm_cache,
+            #[cfg(feature = "wasm-runtime")]
             tx_wasm_cache: self.tx_wasm_cache,
+            #[cfg(not(feature = "wasm-runtime"))]
+            cache_access: std::marker::PhantomData,
         }
     }
 }
@@ -333,7 +350,11 @@ where
     /// calls to `eval`.
     pub verifiers: HostRef<RoAccess, BTreeSet<Address>>,
     /// VP WASM compilation cache
+    #[cfg(feature = "wasm-runtime")]
     pub vp_wasm_cache: HostRef<RwAccess, VpCache<CA>>,
+    /// To avoid unused parameter without "wasm-runtime" feature
+    #[cfg(not(feature = "wasm-runtime"))]
+    pub cache_access: std::marker::PhantomData<CA>,
 }
 
 /// A Validity predicate runner for calls from the [`vp_eval`] function.
@@ -391,7 +412,7 @@ where
         yielded_value: &mut Option<Vec<u8>>,
         keys_changed: &BTreeSet<Key>,
         eval_runner: &EVAL,
-        vp_wasm_cache: &mut VpCache<CA>,
+        #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
     ) -> Self {
         let ctx = VpCtx::new(
             address,
@@ -408,6 +429,7 @@ where
             yielded_value,
             keys_changed,
             eval_runner,
+            #[cfg(feature = "wasm-runtime")]
             vp_wasm_cache,
         );
 
@@ -466,7 +488,7 @@ where
         yielded_value: &mut Option<Vec<u8>>,
         keys_changed: &BTreeSet<Key>,
         eval_runner: &EVAL,
-        vp_wasm_cache: &mut VpCache<CA>,
+        #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
     ) -> Self {
         let address = unsafe { RoHostRef::new(address) };
         let write_log = unsafe { RoHostRef::new(write_log) };
@@ -482,6 +504,7 @@ where
         let yielded_value = unsafe { RwHostRef::new(yielded_value) };
         let keys_changed = unsafe { RoHostRef::new(keys_changed) };
         let eval_runner = unsafe { RoHostRef::new(eval_runner) };
+        #[cfg(feature = "wasm-runtime")]
         let vp_wasm_cache = unsafe { RwHostRef::new(vp_wasm_cache) };
         Self {
             address,
@@ -498,7 +521,10 @@ where
             yielded_value,
             keys_changed,
             verifiers,
+            #[cfg(feature = "wasm-runtime")]
             vp_wasm_cache,
+            #[cfg(not(feature = "wasm-runtime"))]
+            cache_access: std::marker::PhantomData,
         }
     }
 
@@ -546,7 +572,10 @@ where
             yielded_value: self.yielded_value,
             keys_changed: self.keys_changed,
             verifiers: self.verifiers,
+            #[cfg(feature = "wasm-runtime")]
             vp_wasm_cache: self.vp_wasm_cache,
+            #[cfg(not(feature = "wasm-runtime"))]
+            cache_access: std::marker::PhantomData,
         }
     }
 }
@@ -2346,8 +2375,8 @@ pub mod testing {
         tx_index: &TxIndex,
         result_buffer: &mut Option<Vec<u8>>,
         yielded_value: &mut Option<Vec<u8>>,
-        vp_wasm_cache: &mut VpCache<CA>,
-        tx_wasm_cache: &mut TxCache<CA>,
+        #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
+        #[cfg(feature = "wasm-runtime")] tx_wasm_cache: &mut TxCache<CA>,
     ) -> TxVmEnv<NativeMemory, <S as StateRead>::D, <S as StateRead>::H, CA>
     where
         S: State,
@@ -2368,7 +2397,9 @@ pub mod testing {
             verifiers,
             result_buffer,
             yielded_value,
+            #[cfg(feature = "wasm-runtime")]
             vp_wasm_cache,
+            #[cfg(feature = "wasm-runtime")]
             tx_wasm_cache,
         )
     }
@@ -2387,8 +2418,8 @@ pub mod testing {
         result_buffer: &mut Option<Vec<u8>>,
         yielded_value: &mut Option<Vec<u8>>,
         store: Rc<RefCell<wasmer::Store>>,
-        vp_wasm_cache: &mut VpCache<CA>,
-        tx_wasm_cache: &mut TxCache<CA>,
+        #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
+        #[cfg(feature = "wasm-runtime")] tx_wasm_cache: &mut TxCache<CA>,
     ) -> TxVmEnv<WasmMemory, <S as StateRead>::D, <S as StateRead>::H, CA>
     where
         S: State,
@@ -2415,7 +2446,9 @@ pub mod testing {
             verifiers,
             result_buffer,
             yielded_value,
+            #[cfg(feature = "wasm-runtime")]
             vp_wasm_cache,
+            #[cfg(feature = "wasm-runtime")]
             tx_wasm_cache,
         );
 
@@ -2438,7 +2471,7 @@ pub mod testing {
         yielded_value: &mut Option<Vec<u8>>,
         keys_changed: &BTreeSet<Key>,
         eval_runner: &EVAL,
-        vp_wasm_cache: &mut VpCache<CA>,
+        #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
     ) -> VpVmEnv<NativeMemory, <S as StateRead>::D, <S as StateRead>::H, EVAL, CA>
     where
         S: StateRead,
@@ -2461,6 +2494,7 @@ pub mod testing {
             yielded_value,
             keys_changed,
             eval_runner,
+            #[cfg(feature = "wasm-runtime")]
             vp_wasm_cache,
         )
     }

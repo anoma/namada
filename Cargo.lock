@@ -4456,75 +4456,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
-name = "namada"
-version = "0.41.0"
-dependencies = [
- "assert_matches",
- "async-trait",
- "base58",
- "borsh",
- "borsh-ext",
- "byte-unit",
- "clru",
- "either",
- "ethers",
- "eyre",
- "ibc-testkit",
- "itertools 0.12.1",
- "k256",
- "linkme",
- "masp_primitives",
- "masp_proofs",
- "namada_account",
- "namada_core",
- "namada_ethereum_bridge",
- "namada_events",
- "namada_gas",
- "namada_governance",
- "namada_ibc",
- "namada_migrations",
- "namada_parameters",
- "namada_proof_of_stake",
- "namada_replay_protection",
- "namada_sdk",
- "namada_state",
- "namada_test_utils",
- "namada_token",
- "namada_tx",
- "namada_tx_env",
- "namada_vote_ext",
- "namada_vp_env",
- "parity-wasm",
- "pretty_assertions",
- "proptest",
- "prost 0.12.3",
- "rand 0.8.5",
- "rayon",
- "ripemd",
- "serde_json",
- "sha2 0.9.9",
- "smooth-operator",
- "tempfile",
- "tendermint-rpc",
- "test-log",
- "thiserror",
- "tiny-bip39",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "uint",
- "wasm-instrument",
- "wasmer",
- "wasmer-cache",
- "wasmer-compiler",
- "wasmer-compiler-singlepass",
- "wasmer-types",
- "wasmer-vm",
- "wasmparser 0.107.0",
- "wasmtimer",
-]
-
-[[package]]
 name = "namada_account"
 version = "0.41.0"
 dependencies = [
@@ -4549,7 +4480,6 @@ dependencies = [
  "color-eyre",
  "eyre",
  "git2",
- "namada",
  "namada_apps_lib",
  "namada_node",
  "namada_test_utils",
@@ -4591,11 +4521,12 @@ dependencies = [
  "ledger-transport-hid",
  "linkme",
  "masp_primitives",
- "namada",
+ "namada_core",
  "namada_macros",
  "namada_migrations",
  "namada_sdk",
  "namada_test_utils",
+ "namada_vm",
  "pretty_assertions",
  "proptest",
  "prost 0.12.3",
@@ -4633,9 +4564,10 @@ dependencies = [
  "lazy_static",
  "masp_primitives",
  "masp_proofs",
- "namada",
  "namada_apps_lib",
  "namada_node",
+ "namada_vm",
+ "namada_vp",
  "prost 0.12.3",
  "rand 0.8.5",
  "rand_core 0.6.4",
@@ -4669,6 +4601,7 @@ dependencies = [
  "ethabi",
  "ethbridge-structs",
  "eyre",
+ "futures",
  "ibc",
  "ics23",
  "impl-num-traits",
@@ -4701,10 +4634,12 @@ dependencies = [
  "test-log",
  "thiserror",
  "tiny-keccak",
+ "tokio",
  "toml 0.5.11",
  "tracing",
  "tracing-subscriber",
  "uint",
+ "wasmtimer",
  "zeroize",
 ]
 
@@ -4716,7 +4651,10 @@ dependencies = [
  "itertools 0.12.1",
  "lazy_static",
  "madato",
- "namada",
+ "namada_account",
+ "namada_core",
+ "namada_token",
+ "namada_tx",
 ]
 
 [[package]]
@@ -4959,11 +4897,14 @@ dependencies = [
  "linkme",
  "masp_primitives",
  "masp_proofs",
- "namada",
  "namada_apps_lib",
  "namada_migrations",
+ "namada_replay_protection",
  "namada_sdk",
  "namada_test_utils",
+ "namada_vm",
+ "namada_vote_ext",
+ "namada_vp",
  "num-rational",
  "num-traits 0.2.17",
  "num256",
@@ -5096,7 +5037,9 @@ dependencies = [
  "namada_test_utils",
  "namada_token",
  "namada_tx",
+ "namada_vm",
  "namada_vote_ext",
+ "namada_vp",
  "num-traits 0.2.17",
  "num256",
  "orion",
@@ -5122,7 +5065,6 @@ dependencies = [
  "tokio",
  "toml 0.5.11",
  "tracing",
- "wasmtimer",
  "zeroize",
 ]
 
@@ -5234,14 +5176,16 @@ dependencies = [
  "ibc-testkit",
  "ics23",
  "itertools 0.12.1",
- "namada",
  "namada_apps_lib",
  "namada_core",
  "namada_node",
  "namada_sdk",
  "namada_test_utils",
+ "namada_tx_env",
  "namada_tx_prelude",
+ "namada_vm",
  "namada_vm_env",
+ "namada_vp",
  "namada_vp_prelude",
  "once_cell",
  "pretty_assertions",
@@ -5349,6 +5293,7 @@ dependencies = [
  "namada_account",
  "namada_core",
  "namada_events",
+ "namada_gas",
  "namada_governance",
  "namada_ibc",
  "namada_macros",
@@ -5363,10 +5308,10 @@ dependencies = [
 
 [[package]]
 name = "namada_vm"
-version = "0.39.0"
+version = "0.41.0"
 dependencies = [
  "assert_matches",
- "borsh 1.2.1",
+ "borsh",
  "byte-unit",
  "clru",
  "itertools 0.12.1",
@@ -5374,7 +5319,6 @@ dependencies = [
  "namada_events",
  "namada_gas",
  "namada_parameters",
- "namada_sdk",
  "namada_state",
  "namada_test_utils",
  "namada_token",
@@ -5390,7 +5334,9 @@ dependencies = [
  "wasm-instrument",
  "wasmer",
  "wasmer-cache",
+ "wasmer-compiler",
  "wasmer-compiler-singlepass",
+ "wasmer-types",
  "wasmer-vm",
  "wasmparser 0.107.0",
 ]
@@ -5420,7 +5366,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp"
-version = "0.39.0"
+version = "0.41.0"
 dependencies = [
  "namada_core",
  "namada_events",

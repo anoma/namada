@@ -145,7 +145,6 @@ pub trait StateRead: StorageRead + Debug {
     fn validity_predicate<Params: parameters::Keys>(
         &self,
         addr: &Address,
-        _: &Params,
     ) -> Result<(Option<Hash>, u64)> {
         let key = if let Address::Implicit(_) = addr {
             Params::implicit_vp_key()

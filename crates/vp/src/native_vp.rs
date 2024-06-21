@@ -47,13 +47,13 @@ pub trait NativeVp<'a> {
 
 /// A validity predicate's host context.
 ///
-/// This is similar to [`crate::vm::host_env::VpCtx`], but without the VM
+/// This is similar to `namada_vm::host_env::VpCtx`, but without the VM
 /// wrapper types and `eval_runner` field. The references must not be changed
 /// when [`Ctx`] is mutable.
 #[derive(Debug)]
 pub struct Ctx<'a, S, CA, EVAL>
 where
-    S: 'static + StateRead,
+    S: StateRead,
     EVAL: VpEvaluator<'a, S, CA, EVAL>,
 {
     /// The address of the account that owns the VP
@@ -82,10 +82,10 @@ where
     pub eval: PhantomData<EVAL>,
 }
 
-/// A Validity predicate runner for calls from the [`vp_eval`] function.
+/// A Validity predicate runner for calls from the host env `vp_eval` function.
 pub trait VpEvaluator<'a, S, CA, EVAL>
 where
-    S: 'static + StateRead,
+    S: 'a + StateRead,
     EVAL: VpEvaluator<'a, S, CA, EVAL>,
 {
     /// Evaluate a given validity predicate code with the given input data.
@@ -105,7 +105,7 @@ where
 #[derive(Debug)]
 pub struct CtxPreStorageRead<'view, 'a, S, CA, EVAL>
 where
-    S: 'static + StateRead,
+    S: StateRead,
     EVAL: VpEvaluator<'a, S, CA, EVAL>,
 {
     /// The inner context
@@ -117,7 +117,7 @@ where
 #[derive(Debug)]
 pub struct CtxPostStorageRead<'view, 'a, S, CA, EVAL>
 where
-    S: 'static + StateRead,
+    S: StateRead,
     EVAL: VpEvaluator<'a, S, CA, EVAL>,
 {
     /// The inner context
@@ -126,7 +126,7 @@ where
 
 impl<'a, S, CA, EVAL> Ctx<'a, S, CA, EVAL>
 where
-    S: 'static + StateRead,
+    S: StateRead,
     EVAL: VpEvaluator<'a, S, CA, EVAL>,
     CA: 'static + Clone,
 {
@@ -178,7 +178,7 @@ where
 impl<'view, 'a: 'view, S, CA, EVAL> StorageRead
     for CtxPreStorageRead<'view, 'a, S, CA, EVAL>
 where
-    S: 'static + StateRead,
+    S: StateRead,
     EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
     CA: 'static + Clone,
 {
@@ -256,7 +256,7 @@ where
 impl<'view, 'a: 'view, S, CA, EVAL> StorageRead
     for CtxPostStorageRead<'view, 'a, S, CA, EVAL>
 where
-    S: 'static + StateRead,
+    S: StateRead,
     EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
     CA: 'static + Clone,
 {
@@ -333,7 +333,7 @@ where
 
 impl<'view, 'a: 'view, S, CA, EVAL> VpEnv<'view> for Ctx<'a, S, CA, EVAL>
 where
-    S: 'static + StateRead,
+    S: 'a + StateRead,
     EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
     CA: 'static + Clone,
 {
@@ -490,7 +490,7 @@ where
 
 impl<'a, S, CA, EVAL> namada_tx::action::Read for Ctx<'a, S, CA, EVAL>
 where
-    S: 'static + StateRead,
+    S: StateRead,
     EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
     CA: 'static + Clone,
 {
@@ -553,7 +553,7 @@ pub trait StorageReader {
 
 impl<'a, S, CA, EVAL> StorageReader for &Ctx<'a, S, CA, EVAL>
 where
-    S: 'static + StateRead,
+    S: StateRead,
     EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
     CA: 'static + Clone,
 {

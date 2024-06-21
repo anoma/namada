@@ -1,16 +1,16 @@
 //! Namada node CLI.
 
 use eyre::{Context, Result};
-use namada::core::time::{DateTimeUtc, Utc};
-use namada::sdk::migrations::ScheduledMigration;
 use namada_apps_lib::cli::cmds::TestGenesis;
 use namada_apps_lib::cli::{self, cmds};
 use namada_apps_lib::config::{
     Action, ActionAtHeight, NodeLocalConfig, ValidatorLocalConfig,
 };
-use namada_node as node;
 #[cfg(not(feature = "migrations"))]
-use namada_sdk::display_line;
+use namada_apps_lib::display_line;
+use namada_apps_lib::migrations::ScheduledMigration;
+use namada_apps_lib::time::{DateTimeUtc, Utc};
+use namada_node as node;
 
 pub fn main() -> Result<()> {
     let (cmd, mut ctx) = cli::namada_node_cli()?;

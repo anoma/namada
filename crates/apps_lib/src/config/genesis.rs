@@ -12,23 +12,22 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
-use namada::core::address::{Address, EstablishedAddress};
-use namada::core::chain::ProposalBytes;
-use namada::core::collections::HashMap;
-use namada::core::key::*;
-use namada::core::storage;
-use namada::core::string_encoding::StringEncoded;
-use namada::core::time::DateTimeUtc;
-use namada::core::token::Denomination;
-use namada::governance::parameters::GovernanceParameters;
-use namada::governance::pgf::parameters::PgfParameters;
-use namada::ledger::eth_bridge::EthereumBridgeParams;
-use namada::ledger::parameters::EpochDuration;
-use namada::ledger::pos::{Dec, GenesisValidator, OwnedPosParams};
-use namada::token;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
+use namada_sdk::address::{Address, EstablishedAddress};
+use namada_sdk::chain::ProposalBytes;
+use namada_sdk::collections::HashMap;
+use namada_sdk::eth_bridge::EthereumBridgeParams;
+use namada_sdk::governance::parameters::GovernanceParameters;
+use namada_sdk::governance::pgf::parameters::PgfParameters;
+use namada_sdk::key::*;
+use namada_sdk::parameters::EpochDuration;
+use namada_sdk::proof_of_stake::{Dec, GenesisValidator, OwnedPosParams};
+use namada_sdk::string_encoding::StringEncoded;
+use namada_sdk::time::DateTimeUtc;
+use namada_sdk::token::Denomination;
+use namada_sdk::{storage, token};
 use serde::{Deserialize, Serialize};
 
 #[derive(
@@ -334,13 +333,13 @@ pub fn make_dev_genesis(
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
     use std::time::Duration;
 
-    use namada::core::address::testing::wnam;
-    use namada::core::chain::ChainIdPrefix;
-    use namada::core::ethereum_events::EthAddress;
-    use namada::core::key::*;
-    use namada::ledger::eth_bridge::{Contracts, UpgradeableContract};
-    use namada::ledger::pos::types::ValidatorMetaData;
-    use namada::tx::standalone_signature;
+    use namada_sdk::address::testing::wnam;
+    use namada_sdk::chain::ChainIdPrefix;
+    use namada_sdk::eth_bridge::{Contracts, UpgradeableContract};
+    use namada_sdk::ethereum_events::EthAddress;
+    use namada_sdk::key::*;
+    use namada_sdk::proof_of_stake::types::ValidatorMetaData;
+    use namada_sdk::tx::standalone_signature;
     use namada_sdk::wallet::alias::Alias;
 
     use crate::config::genesis::chain::{
@@ -579,8 +578,8 @@ pub fn make_dev_genesis(
 #[cfg(test)]
 pub mod tests {
     use borsh_ext::BorshSerializeExt;
-    use namada::core::address::testing::gen_established_address;
-    use namada::core::key::*;
+    use namada_sdk::address::testing::gen_established_address;
+    use namada_sdk::key::*;
     use rand::prelude::ThreadRng;
     use rand::thread_rng;
 
