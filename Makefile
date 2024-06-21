@@ -100,14 +100,14 @@ check:
 check-mainnet:
 	$(cargo) check --workspace --features "mainnet"
 
-# Check that every crate can be built with default features and that namada crate
-# can be built for wasm
+# Check that every crate can be built with default features and that SDK crate
+# can be built for wasm and with all features enabled
 check-crates:
 	rustup target add --toolchain $(nightly) wasm32-unknown-unknown
 	$(foreach p,$(crates), echo "Checking $(p)" && cargo +$(nightly) check -Z unstable-options --tests -p $(p) && ) \
 		make -C $(wasms) check && \
 		make -C $(wasms_for_tests) check && \
-		cargo check --package namada --target wasm32-unknown-unknown --no-default-features --features "namada-sdk" && \
+		cargo check --package namada_sdk --target wasm32-unknown-unknown --no-default-features && \
 		cargo check --package namada_sdk --all-features
 
 clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets -- -D warnings
@@ -155,7 +155,6 @@ test-coverage:
 	# Run integration tests separately because they require `integration`
 	# feature (and without coverage)
 	$(cargo) +$(nightly) llvm-cov --output-path lcov.info \
-		--features namada/testing \
 		--lcov \
 		-- --skip e2e --skip pos_state_machine_test --skip integration \
 		-Z unstable-options --report-time && \
@@ -204,7 +203,6 @@ test-unit-with-eth-bridge:
 
 test-unit-with-coverage:
 	$(cargo) +$(nightly) llvm-cov --output-path lcov.info \
-		--features namada/testing \
 		--lcov \
 		-- --skip e2e --skip pos_state_machine_test --skip integration \
 		-Z unstable-options --report-time

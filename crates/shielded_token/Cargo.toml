@@ -17,7 +17,6 @@ default = []
 multicore = ["dep:rayon"]
 testing = [
   "multicore",
-  "validation",
   "namada_core/testing",
   "masp_primitives/test-dependencies",
 ]

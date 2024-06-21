@@ -35,7 +35,7 @@ namada_macros = {path = "../crates/macros"}
 namada_migrations = {path = "../crates/migrations"}
 namada_parameters = { path = "../crates/parameters"}
 namada_trans_token = {path = "../crates/trans_token", features = ["migrations"]}
-namada_sdk = { path = "../crates/sdk", default-features = false, features = ["namada-sdk", "std", "testing", "migrations"] }
+namada_sdk = { path = "../crates/sdk", default-features = false, features = ["std", "testing", "migrations"] }
 namada_shielded_token = { path = "../crates/shielded_token" }
 
 borsh.workspace = true

@@ -8,8 +8,8 @@ pub mod event_log {
     use ethbridge_bridge_events::{
         TransferToChainFilter, TransferToErcFilter, ValidatorSetUpdateFilter,
     };
-    use namada::eth_bridge::ethers::abi::AbiEncode;
-    use namada::eth_bridge::ethers::contract::EthEvent;
+    use namada_sdk::eth_bridge::ethers::abi::AbiEncode;
+    use namada_sdk::eth_bridge::ethers::contract::EthEvent;
 
     /// Get an [`ethabi::RawLog`] from a given Ethereum event.
     pub trait GetLog {
@@ -67,8 +67,8 @@ pub mod mock_web3_client {
     use async_trait::async_trait;
     use ethabi::Address;
     use ethbridge_events::EventCodec;
-    use namada::control_flow::time::{Duration, Instant};
-    use namada::core::ethereum_structs::BlockHeight;
+    use namada_sdk::control_flow::time::{Duration, Instant};
+    use namada_sdk::ethereum_structs::BlockHeight;
     use num256::Uint256;
     use tokio::sync::mpsc::{
         unbounded_channel, UnboundedReceiver, UnboundedSender,

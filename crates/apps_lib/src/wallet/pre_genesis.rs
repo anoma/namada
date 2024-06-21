@@ -3,7 +3,7 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use fd_lock::RwLock;
-use namada::core::key::SchemeType;
+use namada_sdk::key::SchemeType;
 use namada_sdk::wallet::pre_genesis::{
     ReadError, ValidatorStore, ValidatorWallet,
 };

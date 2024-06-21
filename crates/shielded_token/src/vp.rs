@@ -57,13 +57,13 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// MASP VP
-pub struct MaspVp<'a, S, CA, EVAL, Params, Gov>
+pub struct MaspVp<'ctx, S, CA, EVAL, Params, Gov>
 where
     S: 'static + StateRead,
-    EVAL: VpEvaluator<'a, S, CA, EVAL>,
+    EVAL: VpEvaluator<'ctx, S, CA, EVAL>,
 {
     /// Context to interact with the host structures.
-    pub ctx: Ctx<'a, S, CA, EVAL>,
+    pub ctx: Ctx<'ctx, S, CA, EVAL>,
     /// Governance type
     pub gov: PhantomData<Params>,
     /// Parameters type
@@ -83,23 +83,33 @@ struct ChangedBalances {
     post: BTreeMap<TransparentAddress, ValueSum<Address, Amount>>,
 }
 
-impl<'a, S, CA, EVAL, Params, Gov> MaspVp<'a, S, CA, EVAL, Params, Gov>
+impl<'view, 'ctx: 'view, S, CA, EVAL, Params, Gov>
+    MaspVp<'ctx, S, CA, EVAL, Params, Gov>
 where
     S: 'static + StateRead,
     CA: 'static + Clone,
-    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
     Params: parameters::Read<
-            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
             Err = StorageError,
         >,
     Gov: governance::Read<
-            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
             Err = StorageError,
         >,
 {
+    /// Instantiate MASP VP
+    pub fn new(ctx: Ctx<'ctx, S, CA, EVAL>) -> Self {
+        Self {
+            ctx,
+            params: PhantomData,
+            gov: PhantomData,
+        }
+    }
+
     /// Return if the parameter change was done via a governance proposal
     pub fn is_valid_parameter_change(
-        &'a self,
+        &'view self,
         tx: &BatchedTxRef<'_>,
     ) -> Result<()> {
         tx.tx.data(tx.cmt).map_or_else(
@@ -259,7 +269,7 @@ where
 
     // Check that the convert descriptions anchors of a transaction are valid
     fn valid_convert_descriptions_anchor(
-        &'a self,
+        &'view self,
         transaction: &Transaction,
     ) -> Result<()> {
         if let Some(bundle) = transaction.sapling_bundle() {
@@ -358,7 +368,7 @@ where
 
     // Check that MASP Transaction and state changes are valid
     fn is_valid_masp_transfer(
-        &'a self,
+        &'view self,
         tx_data: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
     ) -> Result<()> {
@@ -843,25 +853,25 @@ fn verify_sapling_balancing_value(
     }
 }
 
-impl<'a, S, CA, EVAL, Params, Gov> NativeVp<'a>
-    for MaspVp<'a, S, CA, EVAL, Params, Gov>
+impl<'view, 'ctx: 'view, S, CA, EVAL, Params, Gov> NativeVp<'view>
+    for MaspVp<'ctx, S, CA, EVAL, Params, Gov>
 where
     S: 'static + StateRead,
     CA: 'static + Clone,
-    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
     Params: parameters::Read<
-            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
             Err = StorageError,
         >,
     Gov: governance::Read<
-            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
             Err = StorageError,
         >,
 {
     type Error = Error;
 
     fn validate_tx(
-        &'a self,
+        &'view self,
         tx_data: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,

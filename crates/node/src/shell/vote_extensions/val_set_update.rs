@@ -1,7 +1,7 @@
 //! Extend Tendermint votes with validator set updates, to be relayed to
 //! Namada's Ethereum bridge smart contracts.
 
-use namada::core::collections::HashMap;
+use namada_sdk::collections::HashMap;
 
 use super::*;
 
@@ -110,20 +110,19 @@ where
 #[allow(clippy::cast_possible_truncation)]
 #[cfg(test)]
 mod test_vote_extensions {
-    use namada::core::key::RefTo;
-    use namada::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
-    use namada::ledger::pos::PosQueries;
-    use namada::proof_of_stake::storage::{
+    use namada_apps_lib::wallet;
+    use namada_sdk::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
+    use namada_sdk::eth_bridge::EthBridgeQueries;
+    use namada_sdk::key::RefTo;
+    use namada_sdk::proof_of_stake::storage::{
         consensus_validator_set_handle,
         read_consensus_validator_set_addresses_with_stake,
     };
-    use namada::proof_of_stake::types::WeightedValidator;
-    use namada::proof_of_stake::Epoch;
-    use namada::state::collections::lazy_map::{NestedSubKey, SubKey};
-    use namada::tendermint::abci::types::VoteInfo;
-    use namada::vote_ext::validator_set_update;
-    use namada_apps_lib::wallet;
-    use namada_sdk::eth_bridge::EthBridgeQueries;
+    use namada_sdk::proof_of_stake::types::WeightedValidator;
+    use namada_sdk::proof_of_stake::{Epoch, PosQueries};
+    use namada_sdk::state::collections::lazy_map::{NestedSubKey, SubKey};
+    use namada_sdk::tendermint::abci::types::VoteInfo;
+    use namada_vote_ext::validator_set_update;
 
     use super::validate_valset_upd_vext;
     use crate::shell::test_utils::{self, get_pkh_from_address};

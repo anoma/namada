@@ -50,7 +50,10 @@ pub use namada_tx::{action, data as transaction, BatchedTx, Section, Tx};
 pub use namada_tx_env::TxEnv;
 use namada_vm_env::tx::*;
 use namada_vm_env::{read_from_buffer, read_key_val_bytes_from_buffer};
-pub use {namada_governance as governance, namada_parameters as parameters};
+pub use {
+    namada_gas as gas, namada_governance as governance,
+    namada_parameters as parameters,
+};
 
 /// Log a string. The message will be printed at the `tracing::Level::Info`.
 pub fn log_string<T: AsRef<str>>(msg: T) {

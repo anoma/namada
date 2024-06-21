@@ -44,7 +44,7 @@ pub use error::*;
 use namada_core::address::{Address, InternalAddress};
 use namada_core::arith::checked;
 use namada_core::collections::HashSet;
-use namada_core::dec::Dec;
+pub use namada_core::dec::Dec;
 use namada_core::key::common;
 use namada_core::storage::BlockHeight;
 pub use namada_core::storage::{Epoch, Key, KeySeg};
@@ -54,7 +54,9 @@ use namada_storage::collections::lazy_map::{self, Collectable, LazyMap};
 use namada_storage::{OptionExt, StorageRead, StorageWrite};
 pub use namada_trans_token as token;
 pub use parameters::{OwnedPosParams, PosParams};
+pub use pos_queries::PosQueries;
 use storage::write_validator_name;
+pub use types::GenesisValidator;
 use types::{into_tm_voting_power, DelegationEpochs};
 
 use crate::queries::{find_bonds, has_bonds};

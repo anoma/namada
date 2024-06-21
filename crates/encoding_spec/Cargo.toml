@@ -16,6 +16,11 @@ version.workspace = true
 default = []
 
 [dependencies]
+namada_account = { path = "../account" }
+namada_core = { path = "../core" }
+namada_token = { path = "../token" }
+namada_tx = { path = "../tx" }
+
 borsh.workspace = true
 itertools.workspace = true
 lazy_static.workspace = true

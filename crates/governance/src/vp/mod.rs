@@ -48,29 +48,27 @@ pub enum Error {
 }
 
 /// Governance VP
-pub struct GovernanceVp<'a, S, CA: 'a, EVAL, PoS, TokenKeys>
+pub struct GovernanceVp<'ctx, S, CA, EVAL, PoS, TokenKeys>
 where
-    S: 'static + StateRead,
-    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
-    PoS: proof_of_stake::Read<CtxPreStorageRead<'a, 'a, S, CA, EVAL>>,
-    TokenKeys: token::Keys,
+    S: StateRead,
+    EVAL: VpEvaluator<'ctx, S, CA, EVAL>,
 {
     /// Context to interact with the host structures.
-    pub ctx: Ctx<'a, S, CA, EVAL>,
+    pub ctx: Ctx<'ctx, S, CA, EVAL>,
     /// Read PoS storage
     pub pos: PhantomData<PoS>,
     /// Token keys
     pub token_keys: PhantomData<TokenKeys>,
 }
 
-impl<'a, S, CA, EVAL, PoS, TokenKeys> NativeVp<'a>
-    for GovernanceVp<'a, S, CA, EVAL, PoS, TokenKeys>
+impl<'view, 'ctx: 'view, S, CA, EVAL, PoS, TokenKeys> NativeVp<'view>
+    for GovernanceVp<'ctx, S, CA, EVAL, PoS, TokenKeys>
 where
     S: StateRead,
-    EVAL: VpEvaluator<'a, S, CA, EVAL>,
     CA: 'static + Clone,
+    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
     PoS: proof_of_stake::Read<
-            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
             Err = namada_state::StorageError,
         >,
     TokenKeys: token::Keys,
@@ -78,7 +76,7 @@ where
     type Error = Error;
 
     fn validate_tx(
-        &'a self,
+        &'view self,
         tx_data: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<storage::Key>,
         verifiers: &BTreeSet<Address>,
@@ -217,20 +215,20 @@ where
     }
 }
 
-impl<'a, S, CA, EVAL, PoS, TokenKeys>
-    GovernanceVp<'a, S, CA, EVAL, PoS, TokenKeys>
+impl<'view, 'ctx: 'view, S, CA, EVAL, PoS, TokenKeys>
+    GovernanceVp<'ctx, S, CA, EVAL, PoS, TokenKeys>
 where
     S: StateRead,
-    EVAL: VpEvaluator<'a, S, CA, EVAL>,
     CA: 'static + Clone,
+    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
     PoS: proof_of_stake::Read<
-            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
             Err = namada_state::StorageError,
         >,
     TokenKeys: token::Keys,
 {
     /// Instantiate a Governance VP
-    pub fn new(ctx: Ctx<'a, S, CA, EVAL>) -> Self {
+    pub fn new(ctx: Ctx<'ctx, S, CA, EVAL>) -> Self {
         Self {
             ctx,
             pos: PhantomData,
@@ -276,7 +274,7 @@ where
     }
 
     fn is_valid_vote_key(
-        &'a self,
+        &'view self,
         proposal_id: u64,
         key: &storage::Key,
         verifiers: &BTreeSet<Address>,
@@ -1118,7 +1116,7 @@ where
 
     /// Check if a vote is from a validator
     pub fn is_validator(
-        &'a self,
+        &'view self,
         verifiers: &BTreeSet<Address>,
         voter: &Address,
         validator: &Address,
@@ -1176,7 +1174,7 @@ where
 
     /// Check if a vote is from a delegator
     pub fn is_delegator(
-        &'a self,
+        &'view self,
         epoch: Epoch,
         verifiers: &BTreeSet<Address>,
         address: &Address,
@@ -1278,7 +1276,7 @@ mod test {
     use namada_core::key::RefTo;
     use namada_core::storage::testing::get_dummy_header;
     use namada_core::time::DateTimeUtc;
-    use namada_core::{token, WasmCacheRwAccess};
+    use namada_core::token;
     use namada_gas::{TxGasMeter, VpGasMeter};
     use namada_parameters::Parameters;
     use namada_proof_of_stake::bond_tokens;
@@ -1293,9 +1291,9 @@ mod test {
     use namada_tx::action::{Action, GovAction, Write};
     use namada_tx::data::TxType;
     use namada_tx::{Authorization, Code, Data, Section, Tx};
-    use namada_vm::wasm;
     use namada_vm::wasm::run::VpEvalWasm;
     use namada_vm::wasm::VpCache;
+    use namada_vm::{wasm, WasmCacheRwAccess};
     use namada_vp::native_vp::{Ctx, CtxPreStorageRead, NativeVp};
 
     use crate::storage::keys::{
@@ -1308,13 +1306,13 @@ mod test {
 
     type CA = WasmCacheRwAccess;
     type Eval<S> = VpEvalWasm<<S as StateRead>::D, <S as StateRead>::H, CA>;
-    type GovernanceVp<'a, S> = super::GovernanceVp<
-        'a,
+    type GovernanceVp<'ctx, S> = super::GovernanceVp<
+        'ctx,
         S,
         VpCache<CA>,
         Eval<S>,
         namada_proof_of_stake::Store<
-            CtxPreStorageRead<'a, 'a, S, VpCache<CA>, Eval<S>>,
+            CtxPreStorageRead<'ctx, 'ctx, S, VpCache<CA>, Eval<S>>,
         >,
         namada_token::Store<()>,
     >;

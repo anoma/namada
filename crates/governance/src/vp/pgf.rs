@@ -32,25 +32,25 @@ pub enum Error {
 }
 
 /// Pgf VP
-pub struct PgfVp<'a, S, CA, EVAL>
+pub struct PgfVp<'ctx, S, CA, EVAL>
 where
     S: 'static + StateRead,
-    EVAL: VpEvaluator<'a, S, CA, EVAL>,
+    EVAL: VpEvaluator<'ctx, S, CA, EVAL>,
 {
     /// Context to interact with the host structures.
-    pub ctx: Ctx<'a, S, CA, EVAL>,
+    pub ctx: Ctx<'ctx, S, CA, EVAL>,
 }
 
-impl<'a, S, CA, EVAL> NativeVp<'a> for PgfVp<'a, S, CA, EVAL>
+impl<'view, 'ctx, S, CA, EVAL> NativeVp<'view> for PgfVp<'ctx, S, CA, EVAL>
 where
     S: 'static + StateRead,
     CA: 'static + Clone,
-    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
 {
     type Error = Error;
 
     fn validate_tx(
-        &'a self,
+        &'view self,
         batched_tx: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
@@ -207,15 +207,20 @@ where
     }
 }
 
-impl<'a, S, CA, EVAL> PgfVp<'a, S, CA, EVAL>
+impl<'view, 'ctx, S, CA, EVAL> PgfVp<'ctx, S, CA, EVAL>
 where
     S: 'static + StateRead,
     CA: 'static + Clone,
-    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
 {
+    /// Instantiate PGF VP
+    pub fn new(ctx: Ctx<'ctx, S, CA, EVAL>) -> Self {
+        Self { ctx }
+    }
+
     /// Validate a governance parameter
     pub fn is_valid_parameter_change(
-        &'a self,
+        &'view self,
         batched_tx: &BatchedTxRef<'_>,
     ) -> Result<()> {
         batched_tx.tx.data(batched_tx.cmt).map_or_else(
@@ -242,8 +247,8 @@ where
 
 #[allow(clippy::upper_case_acronyms)]
 #[derive(Debug)]
-enum KeyType<'a> {
-    Stewards(&'a Address),
+enum KeyType<'ctx> {
+    Stewards(&'ctx Address),
     Fundings,
     PgfInflationRate,
     StewardInflationRate,

@@ -3,12 +3,12 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::str::FromStr;
 
-use namada::core::chain::{ChainId, ProposalBytes};
-use namada::core::storage::BlockHeight;
-use namada::core::time::DateTimeUtc;
 use namada_apps_lib::cli::namada_version;
 use namada_apps_lib::config;
 pub use namada_apps_lib::tendermint_node::*;
+use namada_sdk::chain::{ChainId, ProposalBytes};
+use namada_sdk::storage::BlockHeight;
+use namada_sdk::time::DateTimeUtc;
 use thiserror::Error;
 use tokio::fs::{File, OpenOptions};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};

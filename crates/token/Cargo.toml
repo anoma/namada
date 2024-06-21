@@ -32,5 +32,6 @@ serde.workspace = true
 
 [dev-dependencies]
 namada_core = { path = "../core", features = ["testing"] }
+namada_shielded_token = { path = "../shielded_token", features = ["testing"] }
 
 proptest.workspace = true

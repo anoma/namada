@@ -18,7 +18,6 @@ use expectrl::stream::log::LogStream;
 use expectrl::{ControlCode, Eof, WaitStatus};
 use eyre::eyre;
 use itertools::{Either, Itertools};
-use namada::core::chain::ChainId;
 use namada_apps_lib::cli::context::ENV_VAR_CHAIN_ID;
 use namada_apps_lib::client::utils::{
     self, validator_pre_genesis_dir, validator_pre_genesis_txs_file,
@@ -34,6 +33,7 @@ use namada_core::collections::HashMap;
 use namada_core::key::{RefTo, SchemeType};
 use namada_core::string_encoding::StringEncoded;
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
+use namada_sdk::chain::ChainId;
 use namada_sdk::wallet::alias::Alias;
 use namada_tx_prelude::token;
 use once_cell::sync::Lazy;

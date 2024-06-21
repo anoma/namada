@@ -66,13 +66,13 @@ pub enum Error {
 pub type VpResult<T> = std::result::Result<T, Error>;
 
 /// IBC VP
-pub struct Ibc<'a, S, CA, EVAL, Params, Gov, Token, PoS>
+pub struct Ibc<'ctx, S, CA, EVAL, Params, Gov, Token, PoS>
 where
     S: 'static + StateRead,
-    EVAL: VpEvaluator<'a, S, CA, EVAL>,
+    EVAL: VpEvaluator<'ctx, S, CA, EVAL>,
 {
     /// Context to interact with the host structures.
-    pub ctx: Ctx<'a, S, CA, EVAL>,
+    pub ctx: Ctx<'ctx, S, CA, EVAL>,
     /// Parameters type
     pub params: PhantomData<Params>,
     /// Governance type
@@ -83,35 +83,35 @@ where
     pub pos: PhantomData<PoS>,
 }
 
-impl<'a, S, CA, EVAL, Params, Gov, Token, PoS> NativeVp<'a>
-    for Ibc<'a, S, CA, EVAL, Params, Gov, Token, PoS>
+impl<'view, 'ctx: 'view, S, CA, EVAL, Params, Gov, Token, PoS> NativeVp<'view>
+    for Ibc<'ctx, S, CA, EVAL, Params, Gov, Token, PoS>
 where
     S: 'static + StateRead,
-    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL> + Debug,
+    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL> + Debug,
     CA: 'static + Clone + Debug,
     Gov: governance::Read<
-            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
             Err = StorageError,
         >,
     Params: parameters::Keys
         + parameters::Read<
-            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
             Err = StorageError,
         >,
     Token: token::Keys
         + token::Write<
-            PseudoExecutionStorage<'a, 'a, S, CA, EVAL>,
+            PseudoExecutionStorage<'view, 'ctx, S, CA, EVAL>,
             Err = StorageError,
         > + Debug,
     PoS: proof_of_stake::Read<
-            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
             Err = StorageError,
         >,
 {
     type Error = Error;
 
     fn validate_tx(
-        &'a self,
+        &'view self,
         batched_tx: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
@@ -149,29 +149,29 @@ where
     }
 }
 
-impl<'a, S, CA, EVAL, Params, Gov, Token, PoS>
-    Ibc<'a, S, CA, EVAL, Params, Gov, Token, PoS>
+impl<'view, 'ctx: 'view, S, CA, EVAL, Params, Gov, Token, PoS>
+    Ibc<'ctx, S, CA, EVAL, Params, Gov, Token, PoS>
 where
     S: 'static + StateRead,
-    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL> + Debug,
+    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL> + Debug,
     CA: 'static + Clone + Debug,
     Params: parameters::Keys
         + parameters::Read<
-            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
             Err = StorageError,
         >,
     Token: token::Keys
         + token::Write<
-            PseudoExecutionStorage<'a, 'a, S, CA, EVAL>,
+            PseudoExecutionStorage<'view, 'ctx, S, CA, EVAL>,
             Err = StorageError,
         > + Debug,
     PoS: proof_of_stake::Read<
-            CtxPreStorageRead<'a, 'a, S, CA, EVAL>,
+            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
             Err = StorageError,
         >,
 {
     /// Instantiate IBC VP
-    pub fn new(ctx: Ctx<'a, S, CA, EVAL>) -> Self {
+    pub fn new(ctx: Ctx<'ctx, S, CA, EVAL>) -> Self {
         Self {
             ctx,
             params: PhantomData,
@@ -182,7 +182,7 @@ where
     }
 
     fn validate_state(
-        &'a self,
+        &'view self,
         tx_data: &[u8],
         keys_changed: &BTreeSet<Key>,
     ) -> VpResult<()> {
@@ -243,7 +243,7 @@ where
         Ok(())
     }
 
-    fn validate_with_msg(&'a self, tx_data: &[u8]) -> VpResult<()> {
+    fn validate_with_msg(&'view self, tx_data: &[u8]) -> VpResult<()> {
         let validation_ctx = VpValidationContext::new(self.ctx.pre());
         let ctx = Rc::new(RefCell::new(validation_ctx));
         // Use an empty verifiers set placeholder for validation, this is only
@@ -265,7 +265,7 @@ where
     }
 
     /// Retrieve the validation params
-    pub fn validation_params(&'a self) -> VpResult<ValidationParams> {
+    pub fn validation_params(&'view self) -> VpResult<ValidationParams> {
         use std::str::FromStr;
         let chain_id = self.ctx.get_chain_id().map_err(Error::NativeVpError)?;
         let proof_specs =
@@ -433,7 +433,6 @@ mod tests {
     use namada_core::storage::{BlockHeight, Epoch, TxIndex};
     use namada_core::tendermint::time::Time as TmTime;
     use namada_core::time::DurationSecs;
-    use namada_core::WasmCacheRwAccess;
     use namada_gas::{TxGasMeter, VpGasMeter};
     use namada_governance::parameters::GovernanceParameters;
     use namada_parameters::storage::{
@@ -447,9 +446,9 @@ mod tests {
     use namada_token::NATIVE_MAX_DECIMAL_PLACES;
     use namada_tx::data::TxType;
     use namada_tx::{Authorization, Code, Data, Section, Tx};
-    use namada_vm::wasm;
     use namada_vm::wasm::run::VpEvalWasm;
     use namada_vm::wasm::VpCache;
+    use namada_vm::{wasm, WasmCacheRwAccess};
     use prost::Message;
     use sha2::Digest;
 
@@ -542,23 +541,23 @@ mod tests {
         <TestState as StateRead>::H,
         CA,
     >;
-    type Ctx<'a> = super::Ctx<'a, TestState, VpCache<CA>, Eval>;
-    type Ibc<'a> = super::Ibc<
-        'a,
+    type Ctx<'ctx> = super::Ctx<'ctx, TestState, VpCache<CA>, Eval>;
+    type Ibc<'ctx> = super::Ibc<
+        'ctx,
         TestState,
         VpCache<CA>,
         Eval,
         namada_parameters::Store<
-            CtxPreStorageRead<'a, 'a, TestState, VpCache<CA>, Eval>,
+            CtxPreStorageRead<'ctx, 'ctx, TestState, VpCache<CA>, Eval>,
         >,
         namada_governance::Store<
-            CtxPreStorageRead<'a, 'a, TestState, VpCache<CA>, Eval>,
+            CtxPreStorageRead<'ctx, 'ctx, TestState, VpCache<CA>, Eval>,
         >,
         namada_token::Store<
-            PseudoExecutionStorage<'a, 'a, TestState, VpCache<CA>, Eval>,
+            PseudoExecutionStorage<'ctx, 'ctx, TestState, VpCache<CA>, Eval>,
         >,
         namada_proof_of_stake::Store<
-            CtxPreStorageRead<'a, 'a, TestState, VpCache<CA>, Eval>,
+            CtxPreStorageRead<'ctx, 'ctx, TestState, VpCache<CA>, Eval>,
         >,
     >;
 

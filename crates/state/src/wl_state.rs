@@ -651,6 +651,29 @@ where
         }
     }
 
+    /// Borrow in-memory state and DB handle with a mutable temporary write-log.
+    ///
+    /// # Safety
+    ///
+    /// The lifetime of borrows is unsafely extended to `'static` to allow usage
+    /// in node's `dry_run_tx`, which needs a static lifetime to be able to call
+    /// protocol's API that is generic over the state with a bound `S: 'static +
+    /// State` with a mutable reference to this struct.
+    /// Because the lifetime of `S` is invariant w.r.t. `&mut S`
+    /// (<https://doc.rust-lang.org/nomicon/subtyping.html>) we are faking a
+    /// static lifetime of `S` for `TempWlState`. This should be safe as neither
+    /// `db` nor `in_mem` are actually mutable, only the `write_log` which is
+    /// owned by this struct.
+    pub unsafe fn with_static_temp_write_log(
+        &self,
+    ) -> TempWlState<'static, D, H> {
+        TempWlState {
+            write_log: WriteLog::default(),
+            db: &*(&self.db as *const _),
+            in_mem: &*(&self.in_mem as *const _),
+        }
+    }
+
     /// Commit the current transaction's write log to the block. Starts a new
     /// transaction write log.
     pub fn commit_tx(&mut self) {

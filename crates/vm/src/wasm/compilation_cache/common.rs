@@ -14,14 +14,14 @@ use std::time::Duration;
 
 use clru::{CLruCache, CLruCacheConfig, WeightScale};
 use namada_core::collections::HashMap;
+use namada_core::control_flow::time::{ExponentialBackoff, SleepStrategy};
 use namada_core::hash::Hash;
-use namada_core::{WasmCacheAccess, WasmCacheRoAccess};
-use namada_sdk::control_flow::time::{ExponentialBackoff, SleepStrategy};
 use wasmer::{Module, Store};
 use wasmer_cache::{FileSystemCache, Hash as CacheHash};
 
 use crate::wasm::run::untrusted_wasm_store;
 use crate::wasm::{self, memory};
+use crate::{WasmCacheAccess, WasmCacheRoAccess};
 
 /// Cache handle. Thread-safe.
 #[derive(Debug, Clone)]
@@ -580,11 +580,11 @@ mod universal {
 /// Testing helpers
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
-    use namada_core::WasmCacheRwAccess;
     use tempfile::{tempdir, TempDir};
 
     use super::*;
     use crate::wasm::{TxCache, VpCache};
+    use crate::WasmCacheRwAccess;
 
     /// VP Cache with a temp dir for testing
     pub fn vp_cache() -> (VpCache<WasmCacheRwAccess>, TempDir) {
@@ -614,12 +614,12 @@ mod test {
 
     use assert_matches::assert_matches;
     use byte_unit::Byte;
-    use namada_core::WasmCacheRwAccess;
     use namada_test_utils::TestWasms;
     use tempfile::{tempdir, TempDir};
     use test_log::test;
 
     use super::*;
+    use crate::WasmCacheRwAccess;
 
     #[test]
     fn test_fetch_or_compile_valid_wasm() {
