@@ -66,9 +66,6 @@ pub trait MaspClient<'client, C: Client> {
     /// Return the wrapped client.
     fn rpc_client(&self) -> &C;
 
-    /// Return the capabilities of this client.
-    fn capabilities(&self) -> MaspClientCapabilities;
-
     /// Fetch shielded transfers from blocks heights in the range `[from, to]`,
     /// keeping track of progress through `progress`. The fetched transfers
     /// are sent over to a separate worker through `tx_sender`.
@@ -81,6 +78,11 @@ pub trait MaspClient<'client, C: Client> {
         from: BlockHeight,
         to: BlockHeight,
     ) -> Result<(), Error>;
+
+    /// Return the capabilities of this client.
+    fn capabilities(&self) -> MaspClientCapabilities {
+        MaspClientCapabilities::OnlyTransfers
+    }
 
     /// Fetch the commitment tree of height `height`.
     #[allow(async_fn_in_trait)]
@@ -143,10 +145,6 @@ where
 {
     fn rpc_client(&self) -> &C {
         self.client
-    }
-
-    fn capabilities(&self) -> MaspClientCapabilities {
-        MaspClientCapabilities::OnlyTransfers
     }
 
     async fn fetch_shielded_transfers<IO: Io>(
