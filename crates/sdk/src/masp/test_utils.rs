@@ -9,8 +9,7 @@ use crate::control_flow::ShutdownSignal;
 use crate::error::Error;
 use crate::io::Io;
 use crate::masp::utils::{
-    FetchQueueSender, IterProgress, MaspClient, MaspClientCapabilities,
-    PeekableIter, ProgressTracker,
+    FetchQueueSender, IterProgress, MaspClient, PeekableIter, ProgressTracker,
 };
 use crate::masp::IndexedNoteEntry;
 use crate::queries::testing::TestClient;
@@ -106,10 +105,6 @@ impl<'client> TestingMaspClient<'client> {
 impl<'a> MaspClient<'a, TestingClient> for TestingMaspClient<'a> {
     fn rpc_client(&self) -> &TestingClient {
         self.client
-    }
-
-    fn capabilities(&self) -> MaspClientCapabilities {
-        MaspClientCapabilities::OnlyTransfers
     }
 
     async fn fetch_shielded_transfers<IO: Io>(
