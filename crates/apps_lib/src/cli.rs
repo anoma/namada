@@ -3135,8 +3135,6 @@ pub mod args {
             Err(_) => config::get_default_namada_folder(),
         }),
     );
-    pub const BATCH_SIZE_OPT: ArgDefault<u64> =
-        arg_default("batch-size", DefaultFn(|| 1));
     pub const BLOCK_HEIGHT: Arg<BlockHeight> = arg("block-height");
     pub const BLOCK_HEIGHT_OPT: ArgOpt<BlockHeight> = arg_opt("height");
     pub const BLOCK_HEIGHT_FROM_OPT: ArgOpt<BlockHeight> =
@@ -6364,14 +6362,12 @@ pub mod args {
     impl Args for ShieldedSync<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let ledger_address = CONFIG_RPC_LEDGER_ADDRESS.parse(matches);
-            let batch_size = BATCH_SIZE_OPT.parse(matches);
             let start_query_height = BLOCK_HEIGHT_FROM_OPT.parse(matches);
             let last_query_height = BLOCK_HEIGHT_TO_OPT.parse(matches);
             let spending_keys = SPENDING_KEYS.parse(matches);
             let viewing_keys = VIEWING_KEYS.parse(matches);
             Self {
                 ledger_address,
-                batch_size,
                 start_query_height,
                 last_query_height,
                 spending_keys,
@@ -6381,10 +6377,6 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.arg(CONFIG_RPC_LEDGER_ADDRESS.def().help(LEDGER_ADDRESS_ABOUT))
-                .arg(BATCH_SIZE_OPT.def().help(wrap!(
-                    "Optional batch size which determines how many txs to \
-                     fetch before caching locally. Default is 1."
-                )))
                 .arg(BLOCK_HEIGHT_TO_OPT.def().help(wrap!(
                     "Option block height to sync up to. Default is latest."
                 )))
@@ -6415,7 +6407,6 @@ pub mod args {
 
             Ok(ShieldedSync {
                 ledger_address: chain_ctx.get(&self.ledger_address),
-                batch_size: self.batch_size,
                 start_query_height: self.start_query_height,
                 last_query_height: self.last_query_height,
                 spending_keys: self

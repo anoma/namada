@@ -769,9 +769,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         start_query_height: Option<BlockHeight>,
         last_query_height: Option<BlockHeight>,
         retry: RetryStrategy,
-        // NOTE: do not remove this argument, it will be used once the indexer
-        // is ready
-        _batch_size: u64,
         sks: &[ExtendedSpendingKey],
         fvks: &[ViewingKey],
     ) -> Result<(), Error>
@@ -787,7 +784,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             start_query_height,
             last_query_height,
             retry,
-            _batch_size,
             sks,
             fvks,
             shutdown_signal,
@@ -823,9 +819,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         start_query_height: Option<BlockHeight>,
         last_query_height: Option<BlockHeight>,
         retry: RetryStrategy,
-        // NOTE: do not remove this argument, it will be used once the indexer
-        // is ready
-        _batch_size: u64,
         sks: &[ExtendedSpendingKey],
         fvks: &[ViewingKey],
         mut shutdown_signal: ShutdownSignal,
@@ -3423,7 +3416,6 @@ mod test_shielded_sync {
                 None,
                 None,
                 RetryStrategy::Times(1),
-                0,
                 &[],
                 &[vk],
             )
@@ -3468,7 +3460,6 @@ mod test_shielded_sync {
                 None,
                 None,
                 RetryStrategy::Times(2),
-                0,
                 &[],
                 &[vk],
             )
@@ -3586,7 +3577,6 @@ mod test_shielded_sync {
                 None,
                 None,
                 RetryStrategy::Times(1),
-                0,
                 &[],
                 &[vk],
             )
@@ -3612,7 +3602,6 @@ mod test_shielded_sync {
                 None,
                 None,
                 RetryStrategy::Times(1),
-                0,
                 &[],
                 &[vk],
             )
@@ -3629,7 +3618,6 @@ mod test_shielded_sync {
                 None,
                 None,
                 RetryStrategy::Times(1),
-                0,
                 &[],
                 &[vk],
             )
@@ -3648,7 +3636,6 @@ mod test_shielded_sync {
                 None,
                 None,
                 RetryStrategy::Times(1),
-                0,
                 &[],
                 &[vk],
             )
@@ -3685,7 +3672,6 @@ mod test_shielded_sync {
                 None,
                 None,
                 RetryStrategy::Times(1),
-                0,
                 &[],
                 &[vk],
             )
@@ -3739,7 +3725,6 @@ mod test_shielded_sync {
                 None,
                 None,
                 RetryStrategy::Times(2),
-                0,
                 &[],
                 &[vk],
             )
@@ -3799,7 +3784,6 @@ mod test_shielded_sync {
                 None,
                 None,
                 RetryStrategy::Forever,
-                0,
                 &[],
                 &[vk],
                 shutdown_signal,
