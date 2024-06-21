@@ -159,7 +159,6 @@ fn run_ledger_ibc() -> Result<()> {
         token,
         50000,
         BERTHA_KEY,
-        true,
     )?;
     check_balances_after_non_ibc(&port_id_b, &channel_id_b, &test_b)?;
 
@@ -234,7 +233,6 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
-        false,
         None,
         None,
         false,
@@ -250,9 +248,8 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         BERTHA,
         ALBERT,
         token,
-        50000,
+        50_000_000_000,
         BERTHA_KEY,
-        true,
     )?;
     check_balances_after_non_ibc(&port_id_b, &channel_id_b, &test_b)?;
 
@@ -268,11 +265,10 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         BERTHA,
         receiver.to_string(),
         ibc_denom,
-        50000.0,
+        50_000_000_000.0,
         BERTHA_KEY,
         &port_id_b,
         &channel_id_b,
-        true,
         None,
         None,
         false,
@@ -289,7 +285,6 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         BTC,
         100,
         ALBERT_KEY,
-        false,
     )?;
     shielded_sync(&test_a, AA_VIEWING_KEY)?;
     // Shieded transfer from Chain A to Chain B
@@ -302,7 +297,6 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
-        false,
         None,
         None,
         false,
@@ -320,7 +314,6 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
-        false,
         None,
         None,
         false,
@@ -343,7 +336,6 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
-        false,
         Some(Duration::new(10, 0)),
         None,
         false,
@@ -409,7 +401,6 @@ fn ibc_namada_gaia() -> Result<()> {
         ALBERT_KEY,
         &port_id_namada,
         &channel_id_namada,
-        false,
         None,
         None,
         false,
@@ -465,7 +456,6 @@ fn ibc_namada_gaia() -> Result<()> {
         ALBERT_KEY,
         &port_id_namada,
         &channel_id_namada,
-        true,
         None,
         None,
         false,
@@ -499,7 +489,6 @@ fn ibc_namada_gaia() -> Result<()> {
         &ibc_denom,
         50,
         ALBERT_KEY,
-        true,
     )?;
     check_balance(&test, AA_VIEWING_KEY, &ibc_denom, 50)?;
     check_balance(&test, AB_VIEWING_KEY, &ibc_denom, 50)?;
@@ -514,7 +503,6 @@ fn ibc_namada_gaia() -> Result<()> {
         BERTHA_KEY,
         &port_id_namada,
         &channel_id_namada,
-        true,
         None,
         None,
         false,
@@ -572,7 +560,6 @@ fn pgf_over_ibc_with_hermes() -> Result<()> {
         NAM,
         100,
         ALBERT_KEY,
-        false,
     )?;
 
     // Proposal on Chain A
@@ -676,7 +663,6 @@ fn proposal_ibc_token_inflation() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
-        false,
         None,
         None,
         false,
@@ -744,7 +730,6 @@ fn ibc_rate_limit() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
-        false,
         None,
         None,
         false,
@@ -760,7 +745,6 @@ fn ibc_rate_limit() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
-        false,
         None,
         // expect an error of the throughput limit
         Some(
@@ -787,7 +771,6 @@ fn ibc_rate_limit() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
-        false,
         None,
         None,
         false,
@@ -812,7 +795,6 @@ fn ibc_rate_limit() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
-        false,
         Some(Duration::new(20, 0)),
         None,
         false,
@@ -1579,7 +1561,6 @@ fn transfer_token(
         ALBERT_KEY,
         port_id_a,
         channel_id_a,
-        false,
         None,
         None,
         false,
@@ -1657,7 +1638,6 @@ fn try_invalid_transfers(
         ALBERT_KEY,
         &"port".parse().unwrap(),
         channel_id_a,
-        false,
         None,
         // the IBC denom can't be parsed when using an invalid port
         Some(&format!("Invalid IBC denom: {nam_addr}")),
@@ -1674,7 +1654,6 @@ fn try_invalid_transfers(
         ALBERT_KEY,
         port_id_a,
         &"channel-42".parse().unwrap(),
-        false,
         None,
         Some("IBC token transfer error: context error: `ICS04 Channel error"),
         false,
@@ -1692,12 +1671,11 @@ fn transfer_on_chain(
     token: impl AsRef<str>,
     amount: u64,
     signer: impl AsRef<str>,
-    force: bool,
 ) -> Result<()> {
     std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let rpc = get_actor_rpc(test, Who::Validator(0));
     let amount = amount.to_string();
-    let mut tx_args = vec![
+    let tx_args = vec![
         kind.as_ref(),
         "--source",
         sender.as_ref(),
@@ -1712,9 +1690,6 @@ fn transfer_on_chain(
         "--node",
         &rpc,
     ];
-    if force {
-        tx_args.push("--force");
-    }
     let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
@@ -1742,11 +1717,10 @@ fn transfer_back(
         BERTHA,
         receiver.to_string(),
         ibc_denom,
-        50000.0,
+        50_000_000_000.0,
         BERTHA_KEY,
         port_id_b,
         channel_id_b,
-        true,
         None,
         None,
         false,
@@ -1820,7 +1794,6 @@ fn transfer_timeout(
         ALBERT_KEY,
         port_id_a,
         channel_id_a,
-        false,
         Some(Duration::new(5, 0)),
         None,
         false,
@@ -1955,7 +1928,6 @@ fn transfer(
     signer: impl AsRef<str>,
     port_id: &PortId,
     channel_id: &ChannelId,
-    force: bool,
     timeout_sec: Option<Duration>,
     expected_err: Option<&str>,
     wait_reveal_pk: bool,
@@ -1985,9 +1957,6 @@ fn transfer(
         "--node",
         &rpc,
     ];
-    if force {
-        tx_args.push("--force");
-    }
 
     let timeout = timeout_sec.unwrap_or_default().as_secs().to_string();
     if timeout_sec.is_some() {
@@ -2479,7 +2448,7 @@ fn check_shielded_balances(
 
     // Check the shielded balance on Chain B
     let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/btc");
-    check_balance(test_b, AB_VIEWING_KEY, ibc_denom, 10)?;
+    check_balance(test_b, AB_VIEWING_KEY, ibc_denom, 1_000_000_000)?;
 
     Ok(())
 }
