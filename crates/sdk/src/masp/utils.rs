@@ -1,7 +1,11 @@
 //! Helper functions and types
 
+use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
+use masp_primitives::merkle_tree::{CommitmentTree, IncrementalWitness};
+use masp_primitives::sapling::Node;
+use namada_core::collections::HashMap;
 use namada_core::storage::BlockHeight;
 use namada_tx::{IndexedTx, Tx};
 
@@ -57,6 +61,7 @@ pub enum MaspClientCapabilities {
 /// This abstracts away the implementation details
 /// of how shielded-sync fetches the necessary data
 /// from a remote server.
+// TODO: redesign this api with progress bars in mind
 pub trait MaspClient<'client, C: Client> {
     /// Return the wrapped client.
     fn rpc_client(&self) -> &C;
@@ -76,6 +81,45 @@ pub trait MaspClient<'client, C: Client> {
         from: BlockHeight,
         to: BlockHeight,
     ) -> Result<(), Error>;
+
+    /// Fetch the commitment tree of height `height`.
+    #[allow(async_fn_in_trait)]
+    async fn fetch_commitment_tree(
+        &self,
+        height: BlockHeight,
+    ) -> Result<CommitmentTree<Node>, Error> {
+        _ = height;
+        Err(Error::Other(
+            "Commitment tree fetching is not implemented by this client"
+                .to_string(),
+        ))
+    }
+
+    /// Fetch the tx notes map of height `height`.
+    #[allow(async_fn_in_trait)]
+    async fn fetch_tx_notes_map(
+        &self,
+        height: BlockHeight,
+    ) -> Result<BTreeMap<IndexedTx, usize>, Error> {
+        _ = height;
+        Err(Error::Other(
+            "Transaction notes map fetching is not implemented by this client"
+                .to_string(),
+        ))
+    }
+
+    /// Fetch the witness map of height `height`.
+    #[allow(async_fn_in_trait)]
+    async fn fetch_witness_map(
+        &self,
+        height: BlockHeight,
+    ) -> Result<HashMap<usize, IncrementalWitness<Node>>, Error> {
+        _ = height;
+        Err(Error::Other(
+            "Witness map fetching is not implemented by this client"
+                .to_string(),
+        ))
+    }
 }
 
 /// An inefficient MASP client which simply uses a
