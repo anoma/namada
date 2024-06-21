@@ -126,10 +126,12 @@ pub trait MaspClient<'client, C: Client> {
 
 /// An inefficient MASP client which simply uses a
 /// client to the blockchain to query it directly.
+#[cfg(not(target_family = "wasm"))]
 pub struct LedgerMaspClient<'client, C> {
     client: &'client C,
 }
 
+#[cfg(not(target_family = "wasm"))]
 impl<'client, C> LedgerMaspClient<'client, C> {
     /// Create a new [`MaspClient`] given an rpc client.
     pub const fn new(client: &'client C) -> Self {
