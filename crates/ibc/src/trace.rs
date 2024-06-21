@@ -60,16 +60,16 @@ pub fn ibc_trace_for_nft(
 pub fn convert_to_address(
     ibc_trace: impl AsRef<str>,
 ) -> Result<Address, Error> {
-    // validation
-    if is_ibc_denom(&ibc_trace).is_none() && is_nft_trace(&ibc_trace).is_none()
-    {
-        return Err(Error::InvalidIbcTrace(format!(
-            "Invalid IBC trace: {}",
-            ibc_trace.as_ref()
-        )));
-    }
-
     if ibc_trace.as_ref().contains('/') {
+        // validation
+        if is_ibc_denom(&ibc_trace).is_none()
+            && is_nft_trace(&ibc_trace).is_none()
+        {
+            return Err(Error::InvalidIbcTrace(format!(
+                "This is not IBC denom and NFT trace: {}",
+                ibc_trace.as_ref()
+            )));
+        }
         Ok(ibc_token(ibc_trace.as_ref()))
     } else {
         Address::decode(ibc_trace.as_ref())

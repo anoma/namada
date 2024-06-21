@@ -405,7 +405,12 @@ where
         let actual: PacketCommitment = self
             .ctx
             .read_bytes_post(&commitment_key)?
-            .expect("Commitment should exist")
+            .ok_or(Error::NativeVpError(native_vp::Error::AllocMessage(
+                format!(
+                    "Packet commitment doesn't exist: Port ID  {src_port_id}, \
+                     Channel ID {src_channel_id}, Sequence {sequence}"
+                ),
+            )))?
             .into();
         let expected = compute_packet_commitment(
             packet_data,
@@ -525,7 +530,7 @@ where
         &self,
         mut acc: ChangedBalances,
         msg: &IbcMsgRecvPacket,
-        ibc_trace: impl AsRef<str>,
+        ibc_traces: Vec<String>,
         amount: Amount,
         keys_changed: &BTreeSet<Key>,
     ) -> Result<ChangedBalances> {
@@ -538,29 +543,34 @@ where
             &msg.packet.chan_id_on_a,
             msg.packet.seq_on_a,
         )? {
-            // Mirror how the IBC token is derived in
-            // gen_ibc_shielded_transfer in the non-refund case
-            let token = namada_ibc::received_ibc_token(
-                ibc_trace,
-                &msg.packet.port_id_on_a,
-                &msg.packet.chan_id_on_a,
-                &msg.packet.port_id_on_b,
-                &msg.packet.chan_id_on_b,
-            )
-            .into_storage_result()
-            .map_err(Error::NativeVpError)?;
-            let delta = ValueSum::from_pair(token.clone(), amount);
-            // Enable funds to be taken from the IBC internal
-            // address and be deposited elsewhere
-            // Required for the IBC internal Address to release
-            // funds
-            let ibc_taddr = addr_taddr(IBC);
-            let pre_entry =
-                acc.pre.get(&ibc_taddr).cloned().unwrap_or(ValueSum::zero());
-            acc.pre.insert(
-                ibc_taddr,
-                checked!(pre_entry + &delta).map_err(native_vp::Error::new)?,
-            );
+            for ibc_trace in ibc_traces {
+                // Get the received token
+                let token = namada_ibc::received_ibc_token(
+                    ibc_trace,
+                    &msg.packet.port_id_on_a,
+                    &msg.packet.chan_id_on_a,
+                    &msg.packet.port_id_on_b,
+                    &msg.packet.chan_id_on_b,
+                )
+                .into_storage_result()
+                .map_err(Error::NativeVpError)?;
+                let delta = ValueSum::from_pair(token.clone(), amount);
+                // Enable funds to be taken from the IBC internal
+                // address and be deposited elsewhere
+                // Required for the IBC internal Address to release
+                // funds
+                let ibc_taddr = addr_taddr(IBC);
+                let pre_entry = acc
+                    .pre
+                    .get(&ibc_taddr)
+                    .cloned()
+                    .unwrap_or(ValueSum::zero());
+                acc.pre.insert(
+                    ibc_taddr,
+                    checked!(pre_entry + &delta)
+                        .map_err(native_vp::Error::new)?,
+                );
+            }
         }
         Ok(acc)
     }
@@ -611,7 +621,7 @@ where
                     acc = self.apply_recv_msg(
                         acc,
                         &msg.message,
-                        ibc_denom,
+                        vec![ibc_denom],
                         amount,
                         keys_changed,
                     )?;
@@ -623,17 +633,21 @@ where
                     let receiver = packet_data.receiver.to_string();
                     let addr = TAddrData::Ibc(receiver.clone());
                     acc.decoder.insert(ibc_taddr(receiver), addr);
-                    for token_id in &packet_data.token_ids.0 {
-                        let ibc_trace =
-                            ibc_trace_for_nft(&packet_data.class_id, token_id);
-                        acc = self.apply_recv_msg(
-                            acc,
-                            &msg.message,
-                            ibc_trace,
-                            Amount::from_u64(1),
-                            keys_changed,
-                        )?;
-                    }
+                    let ibc_traces = packet_data
+                        .token_ids
+                        .0
+                        .iter()
+                        .map(|token_id| {
+                            ibc_trace_for_nft(&packet_data.class_id, token_id)
+                        })
+                        .collect();
+                    acc = self.apply_recv_msg(
+                        acc,
+                        &msg.message,
+                        ibc_traces,
+                        Amount::from_u64(1),
+                        keys_changed,
+                    )?;
                 }
             }
             // Ignore all other IBC events
