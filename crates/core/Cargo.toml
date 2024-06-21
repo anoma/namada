@@ -29,10 +29,12 @@ migrations = [
   "linkme",
 ]
 benches = ["proptest"]
+control_flow = ["futures", "tokio"]
 
 [dependencies]
 namada_macros = {path = "../macros"}
 namada_migrations = {path = "../migrations", optional = true}
+
 arse-merkle-tree.workspace = true
 bech32.workspace = true
 borsh.workspace = true
@@ -43,6 +45,7 @@ ed25519-consensus.workspace = true
 ethabi.workspace = true
 ethbridge-structs.workspace = true
 eyre.workspace = true
+futures = { workspace = true, optional = true }
 ibc.workspace = true
 ics23.workspace = true
 impl-num-traits = "0.1.2"
@@ -70,16 +73,19 @@ tendermint = {workspace = true}
 tendermint-proto = {workspace = true}
 thiserror.workspace = true
 tiny-keccak = {version = "2.0.2", features = ["keccak"]}
+tokio = { workspace = true, optional = true, features = ["full"]}
 tracing.workspace = true
 uint = "0.9.5"
 zeroize.workspace = true
 
 [dev-dependencies]
 assert_matches.workspace = true
+futures.workspace = true
 pretty_assertions.workspace = true
 proptest.workspace = true
 rand.workspace = true
 rand_core.workspace = true
 test-log.workspace = true
+tokio = { workspace = true, features = ["full"] }
 toml.workspace = true
 tracing-subscriber.workspace = true
