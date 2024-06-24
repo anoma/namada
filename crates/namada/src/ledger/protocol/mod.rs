@@ -682,7 +682,7 @@ where
     // initialize it with the already consumed gas. The gas limit should
     // actually be the lowest between the protocol parameter and the actual gas
     // limit of the transaction
-    let min_gas_limit = state
+    let max_gas_limit = state
         .read::<u64>(
             &namada_parameters::storage::get_masp_fee_payment_gas_limit_key(),
         )
@@ -691,7 +691,7 @@ where
         .min(tx_gas_meter.borrow().tx_gas_limit.into());
 
     let mut gas_meter = TxGasMeter::new(
-        namada_gas::Gas::from_whole_units(min_gas_limit).ok_or_else(|| {
+        namada_gas::Gas::from_whole_units(max_gas_limit).ok_or_else(|| {
             Error::GasError("Overflow in gas expansion".to_string())
         })?,
     );
