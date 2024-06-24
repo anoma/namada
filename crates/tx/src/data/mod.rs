@@ -411,7 +411,7 @@ pub struct VpsResult {
 impl<T: Serialize> fmt::Display for TxResult<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if f.alternate() {
-            write!(f, "Transaction is valid. Gas used: {}", self.gas_used,)
+            write!(f, "Transaction is valid. Gas used: {}", self.gas_used)
         } else {
             write!(f, "{}", serde_json::to_string(self).unwrap())
         }

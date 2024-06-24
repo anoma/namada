@@ -48,7 +48,7 @@ use namada::ledger::pos::namada_proof_of_stake::types::{
 };
 use namada::ledger::protocol::ShellParams;
 use namada::ledger::{parameters, protocol};
-use namada::parameters::validate_tx_bytes;
+use namada::parameters::{get_gas_scale, validate_tx_bytes};
 use namada::proof_of_stake::storage::read_pos_params;
 use namada::state::tx_queue::ExpiredTx;
 use namada::state::{
@@ -1067,9 +1067,22 @@ where
                 }
             },
             TxType::Wrapper(wrapper) => {
+                // Get the gas scale first
+                let gas_scale = match get_gas_scale(&self.state) {
+                    Ok(scale) => scale,
+                    Err(_) => {
+                        response.code = ResultCode::InvalidTx.into();
+                        response.log = "The gas scale could not be found in \
+                                        the parameters storage"
+                            .to_string();
+                        return response;
+                    }
+                };
+
                 // Validate wrapper first
                 // Tx gas limit
-                let gas_limit = match Gas::try_from(wrapper.gas_limit) {
+                let gas_limit = match wrapper.gas_limit.as_scaled_gas(gas_scale)
+                {
                     Ok(value) => value,
                     Err(_) => {
                         response.code = ResultCode::InvalidTx.into();
@@ -1091,6 +1104,7 @@ where
                 // Max block gas
                 let block_gas_limit: Gas = Gas::from_whole_units(
                     namada::parameters::get_max_block_gas(&self.state).unwrap(),
+                    gas_scale,
                 )
                 .expect("Gas limit from parameter must not overflow");
                 if gas_meter.tx_gas_limit > block_gas_limit {
