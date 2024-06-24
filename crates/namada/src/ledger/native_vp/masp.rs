@@ -505,12 +505,12 @@ where
     // Check if IBC message was received successfully in this state transition
     fn is_receiving_success(
         &self,
-        src_port_id: &PortId,
-        src_channel_id: &ChannelId,
+        dst_port_id: &PortId,
+        dst_channel_id: &ChannelId,
         sequence: Sequence,
     ) -> Result<bool> {
         // Ensure that the event corresponds to the current changes to storage
-        let ack_key = storage::ack_key(src_port_id, src_channel_id, sequence);
+        let ack_key = storage::ack_key(dst_port_id, dst_channel_id, sequence);
         // If the receive is a success, then the commitment is unique
         let succ_ack_commitment = compute_ack_commitment(
             &AcknowledgementStatus::success(ack_success_b64()).into(),
@@ -539,8 +539,8 @@ where
         // If the transfer was a failure, then enable funds to
         // be withdrawn from the IBC internal address
         if self.is_receiving_success(
-            &msg.packet.port_id_on_a,
-            &msg.packet.chan_id_on_a,
+            &msg.packet.port_id_on_b,
+            &msg.packet.chan_id_on_b,
             msg.packet.seq_on_a,
         )? {
             for ibc_trace in ibc_traces {
