@@ -419,30 +419,27 @@ where
         .delete(&pending_execution_key)
         .expect("Should be able to delete the storage.");
     match dispatch_result {
-        Ok(extended_tx_result) => match extended_tx_result
-            .tx_result
-            .batch_results
-            .0
-            .get(&cmt.get_hash())
-        {
-            Some(Ok(batched_result)) if batched_result.is_accepted() => {
-                shell.state.commit_tx();
-                Ok(true)
+        Ok(extended_tx_result) => {
+            match extended_tx_result.tx_result.0.get(&cmt.get_hash()) {
+                Some(Ok(batched_result)) if batched_result.is_accepted() => {
+                    shell.state.commit_tx();
+                    Ok(true)
+                }
+                Some(Err(e)) => {
+                    tracing::warn!(
+                        "Error executing governance proposal {}",
+                        e.to_string()
+                    );
+                    shell.state.drop_tx();
+                    Ok(false)
+                }
+                _ => {
+                    tracing::warn!("not sure what happen");
+                    shell.state.drop_tx();
+                    Ok(false)
+                }
             }
-            Some(Err(e)) => {
-                tracing::warn!(
-                    "Error executing governance proposal {}",
-                    e.to_string()
-                );
-                shell.state.drop_tx();
-                Ok(false)
-            }
-            _ => {
-                tracing::warn!("not sure what happen");
-                shell.state.drop_tx();
-                Ok(false)
-            }
-        },
+        }
         Err(e) => {
             tracing::warn!(
                 "Error executing governance proposal {}",

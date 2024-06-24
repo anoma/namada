@@ -29,6 +29,7 @@ use namada::tx::event::{Batch, Code};
 use namada::tx::new_tx_event;
 use namada::vote_ext::ethereum_events::MultiSignedEthEvent;
 use namada::vote_ext::ethereum_tx_data_variants;
+use parameters::get_gas_scale;
 
 use super::*;
 use crate::facade::tendermint::abci::types::VoteInfo;
@@ -385,9 +386,15 @@ where
                         .unwrap_or("<unknown>"),
                     msg,
                 );
+                let gas_scale = get_gas_scale(&self.state)
+                    .expect("Failed to get gas scale from parameters");
+                let scaled_gas = tx_data
+                    .tx_gas_meter
+                    .get_tx_consumed_gas()
+                    .get_whole_gas_units(gas_scale);
                 tx_logs
                     .tx_event
-                    .extend(GasUsed(tx_data.tx_gas_meter.get_tx_consumed_gas()))
+                    .extend(GasUsed(scaled_gas))
                     .extend(Info(msg.to_string()))
                     .extend(Code(ResultCode::InvalidTx));
                 // Make sure to clean the write logs for the next transaction
@@ -410,9 +417,16 @@ where
                     msg
                 );
 
+                let gas_scale = get_gas_scale(&self.state)
+                    .expect("Failed to get gas scale from parameters");
+                let scaled_gas = tx_data
+                    .tx_gas_meter
+                    .get_tx_consumed_gas()
+                    .get_whole_gas_units(gas_scale);
+
                 tx_logs
                     .tx_event
-                    .extend(GasUsed(tx_data.tx_gas_meter.get_tx_consumed_gas()))
+                    .extend(GasUsed(scaled_gas))
                     .extend(Info(msg.to_string()))
                     .extend(Code(ResultCode::WasmRuntimeError));
 
@@ -457,10 +471,8 @@ where
             let unrun_txs = tx_data
                 .commitments_len
                 .checked_sub(
-                    u64::try_from(
-                        extended_tx_result.tx_result.batch_results.0.len(),
-                    )
-                    .expect("Should be able to convert to u64"),
+                    u64::try_from(extended_tx_result.tx_result.0.len())
+                        .expect("Should be able to convert to u64"),
                 )
                 .expect("Shouldn't underflow");
             temp_log.stats.set_failing_atomic_batch(unrun_txs);
@@ -487,9 +499,16 @@ where
             self.commit_batch_hash(tx_data.replay_protection_hashes);
         }
 
+        let gas_scale = get_gas_scale(&self.state)
+            .expect("Failed to get gas scale from parameters");
+        let scaled_gas = tx_data
+            .tx_gas_meter
+            .get_tx_consumed_gas()
+            .get_whole_gas_units(gas_scale);
+
         tx_logs
             .tx_event
-            .extend(GasUsed(extended_tx_result.tx_result.gas_used))
+            .extend(GasUsed(scaled_gas))
             .extend(Info("Check batch for result.".to_string()))
             .extend(Batch(&extended_tx_result.tx_result.to_result_string()));
     }
@@ -517,10 +536,8 @@ where
         let unrun_txs = tx_data
             .commitments_len
             .checked_sub(
-                u64::try_from(
-                    extended_tx_result.tx_result.batch_results.0.len(),
-                )
-                .expect("Should be able to convert to u64"),
+                u64::try_from(extended_tx_result.tx_result.0.len())
+                    .expect("Should be able to convert to u64"),
             )
             .expect("Shouldn't underflow");
 
@@ -669,22 +686,25 @@ where
                 TxType::Wrapper(wrapper) => {
                     stats.increment_wrapper_txs();
 
-                    let gas_limit = match Gas::try_from(wrapper.gas_limit) {
-                        Ok(value) => value,
-                        Err(_) => {
-                            response.events.emit(
-                                new_tx_event(&tx, height.0)
-                                    .with(Code(ResultCode::InvalidTx))
-                                    .with(Info(
-                                        "The wrapper gas limit overflowed gas \
-                                         representation"
-                                            .to_owned(),
-                                    ))
-                                    .with(GasUsed(0.into())),
-                            );
-                            continue;
-                        }
-                    };
+                    let gas_scale = get_gas_scale(&self.state)
+                        .expect("Failed to get gas scale from parameters");
+                    let gas_limit =
+                        match wrapper.gas_limit.as_scaled_gas(gas_scale) {
+                            Ok(value) => value,
+                            Err(_) => {
+                                response.events.emit(
+                                    new_tx_event(&tx, height.0)
+                                        .with(Code(ResultCode::InvalidTx))
+                                        .with(Info(
+                                            "The wrapper gas limit overflowed \
+                                             gas representation"
+                                                .to_owned(),
+                                        ))
+                                        .with(GasUsed(0.into())),
+                                );
+                                continue;
+                            }
+                        };
                     let tx_gas_meter = TxGasMeter::new(gas_limit);
                     for cmt in tx.commitments() {
                         if let Some(code_sec) = tx
@@ -971,7 +991,7 @@ impl<'finalize> TempTxLogs {
     ) -> ValidityFlags {
         let mut flags = ValidityFlags::default();
 
-        for (cmt_hash, batched_result) in &tx_result.batch_results.0 {
+        for (cmt_hash, batched_result) in &tx_result.0 {
             match batched_result {
                 Ok(result) => {
                     if result.is_accepted() {
@@ -1186,7 +1206,7 @@ mod test_finalize_block {
         FinalizeBlock, ProcessedTx,
     };
 
-    const WRAPPER_GAS_LIMIT: u64 = 10_000;
+    const WRAPPER_GAS_LIMIT: u64 = 100_000;
     const STORAGE_VALUE: &str = "test_value";
 
     /// Make a wrapper tx and a processed tx from the wrapped tx that can be
@@ -3257,7 +3277,6 @@ mod test_finalize_block {
         assert_eq!(code, ResultCode::Ok);
         let inner_tx_result = event[0].read_attribute::<Batch<'_>>().unwrap();
         let first_tx_result = inner_tx_result
-            .batch_results
             .0
             .get(&wrapper.first_commitments().unwrap().get_hash())
             .unwrap();
@@ -3406,7 +3425,6 @@ mod test_finalize_block {
         assert_eq!(code, ResultCode::Ok);
         let inner_tx_result = event[1].read_attribute::<Batch<'_>>().unwrap();
         let inner_result = inner_tx_result
-            .batch_results
             .0
             .get(&unsigned_wrapper.first_commitments().unwrap().get_hash())
             .unwrap();
@@ -3416,7 +3434,6 @@ mod test_finalize_block {
         assert_eq!(code, ResultCode::Ok);
         let inner_tx_result = event[2].read_attribute::<Batch<'_>>().unwrap();
         let inner_result = inner_tx_result
-            .batch_results
             .0
             .get(
                 &wrong_commitment_wrapper
@@ -3431,7 +3448,6 @@ mod test_finalize_block {
         assert_eq!(code, ResultCode::Ok);
         let inner_tx_result = event[3].read_attribute::<Batch<'_>>().unwrap();
         let inner_result = inner_tx_result
-            .batch_results
             .0
             .get(&failing_wrapper.first_commitments().unwrap().get_hash())
             .unwrap();
@@ -3634,7 +3650,6 @@ mod test_finalize_block {
         assert_eq!(code, ResultCode::Ok);
         let inner_tx_result = event.read_attribute::<Batch<'_>>().unwrap();
         let inner_result = inner_tx_result
-            .batch_results
             .0
             .get(&wrapper.first_commitments().unwrap().get_hash())
             .unwrap();
@@ -5554,7 +5569,7 @@ mod test_finalize_block {
         let code = event[0].read_attribute::<CodeAttr>().unwrap();
         assert_eq!(code, ResultCode::Ok);
         let inner_tx_result = event[0].read_attribute::<Batch<'_>>().unwrap();
-        let inner_results = inner_tx_result.batch_results.0;
+        let inner_results = inner_tx_result.0;
 
         for cmt in batch.commitments() {
             assert!(
@@ -5599,7 +5614,7 @@ mod test_finalize_block {
         let code = event[0].read_attribute::<CodeAttr>().unwrap();
         assert_eq!(code, ResultCode::WasmRuntimeError);
         let inner_tx_result = event[0].read_attribute::<Batch<'_>>().unwrap();
-        let inner_results = inner_tx_result.batch_results.0;
+        let inner_results = inner_tx_result.0;
 
         assert!(
             inner_results
@@ -5647,7 +5662,7 @@ mod test_finalize_block {
         let code = event[0].read_attribute::<CodeAttr>().unwrap();
         assert_eq!(code, ResultCode::Ok);
         let inner_tx_result = event[0].read_attribute::<Batch<'_>>().unwrap();
-        let inner_results = inner_tx_result.batch_results.0;
+        let inner_results = inner_tx_result.0;
 
         assert!(
             inner_results
@@ -5715,7 +5730,7 @@ mod test_finalize_block {
         let code = event[0].read_attribute::<CodeAttr>().unwrap();
         assert_eq!(code, ResultCode::WasmRuntimeError);
         let inner_tx_result = event[0].read_attribute::<Batch<'_>>().unwrap();
-        let inner_results = inner_tx_result.batch_results.0;
+        let inner_results = inner_tx_result.0;
 
         assert!(
             inner_results
@@ -5762,7 +5777,7 @@ mod test_finalize_block {
         let code = event[0].read_attribute::<CodeAttr>().unwrap();
         assert_eq!(code, ResultCode::WasmRuntimeError);
         let inner_tx_result = event[0].read_attribute::<Batch<'_>>().unwrap();
-        let inner_results = inner_tx_result.batch_results.0;
+        let inner_results = inner_tx_result.0;
 
         assert!(
             inner_results

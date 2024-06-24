@@ -26,7 +26,7 @@ pub fn query_tx_events(
 pub fn dry_run_tx(
     tendermint_addr: &str,
     tx_bytes: Vec<u8>,
-) -> Result<TxResult, Error> {
+) -> Result<DryRunResult, Error> {
     let client = HttpClient::new(
         TendermintAddress::from_str(tendermint_addr)
             .map_err(|e| Error::Other(e.to_string()))?,

@@ -113,12 +113,10 @@ pub const MASP_PARALLEL_GAS_DIVIDER: u64 = PARALLEL_GAS_DIVIDER / 2;
 /// Gas module result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Decimal scale of Gas units
-const SCALE: u64 = 100_000_000;
-
-/// Representation of gas in sub-units. This effectively decouples gas metering
-/// from fee payment, allowing higher resolution when accounting for gas while,
-/// at the same time, providing a contained gas value when paying fees.
+/// Representation of tracking gas in sub-units. This effectively decouples gas
+/// metering from fee payment, allowing higher resolution when accounting for
+/// gas while, at the same time, providing a contained gas value when paying
+/// fees.
 #[derive(
     Clone,
     Copy,
@@ -154,22 +152,30 @@ impl Gas {
     }
 
     /// Converts the sub gas units to whole ones. If the sub units are not a
-    /// multiple of the `SCALE` than ceil the quotient
-    fn get_whole_gas_units(&self) -> u64 {
-        let quotient = self.sub / SCALE;
-        if self.sub % SCALE == 0 {
-            quotient
+    /// multiple of the scale than ceil the quotient
+    pub fn get_whole_gas_units(&self, scale: u64) -> WholeGas {
+        let quotient = self
+            .sub
+            .checked_div(scale)
+            .expect("Gas quotient should not overflow on checked division");
+        if self
+            .sub
+            .checked_rem(scale)
+            .expect("Gas quotient remainder should not overflow")
+            == 0
+        {
+            quotient.into()
         } else {
             quotient
                 .checked_add(1)
                 .expect("Cannot overflow as the quotient is scaled down u64")
+                .into()
         }
     }
 
-    /// Generates a `Gas` instance from a whole amount
-    pub fn from_whole_units(whole: u64) -> Option<Self> {
-        let sub = whole.checked_mul(SCALE)?;
-        Some(Self { sub })
+    /// Generates a `Gas` instance from a `WholeGas` amount
+    pub fn from_whole_units(whole: WholeGas, scale: u64) -> Option<Self> {
+        scale.checked_mul(whole.into()).map(|sub| Self { sub })
     }
 }
 
@@ -185,20 +191,46 @@ impl From<Gas> for u64 {
     }
 }
 
-impl Display for Gas {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // Display the gas in whole amounts
-        write!(f, "{}", self.get_whole_gas_units())
+/// Gas represented in whole units. Used for fee payment and to display
+/// information to the user.
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    BorshSchema,
+    Serialize,
+    Deserialize,
+    Eq,
+)]
+pub struct WholeGas(u64);
+
+impl From<u64> for WholeGas {
+    fn from(amount: u64) -> WholeGas {
+        Self(amount)
     }
 }
 
-impl FromStr for Gas {
+impl From<WholeGas> for u64 {
+    fn from(whole: WholeGas) -> u64 {
+        whole.0
+    }
+}
+
+impl FromStr for WholeGas {
     type Err = GasParseError;
 
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        let raw: u64 = s.parse().map_err(GasParseError::Parse)?;
-        let gas = Gas::from_whole_units(raw).ok_or(GasParseError::Overflow)?;
-        Ok(gas)
+        Ok(Self(s.parse().map_err(GasParseError::Parse)?))
+    }
+}
+
+impl Display for WholeGas {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 

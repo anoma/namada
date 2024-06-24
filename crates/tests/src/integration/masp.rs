@@ -13,6 +13,7 @@ use namada_node::shell::testing::client::run;
 use namada_node::shell::testing::node::NodeResults;
 use namada_node::shell::testing::utils::{Bin, CapturedOutput};
 use namada_sdk::masp::fs::FsShieldedUtils;
+use namada_sdk::DEFAULT_GAS_LIMIT;
 use test_log::test;
 
 use super::setup;
@@ -1504,7 +1505,7 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
                 token: native_token.clone(),
             },
             pk.clone(),
-            20000.into(),
+            DEFAULT_GAS_LIMIT.into(),
         );
         tx.sign_wrapper(sk.clone());
 

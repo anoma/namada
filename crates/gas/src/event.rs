@@ -2,13 +2,13 @@
 
 use namada_events::extend::EventAttributeEntry;
 
-use super::Gas;
+use crate::WholeGas;
 
 /// Extend an [`namada_events::Event`] with gas used data.
-pub struct GasUsed(pub Gas);
+pub struct GasUsed(pub WholeGas);
 
 impl EventAttributeEntry<'static> for GasUsed {
-    type Value = Gas;
+    type Value = WholeGas;
     type ValueOwned = Self::Value;
 
     const KEY: &'static str = "gas_used";

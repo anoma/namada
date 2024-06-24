@@ -39,6 +39,7 @@ struct Keys {
     max_block_gas: &'static str,
     minimum_gas_price: &'static str,
     fee_unshielding_gas_limit: &'static str,
+    gas_scale: &'static str,
     max_signatures_per_transaction: &'static str,
     native_token_transferable: &'static str,
 }
@@ -121,6 +122,11 @@ pub fn get_fee_unshielding_gas_limit_key() -> Key {
     get_fee_unshielding_gas_limit_key_at_addr(ADDRESS)
 }
 
+/// Storage key used for the gas scale
+pub fn get_gas_scale_key() -> Key {
+    get_gas_scale_key_at_addr(ADDRESS)
+}
+
 /// Storage key used for max_epected_time_per_block parameter.
 pub fn get_max_expected_time_per_block_key() -> Key {
     get_max_expected_time_per_block_key_at_addr(ADDRESS)
@@ -174,6 +180,18 @@ pub fn get_max_block_gas(
     storage.read(&get_max_block_gas_key())?.ok_or(
         namada_storage::Error::SimpleMessage(
             "Missing max_block_gas parameter from storage",
+        ),
+    )
+}
+
+/// Helper function to retrieve the `gas_scale` protocol parameter from
+/// storage
+pub fn get_gas_scale(
+    storage: &impl StorageRead,
+) -> std::result::Result<u64, namada_storage::Error> {
+    storage.read(&get_gas_scale_key())?.ok_or(
+        namada_storage::Error::SimpleMessage(
+            "Missing gas_scale parameter from storage",
         ),
     )
 }
