@@ -2196,7 +2196,7 @@ fn transfer_from_gaia(
 
 fn check_tx_height(test: &Test, client: &mut NamadaCmd) -> Result<u32> {
     let (_unread, matched) = client.exp_regex(r"height .*")?;
-    // Expecting e.g. "height 1337."
+    // Expecting e.g. "height 1337, consuming x gas units."
     let height_str = matched
         .trim()
         .split_once(' ')
