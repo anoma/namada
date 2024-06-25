@@ -748,7 +748,9 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             }
             let txs = progress.scan(fetch_recv);
             for (ref indexed_tx, ref stx) in txs {
-                if Some(indexed_tx) > last_witnessed_tx.as_ref() {
+                if client.capabilities().needs_witness_map_update()
+                    && Some(indexed_tx) > last_witnessed_tx.as_ref()
+                {
                     self.update_witness_map(indexed_tx.to_owned(), stx)?;
                 }
                 let mut vk_heights = BTreeMap::new();
