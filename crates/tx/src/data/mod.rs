@@ -221,6 +221,24 @@ impl<T> BatchResults<T> {
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
+
+    /// Check if the collecction of inner tx results contains no errors.
+    #[inline]
+    pub fn are_results_ok(&self) -> bool {
+        self.iter().all(|(_, res)| res.is_ok())
+    }
+
+    /// Check if the collecction of inner tx results contains any ok results.
+    #[inline]
+    pub fn are_any_ok(&self) -> bool {
+        self.iter().any(|(_, res)| res.is_ok())
+    }
+
+    /// Check if the collecction of inner tx results contains any errors.
+    #[inline]
+    pub fn are_any_err(&self) -> bool {
+        self.iter().any(|(_, res)| res.is_err())
+    }
 }
 
 /// Compute the hash of the some inner tx in a batch.
