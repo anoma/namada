@@ -99,6 +99,8 @@ stewards = []
 pgf_inflation_rate = "0.1"
 # The pgf stewards inflation rate
 stewards_inflation_rate = "0.01"
+# The maximum number of pgf stewards
+maximum_number_of_stewards = 5
 
 # IBC parameters
 [ibc_params]
