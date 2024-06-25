@@ -5911,16 +5911,10 @@ mod test_finalize_block {
 
         // multiple tx results (2)
         let tx_results = event.read_attribute::<Batch<'_>>().unwrap();
-        assert_eq!(tx_results.batch_results.0.len(), 2);
+        assert_eq!(tx_results.batch_results.len(), 2);
 
         // all txs should have succeeded
-        assert!(
-            tx_results
-                .batch_results
-                .0
-                .values()
-                .all(|result| result.is_ok())
-        );
+        assert!(tx_results.batch_results.are_results_ok());
     }
 
     #[test]
@@ -5990,22 +5984,10 @@ mod test_finalize_block {
 
         // multiple tx results (2)
         let tx_results = event.read_attribute::<Batch<'_>>().unwrap();
-        assert_eq!(tx_results.batch_results.0.len(), 2);
+        assert_eq!(tx_results.batch_results.len(), 2);
 
         // check one succeeded and the other failed
-        assert!(
-            tx_results
-                .batch_results
-                .0
-                .values()
-                .any(|result| result.is_ok())
-        );
-        assert!(
-            tx_results
-                .batch_results
-                .0
-                .values()
-                .any(|result| result.is_err())
-        );
+        assert!(tx_results.batch_results.are_any_ok());
+        assert!(tx_results.batch_results.are_any_err());
     }
 }
