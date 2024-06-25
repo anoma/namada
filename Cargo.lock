@@ -5126,6 +5126,7 @@ version = "0.39.0"
 dependencies = [
  "assert_matches",
  "async-trait",
+ "base64 0.13.1",
  "blake2b-rs",
  "borsh 1.2.1",
  "borsh-ext",
