@@ -38,7 +38,7 @@ struct Keys {
     max_tx_bytes: &'static str,
     max_block_gas: &'static str,
     minimum_gas_price: &'static str,
-    fee_unshielding_gas_limit: &'static str,
+    masp_fee_payment_gas_limit: &'static str,
     max_signatures_per_transaction: &'static str,
     native_token_transferable: &'static str,
 }
@@ -117,8 +117,8 @@ pub fn get_tx_allowlist_storage_key() -> Key {
 }
 
 /// Storage key used for the fee unshielding gas limit
-pub fn get_fee_unshielding_gas_limit_key() -> Key {
-    get_fee_unshielding_gas_limit_key_at_addr(ADDRESS)
+pub fn get_masp_fee_payment_gas_limit_key() -> Key {
+    get_masp_fee_payment_gas_limit_key_at_addr(ADDRESS)
 }
 
 /// Storage key used for max_epected_time_per_block parameter.

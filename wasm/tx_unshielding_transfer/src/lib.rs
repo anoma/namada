@@ -6,20 +6,22 @@ use namada_tx_prelude::*;
 #[transaction]
 fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
     let data = ctx.get_tx_data(&tx_data)?;
-    let transfer = token::UnshieldingTransfer::try_from_slice(&data[..])
+    let transfers = token::UnshieldingMultiTransfer::try_from_slice(&data[..])
         .wrap_err("Failed to decode token::UnshieldingTransfer tx data")?;
-    debug_log!("apply_tx called with transfer: {:#?}", transfer);
+    debug_log!("apply_tx called with transfer: {:#?}", transfers);
 
-    token::transfer(
-        ctx,
-        &address::MASP,
-        &transfer.target,
-        &transfer.token,
-        transfer.amount.amount(),
-    )
-    .wrap_err("Token transfer failed")?;
+    for transfer in transfers.data {
+        token::transfer(
+            ctx,
+            &address::MASP,
+            &transfer.target,
+            &transfer.token,
+            transfer.amount.amount(),
+        )
+        .wrap_err("Token transfer failed")?;
+    }
 
-    let masp_section_ref = transfer.shielded_section_hash;
+    let masp_section_ref = transfers.shielded_section_hash;
     let shielded = tx_data
         .tx
         .get_section(&masp_section_ref)

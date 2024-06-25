@@ -76,8 +76,9 @@ use namada::ledger::queries::{
 use namada::masp::MaspTxRefs;
 use namada::state::StorageRead;
 use namada::token::{
-    Amount, DenominatedAmount, ShieldedTransfer, ShieldingTransfer,
-    UnshieldingTransfer,
+    Amount, DenominatedAmount, ShieldedTransfer, ShieldingMultiTransfer,
+    ShieldingTransfer, ShieldingTransferData, UnshieldingMultiTransfer,
+    UnshieldingTransferData,
 };
 use namada::tx::data::pos::Bond;
 use namada::tx::data::{
@@ -94,7 +95,7 @@ use namada_apps_lib::cli::context::FromContext;
 use namada_apps_lib::cli::Context;
 use namada_apps_lib::wallet::{defaults, CliWalletUtils};
 use namada_sdk::masp::{
-    self, ContextSyncStatus, ShieldedContext, ShieldedUtils,
+    self, ContextSyncStatus, MaspTransferData, ShieldedContext, ShieldedUtils,
 };
 pub use namada_sdk::tx::{
     TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
@@ -255,7 +256,7 @@ impl Default for BenchShell {
         );
 
         bench_shell.execute_tx(&signed_tx.to_ref());
-        bench_shell.state.commit_tx();
+        bench_shell.state.commit_tx_batch();
 
         // Initialize governance proposal
         let content_section = Section::ExtraData(Code::new(
@@ -280,7 +281,7 @@ impl Default for BenchShell {
         );
 
         bench_shell.execute_tx(&signed_tx.to_ref());
-        bench_shell.state.commit_tx();
+        bench_shell.state.commit_tx_batch();
         bench_shell.commit_block();
 
         // Advance epoch for pos benches
@@ -404,6 +405,7 @@ impl BenchShell {
         let msg = MsgTransfer {
             message,
             transfer: None,
+            fee_unshield: None,
         };
 
         self.generate_ibc_tx(TX_IBC_WASM, msg.serialize_to_vec())
@@ -626,7 +628,7 @@ impl BenchShell {
         );
         self.last_block_masp_txs
             .push((masp_tx, self.state.write_log().get_keys()));
-        self.state.commit_tx();
+        self.state.commit_tx_batch();
     }
 }
 
@@ -1080,14 +1082,18 @@ impl BenchShieldedCtx {
             StdIo,
             native_token,
         );
+        let masp_transfer_data = MaspTransferData {
+            source: source.clone(),
+            target: target.clone(),
+            token: address::testing::nam(),
+            amount: denominated_amount,
+        };
         let shielded = async_runtime
             .block_on(
                 ShieldedContext::<BenchShieldedUtils>::gen_shielded_transfer(
                     &namada,
-                    &source,
-                    &target,
-                    &address::testing::nam(),
-                    denominated_amount,
+                    vec![masp_transfer_data],
+                    None,
                     true,
                 ),
             )
@@ -1115,6 +1121,7 @@ impl BenchShieldedCtx {
             namada.client().generate_tx(
                 TX_SHIELDED_TRANSFER_WASM,
                 ShieldedTransfer {
+                    fee_unshield: None,
                     section_hash: shielded_section_hash,
                 },
                 Some(shielded),
@@ -1124,10 +1131,12 @@ impl BenchShieldedCtx {
         } else if target.effective_address() == MASP {
             namada.client().generate_tx(
                 TX_SHIELDING_TRANSFER_WASM,
-                ShieldingTransfer {
-                    source: source.effective_address(),
-                    token: address::testing::nam(),
-                    amount: DenominatedAmount::native(amount),
+                ShieldingMultiTransfer {
+                    data: vec![ShieldingTransferData {
+                        source: source.effective_address(),
+                        token: address::testing::nam(),
+                        amount: DenominatedAmount::native(amount),
+                    }],
                     shielded_section_hash,
                 },
                 Some(shielded),
@@ -1137,10 +1146,12 @@ impl BenchShieldedCtx {
         } else {
             namada.client().generate_tx(
                 TX_UNSHIELDING_TRANSFER_WASM,
-                UnshieldingTransfer {
-                    target: target.effective_address(),
-                    token: address::testing::nam(),
-                    amount: DenominatedAmount::native(amount),
+                UnshieldingMultiTransfer {
+                    data: vec![UnshieldingTransferData {
+                        target: target.effective_address(),
+                        token: address::testing::nam(),
+                        amount: DenominatedAmount::native(amount),
+                    }],
                     shielded_section_hash,
                 },
                 Some(shielded),
@@ -1206,10 +1217,14 @@ impl BenchShieldedCtx {
             timeout_timestamp_on_b: timeout_timestamp,
         };
 
-        let transfer = ShieldingTransfer::deserialize(
+        let vectorized_transfer = ShieldingMultiTransfer::deserialize(
             &mut tx.tx.data(&tx.cmt).unwrap().as_slice(),
         )
         .unwrap();
+        let transfer = ShieldingTransfer {
+            data: vectorized_transfer.data.first().unwrap().to_owned(),
+            shielded_section_hash: vectorized_transfer.shielded_section_hash,
+        };
         let masp_tx = tx
             .tx
             .get_section(&transfer.shielded_section_hash)
@@ -1219,6 +1234,7 @@ impl BenchShieldedCtx {
         let msg = MsgTransfer {
             message: msg,
             transfer: Some(transfer),
+            fee_unshield: None,
         };
 
         let mut ibc_tx = ctx
