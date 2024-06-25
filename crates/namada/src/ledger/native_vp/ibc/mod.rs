@@ -353,12 +353,12 @@ fn match_value(
 /// A dummy header used for testing
 #[cfg(any(test, feature = "testing", feature = "benches"))]
 pub fn get_dummy_header() -> crate::storage::Header {
-    use namada_sdk::time::DateTimeUtc;
+    use namada_sdk::time::{DateTimeUtc, DurationSecs};
 
     crate::storage::Header {
         hash: crate::hash::Hash([0; 32]),
-        #[allow(clippy::disallowed_methods)]
-        time: DateTimeUtc::now(),
+        #[allow(clippy::disallowed_methods, clippy::arithmetic_side_effects)]
+        time: DateTimeUtc::now() + DurationSecs(5),
         next_validators_hash: crate::hash::Hash([0; 32]),
     }
 }

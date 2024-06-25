@@ -242,14 +242,14 @@ impl PartialEq for Data {
 impl Data {
     /// Make a new data section with the given bytes
     pub fn new(data: Vec<u8>) -> Self {
+        use rand_core::{OsRng, RngCore};
+
         Self {
             salt: {
-                #[allow(clippy::disallowed_methods)]
-                DateTimeUtc::now()
-            }
-            .0
-            .timestamp_millis()
-            .to_le_bytes(),
+                let mut buf = [0; 8];
+                OsRng.fill_bytes(&mut buf);
+                buf
+            },
             data,
         }
     }
@@ -359,14 +359,14 @@ impl PartialEq for Code {
 impl Code {
     /// Make a new code section with the given bytes
     pub fn new(code: Vec<u8>, tag: Option<String>) -> Self {
+        use rand_core::{OsRng, RngCore};
+
         Self {
             salt: {
-                #[allow(clippy::disallowed_methods)]
-                DateTimeUtc::now()
-            }
-            .0
-            .timestamp_millis()
-            .to_le_bytes(),
+                let mut buf = [0; 8];
+                OsRng.fill_bytes(&mut buf);
+                buf
+            },
             code: Commitment::Id(code),
             tag,
         }
@@ -377,14 +377,14 @@ impl Code {
         hash: namada_core::hash::Hash,
         tag: Option<String>,
     ) -> Self {
+        use rand_core::{OsRng, RngCore};
+
         Self {
             salt: {
-                #[allow(clippy::disallowed_methods)]
-                DateTimeUtc::now()
-            }
-            .0
-            .timestamp_millis()
-            .to_le_bytes(),
+                let mut buf = [0; 8];
+                OsRng.fill_bytes(&mut buf);
+                buf
+            },
             code: Commitment::Hash(hash),
             tag,
         }
