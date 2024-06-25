@@ -357,13 +357,15 @@ where
         match extended_dispatch_result {
             Ok(extended_tx_result) => match tx_data.tx.header.tx_type {
                 TxType::Wrapper(_) => {
+                    self.state.write_log_mut().commit_batch();
+
                     // Return withouth emitting any events
                     return Some(WrapperCache {
                         tx: tx_data.tx.to_owned(),
                         tx_index: tx_data.tx_index,
                         gas_meter: tx_data.tx_gas_meter,
                         event: tx_logs.tx_event,
-                        tx_result: extended_tx_result.tx_result,
+                        extended_tx_result,
                     });
                 }
                 _ => self.handle_inner_tx_results(
@@ -390,8 +392,12 @@ where
                     .extend(GasUsed(tx_data.tx_gas_meter.get_tx_consumed_gas()))
                     .extend(Info(msg.to_string()))
                     .extend(Code(ResultCode::InvalidTx));
-                // Make sure to clean the write logs for the next transaction
+                // Drop the tx write log which could contain invalid data
                 self.state.write_log_mut().drop_tx();
+                // Instead commit the batch write log because it contains data
+                // that should be persisted even in case of a wrapper failure
+                // (e.g. the fee payment state change)
+                self.state.write_log_mut().commit_batch();
             }
             Err(dispatch_error) => {
                 // This branch represents an error that affects the entire
@@ -700,7 +706,10 @@ where
                         DispatchArgs::Wrapper {
                             wrapper,
                             tx_bytes: processed_tx.tx.as_ref(),
+                            tx_index: TxIndex::must_from_usize(tx_index),
                             block_proposer: native_block_proposer_address,
+                            vp_wasm_cache: &mut self.vp_wasm_cache,
+                            tx_wasm_cache: &mut self.tx_wasm_cache,
                         },
                         tx_gas_meter,
                     )
@@ -824,7 +833,7 @@ where
             tx_index,
             gas_meter: tx_gas_meter,
             event: tx_event,
-            tx_result: wrapper_tx_result,
+            extended_tx_result: wrapper_tx_result,
         } in successful_wrappers
         {
             let tx_hash = tx.header_hash();
@@ -891,7 +900,7 @@ struct WrapperCache {
     tx_index: usize,
     gas_meter: TxGasMeter,
     event: Event,
-    tx_result: namada::tx::data::TxResult<protocol::Error>,
+    extended_tx_result: namada::tx::data::ExtendedTxResult<protocol::Error>,
 }
 
 struct TxData<'tx> {
@@ -5467,7 +5476,7 @@ mod test_finalize_block {
         ));
         let keys_changed = BTreeSet::from([min_confirmations_key()]);
         let verifiers = BTreeSet::default();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = namada::ledger::native_vp::Ctx::new(
             shell.mode.get_validator_address().expect("Test failed"),
             shell.state.read_only(),

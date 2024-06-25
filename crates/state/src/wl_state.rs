@@ -22,7 +22,7 @@ use crate::write_log::{StorageModification, WriteLog};
 use crate::{
     is_pending_transfer_key, DBIter, Epoch, Error, Hash, Key, KeySeg,
     LastBlock, MembershipProof, MerkleTree, MerkleTreeError, ProofOps, Result,
-    State, StateRead, StorageHasher, StorageResult, StoreType, DB,
+    State, StateRead, StorageHasher, StorageResult, StoreType, TxWrites, DB,
     EPOCH_SWITCH_BLOCKS_DELAY, STORAGE_ACCESS_GAS_PER_BYTE,
 };
 
@@ -50,6 +50,22 @@ where
     pub(crate) in_mem: InMemory<H>,
     /// Static diff storage key filter
     pub diff_key_filter: fn(&storage::Key) -> bool,
+}
+
+/// State with a temporary write log. This is used for dry-running txs and ABCI
+/// prepare and processs proposal, which must not modify the actual state.
+#[derive(Debug)]
+pub struct TxWlState<'a, D, H>
+where
+    D: DB + for<'iter> DBIter<'iter>,
+    H: StorageHasher,
+{
+    /// Write log
+    pub(crate) write_log: &'a mut WriteLog,
+    // DB
+    pub(crate) db: &'a D,
+    /// State
+    pub(crate) in_mem: &'a InMemory<H>,
 }
 
 /// State with a temporary write log. This is used for dry-running txs and ABCI
@@ -651,16 +667,17 @@ where
         }
     }
 
-    /// Commit the current transaction's write log to the block. Starts a new
-    /// transaction write log.
-    pub fn commit_tx(&mut self) {
-        self.write_log.commit_tx()
+    /// Commit the current transaction's write log and the entire batch to the
+    /// block. Starts a new transaction and batch write log.
+    pub fn commit_tx_batch(&mut self) {
+        self.write_log.commit_batch()
     }
 
     /// Drop the current transaction's write log when it's declined by any of
-    /// the triggered validity predicates. Starts a new transaction write log.
-    pub fn drop_tx(&mut self) {
-        self.write_log.drop_tx()
+    /// the triggered validity predicates together with the entire batch. Starts
+    /// new transaction and batch write logs.
+    pub fn drop_tx_batch(&mut self) {
+        self.write_log.drop_batch()
     }
 
     /// Mark the provided transaction's hash as redundant to prevent committing
@@ -1236,6 +1253,61 @@ where
     }
 }
 
+impl<D, H> TxWrites for WlState<D, H>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
+{
+    fn with_tx_writes(&mut self) -> TxWlState<'_, Self::D, Self::H> {
+        TxWlState {
+            write_log: &mut self.write_log,
+            db: &self.db,
+            in_mem: &self.in_mem,
+        }
+    }
+}
+
+impl<D, H> StateRead for TxWlState<'_, D, H>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
+{
+    type D = D;
+    type H = H;
+
+    fn write_log(&self) -> &WriteLog {
+        self.write_log
+    }
+
+    fn db(&self) -> &D {
+        self.db
+    }
+
+    fn in_mem(&self) -> &InMemory<Self::H> {
+        self.in_mem
+    }
+
+    fn charge_gas(&self, _gas: u64) -> Result<()> {
+        Ok(())
+    }
+}
+
+impl<D, H> State for TxWlState<'_, D, H>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
+{
+    fn write_log_mut(&mut self) -> &mut WriteLog {
+        self.write_log
+    }
+
+    fn split_borrow(
+        &mut self,
+    ) -> (&mut WriteLog, &InMemory<Self::H>, &Self::D) {
+        (self.write_log, (self.in_mem), (self.db))
+    }
+}
+
 impl<D, H> EmitEvents for WlState<D, H>
 where
     D: 'static + DB + for<'iter> DBIter<'iter>,
@@ -1298,6 +1370,20 @@ where
         &mut self,
     ) -> (&mut WriteLog, &InMemory<Self::H>, &Self::D) {
         (&mut self.write_log, (self.in_mem), (self.db))
+    }
+}
+
+impl<D, H> TxWrites for TempWlState<'_, D, H>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
+{
+    fn with_tx_writes(&mut self) -> TxWlState<'_, Self::D, Self::H> {
+        TxWlState {
+            write_log: &mut self.write_log,
+            db: self.db,
+            in_mem: self.in_mem,
+        }
     }
 }
 
@@ -1370,6 +1456,30 @@ where
 }
 
 impl<D, H> namada_tx::action::Read for WlState<D, H>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
+{
+    type Err = Error;
+
+    fn read_temp<T: namada_core::borsh::BorshDeserialize>(
+        &self,
+        key: &storage::Key,
+    ) -> Result<Option<T>> {
+        let (log_val, _) = self.write_log().read_temp(key).unwrap();
+        match log_val {
+            Some(value) => {
+                let value =
+                    namada_core::borsh::BorshDeserialize::try_from_slice(value)
+                        .map_err(Error::BorshCodingError)?;
+                Ok(Some(value))
+            }
+            None => Ok(None),
+        }
+    }
+}
+
+impl<D, H> namada_tx::action::Read for TempWlState<'_, D, H>
 where
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,

@@ -200,7 +200,7 @@ impl TestTxEnv {
     }
 
     pub fn commit_tx_and_block(&mut self) {
-        self.state.commit_tx();
+        self.state.commit_tx_batch();
         self.state
             .commit_block()
             .map_err(|err| println!("{:?}", err))

@@ -628,7 +628,7 @@ mod tests {
             .write_log_mut()
             .write(&client_update_height_key, host_height.encode_vec())
             .expect("write failed");
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
     }
 
     fn get_connection_id() -> ConnectionId {
@@ -952,7 +952,7 @@ mod tests {
             [(0, keypair_1())].into_iter().collect(),
             None,
         )));
-        let batched_tx = outer_tx.batch_ref_first_tx();
+        let batched_tx = outer_tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1028,7 +1028,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1054,7 +1054,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
         let mut state = init_storage();
         insert_init_client(&mut state);
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
         state.commit_block().expect("commit failed");
 
         // for next block
@@ -1153,7 +1153,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1178,7 +1178,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
         let mut state = init_storage();
         insert_init_client(&mut state);
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -1262,7 +1262,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = outer_tx.batch_ref_first_tx();
+        let batched_tx = outer_tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1356,7 +1356,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1381,7 +1381,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
         let mut state = init_storage();
         insert_init_client(&mut state);
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -1476,7 +1476,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1510,7 +1510,7 @@ mod tests {
             .write_log_mut()
             .write(&conn_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -1586,7 +1586,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = outer_tx.batch_ref_first_tx();
+        let batched_tx = outer_tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1619,7 +1619,7 @@ mod tests {
             .write_log_mut()
             .write(&conn_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -1681,7 +1681,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = outer_tx.batch_ref_first_tx();
+        let batched_tx = outer_tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1715,7 +1715,7 @@ mod tests {
             .write_log_mut()
             .write(&conn_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -1804,7 +1804,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = outer_tx.batch_ref_first_tx();
+        let batched_tx = outer_tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1837,7 +1837,7 @@ mod tests {
             .write_log_mut()
             .write(&conn_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -1926,7 +1926,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = outer_tx.batch_ref_first_tx();
+        let batched_tx = outer_tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1967,7 +1967,7 @@ mod tests {
             .write_log_mut()
             .write(&channel_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -2033,7 +2033,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = outer_tx.batch_ref_first_tx();
+        let batched_tx = outer_tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2074,7 +2074,7 @@ mod tests {
             .write_log_mut()
             .write(&channel_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -2135,7 +2135,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2187,7 +2187,7 @@ mod tests {
             .write_log_mut()
             .write(&balance_key, amount.serialize_to_vec())
             .expect("write failed");
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -2281,6 +2281,7 @@ mod tests {
         let tx_data = MsgTransfer {
             message: msg,
             transfer: None,
+            fee_unshield: None,
         }
         .serialize_to_vec();
 
@@ -2296,7 +2297,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2337,7 +2338,7 @@ mod tests {
             .write_log_mut()
             .write(&channel_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -2507,7 +2508,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2582,7 +2583,7 @@ mod tests {
             .write_log_mut()
             .write(&commitment_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -2662,7 +2663,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2745,7 +2746,7 @@ mod tests {
             .write_log_mut()
             .write(&commitment_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -2824,7 +2825,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2907,7 +2908,7 @@ mod tests {
             .write_log_mut()
             .write(&commitment_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -2987,7 +2988,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -3054,7 +3055,7 @@ mod tests {
             .write(&metadata_key, metadata.serialize_to_vec())
             .expect("write failed");
 
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -3150,6 +3151,7 @@ mod tests {
         let tx_data = MsgNftTransfer {
             message: msg,
             transfer: None,
+            fee_unshield: None,
         }
         .serialize_to_vec();
 
@@ -3165,7 +3167,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -3206,7 +3208,7 @@ mod tests {
             .write_log_mut()
             .write(&channel_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -3399,7 +3401,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
