@@ -158,14 +158,19 @@ where
                         GovernanceEvent::passed_proposal(id, true, result)
                     }
                     ProposalType::PGFSteward(stewards) => {
-                        let _result = execute_pgf_steward_proposal(
+                        let result = execute_pgf_steward_proposal(
                             &mut shell.state,
                             stewards,
                         )?;
                         tracing::info!(
                             "Governance proposal (pgf stewards){} has been \
-                             executed and passed.",
-                            id
+                             executed and {}.",
+                            id,
+                            if result {
+                                "applied the state changes successfully"
+                            } else {
+                                "didn't applied the state changes successfully"
+                            }
                         );
 
                         GovernanceEvent::passed_proposal(id, false, false)
