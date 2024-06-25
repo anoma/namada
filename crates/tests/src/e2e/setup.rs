@@ -423,7 +423,7 @@ pub fn network(
         "--wasm-checksums-path",
         &checksums_path,
         "--genesis-time",
-        "2023-08-30T00:00:00Z",
+        namada_core::time::test_utils::GENESIS_TIME,
         "--archive-dir",
         &archive_dir,
     ];
