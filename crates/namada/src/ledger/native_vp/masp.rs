@@ -389,9 +389,6 @@ where
             return Err(error);
         }
 
-        // The Sapling value balance adds to the transparent tx pool
-        let transparent_tx_pool = shielded_tx.sapling_value_balance();
-
         // Check the validity of the keys and get the transfer data
         let mut changed_balances =
             self.validate_state_and_get_transfer_data(keys_changed)?;
@@ -436,7 +433,6 @@ where
         validate_transparent_bundle(
             &shielded_tx,
             &mut changed_balances,
-            transparent_tx_pool,
             masp_epoch,
             conversion_state,
             &mut signers,
@@ -703,12 +699,13 @@ fn validate_transparent_output(
 fn validate_transparent_bundle(
     shielded_tx: &Transaction,
     changed_balances: &mut ChangedBalances,
-    // Take ownership to prevent further usage after this call
-    mut transparent_tx_pool: I128Sum,
     epoch: MaspEpoch,
     conversion_state: &ConversionState,
     signers: &mut BTreeSet<TransparentAddress>,
 ) -> Result<()> {
+    // The Sapling value balance adds to the transparent tx pool
+    let mut transparent_tx_pool = shielded_tx.sapling_value_balance();
+
     if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
         for vin in transp_bundle.vin.iter() {
             validate_transparent_input(
