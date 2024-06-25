@@ -168,15 +168,18 @@ impl<C: Client + Sync> MaspClient for LedgerMaspClient<'_, C> {
         // Fetch all the transactions we do not have yet
         let mut fetch_iter = progress.fetch(from..=to);
 
-        while let Some(height) = fetch_iter.peek() {
+        loop {
+            let Some(height) = fetch_iter.peek().copied() else {
+                break;
+            };
+            _ = fetch_iter.next();
+
             if shutdown_signal.received() {
                 return Err(Error::Interrupt(
                     "[ShieldedSync::Fetching]".to_string(),
                 ));
             }
-            let height = *height;
             if tx_sender.contains_height(height) {
-                fetch_iter.next();
                 continue;
             }
 
@@ -189,7 +192,6 @@ impl<C: Client + Sync> MaspClient for LedgerMaspClient<'_, C> {
             {
                 Some(events) => events,
                 None => {
-                    fetch_iter.next();
                     continue;
                 }
             };
@@ -224,7 +226,6 @@ impl<C: Client + Sync> MaspClient for LedgerMaspClient<'_, C> {
                     extracted_masp_txs,
                 ));
             }
-            fetch_iter.next();
         }
 
         Ok(())
