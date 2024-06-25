@@ -405,6 +405,7 @@ where
     let dispatch_result = protocol::dispatch_tx(
         &tx,
         protocol::DispatchArgs::Raw {
+            wrapper_hash: None,
             tx_index: TxIndex::default(),
             wrapper_tx_result: None,
             vp_wasm_cache: &mut shell.vp_wasm_cache,
@@ -422,8 +423,7 @@ where
         Ok(extended_tx_result) => match extended_tx_result
             .tx_result
             .batch_results
-            .0
-            .get(&cmt.get_hash())
+            .get_inner_tx_result(None, either::Right(&cmt))
         {
             Some(Ok(batched_result)) if batched_result.is_accepted() => {
                 shell.state.commit_tx();

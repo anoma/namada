@@ -61,7 +61,9 @@ use namada_token::storage_key::balance_key;
 use namada_token::DenominatedAmount;
 use namada_tx::data::pgf::UpdateStewardCommission;
 use namada_tx::data::pos::{BecomeValidator, ConsensusKeyChange};
-use namada_tx::data::{pos, BatchedTxResult, ResultCode, TxResult};
+use namada_tx::data::{
+    compute_inner_tx_hash, pos, BatchedTxResult, ResultCode, TxResult,
+};
 pub use namada_tx::{Authorization, *};
 use num_traits::Zero;
 use rand_core::{OsRng, RngCore};
@@ -164,13 +166,17 @@ impl ProcessTxResponse {
     /// all VPs. Note that this always returns false for dry-run transactions.
     pub fn is_applied_and_valid(
         &self,
+        wrapper_hash: Option<&Hash>,
         cmt: &TxCommitments,
     ) -> Option<&BatchedTxResult> {
         match self {
             ProcessTxResponse::Applied(resp) => {
                 if resp.code == ResultCode::Ok {
                     if let Some(InnerTxResult::Success(result)) =
-                        resp.batch_result().get(&cmt.get_hash())
+                        resp.batch_result().get(&compute_inner_tx_hash(
+                            wrapper_hash,
+                            either::Right(cmt),
+                        ))
                     {
                         return Some(result);
                     }
@@ -246,6 +252,7 @@ pub async fn process_tx(
         // We use this to determine when the wrapper tx makes it on-chain
         let tx_hash = tx.header_hash().to_string();
         let cmts = tx.commitments().clone();
+        let wrapper_hash = tx.wrapper_hash();
         // We use this to determine when the decrypted inner tx makes it
         // on-chain
         let to_broadcast = TxBroadcastData::Live { tx, tx_hash };
@@ -258,7 +265,10 @@ pub async fn process_tx(
                 Ok(resp) => {
                     for cmt in cmts {
                         if let Some(InnerTxResult::Success(result)) =
-                            resp.batch_result().get(&cmt.get_hash())
+                            resp.batch_result().get(&compute_inner_tx_hash(
+                                wrapper_hash.as_ref(),
+                                either::Right(&cmt),
+                            ))
                         {
                             save_initialized_accounts(
                                 context,
@@ -405,13 +415,13 @@ pub async fn submit_tx(
 
 /// Display a result of a tx batch.
 pub fn display_batch_resp(context: &impl Namada, resp: &TxResponse) {
-    for (cmt_hash, result) in resp.batch_result() {
+    for (inner_hash, result) in resp.batch_result() {
         match result {
             InnerTxResult::Success(_) => {
                 display_line!(
                     context.io(),
                     "Transaction {} was successfully applied at height {}.",
-                    cmt_hash,
+                    inner_hash,
                     resp.height,
                 );
             }
@@ -425,7 +435,7 @@ pub fn display_batch_resp(context: &impl Namada, resp: &TxResponse) {
                     context.io(),
                     "Transaction {} was rejected by VPs: {}\nErrors: \
                      {}\nChanged keys: {}",
-                    cmt_hash,
+                    inner_hash,
                     serde_json::to_string_pretty(
                         &inner.vps_result.rejected_vps
                     )
@@ -439,7 +449,7 @@ pub fn display_batch_resp(context: &impl Namada, resp: &TxResponse) {
                 edisplay_line!(
                     context.io(),
                     "Transaction {} failed.\nDetails: {}",
-                    cmt_hash,
+                    inner_hash,
                     serde_json::to_string_pretty(&resp).unwrap()
                 );
             }

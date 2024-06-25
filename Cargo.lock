@@ -2104,9 +2104,9 @@ dependencies = [
 
 [[package]]
 name = "either"
-version = "1.9.0"
+version = "1.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a26ae43d7bcc3b814de94796a5e736d4029efb0ee900c12e2d54c993ad1a1e07"
+checksum = "3dca9240753cf90908d7e4aac30f630662b02aebaa1b58a3cadabdb23385b58b"
 
 [[package]]
 name = "elliptic-curve"
@@ -4689,6 +4689,7 @@ dependencies = [
  "borsh-ext",
  "byte-unit",
  "clru",
+ "either",
  "ethers",
  "eyre",
  "ibc-testkit",
@@ -4799,6 +4800,7 @@ dependencies = [
  "data-encoding",
  "derivative",
  "directories",
+ "either",
  "eyre",
  "fd-lock",
  "flate2",
@@ -5142,6 +5144,7 @@ dependencies = [
  "color-eyre",
  "data-encoding",
  "drain_filter_polyfill",
+ "either",
  "ethabi",
  "ethbridge-bridge-events",
  "ethbridge-events",
@@ -5256,6 +5259,7 @@ dependencies = [
  "data-encoding",
  "derivation-path",
  "duration-str",
+ "either",
  "ethbridge-bridge-contract",
  "ethers",
  "eyre",
@@ -5471,6 +5475,7 @@ dependencies = [
  "bitflags 2.5.0",
  "borsh 1.2.1",
  "data-encoding",
+ "either",
  "konst",
  "linkme",
  "masp_primitives",
