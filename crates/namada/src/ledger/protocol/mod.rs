@@ -446,21 +446,21 @@ where
         .write_tx_hash(tx.header_hash())
         .expect("Error while writing tx hash to storage");
 
-    // Charge or check fees before propagating any possible error
+    // Charge or check fees, propagate any errors to prevent committing invalid
+    // data
     let payment_result = match block_proposer {
         Some(block_proposer) => {
-            transfer_fee(shell_params, block_proposer, tx, wrapper, tx_index)
+            transfer_fee(shell_params, block_proposer, tx, wrapper, tx_index)?
         }
-        None => check_fees(shell_params, tx, wrapper),
+        None => check_fees(shell_params, tx, wrapper)?,
     };
 
-    // Commit tx to the batch write log even in case of subsequent errors (if
+    // Commit tx to the block write log even in case of subsequent errors (if
     // the fee payment failed instead, than the previous two functions must
-    // have already dropped the write log, leading this function call to be
-    // essentially a no-op)
-    shell_params.state.write_log_mut().commit_tx_to_batch();
+    // have propagated an error)
+    shell_params.state.write_log_mut().commit_batch();
 
-    let (batch_results, masp_tx_refs) = payment_result?.map_or_else(
+    let (batch_results, masp_tx_refs) = payment_result.map_or_else(
         || (BatchResults::default(), None),
         |(batched_result, masp_section_ref)| {
             let mut batch = BatchResults::default();
@@ -488,8 +488,8 @@ where
 }
 
 /// Perform the actual transfer of fees from the fee payer to the block
-/// proposer. Drops the modifications if errors occur but does not commit since
-/// we might want to drop things later.
+/// proposer. No modifications to the write log are committed or dropped in this
+/// function: this logic is up to the caller.
 pub fn transfer_fee<S, D, H, CA>(
     shell_params: &mut ShellParams<'_, S, D, H, CA>,
     block_proposer: &Address,
@@ -534,20 +534,13 @@ where
                     fees,
                 )?;
 
-                (Some(post_bal), None)
+                (post_bal, None)
             } else {
                 // See if the first inner transaction of the batch pays the fees
                 // with a masp unshield
                 if let Ok(Some(valid_batched_tx_result)) =
                     try_masp_fee_payment(shell_params, tx, tx_index)
                 {
-                    // NOTE: Even if the unshielding was successful we could
-                    // still fail in the transfer (e.g. cause the unshielded
-                    // amount is not enough to cover the fees). In this case we
-                    // want to drop the changes applied by the masp transaction
-                    // and try to drain the fees from the transparent balance.
-                    // Because of this we must NOT propagate errors from within
-                    // this branch
                     let balance = crate::token::read_balance(
                         shell_params.state,
                         &wrapper.fee.token,
@@ -555,47 +548,49 @@ where
                     )
                     .expect("Could not read balance key from storage");
 
-                    // Ok to unwrap_or_default. In the default case, the only
-                    // way the checked op can return Some is if fees are 0, but
-                    // if that's the case then we would have never reached this
-                    // branch of execution
-                    let post_bal = balance.checked_sub(fees).filter(|_| {
-                        fee_token_transfer(
-                            shell_params.state,
-                            &wrapper.fee.token,
-                            &wrapper.fee_payer(),
-                            block_proposer,
-                            fees,
-                        )
-                        .is_ok()
-                    });
+                    let post_bal = match balance.checked_sub(fees) {
+                        Some(post_bal) => {
+                            // This cannot fail given the checked_sub check here
+                            // above
+                            fee_token_transfer(
+                                shell_params.state,
+                                &wrapper.fee.token,
+                                &wrapper.fee_payer(),
+                                block_proposer,
+                                fees,
+                            )?;
+
+                            post_bal
+                        }
+                        None => {
+                            // This shouldn't happen as it should be prevented
+                            // from process_proposal.
+                            tracing::error!(
+                                "Transfer of tx fee cannot be applied to due \
+                                 to insufficient funds. This shouldn't happen."
+                            );
+                            return Err(Error::FeeError(
+                                "Insufficient funds for fee payment"
+                                    .to_string(),
+                            ));
+                        }
+                    };
 
                     // Batched tx result must be returned (and considered) only
                     // if fee payment was successful
-                    (post_bal, post_bal.map(|_| valid_batched_tx_result))
+                    (post_bal, Some(valid_batched_tx_result))
                 } else {
-                    (None, None)
+                    // This shouldn't happen as it should be prevented by
+                    // process_proposal.
+                    tracing::error!(
+                        "Transfer of tx fee cannot be applied to due to \
+                         insufficient funds. This shouldn't happen."
+                    );
+                    return Err(Error::FeeError(
+                        "Insufficient funds for fee payment".to_string(),
+                    ));
                 }
             };
-
-            if post_bal.is_none() {
-                // Balance was insufficient for fee payment, move all the
-                // available funds in the transparent balance of
-                // the fee payer.
-                tracing::error!(
-                    "Transfer of tx fee cannot be applied to due to \
-                     insufficient funds. Falling back to transferring the \
-                     available balance which is less than the fee. This \
-                     shouldn't happen."
-                );
-                fee_token_transfer(
-                    shell_params.state,
-                    &wrapper.fee.token,
-                    &wrapper.fee_payer(),
-                    block_proposer,
-                    balance,
-                )?;
-            }
 
             let target_post_balance = Some(
                 namada_token::read_balance(
@@ -623,9 +618,7 @@ where
                         amount: fees.into(),
                         source: UserAccount::Internal(wrapper.fee_payer()),
                         target: UserAccount::Internal(block_proposer.clone()),
-                        source_post_balance: post_bal
-                            .map(namada_core::uint::Uint::from)
-                            .unwrap_or(namada_core::uint::ZERO),
+                        source_post_balance: post_bal.into(),
                         target_post_balance,
                     },
                 }
@@ -633,26 +626,15 @@ where
                 .with(TxHashAttr(tx.header_hash())),
             );
 
-            post_bal.map(|_| valid_batched_tx_result).ok_or_else(|| {
-                // In this case don't drop the state changes because we still
-                // want to drain the fee payer's balance
-                Error::FeeError(
-                    "Transparent balance of wrapper's signer was insufficient \
-                     to pay fee. All the available transparent funds have \
-                     been moved to the block proposer. This shouldn't happen."
-                        .to_string(),
-                )
-            })
+            Ok(valid_batched_tx_result)
         }
         Err(e) => {
             // Fee overflow. This shouldn't happen as it should be prevented
-            // from mempool/process_proposal.
+            // by process_proposal.
             tracing::error!(
                 "Transfer of tx fee cannot be applied to due to fee overflow. \
                  This shouldn't happen."
             );
-            shell_params.state.write_log_mut().drop_batch();
-
             Err(Error::FeeError(format!("{}", e)))
         }
     }
@@ -716,9 +698,9 @@ where
                 // NOTE: do not commit yet cause this could be exploited to get
                 // free masp operations. We can commit only after the entire fee
                 // payment has been deemed valid. Also, do not commit to batch
-                // cause we might need to discard the effects of
-                // this valid unshield (e.g. if it unshield an
-                // amount which is not enough to pay the fees)
+                // cause we might need to discard the effects of this valid
+                // unshield (e.g. if it unshield an amount which is not enough
+                // to pay the fees)
                 if !result.is_accepted() {
                     state.write_log_mut().drop_tx();
                     tracing::error!(
@@ -805,81 +787,61 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    fn inner_check_fees<S, D, H, CA>(
-        shell_params: &mut ShellParams<'_, S, D, H, CA>,
-        tx: &Tx,
-        wrapper: &WrapperTx,
-    ) -> Result<Option<(BatchedTxResult, Hash)>>
-    where
-        S: State<D = D, H = H>
-            + StorageRead
-            + Read<Err = namada_state::Error>
-            + Sync,
-        D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-        H: 'static + StorageHasher + Sync,
-        CA: 'static + WasmCacheAccess + Sync,
-    {
-        match wrapper.get_tx_fee() {
-            Ok(fees) => {
-                let fees = crate::token::denom_to_amount(
-                    fees,
-                    &wrapper.fee.token,
-                    shell_params.state,
-                )
-                .map_err(Error::StorageError)?;
+    match wrapper.get_tx_fee() {
+        Ok(fees) => {
+            let fees = crate::token::denom_to_amount(
+                fees,
+                &wrapper.fee.token,
+                shell_params.state,
+            )
+            .map_err(Error::StorageError)?;
 
-                let balance = crate::token::read_balance(
-                    shell_params.state,
-                    &wrapper.fee.token,
-                    &wrapper.fee_payer(),
-                )
-                .map_err(Error::StorageError)?;
+            let balance = crate::token::read_balance(
+                shell_params.state,
+                &wrapper.fee.token,
+                &wrapper.fee_payer(),
+            )
+            .map_err(Error::StorageError)?;
 
-                checked!(balance - fees).map_or_else(
-                    |_| {
-                        // See if the first inner transaction of the batch pays
-                        // the fees with a masp unshield
-                        if let Ok(valid_batched_tx_result @ Some(_)) =
-                            try_masp_fee_payment(
-                                shell_params,
-                                tx,
-                                &TxIndex::default(),
-                            )
-                        {
-                            let balance = crate::token::read_balance(
-                                shell_params.state,
-                                &wrapper.fee.token,
-                                &wrapper.fee_payer(),
-                            )
-                            .map_err(Error::StorageError)?;
+            checked!(balance - fees).map_or_else(
+                |_| {
+                    // See if the first inner transaction of the batch pays
+                    // the fees with a masp unshield
+                    if let Ok(valid_batched_tx_result @ Some(_)) =
+                        try_masp_fee_payment(
+                            shell_params,
+                            tx,
+                            &TxIndex::default(),
+                        )
+                    {
+                        let balance = crate::token::read_balance(
+                            shell_params.state,
+                            &wrapper.fee.token,
+                            &wrapper.fee_payer(),
+                        )
+                        .map_err(Error::StorageError)?;
 
-                            checked!(balance - fees).map_or_else(
-                                |_| {
-                                    Err(Error::FeeError(
-                                        "Masp fee payment unshielded an \
-                                         insufficient amount"
-                                            .to_string(),
-                                    ))
-                                },
-                                |_| Ok(valid_batched_tx_result),
-                            )
-                        } else {
-                            Err(Error::FeeError(
-                                "Failed masp fee payment".to_string(),
-                            ))
-                        }
-                    },
-                    |_| Ok(None),
-                )
-            }
-            Err(e) => Err(Error::FeeError(e.to_string())),
+                        checked!(balance - fees).map_or_else(
+                            |_| {
+                                Err(Error::FeeError(
+                                    "Masp fee payment unshielded an \
+                                     insufficient amount"
+                                        .to_string(),
+                                ))
+                            },
+                            |_| Ok(valid_batched_tx_result),
+                        )
+                    } else {
+                        Err(Error::FeeError(
+                            "Failed masp fee payment".to_string(),
+                        ))
+                    }
+                },
+                |_| Ok(None),
+            )
         }
+        Err(e) => Err(Error::FeeError(e.to_string())),
     }
-    inner_check_fees(shell_params, tx, wrapper).map_err(|err| {
-        shell_params.state.write_log_mut().drop_tx();
-
-        err
-    })
 }
 
 /// Apply a transaction going via the wasm environment. Gas will be metered and

@@ -392,12 +392,10 @@ where
                     .extend(GasUsed(tx_data.tx_gas_meter.get_tx_consumed_gas()))
                     .extend(Info(msg.to_string()))
                     .extend(Code(ResultCode::InvalidTx));
-                // Drop the tx write log which could contain invalid data
-                self.state.write_log_mut().drop_tx();
-                // Instead commit the batch write log because it contains data
-                // that should be persisted even in case of a wrapper failure
-                // (e.g. the fee payment state change)
-                self.state.write_log_mut().commit_batch();
+                // Drop the batch write log which could contain invalid data.
+                // Important data that could be valid (e.g. a valid fee payment)
+                // must have already been moved to the bloc kwrite log by now
+                self.state.write_log_mut().drop_batch();
             }
             Err(dispatch_error) => {
                 // This branch represents an error that affects the entire
@@ -3661,8 +3659,8 @@ mod test_finalize_block {
         )
     }
 
-    // Test that if the fee payer doesn't have enough funds for fee payment the
-    // ledger drains their balance
+    // Test that if the fee payer doesn't have enough funds for fee payment none
+    // of the inner txs of the batch gets executed
     #[test]
     fn test_fee_payment_if_insufficient_balance() {
         let (mut shell, _, _, _) = setup();
@@ -3670,7 +3668,7 @@ mod test_finalize_block {
         let native_token = shell.state.in_mem().native_token.clone();
 
         // Credit some tokens for fee payment
-        let initial_balance = token::Amount::native_whole(1);
+        let initial_balance: token::Amount = 1.into();
         namada::token::credit_tokens(
             &mut shell.state,
             &native_token,
@@ -3686,45 +3684,20 @@ mod test_finalize_block {
         .unwrap();
         assert_eq!(balance, initial_balance);
 
-        let mut wrapper =
-            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-                Fee {
-                    amount_per_gas_unit: DenominatedAmount::native(200.into()),
-                    token: native_token.clone(),
-                },
-                keypair.ref_to(),
-                WRAPPER_GAS_LIMIT.into(),
-            ))));
-        wrapper.header.chain_id = shell.chain_id.clone();
-        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
-        wrapper.set_data(Data::new(
-            "Encrypted transaction data".as_bytes().to_owned(),
-        ));
-        wrapper.add_section(Section::Authorization(Authorization::new(
-            wrapper.sechashes(),
-            [(0, keypair.clone())].into_iter().collect(),
-            None,
-        )));
+        let (batch, processed_tx) =
+            mk_tx_batch(&shell, &keypair, false, false, false);
 
         // Check that the fees are higher than the initial balance of the fee
         // payer
         let fee_amount =
-            wrapper.header().wrapper().unwrap().get_tx_fee().unwrap();
+            batch.header().wrapper().unwrap().get_tx_fee().unwrap();
         let fee_amount = namada::token::denom_to_amount(
             fee_amount,
-            &wrapper.header().wrapper().unwrap().fee.token,
+            &batch.header().wrapper().unwrap().fee.token,
             &shell.state,
         )
         .unwrap();
         assert!(fee_amount > initial_balance);
-
-        let processed_tx = ProcessedTx {
-            tx: wrapper.to_bytes().into(),
-            result: TxResult {
-                code: ResultCode::Ok.into(),
-                info: "".into(),
-            },
-        };
 
         let event = &shell
             .finalize_block(FinalizeBlock {
@@ -3733,7 +3706,7 @@ mod test_finalize_block {
             })
             .expect("Test failed")[0];
 
-        // Check balance of fee payer is 0
+        // Check balance of fee payer is unchanged
         assert_eq!(*event.kind(), APPLIED_TX);
         let code = event.read_attribute::<CodeAttr>().expect("Test failed");
         assert_eq!(code, ResultCode::InvalidTx);
@@ -3744,7 +3717,16 @@ mod test_finalize_block {
         )
         .unwrap();
 
-        assert_eq!(balance, 0.into())
+        assert_eq!(balance, initial_balance);
+
+        // Check that none of the txs of the batch have been executed (batch
+        // attribute is missing)
+        assert!(event.read_attribute::<Batch<'_>>().is_err());
+
+        // Check storage modifications are missing
+        for key in ["random_key_1", "random_key_2", "random_key_3"] {
+            assert!(!shell.state.has_key(&key.parse().unwrap()).unwrap());
+        }
     }
 
     // Test that the fees collected from a block are withdrew from the wrapper
