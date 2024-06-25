@@ -59,6 +59,15 @@ pub enum MaspClientCapabilities {
     AllData,
 }
 
+impl MaspClientCapabilities {
+    /// Check if the laco of one or more capabilities in the
+    /// masp client implementation warrants a manual update
+    /// of the witnesses map.
+    pub const fn needs_witness_map_update(&self) -> bool {
+        matches!(self, Self::OnlyTransfers)
+    }
+}
+
 /// This abstracts away the implementation details
 /// of how shielded-sync fetches the necessary data
 /// from a remote server.
