@@ -334,7 +334,7 @@ impl MaspClient for IndexerMaspClient {
         progress: &impl ProgressTracker<IO>,
         shutdown_signal: &mut ShutdownSignal,
         mut tx_sender: FetchQueueSender,
-        BlockHeight(from): BlockHeight,
+        BlockHeight(mut from): BlockHeight,
         BlockHeight(to): BlockHeight,
     ) -> Result<(), Error> {
         use serde::Deserialize;
@@ -348,87 +348,91 @@ impl MaspClient for IndexerMaspClient {
 
         #[derive(Deserialize)]
         struct TxResponse {
-            transactions: Vec<TransactionBatch>,
+            txs: Vec<TransactionBatch>,
         }
 
-        let Some(off) = to.checked_sub(from) else {
+        if from > to {
             return Err(Error::Other(format!(
                 "Invalid block range {from}-{to}: Beginning height {from} is \
                  greater than ending height {to}"
             )));
-        };
-
-        const MAX_RANGE_THRES: u64 = 30;
-        if off > MAX_RANGE_THRES {
-            return Err(Error::Other(format!(
-                "Invalid block range {from}-{to}: The maximum range of blocks \
-                 to fetch allowed by the indexer is {MAX_RANGE_THRES}"
-            )));
         }
 
-        let txs_fut = async {
-            let response = self
-                .client
-                .get(self.endpoint("/tx"))
-                .query(&[("height", from), ("height_offset", off)])
-                .send()
-                .await
-                .map_err(|err| {
-                    Error::Other(format!(
-                        "Failed to fetch transactions in the height range \
-                         {from}-{to}: {err}"
-                    ))
-                })?;
-            let payload: TxResponse = response.json().await.map_err(|err| {
-                Error::Other(format!(
-                    "Could not deserialize the transactions JSON response in \
-                     the height range {from}-{to}: {err}"
-                ))
-            })?;
-
-            Ok::<_, Error>(payload)
-        };
-        let payload = tokio::select! {
-            maybe_payload = txs_fut => {
-                maybe_payload?
-            }
-            _ = shutdown_signal => {
-                return Err(Error::Interrupt(
-                    "[ShieldedSync::Fetching]".to_string(),
-                ));
-            }
-        };
-
+        const MAX_RANGE_THRES: u64 = 30;
         let mut fetch_iter = progress.fetch(from..=to);
-        let mut last_height = None;
 
-        for TransactionBatch {
-            bytes,
-            index,
-            block_height,
-        } in payload.transactions
-        {
-            type MaspTxBatch = Vec<masp_primitives::transaction::Transaction>;
+        while from <= to {
+            let from_height = from;
+            let off = (to - from).min(MAX_RANGE_THRES);
+            let to_height = from + off;
+            from += off;
 
-            let extracted_masp_txs = MaspTxBatch::try_from_slice(&bytes)
-                .map_err(|err| {
-                    Error::Other(format!(
-                        "Could not deserialize the masp txs borsh data at \
-                         height {block_height} and index {index}: {err}"
-                    ))
-                })?;
-            tx_sender.send((
-                IndexedTx {
-                    height: BlockHeight(block_height),
-                    index: TxIndex(index),
-                },
-                extracted_masp_txs,
-            ));
+            let txs_fut = async {
+                let response = self
+                    .client
+                    .get(self.endpoint("/tx"))
+                    .query(&[("height", from_height), ("height_offset", off)])
+                    .send()
+                    .await
+                    .map_err(|err| {
+                        Error::Other(format!(
+                            "Failed to fetch transactions in the height range \
+                             {from_height}-{to_height}: {err}"
+                        ))
+                    })?;
+                let payload: TxResponse =
+                    response.json().await.map_err(|err| {
+                        Error::Other(format!(
+                            "Could not deserialize the transactions JSON \
+                             response in the height range \
+                             {from_height}-{to_height}: {err}"
+                        ))
+                    })?;
 
-            let curr_height = Some(block_height);
-            if curr_height > last_height {
-                last_height = curr_height;
-                _ = fetch_iter.next();
+                Ok::<_, Error>(payload)
+            };
+            let payload = tokio::select! {
+                maybe_payload = txs_fut => {
+                    maybe_payload?
+                }
+                _ = &mut *shutdown_signal => {
+                    return Err(Error::Interrupt(
+                        "[ShieldedSync::Fetching]".to_string(),
+                    ));
+                }
+            };
+
+            let mut last_height = None;
+
+            for TransactionBatch {
+                bytes,
+                index,
+                block_height,
+            } in payload.txs
+            {
+                type MaspTxBatch =
+                    Vec<masp_primitives::transaction::Transaction>;
+
+                let extracted_masp_txs = MaspTxBatch::try_from_slice(&bytes)
+                    .map_err(|err| {
+                        Error::Other(format!(
+                            "Could not deserialize the masp txs borsh data at \
+                             height {block_height} and index {index}: {err}"
+                        ))
+                    })?;
+                tx_sender.send((
+                    IndexedTx {
+                        height: BlockHeight(block_height),
+                        index: TxIndex(index),
+                    },
+                    extracted_masp_txs,
+                ));
+
+                let curr_height = Some(block_height);
+                if curr_height > last_height {
+                    last_height = curr_height;
+                    _ = fetch_iter.next();
+                }
             }
         }
 
