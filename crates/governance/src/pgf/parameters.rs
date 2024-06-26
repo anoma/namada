@@ -78,7 +78,7 @@ impl PgfParameters {
         storage.write(&steward_inflation_rate_key, stewards_inflation_rate)?;
 
         let maximum_number_of_stewards_key =
-            pgf_storage::get_pgf_inflation_rate_key();
+            pgf_storage::get_maximum_number_of_pgf_steward_key();
         storage
             .write(&maximum_number_of_stewards_key, maximum_number_of_stewards)
     }
