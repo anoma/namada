@@ -8,7 +8,8 @@ edition = "2021"
 cargo-fuzz = true
 
 [dependencies]
-namada_node = { path = "../crates/node" }
+namada_node = { path = "../crates/node", features = ["testing"] }
+namada_tx = { path = "../crates/tx", features = ["arbitrary"] }
 
 libfuzzer-sys = "0.4"
 

@@ -18,7 +18,7 @@ mainnet = [
   "namada/mainnet",
 ]
 # for integration tests and test utilities
-testing = ["namada_test_utils", "lazy_static"]
+testing = ["namada_test_utils", "lazy_static", "namada_sdk/testing"]
 benches = ["namada_test_utils", "lazy_static"]
 integration = []
 migrations = [

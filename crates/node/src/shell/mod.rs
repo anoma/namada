@@ -954,6 +954,7 @@ where
         }
 
         // Tx signature check
+        #[cfg(not(fuzzing))]
         let tx_type = match tx.validate_tx() {
             Ok(_) => tx.header(),
             Err(msg) => {
@@ -962,6 +963,8 @@ where
                 return response;
             }
         };
+        #[cfg(fuzzing)]
+        let tx_type = tx.header();
 
         // try to parse a vote extension protocol tx from
         // the provided tx data
@@ -1344,8 +1347,8 @@ where
 
 /// for the shell
 #[allow(clippy::arithmetic_side_effects, clippy::cast_possible_wrap)]
-#[cfg(test)]
-mod test_utils {
+#[cfg(any(test, feature = "testing"))]
+pub mod test_utils {
     use std::ops::{Deref, DerefMut};
 
     use data_encoding::HEXUPPER;
@@ -1388,12 +1391,9 @@ mod test_utils {
             .expect("Current directory should exist")
             .canonicalize()
             .expect("Current directory should exist");
-        while current_path.file_name().unwrap() != "node" {
+        while !current_path.join("rust-toolchain.toml").exists() {
             current_path.pop();
         }
-        // Two-dirs up to root
-        current_path.pop();
-        current_path.pop();
         current_path
     }
 
@@ -1470,7 +1470,7 @@ mod test_utils {
     /// Drop so as to clean up the files that it
     /// generates. Also allows illegal state
     /// modifications for testing purposes
-    pub(super) struct TestShell {
+    pub struct TestShell {
         pub shell: Shell<MockDB, Sha256Hasher>,
     }
 
@@ -1791,7 +1791,7 @@ mod test_utils {
     /// Same as [`setup_with_cfg`], but returns a shell at block height 0,
     /// with a single validator.
     #[inline]
-    pub(super) fn setup() -> (
+    pub fn setup() -> (
         TestShell,
         UnboundedReceiver<Vec<u8>>,
         Sender<EthereumEvent>,
