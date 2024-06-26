@@ -394,3 +394,28 @@ impl super::SigScheme for SigScheme {
             .map_err(|err| VerifySigError::SigVerifyError(err.to_string()))
     }
 }
+
+#[cfg(feature = "arbitrary")]
+impl arbitrary::Arbitrary<'_> for PublicKey {
+    fn arbitrary(
+        _: &mut arbitrary::Unstructured<'_>,
+    ) -> arbitrary::Result<Self> {
+        Ok(Self(
+            ed25519_consensus::VerificationKey::try_from(
+                [0_u8; PUBLIC_KEY_LENGTH],
+            )
+            .unwrap(),
+        ))
+    }
+}
+
+#[cfg(feature = "arbitrary")]
+impl arbitrary::Arbitrary<'_> for Signature {
+    fn arbitrary(
+        _: &mut arbitrary::Unstructured<'_>,
+    ) -> arbitrary::Result<Self> {
+        Ok(Self(ed25519_consensus::Signature::from(
+            [0_u8; SIGNATURE_LENGTH],
+        )))
+    }
+}

@@ -79,6 +79,7 @@ pub type DecodeError = string_encoding::DecodeError;
 pub type Result<T> = std::result::Result<T, DecodeError>;
 
 /// An account's address
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     BorshSerialize,
@@ -412,6 +413,7 @@ impl TryFrom<Signer> for Address {
 }
 
 /// An established address is generated on-chain
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Clone,
@@ -512,6 +514,7 @@ impl EstablishedAddressGen {
 }
 
 /// An implicit address is derived from a cryptographic key
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Clone,
@@ -543,6 +546,7 @@ impl From<&key::common::PublicKey> for Address {
 }
 
 /// An internal address represents a module with a native VP
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Clone,

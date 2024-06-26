@@ -219,6 +219,7 @@ pub fn verify_standalone_sig<T, S: Signable<T>>(
 }
 
 /// A section representing transaction data
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     Debug,
@@ -268,6 +269,7 @@ impl Data {
 pub struct CommitmentError;
 
 /// Represents either some code bytes or their SHA-256 hash
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     Debug,
@@ -334,6 +336,7 @@ impl Commitment {
 }
 
 /// A section representing transaction code
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     Debug,
@@ -406,6 +409,7 @@ impl Code {
 pub type Memo = Vec<u8>;
 
 /// Indicates the list of public keys against which signatures will be verified
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     Debug,
@@ -425,6 +429,7 @@ pub enum Signer {
 }
 
 /// A section representing a multisig over another section
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     Debug,
@@ -758,6 +763,7 @@ impl MaspBuilder {
 
 /// A section of a transaction. Carries an independent piece of information
 /// necessary for the processing of a transaction.
+// #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     Debug,
@@ -789,6 +795,154 @@ pub enum Section {
     MaspBuilder(MaspBuilder),
     /// Wrap a header with a section for the purposes of computing hashes
     Header(Header),
+}
+
+#[cfg(feature = "arbitrary")]
+std::thread_local! {
+    #[allow(non_upper_case_globals)]
+    static RECURSIVE_COUNT_Section: ::core::cell::Cell<u32> = ::core::cell::Cell::new(0);
+}
+
+#[cfg(feature = "arbitrary")]
+impl<'arbitrary> arbitrary::Arbitrary<'arbitrary> for Section {
+    fn arbitrary(
+        u: &mut arbitrary::Unstructured<'arbitrary>,
+    ) -> arbitrary::Result<Self> {
+        let guard_against_recursion = u.is_empty();
+        if guard_against_recursion {
+            RECURSIVE_COUNT_Section.with(|count| {
+                if count.get() > 0 {
+                    return Err(arbitrary::Error::NotEnoughData);
+                }
+                count.set(count.get() + 1);
+                Ok(())
+            })?;
+        }
+        let result = (|| {
+            Ok(
+                match (u64::from(<u32 as arbitrary::Arbitrary>::arbitrary(u)?)
+                    * 7u64)
+                    >> 32
+                {
+                    0u64 => Section::Data(arbitrary::Arbitrary::arbitrary(u)?),
+                    1u64 => {
+                        Section::ExtraData(arbitrary::Arbitrary::arbitrary(u)?)
+                    }
+                    2u64 => Section::Code(arbitrary::Arbitrary::arbitrary(u)?),
+                    3u64 => Section::Authorization(
+                        arbitrary::Arbitrary::arbitrary(u)?,
+                    ),
+                    // 4u64 => Section::MaspTx(arbitrary::Arbitrary::arbitrary(u)?),
+                    // 5u64 => {
+                    //     Section::MaspBuilder(arbitrary::Arbitrary::arbitrary(u)?)
+                    // }
+                    4u64 => {
+                        Section::Header(arbitrary::Arbitrary::arbitrary(u)?)
+                    }
+                    _ => panic!("internal error: entered unreachable code",),
+                },
+            )
+        })();
+        if guard_against_recursion {
+            RECURSIVE_COUNT_Section.with(|count| {
+                count.set(count.get() - 1);
+            });
+        }
+        result
+    }
+
+    fn arbitrary_take_rest(
+        mut u: arbitrary::Unstructured<'arbitrary>,
+    ) -> arbitrary::Result<Self> {
+        let guard_against_recursion = u.is_empty();
+        if guard_against_recursion {
+            RECURSIVE_COUNT_Section.with(|count| {
+                if count.get() > 0 {
+                    return Err(arbitrary::Error::NotEnoughData);
+                }
+                count.set(count.get() + 1);
+                Ok(())
+            })?;
+        }
+        let result = (|| {
+            Ok(
+                match (u64::from(<u32 as arbitrary::Arbitrary>::arbitrary(
+                    &mut u,
+                )?) * 7u64)
+                    >> 32
+                {
+                    0u64 => Section::Data(
+                        arbitrary::Arbitrary::arbitrary_take_rest(u)?,
+                    ),
+                    1u64 => Section::ExtraData(
+                        arbitrary::Arbitrary::arbitrary_take_rest(u)?,
+                    ),
+                    2u64 => Section::Code(
+                        arbitrary::Arbitrary::arbitrary_take_rest(u)?,
+                    ),
+                    3u64 => Section::Authorization(
+                        arbitrary::Arbitrary::arbitrary_take_rest(u)?,
+                    ),
+                    // 4u64 => {
+                    //     Section::MaspTx(
+                    //         arbitrary::Arbitrary::arbitrary_take_rest(u)?,
+                    //     )
+                    // }
+                    // 5u64 => {
+                    //     Section::MaspBuilder(
+                    //         arbitrary::Arbitrary::arbitrary_take_rest(u)?,
+                    //     )
+                    // }
+                    4u64 => Section::Header(
+                        arbitrary::Arbitrary::arbitrary_take_rest(u)?,
+                    ),
+                    _ => panic!("internal error: entered unreachable code",),
+                },
+            )
+        })();
+        if guard_against_recursion {
+            RECURSIVE_COUNT_Section.with(|count| {
+                count.set(count.get() - 1);
+            });
+        }
+        result
+    }
+
+    #[inline]
+    fn size_hint(depth: usize) -> (usize, Option<usize>) {
+        arbitrary::size_hint::and(
+            <u32 as arbitrary::Arbitrary>::size_hint(depth),
+            arbitrary::size_hint::recursion_guard(depth, |depth| {
+                arbitrary::size_hint::or_all(&[
+                    arbitrary::size_hint::and_all(&[
+                        <Data as arbitrary::Arbitrary>::size_hint(depth),
+                    ]),
+                    arbitrary::size_hint::and_all(&[
+                        <Code as arbitrary::Arbitrary>::size_hint(depth),
+                    ]),
+                    arbitrary::size_hint::and_all(&[
+                        <Code as arbitrary::Arbitrary>::size_hint(depth),
+                    ]),
+                    arbitrary::size_hint::and_all(&[
+                        <Authorization as arbitrary::Arbitrary>::size_hint(
+                            depth,
+                        ),
+                    ]),
+                    // arbitrary::size_hint::and_all(
+                    //     &[<Transaction as
+                    // arbitrary::Arbitrary>::size_hint(depth)],
+                    // ),
+                    // arbitrary::size_hint::and_all(
+                    //     &[<MaspBuilder as
+                    // arbitrary::Arbitrary>::size_hint(depth)],
+                    // ),
+                    arbitrary::size_hint::and_all(&[
+                        <Header as arbitrary::Arbitrary>::size_hint(depth),
+                    ]),
+                ])
+            }),
+        )
+    }
 }
 
 impl Section {
@@ -895,6 +1049,7 @@ impl Section {
 
 /// An inner transaction of the batch, represented by its commitments to the
 /// [`Code`], [`Data`] and [`Memo`] sections
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     Debug,
@@ -955,6 +1110,7 @@ impl TxCommitments {
 
 /// A Namada transaction header indicating where transaction subcomponents can
 /// be found
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     Debug,
@@ -1034,7 +1190,8 @@ pub enum TxError {
 }
 
 /// A Namada transaction is represented as a header followed by a series of
-/// seections providing additional details.
+/// sections providing additional details.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     Debug,
