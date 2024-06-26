@@ -82,6 +82,7 @@ where
     H: StorageHasher + Sync + 'static,
 {
     let mut proposals_result = ProposalsResult::default();
+    let params = read_pos_params(&shell.state)?;
 
     for id in proposal_ids {
         let proposal_funds_key = gov_storage::get_funds_key(id);
@@ -100,7 +101,6 @@ where
 
         let is_steward = pgf::is_steward(&shell.state, &proposal_author)?;
 
-        let params = read_pos_params(&shell.state)?;
         let total_active_voting_power =
             read_total_active_stake(&shell.state, &params, proposal_end_epoch)?;
 
