@@ -343,7 +343,9 @@ impl CliApi {
                         let client = client.unwrap_or_else(|| {
                             C::from_tendermint_address(&args.ledger_address)
                         });
-                        client.wait_until_node_is_synced(&io).await?;
+                        if indexer_addr.is_none() {
+                            client.wait_until_node_is_synced(&io).await?;
+                        }
                         let vks = chain_ctx
                             .wallet
                             .get_viewing_keys()
