@@ -336,7 +336,8 @@ impl CliApi {
                         tx::submit_validator_metadata_change(&namada, args)
                             .await?;
                     }
-                    Sub::ShieldedSync(ShieldedSync(args)) => {
+                    Sub::ShieldedSync(ShieldedSync(mut args)) => {
+                        let indexer_addr = args.with_indexer.take();
                         let args = args.to_sdk(&mut ctx)?;
                         let chain_ctx = ctx.take_chain_or_exit();
                         let client = client.unwrap_or_else(|| {
@@ -361,6 +362,7 @@ impl CliApi {
                         crate::client::masp::syncing(
                             chain_ctx.shielded,
                             &client,
+                            indexer_addr.as_ref().map(|s| s.as_ref()),
                             &io,
                             args.start_query_height,
                             args.last_query_height,

@@ -3386,6 +3386,7 @@ pub mod args {
     pub const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
     pub const WASM_DIR: ArgOpt<PathBuf> = arg_opt("wasm-dir");
     pub const WEBSITE_OPT: ArgOpt<String> = arg_opt("website");
+    pub const WITH_INDEXER: ArgOpt<String> = arg_opt("with-indexer");
     pub const TX_PATH: Arg<PathBuf> = arg("tx-path");
     pub const TX_PATH_OPT: ArgOpt<PathBuf> = TX_PATH.opt();
 
@@ -6366,12 +6367,14 @@ pub mod args {
             let last_query_height = BLOCK_HEIGHT_TO_OPT.parse(matches);
             let spending_keys = SPENDING_KEYS.parse(matches);
             let viewing_keys = VIEWING_KEYS.parse(matches);
+            let with_indexer = WITH_INDEXER.parse(matches);
             Self {
                 ledger_address,
                 start_query_height,
                 last_query_height,
                 spending_keys,
                 viewing_keys,
+                with_indexer,
             }
         }
 
@@ -6392,6 +6395,11 @@ pub mod args {
                 .arg(VIEWING_KEYS.def().help(wrap!(
                     "List of new viewing keys with which to check note \
                      ownership. These will be added to the shielded context."
+                )))
+                .arg(WITH_INDEXER.def().help(wrap!(
+                    "Address of a `namada-masp-indexer` live instance. If \
+                     present, the shielded sync will be performed using data \
+                     retrieved from the given indexer."
                 )))
         }
     }
@@ -6419,6 +6427,7 @@ pub mod args {
                     .iter()
                     .map(|vk| chain_ctx.get_cached(vk))
                     .collect(),
+                with_indexer: self.with_indexer.map(|_| ()),
             })
         }
     }
@@ -6748,6 +6757,7 @@ pub mod args {
         type Data = PathBuf;
         type EthereumAddress = String;
         type Keypair = WalletKeypair;
+        type MaspIndexerAddress = String;
         type PaymentAddress = WalletPaymentAddr;
         type PublicKey = WalletPublicKey;
         type SpendingKey = WalletSpendingKey;
