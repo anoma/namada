@@ -163,13 +163,14 @@ where
                             stewards,
                         )?;
                         tracing::info!(
-                            "Governance proposal (pgf stewards){} has been \
-                             executed and {}.",
+                            "Governance proposal #{} for PGF stewards has \
+                             been executed. {}.",
                             id,
                             if result {
-                                "applied the state changes successfully"
+                                "State changes have been applied successfully"
                             } else {
-                                "didn't applied the state changes successfully"
+                                "FAILURE trying to apply the state changes - \
+                                 no state change occurred"
                             }
                         );
 
@@ -473,14 +474,16 @@ where
         .expect(
             "Pgf parameter maximum_number_of_pgf_steward must be in storage",
         );
-    // first we remove
+
+    // First, remove the appropriate addresses
     for address in stewards.iter().filter_map(|action| match action {
         AddRemove::Add(_) => None,
         AddRemove::Remove(address) => Some(address),
     }) {
         pgf_storage::stewards_handle().remove(storage, address)?;
     }
-    // then we add
+
+    // Then add new addresses
     let mut steward_count = pgf_storage::stewards_handle().len(storage)?;
     for address in stewards.iter().filter_map(|action| match action {
         AddRemove::Add(address) => Some(address),

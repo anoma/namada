@@ -474,7 +474,7 @@ pub struct PgfParams<T: TemplateValidation> {
     pub pgf_inflation_rate: Dec,
     /// The pgf stewards inflation rate
     pub stewards_inflation_rate: Dec,
-    /// The pgf stewards inflation rate
+    /// The maximum allowed number of PGF stewards at any time
     pub maximum_number_of_stewards: u64,
     #[serde(default)]
     #[serde(skip_serializing)]
