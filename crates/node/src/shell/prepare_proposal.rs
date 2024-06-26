@@ -286,7 +286,6 @@ where
         }
     }
 
-    tx.validate_tx().map_err(|_| ())?;
     // Check tx gas limit for tx size
     let gas_limit = Gas::try_from(wrapper.gas_limit).map_err(|_| ())?;
     let mut tx_gas_meter = TxGasMeter::new(gas_limit);
