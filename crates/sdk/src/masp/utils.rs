@@ -109,6 +109,7 @@ pub trait MaspClient {
     ) -> Result<(), Error>;
 
     /// Return the capabilities of this client.
+    #[inline(always)]
     fn capabilities(&self) -> MaspClientCapabilities {
         MaspClientCapabilities::OnlyTransfers
     }
@@ -290,6 +291,7 @@ impl IndexerMaspClient {
 
 #[cfg(not(target_family = "wasm"))]
 impl MaspClient for IndexerMaspClient {
+    #[inline(always)]
     fn capabilities(&self) -> MaspClientCapabilities {
         MaspClientCapabilities::AllData
     }
