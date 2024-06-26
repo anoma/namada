@@ -9,7 +9,7 @@ use namada_tx_prelude::*;
 #[transaction]
 fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
     let data = ctx.get_tx_data(&tx_data)?;
-    let (transfer, masp_tx) =
+    let (transfer, memo_str) =
         ibc::ibc_actions(ctx).execute(&data).into_storage_result()?;
 
     let masp_section_ref =
@@ -29,7 +29,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
                 })?,
         )
     } else {
-        masp_tx
+        memo_str.and_then(|memo| masp::convert_ibc_memo_to_masp_tx(&memo).ok())
     };
     if let Some(shielded) = shielded {
         token::utils::handle_masp_tx(ctx, &shielded)

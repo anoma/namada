@@ -19,7 +19,10 @@ use namada_core::ibc::apps::nft_transfer::types::msgs::transfer::MsgTransfer as 
 use namada_core::ibc::apps::nft_transfer::types::packet::PacketData as NftPacketData;
 use namada_core::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
 use namada_core::ibc::apps::transfer::types::packet::PacketData;
-use namada_core::masp::{addr_taddr, encode_asset_type, ibc_taddr, MaspEpoch};
+use namada_core::masp::{
+    addr_taddr, convert_ibc_memo_to_masp_tx, encode_asset_type, ibc_taddr,
+    MaspEpoch,
+};
 use namada_core::storage::Key;
 use namada_gas::GasMetering;
 use namada_governance::storage::is_proposal_accepted;
@@ -37,7 +40,7 @@ use namada_ibc::trace::{
     convert_to_address, ibc_trace_for_nft, is_sender_chain_source,
 };
 use namada_ibc::{
-    extract_masp_tx_from_envelope, get_last_sequence_send, IbcMessage,
+    extract_memo_from_envelope, get_last_sequence_send, IbcMessage,
 };
 use namada_sdk::masp::{verify_shielded_tx, TAddrData};
 use namada_state::{ConversionState, OptionExt, ResultExt, StateRead};
@@ -772,9 +775,15 @@ where
         let ibc_msg = self.ctx.get_ibc_message(tx_data).ok();
         let shielded_tx =
             if let Some(IbcMessage::Envelope(ref envelope)) = ibc_msg {
-                extract_masp_tx_from_envelope(envelope).ok_or_else(|| {
+                let memo =
+                    extract_memo_from_envelope(envelope).ok_or_else(|| {
+                        native_vp::Error::new_const(
+                            "Missing MASP transaction in IBC message",
+                        )
+                    })?;
+                convert_ibc_memo_to_masp_tx(&memo).map_err(|_| {
                     native_vp::Error::new_const(
-                        "Missing MASP transaction in IBC message",
+                        "Decoding MASP transaction in IBC message failed",
                     )
                 })?
             } else {

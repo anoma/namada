@@ -3480,8 +3480,8 @@ pub async fn build_custom(
 /// Generate IBC shielded transfer
 pub async fn gen_ibc_shielding_transfer<N: Namada>(
     context: &N,
-    args: args::GenIbcShieldedTransfer,
-) -> Result<Option<(token::ShieldingTransfer, MaspTransaction)>> {
+    args: args::GenIbcShieldingTransfer,
+) -> Result<Option<MaspTransaction>> {
     let source = Address::Internal(InternalAddress::Ibc);
     let (src_port_id, src_channel_id) =
         get_ibc_src_port_channel(context, &args.port_id, &args.channel_id)
@@ -3528,19 +3528,7 @@ pub async fn gen_ibc_shielding_transfer<N: Namada>(
         .await
         .map_err(|err| TxSubmitError::MaspError(err.to_string()))?;
 
-    if let Some(shielded_transfer) = shielded_transfer {
-        let masp_tx_hash =
-            Section::MaspTx(shielded_transfer.masp_tx.clone()).get_hash();
-        let transfer = token::ShieldingTransfer {
-            source: source.clone(),
-            token: token.clone(),
-            amount: validated_amount,
-            shielded_section_hash: masp_tx_hash,
-        };
-        Ok(Some((transfer, shielded_transfer.masp_tx)))
-    } else {
-        Ok(None)
-    }
+    Ok(shielded_transfer.map(|st| st.masp_tx))
 }
 
 async fn get_ibc_src_port_channel(

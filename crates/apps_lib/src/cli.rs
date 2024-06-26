@@ -292,6 +292,7 @@ pub mod cmds {
                 // Actions
                 .subcommand(SignTx::def().display_order(6))
                 .subcommand(ShieldedSync::def().display_order(6))
+                .subcommand(GenIbcShieldingTransfer::def().display_order(6))
                 // Utils
                 .subcommand(ClientUtils::def().display_order(7))
         }
@@ -380,6 +381,8 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, AddToEthBridgePool);
             let sign_tx = Self::parse_with_ctx(matches, SignTx);
             let shielded_sync = Self::parse_with_ctx(matches, ShieldedSync);
+            let gen_ibc_shielding =
+                Self::parse_with_ctx(matches, GenIbcShieldingTransfer);
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
             tx_custom
                 .or(tx_transparent_transfer)
@@ -434,6 +437,7 @@ pub mod cmds {
                 .or(query_account)
                 .or(sign_tx)
                 .or(shielded_sync)
+                .or(gen_ibc_shielding)
                 .or(utils)
         }
     }
@@ -524,6 +528,7 @@ pub mod cmds {
         QueryRewards(QueryRewards),
         SignTx(SignTx),
         ShieldedSync(ShieldedSync),
+        GenIbcShieldingTransfer(GenIbcShieldingTransfer),
     }
 
     #[allow(clippy::large_enum_variant)]
@@ -2256,6 +2261,29 @@ pub mod cmds {
                      this account."
                 ))
                 .add_args::<args::RevealPk<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct GenIbcShieldingTransfer(
+        pub args::GenIbcShieldingTransfer<args::CliTypes>,
+    );
+
+    impl SubCmd for GenIbcShieldingTransfer {
+        const CMD: &'static str = "ibc-gen-shielding";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                GenIbcShieldingTransfer(args::GenIbcShieldingTransfer::parse(
+                    matches,
+                ))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Generate shielding transfer for IBC.")
+                .add_args::<args::GenIbcShieldingTransfer<args::CliTypes>>()
         }
     }
 
@@ -6432,19 +6460,19 @@ pub mod args {
         }
     }
 
-    impl CliToSdk<GenIbcShieldedTransfer<SdkTypes>>
-        for GenIbcShieldedTransfer<CliTypes>
+    impl CliToSdk<GenIbcShieldingTransfer<SdkTypes>>
+        for GenIbcShieldingTransfer<CliTypes>
     {
         type Error = std::convert::Infallible;
 
         fn to_sdk(
             self,
             ctx: &mut Context,
-        ) -> Result<GenIbcShieldedTransfer<SdkTypes>, Self::Error> {
+        ) -> Result<GenIbcShieldingTransfer<SdkTypes>, Self::Error> {
             let query = self.query.to_sdk(ctx)?;
             let chain_ctx = ctx.borrow_chain_or_exit();
 
-            Ok(GenIbcShieldedTransfer::<SdkTypes> {
+            Ok(GenIbcShieldingTransfer::<SdkTypes> {
                 query,
                 output_folder: self.output_folder,
                 target: chain_ctx.get(&self.target),
@@ -6457,7 +6485,7 @@ pub mod args {
         }
     }
 
-    impl Args for GenIbcShieldedTransfer<CliTypes> {
+    impl Args for GenIbcShieldingTransfer<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let output_folder = OUTPUT_FOLDER_PATH.parse(matches);
@@ -6498,7 +6526,7 @@ pub mod args {
                     "The channel ID via which the token is received."
                 )))
                 .arg(REFUND.def().help(wrap!(
-                    "Generate the shielded transfer for refunding."
+                    "Generate the shielding transfer for refunding."
                 )))
         }
     }

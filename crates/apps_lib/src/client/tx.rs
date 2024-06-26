@@ -1,4 +1,5 @@
 use std::fs::File;
+use std::io::Write;
 
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
@@ -12,6 +13,7 @@ use namada::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal,
 };
 use namada::io::Io;
+use namada::masp::convert_masp_tx_to_ibc_memo;
 use namada::state::EPOCH_SWITCH_BLOCKS_DELAY;
 use namada::tx::{CompressedAuthorization, Section, Signer, Tx};
 use namada_sdk::args::TxBecomeValidator;
@@ -1351,4 +1353,33 @@ pub async fn submit_tx(
     to_broadcast: TxBroadcastData,
 ) -> Result<TxResponse, error::Error> {
     tx::submit_tx(namada, to_broadcast).await
+}
+
+/// Generate MASP transaction and output it
+pub async fn gen_ibc_shielding_transfer(
+    context: &impl Namada,
+    args: args::GenIbcShieldingTransfer,
+) -> Result<(), error::Error> {
+    if let Some(masp_tx) =
+        tx::gen_ibc_shielding_transfer(context, args.clone()).await?
+    {
+        let tx_id = masp_tx.txid().to_string();
+        let filename = format!("ibc_masp_tx_{}.memo", tx_id);
+        let output_path = match &args.output_folder {
+            Some(path) => path.join(filename),
+            None => filename.into(),
+        };
+        let mut out = File::create(&output_path)
+            .expect("Creating a new file for IBC MASP transaction failed.");
+        let bytes = convert_masp_tx_to_ibc_memo(&masp_tx);
+        out.write_all(bytes.as_bytes())
+            .expect("Writing IBC MASP transaction file failed.");
+        println!(
+            "Output IBC shielding transfer for {tx_id} to {}",
+            output_path.to_string_lossy()
+        );
+    } else {
+        eprintln!("No shielded transfer for this IBC transfer.")
+    }
+    Ok(())
 }
