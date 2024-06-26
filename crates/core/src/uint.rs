@@ -294,6 +294,7 @@ impl Uint {
 construct_uint! {
     /// Namada native type to replace for unsigned 256 bit
     /// integers.
+    #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
     #[derive(
         BorshSerialize,
         BorshDeserialize,

@@ -13,6 +13,7 @@ use sha2::{Digest, Sha256};
 
 use crate::TxError;
 
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     Debug,
@@ -55,6 +56,7 @@ impl ProtocolTx {
     }
 }
 
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Copy,
     Clone,
