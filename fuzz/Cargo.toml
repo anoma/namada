@@ -1,0 +1,20 @@
+[package]
+name = "namada_fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+namada_node = { path = "../crates/node" }
+
+libfuzzer-sys = "0.4"
+
+[[bin]]
+name = "fuzz_txs_mempool"
+path = "fuzz_targets/fuzz_txs_mempool.rs"
+test = false
+doc = false
+bench = false
