@@ -3872,6 +3872,7 @@ name = "namada_ibc"
 version = "0.39.0"
 dependencies = [
  "borsh 1.4.0",
+ "data-encoding",
  "ibc",
  "ibc-derive",
  "ibc-testkit",

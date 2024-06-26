@@ -32,6 +32,7 @@ namada_storage = { path = "../storage" }
 namada_token = { path = "../token" }
 
 borsh.workspace = true
+data-encoding.workspace = true
 konst.workspace = true
 linkme = {workspace = true, optional = true}
 ibc.workspace = true

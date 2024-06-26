@@ -71,6 +71,7 @@ use ibc::core::host::types::identifiers::{ChannelId, PortId, Sequence};
 use ibc::core::router::types::error::RouterError;
 use ibc::primitives::proto::Any;
 pub use ibc::*;
+use masp_primitives::transaction::Transaction as MaspTransaction;
 pub use msg::*;
 use namada_core::address::{self, Address};
 use namada_core::arith::checked;
@@ -151,7 +152,8 @@ where
     pub fn execute(
         &mut self,
         tx_data: &[u8],
-    ) -> Result<Option<ShieldingTransfer>, Error> {
+    ) -> Result<(Option<ShieldingTransfer>, Option<MaspTransaction>), Error>
+    {
         let message = decode_message(tx_data)?;
         match &message {
             IbcMessage::Transfer(msg) => {
@@ -166,7 +168,7 @@ where
                     msg.message.clone(),
                 )
                 .map_err(Error::TokenTransfer)?;
-                Ok(msg.transfer.clone())
+                Ok((msg.transfer.clone(), None))
             }
             IbcMessage::NftTransfer(msg) => {
                 let mut nft_transfer_ctx =
@@ -177,47 +179,45 @@ where
                     msg.message.clone(),
                 )
                 .map_err(Error::NftTransfer)?;
-                Ok(msg.transfer.clone())
-            }
-            IbcMessage::RecvPacket(msg) => {
-                let envelope =
-                    MsgEnvelope::Packet(PacketMsg::Recv(msg.message.clone()));
-                execute(&mut self.ctx, &mut self.router, envelope)
-                    .map_err(|e| Error::Context(Box::new(e)))?;
-                let transfer = if self.is_receiving_success(&msg.message)? {
-                    // For receiving the token to a shielded address
-                    msg.transfer.clone()
-                } else {
-                    None
-                };
-                Ok(transfer)
-            }
-            IbcMessage::AckPacket(msg) => {
-                let envelope =
-                    MsgEnvelope::Packet(PacketMsg::Ack(msg.message.clone()));
-                execute(&mut self.ctx, &mut self.router, envelope)
-                    .map_err(|e| Error::Context(Box::new(e)))?;
-                let transfer =
-                    if !is_ack_successful(&msg.message.acknowledgement)? {
-                        // For refunding the token to a shielded address
-                        msg.transfer.clone()
-                    } else {
-                        None
-                    };
-                Ok(transfer)
-            }
-            IbcMessage::Timeout(msg) => {
-                let envelope = MsgEnvelope::Packet(PacketMsg::Timeout(
-                    msg.message.clone(),
-                ));
-                execute(&mut self.ctx, &mut self.router, envelope)
-                    .map_err(|e| Error::Context(Box::new(e)))?;
-                Ok(msg.transfer.clone())
+                Ok((msg.transfer.clone(), None))
             }
             IbcMessage::Envelope(envelope) => {
-                execute(&mut self.ctx, &mut self.router, *envelope.clone())
+                execute(&mut self.ctx, &mut self.router, envelope.clone())
                     .map_err(|e| Error::Context(Box::new(e)))?;
-                Ok(None)
+                // Extract MASP tx from the memo in the packet if needed
+                let masp_tx = match envelope {
+                    MsgEnvelope::Packet(packet_msg) => {
+                        match packet_msg {
+                            PacketMsg::Recv(msg) => {
+                                if self.is_receiving_success(msg)? {
+                                    extract_masp_tx_from_packet(
+                                        &msg.packet,
+                                        false,
+                                    )
+                                } else {
+                                    None
+                                }
+                            }
+                            PacketMsg::Ack(msg) => {
+                                if is_ack_successful(&msg.acknowledgement)? {
+                                    // No refund
+                                    None
+                                } else {
+                                    extract_masp_tx_from_packet(
+                                        &msg.packet,
+                                        true,
+                                    )
+                                }
+                            }
+                            PacketMsg::Timeout(msg) => {
+                                extract_masp_tx_from_packet(&msg.packet, true)
+                            }
+                            _ => None,
+                        }
+                    }
+                    _ => None,
+                };
+                Ok((None, masp_tx))
             }
         }
     }
@@ -275,26 +275,8 @@ where
                 )
                 .map_err(Error::NftTransfer)
             }
-            IbcMessage::RecvPacket(msg) => validate(
-                &self.ctx,
-                &self.router,
-                MsgEnvelope::Packet(PacketMsg::Recv(msg.message)),
-            )
-            .map_err(|e| Error::Context(Box::new(e))),
-            IbcMessage::AckPacket(msg) => validate(
-                &self.ctx,
-                &self.router,
-                MsgEnvelope::Packet(PacketMsg::Ack(msg.message)),
-            )
-            .map_err(|e| Error::Context(Box::new(e))),
-            IbcMessage::Timeout(msg) => validate(
-                &self.ctx,
-                &self.router,
-                MsgEnvelope::Packet(PacketMsg::Timeout(msg.message)),
-            )
-            .map_err(|e| Error::Context(Box::new(e))),
             IbcMessage::Envelope(envelope) => {
-                validate(&self.ctx, &self.router, *envelope)
+                validate(&self.ctx, &self.router, envelope)
                     .map_err(|e| Error::Context(Box::new(e)))
             }
         }
@@ -326,7 +308,7 @@ pub fn decode_message(tx_data: &[u8]) -> Result<IbcMessage, Error> {
     // ibc-rs message
     if let Ok(any_msg) = Any::decode(tx_data) {
         if let Ok(envelope) = MsgEnvelope::try_from(any_msg) {
-            return Ok(IbcMessage::Envelope(Box::new(envelope)));
+            return Ok(IbcMessage::Envelope(envelope));
         }
     }
 
@@ -338,20 +320,6 @@ pub fn decode_message(tx_data: &[u8]) -> Result<IbcMessage, Error> {
     // NFT transfer message with `IbcShieldedTransfer`
     if let Ok(msg) = MsgNftTransfer::try_from_slice(tx_data) {
         return Ok(IbcMessage::NftTransfer(msg));
-    }
-
-    // Receiving packet message with `IbcShieldedTransfer`
-    if let Ok(msg) = MsgRecvPacket::try_from_slice(tx_data) {
-        return Ok(IbcMessage::RecvPacket(msg));
-    }
-
-    // Acknowledge packet message with `IbcShieldedTransfer`
-    if let Ok(msg) = MsgAcknowledgement::try_from_slice(tx_data) {
-        return Ok(IbcMessage::AckPacket(msg));
-    }
-    // Timeout packet message with `IbcShieldedTransfer`
-    if let Ok(msg) = MsgTimeout::try_from_slice(tx_data) {
-        return Ok(IbcMessage::Timeout(msg));
     }
 
     Err(Error::DecodingData)
