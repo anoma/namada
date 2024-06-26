@@ -644,6 +644,72 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         Ok(last_height_in_witnesses.unwrap_or_else(BlockHeight::first))
     }
 
+    #[cfg(not(target_family = "wasm"))]
+    async fn update_with_pre_built_data<M>(
+        &mut self,
+        client: &M,
+        height: BlockHeight,
+    ) -> Result<(), Error>
+    where
+        M: MaspClient,
+    {
+        trait ThenAwait {
+            #[allow(async_fn_in_trait)]
+            async fn then_await<F>(self, fut: F) -> Option<F::Output>
+            where
+                F: std::future::Future;
+        }
+
+        impl ThenAwait for bool {
+            async fn then_await<F>(self, fut: F) -> Option<F::Output>
+            where
+                F: std::future::Future,
+            {
+                if self { Some(fut.await) } else { None }
+            }
+        }
+
+        let tree_fut = async {
+            client
+                .capabilities()
+                .may_fetch_pre_built_tree()
+                .then_await(client.fetch_commitment_tree(height))
+                .await
+                .transpose()
+        };
+        let notes_map_fut = async {
+            client
+                .capabilities()
+                .may_fetch_pre_built_notes_map()
+                .then_await(client.fetch_tx_notes_map(height))
+                .await
+                .transpose()
+        };
+        let witness_map_fut = async {
+            client
+                .capabilities()
+                .may_fetch_pre_built_witness_map()
+                .then_await(client.fetch_witness_map(height))
+                .await
+                .transpose()
+        };
+
+        let (maybe_tree, maybe_notes_map, maybe_witness_map) =
+            futures::try_join!(tree_fut, notes_map_fut, witness_map_fut)?;
+
+        if let Some(tree) = maybe_tree {
+            self.tree = tree;
+        }
+        if let Some(notes_map) = maybe_notes_map {
+            self.tx_note_map = notes_map;
+        }
+        if let Some(witness_map) = maybe_witness_map {
+            self.witness_map = witness_map;
+        }
+
+        Ok(())
+    }
+
     #[allow(clippy::too_many_arguments)]
     #[cfg(not(target_family = "wasm"))]
     async fn fetch_aux<IO, M>(
@@ -715,6 +781,9 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             // NB: the start height cannot be greater than
             // `last_query_height`
             .min(last_query_height);
+
+        self.update_with_pre_built_data(&client, last_query_height)
+            .await?;
 
         for _ in retry {
             debug_assert!(start_height <= last_query_height);

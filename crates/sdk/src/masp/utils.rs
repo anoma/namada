@@ -60,11 +60,29 @@ pub enum MaspClientCapabilities {
 }
 
 impl MaspClientCapabilities {
-    /// Check if the laco of one or more capabilities in the
+    /// Check if the lack of one or more capabilities in the
     /// masp client implementation warrants a manual update
     /// of the witnesses map.
     pub const fn needs_witness_map_update(&self) -> bool {
         matches!(self, Self::OnlyTransfers)
+    }
+
+    /// Check if the masp client is able to fetch a pre-built
+    /// commitment tree.
+    pub const fn may_fetch_pre_built_tree(&self) -> bool {
+        matches!(self, Self::AllData)
+    }
+
+    /// Check if the masp client is able to fetch a pre-built
+    /// notes map.
+    pub const fn may_fetch_pre_built_notes_map(&self) -> bool {
+        matches!(self, Self::AllData)
+    }
+
+    /// Check if the masp client is able to fetch a pre-built
+    /// witness map.
+    pub const fn may_fetch_pre_built_witness_map(&self) -> bool {
+        matches!(self, Self::AllData)
     }
 }
 
