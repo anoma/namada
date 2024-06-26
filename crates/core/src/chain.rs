@@ -205,6 +205,7 @@ impl ProposalBytes {
 pub const DEFAULT_CHAIN_ID: &str = "namada-internal.00000000000000";
 
 /// Chain ID
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Clone,

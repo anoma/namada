@@ -971,6 +971,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f2c685bad3eb3d45a01354cedb7d5faa66194d1d58ba6e267a8de788f79db38"
 dependencies = [
  "android-tzdata",
+ "arbitrary",
  "iana-time-zone",
  "js-sys",
  "num-traits 0.2.17",
@@ -4014,6 +4015,7 @@ name = "indexmap"
 version = "2.2.4"
 source = "git+https://github.com/heliaxdev/indexmap?tag=2.2.4-heliax-1#b5b5b547bd6ab04bbb16e060326a50ddaeb6c909"
 dependencies = [
+ "arbitrary",
  "borsh 1.2.1",
  "equivalent",
  "hashbrown 0.14.3",
@@ -4894,6 +4896,7 @@ dependencies = [
 name = "namada_core"
 version = "0.39.0"
 dependencies = [
+ "arbitrary",
  "assert_matches",
  "bech32 0.8.1",
  "borsh 1.2.1",
@@ -5025,6 +5028,7 @@ version = "0.0.0"
 dependencies = [
  "libfuzzer-sys",
  "namada_node",
+ "namada_tx",
 ]
 
 [[package]]
@@ -5488,6 +5492,7 @@ dependencies = [
 name = "namada_tx"
 version = "0.39.0"
 dependencies = [
+ "arbitrary",
  "ark-bls12-381",
  "assert_matches",
  "bitflags 2.5.0",

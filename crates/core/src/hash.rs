@@ -34,6 +34,7 @@ pub enum Error {
 /// Result for functions that may fail
 pub type HashResult<T> = std::result::Result<T, Error>;
 
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     Copy,

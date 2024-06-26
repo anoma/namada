@@ -599,6 +599,32 @@ impl super::SigScheme for SigScheme {
     }
 }
 
+#[cfg(feature = "arbitrary")]
+impl arbitrary::Arbitrary<'_> for PublicKey {
+    fn arbitrary(
+        _: &mut arbitrary::Unstructured<'_>,
+    ) -> arbitrary::Result<Self> {
+        Ok(Self(
+            k256::PublicKey::from_sec1_bytes(
+                &[0_u8; COMPRESSED_PUBLIC_KEY_SIZE],
+            )
+            .unwrap(),
+        ))
+    }
+}
+
+#[cfg(feature = "arbitrary")]
+impl arbitrary::Arbitrary<'_> for Signature {
+    fn arbitrary(
+        _: &mut arbitrary::Unstructured<'_>,
+    ) -> arbitrary::Result<Self> {
+        Ok(Self(
+            k256::ecdsa::Signature::from_slice(&[0_u8; 64]).unwrap(),
+            RecoveryId::from_byte(0).unwrap(),
+        ))
+    }
+}
+
 #[cfg(test)]
 mod test {
 
