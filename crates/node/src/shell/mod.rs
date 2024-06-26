@@ -1129,22 +1129,6 @@ where
                     return response;
                 }
 
-                // TODO(namada#2597): validate masp fee payment if normal fee
-                // payment fails Validate wrapper fees
-                if let Err(e) = mempool_fee_check(
-                    &wrapper,
-                    &mut ShellParams::new(
-                        &RefCell::new(gas_meter),
-                        &mut self.state.with_temp_write_log(),
-                        &mut self.vp_wasm_cache.clone(),
-                        &mut self.tx_wasm_cache.clone(),
-                    ),
-                ) {
-                    response.code = ResultCode::FeeError.into();
-                    response.log = format!("{INVALID_MSG}: {e}");
-                    return response;
-                }
-
                 // Validate the inner txs after. Even if the batch is non-atomic
                 // we still reject it if just one of the inner txs is
                 // invalid
@@ -1161,6 +1145,22 @@ where
                         );
                         return response;
                     }
+                }
+
+                // TODO(namada#2597): validate masp fee payment if normal fee
+                // payment fails Validate wrapper fees
+                if let Err(e) = mempool_fee_check(
+                    &wrapper,
+                    &mut ShellParams::new(
+                        &RefCell::new(gas_meter),
+                        &mut self.state.with_temp_write_log(),
+                        &mut self.vp_wasm_cache.clone(),
+                        &mut self.tx_wasm_cache.clone(),
+                    ),
+                ) {
+                    response.code = ResultCode::FeeError.into();
+                    response.log = format!("{INVALID_MSG}: {e}");
+                    return response;
                 }
             }
             TxType::Raw => {
