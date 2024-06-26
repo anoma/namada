@@ -460,6 +460,24 @@ where
                     };
                 }
 
+                // Validate the inner txs after. Even if the batch is non-atomic
+                // we still reject it if just one of the inner txs is
+                // invalid
+                for cmt in tx.commitments() {
+                    // Tx allowlist
+                    if let Err(err) =
+                        check_tx_allowed(&tx.batch_ref_tx(cmt), &self.state)
+                    {
+                        return TxResult {
+                            code: ResultCode::TxNotAllowlisted.into(),
+                            info: format!(
+                                "Tx code didn't pass the allowlist check: {}",
+                                err
+                            ),
+                        };
+                    }
+                }
+
                 // Check that the fee payer has sufficient balance.
                 if let Err(e) = process_proposal_fee_check(
                     &wrapper,
@@ -476,21 +494,6 @@ where
                         code: ResultCode::FeeError.into(),
                         info: e.to_string(),
                     };
-                }
-
-                for cmt in tx.commitments() {
-                    // Tx allowlist
-                    if let Err(err) =
-                        check_tx_allowed(&tx.batch_ref_tx(cmt), &self.state)
-                    {
-                        return TxResult {
-                            code: ResultCode::TxNotAllowlisted.into(),
-                            info: format!(
-                                "Tx code didn't pass the allowlist check: {}",
-                                err
-                            ),
-                        };
-                    }
                 }
 
                 TxResult {
