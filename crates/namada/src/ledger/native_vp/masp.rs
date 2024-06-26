@@ -26,14 +26,19 @@ use namada_governance::storage::is_proposal_accepted;
 use namada_ibc::core::channel::types::commitment::{
     compute_packet_commitment, PacketCommitment,
 };
-use namada_ibc::core::channel::types::msgs::MsgRecvPacket as IbcMsgRecvPacket;
+use namada_ibc::core::channel::types::msgs::{
+    MsgRecvPacket as IbcMsgRecvPacket, PacketMsg,
+};
 use namada_ibc::core::channel::types::timeout::TimeoutHeight;
+use namada_ibc::core::handler::types::msgs::MsgEnvelope;
 use namada_ibc::core::host::types::identifiers::{ChannelId, PortId, Sequence};
 use namada_ibc::primitives::Timestamp;
 use namada_ibc::trace::{
     convert_to_address, ibc_trace_for_nft, is_sender_chain_source,
 };
-use namada_ibc::{get_last_sequence_send, IbcMessage};
+use namada_ibc::{
+    extract_masp_tx_from_envelope, get_last_sequence_send, IbcMessage,
+};
 use namada_sdk::masp::{verify_shielded_tx, TAddrData};
 use namada_state::{ConversionState, OptionExt, ResultExt, StateRead};
 use namada_token::read_denom;
@@ -603,55 +608,59 @@ where
                     self.apply_transfer_msg(acc, &ibc_transfer, keys_changed)?;
             }
             // This event is emitted on the receiver
-            IbcMessage::RecvPacket(msg) => {
-                if msg.message.packet.port_id_on_b.as_str() == PORT_ID_STR {
-                    let packet_data = serde_json::from_slice::<PacketData>(
-                        &msg.message.packet.data,
-                    )
-                    .map_err(native_vp::Error::new)?;
-                    let receiver = packet_data.receiver.to_string();
-                    let addr = TAddrData::Ibc(receiver.clone());
-                    acc.decoder.insert(ibc_taddr(receiver), addr);
-                    let ibc_denom = packet_data.token.denom.to_string();
-                    let amount = packet_data
-                        .token
-                        .amount
-                        .try_into()
-                        .into_storage_result()?;
-                    acc = self.apply_recv_msg(
-                        acc,
-                        &msg.message,
-                        vec![ibc_denom],
-                        amount,
-                        keys_changed,
-                    )?;
-                } else {
-                    let packet_data = serde_json::from_slice::<NftPacketData>(
-                        &msg.message.packet.data,
-                    )
-                    .map_err(native_vp::Error::new)?;
-                    let receiver = packet_data.receiver.to_string();
-                    let addr = TAddrData::Ibc(receiver.clone());
-                    acc.decoder.insert(ibc_taddr(receiver), addr);
-                    let ibc_traces = packet_data
-                        .token_ids
-                        .0
-                        .iter()
-                        .map(|token_id| {
-                            ibc_trace_for_nft(&packet_data.class_id, token_id)
-                        })
-                        .collect();
-                    acc = self.apply_recv_msg(
-                        acc,
-                        &msg.message,
-                        ibc_traces,
-                        Amount::from_u64(1),
-                        keys_changed,
-                    )?;
+            IbcMessage::Envelope(envelope) => {
+                if let MsgEnvelope::Packet(PacketMsg::Recv(msg)) = envelope {
+                    if msg.packet.port_id_on_b.as_str() == PORT_ID_STR {
+                        let packet_data = serde_json::from_slice::<PacketData>(
+                            &msg.packet.data,
+                        )
+                        .map_err(native_vp::Error::new)?;
+                        let receiver = packet_data.receiver.to_string();
+                        let addr = TAddrData::Ibc(receiver.clone());
+                        acc.decoder.insert(ibc_taddr(receiver), addr);
+                        let ibc_denom = packet_data.token.denom.to_string();
+                        let amount = packet_data
+                            .token
+                            .amount
+                            .try_into()
+                            .into_storage_result()?;
+                        acc = self.apply_recv_msg(
+                            acc,
+                            &msg,
+                            vec![ibc_denom],
+                            amount,
+                            keys_changed,
+                        )?;
+                    } else {
+                        let packet_data =
+                            serde_json::from_slice::<NftPacketData>(
+                                &msg.packet.data,
+                            )
+                            .map_err(native_vp::Error::new)?;
+                        let receiver = packet_data.receiver.to_string();
+                        let addr = TAddrData::Ibc(receiver.clone());
+                        acc.decoder.insert(ibc_taddr(receiver), addr);
+                        let ibc_traces = packet_data
+                            .token_ids
+                            .0
+                            .iter()
+                            .map(|token_id| {
+                                ibc_trace_for_nft(
+                                    &packet_data.class_id,
+                                    token_id,
+                                )
+                            })
+                            .collect();
+                        acc = self.apply_recv_msg(
+                            acc,
+                            &msg,
+                            ibc_traces,
+                            Amount::from_u64(1),
+                            keys_changed,
+                        )?;
+                    }
                 }
             }
-            // Ignore all other IBC events
-            _ => {}
         }
         Result::<_>::Ok(acc)
     }
@@ -761,25 +770,32 @@ where
         })?;
         let conversion_state = self.ctx.state.in_mem().get_conversion_state();
         let ibc_msg = self.ctx.get_ibc_message(tx_data).ok();
-
-        // Get the Transaction object from the actions
-        let masp_section_ref = namada_tx::action::get_masp_section_ref(
-            &self.ctx,
-        )?
-        .ok_or_else(|| {
-            native_vp::Error::new_const(
-                "Missing MASP section reference in action",
-            )
-        })?;
-        let shielded_tx = tx_data
-            .tx
-            .get_section(&masp_section_ref)
-            .and_then(|section| section.masp_tx())
-            .ok_or_else(|| {
-                native_vp::Error::new_const(
-                    "Missing MASP section in transaction",
-                )
-            })?;
+        let shielded_tx =
+            if let Some(IbcMessage::Envelope(ref envelope)) = ibc_msg {
+                extract_masp_tx_from_envelope(envelope).ok_or_else(|| {
+                    native_vp::Error::new_const(
+                        "Missing MASP transaction in IBC message",
+                    )
+                })?
+            } else {
+                // Get the Transaction object from the actions
+                let masp_section_ref =
+                    namada_tx::action::get_masp_section_ref(&self.ctx)?
+                        .ok_or_else(|| {
+                            native_vp::Error::new_const(
+                                "Missing MASP section reference in action",
+                            )
+                        })?;
+                tx_data
+                    .tx
+                    .get_section(&masp_section_ref)
+                    .and_then(|section| section.masp_tx())
+                    .ok_or_else(|| {
+                        native_vp::Error::new_const(
+                            "Missing MASP section in transaction",
+                        )
+                    })?
+            };
 
         if u64::from(self.ctx.get_block_height()?)
             > u64::from(shielded_tx.expiry_height())
