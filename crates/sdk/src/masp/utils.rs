@@ -370,7 +370,7 @@ impl MaspClient for IndexerMaspClient {
         let txs_fut = async {
             let response = self
                 .client
-                .get(self.endpoint("tx"))
+                .get(self.endpoint("/tx"))
                 .query(&[("height", from), ("height_offset", off)])
                 .send()
                 .await
@@ -490,19 +490,20 @@ impl MaspClient for IndexerMaspClient {
         #[derive(Deserialize)]
         struct Note {
             // is_fee_unshielding: bool,
-            note_positon: usize,
+            note_position: usize,
             index: u32,
             block_height: u64,
         }
 
         #[derive(Deserialize)]
-        struct NotesMapResponse {
-            notes: Vec<Note>,
+        struct Response {
+            notes_map: Vec<Note>,
         }
 
         let response = self
             .client
-            .get(self.endpoint("notes-map"))
+            .get(self.endpoint("/notes-map"))
+            .keep_alive()
             .query(&[("height", height)])
             .send()
             .await
@@ -511,30 +512,28 @@ impl MaspClient for IndexerMaspClient {
                     "Failed to fetch notes map at height {height}: {err}"
                 ))
             })?;
+        let payload: Response = response.json().await.map_err(|err| {
+            Error::Other(format!(
+                "Could not deserialize the notes map JSON response at height \
+                 {height}: {err}"
+            ))
+        })?;
 
-        let notes_map: NotesMapResponse =
-            response.json().await.map_err(|err| {
-                Error::Other(format!(
-                    "Could not deserialize the notes map JSON response at \
-                     height {height}: {err}"
-                ))
-            })?;
-
-        Ok(notes_map
-            .notes
+        Ok(payload
+            .notes_map
             .into_iter()
             .map(
                 |Note {
                      index,
                      block_height,
-                     note_positon,
+                     note_position,
                  }| {
                     (
                         IndexedTx {
                             index: TxIndex(index),
                             height: BlockHeight(block_height),
                         },
-                        note_positon,
+                        note_position,
                     )
                 },
             )
@@ -560,7 +559,8 @@ impl MaspClient for IndexerMaspClient {
 
         let response = self
             .client
-            .get(self.endpoint("witness-map"))
+            .get(self.endpoint("/witness-map"))
+            .keep_alive()
             .query(&[("height", height)])
             .send()
             .await
