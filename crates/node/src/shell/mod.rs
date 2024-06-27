@@ -422,13 +422,13 @@ where
 
         // For all tests except integration use hard-coded native token addr ...
         #[cfg(all(
-            any(test, feature = "testing", feature = "benches"),
+            any(test, fuzzing, feature = "testing", feature = "benches"),
             not(feature = "integration"),
         ))]
         let native_token = namada::address::testing::nam();
         // ... Otherwise, look it up from the genesis file
         #[cfg(not(all(
-            any(test, feature = "testing", feature = "benches"),
+            any(test, fuzzing, feature = "testing", feature = "benches"),
             not(feature = "integration"),
         )))]
         let native_token = {
@@ -455,7 +455,7 @@ where
         // load in keys and address from wallet if mode is set to `Validator`
         let mode = match mode {
             TendermintMode::Validator => {
-                #[cfg(not(test))]
+                #[cfg(not(any(test, fuzzing)))]
                 {
                     let wallet_path = &base_dir.join(chain_id.as_str());
                     tracing::debug!(
@@ -493,7 +493,7 @@ where
                              wallet",
                         )
                 }
-                #[cfg(test)]
+                #[cfg(any(test, fuzzing))]
                 {
                     let (protocol_keypair, eth_bridge_keypair) =
                         wallet::defaults::validator_keys();
