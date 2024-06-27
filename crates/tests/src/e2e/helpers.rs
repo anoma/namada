@@ -620,6 +620,8 @@ fn make_hermes_chain_config(test: &Test) -> Value {
     table.insert("denom".to_owned(), Value::String(nam_addr.to_string()));
     chain.insert("gas_price".to_owned(), Value::Table(table));
 
+    chain.insert("max_block_time".to_owned(), Value::String("60s".to_owned()));
+
     Value::Table(chain)
 }
 
