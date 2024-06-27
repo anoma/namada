@@ -708,7 +708,7 @@ enum TransferSide<'a> {
 }
 
 enum TokenTransfer<'a> {
-    Transparent(&'a token::TransparentTransfer),
+    Transparent(&'a token::Transfer),
     Shielded,
     Shielding(&'a token::ShieldingMultiTransfer),
     Unshielding(&'a token::UnshieldingMultiTransfer),
@@ -1390,7 +1390,7 @@ pub async fn to_ledger_vector(
             }
         } else if code_sec.tag == Some(TX_TRANSPARENT_TRANSFER_WASM.to_string())
         {
-            let transfer = token::TransparentTransfer::try_from_slice(
+            let transfer = token::Transfer::try_from_slice(
                 &tx.data(cmt)
                     .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
             )

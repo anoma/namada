@@ -59,17 +59,16 @@ fn ledger_txs_and_queries() -> Result<()> {
     let validator_one_rpc = "http://127.0.0.1:26567";
 
     let (node, _services) = setup::setup()?;
-    let transfer =
-        token::TransparentTransfer(vec![token::TransparentTransferData {
-            source: defaults::bertha_address(),
-            target: defaults::albert_address(),
-            token: node.native_token(),
-            amount: token::DenominatedAmount::new(
-                token::Amount::native_whole(10),
-                token::NATIVE_MAX_DECIMAL_PLACES.into(),
-            ),
-        }])
-        .serialize_to_vec();
+    let transfer = token::Transfer(vec![token::TransferData {
+        source: defaults::bertha_address(),
+        target: defaults::albert_address(),
+        token: node.native_token(),
+        amount: token::DenominatedAmount::new(
+            token::Amount::native_whole(10),
+            token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        ),
+    }])
+    .serialize_to_vec();
     let tx_data_path = node.test_dir.path().join("tx.data");
     std::fs::write(&tx_data_path, transfer).unwrap();
     let tx_data_path = tx_data_path.to_string_lossy();

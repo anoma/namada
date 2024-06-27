@@ -2918,7 +2918,7 @@ pub async fn build_transparent_transfer<N: Namada>(
         }
 
         // Construct the corresponding transparent Transfer object
-        let transfer_data = token::TransparentTransferData {
+        let transfer_data = token::TransferData {
             source: source.to_owned(),
             target: target.to_owned(),
             token: token.to_owned(),
@@ -2928,7 +2928,7 @@ pub async fn build_transparent_transfer<N: Namada>(
         transfers.push(transfer_data);
     }
     // Construct the corresponding transparent Transfer object
-    let transfer = token::TransparentTransfer {
+    let transfer = token::Transfer {
         data: transfers,
         shielded_section_hash: None,
     };

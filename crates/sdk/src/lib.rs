@@ -853,7 +853,7 @@ pub mod testing {
     use namada_governance::{InitProposalData, VoteProposalData};
     use namada_ibc::testing::arb_ibc_any;
     use namada_token::testing::arb_denominated_amount;
-    use namada_token::{ShieldedTransfer, TransparentTransfer};
+    use namada_token::{ShieldedTransfer, Transfer};
     use namada_tx::data::pgf::UpdateStewardCommission;
     use namada_tx::data::pos::{
         BecomeValidator, Bond, CommissionChange, ConsensusKeyChange,
@@ -911,7 +911,7 @@ pub mod testing {
         UpdateAccount(UpdateAccount),
         VoteProposal(VoteProposalData),
         Withdraw(Withdraw),
-        TransparentTransfer(TransparentTransfer),
+        TransparentTransfer(Transfer),
         ShieldedTransfer(ShieldedTransfer, (StoredBuildParams, String)),
         ShieldingTransfer(ShieldingMultiTransfer, (StoredBuildParams, String)),
         UnshieldingTransfer(

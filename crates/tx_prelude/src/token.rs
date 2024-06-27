@@ -6,7 +6,7 @@ use namada_events::{EmitEvents, EventLevel};
 pub use namada_token::testing;
 pub use namada_token::{
     storage_key, utils, Amount, DenominatedAmount, ShieldedTransfer,
-    ShieldingMultiTransfer, ShieldingTransfer, TransparentTransfer,
+    ShieldingMultiTransfer, ShieldingTransfer, Transfer,
     UnshieldingMultiTransfer, UnshieldingTransfer,
 };
 use namada_tx_env::TxEnv;

@@ -81,8 +81,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let signature_schema = schema_container_of::<Signature>();
     let init_account_schema = schema_container_of::<account::InitAccount>();
     let init_validator_schema = schema_container_of::<pos::BecomeValidator>();
-    let transparent_transfer_schema =
-        schema_container_of::<token::TransparentTransfer>();
+    let transparent_transfer_schema = schema_container_of::<token::Transfer>();
     let shielded_transfer_schema =
         schema_container_of::<token::ShieldedTransfer>();
     let shielding_transfer_schema =

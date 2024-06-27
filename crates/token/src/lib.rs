@@ -82,9 +82,9 @@ where
     Serialize,
     Deserialize,
 )]
-pub struct TransparentTransfer {
+pub struct Transfer {
     /// Transfer-specific data
-    pub data: Vec<TransparentTransferData>,
+    pub data: Vec<TransferData>,
     /// Hash of tx section that contains the MASP transaction
     pub shielded_section_hash: Option<Hash>,
 }
@@ -104,7 +104,7 @@ pub struct TransparentTransfer {
     Serialize,
     Deserialize,
 )]
-pub struct TransparentTransferData {
+pub struct TransferData {
     /// Source address will spend the tokens
     pub source: Address,
     /// Target address will receive the tokens
@@ -288,7 +288,7 @@ pub mod testing {
     pub use namada_trans_token::testing::*;
     use proptest::prelude::*;
 
-    use super::{TransparentTransfer, TransparentTransferData};
+    use super::{Transfer, TransferData};
 
     prop_compose! {
         /// Generate a transparent transfer
@@ -297,8 +297,8 @@ pub mod testing {
             target in arb_non_internal_address(),
             token in arb_established_address().prop_map(Address::Established),
             amount in arb_denominated_amount(),
-        ) -> TransparentTransferData{
-            TransparentTransferData {
+        ) -> TransferData{
+            TransferData {
                 source,
                 target,
                 token,
@@ -310,9 +310,9 @@ pub mod testing {
     /// Generate a vectorized transparent transfer
     pub fn arb_vectorized_transparent_transfer(
         number_of_txs: usize,
-    ) -> impl Strategy<Value = TransparentTransfer> {
+    ) -> impl Strategy<Value = Transfer> {
         proptest::collection::vec(arb_transparent_transfer(), 0..number_of_txs)
-            .prop_map(|data| TransparentTransfer {
+            .prop_map(|data| Transfer {
                 data,
                 shielded_section_hash: None,
             })

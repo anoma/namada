@@ -4,7 +4,7 @@ use namada_sdk::key::common;
 use namada_sdk::token::transaction::Transaction;
 use namada_sdk::token::ShieldingTransferData;
 pub use namada_sdk::token::{
-    DenominatedAmount, TransparentTransfer, UnshieldingTransferData,
+    DenominatedAmount, Transfer, UnshieldingTransferData,
 };
 use namada_sdk::tx::data::GasLimit;
 use namada_sdk::tx::{
@@ -18,14 +18,11 @@ use crate::transaction;
 
 /// A transfer transaction
 #[derive(Debug, Clone)]
-pub struct Transfer(Tx);
+pub struct TransferBuilder(Tx);
 
-impl Transfer {
+impl TransferBuilder {
     /// Build a transparent transfer transaction from the given parameters
-    pub fn transparent(
-        transfers: TransparentTransfer,
-        args: GlobalArgs,
-    ) -> Self {
+    pub fn transparent(transfers: Transfer, args: GlobalArgs) -> Self {
         Self(transaction::build_tx(
             args,
             transfers,
