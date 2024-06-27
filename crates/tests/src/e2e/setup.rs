@@ -1047,7 +1047,7 @@ where
 {
     // Root cargo workspace manifest path
     let (bin_name, log_level) = match bin {
-        Bin::Node => ("namadan", "info"),
+        Bin::Node => ("namadan", "debug"),
         Bin::Client => ("namadac", "tendermint_rpc=debug"),
         Bin::Wallet => ("namadaw", "info"),
         Bin::Relayer => ("namadar", "info"),
