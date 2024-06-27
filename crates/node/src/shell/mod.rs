@@ -11,6 +11,7 @@ mod governance;
 mod init_chain;
 pub use init_chain::InitChainValidation;
 use namada::vm::wasm::run::check_tx_allowed;
+use namada_apps_lib::config::NodeLocalConfig;
 use namada_sdk::state::StateRead;
 pub mod prepare_proposal;
 use namada::state::State;
@@ -120,6 +121,8 @@ pub enum Error {
     Storage(#[from] namada::state::StorageError),
     #[error("Transaction replay attempt: {0}")]
     ReplayAttempt(String),
+    #[error("Received an invalid block proposal")]
+    InvalidBlockProposal,
 }
 
 impl From<Error> for TxResult {
@@ -168,9 +171,12 @@ pub(super) enum ShellMode {
         data: ValidatorData,
         broadcast_sender: UnboundedSender<Vec<u8>>,
         eth_oracle: Option<EthereumOracleChannels>,
-        local_config: Option<ValidatorLocalConfig>,
+        validator_local_config: Option<ValidatorLocalConfig>,
+        local_config: Option<NodeLocalConfig>,
     },
-    Full,
+    Full {
+        local_config: Option<NodeLocalConfig>,
+    },
     Seed,
 }
 
@@ -341,8 +347,7 @@ where
     /// Path to the WASM directory for files used in the genesis block.
     pub(super) wasm_dir: PathBuf,
     /// Information about the running shell instance
-    #[allow(dead_code)]
-    mode: ShellMode,
+    pub(crate) mode: ShellMode,
     /// VP WASM compilation cache
     pub vp_wasm_cache: VpCache<WasmCacheRwAccess>,
     /// Tx WASM compilation cache
@@ -466,6 +471,8 @@ where
                         .expect("Validator node must have a wallet");
                     let validator_local_config_path =
                         wallet_path.join("validator_local_config.toml");
+                    let local_config_path =
+                        wallet_path.join("local_config.toml");
 
                     let validator_local_config: Option<ValidatorLocalConfig> =
                         if Path::is_file(&validator_local_config_path) {
@@ -480,13 +487,26 @@ where
                             None
                         };
 
+                    let local_config: Option<NodeLocalConfig> =
+                        if Path::is_file(&local_config_path) {
+                            Some(
+                                toml::from_slice(
+                                    &std::fs::read(local_config_path).unwrap(),
+                                )
+                                .unwrap(),
+                            )
+                        } else {
+                            None
+                        };
+
                     wallet
                         .take_validator_data()
                         .map(|data| ShellMode::Validator {
                             data,
                             broadcast_sender,
                             eth_oracle,
-                            local_config: validator_local_config,
+                            validator_local_config,
+                            local_config,
                         })
                         .expect(
                             "Validator data should have been stored in the \
@@ -507,11 +527,37 @@ where
                         },
                         broadcast_sender,
                         eth_oracle,
+                        validator_local_config: None,
                         local_config: None,
                     }
                 }
             }
-            TendermintMode::Full => ShellMode::Full,
+            TendermintMode::Full => {
+                #[cfg(not(test))]
+                {
+                    let local_config_path = &base_dir
+                        .join(chain_id.as_str())
+                        .join("local_config.toml");
+
+                    let local_config: Option<NodeLocalConfig> =
+                        if Path::is_file(local_config_path) {
+                            Some(
+                                toml::from_slice(
+                                    &std::fs::read(local_config_path).unwrap(),
+                                )
+                                .unwrap(),
+                            )
+                        } else {
+                            None
+                        };
+
+                    ShellMode::Full { local_config }
+                }
+                #[cfg(test)]
+                {
+                    ShellMode::Full { local_config: None }
+                }
+            }
             TendermintMode::Seed => ShellMode::Seed,
         };
 

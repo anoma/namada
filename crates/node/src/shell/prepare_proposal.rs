@@ -46,7 +46,8 @@ where
         mut req: RequestPrepareProposal,
     ) -> response::PrepareProposal {
         let txs = if let ShellMode::Validator {
-            ref local_config, ..
+            ref validator_local_config,
+            ..
         } = self.mode
         {
             // start counting allotted space for txs
@@ -70,7 +71,7 @@ where
                 &req.txs,
                 req.time,
                 &block_proposer,
-                local_config.as_ref(),
+                validator_local_config.as_ref(),
             );
             txs.append(&mut normal_txs);
             let mut remaining_txs =
@@ -1036,9 +1037,13 @@ mod test_prepare_proposal {
     fn test_fee_non_accepted_token() {
         let (mut shell, _recv, _, _) = test_utils::setup();
         // Update local validator configuration for gas tokens
-        if let ShellMode::Validator { local_config, .. } = &mut shell.mode {
+        if let ShellMode::Validator {
+            validator_local_config,
+            ..
+        } = &mut shell.mode
+        {
             // Remove the allowed btc
-            *local_config = Some(ValidatorLocalConfig {
+            *validator_local_config = Some(ValidatorLocalConfig {
                 accepted_gas_tokens: namada::core::collections::HashMap::from(
                     [(namada::core::address::testing::nam(), Amount::from(1))],
                 ),
@@ -1137,9 +1142,13 @@ mod test_prepare_proposal {
     fn test_fee_wrong_minimum_accepted_amount() {
         let (mut shell, _recv, _, _) = test_utils::setup();
         // Update local validator configuration for gas tokens
-        if let ShellMode::Validator { local_config, .. } = &mut shell.mode {
+        if let ShellMode::Validator {
+            validator_local_config,
+            ..
+        } = &mut shell.mode
+        {
             // Remove btc and increase minimum for nam
-            *local_config = Some(ValidatorLocalConfig {
+            *validator_local_config = Some(ValidatorLocalConfig {
                 accepted_gas_tokens: namada::core::collections::HashMap::from(
                     [(
                         namada::core::address::testing::nam(),

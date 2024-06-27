@@ -624,13 +624,6 @@ where
                 continue;
             }
 
-            if tx.validate_tx().is_err() {
-                tracing::error!(
-                    "Internal logic error: FinalizeBlock received tx that \
-                     could not be deserialized to a valid TxType"
-                );
-                continue;
-            };
             let tx_header = tx.header();
             // If [`process_proposal`] rejected a Tx, emit an event here and
             // move on to next tx

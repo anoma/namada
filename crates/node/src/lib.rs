@@ -35,9 +35,12 @@ use futures::future::TryFutureExt;
 use namada::core::storage::BlockHeight;
 use namada::core::time::DateTimeUtc;
 use namada::eth_bridge::ethers::providers::{Http, Provider};
+use namada::key::tm_raw_hash_to_string;
+use namada::ledger::pos::find_validator_by_raw_hash;
 use namada::state::DB;
 use namada::storage::DbColFam;
 use namada::tendermint::abci::request::CheckTxKind;
+use namada::tx::data::ResultCode;
 use namada_apps_lib::cli::args;
 use namada_apps_lib::config::utils::{
     convert_tm_addr_to_socket_addr, num_of_threads,
@@ -134,6 +137,64 @@ impl Shell {
             }
             Request::FinalizeBlock(finalize) => {
                 tracing::debug!("Request FinalizeBlock");
+
+                let recheck_process_proposal = match self.mode {
+                    shell::ShellMode::Validator {
+                        ref local_config, ..
+                    } => local_config
+                        .as_ref()
+                        .map(|cfg| cfg.recheck_process_proposal)
+                        .unwrap_or_default(),
+                    shell::ShellMode::Full { ref local_config } => local_config
+                        .as_ref()
+                        .map(|cfg| cfg.recheck_process_proposal)
+                        .unwrap_or_default(),
+                    shell::ShellMode::Seed => false,
+                };
+
+                // FIXME: also optiomize if
+                // process_proposal has already run Run process
+                // proposal validation once more if the node runner
+                // requested it
+                if recheck_process_proposal {
+                    let tm_raw_hash_string =
+                        tm_raw_hash_to_string(&finalize.proposer_address);
+                    let block_proposer = find_validator_by_raw_hash(
+                        &self.state,
+                        tm_raw_hash_string,
+                    )
+                    .unwrap()
+                    .expect(
+                        "Unable to find native validator address of block \
+                         proposer from tendermint raw hash",
+                    );
+
+                    // FIXME: would be slightly more safe to call
+                    // process_proposal instead so that if the logic changes we
+                    // don't diverge. But we need to cache the process_proposal
+                    // request in that case
+
+                    let check_result = self.process_txs(
+                        &finalize
+                            .txs
+                            .iter()
+                            .map(|ptx| ptx.tx.clone())
+                            .collect::<Vec<_>>(),
+                        finalize.header.time,
+                        &block_proposer,
+                    );
+
+                    let invalid_txs = check_result.iter().any(|res| {
+                        let error = ResultCode::from_u32(res.code)
+                            .expect("Failed to cast result code");
+                        !error.is_recoverable()
+                    });
+
+                    if invalid_txs {
+                        return Err(Error::InvalidBlockProposal);
+                    }
+                }
+
                 self.finalize_block(finalize).map(Response::FinalizeBlock)
             }
             Request::Commit => {
