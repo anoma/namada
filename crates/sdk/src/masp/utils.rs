@@ -343,15 +343,21 @@ impl MaspClient for IndexerMaspClient {
         use serde::Deserialize;
 
         #[derive(Deserialize)]
-        struct TransactionBatch {
+        struct TransactionSlot {
+            // masp_tx_index: u64,
             bytes: Vec<u8>,
-            index: u32,
+        }
+
+        #[derive(Deserialize)]
+        struct Transaction {
+            batch: Vec<TransactionSlot>,
+            block_index: u32,
             block_height: u64,
         }
 
         #[derive(Deserialize)]
         struct TxResponse {
-            txs: Vec<TransactionBatch>,
+            txs: Vec<Transaction>,
         }
 
         if from > to {
@@ -364,7 +370,7 @@ impl MaspClient for IndexerMaspClient {
         const MAX_RANGE_THRES: u64 = 30;
         let mut fetch_iter = progress.fetch(from..=to);
 
-        while from <= to {
+        loop {
             let from_height = from;
             let off = (to - from).min(MAX_RANGE_THRES);
             let to_height = from + off;
@@ -408,26 +414,32 @@ impl MaspClient for IndexerMaspClient {
 
             let mut last_height = None;
 
-            for TransactionBatch {
-                bytes,
-                index,
+            for Transaction {
+                batch,
+                block_index,
                 block_height,
             } in payload.txs
             {
-                type MaspTxBatch =
-                    Vec<masp_primitives::transaction::Transaction>;
+                let mut extracted_masp_txs = Vec::with_capacity(batch.len());
 
-                let extracted_masp_txs = MaspTxBatch::try_from_slice(&bytes)
-                    .map_err(|err| {
-                        Error::Other(format!(
-                            "Could not deserialize the masp txs borsh data at \
-                             height {block_height} and index {index}: {err}"
-                        ))
-                    })?;
+                for TransactionSlot { bytes } in batch {
+                    type MaspTx = masp_primitives::transaction::Transaction;
+
+                    extracted_masp_txs.push(
+                        MaspTx::try_from_slice(&bytes).map_err(|err| {
+                            Error::Other(format!(
+                                "Could not deserialize the masp txs borsh \
+                                 data at height {block_height} and index \
+                                 {block_index}: {err}"
+                            ))
+                        })?,
+                    );
+                }
+
                 tx_sender.send((
                     IndexedTx {
                         height: BlockHeight(block_height),
-                        index: TxIndex(index),
+                        index: TxIndex(block_index),
                     },
                     extracted_masp_txs,
                 ));
@@ -437,6 +449,10 @@ impl MaspClient for IndexerMaspClient {
                     last_height = curr_height;
                     _ = fetch_iter.next();
                 }
+            }
+
+            if from >= to {
+                break;
             }
         }
 
@@ -496,9 +512,9 @@ impl MaspClient for IndexerMaspClient {
 
         #[derive(Deserialize)]
         struct Note {
-            // is_fee_unshielding: bool,
+            // masp_tx_index: u64,
             note_position: usize,
-            index: u32,
+            block_index: u32,
             block_height: u64,
         }
 
@@ -531,13 +547,13 @@ impl MaspClient for IndexerMaspClient {
             .into_iter()
             .map(
                 |Note {
-                     index,
+                     block_index,
                      block_height,
                      note_position,
                  }| {
                     (
                         IndexedTx {
-                            index: TxIndex(index),
+                            index: TxIndex(block_index),
                             height: BlockHeight(block_height),
                         },
                         note_position,
