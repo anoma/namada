@@ -82,8 +82,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let init_account_schema = schema_container_of::<account::InitAccount>();
     let init_validator_schema = schema_container_of::<pos::BecomeValidator>();
     let transfer_schema = schema_container_of::<token::Transfer>();
-    let shielding_transfer_schema =
-        schema_container_of::<token::ShieldingTransfer>();
     let unshielding_transfer_schema =
         schema_container_of::<token::UnshieldingTransfer>();
     let update_account = schema_container_of::<account::UpdateAccount>();
@@ -113,7 +111,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     definitions.extend(btree(&init_account_schema));
     definitions.extend(btree(&init_validator_schema));
     definitions.extend(btree(&transfer_schema));
-    definitions.extend(btree(&shielding_transfer_schema));
     definitions.extend(btree(&unshielding_transfer_schema));
     definitions.extend(btree(&update_account));
     definitions.extend(btree(&pos_bond_schema));

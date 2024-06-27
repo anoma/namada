@@ -48,11 +48,10 @@ use crate::tx::{
     TX_CHANGE_METADATA_WASM, TX_CLAIM_REWARDS_WASM,
     TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM, TX_INIT_ACCOUNT_WASM,
     TX_INIT_PROPOSAL, TX_REACTIVATE_VALIDATOR_WASM, TX_REDELEGATE_WASM,
-    TX_RESIGN_STEWARD, TX_REVEAL_PK, TX_SHIELDING_TRANSFER_WASM,
-    TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
-    TX_UNSHIELDING_TRANSFER_WASM, TX_UPDATE_ACCOUNT_WASM,
-    TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
-    VP_USER_WASM,
+    TX_RESIGN_STEWARD, TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM,
+    TX_UNJAIL_VALIDATOR_WASM, TX_UNSHIELDING_TRANSFER_WASM,
+    TX_UPDATE_ACCOUNT_WASM, TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL,
+    TX_WITHDRAW_WASM, VP_USER_WASM,
 };
 pub use crate::wallet::store::AddressVpType;
 use crate::wallet::{Wallet, WalletIo};
@@ -709,7 +708,6 @@ enum TransferSide<'a> {
 
 enum TokenTransfer<'a> {
     Transparent(&'a token::Transfer),
-    Shielding(&'a token::ShieldingMultiTransfer),
     Unshielding(&'a token::UnshieldingMultiTransfer),
 }
 
@@ -717,11 +715,6 @@ impl TokenTransfer<'_> {
     fn sources(&self) -> Vec<&Address> {
         match self {
             TokenTransfer::Transparent(transfers) => transfers
-                .data
-                .iter()
-                .map(|transfer| &transfer.source)
-                .collect(),
-            TokenTransfer::Shielding(transfers) => transfers
                 .data
                 .iter()
                 .map(|transfer| &transfer.source)
@@ -737,7 +730,6 @@ impl TokenTransfer<'_> {
                 .iter()
                 .map(|transfer| &transfer.target)
                 .collect(),
-            TokenTransfer::Shielding(_) => Default::default(),
             TokenTransfer::Unshielding(transfers) => transfers
                 .data
                 .iter()
@@ -776,24 +768,6 @@ impl TokenTransfer<'_> {
                                     transfer.amount,
                                 )?;
                             }
-                        }
-                    }
-                }
-
-                map
-            }
-            TokenTransfer::Shielding(transfers) => {
-                let mut map: HashMap<&Address, DenominatedAmount> =
-                    HashMap::new();
-
-                if let TransferSide::Source(source_addr) = address {
-                    for transfer in &transfers.data {
-                        if &transfer.source == source_addr {
-                            Self::update_token_amount_map(
-                                &mut map,
-                                &transfer.token,
-                                transfer.amount,
-                            )?;
                         }
                     }
                 }
@@ -1455,53 +1429,6 @@ pub async fn to_ledger_vector(
                 &tokens,
                 &mut tv.output_expert,
                 TokenTransfer::Transparent(&transfer),
-                builder,
-                &asset_types,
-            )
-            .await?;
-        } else if code_sec.tag == Some(TX_SHIELDING_TRANSFER_WASM.to_string()) {
-            let transfer = token::ShieldingMultiTransfer::try_from_slice(
-                &tx.data(cmt)
-                    .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
-            )
-            .map_err(|err| {
-                Error::from(EncodingError::Conversion(err.to_string()))
-            })?;
-            // To facilitate lookups of MASP AssetTypes
-            let mut asset_types = HashMap::new();
-            let builder = tx.sections.iter().find_map(|x| match x {
-                Section::MaspBuilder(builder)
-                    if builder.target == transfer.shielded_section_hash =>
-                {
-                    for decoded in &builder.asset_types {
-                        match decoded.encode() {
-                            Err(_) => None,
-                            Ok(asset) => {
-                                asset_types.insert(asset, decoded.clone());
-                                Some(builder)
-                            }
-                        }?;
-                    }
-                    Some(builder)
-                }
-                _ => None,
-            });
-
-            tv.name = "ShieldingTransfer_0".to_string();
-
-            tv.output.push("Type : ShieldingTransfer".to_string());
-            make_ledger_token_transfer_endpoints(
-                &tokens,
-                &mut tv.output,
-                TokenTransfer::Shielding(&transfer),
-                builder,
-                &asset_types,
-            )
-            .await?;
-            make_ledger_token_transfer_endpoints(
-                &tokens,
-                &mut tv.output_expert,
-                TokenTransfer::Shielding(&transfer),
                 builder,
                 &asset_types,
             )

@@ -76,7 +76,7 @@ use ibc::primitives::proto::Any;
 pub use ibc::*;
 pub use msg::*;
 use namada_core::address::{self, Address};
-use namada_token::ShieldingTransfer;
+use namada_token::Transfer;
 pub use nft::*;
 use prost::Message;
 use thiserror::Error;
@@ -152,7 +152,7 @@ where
     pub fn execute(
         &mut self,
         tx_data: &[u8],
-    ) -> Result<Option<ShieldingTransfer>, Error> {
+    ) -> Result<Option<Transfer>, Error> {
         let message = decode_message(tx_data)?;
         match &message {
             IbcMessage::Transfer(msg) => {
