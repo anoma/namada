@@ -1963,8 +1963,6 @@ pub fn vp_verify_tx_section_signature<MEM, D, H, EVAL, CA>(
     signer_ptr: u64,
     signer_len: u64,
     threshold: u8,
-    max_signatures_ptr: u64,
-    max_signatures_len: u64,
 ) -> vp_host_fns::EnvResult<()>
 where
     MEM: VmMemory,
@@ -2002,14 +2000,6 @@ where
     let signer = Address::try_from_slice(&signer)
         .map_err(vp_host_fns::RuntimeError::EncodingError)?;
 
-    let (max_signatures, gas) = env
-        .memory
-        .read_bytes(max_signatures_ptr, max_signatures_len.try_into()?)
-        .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
-    vp_host_fns::add_gas(gas_meter, gas)?;
-    let max_signatures = Option::<u8>::try_from_slice(&max_signatures)
-        .map_err(vp_host_fns::RuntimeError::EncodingError)?;
-
     let tx = unsafe { env.ctx.tx.get() };
 
     match tx.verify_signatures(
@@ -2017,7 +2007,6 @@ where
         public_keys_map,
         &Some(signer),
         threshold,
-        max_signatures,
         || gas_meter.borrow_mut().consume(gas::VERIFY_TX_SIG_GAS),
     ) {
         Ok(_) => Ok(()),
@@ -2136,8 +2125,6 @@ pub fn tx_verify_tx_section_signature<MEM, D, H, CA>(
     public_keys_map_ptr: u64,
     public_keys_map_len: u64,
     threshold: u8,
-    max_signatures_ptr: u64,
-    max_signatures_len: u64,
 ) -> TxResult<i64>
 where
     MEM: VmMemory,
@@ -2167,14 +2154,6 @@ where
 
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
 
-    let (max_signatures, gas) = env
-        .memory
-        .read_bytes(max_signatures_ptr, max_signatures_len.try_into()?)
-        .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
-    tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
-    let max_signatures = Option::<u8>::try_from_slice(&max_signatures)
-        .map_err(TxRuntimeError::EncodingError)?;
-
     let tx = unsafe { env.ctx.tx.get() };
 
     let (gas_meter, sentinel) = env.ctx.gas_meter_and_sentinel();
@@ -2183,7 +2162,6 @@ where
         public_keys_map,
         &None,
         threshold,
-        max_signatures,
         || gas_meter.borrow_mut().consume(gas::VERIFY_TX_SIG_GAS),
     ) {
         Ok(_) => Ok(HostEnvResult::Success.to_i64()),

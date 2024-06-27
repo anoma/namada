@@ -88,7 +88,9 @@ def init_network(
         die(f"Cannot find wasm directory that is not empty at {wasm_path}")
 
     chain_prefix = "local"
-    genesis_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    genesis_time = datetime.datetime.now(datetime.timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%S.000%f+00:00"
+    )
 
     templates = setup_templates(working_directory, args)
 

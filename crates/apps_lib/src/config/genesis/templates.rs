@@ -265,9 +265,6 @@ pub struct ChainParams<T: TemplateValidation> {
     /// Minimum number of blocks per epoch.
     // NB: u64 only works with values up to i64::MAX with toml-rs!
     pub min_num_of_blocks: u64,
-    /// Maximum duration per block (in seconds).
-    // NB: this is i64 because datetime wants it
-    pub max_expected_time_per_block: i64,
     /// Max payload size, in bytes, for a tx batch proposal.
     ///
     /// Block proposers may never return a `PrepareProposal`
@@ -295,8 +292,6 @@ pub struct ChainParams<T: TemplateValidation> {
     pub epochs_per_year: u64,
     /// How many epochs it takes to transition to the next masp epoch
     pub masp_epoch_multiplier: u64,
-    /// Maximum number of signature per transaction
-    pub max_signatures_per_transaction: u8,
     /// Max gas for block
     pub max_block_gas: u64,
     /// Fee unshielding gas limit
@@ -315,14 +310,12 @@ impl ChainParams<Unvalidated> {
             native_token,
             is_native_token_transferable,
             min_num_of_blocks,
-            max_expected_time_per_block,
             max_proposal_bytes,
             vp_allowlist,
             tx_allowlist,
             implicit_vp,
             epochs_per_year,
             masp_epoch_multiplier,
-            max_signatures_per_transaction,
             max_block_gas,
             fee_unshielding_gas_limit,
             minimum_gas_price,
@@ -361,14 +354,12 @@ impl ChainParams<Unvalidated> {
             native_token,
             is_native_token_transferable,
             min_num_of_blocks,
-            max_expected_time_per_block,
             max_proposal_bytes,
             vp_allowlist,
             tx_allowlist,
             implicit_vp,
             epochs_per_year,
             masp_epoch_multiplier,
-            max_signatures_per_transaction,
             max_block_gas,
             fee_unshielding_gas_limit,
             minimum_gas_price: min_gas_prices,

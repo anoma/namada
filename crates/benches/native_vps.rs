@@ -55,7 +55,7 @@ use namada::sdk::masp_primitives::merkle_tree::CommitmentTree;
 use namada::sdk::masp_primitives::transaction::Transaction;
 use namada::sdk::masp_proofs::sapling::SaplingVerificationContextInner;
 use namada::state::{Epoch, StorageRead, StorageWrite, TxIndex};
-use namada::token::{Amount, TransparentTransfer};
+use namada::token::{Amount, TransparentTransfer, TransparentTransferData};
 use namada::tx::{BatchedTx, Code, Section, Tx};
 use namada_apps_lib::wallet::defaults;
 use namada_node::bench_utils::{
@@ -403,7 +403,7 @@ fn prepare_ibc_tx_and_ctx(bench_name: &str) -> (BenchShieldedCtx, BatchedTx) {
             shielded_ctx.generate_shielded_action(
                 Amount::native_whole(10),
                 TransferSource::ExtendedSpendingKey(albert_spending_key),
-                TransferTarget::Address(defaults::bertha_address()),
+                defaults::bertha_address().to_string(),
             )
         }
         _ => panic!("Unexpected bench test"),
@@ -476,12 +476,12 @@ fn vp_multitoken(c: &mut Criterion) {
 
     let transfer = shell.generate_tx(
         TX_TRANSPARENT_TRANSFER_WASM,
-        TransparentTransfer {
+        TransparentTransfer(vec![TransparentTransferData {
             source: defaults::albert_address(),
             target: defaults::bertha_address(),
             token: address::testing::nam(),
             amount: Amount::native_whole(1000).native_denominated(),
-        },
+        }]),
         None,
         None,
         vec![&defaults::albert_keypair()],

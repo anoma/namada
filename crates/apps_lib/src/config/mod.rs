@@ -7,6 +7,7 @@ pub mod utils;
 
 use std::fs::{create_dir_all, File};
 use std::io::Write;
+use std::num::NonZeroU64;
 use std::path::{Path, PathBuf};
 
 use directories::ProjectDirs;
@@ -119,6 +120,9 @@ pub struct Shell {
     pub action_at_height: Option<ActionAtHeight>,
     /// Specify if tendermint is started as validator, fullnode or seednode
     pub tendermint_mode: TendermintMode,
+    /// When set, indicates after how many blocks a new snapshot
+    /// will be taken (counting from the first block)
+    pub blocks_between_snapshots: Option<NonZeroU64>,
 }
 
 impl Ledger {
@@ -147,6 +151,7 @@ impl Ledger {
                 cometbft_dir: COMETBFT_DIR.into(),
                 action_at_height: None,
                 tendermint_mode: mode,
+                blocks_between_snapshots: None,
             },
             cometbft: tendermint_config,
             ethereum_bridge: ethereum_bridge::ledger::Config::default(),

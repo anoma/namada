@@ -84,6 +84,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "anstyle"
+version = "1.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "038dfcf04a5feb68e9c60b21c9625a54c2c0616e79b72b0fd87075a056ae1d1b"
+
+[[package]]
 name = "anyhow"
 version = "1.0.75"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -789,6 +795,31 @@ checksum = "1d34327ead1c743a10db339de35fb58957564b99d248a67985c55638b22c59b5"
 dependencies = [
  "version_check",
 ]
+
+[[package]]
+name = "clap"
+version = "4.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "90bc066a67923782aa8515dbaea16946c5bcc5addbd668bb80af688e53e548a0"
+dependencies = [
+ "clap_builder",
+]
+
+[[package]]
+name = "clap_builder"
+version = "4.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae129e2e766ae0ec03484e609954119f123cc1fe650337e155d03b022f24f7b4"
+dependencies = [
+ "anstyle",
+ "clap_lex",
+]
+
+[[package]]
+name = "clap_lex"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "98cc8fbded0c607b7ba9dd60cd98df59af97e84d24e49c8557331cfc26d301ce"
 
 [[package]]
 name = "clru"
@@ -1558,9 +1589,9 @@ dependencies = [
 
 [[package]]
 name = "either"
-version = "1.9.0"
+version = "1.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a26ae43d7bcc3b814de94796a5e736d4029efb0ee900c12e2d54c993ad1a1e07"
+checksum = "3dca9240753cf90908d7e4aac30f630662b02aebaa1b58a3cadabdb23385b58b"
 
 [[package]]
 name = "elliptic-curve"
@@ -3669,6 +3700,7 @@ dependencies = [
  "borsh 1.4.0",
  "borsh-ext",
  "clru",
+ "either",
  "ethers",
  "eyre",
  "itertools 0.12.1",
@@ -3773,6 +3805,7 @@ dependencies = [
  "prost-types",
  "rand 0.8.5",
  "rand_core 0.6.4",
+ "ripemd",
  "serde",
  "serde_json",
  "sha2 0.9.9",
@@ -3936,6 +3969,7 @@ dependencies = [
  "namada_core",
  "namada_macros",
  "namada_storage",
+ "smooth-operator",
  "thiserror",
 ]
 
@@ -3981,9 +4015,11 @@ dependencies = [
  "borsh 1.4.0",
  "borsh-ext",
  "circular-queue",
+ "clap",
  "data-encoding",
  "derivation-path",
  "duration-str",
+ "either",
  "ethbridge-bridge-contract",
  "ethers",
  "eyre",
@@ -4022,7 +4058,6 @@ dependencies = [
  "rand 0.8.5",
  "rand_core 0.6.4",
  "regex",
- "ripemd",
  "serde",
  "serde_json",
  "sha2 0.9.9",
@@ -4167,6 +4202,7 @@ dependencies = [
  "bitflags 2.5.0",
  "borsh 1.4.0",
  "data-encoding",
+ "either",
  "konst",
  "linkme",
  "masp_primitives",
@@ -4180,6 +4216,7 @@ dependencies = [
  "proptest",
  "prost",
  "prost-types",
+ "rand_core 0.6.4",
  "serde",
  "serde_json",
  "sha2 0.9.9",

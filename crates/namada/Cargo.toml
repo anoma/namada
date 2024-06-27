@@ -105,6 +105,7 @@ async-trait = { version = "0.1.51", optional = true }
 borsh.workspace = true
 borsh-ext.workspace = true
 clru.workspace = true
+either.workspace = true
 ethers.workspace = true
 eyre.workspace = true
 itertools.workspace = true
