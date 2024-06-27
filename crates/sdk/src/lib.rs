@@ -908,9 +908,7 @@ pub mod testing {
         VoteProposal(VoteProposalData),
         Withdraw(Withdraw),
         TransparentTransfer(Transfer),
-        ShieldedTransfer(Transfer, (StoredBuildParams, String)),
-        ShieldingTransfer(Transfer, (StoredBuildParams, String)),
-        UnshieldingTransfer(Transfer, (StoredBuildParams, String)),
+        MaspTransfer(Transfer, (StoredBuildParams, String)),
         Bond(Bond),
         Redelegation(Redelegation),
         UpdateStewardCommission(UpdateStewardCommission),
@@ -1128,7 +1126,7 @@ pub mod testing {
                         shielded_section_hash: Some(shielded_section_hash),
                     };
                     tx.add_data(data.clone());
-                    TxData::ShieldedTransfer(data, (build_params, build_param_bytes))
+                    TxData::MaspTransfer(data, (build_params, build_param_bytes))
                 },
                 MaspTxType::Shielding => {
                     // Set the transparent amount and token
@@ -1152,7 +1150,7 @@ pub mod testing {
                         shielded_section_hash: Some(shielded_section_hash),
                     };
                     tx.add_data(data.clone());
-                    TxData::ShieldingTransfer(data, (build_params, build_param_bytes))
+                    TxData::MaspTransfer(data, (build_params, build_param_bytes))
                 },
                 MaspTxType::Unshielding => {
                     // Set the transparent amount and token
@@ -1173,7 +1171,7 @@ pub mod testing {
                     ).collect();
                     let data = Transfer{data, shielded_section_hash: Some(shielded_section_hash) };
                     tx.add_data(data.clone());
-                    TxData::UnshieldingTransfer(data, (build_params, build_param_bytes))
+                    TxData::MaspTransfer(data, (build_params, build_param_bytes))
                 },
             };
             tx.add_masp_builder(MaspBuilder {

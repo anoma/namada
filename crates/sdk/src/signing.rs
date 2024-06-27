@@ -706,68 +706,56 @@ enum TransferSide<'a> {
     Target(&'a Address),
 }
 
-enum TokenTransfer<'a> {
-    Transparent(&'a token::Transfer),
-}
+struct TokenTransfer<'a>(&'a token::Transfer);
 
 impl TokenTransfer<'_> {
     fn sources(&self) -> Vec<&Address> {
-        match self {
-            TokenTransfer::Transparent(transfers) => transfers
-                .data
-                .iter()
-                .map(|transfer| &transfer.source)
-                .collect(),
-        }
+        self.0
+            .data
+            .iter()
+            .map(|transfer| &transfer.source)
+            .collect()
     }
 
     fn targets(&self) -> Vec<&Address> {
-        match self {
-            TokenTransfer::Transparent(transfers) => transfers
-                .data
-                .iter()
-                .map(|transfer| &transfer.target)
-                .collect(),
-        }
+        self.0
+            .data
+            .iter()
+            .map(|transfer| &transfer.target)
+            .collect()
     }
 
     fn tokens_and_amounts(
         &self,
         address: TransferSide<'_>,
     ) -> Result<HashMap<&Address, DenominatedAmount>, Error> {
-        Ok(match self {
-            TokenTransfer::Transparent(transfers) => {
-                let mut map: HashMap<&Address, DenominatedAmount> =
-                    HashMap::new();
+        let mut map: HashMap<&Address, DenominatedAmount> = HashMap::new();
 
-                match address {
-                    TransferSide::Source(source) => {
-                        for transfer in &transfers.data {
-                            if source == &transfer.source {
-                                Self::update_token_amount_map(
-                                    &mut map,
-                                    &transfer.token,
-                                    transfer.amount,
-                                )?;
-                            }
-                        }
-                    }
-                    TransferSide::Target(target) => {
-                        for transfer in &transfers.data {
-                            if target == &transfer.target {
-                                Self::update_token_amount_map(
-                                    &mut map,
-                                    &transfer.token,
-                                    transfer.amount,
-                                )?;
-                            }
-                        }
+        match address {
+            TransferSide::Source(source) => {
+                for transfer in &self.0.data {
+                    if source == &transfer.source {
+                        Self::update_token_amount_map(
+                            &mut map,
+                            &transfer.token,
+                            transfer.amount,
+                        )?;
                     }
                 }
-
-                map
             }
-        })
+            TransferSide::Target(target) => {
+                for transfer in &self.0.data {
+                    if target == &transfer.target {
+                        Self::update_token_amount_map(
+                            &mut map,
+                            &transfer.token,
+                            transfer.amount,
+                        )?;
+                    }
+                }
+            }
+        }
+        Ok(map)
     }
 
     fn update_token_amount_map<'a>(
@@ -1340,34 +1328,6 @@ pub async fn to_ledger_vector(
             .map_err(|err| {
                 Error::from(EncodingError::Conversion(err.to_string()))
             })?;
-
-            tv.name = "Transfer_0".to_string();
-
-            tv.output.push("Type : TransparentTransfer".to_string());
-            make_ledger_token_transfer_endpoints(
-                &tokens,
-                &mut tv.output,
-                TokenTransfer::Transparent(&transfer),
-                None,
-                &HashMap::default(),
-            )
-            .await?;
-            make_ledger_token_transfer_endpoints(
-                &tokens,
-                &mut tv.output_expert,
-                TokenTransfer::Transparent(&transfer),
-                None,
-                &HashMap::default(),
-            )
-            .await?;
-        } else if code_sec.tag == Some(TX_TRANSFER_WASM.to_string()) {
-            let transfer = token::Transfer::try_from_slice(
-                &tx.data(cmt)
-                    .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
-            )
-            .map_err(|err| {
-                Error::from(EncodingError::Conversion(err.to_string()))
-            })?;
             // To facilitate lookups of MASP AssetTypes
             let mut asset_types = HashMap::new();
             let builder = tx.sections.iter().find_map(|x| match x {
@@ -1389,13 +1349,13 @@ pub async fn to_ledger_vector(
                 _ => None,
             });
 
-            tv.name = "ShieldedTransfer_0".to_string();
+            tv.name = "Transfer_0".to_string();
 
-            tv.output.push("Type : ShieldedTransfer".to_string());
+            tv.output.push("Type : Transfer".to_string());
             make_ledger_token_transfer_endpoints(
                 &tokens,
                 &mut tv.output,
-                TokenTransfer::Transparent(&transfer),
+                TokenTransfer(&transfer),
                 builder,
                 &asset_types,
             )
@@ -1403,7 +1363,7 @@ pub async fn to_ledger_vector(
             make_ledger_token_transfer_endpoints(
                 &tokens,
                 &mut tv.output_expert,
-                TokenTransfer::Transparent(&transfer),
+                TokenTransfer(&transfer),
                 builder,
                 &asset_types,
             )

@@ -6889,7 +6889,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tx_transparent_transfer"
+name = "tx_transfer"
 version = "0.39.0"
 dependencies = [
  "getrandom 0.2.15",

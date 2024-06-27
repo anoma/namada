@@ -108,7 +108,7 @@ pub const TX_REVEAL_PK: &str = "tx_reveal_pk.wasm";
 /// Update validity predicate WASM path
 pub const TX_UPDATE_ACCOUNT_WASM: &str = "tx_update_account.wasm";
 /// Transparent transfer transaction WASM path
-pub const TX_TRANSFER_WASM: &str = "tx_transparent_transfer.wasm";
+pub const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
 /// IBC transaction WASM path
 pub const TX_IBC_WASM: &str = "tx_ibc.wasm";
 /// User validity predicate WASM path

@@ -17,7 +17,7 @@ members = [
     "tx_redelegate",
     "tx_resign_steward",
     "tx_reveal_pk",
-    "tx_transparent_transfer",
+    "tx_transfer",
     "tx_unbond",
     "tx_unjail_validator",
     "tx_update_account",

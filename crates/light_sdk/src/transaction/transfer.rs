@@ -16,10 +16,15 @@ pub struct TransferBuilder(Tx);
 
 impl TransferBuilder {
     /// Build a transparent transfer transaction from the given parameters
-    pub fn transparent(transfers: Transfer, args: GlobalArgs) -> Self {
+    pub fn transparent(transfers: Vec<TransferData>, args: GlobalArgs) -> Self {
+        let data = namada_sdk::token::Transfer {
+            data: transfers,
+            shielded_section_hash: None,
+        };
+
         Self(transaction::build_tx(
             args,
-            transfers,
+            data,
             TX_TRANSFER_WASM.to_string(),
         ))
     }
@@ -42,27 +47,8 @@ impl TransferBuilder {
         Self(tx)
     }
 
-    /// Build a shielding transfer transaction from the given parameters
-    pub fn shielding(
-        transfers: Vec<TransferData>,
-        shielded_section_hash: Hash,
-        transaction: Transaction,
-        args: GlobalArgs,
-    ) -> Self {
-        let data = namada_sdk::token::Transfer {
-            data: transfers,
-            shielded_section_hash: Some(shielded_section_hash),
-        };
-
-        let mut tx =
-            transaction::build_tx(args, data, TX_TRANSFER_WASM.to_string());
-        tx.add_masp_tx_section(transaction);
-
-        Self(tx)
-    }
-
-    /// Build an unshielding transfer transaction from the given parameters
-    pub fn unshielding(
+    /// Build a MASP transfer transaction from the given parameters
+    pub fn masp(
         transfers: Vec<TransferData>,
         shielded_section_hash: Hash,
         transaction: Transaction,
