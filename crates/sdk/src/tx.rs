@@ -108,9 +108,7 @@ pub const TX_REVEAL_PK: &str = "tx_reveal_pk.wasm";
 /// Update validity predicate WASM path
 pub const TX_UPDATE_ACCOUNT_WASM: &str = "tx_update_account.wasm";
 /// Transparent transfer transaction WASM path
-pub const TX_TRANSPARENT_TRANSFER_WASM: &str = "tx_transparent_transfer.wasm";
-/// Shielded transfer transaction WASM path
-pub const TX_SHIELDED_TRANSFER_WASM: &str = "tx_shielded_transfer.wasm";
+pub const TX_TRANSFER_WASM: &str = "tx_transparent_transfer.wasm";
 /// Shielding transfer transaction WASM path
 pub const TX_SHIELDING_TRANSFER_WASM: &str = "tx_shielding_transfer.wasm";
 /// Unshielding transfer transaction WASM path
@@ -2989,39 +2987,39 @@ pub async fn build_shielded_transfer<N: Namada>(
     .await?
     .expect("Shielded transfer must have shielded parts");
 
-    let add_shielded_parts =
-        |tx: &mut Tx, data: &mut token::ShieldedTransfer| {
-            // Add the MASP Transaction and its Builder to facilitate validation
-            let (
-                ShieldedTransfer {
-                    builder,
-                    masp_tx,
-                    metadata,
-                    epoch: _,
-                },
-                asset_types,
-            ) = shielded_parts;
-            // Add a MASP Transaction section to the Tx and get the tx hash
-            let section_hash = tx.add_masp_tx_section(masp_tx).1;
-
-            tx.add_masp_builder(MaspBuilder {
-                asset_types,
-                // Store how the Info objects map to Descriptors/Outputs
-                metadata,
-                // Store the data that was used to construct the Transaction
+    let add_shielded_parts = |tx: &mut Tx, data: &mut token::Transfer| {
+        // Add the MASP Transaction and its Builder to facilitate validation
+        let (
+            ShieldedTransfer {
                 builder,
-                // Link the Builder to the Transaction by hash code
-                target: section_hash,
-            });
+                masp_tx,
+                metadata,
+                epoch: _,
+            },
+            asset_types,
+        ) = shielded_parts;
+        // Add a MASP Transaction section to the Tx and get the tx hash
+        let section_hash = tx.add_masp_tx_section(masp_tx).1;
 
-            data.section_hash = section_hash;
-            tracing::debug!("Transfer data {data:?}");
-            Ok(())
-        };
+        tx.add_masp_builder(MaspBuilder {
+            asset_types,
+            // Store how the Info objects map to Descriptors/Outputs
+            metadata,
+            // Store the data that was used to construct the Transaction
+            builder,
+            // Link the Builder to the Transaction by hash code
+            target: section_hash,
+        });
+
+        data.shielded_section_hash = Some(section_hash);
+        tracing::debug!("Transfer data {data:?}");
+        Ok(())
+    };
 
     // Construct the tx data with a placeholder shielded section hash
-    let data = token::ShieldedTransfer {
-        section_hash: Hash::zero(),
+    let data = token::Transfer {
+        data: vec![],
+        shielded_section_hash: None,
     };
     let tx = build_pow_flag(
         context,

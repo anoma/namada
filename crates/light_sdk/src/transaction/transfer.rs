@@ -8,8 +8,7 @@ pub use namada_sdk::token::{
 };
 use namada_sdk::tx::data::GasLimit;
 use namada_sdk::tx::{
-    Authorization, Tx, TxError, TX_SHIELDED_TRANSFER_WASM,
-    TX_SHIELDING_TRANSFER_WASM, TX_TRANSPARENT_TRANSFER_WASM,
+    Authorization, Tx, TxError, TX_SHIELDING_TRANSFER_WASM, TX_TRANSFER_WASM,
     TX_UNSHIELDING_TRANSFER_WASM,
 };
 
@@ -26,7 +25,7 @@ impl TransferBuilder {
         Self(transaction::build_tx(
             args,
             transfers,
-            TX_TRANSPARENT_TRANSFER_WASM.to_string(),
+            TX_TRANSFER_WASM.to_string(),
         ))
     }
 
@@ -36,15 +35,13 @@ impl TransferBuilder {
         transaction: Transaction,
         args: GlobalArgs,
     ) -> Self {
-        let data = namada_sdk::token::ShieldedTransfer {
-            section_hash: shielded_section_hash,
+        let data = namada_sdk::token::Transfer {
+            data: vec![],
+            shielded_section_hash: Some(shielded_section_hash),
         };
 
-        let mut tx = transaction::build_tx(
-            args,
-            data,
-            TX_SHIELDED_TRANSFER_WASM.to_string(),
-        );
+        let mut tx =
+            transaction::build_tx(args, data, TX_TRANSFER_WASM.to_string());
         tx.add_masp_tx_section(transaction);
 
         Self(tx)

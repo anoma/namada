@@ -6889,15 +6889,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tx_shielded_transfer"
-version = "0.39.0"
-dependencies = [
- "getrandom 0.2.15",
- "namada_tx_prelude",
- "rlsf",
-]
-
-[[package]]
 name = "tx_shielding_transfer"
 version = "0.39.0"
 dependencies = [

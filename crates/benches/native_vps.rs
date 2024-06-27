@@ -62,8 +62,7 @@ use namada_node::bench_utils::{
     generate_foreign_key_tx, BenchShell, BenchShieldedCtx,
     ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
     TX_BRIDGE_POOL_WASM, TX_IBC_WASM, TX_INIT_PROPOSAL_WASM, TX_RESIGN_STEWARD,
-    TX_TRANSPARENT_TRANSFER_WASM, TX_UPDATE_STEWARD_COMMISSION,
-    TX_VOTE_PROPOSAL_WASM,
+    TX_TRANSFER_WASM, TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL_WASM,
 };
 use rand_core::OsRng;
 
@@ -475,8 +474,8 @@ fn vp_multitoken(c: &mut Criterion) {
         generate_foreign_key_tx(&defaults::albert_keypair());
 
     let transfer = shell.generate_tx(
-        TX_TRANSPARENT_TRANSFER_WASM,
-        Transfer(vec![TransferData {
+        TX_TRANSFER_WASM,
+        Transfer::transparent(vec![TransferData {
             source: defaults::albert_address(),
             target: defaults::bertha_address(),
             token: address::testing::nam(),

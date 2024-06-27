@@ -73,11 +73,10 @@ use tx::{
     TX_CLAIM_REWARDS_WASM, TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM,
     TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL, TX_REACTIVATE_VALIDATOR_WASM,
     TX_REDELEGATE_WASM, TX_RESIGN_STEWARD, TX_REVEAL_PK,
-    TX_SHIELDED_TRANSFER_WASM, TX_SHIELDING_TRANSFER_WASM,
-    TX_TRANSPARENT_TRANSFER_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
-    TX_UNSHIELDING_TRANSFER_WASM, TX_UPDATE_ACCOUNT_WASM,
-    TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
-    VP_USER_WASM,
+    TX_SHIELDING_TRANSFER_WASM, TX_TRANSFER_WASM, TX_UNBOND_WASM,
+    TX_UNJAIL_VALIDATOR_WASM, TX_UNSHIELDING_TRANSFER_WASM,
+    TX_UPDATE_ACCOUNT_WASM, TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL,
+    TX_WITHDRAW_WASM, VP_USER_WASM,
 };
 use wallet::{Wallet, WalletIo, WalletStorage};
 
@@ -179,7 +178,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     ) -> args::TxTransparentTransfer {
         args::TxTransparentTransfer {
             data,
-            tx_code_path: PathBuf::from(TX_TRANSPARENT_TRANSFER_WASM),
+            tx_code_path: PathBuf::from(TX_TRANSFER_WASM),
             tx: self.tx_builder(),
         }
     }
@@ -192,7 +191,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     ) -> args::TxShieldedTransfer {
         args::TxShieldedTransfer {
             data,
-            tx_code_path: PathBuf::from(TX_SHIELDED_TRANSFER_WASM),
+            tx_code_path: PathBuf::from(TX_TRANSFER_WASM),
             tx: self.tx_builder(),
         }
     }
@@ -853,7 +852,7 @@ pub mod testing {
     use namada_governance::{InitProposalData, VoteProposalData};
     use namada_ibc::testing::arb_ibc_any;
     use namada_token::testing::arb_denominated_amount;
-    use namada_token::{ShieldedTransfer, Transfer};
+    use namada_token::Transfer;
     use namada_tx::data::pgf::UpdateStewardCommission;
     use namada_tx::data::pos::{
         BecomeValidator, Bond, CommissionChange, ConsensusKeyChange,
@@ -912,7 +911,7 @@ pub mod testing {
         VoteProposal(VoteProposalData),
         Withdraw(Withdraw),
         TransparentTransfer(Transfer),
-        ShieldedTransfer(ShieldedTransfer, (StoredBuildParams, String)),
+        ShieldedTransfer(Transfer, (StoredBuildParams, String)),
         ShieldingTransfer(ShieldingMultiTransfer, (StoredBuildParams, String)),
         UnshieldingTransfer(
             UnshieldingMultiTransfer,
@@ -1082,7 +1081,7 @@ pub mod testing {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
             tx.add_data(transfer.clone());
-            tx.add_code_from_hash(code_hash, Some(TX_TRANSPARENT_TRANSFER_WASM.to_owned()));
+            tx.add_code_from_hash(code_hash, Some(TX_TRANSFER_WASM.to_owned()));
             (tx, TxData::TransparentTransfer(transfer))
         }
     }
@@ -1129,8 +1128,11 @@ pub mod testing {
                 data_encoding::HEXLOWER.encode(&build_params.serialize_to_vec());
             let tx_data = match masp_tx_type {
                 MaspTxType::Shielded => {
-                    tx.add_code_from_hash(code_hash, Some(TX_SHIELDED_TRANSFER_WASM.to_owned()));
-                    let data = ShieldedTransfer { section_hash: shielded_section_hash };
+                    tx.add_code_from_hash(code_hash, Some(TX_TRANSFER_WASM.to_owned()));
+                    let data = Transfer {
+                        data: vec![],
+                        shielded_section_hash: Some(shielded_section_hash),
+                    };
                     tx.add_data(data.clone());
                     TxData::ShieldedTransfer(data, (build_params, build_param_bytes))
                 },

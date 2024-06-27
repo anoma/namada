@@ -17,7 +17,6 @@ members = [
     "tx_redelegate",
     "tx_resign_steward",
     "tx_reveal_pk",
-    "tx_shielded_transfer",
     "tx_shielding_transfer",
     "tx_transparent_transfer",
     "tx_unbond",

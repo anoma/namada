@@ -7,7 +7,7 @@ use namada::token::{Amount, DenominatedAmount, Transfer, TransferData};
 use namada::tx::data::{Fee, WrapperTx};
 use namada::tx::Authorization;
 use namada_apps_lib::wallet::defaults;
-use namada_node::bench_utils::{BenchShell, TX_TRANSPARENT_TRANSFER_WASM};
+use namada_node::bench_utils::{BenchShell, TX_TRANSFER_WASM};
 use namada_node::shell::process_proposal::ValidationMeta;
 
 fn process_tx(c: &mut Criterion) {
@@ -18,8 +18,8 @@ fn process_tx(c: &mut Criterion) {
         BlockHeight(2);
 
     let mut batched_tx = shell.generate_tx(
-        TX_TRANSPARENT_TRANSFER_WASM,
-        Transfer(vec![TransferData {
+        TX_TRANSFER_WASM,
+        Transfer::transparent(vec![TransferData {
             source: defaults::albert_address(),
             target: defaults::bertha_address(),
             token: address::testing::nam(),

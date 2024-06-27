@@ -76,8 +76,8 @@ use namada::ledger::queries::{
 use namada::masp::MaspTxRefs;
 use namada::state::StorageRead;
 use namada::token::{
-    Amount, DenominatedAmount, ShieldedTransfer, ShieldingMultiTransfer,
-    ShieldingTransfer, ShieldingTransferData, UnshieldingMultiTransfer,
+    Amount, DenominatedAmount, ShieldingMultiTransfer, ShieldingTransfer,
+    ShieldingTransferData, Transfer, UnshieldingMultiTransfer,
     UnshieldingTransferData,
 };
 use namada::tx::data::pos::Bond;
@@ -105,11 +105,11 @@ pub use namada_sdk::tx::{
     TX_CLAIM_REWARDS_WASM, TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM,
     TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL as TX_INIT_PROPOSAL_WASM,
     TX_REACTIVATE_VALIDATOR_WASM, TX_REDELEGATE_WASM, TX_RESIGN_STEWARD,
-    TX_REVEAL_PK as TX_REVEAL_PK_WASM, TX_SHIELDED_TRANSFER_WASM,
-    TX_SHIELDING_TRANSFER_WASM, TX_TRANSPARENT_TRANSFER_WASM, TX_UNBOND_WASM,
-    TX_UNJAIL_VALIDATOR_WASM, TX_UNSHIELDING_TRANSFER_WASM,
-    TX_UPDATE_ACCOUNT_WASM, TX_UPDATE_STEWARD_COMMISSION,
-    TX_VOTE_PROPOSAL as TX_VOTE_PROPOSAL_WASM, TX_WITHDRAW_WASM, VP_USER_WASM,
+    TX_REVEAL_PK as TX_REVEAL_PK_WASM, TX_SHIELDING_TRANSFER_WASM,
+    TX_TRANSFER_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
+    TX_UNSHIELDING_TRANSFER_WASM, TX_UPDATE_ACCOUNT_WASM,
+    TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL as TX_VOTE_PROPOSAL_WASM,
+    TX_WITHDRAW_WASM, VP_USER_WASM,
 };
 use namada_sdk::wallet::Wallet;
 use namada_sdk::{Namada, NamadaImpl};
@@ -1117,9 +1117,10 @@ impl BenchShieldedCtx {
             && target.effective_address() == MASP
         {
             namada.client().generate_tx(
-                TX_SHIELDED_TRANSFER_WASM,
-                ShieldedTransfer {
-                    section_hash: shielded_section_hash,
+                TX_TRANSFER_WASM,
+                Transfer {
+                    data: vec![],
+                    shielded_section_hash: Some(shielded_section_hash),
                 },
                 Some(shielded),
                 None,

@@ -19,7 +19,7 @@ use namada_node::shell::testing::node::NodeResults;
 use namada_node::shell::testing::utils::{Bin, CapturedOutput};
 use namada_sdk::migrations;
 use namada_sdk::queries::RPC;
-use namada_sdk::tx::{TX_TRANSPARENT_TRANSFER_WASM, VP_USER_WASM};
+use namada_sdk::tx::{TX_TRANSFER_WASM, VP_USER_WASM};
 use namada_test_utils::TestWasms;
 use test_log::test;
 
@@ -59,7 +59,7 @@ fn ledger_txs_and_queries() -> Result<()> {
     let validator_one_rpc = "http://127.0.0.1:26567";
 
     let (node, _services) = setup::setup()?;
-    let transfer = token::Transfer(vec![token::TransferData {
+    let transfer = token::Transfer::transparent(vec![token::TransferData {
         source: defaults::bertha_address(),
         target: defaults::albert_address(),
         token: node.native_token(),
@@ -140,7 +140,7 @@ fn ledger_txs_and_queries() -> Result<()> {
         vec![
             "tx",
             "--code-path",
-            TX_TRANSPARENT_TRANSFER_WASM,
+            TX_TRANSFER_WASM,
             "--data-path",
             &tx_data_path,
             "--owner",

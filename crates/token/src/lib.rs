@@ -89,6 +89,16 @@ pub struct Transfer {
     pub shielded_section_hash: Option<Hash>,
 }
 
+impl Transfer {
+    /// Make a transparent transfer
+    pub fn transparent(data: Vec<TransferData>) -> Self {
+        Self {
+            data,
+            shielded_section_hash: None,
+        }
+    }
+}
+
 /// Arguments for a transparent token transfer
 #[derive(
     Debug,
@@ -113,26 +123,6 @@ pub struct TransferData {
     pub token: Address,
     /// The amount of tokens
     pub amount: DenominatedAmount,
-}
-
-/// Arguments for a shielded token transfer
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshDeserializer,
-    BorshSchema,
-    Hash,
-    Eq,
-    PartialOrd,
-    Serialize,
-    Deserialize,
-)]
-pub struct ShieldedTransfer {
-    /// Hash of tx section that contains the MASP transaction
-    pub section_hash: Hash,
 }
 
 /// Arguments for a shielding transfer (from a transparent token to a shielded

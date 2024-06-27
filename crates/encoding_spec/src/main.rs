@@ -81,9 +81,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let signature_schema = schema_container_of::<Signature>();
     let init_account_schema = schema_container_of::<account::InitAccount>();
     let init_validator_schema = schema_container_of::<pos::BecomeValidator>();
-    let transparent_transfer_schema = schema_container_of::<token::Transfer>();
-    let shielded_transfer_schema =
-        schema_container_of::<token::ShieldedTransfer>();
+    let transfer_schema = schema_container_of::<token::Transfer>();
     let shielding_transfer_schema =
         schema_container_of::<token::ShieldingTransfer>();
     let unshielding_transfer_schema =
@@ -114,8 +112,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     definitions.extend(btree(&signature_schema));
     definitions.extend(btree(&init_account_schema));
     definitions.extend(btree(&init_validator_schema));
-    definitions.extend(btree(&transparent_transfer_schema));
-    definitions.extend(btree(&shielded_transfer_schema));
+    definitions.extend(btree(&transfer_schema));
     definitions.extend(btree(&shielding_transfer_schema));
     definitions.extend(btree(&unshielding_transfer_schema));
     definitions.extend(btree(&update_account));
@@ -190,11 +187,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/transaction/struct.InitValidator.html");
     tables.push(init_validator_table);
 
-    let token_transfer_definition = definitions
-        .remove(transparent_transfer_schema.declaration())
-        .unwrap();
+    let token_transfer_definition =
+        definitions.remove(transfer_schema.declaration()).unwrap();
     let token_transfer_table = definition_to_table(
-        transparent_transfer_schema.declaration(),
+        transfer_schema.declaration(),
         token_transfer_definition,
     ).with_rust_doc_link("https://dev.namada.net/master/rustdoc/namada/types/token/struct.Transfer.html");
     tables.push(token_transfer_table);
