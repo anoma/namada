@@ -793,11 +793,13 @@ pub enum Section {
     Header(Header),
 }
 
+#[cfg(feature = "arbitrary")]
 std::thread_local! {
     #[allow(non_upper_case_globals)]
     static RECURSIVE_COUNT_Section: ::core::cell::Cell<u32> = ::core::cell::Cell::new(0);
 }
 
+#[cfg(feature = "arbitrary")]
 impl<'arbitrary> arbitrary::Arbitrary<'arbitrary> for Section {
     fn arbitrary(
         u: &mut arbitrary::Unstructured<'arbitrary>,
