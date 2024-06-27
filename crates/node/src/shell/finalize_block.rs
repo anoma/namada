@@ -43,22 +43,7 @@ where
     /// of epoch changes and applies associated updates to validator sets,
     /// etc. as necessary.
     ///
-    /// Validate and apply decrypted transactions unless
-    /// [`Shell::process_proposal`] detected that they were not submitted in
-    /// correct order or more decrypted txs arrived than expected. In that
-    /// case, all decrypted transactions are not applied and must be
-    /// included in the next `Shell::prepare_proposal` call.
-    ///
-    /// Incoming wrapper txs need no further validation. They
-    /// are added to the block.
-    ///
-    /// Error codes:
-    ///   0: Ok
-    ///   1: Invalid tx
-    ///   2: Tx is invalidly signed
-    ///   3: Wasm runtime error
-    ///   4: Invalid order of decrypted txs
-    ///   5. More decrypted txs than expected
+    /// Apply the transactions included in the block.
     pub fn finalize_block(
         &mut self,
         req: shim::request::FinalizeBlock,
