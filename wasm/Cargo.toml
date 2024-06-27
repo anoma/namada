@@ -20,7 +20,6 @@ members = [
     "tx_transparent_transfer",
     "tx_unbond",
     "tx_unjail_validator",
-    "tx_unshielding_transfer",
     "tx_update_account",
     "tx_update_steward_commission",
     "tx_vote_proposal",

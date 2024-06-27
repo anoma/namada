@@ -73,9 +73,9 @@ use tx::{
     TX_CLAIM_REWARDS_WASM, TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM,
     TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL, TX_REACTIVATE_VALIDATOR_WASM,
     TX_REDELEGATE_WASM, TX_RESIGN_STEWARD, TX_REVEAL_PK, TX_TRANSFER_WASM,
-    TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM, TX_UNSHIELDING_TRANSFER_WASM,
-    TX_UPDATE_ACCOUNT_WASM, TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL,
-    TX_WITHDRAW_WASM, VP_USER_WASM,
+    TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
+    TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
+    VP_USER_WASM,
 };
 use wallet::{Wallet, WalletIo, WalletStorage};
 
@@ -220,7 +220,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
         args::TxUnshieldingTransfer {
             source,
             data,
-            tx_code_path: PathBuf::from(TX_UNSHIELDING_TRANSFER_WASM),
+            tx_code_path: PathBuf::from(TX_TRANSFER_WASM),
             tx: self.tx_builder(),
         }
     }
@@ -865,9 +865,7 @@ pub mod testing {
     use ripemd::Digest as RipemdDigest;
     use sha2::Digest;
     use token::testing::arb_vectorized_transparent_transfer;
-    use token::{
-        TransferData, UnshieldingMultiTransfer, UnshieldingTransferData,
-    };
+    use token::TransferData;
 
     use super::*;
     use crate::account::tests::{arb_init_account, arb_update_account};
@@ -912,10 +910,7 @@ pub mod testing {
         TransparentTransfer(Transfer),
         ShieldedTransfer(Transfer, (StoredBuildParams, String)),
         ShieldingTransfer(Transfer, (StoredBuildParams, String)),
-        UnshieldingTransfer(
-            UnshieldingMultiTransfer,
-            (StoredBuildParams, String),
-        ),
+        UnshieldingTransfer(Transfer, (StoredBuildParams, String)),
         Bond(Bond),
         Redelegation(Redelegation),
         UpdateStewardCommission(UpdateStewardCommission),
@@ -1167,15 +1162,16 @@ pub mod testing {
                         token::Amount::from_masp_denominated(*value, decoded.position),
                         decoded.denom,
                     );
-                    tx.add_code_from_hash(code_hash, Some(TX_UNSHIELDING_TRANSFER_WASM.to_owned()));
+                    tx.add_code_from_hash(code_hash, Some(TX_TRANSFER_WASM.to_owned()));
                     let data = transfers.data.into_iter().map(|transfer|
-                    UnshieldingTransferData{
+                    TransferData{
                         target: transfer.target,
                             token: token.clone(),
-                            amount
+                        amount,
+                        source: MASP,
                     }
                     ).collect();
-                    let data = UnshieldingMultiTransfer{data, shielded_section_hash };
+                    let data = Transfer{data, shielded_section_hash: Some(shielded_section_hash) };
                     tx.add_data(data.clone());
                     TxData::UnshieldingTransfer(data, (build_params, build_param_bytes))
                 },

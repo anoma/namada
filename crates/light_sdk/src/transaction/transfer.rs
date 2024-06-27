@@ -3,13 +3,9 @@ use namada_sdk::hash::Hash;
 use namada_sdk::key::common;
 use namada_sdk::token::transaction::Transaction;
 use namada_sdk::token::TransferData;
-pub use namada_sdk::token::{
-    DenominatedAmount, Transfer, UnshieldingTransferData,
-};
+pub use namada_sdk::token::{DenominatedAmount, Transfer};
 use namada_sdk::tx::data::GasLimit;
-use namada_sdk::tx::{
-    Authorization, Tx, TxError, TX_TRANSFER_WASM, TX_UNSHIELDING_TRANSFER_WASM,
-};
+use namada_sdk::tx::{Authorization, Tx, TxError, TX_TRANSFER_WASM};
 
 use super::{attach_fee, attach_fee_signature, GlobalArgs};
 use crate::transaction;
@@ -67,21 +63,18 @@ impl TransferBuilder {
 
     /// Build an unshielding transfer transaction from the given parameters
     pub fn unshielding(
-        transfers: Vec<UnshieldingTransferData>,
+        transfers: Vec<TransferData>,
         shielded_section_hash: Hash,
         transaction: Transaction,
         args: GlobalArgs,
     ) -> Self {
-        let data = namada_sdk::token::UnshieldingMultiTransfer {
+        let data = namada_sdk::token::Transfer {
             data: transfers,
-            shielded_section_hash,
+            shielded_section_hash: Some(shielded_section_hash),
         };
 
-        let mut tx = transaction::build_tx(
-            args,
-            data,
-            TX_UNSHIELDING_TRANSFER_WASM.to_string(),
-        );
+        let mut tx =
+            transaction::build_tx(args, data, TX_TRANSFER_WASM.to_string());
         tx.add_masp_tx_section(transaction);
 
         Self(tx)
