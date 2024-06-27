@@ -82,7 +82,12 @@ where
     Serialize,
     Deserialize,
 )]
-pub struct TransparentTransfer(pub Vec<TransparentTransferData>);
+pub struct TransparentTransfer {
+    /// Transfer-specific data
+    pub data: Vec<TransparentTransferData>,
+    /// Hash of tx section that contains the MASP transaction
+    pub shielded_section_hash: Option<Hash>,
+}
 
 /// Arguments for a transparent token transfer
 #[derive(
@@ -307,6 +312,9 @@ pub mod testing {
         number_of_txs: usize,
     ) -> impl Strategy<Value = TransparentTransfer> {
         proptest::collection::vec(arb_transparent_transfer(), 0..number_of_txs)
-            .prop_map(TransparentTransfer)
+            .prop_map(|data| TransparentTransfer {
+                data,
+                shielded_section_hash: None,
+            })
     }
 }

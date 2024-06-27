@@ -1117,8 +1117,8 @@ pub mod testing {
             code_hash in arb_hash(),
             (masp_tx_type, (shielded_transfer, asset_types, build_params)) in prop_oneof![
                 (Just(MaspTxType::Shielded), arb_shielded_transfer(0..MAX_ASSETS)),
-                (Just(MaspTxType::Shielding), arb_shielding_transfer(encode_address(&transfers.0.first().unwrap().source), 1)),
-                (Just(MaspTxType::Unshielding), arb_deshielding_transfer(encode_address(&transfers.0.first().unwrap().target), 1)),
+                (Just(MaspTxType::Shielding), arb_shielding_transfer(encode_address(&transfers.data.first().unwrap().source), 1)),
+                (Just(MaspTxType::Unshielding), arb_deshielding_transfer(encode_address(&transfers.data.first().unwrap().target), 1)),
             ],
             transfers in Just(transfers),
         ) -> (Tx, TxData) {
@@ -1143,7 +1143,7 @@ pub mod testing {
                         decoded.denom,
                     );
                     tx.add_code_from_hash(code_hash, Some(TX_SHIELDING_TRANSFER_WASM.to_owned()));
-                    let data = transfers.0.into_iter().map(|transfer|
+                    let data = transfers.data.into_iter().map(|transfer|
                     ShieldingTransferData{
                         source: transfer.source,
                             token: token.clone(),
@@ -1163,7 +1163,7 @@ pub mod testing {
                         decoded.denom,
                     );
                     tx.add_code_from_hash(code_hash, Some(TX_UNSHIELDING_TRANSFER_WASM.to_owned()));
-                    let data = transfers.0.into_iter().map(|transfer|
+                    let data = transfers.data.into_iter().map(|transfer|
                     UnshieldingTransferData{
                         target: transfer.target,
                             token: token.clone(),

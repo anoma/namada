@@ -2928,7 +2928,10 @@ pub async fn build_transparent_transfer<N: Namada>(
         transfers.push(transfer_data);
     }
     // Construct the corresponding transparent Transfer object
-    let transfer = token::TransparentTransfer(transfers);
+    let transfer = token::TransparentTransfer {
+        data: transfers,
+        shielded_section_hash: None,
+    };
 
     let tx = build_pow_flag(
         context,
