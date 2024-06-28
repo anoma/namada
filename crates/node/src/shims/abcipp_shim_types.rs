@@ -7,7 +7,6 @@ pub mod shim {
     use thiserror::Error;
 
     use super::{Request as Req, Response as Resp};
-    use crate::facade::tendermint::abci::types::VoteInfo;
     use crate::facade::tendermint::v0_37::abci::{
         request as tm_request, response as tm_response,
     };
@@ -175,7 +174,6 @@ pub mod shim {
         use namada::tendermint::abci::types::CommitInfo;
         use namada::tendermint::block::Height;
 
-        use super::VoteInfo;
         use crate::facade::tendermint::abci::types::Misbehavior;
         use crate::facade::tendermint::v0_37::abci::request as tm_request;
 
@@ -196,9 +194,6 @@ pub mod shim {
             pub byzantine_validators: Vec<Misbehavior>,
             pub txs: Vec<ProcessedTx>,
             pub proposer_address: Vec<u8>,
-            // FIXME: remove votes caus it's already contained in
-            // decided_last_commit
-            pub votes: Vec<VoteInfo>,
             pub height: Height,
             pub decided_last_commit: CommitInfo,
         }
@@ -219,7 +214,6 @@ pub mod shim {
                     byzantine_validators: req.byzantine_validators,
                     txs: vec![],
                     proposer_address: header.proposer_address.into(),
-                    votes: req.last_commit_info.votes.clone(),
                     height: header.height,
                     decided_last_commit: req.last_commit_info,
                 }
