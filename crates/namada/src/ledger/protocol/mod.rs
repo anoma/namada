@@ -12,6 +12,7 @@ use namada_events::extend::{
 };
 use namada_events::EventLevel;
 use namada_gas::TxGasMeter;
+use namada_parameters::get_gas_scale;
 use namada_state::TxWrites;
 use namada_token::event::{TokenEvent, TokenOperation, UserAccount};
 use namada_token::utils::is_masp_transfer;
@@ -487,10 +488,11 @@ where
         || (BatchResults::default(), None),
         |(batched_result, masp_section_ref)| {
             let mut batch = BatchResults::default();
-            batch.0.insert(
+            batch.insert_inner_tx_result(
                 // Ok to unwrap cause if we have a batched result it means
                 // we've executed the first tx in the batch
-                tx.first_commitments().unwrap().get_hash(),
+                tx.wrapper_hash().as_ref(),
+                either::Right(tx.first_commitments().unwrap()),
                 Ok(batched_result),
             );
             (batch, Some(MaspTxRefs(vec![masp_section_ref])))
@@ -694,11 +696,13 @@ where
         .expect("Error reading the storage")
         .expect("Missing masp fee payment gas limit in storage")
         .min(tx_gas_meter.borrow().tx_gas_limit.into());
+    let gas_scale = get_gas_scale(&**state).map_err(Error::StorageError)?;
 
     let mut gas_meter = TxGasMeter::new(
-        namada_gas::Gas::from_whole_units(max_gas_limit).ok_or_else(|| {
-            Error::GasError("Overflow in gas expansion".to_string())
-        })?,
+        namada_gas::Gas::from_whole_units(max_gas_limit, gas_scale)
+            .ok_or_else(|| {
+                Error::GasError("Overflow in gas expansion".to_string())
+            })?,
     );
     gas_meter
         .copy_consumed_gas_from(&tx_gas_meter.borrow())
