@@ -358,13 +358,15 @@ where
         match extended_dispatch_result {
             Ok(extended_tx_result) => match tx_data.tx.header.tx_type {
                 TxType::Wrapper(_) => {
+                    self.state.write_log_mut().commit_batch();
+
                     // Return withouth emitting any events
                     return Some(WrapperCache {
                         tx: tx_data.tx.to_owned(),
                         tx_index: tx_data.tx_index,
                         gas_meter: tx_data.tx_gas_meter,
                         event: tx_logs.tx_event,
-                        tx_result: extended_tx_result.tx_result,
+                        extended_tx_result,
                     });
                 }
                 _ => self.handle_inner_tx_results(
@@ -399,8 +401,10 @@ where
                     .extend(GasUsed(scaled_gas))
                     .extend(Info(msg.to_string()))
                     .extend(Code(ResultCode::InvalidTx));
-                // Make sure to clean the write logs for the next transaction
-                self.state.write_log_mut().drop_tx();
+                // Drop the batch write log which could contain invalid data.
+                // Important data that could be valid (e.g. a valid fee payment)
+                // must have already been moved to the bloc kwrite log by now
+                self.state.write_log_mut().drop_batch();
             }
             Err(dispatch_error) => {
                 // This branch represents an error that affects the entire
@@ -728,7 +732,10 @@ where
                         DispatchArgs::Wrapper {
                             wrapper,
                             tx_bytes: processed_tx.tx.as_ref(),
+                            tx_index: TxIndex::must_from_usize(tx_index),
                             block_proposer: native_block_proposer_address,
+                            vp_wasm_cache: &mut self.vp_wasm_cache,
+                            tx_wasm_cache: &mut self.tx_wasm_cache,
                         },
                         tx_gas_meter,
                     )
@@ -852,7 +859,7 @@ where
             tx_index,
             gas_meter: tx_gas_meter,
             event: tx_event,
-            tx_result: wrapper_tx_result,
+            extended_tx_result: wrapper_tx_result,
         } in successful_wrappers
         {
             let tx_hash = tx.header_hash();
@@ -920,7 +927,7 @@ struct WrapperCache {
     tx_index: usize,
     gas_meter: TxGasMeter,
     event: Event,
-    tx_result: namada::tx::data::TxResult<protocol::Error>,
+    extended_tx_result: namada::tx::data::ExtendedTxResult<protocol::Error>,
 }
 
 struct TxData<'tx> {
@@ -3688,8 +3695,8 @@ mod test_finalize_block {
         )
     }
 
-    // Test that if the fee payer doesn't have enough funds for fee payment the
-    // ledger drains their balance
+    // Test that if the fee payer doesn't have enough funds for fee payment none
+    // of the inner txs of the batch gets executed
     #[test]
     fn test_fee_payment_if_insufficient_balance() {
         let (mut shell, _, _, _) = setup();
@@ -3697,7 +3704,7 @@ mod test_finalize_block {
         let native_token = shell.state.in_mem().native_token.clone();
 
         // Credit some tokens for fee payment
-        let initial_balance = token::Amount::native_whole(1);
+        let initial_balance: token::Amount = 1.into();
         namada::token::credit_tokens(
             &mut shell.state,
             &native_token,
@@ -3713,45 +3720,20 @@ mod test_finalize_block {
         .unwrap();
         assert_eq!(balance, initial_balance);
 
-        let mut wrapper =
-            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-                Fee {
-                    amount_per_gas_unit: DenominatedAmount::native(200.into()),
-                    token: native_token.clone(),
-                },
-                keypair.ref_to(),
-                WRAPPER_GAS_LIMIT.into(),
-            ))));
-        wrapper.header.chain_id = shell.chain_id.clone();
-        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
-        wrapper.set_data(Data::new(
-            "Encrypted transaction data".as_bytes().to_owned(),
-        ));
-        wrapper.add_section(Section::Authorization(Authorization::new(
-            wrapper.sechashes(),
-            [(0, keypair.clone())].into_iter().collect(),
-            None,
-        )));
+        let (batch, processed_tx) =
+            mk_tx_batch(&shell, &keypair, false, false, false);
 
         // Check that the fees are higher than the initial balance of the fee
         // payer
         let fee_amount =
-            wrapper.header().wrapper().unwrap().get_tx_fee().unwrap();
+            batch.header().wrapper().unwrap().get_tx_fee().unwrap();
         let fee_amount = namada::token::denom_to_amount(
             fee_amount,
-            &wrapper.header().wrapper().unwrap().fee.token,
+            &batch.header().wrapper().unwrap().fee.token,
             &shell.state,
         )
         .unwrap();
         assert!(fee_amount > initial_balance);
-
-        let processed_tx = ProcessedTx {
-            tx: wrapper.to_bytes().into(),
-            result: TxResult {
-                code: ResultCode::Ok.into(),
-                info: "".into(),
-            },
-        };
 
         let event = &shell
             .finalize_block(FinalizeBlock {
@@ -3760,7 +3742,7 @@ mod test_finalize_block {
             })
             .expect("Test failed")[0];
 
-        // Check balance of fee payer is 0
+        // Check balance of fee payer is unchanged
         assert_eq!(*event.kind(), APPLIED_TX);
         let code = event.read_attribute::<CodeAttr>().expect("Test failed");
         assert_eq!(code, ResultCode::InvalidTx);
@@ -3771,7 +3753,16 @@ mod test_finalize_block {
         )
         .unwrap();
 
-        assert_eq!(balance, 0.into())
+        assert_eq!(balance, initial_balance);
+
+        // Check that none of the txs of the batch have been executed (batch
+        // attribute is missing)
+        assert!(event.read_attribute::<Batch<'_>>().is_err());
+
+        // Check storage modifications are missing
+        for key in ["random_key_1", "random_key_2", "random_key_3"] {
+            assert!(!shell.state.has_key(&key.parse().unwrap()).unwrap());
+        }
     }
 
     // Test that the fees collected from a block are withdrew from the wrapper
@@ -5503,7 +5494,7 @@ mod test_finalize_block {
         ));
         let keys_changed = BTreeSet::from([min_confirmations_key()]);
         let verifiers = BTreeSet::default();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = namada::ledger::native_vp::Ctx::new(
             shell.mode.get_validator_address().expect("Test failed"),
             shell.state.read_only(),

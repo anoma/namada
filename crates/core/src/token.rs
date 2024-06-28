@@ -231,13 +231,16 @@ impl Amount {
         Self { raw: Uint(raw) }
     }
 
-    /// Given a u128 and [`MaspDigitPos`], construct the corresponding
+    /// Given a i128 and [`MaspDigitPos`], construct the corresponding
     /// amount.
-    pub fn from_masp_denominated_u128(
-        val: u128,
+    pub fn from_masp_denominated_i128(
+        val: i128,
         denom: MaspDigitPos,
     ) -> Option<Self> {
-        let lo = u64::try_from(val).ok()?;
+        #[allow(clippy::cast_sign_loss)]
+        #[allow(clippy::cast_possible_truncation)]
+        let lo = val as u64;
+        #[allow(clippy::cast_sign_loss)]
         let hi = (val >> 64) as u64;
         let lo_pos = denom as usize;
         let hi_pos = lo_pos.checked_add(1)?;
@@ -921,18 +924,6 @@ impl MaspDigitPos {
     pub fn denominate<'a>(&self, amount: impl Into<&'a Amount>) -> u64 {
         let amount = amount.into();
         amount.raw.0[*self as usize]
-    }
-
-    /// Get the corresponding u64 word from the input uint256.
-    pub fn denominate_i128(&self, amount: &Change) -> i128 {
-        let val = i128::from(amount.abs().0[*self as usize]);
-        if Change::is_negative(amount) {
-            // Cannot panic as the value is limited to `u64` range
-            #[allow(clippy::arithmetic_side_effects)]
-            -val
-        } else {
-            val
-        }
     }
 }
 

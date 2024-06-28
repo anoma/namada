@@ -2,7 +2,6 @@
 //! and [`RevertProposal`] ABCI++ methods for the Shell
 
 use data_encoding::HEXUPPER;
-use namada::hash::Hash;
 use namada::ledger::pos::PosQueries;
 use namada::proof_of_stake::storage::find_validator_by_raw_hash;
 use namada::tx::data::protocol::ProtocolTxType;
@@ -137,9 +136,11 @@ where
 
         let tx_results: Vec<_> = txs
             .iter()
-            .map(|tx_bytes| {
+            .enumerate()
+            .map(|(tx_index, tx_bytes)| {
                 let result = self.check_proposal_tx(
                     tx_bytes,
+                    &TxIndex::must_from_usize(tx_index),
                     &mut metadata,
                     &mut temp_state,
                     block_time,
@@ -149,7 +150,7 @@ where
                 );
                 let error_code = ResultCode::from_u32(result.code).unwrap();
                 if let ResultCode::Ok = error_code {
-                    temp_state.write_log_mut().commit_tx();
+                    temp_state.write_log_mut().commit_batch();
                 } else {
                     tracing::info!(
                         "Process proposal rejected an invalid tx. Error code: \
@@ -157,7 +158,7 @@ where
                         error_code,
                         result.info
                     );
-                    temp_state.write_log_mut().drop_tx();
+                    temp_state.write_log_mut().drop_batch();
                 }
                 result
             })
@@ -191,6 +192,7 @@ where
     pub fn check_proposal_tx<CA>(
         &self,
         tx_bytes: &[u8],
+        tx_index: &TxIndex,
         metadata: &mut ValidationMeta,
         temp_state: &mut TempWlState<'_, D, H>,
         block_time: DateTimeUtc,
@@ -479,7 +481,8 @@ where
                 // Check that the fee payer has sufficient balance.
                 if let Err(e) = process_proposal_fee_check(
                     &wrapper,
-                    tx.header_hash(),
+                    &tx,
+                    tx_index,
                     block_proposer,
                     &mut ShellParams::new(
                         &RefCell::new(tx_gas_meter),
@@ -525,10 +528,10 @@ where
     }
 }
 
-// TODO(namada#2597): check masp fee payment if required
 fn process_proposal_fee_check<D, H, CA>(
     wrapper: &WrapperTx,
-    wrapper_tx_hash: Hash,
+    tx: &Tx,
+    tx_index: &TxIndex,
     proposer: &Address,
     shell_params: &mut ShellParams<'_, TempWlState<'_, D, H>, D, H, CA>,
 ) -> Result<()>
@@ -549,13 +552,8 @@ where
 
     fee_data_check(wrapper, minimum_gas_price, shell_params)?;
 
-    protocol::transfer_fee(
-        shell_params.state,
-        proposer,
-        wrapper,
-        wrapper_tx_hash,
-    )
-    .map_err(Error::TxApply)
+    protocol::transfer_fee(shell_params, proposer, tx, wrapper, tx_index)
+        .map_or_else(|e| Err(Error::TxApply(e)), |_| Ok(()))
 }
 
 /// We test the failure cases of [`process_proposal`]. The happy flows
@@ -1034,9 +1032,7 @@ mod test_process_proposal {
             response.result.info,
             String::from(
                 "Error trying to apply a transaction: Error while processing \
-                 transaction's fees: Transparent balance of wrapper's signer \
-                 was insufficient to pay fee. All the available transparent \
-                 funds have been moved to the block proposer"
+                 transaction's fees: Insufficient funds for fee payment"
             )
         );
     }
@@ -1100,9 +1096,7 @@ mod test_process_proposal {
             response.result.info,
             String::from(
                 "Error trying to apply a transaction: Error while processing \
-                 transaction's fees: Transparent balance of wrapper's signer \
-                 was insufficient to pay fee. All the available transparent \
-                 funds have been moved to the block proposer"
+                 transaction's fees: Insufficient funds for fee payment"
             )
         );
     }

@@ -7,7 +7,7 @@ pub use namada_token::testing;
 pub use namada_token::{
     storage_key, utils, Amount, DenominatedAmount, ShieldedTransfer,
     ShieldingMultiTransfer, ShieldingTransfer, TransparentTransfer,
-    UnshieldingMultiTransfer, UnshieldingTransfer,
+    UnshieldingMultiTransfer, UnshieldingTransfer, UnshieldingTransferData,
 };
 use namada_tx_env::TxEnv;
 

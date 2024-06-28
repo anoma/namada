@@ -294,8 +294,8 @@ pub struct ChainParams<T: TemplateValidation> {
     pub masp_epoch_multiplier: u64,
     /// Max gas for block
     pub max_block_gas: u64,
-    /// Fee unshielding gas limit
-    pub fee_unshielding_gas_limit: u64,
+    /// Gas limit of a masp transaction paying fees
+    pub masp_fee_payment_gas_limit: u64,
     /// Gas scale
     pub gas_scale: u64,
     /// Map of the cost per gas unit for every token allowed for fee payment
@@ -319,7 +319,7 @@ impl ChainParams<Unvalidated> {
             epochs_per_year,
             masp_epoch_multiplier,
             max_block_gas,
-            fee_unshielding_gas_limit,
+            masp_fee_payment_gas_limit,
             gas_scale,
             minimum_gas_price,
         } = self;
@@ -364,7 +364,7 @@ impl ChainParams<Unvalidated> {
             epochs_per_year,
             masp_epoch_multiplier,
             max_block_gas,
-            fee_unshielding_gas_limit,
+            masp_fee_payment_gas_limit,
             gas_scale,
             minimum_gas_price: min_gas_prices,
         })
