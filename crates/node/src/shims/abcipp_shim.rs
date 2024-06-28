@@ -5,10 +5,10 @@ use std::task::{Context, Poll};
 
 use futures::future::FutureExt;
 use namada::core::hash::Hash;
-use namada::core::key::tm_raw_hash_to_string;
 use namada::core::storage::BlockHeight;
 use namada::proof_of_stake::storage::find_validator_by_raw_hash;
 use namada::state::DB;
+use namada::tendermint::abci::response::ProcessProposal;
 use namada::time::{DateTimeUtc, Utc};
 use namada::tx::data::hash_tx;
 use namada_sdk::migrations::ScheduledMigration;
@@ -104,6 +104,10 @@ impl AbcippShim {
         while let Ok((req, resp_sender)) = self.shell_recv.recv() {
             let resp = match req {
                 Req::ProcessProposal(proposal) => self
+                    // FIXME: also, can we use this to cache the
+                    // process_proposal result to avoid recomputing it? See if
+                    // we really need the optimization on the already run
+                    // process proposal
                     .service
                     .call(Request::ProcessProposal(proposal))
                     .map_err(Error::from)
@@ -120,43 +124,34 @@ impl AbcippShim {
                 Req::EndBlock(_) => {
                     let begin_block_request =
                         self.begin_block_request.take().unwrap();
-                    let block_time = begin_block_request
-                        .header
-                        .time
-                        .try_into()
-                        .expect("valid RFC3339 block time");
 
-                    let tm_raw_hash_string = tm_raw_hash_to_string(
-                        begin_block_request.header.proposer_address,
-                    );
-                    let block_proposer = find_validator_by_raw_hash(
-                        &self.service.state,
-                        tm_raw_hash_string,
-                    )
-                    .unwrap()
-                    .expect(
-                        "Unable to find native validator address of block \
-                         proposer from tendermint raw hash",
-                    );
+                    let mut process_req = super::abcipp_shim_types::shim::request::begin_block_to_process_proposal_req(begin_block_request.clone());
+                    process_req.txs.clone_from(&self.delivered_txs);
+                    // FIXME: should instead mock a call to call? Probably yes
+                    // FIXME: if cached avoid this call
+                    // Need to run process proposal to extract the data we need
+                    // for finalize block (tx results)
+                    let (process_proposal_result, processing_results) =
+                        self.service.process_proposal(process_req.into());
 
-                    let processing_results = self.service.process_txs(
-                        &self.delivered_txs,
-                        block_time,
-                        &block_proposer,
-                    );
-                    let mut txs = Vec::with_capacity(self.delivered_txs.len());
-                    let mut delivered = vec![];
-                    std::mem::swap(&mut self.delivered_txs, &mut delivered);
-                    for (result, tx) in processing_results
-                        .into_iter()
-                        .zip(delivered.into_iter())
-                    {
-                        txs.push(ProcessedTx { tx, result });
-                    }
-                    let mut end_block_request: FinalizeBlock =
-                        begin_block_request.into();
-                    end_block_request.txs = txs;
-                    self.service
+                    if let ProcessProposal::Reject = process_proposal_result {
+                        Err(Error::ConvertResp(Response::ProcessProposal(
+                            process_proposal_result,
+                        )))
+                    } else {
+                        let mut txs =
+                            Vec::with_capacity(self.delivered_txs.len());
+                        let delivered = std::mem::take(&mut self.delivered_txs);
+                        for (result, tx) in processing_results
+                            .into_iter()
+                            .zip(delivered.into_iter())
+                        {
+                            txs.push(ProcessedTx { tx, result });
+                        }
+                        let mut end_block_request: FinalizeBlock =
+                            begin_block_request.into();
+                        end_block_request.txs = txs;
+                        self.service
                         .call(Request::FinalizeBlock(end_block_request))
                         .map_err(Error::from)
                         .and_then(|res| match res {
@@ -165,6 +160,7 @@ impl AbcippShim {
                             }
                             _ => Err(Error::ConvertResp(res)),
                         })
+                    }
                 }
                 Req::Commit => match self.service.call(Request::Commit) {
                     Ok(Response::Commit(res, take_snapshot)) => {
