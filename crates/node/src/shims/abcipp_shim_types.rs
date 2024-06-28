@@ -172,6 +172,8 @@ pub mod shim {
         use namada::core::hash::Hash;
         use namada::core::storage::Header;
         use namada::core::time::DateTimeUtc;
+        use namada::tendermint::abci::types::CommitInfo;
+        use namada::tendermint::block::Height;
 
         use super::VoteInfo;
         use crate::facade::tendermint::abci::types::Misbehavior;
@@ -194,7 +196,11 @@ pub mod shim {
             pub byzantine_validators: Vec<Misbehavior>,
             pub txs: Vec<ProcessedTx>,
             pub proposer_address: Vec<u8>,
+            // FIXME: remove votes caus it's already contained in
+            // decided_last_commit
             pub votes: Vec<VoteInfo>,
+            pub height: Height,
+            pub decided_last_commit: CommitInfo,
         }
 
         impl From<tm_request::BeginBlock> for FinalizeBlock {
@@ -213,9 +219,61 @@ pub mod shim {
                     byzantine_validators: req.byzantine_validators,
                     txs: vec![],
                     proposer_address: header.proposer_address.into(),
-                    votes: req.last_commit_info.votes,
+                    votes: req.last_commit_info.votes.clone(),
+                    height: header.height,
+                    decided_last_commit: req.last_commit_info,
                 }
             }
+        }
+
+        // FIXME: probably need a custom type because this doesn't contain the
+        // transactions and I want to be sure that we add them FIXME: in
+        // this case I can implement From FIXME: also make sure that
+        // this type is only used for rechecks, not for the actual
+        // process_proposal call
+        pub(crate) fn begin_block_to_process_proposal_req(
+            req: tm_request::BeginBlock,
+        ) -> tm_request::ProcessProposal {
+            let header = req.header;
+            tm_request::ProcessProposal {
+                txs: vec![],
+                proposed_last_commit: Some(req.last_commit_info),
+                misbehavior: req.byzantine_validators,
+                hash: req.hash,
+                height: header.height,
+                time: header.time,
+                next_validators_hash: header.next_validators_hash,
+                proposer_address: header.proposer_address,
+            }
+        }
+
+        // FIXME: maybe better to create a custom type? I can use the same type
+        // I use for the method above FIXME: in this case I can
+        // implement From
+        pub(crate) fn finalize_block_to_process_proposal_req(
+            req: FinalizeBlock,
+        ) -> Result<tm_request::ProcessProposal, super::Error> {
+            let header = req.header;
+            Ok(tm_request::ProcessProposal {
+                txs: req.txs.into_iter().map(|tx| tx.tx).collect(),
+                proposed_last_commit: Some(req.decided_last_commit),
+                misbehavior: req.byzantine_validators,
+                hash: header.hash.into(),
+                height: req.height,
+                time: header.time.try_into().map_err(|_| {
+                    super::Error::Shell(
+                        super::shell::Error::InvalidBlockProposal,
+                    )
+                })?,
+                next_validators_hash: header.next_validators_hash.into(),
+                proposer_address: req.proposer_address.try_into().map_err(
+                    |_| {
+                        super::Error::Shell(
+                            super::shell::Error::InvalidBlockProposal,
+                        )
+                    },
+                )?,
+            })
         }
     }
 

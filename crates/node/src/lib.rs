@@ -35,12 +35,10 @@ use futures::future::TryFutureExt;
 use namada::core::storage::BlockHeight;
 use namada::core::time::DateTimeUtc;
 use namada::eth_bridge::ethers::providers::{Http, Provider};
-use namada::key::tm_raw_hash_to_string;
-use namada::ledger::pos::find_validator_by_raw_hash;
 use namada::state::DB;
 use namada::storage::DbColFam;
 use namada::tendermint::abci::request::CheckTxKind;
-use namada::tx::data::ResultCode;
+use namada::tendermint::abci::response::ProcessProposal;
 use namada_apps_lib::cli::args;
 use namada_apps_lib::config::utils::{
     convert_tm_addr_to_socket_addr, num_of_threads,
@@ -130,6 +128,7 @@ impl Shell {
                 // TODO: use TM domain type in the handler
                 let (response, _tx_results) =
                     self.process_proposal(block.into());
+                // FIXME: here set the flag
                 Ok(Response::ProcessProposal(response))
             }
             Request::RevertProposal(_req) => {
@@ -193,33 +192,17 @@ impl Shell {
         };
 
         if recheck_process_proposal {
-            let tm_raw_hash_string =
-                tm_raw_hash_to_string(&finalize_req.proposer_address);
-            let block_proposer =
-                find_validator_by_raw_hash(&self.state, tm_raw_hash_string)
-                    .unwrap()
-                    .expect(
-                        "Unable to find native validator address of block \
-                         proposer from tendermint raw hash",
-                    );
+            let process_req = crate::shims::abcipp_shim_types::shim::request::finalize_block_to_process_proposal_req(
+                            finalize.clone(),
+                        ).map_err(|_| Error::InvalidBlockProposal)?;
+            // FIXME: should instead mock a call to call? Probably yes
+            // FIXME: need the processing results? Maybe for caching
+            // even though caching here is useless
+            // since this is the last step
+            let (process_proposal_result, _processing_results) =
+                self.process_proposal(process_req.into());
 
-            let check_result = self.process_txs(
-                &finalize_req
-                    .txs
-                    .iter()
-                    .map(|ptx| ptx.tx.clone())
-                    .collect::<Vec<_>>(),
-                finalize_req.header.time,
-                &block_proposer,
-            );
-
-            let invalid_txs = check_result.iter().any(|res| {
-                let error = ResultCode::from_u32(res.code)
-                    .expect("Failed to cast result code");
-                !error.is_recoverable()
-            });
-
-            if invalid_txs {
+            if let ProcessProposal::Reject = process_proposal_result {
                 return Err(Error::InvalidBlockProposal);
             }
         }
