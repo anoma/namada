@@ -1,6 +1,7 @@
 use namada_sdk::address::Address;
 use namada_sdk::hash::Hash;
 use namada_sdk::key::common;
+use namada_sdk::masp::TxId;
 use namada_sdk::token::DenominatedAmount;
 use namada_sdk::tx::data::GasLimit;
 use namada_sdk::tx::{
@@ -40,7 +41,7 @@ impl Transfer {
     }
 
     /// Build a shielded transfer transaction from the given parameters
-    pub fn shielded(shielded_section_hash: Hash, args: GlobalArgs) -> Self {
+    pub fn shielded(shielded_section_hash: TxId, args: GlobalArgs) -> Self {
         let data = namada_sdk::token::ShieldedTransfer {
             section_hash: shielded_section_hash,
         };
@@ -57,7 +58,7 @@ impl Transfer {
         source: Address,
         token: Address,
         amount: DenominatedAmount,
-        shielded_section_hash: Hash,
+        shielded_section_hash: TxId,
         args: GlobalArgs,
     ) -> Self {
         let data = namada_sdk::token::ShieldingTransfer {
@@ -79,7 +80,7 @@ impl Transfer {
         target: Address,
         token: Address,
         amount: DenominatedAmount,
-        shielded_section_hash: Hash,
+        shielded_section_hash: TxId,
         args: GlobalArgs,
     ) -> Self {
         let data = namada_sdk::token::UnshieldingTransfer {

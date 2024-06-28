@@ -19,7 +19,6 @@
 )]
 
 use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use namada_core::hash::Hash;
 use namada_macros::BorshDeserializer;
 pub use namada_shielded_token::*;
 pub use namada_trans_token::*;
@@ -32,6 +31,7 @@ pub mod storage_key {
 }
 
 use namada_core::address::Address;
+use namada_core::masp::TxId;
 use namada_events::EmitEvents;
 use namada_storage::{Result, StorageRead, StorageWrite};
 
@@ -110,7 +110,7 @@ pub struct TransparentTransfer {
 )]
 pub struct ShieldedTransfer {
     /// Hash of tx section that contains the MASP transaction
-    pub section_hash: Hash,
+    pub section_hash: TxId,
 }
 
 /// Arguments for a shielding transfer (from a transparent token to a shielded
@@ -137,7 +137,7 @@ pub struct ShieldingTransfer {
     /// The amount of tokens
     pub amount: DenominatedAmount,
     /// Hash of tx section that contains the MASP transaction
-    pub shielded_section_hash: Hash,
+    pub shielded_section_hash: TxId,
 }
 
 /// Arguments for an unshielding transfer (from a shielded token to a
@@ -164,7 +164,7 @@ pub struct UnshieldingTransfer {
     /// The amount of tokens
     pub amount: DenominatedAmount,
     /// Hash of tx section that contains the MASP transaction
-    pub shielded_section_hash: Hash,
+    pub shielded_section_hash: TxId,
 }
 
 #[cfg(any(test, feature = "testing"))]

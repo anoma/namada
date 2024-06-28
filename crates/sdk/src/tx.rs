@@ -17,7 +17,9 @@ use masp_primitives::transaction::components::transparent::fees::{
     InputView as TransparentInputView, OutputView as TransparentOutputView,
 };
 use masp_primitives::transaction::components::I128Sum;
-use masp_primitives::transaction::{builder, Transaction as MaspTransaction};
+use masp_primitives::transaction::{
+    builder, Transaction as MaspTransaction, TxId,
+};
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada_account::{InitAccount, UpdateAccount};
 use namada_core::address::{Address, InternalAddress, MASP};
@@ -2970,7 +2972,7 @@ pub async fn build_shielded_transfer<N: Namada>(
 
     // Construct the tx data with a placeholder shielded section hash
     let data = token::ShieldedTransfer {
-        section_hash: Hash::zero(),
+        section_hash: TxId::from_bytes(Default::default()).into(),
     };
     let tx = build_pow_flag(
         context,
@@ -3081,7 +3083,7 @@ pub async fn build_shielding_transfer<N: Namada>(
         source: source.clone(),
         token: args.token.clone(),
         amount: validated_amount,
-        shielded_section_hash: Hash::zero(),
+        shielded_section_hash: TxId::from_bytes(Default::default()).into(),
     };
 
     let tx = build_pow_flag(
@@ -3167,7 +3169,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
         target: args.target.clone(),
         token: args.token.clone(),
         amount: validated_amount,
-        shielded_section_hash: Hash::zero(),
+        shielded_section_hash: TxId::from_bytes(Default::default()).into(),
     };
     let tx = build_pow_flag(
         context,
@@ -3539,8 +3541,7 @@ pub async fn gen_ibc_shielding_transfer<N: Namada>(
         .map_err(|err| TxSubmitError::MaspError(err.to_string()))?;
 
     if let Some(shielded_transfer) = shielded_transfer {
-        let masp_tx_hash =
-            Section::MaspTx(shielded_transfer.masp_tx.clone()).get_hash();
+        let masp_tx_hash = shielded_transfer.masp_tx.txid().into();
         let transfer = token::ShieldingTransfer {
             source: source.clone(),
             token: token.clone(),

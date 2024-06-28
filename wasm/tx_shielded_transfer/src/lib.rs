@@ -13,8 +13,8 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
     let masp_section_ref = transfer.section_hash;
     let shielded = tx_data
         .tx
-        .get_section(&masp_section_ref)
-        .and_then(|x| x.as_ref().masp_tx())
+        .get_masp_section(&masp_section_ref)
+        .cloned()
         .ok_or_err_msg("Unable to find required shielded section in tx data")
         .map_err(|err| {
             ctx.set_commitment_sentinel();

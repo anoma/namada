@@ -114,7 +114,6 @@ use namada_sdk::wallet::Wallet;
 use namada_sdk::{Namada, NamadaImpl};
 use namada_test_utils::tx_data::TxWriteData;
 use rand_core::OsRng;
-use sha2::{Digest, Sha256};
 use tempfile::TempDir;
 
 use crate::config;
@@ -936,8 +935,10 @@ impl Client for BenchShell {
                                 tx.sections
                                     .iter()
                                     .find_map(|section| {
-                                        if let Section::MaspTx(_) = section {
-                                            Some(section.get_hash())
+                                        if let Section::MaspTx(transaction) =
+                                            section
+                                        {
+                                            Some(transaction.txid().into())
                                         } else {
                                             None
                                         }
@@ -1102,13 +1103,7 @@ impl BenchShieldedCtx {
             )
             .expect("MASP must have shielded part");
 
-        let mut hasher = Sha256::new();
-        let shielded_section_hash = namada::core::hash::Hash(
-            Section::MaspTx(shielded.clone())
-                .hash(&mut hasher)
-                .finalize_reset()
-                .into(),
-        );
+        let shielded_section_hash = shielded.txid().into();
         let tx = if source.effective_address() == MASP
             && target.effective_address() == MASP
         {
@@ -1212,10 +1207,9 @@ impl BenchShieldedCtx {
         .unwrap();
         let masp_tx = tx
             .tx
-            .get_section(&transfer.shielded_section_hash)
+            .get_masp_section(&transfer.shielded_section_hash)
             .unwrap()
-            .masp_tx()
-            .unwrap();
+            .clone();
         let msg = MsgTransfer {
             message: msg,
             transfer: Some(transfer),
