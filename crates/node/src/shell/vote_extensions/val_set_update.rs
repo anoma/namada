@@ -323,7 +323,10 @@ mod test_vote_extensions {
         }];
         let req = FinalizeBlock {
             proposer_address: pkh1.to_vec(),
-            votes,
+            decided_last_commit: namada::tendermint::abci::types::CommitInfo {
+                round: 0u8.into(),
+                votes,
+            },
             ..Default::default()
         };
         assert_eq!(shell.start_new_epoch(Some(req)).0, 1);

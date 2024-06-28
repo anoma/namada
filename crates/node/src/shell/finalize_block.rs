@@ -83,7 +83,8 @@ where
 
         let emit_events = &mut response.events;
         // Get the actual votes from cometBFT in the preferred format
-        let votes = pos_votes_from_abci(&self.state, &req.votes);
+        let votes =
+            pos_votes_from_abci(&self.state, &req.decided_last_commit.votes);
         let validator_set_update_epoch =
             self.get_validator_set_update_epoch(current_epoch);
 
@@ -1893,7 +1894,10 @@ mod test_finalize_block {
             let req = FinalizeBlock {
                 txs,
                 proposer_address: proposer_address.clone(),
-                votes: votes.clone(),
+                decided_last_commit: tendermint::abci::types::CommitInfo {
+                    round: 0u8.into(),
+                    votes: votes.clone(),
+                },
                 ..Default::default()
             };
             // merkle tree root before finalize_block
