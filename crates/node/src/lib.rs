@@ -152,10 +152,6 @@ impl Shell {
                     shell::ShellMode::Seed => false,
                 };
 
-                // FIXME: also optiomize if
-                // process_proposal has already run Run process
-                // proposal validation once more if the node runner
-                // requested it
                 if recheck_process_proposal {
                     let tm_raw_hash_string =
                         tm_raw_hash_to_string(&finalize.proposer_address);
@@ -168,11 +164,6 @@ impl Shell {
                         "Unable to find native validator address of block \
                          proposer from tendermint raw hash",
                     );
-
-                    // FIXME: would be slightly more safe to call
-                    // process_proposal instead so that if the logic changes we
-                    // don't diverge. But we need to cache the process_proposal
-                    // request in that case
 
                     let check_result = self.process_txs(
                         &finalize

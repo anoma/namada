@@ -108,7 +108,6 @@ where
             );
         }
         (
-            // FIXME: match this on the other side
             if invalid_txs {
                 ProcessProposal::Reject
             } else {
