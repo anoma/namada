@@ -1,4 +1,4 @@
-name: Triggerable Antithesis workflow
+name: Triggerable Antithesis
 
 on: 
   workflow_dispatch:
@@ -30,4 +30,4 @@ jobs:
           username: ${{ secrets.ANTITHESIS_USER_NAME }}
           password: ${{ secrets.ANTITHESIS_PASSWORD }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          images: namada-config:${{ github.event.inputs.namada_docker_tag }},namada-genesis:${{ github.event.inputs.namada_docker_tag }},namada:${{ github.event.inputs.namada_docker_tag }},namada:${{ github.event.inputs.namada_docker_tag }}-inst,namada-scenario-tester:${{ github.event.inputs.scenario_tester_docker_tag }}
+          images: namada-config:${{ github.event.inputs.namada_docker_tag }},namada-genesis:${{ github.event.inputs.namada_docker_tag }},namada:${{ github.event.inputs.namada_docker_tag }},namada-scenario-tester:${{ github.event.inputs.scenario_tester_docker_tag }}
