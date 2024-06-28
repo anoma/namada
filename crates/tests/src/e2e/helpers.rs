@@ -537,7 +537,7 @@ pub fn make_hermes_config(test_a: &Test, test_b: &Test) -> Result<()> {
 
     let mut packets = toml::map::Map::new();
     packets.insert("enabled".to_owned(), Value::Boolean(true));
-    packets.insert("clear_interval".to_owned(), Value::Integer(20));
+    packets.insert("clear_interval".to_owned(), Value::Integer(30));
     packets.insert("clear_on_start".to_owned(), Value::Boolean(true));
     packets.insert("tx_confirmation".to_owned(), Value::Boolean(true));
     mode.insert("packets".to_owned(), Value::Table(packets));
