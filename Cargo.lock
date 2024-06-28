@@ -5157,6 +5157,8 @@ dependencies = [
 name = "namada_systems"
 version = "0.41.0"
 dependencies = [
+ "cargo_metadata",
+ "lazy_static",
  "namada_core",
  "namada_storage",
 ]
