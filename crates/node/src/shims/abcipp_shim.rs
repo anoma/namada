@@ -125,8 +125,7 @@ impl AbcippShim {
                     let begin_block_request =
                         self.begin_block_request.take().unwrap();
 
-                    let mut process_req = super::abcipp_shim_types::shim::request::begin_block_to_process_proposal_req(begin_block_request.clone());
-                    process_req.txs.clone_from(&self.delivered_txs);
+                    let process_req = super::abcipp_shim_types::shim::request::CheckProcessProposal::from(begin_block_request.clone()).cast_to_tendermint_req(self.delivered_txs.clone());
                     // FIXME: should instead mock a call to call? Probably yes
                     // FIXME: if cached avoid this call
                     // Need to run process proposal to extract the data we need
