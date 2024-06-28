@@ -8,6 +8,8 @@
 mod vm_host_env;
 pub use vm_host_env::{tx, vp};
 #[cfg(test)]
+pub mod deps;
+#[cfg(test)]
 mod e2e;
 #[cfg(test)]
 mod integration;

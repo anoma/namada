@@ -65,6 +65,7 @@ assert_cmd.workspace = true
 assert_matches.workspace = true
 borsh.workspace = true
 borsh-ext.workspace = true
+cargo_metadata = "0.18.1"
 color-eyre.workspace = true
 data-encoding.workspace = true
 # NOTE: enable "print" feature to see output from builds ran by e2e tests
@@ -73,6 +74,7 @@ expectrl.workspace = true
 eyre.workspace = true
 flate2.workspace = true
 fs_extra.workspace = true
+lazy_static.workspace= true
 once_cell.workspace = true
 pretty_assertions.workspace = true
 proptest-state-machine.workspace = true
