@@ -27,7 +27,6 @@ namada_account = { path = "../account" }
 namada_controller = { path = "../controller" }
 namada_core = { path = "../core" }
 namada_gas = { path = "../gas" }
-namada_parameters = { path = "../parameters" }
 namada_state = { path = "../state" }
 namada_storage = { path = "../storage" }
 namada_systems = { path = "../systems" }

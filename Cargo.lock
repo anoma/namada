@@ -5231,6 +5231,7 @@ dependencies = [
  "namada_macros",
  "namada_shielded_token",
  "namada_storage",
+ "namada_systems",
  "namada_trans_token",
  "proptest",
  "serde",

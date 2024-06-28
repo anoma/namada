@@ -443,9 +443,10 @@ impl BenchShell {
             .is_masp_new_epoch(true, masp_epoch_multiplier)
             .unwrap()
         {
-            namada_sdk::token::conversion::update_allowed_conversions(
-                &mut self.state,
-            )
+            namada_sdk::token::conversion::update_allowed_conversions::<
+                _,
+                parameters::Store<_>,
+            >(&mut self.state)
             .unwrap();
         }
     }

@@ -21,6 +21,7 @@
 use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_macros::BorshDeserializer;
 pub use namada_shielded_token::*;
+use namada_systems::parameters;
 pub use namada_trans_token::*;
 
 /// Validity predicates
@@ -65,16 +66,17 @@ where
 }
 
 /// Apply token logic for finalizing block (i.e. shielded token rewards)
-pub fn finalize_block<S>(
+pub fn finalize_block<S, Params>(
     storage: &mut S,
     _events: &mut impl EmitEvents,
     is_new_masp_epoch: bool,
 ) -> Result<()>
 where
     S: StorageWrite + StorageRead + WithConversionState,
+    Params: parameters::Read<S>,
 {
     if is_new_masp_epoch {
-        conversion::update_allowed_conversions(storage)?;
+        conversion::update_allowed_conversions::<S, Params>(storage)?;
     }
     Ok(())
 }

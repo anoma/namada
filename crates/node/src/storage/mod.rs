@@ -171,7 +171,7 @@ mod tests {
             .new_epoch(BlockHeight(100));
 
         // update conversion for a new epoch
-        update_allowed_conversions(&mut state)
+        update_allowed_conversions::<_, parameters::Store<_>>(&mut state)
             .expect("update conversions failed");
         state.commit_block().expect("commit failed");
 

@@ -10,6 +10,7 @@ use namada_core::dec::Dec;
 use namada_core::hash::Hash;
 use namada_core::uint::Uint;
 use namada_storage::{StorageRead, StorageWrite};
+use namada_systems::parameters;
 use namada_trans_token::{
     get_effective_total_native_supply, read_balance, read_denom, Amount,
     DenominatedAmount, Denomination,
@@ -223,22 +224,24 @@ where
 // This is only enabled when "wasm-runtime" is on, because we're using rayon
 #[cfg(not(any(feature = "multicore", test)))]
 /// Update the MASP's allowed conversions
-pub fn update_allowed_conversions<S>(
+pub fn update_allowed_conversions<S, Params>(
     _storage: &mut S,
 ) -> namada_storage::Result<()>
 where
     S: StorageWrite + StorageRead + WithConversionState,
+    Params: parameters::Read<S>,
 {
     Ok(())
 }
 
 #[cfg(any(feature = "multicore", test))]
 /// Update the MASP's allowed conversions
-pub fn update_allowed_conversions<S>(
+pub fn update_allowed_conversions<S, Params>(
     storage: &mut S,
 ) -> namada_storage::Result<()>
 where
     S: StorageWrite + StorageRead + WithConversionState,
+    Params: parameters::Read<S>,
 {
     use std::cmp::Ordering;
     use std::collections::BTreeMap;
@@ -251,7 +254,6 @@ where
     use masp_primitives::transaction::components::I128Sum as MaspAmount;
     use namada_core::arith::CheckedAdd;
     use namada_core::masp::{encode_asset_type, MaspEpoch};
-    use namada_parameters as parameters;
     use namada_storage::conversion_state::ConversionLeaf;
     use namada_storage::{Error, OptionExt, ResultExt};
     use namada_trans_token::{MaspDigitPos, NATIVE_MAX_DECIMAL_PLACES};
@@ -329,8 +331,7 @@ where
         calculate_masp_rewards_precision(storage, &native_token)?.0;
 
     // Reward all tokens according to above reward rates
-    let masp_epoch_multiplier =
-        parameters::read_masp_epoch_multiplier_parameter(storage)?;
+    let masp_epoch_multiplier = Params::masp_epoch_multiplier(storage)?;
     let masp_epoch = MaspEpoch::try_from_epoch(
         storage.get_block_epoch()?,
         masp_epoch_multiplier,
@@ -340,9 +341,7 @@ where
         Some(epoch) => epoch,
         None => return Ok(()),
     };
-    let epochs_per_year = storage
-        .read::<u64>(&parameters::storage::get_epochs_per_year_key())?
-        .expect("epochs per year should properly decode");
+    let epochs_per_year = Params::epochs_per_year(storage)?;
     let masp_epochs_per_year =
         checked!(epochs_per_year / masp_epoch_multiplier)?;
     for token in &masp_reward_keys {
@@ -718,7 +717,10 @@ mod tests {
 
         for i in 0..ROUNDS {
             println!("Round {i}");
-            update_allowed_conversions(&mut s).unwrap();
+            update_allowed_conversions::<_, namada_parameters::Store<_>>(
+                &mut s,
+            )
+            .unwrap();
             println!();
             println!();
         }
