@@ -759,6 +759,7 @@ impl FinalizedParameters {
             stewards: pgf_params.stewards,
             pgf_inflation_rate: pgf_params.pgf_inflation_rate,
             stewards_inflation_rate: pgf_params.stewards_inflation_rate,
+            maximum_number_of_stewards: pgf_params.maximum_number_of_stewards,
         };
         Self {
             parameters,
