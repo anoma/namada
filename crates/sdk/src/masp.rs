@@ -4,11 +4,9 @@ use std::cmp::Ordering;
 use std::collections::{btree_map, BTreeMap, BTreeSet};
 use std::env;
 use std::fmt::Debug;
-use std::ops::Deref;
 use std::path::PathBuf;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use lazy_static::lazy_static;
 use masp_primitives::asset_type::AssetType;
 #[cfg(feature = "mainnet")]
 use masp_primitives::consensus::MainNetwork as Network;
@@ -29,24 +27,13 @@ use masp_primitives::transaction::builder::{self, *};
 use masp_primitives::transaction::components::sapling::builder::{
     RngBuildParams, SaplingMetadata,
 };
-use masp_primitives::transaction::components::sapling::{
-    Authorized as SaplingAuthorized, Bundle as SaplingBundle,
-};
-use masp_primitives::transaction::components::transparent::builder::TransparentBuilder;
 use masp_primitives::transaction::components::{
     I128Sum, OutputDescription, TxOut, U64Sum, ValueSum,
 };
 use masp_primitives::transaction::fees::fixed::FeeRule;
-use masp_primitives::transaction::sighash::{signature_hash, SignableInput};
-use masp_primitives::transaction::txid::TxIdDigester;
-use masp_primitives::transaction::{
-    Authorization, Authorized, Transaction, TransactionData, Unauthorized,
-};
+use masp_primitives::transaction::{Authorization, Authorized, Transaction};
 use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
-use masp_proofs::bellman::groth16::VerifyingKey;
-use masp_proofs::bls12_381::Bls12;
 use masp_proofs::prover::LocalTxProver;
-use masp_proofs::sapling::BatchValidator;
 use namada_core::address::Address;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::dec::Dec;
@@ -65,12 +52,14 @@ use namada_events::extend::{
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
-use namada_state::StorageError;
+pub use namada_token::validation::{
+    partial_deauthorize, preload_verifying_keys, PVKs, CONVERT_NAME,
+    ENV_VAR_MASP_PARAMS_DIR, OUTPUT_NAME, SPEND_NAME,
+};
 use namada_token::{self as token, Denomination, MaspDigitPos};
 use namada_tx::{IndexedTx, Tx};
 use rand::rngs::StdRng;
 use rand_core::{CryptoRng, OsRng, RngCore, SeedableRng};
-use smooth_operator::checked;
 use thiserror::Error;
 
 use crate::error::{Error, QueryError};
@@ -79,24 +68,12 @@ use crate::queries::Client;
 use crate::rpc::{query_block, query_conversion, query_denom};
 use crate::{display_line, edisplay_line, rpc, MaybeSend, MaybeSync, Namada};
 
-/// Env var to point to a dir with MASP parameters. When not specified,
-/// the default OS specific path is used.
-pub const ENV_VAR_MASP_PARAMS_DIR: &str = "NAMADA_MASP_PARAMS_DIR";
-
 /// Randomness seed for MASP integration tests to build proofs with
 /// deterministic rng.
 pub const ENV_VAR_MASP_TEST_SEED: &str = "NAMADA_MASP_TEST_SEED";
 
 /// The network to use for MASP
 const NETWORK: Network = Network;
-
-// TODO these could be exported from masp_proof crate
-/// Spend circuit name
-pub const SPEND_NAME: &str = "masp-spend.params";
-/// Output circuit name
-pub const OUTPUT_NAME: &str = "masp-output.params";
-/// Convert circuit name
-pub const CONVERT_NAME: &str = "masp-convert.params";
 
 /// Type alias for convenience and profit
 pub type IndexedNoteData = BTreeMap<IndexedTx, Vec<Transaction>>;
@@ -154,261 +131,6 @@ pub enum TransferErr {
     /// errors
     #[error("{0}")]
     General(#[from] Error),
-}
-
-/// MASP verifying keys
-pub struct PVKs {
-    /// spend verifying key
-    pub spend_vk: VerifyingKey<Bls12>,
-    /// convert verifying key
-    pub convert_vk: VerifyingKey<Bls12>,
-    /// output verifying key
-    pub output_vk: VerifyingKey<Bls12>,
-}
-
-lazy_static! {
-    /// MASP verifying keys load from parameters
-    static ref VERIFIYING_KEYS: PVKs =
-        {
-        let params_dir = get_params_dir();
-        let [spend_path, convert_path, output_path] =
-            [SPEND_NAME, CONVERT_NAME, OUTPUT_NAME].map(|p| params_dir.join(p));
-
-        #[cfg(feature = "download-params")]
-        if !spend_path.exists() || !convert_path.exists() || !output_path.exists() {
-            let paths = masp_proofs::download_masp_parameters(None).expect(
-                "MASP parameters were not present, expected the download to \
-                succeed",
-            );
-            if paths.spend != spend_path
-                || paths.convert != convert_path
-                || paths.output != output_path
-            {
-                panic!(
-                    "unrecoverable: downloaded missing masp params, but to an \
-                    unfamiliar path"
-                )
-            }
-        }
-        // size and blake2b checked here
-        let params = masp_proofs::load_parameters(
-            spend_path.as_path(),
-            output_path.as_path(),
-            convert_path.as_path(),
-        );
-        PVKs {
-            spend_vk: params.spend_params.vk,
-            convert_vk: params.convert_params.vk,
-            output_vk: params.output_params.vk
-        }
-    };
-}
-
-/// Make sure the MASP params are present and load verifying keys into memory
-pub fn preload_verifying_keys() -> &'static PVKs {
-    &VERIFIYING_KEYS
-}
-
-fn load_pvks() -> &'static PVKs {
-    &VERIFIYING_KEYS
-}
-
-/// Represents an authorization where the Sapling bundle is authorized and the
-/// transparent bundle is unauthorized.
-pub struct PartialAuthorized;
-
-impl Authorization for PartialAuthorized {
-    type SaplingAuth = <Authorized as Authorization>::SaplingAuth;
-    type TransparentAuth = <Unauthorized as Authorization>::TransparentAuth;
-}
-
-/// Partially deauthorize the transparent bundle
-pub fn partial_deauthorize(
-    tx_data: &TransactionData<Authorized>,
-) -> Option<TransactionData<PartialAuthorized>> {
-    let transp = tx_data.transparent_bundle().and_then(|x| {
-        let mut tb = TransparentBuilder::empty();
-        for vin in &x.vin {
-            tb.add_input(TxOut {
-                asset_type: vin.asset_type,
-                value: vin.value,
-                address: vin.address,
-            })
-            .ok()?;
-        }
-        for vout in &x.vout {
-            tb.add_output(&vout.address, vout.asset_type, vout.value)
-                .ok()?;
-        }
-        tb.build()
-    });
-    if tx_data.transparent_bundle().is_some() != transp.is_some() {
-        return None;
-    }
-    Some(TransactionData::from_parts(
-        tx_data.version(),
-        tx_data.consensus_branch_id(),
-        tx_data.lock_time(),
-        tx_data.expiry_height(),
-        transp,
-        tx_data.sapling_bundle().cloned(),
-    ))
-}
-
-/// Verify a shielded transaction.
-pub fn verify_shielded_tx<F>(
-    transaction: &Transaction,
-    consume_verify_gas: F,
-) -> Result<(), StorageError>
-where
-    F: Fn(u64) -> std::result::Result<(), StorageError>,
-{
-    tracing::debug!("entered verify_shielded_tx()");
-
-    let sapling_bundle = if let Some(bundle) = transaction.sapling_bundle() {
-        bundle
-    } else {
-        return Err(StorageError::SimpleMessage("no sapling bundle"));
-    };
-    let tx_data = transaction.deref();
-
-    // Partially deauthorize the transparent bundle
-    let unauth_tx_data = match partial_deauthorize(tx_data) {
-        Some(tx_data) => tx_data,
-        None => {
-            return Err(StorageError::SimpleMessage(
-                "Failed to partially de-authorize",
-            ));
-        }
-    };
-
-    let txid_parts = unauth_tx_data.digest(TxIdDigester);
-    // the commitment being signed is shared across all Sapling inputs; once
-    // V4 transactions are deprecated this should just be the txid, but
-    // for now we need to continue to compute it here.
-    let sighash =
-        signature_hash(&unauth_tx_data, &SignableInput::Shielded, &txid_parts);
-    tracing::debug!("sighash computed");
-
-    let PVKs {
-        spend_vk,
-        convert_vk,
-        output_vk,
-    } = load_pvks();
-
-    #[cfg(not(feature = "testing"))]
-    let mut ctx = BatchValidator::new();
-    #[cfg(feature = "testing")]
-    let mut ctx = testing::MockBatchValidator::default();
-
-    // Charge gas before check bundle
-    charge_masp_check_bundle_gas(sapling_bundle, &consume_verify_gas)?;
-
-    if !ctx.check_bundle(sapling_bundle.to_owned(), sighash.as_ref().to_owned())
-    {
-        tracing::debug!("failed check bundle");
-        return Err(StorageError::SimpleMessage("Invalid sapling bundle"));
-    }
-    tracing::debug!("passed check bundle");
-
-    // Charge gas before final validation
-    charge_masp_validate_gas(sapling_bundle, consume_verify_gas)?;
-    if !ctx.validate(spend_vk, convert_vk, output_vk, OsRng) {
-        return Err(StorageError::SimpleMessage(
-            "Invalid proofs or signatures",
-        ));
-    }
-    Ok(())
-}
-
-// Charge gas for the check_bundle operation which does not leverage concurrency
-fn charge_masp_check_bundle_gas<F>(
-    sapling_bundle: &SaplingBundle<SaplingAuthorized>,
-    consume_verify_gas: F,
-) -> Result<(), namada_state::StorageError>
-where
-    F: Fn(u64) -> std::result::Result<(), namada_state::StorageError>,
-{
-    consume_verify_gas(checked!(
-        (sapling_bundle.shielded_spends.len() as u64)
-            * namada_gas::MASP_SPEND_CHECK_GAS
-    )?)?;
-
-    consume_verify_gas(checked!(
-        (sapling_bundle.shielded_converts.len() as u64)
-            * namada_gas::MASP_CONVERT_CHECK_GAS
-    )?)?;
-
-    consume_verify_gas(checked!(
-        (sapling_bundle.shielded_outputs.len() as u64)
-            * namada_gas::MASP_OUTPUT_CHECK_GAS
-    )?)
-}
-
-// Charge gas for the final validation, taking advtange of concurrency for
-// proofs verification but not for signatures
-fn charge_masp_validate_gas<F>(
-    sapling_bundle: &SaplingBundle<SaplingAuthorized>,
-    consume_verify_gas: F,
-) -> Result<(), namada_state::StorageError>
-where
-    F: Fn(u64) -> std::result::Result<(), namada_state::StorageError>,
-{
-    // Signatures gas
-    consume_verify_gas(checked!(
-        // Add one for the binding signature
-        ((sapling_bundle.shielded_spends.len() as u64) + 1)
-            * namada_gas::MASP_VERIFY_SIG_GAS
-    )?)?;
-
-    // If at least one note is present charge the fixed costs. Then charge the
-    // variable cost for every other note, amortized on the fixed expected
-    // number of cores
-    if let Some(remaining_notes) =
-        sapling_bundle.shielded_spends.len().checked_sub(1)
-    {
-        consume_verify_gas(namada_gas::MASP_FIXED_SPEND_GAS)?;
-        consume_verify_gas(checked!(
-            namada_gas::MASP_VARIABLE_SPEND_GAS * remaining_notes as u64
-                / namada_gas::MASP_PARALLEL_GAS_DIVIDER
-        )?)?;
-    }
-
-    if let Some(remaining_notes) =
-        sapling_bundle.shielded_converts.len().checked_sub(1)
-    {
-        consume_verify_gas(namada_gas::MASP_FIXED_CONVERT_GAS)?;
-        consume_verify_gas(checked!(
-            namada_gas::MASP_VARIABLE_CONVERT_GAS * remaining_notes as u64
-                / namada_gas::MASP_PARALLEL_GAS_DIVIDER
-        )?)?;
-    }
-
-    if let Some(remaining_notes) =
-        sapling_bundle.shielded_outputs.len().checked_sub(1)
-    {
-        consume_verify_gas(namada_gas::MASP_FIXED_OUTPUT_GAS)?;
-        consume_verify_gas(checked!(
-            namada_gas::MASP_VARIABLE_OUTPUT_GAS * remaining_notes as u64
-                / namada_gas::MASP_PARALLEL_GAS_DIVIDER
-        )?)?;
-    }
-
-    Ok(())
-}
-
-/// Get the path to MASP parameters from [`ENV_VAR_MASP_PARAMS_DIR`] env var or
-/// use the default.
-pub fn get_params_dir() -> PathBuf {
-    if let Ok(params_dir) = env::var(ENV_VAR_MASP_PARAMS_DIR) {
-        #[allow(clippy::print_stdout)]
-        {
-            println!("Using {} as masp parameter folder.", params_dir);
-        }
-        PathBuf::from(params_dir)
-    } else {
-        masp_proofs::default_params_folder().unwrap()
-    }
 }
 
 /// Freeze a Builder into the format necessary for inclusion in a Tx. This is
@@ -2056,14 +1778,17 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
         }))
 }
 
+#[cfg(test)]
 mod tests {
+    use masp_proofs::bls12_381::Bls12;
+
+    use super::*;
+
     /// quick and dirty test. will fail on size check
     #[test]
     #[should_panic(expected = "parameter file size is not correct")]
     fn test_wrong_masp_params() {
         use std::io::Write;
-
-        use super::{CONVERT_NAME, OUTPUT_NAME, SPEND_NAME};
 
         let tempdir = tempfile::tempdir()
             .expect("expected a temp dir")
@@ -2079,7 +1804,7 @@ mod tests {
                 .expect("expected a writable temp file (on sync)");
         }
 
-        std::env::set_var(super::ENV_VAR_MASP_PARAMS_DIR, tempdir.as_os_str());
+        std::env::set_var(ENV_VAR_MASP_PARAMS_DIR, tempdir.as_os_str());
         // should panic here
         masp_proofs::load_parameters(
             &fake_params_paths[0],
@@ -2098,9 +1823,7 @@ mod tests {
             generate_random_parameters, Parameters,
         };
         use masp_proofs::bellman::{Circuit, ConstraintSystem, SynthesisError};
-        use masp_proofs::bls12_381::{Bls12, Scalar};
-
-        use super::{CONVERT_NAME, OUTPUT_NAME, SPEND_NAME};
+        use masp_proofs::bls12_381::Scalar;
 
         struct FakeCircuit<E: PrimeField> {
             x: E,
@@ -2157,7 +1880,7 @@ mod tests {
                 .expect("expected a writable temp file (on sync)");
         }
 
-        std::env::set_var(super::ENV_VAR_MASP_PARAMS_DIR, tempdir.as_os_str());
+        std::env::set_var(ENV_VAR_MASP_PARAMS_DIR, tempdir.as_os_str());
         // should panic here
         masp_proofs::load_parameters(
             &fake_params_paths[0].0,
@@ -2173,7 +1896,6 @@ pub mod testing {
     use std::ops::AddAssign;
     use std::sync::Mutex;
 
-    use bls12_381::{G1Affine, G2Affine};
     use masp_primitives::consensus::testing::arb_height;
     use masp_primitives::constants::SPENDING_KEY_GENERATOR;
     use masp_primitives::group::GroupEncoding;
@@ -2181,10 +1903,11 @@ pub mod testing {
     use masp_primitives::sapling::redjubjub::{PublicKey, Signature};
     use masp_primitives::sapling::{ProofGenerationKey, Rseed};
     use masp_primitives::transaction::components::sapling::builder::StoredBuildParams;
-    use masp_primitives::transaction::components::sapling::Bundle;
     use masp_primitives::transaction::components::GROTH_PROOF_SIZE;
     use masp_primitives::transaction::TransparentAddress;
-    use masp_proofs::bellman::groth16::{self, Proof};
+    use masp_proofs::bellman::groth16::Proof;
+    use masp_proofs::bls12_381;
+    use masp_proofs::bls12_381::{Bls12, G1Affine, G2Affine};
     use proptest::prelude::*;
     use proptest::sample::SizeRange;
     use proptest::test_runner::TestRng;
@@ -2199,59 +1922,6 @@ pub mod testing {
     use crate::masp_primitives::sapling::redjubjub::PrivateKey;
     use crate::masp_primitives::transaction::components::transparent::testing::arb_transparent_address;
     use crate::token::testing::arb_denomination;
-
-    /// A context object for verifying the Sapling components of MASP
-    /// transactions. Same as BatchValidator, but always assumes the
-    /// proofs and signatures to be valid.
-    pub struct MockBatchValidator {
-        inner: BatchValidator,
-    }
-
-    impl Default for MockBatchValidator {
-        fn default() -> Self {
-            MockBatchValidator {
-                inner: BatchValidator::new(),
-            }
-        }
-    }
-
-    impl MockBatchValidator {
-        /// Checks the bundle against Sapling-specific consensus rules, and adds
-        /// its proof and signatures to the validator.
-        ///
-        /// Returns `false` if the bundle doesn't satisfy all of the consensus
-        /// rules. This `BatchValidator` can continue to be used
-        /// regardless, but some or all of the proofs and signatures
-        /// from this bundle may have already been added to the batch even if
-        /// it fails other consensus rules.
-        pub fn check_bundle(
-            &mut self,
-            bundle: Bundle<
-                masp_primitives::transaction::components::sapling::Authorized,
-            >,
-            sighash: [u8; 32],
-        ) -> bool {
-            self.inner.check_bundle(bundle, sighash)
-        }
-
-        /// Batch-validates the accumulated bundles.
-        ///
-        /// Returns `true` if every proof and signature in every bundle added to
-        /// the batch validator is valid, or `false` if one or more are
-        /// invalid. No attempt is made to figure out which of the
-        /// accumulated bundles might be invalid; if that information is
-        /// desired, construct separate [`BatchValidator`]s for sub-batches of
-        /// the bundles.
-        pub fn validate<R: RngCore + CryptoRng>(
-            self,
-            _spend_vk: &groth16::VerifyingKey<Bls12>,
-            _convert_vk: &groth16::VerifyingKey<Bls12>,
-            _output_vk: &groth16::VerifyingKey<Bls12>,
-            mut _rng: R,
-        ) -> bool {
-            true
-        }
-    }
 
     /// This function computes `value` in the exponent of the value commitment
     /// base
@@ -2975,6 +2645,11 @@ pub mod testing {
 pub mod fs {
     use std::fs::{File, OpenOptions};
     use std::io::{Read, Write};
+
+    use namada_token::validation::{
+        get_params_dir, CONVERT_NAME, ENV_VAR_MASP_PARAMS_DIR, OUTPUT_NAME,
+        SPEND_NAME,
+    };
 
     use super::*;
 

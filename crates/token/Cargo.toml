@@ -15,7 +15,8 @@ version.workspace = true
 [features]
 default = []
 multicore = ["namada_shielded_token/multicore"]
-testing = ["namada_core/testing", "proptest"]
+download-params = ["namada_shielded_token/download-params"]
+testing = ["namada_core/testing", "namada_shielded_token/testing", "proptest"]
 
 [dependencies]
 namada_core = { path = "../core" }
