@@ -537,7 +537,7 @@ pub fn make_hermes_config(test_a: &Test, test_b: &Test) -> Result<()> {
 
     let mut packets = toml::map::Map::new();
     packets.insert("enabled".to_owned(), Value::Boolean(true));
-    packets.insert("clear_interval".to_owned(), Value::Integer(10));
+    packets.insert("clear_interval".to_owned(), Value::Integer(20));
     packets.insert("clear_on_start".to_owned(), Value::Boolean(false));
     packets.insert("tx_confirmation".to_owned(), Value::Boolean(true));
     mode.insert("packets".to_owned(), Value::Table(packets));
@@ -614,11 +614,13 @@ fn make_hermes_chain_config(test: &Test) -> Value {
     );
     chain.insert("store_prefix".to_owned(), Value::String("ibc".to_owned()));
     let mut table = toml::map::Map::new();
-    table.insert("price".to_owned(), Value::Float(0.001));
+    table.insert("price".to_owned(), Value::Float(0.000001));
     std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let nam_addr = find_address(test, setup::constants::NAM).unwrap();
     table.insert("denom".to_owned(), Value::String(nam_addr.to_string()));
     chain.insert("gas_price".to_owned(), Value::Table(table));
+
+    chain.insert("max_block_time".to_owned(), Value::String("60s".to_owned()));
 
     Value::Table(chain)
 }
