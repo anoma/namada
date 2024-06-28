@@ -54,7 +54,7 @@ use namada_core::collections::{HashMap, HashSet};
 use namada_core::dec::Dec;
 pub use namada_core::masp::{
     encode_asset_type, AssetData, BalanceOwner, ExtendedViewingKey,
-    PaymentAddress, TransferSource, TransferTarget,
+    PaymentAddress, TransferSource, TransferTarget, TxId,
 };
 use namada_core::masp::{MaspEpoch, MaspTxRefs};
 use namada_core::storage::{BlockHeight, TxIndex};
@@ -851,14 +851,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             .0
             .iter()
             .try_fold(vec![], |mut acc, hash| {
-                match tx
-                    .get_section(hash)
-                    .and_then(|section| section.masp_tx())
-                    .ok_or_else(|| {
-                        Error::Other(
-                            "Missing expected masp transaction".to_string(),
-                        )
-                    }) {
+                match tx.get_masp_section(hash).cloned().ok_or_else(|| {
+                    Error::Other(
+                        "Missing expected masp transaction".to_string(),
+                    )
+                }) {
                     Ok(transaction) => {
                         acc.push(transaction);
                         Ok(acc)
