@@ -301,6 +301,7 @@ pub fn id_from_pk(pk: &common::PublicKey) -> TendermintNodeId {
 
 /// Initialize a new test network from the given configuration.
 pub fn init_network(
+    global_args: args::Global,
     args::InitNetwork {
         templates_path,
         wasm_checksums_path,
@@ -393,9 +394,11 @@ pub fn init_network(
     // Try to copy the built WASM, if they're present with the checksums
     let checksums = wasm_loader::Checksums::read_checksums(&wasm_dir_full)
         .unwrap_or_else(|_| safe_exit(1));
-    let base_wasm_path = std::env::current_dir()
-        .unwrap()
-        .join(crate::config::DEFAULT_WASM_DIR);
+    let base_wasm_path = global_args.wasm_dir.unwrap_or_else(|| {
+        std::env::current_dir()
+            .unwrap()
+            .join(crate::config::DEFAULT_WASM_DIR)
+    });
     for (_, full_name) in checksums.0 {
         // try to copy built file from the Namada WASM root dir
         let file = base_wasm_path.join(&full_name);
