@@ -1,5 +1,7 @@
 //! Shielded and transparent tokens related functions
 
+use std::collections::BTreeMap;
+
 use namada_core::address::Address;
 use namada_events::{EmitEvents, EventLevel};
 #[cfg(any(test, feature = "testing"))]
@@ -47,6 +49,37 @@ pub fn transfer(
             ),
         },
     });
+
+    Ok(())
+}
+
+/// A transparent token transfer that can be used in a transaction.
+pub fn multi_transfer(
+    ctx: &mut Ctx,
+    sources: &BTreeMap<(Address, Address), Amount>,
+    dests: &BTreeMap<(Address, Address), Amount>,
+) -> TxResult {
+    for (src, token) in sources.keys() {
+        // The tx must be authorized by the source address
+        ctx.insert_verifier(src)?;
+        if token.is_internal() {
+            // Established address tokens do not have VPs themselves, their
+            // validation is handled by the `Multitoken` internal address, but
+            // internal token addresses have to verify the transfer
+            ctx.insert_verifier(token)?;
+        }
+    }
+
+    for (_, token) in dests.keys() {
+        if token.is_internal() {
+            // Established address tokens do not have VPs themselves, their
+            // validation is handled by the `Multitoken` internal address, but
+            // internal token addresses have to verify the transfer
+            ctx.insert_verifier(token)?;
+        }
+    }
+
+    namada_token::multi_transfer(ctx, sources, dests)?;
 
     Ok(())
 }

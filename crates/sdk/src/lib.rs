@@ -865,7 +865,6 @@ pub mod testing {
     use ripemd::Digest as RipemdDigest;
     use sha2::Digest;
     use token::testing::arb_vectorized_transparent_transfer;
-    use token::TransparentTransfer;
 
     use super::*;
     use crate::account::tests::{arb_init_account, arb_update_account};
@@ -1108,8 +1107,8 @@ pub mod testing {
             code_hash in arb_hash(),
             (masp_tx_type, (shielded_transfer, asset_types, build_params)) in prop_oneof![
                 (Just(MaspTxType::Shielded), arb_shielded_transfer(0..MAX_ASSETS)),
-                (Just(MaspTxType::Shielding), arb_shielding_transfer(encode_address(&transfers.transparent.first().unwrap().source), 1)),
-                (Just(MaspTxType::Unshielding), arb_deshielding_transfer(encode_address(&transfers.transparent.first().unwrap().target), 1)),
+                (Just(MaspTxType::Shielding), arb_shielding_transfer(encode_address(&transfers.sources.keys().next().unwrap().owner), 1)),
+                (Just(MaspTxType::Unshielding), arb_deshielding_transfer(encode_address(&transfers.targets.keys().next().unwrap().owner), 1)),
             ],
             transfers in Just(transfers),
         ) -> (Tx, TxData) {
@@ -1121,10 +1120,7 @@ pub mod testing {
             let tx_data = match masp_tx_type {
                 MaspTxType::Shielded => {
                     tx.add_code_from_hash(code_hash, Some(TX_TRANSFER_WASM.to_owned()));
-                    let data = Transfer {
-                        transparent: vec![],
-                        shielded_section_hash: Some(shielded_section_hash),
-                    };
+                    let data = Transfer::masp(shielded_section_hash);
                     tx.add_data(data.clone());
                     TxData::MaspTransfer(data, (build_params, build_param_bytes))
                 },
@@ -1137,18 +1133,15 @@ pub mod testing {
                         decoded.denom,
                     );
                     tx.add_code_from_hash(code_hash, Some(TX_TRANSFER_WASM.to_owned()));
-                    let transparent = transfers.transparent.into_iter().map(|transfer|
-                    TransparentTransfer{
-                        source: transfer.source,
-                        token: token.clone(),
-                        amount,
-                        target: MASP,
-                    }
-                    ).collect();
-                    let data = Transfer{
-                        transparent,
-                        shielded_section_hash: Some(shielded_section_hash),
-                    };
+                    let data = transfers.sources.into_iter().try_fold(
+                        Transfer::masp(shielded_section_hash),
+                        |acc, transfer| acc.transfer(
+                            transfer.0.owner,
+                            MASP,
+                            token.clone(),
+                            amount,
+                        ),
+                    ).unwrap();
                     tx.add_data(data.clone());
                     TxData::MaspTransfer(data, (build_params, build_param_bytes))
                 },
@@ -1161,15 +1154,15 @@ pub mod testing {
                         decoded.denom,
                     );
                     tx.add_code_from_hash(code_hash, Some(TX_TRANSFER_WASM.to_owned()));
-                    let transparent = transfers.transparent.into_iter().map(|transfer|
-                    TransparentTransfer{
-                        target: transfer.target,
-                            token: token.clone(),
-                        amount,
-                        source: MASP,
-                    }
-                    ).collect();
-                    let data = Transfer{transparent, shielded_section_hash: Some(shielded_section_hash) };
+                    let data = transfers.targets.into_iter().try_fold(
+                        Transfer::masp(shielded_section_hash),
+                        |acc, transfer| acc.transfer(
+                            MASP,
+                            transfer.0.owner,
+                            token.clone(),
+                            amount,
+                        )
+                    ).unwrap();
                     tx.add_data(data.clone());
                     TxData::MaspTransfer(data, (build_params, build_param_bytes))
                 },

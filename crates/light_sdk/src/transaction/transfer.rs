@@ -2,7 +2,6 @@ use namada_sdk::address::Address;
 use namada_sdk::hash::Hash;
 use namada_sdk::key::common;
 use namada_sdk::token::transaction::Transaction;
-use namada_sdk::token::TransparentTransfer;
 pub use namada_sdk::token::{DenominatedAmount, Transfer};
 use namada_sdk::tx::data::GasLimit;
 use namada_sdk::tx::{Authorization, Tx, TxError, TX_TRANSFER_WASM};
@@ -16,18 +15,10 @@ pub struct TransferBuilder(Tx);
 
 impl TransferBuilder {
     /// Build a transparent transfer transaction from the given parameters
-    pub fn transparent(
-        transfers: Vec<TransparentTransfer>,
-        args: GlobalArgs,
-    ) -> Self {
-        let data = namada_sdk::token::Transfer {
-            transparent: transfers,
-            shielded_section_hash: None,
-        };
-
+    pub fn transfer(transfer: Transfer, args: GlobalArgs) -> Self {
         Self(transaction::build_tx(
             args,
-            data,
+            transfer,
             TX_TRANSFER_WASM.to_string(),
         ))
     }
@@ -38,30 +29,7 @@ impl TransferBuilder {
         transaction: Transaction,
         args: GlobalArgs,
     ) -> Self {
-        let data = namada_sdk::token::Transfer {
-            transparent: vec![],
-            shielded_section_hash: Some(shielded_section_hash),
-        };
-
-        let mut tx =
-            transaction::build_tx(args, data, TX_TRANSFER_WASM.to_string());
-        tx.add_masp_tx_section(transaction);
-
-        Self(tx)
-    }
-
-    /// Build a MASP transfer transaction from the given parameters
-    pub fn masp(
-        transfers: Vec<TransparentTransfer>,
-        shielded_section_hash: Hash,
-        transaction: Transaction,
-        args: GlobalArgs,
-    ) -> Self {
-        let data = namada_sdk::token::Transfer {
-            transparent: transfers,
-            shielded_section_hash: Some(shielded_section_hash),
-        };
-
+        let data = Transfer::masp(shielded_section_hash);
         let mut tx =
             transaction::build_tx(args, data, TX_TRANSFER_WASM.to_string());
         tx.add_masp_tx_section(transaction);

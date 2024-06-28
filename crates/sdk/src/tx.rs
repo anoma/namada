@@ -65,7 +65,6 @@ use namada_tx::data::{pos, BatchedTxResult, ResultCode, TxResult};
 pub use namada_tx::{Authorization, *};
 use num_traits::Zero;
 use rand_core::{OsRng, RngCore};
-use token::TransparentTransfer;
 
 use crate::args::{
     TxShieldedTransferData, TxShieldingTransferData, TxTransparentTransferData,
@@ -2567,28 +2566,30 @@ pub async fn build_ibc_transfer(
         tx.add_memo(memo);
     }
 
-    let transfer = shielded_parts.map(|(shielded_transfer, asset_types)| {
-        let masp_tx_hash =
-            tx.add_masp_tx_section(shielded_transfer.masp_tx.clone()).1;
-        let transfer = token::Transfer {
-            transparent: vec![TransparentTransfer {
-                // The token will be escrowed to IBC address
-                source: source.clone(),
-                target: MASP,
-                token: args.token.clone(),
-                amount: validated_amount,
-            }],
-            // Link the Transfer to the MASP Transaction by hash code
-            shielded_section_hash: Some(masp_tx_hash),
-        };
-        tx.add_masp_builder(MaspBuilder {
-            asset_types,
-            metadata: shielded_transfer.metadata,
-            builder: shielded_transfer.builder,
-            target: masp_tx_hash,
-        });
-        transfer
-    });
+    let transfer = shielded_parts
+        .map(|(shielded_transfer, asset_types)| {
+            let masp_tx_hash =
+                tx.add_masp_tx_section(shielded_transfer.masp_tx.clone()).1;
+            let transfer = token::Transfer::masp(masp_tx_hash)
+                .transfer(
+                    // The token will be escrowed to IBC address
+                    source.clone(),
+                    MASP,
+                    args.token.clone(),
+                    validated_amount,
+                )
+                .ok_or(Error::Other(
+                    "Combined transfer overflows".to_string(),
+                ))?;
+            tx.add_masp_builder(MaspBuilder {
+                asset_types,
+                metadata: shielded_transfer.metadata,
+                builder: shielded_transfer.builder,
+                target: masp_tx_hash,
+            });
+            Result::Ok(transfer)
+        })
+        .transpose()?;
 
     // Check the token and make the tx data
     let ibc_denom =
@@ -2837,7 +2838,7 @@ pub async fn build_transparent_transfer<N: Namada>(
     context: &N,
     args: &mut args::TxTransparentTransfer,
 ) -> Result<(Tx, SigningTxData)> {
-    let mut transfers = vec![];
+    let mut transfers = token::Transfer::default();
 
     // Evaluate signer and fees
     let (signing_data, fee_amount, updated_balance) = {
@@ -2913,26 +2914,21 @@ pub async fn build_transparent_transfer<N: Namada>(
         }
 
         // Construct the corresponding transparent Transfer object
-        let transfer_data = token::TransparentTransfer {
-            source: source.to_owned(),
-            target: target.to_owned(),
-            token: token.to_owned(),
-            amount: validated_amount,
-        };
-
-        transfers.push(transfer_data);
+        transfers = transfers
+            .transfer(
+                source.to_owned(),
+                target.to_owned(),
+                token.to_owned(),
+                validated_amount,
+            )
+            .ok_or(Error::Other("Combined transfer overflows".to_string()))?;
     }
-    // Construct the corresponding transparent Transfer object
-    let transfer = token::Transfer {
-        transparent: transfers,
-        shielded_section_hash: None,
-    };
 
     let tx = build_pow_flag(
         context,
         &args.tx,
         args.tx_code_path.clone(),
-        transfer,
+        transfers,
         do_nothing,
         fee_amount,
         &signing_data.fee_payer,
@@ -3014,10 +3010,7 @@ pub async fn build_shielded_transfer<N: Namada>(
     };
 
     // Construct the tx data with a placeholder shielded section hash
-    let data = token::Transfer {
-        transparent: vec![],
-        shielded_section_hash: None,
-    };
+    let data = token::Transfer::default();
     let tx = build_pow_flag(
         context,
         &args.tx,
@@ -3059,7 +3052,7 @@ pub async fn build_shielding_transfer<N: Namada>(
             })?;
 
     let mut transfer_data = vec![];
-    let mut data = vec![];
+    let mut data = token::Transfer::default();
     for TxShieldingTransferData {
         source,
         token,
@@ -3099,12 +3092,14 @@ pub async fn build_shielding_transfer<N: Namada>(
             amount: validated_amount,
         });
 
-        data.push(token::TransparentTransfer {
-            source: source.to_owned(),
-            target: MASP,
-            token: token.to_owned(),
-            amount: validated_amount,
-        });
+        data = data
+            .transfer(
+                source.to_owned(),
+                MASP,
+                token.to_owned(),
+                validated_amount,
+            )
+            .ok_or(Error::Other("Combined transfer overflows".to_string()))?;
     }
 
     let shielded_parts = construct_shielded_parts(
@@ -3145,12 +3140,6 @@ pub async fn build_shielding_transfer<N: Namada>(
         Ok(())
     };
 
-    // Construct the tx data with a placeholder shielded section hash
-    let data = token::Transfer {
-        transparent: data,
-        shielded_section_hash: None,
-    };
-
     let tx = build_pow_flag(
         context,
         &args.tx,
@@ -3177,7 +3166,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
     let fee_amount = validate_fee(context, &args.tx).await?;
 
     let mut transfer_data = vec![];
-    let mut data = vec![];
+    let mut data = token::Transfer::default();
     for TxUnshieldingTransferData {
         target,
         token,
@@ -3196,12 +3185,14 @@ pub async fn build_unshielding_transfer<N: Namada>(
             amount: validated_amount,
         });
 
-        data.push(token::TransparentTransfer {
-            source: MASP,
-            target: target.to_owned(),
-            token: token.to_owned(),
-            amount: validated_amount,
-        });
+        data = data
+            .transfer(
+                MASP,
+                target.to_owned(),
+                token.to_owned(),
+                validated_amount,
+            )
+            .ok_or(Error::Other("Combined transfer overflows".to_string()))?;
     }
 
     // TODO(namada#2597): this function should also take another arg as the fees
@@ -3241,12 +3232,6 @@ pub async fn build_unshielding_transfer<N: Namada>(
         data.shielded_section_hash = Some(shielded_section_hash);
         tracing::debug!("Transfer data {data:?}");
         Ok(())
-    };
-
-    // Construct the tx data with a placeholder shielded section hash
-    let data = token::Transfer {
-        transparent: data,
-        shielded_section_hash: None,
     };
 
     let tx = build_pow_flag(
@@ -3630,15 +3615,9 @@ pub async fn gen_ibc_shielding_transfer<N: Namada>(
     if let Some(shielded_transfer) = shielded_transfer {
         let masp_tx_hash =
             Section::MaspTx(shielded_transfer.masp_tx.clone()).get_hash();
-        let transfer = token::Transfer {
-            transparent: vec![TransparentTransfer {
-                source: source.clone(),
-                target: MASP,
-                token: token.clone(),
-                amount: validated_amount,
-            }],
-            shielded_section_hash: Some(masp_tx_hash),
-        };
+        let transfer = token::Transfer::masp(masp_tx_hash)
+            .transfer(source.clone(), MASP, token.clone(), validated_amount)
+            .ok_or(Error::Other("Combined transfer overflows".to_string()))?;
         Ok(Some((transfer, shielded_transfer.masp_tx)))
     } else {
         Ok(None)

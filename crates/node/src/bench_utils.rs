@@ -75,7 +75,7 @@ use namada::ledger::queries::{
 };
 use namada::masp::MaspTxRefs;
 use namada::state::StorageRead;
-use namada::token::{Amount, DenominatedAmount, Transfer, TransparentTransfer};
+use namada::token::{Amount, DenominatedAmount, Transfer};
 use namada::tx::data::pos::Bond;
 use namada::tx::data::{
     BatchResults, BatchedTxResult, Fee, TxResult, VpsResult,
@@ -1113,10 +1113,7 @@ impl BenchShieldedCtx {
         {
             namada.client().generate_tx(
                 TX_TRANSFER_WASM,
-                Transfer {
-                    transparent: vec![],
-                    shielded_section_hash: Some(shielded_section_hash),
-                },
+                Transfer::masp(shielded_section_hash),
                 Some(shielded),
                 None,
                 vec![&defaults::albert_keypair()],
@@ -1124,15 +1121,14 @@ impl BenchShieldedCtx {
         } else if target.effective_address() == MASP {
             namada.client().generate_tx(
                 TX_TRANSFER_WASM,
-                Transfer {
-                    transparent: vec![TransparentTransfer {
-                        source: source.effective_address(),
-                        target: MASP,
-                        token: address::testing::nam(),
-                        amount: DenominatedAmount::native(amount),
-                    }],
-                    shielded_section_hash: Some(shielded_section_hash),
-                },
+                Transfer::masp(shielded_section_hash)
+                    .transfer(
+                        source.effective_address(),
+                        MASP,
+                        address::testing::nam(),
+                        DenominatedAmount::native(amount),
+                    )
+                    .unwrap(),
                 Some(shielded),
                 None,
                 vec![&defaults::albert_keypair()],
@@ -1140,15 +1136,14 @@ impl BenchShieldedCtx {
         } else {
             namada.client().generate_tx(
                 TX_TRANSFER_WASM,
-                Transfer {
-                    transparent: vec![TransparentTransfer {
-                        source: MASP,
-                        target: target.effective_address(),
-                        token: address::testing::nam(),
-                        amount: DenominatedAmount::native(amount),
-                    }],
-                    shielded_section_hash: Some(shielded_section_hash),
-                },
+                Transfer::masp(shielded_section_hash)
+                    .transfer(
+                        MASP,
+                        target.effective_address(),
+                        address::testing::nam(),
+                        DenominatedAmount::native(amount),
+                    )
+                    .unwrap(),
                 Some(shielded),
                 None,
                 vec![&defaults::albert_keypair()],
@@ -1215,10 +1210,17 @@ impl BenchShieldedCtx {
         let vectorized_transfer =
             Transfer::deserialize(&mut tx.tx.data(&tx.cmt).unwrap().as_slice())
                 .unwrap();
+        let sources =
+            vec![vectorized_transfer.sources.into_iter().next().unwrap()]
+                .into_iter()
+                .collect();
+        let targets =
+            vec![vectorized_transfer.targets.into_iter().next().unwrap()]
+                .into_iter()
+                .collect();
         let transfer = Transfer {
-            transparent: vec![
-                vectorized_transfer.transparent.first().unwrap().to_owned(),
-            ],
+            sources,
+            targets,
             shielded_section_hash: Some(
                 vectorized_transfer.shielded_section_hash.unwrap(),
             ),

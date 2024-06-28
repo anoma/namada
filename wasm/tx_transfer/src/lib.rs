@@ -2,6 +2,8 @@
 //! This tx uses `token::TransparentTransfer` wrapped inside `SignedTxData`
 //! as its input as declared in `namada` crate.
 
+use std::collections::BTreeMap;
+
 use namada_tx_prelude::action::{Action, MaspAction, Write};
 use namada_tx_prelude::*;
 
@@ -12,17 +14,29 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
         .wrap_err("Failed to decode token::TransparentTransfer tx data")?;
     debug_log!("apply_tx called with transfer: {:#?}", transfers);
 
-    for transfer in transfers.transparent {
-        token::transfer(
-            ctx,
-            &transfer.source,
-            &transfer.target,
-            &transfer.token,
-            transfer.amount.amount(),
-        )
-        .wrap_err("Token transfer failed")?;
-    }
+    // Prepare the sources of the multi-transfer
+    let sources = transfers
+        .sources
+        .into_iter()
+        .map(|(account, amount)| {
+            ((account.owner, account.token), amount.amount())
+        })
+        .collect::<BTreeMap<_, _>>();
 
+    // Prepare the target of the multi-transfer
+    let targets = transfers
+        .targets
+        .into_iter()
+        .map(|(account, amount)| {
+            ((account.owner, account.token), amount.amount())
+        })
+        .collect::<BTreeMap<_, _>>();
+
+    // Effect the multi transfer
+    token::multi_transfer(ctx, &sources, &targets)
+        .wrap_err("Token transfer failed")?;
+
+    // Apply the shielded transfer if there is a link to one
     if let Some(masp_section_ref) = transfers.shielded_section_hash {
         let shielded = tx_data
             .tx
