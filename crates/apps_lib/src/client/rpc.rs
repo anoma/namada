@@ -626,17 +626,6 @@ pub async fn query_protocol_parameters(
         epoch_duration.min_num_of_blocks
     );
 
-    let key = param_storage::get_max_expected_time_per_block_key();
-    let max_block_duration: u64 = query_storage_value(context.client(), &key)
-        .await
-        .expect("Parameter should be defined.");
-    display_line!(
-        context.io(),
-        "{:4}Max. block duration: {}",
-        "",
-        max_block_duration
-    );
-
     let key = param_storage::get_tx_allowlist_storage_key();
     let vp_allowlist: Vec<String> = query_storage_value(context.client(), &key)
         .await
@@ -660,16 +649,16 @@ pub async fn query_protocol_parameters(
         .expect("Parameter should be defined.");
     display_line!(context.io(), "{:4}Max block gas: {:?}", "", max_block_gas);
 
-    let key = param_storage::get_fee_unshielding_gas_limit_key();
-    let fee_unshielding_gas_limit: u64 =
+    let key = param_storage::get_masp_fee_payment_gas_limit_key();
+    let masp_fee_payment_gas_limit: u64 =
         query_storage_value(context.client(), &key)
             .await
             .expect("Parameter should be defined.");
     display_line!(
         context.io(),
-        "{:4}Fee unshielding gas limit: {:?}",
+        "{:4}Masp fee payment gas limit: {:?}",
         "",
-        fee_unshielding_gas_limit
+        masp_fee_payment_gas_limit
     );
 
     let key = param_storage::get_gas_cost_key();
@@ -1707,6 +1696,19 @@ pub async fn query_conversions(
 ) {
     // The chosen token type of the conversions
     let target_token = args.token;
+
+    if target_token.as_ref().is_none() {
+        // Query and print the total rewards first
+        let total_rewards = rpc::query_masp_total_rewards(context.client())
+            .await
+            .expect("MASP total rewards should be present");
+        display!(
+            context.io(),
+            "Total rewards of native token minted for shielded pool: {}",
+            total_rewards.to_string_native()
+        );
+    }
+
     // To facilitate human readable token addresses
     let tokens = context
         .wallet()

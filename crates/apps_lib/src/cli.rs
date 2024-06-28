@@ -66,26 +66,30 @@ pub mod cmds {
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
         TxRevealPk(TxRevealPk),
+
+        // Generate CLI completions
+        Complete(Complete),
     }
 
     impl Cmd for Namada {
         fn add_sub(app: App) -> App {
-            app.subcommand(NamadaNode::def())
-                .subcommand(NamadaRelayer::def())
-                .subcommand(NamadaClient::def())
-                .subcommand(NamadaWallet::def())
-                .subcommand(EthBridgePool::def())
-                .subcommand(Ledger::def())
-                .subcommand(TxCustom::def())
-                .subcommand(TxTransparentTransfer::def())
-                .subcommand(TxShieldedTransfer::def())
-                .subcommand(TxShieldingTransfer::def())
-                .subcommand(TxUnshieldingTransfer::def())
-                .subcommand(TxIbcTransfer::def())
-                .subcommand(TxUpdateAccount::def())
-                .subcommand(TxInitProposal::def())
-                .subcommand(TxVoteProposal::def())
-                .subcommand(TxRevealPk::def())
+            app.subcommand(NamadaNode::def().display_order(1))
+                .subcommand(NamadaRelayer::def().display_order(1))
+                .subcommand(NamadaClient::def().display_order(1))
+                .subcommand(NamadaWallet::def().display_order(1))
+                .subcommand(EthBridgePool::def().display_order(2))
+                .subcommand(Ledger::def().display_order(2))
+                .subcommand(TxCustom::def().display_order(2))
+                .subcommand(TxTransparentTransfer::def().display_order(2))
+                .subcommand(TxShieldedTransfer::def().display_order(2))
+                .subcommand(TxShieldingTransfer::def().display_order(2))
+                .subcommand(TxUnshieldingTransfer::def().display_order(2))
+                .subcommand(TxIbcTransfer::def().display_order(2))
+                .subcommand(TxUpdateAccount::def().display_order(2))
+                .subcommand(TxInitProposal::def().display_order(2))
+                .subcommand(TxVoteProposal::def().display_order(2))
+                .subcommand(TxRevealPk::def().display_order(2))
+                .subcommand(Complete::def().display_order(3))
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -114,6 +118,7 @@ pub mod cmds {
             let tx_vote_proposal =
                 SubCmd::parse(matches).map(Self::TxVoteProposal);
             let tx_reveal_pk = SubCmd::parse(matches).map(Self::TxRevealPk);
+            let complete = SubCmd::parse(matches).map(Self::Complete);
             node.or(client)
                 .or(relayer)
                 .or(eth_bridge_pool)
@@ -129,6 +134,7 @@ pub mod cmds {
                 .or(tx_init_proposal)
                 .or(tx_vote_proposal)
                 .or(tx_reveal_pk)
+                .or(complete)
         }
     }
 
@@ -2260,6 +2266,28 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct Complete(pub args::Complete);
+
+    impl SubCmd for Complete {
+        const CMD: &'static str = "complete";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Complete(args::Complete::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(wrap!("Generate shell completions"))
+                .add_args::<args::Complete>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct EpochSleep(pub args::Query<args::CliTypes>);
 
     impl SubCmd for EpochSleep {
@@ -3221,6 +3249,8 @@ pub mod args {
         "gas-limit",
         DefaultFn(|| GasLimit::from(DEFAULT_GAS_LIMIT)),
     );
+    pub const GAS_SPENDING_KEY: ArgOpt<WalletSpendingKey> =
+        arg_opt("gas-spending-key");
     pub const FEE_TOKEN: ArgDefaultFromCtx<WalletAddrOrNativeToken> =
         arg_default_from_ctx("gas-token", DefaultFn(|| "".parse().unwrap()));
     pub const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
@@ -3328,6 +3358,7 @@ pub mod args {
     pub const SAFE_MODE: ArgFlag = flag("safe-mode");
     pub const SCHEME: ArgDefault<SchemeType> =
         arg_default("scheme", DefaultFn(|| SchemeType::Ed25519));
+    pub const SHELL: Arg<Shell> = arg("shell");
     pub const SELF_BOND_AMOUNT: Arg<token::DenominatedAmount> =
         arg("self-bond-amount");
     pub const SENDER: Arg<String> = arg("sender");
@@ -3475,12 +3506,10 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.arg(NAMADA_START_TIME.def().help(wrap!(
-                "The start time of the ledger. Accepts a relaxed form of \
-                 RFC3339. A space or a 'T' are accepted as the separator \
-                 between the date and time components. Additional spaces are \
-                 allowed between each component.\nAll of these examples are \
-                 equivalent:\n2023-01-20T12:12:12Z\n2023-01-20 \
-                 12:12:12Z\n2023-  01-20T12:  12:12Z"
+                "The start time of the ledger. Accepts a strict subset of \
+                 RFC3339. A 'T' is accepted as the separator between the date \
+                 and time components.\nHere is a valid timestamp: \
+                 2023-01-20T12:12:12Z"
             )))
             .arg(
                 PATH_OPT
@@ -4338,14 +4367,21 @@ pub mod args {
             ctx: &mut Context,
         ) -> Result<TxTransparentTransfer<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx)?;
+            let mut data = vec![];
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
+
+            for transfer_data in self.data {
+                data.push(TxTransparentTransferData {
+                    source: chain_ctx.get(&transfer_data.source),
+                    target: chain_ctx.get(&transfer_data.target),
+                    token: chain_ctx.get(&transfer_data.token),
+                    amount: transfer_data.amount,
+                });
+            }
 
             Ok(TxTransparentTransfer::<SdkTypes> {
                 tx,
-                source: chain_ctx.get(&self.source),
-                target: chain_ctx.get(&self.target),
-                token: chain_ctx.get(&self.token),
-                amount: self.amount,
+                data,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -4359,12 +4395,16 @@ pub mod args {
             let token = TOKEN.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let tx_code_path = PathBuf::from(TX_TRANSPARENT_TRANSFER_WASM);
-            Self {
-                tx,
+            let data = vec![TxTransparentTransferData {
                 source,
                 target,
                 token,
                 amount,
+            }];
+
+            Self {
+                tx,
+                data,
                 tx_code_path,
             }
         }
@@ -4393,14 +4433,28 @@ pub mod args {
             ctx: &mut Context,
         ) -> Result<TxShieldedTransfer<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx)?;
+            let mut data = vec![];
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
+
+            for transfer_data in self.data {
+                data.push(TxShieldedTransferData {
+                    source: chain_ctx.get_cached(&transfer_data.source),
+                    target: chain_ctx.get(&transfer_data.target),
+                    token: chain_ctx.get(&transfer_data.token),
+                    amount: transfer_data.amount,
+                });
+            }
+
+            let gas_spending_keys = self
+                .gas_spending_keys
+                .iter()
+                .map(|key| chain_ctx.get_cached(key))
+                .collect();
 
             Ok(TxShieldedTransfer::<SdkTypes> {
                 tx,
-                source: chain_ctx.get_cached(&self.source),
-                target: chain_ctx.get(&self.target),
-                token: chain_ctx.get(&self.token),
-                amount: self.amount,
+                data,
+                gas_spending_keys,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -4414,12 +4468,21 @@ pub mod args {
             let token = TOKEN.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let tx_code_path = PathBuf::from(TX_SHIELDED_TRANSFER_WASM);
-            Self {
-                tx,
+            let data = vec![TxShieldedTransferData {
                 source,
                 target,
                 token,
                 amount,
+            }];
+            let mut gas_spending_keys = vec![];
+            if let Some(key) = GAS_SPENDING_KEY.parse(matches) {
+                gas_spending_keys.push(key);
+            }
+
+            Self {
+                tx,
+                data,
+                gas_spending_keys,
                 tx_code_path,
             }
         }
@@ -4442,6 +4505,10 @@ pub mod args {
                         .def()
                         .help(wrap!("The amount to transfer in decimal.")),
                 )
+                .arg(GAS_SPENDING_KEY.def().help(wrap!(
+                    "The optional spending key that will be used in addition \
+                     to the source for gas payment."
+                )))
         }
     }
 
@@ -4453,14 +4520,21 @@ pub mod args {
             ctx: &mut Context,
         ) -> Result<TxShieldingTransfer<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx)?;
+            let mut data = vec![];
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
+
+            for transfer_data in self.data {
+                data.push(TxShieldingTransferData {
+                    source: chain_ctx.get(&transfer_data.source),
+                    token: chain_ctx.get(&transfer_data.token),
+                    amount: transfer_data.amount,
+                });
+            }
 
             Ok(TxShieldingTransfer::<SdkTypes> {
                 tx,
-                source: chain_ctx.get(&self.source),
+                data,
                 target: chain_ctx.get(&self.target),
-                token: chain_ctx.get(&self.token),
-                amount: self.amount,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -4474,12 +4548,16 @@ pub mod args {
             let token = TOKEN.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let tx_code_path = PathBuf::from(TX_SHIELDING_TRANSFER_WASM);
-            Self {
-                tx,
+            let data = vec![TxShieldingTransferData {
                 source,
-                target,
                 token,
                 amount,
+            }];
+
+            Self {
+                tx,
+                data,
+                target,
                 tx_code_path,
             }
         }
@@ -4514,14 +4592,27 @@ pub mod args {
             ctx: &mut Context,
         ) -> Result<TxUnshieldingTransfer<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx)?;
+            let mut data = vec![];
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
+
+            for transfer_data in self.data {
+                data.push(TxUnshieldingTransferData {
+                    target: chain_ctx.get(&transfer_data.target),
+                    token: chain_ctx.get(&transfer_data.token),
+                    amount: transfer_data.amount,
+                });
+            }
+            let gas_spending_keys = self
+                .gas_spending_keys
+                .iter()
+                .map(|key| chain_ctx.get_cached(key))
+                .collect();
 
             Ok(TxUnshieldingTransfer::<SdkTypes> {
                 tx,
+                data,
+                gas_spending_keys,
                 source: chain_ctx.get_cached(&self.source),
-                target: chain_ctx.get(&self.target),
-                token: chain_ctx.get(&self.token),
-                amount: self.amount,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -4535,12 +4626,21 @@ pub mod args {
             let token = TOKEN.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let tx_code_path = PathBuf::from(TX_UNSHIELDING_TRANSFER_WASM);
-            Self {
-                tx,
-                source,
+            let data = vec![TxUnshieldingTransferData {
                 target,
                 token,
                 amount,
+            }];
+            let mut gas_spending_keys = vec![];
+            if let Some(key) = GAS_SPENDING_KEY.parse(matches) {
+                gas_spending_keys.push(key);
+            }
+
+            Self {
+                tx,
+                source,
+                data,
+                gas_spending_keys,
                 tx_code_path,
             }
         }
@@ -4563,6 +4663,10 @@ pub mod args {
                         .def()
                         .help(wrap!("The amount to transfer in decimal.")),
                 )
+                .arg(GAS_SPENDING_KEY.def().help(wrap!(
+                    "The optional spending key that will be used in addition \
+                     to the source for gas payment."
+                )))
         }
     }
 
@@ -4575,6 +4679,11 @@ pub mod args {
         ) -> Result<TxIbcTransfer<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx)?;
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
+            let gas_spending_keys = self
+                .gas_spending_keys
+                .iter()
+                .map(|key| chain_ctx.get_cached(key))
+                .collect();
 
             Ok(TxIbcTransfer::<SdkTypes> {
                 tx,
@@ -4588,6 +4697,7 @@ pub mod args {
                 timeout_sec_offset: self.timeout_sec_offset,
                 refund_target: chain_ctx.get_opt(&self.refund_target),
                 memo: self.memo,
+                gas_spending_keys,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -4609,6 +4719,10 @@ pub mod args {
                 std::fs::read_to_string(path)
                     .expect("Expected a file at given path")
             });
+            let mut gas_spending_keys = vec![];
+            if let Some(key) = GAS_SPENDING_KEY.parse(matches) {
+                gas_spending_keys.push(key);
+            }
             let tx_code_path = PathBuf::from(TX_IBC_WASM);
             Self {
                 tx,
@@ -4622,6 +4736,7 @@ pub mod args {
                 timeout_sec_offset,
                 refund_target,
                 memo,
+                gas_spending_keys,
                 tx_code_path,
             }
         }
@@ -4657,6 +4772,11 @@ pub mod args {
                 )))
                 .arg(IBC_TRANSFER_MEMO_PATH.def().help(wrap!(
                     "The path for the memo field of ICS20 transfer."
+                )))
+                .arg(GAS_SPENDING_KEY.def().help(wrap!(
+                    "The optional spending key that will be used in addition \
+                     to the source for gas payment (if this is a shielded \
+                     action)."
                 )))
         }
     }
@@ -5520,6 +5640,29 @@ pub mod args {
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
                 .arg(PUBLIC_KEY.def().help(wrap!("A public key to reveal.")))
+        }
+    }
+
+    impl CliToSdk<Complete> for Complete {
+        type Error = std::io::Error;
+
+        fn to_sdk(self, _ctx: &mut Context) -> Result<Complete, Self::Error> {
+            Ok(Complete { shell: self.shell })
+        }
+    }
+
+    impl Args for Complete {
+        fn parse(matches: &ArgMatches) -> Self {
+            let shell = SHELL.parse(matches);
+            Self { shell }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                SHELL
+                    .def()
+                    .help(wrap!("The shell to generate the completions for.")),
+            )
         }
     }
 
@@ -8122,7 +8265,7 @@ pub fn namada_relayer_cli() -> Result<NamadaRelayer> {
     }
 }
 
-fn namada_app() -> App {
+pub fn namada_app() -> App {
     let app = App::new(APP_NAME)
         .version(namada_version())
         .about("Namada command line interface.")
@@ -8132,7 +8275,7 @@ fn namada_app() -> App {
     cmds::Namada::add_sub(args::Global::def(app))
 }
 
-fn namada_node_app() -> App {
+pub fn namada_node_app() -> App {
     let app = App::new(APP_NAME)
         .version(namada_version())
         .about("Namada node command line interface.")
@@ -8142,7 +8285,7 @@ fn namada_node_app() -> App {
     cmds::NamadaNode::add_sub(args::Global::def(app))
 }
 
-fn namada_client_app() -> App {
+pub fn namada_client_app() -> App {
     let app = App::new(APP_NAME)
         .version(namada_version())
         .about("Namada client command line interface.")
@@ -8152,7 +8295,7 @@ fn namada_client_app() -> App {
     cmds::NamadaClient::add_sub(args::Global::def(app))
 }
 
-fn namada_wallet_app() -> App {
+pub fn namada_wallet_app() -> App {
     let app = App::new(APP_NAME)
         .version(namada_version())
         .about("Namada wallet command line interface.")
@@ -8162,7 +8305,7 @@ fn namada_wallet_app() -> App {
     cmds::NamadaWallet::add_sub(args::Global::def(app))
 }
 
-fn namada_relayer_app() -> App {
+pub fn namada_relayer_app() -> App {
     let app = App::new(APP_NAME)
         .version(namada_version())
         .about("Namada relayer command line interface.")

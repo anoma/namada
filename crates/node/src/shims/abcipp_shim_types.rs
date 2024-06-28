@@ -1,6 +1,8 @@
 use crate::facade::tendermint::v0_37::abci::{Request, Response};
 
 pub mod shim {
+    use std::fmt::Debug;
+    use std::path::PathBuf;
 
     use thiserror::Error;
 
@@ -27,6 +29,23 @@ pub mod shim {
     impl From<shell::Error> for Error {
         fn from(err: shell::Error) -> Self {
             Self::Shell(err)
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    /// Indicate whether a state snapshot should be created
+    /// at a certain point in time
+    pub enum TakeSnapshot {
+        No,
+        Yes(PathBuf),
+    }
+
+    impl<T: AsRef<std::path::Path>> From<Option<T>> for TakeSnapshot {
+        fn from(value: Option<T>) -> Self {
+            match value {
+                None => TakeSnapshot::No,
+                Some(p) => TakeSnapshot::Yes(p.as_ref().to_path_buf()),
+            }
         }
     }
 
@@ -101,7 +120,7 @@ pub mod shim {
         RevertProposal(response::RevertProposal),
         FinalizeBlock(response::FinalizeBlock),
         EndBlock(tm_response::EndBlock),
-        Commit(tm_response::Commit),
+        Commit(tm_response::Commit, TakeSnapshot),
         Flush,
         Echo(tm_response::Echo),
         CheckTx(tm_response::CheckTx),
@@ -120,7 +139,7 @@ pub mod shim {
                 Response::InitChain(inner) => Ok(Resp::InitChain(inner)),
                 Response::Info(inner) => Ok(Resp::Info(inner)),
                 Response::Query(inner) => Ok(Resp::Query(inner)),
-                Response::Commit(inner) => Ok(Resp::Commit(inner)),
+                Response::Commit(inner, _) => Ok(Resp::Commit(inner)),
                 Response::Flush => Ok(Resp::Flush),
                 Response::Echo(inner) => Ok(Resp::Echo(inner)),
                 Response::CheckTx(inner) => Ok(Resp::CheckTx(inner)),

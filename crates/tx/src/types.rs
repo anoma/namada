@@ -242,14 +242,14 @@ impl PartialEq for Data {
 impl Data {
     /// Make a new data section with the given bytes
     pub fn new(data: Vec<u8>) -> Self {
+        use rand_core::{OsRng, RngCore};
+
         Self {
             salt: {
-                #[allow(clippy::disallowed_methods)]
-                DateTimeUtc::now()
-            }
-            .0
-            .timestamp_millis()
-            .to_le_bytes(),
+                let mut buf = [0; 8];
+                OsRng.fill_bytes(&mut buf);
+                buf
+            },
             data,
         }
     }
@@ -359,14 +359,14 @@ impl PartialEq for Code {
 impl Code {
     /// Make a new code section with the given bytes
     pub fn new(code: Vec<u8>, tag: Option<String>) -> Self {
+        use rand_core::{OsRng, RngCore};
+
         Self {
             salt: {
-                #[allow(clippy::disallowed_methods)]
-                DateTimeUtc::now()
-            }
-            .0
-            .timestamp_millis()
-            .to_le_bytes(),
+                let mut buf = [0; 8];
+                OsRng.fill_bytes(&mut buf);
+                buf
+            },
             code: Commitment::Id(code),
             tag,
         }
@@ -377,14 +377,14 @@ impl Code {
         hash: namada_core::hash::Hash,
         tag: Option<String>,
     ) -> Self {
+        use rand_core::{OsRng, RngCore};
+
         Self {
             salt: {
-                #[allow(clippy::disallowed_methods)]
-                DateTimeUtc::now()
-            }
-            .0
-            .timestamp_millis()
-            .to_le_bytes(),
+                let mut buf = [0; 8];
+                OsRng.fill_bytes(&mut buf);
+                buf
+            },
             code: Commitment::Hash(hash),
             tag,
         }
@@ -1137,6 +1137,12 @@ impl Tx {
         self.header.clone()
     }
 
+    /// Get the transaction's wrapper hash
+    pub fn wrapper_hash(&self) -> Option<namada_core::hash::Hash> {
+        matches!(&self.header.tx_type, TxType::Wrapper(_))
+            .then(|| self.header_hash())
+    }
+
     /// Get the transaction header hash
     pub fn header_hash(&self) -> namada_core::hash::Hash {
         Section::Header(self.header.clone()).get_hash()
@@ -1307,13 +1313,11 @@ impl Tx {
         public_keys_index_map: AccountPublicKeysMap,
         signer: &Option<Address>,
         threshold: u8,
-        max_signatures: Option<u8>,
         mut consume_verify_sig_gas: F,
     ) -> std::result::Result<Vec<&Authorization>, VerifySigError>
     where
         F: FnMut() -> std::result::Result<(), namada_gas::Error>,
     {
-        let max_signatures = max_signatures.unwrap_or(u8::MAX);
         // Records the public key indices used in successful signatures
         let mut verified_pks = HashSet::new();
         // Records the sections instrumental in verifying signatures
@@ -1331,15 +1335,6 @@ impl Tx {
                     .iter()
                     .all(|x| self.get_section(x).is_some())
                 {
-                    if signatures
-                        .total_signatures()
-                        .map_or(false, |len| len > max_signatures)
-                    {
-                        return Err(VerifySigError::InvalidSectionSignature(
-                            "too many signatures.".to_string(),
-                        ));
-                    }
-
                     // Finally verify that the signature itself is valid
                     let amt_verifieds = signatures
                         .verify_signature(
@@ -1386,7 +1381,6 @@ impl Tx {
             AccountPublicKeysMap::from_iter([public_key.clone()]),
             &None,
             1,
-            None,
             || Ok(()),
         )
         .map(|x| *x.first().unwrap())
@@ -1704,12 +1698,11 @@ impl Tx {
     }
 
     /// Creates a batched tx along with the reference to the first inner tx
-    #[cfg(any(test, feature = "testing"))]
-    pub fn batch_ref_first_tx(&self) -> BatchedTxRef<'_> {
-        BatchedTxRef {
+    pub fn batch_ref_first_tx(&self) -> Option<BatchedTxRef<'_>> {
+        Some(BatchedTxRef {
             tx: self,
-            cmt: self.first_commitments().unwrap(),
-        }
+            cmt: self.first_commitments()?,
+        })
     }
 
     /// Creates a batched tx along with a copy of the first inner tx

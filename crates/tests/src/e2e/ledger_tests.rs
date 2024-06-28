@@ -494,7 +494,6 @@ fn pos_bonds() -> Result<()> {
             genesis.parameters.pos_params.pipeline_len = pipeline_len;
             genesis.parameters.pos_params.unbonding_len = unbonding_len;
             genesis.parameters.parameters.min_num_of_blocks = 6;
-            genesis.parameters.parameters.max_expected_time_per_block = 1;
             genesis.parameters.parameters.epochs_per_year = 31_536_000;
             let mut genesis = setup::set_validators(
                 2,
@@ -746,7 +745,6 @@ fn pos_init_validator() -> Result<()> {
         |mut genesis, base_dir: &_| {
             genesis.parameters.parameters.min_num_of_blocks = 4;
             genesis.parameters.parameters.epochs_per_year = 31_536_000;
-            genesis.parameters.parameters.max_expected_time_per_block = 1;
             genesis.parameters.pos_params.pipeline_len = pipeline_len;
             genesis.parameters.pos_params.unbonding_len = 2;
             let genesis = setup::set_validators(
@@ -1448,7 +1446,6 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
             genesis.parameters.pos_params.pipeline_len = pipeline_len;
             genesis.parameters.pos_params.unbonding_len = unbonding_len;
             // genesis.parameters.parameters.min_num_of_blocks = 6;
-            // genesis.parameters.parameters.max_expected_time_per_block = 1;
             // genesis.parameters.parameters.epochs_per_year = 31_536_000;
             let mut genesis = setup::set_validators(
                 2,
@@ -1622,7 +1619,6 @@ fn test_invalid_validator_txs() -> Result<()> {
             genesis.parameters.pos_params.pipeline_len = pipeline_len;
             genesis.parameters.pos_params.unbonding_len = unbonding_len;
             // genesis.parameters.parameters.min_num_of_blocks = 6;
-            // genesis.parameters.parameters.max_expected_time_per_block = 1;
             // genesis.parameters.parameters.epochs_per_year = 31_536_000;
             let mut genesis = setup::set_validators(
                 2,
@@ -1798,7 +1794,6 @@ fn change_consensus_key() -> Result<()> {
     let test = setup::network(
         |mut genesis, base_dir| {
             genesis.parameters.parameters.min_num_of_blocks = min_num_of_blocks;
-            genesis.parameters.parameters.max_expected_time_per_block = 1;
             genesis.parameters.parameters.epochs_per_year = 31_536_000;
             genesis.parameters.pos_params.pipeline_len = pipeline_len;
             genesis.parameters.pos_params.unbonding_len = 4;
@@ -1911,7 +1906,6 @@ fn proposal_change_shielded_reward() -> Result<()> {
     let test = setup::network(
         |mut genesis, base_dir: &_| {
             genesis.parameters.gov_params.max_proposal_code_size = 600000;
-            genesis.parameters.parameters.max_expected_time_per_block = 1;
             setup::set_validators(1, genesis, base_dir, |_| 0u16)
         },
         None,
