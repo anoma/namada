@@ -1868,6 +1868,11 @@ mod test_utils {
                     )
                     .unwrap(),
                 votes: vec![],
+                height: 0u8.into(),
+                decided_last_commit: tendermint::abci::types::CommitInfo {
+                    round: 0u8.into(),
+                    votes: vec![],
+                },
             }
         }
     }
