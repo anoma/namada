@@ -478,7 +478,6 @@ impl MockNode {
             byzantine_validators: vec![],
             txs: txs.clone(),
             proposer_address,
-            votes: votes.clone(),
             height: height.try_into().unwrap(),
             decided_last_commit: tendermint::abci::types::CommitInfo {
                 round: 0u8.into(),
@@ -605,7 +604,6 @@ impl MockNode {
                 })
                 .collect(),
             proposer_address,
-            votes: votes.clone(),
             height: height.try_into().unwrap(),
             decided_last_commit: tendermint::abci::types::CommitInfo {
                 round: 0u8.into(),

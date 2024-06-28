@@ -163,7 +163,10 @@ mod test_queries {
                     }];
                     let req = FinalizeBlock {
                         proposer_address: pkh1.to_vec(),
-                        votes,
+                        decided_last_commit: namada::tendermint::abci::types::CommitInfo{
+                            round: 0u8.into(),
+                            votes
+                        },
                         ..Default::default()
                     };
                     shell.finalize_and_commit(Some(req));

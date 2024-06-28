@@ -687,7 +687,10 @@ mod test_prepare_proposal {
         ];
         let req = FinalizeBlock {
             proposer_address: pkh1.to_vec(),
-            votes,
+            decided_last_commit: namada::tendermint::abci::types::CommitInfo {
+                round: 0u8.into(),
+                votes,
+            },
             ..Default::default()
         };
         shell.start_new_epoch(Some(req));

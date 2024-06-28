@@ -1867,7 +1867,6 @@ mod test_utils {
                             .as_bytes(),
                     )
                     .unwrap(),
-                votes: vec![],
                 height: 0u8.into(),
                 decided_last_commit: tendermint::abci::types::CommitInfo {
                     round: 0u8.into(),
@@ -1919,7 +1918,10 @@ mod test_utils {
         let mut req = FinalizeBlock {
             header,
             proposer_address,
-            votes,
+            decided_last_commit: tendermint::abci::types::CommitInfo {
+                round: 0u8.into(),
+                votes,
+            },
             ..Default::default()
         };
         if let Some(byz_vals) = byzantine_validators {
