@@ -168,11 +168,14 @@ pub mod shim {
     /// Custom types for request payloads
     pub mod request {
 
+        use bytes::Bytes;
         use namada::core::hash::Hash;
         use namada::core::storage::Header;
         use namada::core::time::DateTimeUtc;
         use namada::tendermint::abci::types::CommitInfo;
+        use namada::tendermint::account::Id;
         use namada::tendermint::block::Height;
+        use namada::tendermint::time::Time;
 
         use crate::facade::tendermint::abci::types::Misbehavior;
         use crate::facade::tendermint::v0_37::abci::request as tm_request;
@@ -198,6 +201,17 @@ pub mod shim {
             pub decided_last_commit: CommitInfo,
         }
 
+        // Type to run process proposal checks outside of the CometBFT call
+        pub(crate) struct CheckProcessProposal {
+            proposed_last_commit: Option<CommitInfo>,
+            misbehavior: Vec<Misbehavior>,
+            hash: namada::tendermint::Hash,
+            height: Height,
+            time: Time,
+            next_validators_hash: namada::tendermint::Hash,
+            proposer_address: Id,
+        }
+
         impl From<tm_request::BeginBlock> for FinalizeBlock {
             fn from(req: tm_request::BeginBlock) -> FinalizeBlock {
                 let header = req.header;
@@ -220,54 +234,76 @@ pub mod shim {
             }
         }
 
-        // FIXME: probably need a custom type because this doesn't contain the
-        // transactions and I want to be sure that we add them FIXME: in
-        // this case I can implement From FIXME: also make sure that
-        // this type is only used for rechecks, not for the actual
-        // process_proposal call
-        pub(crate) fn begin_block_to_process_proposal_req(
-            req: tm_request::BeginBlock,
-        ) -> tm_request::ProcessProposal {
-            let header = req.header;
-            tm_request::ProcessProposal {
-                txs: vec![],
-                proposed_last_commit: Some(req.last_commit_info),
-                misbehavior: req.byzantine_validators,
-                hash: req.hash,
-                height: header.height,
-                time: header.time,
-                next_validators_hash: header.next_validators_hash,
-                proposer_address: header.proposer_address,
+        impl From<tm_request::BeginBlock> for CheckProcessProposal {
+            fn from(req: tm_request::BeginBlock) -> CheckProcessProposal {
+                let header = req.header;
+                CheckProcessProposal {
+                    proposed_last_commit: Some(req.last_commit_info),
+                    misbehavior: req.byzantine_validators,
+                    hash: req.hash,
+                    height: header.height,
+                    time: header.time,
+                    next_validators_hash: header.next_validators_hash,
+                    proposer_address: header.proposer_address,
+                }
             }
         }
 
-        // FIXME: maybe better to create a custom type? I can use the same type
-        // I use for the method above FIXME: in this case I can
-        // implement From
-        pub(crate) fn finalize_block_to_process_proposal_req(
-            req: FinalizeBlock,
-        ) -> Result<tm_request::ProcessProposal, super::Error> {
-            let header = req.header;
-            Ok(tm_request::ProcessProposal {
-                txs: req.txs.into_iter().map(|tx| tx.tx).collect(),
-                proposed_last_commit: Some(req.decided_last_commit),
-                misbehavior: req.byzantine_validators,
-                hash: header.hash.into(),
-                height: req.height,
-                time: header.time.try_into().map_err(|_| {
-                    super::Error::Shell(
-                        super::shell::Error::InvalidBlockProposal,
-                    )
-                })?,
-                next_validators_hash: header.next_validators_hash.into(),
-                proposer_address: req.proposer_address.try_into().map_err(
-                    |_| {
+        impl CheckProcessProposal {
+            pub(crate) fn cast_to_tendermint_req(
+                self,
+                txs: Vec<Bytes>,
+            ) -> tm_request::ProcessProposal {
+                let Self {
+                    proposed_last_commit,
+                    misbehavior,
+                    hash,
+                    height,
+                    time,
+                    next_validators_hash,
+                    proposer_address,
+                } = self;
+
+                tm_request::ProcessProposal {
+                    txs,
+                    proposed_last_commit,
+                    misbehavior,
+                    hash,
+                    height,
+                    time,
+                    next_validators_hash,
+                    proposer_address,
+                }
+            }
+        }
+
+        impl FinalizeBlock {
+            pub(crate) fn cast_to_process_proposal_req(
+                self,
+            ) -> Result<tm_request::ProcessProposal, super::Error> {
+                let header = self.header;
+                Ok(tm_request::ProcessProposal {
+                    txs: self.txs.into_iter().map(|tx| tx.tx).collect(),
+                    proposed_last_commit: Some(self.decided_last_commit),
+                    misbehavior: self.byzantine_validators,
+                    hash: header.hash.into(),
+                    height: self.height,
+                    time: header.time.try_into().map_err(|_| {
                         super::Error::Shell(
                             super::shell::Error::InvalidBlockProposal,
                         )
-                    },
-                )?,
-            })
+                    })?,
+                    next_validators_hash: header.next_validators_hash.into(),
+                    proposer_address: self
+                        .proposer_address
+                        .try_into()
+                        .map_err(|_| {
+                            super::Error::Shell(
+                                super::shell::Error::InvalidBlockProposal,
+                            )
+                        })?,
+                })
+            }
         }
     }
 

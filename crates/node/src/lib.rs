@@ -192,9 +192,10 @@ impl Shell {
         };
 
         if recheck_process_proposal {
-            let process_req = crate::shims::abcipp_shim_types::shim::request::finalize_block_to_process_proposal_req(
-                            finalize.clone(),
-                        ).map_err(|_| Error::InvalidBlockProposal)?;
+            let process_req = finalize
+                .clone()
+                .cast_to_process_proposal_req()
+                .map_err(|_| Error::InvalidBlockProposal)?;
             // FIXME: should instead mock a call to call? Probably yes
             // FIXME: need the processing results? Maybe for caching
             // even though caching here is useless
