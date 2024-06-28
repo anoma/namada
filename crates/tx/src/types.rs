@@ -802,7 +802,7 @@ impl Section {
             Self::Authorization(signature) => signature.hash(hasher),
             Self::MaspBuilder(mb) => mb.hash(hasher),
             Self::MaspTx(tx) => {
-                hasher.update(tx.txid().as_ref());
+                hasher.update(tx.serialize_to_vec());
                 hasher
             }
             Self::Header(header) => header.hash(hasher),
