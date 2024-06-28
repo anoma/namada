@@ -235,6 +235,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         &channel_id_a,
         None,
         None,
+        None,
         false,
     )?;
     wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
@@ -271,6 +272,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         &channel_id_b,
         None,
         None,
+        None,
         false,
     )?;
     wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
@@ -288,6 +290,17 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
     )?;
     shielded_sync(&test_a, AA_VIEWING_KEY)?;
     // Shieded transfer from Chain A to Chain B
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
+    let token_addr = find_address(&test_a, BTC)?;
+    let memo_path = gen_masp_tx(
+        &test_b,
+        AB_PAYMENT_ADDRESS,
+        token_addr.to_string(),
+        100_000_000,
+        &port_id_b,
+        &channel_id_b,
+        false,
+    )?;
     transfer(
         &test_a,
         A_SPENDING_KEY,
@@ -298,6 +311,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         &port_id_a,
         &channel_id_a,
         None,
+        Some(memo_path),
         None,
         false,
     )?;
@@ -305,6 +319,15 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
     check_shielded_balances(&port_id_b, &channel_id_b, &test_a, &test_b)?;
 
     // Shielded transfer to an invalid receiver address (refund)
+    let memo_path = gen_masp_tx(
+        &test_a,
+        AA_PAYMENT_ADDRESS,
+        BTC,
+        10,
+        &port_id_a,
+        &channel_id_a,
+        true,
+    )?;
     transfer(
         &test_a,
         A_SPENDING_KEY,
@@ -315,6 +338,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         &port_id_a,
         &channel_id_a,
         None,
+        Some(memo_path),
         None,
         false,
     )?;
@@ -327,6 +351,15 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
     hermes.interrupt()?;
 
     // Send transfer will be timed out (refund)
+    let memo_path = gen_masp_tx(
+        &test_a,
+        AA_PAYMENT_ADDRESS,
+        BTC,
+        10,
+        &port_id_a,
+        &channel_id_a,
+        true,
+    )?;
     transfer(
         &test_a,
         A_SPENDING_KEY,
@@ -337,6 +370,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         &port_id_a,
         &channel_id_a,
         Some(Duration::new(10, 0)),
+        Some(memo_path),
         None,
         false,
     )?;
@@ -403,6 +437,7 @@ fn ibc_namada_gaia() -> Result<()> {
         &channel_id_namada,
         None,
         None,
+        None,
         false,
     )?;
     wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
@@ -422,6 +457,7 @@ fn ibc_namada_gaia() -> Result<()> {
         100000000,
         &port_id_gaia,
         &channel_id_gaia,
+        None,
     )?;
     wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test)?;
 
@@ -438,6 +474,7 @@ fn ibc_namada_gaia() -> Result<()> {
         200,
         &port_id_gaia,
         &channel_id_gaia,
+        None,
     )?;
     wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test)?;
 
@@ -458,6 +495,7 @@ fn ibc_namada_gaia() -> Result<()> {
         &channel_id_namada,
         None,
         None,
+        None,
         false,
     )?;
     wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
@@ -465,6 +503,15 @@ fn ibc_namada_gaia() -> Result<()> {
     check_gaia_balance(&test_gaia, GAIA_USER, GAIA_COIN, 900)?;
 
     // Shielding transfer from Gaia to Namada
+    let memo_path = gen_masp_tx(
+        &test,
+        AA_PAYMENT_ADDRESS,
+        GAIA_COIN,
+        100,
+        &port_id_namada,
+        &channel_id_namada,
+        false,
+    )?;
     transfer_from_gaia(
         &test_gaia,
         GAIA_USER,
@@ -473,6 +520,7 @@ fn ibc_namada_gaia() -> Result<()> {
         100,
         &port_id_gaia,
         &channel_id_gaia,
+        Some(memo_path),
     )?;
     wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test_gaia)?;
 
@@ -503,6 +551,7 @@ fn ibc_namada_gaia() -> Result<()> {
         BERTHA_KEY,
         &port_id_namada,
         &channel_id_namada,
+        None,
         None,
         None,
         false,
@@ -665,6 +714,7 @@ fn proposal_ibc_token_inflation() -> Result<()> {
         &channel_id_a,
         None,
         None,
+        None,
         false,
     )?;
     wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
@@ -732,6 +782,7 @@ fn ibc_rate_limit() -> Result<()> {
         &channel_id_a,
         None,
         None,
+        None,
         false,
     )?;
 
@@ -745,6 +796,7 @@ fn ibc_rate_limit() -> Result<()> {
         ALBERT_KEY,
         &port_id_a,
         &channel_id_a,
+        None,
         None,
         // expect an error of the throughput limit
         Some(
@@ -773,6 +825,7 @@ fn ibc_rate_limit() -> Result<()> {
         &channel_id_a,
         None,
         None,
+        None,
         false,
     )?;
 
@@ -796,6 +849,7 @@ fn ibc_rate_limit() -> Result<()> {
         &port_id_a,
         &channel_id_a,
         Some(Duration::new(20, 0)),
+        None,
         None,
         false,
     )?;
@@ -1563,6 +1617,7 @@ fn transfer_token(
         channel_id_a,
         None,
         None,
+        None,
         false,
     )?;
     let events = get_events(test_a, height)?;
@@ -1639,6 +1694,7 @@ fn try_invalid_transfers(
         &"port".parse().unwrap(),
         channel_id_a,
         None,
+        None,
         // the IBC denom can't be parsed when using an invalid port
         Some(&format!("Invalid IBC denom: {nam_addr}")),
         false,
@@ -1654,6 +1710,7 @@ fn try_invalid_transfers(
         ALBERT_KEY,
         port_id_a,
         &"channel-42".parse().unwrap(),
+        None,
         None,
         Some("IBC token transfer error: context error: `ICS04 Channel error"),
         false,
@@ -1721,6 +1778,7 @@ fn transfer_back(
         BERTHA_KEY,
         port_id_b,
         channel_id_b,
+        None,
         None,
         None,
         false,
@@ -1795,6 +1853,7 @@ fn transfer_timeout(
         port_id_a,
         channel_id_a,
         Some(Duration::new(5, 0)),
+        None,
         None,
         false,
     )?;
@@ -1929,6 +1988,7 @@ fn transfer(
     port_id: &PortId,
     channel_id: &ChannelId,
     timeout_sec: Option<Duration>,
+    memo_path: Option<PathBuf>,
     expected_err: Option<&str>,
     wait_reveal_pk: bool,
 ) -> Result<u32> {
@@ -1962,6 +2022,15 @@ fn transfer(
     if timeout_sec.is_some() {
         tx_args.push("--timeout-sec-offset");
         tx_args.push(&timeout);
+    }
+
+    let memo = memo_path
+        .as_ref()
+        .map(|path| path.to_string_lossy().to_string())
+        .unwrap_or_default();
+    if memo_path.is_some() {
+        tx_args.push("--memo-path");
+        tx_args.push(&memo);
     }
 
     let mut client = run!(test, Bin::Client, tx_args, Some(300))?;
@@ -2151,12 +2220,13 @@ fn transfer_from_gaia(
     amount: u64,
     port_id: &PortId,
     channel_id: &ChannelId,
+    memo_path: Option<PathBuf>,
 ) -> Result<()> {
     let port_id = port_id.to_string();
     let channel_id = channel_id.to_string();
     let amount = format!("{}{}", amount, token.as_ref());
     let rpc = format!("tcp://{GAIA_RPC}");
-    let args = vec![
+    let mut args = vec![
         "tx",
         "ibc-transfer",
         "transfer",
@@ -2176,6 +2246,17 @@ fn transfer_from_gaia(
         GAIA_CHAIN_ID,
         "--yes",
     ];
+
+    let memo = memo_path
+        .as_ref()
+        .map(|path| {
+            std::fs::read_to_string(path).expect("Reading memo file failed")
+        })
+        .unwrap_or_default();
+    if memo_path.is_some() {
+        args.push("--memo");
+        args.push(&memo);
+    }
 
     let mut gaia = run_gaia_cmd(test, args, Some(40))?;
     gaia.assert_success();
@@ -2362,7 +2443,7 @@ fn check_balances(
 
     // Check the balance on Chain B
     let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/nam");
-    check_balance(test_b, BERTHA, ibc_denom, 100000)?;
+    check_balance(test_b, BERTHA, ibc_denom, 100_000_000_000)?;
 
     Ok(())
 }
@@ -2448,7 +2529,7 @@ fn check_shielded_balances(
 
     // Check the shielded balance on Chain B
     let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/btc");
-    check_balance(test_b, AB_VIEWING_KEY, ibc_denom, 1_000_000_000)?;
+    check_balance(test_b, AB_VIEWING_KEY, ibc_denom, 10_000_000_000)?;
 
     Ok(())
 }
@@ -2600,4 +2681,50 @@ fn shielded_sync(test: &Test, viewing_key: impl AsRef<str>) -> Result<()> {
     let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
     client.assert_success();
     Ok(())
+}
+
+/// Get masp proof for the following IBC transfer from the destination chain
+fn gen_masp_tx(
+    dst_test: &Test,
+    receiver: impl AsRef<str>,
+    token: impl AsRef<str>,
+    amount: u64,
+    port_id: &PortId,
+    channel_id: &ChannelId,
+    is_refund: bool,
+) -> Result<PathBuf> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, dst_test.net.chain_id.to_string());
+    let rpc = get_actor_rpc(dst_test, Who::Validator(0));
+    let output_folder = dst_test.test_dir.path().to_string_lossy();
+
+    let amount = amount.to_string();
+    let mut args = vec![
+        "ibc-gen-shielding",
+        "--output-folder-path",
+        &output_folder,
+        "--target",
+        receiver.as_ref(),
+        "--token",
+        token.as_ref(),
+        "--amount",
+        &amount,
+        "--port-id",
+        port_id.as_ref(),
+        "--channel-id",
+        channel_id.as_ref(),
+        "--node",
+        &rpc,
+    ];
+
+    if is_refund {
+        args.push("--refund");
+    }
+
+    let mut client = run!(dst_test, Bin::Client, args, Some(120))?;
+    let (_unread, matched) =
+        client.exp_regex("Output IBC shielded transfer .*")?;
+    let file_path = matched.trim().split(' ').last().expect("invalid output");
+    client.assert_success();
+
+    Ok(PathBuf::from_str(file_path).expect("invalid file path"))
 }
