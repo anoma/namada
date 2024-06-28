@@ -266,6 +266,7 @@ where
                         tx_wasm_cache,
                     },
                 )?;
+
                 Ok(TxResult {
                     gas_used: tx_gas_meter.borrow().get_tx_consumed_gas(),
                     batch_results: {

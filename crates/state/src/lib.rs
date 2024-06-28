@@ -755,6 +755,7 @@ mod tests {
                 epochs_per_year: 100,
                 masp_epoch_multiplier: 2,
                 fee_unshielding_gas_limit: 20_000,
+                gas_scale: 100_000_000,
                 minimum_gas_price: BTreeMap::default(),
                 is_native_token_transferable: true,
             };
