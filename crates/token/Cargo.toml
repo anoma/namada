@@ -24,6 +24,7 @@ namada_events = { path = "../events", default-features = false }
 namada_macros = { path = "../macros" }
 namada_shielded_token = { path = "../shielded_token" }
 namada_storage = { path = "../storage" }
+namada_systems = { path = "../systems" }
 namada_trans_token = { path = "../trans_token" }
 
 borsh.workspace = true
