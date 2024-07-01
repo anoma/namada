@@ -18,6 +18,11 @@ where
         // Invoke the root RPC handler - returns borsh-encoded data on success
         let result = if query.path == RPC.shell().dry_run_tx_path() {
             dry_run_tx(
+                // This is safe as neither the inner `db` nor `in_mem` are
+                // actually mutable, only the `write_log` which is owned by
+                // the `TempWlState` struct. The `TempWlState` will be dropped
+                // right after dry-run and before any other ABCI request is
+                // processed.
                 unsafe { self.state.read_only().with_static_temp_write_log() },
                 self.vp_wasm_cache.read_only(),
                 self.tx_wasm_cache.read_only(),

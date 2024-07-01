@@ -734,6 +734,9 @@ impl<'a> Client for &'a MockNode {
         let borrowed = self.shell.lock().unwrap();
         if request.path == RPC.shell().dry_run_tx_path() {
             dry_run_tx(
+                // This is safe because nothing else is using `self.state`
+                // concurrently and the `TempWlState` will be dropped right
+                // after dry-run.
                 unsafe {
                     borrowed.state.read_only().with_static_temp_write_log()
                 },

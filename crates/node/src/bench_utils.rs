@@ -804,6 +804,9 @@ impl Client for BenchShell {
 
         if request.path == RPC.shell().dry_run_tx_path() {
             dry_run_tx(
+                // This is safe because nothing else is using `self.state`
+                // concurrently and the `TempWlState` will be dropped right
+                // after dry-run.
                 unsafe { self.state.read_only().with_static_temp_write_log() },
                 self.vp_wasm_cache.read_only(),
                 self.tx_wasm_cache.read_only(),
