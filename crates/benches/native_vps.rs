@@ -34,7 +34,6 @@ use namada_apps_lib::ibc::core::host::types::identifiers::{
     ClientId, ConnectionId, PortId,
 };
 use namada_apps_lib::ibc::primitives::ToProto;
-use namada_apps_lib::ibc::vp::context::PseudoExecutionContext;
 use namada_apps_lib::ibc::{IbcActions, NftTransferModule, TransferModule};
 use namada_apps_lib::masp::{
     partial_deauthorize, preload_verifying_keys, PVKs, TransferSource,
@@ -48,8 +47,8 @@ use namada_apps_lib::state::{Epoch, StorageRead, StorageWrite, TxIndex};
 use namada_apps_lib::token::{Amount, TransparentTransfer};
 use namada_apps_lib::tx::{BatchedTx, Code, Section, Tx};
 use namada_apps_lib::validation::{
-    EthBridgeNutVp, EthBridgePoolVp, EthBridgeVp, GovernanceVp, IbcVp, MaspVp,
-    MultitokenVp, ParametersVp, PgfVp, PosVp,
+    EthBridgeNutVp, EthBridgePoolVp, EthBridgeVp, GovernanceVp, IbcVp,
+    IbcVpContext, MaspVp, MultitokenVp, ParametersVp, PgfVp, PosVp,
 };
 use namada_apps_lib::wallet::defaults;
 use namada_apps_lib::{governance, proof_of_stake, storage, token};
@@ -1671,10 +1670,7 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
         // needed in actual txs to addresses whose VPs should be triggered
         let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
 
-        let exec_ctx =
-            PseudoExecutionContext::<'_, '_, _, _, _, token::Store<_>>::new(
-                ibc.ctx.pre(),
-            );
+        let exec_ctx = IbcVpContext::new(ibc.ctx.pre());
         let ctx = Rc::new(RefCell::new(exec_ctx));
         let mut actions = IbcActions::new(ctx.clone(), verifiers.clone());
         actions.set_validation_params(ibc.validation_params().unwrap());
@@ -1730,10 +1726,7 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
         // needed in actual txs to addresses whose VPs should be triggered
         let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
 
-        let exec_ctx =
-            PseudoExecutionContext::<'_, '_, _, _, _, token::Store<_>>::new(
-                ibc.ctx.pre(),
-            );
+        let exec_ctx = IbcVpContext::new(ibc.ctx.pre());
         let ctx = Rc::new(RefCell::new(exec_ctx));
 
         let mut actions = IbcActions::new(ctx.clone(), verifiers.clone());
