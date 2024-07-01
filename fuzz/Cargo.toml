@@ -11,6 +11,7 @@ cargo-fuzz = true
 namada_node = { path = "../crates/node", features = ["testing"] }
 namada_tx = { path = "../crates/tx", features = ["arbitrary"] }
 
+lazy_static.workspace = true
 libfuzzer-sys = "0.4"
 
 [[bin]]
