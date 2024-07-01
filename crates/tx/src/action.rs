@@ -27,6 +27,7 @@ pub enum Action {
     Gov(GovAction),
     Pgf(PgfAction),
     Masp(MaspAction),
+    IbcShielding,
 }
 
 /// PoS tx actions.
@@ -67,7 +68,7 @@ pub enum PgfAction {
 #[derive(Clone, Debug, BorshDeserialize, BorshSerialize)]
 pub struct MaspAction {
     /// The hash of the masp [`crate::types::Section`]
-    pub masp_section_ref: Option<Hash>,
+    pub masp_section_ref: Hash,
 }
 
 /// Read actions from temporary storage
@@ -127,9 +128,19 @@ pub fn get_masp_section_ref<T: Read>(
     Ok(reader.read_actions()?.into_iter().find_map(|action| {
         // In case of multiple masp actions we get the first one
         if let Action::Masp(MaspAction { masp_section_ref }) = action {
-            masp_section_ref
+            Some(masp_section_ref)
         } else {
             None
         }
     }))
+}
+
+/// Helper function to check if the action is IBC shielding transfer
+pub fn is_ibc_shielding_transfer<T: Read>(
+    reader: &T,
+) -> Result<bool, <T as Read>::Err> {
+    Ok(reader
+        .read_actions()?
+        .iter()
+        .any(|action| matches!(action, Action::IbcShielding)))
 }

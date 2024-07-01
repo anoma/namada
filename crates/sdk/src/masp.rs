@@ -62,6 +62,7 @@ use namada_events::extend::{
     MaspTxBatchRefs as MaspTxBatchRefsAttr,
     MaspTxBlockIndex as MaspTxBlockIndexAttr, ReadFromEventAttributes,
 };
+use namada_ibc::{decode_message, extract_masp_tx_from_envelope, IbcMessage};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
@@ -817,7 +818,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 let tx = Tx::try_from(block[idx.0 as usize].as_ref())
                     .map_err(|e| Error::Other(e.to_string()))?;
                 let extracted_masp_txs =
-                    Self::extract_masp_tx(&tx, &masp_sections_refs).await?;
+                    if let Some(masp_sections_refs) = masp_sections_refs {
+                        Self::extract_masp_tx(&tx, &masp_sections_refs).await?
+                    } else {
+                        Self::extract_masp_tx_from_ibc_message(&tx)?
+                    };
                 // Collect the current transactions
                 shielded_txs.insert(
                     IndexedTx {
@@ -862,6 +867,32 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     Err(e) => Err(e),
                 }
             })
+    }
+
+    /// Extract the relevant shield portions from the IBC messages in [`Tx`]
+    fn extract_masp_tx_from_ibc_message(
+        tx: &Tx,
+    ) -> Result<Vec<Transaction>, Error> {
+        let mut masp_txs = Vec::new();
+        for cmt in &tx.header.batch {
+            let tx_data = tx.data(cmt).ok_or_else(|| {
+                Error::Other("Missing expected masp transaction".to_string())
+            })?;
+            let ibc_msg = decode_message(&tx_data)
+                .map_err(|_| Error::Other("Invalid IBC message".to_string()))?;
+            if let IbcMessage::Envelope(ref envelope) = ibc_msg {
+                if let Some(masp_tx) = extract_masp_tx_from_envelope(envelope) {
+                    masp_txs.push(masp_tx);
+                }
+            }
+        }
+        if !masp_txs.is_empty() {
+            Ok(masp_txs)
+        } else {
+            Err(Error::Other(
+                "IBC meesage doesn't have masp transaction".to_string(),
+            ))
+        }
     }
 
     /// Applies the given transaction to the supplied context. More precisely,
@@ -1964,7 +1995,7 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
     client: &C,
     height: BlockHeight,
     first_idx_to_query: Option<TxIndex>,
-) -> Result<Option<Vec<(TxIndex, MaspTxRefs)>>, Error> {
+) -> Result<Option<Vec<(TxIndex, Option<MaspTxRefs>)>>, Error> {
     let first_idx_to_query = first_idx_to_query.unwrap_or_default();
 
     Ok(client
@@ -1988,7 +2019,7 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
                             MaspTxBatchRefsAttr::read_from_event_attributes(
                                 &event.attributes,
                             )
-                            .ok()?;
+                            .ok();
 
                         Some((tx_index, masp_section_refs))
                     } else {

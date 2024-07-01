@@ -24,8 +24,6 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
         .wrap_err("Encountered error while handling MASP transaction")?;
     update_masp_note_commitment_tree(&shielded)
         .wrap_err("Failed to update the MASP commitment tree")?;
-    ctx.push_action(Action::Masp(MaspAction {
-        masp_section_ref: Some(masp_section_ref),
-    }))?;
+    ctx.push_action(Action::Masp(MaspAction { masp_section_ref }))?;
     Ok(())
 }

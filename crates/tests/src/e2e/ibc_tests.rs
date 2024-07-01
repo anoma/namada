@@ -291,12 +291,12 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
     shielded_sync(&test_a, AA_VIEWING_KEY)?;
     // Shieded transfer from Chain A to Chain B
     std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
-    let token_addr = find_address(&test_a, BTC)?;
+    let token_addr = find_address(&test_a, BTC)?.to_string();
     let memo_path = gen_masp_tx(
         &test_b,
         AB_PAYMENT_ADDRESS,
-        token_addr.to_string(),
-        100_000_000,
+        &token_addr,
+        1_000_000_000,
         &port_id_b,
         &channel_id_b,
         false,
@@ -322,7 +322,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
     let memo_path = gen_masp_tx(
         &test_a,
         AA_PAYMENT_ADDRESS,
-        BTC,
+        &token_addr,
         10,
         &port_id_a,
         &channel_id_a,
@@ -354,7 +354,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
     let memo_path = gen_masp_tx(
         &test_a,
         AA_PAYMENT_ADDRESS,
-        BTC,
+        &token_addr,
         10,
         &port_id_a,
         &channel_id_a,
