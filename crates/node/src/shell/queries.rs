@@ -1,9 +1,9 @@
 //! Shell methods for querying state
 
-use namada::ledger::dry_run_tx;
-use namada::ledger::queries::{RequestCtx, ResponseQuery, RPC};
+use namada_sdk::queries::{RequestCtx, ResponseQuery, RPC};
 
 use super::*;
+use crate::dry_run_tx;
 
 impl<D, H> Shell<D, H>
 where
@@ -15,19 +15,29 @@ where
     /// the default if `path` is not a supported string.
     /// INVARIANT: This method must be stateless.
     pub fn query(&self, query: request::Query) -> response::Query {
-        let ctx = RequestCtx {
-            state: self.state.read_only(),
-            event_log: self.event_log(),
-            vp_wasm_cache: self.vp_wasm_cache.read_only(),
-            tx_wasm_cache: self.tx_wasm_cache.read_only(),
-            storage_read_past_height_limit: self.storage_read_past_height_limit,
-        };
-
         // Invoke the root RPC handler - returns borsh-encoded data on success
         let result = if query.path == RPC.shell().dry_run_tx_path() {
-            dry_run_tx(ctx, &query)
+            dry_run_tx(
+                // This is safe as neither the inner `db` nor `in_mem` are
+                // actually mutable, only the `write_log` which is owned by
+                // the `TempWlState` struct. The `TempWlState` will be dropped
+                // right after dry-run and before any other ABCI request is
+                // processed.
+                unsafe { self.state.read_only().with_static_temp_write_log() },
+                self.vp_wasm_cache.read_only(),
+                self.tx_wasm_cache.read_only(),
+                &query,
+            )
         } else {
-            namada::ledger::queries::handle_path(ctx, &query)
+            let ctx = RequestCtx {
+                state: self.state.read_only(),
+                event_log: self.event_log(),
+                vp_wasm_cache: self.vp_wasm_cache.read_only(),
+                tx_wasm_cache: self.tx_wasm_cache.read_only(),
+                storage_read_past_height_limit: self
+                    .storage_read_past_height_limit,
+            };
+            namada_sdk::queries::handle_path(ctx, &query)
         };
         match result {
             Ok(ResponseQuery {
@@ -64,19 +74,19 @@ where
     }
 }
 
-// NOTE: we are testing `namada::ledger::queries_ext`,
+// NOTE: we are testing `namada_sdk::queries_ext`,
 // which is not possible from `namada` since we do not have
 // access to the `Shell` there
 #[allow(clippy::cast_possible_truncation)]
 #[cfg(test)]
 mod test_queries {
-    use namada::core::storage::Epoch;
-    use namada::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
-    use namada::ledger::pos::PosQueries;
-    use namada::proof_of_stake::storage::read_consensus_validator_set_addresses_with_stake;
-    use namada::proof_of_stake::types::WeightedValidator;
-    use namada::tendermint::abci::types::VoteInfo;
+    use namada_sdk::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
     use namada_sdk::eth_bridge::SendValsetUpd;
+    use namada_sdk::proof_of_stake::storage::read_consensus_validator_set_addresses_with_stake;
+    use namada_sdk::proof_of_stake::types::WeightedValidator;
+    use namada_sdk::proof_of_stake::PosQueries;
+    use namada_sdk::storage::Epoch;
+    use namada_sdk::tendermint::abci::types::VoteInfo;
 
     use super::*;
     use crate::shell::test_utils::get_pkh_from_address;
@@ -155,11 +165,11 @@ mod test_queries {
                         Epoch::default(),
                     );
                     let votes = vec![VoteInfo {
-                        validator: namada::tendermint::abci::types::Validator {
+                        validator: namada_sdk::tendermint::abci::types::Validator {
                             address: pkh1.clone().into(),
                             power: (u128::try_from(val1.bonded_stake).expect("Test failed") as u64).try_into().unwrap(),
                         },
-                        sig_info: namada::tendermint::abci::types::BlockSignatureInfo::LegacySigned,
+                        sig_info: namada_sdk::tendermint::abci::types::BlockSignatureInfo::LegacySigned,
                     }];
                     let req = FinalizeBlock {
                         proposer_address: pkh1.to_vec(),

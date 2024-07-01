@@ -15,9 +15,7 @@ rlsf.workspace = true
 getrandom.workspace = true
 
 [dev-dependencies]
-namada_tests = { path = "../../crates/tests", default-features = false, features = [
-    "wasm-runtime",
-] }
+namada_tests = { path = "../../crates/tests" }
 
 proptest = "1.4.0"
 test-log = {version = "0.2.14", default-features = false, features = ["trace"]}

@@ -5,7 +5,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use lazy_static::lazy_static;
-use namada::io::{prompt_aux, read_aux, Io};
+use namada_sdk::io::{prompt_aux, read_aux, Io};
 use tempfile::tempdir;
 use tokio::io::{AsyncRead, ReadBuf};
 

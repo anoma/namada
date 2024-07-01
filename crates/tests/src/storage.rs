@@ -3,7 +3,7 @@
 use std::rc::Rc;
 
 use derivative::Derivative;
-use namada::core::storage;
+use namada_sdk::storage;
 
 /// A list of changes, which must be applied in the same order to get to the
 /// current state.

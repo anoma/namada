@@ -1,6 +1,6 @@
 use borsh::BorshDeserialize;
-use namada::core::storage::Key;
-use namada::state::{self, StorageRead};
+use namada_sdk::state::{self, StorageRead};
+use namada_sdk::storage::Key;
 
 pub(super) fn force_read<S, T>(
     storage: &S,

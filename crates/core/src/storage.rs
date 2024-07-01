@@ -2086,4 +2086,14 @@ pub mod testing {
             1 => arb_address().prop_map(DbKeySeg::AddressSeg),
         ]
     }
+
+    /// A dummy header used for testing
+    pub fn get_dummy_header() -> Header {
+        use tendermint::time::Time as TmTime;
+        Header {
+            hash: Hash([0; 32]),
+            time: TmTime::now().try_into().unwrap(),
+            next_validators_hash: Hash([0; 32]),
+        }
+    }
 }

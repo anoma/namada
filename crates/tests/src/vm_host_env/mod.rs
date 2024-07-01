@@ -11,6 +11,7 @@
 //!
 //! `RUST_LOG=debug cargo test test_tx_read_write -- --nocapture`
 
+#[cfg(test)]
 pub mod ibc;
 pub mod tx;
 pub mod vp;
@@ -23,24 +24,22 @@ mod tests {
 
     use borsh_ext::BorshSerializeExt;
     use itertools::Itertools;
-    use namada::account::pks_handle;
-    use namada::core::hash::Hash;
-    use namada::core::key::*;
-    use namada::core::storage::{self, BlockHeight, Key, KeySeg};
-    use namada::core::time::DateTimeUtc;
-    use namada::core::{address, key};
-    use namada::ibc::context::nft_transfer_mod::testing::DummyNftTransferModule;
-    use namada::ibc::context::transfer_mod::testing::DummyTransferModule;
-    use namada::ibc::primitives::ToProto;
-    use namada::ibc::Error as IbcActionError;
-    use namada::ledger::ibc::storage as ibc_storage;
-    use namada::ledger::native_vp::ibc::{
-        get_dummy_header as tm_dummy_header, Error as IbcError,
-    };
-    use namada::ledger::tx_env::TxEnv;
-    use namada::token::{self, Amount};
-    use namada::tx::Tx;
+    use namada_core::storage::testing::get_dummy_header;
+    use namada_sdk::account::pks_handle;
+    use namada_sdk::hash::Hash;
+    use namada_sdk::ibc::context::nft_transfer_mod::testing::DummyNftTransferModule;
+    use namada_sdk::ibc::context::transfer_mod::testing::DummyTransferModule;
+    use namada_sdk::ibc::primitives::ToProto;
+    use namada_sdk::ibc::vp::Error as IbcError;
+    use namada_sdk::ibc::{storage as ibc_storage, Error as IbcActionError};
+    use namada_sdk::key::*;
+    use namada_sdk::storage::{self, BlockHeight, Key, KeySeg};
+    use namada_sdk::time::DateTimeUtc;
+    use namada_sdk::token::{self, Amount};
+    use namada_sdk::tx::Tx;
+    use namada_sdk::{address, key};
     use namada_test_utils::TestWasms;
+    use namada_tx_env::TxEnv;
     use namada_tx_prelude::address::InternalAddress;
     use namada_tx_prelude::chain::ChainId;
     use namada_tx_prelude::{Address, BatchedTx, StorageRead, StorageWrite};
@@ -717,7 +716,7 @@ mod tests {
         env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
         env.state
             .in_mem_mut()
-            .set_header(tm_dummy_header())
+            .set_header(get_dummy_header())
             .unwrap();
 
         // Start a transaction to update the client
@@ -789,7 +788,7 @@ mod tests {
         env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
         env.state
             .in_mem_mut()
-            .set_header(tm_dummy_header())
+            .set_header(get_dummy_header())
             .unwrap();
         tx_host_env::set(env);
 
@@ -862,7 +861,7 @@ mod tests {
         env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
         env.state
             .in_mem_mut()
-            .set_header(tm_dummy_header())
+            .set_header(get_dummy_header())
             .unwrap();
         tx_host_env::set(env);
 
@@ -937,7 +936,7 @@ mod tests {
         env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
         env.state
             .in_mem_mut()
-            .set_header(tm_dummy_header())
+            .set_header(get_dummy_header())
             .unwrap();
         tx_host_env::set(env);
 
@@ -1012,7 +1011,7 @@ mod tests {
         env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
         env.state
             .in_mem_mut()
-            .set_header(tm_dummy_header())
+            .set_header(get_dummy_header())
             .unwrap();
         tx_host_env::set(env);
 
@@ -1207,7 +1206,7 @@ mod tests {
         env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
         env.state
             .in_mem_mut()
-            .set_header(tm_dummy_header())
+            .set_header(get_dummy_header())
             .unwrap();
         tx_host_env::set(env);
 
@@ -1754,7 +1753,7 @@ mod tests {
         env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
         env.state
             .in_mem_mut()
-            .set_header(tm_dummy_header())
+            .set_header(get_dummy_header())
             .unwrap();
         tx_host_env::set(env);
 
@@ -1838,7 +1837,7 @@ mod tests {
         env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
         env.state
             .in_mem_mut()
-            .set_header(tm_dummy_header())
+            .set_header(get_dummy_header())
             .unwrap();
         tx_host_env::set(env);
 

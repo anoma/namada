@@ -1,5 +1,5 @@
 use color_eyre::eyre::Result;
-use namada::io::Io;
+use namada_sdk::io::Io;
 
 use crate::cli;
 use crate::cli::api::{CliApi, CliClient};
