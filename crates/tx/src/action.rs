@@ -27,6 +27,7 @@ pub enum Action {
     Gov(GovAction),
     Pgf(PgfAction),
     Masp(MaspAction),
+    IbcShielding,
 }
 
 /// PoS tx actions.
@@ -132,4 +133,14 @@ pub fn get_masp_section_ref<T: Read>(
             None
         }
     }))
+}
+
+/// Helper function to check if the action is IBC shielding transfer
+pub fn is_ibc_shielding_transfer<T: Read>(
+    reader: &T,
+) -> Result<bool, <T as Read>::Err> {
+    Ok(reader
+        .read_actions()?
+        .iter()
+        .any(|action| matches!(action, Action::IbcShielding)))
 }

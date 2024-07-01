@@ -50,8 +50,9 @@ use namada_governance::storage::proposal::{
     InitProposalData, ProposalType, VoteProposalData,
 };
 use namada_governance::storage::vote::ProposalVote;
-use namada_ibc::storage::{channel_key, ibc_token};
-use namada_ibc::{is_nft_trace, MsgNftTransfer, MsgTransfer};
+use namada_ibc::storage::channel_key;
+use namada_ibc::trace::{convert_to_address, is_nft_trace};
+use namada_ibc::{MsgNftTransfer, MsgTransfer};
 use namada_proof_of_stake::parameters::{
     PosParams, MAX_VALIDATOR_METADATA_LEN,
 };
@@ -2480,12 +2481,6 @@ pub async fn build_ibc_transfer(
         validate_amount(context, args.amount, &args.token, args.tx.force)
             .await
             .expect("expected to validate amount");
-    if validated_amount.canonical().denom().0 != 0 {
-        return Err(Error::Other(format!(
-            "The amount for the IBC transfer should be an integer: {}",
-            validated_amount
-        )));
-    }
 
     // If source is transparent check the balance (MASP balance is checked when
     // constructing the shielded part)
@@ -2519,7 +2514,7 @@ pub async fn build_ibc_transfer(
         context,
         &args.source,
         // The token will be escrowed to IBC address
-        &TransferTarget::Address(Address::Internal(InternalAddress::Ibc)),
+        &TransferTarget::Ibc(args.receiver.clone()),
         &args.token,
         validated_amount,
         !(args.tx.dry_run || args.tx.dry_run_wrapper),
@@ -3485,8 +3480,8 @@ pub async fn build_custom(
 /// Generate IBC shielded transfer
 pub async fn gen_ibc_shielding_transfer<N: Namada>(
     context: &N,
-    args: args::GenIbcShieldedTransfer,
-) -> Result<Option<(token::ShieldingTransfer, MaspTransaction)>> {
+    args: args::GenIbcShieldingTransfer,
+) -> Result<Option<MaspTransaction>> {
     let source = Address::Internal(InternalAddress::Ibc);
     let (src_port_id, src_channel_id) =
         get_ibc_src_port_channel(context, &args.port_id, &args.channel_id)
@@ -3494,13 +3489,8 @@ pub async fn gen_ibc_shielding_transfer<N: Namada>(
     let ibc_denom =
         rpc::query_ibc_denom(context, &args.token, Some(&source)).await;
     let token = if args.refund {
-        if ibc_denom.contains('/') {
-            ibc_token(ibc_denom)
-        } else {
-            // the token is a base token
-            Address::decode(&ibc_denom)
-                .map_err(|e| Error::Other(format!("Invalid token: {e}")))?
-        }
+        convert_to_address(ibc_denom)
+            .map_err(|e| Error::Other(format!("Invalid token: {e}")))?
     } else {
         // Need to check the prefix
         namada_ibc::received_ibc_token(
@@ -3538,19 +3528,7 @@ pub async fn gen_ibc_shielding_transfer<N: Namada>(
         .await
         .map_err(|err| TxSubmitError::MaspError(err.to_string()))?;
 
-    if let Some(shielded_transfer) = shielded_transfer {
-        let masp_tx_hash =
-            Section::MaspTx(shielded_transfer.masp_tx.clone()).get_hash();
-        let transfer = token::ShieldingTransfer {
-            source: source.clone(),
-            token: token.clone(),
-            amount: validated_amount,
-            shielded_section_hash: masp_tx_hash,
-        };
-        Ok(Some((transfer, shielded_transfer.masp_tx)))
-    } else {
-        Ok(None)
-    }
+    Ok(shielded_transfer.map(|st| st.masp_tx))
 }
 
 async fn get_ibc_src_port_channel(

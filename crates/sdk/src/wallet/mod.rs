@@ -22,7 +22,7 @@ use namada_core::masp::{
     ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
 };
 use namada_core::time::DateTimeUtc;
-use namada_ibc::is_ibc_denom;
+use namada_ibc::trace::is_ibc_denom;
 pub use pre_genesis::gen_key_to_store;
 use rand::CryptoRng;
 use rand_core::RngCore;

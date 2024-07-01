@@ -17,7 +17,7 @@ use namada_core::address::Address;
 use namada_core::token::Amount;
 
 use super::common::IbcCommonContext;
-use crate::{storage, NftClass, NftMetadata, IBC_ESCROW_ADDRESS};
+use crate::{trace, NftClass, NftMetadata, IBC_ESCROW_ADDRESS};
 
 /// NFT transfer context to handle tokens
 #[derive(Debug)]
@@ -95,8 +95,8 @@ where
         class_id: &PrefixedClassId,
         token_id: &TokenId,
     ) -> Result<(), NftTransferError> {
-        let ibc_trace = format!("{class_id}/{token_id}");
-        let trace_hash = storage::calc_hash(&ibc_trace);
+        let ibc_trace = trace::ibc_trace_for_nft(class_id, token_id);
+        let trace_hash = trace::calc_hash(&ibc_trace);
 
         self.inner
             .borrow_mut()
@@ -241,7 +241,7 @@ where
         class_id: &PrefixedClassId,
         token_id: &TokenId,
     ) -> Option<String> {
-        Some(storage::calc_hash(format!("{class_id}/{token_id}")))
+        Some(trace::calc_hash(format!("{class_id}/{token_id}")))
     }
 
     /// Returns the NFT
@@ -300,7 +300,7 @@ where
         token_id: &TokenId,
         _memo: &Memo,
     ) -> Result<(), NftTransferError> {
-        let ibc_token = storage::ibc_token_for_nft(class_id, token_id);
+        let ibc_token = trace::ibc_token_for_nft(class_id, token_id);
 
         self.add_withdraw(&ibc_token)?;
 
@@ -324,7 +324,7 @@ where
         class_id: &PrefixedClassId,
         token_id: &TokenId,
     ) -> Result<(), NftTransferError> {
-        let ibc_token = storage::ibc_token_for_nft(class_id, token_id);
+        let ibc_token = trace::ibc_token_for_nft(class_id, token_id);
 
         self.add_deposit(&ibc_token)?;
 
@@ -347,7 +347,7 @@ where
         token_uri: Option<&TokenUri>,
         token_data: Option<&TokenData>,
     ) -> Result<(), NftTransferError> {
-        let ibc_token = storage::ibc_token_for_nft(class_id, token_id);
+        let ibc_token = trace::ibc_token_for_nft(class_id, token_id);
 
         // create or update the metadata
         let metadata = NftMetadata {
@@ -378,7 +378,7 @@ where
         token_id: &TokenId,
         _memo: &Memo,
     ) -> Result<(), NftTransferError> {
-        let ibc_token = storage::ibc_token_for_nft(class_id, token_id);
+        let ibc_token = trace::ibc_token_for_nft(class_id, token_id);
 
         self.update_mint_amount(&ibc_token, false)?;
         self.add_withdraw(&ibc_token)?;

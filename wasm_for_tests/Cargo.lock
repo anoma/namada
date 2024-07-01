@@ -3848,6 +3848,7 @@ dependencies = [
  "prost-types",
  "rand 0.8.5",
  "rand_core 0.6.4",
+ "ripemd",
  "serde",
  "serde_json",
  "sha2 0.9.9",
@@ -3938,6 +3939,7 @@ name = "namada_ibc"
 version = "0.39.0"
 dependencies = [
  "borsh 1.2.1",
+ "data-encoding",
  "ibc",
  "ibc-derive",
  "ibc-testkit",
@@ -3958,6 +3960,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.9.9",
+ "smooth-operator",
  "thiserror",
  "tracing",
 ]
@@ -4076,7 +4079,6 @@ dependencies = [
  "rand 0.8.5",
  "rand_core 0.6.4",
  "regex",
- "ripemd",
  "serde",
  "serde_json",
  "sha2 0.9.9",

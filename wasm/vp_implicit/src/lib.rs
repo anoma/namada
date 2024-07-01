@@ -102,6 +102,7 @@ fn validate_tx(
                 &addr,
             )?,
             Action::Masp(_) => (),
+            Action::IbcShielding => (),
         }
     }
 
