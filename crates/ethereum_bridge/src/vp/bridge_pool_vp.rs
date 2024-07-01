@@ -71,8 +71,8 @@ where
 {
     /// Context to interact with the host structures.
     pub ctx: Ctx<'ctx, S, CA, EVAL>,
-    /// Token keys type
-    pub token_keys: PhantomData<TokenKeys>,
+    /// Generic types for DI
+    pub _marker: PhantomData<TokenKeys>,
 }
 
 impl<'ctx, S, CA, EVAL, TokenKeys> BridgePool<'ctx, S, CA, EVAL, TokenKeys>
@@ -86,7 +86,7 @@ where
     pub fn new(ctx: Ctx<'ctx, S, CA, EVAL>) -> Self {
         Self {
             ctx,
-            token_keys: PhantomData,
+            _marker: PhantomData,
         }
     }
 
@@ -715,6 +715,8 @@ mod test_bridge_pool_vp {
         CA,
     >;
     type TokenKeys = namada_token::Store<()>;
+    type BridgePool<'a, S> =
+        super::BridgePool<'a, S, VpCache<CA>, Eval, TokenKeys>;
 
     /// The amount of NAM Bertha has
     const ASSET: EthAddress = EthAddress([0; 20]);
@@ -1061,10 +1063,13 @@ mod test_bridge_pool_vp {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let vp = BridgePool {
-            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
-            token_keys: PhantomData::<TokenKeys>,
-        };
+        let vp = BridgePool::new(setup_ctx(
+            &tx,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+        ));
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
@@ -1409,10 +1414,13 @@ mod test_bridge_pool_vp {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let vp = BridgePool {
-            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
-            token_keys: PhantomData::<TokenKeys>,
-        };
+        let vp = BridgePool::new(setup_ctx(
+            &tx,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+        ));
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
@@ -1470,10 +1478,13 @@ mod test_bridge_pool_vp {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let vp = BridgePool {
-            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
-            token_keys: PhantomData::<TokenKeys>,
-        };
+        let vp = BridgePool::new(setup_ctx(
+            &tx,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+        ));
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
@@ -1552,10 +1563,13 @@ mod test_bridge_pool_vp {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let vp = BridgePool {
-            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
-            token_keys: PhantomData::<TokenKeys>,
-        };
+        let vp = BridgePool::new(setup_ctx(
+            &tx,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+        ));
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
@@ -1629,10 +1643,13 @@ mod test_bridge_pool_vp {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let vp = BridgePool {
-            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
-            token_keys: PhantomData::<TokenKeys>,
-        };
+        let vp = BridgePool::new(setup_ctx(
+            &tx,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+        ));
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
@@ -1723,10 +1740,13 @@ mod test_bridge_pool_vp {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let vp = BridgePool {
-            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
-            token_keys: PhantomData::<TokenKeys>,
-        };
+        let vp = BridgePool::new(setup_ctx(
+            &tx,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+        ));
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
@@ -1803,10 +1823,13 @@ mod test_bridge_pool_vp {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let vp = BridgePool {
-            ctx: setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers),
-            token_keys: PhantomData::<TokenKeys>,
-        };
+        let vp = BridgePool::new(setup_ctx(
+            &tx,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+        ));
 
         let mut tx = Tx::from_type(TxType::Raw);
         tx.push_default_inner_tx();

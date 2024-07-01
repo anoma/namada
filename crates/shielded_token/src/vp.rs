@@ -64,10 +64,8 @@ where
 {
     /// Context to interact with the host structures.
     pub ctx: Ctx<'ctx, S, CA, EVAL>,
-    /// Governance type
-    pub gov: PhantomData<Params>,
-    /// Parameters type
-    pub params: PhantomData<Gov>,
+    /// Generic types for DI
+    pub _marker: PhantomData<(Params, Gov)>,
 }
 
 // The balances changed by the transaction, split between masp and non-masp
@@ -102,8 +100,7 @@ where
     pub fn new(ctx: Ctx<'ctx, S, CA, EVAL>) -> Self {
         Self {
             ctx,
-            params: PhantomData,
-            gov: PhantomData,
+            _marker: PhantomData,
         }
     }
 

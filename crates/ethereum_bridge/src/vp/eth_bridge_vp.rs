@@ -28,8 +28,8 @@ where
 {
     /// Context to interact with the host structures.
     pub ctx: Ctx<'ctx, S, CA, EVAL>,
-    /// Token keys type
-    pub token_keys: PhantomData<TokenKeys>,
+    /// Generic types for DI
+    pub _marker: PhantomData<TokenKeys>,
 }
 
 impl<'ctx, S, CA, EVAL, TokenKeys> EthBridge<'ctx, S, CA, EVAL, TokenKeys>
@@ -43,7 +43,7 @@ where
     pub fn new(ctx: Ctx<'ctx, S, CA, EVAL>) -> Self {
         Self {
             ctx,
-            token_keys: PhantomData,
+            _marker: PhantomData,
         }
     }
 
@@ -224,6 +224,8 @@ mod tests {
         CA,
     >;
     type TokenKeys = namada_token::Store<()>;
+    type EthBridge<'a, S> =
+        super::EthBridge<'a, S, VpCache<CA>, Eval, TokenKeys>;
 
     /// Return some arbitrary random key belonging to this account
     fn arbitrary_key() -> Key {
@@ -421,17 +423,14 @@ mod tests {
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let batched_tx = tx.batch_ref_first_tx();
-        let vp = EthBridge {
-            ctx: setup_ctx(
-                batched_tx.tx,
-                batched_tx.cmt,
-                &state,
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-            ),
-            token_keys: PhantomData::<TokenKeys>,
-        };
+        let vp = EthBridge::new(setup_ctx(
+            batched_tx.tx,
+            batched_tx.cmt,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+        ));
 
         let res = vp.validate_tx(&batched_tx, &keys_changed, &verifiers);
         assert!(res.is_ok());
@@ -476,17 +475,14 @@ mod tests {
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let batched_tx = tx.batch_ref_first_tx();
-        let vp = EthBridge {
-            ctx: setup_ctx(
-                batched_tx.tx,
-                batched_tx.cmt,
-                &state,
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-            ),
-            token_keys: PhantomData::<TokenKeys>,
-        };
+        let vp = EthBridge::new(setup_ctx(
+            batched_tx.tx,
+            batched_tx.cmt,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+        ));
 
         let res = vp.validate_tx(&batched_tx, &keys_changed, &verifiers);
         assert!(res.is_err());
@@ -534,17 +530,14 @@ mod tests {
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
         let batched_tx = tx.batch_ref_first_tx();
-        let vp = EthBridge {
-            ctx: setup_ctx(
-                batched_tx.tx,
-                batched_tx.cmt,
-                &state,
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-            ),
-            token_keys: PhantomData::<TokenKeys>,
-        };
+        let vp = EthBridge::new(setup_ctx(
+            batched_tx.tx,
+            batched_tx.cmt,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+        ));
 
         let res = vp.validate_tx(&batched_tx, &keys_changed, &verifiers);
         assert!(res.is_err());

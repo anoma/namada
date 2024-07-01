@@ -55,10 +55,8 @@ where
 {
     /// Context to interact with the host structures.
     pub ctx: Ctx<'ctx, S, CA, EVAL>,
-    /// Read PoS storage
-    pub pos: PhantomData<PoS>,
-    /// Token keys
-    pub token_keys: PhantomData<TokenKeys>,
+    /// Generic types for DI
+    pub _marker: PhantomData<(PoS, TokenKeys)>,
 }
 
 impl<'view, 'ctx: 'view, S, CA, EVAL, PoS, TokenKeys> NativeVp<'view>
@@ -231,8 +229,7 @@ where
     pub fn new(ctx: Ctx<'ctx, S, CA, EVAL>) -> Self {
         Self {
             ctx,
-            pos: PhantomData,
-            token_keys: PhantomData,
+            _marker: PhantomData,
         }
     }
 

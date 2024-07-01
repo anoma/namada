@@ -28,8 +28,8 @@ where
 {
     /// Context to interact with the host structures.
     pub ctx: Ctx<'ctx, S, CA, EVAL>,
-    /// Token keys type
-    pub token_keys: PhantomData<TokenKeys>,
+    /// Generic types for DI
+    pub _marker: PhantomData<TokenKeys>,
 }
 
 impl<'view, 'ctx: 'view, S, CA, EVAL, TokenKeys> NativeVp<'view>
@@ -138,7 +138,7 @@ where
     pub fn new(ctx: Ctx<'ctx, S, CA, EVAL>) -> Self {
         Self {
             ctx,
-            token_keys: PhantomData,
+            _marker: PhantomData,
         }
     }
 }
@@ -173,6 +173,8 @@ mod test_nuts {
         CA,
     >;
     type TokenKeys = namada_token::Store<()>;
+    type NonUsableTokens<'a, S> =
+        super::NonUsableTokens<'a, S, VpCache<CA>, Eval, TokenKeys>;
 
     /// Run a VP check on a NUT transfer between the two provided addresses.
     fn check_nut_transfer(src: Address, dst: Address) -> bool {
@@ -241,10 +243,7 @@ mod test_nuts {
             &verifiers,
             VpCache::new(temp_dir(), 100usize),
         );
-        let vp = NonUsableTokens {
-            ctx,
-            token_keys: PhantomData::<TokenKeys>,
-        };
+        let vp = NonUsableTokens::new(ctx);
 
         // print debug info in case we run into failures
         for key in &keys_changed {

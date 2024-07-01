@@ -53,10 +53,8 @@ where
 {
     /// Context to interact with the host structures.
     pub ctx: Ctx<'ctx, S, CA, EVAL>,
-    /// Parameters type
-    pub params: PhantomData<Params>,
-    /// Governance type
-    pub gov: PhantomData<Gov>,
+    /// Generic types for DI
+    pub _marker: PhantomData<(Params, Gov)>,
 }
 
 impl<'view, 'ctx: 'view, S, CA, EVAL, Params, Gov> NativeVp<'view>
@@ -315,8 +313,7 @@ where
     pub fn new(ctx: Ctx<'ctx, S, CA, EVAL>) -> Self {
         Self {
             ctx,
-            params: PhantomData,
-            gov: PhantomData,
+            _marker: PhantomData,
         }
     }
 
