@@ -3127,11 +3127,10 @@ pub mod args {
         TX_CHANGE_METADATA_WASM, TX_CLAIM_REWARDS_WASM,
         TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM, TX_INIT_ACCOUNT_WASM,
         TX_INIT_PROPOSAL, TX_REACTIVATE_VALIDATOR_WASM, TX_REDELEGATE_WASM,
-        TX_RESIGN_STEWARD, TX_REVEAL_PK, TX_SHIELDED_TRANSFER_WASM,
-        TX_SHIELDING_TRANSFER_WASM, TX_TRANSPARENT_TRANSFER_WASM,
-        TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM, TX_UNSHIELDING_TRANSFER_WASM,
-        TX_UPDATE_ACCOUNT_WASM, TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL,
-        TX_WITHDRAW_WASM, VP_USER_WASM,
+        TX_RESIGN_STEWARD, TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM,
+        TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
+        TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
+        VP_USER_WASM,
     };
     use namada_sdk::DEFAULT_GAS_LIMIT;
 
@@ -4394,7 +4393,7 @@ pub mod args {
             let target = TARGET.parse(matches);
             let token = TOKEN.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
-            let tx_code_path = PathBuf::from(TX_TRANSPARENT_TRANSFER_WASM);
+            let tx_code_path = PathBuf::from(TX_TRANSFER_WASM);
             let data = vec![TxTransparentTransferData {
                 source,
                 target,
@@ -4467,7 +4466,7 @@ pub mod args {
             let target = PAYMENT_ADDRESS_TARGET.parse(matches);
             let token = TOKEN.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
-            let tx_code_path = PathBuf::from(TX_SHIELDED_TRANSFER_WASM);
+            let tx_code_path = PathBuf::from(TX_TRANSFER_WASM);
             let data = vec![TxShieldedTransferData {
                 source,
                 target,
@@ -4547,7 +4546,7 @@ pub mod args {
             let target = PAYMENT_ADDRESS_TARGET.parse(matches);
             let token = TOKEN.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
-            let tx_code_path = PathBuf::from(TX_SHIELDING_TRANSFER_WASM);
+            let tx_code_path = PathBuf::from(TX_TRANSFER_WASM);
             let data = vec![TxShieldingTransferData {
                 source,
                 token,
@@ -4625,7 +4624,7 @@ pub mod args {
             let target = TARGET.parse(matches);
             let token = TOKEN.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
-            let tx_code_path = PathBuf::from(TX_UNSHIELDING_TRANSFER_WASM);
+            let tx_code_path = PathBuf::from(TX_TRANSFER_WASM);
             let data = vec![TxUnshieldingTransferData {
                 target,
                 token,
