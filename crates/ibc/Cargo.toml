@@ -45,6 +45,7 @@ prost.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+smooth-operator.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 

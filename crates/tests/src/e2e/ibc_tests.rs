@@ -248,7 +248,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         BERTHA,
         ALBERT,
         token,
-        50000,
+        50_000_000_000,
         BERTHA_KEY,
     )?;
     check_balances_after_non_ibc(&port_id_b, &channel_id_b, &test_b)?;
@@ -265,7 +265,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         BERTHA,
         receiver.to_string(),
         ibc_denom,
-        50000.0,
+        50_000_000_000.0,
         BERTHA_KEY,
         &port_id_b,
         &channel_id_b,
@@ -410,7 +410,7 @@ fn ibc_namada_gaia() -> Result<()> {
     // Check the received token on Gaia
     let token_addr = find_address(&test, APFEL)?;
     let ibc_denom = format!("{port_id_gaia}/{channel_id_gaia}/{token_addr}");
-    check_gaia_balance(&test_gaia, GAIA_USER, &ibc_denom, 200)?;
+    check_gaia_balance(&test_gaia, GAIA_USER, &ibc_denom, 200000000)?;
 
     // Transfer back from Gaia to Namada
     let receiver = find_address(&test, ALBERT)?.to_string();
@@ -419,7 +419,7 @@ fn ibc_namada_gaia() -> Result<()> {
         GAIA_USER,
         receiver,
         get_gaia_denom_hash(ibc_denom),
-        100,
+        100000000,
         &port_id_gaia,
         &channel_id_gaia,
     )?;
@@ -681,19 +681,19 @@ fn proposal_ibc_token_inflation() -> Result<()> {
 #[test]
 fn ibc_rate_limit() -> Result<()> {
     // Mint limit 2 transfer/channel-0/nam, per-epoch throughput limit 1 NAM
-    let update_genesis = |mut genesis: templates::All<
-        templates::Unvalidated,
-    >,
-                          base_dir: &_| {
-        genesis.parameters.parameters.epochs_per_year =
-            epochs_per_year_from_min_duration(50);
-        genesis.parameters.ibc_params.default_mint_limit = Amount::from_u64(2);
-        genesis
-            .parameters
-            .ibc_params
-            .default_per_epoch_throughput_limit = Amount::from_u64(1_000_000);
-        setup::set_validators(1, genesis, base_dir, |_| 0)
-    };
+    let update_genesis =
+        |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
+            genesis.parameters.parameters.epochs_per_year =
+                epochs_per_year_from_min_duration(50);
+            genesis.parameters.ibc_params.default_mint_limit =
+                Amount::from_u64(2_000_000);
+            genesis
+                .parameters
+                .ibc_params
+                .default_per_epoch_throughput_limit =
+                Amount::from_u64(1_000_000);
+            setup::set_validators(1, genesis, base_dir, |_| 0)
+        };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
     let _bg_ledger_a = ledger_a.background();
     let _bg_ledger_b = ledger_b.background();
@@ -1626,22 +1626,8 @@ fn try_invalid_transfers(
     std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
     let receiver = find_address(test_b, BERTHA)?;
 
-    // invalid amount
-    transfer(
-        test_a,
-        ALBERT,
-        receiver.to_string(),
-        NAM,
-        10.1,
-        ALBERT_KEY,
-        port_id_a,
-        channel_id_a,
-        None,
-        Some("The amount for the IBC transfer should be an integer"),
-        false,
-    )?;
-
     // invalid port
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
     let nam_addr = find_address(test_a, NAM)?;
     transfer(
         test_a,
@@ -1676,6 +1662,7 @@ fn try_invalid_transfers(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn transfer_on_chain(
     test: &Test,
     kind: impl AsRef<str>,
@@ -1687,7 +1674,8 @@ fn transfer_on_chain(
 ) -> Result<()> {
     std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let rpc = get_actor_rpc(test, Who::Validator(0));
-    let tx_args = [
+    let amount = amount.to_string();
+    let tx_args = vec![
         kind.as_ref(),
         "--source",
         sender.as_ref(),
@@ -1696,7 +1684,7 @@ fn transfer_on_chain(
         "--token",
         token.as_ref(),
         "--amount",
-        &amount.to_string(),
+        &amount,
         "--signing-keys",
         signer.as_ref(),
         "--node",
@@ -1729,7 +1717,7 @@ fn transfer_back(
         BERTHA,
         receiver.to_string(),
         ibc_denom,
-        50000.0,
+        50_000_000_000.0,
         BERTHA_KEY,
         port_id_b,
         channel_id_b,
@@ -2460,7 +2448,7 @@ fn check_shielded_balances(
 
     // Check the shielded balance on Chain B
     let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/btc");
-    check_balance(test_b, AB_VIEWING_KEY, ibc_denom, 10)?;
+    check_balance(test_b, AB_VIEWING_KEY, ibc_denom, 1_000_000_000)?;
 
     Ok(())
 }
