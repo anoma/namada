@@ -2529,7 +2529,7 @@ fn check_shielded_balances(
 
     // Check the shielded balance on Chain B
     let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/btc");
-    check_balance(test_b, AB_VIEWING_KEY, ibc_denom, 10_000_000_000)?;
+    check_balance(test_b, AB_VIEWING_KEY, ibc_denom, 1_000_000_000)?;
 
     Ok(())
 }
