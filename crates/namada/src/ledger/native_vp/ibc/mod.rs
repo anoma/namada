@@ -2267,7 +2267,6 @@ mod tests {
         let tx_data = MsgTransfer {
             message: msg,
             transfer: None,
-            fee_unshield: None,
         }
         .serialize_to_vec();
 
@@ -3127,7 +3126,6 @@ mod tests {
         let tx_data = MsgNftTransfer {
             message: msg,
             transfer: None,
-            fee_unshield: None,
         }
         .serialize_to_vec();
 

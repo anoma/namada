@@ -19,7 +19,7 @@ use namada_node::shell::testing::node::NodeResults;
 use namada_node::shell::testing::utils::{Bin, CapturedOutput};
 use namada_sdk::migrations;
 use namada_sdk::queries::RPC;
-use namada_sdk::tx::{TX_TRANSPARENT_TRANSFER_WASM, VP_USER_WASM};
+use namada_sdk::tx::{TX_TRANSFER_WASM, VP_USER_WASM};
 use namada_test_utils::TestWasms;
 use test_log::test;
 
@@ -59,16 +59,17 @@ fn ledger_txs_and_queries() -> Result<()> {
     let validator_one_rpc = "http://127.0.0.1:26567";
 
     let (node, _services) = setup::setup()?;
-    let transfer =
-        token::TransparentTransfer(vec![token::TransparentTransferData {
-            source: defaults::bertha_address(),
-            target: defaults::albert_address(),
-            token: node.native_token(),
-            amount: token::DenominatedAmount::new(
+    let transfer = token::Transfer::default()
+        .transfer(
+            defaults::bertha_address(),
+            defaults::albert_address(),
+            node.native_token(),
+            token::DenominatedAmount::new(
                 token::Amount::native_whole(10),
                 token::NATIVE_MAX_DECIMAL_PLACES.into(),
             ),
-        }])
+        )
+        .unwrap()
         .serialize_to_vec();
     let tx_data_path = node.test_dir.path().join("tx.data");
     std::fs::write(&tx_data_path, transfer).unwrap();
@@ -141,7 +142,7 @@ fn ledger_txs_and_queries() -> Result<()> {
         vec![
             "tx",
             "--code-path",
-            TX_TRANSPARENT_TRANSFER_WASM,
+            TX_TRANSFER_WASM,
             "--data-path",
             &tx_data_path,
             "--owner",
