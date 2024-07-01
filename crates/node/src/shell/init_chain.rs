@@ -419,7 +419,7 @@ where
                 )
                 .or_placeholder(None)?;
 
-                #[cfg(not(test))]
+                #[cfg(not(any(test, fuzzing)))]
                 if name.starts_with("tx_") {
                     self.tx_wasm_cache.pre_compile(&code);
                 } else if name.starts_with("vp_") {
