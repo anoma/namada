@@ -12,8 +12,8 @@ use namada::core::key::*;
 use namada::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal,
 };
+use namada::ibc::convert_masp_tx_to_ibc_memo;
 use namada::io::Io;
-use namada::masp::convert_masp_tx_to_ibc_memo;
 use namada::state::EPOCH_SWITCH_BLOCKS_DELAY;
 use namada::tx::{CompressedAuthorization, Section, Signer, Tx};
 use namada_sdk::args::TxBecomeValidator;

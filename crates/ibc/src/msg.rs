@@ -1,4 +1,5 @@
 use borsh::{BorshDeserialize, BorshSerialize};
+use data_encoding::HEXUPPER;
 use ibc::apps::nft_transfer::types::msgs::transfer::MsgTransfer as IbcMsgNftTransfer;
 use ibc::apps::nft_transfer::types::packet::PacketData as NftPacketData;
 use ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
@@ -8,6 +9,8 @@ use ibc::core::channel::types::packet::Packet;
 use ibc::core::handler::types::msgs::MsgEnvelope;
 use ibc::core::host::types::identifiers::PortId;
 use ibc::primitives::proto::Protobuf;
+use masp_primitives::transaction::Transaction as MaspTransaction;
+use namada_core::borsh::BorshSerializeExt;
 use namada_token::ShieldingTransfer;
 
 /// The different variants of an Ibc message
@@ -87,16 +90,20 @@ impl BorshDeserialize for MsgNftTransfer {
     }
 }
 
-/// Extract the memo string from IBC envelope
-pub fn extract_memo_from_envelope(envelope: &MsgEnvelope) -> Option<String> {
+/// Extract MASP transaction from IBC envelope
+pub fn extract_masp_tx_from_envelope(
+    envelope: &MsgEnvelope,
+) -> Option<MaspTransaction> {
     match envelope {
         MsgEnvelope::Packet(packet_msg) => match packet_msg {
             PacketMsg::Recv(msg) => {
-                extract_memo_from_packet(&msg.packet, false)
+                extract_masp_tx_from_packet(&msg.packet, false)
             }
-            PacketMsg::Ack(msg) => extract_memo_from_packet(&msg.packet, true),
+            PacketMsg::Ack(msg) => {
+                extract_masp_tx_from_packet(&msg.packet, true)
+            }
             PacketMsg::Timeout(msg) => {
-                extract_memo_from_packet(&msg.packet, true)
+                extract_masp_tx_from_packet(&msg.packet, true)
             }
             _ => None,
         },
@@ -104,11 +111,11 @@ pub fn extract_memo_from_envelope(envelope: &MsgEnvelope) -> Option<String> {
     }
 }
 
-/// Extract the memo string from IBC packet
-pub fn extract_memo_from_packet(
+/// Extract MASP transaction from IBC packet memo
+pub fn extract_masp_tx_from_packet(
     packet: &Packet,
     is_sender: bool,
-) -> Option<String> {
+) -> Option<MaspTransaction> {
     let is_ft_packet = if is_sender {
         packet.port_id_on_a == PortId::transfer()
     } else {
@@ -121,10 +128,20 @@ pub fn extract_memo_from_packet(
         if packet_data.memo.as_ref().is_empty() {
             return None;
         }
-        Some(packet_data.memo.as_ref().to_string())
+        let bytes =
+            HEXUPPER.decode(packet_data.memo.as_ref().as_bytes()).ok()?;
+        MaspTransaction::try_from_slice(&bytes).ok()
     } else {
         let packet_data =
             serde_json::from_slice::<NftPacketData>(&packet.data).ok()?;
-        packet_data.memo.map(|s| s.as_ref().to_string())
+        let bytes = HEXUPPER
+            .decode(packet_data.memo?.as_ref().as_bytes())
+            .ok()?;
+        MaspTransaction::try_from_slice(&bytes).ok()
     }
+}
+
+/// Get IBC memo string from Transaction
+pub fn convert_masp_tx_to_ibc_memo(transaction: &MaspTransaction) -> String {
+    HEXUPPER.encode(&transaction.serialize_to_vec())
 }

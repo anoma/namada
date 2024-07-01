@@ -71,6 +71,7 @@ use ibc::core::host::types::identifiers::{ChannelId, PortId, Sequence};
 use ibc::core::router::types::error::RouterError;
 use ibc::primitives::proto::Any;
 pub use ibc::*;
+use masp_primitives::transaction::Transaction as MaspTransaction;
 pub use msg::*;
 use namada_core::address::{self, Address};
 use namada_core::arith::checked;
@@ -151,7 +152,8 @@ where
     pub fn execute(
         &mut self,
         tx_data: &[u8],
-    ) -> Result<(Option<ShieldingTransfer>, Option<String>), Error> {
+    ) -> Result<(Option<ShieldingTransfer>, Option<MaspTransaction>), Error>
+    {
         let message = decode_message(tx_data)?;
         match &message {
             IbcMessage::Transfer(msg) => {
@@ -188,7 +190,10 @@ where
                         match packet_msg {
                             PacketMsg::Recv(msg) => {
                                 if self.is_receiving_success(msg)? {
-                                    extract_memo_from_packet(&msg.packet, false)
+                                    extract_masp_tx_from_packet(
+                                        &msg.packet,
+                                        false,
+                                    )
                                 } else {
                                     None
                                 }
@@ -198,11 +203,14 @@ where
                                     // No refund
                                     None
                                 } else {
-                                    extract_memo_from_packet(&msg.packet, true)
+                                    extract_masp_tx_from_packet(
+                                        &msg.packet,
+                                        true,
+                                    )
                                 }
                             }
                             PacketMsg::Timeout(msg) => {
-                                extract_memo_from_packet(&msg.packet, true)
+                                extract_masp_tx_from_packet(&msg.packet, true)
                             }
                             _ => None,
                         }

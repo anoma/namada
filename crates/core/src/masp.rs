@@ -8,7 +8,7 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
-use masp_primitives::transaction::{Transaction, TransparentAddress};
+use masp_primitives::transaction::TransparentAddress;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
@@ -696,23 +696,4 @@ impl FromStr for MaspTxRefs {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         serde_json::from_str(s)
     }
-}
-
-/// Get Transaction from IBC memo string
-pub fn convert_ibc_memo_to_masp_tx(memo: &str) -> std::io::Result<Transaction> {
-    let bytes =
-        data_encoding::HEXUPPER
-            .decode(memo.as_bytes())
-            .map_err(|_| {
-                std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "unable to create asset type".to_string(),
-                )
-            })?;
-    Transaction::try_from_slice(&bytes)
-}
-
-/// Get IBC memo string from Transaction
-pub fn convert_masp_tx_to_ibc_memo(transaction: &Transaction) -> String {
-    data_encoding::HEXUPPER.encode(&transaction.serialize_to_vec())
 }

@@ -67,7 +67,7 @@ pub enum PgfAction {
 #[derive(Clone, Debug, BorshDeserialize, BorshSerialize)]
 pub struct MaspAction {
     /// The hash of the masp [`crate::types::Section`]
-    pub masp_section_ref: Hash,
+    pub masp_section_ref: Option<Hash>,
 }
 
 /// Read actions from temporary storage
@@ -127,7 +127,7 @@ pub fn get_masp_section_ref<T: Read>(
     Ok(reader.read_actions()?.into_iter().find_map(|action| {
         // In case of multiple masp actions we get the first one
         if let Action::Masp(MaspAction { masp_section_ref }) = action {
-            Some(masp_section_ref)
+            masp_section_ref
         } else {
             None
         }
