@@ -4848,6 +4848,7 @@ dependencies = [
 name = "namada_fuzz"
 version = "0.0.0"
 dependencies = [
+ "lazy_static",
  "libfuzzer-sys",
  "namada_node",
  "namada_tx",
