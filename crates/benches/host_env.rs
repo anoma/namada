@@ -3,7 +3,7 @@ use namada::core::account::AccountPublicKeysMap;
 use namada::core::address;
 use namada::core::collections::{HashMap, HashSet};
 use namada::ledger::storage::DB;
-use namada::token::{Amount, Transfer, TransferData};
+use namada::token::{Amount, Transfer, TransparentTransfer};
 use namada::tx::Authorization;
 use namada::vm::wasm::TxCache;
 use namada_apps_lib::wallet::defaults;
@@ -17,7 +17,7 @@ use namada_node::bench_utils::{
 // transaction
 fn tx_section_signature_validation(c: &mut Criterion) {
     let shell = BenchShell::default();
-    let transfer_data = Transfer::transparent(vec![TransferData {
+    let transfer_data = Transfer::transparent(vec![TransparentTransfer {
         source: defaults::albert_address(),
         target: defaults::bertha_address(),
         token: address::testing::nam(),

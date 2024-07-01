@@ -55,7 +55,7 @@ use namada::sdk::masp_primitives::merkle_tree::CommitmentTree;
 use namada::sdk::masp_primitives::transaction::Transaction;
 use namada::sdk::masp_proofs::sapling::SaplingVerificationContextInner;
 use namada::state::{Epoch, StorageRead, StorageWrite, TxIndex};
-use namada::token::{Amount, Transfer, TransferData};
+use namada::token::{Amount, Transfer, TransparentTransfer};
 use namada::tx::{BatchedTx, Code, Section, Tx};
 use namada_apps_lib::wallet::defaults;
 use namada_node::bench_utils::{
@@ -475,7 +475,7 @@ fn vp_multitoken(c: &mut Criterion) {
 
     let transfer = shell.generate_tx(
         TX_TRANSFER_WASM,
-        Transfer::transparent(vec![TransferData {
+        Transfer::transparent(vec![TransparentTransfer {
             source: defaults::albert_address(),
             target: defaults::bertha_address(),
             token: address::testing::nam(),

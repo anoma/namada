@@ -341,7 +341,7 @@ impl TxShieldedTransfer {
     }
 }
 
-/// Shielded transfer-specific arguments
+/// Shielding transfer-specific arguments
 #[derive(Clone, Debug)]
 pub struct TxShieldingTransferData<C: NamadaTypes = SdkTypes> {
     /// Transfer source spending key

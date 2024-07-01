@@ -65,7 +65,7 @@ use namada_tx::data::{pos, BatchedTxResult, ResultCode, TxResult};
 pub use namada_tx::{Authorization, *};
 use num_traits::Zero;
 use rand_core::{OsRng, RngCore};
-use token::TransferData;
+use token::TransparentTransfer;
 
 use crate::args::{
     TxShieldedTransferData, TxShieldingTransferData, TxTransparentTransferData,
@@ -2571,7 +2571,7 @@ pub async fn build_ibc_transfer(
         let masp_tx_hash =
             tx.add_masp_tx_section(shielded_transfer.masp_tx.clone()).1;
         let transfer = token::Transfer {
-            data: vec![TransferData {
+            transparent: vec![TransparentTransfer {
                 // The token will be escrowed to IBC address
                 source: source.clone(),
                 target: MASP,
@@ -2913,7 +2913,7 @@ pub async fn build_transparent_transfer<N: Namada>(
         }
 
         // Construct the corresponding transparent Transfer object
-        let transfer_data = token::TransferData {
+        let transfer_data = token::TransparentTransfer {
             source: source.to_owned(),
             target: target.to_owned(),
             token: token.to_owned(),
@@ -2924,7 +2924,7 @@ pub async fn build_transparent_transfer<N: Namada>(
     }
     // Construct the corresponding transparent Transfer object
     let transfer = token::Transfer {
-        data: transfers,
+        transparent: transfers,
         shielded_section_hash: None,
     };
 
@@ -3015,7 +3015,7 @@ pub async fn build_shielded_transfer<N: Namada>(
 
     // Construct the tx data with a placeholder shielded section hash
     let data = token::Transfer {
-        data: vec![],
+        transparent: vec![],
         shielded_section_hash: None,
     };
     let tx = build_pow_flag(
@@ -3099,7 +3099,7 @@ pub async fn build_shielding_transfer<N: Namada>(
             amount: validated_amount,
         });
 
-        data.push(token::TransferData {
+        data.push(token::TransparentTransfer {
             source: source.to_owned(),
             target: MASP,
             token: token.to_owned(),
@@ -3147,7 +3147,7 @@ pub async fn build_shielding_transfer<N: Namada>(
 
     // Construct the tx data with a placeholder shielded section hash
     let data = token::Transfer {
-        data,
+        transparent: data,
         shielded_section_hash: None,
     };
 
@@ -3196,7 +3196,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
             amount: validated_amount,
         });
 
-        data.push(token::TransferData {
+        data.push(token::TransparentTransfer {
             source: MASP,
             target: target.to_owned(),
             token: token.to_owned(),
@@ -3245,7 +3245,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
 
     // Construct the tx data with a placeholder shielded section hash
     let data = token::Transfer {
-        data,
+        transparent: data,
         shielded_section_hash: None,
     };
 
@@ -3631,7 +3631,7 @@ pub async fn gen_ibc_shielding_transfer<N: Namada>(
         let masp_tx_hash =
             Section::MaspTx(shielded_transfer.masp_tx.clone()).get_hash();
         let transfer = token::Transfer {
-            data: vec![TransferData {
+            transparent: vec![TransparentTransfer {
                 source: source.clone(),
                 target: MASP,
                 token: token.clone(),

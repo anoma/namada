@@ -711,7 +711,7 @@ struct TokenTransfer<'a>(&'a token::Transfer);
 impl TokenTransfer<'_> {
     fn sources(&self) -> Vec<&Address> {
         self.0
-            .data
+            .transparent
             .iter()
             .map(|transfer| &transfer.source)
             .collect()
@@ -719,7 +719,7 @@ impl TokenTransfer<'_> {
 
     fn targets(&self) -> Vec<&Address> {
         self.0
-            .data
+            .transparent
             .iter()
             .map(|transfer| &transfer.target)
             .collect()
@@ -733,7 +733,7 @@ impl TokenTransfer<'_> {
 
         match address {
             TransferSide::Source(source) => {
-                for transfer in &self.0.data {
+                for transfer in &self.0.transparent {
                     if source == &transfer.source {
                         Self::update_token_amount_map(
                             &mut map,
@@ -744,7 +744,7 @@ impl TokenTransfer<'_> {
                 }
             }
             TransferSide::Target(target) => {
-                for transfer in &self.0.data {
+                for transfer in &self.0.transparent {
                     if target == &transfer.target {
                         Self::update_token_amount_map(
                             &mut map,

@@ -12,7 +12,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
         .wrap_err("Failed to decode token::TransparentTransfer tx data")?;
     debug_log!("apply_tx called with transfer: {:#?}", transfers);
 
-    for transfer in transfers.data {
+    for transfer in transfers.transparent {
         token::transfer(
             ctx,
             &transfer.source,

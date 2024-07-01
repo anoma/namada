@@ -75,7 +75,7 @@ use namada::ledger::queries::{
 };
 use namada::masp::MaspTxRefs;
 use namada::state::StorageRead;
-use namada::token::{Amount, DenominatedAmount, Transfer, TransferData};
+use namada::token::{Amount, DenominatedAmount, Transfer, TransparentTransfer};
 use namada::tx::data::pos::Bond;
 use namada::tx::data::{
     BatchResults, BatchedTxResult, Fee, TxResult, VpsResult,
@@ -1114,7 +1114,7 @@ impl BenchShieldedCtx {
             namada.client().generate_tx(
                 TX_TRANSFER_WASM,
                 Transfer {
-                    data: vec![],
+                    transparent: vec![],
                     shielded_section_hash: Some(shielded_section_hash),
                 },
                 Some(shielded),
@@ -1125,7 +1125,7 @@ impl BenchShieldedCtx {
             namada.client().generate_tx(
                 TX_TRANSFER_WASM,
                 Transfer {
-                    data: vec![TransferData {
+                    transparent: vec![TransparentTransfer {
                         source: source.effective_address(),
                         target: MASP,
                         token: address::testing::nam(),
@@ -1141,7 +1141,7 @@ impl BenchShieldedCtx {
             namada.client().generate_tx(
                 TX_TRANSFER_WASM,
                 Transfer {
-                    data: vec![TransferData {
+                    transparent: vec![TransparentTransfer {
                         source: MASP,
                         target: target.effective_address(),
                         token: address::testing::nam(),
@@ -1216,7 +1216,9 @@ impl BenchShieldedCtx {
             Transfer::deserialize(&mut tx.tx.data(&tx.cmt).unwrap().as_slice())
                 .unwrap();
         let transfer = Transfer {
-            data: vec![vectorized_transfer.data.first().unwrap().to_owned()],
+            transparent: vec![
+                vectorized_transfer.transparent.first().unwrap().to_owned(),
+            ],
             shielded_section_hash: Some(
                 vectorized_transfer.shielded_section_hash.unwrap(),
             ),

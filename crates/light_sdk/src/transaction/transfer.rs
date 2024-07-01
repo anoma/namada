@@ -2,7 +2,7 @@ use namada_sdk::address::Address;
 use namada_sdk::hash::Hash;
 use namada_sdk::key::common;
 use namada_sdk::token::transaction::Transaction;
-use namada_sdk::token::TransferData;
+use namada_sdk::token::TransparentTransfer;
 pub use namada_sdk::token::{DenominatedAmount, Transfer};
 use namada_sdk::tx::data::GasLimit;
 use namada_sdk::tx::{Authorization, Tx, TxError, TX_TRANSFER_WASM};
@@ -16,9 +16,12 @@ pub struct TransferBuilder(Tx);
 
 impl TransferBuilder {
     /// Build a transparent transfer transaction from the given parameters
-    pub fn transparent(transfers: Vec<TransferData>, args: GlobalArgs) -> Self {
+    pub fn transparent(
+        transfers: Vec<TransparentTransfer>,
+        args: GlobalArgs,
+    ) -> Self {
         let data = namada_sdk::token::Transfer {
-            data: transfers,
+            transparent: transfers,
             shielded_section_hash: None,
         };
 
@@ -36,7 +39,7 @@ impl TransferBuilder {
         args: GlobalArgs,
     ) -> Self {
         let data = namada_sdk::token::Transfer {
-            data: vec![],
+            transparent: vec![],
             shielded_section_hash: Some(shielded_section_hash),
         };
 
@@ -49,13 +52,13 @@ impl TransferBuilder {
 
     /// Build a MASP transfer transaction from the given parameters
     pub fn masp(
-        transfers: Vec<TransferData>,
+        transfers: Vec<TransparentTransfer>,
         shielded_section_hash: Hash,
         transaction: Transaction,
         args: GlobalArgs,
     ) -> Self {
         let data = namada_sdk::token::Transfer {
-            data: transfers,
+            transparent: transfers,
             shielded_section_hash: Some(shielded_section_hash),
         };
 
