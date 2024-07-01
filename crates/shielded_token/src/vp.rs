@@ -370,9 +370,7 @@ where
         keys_changed: &BTreeSet<Key>,
     ) -> Result<()> {
         let masp_epoch_multiplier =
-            namada_parameters::read_masp_epoch_multiplier_parameter(
-                self.ctx.state,
-            )?;
+            Params::masp_epoch_multiplier(&self.ctx.pre())?;
         let masp_epoch = MaspEpoch::try_from_epoch(
             self.ctx.get_block_epoch()?,
             masp_epoch_multiplier,
