@@ -2489,10 +2489,10 @@ fn check_balances_after_non_ibc(
 ) -> Result<()> {
     // Check the source on Chain B
     let ibc_denom = format!("{port_id}/{channel_id}/nam");
-    check_balance(test_b, BERTHA, &ibc_denom, 50000)?;
+    check_balance(test_b, BERTHA, &ibc_denom, 50_000_000_000)?;
 
     // Check the traget on Chain B
-    check_balance(test_b, ALBERT, &ibc_denom, 50000)?;
+    check_balance(test_b, ALBERT, &ibc_denom, 50_000_000_000)?;
 
     Ok(())
 }
@@ -2722,7 +2722,7 @@ fn gen_masp_tx(
 
     let mut client = run!(dst_test, Bin::Client, args, Some(120))?;
     let (_unread, matched) =
-        client.exp_regex("Output IBC shielded transfer .*")?;
+        client.exp_regex("Output IBC shielding transfer .*")?;
     let file_path = matched.trim().split(' ').last().expect("invalid output");
     client.assert_success();
 
