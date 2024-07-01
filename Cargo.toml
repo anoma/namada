@@ -223,3 +223,6 @@ lto = true
 opt-level = 3
 panic = "unwind"
 overflow-checks = true
+
+[profile.dev.package.namada_fuzz]
+opt-level = 3
