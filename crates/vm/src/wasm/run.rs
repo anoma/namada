@@ -568,10 +568,7 @@ where
         eval_runner
             .eval_native_result(ctx, vp_code_hash, input_data)
             .inspect_err(|err| {
-                tracing::warn!(
-                    "VP eval from a native VP failed with:
-            {err}",
-                );
+                tracing::warn!("VP eval from a native VP failed with: {err}");
             })
             .into_storage_result()
     }
