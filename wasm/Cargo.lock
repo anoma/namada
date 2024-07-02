@@ -6930,25 +6930,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tx_shielded_transfer"
-version = "0.39.0"
-dependencies = [
- "getrandom 0.2.15",
- "namada_tx_prelude",
- "rlsf",
-]
-
-[[package]]
-name = "tx_shielding_transfer"
-version = "0.39.0"
-dependencies = [
- "getrandom 0.2.15",
- "namada_tx_prelude",
- "rlsf",
-]
-
-[[package]]
-name = "tx_transparent_transfer"
+name = "tx_transfer"
 version = "0.39.0"
 dependencies = [
  "getrandom 0.2.15",
@@ -6975,15 +6957,6 @@ dependencies = [
 
 [[package]]
 name = "tx_unjail_validator"
-version = "0.39.0"
-dependencies = [
- "getrandom 0.2.15",
- "namada_tx_prelude",
- "rlsf",
-]
-
-[[package]]
-name = "tx_unshielding_transfer"
 version = "0.39.0"
 dependencies = [
  "getrandom 0.2.15",
