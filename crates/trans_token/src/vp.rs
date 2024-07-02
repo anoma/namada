@@ -8,9 +8,9 @@ use namada_core::booleans::BoolResultUnitExt;
 use namada_core::collections::HashMap;
 use namada_core::storage::{Key, KeySeg};
 use namada_core::token::Amount;
-use namada_core::{governance, parameters};
 use namada_state::{StateRead, StorageError};
 use namada_storage::StorageRead;
+use namada_systems::{governance, parameters};
 use namada_tx::action::{
     Action, Bond, ClaimRewards, GovAction, PosAction, Read, Withdraw,
 };

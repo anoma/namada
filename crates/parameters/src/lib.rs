@@ -25,10 +25,10 @@ use std::marker::PhantomData;
 
 use namada_core::address::{Address, InternalAddress};
 use namada_core::chain::ProposalBytes;
-pub use namada_core::parameters::*;
 use namada_core::time::DurationSecs;
 use namada_core::token;
 use namada_storage::{ResultExt, StorageRead, StorageWrite};
+pub use namada_systems::parameters::*;
 pub use storage::get_max_block_gas;
 use thiserror::Error;
 pub use wasm_allowlist::{is_tx_allowed, is_vp_allowed};

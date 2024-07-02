@@ -16,11 +16,11 @@ use namada_core::address::Address;
 use namada_core::arith::{self, checked};
 use namada_core::collections::HashSet;
 use namada_core::storage::Key;
-use namada_core::token::{self, Amount};
-use namada_core::{governance, parameters, proof_of_stake};
 use namada_gas::{IBC_ACTION_EXECUTE_GAS, IBC_ACTION_VALIDATE_GAS};
 use namada_state::write_log::StorageModification;
 use namada_state::{StateRead, StorageError};
+use namada_systems::trans_token::{self as token, Amount};
+use namada_systems::{governance, parameters, proof_of_stake};
 use namada_tx::BatchedTxRef;
 use namada_vp::native_vp::{
     self, Ctx, CtxPreStorageRead, NativeVp, VpEvaluator,

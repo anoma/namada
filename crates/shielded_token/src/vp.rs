@@ -20,13 +20,13 @@ use namada_core::borsh::BorshSerializeExt;
 use namada_core::collections::HashSet;
 use namada_core::masp::{encode_asset_type, MaspEpoch};
 use namada_core::storage::Key;
-use namada_core::token::MaspDigitPos;
 use namada_core::uint::I320;
-use namada_core::{governance, parameters, token};
 use namada_gas::GasMetering;
 use namada_state::{
     ConversionState, OptionExt, ResultExt, StateRead, StorageError,
 };
+use namada_systems::trans_token::{Amount, MaspDigitPos};
+use namada_systems::{governance, parameters, trans_token as token};
 use namada_trans_token::read_denom;
 use namada_trans_token::storage_key::{
     is_any_shielded_action_balance_key, ShieldedActionOwner,
@@ -37,7 +37,6 @@ use namada_vp::{native_vp, VpEnv};
 use ripemd::Digest as RipemdDigest;
 use sha2::Digest as Sha2Digest;
 use thiserror::Error;
-use token::Amount;
 
 use crate::storage_key::{
     is_masp_key, is_masp_nullifier_key, is_masp_token_map_key,
