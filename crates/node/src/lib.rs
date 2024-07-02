@@ -126,9 +126,27 @@ impl Shell {
             Request::ProcessProposal(block) => {
                 tracing::debug!("Request ProcessProposal");
                 // TODO: use TM domain type in the handler
-                let (response, _tx_results) =
-                    self.process_proposal(block.into());
-                // FIXME: here set the flag
+                // NOTE: make sure to put any checks inside process_proposal
+                // since that function is called in other places to rerun the
+                // checks if (when) needed. Every check living outside that
+                // function will not be correctly replicated in the other
+                // locations
+                let (response, tx_results) =
+                    self.process_proposal(block.clone().into());
+                // Cache the response in case of future calls from Namada. If
+                // hash conversion fails avoid caching
+                if let Ok(block_hash) = block.hash.try_into() {
+                    self.state.in_mem_mut().process_proposal_cache.insert(
+                        block_hash,
+                        (
+                            response,
+                            tx_results
+                                .into_iter()
+                                .map(|res| res.into())
+                                .collect(),
+                        ),
+                    );
+                }
                 Ok(Response::ProcessProposal(response))
             }
             Request::RevertProposal(_req) => {
@@ -172,9 +190,9 @@ impl Shell {
     }
 
     // Checks if a run of process proposal is required before finalize block
-    // (recheck) and, in case, performs it
+    // (recheck) and, in case, performs it. Clears the cache before returning
     fn try_recheck_process_proposal(
-        &self,
+        &mut self,
         finalize_req: &shims::abcipp_shim_types::shim::request::FinalizeBlock,
     ) -> Result<(), Error> {
         let recheck_process_proposal = match self.mode {
@@ -192,21 +210,22 @@ impl Shell {
         };
 
         if recheck_process_proposal {
-            let process_req = finalize
+            let process_req = finalize_req
                 .clone()
                 .cast_to_process_proposal_req()
                 .map_err(|_| Error::InvalidBlockProposal)?;
-            // FIXME: should instead mock a call to call? Probably yes
-            // FIXME: need the processing results? Maybe for caching
-            // even though caching here is useless
-            // since this is the last step
             let (process_proposal_result, _processing_results) =
                 self.process_proposal(process_req.into());
+            // No need to cache the result since this is the last step before
+            // finalizing the block
 
             if let ProcessProposal::Reject = process_proposal_result {
                 return Err(Error::InvalidBlockProposal);
             }
         }
+
+        // Clear the cache of proposed blocks' results
+        self.state.in_mem_mut().process_proposal_cache.clear();
 
         Ok(())
     }
