@@ -398,24 +398,31 @@ impl super::SigScheme for SigScheme {
 #[cfg(feature = "arbitrary")]
 impl arbitrary::Arbitrary<'_> for PublicKey {
     fn arbitrary(
-        _: &mut arbitrary::Unstructured<'_>,
+        u: &mut arbitrary::Unstructured<'_>,
     ) -> arbitrary::Result<Self> {
-        Ok(Self(
-            ed25519_consensus::VerificationKey::try_from(
-                [0_u8; PUBLIC_KEY_LENGTH],
-            )
-            .unwrap(),
-        ))
+        let seed: [u8; 32] = arbitrary::Arbitrary::arbitrary(u)?;
+        let sk = ed25519_consensus::SigningKey::from(seed);
+        Ok(Self(sk.verification_key()))
+    }
+
+    fn size_hint(_depth: usize) -> (usize, Option<usize>) {
+        // Signing key seed size
+        (32, Some(32))
     }
 }
 
 #[cfg(feature = "arbitrary")]
 impl arbitrary::Arbitrary<'_> for Signature {
     fn arbitrary(
-        _: &mut arbitrary::Unstructured<'_>,
+        u: &mut arbitrary::Unstructured<'_>,
     ) -> arbitrary::Result<Self> {
-        Ok(Self(ed25519_consensus::Signature::from(
-            [0_u8; SIGNATURE_LENGTH],
-        )))
+        let seed: [u8; 32] = arbitrary::Arbitrary::arbitrary(u)?;
+        let sk = ed25519_consensus::SigningKey::from(seed);
+        Ok(Self(sk.sign(&[0_u8])))
+    }
+
+    fn size_hint(_depth: usize) -> (usize, Option<usize>) {
+        // Signing key seed size
+        (32, Some(32))
     }
 }
