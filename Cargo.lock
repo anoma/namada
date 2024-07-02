@@ -5345,6 +5345,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "namada_systems"
+version = "0.39.0"
+dependencies = [
+ "namada_core",
+ "namada_storage",
+]
+
+[[package]]
 name = "namada_test_utils"
 version = "0.39.0"
 dependencies = [

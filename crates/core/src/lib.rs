@@ -21,9 +21,7 @@ pub mod arith;
 pub mod bytes;
 #[cfg(any(test, feature = "control_flow"))]
 pub mod control_flow;
-pub mod governance;
 pub mod hints;
-pub mod proof_of_stake;
 
 // TODO(namada#3248): only re-export v037 `tendermint-rs`
 pub use {masp_primitives, tendermint, tendermint_proto};

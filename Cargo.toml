@@ -26,6 +26,7 @@ members = [
   "crates/shielded_token",
   "crates/state",
   "crates/storage",
+  "crates/systems",
   "crates/test_utils",
   "crates/tests",
   "crates/token",
