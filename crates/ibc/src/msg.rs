@@ -90,6 +90,21 @@ impl BorshDeserialize for MsgNftTransfer {
     }
 }
 
+/// Shielding data in IBC packet memo
+#[derive(Debug, Clone, BorshDeserialize, BorshSerialize)]
+pub struct IbcShieldingData {
+    /// MASP transaction for receiving the token
+    pub shielding: Option<MaspTransaction>,
+    /// MASP transaction for refunding the token
+    pub refund: Option<MaspTransaction>,
+}
+
+impl From<IbcShieldingData> for String {
+    fn from(data: IbcShieldingData) -> Self {
+        HEXUPPER.encode(&data.serialize_to_vec())
+    }
+}
+
 /// Extract MASP transaction from IBC envelope
 pub fn extract_masp_tx_from_envelope(
     envelope: &MsgEnvelope,
@@ -111,6 +126,14 @@ pub fn extract_masp_tx_from_envelope(
     }
 }
 
+/// Decode IBC shielding data from the memo string
+pub fn decode_masp_tx_from_memo(
+    memo: impl AsRef<str>,
+) -> Option<IbcShieldingData> {
+    let bytes = HEXUPPER.decode(memo.as_ref().as_bytes()).ok()?;
+    IbcShieldingData::try_from_slice(&bytes).ok()
+}
+
 /// Extract MASP transaction from IBC packet memo
 pub fn extract_masp_tx_from_packet(
     packet: &Packet,
@@ -122,26 +145,31 @@ pub fn extract_masp_tx_from_packet(
         packet.port_id_on_b == PortId::transfer()
     };
 
-    if is_ft_packet {
+    let shielding_data = if is_ft_packet {
         let packet_data =
             serde_json::from_slice::<PacketData>(&packet.data).ok()?;
         if packet_data.memo.as_ref().is_empty() {
             return None;
         }
-        let bytes =
-            HEXUPPER.decode(packet_data.memo.as_ref().as_bytes()).ok()?;
-        MaspTransaction::try_from_slice(&bytes).ok()
+        decode_masp_tx_from_memo(packet_data.memo)
     } else {
         let packet_data =
             serde_json::from_slice::<NftPacketData>(&packet.data).ok()?;
-        let bytes = HEXUPPER
-            .decode(packet_data.memo?.as_ref().as_bytes())
-            .ok()?;
-        MaspTransaction::try_from_slice(&bytes).ok()
+        decode_masp_tx_from_memo(packet_data.memo?)
+    }?;
+
+    if is_sender {
+        shielding_data.refund
+    } else {
+        shielding_data.shielding
     }
 }
 
-/// Get IBC memo string from Transaction
+/// Get IBC memo string from MASP transaction for receiving
 pub fn convert_masp_tx_to_ibc_memo(transaction: &MaspTransaction) -> String {
-    HEXUPPER.encode(&transaction.serialize_to_vec())
+    let shielding_data = IbcShieldingData {
+        shielding: Some(transaction.clone()),
+        refund: None,
+    };
+    shielding_data.into()
 }
