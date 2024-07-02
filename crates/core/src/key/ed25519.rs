@@ -400,16 +400,17 @@ impl arbitrary::Arbitrary<'_> for PublicKey {
     fn arbitrary(
         u: &mut arbitrary::Unstructured<'_>,
     ) -> arbitrary::Result<Self> {
-        Ok(Self(
-            ed25519_consensus::VerificationKey::try_from(
-                u.bytes(PUBLIC_KEY_LENGTH)?,
-            )
-            .unwrap(),
-        ))
+        let seed: [u8; 32] = u
+            .bytes(u.len())?
+            .try_into()
+            .map_err(|_| arbitrary::Error::NotEnoughData)?;
+        let sk = ed25519_consensus::SigningKey::from(seed);
+        Ok(Self(sk.verification_key()))
     }
 
     fn size_hint(_depth: usize) -> (usize, Option<usize>) {
-        (PUBLIC_KEY_LENGTH, Some(PUBLIC_KEY_LENGTH))
+        // Signing key seed size
+        (32, Some(32))
     }
 }
 
@@ -418,13 +419,16 @@ impl arbitrary::Arbitrary<'_> for Signature {
     fn arbitrary(
         u: &mut arbitrary::Unstructured<'_>,
     ) -> arbitrary::Result<Self> {
-        Ok(Self(
-            ed25519_consensus::Signature::try_from(u.bytes(SIGNATURE_LENGTH)?)
-                .unwrap(),
-        ))
+        let seed: [u8; 32] = u
+            .bytes(u.len())?
+            .try_into()
+            .map_err(|_| arbitrary::Error::NotEnoughData)?;
+        let sk = ed25519_consensus::SigningKey::from(seed);
+        Ok(Self(sk.sign(&[0_u8])))
     }
 
     fn size_hint(_depth: usize) -> (usize, Option<usize>) {
-        (SIGNATURE_LENGTH, Some(SIGNATURE_LENGTH))
+        // Signing key seed size
+        (32, Some(32))
     }
 }
