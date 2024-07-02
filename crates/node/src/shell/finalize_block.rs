@@ -43,22 +43,7 @@ where
     /// of epoch changes and applies associated updates to validator sets,
     /// etc. as necessary.
     ///
-    /// Validate and apply decrypted transactions unless
-    /// [`Shell::process_proposal`] detected that they were not submitted in
-    /// correct order or more decrypted txs arrived than expected. In that
-    /// case, all decrypted transactions are not applied and must be
-    /// included in the next `Shell::prepare_proposal` call.
-    ///
-    /// Incoming wrapper txs need no further validation. They
-    /// are added to the block.
-    ///
-    /// Error codes:
-    ///   0: Ok
-    ///   1: Invalid tx
-    ///   2: Tx is invalidly signed
-    ///   3: Wasm runtime error
-    ///   4: Invalid order of decrypted txs
-    ///   5. More decrypted txs than expected
+    /// Apply the transactions included in the block.
     pub fn finalize_block(
         &mut self,
         req: shim::request::FinalizeBlock,
@@ -98,7 +83,8 @@ where
 
         let emit_events = &mut response.events;
         // Get the actual votes from cometBFT in the preferred format
-        let votes = pos_votes_from_abci(&self.state, &req.votes);
+        let votes =
+            pos_votes_from_abci(&self.state, &req.decided_last_commit.votes);
         let validator_set_update_epoch =
             self.get_validator_set_update_epoch(current_epoch);
 
@@ -639,13 +625,6 @@ where
                 continue;
             }
 
-            if tx.validate_tx().is_err() {
-                tracing::error!(
-                    "Internal logic error: FinalizeBlock received tx that \
-                     could not be deserialized to a valid TxType"
-                );
-                continue;
-            };
             let tx_header = tx.header();
             // If [`process_proposal`] rejected a Tx, emit an event here and
             // move on to next tx
@@ -1872,7 +1851,10 @@ mod test_finalize_block {
             let req = FinalizeBlock {
                 txs,
                 proposer_address: proposer_address.clone(),
-                votes: votes.clone(),
+                decided_last_commit: tendermint::abci::types::CommitInfo {
+                    round: 0u8.into(),
+                    votes: votes.clone(),
+                },
                 ..Default::default()
             };
             // merkle tree root before finalize_block

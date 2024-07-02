@@ -38,6 +38,7 @@ use namada::eth_bridge::ethers::providers::{Http, Provider};
 use namada::state::DB;
 use namada::storage::DbColFam;
 use namada::tendermint::abci::request::CheckTxKind;
+use namada::tendermint::abci::response::ProcessProposal;
 use namada_apps_lib::cli::args;
 use namada_apps_lib::config::utils::{
     convert_tm_addr_to_socket_addr, num_of_threads,
@@ -125,8 +126,27 @@ impl Shell {
             Request::ProcessProposal(block) => {
                 tracing::debug!("Request ProcessProposal");
                 // TODO: use TM domain type in the handler
-                let (response, _tx_results) =
-                    self.process_proposal(block.into());
+                // NOTE: make sure to put any checks inside process_proposal
+                // since that function is called in other places to rerun the
+                // checks if (when) needed. Every check living outside that
+                // function will not be correctly replicated in the other
+                // locations
+                let (response, tx_results) =
+                    self.process_proposal(block.clone().into());
+                // Cache the response in case of future calls from Namada. If
+                // hash conversion fails avoid caching
+                if let Ok(block_hash) = block.hash.try_into() {
+                    self.state.in_mem_mut().process_proposal_cache.insert(
+                        block_hash,
+                        (
+                            response,
+                            tx_results
+                                .into_iter()
+                                .map(|res| res.into())
+                                .collect(),
+                        ),
+                    );
+                }
                 Ok(Response::ProcessProposal(response))
             }
             Request::RevertProposal(_req) => {
@@ -134,6 +154,8 @@ impl Shell {
             }
             Request::FinalizeBlock(finalize) => {
                 tracing::debug!("Request FinalizeBlock");
+
+                self.try_recheck_process_proposal(&finalize)?;
                 self.finalize_block(finalize).map(Response::FinalizeBlock)
             }
             Request::Commit => {
@@ -165,6 +187,63 @@ impl Shell {
                 Ok(Response::ApplySnapshotChunk(Default::default()))
             }
         }
+    }
+
+    // Checks if a run of process proposal is required before finalize block
+    // (recheck) and, in case, performs it. Clears the cache before returning
+    fn try_recheck_process_proposal(
+        &mut self,
+        finalize_req: &shims::abcipp_shim_types::shim::request::FinalizeBlock,
+    ) -> Result<(), Error> {
+        let recheck_process_proposal = match self.mode {
+            shell::ShellMode::Validator {
+                ref local_config, ..
+            } => local_config
+                .as_ref()
+                .map(|cfg| cfg.recheck_process_proposal)
+                .unwrap_or_default(),
+            shell::ShellMode::Full { ref local_config } => local_config
+                .as_ref()
+                .map(|cfg| cfg.recheck_process_proposal)
+                .unwrap_or_default(),
+            shell::ShellMode::Seed => false,
+        };
+
+        if recheck_process_proposal {
+            let process_proposal_result = match self
+                .state
+                .in_mem()
+                .process_proposal_cache
+                .get(&finalize_req.block_hash)
+            {
+                Some((process_resp, _res)) =>
+                // We already have the result of
+                // process proposal for this block
+                // cached in memory
+                {
+                    process_resp.to_owned()
+                }
+
+                None => {
+                    let process_req = finalize_req
+                        .clone()
+                        .cast_to_process_proposal_req()
+                        .map_err(|_| Error::InvalidBlockProposal)?;
+                    // No need to cache the result since this is the last step
+                    // before finalizing the block
+                    self.process_proposal(process_req.into()).0
+                }
+            };
+
+            if let ProcessProposal::Reject = process_proposal_result {
+                return Err(Error::InvalidBlockProposal);
+            }
+        }
+
+        // Clear the cache of proposed blocks' results
+        self.state.in_mem_mut().process_proposal_cache.clear();
+
+        Ok(())
     }
 }
 

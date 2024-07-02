@@ -5,9 +5,8 @@ use std::task::{Context, Poll};
 
 use futures::future::FutureExt;
 use namada::core::hash::Hash;
-use namada::core::key::tm_raw_hash_to_string;
 use namada::core::storage::BlockHeight;
-use namada::proof_of_stake::storage::find_validator_by_raw_hash;
+use namada::tendermint::abci::response::ProcessProposal;
 use namada::time::{DateTimeUtc, Utc};
 use namada::tx::data::hash_tx;
 use namada_sdk::migrations::ScheduledMigration;
@@ -114,43 +113,89 @@ impl AbcippShim {
                 Req::EndBlock(_) => {
                     let begin_block_request =
                         self.begin_block_request.take().unwrap();
-                    let block_time = begin_block_request
-                        .header
-                        .time
-                        .try_into()
-                        .expect("valid RFC3339 block time");
 
-                    let tm_raw_hash_string = tm_raw_hash_to_string(
-                        begin_block_request.header.proposer_address,
-                    );
-                    let block_proposer = find_validator_by_raw_hash(
-                        &self.service.state,
-                        tm_raw_hash_string,
-                    )
-                    .unwrap()
-                    .expect(
-                        "Unable to find native validator address of block \
-                         proposer from tendermint raw hash",
-                    );
+                    let (process_proposal_result, processing_results) =
+                        match namada::core::hash::Hash::try_from(
+                            begin_block_request.hash,
+                        ) {
+                            Ok(block_hash) => {
+                                match self
+                                    .service
+                                    .state
+                                    .in_mem()
+                                    .process_proposal_cache
+                                    .get(&block_hash)
+                                {
+                                    Some((process_resp, res)) => (
+                                        // We already have the result of
+                                        // process proposal for this block
+                                        // cached in memory
+                                        process_resp.to_owned(),
+                                        res.iter()
+                                            .map(|res| res.to_owned().into())
+                                            .collect(),
+                                    ),
+                                    None => {
+                                        // Need to run process proposal to
+                                        // extract the data we need
+                                        // for finalize block (tx results)
+                                        let process_req = super::abcipp_shim_types::shim::request::CheckProcessProposal::from(begin_block_request.clone()).cast_to_tendermint_req(self.delivered_txs.clone());
 
-                    let processing_results = self.service.process_txs(
-                        &self.delivered_txs,
-                        block_time,
-                        &block_proposer,
-                    );
-                    let mut txs = Vec::with_capacity(self.delivered_txs.len());
-                    let mut delivered = vec![];
-                    std::mem::swap(&mut self.delivered_txs, &mut delivered);
-                    for (result, tx) in processing_results
-                        .into_iter()
-                        .zip(delivered.into_iter())
-                    {
-                        txs.push(ProcessedTx { tx, result });
-                    }
-                    let mut end_block_request: FinalizeBlock =
-                        begin_block_request.into();
-                    end_block_request.txs = txs;
-                    self.service
+                                        let (process_resp, res) =
+                                            self.service.process_proposal(
+                                                process_req.into(),
+                                            );
+                                        // Cache the result
+                                        self.service
+                                            .state
+                                            .in_mem_mut()
+                                            .process_proposal_cache
+                                            .insert(
+                                                block_hash.to_owned(),
+                                                (
+                                                    process_resp,
+                                                    res.clone()
+                                                        .into_iter()
+                                                        .map(|res| res.into())
+                                                        .collect(),
+                                                ),
+                                            );
+
+                                        (process_resp, res)
+                                    }
+                                }
+                            }
+                            Err(_) => {
+                                // Need to run process proposal to extract the
+                                // data we need
+                                // for finalize block (tx results)
+                                let process_req = super::abcipp_shim_types::shim::request::CheckProcessProposal::from(begin_block_request.clone()).cast_to_tendermint_req(self.delivered_txs.clone());
+
+                                // Do not cache the result in this case since we
+                                // don't have the hash of the block
+                                self.service
+                                    .process_proposal(process_req.into())
+                            }
+                        };
+
+                    if let ProcessProposal::Reject = process_proposal_result {
+                        Err(Error::ConvertResp(Response::ProcessProposal(
+                            process_proposal_result,
+                        )))
+                    } else {
+                        let mut txs =
+                            Vec::with_capacity(self.delivered_txs.len());
+                        let delivered = std::mem::take(&mut self.delivered_txs);
+                        for (result, tx) in processing_results
+                            .into_iter()
+                            .zip(delivered.into_iter())
+                        {
+                            txs.push(ProcessedTx { tx, result });
+                        }
+                        let mut end_block_request: FinalizeBlock =
+                            begin_block_request.into();
+                        end_block_request.txs = txs;
+                        self.service
                         .call(Request::FinalizeBlock(end_block_request))
                         .map_err(Error::from)
                         .and_then(|res| match res {
@@ -159,6 +204,7 @@ impl AbcippShim {
                             }
                             _ => Err(Error::ConvertResp(res)),
                         })
+                    }
                 }
                 _ => match Request::try_from(req.clone()) {
                     Ok(request) => self

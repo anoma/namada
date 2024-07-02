@@ -73,6 +73,18 @@ where
     pub storage_read_past_height_limit: Option<u64>,
     /// Data that needs to be committed to the merkle tree
     pub commit_only_data: CommitOnlyData,
+    /// Cache of the results of process proposal for the next height to decide.
+    /// The different proposed blocks are indexed by their hash. This is used
+    /// to avoid running process proposal more than once internally because of
+    /// the shim or the recheck option (comet only calls it at most once
+    /// for a given height/round)
+    pub process_proposal_cache: namada_core::collections::HashMap<
+        Hash,
+        (
+            namada_core::tendermint::abci::response::ProcessProposal,
+            Vec<(u32, String)>,
+        ),
+    >,
 }
 
 /// Last committed block
@@ -143,6 +155,7 @@ where
             eth_events_queue: EthEventsQueue::default(),
             storage_read_past_height_limit,
             commit_only_data: CommitOnlyData::default(),
+            process_proposal_cache: Default::default(),
         }
     }
 

@@ -5,7 +5,9 @@ use namada::core::time::{DateTimeUtc, Utc};
 use namada::sdk::migrations::ScheduledMigration;
 use namada_apps_lib::cli::cmds::TestGenesis;
 use namada_apps_lib::cli::{self, cmds};
-use namada_apps_lib::config::{Action, ActionAtHeight, ValidatorLocalConfig};
+use namada_apps_lib::config::{
+    Action, ActionAtHeight, NodeLocalConfig, ValidatorLocalConfig,
+};
 use namada_node as node;
 #[cfg(not(feature = "migrations"))]
 use namada_sdk::display_line;
@@ -127,7 +129,9 @@ pub fn main() -> Result<()> {
                     );
                 }
             }
-            cmds::Config::UpdateLocalConfig(cmds::LocalConfig(args)) => {
+            cmds::Config::UpdateValidatorLocalConfig(
+                cmds::ValidatorLocalConfig(args),
+            ) => {
                 // Validate the new config
                 let updated_config = std::fs::read(args.config_path).unwrap();
                 let _validator_local_config: ValidatorLocalConfig =
@@ -142,6 +146,23 @@ pub fn main() -> Result<()> {
                         ctx.chain.unwrap().config.ledger.chain_id
                     ))
                     .join("validator_local_config.toml");
+                std::fs::write(config_path, updated_config).unwrap();
+            }
+            cmds::Config::UpdateLocalConfig(cmds::LocalConfig(args)) => {
+                // Validate the new config
+                let updated_config = std::fs::read(args.config_path).unwrap();
+                let _local_config: NodeLocalConfig =
+                    toml::from_slice(&updated_config).unwrap();
+
+                // Update the configuration file with the new one
+                let config_path = ctx
+                    .global_args
+                    .base_dir
+                    .join(format!(
+                        "{}",
+                        ctx.chain.unwrap().config.ledger.chain_id
+                    ))
+                    .join("local_config.toml");
                 std::fs::write(config_path, updated_config).unwrap();
             }
         },
