@@ -52,6 +52,7 @@ use namada_core::tendermint::abci::types::Misbehavior;
 use namada_events::EmitEvents;
 use namada_storage::collections::lazy_map::{self, Collectable, LazyMap};
 use namada_storage::{OptionExt, StorageRead, StorageWrite};
+pub use namada_systems::proof_of_stake::*;
 pub use namada_trans_token as token;
 pub use parameters::{OwnedPosParams, PosParams};
 pub use pos_queries::PosQueries;
@@ -112,7 +113,7 @@ use crate::validator_set_update::{
 #[derive(Debug)]
 pub struct Store<S>(PhantomData<S>);
 
-impl<S> namada_core::proof_of_stake::Read<S> for Store<S>
+impl<S> Read<S> for Store<S>
 where
     S: StorageRead,
 {

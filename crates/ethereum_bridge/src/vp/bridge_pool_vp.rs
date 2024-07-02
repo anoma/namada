@@ -26,9 +26,9 @@ use namada_core::eth_bridge_pool::{
 use namada_core::ethereum_events::EthAddress;
 use namada_core::hints;
 use namada_core::storage::Key;
-use namada_core::token::{self, Amount};
 use namada_core::uint::I320;
 use namada_state::{ResultExt, StateRead};
+use namada_systems::trans_token::{self as token, Amount};
 use namada_tx::BatchedTxRef;
 use namada_vp::native_vp::{self, Ctx, NativeVp, StorageReader, VpEvaluator};
 

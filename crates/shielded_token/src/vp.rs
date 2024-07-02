@@ -18,12 +18,12 @@ use namada_core::booleans::BoolResultUnitExt;
 use namada_core::collections::HashSet;
 use namada_core::masp::{addr_taddr, encode_asset_type, MaspEpoch, TAddrData};
 use namada_core::storage::Key;
-use namada_core::token::MaspDigitPos;
 use namada_core::uint::I320;
-use namada_core::{governance, ibc, parameters, token};
 use namada_state::{
     ConversionState, OptionExt, ResultExt, StateRead, StorageError,
 };
+use namada_systems::trans_token::{Amount, MaspDigitPos};
+use namada_systems::{governance, ibc, parameters, trans_token as token};
 use namada_trans_token::read_denom;
 use namada_tx::action::Read;
 use namada_tx::BatchedTxRef;
@@ -32,7 +32,6 @@ use namada_vp::native_vp::{
 };
 use namada_vp::{native_vp, VpEnv};
 use thiserror::Error;
-use token::Amount;
 
 use crate::storage_key::{
     is_masp_key, is_masp_nullifier_key, is_masp_token_map_key,

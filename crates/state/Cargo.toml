@@ -36,6 +36,7 @@ namada_merkle_tree = { path = "../merkle_tree" }
 namada_migrations = { path = "../migrations", optional = true }
 namada_replay_protection = { path = "../replay_protection" }
 namada_storage = { path = "../storage" }
+namada_systems = { path = "../systems" }
 namada_tx = { path = "../tx" }
 
 borsh.workspace = true

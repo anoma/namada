@@ -35,6 +35,7 @@ pub mod utils;
 pub mod vp;
 
 use namada_state::StorageRead;
+pub use namada_systems::governance::*;
 pub use storage::proposal::{InitProposalData, ProposalType, VoteProposalData};
 pub use storage::vote::ProposalVote;
 pub use storage::{init_proposal, is_proposal_accepted, vote_proposal};
@@ -46,7 +47,7 @@ pub const ADDRESS: Address = address::GOV;
 #[derive(Debug)]
 pub struct Store<S>(PhantomData<S>);
 
-impl<S> namada_core::governance::Read<S> for Store<S>
+impl<S> Read<S> for Store<S>
 where
     S: StorageRead,
 {

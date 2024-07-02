@@ -94,6 +94,7 @@ use namada_state::{
     DBIter, Key, ResultExt, State, StorageError, StorageHasher, StorageRead,
     StorageWrite, WlState, DB,
 };
+use namada_systems::ibc::ChangedBalances;
 use namada_token::transaction::components::ValueSum;
 use namada_token::Transfer;
 pub use nft::*;
@@ -212,7 +213,7 @@ impl TryFrom<IbcMsgNftTransfer> for IbcTransferInfo {
 #[derive(Debug)]
 pub struct Store<S>(PhantomData<S>);
 
-impl<S> namada_core::ibc::Read<S> for Store<S>
+impl<S> namada_systems::ibc::Read<S> for Store<S>
 where
     S: StorageRead,
 {

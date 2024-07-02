@@ -8,13 +8,13 @@ use namada_core::arith::checked;
 use namada_core::borsh::BorshSerializeExt;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::storage::{BlockHeight, Epoch, Epochs, Header, Key, TxIndex};
-use namada_core::token::{self, Amount};
 use namada_events::Event;
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
 use namada_state::write_log::StorageModification;
 use namada_state::{
     PrefixIter, StateRead, StorageError, StorageRead, StorageWrite,
 };
+use namada_systems::trans_token::{self as token, Amount};
 use namada_vp::native_vp::{CtxPreStorageRead, VpEvaluator};
 use namada_vp::VpEnv;
 
