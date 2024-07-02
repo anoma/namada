@@ -353,5 +353,20 @@ pub mod shim {
                 }
             }
         }
+
+        impl From<(u32, String)> for TxResult {
+            fn from(value: (u32, String)) -> Self {
+                Self {
+                    code: value.0,
+                    info: value.1,
+                }
+            }
+        }
+
+        impl From<TxResult> for (u32, String) {
+            fn from(value: TxResult) -> Self {
+                (value.code, value.info)
+            }
+        }
     }
 }

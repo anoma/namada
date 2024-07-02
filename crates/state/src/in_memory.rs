@@ -73,12 +73,18 @@ where
     pub storage_read_past_height_limit: Option<u64>,
     /// Data that needs to be committed to the merkle tree
     pub commit_only_data: CommitOnlyData,
-    //FIXME: change this to cache the actual process proposal request? No the result!
-    //FIXME: important to set and clear this in the correct way
-    //FIXME: maybe if I use the block height here it's a bit safer? Not sure, what happens if multiple rounds in the same height?
-    //FIXME: actually what if I get multiple rounds I believe the boolean doesn't work because I don't clear it in between the calls? Maybe there's a way to clean it? I don't think so
-    //FIXME: rename
-    pub process_proposal_ran: bool,
+    /// Cache of the results of process proposal for the next height to decide.
+    /// The different proposed blocks are indexed by their hash. This is used
+    /// to avoid running process proposal more than once internally (comet only
+    /// calls it at most once for a given height/round) because of the shim or
+    /// the recheck option
+    pub process_proposal_cache: namada_core::collections::HashMap<
+        Hash,
+        (
+            namada_core::tendermint::abci::response::ProcessProposal,
+            Vec<(u32, String)>,
+        ),
+    >,
 }
 
 /// Last committed block
@@ -149,7 +155,7 @@ where
             eth_events_queue: EthEventsQueue::default(),
             storage_read_past_height_limit,
             commit_only_data: CommitOnlyData::default(),
-            process_proposal_ran: false,
+            process_proposal_cache: Default::default(),
         }
     }
 
