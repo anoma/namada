@@ -602,26 +602,41 @@ impl super::SigScheme for SigScheme {
 #[cfg(feature = "arbitrary")]
 impl arbitrary::Arbitrary<'_> for PublicKey {
     fn arbitrary(
-        _: &mut arbitrary::Unstructured<'_>,
+        u: &mut arbitrary::Unstructured<'_>,
     ) -> arbitrary::Result<Self> {
+        use rand::SeedableRng;
+        let seed: [u8; 32] = arbitrary::Arbitrary::arbitrary(u)?;
         Ok(Self(
-            k256::PublicKey::from_sec1_bytes(
-                &[0_u8; COMPRESSED_PUBLIC_KEY_SIZE],
-            )
-            .unwrap(),
+            k256::SecretKey::random(&mut rand::rngs::StdRng::from_seed(seed))
+                .public_key(),
         ))
+    }
+
+    fn size_hint(_depth: usize) -> (usize, Option<usize>) {
+        // StdRng seed len
+        (32, Some(32))
     }
 }
 
 #[cfg(feature = "arbitrary")]
 impl arbitrary::Arbitrary<'_> for Signature {
     fn arbitrary(
-        _: &mut arbitrary::Unstructured<'_>,
+        u: &mut arbitrary::Unstructured<'_>,
     ) -> arbitrary::Result<Self> {
-        Ok(Self(
-            k256::ecdsa::Signature::from_slice(&[0_u8; 64]).unwrap(),
-            RecoveryId::from_byte(0).unwrap(),
-        ))
+        use rand::SeedableRng;
+        let seed: [u8; 32] = arbitrary::Arbitrary::arbitrary(u)?;
+        let sk =
+            k256::SecretKey::random(&mut rand::rngs::StdRng::from_seed(seed));
+        let sig_key = k256::ecdsa::SigningKey::from(&sk);
+        let (sig, recovery_id) = sig_key
+            .sign_prehash_recoverable(&[0_u8; 32])
+            .expect("Must be able to sign");
+        Ok(Self(sig, recovery_id))
+    }
+
+    fn size_hint(_depth: usize) -> (usize, Option<usize>) {
+        // StdRng seed len
+        (32, Some(32))
     }
 }
 
