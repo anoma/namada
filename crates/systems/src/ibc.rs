@@ -7,16 +7,14 @@ use masp_primitives::transaction::TransparentAddress;
 use namada_core::address::Address;
 use namada_core::masp::TAddrData;
 use namada_core::{masp_primitives, storage, token};
+pub use namada_storage::Result;
 
 /// Abstract IBC storage read interface
 pub trait Read<S> {
-    /// Storage error
-    type Err;
-
     /// Extract MASP transaction from IBC envelope
     fn try_extract_masp_tx_from_envelope(
         tx_data: &[u8],
-    ) -> Result<Option<masp_primitives::transaction::Transaction>, Self::Err>;
+    ) -> Result<Option<masp_primitives::transaction::Transaction>>;
 
     /// Apply relevant IBC packets to the changed balances structure
     fn apply_ibc_packet(
@@ -24,7 +22,7 @@ pub trait Read<S> {
         tx_data: &[u8],
         acc: ChangedBalances,
         keys_changed: &BTreeSet<storage::Key>,
-    ) -> Result<ChangedBalances, Self::Err>;
+    ) -> Result<ChangedBalances>;
 }
 
 /// Balances changed by a transaction

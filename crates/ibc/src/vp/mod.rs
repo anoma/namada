@@ -18,7 +18,7 @@ use namada_core::collections::HashSet;
 use namada_core::storage::Key;
 use namada_gas::{IBC_ACTION_EXECUTE_GAS, IBC_ACTION_VALIDATE_GAS};
 use namada_state::write_log::StorageModification;
-use namada_state::{StateRead, StorageError};
+use namada_state::StateRead;
 use namada_systems::trans_token::{self as token, Amount};
 use namada_systems::{governance, parameters, proof_of_stake};
 use namada_tx::BatchedTxRef;
@@ -84,24 +84,13 @@ where
     S: 'static + StateRead,
     EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL> + Debug,
     CA: 'static + Clone + Debug,
-    Gov: governance::Read<
-            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
-            Err = StorageError,
-        >,
+    Gov: governance::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
     Params: parameters::Keys
-        + parameters::Read<
-            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
-            Err = StorageError,
-        >,
+        + parameters::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
     Token: token::Keys
-        + token::Write<
-            PseudoExecutionStorage<'view, 'ctx, S, CA, EVAL>,
-            Err = StorageError,
-        > + Debug,
-    PoS: proof_of_stake::Read<
-            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
-            Err = StorageError,
-        >,
+        + token::Write<PseudoExecutionStorage<'view, 'ctx, S, CA, EVAL>>
+        + Debug,
+    PoS: proof_of_stake::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
 {
     type Error = Error;
 
@@ -151,19 +140,11 @@ where
     EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL> + Debug,
     CA: 'static + Clone + Debug,
     Params: parameters::Keys
-        + parameters::Read<
-            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
-            Err = StorageError,
-        >,
+        + parameters::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
     Token: token::Keys
-        + token::Write<
-            PseudoExecutionStorage<'view, 'ctx, S, CA, EVAL>,
-            Err = StorageError,
-        > + Debug,
-    PoS: proof_of_stake::Read<
-            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
-            Err = StorageError,
-        >,
+        + token::Write<PseudoExecutionStorage<'view, 'ctx, S, CA, EVAL>>
+        + Debug,
+    PoS: proof_of_stake::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
 {
     /// Instantiate IBC VP
     pub fn new(ctx: Ctx<'ctx, S, CA, EVAL>) -> Self {

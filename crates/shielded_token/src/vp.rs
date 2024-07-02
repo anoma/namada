@@ -19,9 +19,7 @@ use namada_core::collections::HashSet;
 use namada_core::masp::{addr_taddr, encode_asset_type, MaspEpoch, TAddrData};
 use namada_core::storage::Key;
 use namada_core::uint::I320;
-use namada_state::{
-    ConversionState, OptionExt, ResultExt, StateRead, StorageError,
-};
+use namada_state::{ConversionState, OptionExt, ResultExt, StateRead};
 use namada_systems::trans_token::{Amount, MaspDigitPos};
 use namada_systems::{governance, ibc, parameters, trans_token as token};
 use namada_trans_token::read_denom;
@@ -81,18 +79,9 @@ where
     S: 'static + StateRead,
     CA: 'static + Clone,
     EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
-    Params: parameters::Read<
-            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
-            Err = StorageError,
-        >,
-    Gov: governance::Read<
-            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
-            Err = StorageError,
-        >,
-    Ibc: ibc::Read<
-            CtxPostStorageRead<'view, 'ctx, S, CA, EVAL>,
-            Err = StorageError,
-        >,
+    Params: parameters::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
+    Gov: governance::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
+    Ibc: ibc::Read<CtxPostStorageRead<'view, 'ctx, S, CA, EVAL>>,
     TransToken: token::Keys,
 {
     /// Instantiate MASP VP
@@ -930,18 +919,9 @@ where
     S: 'static + StateRead,
     CA: 'static + Clone,
     EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
-    Params: parameters::Read<
-            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
-            Err = StorageError,
-        >,
-    Gov: governance::Read<
-            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
-            Err = StorageError,
-        >,
-    Ibc: ibc::Read<
-            CtxPostStorageRead<'view, 'ctx, S, CA, EVAL>,
-            Err = StorageError,
-        >,
+    Params: parameters::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
+    Gov: governance::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
+    Ibc: ibc::Read<CtxPostStorageRead<'view, 'ctx, S, CA, EVAL>>,
     TransToken: token::Keys,
 {
     type Error = Error;

@@ -6,7 +6,7 @@ use std::marker::PhantomData;
 use namada_core::address::Address;
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::storage::Key;
-use namada_state::{StateRead, StorageError};
+use namada_state::StateRead;
 use namada_systems::governance;
 use namada_tx::action::{
     Action, Bond, ClaimRewards, PosAction, Read, Redelegation, Unbond, Withdraw,
@@ -54,10 +54,7 @@ where
     S: StateRead,
     CA: 'static + Clone,
     EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
-    Gov: governance::Read<
-            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
-            Err = StorageError,
-        >,
+    Gov: governance::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
 {
     type Error = Error;
 

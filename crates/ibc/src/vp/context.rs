@@ -11,6 +11,7 @@ use namada_core::storage::{BlockHeight, Epoch, Epochs, Header, Key, TxIndex};
 use namada_events::Event;
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
 use namada_state::write_log::StorageModification;
+pub use namada_state::StorageResult as Result;
 use namada_state::{
     PrefixIter, StateRead, StorageError, StorageRead, StorageWrite,
 };
@@ -21,9 +22,6 @@ use namada_vp::VpEnv;
 use crate::event::IbcEvent;
 use crate::storage::is_ibc_key;
 use crate::{IbcCommonContext, IbcStorageContext};
-
-/// Result of a storage API call.
-pub type Result<T> = std::result::Result<T, namada_state::StorageError>;
 
 /// Pseudo execution environment context for ibc native vp
 #[derive(Debug)]
@@ -214,10 +212,7 @@ where
     EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
     CA: 'static + Clone,
     Token: token::Keys
-        + token::Write<
-            PseudoExecutionStorage<'view, 'a, S, CA, EVAL>,
-            Err = StorageError,
-        >,
+        + token::Write<PseudoExecutionStorage<'view, 'a, S, CA, EVAL>>,
 {
     type Storage = PseudoExecutionStorage<'view, 'a, S, CA, EVAL>;
 
@@ -288,10 +283,7 @@ where
     CA: 'static + Clone,
     EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
     Token: token::Keys
-        + token::Write<
-            PseudoExecutionStorage<'view, 'a, S, CA, EVAL>,
-            Err = StorageError,
-        >,
+        + token::Write<PseudoExecutionStorage<'view, 'a, S, CA, EVAL>>,
 {
 }
 

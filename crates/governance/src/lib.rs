@@ -51,12 +51,7 @@ impl<S> Read<S> for Store<S>
 where
     S: StorageRead,
 {
-    type Err = namada_state::StorageError;
-
-    fn is_proposal_accepted(
-        storage: &S,
-        tx_data: &[u8],
-    ) -> Result<bool, Self::Err> {
+    fn is_proposal_accepted(storage: &S, tx_data: &[u8]) -> Result<bool> {
         storage::is_proposal_accepted(storage, tx_data)
     }
 }

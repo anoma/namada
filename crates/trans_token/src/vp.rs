@@ -8,7 +8,7 @@ use namada_core::booleans::BoolResultUnitExt;
 use namada_core::collections::HashMap;
 use namada_core::storage::{Key, KeySeg};
 use namada_core::token::Amount;
-use namada_state::{StateRead, StorageError};
+use namada_state::StateRead;
 use namada_storage::StorageRead;
 use namada_systems::{governance, parameters};
 use namada_tx::action::{
@@ -63,14 +63,8 @@ where
     S: 'static + StateRead,
     CA: 'static + Clone,
     EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
-    Params: parameters::Read<
-            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
-            Err = StorageError,
-        >,
-    Gov: governance::Read<
-            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
-            Err = StorageError,
-        >,
+    Params: parameters::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
+    Gov: governance::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
 {
     type Error = Error;
 
@@ -300,14 +294,8 @@ where
     S: 'static + StateRead,
     CA: 'static + Clone,
     EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
-    Params: parameters::Read<
-            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
-            Err = StorageError,
-        >,
-    Gov: governance::Read<
-            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
-            Err = StorageError,
-        >,
+    Params: parameters::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
+    Gov: governance::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
 {
     /// Instantiate token VP
     pub fn new(ctx: Ctx<'ctx, S, CA, EVAL>) -> Self {
