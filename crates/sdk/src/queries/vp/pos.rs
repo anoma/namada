@@ -679,7 +679,6 @@ where
 }
 
 /// Client-only methods for the router type are composed from router functions.
-#[cfg(any(test, feature = "async-client"))]
 pub mod client_only_methods {
     use super::*;
     use crate::queries::{Client, RPC};

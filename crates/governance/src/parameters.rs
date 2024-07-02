@@ -3,7 +3,7 @@ use namada_core::token;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
-use namada_storage::{Result, StorageRead, StorageWrite};
+use namada_state::{StorageRead, StorageResult, StorageWrite};
 
 use super::storage::keys as goverance_storage;
 
@@ -54,7 +54,7 @@ impl Default for GovernanceParameters {
 
 impl GovernanceParameters {
     /// Initialize governance parameters into storage
-    pub fn init_storage<S>(&self, storage: &mut S) -> Result<()>
+    pub fn init_storage<S>(&self, storage: &mut S) -> StorageResult<()>
     where
         S: StorageRead + StorageWrite,
     {

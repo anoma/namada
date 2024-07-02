@@ -150,9 +150,9 @@ pub mod shim {
     /// Custom types for request payloads
     pub mod request {
 
-        use namada::core::hash::Hash;
-        use namada::core::storage::Header;
-        use namada::core::time::DateTimeUtc;
+        use namada_sdk::hash::Hash;
+        use namada_sdk::storage::Header;
+        use namada_sdk::time::DateTimeUtc;
 
         use super::VoteInfo;
         use crate::facade::tendermint::abci::types::Misbehavior;
@@ -202,7 +202,7 @@ pub mod shim {
 
     /// Custom types for response payloads
     pub mod response {
-        use namada::ledger::events::Event;
+        use namada_sdk::events::Event;
 
         pub use crate::facade::tendermint::v0_37::abci::response::{
             PrepareProposal, ProcessProposal,

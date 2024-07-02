@@ -10,31 +10,29 @@ use itertools::{Either, Itertools};
 use ledger_namada_rs::NamadaApp;
 use ledger_transport_hid::hidapi::HidApi;
 use ledger_transport_hid::TransportNativeHID;
-use namada::account::AccountPublicKeysMap;
-use namada::core::address::{Address, EstablishedAddress};
-use namada::core::chain::ChainId;
-use namada::core::collections::HashSet;
-use namada::core::dec::Dec;
-use namada::core::key::{
-    common, ed25519, RefTo, SerializeWithBorsh, SigScheme,
-};
-use namada::core::string_encoding::StringEncoded;
-use namada::core::time::DateTimeUtc;
-use namada::core::token;
-use namada::core::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
-use namada::ledger::pos::common::PublicKey;
-use namada::ledger::pos::types::ValidatorMetaData;
-use namada::proof_of_stake::parameters::MAX_VALIDATOR_METADATA_LEN;
-use namada::tx::data::{pos, Fee, TxType};
-use namada::tx::{
-    verify_standalone_sig, Code, Commitment, Data, Section, SignatureIndex, Tx,
-};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
+use namada_sdk::account::AccountPublicKeysMap;
+use namada_sdk::address::{Address, EstablishedAddress};
 use namada_sdk::args::Tx as TxArgs;
+use namada_sdk::chain::ChainId;
+use namada_sdk::collections::HashSet;
+use namada_sdk::dec::Dec;
+use namada_sdk::key::common::PublicKey;
+use namada_sdk::key::{common, ed25519, RefTo, SerializeWithBorsh, SigScheme};
+use namada_sdk::proof_of_stake::parameters::MAX_VALIDATOR_METADATA_LEN;
+use namada_sdk::proof_of_stake::types::ValidatorMetaData;
 use namada_sdk::signing::{sign_tx, SigningTxData};
-use namada_sdk::tx::{TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM};
+use namada_sdk::string_encoding::StringEncoded;
+use namada_sdk::time::DateTimeUtc;
+use namada_sdk::token;
+use namada_sdk::token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
+use namada_sdk::tx::data::{pos, Fee, TxType};
+use namada_sdk::tx::{
+    verify_standalone_sig, Code, Commitment, Data, Section, SignatureIndex, Tx,
+    TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM,
+};
 use namada_sdk::wallet::alias::Alias;
 use namada_sdk::wallet::pre_genesis::ValidatorWallet;
 use namada_sdk::wallet::Wallet;
@@ -364,7 +362,7 @@ pub async fn sign_validator_account_tx(
                 tx_data: &T,
                 keypair: &common::SecretKey,
             ) -> StringEncoded<common::Signature> {
-                StringEncoded::new(namada::tx::standalone_signature::<
+                StringEncoded::new(namada_sdk::tx::standalone_signature::<
                     T,
                     SerializeWithBorsh,
                 >(keypair, tx_data))
@@ -548,7 +546,7 @@ impl Transactions<Validated> {
 
                 stakes.into_values().any(|stake| {
                     let tendermint_voting_power =
-                        namada::ledger::pos::into_tm_voting_power(
+                        namada_sdk::proof_of_stake::types::into_tm_voting_power(
                             votes_per_token,
                             stake,
                         );

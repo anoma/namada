@@ -22,23 +22,24 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
 mod tests {
     use std::cell::RefCell;
 
-    use namada::core::dec::Dec;
-    use namada::ledger::gas::VpGasMeter;
-    use namada::ledger::pos::{OwnedPosParams, PosVP};
-    use namada::proof_of_stake::storage::unbond_handle;
-    use namada::proof_of_stake::types::GenesisValidator;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
     use namada_tests::native_vp::TestNativeVpEnv;
     use namada_tests::tx::*;
+    use namada_tests::validation::PosVp;
     use namada_tx_prelude::address::testing::{
         arb_established_address, arb_non_internal_address,
     };
     use namada_tx_prelude::address::InternalAddress;
     use namada_tx_prelude::chain::ChainId;
+    use namada_tx_prelude::dec::Dec;
+    use namada_tx_prelude::gas::VpGasMeter;
     use namada_tx_prelude::key::testing::arb_common_keypair;
     use namada_tx_prelude::key::RefTo;
     use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
+    use namada_tx_prelude::proof_of_stake::parameters::OwnedPosParams;
+    use namada_tx_prelude::proof_of_stake::storage::unbond_handle;
+    use namada_tx_prelude::proof_of_stake::types::GenesisValidator;
     use proptest::prelude::*;
 
     use super::*;
@@ -226,7 +227,8 @@ mod tests {
             &tx_env.gas_meter.borrow(),
         ));
         let vp_env = TestNativeVpEnv::from_tx_env(tx_env, address::POS);
-        let result = vp_env.validate_tx(&gas_meter, PosVP::new);
+        let vp = vp_env.init_vp(&gas_meter, PosVp::new);
+        let result = vp_env.validate_tx(&vp);
         assert!(
             result.is_ok(),
             "PoS Validity predicate must accept this transaction"

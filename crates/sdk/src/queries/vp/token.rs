@@ -44,7 +44,6 @@ where
     }
 }
 
-#[cfg(any(test, feature = "async-client"))]
 pub mod client_only_methods {
     use borsh::BorshDeserialize;
     use namada_core::address::Address;

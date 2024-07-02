@@ -19,6 +19,8 @@
 
 pub mod arith;
 pub mod bytes;
+#[cfg(any(test, feature = "control_flow"))]
+pub mod control_flow;
 pub mod hints;
 
 // TODO(namada#3248): only re-export v037 `tendermint-rs`

@@ -6,85 +6,81 @@ use ibc_testkit::testapp::ibc::clients::mock::client_state::{
 };
 use ibc_testkit::testapp::ibc::clients::mock::consensus_state::MockConsensusState;
 use ibc_testkit::testapp::ibc::clients::mock::header::MockHeader;
-use namada::core::address::{self, Address, InternalAddress};
-use namada::core::hash::Hash;
-use namada::core::storage::{self, BlockHeight, Epoch, Key, TxIndex};
-use namada::core::time::DurationSecs;
-use namada::gas::TxGasMeter;
-use namada::governance::parameters::GovernanceParameters;
-use namada::ibc::apps::transfer::types::error::TokenTransferError;
-use namada::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
-use namada::ibc::apps::transfer::types::packet::PacketData;
-use namada::ibc::apps::transfer::types::{
+use namada_core::collections::HashMap;
+use namada_core::storage::testing::get_dummy_header;
+use namada_sdk::address::{self, Address, InternalAddress};
+use namada_sdk::gas::{TxGasMeter, VpGasMeter};
+use namada_sdk::governance::parameters::GovernanceParameters;
+use namada_sdk::hash::Hash;
+use namada_sdk::ibc::apps::transfer::types::error::TokenTransferError;
+use namada_sdk::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
+use namada_sdk::ibc::apps::transfer::types::packet::PacketData;
+use namada_sdk::ibc::apps::transfer::types::{
     ack_success_b64, PrefixedCoin, VERSION,
 };
-use namada::ibc::core::channel::types::acknowledgement::{
+use namada_sdk::ibc::core::channel::types::acknowledgement::{
     AcknowledgementStatus, StatusValue,
 };
-use namada::ibc::core::channel::types::channel::{
+use namada_sdk::ibc::core::channel::types::channel::{
     ChannelEnd, Counterparty as ChanCounterparty, Order, State as ChanState,
 };
-use namada::ibc::core::channel::types::msgs::{
+use namada_sdk::ibc::core::channel::types::msgs::{
     MsgAcknowledgement, MsgChannelCloseConfirm, MsgChannelCloseInit,
     MsgChannelOpenAck, MsgChannelOpenConfirm, MsgChannelOpenInit,
     MsgChannelOpenTry, MsgRecvPacket, MsgTimeout, MsgTimeoutOnClose,
 };
-pub use namada::ibc::core::channel::types::packet::Packet;
-use namada::ibc::core::channel::types::timeout::TimeoutHeight;
-use namada::ibc::core::channel::types::Version as ChanVersion;
-use namada::ibc::core::client::types::msgs::{
-    MsgCreateClient, MsgUpdateClient, MsgUpgradeClient,
+pub use namada_sdk::ibc::core::channel::types::packet::Packet;
+use namada_sdk::ibc::core::channel::types::timeout::TimeoutHeight;
+use namada_sdk::ibc::core::channel::types::Version as ChanVersion;
+use namada_sdk::ibc::core::client::types::msgs::{
+    MsgCreateClient, MsgUpdateClient,
 };
-use namada::ibc::core::client::types::Height;
-use namada::ibc::core::commitment_types::commitment::{
+use namada_sdk::ibc::core::client::types::Height;
+use namada_sdk::ibc::core::commitment_types::commitment::{
     CommitmentPrefix, CommitmentProofBytes,
 };
-use namada::ibc::core::connection::types::msgs::{
+use namada_sdk::ibc::core::connection::types::msgs::{
     MsgConnectionOpenAck, MsgConnectionOpenConfirm, MsgConnectionOpenInit,
     MsgConnectionOpenTry,
 };
-use namada::ibc::core::connection::types::version::Version as ConnVersion;
-use namada::ibc::core::connection::types::{
+use namada_sdk::ibc::core::connection::types::version::Version as ConnVersion;
+use namada_sdk::ibc::core::connection::types::{
     ConnectionEnd, Counterparty as ConnCounterparty, State as ConnState,
 };
-pub use namada::ibc::core::host::types::identifiers::{
+pub use namada_sdk::ibc::core::host::types::identifiers::{
     ChannelId, ClientId, ConnectionId, PortId, Sequence,
 };
-use namada::ibc::primitives::proto::{Any, Protobuf};
-use namada::ibc::primitives::Timestamp;
-use namada::ibc::MsgTransfer;
-use namada::ledger::gas::VpGasMeter;
-use namada::ledger::ibc::parameters::IbcParameters;
-pub use namada::ledger::ibc::storage::{
-    ack_key, channel_counter_key, channel_key, client_counter_key,
-    client_state_key, client_update_height_key, client_update_timestamp_key,
-    commitment_key, connection_counter_key, connection_key,
-    consensus_state_key, ibc_token, next_sequence_ack_key,
-    next_sequence_recv_key, next_sequence_send_key, port_key, receipt_key,
+use namada_sdk::ibc::parameters::IbcParameters;
+use namada_sdk::ibc::primitives::proto::{Any, Protobuf};
+use namada_sdk::ibc::primitives::Timestamp;
+pub use namada_sdk::ibc::storage::{
+    channel_key, client_counter_key, client_state_key,
+    client_update_height_key, client_update_timestamp_key,
+    connection_counter_key, connection_key, consensus_state_key, ibc_token,
+    port_key,
 };
-use namada::ledger::native_vp::ibc::{
-    get_dummy_genesis_validator, get_dummy_header as tm_dummy_header, Ibc,
-};
-use namada::ledger::native_vp::multitoken::{
-    Error as MultitokenVpError, MultitokenVp,
-};
-use namada::ledger::native_vp::{Ctx, NativeVp};
-use namada::ledger::parameters::storage::{
+use namada_sdk::ibc::MsgTransfer;
+use namada_sdk::parameters::storage::{
     get_epoch_duration_storage_key, get_max_expected_time_per_block_key,
 };
-use namada::ledger::parameters::EpochDuration;
-use namada::ledger::tx_env::TxEnv;
-use namada::ledger::{ibc, pos};
-use namada::proof_of_stake::OwnedPosParams;
-use namada::state::testing::TestState;
-use namada::tendermint::time::Time as TmTime;
-use namada::token::{self, Amount, DenominatedAmount};
-use namada::tx::BatchedTxRef;
-use namada::vm::{wasm, WasmCacheRwAccess};
-use namada_core::collections::HashMap;
+use namada_sdk::parameters::EpochDuration;
+use namada_sdk::proof_of_stake::test_utils::get_dummy_genesis_validator;
+use namada_sdk::proof_of_stake::OwnedPosParams;
+use namada_sdk::state::testing::TestState;
 use namada_sdk::state::StateRead;
+use namada_sdk::storage::{self, BlockHeight, Epoch, Key, TxIndex};
+use namada_sdk::tendermint::time::Time as TmTime;
+use namada_sdk::time::DurationSecs;
+use namada_sdk::token::vp::MultitokenError;
+use namada_sdk::token::{self, Amount, DenominatedAmount};
+use namada_sdk::tx::BatchedTxRef;
+use namada_sdk::validation::{IbcVp, MultitokenVp};
+use namada_sdk::{ibc, proof_of_stake};
 use namada_test_utils::TestWasms;
+use namada_tx_env::TxEnv;
 use namada_tx_prelude::BorshSerializeExt;
+use namada_vm::{wasm, WasmCacheRwAccess};
+use namada_vp::native_vp::{Ctx, NativeVp};
 
 use crate::tx::*;
 
@@ -93,14 +89,14 @@ pub const ANY_DENOMINATION: u8 = 4;
 const COMMITMENT_PREFIX: &[u8] = b"ibc";
 
 pub struct TestIbcVp<'a> {
-    pub ibc: Ibc<'a, TestState, WasmCacheRwAccess>,
+    pub ibc: IbcVp<'a, TestState, WasmCacheRwAccess>,
 }
 
 impl<'a> TestIbcVp<'a> {
     pub fn validate(
         &self,
         batched_tx: &BatchedTxRef,
-    ) -> std::result::Result<(), namada::ledger::native_vp::ibc::Error> {
+    ) -> std::result::Result<(), namada_sdk::ibc::vp::Error> {
         self.ibc.validate_tx(
             batched_tx,
             self.ibc.ctx.keys_changed,
@@ -117,7 +113,7 @@ impl<'a> TestMultitokenVp<'a> {
     pub fn validate(
         &self,
         batched_tx: &BatchedTxRef,
-    ) -> std::result::Result<(), MultitokenVpError> {
+    ) -> std::result::Result<(), MultitokenError> {
         self.multitoken_vp.validate_tx(
             batched_tx,
             self.multitoken_vp.ctx.keys_changed,
@@ -130,7 +126,7 @@ impl<'a> TestMultitokenVp<'a> {
 pub fn validate_ibc_vp_from_tx<'a>(
     tx_env: &'a TestTxEnv,
     batched_tx: &'a BatchedTxRef,
-) -> std::result::Result<(), namada::ledger::native_vp::ibc::Error> {
+) -> std::result::Result<(), namada_sdk::ibc::vp::Error> {
     let (verifiers, keys_changed) = tx_env
         .state
         .write_log()
@@ -159,7 +155,7 @@ pub fn validate_ibc_vp_from_tx<'a>(
         &verifiers,
         vp_wasm_cache,
     );
-    let ibc = Ibc { ctx };
+    let ibc = IbcVp::new(ctx);
 
     TestIbcVp { ibc }.validate(batched_tx)
 }
@@ -169,7 +165,7 @@ pub fn validate_multitoken_vp_from_tx<'a>(
     tx_env: &'a TestTxEnv,
     batched_tx: &'a BatchedTxRef,
     target: &Key,
-) -> std::result::Result<(), MultitokenVpError> {
+) -> std::result::Result<(), MultitokenError> {
     let (verifiers, keys_changed) = tx_env
         .state
         .write_log()
@@ -198,7 +194,7 @@ pub fn validate_multitoken_vp_from_tx<'a>(
         &verifiers,
         vp_wasm_cache,
     );
-    let multitoken_vp = MultitokenVp { ctx };
+    let multitoken_vp = MultitokenVp::new(ctx);
 
     TestMultitokenVp { multitoken_vp }.validate(batched_tx)
 }
@@ -210,7 +206,7 @@ pub fn init_storage() -> (Address, Address) {
     let code_hash = Hash::sha256(&code);
 
     tx_host_env::with(|env| {
-        namada::parameters::init_test_storage(&mut env.state).unwrap();
+        namada_sdk::parameters::init_test_storage(&mut env.state).unwrap();
         ibc::init_genesis_storage(&mut env.state);
         let gov_params = GovernanceParameters::default();
         gov_params.init_storage(&mut env.state).unwrap();
@@ -219,7 +215,7 @@ pub fn init_storage() -> (Address, Address) {
             default_per_epoch_throughput_limit: Amount::native_whole(100),
         };
         ibc_params.init_storage(&mut env.state).unwrap();
-        pos::test_utils::test_init_genesis(
+        proof_of_stake::test_utils::test_init_genesis(
             &mut env.state,
             OwnedPosParams::default(),
             vec![get_dummy_genesis_validator()].into_iter(),
@@ -233,7 +229,7 @@ pub fn init_storage() -> (Address, Address) {
         // block header to check timeout timestamp
         env.state
             .in_mem_mut()
-            .set_header(tm_dummy_header())
+            .set_header(get_dummy_header())
             .unwrap();
         env.state.in_mem_mut().begin_block(BlockHeight(1)).unwrap();
     });
@@ -273,7 +269,7 @@ pub fn init_storage() -> (Address, Address) {
     // max_expected_time_per_block
     let time = DurationSecs::from(Duration::new(60, 0));
     let key = get_max_expected_time_per_block_key();
-    let bytes = namada::core::encode(&time);
+    let bytes = namada_sdk::encode(&time);
     tx_host_env::with(|env| {
         env.state.db_write(&key, &bytes).unwrap();
     });
@@ -286,7 +282,7 @@ pub fn init_storage() -> (Address, Address) {
         // block header to check timeout timestamp
         env.state
             .in_mem_mut()
-            .set_header(tm_dummy_header())
+            .set_header(get_dummy_header())
             .unwrap();
         env.state.in_mem_mut().begin_block(BlockHeight(2)).unwrap();
     });
@@ -427,18 +423,6 @@ pub fn msg_update_client(client_id: ClientId) -> MsgUpdateClient {
     MsgUpdateClient {
         client_id,
         client_message: header,
-        signer: "test".to_string().into(),
-    }
-}
-
-pub fn msg_upgrade_client(client_id: ClientId) -> MsgUpgradeClient {
-    let (client_state, consensus_state) = dummy_client();
-    MsgUpgradeClient {
-        client_id,
-        upgraded_client_state: client_state.into(),
-        upgraded_consensus_state: consensus_state.into(),
-        proof_upgrade_client: dummy_proof(),
-        proof_upgrade_consensus_state: dummy_proof(),
         signer: "test".to_string().into(),
     }
 }
@@ -624,10 +608,6 @@ pub fn dummy_channel_counterparty() -> ChanCounterparty {
     let port_id = PortId::transfer();
     let channel_id = ChannelId::new(42);
     ChanCounterparty::new(port_id, Some(channel_id))
-}
-
-pub fn unorder_channel(channel: &mut ChannelEnd) {
-    channel.ordering = Order::Unordered;
 }
 
 pub fn msg_transfer(

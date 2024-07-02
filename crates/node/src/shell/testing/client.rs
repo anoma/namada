@@ -1,12 +1,12 @@
 use clap::Command as App;
 use eyre::Report;
-use namada::io::Io;
 use namada_apps_lib::cli::api::{CliApi, CliClient};
 use namada_apps_lib::cli::args::Global;
 use namada_apps_lib::cli::{
     args, cmds, Cmd, Context, NamadaClient, NamadaRelayer,
 };
 use namada_sdk::error::Error as SdkError;
+use namada_sdk::io::Io;
 
 use super::node::MockNode;
 use crate::shell::testing::utils::{Bin, TestingIo};

@@ -23,6 +23,16 @@ use namada_core::hash::Hash;
 use namada_macros::BorshDeserializer;
 pub use namada_shielded_token::*;
 pub use namada_trans_token::*;
+
+/// Validity predicates
+pub mod vp {
+    pub use namada_shielded_token::vp::{
+        Error as MaspError, MaspVp, Result as MaspResult,
+    };
+    pub use namada_trans_token::vp::{
+        Error as MultitokenError, MultitokenVp, Result as MultitokenResult,
+    };
+}
 use serde::{Deserialize, Serialize};
 
 /// Token storage keys
@@ -33,7 +43,7 @@ pub mod storage_key {
 
 use namada_core::address::Address;
 use namada_events::EmitEvents;
-use namada_storage::{Result, StorageRead, StorageWrite};
+use namada_storage::{StorageRead, StorageWrite};
 
 /// Initialize parameters for the token in storage during the genesis block.
 pub fn write_params<S>(

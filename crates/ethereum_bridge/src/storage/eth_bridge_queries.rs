@@ -37,6 +37,7 @@ pub const fn is_bridge_comptime_enabled() -> bool {
 pub fn check_bridge_status<S: StorageRead>(
     storage: &S,
 ) -> namada_storage::Result<EthBridgeStatus> {
+    #[cfg(not(test))]
     if !is_bridge_comptime_enabled() {
         return Ok(EthBridgeStatus::Disabled);
     }
