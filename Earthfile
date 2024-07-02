@@ -1,6 +1,6 @@
 VERSION 0.8
 
-IMPORT github.com/earthly/lib/rust:a49d2a0f4028cd15666d19904f8fc5fbd0b9ba87 AS rust
+IMPORT github.com/earthly/lib/rust AS rust
 
 install:
   FROM rust:1.78.0-bookworm
@@ -48,15 +48,18 @@ source:
 # lint runs cargo clippy on the source code
 clippy:
   FROM +source
+
   DO rust+CARGO --args="+nightly-2024-05-15 clippy --all-targets --workspace --exclude namada_benchmarks -- -D warnings"
   DO rust+CARGO --args="+nightly-2024-05-15 clippy --all-targets --package namada_benchmarks -- -D warnings"
 
 clippy-wasm:
   FROM +source
+
   DO rust+CARGO --args="+nightly-2024-05-15 clippy --manifest-path wasm/Cargo.toml --workspace -- -D warnings"
 
 clippy-wasm-for-test:
   FROM +source
+  
   DO rust+CARGO --args="+nightly-2024-05-15 clippy --manifest-path wasm/Cargo.toml --workspace -- -D warnings"
 
 fmt:
@@ -65,15 +68,18 @@ fmt:
 
 fmt-wasm:
   FROM +source
+
   DO rust+CARGO --args="+nightly-2024-05-15 fmt --manifest-path wasm/Cargo.toml --all --check"
 
 build-wasm:
   FROM +source
+
   ENV RUSTFLAGS='-C link-arg=-s' 
   DO rust+CARGO --args="build --release --manifest-path wasm/Cargo.toml --target wasm32-unknown-unknown --target-dir target" --output="wasm32-unknown-unknown\/release\/[a-zA-Z_]+\.wasm"
 
 build-wasm-for-test:
   FROM +source
+
   ENV RUSTFLAGS='-C link-arg=-s' 
   DO rust+CARGO --args="build --release --manifest-path wasm_for_tests/Cargo.toml --target wasm32-unknown-unknown --target-dir target" --output="wasm32-unknown-unknown\/release\/[a-zA-Z_]+\.wasm"
 
@@ -116,8 +122,7 @@ build-debug:
   SAVE ARTIFACT target
 
 test-unit:
-  FROM +save-wasm
-  FROM +save-wasm-for-test
+  FROM +source
 
   COPY +save-wasm/wasm/ wasm
   COPY +save-wasm-for-test/wasm_for_tests/ wasm_for_tests
@@ -127,8 +132,7 @@ test-unit:
   DO rust+CARGO --args="+nightly-2024-05-15 test --lib $filter --features namada/testing -- --skip e2e --skip integration --skip pos_state_machine_test"
 
 test-integration:
-  FROM +save-wasm
-  FROM +save-wasm-for-test
+  FROM +source
 
   COPY +save-wasm/wasm/ wasm
   COPY +save-wasm-for-test/wasm_for_tests/ wasm_for_tests
@@ -141,14 +145,7 @@ test-integration:
   DO rust+CARGO --args="+nightly-2024-05-15 test --lib integration::$filter --features integration -- --test-threads=1"
 
 test-e2e:
-  FROM +build-release
-
-  FROM +save-wasm
-  FROM +save-wasm-for-test
-
-  FROM +download-gaia
-  FROM +download-cometbft
-  FROM +build-hermes
+  FROM +source
 
   COPY +save-wasm/wasm/ wasm
   COPY +save-wasm-for-test/wasm_for_tests/ wasm_for_tests
@@ -178,7 +175,7 @@ download-gaia:
 
   ARG GAIA_VERSION="15.2.0"
 
-  RUN curl -o gaiad -LO https://github.com/cosmos/gaia/releases/download/v${GAIA_VERSION}/gaiad-v${GAIA_VERSION}-linux-amd64
+  RUN curl -o gaiad -LO https://github.com/cosmos/gaia/releases/download/v${GAIA_VERSION}/gaiad-v${GAIA_VERSION}-linux-arm64
 
   SAVE ARTIFACT gaiad
 
@@ -187,7 +184,7 @@ download-cometbft:
 
   ARG COMETBFT_VERSION="0.37.2"
 
-  RUN curl -o cometbft.tar.gz -LO https://github.com/cometbft/cometbft/releases/download/v${COMETBFT_VERSION}/cometbft_${COMETBFT_VERSION}_linux_amd64.tar.gz
+  RUN curl -o cometbft.tar.gz -LO https://github.com/cometbft/cometbft/releases/download/v${COMETBFT_VERSION}/cometbft_${COMETBFT_VERSION}_linux_arm64.tar.gz
   RUN tar -xvzf cometbft.tar.gz
 
   SAVE ARTIFACT cometbft

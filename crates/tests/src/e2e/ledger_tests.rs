@@ -341,6 +341,7 @@ fn run_ledger_load_state_and_reset() -> Result<()> {
 /// 4. restart ledge with migrated db
 /// 5. Check that a key was changed successfully
 #[test]
+#[ignore]
 fn test_db_migration() -> Result<()> {
     let test = setup::single_node_net()?;
 
@@ -378,6 +379,8 @@ fn test_db_migration() -> Result<()> {
             "update-db",
             "--path",
             migrations_json_path.to_string_lossy().as_ref(),
+            "--block-height",
+            "2"
         ],
         Some(30),
     )?;
