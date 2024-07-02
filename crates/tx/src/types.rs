@@ -820,7 +820,7 @@ impl<'arbitrary> arbitrary::Arbitrary<'arbitrary> for Section {
         let result = (|| {
             Ok(
                 match (u64::from(<u32 as arbitrary::Arbitrary>::arbitrary(u)?)
-                    * 7u64)
+                    * 5u64)
                     >> 32
                 {
                     0u64 => Section::Data(arbitrary::Arbitrary::arbitrary(u)?),
@@ -867,7 +867,7 @@ impl<'arbitrary> arbitrary::Arbitrary<'arbitrary> for Section {
             Ok(
                 match (u64::from(<u32 as arbitrary::Arbitrary>::arbitrary(
                     &mut u,
-                )?) * 7u64)
+                )?) * 5u64)
                     >> 32
                 {
                     0u64 => Section::Data(
