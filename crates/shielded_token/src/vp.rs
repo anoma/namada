@@ -22,9 +22,7 @@ use namada_core::masp::{encode_asset_type, MaspEpoch};
 use namada_core::storage::Key;
 use namada_core::uint::I320;
 use namada_gas::GasMetering;
-use namada_state::{
-    ConversionState, OptionExt, ResultExt, StateRead, StorageError,
-};
+use namada_state::{ConversionState, OptionExt, ResultExt, StateRead};
 use namada_systems::trans_token::{Amount, MaspDigitPos};
 use namada_systems::{governance, parameters, trans_token as token};
 use namada_trans_token::read_denom;
@@ -86,14 +84,8 @@ where
     S: 'static + StateRead,
     CA: 'static + Clone,
     EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
-    Params: parameters::Read<
-            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
-            Err = StorageError,
-        >,
-    Gov: governance::Read<
-            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
-            Err = StorageError,
-        >,
+    Params: parameters::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
+    Gov: governance::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
 {
     /// Instantiate MASP VP
     pub fn new(ctx: Ctx<'ctx, S, CA, EVAL>) -> Self {
@@ -853,14 +845,8 @@ where
     S: 'static + StateRead,
     CA: 'static + Clone,
     EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
-    Params: parameters::Read<
-            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
-            Err = StorageError,
-        >,
-    Gov: governance::Read<
-            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
-            Err = StorageError,
-        >,
+    Params: parameters::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
+    Gov: governance::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
 {
     type Error = Error;
 

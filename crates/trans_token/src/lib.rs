@@ -59,12 +59,7 @@ impl<S> Keys for Store<S> {
     }
 }
 
-impl<S> Read<S> for Store<S>
-where
-    S: StorageRead,
-{
-    type Err = namada_storage::Error;
-}
+impl<S> Read<S> for Store<S> where S: StorageRead {}
 
 impl<S> Write<S> for Store<S>
 where
@@ -76,7 +71,7 @@ where
         src: &Address,
         dest: &Address,
         amount: Amount,
-    ) -> Result<(), Self::Err> {
+    ) -> Result<()> {
         storage::transfer(storage, token, src, dest, amount)
     }
 
@@ -85,7 +80,7 @@ where
         token: &Address,
         source: &Address,
         amount: Amount,
-    ) -> Result<(), Self::Err> {
+    ) -> Result<()> {
         storage::burn_tokens(storage, token, source, amount)
     }
 
@@ -94,7 +89,7 @@ where
         token: &Address,
         dest: &Address,
         amount: Amount,
-    ) -> Result<(), Self::Err> {
+    ) -> Result<()> {
         storage::credit_tokens(storage, token, dest, amount)
     }
 }

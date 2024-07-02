@@ -43,7 +43,7 @@ pub mod storage_key {
 
 use namada_core::address::Address;
 use namada_events::EmitEvents;
-use namada_storage::{Result, StorageRead, StorageWrite};
+use namada_storage::{StorageRead, StorageWrite};
 
 /// Initialize parameters for the token in storage during the genesis block.
 pub fn write_params<S>(

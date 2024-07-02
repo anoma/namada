@@ -6,7 +6,7 @@ use std::marker::PhantomData;
 use namada_core::address::Address;
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::storage::Key;
-use namada_state::{StateRead, StorageError};
+use namada_state::StateRead;
 use namada_systems::governance;
 use namada_tx::BatchedTxRef;
 use namada_vp::native_vp::{
@@ -44,10 +44,7 @@ where
     S: 'static + StateRead,
     CA: 'static + Clone,
     EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
-    Gov: governance::Read<
-            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
-            Err = StorageError,
-        >,
+    Gov: governance::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
 {
     type Error = Error;
 
@@ -92,10 +89,7 @@ where
     S: 'static + StateRead,
     CA: 'static + Clone,
     EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
-    Gov: governance::Read<
-            CtxPreStorageRead<'ctx, 'ctx, S, CA, EVAL>,
-            Err = StorageError,
-        >,
+    Gov: governance::Read<CtxPreStorageRead<'ctx, 'ctx, S, CA, EVAL>>,
 {
     /// Instantiate parameters VP
     pub fn new(ctx: Ctx<'ctx, S, CA, EVAL>) -> Self {

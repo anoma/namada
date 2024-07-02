@@ -3,6 +3,7 @@
 use namada_core::address::Address;
 use namada_core::storage;
 pub use namada_core::token::*;
+pub use namada_storage::Result;
 
 /// Abstract token keys interface
 pub trait Keys {
@@ -25,10 +26,7 @@ pub trait Keys {
 }
 
 /// Abstract token storage read interface
-pub trait Read<S> {
-    /// Storage error
-    type Err;
-}
+pub trait Read<S> {}
 
 /// Abstract token storage write interface
 pub trait Write<S>: Read<S> {
@@ -41,7 +39,7 @@ pub trait Write<S>: Read<S> {
         src: &Address,
         dest: &Address,
         amount: Amount,
-    ) -> Result<(), Self::Err>;
+    ) -> Result<()>;
 
     /// Burn a specified amount of tokens from some address. If the burn amount
     /// is larger than the total balance of the given address, then the
@@ -52,7 +50,7 @@ pub trait Write<S>: Read<S> {
         token: &Address,
         source: &Address,
         amount: Amount,
-    ) -> Result<(), Self::Err>;
+    ) -> Result<()>;
 
     /// Credit tokens to an account, to be used only by protocol. In
     /// transactions, this would get rejected by the default `vp_token`.
@@ -61,5 +59,5 @@ pub trait Write<S>: Read<S> {
         token: &Address,
         dest: &Address,
         amount: Amount,
-    ) -> Result<(), Self::Err>;
+    ) -> Result<()>;
 }

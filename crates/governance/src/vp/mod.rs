@@ -66,10 +66,7 @@ where
     S: StateRead,
     CA: 'static + Clone,
     EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
-    PoS: proof_of_stake::Read<
-            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
-            Err = namada_state::StorageError,
-        >,
+    PoS: proof_of_stake::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
     TokenKeys: token::Keys,
 {
     type Error = Error;
@@ -220,10 +217,7 @@ where
     S: StateRead,
     CA: 'static + Clone,
     EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
-    PoS: proof_of_stake::Read<
-            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
-            Err = namada_state::StorageError,
-        >,
+    PoS: proof_of_stake::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
     TokenKeys: token::Keys,
 {
     /// Instantiate a Governance VP
