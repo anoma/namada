@@ -157,7 +157,7 @@ fn run_ledger_ibc() -> Result<()> {
         BERTHA,
         ALBERT,
         token,
-        50000,
+        50_000_000_000,
         BERTHA_KEY,
     )?;
     check_balances_after_non_ibc(&port_id_b, &channel_id_b, &test_b)?;
@@ -295,7 +295,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
     let memo_path = gen_masp_tx(
         &test_b,
         AB_PAYMENT_ADDRESS,
-        &token_addr,
+        token_addr,
         1_000_000_000,
         &port_id_b,
         &channel_id_b,
@@ -319,15 +319,6 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
     check_shielded_balances(&port_id_b, &channel_id_b, &test_a, &test_b)?;
 
     // Shielded transfer to an invalid receiver address (refund)
-    let memo_path = gen_masp_tx(
-        &test_a,
-        AA_PAYMENT_ADDRESS,
-        &token_addr,
-        10,
-        &port_id_a,
-        &channel_id_a,
-        true,
-    )?;
     transfer(
         &test_a,
         A_SPENDING_KEY,
@@ -338,7 +329,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         &port_id_a,
         &channel_id_a,
         None,
-        Some(memo_path),
+        None,
         None,
         false,
     )?;
@@ -351,15 +342,6 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
     hermes.interrupt()?;
 
     // Send transfer will be timed out (refund)
-    let memo_path = gen_masp_tx(
-        &test_a,
-        AA_PAYMENT_ADDRESS,
-        &token_addr,
-        10,
-        &port_id_a,
-        &channel_id_a,
-        true,
-    )?;
     transfer(
         &test_a,
         A_SPENDING_KEY,
@@ -370,7 +352,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         &port_id_a,
         &channel_id_a,
         Some(Duration::new(10, 0)),
-        Some(memo_path),
+        None,
         None,
         false,
     )?;
@@ -692,7 +674,8 @@ fn proposal_ibc_token_inflation() -> Result<()> {
 
     setup_hermes(&test_a, &test_b)?;
     let port_id_a = "transfer".parse().unwrap();
-    let (channel_id_a, _channel_id_b) =
+    let port_id_b = "transfer".parse().unwrap();
+    let (channel_id_a, channel_id_b) =
         create_channel_with_hermes(&test_a, &test_b)?;
 
     // Start relaying
@@ -703,6 +686,17 @@ fn proposal_ibc_token_inflation() -> Result<()> {
     wait_epochs(&test_b, 1)?;
 
     // Transfer 1 from Chain A to a z-address on Chain B
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
+    let token_addr = find_address(&test_a, APFEL)?.to_string();
+    let memo_path = gen_masp_tx(
+        &test_b,
+        AB_PAYMENT_ADDRESS,
+        token_addr,
+        1_000_000,
+        &port_id_b,
+        &channel_id_b,
+        false,
+    )?;
     transfer(
         &test_a,
         ALBERT,
@@ -713,7 +707,7 @@ fn proposal_ibc_token_inflation() -> Result<()> {
         &port_id_a,
         &channel_id_a,
         None,
-        None,
+        Some(memo_path),
         None,
         false,
     )?;

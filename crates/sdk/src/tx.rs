@@ -20,7 +20,7 @@ use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::transaction::{builder, Transaction as MaspTransaction};
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada_account::{InitAccount, UpdateAccount};
-use namada_core::address::{Address, InternalAddress, MASP};
+use namada_core::address::{Address, IBC, MASP};
 use namada_core::arith::checked;
 use namada_core::collections::HashSet;
 use namada_core::dec::Dec;
@@ -2596,7 +2596,7 @@ pub async fn build_ibc_transfer(
         // Generate MASP transaction for refunding the token
         let masp_tx = construct_shielded_parts(
             context,
-            &TransferSource::Address(MASP),
+            &TransferSource::Address(IBC),
             &TransferTarget::PaymentAddress(refund_target),
             &args.token,
             validated_amount,
@@ -3520,7 +3520,7 @@ pub async fn gen_ibc_shielding_transfer<N: Namada>(
     context: &N,
     args: args::GenIbcShieldingTransfer,
 ) -> Result<Option<MaspTransaction>> {
-    let source = Address::Internal(InternalAddress::Ibc);
+    let source = IBC;
     let (src_port_id, src_channel_id) =
         get_ibc_src_port_channel(context, &args.port_id, &args.channel_id)
             .await?;
