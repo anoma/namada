@@ -398,24 +398,33 @@ impl super::SigScheme for SigScheme {
 #[cfg(feature = "arbitrary")]
 impl arbitrary::Arbitrary<'_> for PublicKey {
     fn arbitrary(
-        _: &mut arbitrary::Unstructured<'_>,
+        u: &mut arbitrary::Unstructured<'_>,
     ) -> arbitrary::Result<Self> {
         Ok(Self(
             ed25519_consensus::VerificationKey::try_from(
-                [0_u8; PUBLIC_KEY_LENGTH],
+                u.bytes(PUBLIC_KEY_LENGTH)?,
             )
             .unwrap(),
         ))
+    }
+
+    fn size_hint(_depth: usize) -> (usize, Option<usize>) {
+        (PUBLIC_KEY_LENGTH, Some(PUBLIC_KEY_LENGTH))
     }
 }
 
 #[cfg(feature = "arbitrary")]
 impl arbitrary::Arbitrary<'_> for Signature {
     fn arbitrary(
-        _: &mut arbitrary::Unstructured<'_>,
+        u: &mut arbitrary::Unstructured<'_>,
     ) -> arbitrary::Result<Self> {
-        Ok(Self(ed25519_consensus::Signature::from(
-            [0_u8; SIGNATURE_LENGTH],
-        )))
+        Ok(Self(
+            ed25519_consensus::Signature::try_from(u.bytes(SIGNATURE_LENGTH)?)
+                .unwrap(),
+        ))
+    }
+
+    fn size_hint(_depth: usize) -> (usize, Option<usize>) {
+        (SIGNATURE_LENGTH, Some(SIGNATURE_LENGTH))
     }
 }
