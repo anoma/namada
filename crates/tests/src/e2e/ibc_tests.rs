@@ -159,6 +159,7 @@ fn run_ledger_ibc() -> Result<()> {
         token,
         50000,
         BERTHA_KEY,
+        true,
     )?;
     check_balances_after_non_ibc(&port_id_b, &channel_id_b, &test_b)?;
 
@@ -230,9 +231,10 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         receiver.to_string(),
         NAM,
         100000.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &port_id_a,
         &channel_id_a,
+        false,
         None,
         None,
         false,
@@ -250,6 +252,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         token,
         50000,
         BERTHA_KEY,
+        true,
     )?;
     check_balances_after_non_ibc(&port_id_b, &channel_id_b, &test_b)?;
 
@@ -266,9 +269,10 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         receiver.to_string(),
         ibc_denom,
         50000.0,
-        BERTHA_KEY,
+        Some(BERTHA_KEY),
         &port_id_b,
         &channel_id_b,
+        true,
         None,
         None,
         false,
@@ -285,6 +289,18 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         BTC,
         100,
         ALBERT_KEY,
+        false,
+    )?;
+    // Send some token for masp fee payment
+    transfer_on_chain(
+        &test_a,
+        "shield",
+        ALBERT,
+        AA_PAYMENT_ADDRESS,
+        NAM,
+        10_000,
+        ALBERT_KEY,
+        false,
     )?;
     shielded_sync(&test_a, AA_VIEWING_KEY)?;
     // Shieded transfer from Chain A to Chain B
@@ -294,9 +310,10 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         AB_PAYMENT_ADDRESS,
         BTC,
         10.0,
-        ALBERT_KEY,
+        None,
         &port_id_a,
         &channel_id_a,
+        false,
         None,
         None,
         false,
@@ -311,9 +328,10 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         "invalid_receiver",
         BTC,
         10.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &port_id_a,
         &channel_id_a,
+        false,
         None,
         None,
         false,
@@ -333,9 +351,10 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         AB_PAYMENT_ADDRESS,
         BTC,
         10.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &port_id_a,
         &channel_id_a,
+        false,
         Some(Duration::new(10, 0)),
         None,
         false,
@@ -398,9 +417,10 @@ fn ibc_namada_gaia() -> Result<()> {
         receiver,
         APFEL,
         200.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &port_id_namada,
         &channel_id_namada,
+        false,
         None,
         None,
         false,
@@ -410,7 +430,7 @@ fn ibc_namada_gaia() -> Result<()> {
     // Check the received token on Gaia
     let token_addr = find_address(&test, APFEL)?;
     let ibc_denom = format!("{port_id_gaia}/{channel_id_gaia}/{token_addr}");
-    check_gaia_balance(&test_gaia, GAIA_USER, &ibc_denom, 200)?;
+    check_gaia_balance(&test_gaia, GAIA_USER, &ibc_denom, 200000000)?;
 
     // Transfer back from Gaia to Namada
     let receiver = find_address(&test, ALBERT)?.to_string();
@@ -419,7 +439,7 @@ fn ibc_namada_gaia() -> Result<()> {
         GAIA_USER,
         receiver,
         get_gaia_denom_hash(ibc_denom),
-        100,
+        100000000,
         &port_id_gaia,
         &channel_id_gaia,
     )?;
@@ -453,9 +473,10 @@ fn ibc_namada_gaia() -> Result<()> {
         &receiver,
         ibc_denom,
         100.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &port_id_namada,
         &channel_id_namada,
+        true,
         None,
         None,
         false,
@@ -489,6 +510,7 @@ fn ibc_namada_gaia() -> Result<()> {
         &ibc_denom,
         50,
         ALBERT_KEY,
+        true,
     )?;
     check_balance(&test, AA_VIEWING_KEY, &ibc_denom, 50)?;
     check_balance(&test, AB_VIEWING_KEY, &ibc_denom, 50)?;
@@ -500,9 +522,10 @@ fn ibc_namada_gaia() -> Result<()> {
         &receiver,
         &ibc_denom,
         10.0,
-        BERTHA_KEY,
+        Some(BERTHA_KEY),
         &port_id_namada,
         &channel_id_namada,
+        true,
         None,
         None,
         false,
@@ -560,6 +583,7 @@ fn pgf_over_ibc_with_hermes() -> Result<()> {
         NAM,
         100,
         ALBERT_KEY,
+        false,
     )?;
 
     // Proposal on Chain A
@@ -660,9 +684,10 @@ fn proposal_ibc_token_inflation() -> Result<()> {
         AB_PAYMENT_ADDRESS,
         APFEL,
         1.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &port_id_a,
         &channel_id_a,
+        false,
         None,
         None,
         false,
@@ -681,19 +706,19 @@ fn proposal_ibc_token_inflation() -> Result<()> {
 #[test]
 fn ibc_rate_limit() -> Result<()> {
     // Mint limit 2 transfer/channel-0/nam, per-epoch throughput limit 1 NAM
-    let update_genesis = |mut genesis: templates::All<
-        templates::Unvalidated,
-    >,
-                          base_dir: &_| {
-        genesis.parameters.parameters.epochs_per_year =
-            epochs_per_year_from_min_duration(50);
-        genesis.parameters.ibc_params.default_mint_limit = Amount::from_u64(2);
-        genesis
-            .parameters
-            .ibc_params
-            .default_per_epoch_throughput_limit = Amount::from_u64(1_000_000);
-        setup::set_validators(1, genesis, base_dir, |_| 0)
-    };
+    let update_genesis =
+        |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
+            genesis.parameters.parameters.epochs_per_year =
+                epochs_per_year_from_min_duration(50);
+            genesis.parameters.ibc_params.default_mint_limit =
+                Amount::from_u64(2_000_000);
+            genesis
+                .parameters
+                .ibc_params
+                .default_per_epoch_throughput_limit =
+                Amount::from_u64(1_000_000);
+            setup::set_validators(1, genesis, base_dir, |_| 0)
+        };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
     let _bg_ledger_a = ledger_a.background();
     let _bg_ledger_b = ledger_b.background();
@@ -727,9 +752,10 @@ fn ibc_rate_limit() -> Result<()> {
         receiver.to_string(),
         NAM,
         1.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &port_id_a,
         &channel_id_a,
+        false,
         None,
         None,
         false,
@@ -742,9 +768,10 @@ fn ibc_rate_limit() -> Result<()> {
         receiver.to_string(),
         NAM,
         1.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &port_id_a,
         &channel_id_a,
+        false,
         None,
         // expect an error of the throughput limit
         Some(
@@ -768,9 +795,10 @@ fn ibc_rate_limit() -> Result<()> {
         receiver.to_string(),
         NAM,
         1.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &port_id_a,
         &channel_id_a,
+        false,
         None,
         None,
         false,
@@ -792,9 +820,10 @@ fn ibc_rate_limit() -> Result<()> {
         receiver.to_string(),
         NAM,
         1.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &port_id_a,
         &channel_id_a,
+        false,
         Some(Duration::new(20, 0)),
         None,
         false,
@@ -955,7 +984,7 @@ fn create_channel_with_hermes(
         "--yes",
     ];
 
-    let mut hermes = run_hermes_cmd(test_a, args, Some(120))?;
+    let mut hermes = run_hermes_cmd(test_a, args, Some(240))?;
     let (channel_id_a, channel_id_b) =
         get_channel_ids_from_hermes_output(&mut hermes)?;
     hermes.assert_success();
@@ -1558,9 +1587,10 @@ fn transfer_token(
         receiver.to_string(),
         NAM,
         100000.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         port_id_a,
         channel_id_a,
+        false,
         None,
         None,
         false,
@@ -1626,22 +1656,8 @@ fn try_invalid_transfers(
     std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
     let receiver = find_address(test_b, BERTHA)?;
 
-    // invalid amount
-    transfer(
-        test_a,
-        ALBERT,
-        receiver.to_string(),
-        NAM,
-        10.1,
-        ALBERT_KEY,
-        port_id_a,
-        channel_id_a,
-        None,
-        Some("The amount for the IBC transfer should be an integer"),
-        false,
-    )?;
-
     // invalid port
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
     let nam_addr = find_address(test_a, NAM)?;
     transfer(
         test_a,
@@ -1649,9 +1665,10 @@ fn try_invalid_transfers(
         receiver.to_string(),
         NAM,
         10.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &"port".parse().unwrap(),
         channel_id_a,
+        false,
         None,
         // the IBC denom can't be parsed when using an invalid port
         Some(&format!("Invalid IBC denom: {nam_addr}")),
@@ -1665,9 +1682,10 @@ fn try_invalid_transfers(
         receiver.to_string(),
         NAM,
         10.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         port_id_a,
         &"channel-42".parse().unwrap(),
+        false,
         None,
         Some("IBC token transfer error: context error: `ICS04 Channel error"),
         false,
@@ -1676,6 +1694,7 @@ fn try_invalid_transfers(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn transfer_on_chain(
     test: &Test,
     kind: impl AsRef<str>,
@@ -1684,10 +1703,12 @@ fn transfer_on_chain(
     token: impl AsRef<str>,
     amount: u64,
     signer: impl AsRef<str>,
+    force: bool,
 ) -> Result<()> {
     std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let rpc = get_actor_rpc(test, Who::Validator(0));
-    let tx_args = [
+    let amount = amount.to_string();
+    let mut tx_args = vec![
         kind.as_ref(),
         "--source",
         sender.as_ref(),
@@ -1696,12 +1717,15 @@ fn transfer_on_chain(
         "--token",
         token.as_ref(),
         "--amount",
-        &amount.to_string(),
+        &amount,
         "--signing-keys",
         signer.as_ref(),
         "--node",
         &rpc,
     ];
+    if force {
+        tx_args.push("--force");
+    }
     let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
@@ -1730,9 +1754,10 @@ fn transfer_back(
         receiver.to_string(),
         ibc_denom,
         50000.0,
-        BERTHA_KEY,
+        Some(BERTHA_KEY),
         port_id_b,
         channel_id_b,
+        true,
         None,
         None,
         false,
@@ -1803,9 +1828,10 @@ fn transfer_timeout(
         receiver.to_string(),
         NAM,
         100000.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         port_id_a,
         channel_id_a,
+        false,
         Some(Duration::new(5, 0)),
         None,
         false,
@@ -1937,9 +1963,10 @@ fn transfer(
     receiver: impl AsRef<str>,
     token: impl AsRef<str>,
     amount: f64,
-    signer: impl AsRef<str>,
+    signer: Option<&str>,
     port_id: &PortId,
     channel_id: &ChannelId,
+    force: bool,
     timeout_sec: Option<Duration>,
     expected_err: Option<&str>,
     wait_reveal_pk: bool,
@@ -1956,8 +1983,6 @@ fn transfer(
         sender.as_ref(),
         "--receiver",
         receiver.as_ref(),
-        "--signing-keys",
-        signer.as_ref(),
         "--token",
         token.as_ref(),
         "--amount",
@@ -1969,6 +1994,15 @@ fn transfer(
         "--node",
         &rpc,
     ];
+    if force {
+        tx_args.push("--force");
+    }
+
+    if let Some(signer) = signer {
+        tx_args.extend_from_slice(&["--signing-keys", signer]);
+    } else {
+        tx_args.push("--disposable-gas-payer");
+    }
 
     let timeout = timeout_sec.unwrap_or_default().as_secs().to_string();
     if timeout_sec.is_some() {
@@ -2196,13 +2230,13 @@ fn transfer_from_gaia(
 
 fn check_tx_height(test: &Test, client: &mut NamadaCmd) -> Result<u32> {
     let (_unread, matched) = client.exp_regex(r"height .*")?;
-    // Expecting e.g. "height 1337."
+    // Expecting e.g. "height 1337, consuming x gas units."
     let height_str = matched
         .trim()
         .split_once(' ')
         .unwrap()
         .1
-        .split_once('.')
+        .split_once(',')
         .unwrap()
         .0;
     let height: u32 = height_str.parse().unwrap();

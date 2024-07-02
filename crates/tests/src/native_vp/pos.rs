@@ -268,7 +268,7 @@ mod tests {
                     if !test_state.is_current_tx_valid {
                         // Clear out the changes
                         tx_host_env::with(|env| {
-                            env.state.drop_tx();
+                            env.state.drop_tx_batch();
                         });
                     }
 
@@ -282,7 +282,7 @@ mod tests {
                     tx_host_env::with(|env| {
                         // Clear out the changes
                         if !test_state.is_current_tx_valid {
-                            env.state.drop_tx();
+                            env.state.drop_tx_batch();
                         }
                         // Also commit the last transaction(s) changes, if any
                         env.commit_tx_and_block();
@@ -318,7 +318,7 @@ mod tests {
 
                     // Clear out the invalid changes
                     tx_host_env::with(|env| {
-                        env.state.drop_tx();
+                        env.state.drop_tx_batch();
                     })
                 }
             }

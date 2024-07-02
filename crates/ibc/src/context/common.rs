@@ -1,7 +1,5 @@
 //! IbcCommonContext implementation for IBC
 
-use core::time::Duration;
-
 use ibc::apps::nft_transfer::types::{PrefixedClassId, TokenId};
 use ibc::clients::tendermint::consensus_state::ConsensusState as TmConsensusState;
 use ibc::clients::tendermint::types::ConsensusState as TmConsensusStateType;
@@ -25,8 +23,6 @@ use ibc::primitives::Timestamp;
 use namada_core::address::Address;
 use namada_core::storage::{BlockHeight, Key};
 use namada_core::tendermint::Time as TmTime;
-use namada_core::time::DurationSecs;
-use namada_parameters::storage::get_max_expected_time_per_block_key;
 use namada_token::storage_key::balance_key;
 use namada_token::Amount;
 use prost::Message;
@@ -327,15 +323,6 @@ pub trait IbcCommonContext: IbcStorageContext {
         Ok(consensus_state.into())
     }
 
-    /// Get the max expected time per block
-    fn max_expected_time_per_block(&self) -> Result<Duration> {
-        let key = get_max_expected_time_per_block_key();
-        match self.read::<DurationSecs>(&key)? {
-            Some(duration) => Ok(duration.into()),
-            None => unreachable!("The parameter should be initialized"),
-        }
-    }
-
     /// Get the ConnectionEnd
     fn connection_end(&self, conn_id: &ConnectionId) -> Result<ConnectionEnd> {
         let key = storage::connection_key(conn_id);
@@ -507,7 +494,6 @@ pub trait IbcCommonContext: IbcStorageContext {
 
     /// Calculate the packet commitment
     fn compute_packet_commitment(
-        &self,
         packet_data: &[u8],
         timeout_height: &TimeoutHeight,
         timeout_timestamp: &Timestamp,

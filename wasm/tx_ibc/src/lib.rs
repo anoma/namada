@@ -13,12 +13,12 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
         ibc::ibc_actions(ctx).execute(&data).into_storage_result()?;
 
     if let Some(masp_section_ref) =
-        transfer.map(|transfer| transfer.shielded_section_hash)
+        transfer.and_then(|transfer| transfer.shielded_section_hash)
     {
         let shielded = tx_data
             .tx
-            .get_section(&masp_section_ref)
-            .and_then(|x| x.as_ref().masp_tx())
+            .get_masp_section(&masp_section_ref)
+            .cloned()
             .ok_or_err_msg(
                 "Unable to find required shielded section in tx data",
             )

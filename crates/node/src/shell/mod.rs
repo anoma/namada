@@ -16,6 +16,7 @@ pub mod prepare_proposal;
 use namada::state::State;
 pub mod process_proposal;
 pub(super) mod queries;
+mod snapshots;
 mod stats;
 #[cfg(any(test, feature = "testing"))]
 #[allow(dead_code)]
@@ -25,6 +26,7 @@ mod vote_extensions;
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
+use std::num::NonZeroU64;
 use std::path::{Path, PathBuf};
 #[allow(unused_imports)]
 use std::rc::Rc;
@@ -48,7 +50,7 @@ use namada::ledger::pos::namada_proof_of_stake::types::{
 };
 use namada::ledger::protocol::ShellParams;
 use namada::ledger::{parameters, protocol};
-use namada::parameters::validate_tx_bytes;
+use namada::parameters::{get_gas_scale, validate_tx_bytes};
 use namada::proof_of_stake::storage::read_pos_params;
 use namada::state::tx_queue::ExpiredTx;
 use namada::state::{
@@ -77,6 +79,7 @@ use crate::facade::tendermint::{self, validator};
 use crate::facade::tendermint_proto::v0_37::crypto::public_key;
 use crate::shims::abcipp_shim_types::shim;
 use crate::shims::abcipp_shim_types::shim::response::TxResult;
+use crate::shims::abcipp_shim_types::shim::TakeSnapshot;
 use crate::{storage, tendermint_node};
 
 fn key_to_tendermint(
@@ -120,6 +123,8 @@ pub enum Error {
     Storage(#[from] namada::state::StorageError),
     #[error("Transaction replay attempt: {0}")]
     ReplayAttempt(String),
+    #[error("Error with snapshots: {0}")]
+    Snapshot(std::io::Error),
 }
 
 impl From<Error> for TxResult {
@@ -355,6 +360,9 @@ where
     event_log: EventLog,
     /// A migration that can be scheduled at a given block height
     pub scheduled_migration: Option<ScheduledMigration<D::Migrator>>,
+    /// When set, indicates after how many blocks a new snapshot
+    /// will be taken (counting from the first block)
+    pub blocks_between_snapshots: Option<NonZeroU64>,
 }
 
 /// Storage key filter to store the diffs into the storage. Return `false` for
@@ -548,6 +556,7 @@ where
             // TODO(namada#3237): config event log params
             event_log: EventLog::default(),
             scheduled_migration,
+            blocks_between_snapshots: config.shell.blocks_between_snapshots,
         };
         shell.update_eth_oracle(&Default::default());
         shell
@@ -659,7 +668,7 @@ where
 
     /// Commit a block. Persist the application state and return the Merkle root
     /// hash.
-    pub fn commit(&mut self) -> response::Commit {
+    pub fn commit(&mut self) -> shim::Response {
         self.bump_last_processed_eth_block();
 
         self.state
@@ -678,13 +687,32 @@ where
         );
 
         self.broadcast_queued_txs();
+        let take_snapshot = self.check_snapshot_required();
 
-        response::Commit {
-            // NB: by passing 0, we forbid CometBFT from deleting
-            // data pertaining to past blocks
-            retain_height: tendermint::block::Height::from(0_u32),
-            // NB: current application hash
-            data: merkle_root.0.to_vec().into(),
+        shim::Response::Commit(
+            response::Commit {
+                // NB: by passing 0, we forbid CometBFT from deleting
+                // data pertaining to past blocks
+                retain_height: tendermint::block::Height::from(0_u32),
+                // NB: current application hash
+                data: merkle_root.0.to_vec().into(),
+            },
+            take_snapshot,
+        )
+    }
+
+    /// Check if we have reached a block height at which we should take a
+    /// snapshot
+    fn check_snapshot_required(&self) -> TakeSnapshot {
+        let committed_height = self.state.in_mem().get_last_block_height();
+        let take_snapshot = match self.blocks_between_snapshots {
+            Some(b) => committed_height.0 % b == 0,
+            _ => false,
+        };
+        if take_snapshot {
+            self.state.db().path().into()
+        } else {
+            TakeSnapshot::No
         }
     }
 
@@ -1067,9 +1095,22 @@ where
                 }
             },
             TxType::Wrapper(wrapper) => {
+                // Get the gas scale first
+                let gas_scale = match get_gas_scale(&self.state) {
+                    Ok(scale) => scale,
+                    Err(_) => {
+                        response.code = ResultCode::InvalidTx.into();
+                        response.log = "The gas scale could not be found in \
+                                        the parameters storage"
+                            .to_string();
+                        return response;
+                    }
+                };
+
                 // Validate wrapper first
                 // Tx gas limit
-                let gas_limit = match Gas::try_from(wrapper.gas_limit) {
+                let gas_limit = match wrapper.gas_limit.as_scaled_gas(gas_scale)
+                {
                     Ok(value) => value,
                     Err(_) => {
                         response.code = ResultCode::InvalidTx.into();
@@ -1091,6 +1132,7 @@ where
                 // Max block gas
                 let block_gas_limit: Gas = Gas::from_whole_units(
                     namada::parameters::get_max_block_gas(&self.state).unwrap(),
+                    gas_scale,
                 )
                 .expect("Gas limit from parameter must not overflow");
                 if gas_meter.tx_gas_limit > block_gas_limit {
@@ -1129,16 +1171,16 @@ where
                     return response;
                 }
 
-                // TODO(namada#2597): validate masp fee payment if normal fee
-                // payment fails Validate wrapper fees
+                // Validate wrapper fees
                 if let Err(e) = mempool_fee_check(
-                    &wrapper,
                     &mut ShellParams::new(
                         &RefCell::new(gas_meter),
                         &mut self.state.with_temp_write_log(),
                         &mut self.vp_wasm_cache.clone(),
                         &mut self.tx_wasm_cache.clone(),
                     ),
+                    &tx,
+                    &wrapper,
                 ) {
                     response.code = ResultCode::FeeError.into();
                     response.log = format!("{INVALID_MSG}: {e}");
@@ -1281,8 +1323,9 @@ where
 
 // Perform the fee check in mempool
 fn mempool_fee_check<D, H, CA>(
-    wrapper: &WrapperTx,
     shell_params: &mut ShellParams<'_, TempWlState<'_, D, H>, D, H, CA>,
+    tx: &Tx,
+    wrapper: &WrapperTx,
 ) -> Result<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -1300,7 +1343,9 @@ where
     ))))?;
 
     fee_data_check(wrapper, minimum_gas_price, shell_params)?;
-    protocol::check_fees(shell_params.state, wrapper).map_err(Error::TxApply)
+    protocol::check_fees(shell_params, tx, wrapper)
+        .map_err(Error::TxApply)
+        .map(|_| ())
 }
 
 /// Check the validity of the fee data
