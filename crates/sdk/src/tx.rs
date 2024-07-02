@@ -2603,7 +2603,7 @@ pub async fn build_ibc_transfer(
             let masp_tx_hash =
                 tx.add_masp_tx_section(shielded_transfer.masp_tx.clone()).1;
             transfer.shielded_section_hash = Some(masp_tx_hash);
-            transfer = transfer
+            /*transfer = transfer
                 .transfer(
                     // The token will be escrowed to IBC address
                     source.clone(),
@@ -2613,7 +2613,7 @@ pub async fn build_ibc_transfer(
                 )
                 .ok_or(Error::Other(
                     "Combined transfer overflows".to_string(),
-                ))?;
+                ))?;*/
             tx.add_masp_builder(MaspBuilder {
                 asset_types,
                 metadata: shielded_transfer.metadata,
@@ -3734,9 +3734,7 @@ pub async fn gen_ibc_shielding_transfer<N: Namada>(
     if let Some(shielded_transfer) = shielded_transfer {
         let masp_tx_hash =
             Section::MaspTx(shielded_transfer.masp_tx.clone()).get_hash();
-        let transfer = token::Transfer::masp(masp_tx_hash)
-            .transfer(source.clone(), MASP, token.clone(), validated_amount)
-            .ok_or(Error::Other("Combined transfer overflows".to_string()))?;
+        let transfer = token::Transfer::masp(masp_tx_hash);
         Ok(Some((transfer, shielded_transfer.masp_tx)))
     } else {
         Ok(None)
