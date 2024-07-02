@@ -29,6 +29,7 @@ use namada::tx::event::{Batch, Code};
 use namada::tx::new_tx_event;
 use namada::vote_ext::ethereum_events::MultiSignedEthEvent;
 use namada::vote_ext::ethereum_tx_data_variants;
+use parameters::get_gas_scale;
 
 use super::*;
 use crate::facade::tendermint::abci::types::VoteInfo;
@@ -357,13 +358,15 @@ where
         match extended_dispatch_result {
             Ok(extended_tx_result) => match tx_data.tx.header.tx_type {
                 TxType::Wrapper(_) => {
+                    self.state.write_log_mut().commit_batch();
+
                     // Return withouth emitting any events
                     return Some(WrapperCache {
                         tx: tx_data.tx.to_owned(),
                         tx_index: tx_data.tx_index,
                         gas_meter: tx_data.tx_gas_meter,
                         event: tx_logs.tx_event,
-                        tx_result: extended_tx_result.tx_result,
+                        extended_tx_result,
                     });
                 }
                 _ => self.handle_inner_tx_results(
@@ -385,13 +388,23 @@ where
                         .unwrap_or("<unknown>"),
                     msg,
                 );
+                let gas_scale = get_gas_scale(&self.state)
+                    .expect("Failed to get gas scale from parameters");
+                let scaled_gas = Gas::from(
+                    tx_data
+                        .tx_gas_meter
+                        .get_tx_consumed_gas()
+                        .get_whole_gas_units(gas_scale),
+                );
                 tx_logs
                     .tx_event
-                    .extend(GasUsed(tx_data.tx_gas_meter.get_tx_consumed_gas()))
+                    .extend(GasUsed(scaled_gas))
                     .extend(Info(msg.to_string()))
                     .extend(Code(ResultCode::InvalidTx));
-                // Make sure to clean the write logs for the next transaction
-                self.state.write_log_mut().drop_tx();
+                // Drop the batch write log which could contain invalid data.
+                // Important data that could be valid (e.g. a valid fee payment)
+                // must have already been moved to the bloc kwrite log by now
+                self.state.write_log_mut().drop_batch();
             }
             Err(dispatch_error) => {
                 // This branch represents an error that affects the entire
@@ -410,9 +423,18 @@ where
                     msg
                 );
 
+                let gas_scale = get_gas_scale(&self.state)
+                    .expect("Failed to get gas scale from parameters");
+                let scaled_gas = Gas::from(
+                    tx_data
+                        .tx_gas_meter
+                        .get_tx_consumed_gas()
+                        .get_whole_gas_units(gas_scale),
+                );
+
                 tx_logs
                     .tx_event
-                    .extend(GasUsed(tx_data.tx_gas_meter.get_tx_consumed_gas()))
+                    .extend(GasUsed(scaled_gas))
                     .extend(Info(msg.to_string()))
                     .extend(Code(ResultCode::WasmRuntimeError));
 
@@ -458,7 +480,7 @@ where
                 .commitments_len
                 .checked_sub(
                     u64::try_from(
-                        extended_tx_result.tx_result.batch_results.0.len(),
+                        extended_tx_result.tx_result.batch_results.len(),
                     )
                     .expect("Should be able to convert to u64"),
                 )
@@ -487,9 +509,18 @@ where
             self.commit_batch_hash(tx_data.replay_protection_hashes);
         }
 
+        let gas_scale = get_gas_scale(&self.state)
+            .expect("Failed to get gas scale from parameters");
+        let scaled_gas = Gas::from(
+            tx_data
+                .tx_gas_meter
+                .get_tx_consumed_gas()
+                .get_whole_gas_units(gas_scale),
+        );
+
         tx_logs
             .tx_event
-            .extend(GasUsed(extended_tx_result.tx_result.gas_used))
+            .extend(GasUsed(scaled_gas))
             .extend(Info("Check batch for result.".to_string()))
             .extend(Batch(&extended_tx_result.tx_result.to_result_string()));
     }
@@ -517,10 +548,8 @@ where
         let unrun_txs = tx_data
             .commitments_len
             .checked_sub(
-                u64::try_from(
-                    extended_tx_result.tx_result.batch_results.0.len(),
-                )
-                .expect("Should be able to convert to u64"),
+                u64::try_from(extended_tx_result.tx_result.batch_results.len())
+                    .expect("Should be able to convert to u64"),
             )
             .expect("Shouldn't underflow");
 
@@ -669,22 +698,25 @@ where
                 TxType::Wrapper(wrapper) => {
                     stats.increment_wrapper_txs();
 
-                    let gas_limit = match Gas::try_from(wrapper.gas_limit) {
-                        Ok(value) => value,
-                        Err(_) => {
-                            response.events.emit(
-                                new_tx_event(&tx, height.0)
-                                    .with(Code(ResultCode::InvalidTx))
-                                    .with(Info(
-                                        "The wrapper gas limit overflowed gas \
-                                         representation"
-                                            .to_owned(),
-                                    ))
-                                    .with(GasUsed(0.into())),
-                            );
-                            continue;
-                        }
-                    };
+                    let gas_scale = get_gas_scale(&self.state)
+                        .expect("Failed to get gas scale from parameters");
+                    let gas_limit =
+                        match wrapper.gas_limit.as_scaled_gas(gas_scale) {
+                            Ok(value) => value,
+                            Err(_) => {
+                                response.events.emit(
+                                    new_tx_event(&tx, height.0)
+                                        .with(Code(ResultCode::InvalidTx))
+                                        .with(Info(
+                                            "The wrapper gas limit overflowed \
+                                             gas representation"
+                                                .to_owned(),
+                                        ))
+                                        .with(GasUsed(0.into())),
+                                );
+                                continue;
+                            }
+                        };
                     let tx_gas_meter = TxGasMeter::new(gas_limit);
                     for cmt in tx.commitments() {
                         if let Some(code_sec) = tx
@@ -700,7 +732,10 @@ where
                         DispatchArgs::Wrapper {
                             wrapper,
                             tx_bytes: processed_tx.tx.as_ref(),
+                            tx_index: TxIndex::must_from_usize(tx_index),
                             block_proposer: native_block_proposer_address,
+                            vp_wasm_cache: &mut self.vp_wasm_cache,
+                            tx_wasm_cache: &mut self.tx_wasm_cache,
                         },
                         tx_gas_meter,
                     )
@@ -824,7 +859,7 @@ where
             tx_index,
             gas_meter: tx_gas_meter,
             event: tx_event,
-            tx_result: wrapper_tx_result,
+            extended_tx_result: wrapper_tx_result,
         } in successful_wrappers
         {
             let tx_hash = tx.header_hash();
@@ -841,6 +876,7 @@ where
             let dispatch_result = protocol::dispatch_tx(
                 &tx,
                 DispatchArgs::Raw {
+                    wrapper_hash: Some(&tx_hash),
                     tx_index: TxIndex::must_from_usize(tx_index),
                     wrapper_tx_result: Some(wrapper_tx_result),
                     vp_wasm_cache: &mut self.vp_wasm_cache,
@@ -891,7 +927,7 @@ struct WrapperCache {
     tx_index: usize,
     gas_meter: TxGasMeter,
     event: Event,
-    tx_result: namada::tx::data::TxResult<protocol::Error>,
+    extended_tx_result: namada::tx::data::ExtendedTxResult<protocol::Error>,
 }
 
 struct TxData<'tx> {
@@ -971,7 +1007,7 @@ impl<'finalize> TempTxLogs {
     ) -> ValidityFlags {
         let mut flags = ValidityFlags::default();
 
-        for (cmt_hash, batched_result) in &tx_result.batch_results.0 {
+        for (cmt_hash, batched_result) in tx_result.batch_results.iter() {
             match batched_result {
                 Ok(result) => {
                     if result.is_accepted() {
@@ -1186,7 +1222,7 @@ mod test_finalize_block {
         FinalizeBlock, ProcessedTx,
     };
 
-    const WRAPPER_GAS_LIMIT: u64 = 10_000;
+    const WRAPPER_GAS_LIMIT: u64 = 11_000;
     const STORAGE_VALUE: &str = "test_value";
 
     /// Make a wrapper tx and a processed tx from the wrapped tx that can be
@@ -3258,8 +3294,10 @@ mod test_finalize_block {
         let inner_tx_result = event[0].read_attribute::<Batch<'_>>().unwrap();
         let first_tx_result = inner_tx_result
             .batch_results
-            .0
-            .get(&wrapper.first_commitments().unwrap().get_hash())
+            .get_inner_tx_result(
+                Some(&wrapper.header_hash()),
+                either::Right(wrapper.first_commitments().unwrap()),
+            )
             .unwrap();
         assert!(first_tx_result.as_ref().is_ok_and(|res| !res.is_accepted()));
         assert_eq!(*event[1].kind(), APPLIED_TX);
@@ -3407,8 +3445,10 @@ mod test_finalize_block {
         let inner_tx_result = event[1].read_attribute::<Batch<'_>>().unwrap();
         let inner_result = inner_tx_result
             .batch_results
-            .0
-            .get(&unsigned_wrapper.first_commitments().unwrap().get_hash())
+            .get_inner_tx_result(
+                Some(&unsigned_wrapper.header_hash()),
+                either::Right(unsigned_wrapper.first_commitments().unwrap()),
+            )
             .unwrap();
         assert!(inner_result.as_ref().is_ok_and(|res| !res.is_accepted()));
         assert_eq!(*event[2].kind(), APPLIED_TX);
@@ -3417,12 +3457,11 @@ mod test_finalize_block {
         let inner_tx_result = event[2].read_attribute::<Batch<'_>>().unwrap();
         let inner_result = inner_tx_result
             .batch_results
-            .0
-            .get(
-                &wrong_commitment_wrapper
-                    .first_commitments()
-                    .unwrap()
-                    .get_hash(),
+            .get_inner_tx_result(
+                Some(&wrong_commitment_wrapper.header_hash()),
+                either::Right(
+                    wrong_commitment_wrapper.first_commitments().unwrap(),
+                ),
             )
             .unwrap();
         assert!(inner_result.is_err());
@@ -3432,8 +3471,10 @@ mod test_finalize_block {
         let inner_tx_result = event[3].read_attribute::<Batch<'_>>().unwrap();
         let inner_result = inner_tx_result
             .batch_results
-            .0
-            .get(&failing_wrapper.first_commitments().unwrap().get_hash())
+            .get_inner_tx_result(
+                Some(&failing_wrapper.header_hash()),
+                either::Right(failing_wrapper.first_commitments().unwrap()),
+            )
             .unwrap();
         assert!(inner_result.is_err());
 
@@ -3635,8 +3676,10 @@ mod test_finalize_block {
         let inner_tx_result = event.read_attribute::<Batch<'_>>().unwrap();
         let inner_result = inner_tx_result
             .batch_results
-            .0
-            .get(&wrapper.first_commitments().unwrap().get_hash())
+            .get_inner_tx_result(
+                Some(&wrapper.header_hash()),
+                either::Right(wrapper.first_commitments().unwrap()),
+            )
             .unwrap();
         assert!(inner_result.is_err());
 
@@ -3652,8 +3695,8 @@ mod test_finalize_block {
         )
     }
 
-    // Test that if the fee payer doesn't have enough funds for fee payment the
-    // ledger drains their balance
+    // Test that if the fee payer doesn't have enough funds for fee payment none
+    // of the inner txs of the batch gets executed
     #[test]
     fn test_fee_payment_if_insufficient_balance() {
         let (mut shell, _, _, _) = setup();
@@ -3661,7 +3704,7 @@ mod test_finalize_block {
         let native_token = shell.state.in_mem().native_token.clone();
 
         // Credit some tokens for fee payment
-        let initial_balance = token::Amount::native_whole(1);
+        let initial_balance: token::Amount = 1.into();
         namada::token::credit_tokens(
             &mut shell.state,
             &native_token,
@@ -3677,45 +3720,20 @@ mod test_finalize_block {
         .unwrap();
         assert_eq!(balance, initial_balance);
 
-        let mut wrapper =
-            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-                Fee {
-                    amount_per_gas_unit: DenominatedAmount::native(200.into()),
-                    token: native_token.clone(),
-                },
-                keypair.ref_to(),
-                WRAPPER_GAS_LIMIT.into(),
-            ))));
-        wrapper.header.chain_id = shell.chain_id.clone();
-        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
-        wrapper.set_data(Data::new(
-            "Encrypted transaction data".as_bytes().to_owned(),
-        ));
-        wrapper.add_section(Section::Authorization(Authorization::new(
-            wrapper.sechashes(),
-            [(0, keypair.clone())].into_iter().collect(),
-            None,
-        )));
+        let (batch, processed_tx) =
+            mk_tx_batch(&shell, &keypair, false, false, false);
 
         // Check that the fees are higher than the initial balance of the fee
         // payer
         let fee_amount =
-            wrapper.header().wrapper().unwrap().get_tx_fee().unwrap();
+            batch.header().wrapper().unwrap().get_tx_fee().unwrap();
         let fee_amount = namada::token::denom_to_amount(
             fee_amount,
-            &wrapper.header().wrapper().unwrap().fee.token,
+            &batch.header().wrapper().unwrap().fee.token,
             &shell.state,
         )
         .unwrap();
         assert!(fee_amount > initial_balance);
-
-        let processed_tx = ProcessedTx {
-            tx: wrapper.to_bytes().into(),
-            result: TxResult {
-                code: ResultCode::Ok.into(),
-                info: "".into(),
-            },
-        };
 
         let event = &shell
             .finalize_block(FinalizeBlock {
@@ -3724,7 +3742,7 @@ mod test_finalize_block {
             })
             .expect("Test failed")[0];
 
-        // Check balance of fee payer is 0
+        // Check balance of fee payer is unchanged
         assert_eq!(*event.kind(), APPLIED_TX);
         let code = event.read_attribute::<CodeAttr>().expect("Test failed");
         assert_eq!(code, ResultCode::InvalidTx);
@@ -3735,7 +3753,16 @@ mod test_finalize_block {
         )
         .unwrap();
 
-        assert_eq!(balance, 0.into())
+        assert_eq!(balance, initial_balance);
+
+        // Check that none of the txs of the batch have been executed (batch
+        // attribute is missing)
+        assert!(event.read_attribute::<Batch<'_>>().is_err());
+
+        // Check storage modifications are missing
+        for key in ["random_key_1", "random_key_2", "random_key_3"] {
+            assert!(!shell.state.has_key(&key.parse().unwrap()).unwrap());
+        }
     }
 
     // Test that the fees collected from a block are withdrew from the wrapper
@@ -5467,7 +5494,7 @@ mod test_finalize_block {
         ));
         let keys_changed = BTreeSet::from([min_confirmations_key()]);
         let verifiers = BTreeSet::default();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = namada::ledger::native_vp::Ctx::new(
             shell.mode.get_validator_address().expect("Test failed"),
             shell.state.read_only(),
@@ -5554,12 +5581,15 @@ mod test_finalize_block {
         let code = event[0].read_attribute::<CodeAttr>().unwrap();
         assert_eq!(code, ResultCode::Ok);
         let inner_tx_result = event[0].read_attribute::<Batch<'_>>().unwrap();
-        let inner_results = inner_tx_result.batch_results.0;
+        let inner_results = inner_tx_result.batch_results;
 
         for cmt in batch.commitments() {
             assert!(
                 inner_results
-                    .get(&cmt.get_hash())
+                    .get_inner_tx_result(
+                        Some(&batch.header_hash()),
+                        either::Right(cmt),
+                    )
                     .unwrap()
                     .clone()
                     .is_ok_and(|res| res.is_accepted())
@@ -5599,25 +5629,36 @@ mod test_finalize_block {
         let code = event[0].read_attribute::<CodeAttr>().unwrap();
         assert_eq!(code, ResultCode::WasmRuntimeError);
         let inner_tx_result = event[0].read_attribute::<Batch<'_>>().unwrap();
-        let inner_results = inner_tx_result.batch_results.0;
+        let inner_results = inner_tx_result.batch_results;
 
         assert!(
             inner_results
-                .get(&batch.commitments()[0].get_hash())
+                .get_inner_tx_result(
+                    Some(&batch.header_hash()),
+                    either::Right(&batch.commitments()[0]),
+                )
                 .unwrap()
                 .clone()
                 .is_ok_and(|res| res.is_accepted())
         );
         assert!(
             inner_results
-                .get(&batch.commitments()[1].get_hash())
+                .get_inner_tx_result(
+                    Some(&batch.header_hash()),
+                    either::Right(&batch.commitments()[1]),
+                )
                 .unwrap()
                 .clone()
                 .is_err()
         );
         // Assert that the last tx didn't run
         assert!(
-            !inner_results.contains_key(&batch.commitments()[2].get_hash())
+            inner_results
+                .get_inner_tx_result(
+                    Some(&batch.header_hash()),
+                    either::Right(&batch.commitments()[2]),
+                )
+                .is_none()
         );
 
         // Check storage modifications are missing
@@ -5647,25 +5688,34 @@ mod test_finalize_block {
         let code = event[0].read_attribute::<CodeAttr>().unwrap();
         assert_eq!(code, ResultCode::Ok);
         let inner_tx_result = event[0].read_attribute::<Batch<'_>>().unwrap();
-        let inner_results = inner_tx_result.batch_results.0;
+        let inner_results = inner_tx_result.batch_results;
 
         assert!(
             inner_results
-                .get(&batch.commitments()[0].get_hash())
+                .get_inner_tx_result(
+                    Some(&batch.header_hash()),
+                    either::Right(&batch.commitments()[0]),
+                )
                 .unwrap()
                 .clone()
                 .is_ok_and(|res| res.is_accepted())
         );
         assert!(
             inner_results
-                .get(&batch.commitments()[1].get_hash())
+                .get_inner_tx_result(
+                    Some(&batch.header_hash()),
+                    either::Right(&batch.commitments()[1])
+                )
                 .unwrap()
                 .clone()
                 .is_err()
         );
         assert!(
             inner_results
-                .get(&batch.commitments()[2].get_hash())
+                .get_inner_tx_result(
+                    Some(&batch.header_hash()),
+                    either::Right(&batch.commitments()[2])
+                )
                 .unwrap()
                 .clone()
                 .is_ok_and(|res| res.is_accepted())
@@ -5715,25 +5765,36 @@ mod test_finalize_block {
         let code = event[0].read_attribute::<CodeAttr>().unwrap();
         assert_eq!(code, ResultCode::WasmRuntimeError);
         let inner_tx_result = event[0].read_attribute::<Batch<'_>>().unwrap();
-        let inner_results = inner_tx_result.batch_results.0;
+        let inner_results = inner_tx_result.batch_results;
 
         assert!(
             inner_results
-                .get(&batch.commitments()[0].get_hash())
+                .get_inner_tx_result(
+                    Some(&batch.header_hash()),
+                    either::Right(&batch.commitments()[0]),
+                )
                 .unwrap()
                 .clone()
                 .is_ok_and(|res| res.is_accepted())
         );
         assert!(
             inner_results
-                .get(&batch.commitments()[1].get_hash())
+                .get_inner_tx_result(
+                    Some(&batch.header_hash()),
+                    either::Right(&batch.commitments()[1])
+                )
                 .unwrap()
                 .clone()
                 .is_err()
         );
         // Assert that the last tx didn't run
         assert!(
-            !inner_results.contains_key(&batch.commitments()[2].get_hash())
+            inner_results
+                .get_inner_tx_result(
+                    Some(&batch.header_hash()),
+                    either::Right(&batch.commitments()[2])
+                )
+                .is_none()
         );
 
         // Check storage modifications are missing
@@ -5762,25 +5823,36 @@ mod test_finalize_block {
         let code = event[0].read_attribute::<CodeAttr>().unwrap();
         assert_eq!(code, ResultCode::WasmRuntimeError);
         let inner_tx_result = event[0].read_attribute::<Batch<'_>>().unwrap();
-        let inner_results = inner_tx_result.batch_results.0;
+        let inner_results = inner_tx_result.batch_results;
 
         assert!(
             inner_results
-                .get(&batch.commitments()[0].get_hash())
+                .get_inner_tx_result(
+                    Some(&batch.header_hash()),
+                    either::Right(&batch.commitments()[0]),
+                )
                 .unwrap()
                 .clone()
                 .is_ok_and(|res| res.is_accepted())
         );
         assert!(
             inner_results
-                .get(&batch.commitments()[1].get_hash())
+                .get_inner_tx_result(
+                    Some(&batch.header_hash()),
+                    either::Right(&batch.commitments()[1])
+                )
                 .unwrap()
                 .clone()
                 .is_err()
         );
         // Assert that the last tx didn't run
         assert!(
-            !inner_results.contains_key(&batch.commitments()[2].get_hash())
+            inner_results
+                .get_inner_tx_result(
+                    Some(&batch.header_hash()),
+                    either::Right(&batch.commitments()[2])
+                )
+                .is_none()
         );
 
         // Check storage modifications
@@ -5795,5 +5867,148 @@ mod test_finalize_block {
         for key in ["random_key_2", "random_key_3"] {
             assert!(!shell.state.has_key(&key.parse().unwrap()).unwrap());
         }
+    }
+
+    #[test]
+    fn test_multiple_events_from_batch_tx_all_valid() {
+        let (mut shell, _, _, _) = setup();
+
+        let sk = wallet::defaults::bertha_keypair();
+
+        let batch_tx = {
+            let mut batch =
+                Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                    Fee {
+                        amount_per_gas_unit: DenominatedAmount::native(
+                            1.into(),
+                        ),
+                        token: shell.state.in_mem().native_token.clone(),
+                    },
+                    sk.ref_to(),
+                    WRAPPER_GAS_LIMIT.into(),
+                ))));
+            batch.header.chain_id = shell.chain_id.clone();
+            batch.header.atomic = false;
+
+            // append first inner tx to batch
+            batch.set_code(Code::new(TestWasms::TxNoOp.read_bytes(), None));
+            batch.set_data(Data::new("bing".as_bytes().to_owned()));
+
+            // append second inner tx to batch
+            batch.push_default_inner_tx();
+
+            batch.set_code(Code::new(TestWasms::TxNoOp.read_bytes(), None));
+            batch.set_data(Data::new("bong".as_bytes().to_owned()));
+
+            // sign the batch of txs
+            batch.sign_raw(
+                vec![sk.clone()],
+                vec![sk.ref_to()].into_iter().collect(),
+                None,
+            );
+            batch.sign_wrapper(sk);
+
+            batch
+        };
+
+        let processed_txs = vec![ProcessedTx {
+            tx: batch_tx.to_bytes().into(),
+            result: TxResult {
+                code: ResultCode::Ok.into(),
+                info: "".into(),
+            },
+        }];
+
+        let mut events = shell
+            .finalize_block(FinalizeBlock {
+                txs: processed_txs,
+                ..Default::default()
+            })
+            .expect("Test failed");
+
+        // one top level event
+        assert_eq!(events.len(), 1);
+        let event = events.remove(0);
+
+        // multiple tx results (2)
+        let tx_results = event.read_attribute::<Batch<'_>>().unwrap();
+        assert_eq!(tx_results.batch_results.len(), 2);
+
+        // all txs should have succeeded
+        assert!(tx_results.batch_results.are_results_ok());
+    }
+
+    #[test]
+    fn test_multiple_events_from_batch_tx_one_valid_other_invalid() {
+        let (mut shell, _, _, _) = setup();
+
+        let sk = wallet::defaults::bertha_keypair();
+
+        let batch_tx = {
+            let mut batch =
+                Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                    Fee {
+                        amount_per_gas_unit: DenominatedAmount::native(
+                            1.into(),
+                        ),
+                        token: shell.state.in_mem().native_token.clone(),
+                    },
+                    sk.ref_to(),
+                    WRAPPER_GAS_LIMIT.into(),
+                ))));
+            batch.header.chain_id = shell.chain_id.clone();
+            batch.header.atomic = false;
+
+            // append first inner tx to batch (this one is valid)
+            batch.set_code(Code::new(TestWasms::TxNoOp.read_bytes(), None));
+            batch.set_data(Data::new("bing".as_bytes().to_owned()));
+
+            // append second inner tx to batch (this one is invalid, because
+            // we pass the wrong data)
+            batch.push_default_inner_tx();
+
+            batch.set_code(Code::new(
+                TestWasms::TxWriteStorageKey.read_bytes(),
+                None,
+            ));
+            batch.set_data(Data::new("bong".as_bytes().to_owned()));
+
+            // sign the batch of txs
+            batch.sign_raw(
+                vec![sk.clone()],
+                vec![sk.ref_to()].into_iter().collect(),
+                None,
+            );
+            batch.sign_wrapper(sk);
+
+            batch
+        };
+
+        let processed_txs = vec![ProcessedTx {
+            tx: batch_tx.to_bytes().into(),
+            result: TxResult {
+                code: ResultCode::Ok.into(),
+                info: "".into(),
+            },
+        }];
+
+        let mut events = shell
+            .finalize_block(FinalizeBlock {
+                txs: processed_txs,
+                ..Default::default()
+            })
+            .expect("Test failed");
+
+        // one top level event
+        assert_eq!(events.len(), 1);
+        let event = events.remove(0);
+
+        // multiple tx results (2)
+        let tx_results = event.read_attribute::<Batch<'_>>().unwrap();
+        assert_eq!(tx_results.batch_results.len(), 2);
+
+        // check one succeeded and the other failed
+        assert!(tx_results.batch_results.are_any_ok());
+        assert!(tx_results.batch_results.are_any_err());
     }
 }

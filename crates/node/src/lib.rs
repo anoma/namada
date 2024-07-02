@@ -138,7 +138,7 @@ impl Shell {
             }
             Request::Commit => {
                 tracing::debug!("Request Commit");
-                Ok(Response::Commit(self.commit()))
+                Ok(self.commit())
             }
             Request::Flush => Ok(Response::Flush),
             Request::Echo(msg) => Ok(Response::Echo(response::Echo {
@@ -153,14 +153,14 @@ impl Shell {
                 Ok(Response::CheckTx(self.mempool_validate(&tx.tx, r#type)))
             }
             Request::ListSnapshots => {
-                Ok(Response::ListSnapshots(Default::default()))
+                self.list_snapshots().map(Response::ListSnapshots)
             }
             Request::OfferSnapshot(_) => {
                 Ok(Response::OfferSnapshot(Default::default()))
             }
-            Request::LoadSnapshotChunk(_) => {
-                Ok(Response::LoadSnapshotChunk(Default::default()))
-            }
+            Request::LoadSnapshotChunk(req) => self
+                .load_snapshot_chunk(req)
+                .map(Response::LoadSnapshotChunk),
             Request::ApplySnapshotChunk(_) => {
                 Ok(Response::ApplySnapshotChunk(Default::default()))
             }
@@ -371,7 +371,7 @@ async fn run_aux(
         };
 
     tracing::info!("Loading MASP verifying keys.");
-    let _ = namada_sdk::masp::preload_verifying_keys();
+    let _ = namada::token::validation::preload_verifying_keys();
     tracing::info!("Done loading MASP verifying keys.");
 
     // Start ABCI server and broadcaster (the latter only if we are a validator

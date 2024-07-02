@@ -49,6 +49,7 @@ config.workspace = true
 data-encoding.workspace = true
 derivative.workspace = true
 directories.workspace = true
+either.workspace = true
 eyre.workspace = true
 fd-lock.workspace = true
 flate2.workspace = true

@@ -60,6 +60,47 @@ fn handle_command(cmd: cli::cmds::Namada, raw_sub_cmd: String) -> Result<()> {
         cli::cmds::Namada::Relayer(_) | cli::cmds::Namada::EthBridgePool(_) => {
             handle_subcommand("namadar", sub_args)
         }
+        cli::cmds::Namada::Complete(cli::cmds::Complete(
+            cli::args::Complete { shell },
+        )) => {
+            use std::io::stdout;
+
+            use clap_complete::{generate, shells};
+            use clap_complete_nushell::Nushell;
+
+            for (mut app, name) in [
+                (cli::namada_app(), "namada"),
+                (cli::namada_node_app(), "namadan"),
+                (cli::namada_client_app(), "namadac"),
+                (cli::namada_wallet_app(), "namadaw"),
+                (cli::namada_relayer_app(), "namadar"),
+            ] {
+                match shell {
+                    cli::args::Shell::Bash => {
+                        generate(shells::Bash, &mut app, name, &mut stdout())
+                    }
+                    cli::args::Shell::Elvish => {
+                        generate(shells::Elvish, &mut app, name, &mut stdout())
+                    }
+                    cli::args::Shell::Fish => {
+                        generate(shells::Fish, &mut app, name, &mut stdout())
+                    }
+                    cli::args::Shell::PowerShell => generate(
+                        shells::PowerShell,
+                        &mut app,
+                        name,
+                        &mut stdout(),
+                    ),
+                    cli::args::Shell::Zsh => {
+                        generate(shells::Zsh, &mut app, name, &mut stdout())
+                    }
+                    cli::args::Shell::Nushell => {
+                        generate(Nushell, &mut app, name, &mut stdout())
+                    }
+                };
+            }
+            Ok(())
+        }
     }
 }
 

@@ -75,10 +75,7 @@ use namada::ledger::queries::{
 };
 use namada::masp::MaspTxRefs;
 use namada::state::StorageRead;
-use namada::token::{
-    Amount, DenominatedAmount, ShieldedTransfer, ShieldingTransfer,
-    UnshieldingTransfer,
-};
+use namada::token::{Amount, DenominatedAmount, Transfer};
 use namada::tx::data::pos::Bond;
 use namada::tx::data::{
     BatchResults, BatchedTxResult, Fee, TxResult, VpsResult,
@@ -94,7 +91,7 @@ use namada_apps_lib::cli::context::FromContext;
 use namada_apps_lib::cli::Context;
 use namada_apps_lib::wallet::{defaults, CliWalletUtils};
 use namada_sdk::masp::{
-    self, ContextSyncStatus, ShieldedContext, ShieldedUtils,
+    self, ContextSyncStatus, MaspTransferData, ShieldedContext, ShieldedUtils,
 };
 pub use namada_sdk::tx::{
     TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
@@ -104,11 +101,10 @@ pub use namada_sdk::tx::{
     TX_CLAIM_REWARDS_WASM, TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM,
     TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL as TX_INIT_PROPOSAL_WASM,
     TX_REACTIVATE_VALIDATOR_WASM, TX_REDELEGATE_WASM, TX_RESIGN_STEWARD,
-    TX_REVEAL_PK as TX_REVEAL_PK_WASM, TX_SHIELDED_TRANSFER_WASM,
-    TX_SHIELDING_TRANSFER_WASM, TX_TRANSPARENT_TRANSFER_WASM, TX_UNBOND_WASM,
-    TX_UNJAIL_VALIDATOR_WASM, TX_UNSHIELDING_TRANSFER_WASM,
-    TX_UPDATE_ACCOUNT_WASM, TX_UPDATE_STEWARD_COMMISSION,
-    TX_VOTE_PROPOSAL as TX_VOTE_PROPOSAL_WASM, TX_WITHDRAW_WASM, VP_USER_WASM,
+    TX_REVEAL_PK as TX_REVEAL_PK_WASM, TX_TRANSFER_WASM, TX_UNBOND_WASM,
+    TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
+    TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL as TX_VOTE_PROPOSAL_WASM,
+    TX_WITHDRAW_WASM, VP_USER_WASM,
 };
 use namada_sdk::wallet::Wallet;
 use namada_sdk::{Namada, NamadaImpl};
@@ -255,7 +251,7 @@ impl Default for BenchShell {
         );
 
         bench_shell.execute_tx(&signed_tx.to_ref());
-        bench_shell.state.commit_tx();
+        bench_shell.state.commit_tx_batch();
 
         // Initialize governance proposal
         let content_section = Section::ExtraData(Code::new(
@@ -280,7 +276,7 @@ impl Default for BenchShell {
         );
 
         bench_shell.execute_tx(&signed_tx.to_ref());
-        bench_shell.state.commit_tx();
+        bench_shell.state.commit_tx_batch();
         bench_shell.commit_block();
 
         // Advance epoch for pos benches
@@ -626,7 +622,7 @@ impl BenchShell {
         );
         self.last_block_masp_txs
             .push((masp_tx, self.state.write_log().get_keys()));
-        self.state.commit_tx();
+        self.state.commit_tx_batch();
     }
 }
 
@@ -831,11 +827,20 @@ impl Client for BenchShell {
         height: H,
     ) -> Result<tendermint_rpc::endpoint::block::Response, tendermint_rpc::Error>
     where
-        H: Into<tendermint::block::Height> + Send,
+        H: TryInto<tendermint::block::Height> + Send,
     {
         // NOTE: atm this is only needed to query blocks at a specific height
         // for masp transactions
-        let height = BlockHeight(height.into().into());
+        let height = BlockHeight(
+            height
+                .try_into()
+                .map_err(|_| {
+                    tendermint_rpc::Error::parse(
+                        "Failed to cast block height".to_string(),
+                    )
+                })?
+                .into(),
+        );
 
         // Given the way we setup and run benchmarks, the masp transactions can
         // only present in the last block, we can mock the previous
@@ -895,11 +900,15 @@ impl Client for BenchShell {
         tendermint_rpc::Error,
     >
     where
-        H: Into<namada::tendermint::block::Height> + Send,
+        H: TryInto<namada::tendermint::block::Height> + Send,
     {
         // NOTE: atm this is only needed to query block results at a specific
         // height for masp transactions
-        let height = height.into();
+        let height = height.try_into().map_err(|_| {
+            tendermint_rpc::Error::parse(
+                "Failed to cast block height".to_string(),
+            )
+        })?;
 
         // We can expect all the masp tranfers to have happened only in the last
         // block
@@ -913,19 +922,22 @@ impl Client for BenchShell {
                     .map(|(idx, (tx, changed_keys))| {
                         let tx_result = TxResult::<String> {
                             gas_used: 0.into(),
-                            batch_results: BatchResults(
-                                [(
-                                    tx.first_commitments().unwrap().get_hash(),
+                            batch_results: {
+                                let mut batch_results = BatchResults::new();
+                                batch_results.insert_inner_tx_result(
+                                    tx.wrapper_hash().as_ref(),
+                                    either::Right(
+                                        tx.first_commitments().unwrap(),
+                                    ),
                                     Ok(BatchedTxResult {
                                         changed_keys: changed_keys.to_owned(),
                                         vps_result: VpsResult::default(),
                                         initialized_accounts: vec![],
                                         events: BTreeSet::default(),
                                     }),
-                                )]
-                                .into_iter()
-                                .collect(),
-                            ),
+                                );
+                                batch_results
+                            },
                         };
                         let event: Event = new_tx_event(tx, height.value())
                             .with(Batch(&tx_result))
@@ -1080,14 +1092,18 @@ impl BenchShieldedCtx {
             StdIo,
             native_token,
         );
+        let masp_transfer_data = MaspTransferData {
+            source: source.clone(),
+            target: target.clone(),
+            token: address::testing::nam(),
+            amount: denominated_amount,
+        };
         let shielded = async_runtime
             .block_on(
                 ShieldedContext::<BenchShieldedUtils>::gen_shielded_transfer(
                     &namada,
-                    &source,
-                    &target,
-                    &address::testing::nam(),
-                    denominated_amount,
+                    vec![masp_transfer_data],
+                    None,
                     true,
                 ),
             )
@@ -1113,36 +1129,38 @@ impl BenchShieldedCtx {
             && target.effective_address() == MASP
         {
             namada.client().generate_tx(
-                TX_SHIELDED_TRANSFER_WASM,
-                ShieldedTransfer {
-                    section_hash: shielded_section_hash,
-                },
+                TX_TRANSFER_WASM,
+                Transfer::masp(shielded_section_hash),
                 Some(shielded),
                 None,
                 vec![&defaults::albert_keypair()],
             )
         } else if target.effective_address() == MASP {
             namada.client().generate_tx(
-                TX_SHIELDING_TRANSFER_WASM,
-                ShieldingTransfer {
-                    source: source.effective_address(),
-                    token: address::testing::nam(),
-                    amount: DenominatedAmount::native(amount),
-                    shielded_section_hash,
-                },
+                TX_TRANSFER_WASM,
+                Transfer::masp(shielded_section_hash)
+                    .transfer(
+                        source.effective_address(),
+                        MASP,
+                        address::testing::nam(),
+                        DenominatedAmount::native(amount),
+                    )
+                    .unwrap(),
                 Some(shielded),
                 None,
                 vec![&defaults::albert_keypair()],
             )
         } else {
             namada.client().generate_tx(
-                TX_UNSHIELDING_TRANSFER_WASM,
-                UnshieldingTransfer {
-                    target: target.effective_address(),
-                    token: address::testing::nam(),
-                    amount: DenominatedAmount::native(amount),
-                    shielded_section_hash,
-                },
+                TX_TRANSFER_WASM,
+                Transfer::masp(shielded_section_hash)
+                    .transfer(
+                        MASP,
+                        target.effective_address(),
+                        address::testing::nam(),
+                        DenominatedAmount::native(amount),
+                    )
+                    .unwrap(),
                 Some(shielded),
                 None,
                 vec![&defaults::albert_keypair()],
@@ -1166,12 +1184,12 @@ impl BenchShieldedCtx {
         self,
         amount: Amount,
         source: TransferSource,
-        target: TransferTarget,
+        target: String,
     ) -> (Self, BatchedTx) {
         let (ctx, tx) = self.generate_masp_tx(
             amount,
             source.clone(),
-            TransferTarget::Address(Address::Internal(InternalAddress::Ibc)),
+            TransferTarget::Ibc(target.clone()),
         );
 
         let token = PrefixedCoin {
@@ -1199,20 +1217,34 @@ impl BenchShieldedCtx {
             packet_data: PacketData {
                 token,
                 sender: source.effective_address().to_string().into(),
-                receiver: target.effective_address().to_string().into(),
+                receiver: target.into(),
                 memo: "".parse().unwrap(),
             },
             timeout_height_on_b: timeout_height,
             timeout_timestamp_on_b: timeout_timestamp,
         };
 
-        let transfer = ShieldingTransfer::deserialize(
-            &mut tx.tx.data(&tx.cmt).unwrap().as_slice(),
-        )
-        .unwrap();
+        let vectorized_transfer =
+            Transfer::deserialize(&mut tx.tx.data(&tx.cmt).unwrap().as_slice())
+                .unwrap();
+        let sources =
+            vec![vectorized_transfer.sources.into_iter().next().unwrap()]
+                .into_iter()
+                .collect();
+        let targets =
+            vec![vectorized_transfer.targets.into_iter().next().unwrap()]
+                .into_iter()
+                .collect();
+        let transfer = Transfer {
+            sources,
+            targets,
+            shielded_section_hash: Some(
+                vectorized_transfer.shielded_section_hash.unwrap(),
+            ),
+        };
         let masp_tx = tx
             .tx
-            .get_section(&transfer.shielded_section_hash)
+            .get_section(&transfer.shielded_section_hash.unwrap())
             .unwrap()
             .masp_tx()
             .unwrap();

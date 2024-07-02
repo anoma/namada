@@ -1,3 +1,5 @@
+use std::collections::{BTreeMap, BTreeSet};
+
 use namada_core::address::{Address, InternalAddress};
 use namada_core::hints;
 use namada_core::token::{self, Amount, AmountError, DenominatedAmount};
@@ -256,6 +258,64 @@ where
             "{src} has insufficient balance"
         ))),
     }
+}
+
+/// Transfer tokens from `sources` to `dests`. Returns an `Err` if any source
+/// has insufficient balance or if the transfer to any destination would
+/// overflow (This can only happen if the total supply doesn't fit in
+/// `token::Amount`).
+pub fn multi_transfer<S>(
+    storage: &mut S,
+    sources: &BTreeMap<(Address, Address), Amount>,
+    dests: &BTreeMap<(Address, Address), Amount>,
+) -> storage::Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    // Collect all the accounts whose balance has changed
+    let mut accounts = BTreeSet::new();
+    accounts.extend(sources.keys().cloned());
+    accounts.extend(dests.keys().cloned());
+    let unexpected_err = || {
+        storage::Error::new_const(
+            "Computing difference between amounts should never overflow",
+        )
+    };
+    // Apply the balance change for each account in turn
+    for ref account @ (ref owner, ref token) in accounts {
+        let overflow_err = || {
+            storage::Error::new_alloc(format!(
+                "The transfer would overflow balance of {owner}"
+            ))
+        };
+        let underflow_err = || {
+            storage::Error::new_alloc(format!(
+                "{owner} has insufficient balance"
+            ))
+        };
+        // Load account balances and deltas
+        let owner_key = balance_key(token, owner);
+        let owner_balance = read_balance(storage, token, owner)?;
+        let src_amt = sources.get(account).cloned().unwrap_or_default();
+        let dest_amt = dests.get(account).cloned().unwrap_or_default();
+        // Compute owner_balance + dest_amt - src_amt
+        let new_owner_balance = if src_amt <= dest_amt {
+            owner_balance
+                .checked_add(
+                    dest_amt.checked_sub(src_amt).ok_or_else(unexpected_err)?,
+                )
+                .ok_or_else(overflow_err)?
+        } else {
+            owner_balance
+                .checked_sub(
+                    src_amt.checked_sub(dest_amt).ok_or_else(unexpected_err)?,
+                )
+                .ok_or_else(underflow_err)?
+        };
+        // Wite the new balance
+        storage.write(&owner_key, new_owner_balance)?;
+    }
+    Ok(())
 }
 
 /// Mint `amount` of `token` as `minter` to `dest`.
