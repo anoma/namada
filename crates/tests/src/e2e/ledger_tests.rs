@@ -1404,7 +1404,6 @@ fn test_epoch_sleep() -> Result<()> {
 /// This can be submitted with "init-proposal" command.
 pub fn prepare_proposal_data(
     test_dir: impl AsRef<std::path::Path>,
-    id: u64,
     source: Address,
     data: impl serde::Serialize,
     start_epoch: u64,
@@ -1945,7 +1944,6 @@ fn proposal_change_shielded_reward() -> Result<()> {
     let albert = find_address(&test, ALBERT)?;
     let valid_proposal_json_path = prepare_proposal_data(
         test.test_dir.path(),
-        0,
         albert,
         TestWasms::TxProposalMaspRewards.read_bytes(),
         12,

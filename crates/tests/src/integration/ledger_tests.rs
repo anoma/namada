@@ -704,7 +704,6 @@ fn proposal_submission() -> Result<()> {
     let albert = defaults::albert_address();
     let valid_proposal_json_path = prepare_proposal_data(
         node.test_dir.path(),
-        0,
         albert.clone(),
         TestWasms::TxProposalCode.read_bytes(),
         12,
@@ -772,7 +771,6 @@ fn proposal_submission() -> Result<()> {
     // proposal is invalid due to voting_end_epoch - voting_start_epoch < 3
     let invalid_proposal_json = prepare_proposal_data(
         node.test_dir.path(),
-        1,
         albert,
         TestWasms::TxProposalCode.read_bytes(),
         1,
@@ -1041,13 +1039,8 @@ fn pgf_governance_proposal() -> Result<()> {
         remove: vec![],
     };
 
-    let valid_proposal_json_path = prepare_proposal_data(
-        node.test_dir.path(),
-        0,
-        albert,
-        pgf_stewards,
-        12,
-    );
+    let valid_proposal_json_path =
+        prepare_proposal_data(node.test_dir.path(), albert, pgf_stewards, 12);
     let submit_proposal_args = vec![
         "init-proposal",
         "--pgf-stewards",
@@ -1222,7 +1215,7 @@ fn pgf_governance_proposal() -> Result<()> {
         })],
     };
     let valid_proposal_json_path =
-        prepare_proposal_data(node.test_dir.path(), 1, albert, pgf_funding, 36);
+        prepare_proposal_data(node.test_dir.path(), albert, pgf_funding, 36);
 
     let submit_proposal_args = vec![
         "init-proposal",
@@ -1365,7 +1358,6 @@ fn implicit_account_reveal_pk() -> Result<()> {
             let author = find_address(&node, source).unwrap();
             let valid_proposal_json_path = prepare_proposal_data(
                 node.test_dir.path(),
-                0,
                 author,
                 TestWasms::TxProposalCode.read_bytes(),
                 12,
