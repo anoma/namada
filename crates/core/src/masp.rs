@@ -13,11 +13,10 @@ use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
 use ripemd::Digest as RipemdDigest;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
 
 use crate::address::{Address, DecodeError, HASH_HEX_LEN, IBC, MASP};
-use crate::hash::Hash;
 use crate::impl_display_and_from_str_via_format;
 use crate::storage::Epoch;
 use crate::string_encoding::{
@@ -25,6 +24,62 @@ use crate::string_encoding::{
     MASP_PAYMENT_ADDRESS_HRP,
 };
 use crate::token::{Denomination, MaspDigitPos};
+
+/// Serialize the given TxId
+pub fn serialize_txid<S>(
+    txid: &masp_primitives::transaction::TxId,
+    s: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    s.serialize_bytes(txid.as_ref())
+}
+
+/// Deserialize the given TxId
+pub fn deserialize_txid<'de, D>(
+    deserializer: D,
+) -> Result<masp_primitives::transaction::TxId, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(masp_primitives::transaction::TxId::from_bytes(
+        Deserialize::deserialize(deserializer)?,
+    ))
+}
+
+/// Wrapper for masp_primitive's TxId
+#[derive(
+    Serialize,
+    Deserialize,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    Debug,
+    Eq,
+    PartialEq,
+    Copy,
+    Ord,
+    PartialOrd,
+    Hash,
+)]
+pub struct MaspTxId(
+    #[serde(
+        serialize_with = "serialize_txid",
+        deserialize_with = "deserialize_txid"
+    )]
+    masp_primitives::transaction::TxId,
+);
+
+impl From<masp_primitives::transaction::TxId> for MaspTxId {
+    fn from(txid: masp_primitives::transaction::TxId) -> Self {
+        Self(txid)
+    }
+}
+
+/// Wrapper for masp_primitive's TxId
+pub type TxId = MaspTxId;
 
 /// Wrapper type around `Epoch` for type safe operations involving the masp
 /// epoch
@@ -699,7 +754,7 @@ impl FromStr for MaspValue {
 
 /// The masp transactions' references of a given batch
 #[derive(Default, Clone, Serialize, Deserialize)]
-pub struct MaspTxRefs(pub Vec<Hash>);
+pub struct MaspTxRefs(pub Vec<TxId>);
 
 impl Display for MaspTxRefs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
