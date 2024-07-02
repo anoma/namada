@@ -16,10 +16,11 @@ use namada_core::address::{Address, InternalAddress, HASH_LEN, SHA_HASH_LEN};
 use namada_core::ibc::IbcTokenHash;
 use namada_core::storage::{DbKeySeg, Key, KeySeg};
 use namada_core::token::Amount;
+use namada_events::extend::UserAccount;
 use namada_events::{EmitEvents, EventLevel};
 use namada_state::{StorageRead, StorageResult, StorageWrite};
 use namada_token as token;
-use namada_token::event::{TokenEvent, TokenOperation, UserAccount};
+use namada_token::event::{TokenEvent, TokenOperation};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
@@ -75,8 +76,8 @@ where
     state.emit(TokenEvent {
         descriptor: TOKEN_EVENT_DESCRIPTOR.into(),
         level: EventLevel::Tx,
-        token: token.clone(),
         operation: TokenOperation::Mint {
+            token: token.clone(),
             amount: amount.into(),
             post_balance: token::read_balance(state, token, target)?.into(),
             target_account: UserAccount::Internal(target.clone()),
@@ -101,8 +102,8 @@ where
     state.emit(TokenEvent {
         descriptor: TOKEN_EVENT_DESCRIPTOR.into(),
         level: EventLevel::Tx,
-        token: token.clone(),
         operation: TokenOperation::Burn {
+            token: token.clone(),
             amount: amount.into(),
             post_balance: token::read_balance(state, token, target)?.into(),
             target_account: UserAccount::Internal(target.clone()),

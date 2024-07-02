@@ -16,7 +16,7 @@ use namada::governance::{
     storage as gov_api, ProposalVote, ADDRESS as gov_address,
 };
 use namada::ibc;
-use namada::ledger::events::extend::{ComposeEvent, Height};
+use namada::ledger::events::extend::{ComposeEvent, Height, UserAccount};
 use namada::proof_of_stake::bond_amount;
 use namada::proof_of_stake::parameters::PosParams;
 use namada::proof_of_stake::storage::{
@@ -25,7 +25,7 @@ use namada::proof_of_stake::storage::{
 use namada::proof_of_stake::types::{BondId, ValidatorState};
 use namada::sdk::events::{EmitEvents, EventLevel};
 use namada::state::StorageWrite;
-use namada::token::event::{TokenEvent, TokenOperation, UserAccount};
+use namada::token::event::{TokenEvent, TokenOperation};
 use namada::token::read_balance;
 use namada::tx::{Code, Data};
 use namada_sdk::proof_of_stake::storage::read_validator_stake;
@@ -261,14 +261,14 @@ where
             events.emit(TokenEvent {
                 descriptor: DESCRIPTOR.into(),
                 level: EventLevel::Block,
-                token: native_token.clone(),
-                operation: TokenOperation::Transfer {
-                    amount: funds.into(),
-                    source: UserAccount::Internal(gov_address),
-                    target: UserAccount::Internal(address),
-                    source_post_balance: final_gov_balance,
-                    target_post_balance: Some(final_target_balance),
-                },
+                operation: TokenOperation::transfer(
+                    UserAccount::Internal(gov_address),
+                    UserAccount::Internal(address),
+                    native_token.clone(),
+                    funds.into(),
+                    final_gov_balance,
+                    Some(final_target_balance),
+                ),
             });
         } else {
             token::burn_tokens(
@@ -286,8 +286,8 @@ where
             events.emit(TokenEvent {
                 descriptor: DESCRIPTOR.into(),
                 level: EventLevel::Block,
-                token: native_token.clone(),
                 operation: TokenOperation::Burn {
+                    token: native_token.clone(),
                     amount: funds.into(),
                     target_account: UserAccount::Internal(gov_address),
                     post_balance: final_gov_balance,
@@ -532,22 +532,17 @@ where
                         TokenEvent {
                             descriptor: "pgf-payments".into(),
                             level: EventLevel::Block,
-                            token: token.clone(),
-                            operation: TokenOperation::Transfer {
-                                amount: target.amount.into(),
-                                source: UserAccount::Internal(ADDRESS),
-                                target: UserAccount::Internal(
-                                    target.target.clone(),
-                                ),
-                                source_post_balance: read_balance(
-                                    state, token, &ADDRESS,
-                                )?
-                                .into(),
-                                target_post_balance: Some(
+                            operation: TokenOperation::transfer(
+                                UserAccount::Internal(ADDRESS),
+                                UserAccount::Internal(target.target.clone()),
+                                token.clone(),
+                                target.amount.into(),
+                                read_balance(state, token, &ADDRESS)?.into(),
+                                Some(
                                     read_balance(state, token, &target.target)?
                                         .into(),
                                 ),
-                            },
+                            ),
                         },
                     ),
                     PGFTarget::Ibc(target) => (
@@ -555,19 +550,14 @@ where
                         TokenEvent {
                             descriptor: "pgf-payments-over-ibc".into(),
                             level: EventLevel::Block,
-                            token: token.clone(),
-                            operation: TokenOperation::Transfer {
-                                amount: target.amount.into(),
-                                source: UserAccount::Internal(ADDRESS),
-                                target: UserAccount::External(
-                                    target.target.clone(),
-                                ),
-                                source_post_balance: read_balance(
-                                    state, token, &ADDRESS,
-                                )?
-                                .into(),
-                                target_post_balance: None,
-                            },
+                            operation: TokenOperation::transfer(
+                                UserAccount::Internal(ADDRESS),
+                                UserAccount::External(target.target.clone()),
+                                token.clone(),
+                                target.amount.into(),
+                                read_balance(state, token, &ADDRESS)?.into(),
+                                None,
+                            ),
                         },
                     ),
                 };
