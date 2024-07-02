@@ -18,19 +18,68 @@
 )]
 
 pub mod storage;
+pub mod vp;
 mod wasm_allowlist;
 use std::collections::BTreeMap;
+use std::marker::PhantomData;
 
 use namada_core::address::{Address, InternalAddress};
 use namada_core::chain::ProposalBytes;
-pub use namada_core::parameters::*;
-use namada_core::storage::Key;
 use namada_core::time::DurationSecs;
 use namada_core::token;
 use namada_storage::{ResultExt, StorageRead, StorageWrite};
+pub use namada_systems::parameters::*;
 pub use storage::get_max_block_gas;
 use thiserror::Error;
 pub use wasm_allowlist::{is_tx_allowed, is_vp_allowed};
+
+/// Parameters storage `Keys/Read/Write` implementation
+#[derive(Debug)]
+pub struct Store<S>(PhantomData<S>);
+
+impl<S> Keys for Store<S> {
+    fn implicit_vp_key() -> namada_core::storage::Key {
+        storage::get_implicit_vp_key()
+    }
+}
+
+impl<S> Read<S> for Store<S>
+where
+    S: StorageRead,
+{
+    fn read(storage: &S) -> Result<Parameters> {
+        read(storage)
+    }
+
+    fn masp_epoch_multiplier(storage: &S) -> Result<u64> {
+        read_masp_epoch_multiplier_parameter(storage)
+    }
+
+    fn epoch_duration_parameter(storage: &S) -> Result<EpochDuration> {
+        read_epoch_duration_parameter(storage)
+    }
+
+    fn max_signatures_per_transaction(storage: &S) -> Result<Option<u8>> {
+        max_signatures_per_transaction(storage)
+    }
+
+    fn is_native_token_transferable(storage: &S) -> Result<bool> {
+        storage::is_native_token_transferable(storage)
+    }
+
+    fn epochs_per_year(storage: &S) -> Result<u64> {
+        read_epochs_per_year(storage)
+    }
+}
+
+impl<S> Write<S> for Store<S>
+where
+    S: StorageRead + StorageWrite,
+{
+    fn write(storage: &mut S, parameters: &Parameters) -> Result<()> {
+        init_storage(parameters, storage)
+    }
+}
 
 /// The internal address for storage keys representing parameters than
 /// can be changed via governance.
@@ -316,6 +365,18 @@ where
     Ok(gas_cost_table.get(token).map(|amount| amount.to_owned()))
 }
 
+/// Read the number of epochs per year parameter
+pub fn read_epochs_per_year<S>(storage: &S) -> namada_storage::Result<u64>
+where
+    S: StorageRead,
+{
+    let key = storage::get_epochs_per_year_key();
+    let epochs_per_year = storage.read(&key)?;
+    epochs_per_year
+        .ok_or(ReadError::ParametersMissing)
+        .into_storage_result()
+}
+
 /// Read all the parameters from storage. Returns the parameters and gas
 /// cost.
 pub fn read<S>(storage: &S) -> namada_storage::Result<Parameters>
@@ -452,7 +513,7 @@ where
 }
 
 /// Storage key for the Ethereum address of wNam.
-pub fn native_erc20_key() -> Key {
+pub fn native_erc20_key() -> storage::Key {
     storage::get_native_erc20_key_at_addr(ADDRESS)
 }
 

@@ -21,14 +21,15 @@ pub mod logging;
 pub mod tendermint_node;
 pub mod wallet;
 pub mod wasm_loader;
-
 // This is here only to include the std's docs in our docs.
 // Taken from <https://github.com/rust-lang/rfcs/issues/2324#issuecomment-502437904>.
 #[doc(inline)]
 pub use std;
 
+pub use namada_sdk::*;
+
 pub mod facade {
     // TODO(namada#3248): only re-export v037 `tendermint-rs`
-    pub use namada::{tendermint, tendermint_proto, tendermint_rpc};
-    pub use tendermint_config;
+    pub use namada_core::{tendermint, tendermint_proto};
+    pub use {tendermint_config, tendermint_rpc};
 }

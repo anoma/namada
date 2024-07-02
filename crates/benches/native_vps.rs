@@ -12,52 +12,46 @@ use masp_primitives::transaction::txid::TxIdDigester;
 use masp_primitives::transaction::TransactionData;
 use masp_proofs::group::GroupEncoding;
 use masp_proofs::sapling::BatchValidator;
-use namada::core::address::{self, Address, InternalAddress};
-use namada::core::collections::HashMap;
-use namada::core::eth_bridge_pool::{GasFee, PendingTransfer};
-use namada::core::masp::{TransferSource, TransferTarget};
-use namada::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
-use namada::eth_bridge::storage::whitelist;
-use namada::governance::pgf::storage::steward::StewardDetail;
-use namada::governance::storage::proposal::ProposalType;
-use namada::governance::storage::vote::ProposalVote;
-use namada::governance::{InitProposalData, VoteProposalData};
-use namada::ibc::core::channel::types::channel::Order;
-use namada::ibc::core::channel::types::msgs::MsgChannelOpenInit;
-use namada::ibc::core::channel::types::Version as ChannelVersion;
-use namada::ibc::core::commitment_types::commitment::CommitmentPrefix;
-use namada::ibc::core::connection::types::msgs::MsgConnectionOpenInit;
-use namada::ibc::core::connection::types::version::Version;
-use namada::ibc::core::connection::types::Counterparty;
-use namada::ibc::core::host::types::identifiers::{
+use namada_apps_lib::address::{self, Address, InternalAddress};
+use namada_apps_lib::collections::HashMap;
+use namada_apps_lib::eth_bridge::read_native_erc20_address;
+use namada_apps_lib::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
+use namada_apps_lib::eth_bridge::storage::whitelist;
+use namada_apps_lib::eth_bridge_pool::{GasFee, PendingTransfer};
+use namada_apps_lib::gas::{TxGasMeter, VpGasMeter};
+use namada_apps_lib::governance::pgf::storage::steward::StewardDetail;
+use namada_apps_lib::governance::storage::proposal::ProposalType;
+use namada_apps_lib::governance::storage::vote::ProposalVote;
+use namada_apps_lib::governance::{InitProposalData, VoteProposalData};
+use namada_apps_lib::ibc::core::channel::types::channel::Order;
+use namada_apps_lib::ibc::core::channel::types::msgs::MsgChannelOpenInit;
+use namada_apps_lib::ibc::core::channel::types::Version as ChannelVersion;
+use namada_apps_lib::ibc::core::commitment_types::commitment::CommitmentPrefix;
+use namada_apps_lib::ibc::core::connection::types::msgs::MsgConnectionOpenInit;
+use namada_apps_lib::ibc::core::connection::types::version::Version;
+use namada_apps_lib::ibc::core::connection::types::Counterparty;
+use namada_apps_lib::ibc::core::host::types::identifiers::{
     ClientId, ConnectionId, PortId,
 };
-use namada::ibc::primitives::ToProto;
-use namada::ibc::{IbcActions, NftTransferModule, TransferModule};
-use namada::ledger::eth_bridge::read_native_erc20_address;
-use namada::ledger::gas::{TxGasMeter, VpGasMeter};
-use namada::ledger::governance::GovernanceVp;
-use namada::ledger::native_vp::ethereum_bridge::bridge_pool_vp::BridgePoolVp;
-use namada::ledger::native_vp::ethereum_bridge::nut::NonUsableTokens;
-use namada::ledger::native_vp::ethereum_bridge::vp::EthBridge;
-use namada::ledger::native_vp::ibc::context::PseudoExecutionContext;
-use namada::ledger::native_vp::ibc::Ibc;
-use namada::ledger::native_vp::masp::MaspVp;
-use namada::ledger::native_vp::multitoken::MultitokenVp;
-use namada::ledger::native_vp::parameters::ParametersVp;
-use namada::ledger::native_vp::{Ctx, NativeVp};
-use namada::ledger::pgf::PgfVp;
-use namada::ledger::pos::PosVP;
-use namada::proof_of_stake;
-use namada::proof_of_stake::KeySeg;
-use namada::sdk::masp::{partial_deauthorize, preload_verifying_keys, PVKs};
-use namada::sdk::masp_primitives::merkle_tree::CommitmentTree;
-use namada::sdk::masp_primitives::transaction::Transaction;
-use namada::sdk::masp_proofs::sapling::SaplingVerificationContextInner;
-use namada::state::{Epoch, StorageRead, StorageWrite, TxIndex};
-use namada::token::{Amount, TransparentTransfer};
-use namada::tx::{BatchedTx, Code, Section, Tx};
+use namada_apps_lib::ibc::primitives::ToProto;
+use namada_apps_lib::ibc::{IbcActions, NftTransferModule, TransferModule};
+use namada_apps_lib::masp::{
+    partial_deauthorize, preload_verifying_keys, PVKs, TransferSource,
+    TransferTarget,
+};
+use namada_apps_lib::masp_primitives::merkle_tree::CommitmentTree;
+use namada_apps_lib::masp_primitives::transaction::Transaction;
+use namada_apps_lib::masp_proofs::sapling::SaplingVerificationContextInner;
+use namada_apps_lib::proof_of_stake::KeySeg;
+use namada_apps_lib::state::{Epoch, StorageRead, StorageWrite, TxIndex};
+use namada_apps_lib::token::{Amount, TransparentTransfer};
+use namada_apps_lib::tx::{BatchedTx, Code, Section, Tx};
+use namada_apps_lib::validation::{
+    EthBridgeNutVp, EthBridgePoolVp, EthBridgeVp, GovernanceVp, IbcVp,
+    IbcVpContext, MaspVp, MultitokenVp, ParametersVp, PgfVp, PosVp,
+};
 use namada_apps_lib::wallet::defaults;
+use namada_apps_lib::{governance, proof_of_stake, storage, token};
 use namada_node::bench_utils::{
     generate_foreign_key_tx, BenchShell, BenchShieldedCtx,
     ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
@@ -65,6 +59,7 @@ use namada_node::bench_utils::{
     TX_TRANSPARENT_TRANSFER_WASM, TX_UPDATE_STEWARD_COMMISSION,
     TX_VOTE_PROPOSAL_WASM,
 };
+use namada_vp::native_vp::{Ctx, NativeVp};
 use rand_core::OsRng;
 
 fn governance(c: &mut Criterion) {
@@ -145,9 +140,9 @@ fn governance(c: &mut Criterion) {
             }
             "complete_proposal" => {
                 let max_code_size_key =
-                namada::governance::storage::keys::get_max_proposal_code_size_key();
+                    governance::storage::keys::get_max_proposal_code_size_key();
                 let max_proposal_content_key =
-                    namada::governance::storage::keys::get_max_proposal_content_key();
+                    governance::storage::keys::get_max_proposal_content_key();
                 let max_code_size: u64 = shell
                     .state
                     .read(&max_code_size_key)
@@ -212,19 +207,17 @@ fn governance(c: &mut Criterion) {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let governance = GovernanceVp {
-            ctx: Ctx::new(
-                &Address::Internal(InternalAddress::Governance),
-                &shell.state,
-                &signed_tx.tx,
-                &signed_tx.cmt,
-                &TxIndex(0),
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-                shell.vp_wasm_cache.clone(),
-            ),
-        };
+        let governance = GovernanceVp::new(Ctx::new(
+            &Address::Internal(InternalAddress::Governance),
+            &shell.state,
+            &signed_tx.tx,
+            &signed_tx.cmt,
+            &TxIndex(0),
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            shell.vp_wasm_cache.clone(),
+        ));
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
@@ -323,11 +316,10 @@ fn prepare_ibc_tx_and_ctx(bench_name: &str) -> (BenchShieldedCtx, BatchedTx) {
     match bench_name {
         "open_connection" => {
             let mut shielded_ctx = BenchShieldedCtx::default();
-            let _ = shielded_ctx.shell.init_ibc_client_state(
-                namada::core::storage::Key::from(
+            let _ =
+                shielded_ctx.shell.init_ibc_client_state(storage::Key::from(
                     Address::Internal(InternalAddress::Ibc).to_db_key(),
-                ),
-            );
+                ));
             let msg = MsgConnectionOpenInit {
                 client_id_on_a: ClientId::new("07-tendermint", 1).unwrap(),
                 counterparty: Counterparty::new(
@@ -436,19 +428,17 @@ fn ibc(c: &mut Criterion) {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let ibc = Ibc {
-            ctx: Ctx::new(
-                &Address::Internal(InternalAddress::Ibc),
-                &shielded_ctx.shell.state,
-                &signed_tx.tx,
-                &signed_tx.cmt,
-                &TxIndex(0),
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-                shielded_ctx.shell.vp_wasm_cache.clone(),
-            ),
-        };
+        let ibc = IbcVp::new(Ctx::new(
+            &Address::Internal(InternalAddress::Ibc),
+            &shielded_ctx.shell.state,
+            &signed_tx.tx,
+            &signed_tx.cmt,
+            &TxIndex(0),
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            shielded_ctx.shell.vp_wasm_cache.clone(),
+        ));
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
@@ -501,19 +491,17 @@ fn vp_multitoken(c: &mut Criterion) {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let multitoken = MultitokenVp {
-            ctx: Ctx::new(
-                &Address::Internal(InternalAddress::Multitoken),
-                &shell.state,
-                &signed_tx.tx,
-                &signed_tx.cmt,
-                &TxIndex(0),
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-                shell.vp_wasm_cache.clone(),
-            ),
-        };
+        let multitoken = MultitokenVp::new(Ctx::new(
+            &Address::Internal(InternalAddress::Multitoken),
+            &shell.state,
+            &signed_tx.tx,
+            &signed_tx.cmt,
+            &TxIndex(0),
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            shell.vp_wasm_cache.clone(),
+        ));
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
@@ -566,12 +554,11 @@ fn setup_storage_for_masp_verification(
     shielded_ctx.shell.commit_masp_tx(shield_tx.tx);
 
     // Update the anchor in storage
-    let tree_key = namada::token::storage_key::masp_commitment_tree_key();
+    let tree_key = token::storage_key::masp_commitment_tree_key();
     let updated_tree: CommitmentTree<Node> =
         shielded_ctx.shell.state.read(&tree_key).unwrap().unwrap();
-    let anchor_key = namada::token::storage_key::masp_commitment_anchor_key(
-        updated_tree.root(),
-    );
+    let anchor_key =
+        token::storage_key::masp_commitment_anchor_key(updated_tree.root());
     shielded_ctx.shell.state.write(&anchor_key, ()).unwrap();
     shielded_ctx.shell.commit_block();
 
@@ -614,19 +601,17 @@ fn masp(c: &mut Criterion) {
             let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
                 &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
             ));
-            let masp = MaspVp {
-                ctx: Ctx::new(
-                    &Address::Internal(InternalAddress::Masp),
-                    &shielded_ctx.shell.state,
-                    &signed_tx.tx,
-                    &signed_tx.cmt,
-                    &TxIndex(0),
-                    &gas_meter,
-                    &keys_changed,
-                    &verifiers,
-                    shielded_ctx.shell.vp_wasm_cache.clone(),
-                ),
-            };
+            let masp = MaspVp::new(Ctx::new(
+                &Address::Internal(InternalAddress::Masp),
+                &shielded_ctx.shell.state,
+                &signed_tx.tx,
+                &signed_tx.cmt,
+                &TxIndex(0),
+                &gas_meter,
+                &keys_changed,
+                &verifiers,
+                shielded_ctx.shell.vp_wasm_cache.clone(),
+            ));
 
             b.iter(|| {
                 assert!(
@@ -1178,7 +1163,7 @@ fn pgf(c: &mut Criterion) {
         "steward_inflation_rate",
     ] {
         let mut shell = BenchShell::default();
-        namada::governance::pgf::storage::keys::stewards_handle()
+        namada_apps_lib::governance::pgf::storage::keys::stewards_handle()
             .insert(
                 &mut shell.state,
                 defaults::albert_address(),
@@ -1198,13 +1183,14 @@ fn pgf(c: &mut Criterion) {
                 vec![&defaults::albert_keypair()],
             ),
             "steward_inflation_rate" => {
-                let data = namada::tx::data::pgf::UpdateStewardCommission {
-                    steward: defaults::albert_address(),
-                    commission: HashMap::from([(
-                        defaults::albert_address(),
-                        namada::core::dec::Dec::zero(),
-                    )]),
-                };
+                let data =
+                    namada_apps_lib::tx::data::pgf::UpdateStewardCommission {
+                        steward: defaults::albert_address(),
+                        commission: HashMap::from([(
+                            defaults::albert_address(),
+                            namada_apps_lib::dec::Dec::zero(),
+                        )]),
+                    };
                 shell.generate_tx(
                     TX_UPDATE_STEWARD_COMMISSION,
                     data,
@@ -1227,19 +1213,17 @@ fn pgf(c: &mut Criterion) {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let pgf = PgfVp {
-            ctx: Ctx::new(
-                &Address::Internal(InternalAddress::Pgf),
-                &shell.state,
-                &signed_tx.tx,
-                &signed_tx.cmt,
-                &TxIndex(0),
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-                shell.vp_wasm_cache.clone(),
-            ),
-        };
+        let pgf = PgfVp::new(Ctx::new(
+            &Address::Internal(InternalAddress::Pgf),
+            &shell.state,
+            &signed_tx.tx,
+            &signed_tx.cmt,
+            &TxIndex(0),
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            shell.vp_wasm_cache.clone(),
+        ));
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
@@ -1268,11 +1252,11 @@ fn eth_bridge_nut(c: &mut Criterion) {
 
     let signed_tx = {
         let data = PendingTransfer {
-            transfer: namada::core::eth_bridge_pool::TransferToEthereum {
+            transfer: namada_apps_lib::eth_bridge_pool::TransferToEthereum {
                 kind:
-                    namada::core::eth_bridge_pool::TransferToEthereumKind::Erc20,
+                    namada_apps_lib::eth_bridge_pool::TransferToEthereumKind::Erc20,
                 asset: native_erc20_addres,
-                recipient: namada::core::ethereum_events::EthAddress([1u8; 20]),
+                recipient: namada_apps_lib::ethereum_events::EthAddress([1u8; 20]),
                 sender: defaults::albert_address(),
                 amount: Amount::from(1),
             },
@@ -1304,19 +1288,17 @@ fn eth_bridge_nut(c: &mut Criterion) {
     let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
         &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
     ));
-    let nut = NonUsableTokens {
-        ctx: Ctx::new(
-            &vp_address,
-            &shell.state,
-            &signed_tx.tx,
-            &signed_tx.cmt,
-            &TxIndex(0),
-            &gas_meter,
-            &keys_changed,
-            &verifiers,
-            shell.vp_wasm_cache.clone(),
-        ),
-    };
+    let nut = EthBridgeNutVp::new(Ctx::new(
+        &vp_address,
+        &shell.state,
+        &signed_tx.tx,
+        &signed_tx.cmt,
+        &TxIndex(0),
+        &gas_meter,
+        &keys_changed,
+        &verifiers,
+        shell.vp_wasm_cache.clone(),
+    ));
 
     c.bench_function("vp_eth_bridge_nut", |b| {
         b.iter(|| {
@@ -1342,11 +1324,11 @@ fn eth_bridge(c: &mut Criterion) {
 
     let signed_tx = {
         let data = PendingTransfer {
-            transfer: namada::core::eth_bridge_pool::TransferToEthereum {
+            transfer: namada_apps_lib::eth_bridge_pool::TransferToEthereum {
                 kind:
-                    namada::core::eth_bridge_pool::TransferToEthereumKind::Erc20,
+                    namada_apps_lib::eth_bridge_pool::TransferToEthereumKind::Erc20,
                 asset: native_erc20_addres,
-                recipient: namada::core::ethereum_events::EthAddress([1u8; 20]),
+                recipient: namada_apps_lib::ethereum_events::EthAddress([1u8; 20]),
                 sender: defaults::albert_address(),
                 amount: Amount::from(1),
             },
@@ -1377,19 +1359,17 @@ fn eth_bridge(c: &mut Criterion) {
     let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
         &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
     ));
-    let eth_bridge = EthBridge {
-        ctx: Ctx::new(
-            &vp_address,
-            &shell.state,
-            &signed_tx.tx,
-            &signed_tx.cmt,
-            &TxIndex(0),
-            &gas_meter,
-            &keys_changed,
-            &verifiers,
-            shell.vp_wasm_cache.clone(),
-        ),
-    };
+    let eth_bridge = EthBridgeVp::new(Ctx::new(
+        &vp_address,
+        &shell.state,
+        &signed_tx.tx,
+        &signed_tx.cmt,
+        &TxIndex(0),
+        &gas_meter,
+        &keys_changed,
+        &verifiers,
+        shell.vp_wasm_cache.clone(),
+    ));
 
     c.bench_function("vp_eth_bridge", |b| {
         b.iter(|| {
@@ -1441,11 +1421,11 @@ fn eth_bridge_pool(c: &mut Criterion) {
 
     let signed_tx = {
         let data = PendingTransfer {
-            transfer: namada::core::eth_bridge_pool::TransferToEthereum {
+            transfer: namada_apps_lib::eth_bridge_pool::TransferToEthereum {
                 kind:
-                    namada::core::eth_bridge_pool::TransferToEthereumKind::Erc20,
+                    namada_apps_lib::eth_bridge_pool::TransferToEthereumKind::Erc20,
                 asset: native_erc20_addres,
-                recipient: namada::core::ethereum_events::EthAddress([1u8; 20]),
+                recipient: namada_apps_lib::ethereum_events::EthAddress([1u8; 20]),
                 sender: defaults::albert_address(),
                 amount: Amount::from(1),
             },
@@ -1476,19 +1456,17 @@ fn eth_bridge_pool(c: &mut Criterion) {
     let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
         &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
     ));
-    let bridge_pool = BridgePoolVp {
-        ctx: Ctx::new(
-            &vp_address,
-            &shell.state,
-            &signed_tx.tx,
-            &signed_tx.cmt,
-            &TxIndex(0),
-            &gas_meter,
-            &keys_changed,
-            &verifiers,
-            shell.vp_wasm_cache.clone(),
-        ),
-    };
+    let bridge_pool = EthBridgePoolVp::new(Ctx::new(
+        &vp_address,
+        &shell.state,
+        &signed_tx.tx,
+        &signed_tx.cmt,
+        &TxIndex(0),
+        &gas_meter,
+        &keys_changed,
+        &verifiers,
+        shell.vp_wasm_cache.clone(),
+    ));
 
     c.bench_function("vp_eth_bridge_pool", |b| {
         b.iter(|| {
@@ -1521,15 +1499,18 @@ fn parameters(c: &mut Criterion) {
             "parameter_change" => {
                 // Simulate governance proposal to modify a parameter
                 let min_proposal_fund_key =
-            namada::governance::storage::keys::get_min_proposal_fund_key();
+            namada_apps_lib::governance::storage::keys::get_min_proposal_fund_key();
                 shell.state.write(&min_proposal_fund_key, 1_000).unwrap();
 
-                let proposal_key = namada::governance::storage::keys::get_proposal_execution_key(0);
+                let proposal_key = namada_apps_lib::governance::storage::keys::get_proposal_execution_key(0);
                 shell.state.write(&proposal_key, 0).unwrap();
 
                 // Return a dummy tx for validation
-                let mut tx = Tx::from_type(namada::tx::data::TxType::Raw);
-                tx.set_data(namada::tx::Data::new(borsh::to_vec(&0).unwrap()));
+                let mut tx =
+                    Tx::from_type(namada_apps_lib::tx::data::TxType::Raw);
+                tx.set_data(namada_apps_lib::tx::Data::new(
+                    borsh::to_vec(&0).unwrap(),
+                ));
                 let verifiers_from_tx = BTreeSet::default();
                 let cmt = tx.first_commitments().unwrap().clone();
                 let batched_tx = tx.batch_tx(cmt);
@@ -1547,19 +1528,17 @@ fn parameters(c: &mut Criterion) {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let parameters = ParametersVp {
-            ctx: Ctx::new(
-                &vp_address,
-                &shell.state,
-                &signed_tx.tx,
-                &signed_tx.cmt,
-                &TxIndex(0),
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-                shell.vp_wasm_cache.clone(),
-            ),
-        };
+        let parameters = ParametersVp::new(Ctx::new(
+            &vp_address,
+            &shell.state,
+            &signed_tx.tx,
+            &signed_tx.cmt,
+            &TxIndex(0),
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            shell.vp_wasm_cache.clone(),
+        ));
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
@@ -1595,15 +1574,18 @@ fn pos(c: &mut Criterion) {
             "parameter_change" => {
                 // Simulate governance proposal to modify a parameter
                 let min_proposal_fund_key =
-            namada::governance::storage::keys::get_min_proposal_fund_key();
+            namada_apps_lib::governance::storage::keys::get_min_proposal_fund_key();
                 shell.state.write(&min_proposal_fund_key, 1_000).unwrap();
 
-                let proposal_key = namada::governance::storage::keys::get_proposal_execution_key(0);
+                let proposal_key = namada_apps_lib::governance::storage::keys::get_proposal_execution_key(0);
                 shell.state.write(&proposal_key, 0).unwrap();
 
                 // Return a dummy tx for validation
-                let mut tx = Tx::from_type(namada::tx::data::TxType::Raw);
-                tx.set_data(namada::tx::Data::new(borsh::to_vec(&0).unwrap()));
+                let mut tx =
+                    Tx::from_type(namada_apps_lib::tx::data::TxType::Raw);
+                tx.set_data(namada_apps_lib::tx::Data::new(
+                    borsh::to_vec(&0).unwrap(),
+                ));
                 let verifiers_from_tx = BTreeSet::default();
                 let cmt = tx.first_commitments().unwrap().clone();
                 let batched_tx = tx.batch_tx(cmt);
@@ -1621,19 +1603,17 @@ fn pos(c: &mut Criterion) {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let pos = PosVP {
-            ctx: Ctx::new(
-                &vp_address,
-                &shell.state,
-                &signed_tx.tx,
-                &signed_tx.cmt,
-                &TxIndex(0),
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-                shell.vp_wasm_cache.clone(),
-            ),
-        };
+        let pos = PosVp::new(Ctx::new(
+            &vp_address,
+            &shell.state,
+            &signed_tx.tx,
+            &signed_tx.cmt,
+            &TxIndex(0),
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            shell.vp_wasm_cache.clone(),
+        ));
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
@@ -1675,24 +1655,22 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let ibc = Ibc {
-            ctx: Ctx::new(
-                &Address::Internal(InternalAddress::Ibc),
-                &shielded_ctx.shell.state,
-                &signed_tx.tx,
-                &signed_tx.cmt,
-                &TxIndex(0),
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-                shielded_ctx.shell.vp_wasm_cache.clone(),
-            ),
-        };
+        let ibc = IbcVp::new(Ctx::new(
+            &Address::Internal(InternalAddress::Ibc),
+            &shielded_ctx.shell.state,
+            &signed_tx.tx,
+            &signed_tx.cmt,
+            &TxIndex(0),
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            shielded_ctx.shell.vp_wasm_cache.clone(),
+        ));
         // Use an empty verifiers set placeholder for validation, this is only
         // needed in actual txs to addresses whose VPs should be triggered
         let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
 
-        let exec_ctx = PseudoExecutionContext::new(ibc.ctx.pre());
+        let exec_ctx = IbcVpContext::new(ibc.ctx.pre());
         let ctx = Rc::new(RefCell::new(exec_ctx));
         let mut actions = IbcActions::new(ctx.clone(), verifiers.clone());
         actions.set_validation_params(ibc.validation_params().unwrap());
@@ -1733,24 +1711,22 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
         ));
-        let ibc = Ibc {
-            ctx: Ctx::new(
-                &Address::Internal(InternalAddress::Ibc),
-                &shielded_ctx.shell.state,
-                &signed_tx.tx,
-                &signed_tx.cmt,
-                &TxIndex(0),
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-                shielded_ctx.shell.vp_wasm_cache.clone(),
-            ),
-        };
+        let ibc = IbcVp::new(Ctx::new(
+            &Address::Internal(InternalAddress::Ibc),
+            &shielded_ctx.shell.state,
+            &signed_tx.tx,
+            &signed_tx.cmt,
+            &TxIndex(0),
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            shielded_ctx.shell.vp_wasm_cache.clone(),
+        ));
         // Use an empty verifiers set placeholder for validation, this is only
         // needed in actual txs to addresses whose VPs should be triggered
         let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
 
-        let exec_ctx = PseudoExecutionContext::new(ibc.ctx.pre());
+        let exec_ctx = IbcVpContext::new(ibc.ctx.pre());
         let ctx = Rc::new(RefCell::new(exec_ctx));
 
         let mut actions = IbcActions::new(ctx.clone(), verifiers.clone());

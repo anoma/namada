@@ -2,8 +2,8 @@
 
 use std::collections::BTreeMap;
 
-use namada::vote_ext::ethereum_events::MultiSignedEthEvent;
 use namada_sdk::collections::HashMap;
+use namada_vote_ext::ethereum_events::MultiSignedEthEvent;
 
 use super::*;
 
@@ -137,26 +137,25 @@ where
 #[allow(clippy::cast_possible_truncation)]
 #[cfg(test)]
 mod test_vote_extensions {
-    use namada::core::address::testing::gen_established_address;
-    use namada::core::ethereum_events::{
+    use namada_sdk::address::testing::gen_established_address;
+    use namada_sdk::eth_bridge::storage::bridge_pool;
+    use namada_sdk::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
+    use namada_sdk::eth_bridge::EthBridgeQueries;
+    use namada_sdk::ethereum_events::{
         EthAddress, EthereumEvent, TransferToEthereum, Uint,
     };
-    use namada::core::hash::Hash;
-    use namada::core::key::*;
-    use namada::core::storage::{Epoch, InnerEthEventsQueue};
-    use namada::eth_bridge::storage::bridge_pool;
-    use namada::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
-    use namada::ledger::eth_bridge::EthBridgeQueries;
-    use namada::ledger::pos::PosQueries;
-    use namada::proof_of_stake::storage::{
+    use namada_sdk::hash::Hash;
+    use namada_sdk::key::*;
+    use namada_sdk::proof_of_stake::storage::{
         consensus_validator_set_handle,
         read_consensus_validator_set_addresses_with_stake,
     };
-    use namada::proof_of_stake::types::WeightedValidator;
-    use namada::state::collections::lazy_map::{NestedSubKey, SubKey};
-    use namada::tendermint::abci::types::VoteInfo;
-    use namada::vote_ext::ethereum_events;
-    use namada_sdk::storage::StorageWrite;
+    use namada_sdk::proof_of_stake::types::WeightedValidator;
+    use namada_sdk::proof_of_stake::PosQueries;
+    use namada_sdk::state::collections::lazy_map::{NestedSubKey, SubKey};
+    use namada_sdk::storage::{Epoch, InnerEthEventsQueue, StorageWrite};
+    use namada_sdk::tendermint::abci::types::VoteInfo;
+    use namada_vote_ext::ethereum_events;
 
     use super::validate_eth_events_vext;
     use crate::shell::test_utils::*;

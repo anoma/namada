@@ -22,7 +22,18 @@ use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::hash::Hash;
 use namada_macros::BorshDeserializer;
 pub use namada_shielded_token::*;
+use namada_systems::parameters;
 pub use namada_trans_token::*;
+
+/// Validity predicates
+pub mod vp {
+    pub use namada_shielded_token::vp::{
+        Error as MaspError, MaspVp, Result as MaspResult,
+    };
+    pub use namada_trans_token::vp::{
+        Error as MultitokenError, MultitokenVp, Result as MultitokenResult,
+    };
+}
 use serde::{Deserialize, Serialize};
 
 /// Token storage keys
@@ -33,7 +44,7 @@ pub mod storage_key {
 
 use namada_core::address::Address;
 use namada_events::EmitEvents;
-use namada_storage::{Result, StorageRead, StorageWrite};
+use namada_storage::{StorageRead, StorageWrite};
 
 /// Initialize parameters for the token in storage during the genesis block.
 pub fn write_params<S>(
@@ -53,16 +64,17 @@ where
 }
 
 /// Apply token logic for finalizing block (i.e. shielded token rewards)
-pub fn finalize_block<S>(
+pub fn finalize_block<S, Params>(
     storage: &mut S,
     _events: &mut impl EmitEvents,
     is_new_masp_epoch: bool,
 ) -> Result<()>
 where
     S: StorageWrite + StorageRead + WithConversionState,
+    Params: parameters::Read<S>,
 {
     if is_new_masp_epoch {
-        conversion::update_allowed_conversions(storage)?;
+        conversion::update_allowed_conversions::<S, Params>(storage)?;
     }
     Ok(())
 }

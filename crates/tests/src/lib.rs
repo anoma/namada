@@ -5,10 +5,10 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(rustdoc::private_intra_doc_links)]
 
-pub use namada;
-
 mod vm_host_env;
-pub use vm_host_env::{ibc, tx, vp};
+pub use vm_host_env::{tx, vp};
+#[cfg(test)]
+pub mod deps;
 #[cfg(test)]
 mod e2e;
 #[cfg(test)]
@@ -26,3 +26,5 @@ pub mod strings;
 pub mod log {
     pub use test_log::test;
 }
+
+pub use namada_sdk::*;

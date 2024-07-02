@@ -477,9 +477,9 @@ dependencies = [
 
 [[package]]
 name = "blake3"
-version = "1.5.0"
+version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0231f06152bf547e9c2b5194f247cd97aacf6dcd8b15d8e5ec0663f64580da87"
+checksum = "30cca6d3674597c30ddf2c587bf8d9d65c9a84d2326d941cc79c9842dfe0ef52"
 dependencies = [
  "arrayref",
  "arrayvec",
@@ -626,9 +626,9 @@ checksum = "c3ac9f8b63eca6fd385229b3675f6cc0dc5c8a5c8a54a59d4f52ffd670d87b0c"
 
 [[package]]
 name = "bytecheck"
-version = "0.6.11"
+version = "0.6.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b6372023ac861f6e6dc89c8344a8f398fb42aaba2b5dbc649ca0c0e9dbcb627"
+checksum = "23cdc57ce23ac53c931e88a43d06d070a6fd142f2617be5855eb75efc9beb1c2"
 dependencies = [
  "bytecheck_derive",
  "ptr_meta",
@@ -637,9 +637,9 @@ dependencies = [
 
 [[package]]
 name = "bytecheck_derive"
-version = "0.6.11"
+version = "0.6.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7ec4c6f261935ad534c0c22dbef2201b45918860eb1c574b972bd213a76af61"
+checksum = "3db406d29fbcd95542e92559bed4d8ad92636d1ca8b3b72ede10b4bcc010e659"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1086,9 +1086,9 @@ checksum = "393bc73c451830ff8dbb3a07f61843d6cb41a084f9996319917c0b291ed785bb"
 
 [[package]]
 name = "crc32fast"
-version = "1.3.2"
+version = "1.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b540bd8bc810d3885c6ea91e2018302f68baba2129ab3e88f32389ee9370880d"
+checksum = "a97769d94ddab943e4510d138150169a2758b5ef3eb191a9ee688de3e23ef7b3"
 dependencies = [
  "cfg-if",
 ]
@@ -1234,12 +1234,12 @@ dependencies = [
 
 [[package]]
 name = "darling"
-version = "0.20.3"
+version = "0.20.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0209d94da627ab5605dcccf08bb18afa5009cfbef48d8a8b7d7bdbc79be25c5e"
+checksum = "83b2eb4d90d12bdda5ed17de686c2acb4c57914f8f921b8da7e112b5a36f3fe1"
 dependencies = [
- "darling_core 0.20.3",
- "darling_macro 0.20.3",
+ "darling_core 0.20.9",
+ "darling_macro 0.20.9",
 ]
 
 [[package]]
@@ -1258,9 +1258,9 @@ dependencies = [
 
 [[package]]
 name = "darling_core"
-version = "0.20.3"
+version = "0.20.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "177e3443818124b357d8e76f53be906d60937f0d3a90773a664fa63fa253e621"
+checksum = "622687fe0bac72a04e5599029151f5796111b90f1baaa9b544d807a5e31cd120"
 dependencies = [
  "fnv",
  "ident_case",
@@ -1282,11 +1282,11 @@ dependencies = [
 
 [[package]]
 name = "darling_macro"
-version = "0.20.3"
+version = "0.20.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "836a9bbc7ad63342d6d6e7b815ccab164bc77a2d95d84bc3117a8c0d5c98e2d5"
+checksum = "733cabb43482b1a1b53eee8583c2b9e8684d592215ea83efd305dd31bc2f0178"
 dependencies = [
- "darling_core 0.20.3",
+ "darling_core 0.20.9",
  "quote",
  "syn 2.0.52",
 ]
@@ -1644,7 +1644,7 @@ version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e08b6c6ab82d70f08844964ba10c7babb716de2ecaeab9be5717918a5177d3af"
 dependencies = [
- "darling 0.20.3",
+ "darling 0.20.9",
  "proc-macro2",
  "quote",
  "syn 2.0.52",
@@ -3428,26 +3428,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "linkme"
-version = "0.3.25"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb2cfee0de9bd869589fb9a015e155946d1be5ff415cb844c2caccc6cc4b5db9"
-dependencies = [
- "linkme-impl",
-]
-
-[[package]]
-name = "linkme-impl"
-version = "0.3.25"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "adf157a4dc5a29b7b464aa8fe7edeff30076e07e13646a1c3874f58477dc99f8"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.52",
-]
-
-[[package]]
 name = "linux-raw-sys"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3485,9 +3465,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "mach2"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "19b955cdeb2a02b9117f121ce63aa52d08ade45de53e48fe6a38b39c10f6f709"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "masp_note_encryption"
 version = "1.0.0"
-source = "git+https://github.com/anoma/masp?rev=4ede1c42d76d6348af8224bc8bfac4404321fe82#4ede1c42d76d6348af8224bc8bfac4404321fe82"
+source = "git+https://github.com/anoma/masp?rev=71b36beba21e35f8611f3ba6910ed5b78ec11af1#71b36beba21e35f8611f3ba6910ed5b78ec11af1"
 dependencies = [
  "borsh 1.4.0",
  "chacha20",
@@ -3500,7 +3489,7 @@ dependencies = [
 [[package]]
 name = "masp_primitives"
 version = "1.0.0"
-source = "git+https://github.com/anoma/masp?rev=4ede1c42d76d6348af8224bc8bfac4404321fe82#4ede1c42d76d6348af8224bc8bfac4404321fe82"
+source = "git+https://github.com/anoma/masp?rev=71b36beba21e35f8611f3ba6910ed5b78ec11af1#71b36beba21e35f8611f3ba6910ed5b78ec11af1"
 dependencies = [
  "aes",
  "bip0039",
@@ -3532,7 +3521,7 @@ dependencies = [
 [[package]]
 name = "masp_proofs"
 version = "1.0.0"
-source = "git+https://github.com/anoma/masp?rev=4ede1c42d76d6348af8224bc8bfac4404321fe82#4ede1c42d76d6348af8224bc8bfac4404321fe82"
+source = "git+https://github.com/anoma/masp?rev=71b36beba21e35f8611f3ba6910ed5b78ec11af1#71b36beba21e35f8611f3ba6910ed5b78ec11af1"
 dependencies = [
  "bellman",
  "blake2b_simd",
@@ -3662,70 +3651,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
-name = "namada"
-version = "0.39.0"
-dependencies = [
- "async-trait",
- "borsh 1.4.0",
- "borsh-ext",
- "clru",
- "ethers",
- "eyre",
- "itertools 0.12.1",
- "linkme",
- "masp_primitives",
- "masp_proofs",
- "namada_account",
- "namada_core",
- "namada_ethereum_bridge",
- "namada_events",
- "namada_gas",
- "namada_governance",
- "namada_ibc",
- "namada_migrations",
- "namada_parameters",
- "namada_proof_of_stake",
- "namada_replay_protection",
- "namada_sdk",
- "namada_state",
- "namada_token",
- "namada_tx",
- "namada_tx_env",
- "namada_vote_ext",
- "namada_vp_env",
- "parity-wasm",
- "proptest",
- "prost",
- "rand 0.8.5",
- "rayon",
- "ripemd",
- "serde_json",
- "sha2 0.9.9",
- "smooth-operator",
- "tempfile",
- "thiserror",
- "tiny-bip39",
- "tokio",
- "tracing",
- "uint",
- "wasm-instrument",
- "wasmer",
- "wasmer-cache",
- "wasmer-compiler-singlepass",
- "wasmer-vm",
- "wasmparser 0.107.0",
- "wasmtimer",
-]
-
-[[package]]
 name = "namada_account"
 version = "0.39.0"
 dependencies = [
  "borsh 1.4.0",
- "linkme",
  "namada_core",
  "namada_macros",
- "namada_migrations",
  "namada_storage",
  "proptest",
  "serde",
@@ -3753,16 +3684,15 @@ dependencies = [
  "ethabi",
  "ethbridge-structs",
  "eyre",
+ "futures",
  "ibc",
  "ics23",
  "impl-num-traits",
  "index-set",
  "indexmap 2.2.4",
  "k256",
- "linkme",
  "masp_primitives",
  "namada_macros",
- "namada_migrations",
  "num-integer",
  "num-rational",
  "num-traits 0.2.17",
@@ -3782,8 +3712,10 @@ dependencies = [
  "tendermint-proto 0.36.0",
  "thiserror",
  "tiny-keccak",
+ "tokio",
  "tracing",
  "uint",
+ "wasmtimer",
  "zeroize",
 ]
 
@@ -3796,20 +3728,21 @@ dependencies = [
  "eyre",
  "itertools 0.12.1",
  "konst",
- "linkme",
  "namada_account",
  "namada_core",
  "namada_events",
  "namada_macros",
- "namada_migrations",
  "namada_parameters",
  "namada_proof_of_stake",
  "namada_state",
  "namada_storage",
+ "namada_systems",
  "namada_trans_token",
  "namada_tx",
  "namada_vote_ext",
+ "namada_vp",
  "serde",
+ "smooth-operator",
  "thiserror",
  "tracing",
 ]
@@ -3819,10 +3752,8 @@ name = "namada_events"
 version = "0.39.0"
 dependencies = [
  "borsh 1.4.0",
- "linkme",
  "namada_core",
  "namada_macros",
- "namada_migrations",
  "serde",
  "serde_json",
  "thiserror",
@@ -3834,11 +3765,9 @@ name = "namada_gas"
 version = "0.39.0"
 dependencies = [
  "borsh 1.4.0",
- "linkme",
  "namada_core",
  "namada_events",
  "namada_macros",
- "namada_migrations",
  "serde",
  "thiserror",
 ]
@@ -3850,14 +3779,16 @@ dependencies = [
  "borsh 1.4.0",
  "itertools 0.12.1",
  "konst",
- "linkme",
+ "namada_account",
  "namada_core",
  "namada_events",
  "namada_macros",
- "namada_migrations",
  "namada_parameters",
- "namada_storage",
+ "namada_state",
+ "namada_systems",
  "namada_trans_token",
+ "namada_tx",
+ "namada_vp",
  "proptest",
  "serde",
  "serde_json",
@@ -3879,18 +3810,23 @@ dependencies = [
  "masp_primitives",
  "namada_core",
  "namada_events",
+ "namada_gas",
  "namada_governance",
  "namada_macros",
  "namada_parameters",
  "namada_state",
  "namada_storage",
+ "namada_systems",
  "namada_token",
+ "namada_tx",
+ "namada_vp",
  "primitive-types",
  "proptest",
  "prost",
  "serde",
  "serde_json",
  "sha2 0.9.9",
+ "smooth-operator",
  "thiserror",
  "tracing",
 ]
@@ -3921,21 +3857,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "namada_migrations"
-version = "0.39.0"
-dependencies = [
- "lazy_static",
- "linkme",
- "namada_macros",
-]
-
-[[package]]
 name = "namada_parameters"
 version = "0.39.0"
 dependencies = [
  "namada_core",
  "namada_macros",
+ "namada_state",
  "namada_storage",
+ "namada_systems",
+ "namada_tx",
+ "namada_vp",
  "thiserror",
 ]
 
@@ -3944,18 +3875,21 @@ name = "namada_proof_of_stake"
 version = "0.39.0"
 dependencies = [
  "borsh 1.4.0",
+ "itertools 0.12.1",
  "konst",
- "linkme",
  "namada_account",
  "namada_controller",
  "namada_core",
  "namada_events",
  "namada_governance",
  "namada_macros",
- "namada_migrations",
  "namada_parameters",
+ "namada_state",
  "namada_storage",
+ "namada_systems",
  "namada_trans_token",
+ "namada_tx",
+ "namada_vp",
  "once_cell",
  "proptest",
  "serde",
@@ -3977,7 +3911,6 @@ version = "0.39.0"
 dependencies = [
  "async-trait",
  "bimap",
- "bls12_381",
  "borsh 1.4.0",
  "borsh-ext",
  "circular-queue",
@@ -3992,7 +3925,6 @@ dependencies = [
  "itertools 0.12.1",
  "jubjub",
  "lazy_static",
- "linkme",
  "masp_primitives",
  "masp_proofs",
  "namada_account",
@@ -4003,14 +3935,15 @@ dependencies = [
  "namada_governance",
  "namada_ibc",
  "namada_macros",
- "namada_migrations",
  "namada_parameters",
  "namada_proof_of_stake",
  "namada_state",
  "namada_storage",
  "namada_token",
  "namada_tx",
+ "namada_vm",
  "namada_vote_ext",
+ "namada_vp",
  "num-traits 0.2.17",
  "num256",
  "orion",
@@ -4035,7 +3968,6 @@ dependencies = [
  "tokio",
  "toml 0.5.11",
  "tracing",
- "wasmtimer",
  "zeroize",
 ]
 
@@ -4044,14 +3976,26 @@ name = "namada_shielded_token"
 version = "0.39.0"
 dependencies = [
  "borsh 1.4.0",
+ "lazy_static",
  "masp_primitives",
+ "masp_proofs",
+ "namada_account",
  "namada_controller",
  "namada_core",
- "namada_parameters",
+ "namada_gas",
+ "namada_state",
  "namada_storage",
+ "namada_systems",
  "namada_trans_token",
+ "namada_tx",
+ "namada_vp",
+ "rand_core 0.6.4",
+ "rayon",
+ "ripemd",
  "serde",
+ "sha2 0.9.9",
  "smooth-operator",
+ "thiserror",
  "tracing",
 ]
 
@@ -4061,16 +4005,14 @@ version = "0.39.0"
 dependencies = [
  "borsh 1.4.0",
  "itertools 0.12.1",
- "linkme",
  "namada_core",
  "namada_events",
  "namada_gas",
  "namada_macros",
  "namada_merkle_tree",
- "namada_migrations",
- "namada_parameters",
  "namada_replay_protection",
  "namada_storage",
+ "namada_systems",
  "namada_tx",
  "patricia_tree",
  "proptest",
@@ -4085,17 +4027,23 @@ version = "0.39.0"
 dependencies = [
  "borsh 1.4.0",
  "itertools 0.12.1",
- "linkme",
  "namada_core",
  "namada_macros",
  "namada_merkle_tree",
- "namada_migrations",
  "namada_replay_protection",
  "regex",
  "serde",
  "smooth-operator",
  "thiserror",
  "tracing",
+]
+
+[[package]]
+name = "namada_systems"
+version = "0.39.0"
+dependencies = [
+ "namada_core",
+ "namada_storage",
 ]
 
 [[package]]
@@ -4117,11 +4065,13 @@ dependencies = [
  "ibc-testkit",
  "ics23",
  "itertools 0.12.1",
- "namada",
  "namada_core",
  "namada_sdk",
  "namada_test_utils",
+ "namada_tx_env",
  "namada_tx_prelude",
+ "namada_vm",
+ "namada_vp",
  "namada_vp_prelude",
  "proptest",
  "prost",
@@ -4144,6 +4094,7 @@ dependencies = [
  "namada_macros",
  "namada_shielded_token",
  "namada_storage",
+ "namada_systems",
  "namada_trans_token",
  "proptest",
  "serde",
@@ -4156,7 +4107,13 @@ dependencies = [
  "konst",
  "namada_core",
  "namada_events",
+ "namada_state",
  "namada_storage",
+ "namada_systems",
+ "namada_tx",
+ "namada_vp",
+ "thiserror",
+ "tracing",
 ]
 
 [[package]]
@@ -4168,13 +4125,11 @@ dependencies = [
  "borsh 1.4.0",
  "data-encoding",
  "konst",
- "linkme",
  "masp_primitives",
  "namada_core",
  "namada_events",
  "namada_gas",
  "namada_macros",
- "namada_migrations",
  "num-derive 0.4.2",
  "num-traits 0.2.17",
  "proptest",
@@ -4205,6 +4160,7 @@ dependencies = [
  "namada_account",
  "namada_core",
  "namada_events",
+ "namada_gas",
  "namada_governance",
  "namada_ibc",
  "namada_macros",
@@ -4215,6 +4171,34 @@ dependencies = [
  "namada_tx",
  "namada_tx_env",
  "namada_vm_env",
+]
+
+[[package]]
+name = "namada_vm"
+version = "0.39.0"
+dependencies = [
+ "borsh 1.4.0",
+ "clru",
+ "namada_core",
+ "namada_events",
+ "namada_gas",
+ "namada_parameters",
+ "namada_state",
+ "namada_token",
+ "namada_tx",
+ "namada_vp",
+ "parity-wasm",
+ "rayon",
+ "smooth-operator",
+ "tempfile",
+ "thiserror",
+ "tracing",
+ "wasm-instrument",
+ "wasmer",
+ "wasmer-cache",
+ "wasmer-compiler-singlepass",
+ "wasmer-vm",
+ "wasmparser 0.107.0",
 ]
 
 [[package]]
@@ -4231,12 +4215,25 @@ name = "namada_vote_ext"
 version = "0.39.0"
 dependencies = [
  "borsh 1.4.0",
- "linkme",
  "namada_core",
  "namada_macros",
- "namada_migrations",
  "namada_tx",
  "serde",
+]
+
+[[package]]
+name = "namada_vp"
+version = "0.39.0"
+dependencies = [
+ "namada_core",
+ "namada_events",
+ "namada_gas",
+ "namada_state",
+ "namada_tx",
+ "namada_vp_env",
+ "smooth-operator",
+ "thiserror",
+ "tracing",
 ]
 
 [[package]]
@@ -4247,7 +4244,6 @@ dependencies = [
  "masp_primitives",
  "namada_core",
  "namada_events",
- "namada_ibc",
  "namada_storage",
  "namada_tx",
  "smooth-operator",
@@ -5186,21 +5182,21 @@ checksum = "c08c74e62047bb2de4ff487b251e4a92e24f48745648451635cec7d591162d9f"
 
 [[package]]
 name = "region"
-version = "3.0.0"
+version = "3.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76e189c2369884dce920945e2ddf79b3dff49e071a167dd1817fa9c4c00d512e"
+checksum = "e6b6ebd13bc009aef9cd476c1310d49ac354d36e240cf1bd753290f3dc7199a7"
 dependencies = [
  "bitflags 1.3.2",
  "libc",
- "mach",
- "winapi",
+ "mach2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
 name = "rend"
-version = "0.4.1"
+version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a2571463863a6bd50c32f94402933f03457a3fbaf697a707c5be741e459f08fd"
+checksum = "71fe3824f5629716b1589be05dacd749f6aa084c87e00e016714a8cdfccc997c"
 dependencies = [
  "bytecheck",
 ]
@@ -5290,12 +5286,13 @@ dependencies = [
 
 [[package]]
 name = "rkyv"
-version = "0.7.42"
+version = "0.7.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0200c8230b013893c0b2d6213d6ec64ed2b9be2e0e016682b7224ff82cff5c58"
+checksum = "5cba464629b3394fc4dbc6f940ff8f5b4ff5c7aef40f29166fd4ad12acbc99c0"
 dependencies = [
  "bitvec",
  "bytecheck",
+ "bytes",
  "hashbrown 0.12.3",
  "indexmap 1.9.3",
  "ptr_meta",
@@ -5308,9 +5305,9 @@ dependencies = [
 
 [[package]]
 name = "rkyv_derive"
-version = "0.7.42"
+version = "0.7.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2e06b915b5c230a17d7a736d1e2e63ee753c256a8614ef3f5147b13a4f5541d"
+checksum = "a7dddfff8de25e6f62b9d64e6e432bf1c6736c57d20323e15ee10435fbda7c65"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -6125,9 +6122,9 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
 name = "tar"
-version = "0.4.40"
+version = "0.4.41"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b16afcea1f22891c49a00c751c7b63b2233284064f11a200fc624137c51e2ddb"
+checksum = "cb797dad5fb5b76fcf519e702f4a589483b5ef06567f160c392832c1f5e44909"
 dependencies = [
  "filetime",
  "libc",
@@ -6136,9 +6133,9 @@ dependencies = [
 
 [[package]]
 name = "target-lexicon"
-version = "0.12.12"
+version = "0.12.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14c39fd04924ca3a864207c66fc2cd7d22d7c016007f9ce846cbb9326331930a"
+checksum = "e1fc403891a21bcfb7c37834ba66a547a8f402146eba7265b5a6d88059c9ff2f"
 
 [[package]]
 name = "tempfile"
@@ -6743,7 +6740,6 @@ name = "tx_bond"
 version = "0.39.0"
 dependencies = [
  "getrandom 0.2.15",
- "namada",
  "namada_test_utils",
  "namada_tests",
  "namada_tx_prelude",
@@ -6778,7 +6774,6 @@ name = "tx_change_validator_commission"
 version = "0.39.0"
 dependencies = [
  "getrandom 0.2.15",
- "namada",
  "namada_test_utils",
  "namada_tests",
  "namada_tx_prelude",
@@ -6858,7 +6853,6 @@ name = "tx_redelegate"
 version = "0.39.0"
 dependencies = [
  "getrandom 0.2.15",
- "namada",
  "namada_test_utils",
  "namada_tests",
  "namada_tx_prelude",
@@ -6920,7 +6914,6 @@ name = "tx_unbond"
 version = "0.39.0"
 dependencies = [
  "getrandom 0.2.15",
- "namada",
  "namada_test_utils",
  "namada_tests",
  "namada_tx_prelude",
@@ -6982,7 +6975,6 @@ name = "tx_withdraw"
 version = "0.39.0"
 dependencies = [
  "getrandom 0.2.15",
- "namada",
  "namada_test_utils",
  "namada_tests",
  "namada_tx_prelude",
@@ -7159,7 +7151,6 @@ name = "vp_implicit"
 version = "0.39.0"
 dependencies = [
  "getrandom 0.2.15",
- "namada",
  "namada_test_utils",
  "namada_tests",
  "namada_tx_prelude",
@@ -7176,7 +7167,6 @@ name = "vp_user"
 version = "0.39.0"
 dependencies = [
  "getrandom 0.2.15",
- "namada",
  "namada_test_utils",
  "namada_tests",
  "namada_tx_prelude",
@@ -7314,9 +7304,9 @@ dependencies = [
 
 [[package]]
 name = "wasmer"
-version = "4.3.1"
+version = "4.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ce4a267a570e121c9375136adefa2c48810273907de9c6817bc19db4d6144bc"
+checksum = "b1852ee143a2d8143265bfee017c43bf690702d6c2b45a763a2f13e669f5b7ec"
 dependencies = [
  "bytes",
  "cfg-if",
@@ -7343,9 +7333,9 @@ dependencies = [
 
 [[package]]
 name = "wasmer-cache"
-version = "4.3.1"
+version = "4.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67a40804bcc2567f112003182fc5edc29584da5199c4a1f5a8d6a6e4b65feff0"
+checksum = "092ca4da29a7320b99c9b6660dfbde055f4db0a71c1273860272c213b2f7e019"
 dependencies = [
  "blake3",
  "hex",
@@ -7355,9 +7345,9 @@ dependencies = [
 
 [[package]]
 name = "wasmer-compiler"
-version = "4.3.1"
+version = "4.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b9c23098e86ef1038155684fe50f0c1079a0e2a2e70f115b789df17e6ba98d20"
+checksum = "6b4f157d715f3bb60c2c9d7b9e48299a30e9209f87f4484f79f9cd586b40b6ee"
 dependencies = [
  "backtrace",
  "bytes",
@@ -7383,9 +7373,9 @@ dependencies = [
 
 [[package]]
 name = "wasmer-compiler-cranelift"
-version = "4.3.1"
+version = "4.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "95287b79973ad5f485215733ef9f0d4bb951a6b7e655585d2bd3d4a4ba1253c9"
+checksum = "eb457e66b77ca2188fbbd6c2056ec6e8ccb4bddee73e60ba9d39733d7b2e8068"
 dependencies = [
  "cranelift-codegen",
  "cranelift-entity",
@@ -7402,9 +7392,9 @@ dependencies = [
 
 [[package]]
 name = "wasmer-compiler-singlepass"
-version = "4.3.1"
+version = "4.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00d78d59be3ce78ad859e176b88f0d5bec0120ece0684922d7c5da1289e251b1"
+checksum = "0a3196b2a87d5c6692021ece7ad1cf7fe43b7f1669c3aba1b8ccfcebe660070c"
 dependencies = [
  "byteorder",
  "dynasm",
@@ -7443,9 +7433,9 @@ dependencies = [
 
 [[package]]
 name = "wasmer-derive"
-version = "4.3.1"
+version = "4.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e48f36aeeecb655f15fdd358bdf6e4cec27df181468fa4226084157e8462bd5e"
+checksum = "32cd5732ff64370e98986f9753cce13b91cc9d3c4b649e31b0d08d5db69164ea"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",
@@ -7455,9 +7445,9 @@ dependencies = [
 
 [[package]]
 name = "wasmer-types"
-version = "4.3.1"
+version = "4.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83cb97b6b20084757a2a8d548dc0d4179c3fe9e2d711740423a1e6aa3f8b9091"
+checksum = "c890fd0dbda40df03977b899d1ad7113deba3c225f2cc7b88deb7633044d3e07"
 dependencies = [
  "bytecheck",
  "enum-iterator",
@@ -7476,9 +7466,9 @@ dependencies = [
 
 [[package]]
 name = "wasmer-vm"
-version = "4.3.1"
+version = "4.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc1e19d986844b17b927ec8b0c7f3da6a7a2c2cb3b0f8ca5d4cb1a1f71bfb124"
+checksum = "5e0dc60ab800cf0bd44e2d35d88422d256d2470b00c72778f91bfb826c42dbd0"
 dependencies = [
  "backtrace",
  "cc",

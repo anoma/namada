@@ -2,11 +2,12 @@
 //! and [`RevertProposal`] ABCI++ methods for the Shell
 
 use data_encoding::HEXUPPER;
-use namada::hash::Hash;
-use namada::ledger::pos::PosQueries;
-use namada::proof_of_stake::storage::find_validator_by_raw_hash;
-use namada::tx::data::protocol::ProtocolTxType;
-use namada::vote_ext::ethereum_tx_data_variants;
+use namada_sdk::hash::Hash;
+use namada_sdk::parameters;
+use namada_sdk::proof_of_stake::storage::find_validator_by_raw_hash;
+use namada_sdk::proof_of_stake::PosQueries;
+use namada_sdk::tx::data::protocol::ProtocolTxType;
+use namada_vote_ext::ethereum_tx_data_variants;
 
 use super::block_alloc::{BlockGas, BlockSpace};
 use super::*;
@@ -33,8 +34,7 @@ where
     fn from(state: &WlState<D, H>) -> Self {
         let max_proposal_bytes =
             state.pos_queries().get_max_proposal_bytes().get();
-        let max_block_gas =
-            namada::parameters::get_max_block_gas(state).unwrap();
+        let max_block_gas = parameters::get_max_block_gas(state).unwrap();
 
         let user_gas = TxBin::init(max_block_gas);
         let txs_bin = TxBin::init(max_proposal_bytes);
@@ -527,15 +527,13 @@ where
     H: StorageHasher + Sync + 'static,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    let minimum_gas_price = namada::ledger::parameters::read_gas_cost(
-        shell_params.state,
-        &wrapper.fee.token,
-    )
-    .expect("Must be able to read gas cost parameter")
-    .ok_or(Error::TxApply(protocol::Error::FeeError(format!(
-        "The provided {} token is not allowed for fee payment",
-        wrapper.fee.token
-    ))))?;
+    let minimum_gas_price =
+        parameters::read_gas_cost(shell_params.state, &wrapper.fee.token)
+            .expect("Must be able to read gas cost parameter")
+            .ok_or(Error::TxApply(protocol::Error::FeeError(format!(
+                "The provided {} token is not allowed for fee payment",
+                wrapper.fee.token
+            ))))?;
 
     fee_data_check(wrapper, minimum_gas_price, shell_params)?;
 
@@ -554,19 +552,20 @@ where
 // process proposals
 #[cfg(test)]
 mod test_process_proposal {
-    use namada::core::key::*;
-    use namada::eth_bridge::storage::eth_bridge_queries::{
+    use namada_apps_lib::wallet;
+    use namada_replay_protection as replay_protection;
+    use namada_sdk::address;
+    use namada_sdk::eth_bridge::storage::eth_bridge_queries::{
         is_bridge_comptime_enabled, EthBridgeQueries,
     };
-    use namada::state::StorageWrite;
-    use namada::token::{read_denom, Amount, DenominatedAmount};
-    use namada::tx::data::Fee;
-    use namada::tx::{Authorization, Code, Data, Signed};
-    use namada::vote_ext::{
+    use namada_sdk::key::*;
+    use namada_sdk::state::StorageWrite;
+    use namada_sdk::token::{read_denom, Amount, DenominatedAmount};
+    use namada_sdk::tx::data::Fee;
+    use namada_sdk::tx::{Authorization, Code, Data, Signed};
+    use namada_vote_ext::{
         bridge_pool_roots, ethereum_events, validator_set_update,
     };
-    use namada::{address, replay_protection};
-    use namada_apps_lib::wallet;
 
     use super::*;
     use crate::shell::test_utils::{
@@ -1164,7 +1163,7 @@ mod test_process_proposal {
         )));
 
         // Write wrapper hash to storage
-        let mut batch = namada::state::testing::TestState::batch();
+        let mut batch = namada_sdk::state::testing::TestState::batch();
         let wrapper_unsigned_hash = wrapper.header_hash();
         let hash_key = replay_protection::current_key(&wrapper_unsigned_hash);
         shell
@@ -1284,7 +1283,7 @@ mod test_process_proposal {
         )));
 
         // Write inner hash to storage
-        let mut batch = namada::state::testing::TestState::batch();
+        let mut batch = namada_sdk::state::testing::TestState::batch();
         let hash_key =
             replay_protection::current_key(&wrapper.raw_header_hash());
         shell
@@ -1477,7 +1476,7 @@ mod test_process_proposal {
         let (shell, _recv, _, _) = test_utils::setup();
 
         let block_gas_limit =
-            namada::parameters::get_max_block_gas(&shell.state).unwrap();
+            parameters::get_max_block_gas(&shell.state).unwrap();
         let keypair = super::test_utils::gen_keypair();
 
         let mut wrapper =
@@ -1731,7 +1730,7 @@ mod test_process_proposal {
     /// Test max tx bytes parameter in ProcessProposal
     #[test]
     fn test_max_tx_bytes_process_proposal() {
-        use namada::ledger::parameters::storage::get_max_tx_bytes_key;
+        use parameters::storage::get_max_tx_bytes_key;
         let (shell, _recv, _, _) = test_utils::setup_at_height(3u64);
 
         let max_tx_bytes: u32 = {
@@ -1798,7 +1797,7 @@ mod test_process_proposal {
     /// not validated by `ProcessProposal`.
     #[test]
     fn test_outdated_nonce_process_proposal() {
-        use namada::core::storage::InnerEthEventsQueue;
+        use namada_sdk::storage::InnerEthEventsQueue;
 
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
 

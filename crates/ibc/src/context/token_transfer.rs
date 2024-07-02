@@ -58,7 +58,7 @@ where
         };
 
         // Convert IBC amount to Namada amount for the token
-        let denom = read_denom(&*self.inner.borrow(), &token)
+        let denom = read_denom(self.inner.borrow().storage(), &token)
             .map_err(ContextError::from)?
             .unwrap_or(Denomination(0));
         let uint_amount = Uint(primitive_types::U256::from(coin.amount).0);

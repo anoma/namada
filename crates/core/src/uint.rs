@@ -963,6 +963,12 @@ impl From<Uint> for I320 {
     }
 }
 
+impl From<u64> for I320 {
+    fn from(val: u64) -> Self {
+        Self::from(Uint::from(val))
+    }
+}
+
 impl From<token::Amount> for I320 {
     fn from(lo: token::Amount) -> Self {
         let mut arr = [0u64; Self::N_WORDS];
@@ -1154,6 +1160,22 @@ pub mod testing {
     }
 
     impl std::ops::Neg for I256 {
+        type Output = Self;
+
+        fn neg(self) -> Self::Output {
+            self.checked_neg().unwrap()
+        }
+    }
+
+    impl std::ops::Add for I320 {
+        type Output = Self;
+
+        fn add(self, rhs: Self) -> Self::Output {
+            self.checked_add(rhs).unwrap()
+        }
+    }
+
+    impl std::ops::Neg for I320 {
         type Output = Self;
 
         fn neg(self) -> Self::Output {

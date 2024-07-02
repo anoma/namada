@@ -5,12 +5,12 @@ pub mod eth_events;
 pub mod val_set_update;
 
 use drain_filter_polyfill::DrainFilter;
-use namada::ethereum_bridge::protocol::transactions::bridge_pool_roots::sign_bridge_pool_root;
-use namada::ethereum_bridge::protocol::transactions::ethereum_events::sign_ethereum_events;
-use namada::ethereum_bridge::protocol::transactions::validator_set_update::sign_validator_set_update;
-pub use namada::ethereum_bridge::protocol::validation::VoteExtensionError;
-use namada::tx::Signed;
-use namada::vote_ext::{
+use namada_sdk::eth_bridge::protocol::transactions::bridge_pool_roots::sign_bridge_pool_root;
+use namada_sdk::eth_bridge::protocol::transactions::ethereum_events::sign_ethereum_events;
+use namada_sdk::eth_bridge::protocol::transactions::validator_set_update::sign_validator_set_update;
+pub use namada_sdk::eth_bridge::protocol::validation::VoteExtensionError;
+use namada_sdk::tx::Signed;
+use namada_vote_ext::{
     bridge_pool_roots, ethereum_events, validator_set_update, VoteExtension,
 };
 
@@ -34,7 +34,7 @@ where
             ethereum_events: self.extend_vote_with_ethereum_events(),
             bridge_pool_root: self
                 .extend_vote_with_bp_roots()
-                .map(namada::vote_ext::bridge_pool_roots::SignedVext),
+                .map(bridge_pool_roots::SignedVext),
             validator_set_update: self.extend_vote_with_valset_update(),
         }
     }
@@ -176,9 +176,7 @@ pub fn iter_protocol_txs(
     } = ext;
     [
         ethereum_events.map(|e| {
-            EthereumTxData::EthEventsVext(
-                namada::vote_ext::ethereum_events::SignedVext(e),
-            )
+            EthereumTxData::EthEventsVext(ethereum_events::SignedVext(e))
         }),
         bridge_pool_root.map(EthereumTxData::BridgePoolVext),
         validator_set_update.map(EthereumTxData::ValSetUpdateVext),

@@ -1,7 +1,0 @@
-# Seeds for failure cases proptest has generated in the past. It is
-# automatically read and these particular cases re-run before any
-# novel cases are generated.
-#
-# It is recommended to check this file in to source control so that
-# everyone who runs the test benefits from these saved cases.
-cc e02bfe6892bfa6d068daddc0abb2b66ae6d79b3bc4ebc345813df7e8574c78bd # shrinks to (epoch_duration, max_expected_time_per_block, start_height, start_time, block_height, block_time, min_blocks_delta, min_duration_delta, max_time_per_block_delta) = (EpochDuration { min_num_of_blocks: 1, min_duration: DurationSecs(1) }, 1, BlockHeight(0), DateTimeUtc(1970-01-01T00:00:00Z), BlockHeight(1), DateTimeUtc(1970-01-01T00:00:01Z), 0, 0, 0)

@@ -8,14 +8,14 @@ pub mod eth_events {
         ValidatorSetUpdateFilter,
     };
     use ethbridge_events::{DynEventCodec, Events as RawEvents};
-    use namada::core::address::Address;
-    use namada::core::ethereum_events::{
+    use namada_sdk::address::Address;
+    use namada_sdk::ethereum_events::{
         EthAddress, EthereumEvent, TransferToEthereum, TransferToNamada, Uint,
     };
-    use namada::core::ethereum_structs;
-    use namada::core::hash::Hash;
-    use namada::core::keccak::KeccakHash;
-    use namada::core::token::Amount;
+    use namada_sdk::ethereum_structs;
+    use namada_sdk::hash::Hash;
+    use namada_sdk::keccak::KeccakHash;
+    use namada_sdk::token::Amount;
     use num256::Uint256;
     use thiserror::Error;
 
@@ -181,7 +181,7 @@ pub mod eth_events {
     impl Parse for ethabi::Uint {
         fn parse_amount(self) -> Result<Amount> {
             let uint = {
-                use namada::core::uint::Uint as NamadaUint;
+                use namada_sdk::uint::Uint as NamadaUint;
                 let mut num_buf = [0; 32];
                 self.to_little_endian(&mut num_buf);
                 NamadaUint::from_little_endian(&num_buf)
@@ -303,7 +303,7 @@ pub mod eth_events {
             TRANSFER_TO_CHAIN_CODEC, TRANSFER_TO_ERC_CODEC,
             VALIDATOR_SET_UPDATE_CODEC,
         };
-        use namada::eth_bridge::ethers::contract::EthEvent;
+        use namada_sdk::eth_bridge::ethers::contract::EthEvent;
 
         use super::*;
         use crate::ethereum_oracle::test_tools::event_log::GetLog;
