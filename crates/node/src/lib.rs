@@ -210,14 +210,30 @@ impl Shell {
         };
 
         if recheck_process_proposal {
-            let process_req = finalize_req
-                .clone()
-                .cast_to_process_proposal_req()
-                .map_err(|_| Error::InvalidBlockProposal)?;
-            let (process_proposal_result, _processing_results) =
-                self.process_proposal(process_req.into());
-            // No need to cache the result since this is the last step before
-            // finalizing the block
+            let process_proposal_result = match self
+                .state
+                .in_mem()
+                .process_proposal_cache
+                .get(&finalize_req.block_hash)
+            {
+                Some((process_resp, _res)) =>
+                // We already have the result of
+                // process proposal for this block
+                // cached in memory
+                {
+                    process_resp.to_owned()
+                }
+
+                None => {
+                    let process_req = finalize_req
+                        .clone()
+                        .cast_to_process_proposal_req()
+                        .map_err(|_| Error::InvalidBlockProposal)?;
+                    // No need to cache the result since this is the last step
+                    // before finalizing the block
+                    self.process_proposal(process_req.into()).0
+                }
+            };
 
             if let ProcessProposal::Reject = process_proposal_result {
                 return Err(Error::InvalidBlockProposal);

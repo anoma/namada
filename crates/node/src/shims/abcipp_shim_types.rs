@@ -194,6 +194,7 @@ pub mod shim {
         #[derive(Debug, Clone)]
         pub struct FinalizeBlock {
             pub header: Header,
+            pub block_hash: Hash,
             pub byzantine_validators: Vec<Misbehavior>,
             pub txs: Vec<ProcessedTx>,
             pub proposer_address: Vec<u8>,
@@ -220,11 +221,12 @@ pub mod shim {
                         hash: Hash::try_from(header.app_hash.as_bytes())
                             .unwrap_or_default(),
                         time: DateTimeUtc::try_from(header.time).unwrap(),
-                        next_validators_hash: Hash::try_from(
-                            header.next_validators_hash.as_bytes(),
-                        )
-                        .unwrap(),
+                        next_validators_hash: header
+                            .next_validators_hash
+                            .try_into()
+                            .unwrap(),
                     },
+                    block_hash: req.hash.try_into().unwrap(),
                     byzantine_validators: req.byzantine_validators,
                     txs: vec![],
                     proposer_address: header.proposer_address.into(),
@@ -286,7 +288,7 @@ pub mod shim {
                     txs: self.txs.into_iter().map(|tx| tx.tx).collect(),
                     proposed_last_commit: Some(self.decided_last_commit),
                     misbehavior: self.byzantine_validators,
-                    hash: header.hash.into(),
+                    hash: self.block_hash.into(),
                     height: self.height,
                     time: header.time.try_into().map_err(|_| {
                         super::Error::Shell(

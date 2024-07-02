@@ -1902,6 +1902,7 @@ mod test_utils {
                     time: DateTimeUtc::now(),
                     next_validators_hash: Hash([0; 32]),
                 },
+                block_hash: Hash([0; 32]),
                 byzantine_validators: vec![],
                 txs: vec![],
                 proposer_address: HEXUPPER
