@@ -8,14 +8,15 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
+use masp_primitives::transaction::TransparentAddress;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
-use serde::{Deserialize, Serialize};
+use ripemd::Digest as RipemdDigest;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
 
-use crate::address::{Address, DecodeError, HASH_HEX_LEN, MASP};
-use crate::hash::Hash;
+use crate::address::{Address, DecodeError, HASH_HEX_LEN, IBC, MASP};
 use crate::impl_display_and_from_str_via_format;
 use crate::storage::Epoch;
 use crate::string_encoding::{
@@ -23,6 +24,62 @@ use crate::string_encoding::{
     MASP_PAYMENT_ADDRESS_HRP,
 };
 use crate::token::{Denomination, MaspDigitPos};
+
+/// Serialize the given TxId
+pub fn serialize_txid<S>(
+    txid: &masp_primitives::transaction::TxId,
+    s: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    s.serialize_bytes(txid.as_ref())
+}
+
+/// Deserialize the given TxId
+pub fn deserialize_txid<'de, D>(
+    deserializer: D,
+) -> Result<masp_primitives::transaction::TxId, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(masp_primitives::transaction::TxId::from_bytes(
+        Deserialize::deserialize(deserializer)?,
+    ))
+}
+
+/// Wrapper for masp_primitive's TxId
+#[derive(
+    Serialize,
+    Deserialize,
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshSchema,
+    Debug,
+    Eq,
+    PartialEq,
+    Copy,
+    Ord,
+    PartialOrd,
+    Hash,
+)]
+pub struct MaspTxId(
+    #[serde(
+        serialize_with = "serialize_txid",
+        deserialize_with = "deserialize_txid"
+    )]
+    masp_primitives::transaction::TxId,
+);
+
+impl From<masp_primitives::transaction::TxId> for MaspTxId {
+    fn from(txid: masp_primitives::transaction::TxId) -> Self {
+        Self(txid)
+    }
+}
+
+/// Wrapper for masp_primitive's TxId
+pub type TxId = MaspTxId;
 
 /// Wrapper type around `Epoch` for type safe operations involving the masp
 /// epoch
@@ -368,7 +425,15 @@ impl<'de> serde::Deserialize<'de> for PaymentAddress {
 
 /// Wrapper for masp_primitive's ExtendedSpendingKey
 #[derive(
-    Clone, Debug, Copy, BorshSerialize, BorshDeserialize, BorshDeserializer,
+    Clone,
+    Debug,
+    Copy,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    Hash,
+    Eq,
+    PartialEq,
 )]
 pub struct ExtendedSpendingKey(masp_primitives::zip32::ExtendedSpendingKey);
 
@@ -433,7 +498,7 @@ impl<'de> serde::Deserialize<'de> for ExtendedSpendingKey {
 }
 
 /// Represents a source of funds for a transfer
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum TransferSource {
     /// A transfer coming from a transparent address
     Address(Address),
@@ -467,6 +532,14 @@ impl TransferSource {
             _ => None,
         }
     }
+
+    /// Get the contained transparent address data, if any
+    pub fn t_addr_data(&self) -> Option<TAddrData> {
+        match self {
+            Self::Address(x) => Some(TAddrData::Addr(x.clone())),
+            _ => None,
+        }
+    }
 }
 
 impl Display for TransferSource {
@@ -478,13 +551,78 @@ impl Display for TransferSource {
     }
 }
 
+/// Represents the pre-image to a TransparentAddress
+#[derive(Debug, Clone, BorshDeserialize, BorshSerialize, BorshDeserializer)]
+pub enum TAddrData {
+    /// A transparent address within Namada
+    Addr(Address),
+    /// An IBC address
+    Ibc(String),
+}
+
+impl TAddrData {
+    /// Get the transparent address that this target would effectively go to
+    pub fn effective_address(&self) -> Address {
+        match self {
+            Self::Addr(x) => x.clone(),
+            // An IBC signer address effectively means that assets are
+            // associated with the IBC internal address
+            Self::Ibc(_) => IBC,
+        }
+    }
+
+    /// Get the contained IBC receiver, if any
+    pub fn ibc_receiver_address(&self) -> Option<String> {
+        match self {
+            Self::Ibc(address) => Some(address.clone()),
+            _ => None,
+        }
+    }
+
+    /// Get the contained Address, if any
+    pub fn address(&self) -> Option<Address> {
+        match self {
+            Self::Addr(x) => Some(x.clone()),
+            _ => None,
+        }
+    }
+
+    /// Convert transparent address data into a transparent address
+    pub fn taddress(&self) -> TransparentAddress {
+        TransparentAddress(<[u8; 20]>::from(ripemd::Ripemd160::digest(
+            sha2::Sha256::digest(&self.serialize_to_vec()),
+        )))
+    }
+}
+
+/// Convert a receiver string to a TransparentAddress
+pub fn ibc_taddr(receiver: String) -> TransparentAddress {
+    TAddrData::Ibc(receiver).taddress()
+}
+
+/// Convert a Namada Address to a TransparentAddress
+pub fn addr_taddr(addr: Address) -> TransparentAddress {
+    TAddrData::Addr(addr).taddress()
+}
+
 /// Represents a target for the funds of a transfer
-#[derive(Debug, Clone)]
+#[derive(
+    Debug,
+    Clone,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshDeserializer,
+    Hash,
+    Eq,
+    PartialEq,
+)]
 pub enum TransferTarget {
     /// A transfer going to a transparent address
     Address(Address),
     /// A transfer going to a shielded address
     PaymentAddress(PaymentAddress),
+    /// A transfer going to an IBC address
+    Ibc(String),
 }
 
 impl TransferTarget {
@@ -492,9 +630,12 @@ impl TransferTarget {
     pub fn effective_address(&self) -> Address {
         match self {
             Self::Address(x) => x.clone(),
-            // An ExtendedSpendingKey for a source effectively means that
-            // assets will be drawn from the MASP
+            // A PaymentAddress for a target effectively means that assets will
+            // be sent to the MASP
             Self::PaymentAddress(_) => MASP,
+            // An IBC signer address for a target effectively means that assets
+            // will be sent to the IBC internal address
+            Self::Ibc(_) => IBC,
         }
     }
 
@@ -513,6 +654,15 @@ impl TransferTarget {
             _ => None,
         }
     }
+
+    /// Get the contained TAddrData, if any
+    pub fn t_addr_data(&self) -> Option<TAddrData> {
+        match self {
+            Self::Address(x) => Some(TAddrData::Addr(x.clone())),
+            Self::Ibc(x) => Some(TAddrData::Ibc(x.clone())),
+            _ => None,
+        }
+    }
 }
 
 impl Display for TransferTarget {
@@ -520,6 +670,7 @@ impl Display for TransferTarget {
         match self {
             Self::Address(x) => x.fmt(f),
             Self::PaymentAddress(address) => address.fmt(f),
+            Self::Ibc(x) => x.fmt(f),
         }
     }
 }
@@ -603,7 +754,7 @@ impl FromStr for MaspValue {
 
 /// The masp transactions' references of a given batch
 #[derive(Default, Clone, Serialize, Deserialize)]
-pub struct MaspTxRefs(pub Vec<Hash>);
+pub struct MaspTxRefs(pub Vec<TxId>);
 
 impl Display for MaspTxRefs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

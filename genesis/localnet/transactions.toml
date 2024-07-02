@@ -41,7 +41,7 @@ authorization = "signam1qy9r5vrja246ajayx5hhm68elzm3rms993gmyhjw7lm8lpt5kufmkeq3
 email = "null@null.net"
 
 [validator_account.signatures]
-tpknam1qpg2tsrplvhu3fd7z7tq5ztc2ne3s7e2ahjl2a2cddufrzdyr752g666ytj = "signam1qzp6jjp57ahlerqnygjvans5h6jqaguzd5cu7h6exs5m4fpw4fnp07dnfrvjevnmvkf9tyv2azgygkhpdxtalvfqk5jez6vp9rsey8gq3386xd"
+tpknam1qpg2tsrplvhu3fd7z7tq5ztc2ne3s7e2ahjl2a2cddufrzdyr752g666ytj = "signam1qpz549e55sgwa8zxlq35sehr8csyl3ww394g22sh46r5u2z9tr0gxjyhkqa9554s6q2u58rx2yqz2lw746yprk6vmk4lmx5k2ff6apc9ralkc2"
 
 [[bond]]
 source = "tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx"
@@ -49,7 +49,7 @@ validator = "tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx"
 amount = "100000"
 
 [bond.signatures]
-tpknam1qpg2tsrplvhu3fd7z7tq5ztc2ne3s7e2ahjl2a2cddufrzdyr752g666ytj = "signam1qqyn5ljq7z090ad7p8p2uxqelhhywt6y0kf4snqp3kt5rsqz48xl405vjuj40fsjprkwngy4q99hjrydp78wrathf45r9xdwx56k45sqe3990l"
+tpknam1qpg2tsrplvhu3fd7z7tq5ztc2ne3s7e2ahjl2a2cddufrzdyr752g666ytj = "signam1qpkzy7xs362mkycd58f3ve9jjyvszmxz2huulveyxyd29ru9n30ptj6uaflkxms96rmvvvntvj0k53t9rm2mg9f8rwx4d0y629xj7jc0upuhlw"
 
 # 2.
 
@@ -74,4 +74,4 @@ validator = "tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx"
 amount = "20000"
 
 [bond.signatures]
-tpknam1qrnw8mxyqlj60mykgevnldcj5mg2fya7fs5a8xqdkd2gwtxhef0zy8a2wha = "signam1qrax95lz0j46388xlpxmhlamx7taemskp39feal9jf8s5kculdqaam3tzzjsktd6hw55hewy7nn2etgeupkse4a2trls0uk65yravdcx8z8mp5"
+tpknam1qrnw8mxyqlj60mykgevnldcj5mg2fya7fs5a8xqdkd2gwtxhef0zy8a2wha = "signam1qqp5p6k7g384x6gu65hzv9dve8fwftv02h4p3sgtwvz8vzgwjkr6cflxdv2kx7nrtxqha0mmpcmjeclrjwnlt7fphj4ugxsludlmt8qfs3k9q0"

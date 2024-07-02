@@ -158,14 +158,20 @@ where
                         GovernanceEvent::passed_proposal(id, true, result)
                     }
                     ProposalType::PGFSteward(stewards) => {
-                        let _result = execute_pgf_steward_proposal(
+                        let result = execute_pgf_steward_proposal(
                             &mut shell.state,
                             stewards,
                         )?;
                         tracing::info!(
-                            "Governance proposal (pgf stewards){} has been \
-                             executed and passed.",
-                            id
+                            "Governance proposal #{} for PGF stewards has \
+                             been executed. {}.",
+                            id,
+                            if result {
+                                "State changes have been applied successfully"
+                            } else {
+                                "FAILURE trying to apply the state changes - \
+                                 no state change occurred"
+                            }
                         );
 
                         GovernanceEvent::passed_proposal(id, false, false)
@@ -405,6 +411,7 @@ where
     let dispatch_result = protocol::dispatch_tx(
         &tx,
         protocol::DispatchArgs::Raw {
+            wrapper_hash: None,
             tx_index: TxIndex::default(),
             wrapper_tx_result: None,
             vp_wasm_cache: &mut shell.vp_wasm_cache,
@@ -422,11 +429,10 @@ where
         Ok(extended_tx_result) => match extended_tx_result
             .tx_result
             .batch_results
-            .0
-            .get(&cmt.get_hash())
+            .get_inner_tx_result(None, either::Right(&cmt))
         {
             Some(Ok(batched_result)) if batched_result.is_accepted() => {
-                shell.state.commit_tx();
+                shell.state.commit_tx_batch();
                 Ok(true)
             }
             Some(Err(e)) => {
@@ -434,12 +440,12 @@ where
                     "Error executing governance proposal {}",
                     e.to_string()
                 );
-                shell.state.drop_tx();
+                shell.state.drop_tx_batch();
                 Ok(false)
             }
             _ => {
                 tracing::warn!("not sure what happen");
-                shell.state.drop_tx();
+                shell.state.drop_tx_batch();
                 Ok(false)
             }
         },
@@ -448,7 +454,7 @@ where
                 "Error executing governance proposal {}",
                 e.error.to_string()
             );
-            shell.state.drop_tx();
+            shell.state.drop_tx_batch();
             Ok(false)
         }
     }
@@ -461,18 +467,41 @@ fn execute_pgf_steward_proposal<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    for action in stewards {
-        match action {
-            AddRemove::Add(address) => {
-                pgf_storage::stewards_handle().insert(
-                    storage,
-                    address.to_owned(),
-                    StewardDetail::base(address),
-                )?;
-            }
-            AddRemove::Remove(address) => {
-                pgf_storage::stewards_handle().remove(storage, &address)?;
-            }
+    let maximum_number_of_pgf_steward_key =
+        pgf_storage::get_maximum_number_of_pgf_steward_key();
+    let maximum_number_of_pgf_steward = storage
+        .read::<u64>(&maximum_number_of_pgf_steward_key)?
+        .expect(
+            "Pgf parameter maximum_number_of_pgf_steward must be in storage",
+        );
+
+    // First, remove the appropriate addresses
+    for address in stewards.iter().filter_map(|action| match action {
+        AddRemove::Add(_) => None,
+        AddRemove::Remove(address) => Some(address),
+    }) {
+        pgf_storage::stewards_handle().remove(storage, address)?;
+    }
+
+    // Then add new addresses
+    let mut steward_count = pgf_storage::stewards_handle().len(storage)?;
+    for address in stewards.iter().filter_map(|action| match action {
+        AddRemove::Add(address) => Some(address),
+        AddRemove::Remove(_) => None,
+    }) {
+        #[allow(clippy::arithmetic_side_effects)]
+        if steward_count + 1 > maximum_number_of_pgf_steward {
+            return Ok(false);
+        }
+        pgf_storage::stewards_handle().insert(
+            storage,
+            address.to_owned(),
+            StewardDetail::base(address.to_owned()),
+        )?;
+
+        #[allow(clippy::arithmetic_side_effects)]
+        {
+            steward_count += 1;
         }
     }
 
