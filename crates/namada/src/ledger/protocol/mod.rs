@@ -6,7 +6,7 @@ use std::fmt::Debug;
 use eyre::{eyre, WrapErr};
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::hash::Hash;
-use namada_core::masp::MaspTxRefs;
+use namada_core::masp::{MaspTxRefs, TxId};
 use namada_events::extend::{
     ComposeEvent, Height as HeightAttr, TxHash as TxHashAttr,
 };
@@ -521,7 +521,7 @@ pub fn transfer_fee<S, D, H, CA>(
     tx: &Tx,
     wrapper: &WrapperTx,
     tx_index: &TxIndex,
-) -> Result<Option<(BatchedTxResult, Hash)>>
+) -> Result<Option<(BatchedTxResult, TxId)>>
 where
     S: State<D = D, H = H>
         + StorageRead
@@ -674,7 +674,7 @@ fn try_masp_fee_payment<S, D, H, CA>(
     }: &mut ShellParams<'_, S, D, H, CA>,
     tx: &Tx,
     tx_index: &TxIndex,
-) -> Result<Option<(BatchedTxResult, Hash)>>
+) -> Result<Option<(BatchedTxResult, TxId)>>
 where
     S: State<D = D, H = H>
         + StorageRead
@@ -804,7 +804,7 @@ pub fn check_fees<S, D, H, CA>(
     shell_params: &mut ShellParams<'_, S, D, H, CA>,
     tx: &Tx,
     wrapper: &WrapperTx,
-) -> Result<Option<(BatchedTxResult, Hash)>>
+) -> Result<Option<(BatchedTxResult, TxId)>>
 where
     S: State<D = D, H = H>
         + StorageRead
