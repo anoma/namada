@@ -66,11 +66,15 @@ pub use namada_tx::{Authorization, *};
 use num_traits::Zero;
 use rand_core::{OsRng, RngCore};
 
+use crate::args::{
+    TxShieldedTransferData, TxShieldingTransferData, TxTransparentTransferData,
+    TxUnshieldingTransferData,
+};
 use crate::control_flow::time;
 use crate::error::{EncodingError, Error, QueryError, Result, TxSubmitError};
 use crate::io::Io;
 use crate::masp::TransferErr::Build;
-use crate::masp::{ShieldedContext, ShieldedTransfer};
+use crate::masp::{MaspTransferData, ShieldedContext, ShieldedTransfer};
 use crate::queries::Client;
 use crate::rpc::{
     self, get_validator_stake, query_wasm_code_hash, validate_amount,
@@ -103,13 +107,7 @@ pub const TX_REVEAL_PK: &str = "tx_reveal_pk.wasm";
 /// Update validity predicate WASM path
 pub const TX_UPDATE_ACCOUNT_WASM: &str = "tx_update_account.wasm";
 /// Transparent transfer transaction WASM path
-pub const TX_TRANSPARENT_TRANSFER_WASM: &str = "tx_transparent_transfer.wasm";
-/// Shielded transfer transaction WASM path
-pub const TX_SHIELDED_TRANSFER_WASM: &str = "tx_shielded_transfer.wasm";
-/// Shielding transfer transaction WASM path
-pub const TX_SHIELDING_TRANSFER_WASM: &str = "tx_shielding_transfer.wasm";
-/// Unshielding transfer transaction WASM path
-pub const TX_UNSHIELDING_TRANSFER_WASM: &str = "tx_unshielding_transfer.wasm";
+pub const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
 /// IBC transaction WASM path
 pub const TX_IBC_WASM: &str = "tx_ibc.wasm";
 /// User validity predicate WASM path
@@ -2513,15 +2511,19 @@ pub async fn build_ibc_transfer(
         query_wasm_code_hash(context, args.tx_code_path.to_str().unwrap())
             .await
             .map_err(|e| Error::from(QueryError::Wasm(e.to_string())))?;
+    let masp_transfer_data = MaspTransferData {
+        source: args.source.clone(),
+        target: TransferTarget::Address(Address::Internal(
+            InternalAddress::Ibc,
+        )),
+        token: args.token.clone(),
+        amount: validated_amount,
+    };
 
     // For transfer from a spending key
     let shielded_parts = construct_shielded_parts(
         context,
-        &args.source,
-        // The token will be escrowed to IBC address
-        &TransferTarget::Address(Address::Internal(InternalAddress::Ibc)),
-        &args.token,
-        validated_amount,
+        vec![masp_transfer_data],
         !(args.tx.dry_run || args.tx.dry_run_wrapper),
     )
     .await?;
@@ -2564,25 +2566,30 @@ pub async fn build_ibc_transfer(
         tx.add_memo(memo);
     }
 
-    let transfer = shielded_parts.map(|(shielded_transfer, asset_types)| {
-        let masp_tx_hash =
-            tx.add_masp_tx_section(shielded_transfer.masp_tx.clone()).1;
-        let transfer = token::ShieldingTransfer {
-            // The token will be escrowed to IBC address
-            source: source.clone(),
-            token: args.token.clone(),
-            amount: validated_amount,
-            // Link the Transfer to the MASP Transaction by hash code
-            shielded_section_hash: masp_tx_hash,
-        };
-        tx.add_masp_builder(MaspBuilder {
-            asset_types,
-            metadata: shielded_transfer.metadata,
-            builder: shielded_transfer.builder,
-            target: masp_tx_hash,
-        });
-        transfer
-    });
+    let transfer = shielded_parts
+        .map(|(shielded_transfer, asset_types)| {
+            let masp_tx_hash =
+                tx.add_masp_tx_section(shielded_transfer.masp_tx.clone()).1;
+            let transfer = token::Transfer::masp(masp_tx_hash)
+                .transfer(
+                    // The token will be escrowed to IBC address
+                    source.clone(),
+                    MASP,
+                    args.token.clone(),
+                    validated_amount,
+                )
+                .ok_or(Error::Other(
+                    "Combined transfer overflows".to_string(),
+                ))?;
+            tx.add_masp_builder(MaspBuilder {
+                asset_types,
+                metadata: shielded_transfer.metadata,
+                builder: shielded_transfer.builder,
+                target: masp_tx_hash,
+            });
+            Result::Ok(transfer)
+        })
+        .transpose()?;
 
     // Check the token and make the tx data
     let ibc_denom =
@@ -2831,70 +2838,97 @@ pub async fn build_transparent_transfer<N: Namada>(
     context: &N,
     args: &mut args::TxTransparentTransfer,
 ) -> Result<(Tx, SigningTxData)> {
-    let source = &args.source;
-    let target = &args.target;
+    let mut transfers = token::Transfer::default();
 
-    let default_signer = Some(source.clone());
-    let signing_data = signing::aux_signing_data(
-        context,
-        &args.tx,
-        Some(source.clone()),
-        default_signer,
-    )
-    .await?;
-
-    // Transparent fee payment
-    let (fee_amount, updated_balance) =
-        validate_transparent_fee(context, &args.tx, &signing_data.fee_payer)
-            .await
-            .map(|(fee_amount, updated_balance)| {
-                (fee_amount, Some(updated_balance))
-            })?;
-
-    // Check that the source address exists on chain
-    source_exists_or_err(source.clone(), args.tx.force, context).await?;
-    // Check that the target address exists on chain
-    target_exists_or_err(target.clone(), args.tx.force, context).await?;
-
-    // Validate the amount given
-    let validated_amount =
-        validate_amount(context, args.amount, &args.token, args.tx.force)
-            .await?;
-
-    // Check the balance of the source
-    if let Some(updated_balance) = updated_balance {
-        let check_balance = if &updated_balance.source == source
-            && updated_balance.token == args.token
-        {
-            CheckBalance::Balance(updated_balance.post_balance)
+    // Evaluate signer and fees
+    let (signing_data, fee_amount, updated_balance) = {
+        let source = if args.data.len() == 1 {
+            // If only one transfer take its source as the signer
+            args.data
+                .first()
+                .map(|transfer_data| transfer_data.source.clone())
         } else {
-            CheckBalance::Query(balance_key(&args.token, source))
+            // Otherwise the caller is required to pass the public keys in the
+            // argument
+            None
         };
 
-        check_balance_too_low_err(
-            &args.token,
-            source,
-            validated_amount.amount(),
-            check_balance,
-            args.tx.force,
+        let signing_data = signing::aux_signing_data(
             context,
+            &args.tx,
+            source.clone(),
+            source,
         )
         .await?;
-    }
 
-    // Construct the corresponding transparent Transfer object
-    let transfer = token::TransparentTransfer {
-        source: source.clone(),
-        target: target.clone(),
-        token: args.token.clone(),
-        amount: validated_amount,
+        // Transparent fee payment
+        let (fee_amount, updated_balance) = validate_transparent_fee(
+            context,
+            &args.tx,
+            &signing_data.fee_payer,
+        )
+        .await
+        .map(|(fee_amount, updated_balance)| {
+            (fee_amount, Some(updated_balance))
+        })?;
+
+        (signing_data, fee_amount, updated_balance)
     };
+
+    for TxTransparentTransferData {
+        source,
+        target,
+        token,
+        amount,
+    } in &args.data
+    {
+        // Check that the source address exists on chain
+        source_exists_or_err(source.clone(), args.tx.force, context).await?;
+        // Check that the target address exists on chain
+        target_exists_or_err(target.clone(), args.tx.force, context).await?;
+
+        // Validate the amount given
+        let validated_amount =
+            validate_amount(context, amount.to_owned(), token, args.tx.force)
+                .await?;
+
+        // Check the balance of the source
+        if let Some(updated_balance) = &updated_balance {
+            let check_balance = if &updated_balance.source == source
+                && &updated_balance.token == token
+            {
+                CheckBalance::Balance(updated_balance.post_balance)
+            } else {
+                CheckBalance::Query(balance_key(token, source))
+            };
+
+            check_balance_too_low_err(
+                token,
+                source,
+                validated_amount.amount(),
+                check_balance,
+                args.tx.force,
+                context,
+            )
+            .await?;
+        }
+
+        // Construct the corresponding transparent Transfer object
+        transfers = transfers
+            .transfer(
+                source.to_owned(),
+                target.to_owned(),
+                token.to_owned(),
+                validated_amount,
+            )
+            .ok_or(Error::Other("Combined transfer overflows".to_string()))?;
+    }
 
     let tx = build_pow_flag(
         context,
         &args.tx,
         args.tx_code_path.clone(),
-        transfer,
+        transfers,
         do_nothing,
         fee_amount,
         &signing_data.fee_payer,
@@ -2908,70 +2942,75 @@ pub async fn build_shielded_transfer<N: Namada>(
     context: &N,
     args: &mut args::TxShieldedTransfer,
 ) -> Result<(Tx, SigningTxData)> {
-    let default_signer = Some(MASP);
-    let signing_data = signing::aux_signing_data(
-        context,
-        &args.tx,
-        Some(MASP),
-        default_signer,
-    )
-    .await?;
+    let signing_data =
+        signing::aux_signing_data(context, &args.tx, Some(MASP), Some(MASP))
+            .await?;
 
     // Shielded fee payment
     let fee_amount = validate_fee(context, &args.tx).await?;
 
-    // Validate the amount given
-    let validated_amount =
-        validate_amount(context, args.amount, &args.token, args.tx.force)
-            .await?;
+    let mut transfer_data = vec![];
+    for TxShieldedTransferData {
+        source,
+        target,
+        token,
+        amount,
+    } in &args.data
+    {
+        // Validate the amount given
+        let validated_amount =
+            validate_amount(context, amount.to_owned(), token, args.tx.force)
+                .await?;
+
+        transfer_data.push(MaspTransferData {
+            source: TransferSource::ExtendedSpendingKey(source.to_owned()),
+            target: TransferTarget::PaymentAddress(target.to_owned()),
+            token: token.to_owned(),
+            amount: validated_amount,
+        });
+    }
 
     // TODO(namada#2597): this function should also take another arg as the fees
     // token and amount
     let shielded_parts = construct_shielded_parts(
         context,
-        &TransferSource::ExtendedSpendingKey(args.source),
-        &TransferTarget::PaymentAddress(args.target),
-        &args.token,
-        validated_amount,
+        transfer_data,
         !(args.tx.dry_run || args.tx.dry_run_wrapper),
     )
     .await?
     .expect("Shielded transfer must have shielded parts");
 
-    let add_shielded_parts =
-        |tx: &mut Tx, data: &mut token::ShieldedTransfer| {
-            // Add the MASP Transaction and its Builder to facilitate validation
-            let (
-                ShieldedTransfer {
-                    builder,
-                    masp_tx,
-                    metadata,
-                    epoch: _,
-                },
-                asset_types,
-            ) = shielded_parts;
-            // Add a MASP Transaction section to the Tx and get the tx hash
-            let section_hash = tx.add_masp_tx_section(masp_tx).1;
-
-            tx.add_masp_builder(MaspBuilder {
-                asset_types,
-                // Store how the Info objects map to Descriptors/Outputs
-                metadata,
-                // Store the data that was used to construct the Transaction
+    let add_shielded_parts = |tx: &mut Tx, data: &mut token::Transfer| {
+        // Add the MASP Transaction and its Builder to facilitate validation
+        let (
+            ShieldedTransfer {
                 builder,
-                // Link the Builder to the Transaction by hash code
-                target: section_hash,
-            });
+                masp_tx,
+                metadata,
+                epoch: _,
+            },
+            asset_types,
+        ) = shielded_parts;
+        // Add a MASP Transaction section to the Tx and get the tx hash
+        let section_hash = tx.add_masp_tx_section(masp_tx).1;
 
-            data.section_hash = section_hash;
-            tracing::debug!("Transfer data {data:?}");
-            Ok(())
-        };
+        tx.add_masp_builder(MaspBuilder {
+            asset_types,
+            // Store how the Info objects map to Descriptors/Outputs
+            metadata,
+            // Store the data that was used to construct the Transaction
+            builder,
+            // Link the Builder to the Transaction by hash code
+            target: section_hash,
+        });
+
+        data.shielded_section_hash = Some(section_hash);
+        tracing::debug!("Transfer data {data:?}");
+        Ok(())
+    };
 
     // Construct the tx data with a placeholder shielded section hash
-    let data = token::ShieldedTransfer {
-        section_hash: Hash::zero(),
-    };
+    let data = token::Transfer::default();
     let tx = build_pow_flag(
         context,
         &args.tx,
@@ -2990,15 +3029,19 @@ pub async fn build_shielding_transfer<N: Namada>(
     context: &N,
     args: &mut args::TxShieldingTransfer,
 ) -> Result<(Tx, SigningTxData, MaspEpoch)> {
-    let source = &args.source;
-    let default_signer = Some(source.clone());
-    let signing_data = signing::aux_signing_data(
-        context,
-        &args.tx,
-        Some(source.clone()),
-        default_signer,
-    )
-    .await?;
+    let source = if args.data.len() == 1 {
+        // If only one transfer take its source as the signer
+        args.data
+            .first()
+            .map(|transfer_data| transfer_data.source.clone())
+    } else {
+        // Otherwise the caller is required to pass the public keys in the
+        // argument
+        None
+    };
+    let signing_data =
+        signing::aux_signing_data(context, &args.tx, source.clone(), source)
+            .await?;
 
     // Transparent fee payment
     let (fee_amount, updated_balance) =
@@ -3008,80 +3051,93 @@ pub async fn build_shielding_transfer<N: Namada>(
                 (fee_amount, Some(updated_balance))
             })?;
 
-    // Validate the amount given
-    let validated_amount =
-        validate_amount(context, args.amount, &args.token, args.tx.force)
+    let mut transfer_data = vec![];
+    let mut data = token::Transfer::default();
+    for TxShieldingTransferData {
+        source,
+        token,
+        amount,
+    } in &args.data
+    {
+        // Validate the amount given
+        let validated_amount =
+            validate_amount(context, amount.to_owned(), token, args.tx.force)
+                .await?;
+
+        // Check the balance of the source
+        if let Some(updated_balance) = &updated_balance {
+            let check_balance = if &updated_balance.source == source
+                && &updated_balance.token == token
+            {
+                CheckBalance::Balance(updated_balance.post_balance)
+            } else {
+                CheckBalance::Query(balance_key(token, source))
+            };
+
+            check_balance_too_low_err(
+                token,
+                source,
+                validated_amount.amount(),
+                check_balance,
+                args.tx.force,
+                context,
+            )
             .await?;
+        }
 
-    // Check the balance of the source
-    if let Some(updated_balance) = updated_balance {
-        let check_balance = if &updated_balance.source == source
-            && updated_balance.token == args.token
-        {
-            CheckBalance::Balance(updated_balance.post_balance)
-        } else {
-            CheckBalance::Query(balance_key(&args.token, source))
-        };
+        transfer_data.push(MaspTransferData {
+            source: TransferSource::Address(source.to_owned()),
+            target: TransferTarget::PaymentAddress(args.target),
+            token: token.to_owned(),
+            amount: validated_amount,
+        });
 
-        check_balance_too_low_err(
-            &args.token,
-            source,
-            validated_amount.amount(),
-            check_balance,
-            args.tx.force,
-            context,
-        )
-        .await?;
+        data = data
+            .transfer(
+                source.to_owned(),
+                MASP,
+                token.to_owned(),
+                validated_amount,
+            )
+            .ok_or(Error::Other("Combined transfer overflows".to_string()))?;
     }
 
     let shielded_parts = construct_shielded_parts(
         context,
-        &TransferSource::Address(source.clone()),
-        &TransferTarget::PaymentAddress(args.target),
-        &args.token,
-        validated_amount,
+        transfer_data,
         !(args.tx.dry_run || args.tx.dry_run_wrapper),
     )
     .await?
     .expect("Shielding transfer must have shielded parts");
     let shielded_tx_epoch = shielded_parts.0.epoch;
 
-    let add_shielded_parts =
-        |tx: &mut Tx, data: &mut token::ShieldingTransfer| {
-            // Add the MASP Transaction and its Builder to facilitate validation
-            let (
-                ShieldedTransfer {
-                    builder,
-                    masp_tx,
-                    metadata,
-                    epoch: _,
-                },
-                asset_types,
-            ) = shielded_parts;
-            // Add a MASP Transaction section to the Tx and get the tx hash
-            let shielded_section_hash = tx.add_masp_tx_section(masp_tx).1;
-
-            tx.add_masp_builder(MaspBuilder {
-                asset_types,
-                // Store how the Info objects map to Descriptors/Outputs
-                metadata,
-                // Store the data that was used to construct the Transaction
+    let add_shielded_parts = |tx: &mut Tx, data: &mut token::Transfer| {
+        // Add the MASP Transaction and its Builder to facilitate validation
+        let (
+            ShieldedTransfer {
                 builder,
-                // Link the Builder to the Transaction by hash code
-                target: shielded_section_hash,
-            });
+                masp_tx,
+                metadata,
+                epoch: _,
+            },
+            asset_types,
+        ) = shielded_parts;
+        // Add a MASP Transaction section to the Tx and get the tx hash
+        let shielded_section_hash = tx.add_masp_tx_section(masp_tx).1;
 
-            data.shielded_section_hash = shielded_section_hash;
-            tracing::debug!("Transfer data {data:?}");
-            Ok(())
-        };
+        tx.add_masp_builder(MaspBuilder {
+            asset_types,
+            // Store how the Info objects map to Descriptors/Outputs
+            metadata,
+            // Store the data that was used to construct the Transaction
+            builder,
+            // Link the Builder to the Transaction by hash code
+            target: shielded_section_hash,
+        });
 
-    // Construct the tx data with a placeholder shielded section hash
-    let data = token::ShieldingTransfer {
-        source: source.clone(),
-        token: args.token.clone(),
-        amount: validated_amount,
-        shielded_section_hash: Hash::zero(),
+        data.shielded_section_hash = Some(shielded_section_hash);
+        tracing::debug!("Transfer data {data:?}");
+        Ok(())
     };
 
     let tx = build_pow_flag(
@@ -3102,73 +3158,82 @@ pub async fn build_unshielding_transfer<N: Namada>(
     context: &N,
     args: &mut args::TxUnshieldingTransfer,
 ) -> Result<(Tx, SigningTxData)> {
-    let default_signer = Some(MASP);
-    let signing_data = signing::aux_signing_data(
-        context,
-        &args.tx,
-        Some(MASP),
-        default_signer,
-    )
-    .await?;
+    let signing_data =
+        signing::aux_signing_data(context, &args.tx, Some(MASP), Some(MASP))
+            .await?;
 
     // Shielded fee payment
     let fee_amount = validate_fee(context, &args.tx).await?;
 
-    // Validate the amount given
-    let validated_amount =
-        validate_amount(context, args.amount, &args.token, args.tx.force)
-            .await?;
+    let mut transfer_data = vec![];
+    let mut data = token::Transfer::default();
+    for TxUnshieldingTransferData {
+        target,
+        token,
+        amount,
+    } in &args.data
+    {
+        // Validate the amount given
+        let validated_amount =
+            validate_amount(context, amount.to_owned(), token, args.tx.force)
+                .await?;
+
+        transfer_data.push(MaspTransferData {
+            source: TransferSource::ExtendedSpendingKey(args.source),
+            target: TransferTarget::Address(target.to_owned()),
+            token: token.to_owned(),
+            amount: validated_amount,
+        });
+
+        data = data
+            .transfer(
+                MASP,
+                target.to_owned(),
+                token.to_owned(),
+                validated_amount,
+            )
+            .ok_or(Error::Other("Combined transfer overflows".to_string()))?;
+    }
 
     // TODO(namada#2597): this function should also take another arg as the fees
     // token and amount
     let shielded_parts = construct_shielded_parts(
         context,
-        &TransferSource::ExtendedSpendingKey(args.source),
-        &TransferTarget::Address(args.target.clone()),
-        &args.token,
-        validated_amount,
+        transfer_data,
         !(args.tx.dry_run || args.tx.dry_run_wrapper),
     )
     .await?
     .expect("Shielding transfer must have shielded parts");
 
-    let add_shielded_parts =
-        |tx: &mut Tx, data: &mut token::UnshieldingTransfer| {
-            // Add the MASP Transaction and its Builder to facilitate validation
-            let (
-                ShieldedTransfer {
-                    builder,
-                    masp_tx,
-                    metadata,
-                    epoch: _,
-                },
-                asset_types,
-            ) = shielded_parts;
-            // Add a MASP Transaction section to the Tx and get the tx hash
-            let shielded_section_hash = tx.add_masp_tx_section(masp_tx).1;
-
-            tx.add_masp_builder(MaspBuilder {
-                asset_types,
-                // Store how the Info objects map to Descriptors/Outputs
-                metadata,
-                // Store the data that was used to construct the Transaction
+    let add_shielded_parts = |tx: &mut Tx, data: &mut token::Transfer| {
+        // Add the MASP Transaction and its Builder to facilitate validation
+        let (
+            ShieldedTransfer {
                 builder,
-                // Link the Builder to the Transaction by hash code
-                target: shielded_section_hash,
-            });
+                masp_tx,
+                metadata,
+                epoch: _,
+            },
+            asset_types,
+        ) = shielded_parts;
+        // Add a MASP Transaction section to the Tx and get the tx hash
+        let shielded_section_hash = tx.add_masp_tx_section(masp_tx).1;
 
-            data.shielded_section_hash = shielded_section_hash;
-            tracing::debug!("Transfer data {data:?}");
-            Ok(())
-        };
+        tx.add_masp_builder(MaspBuilder {
+            asset_types,
+            // Store how the Info objects map to Descriptors/Outputs
+            metadata,
+            // Store the data that was used to construct the Transaction
+            builder,
+            // Link the Builder to the Transaction by hash code
+            target: shielded_section_hash,
+        });
 
-    // Construct the tx data with a placeholder shielded section hash
-    let data = token::UnshieldingTransfer {
-        target: args.target.clone(),
-        token: args.token.clone(),
-        amount: validated_amount,
-        shielded_section_hash: Hash::zero(),
+        data.shielded_section_hash = Some(shielded_section_hash);
+        tracing::debug!("Transfer data {data:?}");
+        Ok(())
     };
+
     let tx = build_pow_flag(
         context,
         &args.tx,
@@ -3185,10 +3250,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
 // Construct the shielded part of the transaction, if any
 async fn construct_shielded_parts<N: Namada>(
     context: &N,
-    source: &TransferSource,
-    target: &TransferTarget,
-    token: &Address,
-    amount: token::DenominatedAmount,
+    data: Vec<MaspTransferData>,
     update_ctx: bool,
 ) -> Result<Option<(ShieldedTransfer, HashSet<AssetData>)>> {
     // Precompute asset types to increase chances of success in decoding
@@ -3201,14 +3263,23 @@ async fn construct_shielded_parts<N: Namada>(
         .await;
     let stx_result =
         ShieldedContext::<N::ShieldedUtils>::gen_shielded_transfer(
-            context, source, target, token, amount, update_ctx,
+            context, data, update_ctx,
         )
         .await;
 
     let shielded_parts = match stx_result {
         Ok(Some(stx)) => stx,
         Ok(None) => return Ok(None),
-        Err(Build(builder::Error::InsufficientFunds(_))) => {
+        Err(Build {
+            error: builder::Error::InsufficientFunds(_),
+            data,
+        }) => {
+            let MaspTransferData {
+                source,
+                token,
+                amount,
+                ..
+            } = data.unwrap();
             return Err(TxSubmitError::NegativeBalanceAfterTransfer(
                 Box::new(source.effective_address()),
                 amount.to_string(),
@@ -3486,7 +3557,7 @@ pub async fn build_custom(
 pub async fn gen_ibc_shielding_transfer<N: Namada>(
     context: &N,
     args: args::GenIbcShieldedTransfer,
-) -> Result<Option<(token::ShieldingTransfer, MaspTransaction)>> {
+) -> Result<Option<(token::Transfer, MaspTransaction)>> {
     let source = Address::Internal(InternalAddress::Ibc);
     let (src_port_id, src_channel_id) =
         get_ibc_src_port_channel(context, &args.port_id, &args.channel_id)
@@ -3526,13 +3597,16 @@ pub async fn gen_ibc_shielding_transfer<N: Namada>(
         .precompute_asset_types(context.client(), tokens)
         .await;
 
+    let masp_transfer_data = MaspTransferData {
+        source: TransferSource::Address(source.clone()),
+        target: args.target,
+        token: token.clone(),
+        amount: validated_amount,
+    };
     let shielded_transfer =
         ShieldedContext::<N::ShieldedUtils>::gen_shielded_transfer(
             context,
-            &TransferSource::Address(source.clone()),
-            &args.target,
-            &token,
-            validated_amount,
+            vec![masp_transfer_data],
             true,
         )
         .await
@@ -3541,12 +3615,9 @@ pub async fn gen_ibc_shielding_transfer<N: Namada>(
     if let Some(shielded_transfer) = shielded_transfer {
         let masp_tx_hash =
             Section::MaspTx(shielded_transfer.masp_tx.clone()).get_hash();
-        let transfer = token::ShieldingTransfer {
-            source: source.clone(),
-            token: token.clone(),
-            amount: validated_amount,
-            shielded_section_hash: masp_tx_hash,
-        };
+        let transfer = token::Transfer::masp(masp_tx_hash)
+            .transfer(source.clone(), MASP, token.clone(), validated_amount)
+            .ok_or(Error::Other("Combined transfer overflows".to_string()))?;
         Ok(Some((transfer, shielded_transfer.masp_tx)))
     } else {
         Ok(None)

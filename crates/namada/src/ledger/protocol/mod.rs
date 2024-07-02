@@ -8,12 +8,12 @@ use eyre::{eyre, WrapErr};
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::hash::Hash;
 use namada_events::extend::{
-    ComposeEvent, Height as HeightAttr, TxHash as TxHashAttr,
+    ComposeEvent, Height as HeightAttr, TxHash as TxHashAttr, UserAccount,
 };
 use namada_events::EventLevel;
 use namada_gas::TxGasMeter;
 use namada_state::StorageWrite;
-use namada_token::event::{TokenEvent, TokenOperation, UserAccount};
+use namada_token::event::{TokenEvent, TokenOperation};
 use namada_tx::data::protocol::{ProtocolTx, ProtocolTxType};
 use namada_tx::data::{
     BatchResults, BatchedTxResult, ExtendedTxResult, TxResult, VpStatusFlags,
@@ -522,16 +522,14 @@ where
                     TokenEvent {
                         descriptor: FEE_PAYMENT_DESCRIPTOR,
                         level: EventLevel::Tx,
-                        token: wrapper.fee.token.clone(),
-                        operation: TokenOperation::Transfer {
-                            amount: fees.into(),
-                            source: UserAccount::Internal(wrapper.fee_payer()),
-                            target: UserAccount::Internal(
-                                block_proposer.clone(),
-                            ),
-                            source_post_balance: post_bal.into(),
+                        operation: TokenOperation::transfer(
+                            UserAccount::Internal(wrapper.fee_payer()),
+                            UserAccount::Internal(block_proposer.clone()),
+                            wrapper.fee.token.clone(),
+                            fees.into(),
+                            post_bal.into(),
                             target_post_balance,
-                        },
+                        ),
                     }
                     .with(HeightAttr(current_block_height))
                     .with(TxHashAttr(wrapper_tx_hash)),
@@ -570,16 +568,14 @@ where
                     TokenEvent {
                         descriptor: FEE_PAYMENT_DESCRIPTOR,
                         level: EventLevel::Tx,
-                        token: wrapper.fee.token.clone(),
-                        operation: TokenOperation::Transfer {
-                            amount: balance.into(),
-                            source: UserAccount::Internal(wrapper.fee_payer()),
-                            target: UserAccount::Internal(
-                                block_proposer.clone(),
-                            ),
-                            source_post_balance: namada_core::uint::ZERO,
+                        operation: TokenOperation::transfer(
+                            UserAccount::Internal(wrapper.fee_payer()),
+                            UserAccount::Internal(block_proposer.clone()),
+                            wrapper.fee.token.clone(),
+                            balance.into(),
+                            namada_core::uint::ZERO,
                             target_post_balance,
-                        },
+                        ),
                     }
                     .with(HeightAttr(current_block_height))
                     .with(TxHashAttr(wrapper_tx_hash)),
