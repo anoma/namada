@@ -1,7 +1,7 @@
 //! Proof-of-Stake abstract interfaces
 
-use crate::address::Address;
-use crate::storage;
+use namada_core::address::Address;
+use namada_core::storage;
 
 /// Abstract PoS storage read interface
 pub trait Read<S> {
