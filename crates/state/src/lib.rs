@@ -665,6 +665,7 @@ pub mod testing {
                 eth_events_queue: EthEventsQueue::default(),
                 storage_read_past_height_limit: Some(1000),
                 commit_only_data: CommitOnlyData::default(),
+                process_proposal_cache: Default::default(),
             }
         }
     }

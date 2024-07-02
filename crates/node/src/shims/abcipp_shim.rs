@@ -104,10 +104,6 @@ impl AbcippShim {
         while let Ok((req, resp_sender)) = self.shell_recv.recv() {
             let resp = match req {
                 Req::ProcessProposal(proposal) => self
-                    // FIXME: also, can we use this to cache the
-                    // process_proposal result to avoid recomputing it? See if
-                    // we really need the optimization on the already run
-                    // process proposal
                     .service
                     .call(Request::ProcessProposal(proposal))
                     .map_err(Error::from)
@@ -125,13 +121,69 @@ impl AbcippShim {
                     let begin_block_request =
                         self.begin_block_request.take().unwrap();
 
-                    let process_req = super::abcipp_shim_types::shim::request::CheckProcessProposal::from(begin_block_request.clone()).cast_to_tendermint_req(self.delivered_txs.clone());
-                    // FIXME: should instead mock a call to call? Probably yes
-                    // FIXME: if cached avoid this call
-                    // Need to run process proposal to extract the data we need
-                    // for finalize block (tx results)
                     let (process_proposal_result, processing_results) =
-                        self.service.process_proposal(process_req.into());
+                        match namada::core::hash::Hash::try_from(
+                            begin_block_request.hash,
+                        ) {
+                            Ok(block_hash) => {
+                                match self
+                                    .service
+                                    .state
+                                    .in_mem()
+                                    .process_proposal_cache
+                                    .get(&block_hash)
+                                {
+                                    Some((process_resp, res)) => (
+                                        // We already have the result of
+                                        // process proposal for this block
+                                        // cached in memory
+                                        process_resp.to_owned(),
+                                        res.iter()
+                                            .map(|res| res.to_owned().into())
+                                            .collect(),
+                                    ),
+                                    None => {
+                                        // Need to run process proposal to
+                                        // extract the data we need
+                                        // for finalize block (tx results)
+                                        let process_req = super::abcipp_shim_types::shim::request::CheckProcessProposal::from(begin_block_request.clone()).cast_to_tendermint_req(self.delivered_txs.clone());
+
+                                        let (process_resp, res) =
+                                            self.service.process_proposal(
+                                                process_req.into(),
+                                            );
+                                        // Cache the result
+                                        self.service
+                                            .state
+                                            .in_mem_mut()
+                                            .process_proposal_cache
+                                            .insert(
+                                                block_hash.to_owned(),
+                                                (
+                                                    process_resp,
+                                                    res.clone()
+                                                        .into_iter()
+                                                        .map(|res| res.into())
+                                                        .collect(),
+                                                ),
+                                            );
+
+                                        (process_resp, res)
+                                    }
+                                }
+                            }
+                            Err(_) => {
+                                // Need to run process proposal to extract the
+                                // data we need
+                                // for finalize block (tx results)
+                                let process_req = super::abcipp_shim_types::shim::request::CheckProcessProposal::from(begin_block_request.clone()).cast_to_tendermint_req(self.delivered_txs.clone());
+
+                                // Do not cache the result in this case since we
+                                // don't have the hash of the block
+                                self.service
+                                    .process_proposal(process_req.into())
+                            }
+                        };
 
                     if let ProcessProposal::Reject = process_proposal_result {
                         Err(Error::ConvertResp(Response::ProcessProposal(
