@@ -22,6 +22,7 @@ use crate::uint::{self, Uint, I256};
 
 /// Amount in micro units. For different granularity another representation
 /// might be more appropriate.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     Copy,
@@ -378,6 +379,7 @@ impl Display for Amount {
 /// Given a number represented as `M*B^D`, then
 /// `M` is the matissa, `B` is the base and `D`
 /// is the denomination, represented by this struct.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Copy,
@@ -410,6 +412,7 @@ impl From<Denomination> for u8 {
 }
 
 /// An amount with its denomination.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Copy,

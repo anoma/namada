@@ -394,3 +394,41 @@ impl super::SigScheme for SigScheme {
             .map_err(|err| VerifySigError::SigVerifyError(err.to_string()))
     }
 }
+
+#[cfg(feature = "arbitrary")]
+impl arbitrary::Arbitrary<'_> for PublicKey {
+    fn arbitrary(
+        u: &mut arbitrary::Unstructured<'_>,
+    ) -> arbitrary::Result<Self> {
+        let seed: [u8; 32] = u
+            .bytes(u.len())?
+            .try_into()
+            .map_err(|_| arbitrary::Error::NotEnoughData)?;
+        let sk = ed25519_consensus::SigningKey::from(seed);
+        Ok(Self(sk.verification_key()))
+    }
+
+    fn size_hint(_depth: usize) -> (usize, Option<usize>) {
+        // Signing key seed size
+        (32, Some(32))
+    }
+}
+
+#[cfg(feature = "arbitrary")]
+impl arbitrary::Arbitrary<'_> for Signature {
+    fn arbitrary(
+        u: &mut arbitrary::Unstructured<'_>,
+    ) -> arbitrary::Result<Self> {
+        let seed: [u8; 32] = u
+            .bytes(u.len())?
+            .try_into()
+            .map_err(|_| arbitrary::Error::NotEnoughData)?;
+        let sk = ed25519_consensus::SigningKey::from(seed);
+        Ok(Self(sk.sign(&[0_u8])))
+    }
+
+    fn size_hint(_depth: usize) -> (usize, Option<usize>) {
+        // Signing key seed size
+        (32, Some(32))
+    }
+}

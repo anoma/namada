@@ -39,6 +39,7 @@ members = [
   "crates/vp_env",
   "crates/vp_prelude",
   "examples",
+  "fuzz",
 ]
 
 # wasm packages have to be built separately
@@ -60,6 +61,7 @@ repository = "https://github.com/anoma/namada"
 version = "0.39.0"
 
 [workspace.dependencies]
+arbitrary = {version = "1.3", features = ["derive"]}
 ark-bls12-381 = {version = "0.3"}
 ark-serialize = {version = "0.3"}
 ark-std = "0.3.0"
@@ -206,3 +208,6 @@ lto = true
 opt-level = 3
 panic = "unwind"
 overflow-checks = true
+
+[profile.dev.package.namada_fuzz]
+opt-level = 3

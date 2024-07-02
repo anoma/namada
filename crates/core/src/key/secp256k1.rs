@@ -599,6 +599,53 @@ impl super::SigScheme for SigScheme {
     }
 }
 
+#[cfg(feature = "arbitrary")]
+impl arbitrary::Arbitrary<'_> for PublicKey {
+    fn arbitrary(
+        u: &mut arbitrary::Unstructured<'_>,
+    ) -> arbitrary::Result<Self> {
+        use rand::SeedableRng;
+        let seed: [u8; 32] = u
+            .bytes(u.len())?
+            .try_into()
+            .map_err(|_| arbitrary::Error::NotEnoughData)?;
+        Ok(Self(
+            k256::SecretKey::random(&mut rand::rngs::StdRng::from_seed(seed))
+                .public_key(),
+        ))
+    }
+
+    fn size_hint(_depth: usize) -> (usize, Option<usize>) {
+        // StdRng seed len
+        (32, Some(32))
+    }
+}
+
+#[cfg(feature = "arbitrary")]
+impl arbitrary::Arbitrary<'_> for Signature {
+    fn arbitrary(
+        u: &mut arbitrary::Unstructured<'_>,
+    ) -> arbitrary::Result<Self> {
+        use rand::SeedableRng;
+        let seed: [u8; 32] = u
+            .bytes(u.len())?
+            .try_into()
+            .map_err(|_| arbitrary::Error::NotEnoughData)?;
+        let sk =
+            k256::SecretKey::random(&mut rand::rngs::StdRng::from_seed(seed));
+        let sig_key = k256::ecdsa::SigningKey::from(&sk);
+        let (sig, recovery_id) = sig_key
+            .sign_prehash_recoverable(&[0_u8; 32])
+            .expect("Must be able to sign");
+        Ok(Self(sig, recovery_id))
+    }
+
+    fn size_hint(_depth: usize) -> (usize, Option<usize>) {
+        // StdRng seed len
+        (32, Some(32))
+    }
+}
+
 #[cfg(test)]
 mod test {
 
