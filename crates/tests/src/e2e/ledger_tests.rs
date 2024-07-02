@@ -1411,7 +1411,6 @@ pub fn prepare_proposal_data(
 ) -> PathBuf {
     let valid_proposal_json = json!({
         "proposal": {
-            "id": id,
             "content": {
                 "title": "TheTitle",
                 "authors": "test@test.com",

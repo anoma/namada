@@ -2134,7 +2134,6 @@ fn propose_inflation(test: &Test) -> Result<Epoch> {
     let start_epoch = (epoch.0 + 3) / 3 * 3;
     let proposal_json = serde_json::json!({
         "proposal": {
-            "id": 0,
             "content": {
                 "title": "TheTitle",
                 "authors": "test@test.com",
