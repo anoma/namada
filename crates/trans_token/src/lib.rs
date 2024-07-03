@@ -25,6 +25,7 @@ pub mod vp;
 use std::marker::PhantomData;
 
 use namada_core::address::Address;
+use namada_core::token;
 use namada_storage::{StorageRead, StorageWrite};
 pub use namada_systems::trans_token::*;
 pub use storage::*;
@@ -34,32 +35,63 @@ pub use storage::*;
 pub struct Store<S>(PhantomData<S>);
 
 impl<S> Keys for Store<S> {
-    fn balance_key(
-        token: &Address,
-        owner: &Address,
-    ) -> namada_core::storage::Key {
+    fn balance_key(token: &Address, owner: &Address) -> storage::Key {
         storage_key::balance_key(token, owner)
     }
 
     fn is_balance_key<'a>(
         token_addr: &Address,
-        key: &'a namada_core::storage::Key,
+        key: &'a storage::Key,
     ) -> Option<&'a Address> {
         storage_key::is_balance_key(token_addr, key)
     }
 
-    fn is_any_token_balance_key(
-        key: &namada_core::storage::Key,
-    ) -> Option<[&Address; 2]> {
+    fn is_any_token_balance_key(key: &storage::Key) -> Option<[&Address; 2]> {
         storage_key::is_any_token_balance_key(key)
     }
 
-    fn minter_key(token_addr: &Address) -> namada_core::storage::Key {
+    fn minter_key(token_addr: &Address) -> storage::Key {
         storage_key::minter_key(token_addr)
+    }
+
+    fn parameter_prefix(token_addr: &Address) -> storage::Key {
+        storage_key::parameter_prefix(token_addr)
+    }
+
+    fn minted_balance_key(token_addr: &Address) -> namada_core::storage::Key {
+        storage_key::minted_balance_key(token_addr)
+    }
+
+    fn is_any_minted_balance_key(
+        key: &namada_core::storage::Key,
+    ) -> Option<&Address> {
+        storage_key::is_any_minted_balance_key(key)
     }
 }
 
-impl<S> Read<S> for Store<S> where S: StorageRead {}
+impl<S> Read<S> for Store<S>
+where
+    S: StorageRead,
+{
+    fn read_denom(
+        storage: &S,
+        token: &Address,
+    ) -> Result<Option<token::Denomination>> {
+        storage::read_denom(storage, token)
+    }
+
+    fn get_effective_total_native_supply(storage: &S) -> Result<token::Amount> {
+        storage::get_effective_total_native_supply(storage)
+    }
+
+    fn read_balance(
+        storage: &S,
+        token: &Address,
+        owner: &Address,
+    ) -> Result<token::Amount> {
+        storage::read_balance(storage, token, owner)
+    }
+}
 
 impl<S> Write<S> for Store<S>
 where

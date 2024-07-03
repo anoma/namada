@@ -37,8 +37,49 @@ use serde::{Deserialize, Serialize};
 
 /// Token storage keys
 pub mod storage_key {
-    pub use namada_shielded_token::storage_key::*;
+    use namada_core::address::Address;
+    use namada_core::storage;
+    use namada_shielded_token::storage_key as shielded;
+    pub use namada_shielded_token::storage_key::{
+        is_masp_commitment_anchor_key, is_masp_key, is_masp_nullifier_key,
+        is_masp_token_map_key, is_masp_transfer_key, masp_assets_hash_key,
+        masp_commitment_anchor_key, masp_commitment_tree_key,
+        masp_convert_anchor_key, masp_nullifier_key, masp_token_map_key,
+        masp_total_rewards,
+    };
     pub use namada_trans_token::storage_key::*;
+
+    type TransToken = namada_trans_token::Store<()>;
+
+    /// Obtain the nominal proportional key for the given token
+    pub fn masp_kp_gain_key(token_addr: &Address) -> storage::Key {
+        shielded::masp_kp_gain_key::<TransToken>(token_addr)
+    }
+
+    /// Obtain the nominal derivative key for the given token
+    pub fn masp_kd_gain_key(token_addr: &Address) -> storage::Key {
+        shielded::masp_kd_gain_key::<TransToken>(token_addr)
+    }
+
+    /// The max reward rate key for the given token
+    pub fn masp_max_reward_rate_key(token_addr: &Address) -> storage::Key {
+        shielded::masp_max_reward_rate_key::<TransToken>(token_addr)
+    }
+
+    /// Obtain the locked target amount key for the given token
+    pub fn masp_locked_amount_target_key(token_addr: &Address) -> storage::Key {
+        shielded::masp_locked_amount_target_key::<TransToken>(token_addr)
+    }
+
+    /// Obtain the storage key for the last locked amount of a token
+    pub fn masp_last_locked_amount_key(token_addr: &Address) -> storage::Key {
+        shielded::masp_last_locked_amount_key::<TransToken>(token_addr)
+    }
+
+    /// Obtain the storage key for the last inflation of a token
+    pub fn masp_last_inflation_key(token_addr: &Address) -> storage::Key {
+        shielded::masp_last_inflation_key::<TransToken>(token_addr)
+    }
 }
 
 use std::collections::BTreeMap;
@@ -60,7 +101,9 @@ where
 {
     namada_trans_token::write_params(storage, address)?;
     if let Some(params) = params {
-        namada_shielded_token::write_params(params, storage, address, denom)?;
+        namada_shielded_token::write_params::<S, namada_trans_token::Store<()>>(
+            params, storage, address, denom,
+        )?;
     }
     Ok(())
 }
@@ -76,7 +119,7 @@ where
     Params: parameters::Read<S>,
 {
     if is_new_masp_epoch {
-        conversion::update_allowed_conversions::<S, Params>(storage)?;
+        conversion::update_allowed_conversions::<S, Params, Store<S>>(storage)?;
     }
     Ok(())
 }

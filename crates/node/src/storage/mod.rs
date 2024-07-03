@@ -72,7 +72,7 @@ mod tests {
     use namada_sdk::storage::{BlockHeight, Key, KeySeg};
     use namada_sdk::token::conversion::update_allowed_conversions;
     use namada_sdk::{
-        address, decode, encode, parameters, storage, validation,
+        address, decode, encode, parameters, storage, token, validation,
     };
     use proptest::collection::vec;
     use proptest::prelude::*;
@@ -171,8 +171,10 @@ mod tests {
             .new_epoch(BlockHeight(100));
 
         // update conversion for a new epoch
-        update_allowed_conversions::<_, parameters::Store<_>>(&mut state)
-            .expect("update conversions failed");
+        update_allowed_conversions::<_, parameters::Store<_>, token::Store<_>>(
+            &mut state,
+        )
+        .expect("update conversions failed");
         state.commit_block().expect("commit failed");
 
         // save the last state and the storage

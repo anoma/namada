@@ -3829,7 +3829,6 @@ dependencies = [
  "namada_state",
  "namada_storage",
  "namada_systems",
- "namada_trans_token",
  "namada_tx",
  "namada_vp",
  "rand_core 0.6.4",

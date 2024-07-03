@@ -8,13 +8,10 @@ use namada_core::borsh::BorshSerializeExt;
 use namada_core::dec::Dec;
 #[cfg(any(feature = "multicore", test))]
 use namada_core::hash::Hash;
+use namada_core::token::{Amount, DenominatedAmount, Denomination};
 use namada_core::uint::Uint;
 use namada_storage::{StorageRead, StorageWrite};
-use namada_systems::parameters;
-use namada_trans_token::{
-    get_effective_total_native_supply, read_balance, read_denom, Amount,
-    DenominatedAmount, Denomination,
-};
+use namada_systems::{parameters, trans_token};
 
 #[cfg(any(feature = "multicore", test))]
 use crate::storage_key::{masp_assets_hash_key, masp_token_map_key};
@@ -66,15 +63,16 @@ pub fn compute_inflation(
 
 /// Compute the precision of MASP rewards for the given token. This function
 /// must be a non-zero constant for a given token.
-pub fn calculate_masp_rewards_precision<S>(
+pub fn calculate_masp_rewards_precision<S, TransToken>(
     storage: &mut S,
     addr: &Address,
 ) -> namada_storage::Result<(u128, Denomination)>
 where
     S: StorageWrite + StorageRead,
+    TransToken: trans_token::Read<S>,
 {
-    let denomination =
-        read_denom(storage, addr)?.expect("failed to read token denomination");
+    let denomination = TransToken::read_denom(storage, addr)?
+        .expect("failed to read token denomination");
     // Inflation is implicitly denominated by this value. The lower this
     // figure, the less precise inflation computations are. This is especially
     // problematic when inflation is coming from a token with much higher
@@ -90,51 +88,54 @@ where
 
 /// Compute the MASP rewards by applying the PD-controller to the genesis
 /// parameters and the last inflation and last locked rewards ratio values.
-pub fn calculate_masp_rewards<S>(
+pub fn calculate_masp_rewards<S, TransToken>(
     storage: &mut S,
     token: &Address,
     masp_epochs_per_year: u64,
 ) -> namada_storage::Result<((u128, u128), Denomination)>
 where
     S: StorageWrite + StorageRead,
+    TransToken: trans_token::Keys + trans_token::Read<S>,
 {
     let (precision, denomination) =
-        calculate_masp_rewards_precision(storage, token)?;
+        calculate_masp_rewards_precision::<S, TransToken>(storage, token)?;
 
     let masp_addr = MASP;
 
     // Query the storage for information -------------------------
 
     //// information about the amount of native tokens on the chain
-    let total_native_tokens = get_effective_total_native_supply(storage)?;
+    let total_native_tokens =
+        TransToken::get_effective_total_native_supply(storage)?;
 
     // total locked amount in the Shielded pool
-    let total_tokens_in_masp = read_balance(storage, token, &masp_addr)?;
+    let total_tokens_in_masp =
+        TransToken::read_balance(storage, token, &masp_addr)?;
 
     //// Values from the last epoch
     let last_inflation: Amount = storage
-        .read(&masp_last_inflation_key(token))?
+        .read(&masp_last_inflation_key::<TransToken>(token))?
         .expect("failure to read last inflation");
 
     let last_locked_amount: Amount = storage
-        .read(&masp_last_locked_amount_key(token))?
+        .read(&masp_last_locked_amount_key::<TransToken>(token))?
         .expect("failure to read last inflation");
 
     //// Parameters for each token
     let max_reward_rate: Dec = storage
-        .read(&masp_max_reward_rate_key(token))?
+        .read(&masp_max_reward_rate_key::<TransToken>(token))?
         .expect("max reward should properly decode");
 
     let kp_gain_nom: Dec = storage
-        .read(&masp_kp_gain_key(token))?
+        .read(&masp_kp_gain_key::<TransToken>(token))?
         .expect("kp_gain_nom reward should properly decode");
 
     let kd_gain_nom: Dec = storage
-        .read(&masp_kd_gain_key(token))?
+        .read(&masp_kd_gain_key::<TransToken>(token))?
         .expect("kd_gain_nom reward should properly decode");
 
     let target_locked_amount: Amount = storage
-        .read(&masp_locked_amount_target_key(token))?
+        .read(&masp_locked_amount_target_key::<TransToken>(token))?
         .expect("locked ratio target should properly decode");
 
     let target_locked_dec = Dec::try_from(target_locked_amount.raw_amount())
@@ -214,9 +215,15 @@ where
     // but we should make sure the return value's ratio matches
     // this new inflation rate in 'update_allowed_conversions',
     // otherwise we will have an inaccurate view of inflation
-    storage.write(&masp_last_inflation_key(token), inflation_amount)?;
+    storage.write(
+        &masp_last_inflation_key::<TransToken>(token),
+        inflation_amount,
+    )?;
 
-    storage.write(&masp_last_locked_amount_key(token), total_tokens_in_masp)?;
+    storage.write(
+        &masp_last_locked_amount_key::<TransToken>(token),
+        total_tokens_in_masp,
+    )?;
 
     Ok(((noterized_inflation, precision), denomination))
 }
@@ -224,24 +231,27 @@ where
 // This is only enabled when "wasm-runtime" is on, because we're using rayon
 #[cfg(not(any(feature = "multicore", test)))]
 /// Update the MASP's allowed conversions
-pub fn update_allowed_conversions<S, Params>(
+pub fn update_allowed_conversions<S, Params, TransToken>(
     _storage: &mut S,
 ) -> namada_storage::Result<()>
 where
     S: StorageWrite + StorageRead + WithConversionState,
     Params: parameters::Read<S>,
+    TransToken: trans_token::Keys,
 {
     Ok(())
 }
 
 #[cfg(any(feature = "multicore", test))]
 /// Update the MASP's allowed conversions
-pub fn update_allowed_conversions<S, Params>(
+pub fn update_allowed_conversions<S, Params, TransToken>(
     storage: &mut S,
 ) -> namada_storage::Result<()>
 where
     S: StorageWrite + StorageRead + WithConversionState,
     Params: parameters::Read<S>,
+    TransToken:
+        trans_token::Keys + trans_token::Read<S> + trans_token::Write<S>,
 {
     use std::cmp::Ordering;
     use std::collections::BTreeMap;
@@ -254,9 +264,9 @@ where
     use masp_primitives::transaction::components::I128Sum as MaspAmount;
     use namada_core::arith::CheckedAdd;
     use namada_core::masp::{encode_asset_type, MaspEpoch};
+    use namada_core::token::{MaspDigitPos, NATIVE_MAX_DECIMAL_PLACES};
     use namada_storage::conversion_state::ConversionLeaf;
     use namada_storage::{Error, OptionExt, ResultExt};
-    use namada_trans_token::{MaspDigitPos, NATIVE_MAX_DECIMAL_PLACES};
     use rayon::iter::{
         IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
     };
@@ -327,8 +337,11 @@ where
         AllowedConversion,
     >::new();
     // Native token inflation values are always with respect to this
-    let ref_inflation =
-        calculate_masp_rewards_precision(storage, &native_token)?.0;
+    let ref_inflation = calculate_masp_rewards_precision::<S, TransToken>(
+        storage,
+        &native_token,
+    )?
+    .0;
 
     // Reward all tokens according to above reward rates
     let masp_epoch_multiplier = Params::masp_epoch_multiplier(storage)?;
@@ -346,10 +359,14 @@ where
         checked!(epochs_per_year / masp_epoch_multiplier)?;
     for token in &masp_reward_keys {
         let ((reward, precision), denom) =
-            calculate_masp_rewards(storage, token, masp_epochs_per_year)?;
+            calculate_masp_rewards::<S, TransToken>(
+                storage,
+                token,
+                masp_epochs_per_year,
+            )?;
         masp_reward_denoms.insert(token.clone(), denom);
         // Dispense a transparent reward in parallel to the shielded rewards
-        let addr_bal = read_balance(storage, token, &masp_addr)?;
+        let addr_bal = TransToken::read_balance(storage, token, &masp_addr)?;
 
         // Get the last rewarded amount of the native token
         let normed_inflation = *storage
@@ -566,7 +583,7 @@ where
 
     // Update the MASP's transparent reward token balance to ensure that it
     // is sufficiently backed to redeem rewards
-    mint_rewards(storage, total_reward)?;
+    mint_rewards::<S, TransToken>(storage, total_reward)?;
 
     // Try to distribute Merkle tree construction as evenly as possible
     // across multiple cores
@@ -689,8 +706,13 @@ mod tests {
 
             for (token_addr, (alias, denom)) in tokens() {
                 namada_trans_token::write_params(&mut s, &token_addr).unwrap();
-                crate::write_params(&token_params, &mut s, &token_addr, &denom)
-                    .unwrap();
+                crate::write_params::<_, namada_trans_token::Store<()>>(
+                    &token_params,
+                    &mut s,
+                    &token_addr,
+                    &denom,
+                )
+                .unwrap();
 
                 write_denom(&mut s, &token_addr, denom).unwrap();
 
@@ -717,9 +739,11 @@ mod tests {
 
         for i in 0..ROUNDS {
             println!("Round {i}");
-            update_allowed_conversions::<_, namada_parameters::Store<_>>(
-                &mut s,
-            )
+            update_allowed_conversions::<
+                _,
+                namada_parameters::Store<_>,
+                namada_trans_token::Store<_>,
+            >(&mut s)
             .unwrap();
             println!();
             println!();

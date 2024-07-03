@@ -5,7 +5,7 @@ use masp_primitives::sapling::Nullifier;
 use namada_core::address::{self, Address};
 use namada_core::hash::Hash;
 use namada_core::storage::{self, DbKeySeg, KeySeg};
-use namada_trans_token::storage_key::parameter_prefix;
+use namada_systems::trans_token;
 
 /// Key segment prefix for the nullifiers
 pub const MASP_NULLIFIERS_KEY: &str = "nullifiers";
@@ -36,36 +36,50 @@ pub const MASP_MAX_REWARD_RATE_KEY: &str = "max_reward_rate";
 pub const MASP_TOTAL_REWARDS: &str = "max_total_rewards";
 
 /// Obtain the nominal proportional key for the given token
-pub fn masp_kp_gain_key(token_addr: &Address) -> storage::Key {
-    parameter_prefix(token_addr).with_segment(MASP_KP_GAIN_KEY.to_owned())
+pub fn masp_kp_gain_key<TransToken: trans_token::Keys>(
+    token_addr: &Address,
+) -> storage::Key {
+    TransToken::parameter_prefix(token_addr)
+        .with_segment(MASP_KP_GAIN_KEY.to_owned())
 }
 
 /// Obtain the nominal derivative key for the given token
-pub fn masp_kd_gain_key(token_addr: &Address) -> storage::Key {
-    parameter_prefix(token_addr).with_segment(MASP_KD_GAIN_KEY.to_owned())
+pub fn masp_kd_gain_key<TransToken: trans_token::Keys>(
+    token_addr: &Address,
+) -> storage::Key {
+    TransToken::parameter_prefix(token_addr)
+        .with_segment(MASP_KD_GAIN_KEY.to_owned())
 }
 
 /// The max reward rate key for the given token
-pub fn masp_max_reward_rate_key(token_addr: &Address) -> storage::Key {
-    parameter_prefix(token_addr)
+pub fn masp_max_reward_rate_key<TransToken: trans_token::Keys>(
+    token_addr: &Address,
+) -> storage::Key {
+    TransToken::parameter_prefix(token_addr)
         .with_segment(MASP_MAX_REWARD_RATE_KEY.to_owned())
 }
 
 /// Obtain the locked target amount key for the given token
-pub fn masp_locked_amount_target_key(token_addr: &Address) -> storage::Key {
-    parameter_prefix(token_addr)
+pub fn masp_locked_amount_target_key<TransToken: trans_token::Keys>(
+    token_addr: &Address,
+) -> storage::Key {
+    TransToken::parameter_prefix(token_addr)
         .with_segment(MASP_LOCKED_AMOUNT_TARGET_KEY.to_owned())
 }
 
 /// Obtain the storage key for the last locked amount of a token
-pub fn masp_last_locked_amount_key(token_address: &Address) -> storage::Key {
-    parameter_prefix(token_address)
+pub fn masp_last_locked_amount_key<TransToken: trans_token::Keys>(
+    token_address: &Address,
+) -> storage::Key {
+    TransToken::parameter_prefix(token_address)
         .with_segment(MASP_LAST_LOCKED_AMOUNT_KEY.to_owned())
 }
 
 /// Obtain the storage key for the last inflation of a token
-pub fn masp_last_inflation_key(token_address: &Address) -> storage::Key {
-    parameter_prefix(token_address)
+pub fn masp_last_inflation_key<TransToken: trans_token::Keys>(
+    token_address: &Address,
+) -> storage::Key {
+    TransToken::parameter_prefix(token_address)
         .with_segment(MASP_LAST_INFLATION_KEY.to_owned())
 }
 

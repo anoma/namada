@@ -89,7 +89,7 @@ pub type MaspVp<'a, S, CA> = token::vp::MaspVp<
     ParamsPreStore<'a, S, CA>,
     GovPreStore<'a, S, CA>,
     IbcPostStore<'a, S, CA>,
-    TokenKeys,
+    TokenPreStore<'a, S, CA>,
 >;
 
 /// Native ETH bridge VP
@@ -116,6 +116,10 @@ pub type ParamsPreStore<'a, S, CA> =
 pub type PosPreStore<'a, S, CA> = proof_of_stake::Store<
     CtxPreStorageRead<'a, 'a, S, VpCache<CA>, Eval<S, CA>>,
 >;
+
+/// Token store implementation over the native prior context
+pub type TokenPreStore<'a, S, CA> =
+    token::Store<CtxPreStorageRead<'a, 'a, S, VpCache<CA>, Eval<S, CA>>>;
 
 /// Ibc store implementation over the native posterior context
 pub type IbcPostStore<'a, S, CA> =
