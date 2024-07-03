@@ -254,12 +254,13 @@ where
     use namada_parameters as parameters;
     use namada_storage::conversion_state::ConversionLeaf;
     use namada_storage::{Error, OptionExt, ResultExt};
-    use namada_trans_token::storage_key::balance_key;
     use namada_trans_token::{MaspDigitPos, NATIVE_MAX_DECIMAL_PLACES};
     use rayon::iter::{
         IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
     };
     use rayon::prelude::ParallelSlice;
+
+    use crate::mint_rewards;
 
     // The derived conversions will be placed in MASP address space
     let masp_addr = MASP;
@@ -566,12 +567,8 @@ where
 
     // Update the MASP's transparent reward token balance to ensure that it
     // is sufficiently backed to redeem rewards
-    let reward_key = balance_key(&native_token, &masp_addr);
-    let addr_bal: Amount = storage.read(&reward_key)?.unwrap_or_default();
-    let new_bal = addr_bal
-        .checked_add(total_reward)
-        .ok_or_else(|| Error::new_const("Balance with reward overflow"))?;
-    storage.write(&reward_key, new_bal)?;
+    mint_rewards(storage, total_reward)?;
+
     // Try to distribute Merkle tree construction as evenly as possible
     // across multiple cores
     // Merkle trees must have exactly 2^n leaves to be mergeable
