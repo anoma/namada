@@ -108,7 +108,6 @@ impl TestTxEnv {
         epoch_duration: Option<EpochDuration>,
         vp_allowlist: Option<Vec<String>>,
         tx_allowlist: Option<Vec<String>>,
-        max_signatures_per_transaction: Option<u8>,
     ) {
         parameters::update_epoch_parameter(
             &mut self.state,
@@ -126,11 +125,6 @@ impl TestTxEnv {
         parameters::update_vp_allowlist_parameter(
             &mut self.state,
             vp_allowlist.unwrap_or_default(),
-        )
-        .unwrap();
-        parameters::update_max_signature_per_tx(
-            &mut self.state,
-            max_signatures_per_transaction.unwrap_or(15),
         )
         .unwrap();
     }
@@ -522,8 +516,6 @@ mod native_tx_host_env {
         public_keys_map_ptr: u64,
         public_keys_map_len: u64,
         threshold: u8,
-        max_signatures_ptr: u64,
-        max_signatures_len: u64,
     ) -> i64);
     native_host_fn!(tx_yield_value(
         buf_ptr: u64,
