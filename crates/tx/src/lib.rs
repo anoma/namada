@@ -24,6 +24,7 @@ pub mod proto;
 mod types;
 
 use data::TxType;
+pub use either;
 pub use event::new_tx_event;
 pub use namada_core::key::SignableEthMessage;
 pub use namada_core::sign::SignatureIndex;

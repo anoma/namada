@@ -16,6 +16,7 @@ use std::marker::PhantomData;
 use std::str::FromStr;
 
 use bitflags::bitflags;
+use either::Either;
 use namada_core::address::Address;
 use namada_core::borsh::{
     BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
@@ -36,6 +37,7 @@ use sha2::{Digest, Sha256};
 pub use wrapper::*;
 
 use crate::data::protocol::ProtocolTx;
+use crate::types::TxCommitments;
 
 /// The different result codes that the ledger may send back to a client
 /// indicating the status of their submitted tx.
@@ -169,7 +171,74 @@ pub fn hash_tx(tx_bytes: &[u8]) -> Hash {
 // management with regards to replay protection, whereas for logging we use
 // strings
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
-pub struct BatchResults<T>(pub BTreeMap<Hash, Result<BatchedTxResult, T>>);
+pub struct BatchResults<T>(BTreeMap<Hash, Result<BatchedTxResult, T>>);
+
+impl<T> BatchResults<T> {
+    /// Return a new set of batch results.
+    pub const fn new() -> Self {
+        Self(BTreeMap::new())
+    }
+
+    /// Insert an inner tx result into this [`BatchResults`].
+    #[inline]
+    pub fn insert_inner_tx_result(
+        &mut self,
+        wrapper_hash: Option<&Hash>,
+        commitments: Either<&Hash, &TxCommitments>,
+        result: Result<BatchedTxResult, T>,
+    ) {
+        self.0
+            .insert(compute_inner_tx_hash(wrapper_hash, commitments), result);
+    }
+
+    /// Retrieve an inner tx result, if it exists.
+    #[inline]
+    pub fn get_inner_tx_result(
+        &self,
+        wrapper_hash: Option<&Hash>,
+        commitments: Either<&Hash, &TxCommitments>,
+    ) -> Option<&Result<BatchedTxResult, T>> {
+        self.0
+            .get(&compute_inner_tx_hash(wrapper_hash, commitments))
+    }
+
+    /// Iterate over all the inner tx results.
+    #[inline]
+    pub fn iter(
+        &self,
+    ) -> impl Iterator<Item = (&Hash, &Result<BatchedTxResult, T>)> + '_ {
+        self.0.iter()
+    }
+
+    /// Return the length of the collecction of inner tx results.
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Check if the collecction of inner tx results is empty.
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+/// Compute the hash of the some inner tx in a batch.
+pub fn compute_inner_tx_hash(
+    wrapper_hash: Option<&Hash>,
+    commitments: Either<&Hash, &TxCommitments>,
+) -> Hash {
+    const ZERO_HASH: Hash = Hash([0; 32]);
+
+    let mut state = Sha256::new();
+    state.update(wrapper_hash.unwrap_or(&ZERO_HASH));
+    state.update(
+        commitments
+            .map_either(|hash| *hash, |commitments| commitments.get_hash()),
+    );
+
+    Hash(state.finalize_reset().into())
+}
 
 impl<T> Default for BatchResults<T> {
     fn default() -> Self {
@@ -264,8 +333,7 @@ impl<T> Default for ExtendedTxResult<T> {
 pub struct TxResult<T> {
     /// Total gas used by the transaction (includes the gas used by VPs)
     pub gas_used: Gas,
-    /// The results of the batch, indexed by the hash of the specific
-    /// [`crate::types::TxCommitments`]
+    /// The results of the batch, indexed by the hash of each inner tx
     pub batch_results: BatchResults<T>,
 }
 

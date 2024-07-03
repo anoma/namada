@@ -100,6 +100,7 @@ clap = { version = "4.3", default-features = false, features = ["std"] }
 data-encoding.workspace = true
 derivation-path.workspace = true
 duration-str.workspace = true
+either.workspace = true
 ethbridge-bridge-contract.workspace = true
 ethers.workspace = true
 eyre.workspace = true
