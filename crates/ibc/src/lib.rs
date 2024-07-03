@@ -46,6 +46,7 @@ use ibc::apps::nft_transfer::handler::{
     send_nft_transfer_execute, send_nft_transfer_validate,
 };
 use ibc::apps::nft_transfer::types::error::NftTransferError;
+use ibc::apps::nft_transfer::types::msgs::transfer::MsgTransfer as IbcMsgNftTransfer;
 use ibc::apps::nft_transfer::types::{
     ack_success_b64, is_receiver_chain_source as is_nft_receiver_chain_source,
     PrefixedClassId, TokenId, TracePath as NftTracePath,
@@ -55,6 +56,7 @@ use ibc::apps::transfer::handler::{
     send_transfer_execute, send_transfer_validate,
 };
 use ibc::apps::transfer::types::error::TokenTransferError;
+use ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
 use ibc::apps::transfer::types::{
     is_receiver_chain_source, PrefixedDenom, TracePath, TracePrefix,
 };
@@ -326,31 +328,45 @@ fn is_ack_successful(ack: &Acknowledgement) -> Result<bool, Error> {
 pub fn decode_message(tx_data: &[u8]) -> Result<IbcMessage, Error> {
     // ibc-rs message
     if let Ok(any_msg) = Any::decode(tx_data) {
-        if let Ok(envelope) = MsgEnvelope::try_from(any_msg) {
+        if let Ok(envelope) = MsgEnvelope::try_from(any_msg.clone()) {
             return Ok(IbcMessage::Envelope(Box::new(envelope)));
+        }
+        if let Ok(message) = IbcMsgTransfer::try_from(any_msg.clone()) {
+            let msg = MsgTransfer {
+                message,
+                transfer: None,
+            };
+            return Ok(IbcMessage::Transfer(msg));
+        }
+        if let Ok(message) = IbcMsgNftTransfer::try_from(any_msg) {
+            let msg = MsgNftTransfer {
+                message,
+                transfer: None,
+            };
+            return Ok(IbcMessage::NftTransfer(msg));
         }
     }
 
-    // Transfer message with `IbcShieldedTransfer`
+    // Transfer message with `ShieldingTransfer`
     if let Ok(msg) = MsgTransfer::try_from_slice(tx_data) {
         return Ok(IbcMessage::Transfer(msg));
     }
 
-    // NFT transfer message with `IbcShieldedTransfer`
+    // NFT transfer message with `ShieldingTransfer`
     if let Ok(msg) = MsgNftTransfer::try_from_slice(tx_data) {
         return Ok(IbcMessage::NftTransfer(msg));
     }
 
-    // Receiving packet message with `IbcShieldedTransfer`
+    // Receiving packet message with `ShieldingTransfer`
     if let Ok(msg) = MsgRecvPacket::try_from_slice(tx_data) {
         return Ok(IbcMessage::RecvPacket(msg));
     }
 
-    // Acknowledge packet message with `IbcShieldedTransfer`
+    // Acknowledge packet message with `ShieldingTransfer`
     if let Ok(msg) = MsgAcknowledgement::try_from_slice(tx_data) {
         return Ok(IbcMessage::AckPacket(msg));
     }
-    // Timeout packet message with `IbcShieldedTransfer`
+    // Timeout packet message with `ShieldingTransfer`
     if let Ok(msg) = MsgTimeout::try_from_slice(tx_data) {
         return Ok(IbcMessage::Timeout(msg));
     }
