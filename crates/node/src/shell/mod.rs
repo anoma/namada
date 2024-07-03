@@ -16,6 +16,7 @@ pub mod prepare_proposal;
 use namada::state::State;
 pub mod process_proposal;
 pub(super) mod queries;
+mod snapshots;
 mod stats;
 #[cfg(any(test, feature = "testing"))]
 #[allow(dead_code)]
@@ -122,6 +123,8 @@ pub enum Error {
     Storage(#[from] namada::state::StorageError),
     #[error("Transaction replay attempt: {0}")]
     ReplayAttempt(String),
+    #[error("Error with snapshots: {0}")]
+    Snapshot(std::io::Error),
 }
 
 impl From<Error> for TxResult {

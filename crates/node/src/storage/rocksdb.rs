@@ -46,7 +46,7 @@
 
 use std::ffi::OsStr;
 use std::fs::File;
-use std::io::{BufWriter, Write};
+use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Mutex;
@@ -55,7 +55,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXLOWER;
 use itertools::Either;
-use namada::core::collections::HashSet;
+use namada::core::collections::{HashMap, HashSet};
 use namada::core::storage::{BlockHeight, Epoch, Header, Key, KeySeg};
 use namada::core::{decode, encode, ethereum_events};
 use namada::eth_bridge::storage::proof::BridgePoolRootProof;
@@ -740,6 +740,19 @@ impl RocksDB {
     }
 }
 
+/// Information about a particular snapshot
+/// owned by a node
+pub struct SnapshotMetadata {
+    /// The height at which the snapshot was taken
+    pub height: BlockHeight,
+    /// The name of the paths to the file and metadata
+    /// holding the snapshot minus extensions
+    pub path_stem: String,
+    /// Data about the chunks that the snapshot is
+    /// partitioned into
+    pub chunks: Vec<Chunk>,
+}
+
 pub struct DbSnapshot<'a>(pub rocksdb::Snapshot<'a>);
 
 impl<'a> DbSnapshot<'a> {
@@ -749,9 +762,11 @@ impl<'a> DbSnapshot<'a> {
     pub fn write_to_file(
         &self,
         cfs: [(&'static str, &'a ColumnFamily); 6],
-        path: &Path,
+        base_dir: PathBuf,
+        height: BlockHeight,
     ) -> std::io::Result<()> {
-        let file = File::create(path)?;
+        let [snap_file, metadata_file] = Self::paths(height, base_dir);
+        let file = File::create(snap_file)?;
         let mut buf = BufWriter::new(file);
         let mut chunker = Chunker::new(MAX_CHUNK_SIZE);
         for (cf_name, cf) in cfs {
@@ -771,11 +786,10 @@ impl<'a> DbSnapshot<'a> {
             }
             buf.flush()?;
         }
-        let chunks = chunker.finalize();
-        let val = base64::encode(chunks.serialize_to_vec());
-        let bytes = format!("chunks:{val}");
-        buf.write_all(bytes.as_bytes())?;
         buf.flush()?;
+        let chunks = chunker.finalize();
+        let metadata = base64::encode(chunks.serialize_to_vec());
+        std::fs::write(metadata_file, metadata.as_bytes())?;
         Ok(())
     }
 
@@ -784,44 +798,154 @@ impl<'a> DbSnapshot<'a> {
         latest_height: BlockHeight,
         base_dir: &Path,
     ) -> std::io::Result<()> {
-        let toml = OsStr::new("toml");
-        for entry in std::fs::read_dir(base_dir)? {
-            let entry = entry?;
-            if entry.path().is_file() && Some(toml) == entry.path().extension()
-            {
-                if let Some(name) = entry.path().file_name() {
-                    let Some(height) = name
-                        .to_string_lossy()
-                        .strip_prefix("snapshot_")
-                        .and_then(|n| n.strip_suffix(".toml"))
-                        .and_then(|h| BlockHeight::from_str(h).ok())
-                    else {
-                        continue;
-                    };
-                    if height < latest_height {
-                        _ = std::fs::remove_file(entry.path());
-                    }
-                };
+        for SnapshotMetadata {
+            height, path_stem, ..
+        } in Self::files(base_dir)?
+        {
+            if height < latest_height {
+                let path = PathBuf::from(path_stem);
+                _ = std::fs::remove_file(&path.with_extension("snap"));
+                _ = std::fs::remove_file(path.with_extension("meta"));
             }
         }
         Ok(())
     }
 
+    /// List all snapshot files along with the block height at which
+    /// they were created and their chunks.
+    pub fn files(base_dir: &Path) -> std::io::Result<Vec<SnapshotMetadata>> {
+        let snap = OsStr::new("snap");
+        let meta = OsStr::new("meta");
+        let mut files =
+            HashMap::<BlockHeight, (Option<String>, Option<Vec<Chunk>>)>::new();
+        for entry in std::fs::read_dir(base_dir)? {
+            let entry = entry?;
+            let entry_path = entry.path();
+            let entry_ext = entry_path.extension();
+            if entry_path.is_file()
+                && (Some(snap) == entry_ext || Some(meta) == entry_ext)
+            {
+                if let Some(name) = entry.path().file_name() {
+                    // Extract the block height from the file name
+                    // (assuming the file name is of the correct format)
+                    let Some(height) = name
+                        .to_string_lossy()
+                        .strip_prefix("snapshot_")
+                        .and_then(|n| {
+                            n.strip_suffix(".meta").or(n.strip_suffix(".snap"))
+                        })
+                        .and_then(|h| BlockHeight::from_str(h).ok())
+                    else {
+                        continue;
+                    };
+                    // check if we have found the metadata file or snapshot file
+                    // for a given block height
+                    if entry_ext == Some(meta) {
+                        let metadata = std::fs::read_to_string(entry_path)?;
+                        let metadata_bytes = HEXLOWER
+                            .decode(metadata.as_bytes())
+                            .map_err(|e| {
+                                std::io::Error::new(ErrorKind::InvalidData, e)
+                            })?;
+                        let chunks: Vec<Chunk> =
+                            BorshDeserialize::try_from_slice(
+                                &metadata_bytes[..],
+                            )?;
+                        files.entry(height).or_default().1 = Some(chunks);
+                    } else {
+                        files.entry(height).or_default().0 = Some(
+                            base_dir
+                                .join(format!("snapshot_{}", height))
+                                .to_string_lossy()
+                                .into(),
+                        );
+                    }
+                };
+            }
+        }
+        let mut res = Vec::with_capacity(files.len());
+        for (height, (path, chunks)) in files {
+            // only include snapshots which have both a .snap and .meta file.
+            if let Some((path_stem, chunks)) = path.zip(chunks) {
+                res.push(SnapshotMetadata {
+                    height,
+                    path_stem,
+                    chunks,
+                });
+            }
+        }
+        Ok(res)
+    }
+
     /// Create a path to save a snapshot at a specific block height.
-    pub fn path(height: BlockHeight, mut base_dir: PathBuf) -> PathBuf {
-        base_dir.push(format!("snapshot_{}.toml", height));
-        base_dir
+    pub fn paths(height: BlockHeight, base_dir: PathBuf) -> [PathBuf; 2] {
+        let snap_file = base_dir.join(format!("snapshot_{}.snap", height));
+        let metadata_file = base_dir.join(format!("snapshot_{}.meta", height));
+        [snap_file, metadata_file]
+    }
+
+    /// Load the specified chunk of a snapshot at the given block height
+    pub fn load_chunk(
+        height: BlockHeight,
+        chunk: u64,
+        base_dir: &Path,
+    ) -> std::io::Result<Vec<u8>> {
+        let files = Self::files(base_dir)?;
+        let Some(metadata) = files.into_iter().find(|m| m.height == height)
+        else {
+            return Err(std::io::Error::new(
+                ErrorKind::NotFound,
+                format!(
+                    "Could not find the metadata file for the snapshot at \
+                     height {}",
+                    height,
+                ),
+            ));
+        };
+        let chunk_start = if chunk == 0 {
+            0usize
+        } else {
+            let prev = checked!(usize::try_from(chunk).unwrap() - 1).unwrap();
+            usize::try_from(metadata.chunks[prev].boundary).unwrap()
+        };
+        let chunk_end = metadata
+            .chunks
+            .get(usize::try_from(chunk).unwrap())
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    ErrorKind::InvalidInput,
+                    format!("Chunk {} not found", chunk),
+                )
+            })?
+            .boundary;
+        let chunk_end = usize::try_from(chunk_end).unwrap();
+
+        let file = File::open(
+            PathBuf::from(metadata.path_stem).with_extension("snap"),
+        )?;
+        let reader = BufReader::new(file);
+        let mut bytes: Vec<u8> = vec![];
+        for line in reader
+            .lines()
+            .skip(chunk_start)
+            .take(checked!(chunk_end - chunk_start).unwrap())
+        {
+            bytes.extend(line?.as_bytes());
+        }
+        Ok(bytes)
     }
 }
 
 /// A chunk of a snapshot. Includes the last line number in the file
 /// for this chunk and a hash of the chunk contents.
 #[derive(
-    Debug, Clone, Default, PartialEq, Eq, BorshSerialize, BorshDeserialize,
+    Debug, Clone, Default, PartialEq, Eq, BorshSerialize, BorshDeserialize, Hash,
 )]
-struct Chunk {
-    boundary: u64,
-    hash: Hash,
+pub struct Chunk {
+    /// The line number ending the chunk
+    pub boundary: u64,
+    /// Sha256 hash of the chunk
+    pub hash: Hash,
 }
 
 /// Builds a set of chunks from a stream of lines to be
@@ -2658,22 +2782,33 @@ mod test {
     fn test_snapshot_cleanup() {
         let temp = tempfile::tempdir().expect("Test failed");
         let base_dir = temp.path().to_path_buf();
+        let chunks = vec![Chunk::default()];
+        let chunk_bytes = HEXLOWER.encode(&chunks.serialize_to_vec());
         for i in 0..4 {
             let mut path = base_dir.clone();
-            path.push(format!("snapshot_{}.toml", i));
-            _ = File::create(path).expect("Test failed")
+            path.push(format!("snapshot_{}.snap", i));
+            _ = File::create(path).expect("Test failed");
+            let mut path = base_dir.clone();
+            path.push(format!("snapshot_{}.meta", i));
+            std::fs::write(&path, chunk_bytes.as_bytes()).expect("Test failed");
         }
         let mut path = base_dir.clone();
-        path.push("snapshot_0_backup.toml");
+        path.push("snapshot_0_backup.snap");
+        _ = File::create(path).expect("Test failed");
+        let mut path = base_dir.clone();
+        path.push("snapshot_0_backup.meta");
         _ = File::create(path).expect("Test failed");
         let mut path = base_dir.clone();
         path.push("snapshot_0.bak");
         _ = File::create(path).expect("Test failed");
         DbSnapshot::cleanup(2.into(), &base_dir).expect("Test failed");
         let mut expected = HashSet::from([
-            "snapshot_2.toml",
-            "snapshot_3.toml",
-            "snapshot_0_backup.toml",
+            "snapshot_2.snap",
+            "snapshot_2.meta",
+            "snapshot_3.snap",
+            "snapshot_3.meta",
+            "snapshot_0_backup.snap",
+            "snapshot_0_backup.meta",
             "snapshot_0.bak",
         ]);
         for entry in std::fs::read_dir(base_dir).expect("Test failed") {
@@ -2794,12 +2929,14 @@ mod test {
         let db = open(&temp, true, None).expect("Test failed");
         // freeze the database at this point in time
         let snapshot = db.snapshot();
-        let mut path = temp.path().to_path_buf();
-        path.push("snapshot_0.toml");
+        let path = temp.path().to_path_buf();
+
         snapshot
-            .write_to_file(db.column_families(), &path)
+            .write_to_file(db.column_families(), path.clone(), 0.into())
             .expect("Test failed");
-        let snapshot = std::fs::read_to_string(path).expect("Test failed");
+        let snapshot =
+            std::fs::read_to_string(path.clone().join("snapshot_0.snap"))
+                .expect("Test failed");
         let chunks = vec![Chunk {
             boundary: 2,
             hash: Hash::sha256(
@@ -2808,15 +2945,70 @@ mod test {
                     .as_bytes(),
             ),
         }];
-        let chunk_val =
-            format!("chunks:{}", base64::encode(chunks.serialize_to_vec()));
+        let chunk_val = base64::encode(chunks.serialize_to_vec());
         let expected = [
             "subspace:bing/fucking/bong=AQ==".to_string(),
             "rollback:0000000000002/new/bing/fucking/bong=AQ==".to_string(),
-            chunk_val,
+            "".to_string(),
         ];
 
         let lines: Vec<&str> = snapshot.split('\n').collect();
         assert_eq!(lines, expected);
+        let metadata = std::fs::read_to_string(path.join("snapshot_0.meta"))
+            .expect("Test failed");
+        assert_eq!(metadata, chunk_val);
+    }
+
+    /// Test that we load chunks correctly
+    /// from the snapshot file
+    #[test]
+    fn test_load_chunks() {
+        let temp = tempfile::tempdir().expect("Test failed");
+        let mut chunker = Chunker::new(10);
+        let lines = vec!["fffffggggghh", "aaaa", "bbbbb", "cc", "dddddddd"];
+        for l in lines {
+            chunker.add_line(l);
+        }
+        let chunks = chunker.finalize();
+        let expected = vec![
+            Chunk {
+                boundary: 1,
+                hash: Hash::sha256("fffffggggghh"),
+            },
+            Chunk {
+                boundary: 3,
+                hash: Hash::sha256("aaaabbbbb".as_bytes()),
+            },
+            Chunk {
+                boundary: 5,
+                hash: Hash::sha256("ccdddddddd".as_bytes()),
+            },
+        ];
+        assert_eq!(chunks, expected);
+        let [snap_file, meta_file] =
+            DbSnapshot::paths(1.into(), temp.path().to_path_buf());
+        std::fs::write(
+            &snap_file,
+            "fffffggggghh\naaaa\nbbbbb\ncc\ndddddddd".as_bytes(),
+        )
+        .expect("Test failed");
+        std::fs::write(meta_file, HEXLOWER.encode(&chunks.serialize_to_vec()))
+            .expect("Test failed");
+        let chunks: Vec<_> = (0..3)
+            .filter_map(|i| {
+                DbSnapshot::load_chunk(1.into(), i, temp.path()).ok()
+            })
+            .collect();
+        let expected = vec![
+            "fffffggggghh".as_bytes().to_vec(),
+            "aaaabbbbb".as_bytes().to_vec(),
+            "ccdddddddd".as_bytes().to_vec(),
+        ];
+        assert_eq!(chunks, expected);
+
+        assert!(DbSnapshot::load_chunk(0.into(), 0, temp.path()).is_err());
+        assert!(DbSnapshot::load_chunk(0.into(), 4, temp.path()).is_err());
+        std::fs::remove_file(snap_file).unwrap();
+        assert!(DbSnapshot::load_chunk(0.into(), 0, temp.path()).is_err());
     }
 }

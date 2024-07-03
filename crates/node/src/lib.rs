@@ -153,14 +153,14 @@ impl Shell {
                 Ok(Response::CheckTx(self.mempool_validate(&tx.tx, r#type)))
             }
             Request::ListSnapshots => {
-                Ok(Response::ListSnapshots(Default::default()))
+                self.list_snapshots().map(Response::ListSnapshots)
             }
             Request::OfferSnapshot(_) => {
                 Ok(Response::OfferSnapshot(Default::default()))
             }
-            Request::LoadSnapshotChunk(_) => {
-                Ok(Response::LoadSnapshotChunk(Default::default()))
-            }
+            Request::LoadSnapshotChunk(req) => self
+                .load_snapshot_chunk(req)
+                .map(Response::LoadSnapshotChunk),
             Request::ApplySnapshotChunk(_) => {
                 Ok(Response::ApplySnapshotChunk(Default::default()))
             }
