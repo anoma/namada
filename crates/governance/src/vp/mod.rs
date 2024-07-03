@@ -1236,11 +1236,11 @@ mod test {
     use namada_core::borsh::BorshSerializeExt;
     use namada_core::key::testing::keypair_1;
     use namada_core::key::RefTo;
+    use namada_core::parameters::Parameters;
     use namada_core::storage::testing::get_dummy_header;
     use namada_core::time::DateTimeUtc;
     use namada_core::token;
     use namada_gas::{TxGasMeter, VpGasMeter};
-    use namada_parameters::Parameters;
     use namada_proof_of_stake::bond_tokens;
     use namada_proof_of_stake::test_utils::get_dummy_genesis_validator;
     use namada_state::mockdb::MockDB;

@@ -7,10 +7,10 @@ use namada_core::address::Address;
 use namada_core::hash::Hash;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::storage::Epoch;
+use namada_core::token;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
-use namada_trans_token::Amount;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -282,7 +282,7 @@ impl PGFTarget {
     }
 
     /// Returns the funding amount
-    pub fn amount(&self) -> Amount {
+    pub fn amount(&self) -> token::Amount {
         match self {
             PGFTarget::Internal(t) => t.amount,
             PGFTarget::Ibc(t) => t.amount,
@@ -323,7 +323,7 @@ pub struct PGFInternalTarget {
     /// The target address
     pub target: Address,
     /// The amount of token to fund the target address
-    pub amount: Amount,
+    pub amount: token::Amount,
 }
 
 /// The target of a PGF payment
@@ -343,7 +343,7 @@ pub struct PGFIbcTarget {
     /// The target address on the target chain
     pub target: String,
     /// The amount of token to fund the target address
-    pub amount: Amount,
+    pub amount: token::Amount,
     /// Port ID to fund
     pub port_id: PortId,
     /// Channel ID to fund
@@ -368,7 +368,8 @@ impl borsh::BorshDeserialize for PGFIbcTarget {
     ) -> std::io::Result<Self> {
         use std::io::{Error, ErrorKind};
         let target: String = BorshDeserialize::deserialize_reader(reader)?;
-        let amount: Amount = BorshDeserialize::deserialize_reader(reader)?;
+        let amount: token::Amount =
+            BorshDeserialize::deserialize_reader(reader)?;
         let port_id: String = BorshDeserialize::deserialize_reader(reader)?;
         let port_id: PortId = port_id.parse().map_err(|err| {
             Error::new(
@@ -401,7 +402,7 @@ impl borsh::BorshSchema for PGFIbcTarget {
     ) {
         let fields = borsh::schema::Fields::NamedFields(vec![
             ("target".into(), String::declaration()),
-            ("amount".into(), Amount::declaration()),
+            ("amount".into(), token::Amount::declaration()),
             ("port_id".into(), String::declaration()),
             ("channel_id".into(), String::declaration()),
         ]);

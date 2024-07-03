@@ -66,7 +66,7 @@ pub trait Write<S>: Read<S> {
         token: &Address,
         src: &Address,
         dest: &Address,
-        amount: Amount,
+        amount: token::Amount,
     ) -> Result<()>;
 
     /// Burn a specified amount of tokens from some address. If the burn amount
@@ -77,7 +77,7 @@ pub trait Write<S>: Read<S> {
         storage: &mut S,
         token: &Address,
         source: &Address,
-        amount: Amount,
+        amount: token::Amount,
     ) -> Result<()>;
 
     /// Credit tokens to an account, to be used only by protocol. In
@@ -86,6 +86,6 @@ pub trait Write<S>: Read<S> {
         storage: &mut S,
         token: &Address,
         dest: &Address,
-        amount: Amount,
+        amount: token::Amount,
     ) -> Result<()>;
 }
