@@ -2,8 +2,10 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use data_encoding::HEXUPPER;
 use ibc::apps::nft_transfer::types::msgs::transfer::MsgTransfer as IbcMsgNftTransfer;
 use ibc::apps::nft_transfer::types::packet::PacketData as NftPacketData;
+use ibc::apps::nft_transfer::types::PORT_ID_STR as NFT_PORT_ID_STR;
 use ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
 use ibc::apps::transfer::types::packet::PacketData;
+use ibc::apps::transfer::types::PORT_ID_STR as FT_PORT_ID_STR;
 use ibc::core::channel::types::msgs::PacketMsg;
 use ibc::core::channel::types::packet::Packet;
 use ibc::core::handler::types::msgs::MsgEnvelope;
@@ -139,29 +141,46 @@ pub fn extract_masp_tx_from_packet(
     packet: &Packet,
     is_sender: bool,
 ) -> Option<MaspTransaction> {
-    let is_ft_packet = if is_sender {
-        packet.port_id_on_a == PortId::transfer()
+    let port_id = if is_sender {
+        &packet.port_id_on_a
     } else {
-        packet.port_id_on_b == PortId::transfer()
+        &packet.port_id_on_b
     };
-
-    let shielding_data = if is_ft_packet {
-        let packet_data =
-            serde_json::from_slice::<PacketData>(&packet.data).ok()?;
-        if packet_data.memo.as_ref().is_empty() {
-            return None;
-        }
-        decode_masp_tx_from_memo(packet_data.memo)
-    } else {
-        let packet_data =
-            serde_json::from_slice::<NftPacketData>(&packet.data).ok()?;
-        decode_masp_tx_from_memo(packet_data.memo?)
-    }?;
-
+    let memo = extract_memo_from_packet(packet, port_id)?;
+    let shielding_data = decode_masp_tx_from_memo(memo)?;
     if is_sender {
         shielding_data.refund
     } else {
         shielding_data.shielding
+    }
+}
+
+fn extract_memo_from_packet(
+    packet: &Packet,
+    port_id: &PortId,
+) -> Option<String> {
+    match port_id.as_str() {
+        FT_PORT_ID_STR => {
+            let packet_data =
+                serde_json::from_slice::<PacketData>(&packet.data).ok()?;
+            if packet_data.memo.as_ref().is_empty() {
+                None
+            } else {
+                Some(packet_data.memo.as_ref().to_string())
+            }
+        }
+        NFT_PORT_ID_STR => {
+            let packet_data =
+                serde_json::from_slice::<NftPacketData>(&packet.data).ok()?;
+            Some(packet_data.memo?.as_ref().to_string())
+        }
+        _ => {
+            tracing::warn!(
+                "Memo couldn't be extracted from the unsupported IBC packet \
+                 data for Port ID {port_id}"
+            );
+            None
+        }
     }
 }
 
