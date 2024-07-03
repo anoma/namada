@@ -1186,7 +1186,7 @@ mod test_finalize_block {
         FinalizeBlock, ProcessedTx,
     };
 
-    const WRAPPER_GAS_LIMIT: u64 = 10_000;
+    const WRAPPER_GAS_LIMIT: u64 = 11_000;
     const STORAGE_VALUE: &str = "test_value";
 
     /// Make a wrapper tx and a processed tx from the wrapped tx that can be
