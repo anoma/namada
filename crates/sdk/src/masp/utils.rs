@@ -290,6 +290,25 @@ impl IndexerMaspClient {
     fn endpoint(&self, which: &str) -> String {
         format!("{}{which}", self.indexer_api)
     }
+
+    async fn get_server_error(
+        response: reqwest::Response,
+    ) -> Result<String, Error> {
+        use serde::Deserialize;
+
+        #[derive(Deserialize)]
+        struct Response {
+            message: String,
+        }
+
+        let payload: Response = response.json().await.map_err(|err| {
+            Error::Other(format!(
+                "Could not deserialize server's error JSON response: {err}"
+            ))
+        })?;
+
+        Ok(payload.message)
+    }
 }
 
 #[cfg(not(target_family = "wasm"))]
@@ -318,6 +337,12 @@ impl MaspClient for IndexerMaspClient {
                     "Failed to fetch latest block height: {err}"
                 ))
             })?;
+        if !response.status().is_success() {
+            let err = Self::get_server_error(response).await?;
+            return Err(Error::Other(format!(
+                "Failed to fetch last block height: {err}"
+            )));
+        }
         let payload: Response = response.json().await.map_err(|err| {
             Error::Other(format!(
                 "Could not deserialize latest block height JSON response: \
@@ -390,6 +415,13 @@ impl MaspClient for IndexerMaspClient {
                              {from_height}-{to_height}: {err}"
                         ))
                     })?;
+                if !response.status().is_success() {
+                    let err = Self::get_server_error(response).await?;
+                    return Err(Error::Other(format!(
+                        "Failed to fetch transactions in the range \
+                         {from_height}-{to_height}: {err}"
+                    )));
+                }
                 let payload: TxResponse =
                     response.json().await.map_err(|err| {
                         Error::Other(format!(
@@ -487,6 +519,12 @@ impl MaspClient for IndexerMaspClient {
                     "Failed to fetch commitment tree at height {height}: {err}"
                 ))
             })?;
+        if !response.status().is_success() {
+            let err = Self::get_server_error(response).await?;
+            return Err(Error::Other(format!(
+                "Failed to fetch commitment tree at height {height}: {err}"
+            )));
+        }
         let payload: Response = response.json().await.map_err(|err| {
             Error::Other(format!(
                 "Could not deserialize the commitment tree JSON response at \
@@ -535,6 +573,12 @@ impl MaspClient for IndexerMaspClient {
                     "Failed to fetch notes map at height {height}: {err}"
                 ))
             })?;
+        if !response.status().is_success() {
+            let err = Self::get_server_error(response).await?;
+            return Err(Error::Other(format!(
+                "Failed to fetch notes map at height {height}: {err}"
+            )));
+        }
         let payload: Response = response.json().await.map_err(|err| {
             Error::Other(format!(
                 "Could not deserialize the notes map JSON response at height \
@@ -592,6 +636,12 @@ impl MaspClient for IndexerMaspClient {
                     "Failed to fetch witness map at height {height}: {err}"
                 ))
             })?;
+        if !response.status().is_success() {
+            let err = Self::get_server_error(response).await?;
+            return Err(Error::Other(format!(
+                "Failed to fetch witness map at height {height}: {err}"
+            )));
+        }
         let payload: WitnessMapResponse =
             response.json().await.map_err(|err| {
                 Error::Other(format!(
