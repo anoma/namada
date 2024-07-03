@@ -134,6 +134,12 @@ pub trait DB: Debug {
         cache: Option<&Self::Cache>,
     ) -> Self;
 
+    /// Get the path to the db in the filesystem,
+    /// if it exists (the DB may be in-memory only)
+    fn path(&self) -> Option<&std::path::Path> {
+        None
+    }
+
     /// Flush data on the memory to persistent them
     fn flush(&self, wait: bool) -> Result<()>;
 
