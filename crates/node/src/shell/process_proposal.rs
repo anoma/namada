@@ -410,7 +410,17 @@ where
                 let allocated_gas =
                     metadata.user_gas.try_dump(u64::from(wrapper.gas_limit));
 
-                let gas_limit = match Gas::try_from(wrapper.gas_limit) {
+                let gas_scale = match get_gas_scale(temp_state) {
+                    Ok(scale) => scale,
+                    Err(_) => {
+                        return TxResult {
+                            code: ResultCode::TxGasLimit.into(),
+                            info: "Failed to get gas scale".to_owned(),
+                        };
+                    }
+                };
+                let gas_limit = match wrapper.gas_limit.as_scaled_gas(gas_scale)
+                {
                     Ok(value) => value,
                     Err(_) => {
                         return TxResult {

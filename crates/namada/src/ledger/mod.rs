@@ -23,7 +23,6 @@ pub use {
 mod dry_run_tx {
     use std::cell::RefCell;
 
-    use namada_gas::Gas;
     use namada_sdk::queries::{EncodedResponseQuery, RequestCtx, RequestQuery};
     use namada_state::{DBIter, ResultExt, StorageHasher, DB};
     use namada_tx::data::{GasLimit, TxResult};
@@ -54,14 +53,18 @@ mod dry_run_tx {
         let tx = Tx::try_from(&request.data[..]).into_storage_result()?;
         tx.validate_tx().into_storage_result()?;
 
+        let gas_scale = namada_parameters::get_gas_scale(ctx.state)?;
+
         // Wrapper dry run to allow estimating the gas cost of a transaction
         let (wrapper_hash, mut tx_result, tx_gas_meter) = match tx
             .header()
             .tx_type
         {
             TxType::Wrapper(wrapper) => {
-                let gas_limit =
-                    Gas::try_from(wrapper.gas_limit).into_storage_result()?;
+                let gas_limit = wrapper
+                    .gas_limit
+                    .as_scaled_gas(gas_scale)
+                    .into_storage_result()?;
                 let tx_gas_meter = RefCell::new(TxGasMeter::new(gas_limit));
                 let tx_result = protocol::apply_wrapper_tx(
                     &tx,
@@ -86,7 +89,8 @@ mod dry_run_tx {
                 // the gas limit
                 let max_block_gas =
                     namada_parameters::get_max_block_gas(ctx.state)?;
-                let gas_limit = Gas::try_from(GasLimit::from(max_block_gas))
+                let gas_limit = GasLimit::from(max_block_gas)
+                    .as_scaled_gas(gas_scale)
                     .into_storage_result()?;
                 (None, TxResult::default(), TxGasMeter::new(gas_limit))
             }
@@ -195,6 +199,12 @@ mod test {
                 .expect(
                     "Max block gas parameter must be initialized in storage",
                 );
+            // Initialize mock gas scale
+            let gas_scale_key = namada_parameters::storage::get_gas_scale_key();
+            state
+                .db_write(&gas_scale_key, 100_000_000_u64.serialize_to_vec())
+                .expect("Gas scale parameter must be initialized in storage");
+
             let event_log = EventLog::default();
             let (vp_wasm_cache, vp_cache_dir) =
                 wasm::compilation_cache::common::testing::cache();
