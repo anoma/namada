@@ -49,6 +49,11 @@ pub struct ValidatorLocalConfig {
         HashMap<namada::core::address::Address, namada::core::token::Amount>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NodeLocalConfig {
+    pub recheck_process_proposal: bool,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TendermintMode {
     Full,

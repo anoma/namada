@@ -175,19 +175,21 @@ where
     ///
     /// Error codes:
     ///   0: Ok
-    ///   1: Invalid tx
-    ///   2: Tx is invalidly signed
-    ///   3: Wasm runtime error
-    ///   4: Invalid order of decrypted txs
-    ///   5. More decrypted txs than expected
-    ///   6. A transaction could not be decrypted
-    ///   7. An error in the vote extensions included in the proposal
-    ///   8. Not enough block space was available for some tx
-    ///   9. Replay attack
+    ///   1: Wasm runtime error
+    ///   2: Invalid tx
+    ///   3: Tx is invalidly signed
+    ///   4: Block is full
+    ///   5: Replay attempt
+    ///   6. Tx targets a different chain id
+    ///   7. Tx is expired
+    ///   8. Tx exceeds the gas limit
+    ///   9. Tx failed to pay fees
+    ///   10. An error in the vote extensions included in the proposal
+    ///   11. Not enough block space was available for some tx
+    ///   12. Tx wasm code is not allowlisted
     ///
-    /// INVARIANT: Any changes applied in this method must be reverted if the
-    /// proposal is rejected (unless we can simply overwrite them in the
-    /// next block).
+    /// INVARIANT: This function should not, under any circumstances, modify the
+    /// state since the proposal could be rejected.
     #[allow(clippy::too_many_arguments)]
     pub fn check_proposal_tx<CA>(
         &self,
@@ -472,6 +474,24 @@ where
                     };
                 }
 
+                // Validate the inner txs after. Even if the batch is non-atomic
+                // we still reject it if just one of the inner txs is
+                // invalid
+                for cmt in tx.commitments() {
+                    // Tx allowlist
+                    if let Err(err) =
+                        check_tx_allowed(&tx.batch_ref_tx(cmt), &self.state)
+                    {
+                        return TxResult {
+                            code: ResultCode::TxNotAllowlisted.into(),
+                            info: format!(
+                                "Tx code didn't pass the allowlist check: {}",
+                                err
+                            ),
+                        };
+                    }
+                }
+
                 // Check that the fee payer has sufficient balance.
                 if let Err(e) = process_proposal_fee_check(
                     &wrapper,
@@ -489,21 +509,6 @@ where
                         code: ResultCode::FeeError.into(),
                         info: e.to_string(),
                     };
-                }
-
-                for cmt in tx.commitments() {
-                    // Tx allowlist
-                    if let Err(err) =
-                        check_tx_allowed(&tx.batch_ref_tx(cmt), &self.state)
-                    {
-                        return TxResult {
-                            code: ResultCode::TxNotAllowlisted.into(),
-                            info: format!(
-                                "Tx code didn't pass the allowlist check: {}",
-                                err
-                            ),
-                        };
-                    }
                 }
 
                 TxResult {
