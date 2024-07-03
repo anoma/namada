@@ -465,6 +465,8 @@ pub struct PgfParams<T: TemplateValidation> {
     pub pgf_inflation_rate: Dec,
     /// The pgf stewards inflation rate
     pub stewards_inflation_rate: Dec,
+    /// The maximum allowed number of PGF stewards at any time
+    pub maximum_number_of_stewards: u64,
     #[serde(default)]
     #[serde(skip_serializing)]
     #[cfg(test)]
@@ -904,6 +906,8 @@ pub fn validate_parameters(
                 stewards: pgf_params.stewards,
                 pgf_inflation_rate: pgf_params.pgf_inflation_rate,
                 stewards_inflation_rate: pgf_params.stewards_inflation_rate,
+                maximum_number_of_stewards: pgf_params
+                    .maximum_number_of_stewards,
                 valid: Default::default(),
             },
             eth_bridge_params,

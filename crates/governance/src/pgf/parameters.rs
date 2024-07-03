@@ -34,6 +34,8 @@ pub struct PgfParameters {
     pub pgf_inflation_rate: Dec,
     /// The pgf stewards inflation rate
     pub stewards_inflation_rate: Dec,
+    /// The maximum number of pgf stewards at once
+    pub maximum_number_of_stewards: u64,
 }
 
 impl Default for PgfParameters {
@@ -42,6 +44,7 @@ impl Default for PgfParameters {
             stewards: BTreeSet::default(),
             pgf_inflation_rate: Dec::new(10, 2).unwrap(),
             stewards_inflation_rate: Dec::new(1, 2).unwrap(),
+            maximum_number_of_stewards: 5,
         }
     }
 }
@@ -56,6 +59,7 @@ impl PgfParameters {
             stewards,
             pgf_inflation_rate,
             stewards_inflation_rate,
+            maximum_number_of_stewards,
         } = self;
 
         for steward in stewards {
@@ -71,6 +75,11 @@ impl PgfParameters {
 
         let steward_inflation_rate_key =
             pgf_storage::get_steward_inflation_rate_key();
-        storage.write(&steward_inflation_rate_key, stewards_inflation_rate)
+        storage.write(&steward_inflation_rate_key, stewards_inflation_rate)?;
+
+        let maximum_number_of_stewards_key =
+            pgf_storage::get_maximum_number_of_pgf_steward_key();
+        storage
+            .write(&maximum_number_of_stewards_key, maximum_number_of_stewards)
     }
 }
