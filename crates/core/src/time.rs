@@ -154,6 +154,8 @@ impl Display for DateTimeUtc {
 }
 
 impl DateTimeUtc {
+    const FORMAT: &'static str = "%Y-%m-%dT%H:%M:%S%.9f+00:00";
+
     /// Returns a DateTimeUtc which corresponds to the current date.
     pub fn now() -> Self {
         Self(
@@ -183,7 +185,19 @@ impl DateTimeUtc {
 
     /// Returns an rfc3339 string or an error.
     pub fn to_rfc3339(&self) -> String {
-        chrono::DateTime::to_rfc3339(&self.0)
+        self.0.format(DateTimeUtc::FORMAT).to_string()
+    }
+
+    /// Parses a rfc3339 string, or returns an error.
+    pub fn from_rfc3339(s: &str) -> Result<Self, ParseError> {
+        use chrono::format;
+        use chrono::format::strftime::StrftimeItems;
+
+        let format = StrftimeItems::new(Self::FORMAT);
+        let mut parsed = format::Parsed::new();
+        format::parse(&mut parsed, s, format)?;
+
+        parsed.to_datetime_with_timezone(&chrono::Utc).map(Self)
     }
 
     /// Returns the DateTimeUtc corresponding to one second in the future
@@ -196,8 +210,9 @@ impl DateTimeUtc {
 impl FromStr for DateTimeUtc {
     type Err = ParseError;
 
+    #[inline]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self(s.parse::<DateTime<Utc>>()?))
+        Self::from_rfc3339(s)
     }
 }
 
@@ -250,7 +265,7 @@ impl BorshSerialize for DateTimeUtc {
         &self,
         writer: &mut W,
     ) -> std::io::Result<()> {
-        let raw = self.0.to_rfc3339();
+        let raw = self.to_rfc3339();
         BorshSerialize::serialize(&raw, writer)
     }
 }
@@ -259,9 +274,8 @@ impl BorshDeserialize for DateTimeUtc {
     fn deserialize_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
         use std::io::{Error, ErrorKind};
         let raw: String = BorshDeserialize::deserialize_reader(reader)?;
-        let actual = DateTime::parse_from_rfc3339(&raw)
-            .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
-        Ok(Self(actual.into()))
+        Self::from_rfc3339(&raw)
+            .map_err(|err| Error::new(ErrorKind::InvalidData, err))
     }
 }
 
@@ -336,14 +350,13 @@ impl TryFrom<Rfc3339String> for DateTimeUtc {
     type Error = chrono::ParseError;
 
     fn try_from(str: Rfc3339String) -> Result<Self, Self::Error> {
-        let utc = DateTime::parse_from_rfc3339(&str.0)?;
-        Ok(Self(utc.into()))
+        Self::from_rfc3339(&str.0)
     }
 }
 
 impl From<DateTimeUtc> for Rfc3339String {
     fn from(dt: DateTimeUtc) -> Self {
-        Self(DateTime::to_rfc3339(&dt.0))
+        Self(dt.to_rfc3339())
     }
 }
 
@@ -351,15 +364,15 @@ impl TryFrom<DateTimeUtc> for crate::tendermint::time::Time {
     type Error = crate::tendermint::Error;
 
     fn try_from(dt: DateTimeUtc) -> Result<Self, Self::Error> {
-        Self::parse_from_rfc3339(&DateTime::to_rfc3339(&dt.0))
+        Self::parse_from_rfc3339(&dt.to_rfc3339())
     }
 }
 
 impl TryFrom<crate::tendermint::time::Time> for DateTimeUtc {
-    type Error = chrono::ParseError;
+    type Error = prost_types::TimestampError;
 
     fn try_from(t: crate::tendermint::time::Time) -> Result<Self, Self::Error> {
-        Rfc3339String(t.to_rfc3339()).try_into()
+        crate::tendermint_proto::google::protobuf::Timestamp::from(t).try_into()
     }
 }
 
@@ -372,5 +385,76 @@ impl From<crate::tendermint::Timeout> for DurationNanos {
 impl From<DurationNanos> for crate::tendermint::Timeout {
     fn from(val: DurationNanos) -> Self {
         Self::from(std::time::Duration::from(val))
+    }
+}
+
+#[cfg(any(test, feature = "testing"))]
+pub mod test_utils {
+    //! Time related test utilities.
+
+    /// Genesis time used during tests.
+    pub const GENESIS_TIME: &str = "2023-08-30T00:00:00.000000000+00:00";
+}
+
+#[cfg(test)]
+mod core_time_tests {
+    use proptest::prelude::*;
+
+    use super::*;
+
+    proptest! {
+        #[test]
+        fn test_valid_reverse_datetime_utc_encoding_roundtrip(
+            year in 1974..=3_000,
+            month in 1..=12,
+            day in 1..=28,
+            hour in 0..=23,
+            min in 0..=59,
+            sec in 0..=59,
+            nanos in 0..=999_999_999,
+        )
+        {
+            let timestamp = format!("{year:04}-{month:02}-{day:02}T{hour:02}:{min:02}:{sec:02}.{nanos:09}+00:00");
+            println!("Testing timestamp: {timestamp}");
+            test_valid_reverse_datetime_utc_encoding_roundtrip_inner(&timestamp);
+        }
+    }
+
+    fn test_valid_reverse_datetime_utc_encoding_roundtrip_inner(
+        timestamp: &str,
+    ) {
+        // we should be able to parse our custom datetime
+        let datetime = DateTimeUtc::from_rfc3339(timestamp).unwrap();
+
+        // the chrono datetime, which uses a superset of
+        // our datetime format should also be parsable
+        let datetime_inner = DateTime::parse_from_rfc3339(timestamp)
+            .unwrap()
+            .with_timezone(&Utc);
+        assert_eq!(datetime, DateTimeUtc(datetime_inner));
+
+        let encoded = datetime.to_rfc3339();
+
+        assert_eq!(encoded, timestamp);
+    }
+
+    #[test]
+    fn test_invalid_datetime_utc_encoding() {
+        // NB: this is a valid rfc3339 string, but we enforce
+        // a subset of the format to get deterministic encoding
+        // results
+        const TIMESTAMP: &str = "1966-03-03T00:06:56.520Z";
+        // const TIMESTAMP: &str = "1966-03-03T00:06:56.520+00:00";
+
+        // this is a valid rfc3339 string
+        assert!(DateTime::parse_from_rfc3339(TIMESTAMP).is_ok());
+
+        // but it cannot be parsed as a `DateTimeUtc`
+        assert!(DateTimeUtc::from_rfc3339(TIMESTAMP).is_err());
+    }
+
+    #[test]
+    fn test_valid_test_utils_genesis_time() {
+        assert!(DateTimeUtc::from_rfc3339(test_utils::GENESIS_TIME).is_ok());
     }
 }
