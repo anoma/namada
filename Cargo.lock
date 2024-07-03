@@ -4451,7 +4451,7 @@ dependencies = [
 [[package]]
 name = "masp_note_encryption"
 version = "1.0.0"
-source = "git+https://github.com/anoma/masp?rev=4ede1c42d76d6348af8224bc8bfac4404321fe82#4ede1c42d76d6348af8224bc8bfac4404321fe82"
+source = "git+https://github.com/anoma/masp?rev=71b36beba21e35f8611f3ba6910ed5b78ec11af1#71b36beba21e35f8611f3ba6910ed5b78ec11af1"
 dependencies = [
  "borsh 1.2.1",
  "chacha20",
@@ -4464,7 +4464,7 @@ dependencies = [
 [[package]]
 name = "masp_primitives"
 version = "1.0.0"
-source = "git+https://github.com/anoma/masp?rev=4ede1c42d76d6348af8224bc8bfac4404321fe82#4ede1c42d76d6348af8224bc8bfac4404321fe82"
+source = "git+https://github.com/anoma/masp?rev=71b36beba21e35f8611f3ba6910ed5b78ec11af1#71b36beba21e35f8611f3ba6910ed5b78ec11af1"
 dependencies = [
  "aes",
  "bip0039",
@@ -4496,7 +4496,7 @@ dependencies = [
 [[package]]
 name = "masp_proofs"
 version = "1.0.0"
-source = "git+https://github.com/anoma/masp?rev=4ede1c42d76d6348af8224bc8bfac4404321fe82#4ede1c42d76d6348af8224bc8bfac4404321fe82"
+source = "git+https://github.com/anoma/masp?rev=71b36beba21e35f8611f3ba6910ed5b78ec11af1#71b36beba21e35f8611f3ba6910ed5b78ec11af1"
 dependencies = [
  "bellman",
  "blake2b_simd",
@@ -5243,7 +5243,6 @@ dependencies = [
  "async-trait",
  "base58",
  "bimap",
- "bls12_381",
  "borsh 1.2.1",
  "borsh-ext",
  "circular-queue",
@@ -5313,13 +5312,17 @@ name = "namada_shielded_token"
 version = "0.39.0"
 dependencies = [
  "borsh 1.2.1",
+ "lazy_static",
  "masp_primitives",
+ "masp_proofs",
  "namada_controller",
  "namada_core",
+ "namada_gas",
  "namada_parameters",
  "namada_storage",
  "namada_trans_token",
  "proptest",
+ "rand_core 0.6.4",
  "rayon",
  "serde",
  "smooth-operator",
