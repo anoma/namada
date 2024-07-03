@@ -1003,6 +1003,7 @@ where
         };
 
         // Tx chain id
+        #[cfg(not(fuzzing))]
         if tx.header.chain_id != self.chain_id {
             response.code = ResultCode::InvalidChainId.into();
             response.log = format!(
