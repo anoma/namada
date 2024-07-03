@@ -55,7 +55,10 @@ mod dry_run_tx {
         tx.validate_tx().into_storage_result()?;
 
         // Wrapper dry run to allow estimating the gas cost of a transaction
-        let (mut tx_result, tx_gas_meter) = match tx.header().tx_type {
+        let (wrapper_hash, mut tx_result, tx_gas_meter) = match tx
+            .header()
+            .tx_type
+        {
             TxType::Wrapper(wrapper) => {
                 let gas_limit =
                     Gas::try_from(wrapper.gas_limit).into_storage_result()?;
@@ -72,7 +75,11 @@ mod dry_run_tx {
 
                 temp_state.write_log_mut().commit_tx();
                 let available_gas = tx_gas_meter.borrow().get_available_gas();
-                (tx_result, TxGasMeter::new_from_sub_limit(available_gas))
+                (
+                    Some(tx.header_hash()),
+                    tx_result,
+                    TxGasMeter::new_from_sub_limit(available_gas),
+                )
             }
             _ => {
                 // If dry run only the inner tx, use the max block gas as
@@ -81,7 +88,7 @@ mod dry_run_tx {
                     namada_parameters::get_max_block_gas(ctx.state)?;
                 let gas_limit = Gas::try_from(GasLimit::from(max_block_gas))
                     .into_storage_result()?;
-                (TxResult::default(), TxGasMeter::new(gas_limit))
+                (None, TxResult::default(), TxGasMeter::new(gas_limit))
             }
         };
 
@@ -104,10 +111,11 @@ mod dry_run_tx {
             } else {
                 temp_state.write_log_mut().drop_tx();
             }
-            tx_result
-                .batch_results
-                .0
-                .insert(cmt.get_hash(), batched_tx_result);
+            tx_result.batch_results.insert_inner_tx_result(
+                wrapper_hash.as_ref(),
+                either::Right(cmt),
+                batched_tx_result,
+            );
         }
         // Account gas for both batch and wrapper
         tx_result.gas_used = tx_gas_meter.borrow().get_tx_consumed_gas();
@@ -297,8 +305,7 @@ mod test {
             result
                 .data
                 .batch_results
-                .0
-                .get(&cmt.get_hash())
+                .get_inner_tx_result(None, either::Right(cmt))
                 .unwrap()
                 .as_ref()
                 .unwrap()

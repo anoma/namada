@@ -1137,6 +1137,12 @@ impl Tx {
         self.header.clone()
     }
 
+    /// Get the transaction's wrapper hash
+    pub fn wrapper_hash(&self) -> Option<namada_core::hash::Hash> {
+        matches!(&self.header.tx_type, TxType::Wrapper(_))
+            .then(|| self.header_hash())
+    }
+
     /// Get the transaction header hash
     pub fn header_hash(&self) -> namada_core::hash::Hash {
         Section::Header(self.header.clone()).get_hash()
