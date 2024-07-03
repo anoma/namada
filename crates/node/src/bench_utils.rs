@@ -832,11 +832,20 @@ impl Client for BenchShell {
         height: H,
     ) -> Result<tendermint_rpc::endpoint::block::Response, tendermint_rpc::Error>
     where
-        H: Into<tendermint::block::Height> + Send,
+        H: TryInto<tendermint::block::Height> + Send,
     {
         // NOTE: atm this is only needed to query blocks at a specific height
         // for masp transactions
-        let height = BlockHeight(height.into().into());
+        let height = BlockHeight(
+            height
+                .try_into()
+                .map_err(|_| {
+                    tendermint_rpc::Error::parse(
+                        "Failed to cast block height".to_string(),
+                    )
+                })?
+                .into(),
+        );
 
         // Given the way we setup and run benchmarks, the masp transactions can
         // only present in the last block, we can mock the previous
@@ -896,11 +905,15 @@ impl Client for BenchShell {
         tendermint_rpc::Error,
     >
     where
-        H: Into<namada::tendermint::block::Height> + Send,
+        H: TryInto<namada::tendermint::block::Height> + Send,
     {
         // NOTE: atm this is only needed to query block results at a specific
         // height for masp transactions
-        let height = height.into();
+        let height = height.try_into().map_err(|_| {
+            tendermint_rpc::Error::parse(
+                "Failed to cast block height".to_string(),
+            )
+        })?;
 
         // We can expect all the masp tranfers to have happened only in the last
         // block

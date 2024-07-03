@@ -823,7 +823,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             // minimal improvement and it's even hard to tell how many times
             // we'd need a single masp tx to make this worth it
             let block = client
-                .block(height as u32)
+                .block(height)
                 .await
                 .map_err(|e| Error::from(QueryError::General(e.to_string())))?
                 .block
@@ -2025,7 +2025,7 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
     let first_idx_to_query = first_idx_to_query.unwrap_or_default();
 
     Ok(client
-        .block_results(height.0 as u32)
+        .block_results(height.0)
         .await
         .map_err(|e| Error::from(QueryError::General(e.to_string())))?
         .end_block_events
