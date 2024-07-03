@@ -766,21 +766,6 @@ where
             .into());
         }
 
-        let proposal_period_multiple_of_min_period =
-            checked!((end_epoch - start_epoch) % min_period)
-                .map_err(|e| Error::NativeVpError(e.into()))?
-                .0
-                == 0;
-        if !proposal_period_multiple_of_min_period {
-            return Err(native_vp::Error::new_alloc(format!(
-                "Proposal with id {proposal_id} does not have a voting period \
-                 that is a multiple of the minimum voting period \
-                 {min_period}. Starting epoch is {start_epoch}, and ending \
-                 epoch is {end_epoch}.",
-            ))
-            .into());
-        }
-
         let proposal_meets_min_period = checked!(end_epoch - start_epoch)
             .map_err(|e| Error::NativeVpError(e.into()))?
             .0
@@ -849,21 +834,6 @@ where
             .into();
             tracing::info!("{error}");
             return Err(error);
-        }
-
-        let proposal_period_multiple_of_min_period =
-            checked!((end_epoch - start_epoch) % min_period)
-                .map_err(|e| Error::NativeVpError(e.into()))?
-                .0
-                == 0;
-        if !proposal_period_multiple_of_min_period {
-            return Err(native_vp::Error::new_alloc(format!(
-                "Proposal with id {proposal_id} does not have a voting period \
-                 that is a multiple of the minimum voting period \
-                 {min_period}. Starting epoch is {start_epoch}, and ending \
-                 epoch is {end_epoch}.",
-            ))
-            .into());
         }
 
         let diff = checked!(end_epoch - start_epoch)
@@ -1461,7 +1431,7 @@ mod test {
         funds: u64,
         start_epoch: u64,
         end_epoch: u64,
-        grace_epoch: u64,
+        activation_epoch: u64,
         signer_address: &Address,
         no_commiting_key: bool,
     ) where
@@ -1476,7 +1446,7 @@ mod test {
         let proposal_type_key = get_proposal_type_key(proposal_id);
         let funds_key = get_funds_key(proposal_id);
         let commiting_key =
-            get_committing_proposals_key(proposal_id, grace_epoch);
+            get_committing_proposals_key(proposal_id, activation_epoch);
 
         transfer(state, signer_address, &ADDRESS, funds);
 
@@ -1503,7 +1473,10 @@ mod test {
             .unwrap();
         state
             .write_log_mut()
-            .write(&activation_epoch_key, Epoch(grace_epoch).serialize_to_vec())
+            .write(
+                &activation_epoch_key,
+                Epoch(activation_epoch).serialize_to_vec(),
+            )
             .unwrap();
         state
             .write_log_mut()
@@ -1830,9 +1803,9 @@ mod test {
         let mut state = init_storage();
 
         let proposal_id = 0;
-        let grace_epoch = 19;
+        let activation_epoch = 19;
 
-        let keys_changed = get_proposal_keys(proposal_id, grace_epoch);
+        let keys_changed = get_proposal_keys(proposal_id, activation_epoch);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
@@ -1876,8 +1849,8 @@ mod test {
             proposal_id,
             509,
             3,
-            8,
-            19,
+            4,
+            activation_epoch,
             &signer_address,
             false,
         );
@@ -1908,9 +1881,9 @@ mod test {
         let mut state = init_storage();
 
         let proposal_id = 0;
-        let grace_epoch = 12;
+        let activation_epoch = 12;
 
-        let keys_changed = get_proposal_keys(proposal_id, grace_epoch);
+        let keys_changed = get_proposal_keys(proposal_id, activation_epoch);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
@@ -1955,7 +1928,7 @@ mod test {
             509,
             3,
             9,
-            12,
+            activation_epoch,
             &signer_address,
             false,
         );
@@ -1986,9 +1959,9 @@ mod test {
         let mut state = init_storage();
 
         let proposal_id = 0;
-        let grace_epoch = 40;
+        let activation_epoch = 40;
 
-        let keys_changed = get_proposal_keys(proposal_id, grace_epoch);
+        let keys_changed = get_proposal_keys(proposal_id, activation_epoch);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
@@ -2033,7 +2006,7 @@ mod test {
             509,
             3,
             9,
-            40,
+            activation_epoch,
             &signer_address,
             false,
         );
