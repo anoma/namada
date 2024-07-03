@@ -58,7 +58,7 @@ pub use namada_core::masp::{
 };
 use namada_core::masp::{MaspEpoch, MaspTxRefs};
 use namada_core::storage::{BlockHeight, TxIndex};
-use namada_core::time::{DateTimeUtc, DurationSecs};
+use namada_core::time::DateTimeUtc;
 use namada_core::uint::Uint;
 use namada_events::extend::{
     MaspTxBatchRefs as MaspTxBatchRefsAttr,
@@ -1561,47 +1561,40 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         // we set for the transaction. This should be small enough to not cause
         // any issue, in case refactor this function to request the precise
         // datetime to the caller
-        let expiration_height: u32 = match context
-            .tx_builder()
-            .expiration
-            .to_datetime()
-        {
-            Some(expiration) => {
-                // Try to match a DateTime expiration with a plausible
-                // corresponding block height
-                let last_block_height: u64 =
-                    crate::rpc::query_block(context.client())
-                        .await?
-                        .map_or_else(|| 1, |block| u64::from(block.height));
-                #[allow(clippy::disallowed_methods)]
-                let current_time = DateTimeUtc::now();
-                let delta_time =
-                    expiration.0.signed_duration_since(current_time.0);
+        let expiration_height: u32 =
+            match context.tx_builder().expiration.to_datetime() {
+                Some(expiration) => {
+                    // Try to match a DateTime expiration with a plausible
+                    // corresponding block height
+                    let last_block_height: u64 =
+                        crate::rpc::query_block(context.client())
+                            .await?
+                            .map_or_else(|| 1, |block| u64::from(block.height));
+                    #[allow(clippy::disallowed_methods)]
+                    let current_time = DateTimeUtc::now();
+                    let delta_time =
+                        expiration.0.signed_duration_since(current_time.0);
 
-                let max_expected_time_per_block_key =
-                    namada_parameters::storage::get_max_expected_time_per_block_key();
-                let max_block_time =
-                    crate::rpc::query_storage_value::<_, DurationSecs>(
-                        context.client(),
-                        &max_expected_time_per_block_key,
+                    let max_block_time =
+                        crate::rpc::query_max_block_time_estimate(context)
+                            .await?;
+
+                    let delta_blocks = u32::try_from(
+                        delta_time.num_seconds() / max_block_time.0 as i64,
                     )
-                    .await?;
-
-                let delta_blocks = u32::try_from(
-                    delta_time.num_seconds() / max_block_time.0 as i64,
-                )
-                .map_err(|e| Error::Other(e.to_string()))?;
-                u32::try_from(last_block_height)
-                    .map_err(|e| Error::Other(e.to_string()))?
-                    + delta_blocks
-            }
-            None => {
-                // NOTE: The masp library doesn't support optional expiration so
-                // we set the max to mimic a never-expiring tx. We also need to
-                // remove 20 which is going to be added back by the builder
-                u32::MAX - 20
-            }
-        };
+                    .map_err(|e| Error::Other(e.to_string()))?;
+                    u32::try_from(last_block_height)
+                        .map_err(|e| Error::Other(e.to_string()))?
+                        + delta_blocks
+                }
+                None => {
+                    // NOTE: The masp library doesn't support optional
+                    // expiration so we set the max to mimic
+                    // a never-expiring tx. We also need to
+                    // remove 20 which is going to be added back by the builder
+                    u32::MAX - 20
+                }
+            };
         let mut builder = Builder::<Network, _>::new(
             NETWORK,
             // NOTE: this is going to add 20 more blocks to the actual

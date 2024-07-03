@@ -520,9 +520,7 @@ mod tests {
     use crate::ibc::{MsgNftTransfer, MsgTransfer, NftClass, NftMetadata};
     use crate::key::testing::keypair_1;
     use crate::ledger::gas::VpGasMeter;
-    use crate::ledger::parameters::storage::{
-        get_epoch_duration_storage_key, get_max_expected_time_per_block_key,
-    };
+    use crate::ledger::parameters::storage::get_epoch_duration_storage_key;
     use crate::ledger::parameters::EpochDuration;
     use crate::ledger::{ibc, pos};
     use crate::storage::{BlockHeight, TxIndex};
@@ -568,13 +566,6 @@ mod tests {
         state
             .write_log_mut()
             .write(&epoch_duration_key, epoch_duration.serialize_to_vec())
-            .expect("write failed");
-        // max_expected_time_per_block
-        let time = DurationSecs::from(Duration::new(60, 0));
-        let time_key = get_max_expected_time_per_block_key();
-        state
-            .write_log_mut()
-            .write(&time_key, namada_core::encode(&time))
             .expect("write failed");
         // set a dummy header
         state

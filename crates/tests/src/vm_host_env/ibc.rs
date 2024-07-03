@@ -69,9 +69,7 @@ use namada::ledger::native_vp::multitoken::{
     Error as MultitokenVpError, MultitokenVp,
 };
 use namada::ledger::native_vp::{Ctx, NativeVp};
-use namada::ledger::parameters::storage::{
-    get_epoch_duration_storage_key, get_max_expected_time_per_block_key,
-};
+use namada::ledger::parameters::storage::get_epoch_duration_storage_key;
 use namada::ledger::parameters::EpochDuration;
 use namada::ledger::tx_env::TxEnv;
 use namada::ledger::{ibc, pos};
@@ -266,14 +264,6 @@ pub fn init_storage() -> (Address, Address) {
         min_duration: DurationSecs(100),
     };
     let bytes = epoch_duration.serialize_to_vec();
-    tx_host_env::with(|env| {
-        env.state.db_write(&key, &bytes).unwrap();
-    });
-
-    // max_expected_time_per_block
-    let time = DurationSecs::from(Duration::new(60, 0));
-    let key = get_max_expected_time_per_block_key();
-    let bytes = namada::core::encode(&time);
     tx_host_env::with(|env| {
         env.state.db_write(&key, &bytes).unwrap();
     });

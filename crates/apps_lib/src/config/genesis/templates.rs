@@ -265,9 +265,6 @@ pub struct ChainParams<T: TemplateValidation> {
     /// Minimum number of blocks per epoch.
     // NB: u64 only works with values up to i64::MAX with toml-rs!
     pub min_num_of_blocks: u64,
-    /// Maximum duration per block (in seconds).
-    // NB: this is i64 because datetime wants it
-    pub max_expected_time_per_block: i64,
     /// Max payload size, in bytes, for a tx batch proposal.
     ///
     /// Block proposers may never return a `PrepareProposal`
@@ -313,7 +310,6 @@ impl ChainParams<Unvalidated> {
             native_token,
             is_native_token_transferable,
             min_num_of_blocks,
-            max_expected_time_per_block,
             max_proposal_bytes,
             vp_allowlist,
             tx_allowlist,
@@ -358,7 +354,6 @@ impl ChainParams<Unvalidated> {
             native_token,
             is_native_token_transferable,
             min_num_of_blocks,
-            max_expected_time_per_block,
             max_proposal_bytes,
             vp_allowlist,
             tx_allowlist,
