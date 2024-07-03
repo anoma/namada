@@ -378,6 +378,8 @@ fn test_db_migration() -> Result<()> {
             "update-db",
             "--path",
             migrations_json_path.to_string_lossy().as_ref(),
+            "--block-height",
+            "2",
         ],
         Some(30),
     )?;
@@ -394,7 +396,9 @@ fn test_db_migration() -> Result<()> {
         &[
             "balance",
             "--owner",
-            "tnam1q9rhgyv3ydq0zu3whnftvllqnvhvhm270qxay5tn"
+            "tnam1q9rhgyv3ydq0zu3whnftvllqnvhvhm270qxay5tn",
+            "--token",
+            "nam"
         ],
         Some(20),
     )?;
