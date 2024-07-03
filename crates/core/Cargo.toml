@@ -61,6 +61,7 @@ proptest = {workspace = true, optional = true}
 prost-types.workspace = true
 rand = {version = "0.8", optional = true}
 rand_core = {version = "0.6", optional = true}
+ripemd.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

@@ -10,6 +10,7 @@ use ibc::primitives::proto::Protobuf;
 use namada_token::ShieldingTransfer;
 
 /// The different variants of an Ibc message
+#[derive(Debug, Clone)]
 pub enum IbcMessage {
     /// Ibc Envelop
     Envelope(Box<MsgEnvelope>),

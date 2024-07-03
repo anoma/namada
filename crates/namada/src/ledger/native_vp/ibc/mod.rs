@@ -428,7 +428,6 @@ mod tests {
     use namada_ibc::event::IbcEventType;
     use namada_state::testing::TestState;
     use namada_state::StorageRead;
-    use namada_token::NATIVE_MAX_DECIMAL_PLACES;
     use namada_tx::data::TxType;
     use namada_tx::{Authorization, Code, Data, Section, Tx};
     use prost::Message;
@@ -2196,7 +2195,7 @@ mod tests {
             packet_data: PacketData {
                 token: PrefixedCoin {
                     denom: nam().to_string().parse().unwrap(),
-                    amount: 100.into(),
+                    amount: amount.into(),
                 },
                 sender: sender.to_string().into(),
                 receiver: "receiver".to_string().into(),
@@ -2228,12 +2227,7 @@ mod tests {
         keys_changed.insert(commitment_key);
         // withdraw
         let withdraw_key = withdraw_key(&nam());
-        let bytes = Amount::from_str(
-            msg.packet_data.token.amount.to_string(),
-            NATIVE_MAX_DECIMAL_PLACES,
-        )
-        .unwrap()
-        .serialize_to_vec();
+        let bytes = amount.serialize_to_vec();
         state
             .write_log_mut()
             .write(&withdraw_key, bytes)
@@ -2711,7 +2705,7 @@ mod tests {
             packet_data: PacketData {
                 token: PrefixedCoin {
                     denom: nam().to_string().parse().unwrap(),
-                    amount: 100u64.into(),
+                    amount: amount.into(),
                 },
                 sender: established_address_1().to_string().into(),
                 receiver: "receiver".to_string().into(),
@@ -2766,12 +2760,7 @@ mod tests {
         let data = serde_json::from_slice::<PacketData>(&packet.data)
             .expect("decoding packet data failed");
         let deposit_key = deposit_key(&nam());
-        let bytes = Amount::from_str(
-            data.token.amount.to_string(),
-            NATIVE_MAX_DECIMAL_PLACES,
-        )
-        .unwrap()
-        .serialize_to_vec();
+        let bytes = amount.serialize_to_vec();
         state
             .write_log_mut()
             .write(&deposit_key, bytes)
@@ -2874,7 +2863,7 @@ mod tests {
             packet_data: PacketData {
                 token: PrefixedCoin {
                     denom: nam().to_string().parse().unwrap(),
-                    amount: 100u64.into(),
+                    amount: amount.into(),
                 },
                 sender: sender.to_string().into(),
                 receiver: "receiver".to_string().into(),
@@ -2929,12 +2918,7 @@ mod tests {
         let data = serde_json::from_slice::<PacketData>(&packet.data)
             .expect("decoding packet data failed");
         let deposit_key = deposit_key(&nam());
-        let bytes = Amount::from_str(
-            data.token.amount.to_string(),
-            NATIVE_MAX_DECIMAL_PLACES,
-        )
-        .unwrap()
-        .serialize_to_vec();
+        let bytes = amount.serialize_to_vec();
         state
             .write_log_mut()
             .write(&deposit_key, bytes)

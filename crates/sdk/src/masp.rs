@@ -8,7 +8,6 @@ use std::ops::Deref;
 use std::path::PathBuf;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
 use lazy_static::lazy_static;
 use masp_primitives::asset_type::AssetType;
 #[cfg(feature = "mainnet")]
@@ -41,8 +40,7 @@ use masp_primitives::transaction::fees::fixed::FeeRule;
 use masp_primitives::transaction::sighash::{signature_hash, SignableInput};
 use masp_primitives::transaction::txid::TxIdDigester;
 use masp_primitives::transaction::{
-    Authorization, Authorized, Transaction, TransactionData,
-    TransparentAddress, Unauthorized,
+    Authorization, Authorized, Transaction, TransactionData, Unauthorized,
 };
 use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
 use masp_proofs::bellman::groth16::VerifyingKey;
@@ -54,7 +52,7 @@ use namada_core::collections::{HashMap, HashSet};
 use namada_core::dec::Dec;
 pub use namada_core::masp::{
     encode_asset_type, AssetData, BalanceOwner, ExtendedViewingKey,
-    PaymentAddress, TransferSource, TransferTarget,
+    PaymentAddress, TAddrData, TransferSource, TransferTarget,
 };
 use namada_core::masp::{MaspEpoch, MaspTxRefs};
 use namada_core::storage::{BlockHeight, TxIndex};
@@ -72,8 +70,6 @@ use namada_token::{self as token, Denomination, MaspDigitPos};
 use namada_tx::{IndexedTx, Tx};
 use rand::rngs::StdRng;
 use rand_core::{CryptoRng, OsRng, RngCore, SeedableRng};
-use ripemd::Digest as RipemdDigest;
-use sha2::Digest;
 use smooth_operator::checked;
 use thiserror::Error;
 
@@ -1707,19 +1703,15 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 // We add a dummy UTXO to our transaction, but only the source
                 // of the parent Transfer object is used to
                 // validate fund availability
-                let source_enc = source
-                    .address()
+                let script = source
+                    .t_addr_data()
                     .ok_or_else(|| {
                         Error::Other(
                             "source address should be transparent".to_string(),
                         )
                     })?
-                    .serialize_to_vec();
+                    .taddress();
 
-                let hash = ripemd::Ripemd160::digest(sha2::Sha256::digest(
-                    source_enc.as_ref(),
-                ));
-                let script = TransparentAddress(hash.into());
                 for (digit, asset_type) in
                     MaspDigitPos::iter().zip(asset_types.iter())
                 {
@@ -1749,24 +1741,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 .decode_sum(context.client(), value_balance)
                 .await;
 
-            // If we are sending to a transparent output, then we will need to
-            // embed the transparent target address into the
-            // shielded transaction so that it can be signed
-            let transparent_target_hash = if payment_address.is_none() {
-                let target_enc = target
-                    .address()
-                    .ok_or_else(|| {
-                        Error::Other(
-                            "target address should be transparent".to_string(),
-                        )
-                    })?
-                    .serialize_to_vec();
-                Some(ripemd::Ripemd160::digest(sha2::Sha256::digest(
-                    target_enc.as_ref(),
-                )))
-            } else {
-                None
-            };
             // This indicates how many more assets need to be sent to the
             // receiver in order to satisfy the requested transfer
             // amount.
@@ -1812,17 +1786,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                                 error: builder::Error::SaplingBuild(e),
                                 data: None,
                             })?;
-                    } else {
+                    } else if let Some(t_addr_data) = target.t_addr_data() {
                         // If there is a transparent output
-                        let hash = transparent_target_hash
-                            .expect(
-                                "transparent target hash should have been \
-                                 computed already",
-                            )
-                            .into();
                         builder
                             .add_transparent_output(
-                                &TransparentAddress(hash),
+                                &t_addr_data.taddress(),
                                 *asset_type,
                                 contr,
                             )
@@ -1830,6 +1798,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                                 error: builder::Error::TransparentBuild(e),
                                 data: None,
                             })?;
+                    } else {
+                        return Result::Err(TransferErr::from(Error::Other(
+                            "transaction target must be a payment address or \
+                             Namada address or IBC address"
+                                .to_string(),
+                        )));
                     }
                     // Lower what is required of the remaining contribution
                     *rem_amount -= contr;
@@ -1843,7 +1817,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 for (asset_type, val) in asset_types.iter().zip(rem_amount) {
                     shortfall += I128Sum::from_pair(*asset_type, val.into());
                 }
-                // Return an insufficient funds error
+                // Return an insufficient ffunds error
                 return Result::Err(TransferErr::Build {
                     error: builder::Error::InsufficientFunds(shortfall),
                     data: Some(MaspTransferData {
@@ -2209,6 +2183,7 @@ pub mod testing {
     use masp_primitives::transaction::components::sapling::builder::StoredBuildParams;
     use masp_primitives::transaction::components::sapling::Bundle;
     use masp_primitives::transaction::components::GROTH_PROOF_SIZE;
+    use masp_primitives::transaction::TransparentAddress;
     use masp_proofs::bellman::groth16::{self, Proof};
     use proptest::prelude::*;
     use proptest::sample::SizeRange;

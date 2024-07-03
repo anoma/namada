@@ -76,7 +76,7 @@ use namada::ledger::{ibc, pos};
 use namada::proof_of_stake::OwnedPosParams;
 use namada::state::testing::TestState;
 use namada::tendermint::time::Time as TmTime;
-use namada::token::{self, Amount, DenominatedAmount};
+use namada::token::{self, Amount};
 use namada::tx::BatchedTxRef;
 use namada::vm::{wasm, WasmCacheRwAccess};
 use namada_core::collections::HashMap;
@@ -87,7 +87,7 @@ use namada_tx_prelude::BorshSerializeExt;
 use crate::tx::*;
 
 const ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
-pub const ANY_DENOMINATION: u8 = 4;
+pub const ANY_DENOMINATION: u8 = token::NATIVE_MAX_DECIMAL_PLACES;
 const COMMITMENT_PREFIX: &[u8] = b"ibc";
 
 pub struct TestIbcVp<'a> {
@@ -626,7 +626,6 @@ pub fn msg_transfer(
     denom: String,
     sender: &Address,
 ) -> MsgTransfer {
-    let amount = DenominatedAmount::native(Amount::native_whole(100));
     let timestamp = (Timestamp::now() + Duration::from_secs(100)).unwrap();
     let message = IbcMsgTransfer {
         port_id_on_a: port_id,
@@ -634,7 +633,7 @@ pub fn msg_transfer(
         packet_data: PacketData {
             token: PrefixedCoin {
                 denom: denom.parse().expect("invalid denom"),
-                amount: amount.into(),
+                amount: Amount::native_whole(100).into(),
             },
             sender: sender.to_string().into(),
             receiver: address::testing::gen_established_address()
@@ -683,12 +682,11 @@ pub fn received_packet(
     token: String,
     receiver: &Address,
 ) -> Packet {
-    let amount = DenominatedAmount::native(Amount::native_whole(100));
     let counterparty = dummy_channel_counterparty();
     let timestamp = (Timestamp::now() + Duration::from_secs(100)).unwrap();
     let coin = PrefixedCoin {
         denom: token.parse().expect("invalid denom"),
-        amount: amount.into(),
+        amount: Amount::native_whole(100).into(),
     };
     let sender = address::testing::gen_established_address();
     let data = PacketData {
