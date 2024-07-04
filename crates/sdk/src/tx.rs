@@ -3721,8 +3721,7 @@ pub async fn gen_ibc_shielding_transfer<N: Namada>(
         .map_err(|err| TxSubmitError::MaspError(err.to_string()))?;
 
     if let Some(shielded_transfer) = shielded_transfer {
-        let masp_tx_hash =
-            Section::MaspTx(shielded_transfer.masp_tx.clone()).get_hash();
+        let masp_tx_hash = shielded_transfer.masp_tx.txid().into();
         let transfer = token::Transfer::masp(masp_tx_hash);
         Ok(Some((transfer, shielded_transfer.masp_tx)))
     } else {

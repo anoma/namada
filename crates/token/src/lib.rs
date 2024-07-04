@@ -19,7 +19,6 @@
 )]
 
 use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use namada_core::hash::Hash;
 use namada_macros::BorshDeserializer;
 pub use namada_shielded_token::*;
 pub use namada_trans_token::*;
@@ -34,6 +33,7 @@ pub mod storage_key {
 use std::collections::BTreeMap;
 
 use namada_core::address::Address;
+use namada_core::masp::TxId;
 use namada_events::EmitEvents;
 use namada_storage::{Result, StorageRead, StorageWrite};
 
@@ -114,12 +114,12 @@ pub struct Transfer {
     /// Targets of this transfer
     pub targets: BTreeMap<Account, DenominatedAmount>,
     /// Hash of tx section that contains the MASP transaction
-    pub shielded_section_hash: Option<Hash>,
+    pub shielded_section_hash: Option<TxId>,
 }
 
 impl Transfer {
     /// Create a MASP transaction
-    pub fn masp(hash: Hash) -> Self {
+    pub fn masp(hash: TxId) -> Self {
         Self {
             shielded_section_hash: Some(hash),
             ..Self::default()

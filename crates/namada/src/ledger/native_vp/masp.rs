@@ -669,8 +669,8 @@ where
         })?;
         let shielded_tx = tx_data
             .tx
-            .get_section(&masp_section_ref)
-            .and_then(|section| section.masp_tx())
+            .get_masp_section(&masp_section_ref)
+            .cloned()
             .ok_or_else(|| {
                 native_vp::Error::new_const(
                     "Missing MASP section in transaction",
