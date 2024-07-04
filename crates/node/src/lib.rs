@@ -35,7 +35,7 @@ use futures::future::TryFutureExt;
 use namada::core::storage::BlockHeight;
 use namada::core::time::DateTimeUtc;
 use namada::eth_bridge::ethers::providers::{Http, Provider};
-use namada::state::DB;
+use namada::state::{ProcessProposalCachedResult, DB};
 use namada::storage::DbColFam;
 use namada::tendermint::abci::request::CheckTxKind;
 use namada::tendermint::abci::response::ProcessProposal;
@@ -138,12 +138,14 @@ impl Shell {
                 // hash conversion fails avoid caching
                 if let Ok(block_hash) = block_hash {
                     let result = if let ProcessProposal::Accept = response {
-                        Ok(tx_results
-                            .into_iter()
-                            .map(|res| res.into())
-                            .collect())
+                        ProcessProposalCachedResult::Accepted(
+                            tx_results
+                                .into_iter()
+                                .map(|res| res.into())
+                                .collect(),
+                        )
                     } else {
-                        Err(())
+                        ProcessProposalCachedResult::Rejected
                     };
 
                     self.state
@@ -233,14 +235,16 @@ impl Shell {
                     if let ProcessProposal::Accept =
                         self.process_proposal(process_req.into()).0
                     {
-                        Ok(vec![])
+                        ProcessProposalCachedResult::Accepted(vec![])
                     } else {
-                        Err(())
+                        ProcessProposalCachedResult::Rejected
                     }
                 }
             };
 
-            if process_proposal_result.is_err() {
+            if let ProcessProposalCachedResult::Rejected =
+                process_proposal_result
+            {
                 return Err(Error::RejectedBlockProposal);
             }
         }

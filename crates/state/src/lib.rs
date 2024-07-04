@@ -26,7 +26,9 @@ use std::fmt::Debug;
 use std::iter::Peekable;
 
 pub use host_env::{TxHostEnvState, VpHostEnvState};
-pub use in_memory::{BlockStorage, InMemory, LastBlock};
+pub use in_memory::{
+    BlockStorage, InMemory, LastBlock, ProcessProposalCachedResult,
+};
 use namada_core::address::Address;
 use namada_core::arith::{self, checked};
 use namada_core::eth_bridge_pool::is_pending_transfer_key;

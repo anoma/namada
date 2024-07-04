@@ -78,11 +78,9 @@ where
     /// to avoid running process proposal more than once internally because of
     /// the shim or the recheck option (comet only calls it at most once
     /// for a given height/round)
-    pub process_proposal_cache: namada_core::collections::HashMap<
-        Hash,
-        // FIXME: myabe better with an enum instead of result?
-        std::result::Result<Vec<(u32, String)>, ()>,
-    >,
+    // FIXME: would be better to limit the size of this cache. CLruCache?
+    pub process_proposal_cache:
+        namada_core::collections::HashMap<Hash, ProcessProposalCachedResult>,
 }
 
 /// Last committed block
@@ -92,6 +90,17 @@ pub struct LastBlock {
     pub height: BlockHeight,
     /// Block time
     pub time: DateTimeUtc,
+}
+
+/// The result of process proposal that can be cached for future lookup
+#[must_use]
+#[derive(Debug, Clone)]
+pub enum ProcessProposalCachedResult {
+    /// The proposed block was accepted by this node with the attached results
+    /// for every included tx
+    Accepted(Vec<(u32, String)>),
+    /// The proposed block was rejected by this node
+    Rejected,
 }
 
 /// The block storage data

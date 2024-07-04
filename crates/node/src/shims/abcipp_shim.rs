@@ -6,6 +6,7 @@ use std::task::{Context, Poll};
 use futures::future::FutureExt;
 use namada::core::hash::Hash;
 use namada::core::storage::BlockHeight;
+use namada::state::ProcessProposalCachedResult;
 use namada::state::DB;
 use namada::tendermint::abci::response::ProcessProposal;
 use namada::time::{DateTimeUtc, Utc};
@@ -19,7 +20,7 @@ use super::abcipp_shim_types::shim::request::{
     CheckProcessProposal, FinalizeBlock, ProcessedTx,
 };
 use super::abcipp_shim_types::shim::{
-    response, Error, Request, Response, TakeSnapshot, TxBytes,
+    Error, Request, Response, TakeSnapshot, TxBytes,
 };
 use crate::config;
 use crate::config::{Action, ActionAtHeight};
@@ -125,15 +126,19 @@ impl AbcippShim {
                     match self.get_process_proposal_result(
                         begin_block_request.clone(),
                     ) {
-                        Ok(res) => {
+                        ProcessProposalCachedResult::Accepted(tx_results) => {
                             let mut txs =
                                 Vec::with_capacity(self.delivered_txs.len());
                             let delivered =
                                 std::mem::take(&mut self.delivered_txs);
-                            for (result, tx) in
-                                res.into_iter().zip(delivered.into_iter())
+                            for (result, tx) in tx_results
+                                .into_iter()
+                                .zip(delivered.into_iter())
                             {
-                                txs.push(ProcessedTx { tx, result });
+                                txs.push(ProcessedTx {
+                                    tx,
+                                    result: result.into(),
+                                });
                             }
                             let mut end_block_request: FinalizeBlock =
                                 begin_block_request.into();
@@ -148,9 +153,11 @@ impl AbcippShim {
                             _ => Err(Error::ConvertResp(res)),
                         })
                         }
-                        Err(()) => Err(Error::Shell(
-                            crate::shell::Error::RejectedBlockProposal,
-                        )),
+                        ProcessProposalCachedResult::Rejected => {
+                            Err(Error::Shell(
+                                crate::shell::Error::RejectedBlockProposal,
+                            ))
+                        }
                     }
                 }
                 Req::Commit => match self.service.call(Request::Commit) {
@@ -240,7 +247,7 @@ impl AbcippShim {
     fn get_process_proposal_result(
         &mut self,
         begin_block_request: request::BeginBlock,
-    ) -> std::result::Result<Vec<response::TxResult>, ()> {
+    ) -> ProcessProposalCachedResult {
         match namada::core::hash::Hash::try_from(begin_block_request.hash) {
             Ok(block_hash) => {
                 match self
@@ -252,9 +259,7 @@ impl AbcippShim {
                 {
                     // We already have the result of process proposal for
                     // this block cached in memory
-                    Some(res) => res
-                        .to_owned()
-                        .map(|r| r.into_iter().map(|res| res.into()).collect()),
+                    Some(res) => res.to_owned(),
                     None => {
                         // Need to run process proposal to extract the data we
                         // need for finalize block (tx results)
@@ -266,26 +271,22 @@ impl AbcippShim {
 
                         let (process_resp, res) =
                             self.service.process_proposal(process_req.into());
-                        let result =
-                            if let ProcessProposal::Accept = process_resp {
-                                Ok(res)
-                            } else {
-                                Err(())
-                            };
+                        let result = if let ProcessProposal::Accept =
+                            process_resp
+                        {
+                            ProcessProposalCachedResult::Accepted(
+                                res.into_iter().map(|res| res.into()).collect(),
+                            )
+                        } else {
+                            ProcessProposalCachedResult::Rejected
+                        };
 
                         // Cache the result
                         self.service
                             .state
                             .in_mem_mut()
                             .process_proposal_cache
-                            .insert(
-                                block_hash.to_owned(),
-                                result.clone().map(|res| {
-                                    res.into_iter()
-                                        .map(|res| res.into())
-                                        .collect()
-                                }),
-                            );
+                            .insert(block_hash.to_owned(), result.clone());
 
                         result
                     }
@@ -303,9 +304,11 @@ impl AbcippShim {
                 let (process_resp, res) =
                     self.service.process_proposal(process_req.into());
                 if let ProcessProposal::Accept = process_resp {
-                    Ok(res)
+                    ProcessProposalCachedResult::Accepted(
+                        res.into_iter().map(|res| res.into()).collect(),
+                    )
                 } else {
-                    Err(())
+                    ProcessProposalCachedResult::Rejected
                 }
             }
         }
