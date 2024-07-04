@@ -687,8 +687,6 @@ where
             return Err(error);
         }
 
-        // The Sapling value balance adds to the transparent tx pool
-        let mut transparent_tx_pool = shielded_tx.sapling_value_balance();
         // Check the validity of the keys and get the transfer data
         let mut changed_balances = self.validate_state_and_get_transfer_data(
             keys_changed,
@@ -731,7 +729,6 @@ where
         validate_transparent_bundle(
             &shielded_tx,
             &mut changed_balances,
-            &mut transparent_tx_pool,
             masp_epoch,
             conversion_state,
             &mut signers,
@@ -816,31 +813,6 @@ where
                 tracing::debug!("{error}");
                 return Err(error);
             }
-        }
-
-        // Ensure that the shielded transaction exactly balances
-        match transparent_tx_pool.partial_cmp(&I128Sum::zero()) {
-            None | Some(Ordering::Less) => {
-                let error = native_vp::Error::new_const(
-                    "Transparent transaction value pool must be nonnegative. \
-                     Violation may be caused by transaction being constructed \
-                     in previous epoch. Maybe try again.",
-                )
-                .into();
-                tracing::debug!("{error}");
-                // Section 3.4: The remaining value in the transparent
-                // transaction value pool MUST be nonnegative.
-                return Err(error);
-            }
-            Some(Ordering::Greater) => {
-                let error = native_vp::Error::new_const(
-                    "Transaction fees cannot be paid inside MASP transaction.",
-                )
-                .into();
-                tracing::debug!("{error}");
-                return Err(error);
-            }
-            _ => {}
         }
 
         // Verify the proofs
@@ -1019,21 +991,23 @@ fn validate_transparent_output(
 // Update the transaction value pool and also ensure that the Transaction is
 // consistent with the balance changes. I.e. the transparent inputs are not more
 // than the initial balances and that the transparent outputs are not more than
-// the final balances.
+// the final balances. Also ensure that the sapling value balance is exactly 0.
 fn validate_transparent_bundle(
     shielded_tx: &Transaction,
     changed_balances: &mut ChangedBalances,
-    transparent_tx_pool: &mut I128Sum,
     epoch: MaspEpoch,
     conversion_state: &ConversionState,
     signers: &mut BTreeSet<TransparentAddress>,
 ) -> Result<()> {
+    // The Sapling value balance adds to the transparent tx pool
+    let mut transparent_tx_pool = shielded_tx.sapling_value_balance();
+
     if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
         for vin in transp_bundle.vin.iter() {
             validate_transparent_input(
                 vin,
                 changed_balances,
-                transparent_tx_pool,
+                &mut transparent_tx_pool,
                 epoch,
                 conversion_state,
                 signers,
@@ -1044,13 +1018,37 @@ fn validate_transparent_bundle(
             validate_transparent_output(
                 out,
                 changed_balances,
-                transparent_tx_pool,
+                &mut transparent_tx_pool,
                 epoch,
                 conversion_state,
             )?;
         }
     }
-    Ok(())
+
+    // Ensure that the shielded transaction exactly balances
+    match transparent_tx_pool.partial_cmp(&I128Sum::zero()) {
+        None | Some(Ordering::Less) => {
+            let error = native_vp::Error::new_const(
+                "Transparent transaction value pool must be nonnegative. \
+                 Violation may be caused by transaction being constructed in \
+                 previous epoch. Maybe try again.",
+            )
+            .into();
+            tracing::debug!("{error}");
+            // The remaining value in the transparent transaction value pool
+            // MUST be nonnegative.
+            Err(error)
+        }
+        Some(Ordering::Greater) => {
+            let error = native_vp::Error::new_const(
+                "Transaction fees cannot be left on the MASP balance.",
+            )
+            .into();
+            tracing::debug!("{error}");
+            Err(error)
+        }
+        _ => Ok(()),
+    }
 }
 
 // Apply the given Sapling value balance component to the accumulator
