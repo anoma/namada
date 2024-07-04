@@ -299,7 +299,6 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         1_000_000_000,
         &port_id_b,
         &channel_id_b,
-        false,
     )?;
     transfer(
         &test_a,
@@ -492,7 +491,6 @@ fn ibc_namada_gaia() -> Result<()> {
         100,
         &port_id_namada,
         &channel_id_namada,
-        false,
     )?;
     transfer_from_gaia(
         &test_gaia,
@@ -695,7 +693,6 @@ fn proposal_ibc_token_inflation() -> Result<()> {
         1_000_000,
         &port_id_b,
         &channel_id_b,
-        false,
     )?;
     transfer(
         &test_a,
@@ -2685,14 +2682,13 @@ fn gen_masp_tx(
     amount: u64,
     port_id: &PortId,
     channel_id: &ChannelId,
-    is_refund: bool,
 ) -> Result<PathBuf> {
     std::env::set_var(ENV_VAR_CHAIN_ID, dst_test.net.chain_id.to_string());
     let rpc = get_actor_rpc(dst_test, Who::Validator(0));
     let output_folder = dst_test.test_dir.path().to_string_lossy();
 
     let amount = amount.to_string();
-    let mut args = vec![
+    let args = vec![
         "ibc-gen-shielding",
         "--output-folder-path",
         &output_folder,
@@ -2709,10 +2705,6 @@ fn gen_masp_tx(
         "--node",
         &rpc,
     ];
-
-    if is_refund {
-        args.push("--refund");
-    }
 
     let mut client = run!(dst_test, Bin::Client, args, Some(120))?;
     let (_unread, matched) =

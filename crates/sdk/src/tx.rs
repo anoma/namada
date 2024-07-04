@@ -51,7 +51,7 @@ use namada_governance::storage::proposal::{
 };
 use namada_governance::storage::vote::ProposalVote;
 use namada_ibc::storage::channel_key;
-use namada_ibc::trace::{convert_to_address, is_nft_trace};
+use namada_ibc::trace::is_nft_trace;
 use namada_ibc::{
     decode_masp_tx_from_memo, IbcShieldingData, MsgNftTransfer, MsgTransfer,
 };
@@ -3526,22 +3526,17 @@ pub async fn gen_ibc_shielding_transfer<N: Namada>(
             .await?;
     let ibc_denom =
         rpc::query_ibc_denom(context, &args.token, Some(&source)).await;
-    let token = if args.refund {
-        convert_to_address(ibc_denom)
-            .map_err(|e| Error::Other(format!("Invalid token: {e}")))?
-    } else {
-        // Need to check the prefix
-        namada_ibc::received_ibc_token(
-            &ibc_denom,
-            &src_port_id,
-            &src_channel_id,
-            &args.port_id,
-            &args.channel_id,
-        )
-        .map_err(|e| {
-            Error::Other(format!("Getting IBC Token failed: error {e}"))
-        })?
-    };
+    // Need to check the prefix
+    let token = namada_ibc::received_ibc_token(
+        &ibc_denom,
+        &src_port_id,
+        &src_channel_id,
+        &args.port_id,
+        &args.channel_id,
+    )
+    .map_err(|e| {
+        Error::Other(format!("Getting IBC Token failed: error {e}"))
+    })?;
     let validated_amount =
         validate_amount(context, args.amount, &token, false).await?;
 

@@ -876,7 +876,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let mut masp_txs = Vec::new();
         for cmt in &tx.header.batch {
             let tx_data = tx.data(cmt).ok_or_else(|| {
-                Error::Other("Missing expected masp transaction".to_string())
+                Error::Other("Missing transaction data".to_string())
             })?;
             let ibc_msg = decode_message(&tx_data)
                 .map_err(|_| Error::Other("Invalid IBC message".to_string()))?;
@@ -890,7 +890,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             Ok(masp_txs)
         } else {
             Err(Error::Other(
-                "IBC meesage doesn't have masp transaction".to_string(),
+                "IBC message doesn't have masp transaction".to_string(),
             ))
         }
     }
