@@ -2,98 +2,36 @@ use namada_sdk::address::Address;
 use namada_sdk::hash::Hash;
 use namada_sdk::key::common;
 use namada_sdk::token::transaction::Transaction;
-use namada_sdk::token::ShieldingTransferData;
-pub use namada_sdk::token::{
-    DenominatedAmount, TransparentTransfer, UnshieldingTransferData,
-};
+pub use namada_sdk::token::{DenominatedAmount, Transfer};
 use namada_sdk::tx::data::GasLimit;
-use namada_sdk::tx::{
-    Authorization, Tx, TxError, TX_SHIELDED_TRANSFER_WASM,
-    TX_SHIELDING_TRANSFER_WASM, TX_TRANSPARENT_TRANSFER_WASM,
-    TX_UNSHIELDING_TRANSFER_WASM,
-};
+use namada_sdk::tx::{Authorization, Tx, TxError, TX_TRANSFER_WASM};
 
 use super::{attach_fee, attach_fee_signature, GlobalArgs};
 use crate::transaction;
 
 /// A transfer transaction
 #[derive(Debug, Clone)]
-pub struct Transfer(Tx);
+pub struct TransferBuilder(Tx);
 
-impl Transfer {
+impl TransferBuilder {
     /// Build a transparent transfer transaction from the given parameters
-    pub fn transparent(
-        transfers: TransparentTransfer,
-        args: GlobalArgs,
-    ) -> Self {
+    pub fn transfer(transfer: Transfer, args: GlobalArgs) -> Self {
         Self(transaction::build_tx(
             args,
-            transfers,
-            TX_TRANSPARENT_TRANSFER_WASM.to_string(),
+            transfer,
+            TX_TRANSFER_WASM.to_string(),
         ))
     }
 
     /// Build a shielded transfer transaction from the given parameters
     pub fn shielded(
-        fee_unshield: Option<UnshieldingTransferData>,
         shielded_section_hash: Hash,
         transaction: Transaction,
         args: GlobalArgs,
     ) -> Self {
-        let data = namada_sdk::token::ShieldedTransfer {
-            fee_unshield,
-            section_hash: shielded_section_hash,
-        };
-
-        let mut tx = transaction::build_tx(
-            args,
-            data,
-            TX_SHIELDED_TRANSFER_WASM.to_string(),
-        );
-        tx.add_masp_tx_section(transaction);
-
-        Self(tx)
-    }
-
-    /// Build a shielding transfer transaction from the given parameters
-    pub fn shielding(
-        transfers: Vec<ShieldingTransferData>,
-        shielded_section_hash: Hash,
-        transaction: Transaction,
-        args: GlobalArgs,
-    ) -> Self {
-        let data = namada_sdk::token::ShieldingMultiTransfer {
-            data: transfers,
-            shielded_section_hash,
-        };
-
-        let mut tx = transaction::build_tx(
-            args,
-            data,
-            TX_SHIELDING_TRANSFER_WASM.to_string(),
-        );
-        tx.add_masp_tx_section(transaction);
-
-        Self(tx)
-    }
-
-    /// Build an unshielding transfer transaction from the given parameters
-    pub fn unshielding(
-        transfers: Vec<UnshieldingTransferData>,
-        shielded_section_hash: Hash,
-        transaction: Transaction,
-        args: GlobalArgs,
-    ) -> Self {
-        let data = namada_sdk::token::UnshieldingMultiTransfer {
-            data: transfers,
-            shielded_section_hash,
-        };
-
-        let mut tx = transaction::build_tx(
-            args,
-            data,
-            TX_UNSHIELDING_TRANSFER_WASM.to_string(),
-        );
+        let data = Transfer::masp(shielded_section_hash);
+        let mut tx =
+            transaction::build_tx(args, data, TX_TRANSFER_WASM.to_string());
         tx.add_masp_tx_section(transaction);
 
         Self(tx)

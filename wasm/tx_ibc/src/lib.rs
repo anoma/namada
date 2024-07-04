@@ -30,7 +30,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
     }
 
     if let Some(masp_section_ref) =
-        transfer.map(|transfer| transfer.shielded_section_hash)
+        transfer.and_then(|transfer| transfer.shielded_section_hash)
     {
         let shielded = tx_data
             .tx

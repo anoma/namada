@@ -78,7 +78,7 @@ use ibc::primitives::proto::Any;
 pub use ibc::*;
 pub use msg::*;
 use namada_core::address::{self, Address};
-use namada_token::{ShieldingTransfer, UnshieldingTransferData};
+use namada_token::Transfer;
 pub use nft::*;
 use prost::Message;
 use thiserror::Error;
@@ -154,10 +154,7 @@ where
     pub fn execute(
         &mut self,
         tx_data: &[u8],
-    ) -> Result<
-        (Option<ShieldingTransfer>, Option<UnshieldingTransferData>),
-        Error,
-    > {
+    ) -> Result<Option<Transfer>, Error> {
         let message = decode_message(tx_data)?;
         match &message {
             IbcMessage::Transfer(msg) => {
@@ -172,7 +169,7 @@ where
                     msg.message.clone(),
                 )
                 .map_err(Error::TokenTransfer)?;
-                Ok((msg.transfer.clone(), msg.fee_unshield.clone()))
+                Ok(msg.transfer.clone())
             }
             IbcMessage::NftTransfer(msg) => {
                 let mut nft_transfer_ctx =
@@ -183,7 +180,7 @@ where
                     msg.message.clone(),
                 )
                 .map_err(Error::NftTransfer)?;
-                Ok((msg.transfer.clone(), msg.fee_unshield.clone()))
+                Ok(msg.transfer.clone())
             }
             IbcMessage::RecvPacket(msg) => {
                 let envelope =
@@ -196,7 +193,7 @@ where
                 } else {
                     None
                 };
-                Ok((transfer, None))
+                Ok(transfer)
             }
             IbcMessage::AckPacket(msg) => {
                 let envelope =
@@ -210,7 +207,7 @@ where
                     } else {
                         None
                     };
-                Ok((transfer, None))
+                Ok(transfer)
             }
             IbcMessage::Timeout(msg) => {
                 let envelope = MsgEnvelope::Packet(PacketMsg::Timeout(
@@ -218,12 +215,12 @@ where
                 ));
                 execute(&mut self.ctx, &mut self.router, envelope)
                     .map_err(|e| Error::Context(Box::new(e)))?;
-                Ok((msg.transfer.clone(), None))
+                Ok(msg.transfer.clone())
             }
             IbcMessage::Envelope(envelope) => {
                 execute(&mut self.ctx, &mut self.router, *envelope.clone())
                     .map_err(|e| Error::Context(Box::new(e)))?;
-                Ok((None, None))
+                Ok(None)
             }
         }
     }
@@ -338,7 +335,6 @@ pub fn decode_message(tx_data: &[u8]) -> Result<IbcMessage, Error> {
             let msg = MsgTransfer {
                 message,
                 transfer: None,
-                fee_unshield: None,
             };
             return Ok(IbcMessage::Transfer(msg));
         }
@@ -346,7 +342,6 @@ pub fn decode_message(tx_data: &[u8]) -> Result<IbcMessage, Error> {
             let msg = MsgNftTransfer {
                 message,
                 transfer: None,
-                fee_unshield: None,
             };
             return Ok(IbcMessage::NftTransfer(msg));
         }

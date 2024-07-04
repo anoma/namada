@@ -1,12 +1,13 @@
 //! Token transaction events.
 
 use std::borrow::Cow;
-use std::fmt;
-use std::str::FromStr;
+use std::collections::BTreeMap;
 
 use namada_core::address::Address;
 use namada_core::uint::Uint;
-use namada_events::extend::{Closure, ComposeEvent, EventAttributeEntry};
+use namada_events::extend::{
+    ComposeEvent, EventAttributeEntry, EventValue, UserAccount,
+};
 use namada_events::{Event, EventLevel, EventToEmit, EventType};
 
 pub mod types {
@@ -24,45 +25,6 @@ pub mod types {
 
     /// Transfer token event.
     pub const TRANSFER: EventType = event_type!(TokenEvent, "transfer");
-}
-
-/// A user account.
-#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
-pub enum UserAccount {
-    /// Internal chain address in Namada.
-    Internal(Address),
-    /// External chain address.
-    External(String),
-}
-
-impl fmt::Display for UserAccount {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Internal(addr) => write!(f, "internal-address/{addr}"),
-            Self::External(addr) => write!(f, "external-address/{addr}"),
-        }
-    }
-}
-
-impl FromStr for UserAccount {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.split_once('/') {
-            Some(("internal-address", addr)) => {
-                Ok(Self::Internal(Address::decode(addr).map_err(|err| {
-                    format!(
-                        "Unknown internal address balance change target \
-                         {s:?}: {err}"
-                    )
-                })?))
-            }
-            Some(("external-address", addr)) => {
-                Ok(Self::External(addr.to_owned()))
-            }
-            _ => Err(format!("Unknown balance change target {s:?}")),
-        }
-    }
 }
 
 /// Token event kind.
@@ -97,8 +59,6 @@ impl From<TokenEventKind> for EventType {
 pub struct TokenEvent {
     /// The event level.
     pub level: EventLevel,
-    /// The affected token address.
-    pub token: Address,
     /// The operation that took place.
     pub operation: TokenOperation,
     /// Additional description of the token event.
@@ -112,6 +72,8 @@ pub enum TokenOperation {
     Mint {
         /// The target account whose balance was changed.
         target_account: UserAccount,
+        /// The affected token address.
+        token: Address,
         /// The amount of minted tokens.
         amount: Uint,
         /// The balance that `target_account` ended up with.
@@ -121,6 +83,8 @@ pub enum TokenOperation {
     Burn {
         /// The target account whose balance was changed.
         target_account: UserAccount,
+        /// The affected token address.
+        token: Address,
         /// The amount of minted tokens.
         amount: Uint,
         /// The balance that `target_account` ended up with.
@@ -129,16 +93,11 @@ pub enum TokenOperation {
     /// Token transfer event.
     Transfer {
         /// The source of the token transfer.
-        source: UserAccount,
+        sources: BTreeMap<(UserAccount, Address), Uint>,
         /// The target of the token transfer.
-        target: UserAccount,
-        /// The transferred amount.
-        amount: Uint,
-        /// The balance that `source` ended up with.
-        source_post_balance: Uint,
-        /// The balance that `target` ended up with,
-        /// if it is known.
-        target_post_balance: Option<Uint>,
+        targets: BTreeMap<(UserAccount, Address), Uint>,
+        /// The balance that `sources` and `targets` ended up with.
+        post_balances: BTreeMap<(UserAccount, Address), Uint>,
     },
 }
 
@@ -151,6 +110,31 @@ impl TokenOperation {
             Self::Transfer { .. } => TokenEventKind::Transfer,
         }
     }
+
+    /// Construct a simple transfer operation
+    pub fn transfer(
+        source: UserAccount,
+        target: UserAccount,
+        token: Address,
+        amount: Uint,
+        source_post_balance: Uint,
+        target_post_balance: Option<Uint>,
+    ) -> Self {
+        let mut sources = BTreeMap::new();
+        sources.insert((source.clone(), token.clone()), amount);
+        let mut targets = BTreeMap::new();
+        targets.insert((target.clone(), token.clone()), amount);
+        let mut post_balances = BTreeMap::new();
+        post_balances.insert((source, token.clone()), source_post_balance);
+        if let Some(target_post_balance) = target_post_balance {
+            post_balances.insert((target, token), target_post_balance);
+        }
+        Self::Transfer {
+            sources,
+            targets,
+            post_balances,
+        }
+    }
 }
 
 impl EventToEmit for TokenEvent {
@@ -161,40 +145,40 @@ impl From<TokenEvent> for Event {
     fn from(token_event: TokenEvent) -> Self {
         let event =
             Self::new(token_event.operation.kind().into(), token_event.level)
-                .with(TokenAddress(token_event.token))
                 .with(Descriptor(&token_event.descriptor));
 
         match token_event.operation {
             TokenOperation::Mint {
                 target_account,
+                token,
                 amount,
                 post_balance,
             }
             | TokenOperation::Burn {
                 target_account,
+                token,
                 amount,
                 post_balance,
             } => event
                 .with(TargetAccount(target_account))
+                .with(TokenAddress(token))
                 .with(Amount(&amount))
                 .with(TargetPostBalance(&post_balance))
                 .into(),
             TokenOperation::Transfer {
-                source,
-                target,
-                amount,
-                source_post_balance,
-                target_post_balance,
+                sources,
+                targets,
+                post_balances,
             } => event
-                .with(SourceAccount(source))
-                .with(TargetAccount(target))
-                .with(Amount(&amount))
-                .with(SourcePostBalance(&source_post_balance))
-                .with(Closure(|event: &mut Event| {
-                    if let Some(post_balance) = target_post_balance {
-                        event.extend(TargetPostBalance(&post_balance));
-                    }
-                }))
+                .with(SourceAccounts(
+                    sources.into_iter().collect::<Vec<_>>().into(),
+                ))
+                .with(TargetAccounts(
+                    targets.into_iter().collect::<Vec<_>>().into(),
+                ))
+                .with(PostBalances(
+                    post_balances.into_iter().collect::<Vec<_>>().into(),
+                ))
                 .into(),
         }
     }
@@ -242,6 +226,20 @@ impl EventAttributeEntry<'static> for SourceAccount {
     }
 }
 
+/// Extend an [`Event`] with source account data.
+pub struct SourceAccounts(pub EventValue<Vec<((UserAccount, Address), Uint)>>);
+
+impl EventAttributeEntry<'static> for SourceAccounts {
+    type Value = EventValue<Vec<((UserAccount, Address), Uint)>>;
+    type ValueOwned = Self::Value;
+
+    const KEY: &'static str = "source-accounts";
+
+    fn into_value(self) -> Self::Value {
+        self.0
+    }
+}
+
 /// Extend an [`Event`] with target account data.
 pub struct TargetAccount(pub UserAccount);
 
@@ -256,6 +254,20 @@ impl EventAttributeEntry<'static> for TargetAccount {
     }
 }
 
+/// Extend an [`Event`] with target account data.
+pub struct TargetAccounts(pub EventValue<Vec<((UserAccount, Address), Uint)>>);
+
+impl EventAttributeEntry<'static> for TargetAccounts {
+    type Value = EventValue<Vec<((UserAccount, Address), Uint)>>;
+    type ValueOwned = Self::Value;
+
+    const KEY: &'static str = "target-accounts";
+
+    fn into_value(self) -> Self::Value {
+        self.0
+    }
+}
+
 /// Extend an [`Event`] with amount data.
 pub struct Amount<'amt>(pub &'amt Uint);
 
@@ -264,6 +276,20 @@ impl<'amt> EventAttributeEntry<'amt> for Amount<'amt> {
     type ValueOwned = Uint;
 
     const KEY: &'static str = "amount";
+
+    fn into_value(self) -> Self::Value {
+        self.0
+    }
+}
+
+/// Extend an [`Event`] with source post balance data.
+pub struct PostBalances(pub EventValue<Vec<((UserAccount, Address), Uint)>>);
+
+impl EventAttributeEntry<'static> for PostBalances {
+    type Value = EventValue<Vec<((UserAccount, Address), Uint)>>;
+    type ValueOwned = Self::Value;
+
+    const KEY: &'static str = "post-balances";
 
     fn into_value(self) -> Self::Value {
         self.0
