@@ -40,6 +40,7 @@ namada_storage = { path = "../storage" }
 namada_tx = { path = "../tx" }
 
 borsh.workspace = true
+clru.workspace = true
 itertools.workspace = true
 linkme = {workspace = true, optional = true}
 smooth-operator.workspace = true

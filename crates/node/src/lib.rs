@@ -151,7 +151,7 @@ impl Shell {
                     self.state
                         .in_mem_mut()
                         .process_proposal_cache
-                        .insert(block_hash, result);
+                        .put(block_hash, result);
                 }
                 Ok(Response::ProcessProposal(response))
             }
@@ -218,7 +218,7 @@ impl Shell {
         if recheck_process_proposal {
             let process_proposal_result = match self
                 .state
-                .in_mem()
+                .in_mem_mut()
                 .process_proposal_cache
                 .get(&finalize_req.block_hash)
             {

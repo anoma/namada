@@ -253,7 +253,7 @@ impl AbcippShim {
                 match self
                     .service
                     .state
-                    .in_mem()
+                    .in_mem_mut()
                     .process_proposal_cache
                     .get(&block_hash)
                 {
@@ -286,7 +286,7 @@ impl AbcippShim {
                             .state
                             .in_mem_mut()
                             .process_proposal_cache
-                            .insert(block_hash.to_owned(), result.clone());
+                            .put(block_hash.to_owned(), result.clone());
 
                         result
                     }
