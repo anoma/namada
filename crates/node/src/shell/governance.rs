@@ -12,6 +12,7 @@ use namada_sdk::governance::storage::{keys as gov_storage, load_proposals};
 use namada_sdk::governance::utils::{
     compute_proposal_result, ProposalVotes, TallyResult, TallyType, VotePower,
 };
+pub use namada_sdk::governance::Store;
 use namada_sdk::governance::{
     storage as gov_api, ProposalVote, ADDRESS as gov_address,
 };
@@ -80,7 +81,7 @@ where
     H: StorageHasher + Sync + 'static,
 {
     let mut proposals_result = ProposalsResult::default();
-    let params = read_pos_params(&shell.state)?;
+    let params = read_pos_params::<_, Store<_>>(&shell.state)?;
 
     for id in proposal_ids {
         let proposal_funds_key = gov_storage::get_funds_key(id);
@@ -364,7 +365,8 @@ where
                 source: delegator.clone(),
                 validator: validator.clone(),
             };
-            let delegator_stake = bond_amount(storage, &bond_id, epoch);
+            let delegator_stake =
+                bond_amount::<_, Store<_>>(storage, &bond_id, epoch);
 
             if let Ok(stake) = delegator_stake {
                 delegators_vote.insert(delegator.clone(), vote_data);

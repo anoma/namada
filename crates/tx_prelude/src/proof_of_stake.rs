@@ -41,7 +41,14 @@ impl Ctx {
         })))?;
 
         let current_epoch = self.get_block_epoch()?;
-        bond_tokens(self, source, validator, amount, current_epoch, None)
+        bond_tokens::<_, governance::Store<_>>(
+            self,
+            source,
+            validator,
+            amount,
+            current_epoch,
+            None,
+        )
     }
 
     /// Unbond self-bonded tokens from a validator when `source` is `None`
@@ -64,7 +71,14 @@ impl Ctx {
         })))?;
 
         let current_epoch = self.get_block_epoch()?;
-        unbond_tokens(self, source, validator, amount, current_epoch, false)
+        unbond_tokens::<_, governance::Store<_>>(
+            self,
+            source,
+            validator,
+            amount,
+            current_epoch,
+            false,
+        )
     }
 
     /// Withdraw unbonded tokens from a self-bond to a validator when
@@ -85,7 +99,12 @@ impl Ctx {
         })))?;
 
         let current_epoch = self.get_block_epoch()?;
-        withdraw_tokens(self, source, validator, current_epoch)
+        withdraw_tokens::<_, governance::Store<_>>(
+            self,
+            source,
+            validator,
+            current_epoch,
+        )
     }
 
     /// Change validator consensus key.
@@ -102,7 +121,12 @@ impl Ctx {
         )))?;
 
         let current_epoch = self.get_block_epoch()?;
-        change_consensus_key(self, validator, consensus_key, current_epoch)
+        change_consensus_key::<_, governance::Store<_>>(
+            self,
+            validator,
+            consensus_key,
+            current_epoch,
+        )
     }
 
     /// Change validator commission rate.
@@ -119,7 +143,12 @@ impl Ctx {
         )))?;
 
         let current_epoch = self.get_block_epoch()?;
-        change_validator_commission_rate(self, validator, *rate, current_epoch)
+        change_validator_commission_rate::<_, governance::Store<_>>(
+            self,
+            validator,
+            *rate,
+            current_epoch,
+        )
     }
 
     /// Unjail a jailed validator and re-enter the validator sets.
@@ -130,7 +159,11 @@ impl Ctx {
         self.push_action(Action::Pos(PosAction::Unjail(validator.clone())))?;
 
         let current_epoch = self.get_block_epoch()?;
-        unjail_validator(self, validator, current_epoch)
+        unjail_validator::<_, governance::Store<_>>(
+            self,
+            validator,
+            current_epoch,
+        )
     }
 
     /// Redelegate bonded tokens from one validator to another one.
@@ -152,7 +185,7 @@ impl Ctx {
         })))?;
 
         let current_epoch = self.get_block_epoch()?;
-        redelegate_tokens(
+        redelegate_tokens::<_, governance::Store<_>>(
             self,
             owner,
             src_validator,
@@ -178,7 +211,12 @@ impl Ctx {
         })))?;
 
         let current_epoch = self.get_block_epoch()?;
-        claim_reward_tokens(self, source, validator, current_epoch)
+        claim_reward_tokens::<_, governance::Store<_>>(
+            self,
+            source,
+            validator,
+            current_epoch,
+        )
     }
 
     /// Attempt to initialize a validator account. On success, returns the
@@ -204,7 +242,7 @@ impl Ctx {
         let current_epoch = self.get_block_epoch()?;
         let eth_cold_key = key::common::PublicKey::Secp256k1(eth_cold_key);
         let eth_hot_key = key::common::PublicKey::Secp256k1(eth_hot_key);
-        let params = read_pos_params(self)?;
+        let params = read_pos_params::<_, governance::Store<_>>(self)?;
 
         // The tx must be authorized by the source address
         self.insert_verifier(&address)?;
@@ -213,7 +251,7 @@ impl Ctx {
             address.clone(),
         )))?;
 
-        become_validator(
+        become_validator::<_, governance::Store<_>>(
             self,
             namada_proof_of_stake::BecomeValidator {
                 params: &params,
@@ -250,7 +288,11 @@ impl Ctx {
         )))?;
 
         let current_epoch = self.get_block_epoch()?;
-        deactivate_validator(self, validator, current_epoch)
+        deactivate_validator::<_, governance::Store<_>>(
+            self,
+            validator,
+            current_epoch,
+        )
     }
 
     /// Reactivate validator
@@ -263,7 +305,11 @@ impl Ctx {
         )))?;
 
         let current_epoch = self.get_block_epoch()?;
-        reactivate_validator(self, validator, current_epoch)
+        reactivate_validator::<_, governance::Store<_>>(
+            self,
+            validator,
+            current_epoch,
+        )
     }
 
     /// Change validator metadata.
@@ -287,7 +333,7 @@ impl Ctx {
         )))?;
 
         let current_epoch = self.get_block_epoch()?;
-        change_validator_metadata(
+        change_validator_metadata::<_, governance::Store<_>>(
             self,
             validator,
             email,

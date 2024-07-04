@@ -8,6 +8,7 @@ use namada_core::dec::Dec;
 use namada_core::storage::Epoch;
 use namada_core::token;
 use namada_core::uint::Uint;
+#[cfg(any(test, feature = "testing"))]
 use namada_governance::parameters::GovernanceParameters;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
@@ -106,6 +107,7 @@ impl Default for OwnedPosParams {
     }
 }
 
+#[cfg(any(test, feature = "testing"))]
 impl Default for PosParams {
     fn default() -> Self {
         let owned = OwnedPosParams::default();

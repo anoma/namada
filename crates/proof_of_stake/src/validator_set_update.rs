@@ -8,6 +8,7 @@ use namada_core::storage::Epoch;
 use namada_core::token;
 use namada_storage::collections::lazy_map::{NestedSubKey, SubKey};
 use namada_storage::{StorageRead, StorageWrite};
+use namada_systems::governance;
 use once_cell::unsync::Lazy;
 
 use crate::storage::{
@@ -25,7 +26,7 @@ use crate::PosParams;
 
 /// Update validator set at the pipeline epoch when a validator receives a new
 /// bond and when its bond is unbonded (self-bond or delegation).
-pub fn update_validator_set<S>(
+pub fn update_validator_set<S, Gov>(
     storage: &mut S,
     params: &PosParams,
     validator: &Address,
@@ -35,6 +36,7 @@ pub fn update_validator_set<S>(
 ) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
+    Gov: governance::Read<S>,
 {
     if token_change.is_zero() {
         return Ok(());
@@ -99,7 +101,7 @@ where
                     "Demoting this validator to the below-threshold set"
                 );
                 // Set the validator state as below-threshold
-                validator_state_handle(validator).set(
+                validator_state_handle(validator).set::<S, Gov>(
                     storage,
                     ValidatorState::BelowThreshold,
                     current_epoch,
@@ -136,12 +138,13 @@ where
                         &epoch,
                         &removed_max_below_capacity,
                     )?;
-                    validator_state_handle(&removed_max_below_capacity).set(
-                        storage,
-                        ValidatorState::Consensus,
-                        current_epoch,
-                        offset,
-                    )?;
+                    validator_state_handle(&removed_max_below_capacity)
+                        .set::<S, Gov>(
+                            storage,
+                            ValidatorState::Consensus,
+                            current_epoch,
+                            offset,
+                        )?;
                 }
             } else if tokens_post < max_below_capacity_validator_amount {
                 tracing::debug!(
@@ -171,12 +174,13 @@ where
                     &epoch,
                     &removed_max_below_capacity,
                 )?;
-                validator_state_handle(&removed_max_below_capacity).set(
-                    storage,
-                    ValidatorState::Consensus,
-                    current_epoch,
-                    offset,
-                )?;
+                validator_state_handle(&removed_max_below_capacity)
+                    .set::<S, Gov>(
+                        storage,
+                        ValidatorState::Consensus,
+                        current_epoch,
+                        offset,
+                    )?;
 
                 // Insert the current validator into the below-capacity set
                 insert_validator_into_set(
@@ -185,7 +189,7 @@ where
                     &epoch,
                     validator,
                 )?;
-                validator_state_handle(validator).set(
+                validator_state_handle(validator).set::<S, Gov>(
                     storage,
                     ValidatorState::BelowCapacity,
                     current_epoch,
@@ -227,7 +231,7 @@ where
                      a consensus validator to the below-capacity set"
                 );
 
-                insert_into_consensus_and_demote_to_below_cap(
+                insert_into_consensus_and_demote_to_below_cap::<S, Gov>(
                     storage,
                     validator,
                     tokens_post,
@@ -246,7 +250,7 @@ where
                     &epoch,
                     validator,
                 )?;
-                validator_state_handle(validator).set(
+                validator_state_handle(validator).set::<S, Gov>(
                     storage,
                     ValidatorState::BelowCapacity,
                     current_epoch,
@@ -258,7 +262,7 @@ where
                     "Demoting this validator to the below-threshold set"
                 );
 
-                validator_state_handle(validator).set(
+                validator_state_handle(validator).set::<S, Gov>(
                     storage,
                     ValidatorState::BelowThreshold,
                     current_epoch,
@@ -293,7 +297,7 @@ where
                 &epoch,
                 validator,
             )?;
-            validator_state_handle(validator).set(
+            validator_state_handle(validator).set::<S, Gov>(
                 storage,
                 ValidatorState::Consensus,
                 current_epoch,
@@ -313,7 +317,7 @@ where
                      a consensus validator to the below-capacity set"
                 );
 
-                insert_into_consensus_and_demote_to_below_cap(
+                insert_into_consensus_and_demote_to_below_cap::<S, Gov>(
                     storage,
                     validator,
                     tokens_post,
@@ -335,7 +339,7 @@ where
                     &epoch,
                     validator,
                 )?;
-                validator_state_handle(validator).set(
+                validator_state_handle(validator).set::<S, Gov>(
                     storage,
                     ValidatorState::BelowCapacity,
                     current_epoch,
@@ -350,7 +354,7 @@ where
 
 /// Insert the new validator into the right validator set (depending on its
 /// stake)
-pub fn insert_validator_into_validator_set<S>(
+pub fn insert_validator_into_validator_set<S, Gov>(
     storage: &mut S,
     params: &PosParams,
     address: &Address,
@@ -360,6 +364,7 @@ pub fn insert_validator_into_validator_set<S>(
 ) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
+    Gov: governance::Read<S>,
 {
     let target_epoch = checked!(current_epoch + offset)?;
     let consensus_set = consensus_validator_set_handle().at(&target_epoch);
@@ -369,7 +374,7 @@ where
         get_num_consensus_validators(storage, target_epoch)?;
 
     if stake < params.validator_stake_threshold {
-        validator_state_handle(address).set(
+        validator_state_handle(address).set::<S, Gov>(
             storage,
             ValidatorState::BelowThreshold,
             current_epoch,
@@ -382,7 +387,7 @@ where
             &target_epoch,
             address,
         )?;
-        validator_state_handle(address).set(
+        validator_state_handle(address).set::<S, Gov>(
             storage,
             ValidatorState::Consensus,
             current_epoch,
@@ -414,7 +419,7 @@ where
                 &target_epoch,
                 &removed,
             )?;
-            validator_state_handle(&removed).set(
+            validator_state_handle(&removed).set::<S, Gov>(
                 storage,
                 ValidatorState::BelowCapacity,
                 current_epoch,
@@ -428,7 +433,7 @@ where
                 address,
             )?;
             // Update and set the validator states
-            validator_state_handle(address).set(
+            validator_state_handle(address).set::<S, Gov>(
                 storage,
                 ValidatorState::Consensus,
                 current_epoch,
@@ -442,7 +447,7 @@ where
                 &target_epoch,
                 address,
             )?;
-            validator_state_handle(address).set(
+            validator_state_handle(address).set::<S, Gov>(
                 storage,
                 ValidatorState::BelowCapacity,
                 current_epoch,
@@ -515,13 +520,14 @@ where
 /// determined as the validator in the below-capacity set with the largest stake
 /// and the lowest `Position`. Assumes that there is adequate space within the
 /// consensus set already.
-pub fn promote_next_below_capacity_validator_to_consensus<S>(
+pub fn promote_next_below_capacity_validator_to_consensus<S, Gov>(
     storage: &mut S,
     current_epoch: Epoch,
     offset: u64,
 ) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
+    Gov: governance::Read<S>,
 {
     let epoch = checked!(current_epoch + offset)?;
     let below_cap_set = below_capacity_validator_set_handle().at(&epoch);
@@ -545,7 +551,7 @@ where
             &epoch,
             &promoted_validator,
         )?;
-        validator_state_handle(&promoted_validator).set(
+        validator_state_handle(&promoted_validator).set::<S, Gov>(
             storage,
             ValidatorState::Consensus,
             current_epoch,
@@ -876,7 +882,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-fn insert_into_consensus_and_demote_to_below_cap<S>(
+fn insert_into_consensus_and_demote_to_below_cap<S, Gov>(
     storage: &mut S,
     validator: &Address,
     tokens_post: token::Amount,
@@ -888,6 +894,7 @@ fn insert_into_consensus_and_demote_to_below_cap<S>(
 ) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
+    Gov: governance::Read<S>,
 {
     // First, remove the last position min consensus validator
     let consensus_vals_min = consensus_set.at(&min_consensus_amount);
@@ -908,7 +915,7 @@ where
         &offset_epoch,
         &removed_min_consensus,
     )?;
-    validator_state_handle(&removed_min_consensus).set(
+    validator_state_handle(&removed_min_consensus).set::<S, Gov>(
         storage,
         ValidatorState::BelowCapacity,
         current_epoch,
@@ -922,7 +929,7 @@ where
         &offset_epoch,
         validator,
     )?;
-    validator_state_handle(validator).set(
+    validator_state_handle(validator).set::<S, Gov>(
         storage,
         ValidatorState::Consensus,
         current_epoch,

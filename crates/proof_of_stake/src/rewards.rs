@@ -11,6 +11,7 @@ use namada_core::uint::{Uint, I256};
 use namada_parameters::storage as params_storage;
 use namada_storage::collections::lazy_map::NestedSubKey;
 use namada_storage::{ResultExt, StorageRead, StorageWrite};
+use namada_systems::governance;
 use namada_trans_token::get_effective_total_native_supply;
 use thiserror::Error;
 
@@ -171,7 +172,7 @@ impl PosRewardsCalculator {
 }
 
 /// Process the proposer and votes in the block to assign their PoS rewards.
-pub(crate) fn log_block_rewards<S>(
+pub(crate) fn log_block_rewards<S, Gov>(
     storage: &mut S,
     votes: Vec<VoteInfo>,
     height: BlockHeight,
@@ -180,13 +181,14 @@ pub(crate) fn log_block_rewards<S>(
 ) -> namada_storage::Result<()>
 where
     S: StorageWrite + StorageRead,
+    Gov: governance::Read<S>,
 {
     // Read the block proposer of the previously committed block in storage
     // (n-1 if we are in the process of finalizing n right now).
     match storage::read_last_block_proposer_address(storage)? {
         Some(proposer_address) => {
             tracing::debug!("Found last block proposer: {proposer_address}");
-            log_block_rewards_aux(
+            log_block_rewards_aux::<S, Gov>(
                 storage,
                 if new_epoch {
                     current_epoch.prev().expect("New epoch must have prev")
@@ -213,7 +215,7 @@ where
 /// Tally a running sum of the fraction of rewards owed to each validator in
 /// the consensus set. This is used to keep track of the rewards due to each
 /// consensus validator over the lifetime of an epoch.
-pub(crate) fn log_block_rewards_aux<S>(
+pub(crate) fn log_block_rewards_aux<S, Gov>(
     storage: &mut S,
     epoch: impl Into<Epoch>,
     proposer_address: &Address,
@@ -221,12 +223,13 @@ pub(crate) fn log_block_rewards_aux<S>(
 ) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
+    Gov: governance::Read<S>,
 {
     // The votes correspond to the last committed block (n-1 if we are
     // finalizing block n)
 
     let epoch: Epoch = epoch.into();
-    let params = read_pos_params(storage)?;
+    let params = read_pos_params::<S, Gov>(storage)?;
     let consensus_validators = consensus_validator_set_handle().at(&epoch);
 
     // Get total stake of the consensus validator set
@@ -355,13 +358,14 @@ where
 }
 
 /// Apply inflation to the Proof of Stake system.
-pub fn apply_inflation<S>(
+pub fn apply_inflation<S, Gov>(
     storage: &mut S,
     last_epoch: Epoch,
     num_blocks_in_last_epoch: u64,
 ) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
+    Gov: governance::Read<S>,
 {
     // Read from Parameters storage
     let epochs_per_year: u64 = storage
@@ -372,7 +376,7 @@ where
     let total_tokens = get_effective_total_native_supply(storage)?;
 
     // Read from PoS storage
-    let params = read_pos_params(storage)?;
+    let params = read_pos_params::<S, Gov>(storage)?;
     let locked_amount = read_total_stake(storage, &params, last_epoch)?;
 
     let last_staked_ratio = read_last_staked_ratio(storage)?
@@ -547,7 +551,7 @@ where
 /// Compute the current available rewards amount due only to existing bonds.
 /// This does not include pending rewards held in the rewards counter due to
 /// unbonds and redelegations.
-pub fn compute_current_rewards_from_bonds<S>(
+pub fn compute_current_rewards_from_bonds<S, Gov>(
     storage: &S,
     source: &Address,
     validator: &Address,
@@ -555,6 +559,7 @@ pub fn compute_current_rewards_from_bonds<S>(
 ) -> namada_storage::Result<token::Amount>
 where
     S: StorageRead,
+    Gov: governance::Read<S>,
 {
     if current_epoch == Epoch::default() {
         // Nothing to claim in the first epoch
@@ -580,7 +585,7 @@ where
             .prev()
             .expect("Safe because of the check above"),
     );
-    let bond_amounts = bond_amounts_for_rewards(
+    let bond_amounts = bond_amounts_for_rewards::<S, Gov>(
         storage,
         &BondId {
             source: source.clone(),

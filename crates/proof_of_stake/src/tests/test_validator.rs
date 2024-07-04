@@ -25,8 +25,7 @@ use crate::storage::{
     consensus_validator_set_handle, find_validator_by_raw_hash,
     get_num_consensus_validators,
     read_below_capacity_validator_set_addresses_with_stake,
-    read_below_threshold_validator_set_addresses,
-    read_consensus_validator_set_addresses_with_stake, update_validator_deltas,
+    read_consensus_validator_set_addresses_with_stake,
     validator_addresses_handle, validator_consensus_key_handle,
     validator_set_positions_handle, write_validator_address_raw_hash,
 };
@@ -34,6 +33,11 @@ use crate::test_utils::{init_genesis_helper, test_init_genesis};
 use crate::tests::helpers::{
     advance_epoch, arb_genesis_validators, arb_params_and_genesis_validators,
     get_tendermint_set_updates,
+};
+use crate::tests::{
+    become_validator, bond_tokens, change_consensus_key,
+    read_below_threshold_validator_set_addresses, unbond_tokens,
+    update_validator_deltas, withdraw_tokens, GovStore,
 };
 use crate::token::credit_tokens;
 use crate::types::{
@@ -44,9 +48,7 @@ use crate::validator_set_update::{
     insert_validator_into_validator_set, update_validator_set,
 };
 use crate::{
-    become_validator, bond_tokens, change_consensus_key, is_validator,
-    staking_token_address, unbond_tokens, withdraw_tokens, BecomeValidator,
-    OwnedPosParams,
+    is_validator, staking_token_address, BecomeValidator, OwnedPosParams,
 };
 
 proptest! {
@@ -395,7 +397,7 @@ fn test_validator_sets() {
                             pk: &common::PublicKey,
                             stake: token::Amount,
                             epoch: Epoch| {
-        insert_validator_into_validator_set(
+        insert_validator_into_validator_set::<_, GovStore<_>>(
             s,
             &params,
             addr,
@@ -411,7 +413,7 @@ fn test_validator_sets() {
         // Set their consensus key (needed for
         // `validator_set_update_tendermint` fn)
         validator_consensus_key_handle(addr)
-            .set(s, pk.clone(), epoch, params.pipeline_len)
+            .set::<_, GovStore<_>>(s, pk.clone(), epoch, params.pipeline_len)
             .unwrap();
     };
 
@@ -634,8 +636,15 @@ fn test_validator_sets() {
     // Because `update_validator_set` and `update_validator_deltas` are
     // effective from pipeline offset, we use pipeline epoch for the rest of the
     // checks
-    update_validator_set(&mut s, &params, &val1, -unbond.change(), epoch, None)
-        .unwrap();
+    update_validator_set::<_, GovStore<_>>(
+        &mut s,
+        &params,
+        &val1,
+        -unbond.change(),
+        epoch,
+        None,
+    )
+    .unwrap();
     update_validator_deltas(
         &mut s,
         &params,
@@ -833,8 +842,15 @@ fn test_validator_sets() {
     let bond = token::Amount::from_uint(500_000, 0).unwrap();
     let stake6 = stake6 + bond;
 
-    update_validator_set(&mut s, &params, &val6, bond.change(), epoch, None)
-        .unwrap();
+    update_validator_set::<_, GovStore<_>>(
+        &mut s,
+        &params,
+        &val6,
+        bond.change(),
+        epoch,
+        None,
+    )
+    .unwrap();
     update_validator_deltas(&mut s, &params, &val6, bond.change(), epoch, None)
         .unwrap();
     let val6_bond_epoch = pipeline_epoch;
@@ -1073,7 +1089,7 @@ fn test_validator_sets_swap() {
                             pk: &common::PublicKey,
                             stake: token::Amount,
                             epoch: Epoch| {
-        insert_validator_into_validator_set(
+        insert_validator_into_validator_set::<_, GovStore<_>>(
             s,
             &params,
             addr,
@@ -1089,7 +1105,7 @@ fn test_validator_sets_swap() {
         // Set their consensus key (needed for
         // `validator_set_update_tendermint` fn)
         validator_consensus_key_handle(addr)
-            .set(s, pk.clone(), epoch, params.pipeline_len)
+            .set::<_, GovStore<_>>(s, pk.clone(), epoch, params.pipeline_len)
             .unwrap();
     };
 
@@ -1113,8 +1129,15 @@ fn test_validator_sets_swap() {
     assert_eq!(into_tm_voting_power(params.tm_votes_per_token, stake2), 0);
     assert_eq!(into_tm_voting_power(params.tm_votes_per_token, stake3), 0);
 
-    update_validator_set(&mut s, &params, &val2, bond2.change(), epoch, None)
-        .unwrap();
+    update_validator_set::<_, GovStore<_>>(
+        &mut s,
+        &params,
+        &val2,
+        bond2.change(),
+        epoch,
+        None,
+    )
+    .unwrap();
     update_validator_deltas(
         &mut s,
         &params,
@@ -1125,8 +1148,15 @@ fn test_validator_sets_swap() {
     )
     .unwrap();
 
-    update_validator_set(&mut s, &params, &val3, bond3.change(), epoch, None)
-        .unwrap();
+    update_validator_set::<_, GovStore<_>>(
+        &mut s,
+        &params,
+        &val3,
+        bond3.change(),
+        epoch,
+        None,
+    )
+    .unwrap();
     update_validator_deltas(
         &mut s,
         &params,
@@ -1152,8 +1182,15 @@ fn test_validator_sets_swap() {
         into_tm_voting_power(params.tm_votes_per_token, stake3)
     );
 
-    update_validator_set(&mut s, &params, &val2, bonds.change(), epoch, None)
-        .unwrap();
+    update_validator_set::<_, GovStore<_>>(
+        &mut s,
+        &params,
+        &val2,
+        bonds.change(),
+        epoch,
+        None,
+    )
+    .unwrap();
     update_validator_deltas(
         &mut s,
         &params,
@@ -1164,8 +1201,15 @@ fn test_validator_sets_swap() {
     )
     .unwrap();
 
-    update_validator_set(&mut s, &params, &val3, bonds.change(), epoch, None)
-        .unwrap();
+    update_validator_set::<_, GovStore<_>>(
+        &mut s,
+        &params,
+        &val3,
+        bonds.change(),
+        epoch,
+        None,
+    )
+    .unwrap();
     update_validator_deltas(
         &mut s,
         &params,
@@ -1215,8 +1259,15 @@ fn test_validator_sets_swap() {
     let bonds = token::Amount::native_whole(1);
     let stake2 = stake2 + bonds;
 
-    update_validator_set(&mut s, &params, &val2, bonds.change(), epoch, None)
-        .unwrap();
+    update_validator_set::<_, GovStore<_>>(
+        &mut s,
+        &params,
+        &val2,
+        bonds.change(),
+        epoch,
+        None,
+    )
+    .unwrap();
     update_validator_deltas(
         &mut s,
         &params,
@@ -1293,7 +1344,8 @@ fn test_purge_validator_information_aux(validators: Vec<GenesisValidator>) {
     };
 
     gov_params.init_storage(&mut s).unwrap();
-    let params = crate::read_non_pos_owned_params(&s, owned).unwrap();
+    let params =
+        crate::read_non_pos_owned_params::<_, GovStore<_>>(&s, owned).unwrap();
     init_genesis_helper(&mut s, &params, validators.into_iter(), current_epoch)
         .unwrap();
 

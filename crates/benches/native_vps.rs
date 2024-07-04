@@ -110,9 +110,11 @@ fn governance(c: &mut Criterion) {
             "minimal_proposal" => {
                 let content_section =
                     Section::ExtraData(Code::new(vec![], None));
-                let params =
-                    proof_of_stake::storage::read_pos_params(&shell.state)
-                        .unwrap();
+                let params = proof_of_stake::storage::read_pos_params::<
+                    _,
+                    governance::Store<_>,
+                >(&shell.state)
+                .unwrap();
                 let voting_start_epoch =
                     Epoch(2 + params.pipeline_len + params.unbonding_len);
                 // Must start after current epoch
@@ -163,9 +165,11 @@ fn governance(c: &mut Criterion) {
                     None,
                 ));
 
-                let params =
-                    proof_of_stake::storage::read_pos_params(&shell.state)
-                        .unwrap();
+                let params = proof_of_stake::storage::read_pos_params::<
+                    _,
+                    governance::Store<_>,
+                >(&shell.state)
+                .unwrap();
                 let voting_start_epoch =
                     Epoch(2 + params.pipeline_len + params.unbonding_len);
                 // Must start after current epoch

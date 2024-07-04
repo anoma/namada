@@ -12,6 +12,7 @@ use namada_core::storage::Epoch;
 use namada_core::token;
 use namada_storage::collections::lazy_map::{NestedSubKey, SubKey};
 use namada_storage::StorageRead;
+use namada_systems::governance;
 
 use crate::slashing::{find_validator_slashes, get_slashed_amount};
 use crate::storage::{
@@ -80,13 +81,14 @@ where
 
 /// Find all validators to which a given bond `owner` (or source) has a
 /// delegation with the amount
-pub fn find_delegations<S>(
+pub fn find_delegations<S, Gov>(
     storage: &S,
     owner: &Address,
     epoch: &Epoch,
 ) -> namada_storage::Result<HashMap<Address, token::Amount>>
 where
     S: StorageRead,
+    Gov: governance::Read<S>,
 {
     let validators = delegation_targets_handle(owner);
     if validators.is_empty(storage)? {
@@ -104,7 +106,7 @@ where
             },
         ) = validator?;
 
-        let bond_amount = raw_bond_amount(
+        let bond_amount = raw_bond_amount::<S, Gov>(
             storage,
             &BondId {
                 source: owner.clone(),
@@ -141,15 +143,16 @@ where
 }
 
 /// Find if the given source address has any bonds.
-pub fn has_bonds<S>(
+pub fn has_bonds<S, Gov>(
     storage: &S,
     source: &Address,
 ) -> namada_storage::Result<bool>
 where
     S: StorageRead,
+    Gov: governance::Read<S>,
 {
     let max_epoch = Epoch(u64::MAX);
-    let delegations = find_delegations(storage, source, &max_epoch)?;
+    let delegations = find_delegations::<S, Gov>(storage, source, &max_epoch)?;
     Ok(!delegations.values().all(token::Amount::is_zero))
 }
 
@@ -195,15 +198,16 @@ where
 /// Collect the details of all bonds and unbonds that match the source and
 /// validator arguments. If either source or validator is `None`, then grab the
 /// information for all sources or validators, respectively.
-pub fn bonds_and_unbonds<S>(
+pub fn bonds_and_unbonds<S, Gov>(
     storage: &S,
     source: Option<Address>,
     validator: Option<Address>,
 ) -> namada_storage::Result<BondsAndUnbondsDetails>
 where
     S: StorageRead,
+    Gov: governance::Read<S>,
 {
-    let params = read_pos_params(storage)?;
+    let params = read_pos_params::<S, Gov>(storage)?;
 
     match (source.clone(), validator.clone()) {
         (Some(source), Some(validator)) => {

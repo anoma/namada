@@ -2727,7 +2727,7 @@ mod test {
             token::Amount::native_whole(1000000),
         );
 
-        bond_tokens(
+        bond_tokens::<_, crate::Store<_>>(
             &mut state,
             Some(&delegator_address),
             &validator_address,
@@ -2873,7 +2873,7 @@ mod test {
             token::Amount::native_whole(1000000),
         );
 
-        bond_tokens(
+        bond_tokens::<_, crate::Store<_>>(
             &mut state,
             Some(&delegator_address),
             &validator_address,
@@ -3019,7 +3019,7 @@ mod test {
             token::Amount::native_whole(1000000),
         );
 
-        bond_tokens(
+        bond_tokens::<_, crate::Store<_>>(
             &mut state,
             Some(&delegator_address),
             &validator_address,

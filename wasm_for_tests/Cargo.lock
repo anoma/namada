@@ -3569,6 +3569,7 @@ dependencies = [
  "namada_account",
  "namada_core",
  "namada_events",
+ "namada_governance",
  "namada_macros",
  "namada_parameters",
  "namada_proof_of_stake",

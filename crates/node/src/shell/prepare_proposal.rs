@@ -7,9 +7,7 @@ use namada_sdk::gas::TxGasMeter;
 use namada_sdk::key::tm_raw_hash_to_string;
 use namada_sdk::parameters::get_gas_scale;
 use namada_sdk::proof_of_stake::storage::find_validator_by_raw_hash;
-use namada_sdk::state::{
-    DBIter, StorageHasher, StorageRead, TempWlState, TxIndex, DB,
-};
+use namada_sdk::state::{DBIter, StorageHasher, TempWlState, TxIndex, DB};
 use namada_sdk::token::{Amount, DenominatedAmount};
 use namada_sdk::tx::data::WrapperTx;
 use namada_sdk::tx::Tx;
@@ -430,11 +428,13 @@ mod test_prepare_proposal {
     use namada_sdk::proof_of_stake::types::WeightedValidator;
     use namada_sdk::proof_of_stake::Epoch;
     use namada_sdk::state::collections::lazy_map::{NestedSubKey, SubKey};
-    use namada_sdk::storage::{BlockHeight, InnerEthEventsQueue, StorageWrite};
+    use namada_sdk::storage::{
+        BlockHeight, InnerEthEventsQueue, StorageRead, StorageWrite,
+    };
     use namada_sdk::token::read_denom;
     use namada_sdk::tx::data::{Fee, TxType};
     use namada_sdk::tx::{Authorization, Code, Data, Section, Signed};
-    use namada_sdk::{address, token};
+    use namada_sdk::{address, governance, token};
     use namada_vote_ext::{ethereum_events, ethereum_tx_data_variants};
 
     use super::*;
@@ -618,7 +618,8 @@ mod test_prepare_proposal {
                 ..Default::default()
             });
 
-        let params = read_pos_params(&shell.state).unwrap();
+        let params =
+            read_pos_params::<_, governance::Store<_>>(&shell.state).unwrap();
 
         // artificially change the voting power of the default validator to
         // one, change the block height, and commit a dummy block,

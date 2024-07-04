@@ -109,7 +109,11 @@ where
             .mode
             .get_eth_bridge_keypair()
             .expect("{VALIDATOR_EXPECT_MSG}");
-        sign_validator_set_update(&self.state, validator_addr, eth_hot_key)
+        sign_validator_set_update::<_, _, governance::Store<_>>(
+            &self.state,
+            validator_addr,
+            eth_hot_key,
+        )
     }
 
     /// Given a slice of [`TxBytes`], return an iterator over the

@@ -980,12 +980,20 @@ where
         ) => {
             let ethereum_events::VextDigest { events, .. } =
                 ethereum_events::VextDigest::singleton(ext);
-            transactions::ethereum_events::apply_derived_tx(state, events)
-                .map_err(Error::ProtocolTxError)
+            transactions::ethereum_events::apply_derived_tx::<
+                _,
+                _,
+                governance::Store<_>,
+            >(state, events)
+            .map_err(Error::ProtocolTxError)
         }
         EthereumTxData::BridgePoolVext(ext) => {
-            transactions::bridge_pool_roots::apply_derived_tx(state, ext.into())
-                .map_err(Error::ProtocolTxError)
+            transactions::bridge_pool_roots::apply_derived_tx::<
+                _,
+                _,
+                governance::Store<_>,
+            >(state, ext.into())
+            .map_err(Error::ProtocolTxError)
         }
         EthereumTxData::ValSetUpdateVext(ext) => {
             // NOTE(feature = "abcipp"): with ABCI++, we can write the

@@ -11,10 +11,10 @@ use namada_core::dec::Dec;
 use namada_core::key::{common, tm_consensus_key_raw_hash};
 use namada_core::storage::Epoch;
 use namada_core::token;
-use namada_governance::storage::get_max_proposal_period;
 use namada_storage::collections::lazy_map::NestedSubKey;
 use namada_storage::collections::{LazyCollection, LazySet};
 use namada_storage::{Result, StorageRead, StorageWrite};
+use namada_systems::governance;
 
 use crate::storage_key::consensus_keys_key;
 use crate::types::{
@@ -272,24 +272,26 @@ where
 }
 
 /// Read PoS parameters
-pub fn read_pos_params<S>(storage: &S) -> namada_storage::Result<PosParams>
+pub fn read_pos_params<S, Gov>(storage: &S) -> namada_storage::Result<PosParams>
 where
     S: StorageRead,
+    Gov: governance::Read<S>,
 {
     let params = read_owned_pos_params(storage)?;
-    read_non_pos_owned_params(storage, params)
+    read_non_pos_owned_params::<S, Gov>(storage, params)
 }
 
 /// Read non-PoS-owned parameters to add them to `OwnedPosParams` to construct
 /// `PosParams`.
-pub fn read_non_pos_owned_params<S>(
+pub fn read_non_pos_owned_params<S, Gov>(
     storage: &S,
     owned: OwnedPosParams,
 ) -> namada_storage::Result<PosParams>
 where
     S: StorageRead,
+    Gov: governance::Read<S>,
 {
-    let max_proposal_period = get_max_proposal_period(storage)?;
+    let max_proposal_period = Gov::max_proposal_period(storage)?;
     Ok(PosParams {
         owned,
         max_proposal_period,
@@ -456,15 +458,16 @@ where
 }
 
 /// Read the validator state
-pub fn read_validator_state<S>(
+pub fn read_validator_state<S, Gov>(
     storage: &S,
     validator: &Address,
     epoch: &Epoch,
 ) -> namada_storage::Result<Option<ValidatorState>>
 where
     S: StorageRead,
+    Gov: governance::Read<S>,
 {
-    let params = read_pos_params(storage)?;
+    let params = read_pos_params::<S, Gov>(storage)?;
     validator_state_handle(validator).get(storage, *epoch, &params)
 }
 
@@ -505,7 +508,7 @@ where
 }
 
 /// Add or remove PoS validator's stake delta value
-pub fn update_validator_deltas<S>(
+pub fn update_validator_deltas<S, Gov>(
     storage: &mut S,
     params: &OwnedPosParams,
     validator: &Address,
@@ -515,6 +518,7 @@ pub fn update_validator_deltas<S>(
 ) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
+    Gov: governance::Read<S>,
 {
     let handle = validator_deltas_handle(validator);
     let offset = offset_opt.unwrap_or(params.pipeline_len);
@@ -522,7 +526,7 @@ where
     let val = handle
         .get_delta_val(storage, offset_epoch)?
         .unwrap_or_default();
-    handle.set(
+    handle.set::<S, Gov>(
         storage,
         val.checked_add(delta)
             .expect("Validator deltas updated amount should not overflow"),
@@ -602,14 +606,15 @@ where
 }
 
 /// Read all addresses from the below-threshold set
-pub fn read_below_threshold_validator_set_addresses<S>(
+pub fn read_below_threshold_validator_set_addresses<S, Gov>(
     storage: &S,
     epoch: namada_core::storage::Epoch,
 ) -> namada_storage::Result<HashSet<Address>>
 where
     S: StorageRead,
+    Gov: governance::Read<S>,
 {
-    let params = read_pos_params(storage)?;
+    let params = read_pos_params::<S, Gov>(storage)?;
     Ok(validator_addresses_handle()
         .at(&epoch)
         .iter(storage)?
@@ -713,7 +718,7 @@ where
 
 /// Update PoS total deltas.
 /// Note: for EpochedDelta, write the value to change storage by
-pub fn update_total_deltas<S>(
+pub fn update_total_deltas<S, Gov>(
     storage: &mut S,
     params: &OwnedPosParams,
     delta: token::Change,
@@ -723,6 +728,7 @@ pub fn update_total_deltas<S>(
 ) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
+    Gov: governance::Read<S>,
 {
     let offset = offset_opt.unwrap_or(params.pipeline_len);
     let total_deltas = total_deltas_handle();
@@ -733,7 +739,7 @@ where
     let total_deltas_val = total_deltas
         .get_delta_val(storage, offset_epoch)?
         .unwrap_or_default();
-    total_deltas.set(
+    total_deltas.set::<S, Gov>(
         storage,
         total_deltas_val
             .checked_add(delta)
@@ -747,7 +753,7 @@ where
         let active_delta = total_active_deltas
             .get_delta_val(storage, offset_epoch)?
             .unwrap_or_default();
-        total_active_deltas.set(
+        total_active_deltas.set::<S, Gov>(
             storage,
             active_delta.checked_add(delta).expect(
                 "Total active voting power updated amount should not overflow",
@@ -1034,14 +1040,15 @@ where
 }
 
 /// Find a consensus key of a validator account.
-pub fn get_consensus_key<S>(
+pub fn get_consensus_key<S, Gov>(
     storage: &S,
     addr: &Address,
     epoch: Epoch,
 ) -> namada_storage::Result<Option<common::PublicKey>>
 where
     S: StorageRead,
+    Gov: governance::Read<S>,
 {
-    let params = read_pos_params(storage)?;
+    let params = read_pos_params::<S, Gov>(storage)?;
     validator_consensus_key_handle(addr).get(storage, epoch, &params)
 }

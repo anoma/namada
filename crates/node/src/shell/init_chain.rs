@@ -290,13 +290,13 @@ where
         );
         self.apply_genesis_txs_bonds(&genesis);
 
-        proof_of_stake::compute_and_store_total_consensus_stake(
-            &mut self.state,
-            current_epoch,
-        )
+        proof_of_stake::compute_and_store_total_consensus_stake::<
+            _,
+            governance::Store<_>,
+        >(&mut self.state, current_epoch)
         .expect("Could not compute total consensus stake at genesis");
         // This has to be done after `apply_genesis_txs_validator_account`
-        proof_of_stake::copy_genesis_validator_sets(
+        proof_of_stake::copy_genesis_validator_sets::<_, governance::Store<_>>(
             &mut self.state,
             &pos_params,
             current_epoch,
@@ -627,22 +627,25 @@ where
                     .write(&protocol_pk_key(address), &protocol_key.pk.raw)
                     .expect("Unable to set genesis user protocol public key");
 
-                if let Err(err) = proof_of_stake::become_validator(
-                    &mut self.state,
-                    BecomeValidator {
-                        params,
-                        address,
-                        consensus_key: &consensus_key.pk.raw,
-                        protocol_key: &protocol_key.pk.raw,
-                        eth_cold_key: &eth_cold_key.pk.raw,
-                        eth_hot_key: &eth_hot_key.pk.raw,
-                        current_epoch,
-                        commission_rate: *commission_rate,
-                        max_commission_rate_change: *max_commission_rate_change,
-                        metadata: metadata.clone(),
-                        offset_opt: Some(0),
-                    },
-                ) {
+                if let Err(err) =
+                    proof_of_stake::become_validator::<_, governance::Store<_>>(
+                        &mut self.state,
+                        BecomeValidator {
+                            params,
+                            address,
+                            consensus_key: &consensus_key.pk.raw,
+                            protocol_key: &protocol_key.pk.raw,
+                            eth_cold_key: &eth_cold_key.pk.raw,
+                            eth_hot_key: &eth_hot_key.pk.raw,
+                            current_epoch,
+                            commission_rate: *commission_rate,
+                            max_commission_rate_change:
+                                *max_commission_rate_change,
+                            metadata: metadata.clone(),
+                            offset_opt: Some(0),
+                        },
+                    )
+                {
                     tracing::warn!(
                         "Genesis init genesis validator tx for {address} \
                          failed with {err}. Skipping."
@@ -675,14 +678,16 @@ where
                     amount,
                 );
 
-                if let Err(err) = proof_of_stake::bond_tokens(
-                    &mut self.state,
-                    Some(&source.address()),
-                    validator,
-                    amount.amount(),
-                    current_epoch,
-                    Some(0),
-                ) {
+                if let Err(err) =
+                    proof_of_stake::bond_tokens::<_, governance::Store<_>>(
+                        &mut self.state,
+                        Some(&source.address()),
+                        validator,
+                        amount.amount(),
+                        current_epoch,
+                        Some(0),
+                    )
+                {
                     tracing::warn!(
                         "Genesis bond tx failed with: {err}. Skipping."
                     );

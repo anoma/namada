@@ -25,18 +25,14 @@ use token::get_effective_total_native_supply;
 use crate::epoched::EpochOffset;
 use crate::parameters::testing::arb_pos_params;
 use crate::parameters::OwnedPosParams;
-use crate::queries::{
-    bonds_and_unbonds, find_delegation_validators, find_delegations,
-};
+use crate::queries::find_delegation_validators;
 use crate::rewards::{
     log_block_rewards_aux, update_rewards_products_and_mint_inflation,
     PosRewardsCalculator,
 };
-use crate::slashing::{process_slashes, slash};
 use crate::storage::{
     delegation_targets_handle, get_consensus_key_set,
     liveness_sum_missed_votes_handle,
-    read_below_threshold_validator_set_addresses,
     read_consensus_validator_set_addresses_with_stake, read_total_stake,
     read_validator_deltas_value, rewards_accumulator_handle,
     total_deltas_handle,
@@ -46,6 +42,12 @@ use crate::tests::helpers::{
     advance_epoch, arb_genesis_validators, arb_params_and_genesis_validators,
     get_genesis_validators,
 };
+use crate::tests::{
+    bond_amount, bond_tokens, bonds_and_unbonds, change_consensus_key,
+    find_delegations, process_slashes,
+    read_below_threshold_validator_set_addresses, redelegate_tokens, slash,
+    unbond_tokens, unjail_validator, withdraw_tokens, GovStore,
+};
 use crate::token::{credit_tokens, read_balance};
 use crate::types::{
     into_tm_voting_power, BondDetails, BondId, BondsAndUnbondsDetails,
@@ -53,12 +55,11 @@ use crate::types::{
     WeightedValidator,
 };
 use crate::{
-    below_capacity_validator_set_handle, bond_handle, bond_tokens,
-    change_consensus_key, consensus_validator_set_handle, is_delegator,
-    is_validator, jail_for_liveness, read_validator_stake, redelegate_tokens,
-    staking_token_address, token, unbond_handle, unbond_tokens,
-    unjail_validator, validator_consensus_key_handle,
-    validator_set_positions_handle, validator_state_handle, withdraw_tokens,
+    below_capacity_validator_set_handle, bond_handle,
+    consensus_validator_set_handle, is_delegator, is_validator,
+    jail_for_liveness, read_validator_stake, staking_token_address, token,
+    unbond_handle, validator_consensus_key_handle,
+    validator_set_positions_handle, validator_state_handle,
 };
 
 proptest! {
@@ -1157,7 +1158,7 @@ fn test_unslashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
         Epoch(0),
         current_epoch + params.pipeline_len,
     ) {
-        let bond_amount = crate::bond_amount(
+        let amount = bond_amount(
             &storage,
             &BondId {
                 source: delegator.clone(),
@@ -1170,8 +1171,8 @@ fn test_unslashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
         let val_stake =
             crate::read_validator_stake(&storage, &params, &validator1, epoch)
                 .unwrap();
-        // dbg!(&bond_amount);
-        assert_eq!(val_stake - val1_init_stake, bond_amount);
+        // dbg!(&amount);
+        assert_eq!(val_stake - val1_init_stake, amount);
     }
 }
 
@@ -1264,7 +1265,7 @@ fn test_log_block_rewards_aux_aux(
         };
 
         let (votes, signing_stake, non_voters) = prep_votes(current_epoch);
-        log_block_rewards_aux(
+        log_block_rewards_aux::<_, GovStore<_>>(
             &mut s,
             current_epoch,
             &proposer_address,
@@ -1778,7 +1779,13 @@ fn test_jail_for_liveness_aux(validators: Vec<GenesisValidator>) {
                 .unwrap();
         }
 
-        jail_for_liveness(s, &params, current_epoch, jail_epoch).unwrap();
+        jail_for_liveness::<_, GovStore<_>>(
+            s,
+            &params,
+            current_epoch,
+            jail_epoch,
+        )
+        .unwrap();
 
         for GenesisValidator { address, .. } in &validators_who_missed_votes {
             let state_jail_epoch = validator_state_handle(address)

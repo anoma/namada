@@ -6,7 +6,7 @@ use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::common;
 use namada_core::storage::{BlockHeight, Epoch};
 use namada_core::token::Amount;
-use namada_state::{DBIter, StorageHasher, StorageRead, WlState, DB};
+use namada_state::{DBIter, StorageHasher, WlState, DB};
 use namada_systems::governance;
 use namada_tx::data::BatchedTxResult;
 use namada_vote_ext::validator_set_update;
@@ -252,6 +252,7 @@ mod test_valset_upd_state_changes {
     use namada_proof_of_stake::queries::{
         get_total_voting_power, read_validator_stake,
     };
+    use namada_state::StorageRead;
     use namada_vote_ext::validator_set_update::VotingPowersMap;
 
     use super::*;

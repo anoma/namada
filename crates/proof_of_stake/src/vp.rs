@@ -17,7 +17,7 @@ use namada_vp::native_vp::{
 };
 use thiserror::Error;
 
-use crate::storage::read_pos_params;
+use crate::storage::read_owned_pos_params;
 use crate::storage_key::is_params_key;
 use crate::types::BondId;
 use crate::{storage_key, token};
@@ -314,7 +314,7 @@ where
     }
 }
 
-impl<'ctx, S, CA, EVAL, Gov> PosVp<'ctx, S, CA, EVAL, Gov>
+impl<'view, 'ctx: 'view, S, CA, EVAL, Gov> PosVp<'ctx, S, CA, EVAL, Gov>
 where
     S: StateRead,
     CA: 'static + Clone,
@@ -331,9 +331,8 @@ where
     /// Return `Ok` if the changed parameters are valid
     fn is_valid_parameter_change(&self) -> Result<()> {
         let validation_errors: Vec<crate::parameters::ValidationError> =
-            read_pos_params(&self.ctx.post())
+            read_owned_pos_params(&self.ctx.post())
                 .map_err(Error::NativeVpError)?
-                .owned
                 .validate();
         validation_errors.is_empty().ok_or_else(|| {
             let validation_errors_str =

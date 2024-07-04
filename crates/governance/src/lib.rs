@@ -54,4 +54,8 @@ where
     fn is_proposal_accepted(storage: &S, tx_data: &[u8]) -> Result<bool> {
         storage::is_proposal_accepted(storage, tx_data)
     }
+
+    fn max_proposal_period(storage: &S) -> Result<u64> {
+        storage::get_max_proposal_period(storage)
+    }
 }

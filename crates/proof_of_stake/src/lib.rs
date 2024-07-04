@@ -51,6 +51,7 @@ use namada_core::tendermint::abci::types::Misbehavior;
 use namada_events::EmitEvents;
 use namada_storage::collections::lazy_map::{self, Collectable, LazyMap};
 use namada_storage::{OptionExt, StorageRead, StorageWrite};
+use namada_systems::governance;
 pub use namada_systems::proof_of_stake::*;
 pub use namada_trans_token as token;
 pub use parameters::{OwnedPosParams, PosParams};
@@ -173,15 +174,16 @@ where
 
 /// Copies the validator sets into all epochs up through the pipeline epoch at
 /// genesis.
-pub fn copy_genesis_validator_sets<S>(
+pub fn copy_genesis_validator_sets<S, Gov>(
     storage: &mut S,
     params: &OwnedPosParams,
     current_epoch: Epoch,
 ) -> Result<()>
 where
     S: StorageRead + StorageWrite,
+    Gov: governance::Read<S>,
 {
-    let params = read_non_pos_owned_params(storage, params.clone())?;
+    let params = read_non_pos_owned_params::<_, Gov>(storage, params.clone())?;
 
     // Copy the genesis validator sets up to the pipeline epoch
     for epoch in (current_epoch.next()).iter_range(params.pipeline_len) {
@@ -251,7 +253,7 @@ where
 /// Self-bond tokens to a validator when `source` is `None` or equal to
 /// the `validator` address, or delegate tokens from the `source` to the
 /// `validator`.
-pub fn bond_tokens<S>(
+pub fn bond_tokens<S, Gov>(
     storage: &mut S,
     source: Option<&Address>,
     validator: &Address,
@@ -261,6 +263,7 @@ pub fn bond_tokens<S>(
 ) -> Result<()>
 where
     S: StorageRead + StorageWrite,
+    Gov: governance::Read<S>,
 {
     tracing::debug!(
         "Bonding token amount {} at epoch {current_epoch}",
@@ -285,7 +288,7 @@ where
     let staking_token = staking_token_address(storage);
     token::transfer(storage, &staking_token, source, &ADDRESS, amount)?;
 
-    let params = read_pos_params(storage)?;
+    let params = read_pos_params::<S, Gov>(storage)?;
     let offset = offset_opt.unwrap_or(params.pipeline_len);
     let offset_epoch = checked!(current_epoch + offset)?;
 
@@ -304,8 +307,13 @@ where
     // Initialize or update the bond at the pipeline offset
     let bond_handle = bond_handle(source, validator);
     let total_bonded_handle = total_bonded_handle(validator);
-    bond_handle.add(storage, amount, current_epoch, offset)?;
-    total_bonded_handle.add(storage, amount, current_epoch, offset)?;
+    bond_handle.add::<S, Gov>(storage, amount, current_epoch, offset)?;
+    total_bonded_handle.add::<S, Gov>(
+        storage,
+        amount,
+        current_epoch,
+        offset,
+    )?;
 
     if tracing::level_enabled!(tracing::Level::DEBUG) {
         let bonds = find_bonds(storage, source, validator)?;
@@ -329,7 +337,7 @@ where
         Some(ValidatorState::Jailed) | Some(ValidatorState::Inactive)
     );
     if !is_jailed_or_inactive_at_offset {
-        update_validator_set(
+        update_validator_set::<S, Gov>(
             storage,
             &params,
             validator,
@@ -340,7 +348,7 @@ where
     }
 
     // Update the validator and total deltas
-    update_validator_deltas(
+    update_validator_deltas::<S, Gov>(
         storage,
         &params,
         validator,
@@ -349,7 +357,7 @@ where
         offset_opt,
     )?;
 
-    update_total_deltas(
+    update_total_deltas::<S, Gov>(
         storage,
         &params,
         amount.change(),
@@ -387,12 +395,13 @@ where
 }
 
 /// Compute and then store the total consensus stake
-pub fn compute_and_store_total_consensus_stake<S>(
+pub fn compute_and_store_total_consensus_stake<S, Gov>(
     storage: &mut S,
     epoch: Epoch,
 ) -> Result<()>
 where
     S: StorageRead + StorageWrite,
+    Gov: governance::Read<S>,
 {
     let total = compute_total_consensus_stake(storage, epoch)?;
     tracing::debug!(
@@ -400,7 +409,7 @@ where
         epoch,
         total.to_string_native()
     );
-    total_consensus_stake_handle().set(storage, total, epoch, 0)
+    total_consensus_stake_handle().set::<S, Gov>(storage, total, epoch, 0)
 }
 
 /// Unbond tokens that are bonded between a validator and a source (self or
@@ -408,7 +417,7 @@ where
 ///
 /// This fn is also called during redelegation for a source validator, in
 /// which case the `is_redelegation` param must be true.
-pub fn unbond_tokens<S>(
+pub fn unbond_tokens<S, Gov>(
     storage: &mut S,
     source: Option<&Address>,
     validator: &Address,
@@ -418,12 +427,13 @@ pub fn unbond_tokens<S>(
 ) -> Result<ResultSlashing>
 where
     S: StorageRead + StorageWrite,
+    Gov: governance::Read<S>,
 {
     if amount.is_zero() {
         return Ok(ResultSlashing::default());
     }
 
-    let params = read_pos_params(storage)?;
+    let params = read_pos_params::<S, Gov>(storage)?;
     let pipeline_epoch = checked!(current_epoch + params.pipeline_len)?;
     let withdrawable_epoch =
         checked!(current_epoch + params.withdrawable_epoch_offset())?;
@@ -554,7 +564,7 @@ where
     }
     // Replace bond amount for partial unbond, if any.
     if let Some((bond_epoch, new_bond_amount)) = bonds_to_unbond.new_entry {
-        bonds_handle.set(storage, new_bond_amount, bond_epoch, 0)?;
+        bonds_handle.set::<S, Gov>(storage, new_bond_amount, bond_epoch, 0)?;
     }
 
     // If the bond is now completely empty, remove the validator from the
@@ -735,7 +745,7 @@ where
         Some(ValidatorState::Jailed) | Some(ValidatorState::Inactive)
     );
     if !is_jailed_or_inactive_at_pipeline {
-        update_validator_set(
+        update_validator_set::<S, Gov>(
             storage,
             &params,
             validator,
@@ -746,7 +756,7 @@ where
     }
 
     // Update the validator and total deltas at the pipeline offset
-    update_validator_deltas(
+    update_validator_deltas::<S, Gov>(
         storage,
         &params,
         validator,
@@ -754,7 +764,7 @@ where
         current_epoch,
         None,
     )?;
-    update_total_deltas(
+    update_total_deltas::<S, Gov>(
         storage,
         &params,
         change_after_slashing,
@@ -1283,12 +1293,13 @@ pub struct BecomeValidator<'a> {
 }
 
 /// Initialize data for a new validator.
-pub fn become_validator<S>(
+pub fn become_validator<S, Gov>(
     storage: &mut S,
     args: BecomeValidator<'_>,
 ) -> Result<()>
 where
     S: StorageRead + StorageWrite,
+    Gov: governance::Read<S>,
 {
     let BecomeValidator {
         params,
@@ -1320,7 +1331,7 @@ where
 
     // The address may not have any bonds if it is going to be initialized as a
     // validator
-    if has_bonds(storage, address)? {
+    if has_bonds::<S, Gov>(storage, address)? {
         return Err(namada_storage::Error::new_const(
             "The given address has delegations and therefore cannot become a \
              validator. Unbond first.",
@@ -1345,37 +1356,37 @@ where
     write_validator_metadata(storage, address, &metadata)?;
 
     // Epoched validator data
-    validator_consensus_key_handle(address).set(
+    validator_consensus_key_handle(address).set::<S, Gov>(
         storage,
         consensus_key.clone(),
         current_epoch,
         offset,
     )?;
-    validator_protocol_key_handle(address).set(
+    validator_protocol_key_handle(address).set::<S, Gov>(
         storage,
         protocol_key.clone(),
         current_epoch,
         offset,
     )?;
-    validator_eth_hot_key_handle(address).set(
+    validator_eth_hot_key_handle(address).set::<S, Gov>(
         storage,
         eth_hot_key.clone(),
         current_epoch,
         offset,
     )?;
-    validator_eth_cold_key_handle(address).set(
+    validator_eth_cold_key_handle(address).set::<S, Gov>(
         storage,
         eth_cold_key.clone(),
         current_epoch,
         offset,
     )?;
-    validator_commission_rate_handle(address).set(
+    validator_commission_rate_handle(address).set::<S, Gov>(
         storage,
         commission_rate,
         current_epoch,
         offset,
     )?;
-    validator_deltas_handle(address).set(
+    validator_deltas_handle(address).set::<S, Gov>(
         storage,
         token::Change::zero(),
         current_epoch,
@@ -1384,14 +1395,14 @@ where
 
     // The validator's stake at initialization is 0, so its state is immediately
     // below-threshold
-    validator_state_handle(address).set(
+    validator_state_handle(address).set::<S, Gov>(
         storage,
         ValidatorState::BelowThreshold,
         current_epoch,
         offset,
     )?;
 
-    insert_validator_into_validator_set(
+    insert_validator_into_validator_set::<S, Gov>(
         storage,
         params,
         address,
@@ -1404,7 +1415,7 @@ where
 }
 
 /// Consensus key change for a validator
-pub fn change_consensus_key<S>(
+pub fn change_consensus_key<S, Gov>(
     storage: &mut S,
     validator: &Address,
     consensus_key: &common::PublicKey,
@@ -1412,6 +1423,7 @@ pub fn change_consensus_key<S>(
 ) -> Result<()>
 where
     S: StorageRead + StorageWrite,
+    Gov: governance::Read<S>,
 {
     tracing::debug!("Changing consensus key for validator {}", validator);
 
@@ -1427,8 +1439,8 @@ where
     try_insert_consensus_key(storage, consensus_key)?;
 
     // Set the new consensus key at the pipeline epoch
-    let params = read_pos_params(storage)?;
-    validator_consensus_key_handle(validator).set(
+    let params = read_pos_params::<S, Gov>(storage)?;
+    validator_consensus_key_handle(validator).set::<S, Gov>(
         storage,
         consensus_key.clone(),
         current_epoch,
@@ -1442,7 +1454,7 @@ where
 }
 
 /// Withdraw tokens from those that have been unbonded from proof-of-stake
-pub fn withdraw_tokens<S>(
+pub fn withdraw_tokens<S, Gov>(
     storage: &mut S,
     source: Option<&Address>,
     validator: &Address,
@@ -1450,8 +1462,9 @@ pub fn withdraw_tokens<S>(
 ) -> Result<token::Amount>
 where
     S: StorageRead + StorageWrite,
+    Gov: governance::Read<S>,
 {
-    let params = read_pos_params(storage)?;
+    let params = read_pos_params::<S, Gov>(storage)?;
     let source = source.unwrap_or(validator);
 
     tracing::debug!("Withdrawing tokens in epoch {current_epoch}");
@@ -1581,7 +1594,7 @@ where
 }
 
 /// Change the commission rate of a validator
-pub fn change_validator_commission_rate<S>(
+pub fn change_validator_commission_rate<S, Gov>(
     storage: &mut S,
     validator: &Address,
     new_rate: Dec,
@@ -1589,6 +1602,7 @@ pub fn change_validator_commission_rate<S>(
 ) -> Result<()>
 where
     S: StorageRead + StorageWrite,
+    Gov: governance::Read<S>,
 {
     if new_rate.is_negative() {
         return Err(CommissionRateChangeError::NegativeRate(
@@ -1612,7 +1626,7 @@ where
                 CommissionRateChangeError::NoMaxSetInStorage(validator.clone())
             })?;
 
-    let params = read_pos_params(storage)?;
+    let params = read_pos_params::<S, Gov>(storage)?;
     let commission_handle = validator_commission_rate_handle(validator);
     let pipeline_epoch = checked!(current_epoch + params.pipeline_len)?;
 
@@ -1639,7 +1653,12 @@ where
         .into());
     }
 
-    commission_handle.set(storage, new_rate, current_epoch, params.pipeline_len)
+    commission_handle.set::<S, Gov>(
+        storage,
+        new_rate,
+        current_epoch,
+        params.pipeline_len,
+    )
 }
 
 fn bond_amounts_for_query<S>(
@@ -1761,15 +1780,16 @@ where
 
 /// Get the total bond amount, without applying slashes, for a given bond ID and
 /// epoch. For future epochs, the value is subject to change.
-pub fn raw_bond_amount<S>(
+pub fn raw_bond_amount<S, Gov>(
     storage: &S,
     bond_id: &BondId,
     epoch: Epoch,
 ) -> Result<token::Amount>
 where
     S: StorageRead,
+    Gov: governance::Read<S>,
 {
-    let params = read_pos_params(storage)?;
+    let params = read_pos_params::<S, Gov>(storage)?;
     let amounts = bond_amounts_for_query(storage, &params, bond_id, epoch)?;
     token::Amount::sum(amounts.values().copied())
         .ok_or_err_msg("token amount overflow")
@@ -1778,15 +1798,16 @@ where
 /// Get the total bond amount, including slashes, for a given bond ID and epoch.
 /// Returns the bond amount after slashing. For future epochs, the value is
 /// subject to change.
-pub fn bond_amount<S>(
+pub fn bond_amount<S, Gov>(
     storage: &S,
     bond_id: &BondId,
     epoch: Epoch,
 ) -> Result<token::Amount>
 where
     S: StorageRead,
+    Gov: governance::Read<S>,
 {
-    let params = read_pos_params(storage)?;
+    let params = read_pos_params::<S, Gov>(storage)?;
     let mut amounts = bond_amounts_for_query(storage, &params, bond_id, epoch)?;
 
     if !amounts.is_empty() {
@@ -1854,7 +1875,7 @@ where
 /// the epoch in which we're calculating the bond amount to correspond to the
 /// validator stake that was used to calculate reward products (slashes do *not*
 /// retrospectively affect the rewards calculated before slash processing).
-pub fn bond_amounts_for_rewards<S>(
+pub fn bond_amounts_for_rewards<S, Gov>(
     storage: &S,
     bond_id: &BondId,
     claim_start: Epoch,
@@ -1862,8 +1883,9 @@ pub fn bond_amounts_for_rewards<S>(
 ) -> Result<BTreeMap<Epoch, token::Amount>>
 where
     S: StorageRead,
+    Gov: governance::Read<S>,
 {
-    let params = read_pos_params(storage)?;
+    let params = read_pos_params::<S, Gov>(storage)?;
     // Outer key is every epoch in which the a bond amount contributed to stake
     // and the inner key is the start epoch used to calculate slashes. The inner
     // keys are discarded after applying slashes.
@@ -1995,15 +2017,16 @@ where
 }
 
 /// Unjail a validator that is currently jailed.
-pub fn unjail_validator<S>(
+pub fn unjail_validator<S, Gov>(
     storage: &mut S,
     validator: &Address,
     current_epoch: Epoch,
 ) -> Result<()>
 where
     S: StorageRead + StorageWrite,
+    Gov: governance::Read<S>,
 {
-    let params = read_pos_params(storage)?;
+    let params = read_pos_params::<S, Gov>(storage)?;
 
     // Check that the validator is jailed up to the pipeline epoch
     for epoch in current_epoch.iter_range(
@@ -2048,7 +2071,7 @@ where
     let stake =
         read_validator_stake(storage, &params, validator, pipeline_epoch)?;
 
-    insert_validator_into_validator_set(
+    insert_validator_into_validator_set::<S, Gov>(
         storage,
         &params,
         validator,
@@ -2098,7 +2121,7 @@ where
 }
 
 /// Redelegate bonded tokens from a source validator to a destination validator
-pub fn redelegate_tokens<S>(
+pub fn redelegate_tokens<S, Gov>(
     storage: &mut S,
     delegator: &Address,
     src_validator: &Address,
@@ -2108,6 +2131,7 @@ pub fn redelegate_tokens<S>(
 ) -> Result<()>
 where
     S: StorageRead + StorageWrite,
+    Gov: governance::Read<S>,
 {
     tracing::debug!(
         "Delegator {} redelegating {} tokens from {} to {}",
@@ -2142,7 +2166,7 @@ where
         );
     }
 
-    let params = read_pos_params(storage)?;
+    let params = read_pos_params::<S, Gov>(storage)?;
     let pipeline_epoch = checked!(current_epoch + params.pipeline_len)?;
     let src_redel_end_epoch =
         validator_incoming_redelegations_handle(src_validator)
@@ -2172,7 +2196,7 @@ where
 
     // Unbond the redelegated tokens from the src validator.
     // `resultUnbond` in quint
-    let result_unbond = unbond_tokens(
+    let result_unbond = unbond_tokens::<S, Gov>(
         storage,
         Some(delegator),
         src_validator,
@@ -2212,7 +2236,7 @@ where
     if !amount_after_slashing.is_zero() {
         // `updatedDelegator` with updates to `bonded`
         let bond_handle = bond_handle(delegator, dest_validator);
-        bond_handle.add(
+        bond_handle.add::<S, Gov>(
             storage,
             amount_after_slashing,
             current_epoch,
@@ -2221,7 +2245,7 @@ where
         // `updatedDestValidator` --> `with("totalVBonded")`
         // Add the amount to the dest validator total bonded
         let dest_total_bonded = total_bonded_handle(dest_validator);
-        dest_total_bonded.add(
+        dest_total_bonded.add::<S, Gov>(
             storage,
             amount_after_slashing,
             current_epoch,
@@ -2294,7 +2318,7 @@ where
         Some(ValidatorState::Jailed) | Some(ValidatorState::Inactive)
     );
     if !is_jailed_or_inactive_at_pipeline {
-        update_validator_set(
+        update_validator_set::<S, Gov>(
             storage,
             &params,
             dest_validator,
@@ -2305,7 +2329,7 @@ where
     }
 
     // Update deltas
-    update_validator_deltas(
+    update_validator_deltas::<S, Gov>(
         storage,
         &params,
         dest_validator,
@@ -2313,7 +2337,7 @@ where
         current_epoch,
         None,
     )?;
-    update_total_deltas(
+    update_total_deltas::<S, Gov>(
         storage,
         &params,
         amount_after_slashing.change(),
@@ -2327,15 +2351,16 @@ where
 
 /// Deactivate a validator by removing it from any validator sets. A validator
 /// can only be deactivated if it is not jailed or already inactive.
-pub fn deactivate_validator<S>(
+pub fn deactivate_validator<S, Gov>(
     storage: &mut S,
     validator: &Address,
     current_epoch: Epoch,
 ) -> Result<()>
 where
     S: StorageRead + StorageWrite,
+    Gov: governance::Read<S>,
 {
-    let params = read_pos_params(storage)?;
+    let params = read_pos_params::<S, Gov>(storage)?;
     let pipeline_epoch = checked!(current_epoch + params.pipeline_len)?;
 
     let pipeline_state = match validator_state_handle(validator).get(
@@ -2364,7 +2389,7 @@ where
             )?;
 
             // Promote the next below-capacity validator to consensus
-            promote_next_below_capacity_validator_to_consensus(
+            promote_next_below_capacity_validator_to_consensus::<S, Gov>(
                 storage,
                 current_epoch,
                 params.pipeline_len,
@@ -2397,7 +2422,7 @@ where
     }
 
     // Set the state to inactive
-    validator_state_handle(validator).set(
+    validator_state_handle(validator).set::<S, Gov>(
         storage,
         ValidatorState::Inactive,
         current_epoch,
@@ -2408,15 +2433,16 @@ where
 }
 
 /// Re-activate an inactive validator
-pub fn reactivate_validator<S>(
+pub fn reactivate_validator<S, Gov>(
     storage: &mut S,
     validator: &Address,
     current_epoch: Epoch,
 ) -> Result<()>
 where
     S: StorageRead + StorageWrite,
+    Gov: governance::Read<S>,
 {
-    let params = read_pos_params(storage)?;
+    let params = read_pos_params::<S, Gov>(storage)?;
     let pipeline_epoch = checked!(current_epoch + params.pipeline_len)?;
 
     // Make sure state is Inactive at every epoch up through the pipeline
@@ -2445,7 +2471,7 @@ where
     // discovered later, thus the validator is frozen.
     if is_validator_frozen(storage, validator, current_epoch, &params)? {
         // The validator should be set back to jailed
-        validator_state_handle(validator).set(
+        validator_state_handle(validator).set::<S, Gov>(
             storage,
             ValidatorState::Jailed,
             current_epoch,
@@ -2458,7 +2484,7 @@ where
     let stake =
         read_validator_stake(storage, &params, validator, pipeline_epoch)?;
 
-    insert_validator_into_validator_set(
+    insert_validator_into_validator_set::<S, Gov>(
         storage,
         &params,
         validator,
@@ -2589,7 +2615,7 @@ where
 }
 
 /// Jail validators who failed to match the liveness threshold
-pub fn jail_for_liveness<S>(
+pub fn jail_for_liveness<S, Gov>(
     storage: &mut S,
     params: &PosParams,
     current_epoch: Epoch,
@@ -2597,6 +2623,7 @@ pub fn jail_for_liveness<S>(
 ) -> Result<()>
 where
     S: StorageRead + StorageWrite,
+    Gov: governance::Read<S>,
 {
     // Derive the actual missing votes limit from the percentage
     let missing_votes_threshold = checked!(
@@ -2639,7 +2666,13 @@ where
             validator,
             jail_epoch,
         );
-        jail_validator(storage, params, validator, current_epoch, jail_epoch)?;
+        jail_validator::<S, Gov>(
+            storage,
+            params,
+            validator,
+            current_epoch,
+            jail_epoch,
+        )?;
     }
 
     Ok(())
@@ -2681,7 +2714,7 @@ pub mod test_utils {
             metadata,
         } in validators
         {
-            become_validator(
+            become_validator::<S, namada_governance::Store<S>>(
                 storage,
                 BecomeValidator {
                     params,
@@ -2702,7 +2735,7 @@ pub mod test_utils {
             let staking_token = staking_token_address(storage);
             credit_tokens(storage, &staking_token, &address, tokens)?;
 
-            bond_tokens(
+            bond_tokens::<S, namada_governance::Store<S>>(
                 storage,
                 None,
                 &address,
@@ -2712,10 +2745,17 @@ pub mod test_utils {
             )?;
         }
         // Store the total consensus validator stake to storage
-        compute_and_store_total_consensus_stake(storage, current_epoch)?;
+        compute_and_store_total_consensus_stake::<
+            S,
+            namada_governance::Store<S>,
+        >(storage, current_epoch)?;
 
         // Copy validator sets and positions
-        copy_genesis_validator_sets(storage, params, current_epoch)?;
+        copy_genesis_validator_sets::<S, namada_governance::Store<S>>(
+            storage,
+            params,
+            current_epoch,
+        )?;
 
         Ok(())
     }
@@ -2734,7 +2774,9 @@ pub mod test_utils {
         let gov_params =
             namada_governance::parameters::GovernanceParameters::default();
         gov_params.init_storage(storage)?;
-        let params = read_non_pos_owned_params(storage, owned)?;
+        let params = read_non_pos_owned_params::<_, namada_governance::Store<_>>(
+            storage, owned,
+        )?;
         let chain_parameters = namada_parameters::Parameters {
             max_tx_bytes: 123456789,
             epoch_duration: EpochDuration {
@@ -2807,7 +2849,7 @@ pub mod test_utils {
 /// [`ValidatorMetaData`], the validator's commission rate can be changed within
 /// here as well.
 #[allow(clippy::too_many_arguments)]
-pub fn change_validator_metadata<S>(
+pub fn change_validator_metadata<S, Gov>(
     storage: &mut S,
     validator: &Address,
     email: Option<String>,
@@ -2821,6 +2863,7 @@ pub fn change_validator_metadata<S>(
 ) -> Result<()>
 where
     S: StorageRead + StorageWrite,
+    Gov: governance::Read<S>,
 {
     if let Some(email) = email {
         write_validator_email(storage, validator, &email)?;
@@ -2841,7 +2884,7 @@ where
         write_validator_name(storage, validator, &name)?;
     }
     if let Some(commission_rate) = commission_rate {
-        change_validator_commission_rate(
+        change_validator_commission_rate::<S, Gov>(
             storage,
             validator,
             commission_rate,
@@ -2853,7 +2896,7 @@ where
 
 /// Claim available rewards, triggering an immediate transfer of tokens from the
 /// PoS account to the source address.
-pub fn claim_reward_tokens<S>(
+pub fn claim_reward_tokens<S, Gov>(
     storage: &mut S,
     source: Option<&Address>,
     validator: &Address,
@@ -2861,13 +2904,14 @@ pub fn claim_reward_tokens<S>(
 ) -> Result<token::Amount>
 where
     S: StorageRead + StorageWrite,
+    Gov: governance::Read<S>,
 {
     tracing::debug!("Claiming rewards in epoch {current_epoch}");
 
     let source = source.cloned().unwrap_or_else(|| validator.clone());
     tracing::debug!("Source {} --> Validator {}", source, validator);
 
-    let mut reward_tokens = compute_current_rewards_from_bonds(
+    let mut reward_tokens = compute_current_rewards_from_bonds::<S, Gov>(
         storage,
         &source,
         validator,
@@ -2890,7 +2934,7 @@ where
 }
 
 /// Query the amount of available reward tokens for a given bond.
-pub fn query_reward_tokens<S>(
+pub fn query_reward_tokens<S, Gov>(
     storage: &S,
     source: Option<&Address>,
     validator: &Address,
@@ -2898,9 +2942,10 @@ pub fn query_reward_tokens<S>(
 ) -> Result<token::Amount>
 where
     S: StorageRead,
+    Gov: governance::Read<S>,
 {
     let source = source.cloned().unwrap_or_else(|| validator.clone());
-    let rewards_from_bonds = compute_current_rewards_from_bonds(
+    let rewards_from_bonds = compute_current_rewards_from_bonds::<S, Gov>(
         storage,
         &source,
         validator,
@@ -2917,7 +2962,7 @@ where
 /// Jail a validator by removing it from and updating the validator sets and
 /// changing a its state to `Jailed`. Validators are jailed for liveness and for
 /// misbehaving.
-pub fn jail_validator<S>(
+pub fn jail_validator<S, Gov>(
     storage: &mut S,
     params: &PosParams,
     validator: &Address,
@@ -2926,6 +2971,7 @@ pub fn jail_validator<S>(
 ) -> Result<()>
 where
     S: StorageRead + StorageWrite,
+    Gov: governance::Read<S>,
 {
     tracing::debug!(
         "Jailing validator {} beginning in epoch {}",
@@ -2958,7 +3004,7 @@ where
                 // promote the next max inactive validator to the active
                 // validator set at the pipeline offset
                 if offset == params.pipeline_len {
-                    promote_next_below_capacity_validator_to_consensus(
+                    promote_next_below_capacity_validator_to_consensus::<S, Gov>(
                         storage,
                         current_epoch,
                         offset,
@@ -3001,7 +3047,7 @@ where
         .expect("Safe sub cause `validator_set_update_epoch > current_epoch`");
     // Set the validator state as `Jailed` thru the pipeline epoch
     for offset in start_offset..=params.pipeline_len {
-        validator_state_handle(validator).set(
+        validator_state_handle(validator).set::<S, Gov>(
             storage,
             ValidatorState::Jailed,
             current_epoch,
@@ -3012,7 +3058,7 @@ where
 }
 
 /// Apply PoS updates for a block
-pub fn finalize_block<S>(
+pub fn finalize_block<S, Gov>(
     storage: &mut S,
     events: &mut impl EmitEvents,
     is_new_epoch: bool,
@@ -3022,10 +3068,11 @@ pub fn finalize_block<S>(
 ) -> Result<()>
 where
     S: StorageWrite + StorageRead,
+    Gov: governance::Read<S>,
 {
     let height = storage.get_block_height()?;
     let current_epoch = storage.get_block_epoch()?;
-    let pos_params = storage::read_pos_params(storage)?;
+    let pos_params = storage::read_pos_params::<S, Gov>(storage)?;
 
     if is_new_epoch {
         // Copy the new_epoch + pipeline_len - 1 validator set into
@@ -3039,14 +3086,17 @@ where
 
         // Compute the total stake of the consensus validator set and record
         // it in storage
-        compute_and_store_total_consensus_stake(storage, current_epoch)?;
+        compute_and_store_total_consensus_stake::<S, Gov>(
+            storage,
+            current_epoch,
+        )?;
     }
 
     // Invariant: Has to be applied before `record_slashes_from_evidence`
     // because it potentially needs to be able to read validator state from
     // previous epoch and jailing validator removes the historical state
     if !votes.is_empty() {
-        rewards::log_block_rewards(
+        rewards::log_block_rewards::<S, Gov>(
             storage,
             votes.clone(),
             height,
@@ -3057,7 +3107,7 @@ where
 
     // Invariant: This has to be applied after
     // `copy_validator_sets_and_positions` and before `self.update_epoch`.
-    slashing::record_slashes_from_evidence(
+    slashing::record_slashes_from_evidence::<S, Gov>(
         storage,
         byzantine_validators,
         &pos_params,
@@ -3074,7 +3124,7 @@ where
         // Process and apply slashes that have already been recorded for the
         // current epoch
         if let Err(err) =
-            slashing::process_slashes(storage, events, current_epoch)
+            slashing::process_slashes::<S, Gov>(storage, events, current_epoch)
         {
             tracing::error!(
                 "Error while processing slashes queued for epoch {}: {}",
@@ -3104,7 +3154,7 @@ where
     }
 
     // Jail validators for inactivity
-    jail_for_liveness(
+    jail_for_liveness::<S, Gov>(
         storage,
         &pos_params,
         current_epoch,

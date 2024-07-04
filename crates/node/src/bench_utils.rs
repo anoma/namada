@@ -29,7 +29,7 @@ use namada_sdk::events::extend::{
 use namada_sdk::events::Event;
 use namada_sdk::gas::TxGasMeter;
 use namada_sdk::governance::storage::proposal::ProposalType;
-use namada_sdk::governance::InitProposalData;
+use namada_sdk::governance::{self, InitProposalData};
 use namada_sdk::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
 use namada_sdk::ibc::apps::transfer::types::packet::PacketData;
 use namada_sdk::ibc::apps::transfer::types::PrefixedCoin;
@@ -234,9 +234,11 @@ impl Default for BenchShell {
             amount: Amount::native_whole(1000),
             source: Some(defaults::albert_address()),
         };
-        let params =
-            proof_of_stake::storage::read_pos_params(&bench_shell.state)
-                .unwrap();
+        let params = proof_of_stake::storage::read_pos_params::<
+            _,
+            governance::Store<_>,
+        >(&bench_shell.state)
+        .unwrap();
         let signed_tx = bench_shell.generate_tx(
             TX_BOND_WASM,
             bond,
@@ -419,9 +421,11 @@ impl BenchShell {
     }
 
     pub fn advance_epoch(&mut self) {
-        let params =
-            proof_of_stake::storage::read_pos_params(&self.inner.state)
-                .unwrap();
+        let params = proof_of_stake::storage::read_pos_params::<
+            _,
+            governance::Store<_>,
+        >(&self.inner.state)
+        .unwrap();
 
         self.state.in_mem_mut().block.epoch =
             self.state.in_mem().block.epoch.next();

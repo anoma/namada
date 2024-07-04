@@ -218,6 +218,7 @@ mod tests {
 
     use address::testing::arb_non_internal_address;
     use namada_test_utils::TestWasms;
+    use namada_tests::governance;
     // Use this as `#[test]` annotation to enable logging
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
@@ -648,7 +649,7 @@ mod tests {
         .unwrap();
 
         // Jail validator3
-        jail_validator(
+        jail_validator::<_, governance::Store<_>>(
             &mut tx_env.state,
             &pos_params,
             &validator3,

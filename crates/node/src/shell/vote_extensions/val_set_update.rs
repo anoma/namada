@@ -26,7 +26,7 @@ where
         >,
     > + '_ {
         vote_extensions.into_iter().map(|vote_extension| {
-            validate_valset_upd_vext(
+            validate_valset_upd_vext::<_, _, governance::Store<_>>(
                 &self.state,
                 &vote_extension,
                 self.state.in_mem().get_current_epoch().0,
@@ -114,6 +114,7 @@ mod test_vote_extensions {
     use namada_sdk::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
     use namada_sdk::eth_bridge::test_utils::GovStore;
     use namada_sdk::eth_bridge::EthBridgeQueries;
+    use namada_sdk::governance;
     use namada_sdk::key::RefTo;
     use namada_sdk::proof_of_stake::queries::get_consensus_validator_from_protocol_pk;
     use namada_sdk::proof_of_stake::storage::{
@@ -153,7 +154,7 @@ mod test_vote_extensions {
             shell
                 .state
                 .ethbridge_queries()
-                .get_consensus_eth_addresses(next_epoch)
+                .get_consensus_eth_addresses::<governance::Store<_>>(next_epoch)
                 .map(|(eth_addr_book, _, voting_power)| {
                     (eth_addr_book, voting_power)
                 })
@@ -168,7 +169,7 @@ mod test_vote_extensions {
         }
         .sign(eth_bridge_key);
         assert!(
-            validate_valset_upd_vext(
+            validate_valset_upd_vext::<_, _, governance::Store<_>>(
                 &shell.state,
                 &validator_set_update,
                 signing_epoch,
@@ -198,7 +199,7 @@ mod test_vote_extensions {
             shell
                 .state
                 .ethbridge_queries()
-                .get_consensus_eth_addresses(next_epoch)
+                .get_consensus_eth_addresses::<governance::Store<_>>(next_epoch)
                 .map(|(eth_addr_book, _, voting_power)| {
                     (eth_addr_book, voting_power)
                 })
@@ -212,7 +213,7 @@ mod test_vote_extensions {
         }
         .sign(&eth_bridge_key);
         assert!(
-            validate_valset_upd_vext(
+            validate_valset_upd_vext::<_, _, governance::Store<_>>(
                 &shell.state,
                 &validator_set_update,
                 signing_epoch,
@@ -280,7 +281,7 @@ mod test_vote_extensions {
             shell
                 .state
                 .ethbridge_queries()
-                .get_consensus_eth_addresses(next_epoch)
+                .get_consensus_eth_addresses::<governance::Store<_>>(next_epoch)
                 .map(|(eth_addr_book, _, voting_power)| {
                     (eth_addr_book, voting_power)
                 })
@@ -295,7 +296,8 @@ mod test_vote_extensions {
         assert!(vote_ext.data.voting_powers.is_empty());
 
         // we advance forward to the next epoch
-        let params = read_pos_params(&shell.state).unwrap();
+        let params =
+            read_pos_params::<_, governance::Store<_>>(&shell.state).unwrap();
         let mut consensus_set: Vec<WeightedValidator> =
             read_consensus_validator_set_addresses_with_stake(
                 &shell.state,
@@ -351,8 +353,12 @@ mod test_vote_extensions {
 
         // check validation of the vext passes
         assert!(
-            validate_valset_upd_vext(&shell.state, &vote_ext, signing_epoch)
-                .is_ok()
+            validate_valset_upd_vext::<_, _, governance::Store<_>>(
+                &shell.state,
+                &vote_ext,
+                signing_epoch
+            )
+            .is_ok()
         );
     }
 
@@ -380,7 +386,9 @@ mod test_vote_extensions {
                 shell
                     .state
                     .ethbridge_queries()
-                    .get_consensus_eth_addresses(next_epoch)
+                    .get_consensus_eth_addresses::<governance::Store<_>>(
+                        next_epoch,
+                    )
                     .map(|(eth_addr_book, _, voting_power)| {
                         (eth_addr_book, voting_power)
                     })
@@ -396,7 +404,7 @@ mod test_vote_extensions {
             Some(ext)
         };
         assert!(
-            validate_valset_upd_vext(
+            validate_valset_upd_vext::<_, _, governance::Store<_>>(
                 &shell.state,
                 &validator_set_update.unwrap(),
                 signing_epoch,

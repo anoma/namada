@@ -15,7 +15,7 @@ version.workspace = true
 [features]
 default = []
 # testing helpers
-testing = ["proptest"]
+testing = ["proptest", "namada_governance"]
 migrations = [
     "namada_migrations",
     "linkme",
@@ -26,7 +26,7 @@ namada_account = { path = "../account" }
 namada_controller = { path = "../controller" }
 namada_core = { path = "../core" }
 namada_events = { path = "../events", default-features = false }
-namada_governance = { path = "../governance" }
+namada_governance = { path = "../governance", optional = true }
 namada_macros = { path = "../macros" }
 namada_migrations = { path = "../migrations", optional = true }
 namada_state = { path = "../state" }
@@ -52,6 +52,7 @@ tracing.workspace = true
 [dev-dependencies]
 namada_core = { path = "../core", features = ["testing"] }
 namada_events = { path = "../events", features = ["testing"] }
+namada_governance = { path = "../governance" }
 namada_state = { path = "../state", features = ["testing"] }
 
 assert_matches.workspace = true

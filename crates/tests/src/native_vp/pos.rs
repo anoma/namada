@@ -594,7 +594,7 @@ pub mod testing {
     use namada_sdk::proof_of_stake::ADDRESS as POS_ADDRESS;
     use namada_sdk::storage::Epoch;
     use namada_sdk::token::{Amount, Change};
-    use namada_sdk::{address, key, token};
+    use namada_sdk::{address, governance, key, token};
     use namada_tx_prelude::{Address, StorageRead, StorageWrite};
     use proptest::prelude::*;
 
@@ -861,7 +861,8 @@ pub mod testing {
         /// the VP.
         pub fn apply(self, is_current_tx_valid: bool) {
             // Read the PoS parameters
-            let params = read_pos_params(tx::ctx()).unwrap();
+            let params =
+                read_pos_params::<_, governance::Store<_>>(tx::ctx()).unwrap();
 
             let current_epoch = tx_host_env::with(|env| {
                 // Reset the gas meter on each change, so that we never run
@@ -1575,7 +1576,8 @@ pub mod testing {
         /// Apply an invalid PoS storage action.
         pub fn apply(self) {
             // Read the PoS parameters
-            let params = read_pos_params(tx::ctx()).unwrap();
+            let params =
+                read_pos_params::<_, governance::Store<_>>(tx::ctx()).unwrap();
 
             for (epoch, changes) in self.changes {
                 for change in changes {

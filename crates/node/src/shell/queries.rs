@@ -145,7 +145,7 @@ mod test_queries {
                             .must_send_valset_upd(SendValsetUpd::Now),
                         can_send,
                     );
-                    let params = read_pos_params(&shell.state).unwrap();
+                    let params = read_pos_params::<_, governance::Store<_>>(&shell.state).unwrap();
                     let consensus_set: Vec<WeightedValidator> =
                         read_consensus_validator_set_addresses_with_stake(
                             &shell.state,

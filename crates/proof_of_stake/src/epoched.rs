@@ -15,6 +15,7 @@ use namada_migrations::*;
 use namada_storage::collections::lazy_map::{LazyMap, NestedMap};
 use namada_storage::collections::{self, LazyCollection};
 use namada_storage::{StorageRead, StorageWrite};
+use namada_systems::governance;
 
 use crate::parameters::PosParams;
 use crate::read_pos_params;
@@ -133,7 +134,7 @@ where
     }
 
     /// Initialize or set the value at the given epoch offset.
-    pub fn set<S>(
+    pub fn set<S, Gov>(
         &self,
         storage: &mut S,
         value: Data,
@@ -142,8 +143,9 @@ where
     ) -> namada_storage::Result<()>
     where
         S: StorageWrite + StorageRead,
+        Gov: governance::Read<S>,
     {
-        let params = read_pos_params(storage)?;
+        let params = read_pos_params::<S, Gov>(storage)?;
         self.update_data(storage, &params, current_epoch)?;
         self.set_at_epoch(storage, value, current_epoch, offset)
     }
@@ -551,7 +553,7 @@ where
 
     /// Initialize or add a value to the current delta value at the given epoch
     /// offset.
-    pub fn add<S>(
+    pub fn add<S, Gov>(
         &self,
         storage: &mut S,
         value: Data,
@@ -560,9 +562,10 @@ where
     ) -> namada_storage::Result<()>
     where
         S: StorageWrite + StorageRead,
+        Gov: governance::Read<S>,
         Data: Default,
     {
-        let params = read_pos_params(storage)?;
+        let params = read_pos_params::<S, Gov>(storage)?;
         self.update_data(storage, &params, current_epoch)?;
         let cur_value = self
             .get_delta_val(storage, current_epoch.unchecked_add(offset))?
@@ -572,7 +575,7 @@ where
     }
 
     /// Initialize or set the value at the given epoch offset.
-    pub fn set<S>(
+    pub fn set<S, Gov>(
         &self,
         storage: &mut S,
         value: Data,
@@ -581,8 +584,9 @@ where
     ) -> namada_storage::Result<()>
     where
         S: StorageWrite + StorageRead,
+        Gov: governance::Read<S>,
     {
-        let params = read_pos_params(storage)?;
+        let params = read_pos_params::<S, Gov>(storage)?;
         self.update_data(storage, &params, current_epoch)?;
         self.set_at_epoch(storage, value, current_epoch, offset)
     }
@@ -1120,6 +1124,7 @@ mod test {
     use test_log::test;
 
     use super::*;
+    use crate::tests::GovStore;
     use crate::types::GenesisValidator;
 
     #[test]
@@ -1140,19 +1145,19 @@ mod test {
         assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
         assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(0));
 
-        epoched.set(&mut s, 1, Epoch(0), 0)?;
+        epoched.set::<_, GovStore<_>>(&mut s, 1, Epoch(0), 0)?;
         assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(0)));
         assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
         assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
 
-        epoched.set(&mut s, 2, Epoch(1), 0)?;
+        epoched.set::<_, GovStore<_>>(&mut s, 2, Epoch(1), 0)?;
         assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(1)));
         assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
         assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
         assert_eq!(data_handler.get(&s, &Epoch(1))?, Some(2));
 
         // Nothing is trimmed yet, oldest kept epoch is 0
-        epoched.set(&mut s, 3, Epoch(2), 0)?;
+        epoched.set::<_, GovStore<_>>(&mut s, 3, Epoch(2), 0)?;
         assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(2)));
         assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
         assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
@@ -1160,7 +1165,7 @@ mod test {
         assert_eq!(data_handler.get(&s, &Epoch(2))?, Some(3));
 
         // Epoch 0 should be trimmed now, oldest kept epoch is 1
-        epoched.set(&mut s, 4, Epoch(3), 0)?;
+        epoched.set::<_, GovStore<_>>(&mut s, 4, Epoch(3), 0)?;
         assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(3)));
         assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(1)));
         assert_eq!(data_handler.get(&s, &Epoch(0))?, None);
@@ -1169,7 +1174,7 @@ mod test {
         assert_eq!(data_handler.get(&s, &Epoch(3))?, Some(4));
 
         // Anything before epoch 3 should be trimmed
-        epoched.set(&mut s, 5, Epoch(5), 0)?;
+        epoched.set::<_, GovStore<_>>(&mut s, 5, Epoch(5), 0)?;
         assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(5)));
         assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(3)));
         assert_eq!(data_handler.get(&s, &Epoch(0))?, None);
@@ -1179,7 +1184,7 @@ mod test {
         assert_eq!(data_handler.get(&s, &Epoch(5))?, Some(5));
 
         // Anything before epoch 8 should be trimmed
-        epoched.set(&mut s, 6, Epoch(10), 0)?;
+        epoched.set::<_, GovStore<_>>(&mut s, 6, Epoch(10), 0)?;
         assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(10)));
         assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(8)));
         for epoch in Epoch(0).iter_range(7) {
@@ -1209,25 +1214,25 @@ mod test {
         assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
         assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(0));
 
-        epoched.set(&mut s, 1, Epoch(0), 0)?;
+        epoched.set::<_, GovStore<_>>(&mut s, 1, Epoch(0), 0)?;
         assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(0)));
         assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
         assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
 
-        epoched.set(&mut s, 2, Epoch(1), 0)?;
+        epoched.set::<_, GovStore<_>>(&mut s, 2, Epoch(1), 0)?;
         assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(1)));
         assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
         assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
         assert_eq!(data_handler.get(&s, &Epoch(1))?, Some(2));
 
-        epoched.set(&mut s, 3, Epoch(2), 0)?;
+        epoched.set::<_, GovStore<_>>(&mut s, 3, Epoch(2), 0)?;
         assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(2)));
         assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
         assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
         assert_eq!(data_handler.get(&s, &Epoch(1))?, Some(2));
         assert_eq!(data_handler.get(&s, &Epoch(2))?, Some(3));
 
-        epoched.set(&mut s, 4, Epoch(3), 0)?;
+        epoched.set::<_, GovStore<_>>(&mut s, 4, Epoch(3), 0)?;
         assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(3)));
         assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
         assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
@@ -1235,7 +1240,7 @@ mod test {
         assert_eq!(data_handler.get(&s, &Epoch(2))?, Some(3));
         assert_eq!(data_handler.get(&s, &Epoch(3))?, Some(4));
 
-        epoched.set(&mut s, 5, Epoch(5), 0)?;
+        epoched.set::<_, GovStore<_>>(&mut s, 5, Epoch(5), 0)?;
         assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(5)));
         assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
         assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
@@ -1244,7 +1249,7 @@ mod test {
         assert_eq!(data_handler.get(&s, &Epoch(3))?, Some(4));
         assert_eq!(data_handler.get(&s, &Epoch(5))?, Some(5));
 
-        epoched.set(&mut s, 6, Epoch(10), 0)?;
+        epoched.set::<_, GovStore<_>>(&mut s, 6, Epoch(10), 0)?;
         assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(10)));
         assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
         assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
@@ -1279,19 +1284,19 @@ mod test {
         assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
         assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(0));
 
-        epoched.set(&mut s, 1, Epoch(0), 0)?;
+        epoched.set::<_, GovStore<_>>(&mut s, 1, Epoch(0), 0)?;
         assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(0)));
         assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
         assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
 
-        epoched.set(&mut s, 2, Epoch(1), 0)?;
+        epoched.set::<_, GovStore<_>>(&mut s, 2, Epoch(1), 0)?;
         assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(1)));
         assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
         assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
         assert_eq!(data_handler.get(&s, &Epoch(1))?, Some(2));
 
         // Nothing is trimmed yet, oldest kept epoch is 0
-        epoched.set(&mut s, 3, Epoch(2), 0)?;
+        epoched.set::<_, GovStore<_>>(&mut s, 3, Epoch(2), 0)?;
         assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(2)));
         assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
         assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
@@ -1299,7 +1304,7 @@ mod test {
         assert_eq!(data_handler.get(&s, &Epoch(2))?, Some(3));
 
         // Epoch 0 should be trimmed now, oldest kept epoch is 1
-        epoched.set(&mut s, 4, Epoch(3), 0)?;
+        epoched.set::<_, GovStore<_>>(&mut s, 4, Epoch(3), 0)?;
         assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(3)));
         assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(1)));
         assert_eq!(data_handler.get(&s, &Epoch(0))?, None);
@@ -1309,7 +1314,7 @@ mod test {
         assert_eq!(data_handler.get(&s, &Epoch(3))?, Some(4));
 
         // Anything before epoch 3 should be trimmed
-        epoched.set(&mut s, 5, Epoch(5), 0)?;
+        epoched.set::<_, GovStore<_>>(&mut s, 5, Epoch(5), 0)?;
         assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(5)));
         assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(3)));
         assert_eq!(data_handler.get(&s, &Epoch(0))?, None);
@@ -1320,7 +1325,7 @@ mod test {
         assert_eq!(data_handler.get(&s, &Epoch(5))?, Some(5));
 
         // Anything before epoch 8 should be trimmed
-        epoched.set(&mut s, 6, Epoch(10), 0)?;
+        epoched.set::<_, GovStore<_>>(&mut s, 6, Epoch(10), 0)?;
         assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(10)));
         assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(8)));
         for epoch in Epoch(0).iter_range(7) {
@@ -1354,25 +1359,25 @@ mod test {
         assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
         assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(0));
 
-        epoched.set(&mut s, 1, Epoch(0), 0)?;
+        epoched.set::<_, GovStore<_>>(&mut s, 1, Epoch(0), 0)?;
         assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(0)));
         assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
         assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
 
-        epoched.set(&mut s, 2, Epoch(1), 0)?;
+        epoched.set::<_, GovStore<_>>(&mut s, 2, Epoch(1), 0)?;
         assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(1)));
         assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
         assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
         assert_eq!(data_handler.get(&s, &Epoch(1))?, Some(2));
 
-        epoched.set(&mut s, 3, Epoch(2), 0)?;
+        epoched.set::<_, GovStore<_>>(&mut s, 3, Epoch(2), 0)?;
         assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(2)));
         assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
         assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
         assert_eq!(data_handler.get(&s, &Epoch(1))?, Some(2));
         assert_eq!(data_handler.get(&s, &Epoch(2))?, Some(3));
 
-        epoched.set(&mut s, 4, Epoch(3), 0)?;
+        epoched.set::<_, GovStore<_>>(&mut s, 4, Epoch(3), 0)?;
         assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(3)));
         assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
         assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
@@ -1380,7 +1385,7 @@ mod test {
         assert_eq!(data_handler.get(&s, &Epoch(2))?, Some(3));
         assert_eq!(data_handler.get(&s, &Epoch(3))?, Some(4));
 
-        epoched.set(&mut s, 5, Epoch(5), 0)?;
+        epoched.set::<_, GovStore<_>>(&mut s, 5, Epoch(5), 0)?;
         assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(5)));
         assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
         assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
@@ -1389,7 +1394,7 @@ mod test {
         assert_eq!(data_handler.get(&s, &Epoch(3))?, Some(4));
         assert_eq!(data_handler.get(&s, &Epoch(5))?, Some(5));
 
-        epoched.set(&mut s, 6, Epoch(10), 0)?;
+        epoched.set::<_, GovStore<_>>(&mut s, 6, Epoch(10), 0)?;
         assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(10)));
         assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
         assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));
@@ -1403,7 +1408,7 @@ mod test {
         assert_eq!(data_handler.get(&s, &Epoch(9))?, None);
         assert_eq!(data_handler.get(&s, &Epoch(10))?, Some(6));
 
-        epoched.add(&mut s, 15, Epoch(10), 0)?;
+        epoched.add::<_, GovStore<_>>(&mut s, 15, Epoch(10), 0)?;
         assert_eq!(epoched.get_last_update(&s)?, Some(Epoch(10)));
         assert_eq!(epoched.get_oldest_epoch(&s)?, Some(Epoch(0)));
         assert_eq!(data_handler.get(&s, &Epoch(0))?, Some(1));

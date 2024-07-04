@@ -36,10 +36,15 @@ use crate::storage::{
     enqueued_slashes_handle, read_all_validator_addresses,
     read_below_capacity_validator_set_addresses,
     read_below_capacity_validator_set_addresses_with_stake,
-    read_below_threshold_validator_set_addresses,
     read_consensus_validator_set_addresses_with_stake,
 };
 use crate::tests::helpers::{advance_epoch, arb_params_and_genesis_validators};
+use crate::tests::{
+    become_validator, bond_tokens, deactivate_validator, find_delegations,
+    process_slashes, reactivate_validator,
+    read_below_threshold_validator_set_addresses, read_pos_params,
+    redelegate_tokens, slash, unbond_tokens, unjail_validator, withdraw_tokens,
+};
 use crate::token::{self, read_balance};
 use crate::types::{
     BondId, EagerRedelegatedBondsMap, GenesisValidator, ReverseOrdTokenAmount,
@@ -47,10 +52,10 @@ use crate::types::{
 };
 use crate::{
     below_capacity_validator_set_handle, consensus_validator_set_handle,
-    is_validator_frozen, read_pos_params, redelegate_tokens,
-    validator_deltas_handle, validator_slashes_handle, validator_state_handle,
-    BondsForRemovalRes, EagerRedelegatedUnbonds, FoldRedelegatedBondsResult,
-    ModifiedRedelegation, RedelegationError, ResultSlashing,
+    is_validator_frozen, validator_deltas_handle, validator_slashes_handle,
+    validator_state_handle, BondsForRemovalRes, EagerRedelegatedUnbonds,
+    FoldRedelegatedBondsResult, ModifiedRedelegation, RedelegationError,
+    ResultSlashing,
 };
 
 prop_state_machine! {
@@ -255,7 +260,7 @@ impl StateMachineTest for ConcretePosState {
         ref_state: &<Self::Reference as ReferenceStateMachine>::State,
         transition: <Self::Reference as ReferenceStateMachine>::Transition,
     ) -> Self::SystemUnderTest {
-        let params = crate::read_pos_params(&state.s).unwrap();
+        let params = read_pos_params(&state.s).unwrap();
         let pos_balance = read_balance(
             &state.s,
             &state.s.in_mem().native_token,
@@ -270,7 +275,7 @@ impl StateMachineTest for ConcretePosState {
 
                 // Need to apply some slashing
                 let current_epoch = state.s.in_mem().block.epoch;
-                crate::slashing::process_slashes(
+                process_slashes(
                     &mut state.s,
                     &mut namada_events::testing::VoidEventSink,
                     current_epoch,
@@ -292,7 +297,7 @@ impl StateMachineTest for ConcretePosState {
                 tracing::debug!("\nCONCRETE Init validator");
                 let current_epoch = state.current_epoch();
 
-                crate::become_validator(
+                become_validator(
                     &mut state.s,
                     crate::BecomeValidator {
                         params: &params,
@@ -364,7 +369,7 @@ impl StateMachineTest for ConcretePosState {
                 );
 
                 // Apply the bond
-                crate::bond_tokens(
+                bond_tokens(
                     &mut state.s,
                     Some(&id.source),
                     &id.validator,
@@ -431,7 +436,7 @@ impl StateMachineTest for ConcretePosState {
                     .unwrap();
 
                 // Apply the unbond
-                crate::unbond_tokens(
+                unbond_tokens(
                     &mut state.s,
                     Some(&id.source),
                     &id.validator,
@@ -482,7 +487,7 @@ impl StateMachineTest for ConcretePosState {
                         .unwrap();
 
                 // Apply the withdrawal
-                let withdrawn = crate::withdraw_tokens(
+                let withdrawn = withdraw_tokens(
                     &mut state.s,
                     Some(&source),
                     &validator,
@@ -575,10 +580,8 @@ impl StateMachineTest for ConcretePosState {
                     .unwrap();
 
                 // Find delegations
-                let delegations_pre = crate::queries::find_delegations(
-                    &state.s, &id.source, &pipeline,
-                )
-                .unwrap();
+                let delegations_pre =
+                    find_delegations(&state.s, &id.source, &pipeline).unwrap();
 
                 // Apply redelegation
                 let result = redelegate_tokens(
@@ -697,10 +700,9 @@ impl StateMachineTest for ConcretePosState {
                     // updated with redelegation. For the source reduced by the
                     // redelegation amount and for the destination increased by
                     // the redelegation amount, less any slashes.
-                    let delegations_post = crate::queries::find_delegations(
-                        &state.s, &id.source, &pipeline,
-                    )
-                    .unwrap();
+                    let delegations_post =
+                        find_delegations(&state.s, &id.source, &pipeline)
+                            .unwrap();
                     let src_delegation_pre = delegations_pre
                         .get(&id.validator)
                         .cloned()
@@ -736,7 +738,7 @@ impl StateMachineTest for ConcretePosState {
                 tracing::debug!("\nCONCRETE Misbehavior");
                 let current_epoch = state.current_epoch();
                 // Record the slash evidence
-                crate::slashing::slash(
+                slash(
                     &mut state.s,
                     &params,
                     current_epoch,
@@ -766,7 +768,7 @@ impl StateMachineTest for ConcretePosState {
                 let current_epoch = state.current_epoch();
 
                 // Unjail the validator
-                crate::unjail_validator(&mut state.s, &address, current_epoch)
+                unjail_validator(&mut state.s, &address, current_epoch)
                     .unwrap();
 
                 // Post-conditions
@@ -778,12 +780,8 @@ impl StateMachineTest for ConcretePosState {
                 let current_epoch = state.current_epoch();
 
                 // Deactivate the validator
-                crate::deactivate_validator(
-                    &mut state.s,
-                    &address,
-                    current_epoch,
-                )
-                .unwrap();
+                deactivate_validator(&mut state.s, &address, current_epoch)
+                    .unwrap();
 
                 // Post-conditions
                 let params = read_pos_params(&state.s).unwrap();
@@ -796,12 +794,8 @@ impl StateMachineTest for ConcretePosState {
                 let current_epoch = state.current_epoch();
 
                 // Reactivate the validator
-                crate::reactivate_validator(
-                    &mut state.s,
-                    &address,
-                    current_epoch,
-                )
-                .unwrap();
+                reactivate_validator(&mut state.s, &address, current_epoch)
+                    .unwrap();
 
                 // Post-conditions
                 let params = read_pos_params(&state.s).unwrap();

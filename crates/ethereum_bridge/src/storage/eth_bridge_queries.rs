@@ -28,7 +28,6 @@ use namada_vote_ext::validator_set_update::{
 
 use crate::storage::proof::BridgePoolRootProof;
 use crate::storage::{active_key, bridge_pool, vote_tallies, whitelist};
-use crate::test_utils::GovStore;
 
 /// Check if the Ethereum Bridge has been enabled at compile time.
 pub const fn is_bridge_comptime_enabled() -> bool {
@@ -413,7 +412,7 @@ where
             .collect();
 
         let total_power =
-            get_total_voting_power::<_, GovStore<_>>(self.state, epoch).into();
+            get_total_voting_power::<_, Gov>(self.state, epoch).into();
         let (validators, voting_powers) = voting_powers_map
             .get_sorted()
             .into_iter()

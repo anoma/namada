@@ -135,7 +135,8 @@ where
     fn from(storage: &WlState<D, H>) -> Self {
         Self::init(
             parameters::read_max_proposal_bytes(storage)
-                .expect("Must be able to read ProposalBytes from storage"),
+                .expect("Must be able to read ProposalBytes from storage")
+                .get(),
             parameters::get_max_block_gas(storage).unwrap(),
         )
     }

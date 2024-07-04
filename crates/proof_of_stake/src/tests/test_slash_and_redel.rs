@@ -23,8 +23,6 @@ use proptest::test_runner::Config;
 // `tracing` logs from tests
 use test_log::test;
 
-use crate::queries::bonds_and_unbonds;
-use crate::slashing::{process_slashes, slash};
 use crate::storage::{
     bond_handle, delegator_redelegated_bonds_handle,
     delegator_redelegated_unbonds_handle, enqueued_slashes_handle,
@@ -40,12 +38,13 @@ use crate::tests::helpers::{
     advance_epoch, arb_genesis_validators, arb_redelegation_amounts,
     test_slashes_with_unbonding_params,
 };
+use crate::tests::{
+    bond_amount, bond_tokens, bonds_and_unbonds, process_slashes,
+    redelegate_tokens, slash, unbond_tokens, withdraw_tokens,
+};
 use crate::token::{credit_tokens, read_balance};
 use crate::types::{BondId, GenesisValidator, Slash, SlashType};
-use crate::{
-    bond_tokens, redelegate_tokens, staking_token_address, token,
-    unbond_tokens, withdraw_tokens, OwnedPosParams, RedelegationError,
-};
+use crate::{staking_token_address, token, OwnedPosParams, RedelegationError};
 
 proptest! {
     // Generate arb valid input for `test_simple_redelegation_aux`
@@ -1320,10 +1319,9 @@ fn test_overslashing_aux(mut validators: Vec<GenesisValidator>) {
         source: validator.clone(),
         validator: validator.clone(),
     };
-    let bond_amount =
-        crate::bond_amount(&storage, &self_bond_id, epoch).unwrap();
+    let amount = bond_amount(&storage, &self_bond_id, epoch).unwrap();
     let exp_bond_amount = offending_stake - exp_slashed_1;
-    assert_eq!(bond_amount, exp_bond_amount);
+    assert_eq!(amount, exp_bond_amount);
 
     // Advance to processing epoch 2
     loop {
@@ -1367,12 +1365,11 @@ fn test_overslashing_aux(mut validators: Vec<GenesisValidator>) {
         validator: validator.clone(),
     };
     let delegation_amount =
-        crate::bond_amount(&storage, &delegation_id, epoch).unwrap();
+        bond_amount(&storage, &delegation_id, epoch).unwrap();
     let exp_del_amount = amount_del - exp_slashed_from_delegation;
     assert_eq!(delegation_amount, exp_del_amount);
 
-    let self_bond_amount =
-        crate::bond_amount(&storage, &self_bond_id, epoch).unwrap();
+    let self_bond_amount = bond_amount(&storage, &self_bond_id, epoch).unwrap();
     let exp_bond_amount = token::Amount::zero();
     assert_eq!(self_bond_amount, exp_bond_amount);
 }
@@ -1640,7 +1637,7 @@ fn test_slashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
 
     let pipeline_epoch = current_epoch + params.pipeline_len;
 
-    let del_bond_amount = crate::bond_amount(
+    let del_bond_amount = bond_amount(
         &storage,
         &BondId {
             source: delegator.clone(),
@@ -1650,7 +1647,7 @@ fn test_slashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
     )
     .unwrap_or_default();
 
-    let self_bond_amount = crate::bond_amount(
+    let self_bond_amount = bond_amount(
         &storage,
         &BondId {
             source: validator1.clone(),
@@ -1660,13 +1657,9 @@ fn test_slashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
     )
     .unwrap_or_default();
 
-    let val_stake = crate::read_validator_stake(
-        &storage,
-        &params,
-        &validator1,
-        pipeline_epoch,
-    )
-    .unwrap();
+    let val_stake =
+        read_validator_stake(&storage, &params, &validator1, pipeline_epoch)
+            .unwrap();
 
     let diff = val_stake - self_bond_amount - del_bond_amount;
     assert!(diff <= 2.into());
@@ -1762,7 +1755,7 @@ fn test_one_slash_per_block_height() {
     let processing_epoch =
         current_epoch + params.slash_processing_epoch_offset();
     let enqueue = |stg: &mut TestState, slash: &Slash, validator: &Address| {
-        crate::slashing::slash(
+        crate::tests::slash(
             stg,
             &params,
             current_epoch,
