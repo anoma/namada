@@ -329,6 +329,8 @@ pub struct TxShieldedTransfer<C: NamadaTypes = SdkTypes> {
     pub tx: Tx<C>,
     /// Transfer-specific data
     pub data: Vec<TxShieldedTransferData<C>>,
+    /// Optional additional keys for gas payment
+    pub gas_spending_keys: Vec<C::SpendingKey>,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -397,6 +399,8 @@ pub struct TxUnshieldingTransfer<C: NamadaTypes = SdkTypes> {
     pub source: C::SpendingKey,
     /// Transfer-specific data
     pub data: Vec<TxUnshieldingTransferData<C>>,
+    /// Optional additional keys for gas payment
+    pub gas_spending_keys: Vec<C::SpendingKey>,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -436,6 +440,8 @@ pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
     pub refund_target: Option<C::TransferTarget>,
     /// Memo
     pub memo: Option<String>,
+    /// Optional additional keys for gas payment
+    pub gas_spending_keys: Vec<C::SpendingKey>,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -511,6 +517,17 @@ impl<C: NamadaTypes> TxIbcTransfer<C> {
     pub fn memo(self, memo: String) -> Self {
         Self {
             memo: Some(memo),
+            ..self
+        }
+    }
+
+    /// Gas spending keys
+    pub fn gas_spending_keys(
+        self,
+        gas_spending_keys: Vec<C::SpendingKey>,
+    ) -> Self {
+        Self {
+            gas_spending_keys,
             ..self
         }
     }

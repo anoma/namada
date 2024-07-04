@@ -3249,6 +3249,8 @@ pub mod args {
         "gas-limit",
         DefaultFn(|| GasLimit::from(DEFAULT_GAS_LIMIT)),
     );
+    pub const GAS_SPENDING_KEY: ArgOpt<WalletSpendingKey> =
+        arg_opt("gas-spending-key");
     pub const FEE_TOKEN: ArgDefaultFromCtx<WalletAddrOrNativeToken> =
         arg_default_from_ctx("gas-token", DefaultFn(|| "".parse().unwrap()));
     pub const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
@@ -4443,9 +4445,16 @@ pub mod args {
                 });
             }
 
+            let gas_spending_keys = self
+                .gas_spending_keys
+                .iter()
+                .map(|key| chain_ctx.get_cached(key))
+                .collect();
+
             Ok(TxShieldedTransfer::<SdkTypes> {
                 tx,
                 data,
+                gas_spending_keys,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -4465,10 +4474,15 @@ pub mod args {
                 token,
                 amount,
             }];
+            let mut gas_spending_keys = vec![];
+            if let Some(key) = GAS_SPENDING_KEY.parse(matches) {
+                gas_spending_keys.push(key);
+            }
 
             Self {
                 tx,
                 data,
+                gas_spending_keys,
                 tx_code_path,
             }
         }
@@ -4491,6 +4505,10 @@ pub mod args {
                         .def()
                         .help(wrap!("The amount to transfer in decimal.")),
                 )
+                .arg(GAS_SPENDING_KEY.def().help(wrap!(
+                    "The optional spending key that will be used in addition \
+                     to the source for gas payment."
+                )))
         }
     }
 
@@ -4584,10 +4602,16 @@ pub mod args {
                     amount: transfer_data.amount,
                 });
             }
+            let gas_spending_keys = self
+                .gas_spending_keys
+                .iter()
+                .map(|key| chain_ctx.get_cached(key))
+                .collect();
 
             Ok(TxUnshieldingTransfer::<SdkTypes> {
                 tx,
                 data,
+                gas_spending_keys,
                 source: chain_ctx.get_cached(&self.source),
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
@@ -4607,11 +4631,16 @@ pub mod args {
                 token,
                 amount,
             }];
+            let mut gas_spending_keys = vec![];
+            if let Some(key) = GAS_SPENDING_KEY.parse(matches) {
+                gas_spending_keys.push(key);
+            }
 
             Self {
                 tx,
                 source,
                 data,
+                gas_spending_keys,
                 tx_code_path,
             }
         }
@@ -4634,6 +4663,10 @@ pub mod args {
                         .def()
                         .help(wrap!("The amount to transfer in decimal.")),
                 )
+                .arg(GAS_SPENDING_KEY.def().help(wrap!(
+                    "The optional spending key that will be used in addition \
+                     to the source for gas payment."
+                )))
         }
     }
 
@@ -4646,6 +4679,11 @@ pub mod args {
         ) -> Result<TxIbcTransfer<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx)?;
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
+            let gas_spending_keys = self
+                .gas_spending_keys
+                .iter()
+                .map(|key| chain_ctx.get_cached(key))
+                .collect();
 
             Ok(TxIbcTransfer::<SdkTypes> {
                 tx,
@@ -4659,6 +4697,7 @@ pub mod args {
                 timeout_sec_offset: self.timeout_sec_offset,
                 refund_target: chain_ctx.get_opt(&self.refund_target),
                 memo: self.memo,
+                gas_spending_keys,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -4680,6 +4719,10 @@ pub mod args {
                 std::fs::read_to_string(path)
                     .expect("Expected a file at given path")
             });
+            let mut gas_spending_keys = vec![];
+            if let Some(key) = GAS_SPENDING_KEY.parse(matches) {
+                gas_spending_keys.push(key);
+            }
             let tx_code_path = PathBuf::from(TX_IBC_WASM);
             Self {
                 tx,
@@ -4693,6 +4736,7 @@ pub mod args {
                 timeout_sec_offset,
                 refund_target,
                 memo,
+                gas_spending_keys,
                 tx_code_path,
             }
         }
@@ -4728,6 +4772,11 @@ pub mod args {
                 )))
                 .arg(IBC_TRANSFER_MEMO_PATH.def().help(wrap!(
                     "The path for the memo field of ICS20 transfer."
+                )))
+                .arg(GAS_SPENDING_KEY.def().help(wrap!(
+                    "The optional spending key that will be used in addition \
+                     to the source for gas payment (if this is a shielded \
+                     action)."
                 )))
         }
     }

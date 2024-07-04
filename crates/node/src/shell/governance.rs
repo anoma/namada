@@ -432,7 +432,7 @@ where
             .get_inner_tx_result(None, either::Right(&cmt))
         {
             Some(Ok(batched_result)) if batched_result.is_accepted() => {
-                shell.state.commit_tx();
+                shell.state.commit_tx_batch();
                 Ok(true)
             }
             Some(Err(e)) => {
@@ -440,12 +440,12 @@ where
                     "Error executing governance proposal {}",
                     e.to_string()
                 );
-                shell.state.drop_tx();
+                shell.state.drop_tx_batch();
                 Ok(false)
             }
             _ => {
                 tracing::warn!("not sure what happen");
-                shell.state.drop_tx();
+                shell.state.drop_tx_batch();
                 Ok(false)
             }
         },
@@ -454,7 +454,7 @@ where
                 "Error executing governance proposal {}",
                 e.error.to_string()
             );
-            shell.state.drop_tx();
+            shell.state.drop_tx_batch();
             Ok(false)
         }
     }

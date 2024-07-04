@@ -7,6 +7,7 @@ use std::fmt::Debug;
 use std::path::PathBuf;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use itertools::Itertools;
 use masp_primitives::asset_type::AssetType;
 #[cfg(feature = "mainnet")]
 use masp_primitives::consensus::MainNetwork as Network;
@@ -35,6 +36,7 @@ use masp_primitives::transaction::{Authorization, Authorized, Transaction};
 use masp_primitives::zip32::{ExtendedFullViewingKey, ExtendedSpendingKey};
 use masp_proofs::prover::LocalTxProver;
 use namada_core::address::Address;
+use namada_core::arith::CheckedAdd;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::dec::Dec;
 pub use namada_core::masp::{
@@ -60,12 +62,15 @@ use namada_token::{self as token, Denomination, MaspDigitPos};
 use namada_tx::{IndexedTx, Tx};
 use rand::rngs::StdRng;
 use rand_core::{CryptoRng, OsRng, RngCore, SeedableRng};
+use smooth_operator::checked;
 use thiserror::Error;
 
 use crate::error::{Error, QueryError};
 use crate::io::Io;
 use crate::queries::Client;
-use crate::rpc::{query_block, query_conversion, query_denom};
+use crate::rpc::{
+    query_block, query_conversion, query_denom, query_native_token,
+};
 use crate::{display_line, edisplay_line, rpc, MaybeSend, MaybeSync, Namada};
 
 /// Randomness seed for MASP integration tests to build proofs with
@@ -94,6 +99,16 @@ pub struct ShieldedTransfer {
     pub epoch: MaspEpoch,
 }
 
+/// The data for a masp fee payment
+#[allow(missing_docs)]
+#[derive(Debug)]
+pub struct MaspFeeData {
+    pub sources: Vec<namada_core::masp::ExtendedSpendingKey>,
+    pub target: Address,
+    pub token: Address,
+    pub amount: token::DenominatedAmount,
+}
+
 /// The data for a single masp transfer
 #[allow(missing_docs)]
 #[derive(Debug)]
@@ -103,6 +118,41 @@ pub struct MaspTransferData {
     pub token: Address,
     pub amount: token::DenominatedAmount,
 }
+
+// The data for a masp transfer relative to a given source
+#[derive(Hash, Eq, PartialEq)]
+struct MaspSourceTransferData {
+    source: TransferSource,
+    token: Address,
+}
+
+// The data for a masp transfer relative to a given target
+#[derive(Hash, Eq, PartialEq)]
+struct MaspTargetTransferData {
+    source: TransferSource,
+    target: TransferTarget,
+    token: Address,
+}
+
+/// Data to log masp transactions' errors
+#[allow(missing_docs)]
+#[derive(Debug)]
+pub struct MaspDataLog {
+    pub source: Option<TransferSource>,
+    pub token: Address,
+    pub amount: token::DenominatedAmount,
+}
+
+struct MaspTxReorderedData {
+    source_data: HashMap<MaspSourceTransferData, token::DenominatedAmount>,
+    target_data: HashMap<MaspTargetTransferData, token::DenominatedAmount>,
+    denoms: HashMap<Address, Denomination>,
+}
+
+// Data about the unspent amounts for any given shielded source coming from the
+// spent notes in their posses that have been added to the builder. Can be used
+// to either pay fees or to return a change
+type Changes = HashMap<namada_core::masp::ExtendedSpendingKey, I128Sum>;
 
 /// Shielded pool data for a token
 #[allow(missing_docs)]
@@ -126,7 +176,7 @@ pub enum TransferErr {
         /// The error
         error: builder::Error<std::convert::Infallible>,
         /// The optional associated transfer data for logging purposes
-        data: Option<MaspTransferData>,
+        data: Option<MaspDataLog>,
     },
     /// errors
     #[error("{0}")]
@@ -209,15 +259,62 @@ pub fn find_valid_diversifier<R: RngCore + CryptoRng>(
 }
 
 /// Determine if using the current note would actually bring us closer to our
-/// target
-pub fn is_amount_required(src: I128Sum, dest: I128Sum, delta: I128Sum) -> bool {
-    let gap = dest - src;
+/// target. Returns the unused amounts (change) of delta if any
+pub fn is_amount_required(
+    src: I128Sum,
+    dest: I128Sum,
+    normed_delta: I128Sum,
+    opt_delta: Option<I128Sum>,
+) -> Option<I128Sum> {
+    let mut changes = None;
+    let gap = dest.clone() - src;
+
     for (asset_type, value) in gap.components() {
-        if *value > 0 && delta[asset_type] > 0 {
-            return true;
+        if *value > 0 && normed_delta[asset_type] > 0 {
+            let signed_change_amt =
+                checked!(normed_delta[asset_type] - *value).unwrap_or_default();
+            let unsigned_change_amt = if signed_change_amt > 0 {
+                signed_change_amt
+            } else {
+                // Even if there's no change we still need to set the return
+                // value of this function to be Some so that the caller sees
+                // that this note should be used
+                0
+            };
+
+            let change_amt = I128Sum::from_nonnegative(
+                asset_type.to_owned(),
+                unsigned_change_amt,
+            )
+            .expect("Change is guaranteed to be non-negative");
+            changes = changes
+                .map(|prev| prev + change_amt.clone())
+                .or(Some(change_amt));
         }
     }
-    false
+
+    // Because of the way conversions are computed, we need an extra step here
+    // if the token is not the native one
+    if let Some(delta) = opt_delta {
+        // Only if this note is going to be used, handle the assets in delta
+        // (not normalized) that are not part of dest
+        changes = changes.map(|mut chngs| {
+            for (delta_asset_type, delta_amt) in delta.components() {
+                if !dest.asset_types().contains(delta_asset_type) {
+                    let rmng = I128Sum::from_nonnegative(
+                        delta_asset_type.to_owned(),
+                        *delta_amt,
+                    )
+                    .expect("Change is guaranteed to be non-negative");
+                    chngs += rmng;
+                }
+            }
+
+            chngs
+        });
+    }
+
+    changes
 }
 
 /// a masp change
@@ -231,6 +328,11 @@ pub struct MaspChange {
 
 /// a masp amount
 pub type MaspAmount = ValueSum<(Option<MaspEpoch>, Address), token::Change>;
+
+// A type tracking the notes used to construct a shielded transfer. Used to
+// avoid reusing the same notes multiple times which would lead to an invalid
+// transaction
+type SpentNotesTracker = HashMap<ViewingKey, HashSet<usize>>;
 
 /// An extension of Option's cloned method for pair types
 fn cloned_pair<T: Clone, U: Clone>((a, b): (&T, &U)) -> (T, U) {
@@ -1058,13 +1160,17 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     /// Collect enough unspent notes in this context to exceed the given amount
     /// of the specified asset type. Return the total value accumulated plus
     /// notes and the corresponding diversifiers/merkle paths that were used to
-    /// achieve the total value.
+    /// achieve the total value. Updates the changes map.
+    #[allow(clippy::too_many_arguments)]
     pub async fn collect_unspent_notes(
         &mut self,
         context: &impl Namada,
-        vk: &ViewingKey,
+        spent_notes: &mut SpentNotesTracker,
+        sk: namada_core::masp::ExtendedSpendingKey,
+        is_native_token: bool,
         target: I128Sum,
         target_epoch: MaspEpoch,
+        changes: &mut Changes,
     ) -> Result<
         (
             I128Sum,
@@ -1073,6 +1179,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         ),
         Error,
     > {
+        let vk = &to_viewing_key(&sk.into()).vk;
         // TODO: we should try to use the smallest notes possible to fund the
         // transaction to allow people to fetch less often
         // Establish connection with which to do exchange rate queries
@@ -1080,15 +1187,24 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         let mut val_acc = I128Sum::zero();
         let mut normed_val_acc = I128Sum::zero();
         let mut notes = Vec::new();
+
         // Retrieve the notes that can be spent by this key
         if let Some(avail_notes) = self.pos_map.get(vk).cloned() {
             for note_idx in &avail_notes {
+                // Skip spend notes already used in this transaction
+                if spent_notes
+                    .get(vk)
+                    .is_some_and(|set| set.contains(note_idx))
+                {
+                    continue;
+                }
                 // No more transaction inputs are required once we have met
                 // the target amount
                 if normed_val_acc >= target {
                     break;
                 }
-                // Spent notes cannot contribute a new transaction's pool
+                // Spent notes from the shielded context (i.e. from previous
+                // transactions) cannot contribute a new transaction's pool
                 if self.spents.contains(note_idx) {
                     continue;
                 }
@@ -1110,16 +1226,29 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     )
                     .await?;
 
+                let opt_delta = if is_native_token {
+                    None
+                } else {
+                    Some(contr.clone())
+                };
                 // Use this note only if it brings us closer to our target
-                if is_amount_required(
+                if let Some(change) = is_amount_required(
                     normed_val_acc.clone(),
                     target.clone(),
                     normed_contr.clone(),
+                    opt_delta,
                 ) {
                     // Be sure to record the conversions used in computing
                     // accumulated value
                     val_acc += contr;
                     normed_val_acc += normed_contr;
+
+                    // Update the changes
+                    changes
+                        .entry(sk)
+                        .and_modify(|amt| *amt += &change)
+                        .or_insert(change);
+
                     // Commit the conversions that were used to exchange
                     conversions = proposed_convs;
                     let merkle_path = self
@@ -1145,6 +1274,13 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                         })?;
                     // Commit this note to our transaction
                     notes.push((*diversifier, note, merkle_path));
+                    // Append the note the list of used ones
+                    spent_notes
+                        .entry(vk.to_owned())
+                        .and_modify(|set| {
+                            set.insert(*note_idx);
+                        })
+                        .or_insert([*note_idx].into_iter().collect());
                 }
             }
         }
@@ -1250,6 +1386,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     pub async fn gen_shielded_transfer(
         context: &impl Namada,
         data: Vec<MaspTransferData>,
+        fee_data: Option<MaspFeeData>,
         update_ctx: bool,
     ) -> Result<Option<ShieldedTransfer>, TransferErr> {
         // Try to get a seed from env var, if any.
@@ -1323,286 +1460,89 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         // Determine epoch in which to submit potential shielded transaction
         let epoch = rpc::query_masp_epoch(context.client()).await?;
 
-        let mut is_context_loaded = false;
-        for MaspTransferData {
-            source,
+        let mut notes_tracker = SpentNotesTracker::new();
+        {
+            // Load the current shielded context given
+            // the spending key we possess
+            let mut shielded = context.shielded_mut().await;
+            let _ = shielded.load().await;
+        }
+
+        let Some(MaspTxReorderedData {
+            source_data,
+            target_data,
+            mut denoms,
+        }) = Self::reorder_data_for_masp_transfer(context, data).await?
+        else {
+            // No shielded components are needed when neither source nor
+            // destination are shielded
+            return Ok(None);
+        };
+        let mut changes = Changes::default();
+
+        for (MaspSourceTransferData { source, token }, amount) in &source_data {
+            Self::add_inputs(
+                context,
+                &mut builder,
+                source,
+                token,
+                amount,
+                epoch,
+                &denoms,
+                &mut notes_tracker,
+                &mut changes,
+            )
+            .await?;
+        }
+
+        for (
+            MaspTargetTransferData {
+                source,
+                target,
+                token,
+            },
+            amount,
+        ) in target_data
+        {
+            Self::add_outputs(
+                context,
+                &mut builder,
+                source,
+                &target,
+                token,
+                amount,
+                epoch,
+                &denoms,
+            )
+            .await?;
+        }
+
+        // Collect the fees if needed
+        if let Some(MaspFeeData {
+            sources,
             target,
             token,
             amount,
-        } in data
+        }) = fee_data
         {
-            let spending_key = source.spending_key();
-            let payment_address = target.payment_address();
-            // No shielded components are needed when neither source nor
-            // destination are shielded
-            if spending_key.is_none() && payment_address.is_none() {
-                return Ok(None);
-            }
-            // We want to fund our transaction solely from supplied spending key
-            let spending_key = spending_key.map(|x| x.into());
-            {
-                if !is_context_loaded {
-                    // Load the current shielded context (at most once) given
-                    // the spending key we possess
-                    let mut shielded = context.shielded_mut().await;
-                    let _ = shielded.load().await;
-                    is_context_loaded = true;
-                }
-            }
-            // Context required for storing which notes are in the source's
-            // possession
-            let memo = MemoBytes::empty();
-
-            // Now we build up the transaction within this object
-
-            // Convert transaction amount into MASP types
-            let Some(denom) = query_denom(context.client(), &token).await
-            else {
-                return Err(TransferErr::General(Error::from(
-                    QueryError::General(format!(
-                        "denomination for token {token}"
-                    )),
-                )));
-            };
-            let (asset_types, masp_amount) = {
-                let mut shielded = context.shielded_mut().await;
-                // Do the actual conversion to an asset type
-                let amount = shielded
-                    .convert_amount(
-                        context.client(),
-                        epoch,
-                        &token,
-                        denom,
-                        amount.amount(),
-                    )
-                    .await?;
-                // Make sure to save any decodings of the asset types used so
-                // that balance queries involving them are
-                // successful
-                let _ = shielded.save().await;
-                amount
-            };
-
-            // If there are shielded inputs
-            if let Some(sk) = spending_key {
-                // Locate unspent notes that can help us meet the transaction
-                // amount
-                let (_, unspent_notes, used_convs) = context
-                    .shielded_mut()
-                    .await
-                    .collect_unspent_notes(
-                        context,
-                        &to_viewing_key(&sk).vk,
-                        I128Sum::from_sum(masp_amount),
-                        epoch,
-                    )
-                    .await?;
-                // Commit the notes found to our transaction
-                for (diversifier, note, merkle_path) in unspent_notes {
-                    builder
-                        .add_sapling_spend(sk, diversifier, note, merkle_path)
-                        .map_err(|e| TransferErr::Build {
-                            error: builder::Error::SaplingBuild(e),
-                            data: None,
-                        })?;
-                }
-                // Commit the conversion notes used during summation
-                for (conv, wit, value) in used_convs.values() {
-                    if value.is_positive() {
-                        builder
-                            .add_sapling_convert(
-                                conv.clone(),
-                                *value as u64,
-                                wit.clone(),
-                            )
-                            .map_err(|e| TransferErr::Build {
-                                error: builder::Error::SaplingBuild(e),
-                                data: None,
-                            })?;
-                    }
-                }
-            } else {
-                // We add a dummy UTXO to our transaction, but only the source
-                // of the parent Transfer object is used to
-                // validate fund availability
-                let script = source
-                    .t_addr_data()
-                    .ok_or_else(|| {
-                        Error::Other(
-                            "source address should be transparent".to_string(),
-                        )
-                    })?
-                    .taddress();
-
-                for (digit, asset_type) in
-                    MaspDigitPos::iter().zip(asset_types.iter())
-                {
-                    let amount_part = digit.denominate(&amount.amount());
-                    // Skip adding an input if its value is 0
-                    if amount_part != 0 {
-                        builder
-                            .add_transparent_input(TxOut {
-                                asset_type: *asset_type,
-                                value: amount_part,
-                                address: script,
-                            })
-                            .map_err(|e| TransferErr::Build {
-                                error: builder::Error::TransparentBuild(e),
-                                data: None,
-                            })?;
-                    }
-                }
-            }
-
-            // Anotate the asset type in the value balance with its decoding in
-            // order to facilitate cross-epoch computations
-            let value_balance = builder.value_balance();
-            let value_balance = context
-                .shielded_mut()
-                .await
-                .decode_sum(context.client(), value_balance)
-                .await;
-
-            // This indicates how many more assets need to be sent to the
-            // receiver in order to satisfy the requested transfer
-            // amount.
-            let mut rem_amount = amount.amount().raw_amount().0;
-            // If we are sending to a shielded address, we may need the outgoing
-            // viewing key in the following computations.
-            let ovk_opt = spending_key.map(|x| x.expsk.ovk);
-
-            // Now handle the outputs of this transaction
-            // Loop through the value balance components and see which
-            // ones can be given to the receiver
-            for ((asset_type, decoded), val) in value_balance.components() {
-                let rem_amount = &mut rem_amount[decoded.position as usize];
-                // Only asset types with the correct token can contribute. But
-                // there must be a demonstrated need for it.
-                if decoded.token == token
-                    && decoded.denom == denom
-                    && decoded
-                        .epoch
-                        .map_or(true, |vbal_epoch| vbal_epoch <= epoch)
-                    && *rem_amount > 0
-                {
-                    let val = u128::try_from(*val).expect(
-                        "value balance in absence of output descriptors \
-                         should be non-negative",
-                    );
-                    // We want to take at most the remaining quota for the
-                    // current denomination to the receiver
-                    let contr = std::cmp::min(*rem_amount as u128, val) as u64;
-                    // Make transaction output tied to the current token,
-                    // denomination, and epoch.
-                    if let Some(pa) = payment_address {
-                        // If there is a shielded output
-                        builder
-                            .add_sapling_output(
-                                ovk_opt,
-                                pa.into(),
-                                *asset_type,
-                                contr,
-                                memo.clone(),
-                            )
-                            .map_err(|e| TransferErr::Build {
-                                error: builder::Error::SaplingBuild(e),
-                                data: None,
-                            })?;
-                    } else if let Some(t_addr_data) = target.t_addr_data() {
-                        // If there is a transparent output
-                        builder
-                            .add_transparent_output(
-                                &t_addr_data.taddress(),
-                                *asset_type,
-                                contr,
-                            )
-                            .map_err(|e| TransferErr::Build {
-                                error: builder::Error::TransparentBuild(e),
-                                data: None,
-                            })?;
-                    } else {
-                        return Result::Err(TransferErr::from(Error::Other(
-                            "transaction target must be a payment address or \
-                             Namada address or IBC address"
-                                .to_string(),
-                        )));
-                    }
-                    // Lower what is required of the remaining contribution
-                    *rem_amount -= contr;
-                }
-            }
-
-            // Nothing must remain to be included in output
-            if rem_amount != [0; 4] {
-                // Convert the shortfall into a I128Sum
-                let mut shortfall = I128Sum::zero();
-                for (asset_type, val) in asset_types.iter().zip(rem_amount) {
-                    shortfall += I128Sum::from_pair(*asset_type, val.into());
-                }
-                // Return an insufficient ffunds error
-                return Result::Err(TransferErr::Build {
-                    error: builder::Error::InsufficientFunds(shortfall),
-                    data: Some(MaspTransferData {
-                        source,
-                        target,
-                        token,
-                        amount,
-                    }),
-                });
-            }
-
-            // Now add outputs representing the change from this payment
-            if let Some(sk) = spending_key {
-                // Represents the amount of inputs we are short by
-                let mut additional = I128Sum::zero();
-                for (asset_type, amt) in builder.value_balance().components() {
-                    match amt.cmp(&0) {
-                        Ordering::Greater => {
-                            // Send the change in this asset type back to the
-                            // sender
-                            builder
-                                .add_sapling_output(
-                                    Some(sk.expsk.ovk),
-                                    sk.default_address().1,
-                                    *asset_type,
-                                    *amt as u64,
-                                    memo.clone(),
-                                )
-                                .map_err(|e| TransferErr::Build {
-                                    error: builder::Error::SaplingBuild(e),
-                                    data: None,
-                                })?;
-                        }
-                        Ordering::Less => {
-                            // Record how much of the current asset type we are
-                            // short by
-                            additional +=
-                                I128Sum::from_nonnegative(*asset_type, -*amt)
-                                    .map_err(|()| {
-                                    Error::Other(format!(
-                                        "from non negative conversion: {}",
-                                        line!()
-                                    ))
-                                })?;
-                        }
-                        Ordering::Equal => {}
-                    }
-                }
-                // If we are short by a non-zero amount, then we have
-                // insufficient funds
-                if !additional.is_zero() {
-                    return Result::Err(TransferErr::Build {
-                        error: builder::Error::InsufficientFunds(additional),
-                        data: Some(MaspTransferData {
-                            source,
-                            target,
-                            token,
-                            amount,
-                        }),
-                    });
-                }
-            }
+            Self::add_fees(
+                context,
+                &mut builder,
+                &source_data,
+                sources,
+                &target,
+                &token,
+                &amount,
+                epoch,
+                &mut denoms,
+                &mut notes_tracker,
+                &mut changes,
+            )
+            .await?;
         }
+
+        // Finally, add outputs representing the change from this payment.
+        Self::add_changes(&mut builder, changes)?;
 
         let builder_clone = builder.clone().map_builder(WalletMap);
         // Build and return the constructed transaction
@@ -1633,6 +1573,636 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             metadata,
             epoch,
         }))
+    }
+
+    // Group all the information for every source/token and target/token couple,
+    // and extract the denominations for all the tokens involved (expect the one
+    // involved in the fees if needed). This step is required so that we can
+    // collect the amount required for every couple and pass it to the
+    // appropriate function so that notes can be collected based on the correct
+    // amount.
+    async fn reorder_data_for_masp_transfer(
+        context: &impl Namada,
+        data: Vec<MaspTransferData>,
+    ) -> Result<Option<MaspTxReorderedData>, TransferErr> {
+        let mut source_data =
+            HashMap::<MaspSourceTransferData, token::DenominatedAmount>::new();
+        let mut target_data =
+            HashMap::<MaspTargetTransferData, token::DenominatedAmount>::new();
+        let mut denoms = HashMap::new();
+
+        for MaspTransferData {
+            source,
+            target,
+            token,
+            amount,
+        } in data
+        {
+            let spending_key = source.spending_key();
+            let payment_address = target.payment_address();
+            // No shielded components are needed when neither source nor
+            // destination are shielded
+            if spending_key.is_none() && payment_address.is_none() {
+                return Ok(None);
+            }
+
+            if denoms.get(&token).is_none() {
+                if let Some(denom) = query_denom(context.client(), &token).await
+                {
+                    denoms.insert(token.clone(), denom);
+                } else {
+                    return Err(TransferErr::General(Error::from(
+                        QueryError::General(format!(
+                            "denomination for token {token}"
+                        )),
+                    )));
+                };
+            }
+
+            let key = MaspSourceTransferData {
+                source: source.clone(),
+                token: token.clone(),
+            };
+            match source_data.get_mut(&key) {
+                Some(prev_amount) => {
+                    *prev_amount = checked!(prev_amount.to_owned() + amount)
+                        .map_err(|e| TransferErr::General(e.into()))?;
+                }
+                None => {
+                    source_data.insert(key, amount);
+                }
+            }
+
+            let key = MaspTargetTransferData {
+                source,
+                target,
+                token,
+            };
+            match target_data.get_mut(&key) {
+                Some(prev_amount) => {
+                    *prev_amount = checked!(prev_amount.to_owned() + amount)
+                        .map_err(|e| TransferErr::General(e.into()))?;
+                }
+                None => {
+                    target_data.insert(key, amount);
+                }
+            }
+        }
+
+        Ok(Some(MaspTxReorderedData {
+            source_data,
+            target_data,
+            denoms,
+        }))
+    }
+
+    // Add the necessary transaction inputs to the builder.
+    #[allow(clippy::too_many_arguments)]
+    async fn add_inputs(
+        context: &impl Namada,
+        builder: &mut Builder<Network>,
+        source: &TransferSource,
+        token: &Address,
+        amount: &token::DenominatedAmount,
+        epoch: MaspEpoch,
+        denoms: &HashMap<Address, Denomination>,
+        notes_tracker: &mut SpentNotesTracker,
+        changes: &mut Changes,
+    ) -> Result<Option<I128Sum>, TransferErr> {
+        // We want to fund our transaction solely from supplied spending key
+        let spending_key = source.spending_key();
+
+        // Now we build up the transaction within this object
+
+        // Convert transaction amount into MASP types
+        // Ok to unwrap cause we've already seen the token before, the
+        // denomination must be there
+        let denom = denoms.get(token).unwrap();
+        let (asset_types, masp_amount) = {
+            let mut shielded = context.shielded_mut().await;
+            // Do the actual conversion to an asset type
+            let amount = shielded
+                .convert_namada_amount_to_masp(
+                    context.client(),
+                    epoch,
+                    token,
+                    denom.to_owned(),
+                    amount.amount(),
+                )
+                .await?;
+            // Make sure to save any decodings of the asset types used so
+            // that balance queries involving them are
+            // successful
+            let _ = shielded.save().await;
+            amount
+        };
+
+        // If there are shielded inputs
+        let added_amt = if let Some(sk) = spending_key {
+            let is_native_token =
+                &query_native_token(context.client()).await? == token;
+            // Locate unspent notes that can help us meet the transaction
+            // amount
+            let (added_amount, unspent_notes, used_convs) = context
+                .shielded_mut()
+                .await
+                .collect_unspent_notes(
+                    context,
+                    notes_tracker,
+                    sk,
+                    is_native_token,
+                    I128Sum::from_sum(masp_amount),
+                    epoch,
+                    changes,
+                )
+                .await?;
+            // Commit the notes found to our transaction
+            for (diversifier, note, merkle_path) in unspent_notes {
+                builder
+                    .add_sapling_spend(
+                        sk.into(),
+                        diversifier,
+                        note,
+                        merkle_path,
+                    )
+                    .map_err(|e| TransferErr::Build {
+                        error: builder::Error::SaplingBuild(e),
+                        data: None,
+                    })?;
+            }
+            // Commit the conversion notes used during summation
+            for (conv, wit, value) in used_convs.values() {
+                if value.is_positive() {
+                    builder
+                        .add_sapling_convert(
+                            conv.clone(),
+                            *value as u64,
+                            wit.clone(),
+                        )
+                        .map_err(|e| TransferErr::Build {
+                            error: builder::Error::SaplingBuild(e),
+                            data: None,
+                        })?;
+                }
+            }
+
+            Some(added_amount)
+        } else {
+            // We add a dummy UTXO to our transaction, but only the source
+            // of the parent Transfer object is used to
+            // validate fund availability
+            let script = source
+                .t_addr_data()
+                .ok_or_else(|| {
+                    Error::Other(
+                        "source address should be transparent".to_string(),
+                    )
+                })?
+                .taddress();
+
+            for (digit, asset_type) in
+                MaspDigitPos::iter().zip(asset_types.iter())
+            {
+                let amount_part = digit.denominate(&amount.amount());
+                // Skip adding an input if its value is 0
+                if amount_part != 0 {
+                    builder
+                        .add_transparent_input(TxOut {
+                            asset_type: *asset_type,
+                            value: amount_part,
+                            address: script,
+                        })
+                        .map_err(|e| TransferErr::Build {
+                            error: builder::Error::TransparentBuild(e),
+                            data: None,
+                        })?;
+                }
+            }
+
+            None
+        };
+
+        Ok(added_amt)
+    }
+
+    // Add the necessary transaction outputs to the builder
+    #[allow(clippy::too_many_arguments)]
+    async fn add_outputs(
+        context: &impl Namada,
+        builder: &mut Builder<Network>,
+        source: TransferSource,
+        target: &TransferTarget,
+        token: Address,
+        amount: token::DenominatedAmount,
+        epoch: MaspEpoch,
+        denoms: &HashMap<Address, Denomination>,
+    ) -> Result<(), TransferErr> {
+        // Anotate the asset type in the value balance with its decoding in
+        // order to facilitate cross-epoch computations
+        let value_balance = context
+            .shielded_mut()
+            .await
+            .decode_sum(context.client(), builder.value_balance())
+            .await;
+
+        let payment_address = target.payment_address();
+
+        // This indicates how many more assets need to be sent to the
+        // receiver in order to satisfy the requested transfer
+        // amount.
+        let mut rem_amount = amount.amount().raw_amount().0;
+
+        // Ok to unwrap cause we've already seen the token before, the
+        // denomination must be there
+        let denom = denoms.get(&token).unwrap();
+
+        // Now handle the outputs of this transaction
+        // Loop through the value balance components and see which
+        // ones can be given to the receiver
+        for ((asset_type, decoded), val) in value_balance.components() {
+            let rem_amount = &mut rem_amount[decoded.position as usize];
+            // Only asset types with the correct token can contribute. But
+            // there must be a demonstrated need for it.
+            if decoded.token == token
+                && &decoded.denom == denom
+                && decoded.epoch.map_or(true, |vbal_epoch| vbal_epoch <= epoch)
+                && *rem_amount > 0
+            {
+                let val = u128::try_from(*val).expect(
+                    "value balance in absence of output descriptors should be \
+                     non-negative",
+                );
+                // We want to take at most the remaining quota for the
+                // current denomination to the receiver
+                let contr = std::cmp::min(*rem_amount as u128, val) as u64;
+                // If we are sending to a shielded address, we need the outgoing
+                // viewing key in the following computations.
+                let ovk_opt = source
+                    .spending_key()
+                    .map(|x| ExtendedSpendingKey::from(x).expsk.ovk);
+                // Make transaction output tied to the current token,
+                // denomination, and epoch.
+                if let Some(pa) = payment_address {
+                    // If there is a shielded output
+                    builder
+                        .add_sapling_output(
+                            ovk_opt,
+                            pa.into(),
+                            *asset_type,
+                            contr,
+                            MemoBytes::empty(),
+                        )
+                        .map_err(|e| TransferErr::Build {
+                            error: builder::Error::SaplingBuild(e),
+                            data: None,
+                        })?;
+                } else if let Some(t_addr_data) = target.t_addr_data() {
+                    // If there is a transparent output
+                    builder
+                        .add_transparent_output(
+                            &t_addr_data.taddress(),
+                            *asset_type,
+                            contr,
+                        )
+                        .map_err(|e| TransferErr::Build {
+                            error: builder::Error::TransparentBuild(e),
+                            data: None,
+                        })?;
+                } else {
+                    return Result::Err(TransferErr::from(Error::Other(
+                        "transaction target must be a payment address or \
+                         Namada address or IBC address"
+                            .to_string(),
+                    )));
+                }
+                // Lower what is required of the remaining contribution
+                *rem_amount -= contr;
+            }
+        }
+
+        // Nothing must remain to be included in output
+        if rem_amount != [0; 4] {
+            let (asset_types, _) = {
+                let mut shielded = context.shielded_mut().await;
+                // Do the actual conversion to an asset type
+                let amount = shielded
+                    .convert_namada_amount_to_masp(
+                        context.client(),
+                        epoch,
+                        &token,
+                        denom.to_owned(),
+                        amount.amount(),
+                    )
+                    .await?;
+                // Make sure to save any decodings of the asset types used so
+                // that balance queries involving them are
+                // successful
+                let _ = shielded.save().await;
+                amount
+            };
+
+            // Convert the shortfall into a I128Sum
+            let mut shortfall = I128Sum::zero();
+            for (asset_type, val) in asset_types.iter().zip(rem_amount) {
+                shortfall += I128Sum::from_pair(*asset_type, val.into());
+            }
+            // Return an insufficient funds error
+            return Result::Err(TransferErr::Build {
+                error: builder::Error::InsufficientFunds(shortfall),
+                data: Some(MaspDataLog {
+                    source: Some(source),
+                    token,
+                    amount,
+                }),
+            });
+        }
+
+        Ok(())
+    }
+
+    // Add the necessary note to include a masp fee payment in the transaction.
+    // Funds are gathered in the following order:
+    //
+    // 1. From the residual values of the already included spend notes (i.e.
+    //    changes)
+    // 2. From new spend notes of the transaction's sources
+    // 3. From new spend notes of the optional gas spending keys
+    #[allow(clippy::too_many_arguments)]
+    async fn add_fees(
+        context: &impl Namada,
+        builder: &mut Builder<Network>,
+        source_data: &HashMap<MaspSourceTransferData, token::DenominatedAmount>,
+        sources: Vec<namada_core::masp::ExtendedSpendingKey>,
+        target: &Address,
+        token: &Address,
+        amount: &token::DenominatedAmount,
+        epoch: MaspEpoch,
+        denoms: &mut HashMap<Address, Denomination>,
+        notes_tracker: &mut SpentNotesTracker,
+        changes: &mut Changes,
+    ) -> Result<(), TransferErr> {
+        if denoms.get(token).is_none() {
+            if let Some(denom) = query_denom(context.client(), token).await {
+                denoms.insert(token.to_owned(), denom);
+            } else {
+                return Err(TransferErr::General(Error::from(
+                    QueryError::General(format!(
+                        "denomination for token {token}"
+                    )),
+                )));
+            };
+        }
+
+        let raw_amount = amount.amount().raw_amount().0;
+        let (asset_types, _) = {
+            let mut shielded = context.shielded_mut().await;
+            // Do the actual conversion to an asset type
+            let (asset_types, amount) = shielded
+                .convert_namada_amount_to_masp(
+                    context.client(),
+                    epoch,
+                    token,
+                    // Safe to unwrap
+                    denoms.get(token).unwrap().to_owned(),
+                    amount.amount(),
+                )
+                .await?;
+            // Make sure to save any decodings of the asset types used so
+            // that balance queries involving them are
+            // successful
+            let _ = shielded.save().await;
+            (asset_types, amount)
+        };
+
+        let mut fees = I128Sum::zero();
+        // Convert the shortfall into a I128Sum
+        for (asset_type, val) in asset_types.iter().zip(raw_amount) {
+            fees += I128Sum::from_nonnegative(*asset_type, val.into())
+                .map_err(|()| {
+                    TransferErr::General(Error::Other(
+                        "Fee amount is expected expected to be non-negative"
+                            .to_string(),
+                    ))
+                })?;
+        }
+
+        // 1. Try to use the change to pay fees
+        let mut temp_changes = Changes::default();
+
+        for (sp, changes) in changes.iter() {
+            for (asset_type, change) in changes.components() {
+                for (_, fee_amt) in fees
+                    .clone()
+                    .components()
+                    .filter(|(axt, _)| *axt == asset_type)
+                {
+                    // Get the minimum between the available change and
+                    // the due fee
+                    let output_amt = I128Sum::from_nonnegative(
+                        asset_type.to_owned(),
+                        *change.min(fee_amt),
+                    )
+                    .map_err(|()| {
+                        TransferErr::General(Error::Other(
+                            "Fee amount is expected to be non-negative"
+                                .to_string(),
+                        ))
+                    })?;
+                    let denominated_output_amt = context
+                        .shielded_mut()
+                        .await
+                        .convert_masp_amount_to_namada(
+                            context.client(),
+                            // Safe to unwrap
+                            denoms.get(token).unwrap().to_owned(),
+                            output_amt.clone(),
+                        )
+                        .await?;
+
+                    Self::add_outputs(
+                        context,
+                        builder,
+                        TransferSource::ExtendedSpendingKey(sp.to_owned()),
+                        &TransferTarget::Address(target.clone()),
+                        token.clone(),
+                        denominated_output_amt,
+                        epoch,
+                        denoms,
+                    )
+                    .await?;
+
+                    fees -= &output_amt;
+                    // Update the changes
+                    temp_changes
+                        .entry(*sp)
+                        .and_modify(|amt| *amt += &output_amt)
+                        .or_insert(output_amt);
+                }
+            }
+
+            if fees.is_zero() {
+                break;
+            }
+        }
+
+        // Decrease the changes by the amounts used for fee payment
+        for (sp, temp_changes) in temp_changes.iter() {
+            for (asset_type, temp_change) in temp_changes.components() {
+                let output_amt = I128Sum::from_nonnegative(
+                    asset_type.to_owned(),
+                    *temp_change,
+                )
+                .map_err(|()| {
+                    TransferErr::General(Error::Other(
+                        "Fee amount is expected expected to be non-negative"
+                            .to_string(),
+                    ))
+                })?;
+
+                // Entry is guaranteed to be in the map
+                changes.entry(*sp).and_modify(|amt| *amt -= &output_amt);
+            }
+        }
+
+        if !fees.is_zero() {
+            // 2. Look for unused spent notes of the sources and the optional
+            //    gas spending keys (sources first)
+            for fee_source in
+                source_data.iter().map(|(src, _)| src.source.clone()).chain(
+                    sources
+                        .into_iter()
+                        .map(TransferSource::ExtendedSpendingKey),
+                )
+            {
+                for (asset_type, fee_amt) in fees.clone().components() {
+                    let input_amt = I128Sum::from_nonnegative(
+                        asset_type.to_owned(),
+                        *fee_amt,
+                    )
+                    .map_err(|()| {
+                        TransferErr::General(Error::Other(
+                            "Fee amount is expected expected to be \
+                             non-negative"
+                                .to_string(),
+                        ))
+                    })?;
+                    let denominated_fee = context
+                        .shielded_mut()
+                        .await
+                        .convert_masp_amount_to_namada(
+                            context.client(),
+                            // Safe to unwrap
+                            denoms.get(token).unwrap().to_owned(),
+                            input_amt.clone(),
+                        )
+                        .await?;
+
+                    let Some(found_amt) = Self::add_inputs(
+                        context,
+                        builder,
+                        &fee_source,
+                        token,
+                        &denominated_fee,
+                        epoch,
+                        denoms,
+                        notes_tracker,
+                        changes,
+                    )
+                    .await?
+                    else {
+                        continue;
+                    };
+                    // Pick the minimum between the due fee and the amount found
+                    let output_amt = match found_amt.partial_cmp(&input_amt) {
+                        None | Some(Ordering::Less) => found_amt,
+                        _ => input_amt.clone(),
+                    };
+                    let denom_amt = context
+                        .shielded_mut()
+                        .await
+                        .convert_masp_amount_to_namada(
+                            context.client(),
+                            // Safe to unwrap
+                            denoms.get(token).unwrap().to_owned(),
+                            output_amt.clone(),
+                        )
+                        .await?;
+
+                    Self::add_outputs(
+                        context,
+                        builder,
+                        fee_source.clone(),
+                        &TransferTarget::Address(target.clone()),
+                        token.clone(),
+                        denom_amt,
+                        epoch,
+                        denoms,
+                    )
+                    .await?;
+
+                    fees -= &output_amt;
+                }
+
+                if fees.is_zero() {
+                    break;
+                }
+            }
+        }
+
+        if !fees.is_zero() {
+            return Result::Err(TransferErr::Build {
+                error: builder::Error::InsufficientFunds(fees),
+                data: Some(MaspDataLog {
+                    source: None,
+                    token: token.to_owned(),
+                    amount: *amount,
+                }),
+            });
+        }
+
+        Ok(())
+    }
+
+    // Consumes the changes and adds them back to the original sources to
+    // balance the transaction. This function has to be called after
+    // `add_fees` cause we might have some change coming from there too
+    #[allow(clippy::result_large_err)]
+    fn add_changes(
+        builder: &mut Builder<Network>,
+        changes: Changes,
+    ) -> Result<(), TransferErr> {
+        for (sp, changes) in changes.into_iter() {
+            for (asset_type, amt) in changes.components() {
+                if let Ordering::Greater = amt.cmp(&0) {
+                    let sk = ExtendedSpendingKey::from(sp.to_owned());
+                    // Send the change in this asset type back to the sender
+                    builder
+                        .add_sapling_output(
+                            Some(sk.expsk.ovk),
+                            sk.default_address().1,
+                            *asset_type,
+                            *amt as u64,
+                            MemoBytes::empty(),
+                        )
+                        .map_err(|e| TransferErr::Build {
+                            error: builder::Error::SaplingBuild(e),
+                            data: None,
+                        })?;
+                }
+            }
+        }
+
+        // Final safety check on the value balance to verify that the
+        // transaction is balanced
+        let value_balance = builder.value_balance();
+        if !value_balance.is_zero() {
+            return Result::Err(TransferErr::Build {
+                error: builder::Error::InsufficientFunds(value_balance),
+                data: None,
+            });
+        }
+
+        Ok(())
     }
 
     // Updates the internal state with the data of the newly generated
@@ -1699,8 +2269,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         Ok(asset_type)
     }
 
-    /// Convert Anoma amount and token type to MASP equivalents
-    async fn convert_amount<C: Client + Sync>(
+    /// Convert Namada amount and token type to MASP equivalents
+    async fn convert_namada_amount_to_masp<C: Client + Sync>(
         &mut self,
         client: &C,
         epoch: MaspEpoch,
@@ -1733,6 +2303,28 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 .expect("there must be exactly 4 denominations"),
             amount,
         ))
+    }
+
+    /// Convert MASP amount to Namada equivalent
+    async fn convert_masp_amount_to_namada<C: Client + Sync>(
+        &mut self,
+        client: &C,
+        denom: Denomination,
+        amt: I128Sum,
+    ) -> Result<token::DenominatedAmount, Error> {
+        let mut amount = token::Amount::zero();
+        let value_sum = self.decode_sum(client, amt).await;
+
+        for ((_, decoded), val) in value_sum.components() {
+            let positioned_amt = token::Amount::from_masp_denominated_i128(
+                *val,
+                decoded.position,
+            )
+            .unwrap_or_default();
+            amount = checked!(amount + positioned_amt)?;
+        }
+
+        Ok(token::DenominatedAmount::new(amount, denom))
     }
 }
 

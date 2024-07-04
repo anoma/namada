@@ -47,8 +47,8 @@ pub struct Parameters {
     /// The multiplier for masp epochs (it requires this amount of epochs to
     /// transition to the next masp epoch)
     pub masp_epoch_multiplier: u64,
-    /// Fee unshielding gas limit
-    pub fee_unshielding_gas_limit: u64,
+    /// The gas limit for a masp transaction paying fees
+    pub masp_fee_payment_gas_limit: u64,
     /// Gas scale
     pub gas_scale: u64,
     /// Map of the cost per gas unit for every token allowed for fee payment

@@ -270,7 +270,7 @@ pub fn init_storage() -> (Address, Address) {
 
     // commit the initialized token and account
     tx_host_env::with(|env| {
-        env.state.commit_tx();
+        env.state.commit_tx_batch();
         env.state.commit_block().unwrap();
 
         // block header to check timeout timestamp
@@ -647,6 +647,7 @@ pub fn msg_transfer(
     MsgTransfer {
         message,
         transfer: None,
+        fee_unshield: None,
     }
 }
 
