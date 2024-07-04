@@ -1698,12 +1698,11 @@ impl Tx {
     }
 
     /// Creates a batched tx along with the reference to the first inner tx
-    #[cfg(any(test, feature = "testing"))]
-    pub fn batch_ref_first_tx(&self) -> BatchedTxRef<'_> {
-        BatchedTxRef {
+    pub fn batch_ref_first_tx(&self) -> Option<BatchedTxRef<'_>> {
+        Some(BatchedTxRef {
             tx: self,
-            cmt: self.first_commitments().unwrap(),
-        }
+            cmt: self.first_commitments()?,
+        })
     }
 
     /// Creates a batched tx along with a copy of the first inner tx

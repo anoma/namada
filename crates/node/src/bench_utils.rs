@@ -256,7 +256,7 @@ impl Default for BenchShell {
         );
 
         bench_shell.execute_tx(&signed_tx.to_ref());
-        bench_shell.state.commit_tx();
+        bench_shell.state.commit_tx_batch();
 
         // Initialize governance proposal
         let content_section = Section::ExtraData(Code::new(
@@ -281,7 +281,7 @@ impl Default for BenchShell {
         );
 
         bench_shell.execute_tx(&signed_tx.to_ref());
-        bench_shell.state.commit_tx();
+        bench_shell.state.commit_tx_batch();
         bench_shell.commit_block();
 
         // Advance epoch for pos benches
@@ -405,6 +405,7 @@ impl BenchShell {
         let msg = MsgTransfer {
             message,
             transfer: None,
+            fee_unshield: None,
         };
 
         self.generate_ibc_tx(TX_IBC_WASM, msg.serialize_to_vec())
@@ -627,7 +628,7 @@ impl BenchShell {
         );
         self.last_block_masp_txs
             .push((masp_tx, self.state.write_log().get_keys()));
-        self.state.commit_tx();
+        self.state.commit_tx_batch();
     }
 }
 
@@ -1108,6 +1109,7 @@ impl BenchShieldedCtx {
                 ShieldedContext::<BenchShieldedUtils>::gen_shielded_transfer(
                     &namada,
                     vec![masp_transfer_data],
+                    None,
                     true,
                 ),
             )
@@ -1135,6 +1137,7 @@ impl BenchShieldedCtx {
             namada.client().generate_tx(
                 TX_SHIELDED_TRANSFER_WASM,
                 ShieldedTransfer {
+                    fee_unshield: None,
                     section_hash: shielded_section_hash,
                 },
                 Some(shielded),
@@ -1247,6 +1250,7 @@ impl BenchShieldedCtx {
         let msg = MsgTransfer {
             message: msg,
             transfer: Some(transfer),
+            fee_unshield: None,
         };
 
         let mut ibc_tx = ctx

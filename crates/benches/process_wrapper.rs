@@ -3,6 +3,7 @@ use namada::core::address;
 use namada::core::key::RefTo;
 use namada::core::storage::BlockHeight;
 use namada::core::time::DateTimeUtc;
+use namada::state::TxIndex;
 use namada::token::{
     Amount, DenominatedAmount, TransparentTransfer, TransparentTransferData,
 };
@@ -80,6 +81,7 @@ fn process_tx(c: &mut Criterion) {
                     shell
                         .check_proposal_tx(
                             &wrapper,
+                            &TxIndex::default(),
                             validation_meta,
                             temp_state,
                             datetime,
