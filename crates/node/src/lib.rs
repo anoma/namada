@@ -131,11 +131,12 @@ impl Shell {
                 // checks if (when) needed. Every check living outside that
                 // function will not be correctly replicated in the other
                 // locations
+                let block_hash = block.hash.try_into();
                 let (response, tx_results) =
-                    self.process_proposal(block.clone().into());
+                    self.process_proposal(block.into());
                 // Cache the response in case of future calls from Namada. If
                 // hash conversion fails avoid caching
-                if let Ok(block_hash) = block.hash.try_into() {
+                if let Ok(block_hash) = block_hash {
                     self.state.in_mem_mut().process_proposal_cache.insert(
                         block_hash,
                         (
