@@ -16,7 +16,6 @@ use namada::ledger::gas::GasMetering;
 use namada::ledger::ibc;
 use namada::ledger::pos::namada_proof_of_stake;
 use namada::ledger::protocol::{DispatchArgs, DispatchError};
-use namada::masp::MaspTxRefs;
 use namada::proof_of_stake;
 use namada::proof_of_stake::storage::{
     find_validator_by_raw_hash, write_last_block_proposer_address,
@@ -452,8 +451,7 @@ where
             commit_batch_hash,
             is_any_tx_invalid,
         } = temp_log.check_inner_results(
-            &extended_tx_result.tx_result,
-            extended_tx_result.masp_tx_refs,
+            &extended_tx_result,
             tx_data.tx_index,
             tx_data.height,
         );
@@ -524,8 +522,7 @@ where
             commit_batch_hash,
             is_any_tx_invalid: _,
         } = temp_log.check_inner_results(
-            &extended_tx_result.tx_result,
-            extended_tx_result.masp_tx_refs,
+            &extended_tx_result,
             tx_data.tx_index,
             tx_data.height,
         );
@@ -978,14 +975,17 @@ impl<'finalize> TempTxLogs {
 
     fn check_inner_results(
         &mut self,
-        tx_result: &namada::tx::data::TxResult<protocol::Error>,
-        masp_tx_refs: MaspTxRefs,
+        extended_tx_result: &namada::tx::data::ExtendedTxResult<
+            protocol::Error,
+        >,
         tx_index: usize,
         height: BlockHeight,
     ) -> ValidityFlags {
         let mut flags = ValidityFlags::default();
 
-        for (cmt_hash, batched_result) in tx_result.batch_results.iter() {
+        for (cmt_hash, batched_result) in
+            extended_tx_result.tx_result.batch_results.iter()
+        {
             match batched_result {
                 Ok(result) => {
                     if result.is_accepted() {
@@ -1048,10 +1048,17 @@ impl<'finalize> TempTxLogs {
 
         // If at least one of the inner transactions is a valid masp tx, update
         // the events
-        if !masp_tx_refs.0.is_empty() {
+        if !extended_tx_result.masp_tx_refs.0.is_empty() {
             self.tx_event
                 .extend(MaspTxBlockIndex(TxIndex::must_from_usize(tx_index)));
-            self.tx_event.extend(MaspTxBatchRefs(masp_tx_refs));
+            self.tx_event.extend(MaspTxBatchRefs(
+                extended_tx_result.masp_tx_refs.clone(),
+            ));
+        }
+
+        if extended_tx_result.is_ibc_shielding {
+            self.tx_event
+                .extend(MaspTxBlockIndex(TxIndex::must_from_usize(tx_index)));
         }
 
         flags

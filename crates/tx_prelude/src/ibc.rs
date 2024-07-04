@@ -8,9 +8,9 @@ use namada_core::address::Address;
 use namada_core::token::Amount;
 pub use namada_ibc::event::{IbcEvent, IbcEventType};
 pub use namada_ibc::storage::{
-    burn_tokens, ibc_token, is_ibc_key, mint_limit_key, mint_tokens,
-    throughput_limit_key,
+    burn_tokens, is_ibc_key, mint_limit_key, mint_tokens, throughput_limit_key,
 };
+pub use namada_ibc::trace::ibc_token;
 pub use namada_ibc::{
     IbcActions, IbcCommonContext, IbcStorageContext, NftTransferModule,
     ProofSpec, TransferModule,

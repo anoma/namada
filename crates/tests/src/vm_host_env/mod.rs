@@ -33,7 +33,7 @@ mod tests {
     use namada::ibc::context::transfer_mod::testing::DummyTransferModule;
     use namada::ibc::primitives::ToProto;
     use namada::ibc::Error as IbcActionError;
-    use namada::ledger::ibc::storage as ibc_storage;
+    use namada::ledger::ibc::{storage as ibc_storage, trace as ibc_trace};
     use namada::ledger::native_vp::ibc::{
         get_dummy_header as tm_dummy_header, Error as IbcError,
     };
@@ -1304,7 +1304,7 @@ mod tests {
         writes.extend(channel_writes);
         // the origin-specific token
         let denom = format!("{}/{}/{}", port_id, channel_id, token);
-        let ibc_token = ibc_storage::ibc_token(&denom);
+        let ibc_token = ibc_trace::ibc_token(&denom);
         let balance_key = token::storage_key::balance_key(&ibc_token, &sender);
         let init_bal = Amount::native_whole(100);
         writes.insert(balance_key.clone(), init_bal.serialize_to_vec());

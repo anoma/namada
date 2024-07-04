@@ -9,7 +9,6 @@ use ibc::core::channel::types::commitment::{
 };
 use ibc::core::channel::types::error::{ChannelError, PacketError};
 use ibc::core::channel::types::packet::Receipt;
-use ibc::core::channel::types::timeout::TimeoutHeight;
 use ibc::core::client::types::error::ClientError;
 use ibc::core::client::types::Height;
 use ibc::core::connection::types::error::ConnectionError;
@@ -23,14 +22,14 @@ use ibc::primitives::Timestamp;
 use namada_core::address::Address;
 use namada_core::storage::{BlockHeight, Key};
 use namada_core::tendermint::Time as TmTime;
+use namada_storage::{Error as StorageError, StorageRead};
 use namada_token::storage_key::balance_key;
 use namada_token::Amount;
 use prost::Message;
-use sha2::Digest;
 
 use super::client::{AnyClientState, AnyConsensusState};
 use super::storage::IbcStorageContext;
-use crate::{storage, NftClass, NftMetadata};
+use crate::{storage, trace, NftClass, NftMetadata};
 
 /// Result of IBC common function call
 pub type Result<T> = std::result::Result<T, ContextError>;
@@ -408,7 +407,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         channel_id: &ChannelId,
     ) -> Result<Sequence> {
         let key = storage::next_sequence_send_key(port_id, channel_id);
-        self.read_sequence(&key)
+        read_sequence(self, &key).map_err(ContextError::from)
     }
 
     /// Store the NextSequenceSend
@@ -429,7 +428,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         channel_id: &ChannelId,
     ) -> Result<Sequence> {
         let key = storage::next_sequence_recv_key(port_id, channel_id);
-        self.read_sequence(&key)
+        read_sequence(self, &key).map_err(ContextError::from)
     }
 
     /// Store the NextSequenceRecv
@@ -450,7 +449,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         channel_id: &ChannelId,
     ) -> Result<Sequence> {
         let key = storage::next_sequence_ack_key(port_id, channel_id);
-        self.read_sequence(&key)
+        read_sequence(self, &key).map_err(ContextError::from)
     }
 
     /// Store the NextSequenceAck
@@ -464,55 +463,10 @@ pub trait IbcCommonContext: IbcStorageContext {
         self.store_sequence(&key, seq)
     }
 
-    /// Read a sequence
-    fn read_sequence(&self, key: &Key) -> Result<Sequence> {
-        match self.read_bytes(key)? {
-            Some(value) => {
-                let value: [u8; 8] =
-                    value.try_into().map_err(|_| ChannelError::Other {
-                        description: format!(
-                            "The sequence value wasn't u64: Key {key}",
-                        ),
-                    })?;
-                Ok(u64::from_be_bytes(value).into())
-            }
-            // when the sequence has never been used, returns the initial value
-            None => Ok(1.into()),
-        }
-    }
-
     /// Store the sequence
     fn store_sequence(&mut self, key: &Key, sequence: Sequence) -> Result<()> {
         let bytes = u64::from(sequence).to_be_bytes().to_vec();
         self.write_bytes(key, bytes).map_err(ContextError::from)
-    }
-
-    /// Calculate the hash
-    fn hash(value: &[u8]) -> Vec<u8> {
-        sha2::Sha256::digest(value).to_vec()
-    }
-
-    /// Calculate the packet commitment
-    fn compute_packet_commitment(
-        packet_data: &[u8],
-        timeout_height: &TimeoutHeight,
-        timeout_timestamp: &Timestamp,
-    ) -> PacketCommitment {
-        let mut hash_input =
-            timeout_timestamp.nanoseconds().to_be_bytes().to_vec();
-
-        let revision_number =
-            timeout_height.commitment_revision_number().to_be_bytes();
-        hash_input.append(&mut revision_number.to_vec());
-
-        let revision_height =
-            timeout_height.commitment_revision_height().to_be_bytes();
-        hash_input.append(&mut revision_height.to_vec());
-
-        let packet_data_hash = Self::hash(packet_data);
-        hash_input.append(&mut packet_data_hash.to_vec());
-
-        Self::hash(&hash_input).into()
     }
 
     /// Get the packet commitment
@@ -703,7 +657,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         token_id: &TokenId,
         owner: &Address,
     ) -> Result<bool> {
-        let ibc_token = storage::ibc_token_for_nft(class_id, token_id);
+        let ibc_token = trace::ibc_token_for_nft(class_id, token_id);
         let balance_key = balance_key(&ibc_token, owner);
         let amount = self.read::<Amount>(&balance_key)?;
         Ok(amount == Some(Amount::from_u64(1)))
@@ -751,5 +705,24 @@ pub trait IbcCommonContext: IbcStorageContext {
     ) -> Result<()> {
         let key = storage::withdraw_key(token);
         self.write(&key, amount).map_err(ContextError::from)
+    }
+}
+
+/// Read and decode the IBC sequence
+pub fn read_sequence<S: StorageRead + ?Sized>(
+    storage: &S,
+    key: &Key,
+) -> std::result::Result<Sequence, StorageError> {
+    match storage.read_bytes(key)? {
+        Some(value) => {
+            let value: [u8; 8] = value.try_into().map_err(|_| {
+                StorageError::new_alloc(format!(
+                    "The sequence value wasn't u64: Key {key}",
+                ))
+            })?;
+            Ok(u64::from_be_bytes(value).into())
+        }
+        // when the sequence has never been used, returns the initial value
+        None => Ok(1.into()),
     }
 }

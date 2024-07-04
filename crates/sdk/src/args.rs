@@ -2765,9 +2765,9 @@ pub struct ValidatorSetUpdateRelay<C: NamadaTypes = SdkTypes> {
     pub safe_mode: bool,
 }
 
-/// IBC shielded transfer generation arguments
+/// IBC shielding transfer generation arguments
 #[derive(Clone, Debug)]
-pub struct GenIbcShieldedTransfer<C: NamadaTypes = SdkTypes> {
+pub struct GenIbcShieldingTransfer<C: NamadaTypes = SdkTypes> {
     /// The query parameters.
     pub query: Query<C>,
     /// The output directory path to where serialize the data
@@ -2782,6 +2782,4 @@ pub struct GenIbcShieldedTransfer<C: NamadaTypes = SdkTypes> {
     pub port_id: PortId,
     /// Channel ID via which the token is received
     pub channel_id: ChannelId,
-    /// Generate the shielded transfer for refunding
-    pub refund: bool,
 }
