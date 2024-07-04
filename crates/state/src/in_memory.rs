@@ -83,7 +83,7 @@ where
     /// to avoid running process proposal more than once internally because of
     /// the shim or the recheck option (comet only calls it at most once
     /// for a given height/round)
-    pub process_proposal_cache: CLruCache<Hash, ProcessProposalCachedResult>,
+    pub block_proposals_cache: CLruCache<Hash, ProcessProposalCachedResult>,
 }
 
 /// Last committed block
@@ -165,7 +165,7 @@ where
             eth_events_queue: EthEventsQueue::default(),
             storage_read_past_height_limit,
             commit_only_data: CommitOnlyData::default(),
-            process_proposal_cache: CLruCache::new(
+            block_proposals_cache: CLruCache::new(
                 NonZeroUsize::new(10).unwrap(),
             ),
         }
