@@ -249,15 +249,15 @@ where
             |tx| {
                 let tx_chain_id = tx.header.chain_id.clone();
                 let tx_expiration = tx.header.expiration;
-                if let Err(err) = tx.validate_tx() {
+                match tx.validate_tx() {
+                    Ok(_) => Ok((tx_chain_id, tx_expiration, tx)),
                     // This occurs if the wrapper / protocol tx signature is
                     // invalid
-                    return Err(TxResult {
+                    Err(err) => Err(TxResult {
                         code: ResultCode::InvalidSig.into(),
                         info: err.to_string(),
-                    });
+                    }),
                 }
-                Ok((tx_chain_id, tx_expiration, tx))
             },
         );
         let (tx_chain_id, tx_expiration, tx) = match maybe_tx {
@@ -265,12 +265,6 @@ where
             Err(tx_result) => return tx_result,
         };
 
-        if let Err(err) = tx.validate_tx() {
-            return TxResult {
-                code: ResultCode::InvalidSig.into(),
-                info: err.to_string(),
-            };
-        }
         match tx.header().tx_type {
             // If it is a raw transaction, we do no further validation
             TxType::Raw => TxResult {
