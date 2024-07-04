@@ -1,18 +1,13 @@
 use std::collections::BTreeMap;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use data_encoding::{HEXLOWER, HEXUPPER};
-use namada_apps_lib::wasm_loader::read_wasm;
 use namada_macros::BorshDeserializer;
-use namada_parameters::storage;
 use namada_sdk::address::Address;
-use namada_sdk::hash::Hash as CodeHash;
 use namada_sdk::masp_primitives::asset_type::AssetType;
 use namada_sdk::masp_primitives::merkle_tree::FrozenCommitmentTree;
 use namada_sdk::masp_primitives::sapling;
 use namada_sdk::migrations;
-use namada_sdk::storage::{DbColFam, Key};
-use namada_shielded_token::storage_key::masp_token_map_key;
+use namada_sdk::storage::DbColFam;
 use namada_shielded_token::{ConversionLeaf, ConversionState};
 use namada_trans_token::storage_key::{balance_key, minted_balance_key};
 use namada_trans_token::Amount;
