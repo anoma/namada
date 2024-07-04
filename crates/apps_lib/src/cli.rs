@@ -1071,6 +1071,7 @@ pub mod cmds {
     #[derive(Clone, Debug)]
     pub enum Config {
         Gen(ConfigGen),
+        UpdateValidatorLocalConfig(ValidatorLocalConfig),
         UpdateLocalConfig(LocalConfig),
     }
 
@@ -1080,9 +1081,11 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
                 let gen = SubCmd::parse(matches).map(Self::Gen);
-                let gas_tokens =
+                let validator_cfg = SubCmd::parse(matches)
+                    .map(Self::UpdateValidatorLocalConfig);
+                let local_cfg =
                     SubCmd::parse(matches).map(Self::UpdateLocalConfig);
-                gen.or(gas_tokens)
+                gen.or(validator_cfg).or(local_cfg)
             })
         }
 
@@ -1092,6 +1095,7 @@ pub mod cmds {
                 .arg_required_else_help(true)
                 .about(wrap!("Configuration sub-commands."))
                 .subcommand(ConfigGen::def())
+                .subcommand(ValidatorLocalConfig::def())
                 .subcommand(LocalConfig::def())
         }
     }
@@ -1113,6 +1117,25 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct ValidatorLocalConfig(pub args::UpdateValidatorLocalConfig);
+
+    impl SubCmd for ValidatorLocalConfig {
+        const CMD: &'static str = "update-validator-local-config";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                Self(args::UpdateValidatorLocalConfig::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(wrap!("Update the validator's local configuration."))
+                .add_args::<args::UpdateValidatorLocalConfig>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct LocalConfig(pub args::UpdateLocalConfig);
 
     impl SubCmd for LocalConfig {
@@ -1126,7 +1149,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about(wrap!("Update the validator's local configuration."))
+                .about(wrap!("Update the node's local configuration."))
                 .add_args::<args::UpdateLocalConfig>()
         }
     }
@@ -3699,6 +3722,25 @@ pub mod args {
     }
 
     #[derive(Clone, Debug)]
+    pub struct UpdateValidatorLocalConfig {
+        pub config_path: PathBuf,
+    }
+
+    impl Args for UpdateValidatorLocalConfig {
+        fn parse(matches: &ArgMatches) -> Self {
+            let config_path = DATA_PATH.parse(matches);
+            Self { config_path }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(DATA_PATH.def().help(wrap!(
+                "The path to the toml file containing the updated validator's \
+                 local configuration."
+            )))
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct UpdateLocalConfig {
         pub config_path: PathBuf,
     }
@@ -3711,8 +3753,8 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.arg(DATA_PATH.def().help(wrap!(
-                "The path to the toml file containing the updated local \
-                 configuration."
+                "The path to the toml file containing the updated node's \
+                 local configuration."
             )))
         }
     }
