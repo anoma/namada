@@ -338,6 +338,7 @@ pub fn decode_message(tx_data: &[u8]) -> Result<IbcMessage, Error> {
             let msg = MsgTransfer {
                 message,
                 transfer: None,
+                fee_unshield: None,
             };
             return Ok(IbcMessage::Transfer(msg));
         }
@@ -345,6 +346,7 @@ pub fn decode_message(tx_data: &[u8]) -> Result<IbcMessage, Error> {
             let msg = MsgNftTransfer {
                 message,
                 transfer: None,
+                fee_unshield: None,
             };
             return Ok(IbcMessage::NftTransfer(msg));
         }

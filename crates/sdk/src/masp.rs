@@ -62,6 +62,7 @@ use namada_token::{self as token, Denomination, MaspDigitPos};
 use namada_tx::{IndexedTx, Tx};
 use rand::rngs::StdRng;
 use rand_core::{CryptoRng, OsRng, RngCore, SeedableRng};
+use smooth_operator::checked;
 use thiserror::Error;
 
 use crate::error::{Error, QueryError};
@@ -1750,19 +1751,15 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             // We add a dummy UTXO to our transaction, but only the source
             // of the parent Transfer object is used to
             // validate fund availability
-            let source_enc = source
-                .address()
+            let script = source
+                .t_addr_data()
                 .ok_or_else(|| {
                     Error::Other(
                         "source address should be transparent".to_string(),
                     )
                 })?
-                .serialize_to_vec();
+                .taddress();
 
-            let hash = ripemd::Ripemd160::digest(sha2::Sha256::digest(
-                source_enc.as_ref(),
-            ));
-            let script = TransparentAddress(hash.into());
             for (digit, asset_type) in
                 MaspDigitPos::iter().zip(asset_types.iter())
             {
@@ -1809,24 +1806,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             .await;
 
         let payment_address = target.payment_address();
-        // If we are sending to a transparent output, then we will need to
-        // embed the transparent target address into the
-        // shielded transaction so that it can be signed
-        let transparent_target_hash = if payment_address.is_none() {
-            let target_enc = target
-                .address()
-                .ok_or_else(|| {
-                    Error::Other(
-                        "target address should be transparent".to_string(),
-                    )
-                })?
-                .serialize_to_vec();
-            Some(ripemd::Ripemd160::digest(sha2::Sha256::digest(
-                target_enc.as_ref(),
-            )))
-        } else {
-            None
-        };
+
         // This indicates how many more assets need to be sent to the
         // receiver in order to satisfy the requested transfer
         // amount.
@@ -1876,17 +1856,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                             error: builder::Error::SaplingBuild(e),
                             data: None,
                         })?;
-                } else {
+                } else if let Some(t_addr_data) = target.t_addr_data() {
                     // If there is a transparent output
-                    let hash = transparent_target_hash
-                        .expect(
-                            "transparent target hash should have been \
-                             computed already",
-                        )
-                        .into();
                     builder
                         .add_transparent_output(
-                            &TransparentAddress(hash),
+                            &t_addr_data.taddress(),
                             *asset_type,
                             contr,
                         )
@@ -1894,6 +1868,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                             error: builder::Error::TransparentBuild(e),
                             data: None,
                         })?;
+                } else {
+                    return Result::Err(TransferErr::from(Error::Other(
+                        "transaction target must be a payment address or \
+                         Namada address or IBC address"
+                            .to_string(),
+                    )));
                 }
                 // Lower what is required of the remaining contribution
                 *rem_amount -= contr;
