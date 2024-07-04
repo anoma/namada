@@ -148,3 +148,19 @@ pub fn is_ibc_shielding_transfer<T: Read>(
         .iter()
         .any(|action| matches!(action, Action::IbcShielding)))
 }
+
+// FIXME: remove if used only in one place
+/// Helper function to check if the provided address is mentioned as a  masp
+/// signer in the [`Actions`].
+pub fn is_required_masp_signer<T: Read>(
+    reader: &T,
+    address: &Address,
+) -> Result<bool, <T as Read>::Err> {
+    Ok(reader.read_actions()?.iter().any(|action| {
+        if let Action::Masp(MaspAction::MaspSigner(addr)) = action {
+            addr == address
+        } else {
+            false
+        }
+    }))
+}

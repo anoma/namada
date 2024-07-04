@@ -908,10 +908,23 @@ where
             } else if let Some(TAddrData::Addr(signer)) =
                 changed_bals_minus_txn.decoder.get(&signer)
             {
-                // Otherwise the owner's vp must have been triggered
+                // Otherwise the owner's vp must have been triggered and the
+                // relative action must have been written
                 if !verifiers.contains(signer) {
                     let error = native_vp::Error::new_alloc(format!(
                         "The required vp of address {signer} was not triggered"
+                    ))
+                    .into();
+                    tracing::debug!("{error}");
+                    return Err(error);
+                }
+
+                if !namada_tx::action::is_required_masp_signer(
+                    &self.ctx, signer,
+                )? {
+                    let error = native_vp::Error::new_alloc(format!(
+                        "The required masp signer action for address {signer} \
+                         is missing"
                     ))
                     .into();
                     tracing::debug!("{error}");
