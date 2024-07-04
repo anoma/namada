@@ -7,7 +7,7 @@ use ibc::core::channel::types::msgs::{
 };
 use ibc::core::handler::types::msgs::MsgEnvelope;
 use ibc::primitives::proto::Protobuf;
-use namada_token::{ShieldingTransfer, UnshieldingTransferData};
+use namada_token::Transfer;
 
 /// The different variants of an Ibc message
 #[derive(Debug, Clone)]
@@ -32,9 +32,7 @@ pub struct MsgTransfer {
     /// IBC transfer message
     pub message: IbcMsgTransfer,
     /// Shieleded transfer for MASP transaction
-    pub transfer: Option<ShieldingTransfer>,
-    /// Optional data for masp fee payment in the source chain
-    pub fee_unshield: Option<UnshieldingTransferData>,
+    pub transfer: Option<Transfer>,
 }
 
 impl BorshSerialize for MsgTransfer {
@@ -43,11 +41,7 @@ impl BorshSerialize for MsgTransfer {
         writer: &mut W,
     ) -> std::io::Result<()> {
         let encoded_msg = self.message.clone().encode_vec();
-        let members = (
-            encoded_msg,
-            self.transfer.clone(),
-            self.fee_unshield.clone(),
-        );
+        let members = (encoded_msg, self.transfer.clone());
         BorshSerialize::serialize(&members, writer)
     }
 }
@@ -57,18 +51,11 @@ impl BorshDeserialize for MsgTransfer {
         reader: &mut R,
     ) -> std::io::Result<Self> {
         use std::io::{Error, ErrorKind};
-        let (msg, transfer, fee_unshield): (
-            Vec<u8>,
-            Option<ShieldingTransfer>,
-            Option<UnshieldingTransferData>,
-        ) = BorshDeserialize::deserialize_reader(reader)?;
+        let (msg, transfer): (Vec<u8>, Option<Transfer>) =
+            BorshDeserialize::deserialize_reader(reader)?;
         let message = IbcMsgTransfer::decode_vec(&msg)
             .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
-        Ok(Self {
-            message,
-            transfer,
-            fee_unshield,
-        })
+        Ok(Self { message, transfer })
     }
 }
 
@@ -78,9 +65,7 @@ pub struct MsgNftTransfer {
     /// IBC NFT transfer message
     pub message: IbcMsgNftTransfer,
     /// Shieleded transfer for MASP transaction
-    pub transfer: Option<ShieldingTransfer>,
-    /// Optional data for masp fee payment in the source chain
-    pub fee_unshield: Option<UnshieldingTransferData>,
+    pub transfer: Option<Transfer>,
 }
 
 impl BorshSerialize for MsgNftTransfer {
@@ -89,11 +74,7 @@ impl BorshSerialize for MsgNftTransfer {
         writer: &mut W,
     ) -> std::io::Result<()> {
         let encoded_msg = self.message.clone().encode_vec();
-        let members = (
-            encoded_msg,
-            self.transfer.clone(),
-            self.fee_unshield.clone(),
-        );
+        let members = (encoded_msg, self.transfer.clone());
         BorshSerialize::serialize(&members, writer)
     }
 }
@@ -103,18 +84,11 @@ impl BorshDeserialize for MsgNftTransfer {
         reader: &mut R,
     ) -> std::io::Result<Self> {
         use std::io::{Error, ErrorKind};
-        let (msg, transfer, fee_unshield): (
-            Vec<u8>,
-            Option<ShieldingTransfer>,
-            Option<UnshieldingTransferData>,
-        ) = BorshDeserialize::deserialize_reader(reader)?;
+        let (msg, transfer): (Vec<u8>, Option<Transfer>) =
+            BorshDeserialize::deserialize_reader(reader)?;
         let message = IbcMsgNftTransfer::decode_vec(&msg)
             .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
-        Ok(Self {
-            message,
-            transfer,
-            fee_unshield,
-        })
+        Ok(Self { message, transfer })
     }
 }
 
@@ -124,7 +98,7 @@ pub struct MsgRecvPacket {
     /// IBC receiving packet message
     pub message: IbcMsgRecvPacket,
     /// Shieleded transfer for MASP transaction
-    pub transfer: Option<ShieldingTransfer>,
+    pub transfer: Option<Transfer>,
 }
 
 impl BorshSerialize for MsgRecvPacket {
@@ -143,7 +117,7 @@ impl BorshDeserialize for MsgRecvPacket {
         reader: &mut R,
     ) -> std::io::Result<Self> {
         use std::io::{Error, ErrorKind};
-        let (msg, transfer): (Vec<u8>, Option<ShieldingTransfer>) =
+        let (msg, transfer): (Vec<u8>, Option<Transfer>) =
             BorshDeserialize::deserialize_reader(reader)?;
         let message = IbcMsgRecvPacket::decode_vec(&msg)
             .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
@@ -158,7 +132,7 @@ pub struct MsgAcknowledgement {
     /// IBC acknowledgement message
     pub message: IbcMsgAcknowledgement,
     /// Shieleded transfer for MASP transaction
-    pub transfer: Option<ShieldingTransfer>,
+    pub transfer: Option<Transfer>,
 }
 
 impl BorshSerialize for MsgAcknowledgement {
@@ -177,7 +151,7 @@ impl BorshDeserialize for MsgAcknowledgement {
         reader: &mut R,
     ) -> std::io::Result<Self> {
         use std::io::{Error, ErrorKind};
-        let (msg, transfer): (Vec<u8>, Option<ShieldingTransfer>) =
+        let (msg, transfer): (Vec<u8>, Option<Transfer>) =
             BorshDeserialize::deserialize_reader(reader)?;
         let message = IbcMsgAcknowledgement::decode_vec(&msg)
             .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
@@ -192,7 +166,7 @@ pub struct MsgTimeout {
     /// IBC timeout message
     pub message: IbcMsgTimeout,
     /// Shieleded transfer for MASP transaction
-    pub transfer: Option<ShieldingTransfer>,
+    pub transfer: Option<Transfer>,
 }
 
 impl BorshSerialize for MsgTimeout {
@@ -211,7 +185,7 @@ impl BorshDeserialize for MsgTimeout {
         reader: &mut R,
     ) -> std::io::Result<Self> {
         use std::io::{Error, ErrorKind};
-        let (msg, transfer): (Vec<u8>, Option<ShieldingTransfer>) =
+        let (msg, transfer): (Vec<u8>, Option<Transfer>) =
             BorshDeserialize::deserialize_reader(reader)?;
         let message = IbcMsgTimeout::decode_vec(&msg)
             .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
