@@ -80,10 +80,8 @@ where
     /// for a given height/round)
     pub process_proposal_cache: namada_core::collections::HashMap<
         Hash,
-        (
-            namada_core::tendermint::abci::response::ProcessProposal,
-            Vec<(u32, String)>,
-        ),
+        // FIXME: myabe better with an enum instead of result?
+        std::result::Result<Vec<(u32, String)>, ()>,
     >,
 }
 

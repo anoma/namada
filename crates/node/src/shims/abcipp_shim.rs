@@ -122,29 +122,23 @@ impl AbcippShim {
                     let begin_block_request =
                         self.begin_block_request.take().unwrap();
 
-                    let (process_proposal_result, processing_results) = self
-                        .get_process_proposal_result(
-                            begin_block_request.clone(),
-                        );
-
-                    if let ProcessProposal::Reject = process_proposal_result {
-                        Err(Error::ConvertResp(Response::ProcessProposal(
-                            process_proposal_result,
-                        )))
-                    } else {
-                        let mut txs =
-                            Vec::with_capacity(self.delivered_txs.len());
-                        let delivered = std::mem::take(&mut self.delivered_txs);
-                        for (result, tx) in processing_results
-                            .into_iter()
-                            .zip(delivered.into_iter())
-                        {
-                            txs.push(ProcessedTx { tx, result });
-                        }
-                        let mut end_block_request: FinalizeBlock =
-                            begin_block_request.into();
-                        end_block_request.txs = txs;
-                        self.service
+                    match self.get_process_proposal_result(
+                        begin_block_request.clone(),
+                    ) {
+                        Ok(res) => {
+                            let mut txs =
+                                Vec::with_capacity(self.delivered_txs.len());
+                            let delivered =
+                                std::mem::take(&mut self.delivered_txs);
+                            for (result, tx) in
+                                res.into_iter().zip(delivered.into_iter())
+                            {
+                                txs.push(ProcessedTx { tx, result });
+                            }
+                            let mut end_block_request: FinalizeBlock =
+                                begin_block_request.into();
+                            end_block_request.txs = txs;
+                            self.service
                         .call(Request::FinalizeBlock(end_block_request))
                         .map_err(Error::from)
                         .and_then(|res| match res {
@@ -153,6 +147,10 @@ impl AbcippShim {
                             }
                             _ => Err(Error::ConvertResp(res)),
                         })
+                        }
+                        Err(()) => Err(Error::Shell(
+                            crate::shell::Error::RejectedBlockProposal,
+                        )),
                     }
                 }
                 Req::Commit => match self.service.call(Request::Commit) {
@@ -242,7 +240,7 @@ impl AbcippShim {
     fn get_process_proposal_result(
         &mut self,
         begin_block_request: request::BeginBlock,
-    ) -> (ProcessProposal, Vec<response::TxResult>) {
+    ) -> std::result::Result<Vec<response::TxResult>, ()> {
         match namada::core::hash::Hash::try_from(begin_block_request.hash) {
             Ok(block_hash) => {
                 match self
@@ -252,12 +250,11 @@ impl AbcippShim {
                     .process_proposal_cache
                     .get(&block_hash)
                 {
-                    Some((process_resp, res)) => (
-                        // We already have the result of process proposal for
-                        // this block cached in memory
-                        process_resp.to_owned(),
-                        res.iter().map(|res| res.to_owned().into()).collect(),
-                    ),
+                    // We already have the result of process proposal for
+                    // this block cached in memory
+                    Some(res) => res
+                        .to_owned()
+                        .map(|r| r.into_iter().map(|res| res.into()).collect()),
                     None => {
                         // Need to run process proposal to extract the data we
                         // need for finalize block (tx results)
@@ -269,6 +266,13 @@ impl AbcippShim {
 
                         let (process_resp, res) =
                             self.service.process_proposal(process_req.into());
+                        let result =
+                            if let ProcessProposal::Accept = process_resp {
+                                Ok(res)
+                            } else {
+                                Err(())
+                            };
+
                         // Cache the result
                         self.service
                             .state
@@ -276,16 +280,14 @@ impl AbcippShim {
                             .process_proposal_cache
                             .insert(
                                 block_hash.to_owned(),
-                                (
-                                    process_resp,
-                                    res.clone()
-                                        .into_iter()
+                                result.clone().map(|res| {
+                                    res.into_iter()
                                         .map(|res| res.into())
-                                        .collect(),
-                                ),
+                                        .collect()
+                                }),
                             );
 
-                        (process_resp, res)
+                        result
                     }
                 }
             }
@@ -298,7 +300,13 @@ impl AbcippShim {
 
                 // Do not cache the result in this case since we
                 // don't have the hash of the block
-                self.service.process_proposal(process_req.into())
+                let (process_resp, res) =
+                    self.service.process_proposal(process_req.into());
+                if let ProcessProposal::Accept = process_resp {
+                    Ok(res)
+                } else {
+                    Err(())
+                }
             }
         }
     }
