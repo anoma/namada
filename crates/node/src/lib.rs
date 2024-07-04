@@ -150,7 +150,7 @@ impl Shell {
 
                     self.state
                         .in_mem_mut()
-                        .process_proposal_cache
+                        .block_proposals_cache
                         .put(block_hash, result);
                 }
                 Ok(Response::ProcessProposal(response))
@@ -219,7 +219,7 @@ impl Shell {
             let process_proposal_result = match self
                 .state
                 .in_mem_mut()
-                .process_proposal_cache
+                .block_proposals_cache
                 .get(&finalize_req.block_hash)
             {
                 // We already have the result of process proposal for this block
@@ -250,7 +250,7 @@ impl Shell {
         }
 
         // Clear the cache of proposed blocks' results
-        self.state.in_mem_mut().process_proposal_cache.clear();
+        self.state.in_mem_mut().block_proposals_cache.clear();
 
         Ok(())
     }

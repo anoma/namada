@@ -6,8 +6,7 @@ use std::task::{Context, Poll};
 use futures::future::FutureExt;
 use namada::core::hash::Hash;
 use namada::core::storage::BlockHeight;
-use namada::state::ProcessProposalCachedResult;
-use namada::state::DB;
+use namada::state::{ProcessProposalCachedResult, DB};
 use namada::tendermint::abci::response::ProcessProposal;
 use namada::time::{DateTimeUtc, Utc};
 use namada::tx::data::hash_tx;
@@ -254,7 +253,7 @@ impl AbcippShim {
                     .service
                     .state
                     .in_mem_mut()
-                    .process_proposal_cache
+                    .block_proposals_cache
                     .get(&block_hash)
                 {
                     // We already have the result of process proposal for
@@ -285,7 +284,7 @@ impl AbcippShim {
                         self.service
                             .state
                             .in_mem_mut()
-                            .process_proposal_cache
+                            .block_proposals_cache
                             .put(block_hash.to_owned(), result.clone());
 
                         result
