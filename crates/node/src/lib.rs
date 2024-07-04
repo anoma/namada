@@ -137,16 +137,19 @@ impl Shell {
                 // Cache the response in case of future calls from Namada. If
                 // hash conversion fails avoid caching
                 if let Ok(block_hash) = block_hash {
-                    self.state.in_mem_mut().process_proposal_cache.insert(
-                        block_hash,
-                        (
-                            response,
-                            tx_results
-                                .into_iter()
-                                .map(|res| res.into())
-                                .collect(),
-                        ),
-                    );
+                    let result = if let ProcessProposal::Accept = response {
+                        Ok(tx_results
+                            .into_iter()
+                            .map(|res| res.into())
+                            .collect())
+                    } else {
+                        Err(())
+                    };
+
+                    self.state
+                        .in_mem_mut()
+                        .process_proposal_cache
+                        .insert(block_hash, result);
                 }
                 Ok(Response::ProcessProposal(response))
             }
@@ -217,14 +220,9 @@ impl Shell {
                 .process_proposal_cache
                 .get(&finalize_req.block_hash)
             {
-                Some((process_resp, _res)) =>
-                // We already have the result of
-                // process proposal for this block
+                // We already have the result of process proposal for this block
                 // cached in memory
-                {
-                    process_resp.to_owned()
-                }
-
+                Some(res) => res.to_owned(),
                 None => {
                     let process_req = finalize_req
                         .clone()
@@ -232,12 +230,18 @@ impl Shell {
                         .map_err(|_| Error::InvalidBlockProposal)?;
                     // No need to cache the result since this is the last step
                     // before finalizing the block
-                    self.process_proposal(process_req.into()).0
+                    if let ProcessProposal::Accept =
+                        self.process_proposal(process_req.into()).0
+                    {
+                        Ok(vec![])
+                    } else {
+                        Err(())
+                    }
                 }
             };
 
-            if let ProcessProposal::Reject = process_proposal_result {
-                return Err(Error::InvalidBlockProposal);
+            if process_proposal_result.is_err() {
+                return Err(Error::RejectedBlockProposal);
             }
         }
 

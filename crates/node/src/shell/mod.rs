@@ -126,6 +126,11 @@ pub enum Error {
     ReplayAttempt(String),
     #[error("Error with snapshots: {0}")]
     Snapshot(std::io::Error),
+    #[error(
+        "Received a finalize request for a block that was previously rejected \
+         by process proposal"
+    )]
+    RejectedBlockProposal,
     #[error("Received an invalid block proposal")]
     InvalidBlockProposal,
 }
