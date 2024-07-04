@@ -5339,6 +5339,7 @@ dependencies = [
  "assert_matches",
  "borsh 1.2.1",
  "chrono",
+ "clru",
  "itertools 0.12.1",
  "linkme",
  "namada_core",
