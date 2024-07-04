@@ -2629,12 +2629,16 @@ pub async fn build_ibc_transfer(
     // Reconstruct the memo for refunding if needed
     let memo = if let Some(refund_target) = refund_target {
         // Generate MASP transaction for refunding the token
+        let masp_transfer_data = vec![MaspTransferData {
+            source: TransferSource::Address(IBC),
+            target: TransferTarget::PaymentAddress(refund_target),
+            token: args.token.clone(),
+            amount: validated_amount,
+        }];
         let masp_tx = construct_shielded_parts(
             context,
-            &TransferSource::Address(IBC),
-            &TransferTarget::PaymentAddress(refund_target),
-            &args.token,
-            validated_amount,
+            masp_transfer_data,
+            None,
             !(args.tx.dry_run || args.tx.dry_run_wrapper),
         )
         .await?

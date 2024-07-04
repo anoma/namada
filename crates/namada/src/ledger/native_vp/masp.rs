@@ -610,7 +610,7 @@ where
             }
             // This event is emitted on the receiver
             IbcMessage::Envelope(envelope) => {
-                if let MsgEnvelope::Packet(PacketMsg::Recv(msg)) = envelope {
+                if let MsgEnvelope::Packet(PacketMsg::Recv(msg)) = *envelope {
                     if msg.packet.port_id_on_b.as_str() == PORT_ID_STR {
                         let packet_data = serde_json::from_slice::<PacketData>(
                             &msg.packet.data,

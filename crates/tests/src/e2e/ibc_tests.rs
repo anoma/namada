@@ -297,7 +297,6 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         NAM,
         10_000,
         ALBERT_KEY,
-        false,
     )?;
     shielded_sync(&test_a, AA_VIEWING_KEY)?;
     // Shieded transfer from Chain A to Chain B

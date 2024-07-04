@@ -19,7 +19,7 @@ use namada_token::Transfer;
 #[derive(Debug, Clone)]
 pub enum IbcMessage {
     /// Ibc Envelop
-    Envelope(MsgEnvelope),
+    Envelope(Box<MsgEnvelope>),
     /// Ibc transaprent transfer
     Transfer(MsgTransfer),
     /// NFT transfer

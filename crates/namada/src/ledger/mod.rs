@@ -109,6 +109,7 @@ mod dry_run_tx {
         let ExtendedTxResult {
             mut tx_result,
             ref masp_tx_refs,
+            is_ibc_shielding: _,
         } = extended_tx_result;
         let tx_gas_meter = RefCell::new(tx_gas_meter);
         for cmt in

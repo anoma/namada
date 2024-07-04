@@ -154,8 +154,7 @@ where
     pub fn execute(
         &mut self,
         tx_data: &[u8],
-    ) -> Result<(Option<Transfer>, Option<MaspTransaction>), Error>
-    {
+    ) -> Result<(Option<Transfer>, Option<MaspTransaction>), Error> {
         let message = decode_message(tx_data)?;
         match &message {
             IbcMessage::Transfer(msg) => {
@@ -184,10 +183,10 @@ where
                 Ok((msg.transfer.clone(), None))
             }
             IbcMessage::Envelope(envelope) => {
-                execute(&mut self.ctx, &mut self.router, envelope.clone())
+                execute(&mut self.ctx, &mut self.router, *envelope.clone())
                     .map_err(|e| Error::Context(Box::new(e)))?;
                 // Extract MASP tx from the memo in the packet if needed
-                let masp_tx = match envelope {
+                let masp_tx = match &**envelope {
                     MsgEnvelope::Packet(packet_msg) => {
                         match packet_msg {
                             PacketMsg::Recv(msg) => {
@@ -278,7 +277,7 @@ where
                 .map_err(Error::NftTransfer)
             }
             IbcMessage::Envelope(envelope) => {
-                validate(&self.ctx, &self.router, envelope)
+                validate(&self.ctx, &self.router, *envelope)
                     .map_err(|e| Error::Context(Box::new(e)))
             }
         }
@@ -310,7 +309,7 @@ pub fn decode_message(tx_data: &[u8]) -> Result<IbcMessage, Error> {
     // ibc-rs message
     if let Ok(any_msg) = Any::decode(tx_data) {
         if let Ok(envelope) = MsgEnvelope::try_from(any_msg.clone()) {
-            return Ok(IbcMessage::Envelope(envelope));
+            return Ok(IbcMessage::Envelope(Box::new(envelope)));
         }
         if let Ok(message) = IbcMsgTransfer::try_from(any_msg.clone()) {
             let msg = MsgTransfer {
