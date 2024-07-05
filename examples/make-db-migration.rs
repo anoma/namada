@@ -1,18 +1,13 @@
 use std::collections::BTreeMap;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use data_encoding::{HEXLOWER, HEXUPPER};
-use namada_apps_lib::wasm_loader::read_wasm;
 use namada_macros::BorshDeserializer;
-use namada_parameters::storage;
 use namada_sdk::address::Address;
-use namada_sdk::hash::Hash as CodeHash;
 use namada_sdk::masp_primitives::asset_type::AssetType;
 use namada_sdk::masp_primitives::merkle_tree::FrozenCommitmentTree;
 use namada_sdk::masp_primitives::sapling;
 use namada_sdk::migrations;
-use namada_sdk::storage::{DbColFam, Key};
-use namada_shielded_token::storage_key::masp_token_map_key;
+use namada_sdk::storage::DbColFam;
 use namada_shielded_token::{ConversionLeaf, ConversionState};
 use namada_trans_token::storage_key::{balance_key, minted_balance_key};
 use namada_trans_token::Amount;
@@ -78,128 +73,5 @@ fn example() {
 }
 
 fn main() {
-    se_migration()
-}
-
-// The current vp_user hash to be replaced on the SE
-const REMOVED_HASH: &str =
-    "129EE7BEE68B02BFAE638DA2A634B8ECBFFA2CB3F46CFA8E172BAF009627EC78";
-fn se_migration() {
-    // Get VP
-    let wasm_path = "wasm";
-    let bytes = read_wasm(wasm_path, "vp_user.wasm").expect("bingbong");
-    let vp_hash = CodeHash::sha256(&bytes);
-
-    // account VPs
-    let account_vp_str = "#tnam[a-z,0-9]*\\/\\?".to_string();
-    let accounts_update = migrations::DbUpdateType::RepeatAdd {
-        pattern: account_vp_str,
-        cf: DbColFam::SUBSPACE,
-        value: migrations::UpdateValue::raw(vp_hash),
-        force: false,
-    };
-
-    // wasm/hash and wasm/name
-    let wasm_name_key = Key::wasm_code_name("vp_user.wasm".to_string());
-    let wasm_hash_key = Key::wasm_hash("vp_user.wasm");
-    let wasm_name_update = migrations::DbUpdateType::Add {
-        key: wasm_name_key,
-        cf: DbColFam::SUBSPACE,
-        value: migrations::UpdateValue::raw(vp_hash),
-        force: false,
-    };
-    let wasm_hash_update = migrations::DbUpdateType::Add {
-        key: wasm_hash_key,
-        cf: DbColFam::SUBSPACE,
-        value: migrations::UpdateValue::raw(vp_hash),
-        force: false,
-    };
-
-    // wasm/code/<uc hash>
-    let code_key = Key::wasm_code(&vp_hash);
-    let code_update = migrations::DbUpdateType::Add {
-        key: code_key,
-        cf: DbColFam::SUBSPACE,
-        value: migrations::UpdateValue::raw(bytes.clone()),
-        force: false,
-    };
-
-    // wasm/len/<code len>
-    let len_key = Key::wasm_code_len(&vp_hash);
-    let code_len_update = migrations::DbUpdateType::Add {
-        key: len_key,
-        cf: DbColFam::SUBSPACE,
-        value: (bytes.len() as u64).into(),
-        force: false,
-    };
-
-    // VP allowlist
-    let vp_allowlist_key = storage::get_vp_allowlist_storage_key();
-    let new_hash_str = HEXLOWER.encode(vp_hash.as_ref());
-    let new_vp_allowlist = vec![
-        "8781c170ad1e3d2bbddc308b77b7a2edda3fff3bc5d746232feec968ee4fe3cd"
-            .to_string(),
-        new_hash_str,
-    ];
-    let allowlist_update = migrations::DbUpdateType::Add {
-        key: vp_allowlist_key,
-        cf: DbColFam::SUBSPACE,
-        value: new_vp_allowlist.into(),
-        force: false,
-    };
-
-    // remove keys associated with old wasm
-    let remove_old_wasm = migrations::DbUpdateType::RepeatDelete(
-        format!("/wasm/[a-z]+/{}", REMOVED_HASH),
-        DbColFam::SUBSPACE,
-    );
-
-    // Conversion state token map
-    let conversion_token_map: BTreeMap<String, Address> = BTreeMap::new();
-    let conversion_token_map_key = masp_token_map_key();
-    let conversion_state_token_map_update = migrations::DbUpdateType::Add {
-        key: conversion_token_map_key,
-        cf: DbColFam::SUBSPACE,
-        value: migrations::UpdateValue::wrapped(conversion_token_map),
-        force: false,
-    };
-
-    // Conversion state
-    let query_result = std::fs::read_to_string("conversion_state.txt").unwrap();
-    let hex_bytes = query_result.split('\n').nth(2).unwrap();
-    let bytes = HEXUPPER
-        .decode(
-            hex_bytes
-                .strip_prefix("The value in bytes is ")
-                .unwrap()
-                .trim()
-                .as_bytes(),
-        )
-        .unwrap();
-    let old_conversion_state = ConversionState::try_from_slice(&bytes).unwrap();
-    let new_conversion_state: NewConversionState = old_conversion_state.into();
-    let conversion_state_update = migrations::DbUpdateType::Add {
-        key: Key::parse("conversion_state").unwrap(),
-        cf: DbColFam::STATE,
-        value: migrations::UpdateValue::force_borsh(new_conversion_state),
-        force: true,
-    };
-
-    let updates = [
-        accounts_update,
-        wasm_name_update,
-        wasm_hash_update,
-        code_update,
-        allowlist_update,
-        code_len_update,
-        remove_old_wasm,
-        conversion_state_token_map_update,
-        conversion_state_update,
-    ];
-
-    let changes = migrations::DbChanges {
-        changes: updates.into_iter().collect(),
-    };
-    std::fs::write("migrations.json", serde_json::to_string(&changes).unwrap())
-        .unwrap();
+    example()
 }
