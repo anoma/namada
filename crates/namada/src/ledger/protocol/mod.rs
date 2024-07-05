@@ -3,9 +3,11 @@ use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::fmt::Debug;
 
+use either::Either;
 use eyre::{eyre, WrapErr};
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::hash::Hash;
+use namada_core::ibc::{IbcTxDataHash, IbcTxDataRefs};
 use namada_core::masp::{MaspTxRefs, TxId};
 use namada_events::extend::{
     ComposeEvent, Height as HeightAttr, TxHash as TxHashAttr, UserAccount,
@@ -265,7 +267,7 @@ where
                 let cmt =
                     tx.first_commitments().ok_or(Error::MissingInnerTxs)?;
                 let batched_tx_result = apply_wasm_tx(
-                    tx.batch_ref_tx(cmt),
+                    &tx.batch_ref_tx(cmt),
                     &tx_index,
                     ShellParams {
                         tx_gas_meter,
@@ -342,9 +344,10 @@ where
 pub(crate) fn get_batch_txs_to_execute<'a>(
     tx: &'a Tx,
     masp_tx_refs: &MaspTxRefs,
+    ibc_tx_data_refs: &IbcTxDataRefs,
 ) -> impl Iterator<Item = &'a TxCommitments> {
     let mut batch_iter = tx.commitments().iter();
-    if !masp_tx_refs.0.is_empty() {
+    if !masp_tx_refs.0.is_empty() || !ibc_tx_data_refs.0.is_empty() {
         // If fees were paid via masp skip the first transaction of the batch
         // which has already been executed
         batch_iter.next();
@@ -369,9 +372,13 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    for cmt in get_batch_txs_to_execute(tx, &extended_tx_result.masp_tx_refs) {
+    for cmt in get_batch_txs_to_execute(
+        tx,
+        &extended_tx_result.masp_tx_refs,
+        &extended_tx_result.ibc_tx_data_refs,
+    ) {
         match apply_wasm_tx(
-            tx.batch_ref_tx(cmt),
+            &tx.batch_ref_tx(cmt),
             &tx_index,
             ShellParams {
                 tx_gas_meter,
@@ -424,9 +431,14 @@ where
                             .0
                             .push(masp_section_ref);
                     }
-                    extended_tx_result.is_ibc_shielding =
-                        namada_tx::action::is_ibc_shielding_transfer(state)
-                            .map_err(Error::StateError)?;
+                    if namada_tx::action::is_ibc_shielding_transfer(state)
+                        .map_err(Error::StateError)?
+                    {
+                        extended_tx_result
+                            .ibc_tx_data_refs
+                            .0
+                            .push(*cmt.data_sechash())
+                    }
                     state.write_log_mut().commit_tx_to_batch();
                 } else {
                     state.write_log_mut().drop_tx();
@@ -445,6 +457,12 @@ where
     }
 
     Ok(extended_tx_result)
+}
+
+/// Transaction result for masp transfer
+pub struct MaspTxResult {
+    tx_result: BatchedTxResult,
+    masp_section_ref: Either<TxId, IbcTxDataHash>,
 }
 
 /// Performs the required operation on a wrapper transaction:
@@ -487,18 +505,23 @@ where
     // have propagated an error)
     shell_params.state.write_log_mut().commit_batch();
 
-    let (batch_results, masp_tx_refs) = payment_result.map_or_else(
+    let (batch_results, masp_section_refs) = payment_result.map_or_else(
         || (BatchResults::default(), None),
-        |(batched_result, masp_section_ref)| {
+        |masp_tx_result| {
             let mut batch = BatchResults::default();
             batch.insert_inner_tx_result(
                 // Ok to unwrap cause if we have a batched result it means
                 // we've executed the first tx in the batch
                 tx.wrapper_hash().as_ref(),
                 either::Right(tx.first_commitments().unwrap()),
-                Ok(batched_result),
+                Ok(masp_tx_result.tx_result),
             );
-            (batch, Some(MaspTxRefs(vec![masp_section_ref])))
+            let masp_section_refs =
+                Some(masp_tx_result.masp_section_ref.map_either(
+                    |masp_tx_ref| MaspTxRefs(vec![masp_tx_ref]),
+                    |ibc_tx_data| IbcTxDataRefs(vec![ibc_tx_data]),
+                ));
+            (batch, masp_section_refs)
         },
     );
 
@@ -512,7 +535,7 @@ where
         gas_used: tx_gas_meter.borrow().get_tx_consumed_gas(),
         batch_results,
     }
-    .to_extended_result(masp_tx_refs))
+    .to_extended_result(masp_section_refs))
 }
 
 /// Perform the actual transfer of fees from the fee payer to the block
@@ -524,7 +547,7 @@ pub fn transfer_fee<S, D, H, CA>(
     tx: &Tx,
     wrapper: &WrapperTx,
     tx_index: &TxIndex,
-) -> Result<Option<(BatchedTxResult, TxId)>>
+) -> Result<Option<MaspTxResult>>
 where
     S: State<D = D, H = H>
         + StorageRead
@@ -677,7 +700,7 @@ fn try_masp_fee_payment<S, D, H, CA>(
     }: &mut ShellParams<'_, S, D, H, CA>,
     tx: &Tx,
     tx_index: &TxIndex,
-) -> Result<Option<(BatchedTxResult, TxId)>>
+) -> Result<Option<MaspTxResult>>
 where
     S: State<D = D, H = H>
         + StorageRead
@@ -713,9 +736,11 @@ where
     let ref_unshield_gas_meter = RefCell::new(gas_meter);
 
     let valid_batched_tx_result = {
+        let first_tx = tx
+            .batch_ref_first_tx()
+            .ok_or_else(|| Error::MissingInnerTxs)?;
         match apply_wasm_tx(
-            tx.batch_ref_first_tx()
-                .ok_or_else(|| Error::MissingInnerTxs)?,
+            &first_tx,
             tx_index,
             ShellParams {
                 tx_gas_meter: &ref_unshield_gas_meter,
@@ -740,16 +765,20 @@ where
                     );
                 }
 
-                let masp_ref = namada_tx::action::get_masp_section_ref(*state)
-                    .map_err(Error::StateError)?;
+                let masp_section_ref =
+                    match namada_tx::action::get_masp_section_ref(*state)
+                        .map_err(Error::StateError)?
+                    {
+                        Some(masp_tx_id) => Either::Left(masp_tx_id),
+                        None => Either::Right(*first_tx.cmt.data_sechash()),
+                    };
                 // Ensure that the transaction is actually a masp one, otherwise
                 // reject
                 (is_masp_transfer(&result.changed_keys) && result.is_accepted())
-                    .then(|| {
-                        masp_ref
-                            .map(|masp_section_ref| (result, masp_section_ref))
+                    .then_some(MaspTxResult {
+                        tx_result: result,
+                        masp_section_ref,
                     })
-                    .flatten()
             }
             Err(e) => {
                 state.write_log_mut().drop_tx();
@@ -807,7 +836,7 @@ pub fn check_fees<S, D, H, CA>(
     shell_params: &mut ShellParams<'_, S, D, H, CA>,
     tx: &Tx,
     wrapper: &WrapperTx,
-) -> Result<Option<(BatchedTxResult, TxId)>>
+) -> Result<Option<MaspTxResult>>
 where
     S: State<D = D, H = H>
         + StorageRead
@@ -877,7 +906,7 @@ where
 /// Apply a transaction going via the wasm environment. Gas will be metered and
 /// validity predicates will be triggered in the normal way.
 pub fn apply_wasm_tx<'a, S, D, H, CA>(
-    batched_tx: BatchedTxRef<'_>,
+    batched_tx: &BatchedTxRef<'_>,
     tx_index: &TxIndex,
     shell_params: ShellParams<'a, S, D, H, CA>,
 ) -> Result<BatchedTxResult>
@@ -895,7 +924,7 @@ where
     } = shell_params;
 
     let verifiers = execute_tx(
-        &batched_tx,
+        batched_tx,
         tx_index,
         state,
         tx_gas_meter,
@@ -904,7 +933,7 @@ where
     )?;
 
     let vps_result = check_vps(CheckVps {
-        batched_tx: &batched_tx,
+        batched_tx,
         tx_index,
         state,
         tx_gas_meter: &mut tx_gas_meter.borrow_mut(),
