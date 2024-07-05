@@ -846,11 +846,9 @@ pub mod testing {
     use namada_core::address::testing::{
         arb_established_address, arb_non_internal_address,
     };
-    use namada_core::address::MASP;
     use namada_core::eth_bridge_pool::PendingTransfer;
     use namada_core::hash::testing::arb_hash;
     use namada_core::key::testing::arb_common_keypair;
-    use namada_core::masp::addr_taddr;
     use namada_governance::storage::proposal::testing::{
         arb_init_proposal, arb_vote_proposal,
     };
@@ -867,16 +865,14 @@ pub mod testing {
     use proptest::prelude::{Just, Strategy};
     use proptest::{arbitrary, collection, option, prop_compose, prop_oneof};
     use prost::Message;
-    use token::testing::arb_vectorized_transparent_transfer;
+    use token::testing::arb_transparent_transfer;
 
     use super::*;
     use crate::account::tests::{arb_init_account, arb_update_account};
     use crate::chain::ChainId;
     use crate::eth_bridge_pool::testing::arb_pending_transfer;
     use crate::key::testing::arb_common_pk;
-    use crate::masp::testing::{
-        arb_deshielding_transfer, arb_shielded_transfer, arb_shielding_transfer,
-    };
+    use crate::masp::testing::arb_shielded_transfer;
     use crate::time::{DateTime, DateTimeUtc, TimeZone, Utc};
     use crate::tx::data::pgf::tests::arb_update_steward_commission;
     use crate::tx::data::pos::tests::{
@@ -1069,7 +1065,7 @@ pub mod testing {
         pub fn arb_transparent_transfer_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
-            transfer in arb_vectorized_transparent_transfer(10),
+            transfer in arb_transparent_transfer(..5),
             code_hash in arb_hash(),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
@@ -1083,88 +1079,22 @@ pub mod testing {
     // Maximum number of notes to include in a transaction
     const MAX_ASSETS: usize = 2;
 
-    // Type of MASP transaction
-    #[derive(Debug, Clone)]
-    enum MaspTxType {
-        // Shielded transaction
-        Shielded,
-        // Shielding transaction
-        Shielding,
-        // Unshielding transaction
-        Unshielding,
-    }
-
     prop_compose! {
         /// Generate an arbitrary masp transfer transaction
-        pub fn arb_masp_transfer_tx()(transfers in arb_vectorized_transparent_transfer(5))(
+        pub fn arb_masp_transfer_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
             code_hash in arb_hash(),
-            (masp_tx_type, (shielded_transfer, asset_types, build_params)) in prop_oneof![
-                (Just(MaspTxType::Shielded), arb_shielded_transfer(0..MAX_ASSETS)),
-                (Just(MaspTxType::Shielding), arb_shielding_transfer(addr_taddr(transfers.sources.keys().next().unwrap().owner.clone()), 1)),
-                (Just(MaspTxType::Unshielding), arb_deshielding_transfer(addr_taddr(transfers.targets.keys().next().unwrap().owner.clone()), 1)),
-            ],
-            transfers in Just(transfers),
+            (data, shielded_transfer, asset_types, build_params) in arb_shielded_transfer(0..MAX_ASSETS),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
             let shielded_section_hash = tx.add_masp_tx_section(shielded_transfer.masp_tx).1;
             let build_param_bytes =
                 data_encoding::HEXLOWER.encode(&build_params.serialize_to_vec());
-            let tx_data = match masp_tx_type {
-                MaspTxType::Shielded => {
-                    tx.add_code_from_hash(code_hash, Some(TX_TRANSFER_WASM.to_owned()));
-                    let mut data = Transfer::masp(shielded_section_hash);
-                    if let Some((account, amount)) = transfers.targets.first_key_value() {
-                        data = data.transfer(MASP, account.owner.to_owned(), account.token.to_owned(), *amount).unwrap();
-                    }
-                    tx.add_data(data.clone());
-                    TxData::MaspTransfer(data, (build_params, build_param_bytes))
-                },
-                MaspTxType::Shielding => {
-                    // Set the transparent amount and token
-                    let (decoded, value) = asset_types.iter().next().unwrap();
-                    let token = decoded.token.clone();
-                    let amount = DenominatedAmount::new(
-                        token::Amount::from_masp_denominated(*value, decoded.position),
-                        decoded.denom,
-                    );
-                    tx.add_code_from_hash(code_hash, Some(TX_TRANSFER_WASM.to_owned()));
-                    let data = transfers.sources.into_iter().try_fold(
-                        Transfer::masp(shielded_section_hash),
-                        |acc, transfer| acc.transfer(
-                            transfer.0.owner,
-                            MASP,
-                            token.clone(),
-                            amount,
-                        ),
-                    ).unwrap();
-                    tx.add_data(data.clone());
-                    TxData::MaspTransfer(data, (build_params, build_param_bytes))
-                },
-                MaspTxType::Unshielding => {
-                    // Set the transparent amount and token
-                    let (decoded, value) = asset_types.iter().next().unwrap();
-                    let token = decoded.token.clone();
-                    let amount = DenominatedAmount::new(
-                        token::Amount::from_masp_denominated(*value, decoded.position),
-                        decoded.denom,
-                    );
-                    tx.add_code_from_hash(code_hash, Some(TX_TRANSFER_WASM.to_owned()));
-                    let data = transfers.targets.into_iter().try_fold(
-                        Transfer::masp(shielded_section_hash),
-                        |acc, transfer| acc.transfer(
-                            MASP,
-                            transfer.0.owner,
-                            token.clone(),
-                            amount,
-                        )
-                    ).unwrap();
-                    tx.add_data(data.clone());
-                    TxData::MaspTransfer(data, (build_params, build_param_bytes))
-                },
-            };
+            tx.add_code_from_hash(code_hash, Some(TX_TRANSFER_WASM.to_owned()));
+            tx.add_data(data.clone());
+            let tx_data = TxData::MaspTransfer(data, (build_params, build_param_bytes));
             tx.add_masp_builder(MaspBuilder {
                 asset_types: asset_types.into_keys().collect(),
                 // Store how the Info objects map to Descriptors/Outputs

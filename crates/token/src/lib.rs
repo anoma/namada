@@ -221,12 +221,13 @@ pub mod testing {
     pub use namada_core::token::*;
     pub use namada_trans_token::testing::*;
     use proptest::prelude::*;
+    use proptest::sample::SizeRange;
 
     use super::Transfer;
 
     prop_compose! {
         /// Generate a transparent transfer
-        fn arb_transparent_transfer()(
+        fn arb_single_transparent_transfer()(
             source in arb_non_internal_address(),
             target in arb_non_internal_address(),
             token in arb_established_address().prop_map(Address::Established),
@@ -242,17 +243,20 @@ pub mod testing {
     }
 
     /// Generate a vectorized transparent transfer
-    pub fn arb_vectorized_transparent_transfer(
-        number_of_txs: usize,
+    pub fn arb_transparent_transfer(
+        number_of_txs: impl Into<SizeRange>,
     ) -> impl Strategy<Value = Transfer> {
-        proptest::collection::vec(arb_transparent_transfer(), 0..number_of_txs)
-            .prop_filter_map("Transfers must not overflow", |data| {
-                data.into_iter().try_fold(
-                    Transfer::default(),
-                    |acc, (source, target, token, amount)| {
-                        acc.transfer(source, target, token, amount)
-                    },
-                )
-            })
+        proptest::collection::vec(
+            arb_single_transparent_transfer(),
+            number_of_txs,
+        )
+        .prop_filter_map("Transfers must not overflow", |data| {
+            data.into_iter().try_fold(
+                Transfer::default(),
+                |acc, (source, target, token, amount)| {
+                    acc.transfer(source, target, token, amount)
+                },
+            )
+        })
     }
 }
