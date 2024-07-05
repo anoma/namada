@@ -7,6 +7,7 @@ use borsh::BorshDeserialize;
 use namada_core::address::Address;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::dec::Dec;
+use namada_core::key::common;
 use namada_core::storage::Epoch;
 use namada_core::token;
 use namada_storage::collections::lazy_map::{NestedSubKey, SubKey};
@@ -14,7 +15,9 @@ use namada_storage::StorageRead;
 
 use crate::slashing::{find_validator_slashes, get_slashed_amount};
 use crate::storage::{
-    bond_handle, delegation_targets_handle, read_pos_params, unbond_handle,
+    bond_handle, delegation_targets_handle,
+    read_consensus_validator_set_addresses, read_pos_params, unbond_handle,
+    validator_eth_hot_key_handle,
 };
 use crate::types::{
     BondDetails, BondId, BondsAndUnbondsDetail, BondsAndUnbondsDetails,
@@ -526,4 +529,93 @@ fn make_unbond_details(
         amount,
         slashed_amount,
     }
+}
+
+/// Lookup the total voting power for an epoch.
+pub fn get_total_voting_power<S, Gov>(
+    storage: &S,
+    epoch: Epoch,
+) -> token::Amount
+where
+    S: StorageRead,
+    Gov: governance::Read<S>,
+{
+    let params =
+        read_pos_params::<S, Gov>(storage).expect("PoS params must be present");
+    crate::get_total_consensus_stake(storage, epoch, &params)
+        .expect("Total consensus stake must always be available")
+}
+
+/// Find the protocol key of the given validator address at the given epoch.
+pub fn get_validator_protocol_key<S, Gov>(
+    storage: &S,
+    addr: &Address,
+    epoch: Epoch,
+) -> namada_storage::Result<Option<common::PublicKey>>
+where
+    S: StorageRead,
+    Gov: governance::Read<S>,
+{
+    let params =
+        read_pos_params::<S, Gov>(storage).expect("PoS params must be present");
+    let protocol_keys = crate::validator_protocol_key_handle(addr);
+    protocol_keys.get(storage, epoch, &params)
+}
+
+/// Get a validator's Ethereum hot key from storage at the given epoch.
+pub fn get_validator_eth_hot_key<S, Gov>(
+    storage: &S,
+    validator: &Address,
+    epoch: Epoch,
+) -> namada_storage::Result<Option<common::PublicKey>>
+where
+    S: StorageRead,
+    Gov: governance::Read<S>,
+{
+    let params =
+        read_pos_params::<S, Gov>(storage).expect("PoS params must be present");
+    validator_eth_hot_key_handle(validator).get(storage, epoch, &params)
+}
+
+/// Read PoS validator's stake (sum of deltas).
+/// For non-validators and validators with `0` stake, this returns the default -
+/// `token::Amount::zero()`.
+pub fn read_validator_stake<S, Gov>(
+    storage: &S,
+    validator: &Address,
+    epoch: Epoch,
+) -> namada_storage::Result<token::Amount>
+where
+    S: StorageRead,
+    Gov: governance::Read<S>,
+{
+    let params =
+        read_pos_params::<S, Gov>(storage).expect("PoS params must be present");
+    crate::storage::read_validator_stake(storage, &params, validator, epoch)
+}
+
+/// Lookup data about a validator from their protocol signing key.
+pub fn get_consensus_validator_from_protocol_pk<S, Gov>(
+    storage: &S,
+    pk: &common::PublicKey,
+    epoch: Option<Epoch>,
+) -> namada_storage::Result<Option<Address>>
+where
+    S: StorageRead,
+    Gov: governance::Read<S>,
+{
+    let params = crate::read_pos_params::<S, Gov>(storage)?;
+    let epoch = epoch.map(Ok).unwrap_or_else(|| storage.get_block_epoch())?;
+
+    let address = read_consensus_validator_set_addresses(storage, epoch)?
+        .iter()
+        .find(|validator| {
+            let protocol_keys = crate::validator_protocol_key_handle(validator);
+            match protocol_keys.get(storage, epoch, &params) {
+                Ok(Some(key)) => key == *pk,
+                _ => false,
+            }
+        })
+        .cloned();
+    Ok(address)
 }

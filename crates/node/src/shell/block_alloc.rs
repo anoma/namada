@@ -42,7 +42,6 @@ pub mod states;
 use std::marker::PhantomData;
 
 use namada_sdk::parameters;
-use namada_sdk::proof_of_stake::pos_queries::PosQueries;
 use namada_sdk::state::{self, WlState};
 
 #[allow(unused_imports)]
@@ -135,7 +134,8 @@ where
     #[inline]
     fn from(storage: &WlState<D, H>) -> Self {
         Self::init(
-            storage.pos_queries().get_max_proposal_bytes().get(),
+            parameters::read_max_proposal_bytes(storage)
+                .expect("Must be able to read ProposalBytes from storage"),
             parameters::get_max_block_gas(storage).unwrap(),
         )
     }

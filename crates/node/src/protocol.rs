@@ -994,7 +994,11 @@ where
             // with ABCI+, multiple vote extension protocol txs may be needed
             // to reach a complete proof.
             let signing_epoch = ext.data.signing_epoch;
-            transactions::validator_set_update::aggregate_votes(
+            transactions::validator_set_update::aggregate_votes::<
+                _,
+                _,
+                governance::Store<_>,
+            >(
                 state,
                 validator_set_update::VextDigest::singleton(ext),
                 signing_epoch,

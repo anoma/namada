@@ -84,7 +84,6 @@ mod test_queries {
     use namada_sdk::eth_bridge::SendValsetUpd;
     use namada_sdk::proof_of_stake::storage::read_consensus_validator_set_addresses_with_stake;
     use namada_sdk::proof_of_stake::types::WeightedValidator;
-    use namada_sdk::proof_of_stake::PosQueries;
     use namada_sdk::storage::Epoch;
     use namada_sdk::tendermint::abci::types::VoteInfo;
 
@@ -135,8 +134,8 @@ mod test_queries {
                     assert_eq!(
                         shell
                             .state
-                            .pos_queries()
-                            .get_epoch(curr_block_height.into()),
+                            .get_epoch_at_height(curr_block_height.into())
+                            .unwrap(),
                         Some(Epoch(curr_epoch))
                     );
                     assert_eq!(
@@ -146,8 +145,7 @@ mod test_queries {
                             .must_send_valset_upd(SendValsetUpd::Now),
                         can_send,
                     );
-                    let params =
-                        shell.state.pos_queries().get_pos_params();
+                    let params = read_pos_params(&shell.state).unwrap();
                     let consensus_set: Vec<WeightedValidator> =
                         read_consensus_validator_set_addresses_with_stake(
                             &shell.state,

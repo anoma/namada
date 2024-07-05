@@ -14,9 +14,10 @@ use namada_core::ethereum_events::EthereumEvent;
 use namada_core::key::common;
 use namada_core::storage::{BlockHeight, Epoch, Key};
 use namada_core::token::Amount;
-use namada_proof_of_stake::pos_queries::PosQueries;
+use namada_proof_of_stake::storage::read_owned_pos_params;
 use namada_state::tx_queue::ExpiredTx;
 use namada_state::{DBIter, StorageHasher, WlState, DB};
+use namada_systems::governance;
 use namada_tx::data::BatchedTxResult;
 use namada_vote_ext::ethereum_events::{MultiSignedEthEvent, SignedVext, Vext};
 
@@ -81,15 +82,16 @@ where
 ///
 /// This function is deterministic based on some existing blockchain state and
 /// the passed `events`.
-pub fn apply_derived_tx<D, H>(
+pub fn apply_derived_tx<D, H, Gov>(
     state: &mut WlState<D, H>,
     events: Vec<MultiSignedEthEvent>,
 ) -> Result<BatchedTxResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
+    Gov: governance::Read<WlState<D, H>>,
 {
-    let mut changed_keys = timeout_events(state)?;
+    let mut changed_keys = timeout_events::<D, H, Gov>(state)?;
     if events.is_empty() {
         return Ok(BatchedTxResult {
             changed_keys,
@@ -116,7 +118,7 @@ where
     let voting_powers = utils::get_voting_powers(state, &updates)?;
 
     let (mut apply_updates_keys, eth_bridge_events) =
-        apply_updates(state, updates, voting_powers)?;
+        apply_updates::<D, H, Gov>(state, updates, voting_powers)?;
     changed_keys.append(&mut apply_updates_keys);
 
     Ok(BatchedTxResult {
@@ -134,7 +136,7 @@ where
 ///
 /// The `voting_powers` map must contain a voting power for all
 /// `(Address, BlockHeight)`s that occur in any of the `updates`.
-pub(super) fn apply_updates<D, H>(
+pub(super) fn apply_updates<D, H, Gov>(
     state: &mut WlState<D, H>,
     updates: HashSet<EthMsgUpdate>,
     voting_powers: HashMap<(Address, BlockHeight), Amount>,
@@ -142,6 +144,7 @@ pub(super) fn apply_updates<D, H>(
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
+    Gov: governance::Read<WlState<D, H>>,
 {
     tracing::debug!(
         updates.len = updates.len(),
@@ -156,7 +159,7 @@ where
         // The order in which updates are applied to storage does not matter.
         // The final storage state will be the same regardless.
         let (mut changed, newly_confirmed) =
-            apply_update(state, update.clone(), &voting_powers)?;
+            apply_update::<D, H, Gov>(state, update.clone(), &voting_powers)?;
         changed_keys.append(&mut changed);
         if newly_confirmed {
             confirmed.push(update.body);
@@ -183,7 +186,7 @@ where
 ///
 /// The `voting_powers` map must contain a voting power for all
 /// `(Address, BlockHeight)`s that occur in `update`.
-fn apply_update<D, H>(
+fn apply_update<D, H, Gov>(
     state: &mut WlState<D, H>,
     update: EthMsgUpdate,
     voting_powers: &HashMap<(Address, BlockHeight), Amount>,
@@ -191,6 +194,7 @@ fn apply_update<D, H>(
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
+    Gov: governance::Read<WlState<D, H>>,
 {
     let eth_msg_keys = vote_tallies::Keys::from(&update.body);
     let exists_in_storage = if let Some(seen) =
@@ -208,8 +212,11 @@ where
     let (vote_tracking, changed, confirmed, already_present) =
         if !exists_in_storage {
             tracing::debug!(%eth_msg_keys.prefix, "Ethereum event not seen before by any validator");
-            let vote_tracking =
-                calculate_new(state, update.seen_by, voting_powers)?;
+            let vote_tracking = calculate_new::<D, H, Gov>(
+                state,
+                update.seen_by,
+                voting_powers,
+            )?;
             let changed = eth_msg_keys.into_iter().collect();
             let confirmed = vote_tracking.seen;
             (vote_tracking, changed, confirmed, false)
@@ -221,7 +228,11 @@ where
             let new_votes =
                 NewVotes::new(update.seen_by.clone(), voting_powers)?;
             let (vote_tracking, changed) =
-                votes::update::calculate(state, &eth_msg_keys, new_votes)?;
+                votes::update::calculate::<D, H, Gov, _>(
+                    state,
+                    &eth_msg_keys,
+                    new_votes,
+                )?;
             if changed.is_empty() {
                 return Ok((changed, false));
             }
@@ -241,10 +252,11 @@ where
     Ok((changed, confirmed))
 }
 
-fn timeout_events<D, H>(state: &mut WlState<D, H>) -> Result<ChangedKeys>
+fn timeout_events<D, H, Gov>(state: &mut WlState<D, H>) -> Result<ChangedKeys>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
+    Gov: governance::Read<WlState<D, H>>,
 {
     let mut changed = ChangedKeys::new();
     for keys in get_timed_out_eth_events(state)? {
@@ -252,7 +264,9 @@ where
             %keys.prefix,
             "Ethereum event timed out",
         );
-        if let Some(event) = votes::storage::delete(state, &keys)? {
+        if let Some(event) =
+            votes::storage::delete::<D, H, Gov, _>(state, &keys)?
+        {
             tracing::debug!(
                 %keys.prefix,
                 "Queueing Ethereum event for retransmission",
@@ -281,7 +295,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let unbonding_len = state.pos_queries().get_pos_params().unbonding_len;
+    let unbonding_len = read_owned_pos_params(state)?.unbonding_len;
     let current_epoch = state.in_mem().last_epoch;
     if current_epoch.0 <= unbonding_len {
         return Ok(Vec::new());
@@ -358,7 +372,7 @@ mod tests {
         EpochedVotingPower, EpochedVotingPowerExt, Votes,
     };
     use crate::storage::wrapped_erc20s;
-    use crate::test_utils;
+    use crate::test_utils::{self, GovStore};
     use crate::token::storage_key::{balance_key, minted_balance_key};
 
     /// All kinds of [`Keys`].
@@ -407,8 +421,11 @@ mod tests {
             )],
         );
 
-        let (changed_keys, _) =
-            apply_updates(&mut state, updates, voting_powers)?;
+        let (changed_keys, _) = apply_updates::<_, _, GovStore<_>>(
+            &mut state,
+            updates,
+            voting_powers,
+        )?;
 
         let eth_msg_keys: vote_tallies::Keys<EthereumEvent> = (&body).into();
         let wrapped_erc20_token = wrapped_erc20s::token(&asset);
@@ -440,7 +457,7 @@ mod tests {
         let voting_power = state
             .read::<EpochedVotingPower>(&eth_msg_keys.voting_power())?
             .expect("Test failed")
-            .fractional_stake(&state);
+            .fractional_stake::<_, _, GovStore<_>>(&state);
         assert_eq!(voting_power, FractionalVotingPower::WHOLE);
 
         let epoch: Epoch = state
@@ -492,7 +509,7 @@ mod tests {
             }],
         };
 
-        let result = apply_derived_tx(
+        let result = apply_derived_tx::<_, _, GovStore<_>>(
             &mut state,
             vec![MultiSignedEthEvent {
                 event: event.clone(),
@@ -548,7 +565,7 @@ mod tests {
             }],
         };
 
-        let result = apply_derived_tx(
+        let result = apply_derived_tx::<_, _, GovStore<_>>(
             &mut state,
             vec![MultiSignedEthEvent {
                 event: event.clone(),
@@ -607,7 +624,8 @@ mod tests {
 
         let multisigneds = vec![multisigned.clone(), multisigned];
 
-        let result = apply_derived_tx(&mut state, multisigneds);
+        let result =
+            apply_derived_tx::<_, _, GovStore<_>>(&mut state, multisigneds);
         let tx_result = match result {
             Ok(tx_result) => tx_result,
             Err(err) => panic!("unexpected error: {:#?}", err),
@@ -633,7 +651,7 @@ mod tests {
         let voting_power = state
             .read::<EpochedVotingPower>(&eth_msg_keys.voting_power())?
             .expect("Test failed")
-            .fractional_stake(&state);
+            .fractional_stake::<_, _, GovStore<_>>(&state);
         assert_eq!(voting_power, FractionalVotingPower::HALF);
 
         Ok(())
@@ -717,7 +735,7 @@ mod tests {
                 receiver: receiver.clone(),
             }],
         };
-        let _result = apply_derived_tx(
+        let _result = apply_derived_tx::<_, _, GovStore<_>>(
             &mut state,
             vec![MultiSignedEthEvent {
                 event: event.clone(),
@@ -731,11 +749,13 @@ mod tests {
 
         // commit then update the epoch
         state.commit_block().unwrap();
-        let unbonding_len =
-            namada_proof_of_stake::storage::read_pos_params(&state)
-                .expect("Test failed")
-                .unbonding_len
-                + 1;
+        let unbonding_len = namada_proof_of_stake::storage::read_pos_params::<
+            _,
+            GovStore<_>,
+        >(&state)
+        .expect("Test failed")
+        .unbonding_len
+            + 1;
         state.in_mem_mut().last_epoch =
             state.in_mem().last_epoch + unbonding_len;
         state.in_mem_mut().block.epoch = state.in_mem().last_epoch + 1_u64;
@@ -748,7 +768,7 @@ mod tests {
                 receiver,
             }],
         };
-        let result = apply_derived_tx(
+        let result = apply_derived_tx::<_, _, GovStore<_>>(
             &mut state,
             vec![MultiSignedEthEvent {
                 event: new_event.clone(),
@@ -853,7 +873,7 @@ mod tests {
         };
         let keys = vote_tallies::Keys::from(&event);
 
-        let result = apply_derived_tx(
+        let result = apply_derived_tx::<_, _, GovStore<_>>(
             &mut state,
             vec![MultiSignedEthEvent {
                 event: event.clone(),
@@ -866,7 +886,7 @@ mod tests {
                 (KeyKind::VotingPower, Some(power)) => {
                     let power = EpochedVotingPower::try_from_slice(&power)
                         .expect("Test failed")
-                        .fractional_stake(&state);
+                        .fractional_stake::<_, _, GovStore<_>>(&state);
                     assert_eq!(power, FractionalVotingPower::HALF);
                 }
                 (_, Some(_)) => {}
@@ -875,16 +895,18 @@ mod tests {
 
         // commit then update the epoch
         state.commit_block().unwrap();
-        let unbonding_len =
-            namada_proof_of_stake::storage::read_pos_params(&state)
-                .expect("Test failed")
-                .unbonding_len
-                + 1;
+        let unbonding_len = namada_proof_of_stake::storage::read_pos_params::<
+            _,
+            GovStore<_>,
+        >(&state)
+        .expect("Test failed")
+        .unbonding_len
+            + 1;
         state.in_mem_mut().last_epoch =
             state.in_mem().last_epoch + unbonding_len;
         state.in_mem_mut().block.epoch = state.in_mem().last_epoch + 1_u64;
 
-        let result = apply_derived_tx(
+        let result = apply_derived_tx::<_, _, GovStore<_>>(
             &mut state,
             vec![MultiSignedEthEvent {
                 event,
@@ -897,7 +919,7 @@ mod tests {
                 (KeyKind::VotingPower, Some(power)) => {
                     let power = EpochedVotingPower::try_from_slice(&power)
                         .expect("Test failed")
-                        .fractional_stake(&state);
+                        .fractional_stake::<_, _, GovStore<_>>(&state);
                     assert_eq!(power, FractionalVotingPower::HALF);
                 }
                 (_, Some(_)) => {}
@@ -933,8 +955,10 @@ mod tests {
         macro_rules! nonce_ok {
             ($nonce:expr) => {
                 let (multisigned, event) = new_multisigned($nonce);
-                let tx_result =
-                    apply_derived_tx(&mut state, vec![multisigned])?;
+                let tx_result = apply_derived_tx::<_, _, GovStore<_>>(
+                    &mut state,
+                    vec![multisigned],
+                )?;
 
                 let eth_msg_keys = vote_tallies::Keys::from(&event);
                 assert!(
@@ -952,8 +976,10 @@ mod tests {
         macro_rules! nonce_err {
             ($nonce:expr) => {
                 let (multisigned, event) = new_multisigned($nonce);
-                let tx_result =
-                    apply_derived_tx(&mut state, vec![multisigned])?;
+                let tx_result = apply_derived_tx::<_, _, GovStore<_>>(
+                    &mut state,
+                    vec![multisigned],
+                )?;
 
                 let eth_msg_keys = vote_tallies::Keys::from(&event);
                 assert!(

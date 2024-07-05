@@ -7,7 +7,9 @@ use namada_sdk::gas::TxGasMeter;
 use namada_sdk::key::tm_raw_hash_to_string;
 use namada_sdk::parameters::get_gas_scale;
 use namada_sdk::proof_of_stake::storage::find_validator_by_raw_hash;
-use namada_sdk::state::{DBIter, StorageHasher, TempWlState, TxIndex, DB};
+use namada_sdk::state::{
+    DBIter, StorageHasher, StorageRead, TempWlState, TxIndex, DB,
+};
 use namada_sdk::token::{Amount, DenominatedAmount};
 use namada_sdk::tx::data::WrapperTx;
 use namada_sdk::tx::Tx;
@@ -423,10 +425,10 @@ mod test_prepare_proposal {
     use namada_sdk::key::RefTo;
     use namada_sdk::proof_of_stake::storage::{
         consensus_validator_set_handle,
-        read_consensus_validator_set_addresses_with_stake,
+        read_consensus_validator_set_addresses_with_stake, read_pos_params,
     };
     use namada_sdk::proof_of_stake::types::WeightedValidator;
-    use namada_sdk::proof_of_stake::{Epoch, PosQueries};
+    use namada_sdk::proof_of_stake::Epoch;
     use namada_sdk::state::collections::lazy_map::{NestedSubKey, SubKey};
     use namada_sdk::storage::{BlockHeight, InnerEthEventsQueue, StorageWrite};
     use namada_sdk::token::read_denom;
@@ -616,15 +618,15 @@ mod test_prepare_proposal {
                 ..Default::default()
             });
 
-        let params = shell.state.pos_queries().get_pos_params();
+        let params = read_pos_params(&shell.state).unwrap();
 
         // artificially change the voting power of the default validator to
         // one, change the block height, and commit a dummy block,
         // to move to a new epoch
         let events_epoch = shell
             .state
-            .pos_queries()
-            .get_epoch(FIRST_HEIGHT)
+            .get_epoch_at_height(FIRST_HEIGHT)
+            .unwrap()
             .expect("Test failed");
         let validators_handle =
             consensus_validator_set_handle().at(&events_epoch);
@@ -710,8 +712,8 @@ mod test_prepare_proposal {
         assert_eq!(
             shell
                 .state
-                .pos_queries()
-                .get_epoch(shell.get_current_decision_height()),
+                .get_epoch_at_height(shell.get_current_decision_height())
+                .unwrap(),
             Some(Epoch(1))
         );
 

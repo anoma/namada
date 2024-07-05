@@ -1,8 +1,9 @@
 //! Validator set update validation.
 
 use namada_core::storage::Epoch;
-use namada_proof_of_stake::pos_queries::PosQueries;
+use namada_proof_of_stake::queries::get_validator_eth_hot_key;
 use namada_state::{DBIter, StorageHasher, WlState, DB};
+use namada_systems::governance;
 use namada_vote_ext::validator_set_update;
 
 use super::VoteExtensionError;
@@ -28,7 +29,7 @@ use crate::storage::eth_bridge_queries::{
 ///    of the validators of `signing_epoch + 1`.
 ///  * The voting powers signed over were Ethereum ABI encoded, normalized to
 ///    `2^32`, and sorted in descending order.
-pub fn validate_valset_upd_vext<D, H>(
+pub fn validate_valset_upd_vext<D, H, Gov>(
     state: &WlState<D, H>,
     ext: &validator_set_update::SignedVext,
     last_epoch: Epoch,
@@ -36,6 +37,7 @@ pub fn validate_valset_upd_vext<D, H>(
 where
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
+    Gov: governance::Read<WlState<D, H>>,
 {
     let signing_epoch = ext.data.signing_epoch;
     if !is_bridge_comptime_enabled() {
@@ -75,10 +77,10 @@ where
     // verify if the new epoch validators' voting powers in storage match
     // the voting powers in the vote extension
     let mut no_local_consensus_eth_addresses = 0;
-    for (eth_addr_book, namada_addr, namada_power) in state
-        .ethbridge_queries()
-        .get_consensus_eth_addresses(Some(signing_epoch.next()))
-        .iter()
+    for (eth_addr_book, namada_addr, namada_power) in
+        state
+            .ethbridge_queries()
+            .get_consensus_eth_addresses::<Gov>(signing_epoch.next())
     {
         let &ext_power = match ext.data.voting_powers.get(&eth_addr_book) {
             Some(voting_power) => voting_power,
@@ -117,17 +119,21 @@ where
     }
     // get the public key associated with this validator
     let validator = &ext.data.validator_addr;
-    let pk = state
-        .pos_queries()
-        .read_validator_eth_hot_key(validator, Some(signing_epoch))
-        .ok_or_else(|| {
-            tracing::debug!(
-                %validator,
-                "Could not get Ethereum hot key from Storage for some validator, \
-                 while validating valset upd vote extension"
-            );
-            VoteExtensionError::PubKeyNotInStorage
-        })?;
+    let pk = get_validator_eth_hot_key::<_, Gov>(
+        state,
+        validator,
+        signing_epoch,
+    )
+    .ok()
+    .flatten()
+    .ok_or_else(|| {
+        tracing::debug!(
+            %validator,
+            "Could not get Ethereum hot key from Storage for some validator, \
+             while validating valset upd vote extension"
+        );
+        VoteExtensionError::PubKeyNotInStorage
+    })?;
     // verify the signature of the vote extension
     ext.verify(&pk).map_err(|err| {
         tracing::debug!(
@@ -152,7 +158,7 @@ mod tests {
 
     use super::*;
     use crate::storage::eth_bridge_queries::is_bridge_comptime_enabled;
-    use crate::test_utils;
+    use crate::test_utils::{self, GovStore};
 
     /// Test that we reject vote extensions containing a superset of the
     /// next validator set in storage.
@@ -215,7 +221,11 @@ mod tests {
         }
         .sign(&keys.get(&validator).expect("Test failed").eth_bridge);
 
-        let result = validate_valset_upd_vext(&state, &ext, 0.into());
+        let result = validate_valset_upd_vext::<_, _, GovStore<_>>(
+            &state,
+            &ext,
+            0.into(),
+        );
         assert_matches!(
             result,
             Err(VoteExtensionError::ExtraValidatorsInExtension)

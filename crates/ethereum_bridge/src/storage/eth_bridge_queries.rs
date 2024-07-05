@@ -14,18 +14,21 @@ use namada_core::{hints, token};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
-use namada_proof_of_stake::pos_queries::{ConsensusValidators, PosQueries};
+use namada_proof_of_stake::queries::get_total_voting_power;
 use namada_proof_of_stake::storage::{
+    read_consensus_validator_set_addresses_with_stake, read_pos_params,
     validator_eth_cold_key_handle, validator_eth_hot_key_handle,
 };
 use namada_state::{DBIter, StorageHasher, StoreType, WlState, DB};
 use namada_storage::StorageRead;
+use namada_systems::governance;
 use namada_vote_ext::validator_set_update::{
     EthAddrBook, ValidatorSetArgs, VotingPowersMap, VotingPowersMapExt,
 };
 
 use crate::storage::proof::BridgePoolRootProof;
 use crate::storage::{active_key, bridge_pool, vote_tallies, whitelist};
+use crate::test_utils::GovStore;
 
 /// Check if the Ethereum Bridge has been enabled at compile time.
 pub const fn is_bridge_comptime_enabled() -> bool {
@@ -308,14 +311,17 @@ where
     /// For a given Namada validator, return its corresponding Ethereum bridge
     /// address.
     #[inline]
-    pub fn get_ethbridge_from_namada_addr(
+    pub fn get_ethbridge_from_namada_addr<Gov>(
         self,
         validator: &Address,
         epoch: Option<Epoch>,
-    ) -> Option<EthAddress> {
+    ) -> Option<EthAddress>
+    where
+        Gov: governance::Read<WlState<D, H>>,
+    {
         let epoch =
             epoch.unwrap_or_else(|| self.state.in_mem().get_current_epoch().0);
-        let params = self.state.pos_queries().get_pos_params();
+        let params = read_pos_params::<_, Gov>(self.state).unwrap();
         validator_eth_hot_key_handle(validator)
             .get(self.state, epoch, &params)
             .expect("Should be able to read eth hot key from storage")
@@ -325,14 +331,17 @@ where
     /// For a given Namada validator, return its corresponding Ethereum
     /// governance address.
     #[inline]
-    pub fn get_ethgov_from_namada_addr(
+    pub fn get_ethgov_from_namada_addr<Gov>(
         self,
         validator: &Address,
         epoch: Option<Epoch>,
-    ) -> Option<EthAddress> {
+    ) -> Option<EthAddress>
+    where
+        Gov: governance::Read<WlState<D, H>>,
+    {
         let epoch =
             epoch.unwrap_or_else(|| self.state.in_mem().get_current_epoch().0);
-        let params = self.state.pos_queries().get_pos_params();
+        let params = read_pos_params::<_, Gov>(self.state).unwrap();
         validator_eth_cold_key_handle(validator)
             .get(self.state, epoch, &params)
             .expect("Should be able to read eth cold key from storage")
@@ -342,13 +351,18 @@ where
     /// For a given Namada validator, return its corresponding Ethereum
     /// address book.
     #[inline]
-    pub fn get_eth_addr_book(
+    pub fn get_eth_addr_book<Gov>(
         self,
         validator: &Address,
         epoch: Option<Epoch>,
-    ) -> Option<EthAddrBook> {
-        let bridge = self.get_ethbridge_from_namada_addr(validator, epoch)?;
-        let governance = self.get_ethgov_from_namada_addr(validator, epoch)?;
+    ) -> Option<EthAddrBook>
+    where
+        Gov: governance::Read<WlState<D, H>>,
+    {
+        let bridge =
+            self.get_ethbridge_from_namada_addr::<Gov>(validator, epoch)?;
+        let governance =
+            self.get_ethgov_from_namada_addr::<Gov>(validator, epoch)?;
         Some(EthAddrBook {
             hot_key_addr: bridge,
             cold_key_addr: governance,
@@ -356,50 +370,50 @@ where
     }
 
     /// Extension of
-    /// [`get_consensus_validators`](namada_proof_of_stake::pos_queries::PosQueriesHook::get_consensus_validators),
+    /// [`read_consensus_validator_set_addresses_with_stake`](namada_proof_of_stake::pos_queries::storage::read_consensus_validator_set_addresses_with_stake),
     /// which additionally returns all Ethereum addresses of some validator.
     #[inline]
-    pub fn get_consensus_eth_addresses(
+    pub fn get_consensus_eth_addresses<Gov>(
         self,
-        epoch: Option<Epoch>,
-    ) -> ConsensusEthAddresses<'db, D, H> {
-        let epoch =
-            epoch.unwrap_or_else(|| self.state.in_mem().get_current_epoch().0);
-        let consensus_validators = self
-            .state
-            .pos_queries()
-            .get_consensus_validators(Some(epoch));
-        ConsensusEthAddresses {
-            state: self.state,
-            consensus_validators,
-            epoch,
-        }
+        epoch: Epoch,
+    ) -> impl Iterator<Item = (EthAddrBook, Address, token::Amount)> + 'db
+    where
+        Gov: governance::Read<WlState<D, H>>,
+    {
+        read_consensus_validator_set_addresses_with_stake(self.state, epoch)
+            .unwrap()
+            .into_iter()
+            .map(move |validator| {
+                let eth_addr_book = self
+                    .state
+                    .ethbridge_queries()
+                    .get_eth_addr_book::<Gov>(&validator.address, Some(epoch))
+                    .expect("All Namada validators should have Ethereum keys");
+                (eth_addr_book, validator.address, validator.bonded_stake)
+            })
     }
 
     /// Query a chosen [`ValidatorSetArgs`] at the given [`Epoch`].
     /// Also returns a map of each validator's voting power.
-    fn get_validator_set_args<F>(
+    fn get_validator_set_args<Gov, F>(
         self,
         epoch: Option<Epoch>,
         mut select_validator: F,
     ) -> (ValidatorSetArgs, VotingPowersMap)
     where
+        Gov: governance::Read<WlState<D, H>>,
         F: FnMut(&EthAddrBook) -> EthAddress,
     {
         let epoch =
             epoch.unwrap_or_else(|| self.state.in_mem().get_current_epoch().0);
 
         let voting_powers_map: VotingPowersMap = self
-            .get_consensus_eth_addresses(Some(epoch))
-            .iter()
+            .get_consensus_eth_addresses::<Gov>(epoch)
             .map(|(addr_book, _, power)| (addr_book, power))
             .collect();
 
-        let total_power = self
-            .state
-            .pos_queries()
-            .get_total_voting_power(Some(epoch))
-            .into();
+        let total_power =
+            get_total_voting_power::<_, GovStore<_>>(self.state, epoch).into();
         let (validators, voting_powers) = voting_powers_map
             .get_sorted()
             .into_iter()
@@ -426,11 +440,14 @@ where
     /// Query the Bridge [`ValidatorSetArgs`] at the given [`Epoch`].
     /// Also returns a map of each validator's voting power.
     #[inline]
-    pub fn get_bridge_validator_set(
+    pub fn get_bridge_validator_set<Gov>(
         self,
         epoch: Option<Epoch>,
-    ) -> (ValidatorSetArgs, VotingPowersMap) {
-        self.get_validator_set_args(
+    ) -> (ValidatorSetArgs, VotingPowersMap)
+    where
+        Gov: governance::Read<WlState<D, H>>,
+    {
+        self.get_validator_set_args::<Gov, _>(
             epoch,
             |&EthAddrBook { hot_key_addr, .. }| hot_key_addr,
         )
@@ -439,11 +456,14 @@ where
     /// Query the Governance [`ValidatorSetArgs`] at the given [`Epoch`].
     /// Also returns a map of each validator's voting power.
     #[inline]
-    pub fn get_governance_validator_set(
+    pub fn get_governance_validator_set<Gov>(
         self,
         epoch: Option<Epoch>,
-    ) -> (ValidatorSetArgs, VotingPowersMap) {
-        self.get_validator_set_args(
+    ) -> (ValidatorSetArgs, VotingPowersMap)
+    where
+        Gov: governance::Read<WlState<D, H>>,
+    {
+        self.get_validator_set_args::<Gov, _>(
             epoch,
             |&EthAddrBook { cold_key_addr, .. }| cold_key_addr,
         )
@@ -634,38 +654,5 @@ impl EthAssetMint {
     #[inline]
     pub fn should_mint_erc20s(&self) -> bool {
         !self.erc20_amount.is_zero()
-    }
-}
-
-/// A handle to the Ethereum addresses of the set of consensus
-/// validators in Namada, at some given epoch.
-pub struct ConsensusEthAddresses<'db, D, H>
-where
-    D: 'static + DB + for<'iter> DBIter<'iter>,
-    H: 'static + StorageHasher,
-{
-    epoch: Epoch,
-    state: &'db WlState<D, H>,
-    consensus_validators: ConsensusValidators<'db, WlState<D, H>>,
-}
-
-impl<'db, D, H> ConsensusEthAddresses<'db, D, H>
-where
-    D: 'static + DB + for<'iter> DBIter<'iter>,
-    H: 'static + StorageHasher,
-{
-    /// Iterate over the Ethereum addresses of the set of consensus validators
-    /// in Namada, at some given epoch.
-    pub fn iter<'this: 'db>(
-        &'this self,
-    ) -> impl Iterator<Item = (EthAddrBook, Address, token::Amount)> + 'db {
-        self.consensus_validators.iter().map(move |validator| {
-            let eth_addr_book = self
-                .state
-                .ethbridge_queries()
-                .get_eth_addr_book(&validator.address, Some(self.epoch))
-                .expect("All Namada validators should have Ethereum keys");
-            (eth_addr_book, validator.address, validator.bonded_stake)
-        })
     }
 }

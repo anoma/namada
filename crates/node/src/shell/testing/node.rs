@@ -20,9 +20,8 @@ use namada_sdk::events::log::dumb_queries;
 use namada_sdk::events::Event;
 use namada_sdk::hash::Hash;
 use namada_sdk::key::tm_consensus_key_raw_hash;
-use namada_sdk::proof_of_stake::pos_queries::PosQueries;
 use namada_sdk::proof_of_stake::storage::{
-    read_consensus_validator_set_addresses_with_stake,
+    read_consensus_validator_set_addresses_with_stake, read_pos_params,
     validator_consensus_key_handle,
 };
 use namada_sdk::proof_of_stake::types::WeightedValidator;
@@ -402,7 +401,7 @@ impl MockNode {
     fn prepare_request(&self) -> (Vec<u8>, Vec<VoteInfo>) {
         let (val1, ck) = {
             let locked = self.shell.lock().unwrap();
-            let params = locked.state.pos_queries().get_pos_params();
+            let params = read_pos_params(&locked.state).unwrap();
             let current_epoch = locked.state.in_mem().get_current_epoch().0;
             let consensus_set: Vec<WeightedValidator> =
                 read_consensus_validator_set_addresses_with_stake(

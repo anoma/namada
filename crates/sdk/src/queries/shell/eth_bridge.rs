@@ -33,7 +33,6 @@ use namada_ethereum_bridge::storage::{
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
-use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_state::MembershipProof::BridgePool;
 use namada_state::{DBIter, StorageHasher, StoreRef, StoreType, DB};
 use namada_storage::{CustomError, ResultExt, StorageRead};
@@ -802,7 +801,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let maybe_epoch = ctx.state.pos_queries().get_epoch(height);
+    let maybe_epoch = ctx.state.get_epoch_at_height(height).unwrap();
     let Some(epoch) = maybe_epoch else {
         return Err(namada_storage::Error::SimpleMessage(
             "The epoch of the requested height does not exist",
@@ -850,6 +849,8 @@ mod test_ethbridge_router {
     };
     use namada_ethereum_bridge::storage::proof::BridgePoolRootProof;
     use namada_ethereum_bridge::storage::whitelist;
+    use namada_ethereum_bridge::test_utils::GovStore;
+    use namada_proof_of_stake::queries::get_total_voting_power;
     use namada_storage::mockdb::MockDBWriteBatch;
     use namada_storage::StorageWrite;
     use namada_vote_ext::validator_set_update;
@@ -886,17 +887,14 @@ mod test_ethbridge_router {
             .await
             .unwrap();
         let expected = {
-            let total_power = client
-                .state
-                .pos_queries()
-                .get_total_voting_power(Some(epoch))
-                .into();
+            let total_power =
+                get_total_voting_power::<_, GovStore<_>>(&client.state, epoch)
+                    .into();
 
             let voting_powers_map: VotingPowersMap = client
                 .state
                 .ethbridge_queries()
-                .get_consensus_eth_addresses(Some(epoch))
-                .iter()
+                .get_consensus_eth_addresses(epoch)
                 .map(|(addr_book, _, power)| (addr_book, power))
                 .collect();
             let (validators, voting_powers) = voting_powers_map
@@ -976,7 +974,7 @@ mod test_ethbridge_router {
                 .expect("Test failed")
                 .eth_bridge,
         );
-        let tx_result = aggregate_votes(
+        let tx_result = aggregate_votes::<_, _, GovStore<_>>(
             &mut client.state,
             validator_set_update::VextDigest::singleton(vext.clone()),
             0.into(),

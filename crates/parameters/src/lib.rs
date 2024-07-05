@@ -342,6 +342,20 @@ where
         .into_storage_result()
 }
 
+/// Retrieve the `max_proposal_bytes` consensus parameter from storage.
+pub fn read_max_proposal_bytes<S>(
+    storage: &S,
+) -> namada_storage::Result<ProposalBytes>
+where
+    S: StorageRead,
+{
+    let key = storage::get_max_proposal_bytes_key();
+    let result = storage.read(&key)?;
+    result
+        .ok_or(ReadError::ParametersMissing)
+        .into_storage_result()
+}
+
 /// Read all the parameters from storage. Returns the parameters and gas
 /// cost.
 pub fn read<S>(storage: &S) -> namada_storage::Result<Parameters>

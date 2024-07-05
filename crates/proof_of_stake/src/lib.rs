@@ -20,7 +20,6 @@
 pub mod epoched;
 pub mod event;
 pub mod parameters;
-pub mod pos_queries;
 pub mod queries;
 pub mod rewards;
 pub mod slashing;
@@ -55,7 +54,6 @@ use namada_storage::{OptionExt, StorageRead, StorageWrite};
 pub use namada_systems::proof_of_stake::*;
 pub use namada_trans_token as token;
 pub use parameters::{OwnedPosParams, PosParams};
-pub use pos_queries::PosQueries;
 use storage::write_validator_name;
 pub use types::GenesisValidator;
 use types::{into_tm_voting_power, DelegationEpochs};
@@ -97,10 +95,9 @@ use crate::storage::{
 };
 use crate::storage_key::{bonds_for_source_prefix, is_bond_key};
 use crate::types::{
-    BondId, ConsensusValidator, ConsensusValidatorSet,
-    EagerRedelegatedBondsMap, RedelegatedBondsOrUnbonds, RedelegatedTokens,
-    ResultSlashing, Slash, Unbonds, ValidatorMetaData, ValidatorSetUpdate,
-    ValidatorState, VoteInfo,
+    BondId, ConsensusValidator, EagerRedelegatedBondsMap,
+    RedelegatedBondsOrUnbonds, RedelegatedTokens, ResultSlashing, Slash,
+    Unbonds, ValidatorMetaData, ValidatorSetUpdate, ValidatorState, VoteInfo,
 };
 use crate::validator_set_update::{
     copy_validator_sets_and_positions, insert_validator_into_validator_set,

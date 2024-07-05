@@ -6,7 +6,8 @@ use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::common;
 use namada_core::storage::{BlockHeight, Epoch};
 use namada_core::token::Amount;
-use namada_state::{DBIter, StorageHasher, WlState, DB};
+use namada_state::{DBIter, StorageHasher, StorageRead, WlState, DB};
+use namada_systems::governance;
 use namada_tx::data::BatchedTxResult;
 use namada_vote_ext::validator_set_update;
 
@@ -33,7 +34,7 @@ impl utils::GetVoters for (&validator_set_update::VextDigest, BlockHeight) {
 
 /// Sign the next set of validators, and return the associated
 /// vote extension protocol transaction.
-pub fn sign_validator_set_update<D, H>(
+pub fn sign_validator_set_update<D, H, Gov>(
     state: &WlState<D, H>,
     validator_addr: &Address,
     eth_hot_key: &common::SecretKey,
@@ -41,6 +42,7 @@ pub fn sign_validator_set_update<D, H>(
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
+    Gov: governance::Read<WlState<D, H>>,
 {
     state
         .ethbridge_queries()
@@ -50,8 +52,7 @@ where
 
             let voting_powers = state
                 .ethbridge_queries()
-                .get_consensus_eth_addresses(Some(next_epoch))
-                .iter()
+                .get_consensus_eth_addresses::<Gov>(next_epoch)
                 .map(|(eth_addr_book, _, voting_power)| {
                     (eth_addr_book, voting_power)
                 })
@@ -68,7 +69,7 @@ where
 }
 
 /// Aggregate validators' votes
-pub fn aggregate_votes<D, H>(
+pub fn aggregate_votes<D, H, Gov>(
     state: &mut WlState<D, H>,
     ext: validator_set_update::VextDigest,
     signing_epoch: Epoch,
@@ -76,6 +77,7 @@ pub fn aggregate_votes<D, H>(
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
+    Gov: governance::Read<WlState<D, H>>,
 {
     if ext.signatures.is_empty() {
         tracing::debug!("Ignoring empty validator set update");
@@ -101,7 +103,7 @@ where
         .next_height();
     let voting_powers =
         utils::get_voting_powers(state, (&ext, epoch_2nd_height))?;
-    let changed_keys = apply_update(
+    let changed_keys = apply_update::<D, H, Gov>(
         state,
         ext,
         signing_epoch,
@@ -115,7 +117,7 @@ where
     })
 }
 
-fn apply_update<D, H>(
+fn apply_update<D, H, Gov>(
     state: &mut WlState<D, H>,
     ext: validator_set_update::VextDigest,
     signing_epoch: Epoch,
@@ -125,6 +127,7 @@ fn apply_update<D, H>(
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
+    Gov: governance::Read<WlState<D, H>>,
 {
     let next_epoch = {
         // proofs should be written to the sub-key space of the next epoch.
@@ -163,8 +166,11 @@ where
                 "Validator set update votes already in storage",
             );
             let new_votes = NewVotes::new(seen_by, &voting_powers)?;
-            let (tally, changed) =
-                votes::update::calculate(state, &valset_upd_keys, new_votes)?;
+            let (tally, changed) = votes::update::calculate::<_, _, Gov, _>(
+                state,
+                &valset_upd_keys,
+                new_votes,
+            )?;
             if changed.is_empty() {
                 return Ok(changed);
             }
@@ -175,7 +181,10 @@ where
                     (
                         state
                             .ethbridge_queries()
-                            .get_eth_addr_book(&addr, Some(signing_epoch))
+                            .get_eth_addr_book::<Gov>(
+                                &addr,
+                                Some(signing_epoch),
+                            )
                             .expect("All validators should have eth keys"),
                         sig,
                     )
@@ -188,14 +197,21 @@ where
                 ?ext.voting_powers,
                 "New validator set update vote aggregation started"
             );
-            let tally = votes::calculate_new(state, seen_by, &voting_powers)?;
+            let tally = votes::calculate_new::<D, H, Gov>(
+                state,
+                seen_by,
+                &voting_powers,
+            )?;
             let mut proof = EthereumProof::new(ext.voting_powers);
             proof.attach_signature_batch(ext.signatures.into_iter().map(
                 |(addr, sig)| {
                     (
                         state
                             .ethbridge_queries()
-                            .get_eth_addr_book(&addr, Some(signing_epoch))
+                            .get_eth_addr_book::<Gov>(
+                                &addr,
+                                Some(signing_epoch),
+                            )
                             .expect("All validators should have eth keys"),
                         sig,
                     )
@@ -233,11 +249,13 @@ where
 mod test_valset_upd_state_changes {
     use namada_core::address;
     use namada_core::voting_power::FractionalVotingPower;
-    use namada_proof_of_stake::pos_queries::PosQueries;
+    use namada_proof_of_stake::queries::{
+        get_total_voting_power, read_validator_stake,
+    };
     use namada_vote_ext::validator_set_update::VotingPowersMap;
 
     use super::*;
-    use crate::test_utils;
+    use crate::test_utils::{self, GovStore};
 
     /// Test that if a validator set update becomes "seen", then
     /// it should have a complete proof backing it up in storage.
@@ -247,11 +265,11 @@ mod test_valset_upd_state_changes {
 
         let last_height = state.in_mem().get_last_block_height();
         let signing_epoch = state
-            .pos_queries()
-            .get_epoch(last_height)
+            .get_epoch_at_height(last_height)
+            .unwrap()
             .expect("The epoch of the last block height should be known");
 
-        let tx_result = aggregate_votes(
+        let tx_result = aggregate_votes::<_, _, GovStore<_>>(
             &mut state,
             validator_set_update::VextDigest::singleton(
                 validator_set_update::Vext {
@@ -303,7 +321,7 @@ mod test_valset_upd_state_changes {
             addr_book,
             state
                 .ethbridge_queries()
-                .get_eth_addr_book(
+                .get_eth_addr_book::<GovStore<_>>(
                     &address::testing::established_address_1(),
                     Some(signing_epoch)
                 )
@@ -312,17 +330,14 @@ mod test_valset_upd_state_changes {
 
         // since only one validator is configured, we should
         // have reached a complete proof
-        let total_voting_power = state
-            .pos_queries()
-            .get_total_voting_power(Some(signing_epoch));
-        let validator_voting_power = state
-            .pos_queries()
-            .get_validator_from_address(
-                &address::testing::established_address_1(),
-                Some(signing_epoch),
-            )
-            .expect("Test failed")
-            .0;
+        let total_voting_power =
+            get_total_voting_power::<_, GovStore<_>>(&state, signing_epoch);
+        let validator_voting_power = read_validator_stake::<_, GovStore<_>>(
+            &state,
+            &address::testing::established_address_1(),
+            signing_epoch,
+        )
+        .expect("Test failed");
         let voting_power = FractionalVotingPower::new(
             validator_voting_power.into(),
             total_voting_power.into(),
@@ -351,11 +366,11 @@ mod test_valset_upd_state_changes {
 
         let last_height = state.in_mem().get_last_block_height();
         let signing_epoch = state
-            .pos_queries()
-            .get_epoch(last_height)
+            .get_epoch_at_height(last_height)
+            .unwrap()
             .expect("The epoch of the last block height should be known");
 
-        let tx_result = aggregate_votes(
+        let tx_result = aggregate_votes::<_, _, GovStore<_>>(
             &mut state,
             validator_set_update::VextDigest::singleton(
                 validator_set_update::Vext {
@@ -407,7 +422,7 @@ mod test_valset_upd_state_changes {
             addr_book,
             state
                 .ethbridge_queries()
-                .get_eth_addr_book(
+                .get_eth_addr_book::<GovStore<_>>(
                     &address::testing::established_address_1(),
                     Some(signing_epoch)
                 )
@@ -415,17 +430,14 @@ mod test_valset_upd_state_changes {
         );
 
         // make sure we do not have a complete proof yet
-        let total_voting_power = state
-            .pos_queries()
-            .get_total_voting_power(Some(signing_epoch));
-        let validator_voting_power = state
-            .pos_queries()
-            .get_validator_from_address(
-                &address::testing::established_address_1(),
-                Some(signing_epoch),
-            )
-            .expect("Test failed")
-            .0;
+        let total_voting_power =
+            get_total_voting_power::<_, GovStore<_>>(&state, signing_epoch);
+        let validator_voting_power = read_validator_stake::<_, GovStore<_>>(
+            &state,
+            &address::testing::established_address_1(),
+            signing_epoch,
+        )
+        .expect("Test failed");
         let voting_power = FractionalVotingPower::new(
             validator_voting_power.into(),
             total_voting_power.into(),

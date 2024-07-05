@@ -65,13 +65,13 @@ mod test_bp_vote_extensions {
     use namada_sdk::key::*;
     use namada_sdk::proof_of_stake::storage::{
         consensus_validator_set_handle,
-        read_consensus_validator_set_addresses_with_stake,
+        read_consensus_validator_set_addresses_with_stake, read_pos_params,
     };
     use namada_sdk::proof_of_stake::types::{
         Position as ValidatorPosition, WeightedValidator,
     };
     use namada_sdk::proof_of_stake::{
-        become_validator, BecomeValidator, Epoch, PosQueries,
+        become_validator, BecomeValidator, Epoch,
     };
     use namada_sdk::state::StorageWrite;
     use namada_sdk::storage::BlockHeight;
@@ -95,7 +95,7 @@ mod test_bp_vote_extensions {
             .expect("Test failed");
 
         // change pipeline length to 1
-        let mut params = shell.state.pos_queries().get_pos_params();
+        let mut params = read_pos_params(&shell.state).unwrap();
         params.owned.pipeline_len = 1;
 
         let consensus_key = gen_keypair();
