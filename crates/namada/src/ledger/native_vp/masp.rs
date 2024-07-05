@@ -42,6 +42,7 @@ use namada_sdk::masp::TAddrData;
 use namada_state::{ConversionState, OptionExt, ResultExt, StateRead};
 use namada_token::read_denom;
 use namada_token::validation::verify_shielded_tx;
+use namada_tx::action::Read;
 use namada_tx::BatchedTxRef;
 use namada_vp_env::VpEnv;
 use thiserror::Error;
@@ -764,6 +765,7 @@ where
         })?;
         let conversion_state = self.ctx.state.in_mem().get_conversion_state();
         let ibc_msg = self.ctx.get_ibc_message(tx_data).ok();
+        let actions = self.ctx.read_actions()?;
         let shielded_tx =
             if let Some(IbcMessage::Envelope(ref envelope)) = ibc_msg {
                 extract_masp_tx_from_envelope(envelope).ok_or_else(|| {
@@ -774,7 +776,7 @@ where
             } else {
                 // Get the Transaction object from the actions
                 let masp_section_ref =
-                    namada_tx::action::get_masp_section_ref(&self.ctx)?
+                    namada_tx::action::get_masp_section_ref(&actions)
                         .ok_or_else(|| {
                             native_vp::Error::new_const(
                                 "Missing MASP section reference in action",
@@ -919,9 +921,16 @@ where
                     return Err(error);
                 }
 
-                if !namada_tx::action::is_required_masp_signer(
-                    &self.ctx, signer,
-                )? {
+                // The action is required becuse the target vp might have been
+                // triggered for other reasons but we need to signal it that it
+                // is required to validate a discrepancy in its balance change
+                // because of a masp transaction, which might require a
+                // different validation than a normal balance change
+                if !actions.contains(&namada_tx::action::Action::Masp(
+                    namada_tx::action::MaspAction::MaspSigner(
+                        signer.to_owned(),
+                    ),
+                )) {
                     let error = native_vp::Error::new_alloc(format!(
                         "The required masp signer action for address {signer} \
                          is missing"
