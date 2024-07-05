@@ -11,10 +11,10 @@ use namada_tx_prelude::*;
 #[transaction]
 fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
     let data = ctx.get_tx_data(&tx_data)?;
-    let transfer =
+    let (transfer, masp_tx) =
         ibc::ibc_actions(ctx).execute(&data).into_storage_result()?;
 
-    if let Some(transfers) = transfer {
+    let masp_section_ref = if let Some(transfers) = transfer {
         // Prepare the sources of the multi-transfer
         let sources = transfers
             .sources
@@ -37,8 +37,14 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
         token::multi_transfer(ctx, &sources, &targets)
             .wrap_err("Token transfer failed")?;
 
-        if let Some(masp_section_ref) = transfers.shielded_section_hash {
-            let shielded = tx_data
+        transfers.shielded_section_hash
+    } else {
+        None
+    };
+
+    let shielded = if let Some(masp_section_ref) = masp_section_ref {
+        Some(
+            tx_data
                 .tx
                 .get_masp_section(&masp_section_ref)
                 .cloned()
@@ -48,13 +54,20 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
                 .map_err(|err| {
                     ctx.set_commitment_sentinel();
                     err
-                })?;
-            token::utils::handle_masp_tx(ctx, &shielded).wrap_err(
-                "Encountered error while handling MASP transaction",
-            )?;
-            update_masp_note_commitment_tree(&shielded)
-                .wrap_err("Failed to update the MASP commitment tree")?;
+                })?,
+        )
+    } else {
+        masp_tx
+    };
+    if let Some(shielded) = shielded {
+        token::utils::handle_masp_tx(ctx, &shielded)
+            .wrap_err("Encountered error while handling MASP transaction")?;
+        update_masp_note_commitment_tree(&shielded)
+            .wrap_err("Failed to update the MASP commitment tree")?;
+        if let Some(masp_section_ref) = masp_section_ref {
             ctx.push_action(Action::Masp(MaspAction { masp_section_ref }))?;
+        } else {
+            ctx.push_action(Action::IbcShielding)?;
         }
     }
 

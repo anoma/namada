@@ -5040,6 +5040,7 @@ name = "namada_ibc"
 version = "0.39.0"
 dependencies = [
  "borsh 1.2.1",
+ "data-encoding",
  "ibc",
  "ibc-derive",
  "ibc-testkit",
@@ -5062,6 +5063,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.9.9",
+ "smooth-operator",
  "thiserror",
  "tracing",
 ]

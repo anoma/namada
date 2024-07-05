@@ -424,6 +424,9 @@ where
                             .0
                             .push(masp_section_ref);
                     }
+                    extended_tx_result.is_ibc_shielding =
+                        namada_tx::action::is_ibc_shielding_transfer(state)
+                            .map_err(Error::StateError)?;
                     state.write_log_mut().commit_tx_to_batch();
                 } else {
                     state.write_log_mut().drop_tx();

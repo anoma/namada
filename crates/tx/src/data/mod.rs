@@ -333,6 +333,8 @@ pub struct ExtendedTxResult<T> {
     pub tx_result: TxResult<T>,
     /// The optional references to masp sections
     pub masp_tx_refs: MaspTxRefs,
+    /// The flag for IBC shielding transfer
+    pub is_ibc_shielding: bool,
 }
 
 impl<T> Default for ExtendedTxResult<T> {
@@ -340,6 +342,7 @@ impl<T> Default for ExtendedTxResult<T> {
         Self {
             tx_result: Default::default(),
             masp_tx_refs: Default::default(),
+            is_ibc_shielding: Default::default(),
         }
     }
 }
@@ -392,6 +395,7 @@ impl<T: Display> TxResult<T> {
         ExtendedTxResult {
             tx_result: self,
             masp_tx_refs: masp_tx_refs.unwrap_or_default(),
+            is_ibc_shielding: false,
         }
     }
 }
