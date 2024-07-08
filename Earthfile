@@ -262,15 +262,6 @@ lints:
   BUILD +fmt
   BUILD +fmt-wasm
 
-builds-release:
-  BUILD +build-wasm
-  BUILD +build-release
-
-tests:
-  BUILD +test-unit
-  BUILD +test-integration
-  BUILD +test-wasm
-
 tests-e2e-ledger:
   BUILD +test-e2e --filter="ledger_tests::"
 
@@ -283,19 +274,13 @@ tests-e2e-wallet:
 tests-e2e-ibc-ledger:
   BUILD +test-e2e --filter="ibc_tests::run_ledger_ibc"
 
-tests-e2e-ibc-gaia:
-  BUILD +test-e2e --filter="ibc_tests::ibc_namada_gaia"
-
-tests-e2e-ibc-ledger-pgf:
+tests-e2e-ibc-pgf:
   BUILD +test-e2e --filter="ibc_tests::pgf_over_ibc_with_hermes"
 
-tests-e2e-ibc-ledger-inflation:
+tests-e2e-ibc-inflation:
   BUILD +test-e2e --filter="ibc_tests::proposal_ibc_token_inflation"
 
-tests-e2e-ibc-ledger-rate-limit:
-  BUILD +test-e2e --filter="ibc_tests::ibc_rate_limit"
-
-check-namada:
+check-crates:
   FROM +install
 
   FOR package IN "namada" "namada_account" "namada_apps" "namada_apps_lib" "namada_benchmarks" "namada_core" "namada_encoding_spec" "namada_ethereum_bridge" "namada_events" "namada_gas" "namada_governance" "namada_ibc" "namada_light_sdk" "namada_macros" "namada_merkle_tree" "namada_parameters" "namada_proof_of_stake" "namada_replay_protection" "namada_node" "namada_sdk" "namada_shielded_token" "namada_state" "namada_storage" "namada_test_utils" "namada_tests" "namada_token" "namada_trans_token" "namada_tx" "namada_tx_env" "namada_tx_prelude" "namada_vm_env" "namada_vote_ext" "namada_vp_env" "namada_vp_prelude"

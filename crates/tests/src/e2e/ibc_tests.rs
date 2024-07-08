@@ -380,7 +380,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
 }
 
 #[test]
-fn ibc_namada_gaia() -> Result<()> {
+fn run_ledger_ibc_and_gaia() -> Result<()> {
     // epoch per 100 seconds
     let update_genesis =
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
@@ -730,7 +730,7 @@ fn proposal_ibc_token_inflation() -> Result<()> {
 }
 
 #[test]
-fn ibc_rate_limit() -> Result<()> {
+fn run_ledger_ibc_with_rate_limit() -> Result<()> {
     // Mint limit 2 transfer/channel-0/nam, per-epoch throughput limit 1 NAM
     let update_genesis =
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {

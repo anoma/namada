@@ -1,14 +1,9 @@
-name: Run period checks
+name: Audit
 
 on:
   schedule:
     - cron: "0 0 * * *"
   workflow_dispatch:
-
-permissions:
-  id-token: write
-  contents: read
-  issues: write
 
 env:
   GIT_LFS_SKIP_SMUDGE: 1
@@ -17,43 +12,31 @@ env:
 
 jobs:
   cron:
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
+        branch: [main, draft]
         nightly_version: [nightly-2024-05-15]
         make:
-          - name: Audit
-            command: audit
-            version: rustsec/rustsec@cargo-audit/v0.17.6
-          - name: Unused dependencies
-            command: udeps
-            version: est31/cargo-udeps@v0.1.42
+          - name: cargo-audit
+            tool: audit
+          - name: cargo-machete
+            command: machete
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.branch }}
       - name: Setup rust nightly
-        uses: oxidecomputer/actions-rs_toolchain@ad3f86084a8a5acf2c09cb691421b31cf8af7a36
+        uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: ${{ matrix.nightly_version }}
-          profile: minimal
-      - name: Show rust toolchain info
-        run: rustup show
-      - name: Cache cargo registry
-        uses: actions/cache@v3
-        continue-on-error: false
+      - name: Install ${{ matrix.make.name }}
+        uses: taiki-e/install-action@v2
         with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target
-          key: ${{ runner.os }}-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-
-      - name: Install cargo ${{ matrix.make.command }}
-        run: curl https://i.jpillora.com/${{ matrix.make.version }}! | bash
+          tool: ${{ matrix.make.tool }}
       - name: Install libudev
         run: sudo apt-get update && sudo apt-get -y install libudev-dev
       - name: Install Protoc
@@ -61,15 +44,5 @@ jobs:
         with:
           version: "25.0"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: ${{ matrix.make.name }}
-        working-directory: ./.github/workflows/scripts
-        run: |
-          pip3 install -Iv cryptography==37.0.4 >/dev/null 2>&1
-          pip3 install github3.py >/dev/null 2>&1
-          python3 ${{ matrix.make.command }}.py
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Clean cargo cache
-        run: |
-          cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache
-          cargo-cache
+      - name: Run ${{ matrix.make.name }}
+        run: cargo ${{ matrix.make.command }}
