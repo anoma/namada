@@ -30,9 +30,12 @@ pub mod vp;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::fmt::Debug;
+use std::marker::PhantomData;
 use std::rc::Rc;
 
 pub use actions::transfer_over_ibc;
+use apps::transfer::types::packet::PacketData;
+use apps::transfer::types::PORT_ID_STR;
 use borsh::BorshDeserialize;
 pub use context::common::IbcCommonContext;
 pub use context::nft_transfer::NftTransferContext;
@@ -65,6 +68,7 @@ use ibc::core::channel::types::commitment::compute_ack_commitment;
 use ibc::core::channel::types::msgs::{
     MsgRecvPacket as IbcMsgRecvPacket, PacketMsg,
 };
+use ibc::core::channel::types::timeout::TimeoutHeight;
 use ibc::core::entrypoint::{execute, validate};
 use ibc::core::handler::types::error::ContextError;
 use ibc::core::handler::types::events::Error as RawIbcEventError;
@@ -77,17 +81,26 @@ pub use ibc::*;
 use masp_primitives::transaction::Transaction as MaspTransaction;
 pub use msg::*;
 use namada_core::address::{self, Address};
-use namada_core::arith::checked;
+use namada_core::arith::{checked, CheckedAdd, CheckedSub};
+use namada_core::ibc::apps::nft_transfer::types::packet::PacketData as NftPacketData;
+use namada_core::ibc::core::channel::types::commitment::{
+    compute_packet_commitment, AcknowledgementCommitment, PacketCommitment,
+};
+pub use namada_core::ibc::*;
+use namada_core::masp::{addr_taddr, ibc_taddr, TAddrData};
 use namada_core::token::Amount;
 use namada_events::EmitEvents;
 use namada_state::{
-    DBIter, Key, State, StorageError, StorageHasher, StorageRead, StorageWrite,
-    WlState, DB,
+    DBIter, Key, ResultExt, State, StorageError, StorageHasher, StorageRead,
+    StorageWrite, WlState, DB,
 };
+use namada_token::transaction::components::ValueSum;
 use namada_token::Transfer;
 pub use nft::*;
+use primitives::Timestamp;
 use prost::Message;
 use thiserror::Error;
+use trace::{convert_to_address, ibc_trace_for_nft, is_sender_chain_source};
 
 use crate::storage::{
     channel_counter_key, client_counter_key, connection_counter_key,
@@ -122,6 +135,408 @@ pub enum Error {
     ChainId(IdentifierError),
     #[error("Verifier insertion error: {0}")]
     Verifier(namada_storage::Error),
+}
+
+struct IbcTransferInfo {
+    src_port_id: PortId,
+    src_channel_id: ChannelId,
+    timeout_height: TimeoutHeight,
+    timeout_timestamp: Timestamp,
+    packet_data: Vec<u8>,
+    ibc_traces: Vec<String>,
+    amount: Amount,
+    receiver: String,
+}
+
+impl TryFrom<IbcMsgTransfer> for IbcTransferInfo {
+    type Error = namada_storage::Error;
+
+    fn try_from(
+        message: IbcMsgTransfer,
+    ) -> std::result::Result<Self, Self::Error> {
+        let packet_data = serde_json::to_vec(&message.packet_data)
+            .map_err(namada_storage::Error::new)?;
+        let ibc_traces = vec![message.packet_data.token.denom.to_string()];
+        let amount = message
+            .packet_data
+            .token
+            .amount
+            .try_into()
+            .into_storage_result()?;
+        let receiver = message.packet_data.receiver.to_string();
+        Ok(Self {
+            src_port_id: message.port_id_on_a,
+            src_channel_id: message.chan_id_on_a,
+            timeout_height: message.timeout_height_on_b,
+            timeout_timestamp: message.timeout_timestamp_on_b,
+            packet_data,
+            ibc_traces,
+            amount,
+            receiver,
+        })
+    }
+}
+
+impl TryFrom<IbcMsgNftTransfer> for IbcTransferInfo {
+    type Error = namada_storage::Error;
+
+    fn try_from(
+        message: IbcMsgNftTransfer,
+    ) -> std::result::Result<Self, Self::Error> {
+        let packet_data = serde_json::to_vec(&message.packet_data)
+            .map_err(namada_storage::Error::new)?;
+        let ibc_traces = message
+            .packet_data
+            .token_ids
+            .0
+            .iter()
+            .map(|token_id| {
+                ibc_trace_for_nft(&message.packet_data.class_id, token_id)
+            })
+            .collect();
+        let receiver = message.packet_data.receiver.to_string();
+        Ok(Self {
+            src_port_id: message.port_id_on_a,
+            src_channel_id: message.chan_id_on_a,
+            timeout_height: message.timeout_height_on_b,
+            timeout_timestamp: message.timeout_timestamp_on_b,
+            packet_data,
+            ibc_traces,
+            amount: Amount::from_u64(1),
+            receiver,
+        })
+    }
+}
+
+/// IBC storage `Keys/Read/Write` implementation
+#[derive(Debug)]
+pub struct Store<S>(PhantomData<S>);
+
+impl<S> namada_core::ibc::Read<S> for Store<S>
+where
+    S: StorageRead,
+{
+    type Err = namada_storage::Error;
+
+    fn try_extract_masp_tx_from_envelope(
+        tx_data: &[u8],
+    ) -> Result<Option<masp_primitives::transaction::Transaction>, Self::Err>
+    {
+        let msg = decode_message(tx_data).into_storage_result().ok();
+        let tx = if let Some(IbcMessage::Envelope(ref envelope)) = msg {
+            Some(extract_masp_tx_from_envelope(envelope).ok_or_else(|| {
+                namada_storage::Error::new_const(
+                    "Missing MASP transaction in IBC message",
+                )
+            })?)
+        } else {
+            None
+        };
+        Ok(tx)
+    }
+
+    fn apply_ibc_packet(
+        storage: &S,
+        tx_data: &[u8],
+        mut accum: ChangedBalances,
+        keys_changed: &BTreeSet<namada_core::storage::Key>,
+    ) -> Result<ChangedBalances, Self::Err> {
+        let msg = decode_message(tx_data).into_storage_result().ok();
+        match msg {
+            None => {}
+            // This event is emitted on the sender
+            Some(IbcMessage::Transfer(msg)) => {
+                // Get the packet commitment from post-storage that corresponds
+                // to this event
+                let ibc_transfer = IbcTransferInfo::try_from(msg.message)?;
+                let receiver = ibc_transfer.receiver.clone();
+                let addr = TAddrData::Ibc(receiver.clone());
+                accum.decoder.insert(ibc_taddr(receiver), addr);
+                accum = apply_transfer_msg(
+                    storage,
+                    accum,
+                    &ibc_transfer,
+                    keys_changed,
+                )?;
+            }
+            Some(IbcMessage::NftTransfer(msg)) => {
+                let ibc_transfer = IbcTransferInfo::try_from(msg.message)?;
+                let receiver = ibc_transfer.receiver.clone();
+                let addr = TAddrData::Ibc(receiver.clone());
+                accum.decoder.insert(ibc_taddr(receiver), addr);
+                accum = apply_transfer_msg(
+                    storage,
+                    accum,
+                    &ibc_transfer,
+                    keys_changed,
+                )?;
+            }
+            // This event is emitted on the receiver
+            Some(IbcMessage::Envelope(envelope)) => {
+                if let MsgEnvelope::Packet(PacketMsg::Recv(msg)) = *envelope {
+                    if msg.packet.port_id_on_b.as_str() == PORT_ID_STR {
+                        let packet_data = serde_json::from_slice::<PacketData>(
+                            &msg.packet.data,
+                        )
+                        .map_err(namada_storage::Error::new)?;
+                        let receiver = packet_data.receiver.to_string();
+                        let addr = TAddrData::Ibc(receiver.clone());
+                        accum.decoder.insert(ibc_taddr(receiver), addr);
+                        let ibc_denom = packet_data.token.denom.to_string();
+                        let amount = packet_data
+                            .token
+                            .amount
+                            .try_into()
+                            .into_storage_result()?;
+                        accum = apply_recv_msg(
+                            storage,
+                            accum,
+                            &msg,
+                            vec![ibc_denom],
+                            amount,
+                            keys_changed,
+                        )?;
+                    } else {
+                        let packet_data =
+                            serde_json::from_slice::<NftPacketData>(
+                                &msg.packet.data,
+                            )
+                            .map_err(namada_storage::Error::new)?;
+                        let receiver = packet_data.receiver.to_string();
+                        let addr = TAddrData::Ibc(receiver.clone());
+                        accum.decoder.insert(ibc_taddr(receiver), addr);
+                        let ibc_traces = packet_data
+                            .token_ids
+                            .0
+                            .iter()
+                            .map(|token_id| {
+                                ibc_trace_for_nft(
+                                    &packet_data.class_id,
+                                    token_id,
+                                )
+                            })
+                            .collect();
+                        accum = apply_recv_msg(
+                            storage,
+                            accum,
+                            &msg,
+                            ibc_traces,
+                            Amount::from_u64(1),
+                            keys_changed,
+                        )?;
+                    }
+                }
+            }
+        }
+        Ok(accum)
+    }
+}
+
+fn check_ibc_transfer<S>(
+    storage: &S,
+    ibc_transfer: &IbcTransferInfo,
+    keys_changed: &BTreeSet<Key>,
+) -> namada_storage::Result<()>
+where
+    S: StorageRead,
+{
+    let IbcTransferInfo {
+        src_port_id,
+        src_channel_id,
+        timeout_height,
+        timeout_timestamp,
+        packet_data,
+        ..
+    } = ibc_transfer;
+    let sequence =
+        get_last_sequence_send(storage, src_port_id, src_channel_id)?;
+    let commitment_key =
+        storage::commitment_key(src_port_id, src_channel_id, sequence);
+
+    if !keys_changed.contains(&commitment_key) {
+        return Err(namada_storage::Error::new_alloc(format!(
+            "Expected IBC transfer didn't happen: Port ID {src_port_id}, \
+             Channel ID {src_channel_id}, Sequence {sequence}"
+        )));
+    }
+
+    // The commitment is also validated in IBC VP. Make sure that for when
+    // IBC VP isn't triggered.
+    let actual: PacketCommitment = storage
+        .read_bytes(&commitment_key)?
+        .ok_or(namada_storage::Error::new_alloc(format!(
+            "Packet commitment doesn't exist: Port ID  {src_port_id}, Channel \
+             ID {src_channel_id}, Sequence {sequence}"
+        )))?
+        .into();
+    let expected = compute_packet_commitment(
+        packet_data,
+        timeout_height,
+        timeout_timestamp,
+    );
+    if actual != expected {
+        return Err(namada_storage::Error::new_alloc(format!(
+            "Packet commitment mismatched: Port ID {src_port_id}, Channel ID \
+             {src_channel_id}, Sequence {sequence}"
+        )));
+    }
+
+    Ok(())
+}
+
+fn check_packet_receiving(
+    msg: &IbcMsgRecvPacket,
+    keys_changed: &BTreeSet<Key>,
+) -> namada_storage::Result<()> {
+    let receipt_key = storage::receipt_key(
+        &msg.packet.port_id_on_b,
+        &msg.packet.chan_id_on_b,
+        msg.packet.seq_on_a,
+    );
+    if !keys_changed.contains(&receipt_key) {
+        return Err(namada_storage::Error::new_alloc(format!(
+            "The packet has not been received: Port ID  {}, Channel ID {}, \
+             Sequence {}",
+            msg.packet.port_id_on_b,
+            msg.packet.chan_id_on_b,
+            msg.packet.seq_on_a,
+        )));
+    }
+    Ok(())
+}
+
+// Apply the given transfer message to the changed balances structure
+fn apply_transfer_msg<S>(
+    storage: &S,
+    mut accum: ChangedBalances,
+    ibc_transfer: &IbcTransferInfo,
+    keys_changed: &BTreeSet<Key>,
+) -> namada_storage::Result<ChangedBalances>
+where
+    S: StorageRead,
+{
+    check_ibc_transfer(storage, ibc_transfer, keys_changed)?;
+
+    let IbcTransferInfo {
+        ibc_traces,
+        src_port_id,
+        src_channel_id,
+        amount,
+        receiver,
+        ..
+    } = ibc_transfer;
+
+    let receiver = ibc_taddr(receiver.clone());
+    for ibc_trace in ibc_traces {
+        let token = convert_to_address(ibc_trace).into_storage_result()?;
+        let delta = ValueSum::from_pair(token, *amount);
+        // If there is a transfer to the IBC account, then deduplicate the
+        // balance increase since we already accounted for it above
+        if is_sender_chain_source(ibc_trace, src_port_id, src_channel_id) {
+            let ibc_taddr = addr_taddr(address::IBC);
+            let post_entry = accum
+                .post
+                .get(&ibc_taddr)
+                .cloned()
+                .unwrap_or(ValueSum::zero());
+            accum.post.insert(
+                ibc_taddr,
+                checked!(post_entry - &delta)
+                    .map_err(namada_storage::Error::new)?,
+            );
+        }
+        // Record an increase to the balance of a specific IBC receiver
+        let post_entry = accum
+            .post
+            .get(&receiver)
+            .cloned()
+            .unwrap_or(ValueSum::zero());
+        accum.post.insert(
+            receiver,
+            checked!(post_entry + &delta)
+                .map_err(namada_storage::Error::new)?,
+        );
+    }
+
+    Ok(accum)
+}
+
+// Check if IBC message was received successfully in this state transition
+fn is_receiving_success<S>(
+    storage: &S,
+    dst_port_id: &PortId,
+    dst_channel_id: &ChannelId,
+    sequence: Sequence,
+) -> namada_storage::Result<bool>
+where
+    S: StorageRead,
+{
+    // Ensure that the event corresponds to the current changes to storage
+    let ack_key = storage::ack_key(dst_port_id, dst_channel_id, sequence); // If the receive is a success, then the commitment is unique
+    let succ_ack_commitment = compute_ack_commitment(
+        &AcknowledgementStatus::success(ack_success_b64()).into(),
+    );
+    Ok(match storage.read_bytes(&ack_key)? {
+        // Success happens only if commitment equals the above
+        Some(value) => {
+            AcknowledgementCommitment::from(value) == succ_ack_commitment
+        }
+        // Acknowledgement key non-existence is failure
+        None => false,
+    })
+}
+
+// Apply the given write acknowledge to the changed balances structure
+fn apply_recv_msg<S>(
+    storage: &S,
+    mut accum: ChangedBalances,
+    msg: &IbcMsgRecvPacket,
+    ibc_traces: Vec<String>,
+    amount: Amount,
+    keys_changed: &BTreeSet<Key>,
+) -> namada_storage::Result<ChangedBalances>
+where
+    S: StorageRead,
+{
+    check_packet_receiving(msg, keys_changed)?;
+
+    // If the transfer was a failure, then enable funds to
+    // be withdrawn from the IBC internal address
+    if is_receiving_success(
+        storage,
+        &msg.packet.port_id_on_b,
+        &msg.packet.chan_id_on_b,
+        msg.packet.seq_on_a,
+    )? {
+        for ibc_trace in ibc_traces {
+            // Get the received token
+            let token = received_ibc_token(
+                ibc_trace,
+                &msg.packet.port_id_on_a,
+                &msg.packet.chan_id_on_a,
+                &msg.packet.port_id_on_b,
+                &msg.packet.chan_id_on_b,
+            )
+            .into_storage_result()?;
+            let delta = ValueSum::from_pair(token.clone(), amount);
+            // Enable funds to be taken from the IBC internal
+            // address and be deposited elsewhere
+            // Required for the IBC internal Address to release
+            // funds
+            let ibc_taddr = addr_taddr(address::IBC);
+            let pre_entry = accum
+                .pre
+                .get(&ibc_taddr)
+                .cloned()
+                .unwrap_or(ValueSum::zero());
+            accum.pre.insert(
+                ibc_taddr,
+                checked!(pre_entry + &delta)
+                    .map_err(namada_storage::Error::new)?,
+            );
+        }
+    }
+    Ok(accum)
 }
 
 /// IBC actions to handle IBC operations
