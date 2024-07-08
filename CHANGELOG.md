@@ -1,5 +1,108 @@
 # CHANGELOG
 
+## v0.40.0
+
+Namada 0.40.0 is a minor release that makes many important improvements to shielded actions, DB snapshotting capabilities, batched transactions, and much more.
+
+### BUG FIXES
+
+- Update native token total supply with MASP rewards.
+  ([\#3375](https://github.com/anoma/namada/pull/3375))
+- Increase the lifetime of disposable signing keys from 5 minutes to 1 week.
+  ([\#3378](https://github.com/anoma/namada/pull/3378))
+- Our `DateTimeUtc` type allowed a relaxed representation of RFC3339 strings.
+  We now enforce a string subset of this format, to guarantee deterministic
+  serialization. ([\#3389](https://github.com/anoma/namada/pull/3389))
+- Fix to decode ibc-rs transfer messages
+  ([\#3404](https://github.com/anoma/namada/issues/3404))
+- Add replay protection to MASP-IBC transactions.
+  ([\#3409](https://github.com/anoma/namada/pull/3409))
+- Respect --wasm-dir on init-network.
+  ([\#3432](https://github.com/anoma/namada/pull/3432))
+- Fix IBC shielding transfer for the receiver not to be replaced by a malicious
+  relayer ([\#3438](https://github.com/anoma/namada/issues/3438))
+- Fixed MASP witness data malleability in the Tx
+  ([\#3463](https://github.com/anoma/namada/pull/3463))
+
+### FEATURES
+
+- Reworked transparent and masp transfers to allow for multiple sources, targets,
+  tokens and amounts. ([\#3356](https://github.com/anoma/namada/pull/3356))
+- Added support for fee payment directly from the MASP pool.
+  ([\#3393](https://github.com/anoma/namada/pull/3393))
+
+### IMPROVEMENTS
+
+- Moved up the check on the sapling value balance in the masp vp.
+  ([\#2721](https://github.com/anoma/namada/issues/2721))
+- Queries methods now requests `TryInto` trait bound for block heights to reduce
+  the conversion error. ([\#2891](https://github.com/anoma/namada/issues/2891))
+- Miscellaneous code optimizations.
+  ([\#3192](https://github.com/anoma/namada/issues/3192))
+- Added a `namada complete` command to generate shell completions. This command
+  requires `--shell` with one of:
+  -  bash
+  - elvish
+  - fish
+  - powershell
+  - zsh
+  - nushell
+
+  To use in e.g. bash, run `namada complete --shell bash > /usr/share/bash-completion/completions/namada.bash`.
+  ([\#3343](https://github.com/anoma/namada/pull/3343))
+- Remove the `max_expected_time_per_block` genesis parameter.
+  ([\#3366](https://github.com/anoma/namada/pull/3366))
+- Refactored checked assign arithmetic operations to use smooth-operator macro.
+  ([\#3374](https://github.com/anoma/namada/pull/3374))
+- Store total MASP rewards and print them in the conversions query.
+  ([\#3375](https://github.com/anoma/namada/pull/3375))
+- Remove the check on the maximum number of signatures allowed per transaction
+  ([\#3380](https://github.com/anoma/namada/pull/3380))
+* Resolves the first two points of Issue [\#3307](https://github.com/anoma/namada/issues/3307):
+   - Add the ability to create chunkable snapshots to our rocksdb implementation
+   - Spawn a background task to create snapshots are certain blockheights
+
+   Specifically adds a config parameter that indicates after how many blocks a 
+   snapshot should be created. If set, then on the corresponding calls to commit,
+   a background task is spun up that takes a snapshot of rocksDB and writes it
+   in a convenient format to a file. This file contains metadata of how to be 
+   broken up into chunks. Once a new snapshot is created, older snapshots are
+   removed. ([\#3383](https://github.com/anoma/namada/pull/3383))
+ - Addresses the third point and part of the fourth point of Issue
+   [\#3307](https://github.com/anoma/namada/issues/3307)
+   * Adds chunking logic to snapshots
+   * Implements the `ListSnapshots` ABCI call
+   * Implements the `LoadSnapshotChunk` ABCI call
+     
+   ([\#3386](https://github.com/anoma/namada/pull/3386))
+- Remove the requirement that the proposal voting period
+  is some integer multiple of the minimum voting period.
+  ([\#3390](https://github.com/anoma/namada/pull/3390))
+- Include the gas scale as a protocol parameter that is
+  mutable via governance rather than as a hard-coded constant.
+  ([\#3391](https://github.com/anoma/namada/pull/3391))
+- Upgrade the library used to communicate with hardware wallet
+  ([\#3412](https://github.com/anoma/namada/pull/3412))
+- Index batched txs via their wrapper and commitment hashes.
+  ([\#3416](https://github.com/anoma/namada/pull/3416))
+- Moved shielded tx validation out of the SDK crate into shielded token crate.
+  ([\#3419](https://github.com/anoma/namada/pull/3419))
+- Enforce an upper limit on the number of PGF stewards allowed to exist at a
+  given time. ([\#3442](https://github.com/anoma/namada/pull/3442))
+- Combined the various Transfer formats into one general one.
+  ([\#3446](https://github.com/anoma/namada/pull/3446))
+- Introduced a local configuration parameter to allow nodes to
+  rerun the process proposal checks before block finalization.
+  ([\#3448](https://github.com/anoma/namada/pull/3448))
+
+### TESTING
+
+- Adds additional test coverage to batch tx events emission, to make
+  sure we correctly build a batch of inner tx events from a batched tx.
+  ([\#3401](https://github.com/anoma/namada/pull/3401))
+- Change the IBC E2E testing config
+  ([\#3455](https://github.com/anoma/namada/issues/3455))
+
 ## v0.39.0
 
 Namada 0.39.0 is a minor release that primarily abstracts the different kinds of transfer transactions and makes upgrades to the MASP and VPs.

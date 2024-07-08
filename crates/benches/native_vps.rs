@@ -55,15 +55,14 @@ use namada::sdk::masp_primitives::merkle_tree::CommitmentTree;
 use namada::sdk::masp_primitives::transaction::Transaction;
 use namada::sdk::masp_proofs::sapling::SaplingVerificationContextInner;
 use namada::state::{Epoch, StorageRead, StorageWrite, TxIndex};
-use namada::token::{Amount, TransparentTransfer};
+use namada::token::{Amount, Transfer};
 use namada::tx::{BatchedTx, Code, Section, Tx};
 use namada_apps_lib::wallet::defaults;
 use namada_node::bench_utils::{
     generate_foreign_key_tx, BenchShell, BenchShieldedCtx,
     ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
     TX_BRIDGE_POOL_WASM, TX_IBC_WASM, TX_INIT_PROPOSAL_WASM, TX_RESIGN_STEWARD,
-    TX_TRANSPARENT_TRANSFER_WASM, TX_UPDATE_STEWARD_COMMISSION,
-    TX_VOTE_PROPOSAL_WASM,
+    TX_TRANSFER_WASM, TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL_WASM,
 };
 use rand_core::OsRng;
 
@@ -403,7 +402,7 @@ fn prepare_ibc_tx_and_ctx(bench_name: &str) -> (BenchShieldedCtx, BatchedTx) {
             shielded_ctx.generate_shielded_action(
                 Amount::native_whole(10),
                 TransferSource::ExtendedSpendingKey(albert_spending_key),
-                TransferTarget::Address(defaults::bertha_address()),
+                defaults::bertha_address().to_string(),
             )
         }
         _ => panic!("Unexpected bench test"),
@@ -475,13 +474,15 @@ fn vp_multitoken(c: &mut Criterion) {
         generate_foreign_key_tx(&defaults::albert_keypair());
 
     let transfer = shell.generate_tx(
-        TX_TRANSPARENT_TRANSFER_WASM,
-        TransparentTransfer {
-            source: defaults::albert_address(),
-            target: defaults::bertha_address(),
-            token: address::testing::nam(),
-            amount: Amount::native_whole(1000).native_denominated(),
-        },
+        TX_TRANSFER_WASM,
+        Transfer::default()
+            .transfer(
+                defaults::albert_address(),
+                defaults::bertha_address(),
+                address::testing::nam(),
+                Amount::native_whole(1000).native_denominated(),
+            )
+            .unwrap(),
         None,
         None,
         vec![&defaults::albert_keypair()],

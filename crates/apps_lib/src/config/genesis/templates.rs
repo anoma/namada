@@ -265,9 +265,6 @@ pub struct ChainParams<T: TemplateValidation> {
     /// Minimum number of blocks per epoch.
     // NB: u64 only works with values up to i64::MAX with toml-rs!
     pub min_num_of_blocks: u64,
-    /// Maximum duration per block (in seconds).
-    // NB: this is i64 because datetime wants it
-    pub max_expected_time_per_block: i64,
     /// Max payload size, in bytes, for a tx batch proposal.
     ///
     /// Block proposers may never return a `PrepareProposal`
@@ -295,12 +292,10 @@ pub struct ChainParams<T: TemplateValidation> {
     pub epochs_per_year: u64,
     /// How many epochs it takes to transition to the next masp epoch
     pub masp_epoch_multiplier: u64,
-    /// Maximum number of signature per transaction
-    pub max_signatures_per_transaction: u8,
     /// Max gas for block
     pub max_block_gas: u64,
-    /// Fee unshielding gas limit
-    pub fee_unshielding_gas_limit: u64,
+    /// Gas limit of a masp transaction paying fees
+    pub masp_fee_payment_gas_limit: u64,
     /// Gas scale
     pub gas_scale: u64,
     /// Map of the cost per gas unit for every token allowed for fee payment
@@ -317,16 +312,14 @@ impl ChainParams<Unvalidated> {
             native_token,
             is_native_token_transferable,
             min_num_of_blocks,
-            max_expected_time_per_block,
             max_proposal_bytes,
             vp_allowlist,
             tx_allowlist,
             implicit_vp,
             epochs_per_year,
             masp_epoch_multiplier,
-            max_signatures_per_transaction,
             max_block_gas,
-            fee_unshielding_gas_limit,
+            masp_fee_payment_gas_limit,
             gas_scale,
             minimum_gas_price,
         } = self;
@@ -364,16 +357,14 @@ impl ChainParams<Unvalidated> {
             native_token,
             is_native_token_transferable,
             min_num_of_blocks,
-            max_expected_time_per_block,
             max_proposal_bytes,
             vp_allowlist,
             tx_allowlist,
             implicit_vp,
             epochs_per_year,
             masp_epoch_multiplier,
-            max_signatures_per_transaction,
             max_block_gas,
-            fee_unshielding_gas_limit,
+            masp_fee_payment_gas_limit,
             gas_scale,
             minimum_gas_price: min_gas_prices,
         })
@@ -478,6 +469,8 @@ pub struct PgfParams<T: TemplateValidation> {
     pub pgf_inflation_rate: Dec,
     /// The pgf stewards inflation rate
     pub stewards_inflation_rate: Dec,
+    /// The maximum allowed number of PGF stewards at any time
+    pub maximum_number_of_stewards: u64,
     #[serde(default)]
     #[serde(skip_serializing)]
     #[cfg(test)]
@@ -917,6 +910,8 @@ pub fn validate_parameters(
                 stewards: pgf_params.stewards,
                 pgf_inflation_rate: pgf_params.pgf_inflation_rate,
                 stewards_inflation_rate: pgf_params.stewards_inflation_rate,
+                maximum_number_of_stewards: pgf_params
+                    .maximum_number_of_stewards,
                 valid: Default::default(),
             },
             eth_bridge_params,

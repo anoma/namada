@@ -157,7 +157,7 @@ fn run_ledger_ibc() -> Result<()> {
         BERTHA,
         ALBERT,
         token,
-        50000,
+        50_000_000_000,
         BERTHA_KEY,
     )?;
     check_balances_after_non_ibc(&port_id_b, &channel_id_b, &test_b)?;
@@ -230,9 +230,10 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         receiver.to_string(),
         NAM,
         100000.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &port_id_a,
         &channel_id_a,
+        None,
         None,
         None,
         false,
@@ -248,7 +249,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         BERTHA,
         ALBERT,
         token,
-        50000,
+        50_000_000_000,
         BERTHA_KEY,
     )?;
     check_balances_after_non_ibc(&port_id_b, &channel_id_b, &test_b)?;
@@ -265,10 +266,11 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         BERTHA,
         receiver.to_string(),
         ibc_denom,
-        50000.0,
-        BERTHA_KEY,
+        50_000_000_000.0,
+        Some(BERTHA_KEY),
         &port_id_b,
         &channel_id_b,
+        None,
         None,
         None,
         false,
@@ -286,18 +288,39 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         100,
         ALBERT_KEY,
     )?;
+    // Send some token for masp fee payment
+    transfer_on_chain(
+        &test_a,
+        "shield",
+        ALBERT,
+        AA_PAYMENT_ADDRESS,
+        NAM,
+        10_000,
+        ALBERT_KEY,
+    )?;
     shielded_sync(&test_a, AA_VIEWING_KEY)?;
     // Shieded transfer from Chain A to Chain B
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
+    let token_addr = find_address(&test_a, BTC)?.to_string();
+    let memo_path = gen_masp_tx(
+        &test_b,
+        AB_PAYMENT_ADDRESS,
+        token_addr,
+        1_000_000_000,
+        &port_id_b,
+        &channel_id_b,
+    )?;
     transfer(
         &test_a,
         A_SPENDING_KEY,
         AB_PAYMENT_ADDRESS,
         BTC,
         10.0,
-        ALBERT_KEY,
+        None,
         &port_id_a,
         &channel_id_a,
         None,
+        Some(memo_path),
         None,
         false,
     )?;
@@ -311,9 +334,10 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         "invalid_receiver",
         BTC,
         10.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &port_id_a,
         &channel_id_a,
+        None,
         None,
         None,
         false,
@@ -333,10 +357,11 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         AB_PAYMENT_ADDRESS,
         BTC,
         10.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &port_id_a,
         &channel_id_a,
         Some(Duration::new(10, 0)),
+        None,
         None,
         false,
     )?;
@@ -398,9 +423,10 @@ fn ibc_namada_gaia() -> Result<()> {
         receiver,
         APFEL,
         200.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &port_id_namada,
         &channel_id_namada,
+        None,
         None,
         None,
         false,
@@ -410,7 +436,7 @@ fn ibc_namada_gaia() -> Result<()> {
     // Check the received token on Gaia
     let token_addr = find_address(&test, APFEL)?;
     let ibc_denom = format!("{port_id_gaia}/{channel_id_gaia}/{token_addr}");
-    check_gaia_balance(&test_gaia, GAIA_USER, &ibc_denom, 200)?;
+    check_gaia_balance(&test_gaia, GAIA_USER, &ibc_denom, 200000000)?;
 
     // Transfer back from Gaia to Namada
     let receiver = find_address(&test, ALBERT)?.to_string();
@@ -419,9 +445,10 @@ fn ibc_namada_gaia() -> Result<()> {
         GAIA_USER,
         receiver,
         get_gaia_denom_hash(ibc_denom),
-        100,
+        100000000,
         &port_id_gaia,
         &channel_id_gaia,
+        None,
     )?;
     wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test)?;
 
@@ -438,6 +465,7 @@ fn ibc_namada_gaia() -> Result<()> {
         200,
         &port_id_gaia,
         &channel_id_gaia,
+        None,
     )?;
     wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test)?;
 
@@ -453,9 +481,10 @@ fn ibc_namada_gaia() -> Result<()> {
         &receiver,
         ibc_denom,
         100.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &port_id_namada,
         &channel_id_namada,
+        None,
         None,
         None,
         false,
@@ -465,6 +494,14 @@ fn ibc_namada_gaia() -> Result<()> {
     check_gaia_balance(&test_gaia, GAIA_USER, GAIA_COIN, 900)?;
 
     // Shielding transfer from Gaia to Namada
+    let memo_path = gen_masp_tx(
+        &test,
+        AA_PAYMENT_ADDRESS,
+        GAIA_COIN,
+        100,
+        &port_id_namada,
+        &channel_id_namada,
+    )?;
     transfer_from_gaia(
         &test_gaia,
         GAIA_USER,
@@ -473,6 +510,7 @@ fn ibc_namada_gaia() -> Result<()> {
         100,
         &port_id_gaia,
         &channel_id_gaia,
+        Some(memo_path),
     )?;
     wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test_gaia)?;
 
@@ -500,9 +538,10 @@ fn ibc_namada_gaia() -> Result<()> {
         &receiver,
         &ibc_denom,
         10.0,
-        BERTHA_KEY,
+        Some(BERTHA_KEY),
         &port_id_namada,
         &channel_id_namada,
+        None,
         None,
         None,
         false,
@@ -643,7 +682,8 @@ fn proposal_ibc_token_inflation() -> Result<()> {
 
     setup_hermes(&test_a, &test_b)?;
     let port_id_a = "transfer".parse().unwrap();
-    let (channel_id_a, _channel_id_b) =
+    let port_id_b = "transfer".parse().unwrap();
+    let (channel_id_a, channel_id_b) =
         create_channel_with_hermes(&test_a, &test_b)?;
 
     // Start relaying
@@ -654,16 +694,27 @@ fn proposal_ibc_token_inflation() -> Result<()> {
     wait_epochs(&test_b, 1)?;
 
     // Transfer 1 from Chain A to a z-address on Chain B
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
+    let token_addr = find_address(&test_a, APFEL)?.to_string();
+    let memo_path = gen_masp_tx(
+        &test_b,
+        AB_PAYMENT_ADDRESS,
+        token_addr,
+        1_000_000,
+        &port_id_b,
+        &channel_id_b,
+    )?;
     transfer(
         &test_a,
         ALBERT,
         AB_PAYMENT_ADDRESS,
         APFEL,
         1.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &port_id_a,
         &channel_id_a,
         None,
+        Some(memo_path),
         None,
         false,
     )?;
@@ -681,19 +732,19 @@ fn proposal_ibc_token_inflation() -> Result<()> {
 #[test]
 fn ibc_rate_limit() -> Result<()> {
     // Mint limit 2 transfer/channel-0/nam, per-epoch throughput limit 1 NAM
-    let update_genesis = |mut genesis: templates::All<
-        templates::Unvalidated,
-    >,
-                          base_dir: &_| {
-        genesis.parameters.parameters.epochs_per_year =
-            epochs_per_year_from_min_duration(50);
-        genesis.parameters.ibc_params.default_mint_limit = Amount::from_u64(2);
-        genesis
-            .parameters
-            .ibc_params
-            .default_per_epoch_throughput_limit = Amount::from_u64(1_000_000);
-        setup::set_validators(1, genesis, base_dir, |_| 0)
-    };
+    let update_genesis =
+        |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
+            genesis.parameters.parameters.epochs_per_year =
+                epochs_per_year_from_min_duration(50);
+            genesis.parameters.ibc_params.default_mint_limit =
+                Amount::from_u64(2_000_000);
+            genesis
+                .parameters
+                .ibc_params
+                .default_per_epoch_throughput_limit =
+                Amount::from_u64(1_000_000);
+            setup::set_validators(1, genesis, base_dir, |_| 0)
+        };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
     let _bg_ledger_a = ledger_a.background();
     let _bg_ledger_b = ledger_b.background();
@@ -727,9 +778,10 @@ fn ibc_rate_limit() -> Result<()> {
         receiver.to_string(),
         NAM,
         1.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &port_id_a,
         &channel_id_a,
+        None,
         None,
         None,
         false,
@@ -742,9 +794,10 @@ fn ibc_rate_limit() -> Result<()> {
         receiver.to_string(),
         NAM,
         1.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &port_id_a,
         &channel_id_a,
+        None,
         None,
         // expect an error of the throughput limit
         Some(
@@ -768,9 +821,10 @@ fn ibc_rate_limit() -> Result<()> {
         receiver.to_string(),
         NAM,
         1.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &port_id_a,
         &channel_id_a,
+        None,
         None,
         None,
         false,
@@ -792,10 +846,11 @@ fn ibc_rate_limit() -> Result<()> {
         receiver.to_string(),
         NAM,
         1.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &port_id_a,
         &channel_id_a,
         Some(Duration::new(20, 0)),
+        None,
         None,
         false,
     )?;
@@ -955,7 +1010,7 @@ fn create_channel_with_hermes(
         "--yes",
     ];
 
-    let mut hermes = run_hermes_cmd(test_a, args, Some(120))?;
+    let mut hermes = run_hermes_cmd(test_a, args, Some(240))?;
     let (channel_id_a, channel_id_b) =
         get_channel_ids_from_hermes_output(&mut hermes)?;
     hermes.assert_success();
@@ -1558,9 +1613,10 @@ fn transfer_token(
         receiver.to_string(),
         NAM,
         100000.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         port_id_a,
         channel_id_a,
+        None,
         None,
         None,
         false,
@@ -1626,22 +1682,8 @@ fn try_invalid_transfers(
     std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
     let receiver = find_address(test_b, BERTHA)?;
 
-    // invalid amount
-    transfer(
-        test_a,
-        ALBERT,
-        receiver.to_string(),
-        NAM,
-        10.1,
-        ALBERT_KEY,
-        port_id_a,
-        channel_id_a,
-        None,
-        Some("The amount for the IBC transfer should be an integer"),
-        false,
-    )?;
-
     // invalid port
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
     let nam_addr = find_address(test_a, NAM)?;
     transfer(
         test_a,
@@ -1649,9 +1691,10 @@ fn try_invalid_transfers(
         receiver.to_string(),
         NAM,
         10.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &"port".parse().unwrap(),
         channel_id_a,
+        None,
         None,
         // the IBC denom can't be parsed when using an invalid port
         Some(&format!("Invalid IBC denom: {nam_addr}")),
@@ -1665,9 +1708,10 @@ fn try_invalid_transfers(
         receiver.to_string(),
         NAM,
         10.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         port_id_a,
         &"channel-42".parse().unwrap(),
+        None,
         None,
         Some("IBC token transfer error: context error: `ICS04 Channel error"),
         false,
@@ -1676,6 +1720,7 @@ fn try_invalid_transfers(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn transfer_on_chain(
     test: &Test,
     kind: impl AsRef<str>,
@@ -1687,7 +1732,8 @@ fn transfer_on_chain(
 ) -> Result<()> {
     std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let rpc = get_actor_rpc(test, Who::Validator(0));
-    let tx_args = [
+    let amount = amount.to_string();
+    let tx_args = vec![
         kind.as_ref(),
         "--source",
         sender.as_ref(),
@@ -1696,7 +1742,7 @@ fn transfer_on_chain(
         "--token",
         token.as_ref(),
         "--amount",
-        &amount.to_string(),
+        &amount,
         "--signing-keys",
         signer.as_ref(),
         "--node",
@@ -1729,10 +1775,11 @@ fn transfer_back(
         BERTHA,
         receiver.to_string(),
         ibc_denom,
-        50000.0,
-        BERTHA_KEY,
+        50_000_000_000.0,
+        Some(BERTHA_KEY),
         port_id_b,
         channel_id_b,
+        None,
         None,
         None,
         false,
@@ -1803,10 +1850,11 @@ fn transfer_timeout(
         receiver.to_string(),
         NAM,
         100000.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         port_id_a,
         channel_id_a,
         Some(Duration::new(5, 0)),
+        None,
         None,
         false,
     )?;
@@ -1937,10 +1985,11 @@ fn transfer(
     receiver: impl AsRef<str>,
     token: impl AsRef<str>,
     amount: f64,
-    signer: impl AsRef<str>,
+    signer: Option<&str>,
     port_id: &PortId,
     channel_id: &ChannelId,
     timeout_sec: Option<Duration>,
+    memo_path: Option<PathBuf>,
     expected_err: Option<&str>,
     wait_reveal_pk: bool,
 ) -> Result<u32> {
@@ -1956,8 +2005,6 @@ fn transfer(
         sender.as_ref(),
         "--receiver",
         receiver.as_ref(),
-        "--signing-keys",
-        signer.as_ref(),
         "--token",
         token.as_ref(),
         "--amount",
@@ -1972,10 +2019,25 @@ fn transfer(
         &rpc,
     ];
 
+    if let Some(signer) = signer {
+        tx_args.extend_from_slice(&["--signing-keys", signer]);
+    } else {
+        tx_args.push("--disposable-gas-payer");
+    }
+
     let timeout = timeout_sec.unwrap_or_default().as_secs().to_string();
     if timeout_sec.is_some() {
         tx_args.push("--timeout-sec-offset");
         tx_args.push(&timeout);
+    }
+
+    let memo = memo_path
+        .as_ref()
+        .map(|path| path.to_string_lossy().to_string())
+        .unwrap_or_default();
+    if memo_path.is_some() {
+        tx_args.push("--memo-path");
+        tx_args.push(&memo);
     }
 
     let mut client = run!(test, Bin::Client, tx_args, Some(300))?;
@@ -2165,12 +2227,13 @@ fn transfer_from_gaia(
     amount: u64,
     port_id: &PortId,
     channel_id: &ChannelId,
+    memo_path: Option<PathBuf>,
 ) -> Result<()> {
     let port_id = port_id.to_string();
     let channel_id = channel_id.to_string();
     let amount = format!("{}{}", amount, token.as_ref());
     let rpc = format!("tcp://{GAIA_RPC}");
-    let args = vec![
+    let mut args = vec![
         "tx",
         "ibc-transfer",
         "transfer",
@@ -2190,6 +2253,17 @@ fn transfer_from_gaia(
         GAIA_CHAIN_ID,
         "--yes",
     ];
+
+    let memo = memo_path
+        .as_ref()
+        .map(|path| {
+            std::fs::read_to_string(path).expect("Reading memo file failed")
+        })
+        .unwrap_or_default();
+    if memo_path.is_some() {
+        args.push("--memo");
+        args.push(&memo);
+    }
 
     let mut gaia = run_gaia_cmd(test, args, Some(40))?;
     gaia.assert_success();
@@ -2376,7 +2450,7 @@ fn check_balances(
 
     // Check the balance on Chain B
     let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/nam");
-    check_balance(test_b, BERTHA, ibc_denom, 100000)?;
+    check_balance(test_b, BERTHA, ibc_denom, 100_000_000_000)?;
 
     Ok(())
 }
@@ -2422,10 +2496,10 @@ fn check_balances_after_non_ibc(
 ) -> Result<()> {
     // Check the source on Chain B
     let ibc_denom = format!("{port_id}/{channel_id}/nam");
-    check_balance(test_b, BERTHA, &ibc_denom, 50000)?;
+    check_balance(test_b, BERTHA, &ibc_denom, 50_000_000_000)?;
 
     // Check the traget on Chain B
-    check_balance(test_b, ALBERT, &ibc_denom, 50000)?;
+    check_balance(test_b, ALBERT, &ibc_denom, 50_000_000_000)?;
 
     Ok(())
 }
@@ -2462,7 +2536,7 @@ fn check_shielded_balances(
 
     // Check the shielded balance on Chain B
     let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/btc");
-    check_balance(test_b, AB_VIEWING_KEY, ibc_denom, 10)?;
+    check_balance(test_b, AB_VIEWING_KEY, ibc_denom, 1_000_000_000)?;
 
     Ok(())
 }
@@ -2614,4 +2688,45 @@ fn shielded_sync(test: &Test, viewing_key: impl AsRef<str>) -> Result<()> {
     let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
     client.assert_success();
     Ok(())
+}
+
+/// Get masp proof for the following IBC transfer from the destination chain
+fn gen_masp_tx(
+    dst_test: &Test,
+    receiver: impl AsRef<str>,
+    token: impl AsRef<str>,
+    amount: u64,
+    port_id: &PortId,
+    channel_id: &ChannelId,
+) -> Result<PathBuf> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, dst_test.net.chain_id.to_string());
+    let rpc = get_actor_rpc(dst_test, Who::Validator(0));
+    let output_folder = dst_test.test_dir.path().to_string_lossy();
+
+    let amount = amount.to_string();
+    let args = vec![
+        "ibc-gen-shielding",
+        "--output-folder-path",
+        &output_folder,
+        "--target",
+        receiver.as_ref(),
+        "--token",
+        token.as_ref(),
+        "--amount",
+        &amount,
+        "--port-id",
+        port_id.as_ref(),
+        "--channel-id",
+        channel_id.as_ref(),
+        "--node",
+        &rpc,
+    ];
+
+    let mut client = run!(dst_test, Bin::Client, args, Some(120))?;
+    let (_unread, matched) =
+        client.exp_regex("Output IBC shielding transfer .*")?;
+    let file_path = matched.trim().split(' ').last().expect("invalid output");
+    client.assert_success();
+
+    Ok(PathBuf::from_str(file_path).expect("invalid file path"))
 }

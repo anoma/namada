@@ -846,10 +846,12 @@ impl<'a> Client for &'a MockNode {
         height: H,
     ) -> Result<tendermint_rpc::endpoint::block_results::Response, RpcError>
     where
-        H: Into<namada::tendermint::block::Height> + Send,
+        H: TryInto<namada::tendermint::block::Height> + Send,
     {
         self.drive_mock_services_bg().await;
-        let height = height.into();
+        let height = height.try_into().map_err(|_| {
+            RpcError::parse("Failed to cast block height".to_string())
+        })?;
         let locked = self.shell.lock().unwrap();
         let events: Vec<_> = locked
             .event_log()
@@ -890,11 +892,18 @@ impl<'a> Client for &'a MockNode {
         height: H,
     ) -> Result<tendermint_rpc::endpoint::block::Response, RpcError>
     where
-        H: Into<tendermint::block::Height> + Send,
+        H: TryInto<tendermint::block::Height> + Send,
     {
         // NOTE: atm this is only needed to query blocks at a
         // specific height for masp transactions
-        let height = BlockHeight(height.into().into());
+        let height = BlockHeight(
+            height
+                .try_into()
+                .map_err(|_| {
+                    RpcError::parse("Failed to cast block height".to_string())
+                })?
+                .into(),
+        );
 
         self.blocks
             .lock()

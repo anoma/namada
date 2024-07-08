@@ -57,7 +57,7 @@ keywords = ["blockchain", "privacy", "crypto", "protocol", "network"]
 license = "GPL-3.0"
 readme = "README.md"
 repository = "https://github.com/anoma/namada"
-version = "0.39.0"
+version = "0.40.0"
 
 [workspace.dependencies]
 ark-bls12-381 = {version = "0.3"}
@@ -75,14 +75,15 @@ bimap = {version = "0.6.2", features = ["serde"]}
 bit-set = "0.5.2"
 bitflags = { version = "2.5.0", features = ["serde"] }
 blake2b-rs = "0.2.0"
-bls12_381 = "0.8"
 byte-unit = "4.0.13"
 byteorder = "1.4.2"
 borsh = {version = "1.2.0", features = ["unstable__schema", "derive"]}
 borsh-ext = { git = "https://github.com/heliaxdev/borsh-ext", tag = "v1.2.0" }
 chrono = {version = "0.4.22", default-features = false, features = ["clock", "std"]}
 circular-queue = "0.2.6"
-clap = "4.3.4"
+clap = "4.5"
+clap_complete = "4.5"
+clap_complete_nushell = "4.5"
 clru = {git = "https://github.com/marmeladema/clru-rs.git", rev = "71ca566"}
 color-eyre = "0.6.2"
 concat-idents = "1.1.2"
@@ -94,6 +95,7 @@ directories = "4.0.1"
 drain_filter_polyfill = "0.1.3"
 duration-str = "0.10.0"
 ed25519-consensus = "2.1.0"
+either = "1.12.0"
 escargot = "0.5.7"
 ethabi = "18.0.0"
 ethbridge-bridge-contract = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.24.0"}
@@ -119,14 +121,14 @@ jubjub = "0.10"
 k256 = { version = "0.13.0", default-features = false, features = ["ecdsa", "pkcs8", "precomputed-tables", "serde", "std"]}
 konst = { version = "0.3.8", default-features = false }
 lazy_static = "1.4.0"
-ledger-namada-rs = { git = "https://github.com/Zondax/ledger-namada", tag = "v0.0.12" }
+ledger-namada-rs = { git = "https://github.com/Zondax/ledger-namada", tag = "v0.0.24" }
 ledger-transport-hid = "0.10.0"
 libc = "0.2.97"
 libloading = "0.7.2"
 linkme = "0.3.24"
 # branch = "main"
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "4ede1c42d76d6348af8224bc8bfac4404321fe82" }
-masp_proofs = { git = "https://github.com/anoma/masp", rev = "4ede1c42d76d6348af8224bc8bfac4404321fe82", default-features = false, features = ["local-prover"] }
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "8d83b172698098fba393006016072bc201ed9ab7" }
+masp_proofs = { git = "https://github.com/anoma/masp", rev = "8d83b172698098fba393006016072bc201ed9ab7", default-features = false, features = ["local-prover"] }
 num256 = "0.3.5"
 num_cpus = "1.13.0"
 num-derive = "0.4"

@@ -1,4 +1,5 @@
 use std::fs::File;
+use std::io::Write;
 
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
@@ -11,8 +12,10 @@ use namada::core::key::*;
 use namada::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal,
 };
+use namada::ibc::convert_masp_tx_to_ibc_memo;
 use namada::io::Io;
 use namada::state::EPOCH_SWITCH_BLOCKS_DELAY;
+use namada::tx::data::compute_inner_tx_hash;
 use namada::tx::{CompressedAuthorization, Section, Signer, Tx};
 use namada_sdk::args::TxBecomeValidator;
 use namada_sdk::rpc::{InnerTxResult, TxBroadcastData, TxResponse};
@@ -298,8 +301,11 @@ where
         sign(namada, &mut tx, &args.tx, signing_data).await?;
 
         let cmt = tx.first_commitments().unwrap().to_owned();
+        let wrapper_hash = tx.wrapper_hash();
         let response = namada.submit(tx, &args.tx).await?;
-        if let Some(result) = response.is_applied_and_valid(&cmt) {
+        if let Some(result) =
+            response.is_applied_and_valid(wrapper_hash.as_ref(), &cmt)
+        {
             return Ok(result.initialized_accounts.first().cloned());
         }
     }
@@ -377,10 +383,14 @@ pub async fn submit_change_consensus_key(
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
         let cmt = tx.first_commitments().unwrap().to_owned();
+        let wrapper_hash = tx.wrapper_hash();
         let resp = namada.submit(tx, &args.tx).await?;
 
         if !args.tx.dry_run {
-            if resp.is_applied_and_valid(&cmt).is_some() {
+            if resp
+                .is_applied_and_valid(wrapper_hash.as_ref(), &cmt)
+                .is_some()
+            {
                 namada.wallet_mut().await.save().unwrap_or_else(|err| {
                     edisplay_line!(namada.io(), "{}", err)
                 });
@@ -571,6 +581,7 @@ pub async fn submit_become_validator(
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
         let cmt = tx.first_commitments().unwrap().to_owned();
+        let wrapper_hash = tx.wrapper_hash();
         let resp = namada.submit(tx, &args.tx).await?;
 
         if args.tx.dry_run {
@@ -581,7 +592,10 @@ pub async fn submit_become_validator(
             safe_exit(0)
         }
 
-        if resp.is_applied_and_valid(&cmt).is_none() {
+        if resp
+            .is_applied_and_valid(wrapper_hash.as_ref(), &cmt)
+            .is_none()
+        {
             display_line!(
                 namada.io(),
                 "Transaction failed. No key or addresses have been saved."
@@ -743,7 +757,26 @@ pub async fn submit_transparent_transfer(
     namada: &impl Namada,
     args: args::TxTransparentTransfer,
 ) -> Result<(), error::Error> {
-    submit_reveal_aux(namada, args.tx.clone(), &args.source).await?;
+    if args.data.len() > 1 {
+        // TODO(namada#3379): Vectorized transfers are not yet supported in the
+        // CLI
+        return Err(error::Error::Other(
+            "Unexpected vectorized transparent transfer".to_string(),
+        ));
+    }
+
+    submit_reveal_aux(
+        namada,
+        args.tx.clone(),
+        &args
+            .data
+            .first()
+            .ok_or_else(|| {
+                error::Error::Other("Missing transfer data".to_string())
+            })?
+            .source,
+    )
+    .await?;
 
     let (mut tx, signing_data) = args.clone().build(namada).await?;
 
@@ -787,11 +820,18 @@ pub async fn submit_shielding_transfer(
         } else {
             sign(namada, &mut tx, &args.tx, signing_data).await?;
             let cmt_hash = tx.first_commitments().unwrap().get_hash();
+            let wrapper_hash = tx.wrapper_hash();
             let result = namada.submit(tx, &args.tx).await?;
             match result {
                 ProcessTxResponse::Applied(resp) if
                     // If a transaction is rejected by a VP
-                    matches!(resp.batch_result().get(&cmt_hash), Some(InnerTxResult::VpsRejected(_))) =>
+                    matches!(
+                        resp.batch_result().get(&compute_inner_tx_hash(
+                            wrapper_hash.as_ref(),
+                            either::Left(&cmt_hash)
+                        )),
+                        Some(InnerTxResult::VpsRejected(_))
+                    ) =>
                 {
                     let submission_masp_epoch = rpc::query_and_print_masp_epoch(namada).await;
                     // And its submission epoch doesn't match construction epoch
@@ -1107,9 +1147,14 @@ where
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
         let cmt = tx.first_commitments().unwrap().to_owned();
+        let wrapper_hash = tx.wrapper_hash();
         let resp = namada.submit(tx, &args.tx).await?;
 
-        if !args.tx.dry_run && resp.is_applied_and_valid(&cmt).is_some() {
+        if !args.tx.dry_run
+            && resp
+                .is_applied_and_valid(wrapper_hash.as_ref(), &cmt)
+                .is_some()
+        {
             tx::query_unbonds(namada, args.clone(), latest_withdrawal_pre)
                 .await?;
         }
@@ -1351,4 +1396,33 @@ pub async fn submit_tx(
     to_broadcast: TxBroadcastData,
 ) -> Result<TxResponse, error::Error> {
     tx::submit_tx(namada, to_broadcast).await
+}
+
+/// Generate MASP transaction and output it
+pub async fn gen_ibc_shielding_transfer(
+    context: &impl Namada,
+    args: args::GenIbcShieldingTransfer,
+) -> Result<(), error::Error> {
+    if let Some(masp_tx) =
+        tx::gen_ibc_shielding_transfer(context, args.clone()).await?
+    {
+        let tx_id = masp_tx.txid().to_string();
+        let filename = format!("ibc_masp_tx_{}.memo", tx_id);
+        let output_path = match &args.output_folder {
+            Some(path) => path.join(filename),
+            None => filename.into(),
+        };
+        let mut out = File::create(&output_path)
+            .expect("Creating a new file for IBC MASP transaction failed.");
+        let bytes = convert_masp_tx_to_ibc_memo(&masp_tx);
+        out.write_all(bytes.as_bytes())
+            .expect("Writing IBC MASP transaction file failed.");
+        println!(
+            "Output IBC shielding transfer for {tx_id} to {}",
+            output_path.to_string_lossy()
+        );
+    } else {
+        eprintln!("No shielded transfer for this IBC transfer.")
+    }
+    Ok(())
 }

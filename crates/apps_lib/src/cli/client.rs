@@ -370,6 +370,20 @@ impl CliApi {
                         )
                         .await?;
                     }
+                    Sub::GenIbcShieldingTransfer(GenIbcShieldingTransfer(
+                        args,
+                    )) => {
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.query.ledger_address);
+                        let client = client.unwrap_or_else(|| {
+                            C::from_tendermint_address(&ledger_address)
+                        });
+                        client.wait_until_node_is_synced(&io).await?;
+                        let args = args.to_sdk(&mut ctx)?;
+                        let namada = ctx.to_sdk(client, io);
+                        tx::gen_ibc_shielding_transfer(&namada, args).await?;
+                    }
                     #[cfg(feature = "namada-eth-bridge")]
                     Sub::AddToEthBridgePool(args) => {
                         let args = args.0;
@@ -766,7 +780,7 @@ impl CliApi {
                     utils::validate_wasm(args)
                 }
                 ClientUtils::InitNetwork(InitNetwork(args)) => {
-                    utils::init_network(args);
+                    utils::init_network(global_args, args);
                 }
                 ClientUtils::GenesisBond(GenesisBond(args)) => {
                     utils::genesis_bond(args)

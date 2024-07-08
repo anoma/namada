@@ -52,7 +52,7 @@ where
             "namada_tx_set_commitment_sentinel" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_0(host_env::tx_set_commitment_sentinel)),
             "namada_tx_update_masp_note_commitment_tree" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_2(host_env::tx_update_masp_note_commitment_tree)),
             "namada_tx_update_validity_predicate" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_6(host_env::tx_update_validity_predicate)),
-            "namada_tx_verify_tx_section_signature" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_7(host_env::tx_verify_tx_section_signature)),
+            "namada_tx_verify_tx_section_signature" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_5(host_env::tx_verify_tx_section_signature)),
             "namada_tx_write" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_4(host_env::tx_write)),
             "namada_tx_write_temp" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_4(host_env::tx_write_temp)),
             "namada_tx_yield_value" => Function::new_typed_with_env(wasm_store, &env, wrap_tx::_2(host_env::tx_yield_value)),
@@ -99,7 +99,7 @@ where
             "namada_vp_read_pre" => Function::new_typed_with_env(wasm_store, &env, wrap_vp::_2(host_env::vp_read_pre)),
             "namada_vp_read_temp" => Function::new_typed_with_env(wasm_store, &env, wrap_vp::_2(host_env::vp_read_temp)),
             "namada_vp_result_buffer" => Function::new_typed_with_env(wasm_store, &env, wrap_vp::_1(host_env::vp_result_buffer)),
-            "namada_vp_verify_tx_section_signature" => Function::new_typed_with_env(wasm_store, &env, wrap_vp::_9(host_env::vp_verify_tx_section_signature)),
+            "namada_vp_verify_tx_section_signature" => Function::new_typed_with_env(wasm_store, &env, wrap_vp::_7(host_env::vp_verify_tx_section_signature)),
             "namada_vp_yield_value" => Function::new_typed_with_env(wasm_store, &env, wrap_vp::_2(host_env::vp_yield_value)),
         },
     }
@@ -179,6 +179,34 @@ mod wrap_tx {
     {
         move |mut env, arg0, arg1, arg2, arg3| {
             f(env.data_mut(), arg0, arg1, arg2, arg3)
+        }
+    }
+
+    pub(super) fn _5<F, ARG0, ARG1, ARG2, ARG3, ARG4, RET, D, H, CA>(
+        f: F,
+    ) -> impl Fn(
+        FunctionEnvMut<'_, TxVmEnv<WasmMemory, D, H, CA>>,
+        ARG0,
+        ARG1,
+        ARG2,
+        ARG3,
+        ARG4,
+    ) -> RET
+    where
+        D: DB + for<'iter> DBIter<'iter> + 'static,
+        H: StorageHasher + 'static,
+        CA: WasmCacheAccess + 'static,
+        F: Fn(
+            &mut TxVmEnv<WasmMemory, D, H, CA>,
+            ARG0,
+            ARG1,
+            ARG2,
+            ARG3,
+            ARG4,
+        ) -> RET,
+    {
+        move |mut env, arg0, arg1, arg2, arg3, arg4| {
+            f(env.data_mut(), arg0, arg1, arg2, arg3, arg4)
         }
     }
 
@@ -340,6 +368,53 @@ mod wrap_vp {
     {
         move |mut env, arg0, arg1, arg2, arg3| {
             f(env.data_mut(), arg0, arg1, arg2, arg3)
+        }
+    }
+
+    pub(super) fn _7<
+        F,
+        ARG0,
+        ARG1,
+        ARG2,
+        ARG3,
+        ARG4,
+        ARG5,
+        ARG6,
+        RET,
+        D,
+        H,
+        EVAL,
+        CA,
+    >(
+        f: F,
+    ) -> impl Fn(
+        FunctionEnvMut<'_, VpVmEnv<WasmMemory, D, H, EVAL, CA>>,
+        ARG0,
+        ARG1,
+        ARG2,
+        ARG3,
+        ARG4,
+        ARG5,
+        ARG6,
+    ) -> RET
+    where
+        D: DB + for<'iter> DBIter<'iter> + 'static,
+        H: StorageHasher + 'static,
+        CA: WasmCacheAccess + 'static,
+        EVAL: VpEvaluator<Db = D, H = H, Eval = EVAL, CA = CA> + 'static,
+        F: Fn(
+            &mut VpVmEnv<WasmMemory, D, H, EVAL, CA>,
+            ARG0,
+            ARG1,
+            ARG2,
+            ARG3,
+            ARG4,
+            ARG5,
+            ARG6,
+        ) -> RET,
+    {
+        move |mut env, arg0, arg1, arg2, arg3, arg4, arg5, arg6| {
+            f(env.data_mut(), arg0, arg1, arg2, arg3, arg4, arg5, arg6)
         }
     }
 

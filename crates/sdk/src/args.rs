@@ -1,6 +1,8 @@
 //! Structures encapsulating SDK arguments
 
+use std::fmt::Display;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::time::Duration as StdDuration;
 
 use namada_core::address::Address;
@@ -229,11 +231,9 @@ impl From<token::DenominatedAmount> for InputAmount {
     }
 }
 
-/// Transparent transfer transaction arguments
+/// Transparent transfer-specific arguments
 #[derive(Clone, Debug)]
-pub struct TxTransparentTransfer<C: NamadaTypes = SdkTypes> {
-    /// Common tx arguments
-    pub tx: Tx<C>,
+pub struct TxTransparentTransferData<C: NamadaTypes = SdkTypes> {
     /// Transfer source address
     pub source: C::Address,
     /// Transfer target address
@@ -242,6 +242,15 @@ pub struct TxTransparentTransfer<C: NamadaTypes = SdkTypes> {
     pub token: C::Address,
     /// Transferred token amount
     pub amount: InputAmount,
+}
+
+/// Transparent transfer transaction arguments
+#[derive(Clone, Debug)]
+pub struct TxTransparentTransfer<C: NamadaTypes = SdkTypes> {
+    /// Common tx arguments
+    pub tx: Tx<C>,
+    /// The transfer specific data
+    pub data: Vec<TxTransparentTransferData<C>>,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -258,7 +267,7 @@ impl<C: NamadaTypes> TxBuilder<C> for TxTransparentTransfer<C> {
     }
 }
 
-impl<C: NamadaTypes> TxTransparentTransfer<C> {
+impl<C: NamadaTypes> TxTransparentTransferData<C> {
     /// Transfer source address
     pub fn source(self, source: C::Address) -> Self {
         Self { source, ..self }
@@ -278,7 +287,9 @@ impl<C: NamadaTypes> TxTransparentTransfer<C> {
     pub fn amount(self, amount: InputAmount) -> Self {
         Self { amount, ..self }
     }
+}
 
+impl<C: NamadaTypes> TxTransparentTransfer<C> {
     /// Path to the TX WASM code file
     pub fn tx_code_path(self, tx_code_path: PathBuf) -> Self {
         Self {
@@ -298,11 +309,9 @@ impl TxTransparentTransfer {
     }
 }
 
-/// Shielded transfer transaction arguments
+/// Shielded transfer-specific arguments
 #[derive(Clone, Debug)]
-pub struct TxShieldedTransfer<C: NamadaTypes = SdkTypes> {
-    /// Common tx arguments
-    pub tx: Tx<C>,
+pub struct TxShieldedTransferData<C: NamadaTypes = SdkTypes> {
     /// Transfer source spending key
     pub source: C::SpendingKey,
     /// Transfer target address
@@ -311,6 +320,17 @@ pub struct TxShieldedTransfer<C: NamadaTypes = SdkTypes> {
     pub token: C::Address,
     /// Transferred token amount
     pub amount: InputAmount,
+}
+
+/// Shielded transfer transaction arguments
+#[derive(Clone, Debug)]
+pub struct TxShieldedTransfer<C: NamadaTypes = SdkTypes> {
+    /// Common tx arguments
+    pub tx: Tx<C>,
+    /// Transfer-specific data
+    pub data: Vec<TxShieldedTransferData<C>>,
+    /// Optional additional keys for gas payment
+    pub gas_spending_keys: Vec<C::SpendingKey>,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -325,19 +345,26 @@ impl TxShieldedTransfer {
     }
 }
 
+/// Shielding transfer-specific arguments
+#[derive(Clone, Debug)]
+pub struct TxShieldingTransferData<C: NamadaTypes = SdkTypes> {
+    /// Transfer source spending key
+    pub source: C::Address,
+    /// Transferred token address
+    pub token: C::Address,
+    /// Transferred token amount
+    pub amount: InputAmount,
+}
+
 /// Shielding transfer transaction arguments
 #[derive(Clone, Debug)]
 pub struct TxShieldingTransfer<C: NamadaTypes = SdkTypes> {
     /// Common tx arguments
     pub tx: Tx<C>,
-    /// Transfer source address
-    pub source: C::Address,
     /// Transfer target address
     pub target: C::PaymentAddress,
-    /// Transferred token address
-    pub token: C::Address,
-    /// Transferred token amount
-    pub amount: InputAmount,
+    /// Transfer-specific data
+    pub data: Vec<TxShieldingTransferData<C>>,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -352,6 +379,17 @@ impl TxShieldingTransfer {
     }
 }
 
+/// Unshielding transfer-specific arguments
+#[derive(Clone, Debug)]
+pub struct TxUnshieldingTransferData<C: NamadaTypes = SdkTypes> {
+    /// Transfer target address
+    pub target: C::Address,
+    /// Transferred token address
+    pub token: C::Address,
+    /// Transferred token amount
+    pub amount: InputAmount,
+}
+
 /// Unshielding transfer transaction arguments
 #[derive(Clone, Debug)]
 pub struct TxUnshieldingTransfer<C: NamadaTypes = SdkTypes> {
@@ -359,12 +397,10 @@ pub struct TxUnshieldingTransfer<C: NamadaTypes = SdkTypes> {
     pub tx: Tx<C>,
     /// Transfer source spending key
     pub source: C::SpendingKey,
-    /// Transfer target address
-    pub target: C::Address,
-    /// Transferred token address
-    pub token: C::Address,
-    /// Transferred token amount
-    pub amount: InputAmount,
+    /// Transfer-specific data
+    pub data: Vec<TxUnshieldingTransferData<C>>,
+    /// Optional additional keys for gas payment
+    pub gas_spending_keys: Vec<C::SpendingKey>,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -404,6 +440,8 @@ pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
     pub refund_target: Option<C::TransferTarget>,
     /// Memo
     pub memo: Option<String>,
+    /// Optional additional keys for gas payment
+    pub gas_spending_keys: Vec<C::SpendingKey>,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -479,6 +517,17 @@ impl<C: NamadaTypes> TxIbcTransfer<C> {
     pub fn memo(self, memo: String) -> Self {
         Self {
             memo: Some(memo),
+            ..self
+        }
+    }
+
+    /// Gas spending keys
+    pub fn gas_spending_keys(
+        self,
+        gas_spending_keys: Vec<C::SpendingKey>,
+    ) -> Self {
+        Self {
+            gas_spending_keys,
             ..self
         }
     }
@@ -1254,6 +1303,77 @@ impl RevealPk {
         context: &impl Namada,
     ) -> crate::error::Result<(namada_tx::Tx, SigningTxData)> {
         tx::build_reveal_pk(context, &self.tx, &self.public_key).await
+    }
+}
+
+/// Generate shell completions
+#[derive(Clone, Debug)]
+pub struct Complete {
+    /// Which shell
+    pub shell: Shell,
+}
+
+/// Supported shell types
+#[allow(missing_docs)]
+#[derive(Clone, Copy, Debug)]
+pub enum Shell {
+    Bash,
+    Elvish,
+    Fish,
+    PowerShell,
+    Zsh,
+    Nushell,
+}
+
+impl Display for Shell {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.possible_value().get_name().fmt(f)
+    }
+}
+
+impl FromStr for Shell {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        use clap::ValueEnum;
+
+        for variant in Self::value_variants() {
+            if variant.possible_value().matches(s, false) {
+                return Ok(*variant);
+            }
+        }
+        Err(format!("invalid variant: {s}"))
+    }
+}
+
+impl Shell {
+    fn possible_value(&self) -> clap::builder::PossibleValue {
+        use clap::builder::PossibleValue;
+        match self {
+            Shell::Bash => PossibleValue::new("bash"),
+            Shell::Elvish => PossibleValue::new("elvish"),
+            Shell::Fish => PossibleValue::new("fish"),
+            Shell::PowerShell => PossibleValue::new("powershell"),
+            Shell::Zsh => PossibleValue::new("zsh"),
+            Shell::Nushell => PossibleValue::new("nushell"),
+        }
+    }
+}
+
+impl clap::ValueEnum for Shell {
+    fn value_variants<'a>() -> &'a [Self] {
+        &[
+            Shell::Bash,
+            Shell::Elvish,
+            Shell::Fish,
+            Shell::PowerShell,
+            Shell::Zsh,
+            Shell::Nushell,
+        ]
+    }
+
+    fn to_possible_value<'a>(&self) -> Option<clap::builder::PossibleValue> {
+        Some(self.possible_value())
     }
 }
 
@@ -2645,9 +2765,9 @@ pub struct ValidatorSetUpdateRelay<C: NamadaTypes = SdkTypes> {
     pub safe_mode: bool,
 }
 
-/// IBC shielded transfer generation arguments
+/// IBC shielding transfer generation arguments
 #[derive(Clone, Debug)]
-pub struct GenIbcShieldedTransfer<C: NamadaTypes = SdkTypes> {
+pub struct GenIbcShieldingTransfer<C: NamadaTypes = SdkTypes> {
     /// The query parameters.
     pub query: Query<C>,
     /// The output directory path to where serialize the data
@@ -2662,6 +2782,4 @@ pub struct GenIbcShieldedTransfer<C: NamadaTypes = SdkTypes> {
     pub port_id: PortId,
     /// Channel ID via which the token is received
     pub channel_id: ChannelId,
-    /// Generate the shielded transfer for refunding
-    pub refund: bool,
 }

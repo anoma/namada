@@ -144,8 +144,6 @@ pub mod tx {
             public_keys_map_ptr: u64,
             public_keys_map_len: u64,
             threshold: u8,
-            max_signatures_ptr: u64,
-            max_signatures_len: u64,
         ) -> i64;
 
         /// Update the masp note commitment tree with the new notes
@@ -260,8 +258,6 @@ pub mod vp {
             signer_ptr: u64,
             signer_len: u64,
             threshold: u8,
-            max_signatures_ptr: u64,
-            max_signatures_len: u64,
         );
 
         /// Evaluate a validity-predicate

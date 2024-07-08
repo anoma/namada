@@ -55,6 +55,8 @@ namada = {path = "../namada"}
 namada_apps_lib = {path = "../apps_lib"}
 namada_node = {path = "../node"}
 
+clap_complete.workspace = true
+clap_complete_nushell.workspace = true
 color-eyre.workspace = true
 eyre.workspace = true
 tokio = {workspace = true, features = ["full"]}

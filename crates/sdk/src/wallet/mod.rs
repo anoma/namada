@@ -22,7 +22,7 @@ use namada_core::masp::{
     ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
 };
 use namada_core::time::DateTimeUtc;
-use namada_ibc::is_ibc_denom;
+use namada_ibc::trace::is_ibc_denom;
 pub use pre_genesis::gen_key_to_store;
 use rand::CryptoRng;
 use rand_core::RngCore;
@@ -35,7 +35,7 @@ pub use self::keys::{DecryptionError, StoredKeypair};
 pub use self::store::{ConfirmationResponse, ValidatorData, ValidatorKeys};
 use crate::wallet::store::{derive_hd_secret_key, derive_hd_spending_key};
 
-const DISPOSABLE_KEY_LIFETIME_IN_SECONDS: i64 = 5 * 60; // 5 minutes
+const DISPOSABLE_KEY_LIFETIME_IN_SECONDS: i64 = 7 * 24 * 60 * 60; // 1 week
 
 /// Captures the interactive parts of the wallet's functioning
 pub trait WalletIo: Sized + Clone {

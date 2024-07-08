@@ -52,6 +52,7 @@ namada_test_utils = {path = "../test_utils", optional = true}
 
 arse-merkle-tree = { workspace = true, features = ["blake2b"] }
 async-trait.workspace = true
+base64.workspace = true
 blake2b-rs.workspace = true
 borsh.workspace = true
 borsh-ext.workspace = true
@@ -61,6 +62,7 @@ clap = { workspace = true, optional = true }
 color-eyre.workspace = true
 data-encoding.workspace = true
 drain_filter_polyfill.workspace = true
+either.workspace = true
 ethabi.workspace = true
 ethbridge-bridge-events.workspace = true
 ethbridge-events.workspace = true

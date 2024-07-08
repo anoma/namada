@@ -31,16 +31,14 @@ struct Keys {
     epochs_per_year: &'static str,
     masp_epoch_multiplier: &'static str,
     implicit_vp: &'static str,
-    max_expected_time_per_block: &'static str,
     tx_allowlist: &'static str,
     vp_allowlist: &'static str,
     max_proposal_bytes: &'static str,
     max_tx_bytes: &'static str,
     max_block_gas: &'static str,
     minimum_gas_price: &'static str,
-    fee_unshielding_gas_limit: &'static str,
+    masp_fee_payment_gas_limit: &'static str,
     gas_scale: &'static str,
-    max_signatures_per_transaction: &'static str,
     native_token_transferable: &'static str,
 }
 
@@ -65,11 +63,6 @@ pub fn is_protocol_parameter_key(key: &Key) -> bool {
 /// Returns if the key is an epoch storage key.
 pub fn is_epoch_duration_storage_key(key: &Key) -> bool {
     is_epoch_duration_key_at_addr(key, &ADDRESS)
-}
-
-/// Returns if the key is the max_expected_time_per_block key.
-pub fn is_max_expected_time_per_block_key(key: &Key) -> bool {
-    is_max_expected_time_per_block_key_at_addr(key, &ADDRESS)
 }
 
 /// Returns if the key is the tx_allowlist key.
@@ -118,18 +111,13 @@ pub fn get_tx_allowlist_storage_key() -> Key {
 }
 
 /// Storage key used for the fee unshielding gas limit
-pub fn get_fee_unshielding_gas_limit_key() -> Key {
-    get_fee_unshielding_gas_limit_key_at_addr(ADDRESS)
+pub fn get_masp_fee_payment_gas_limit_key() -> Key {
+    get_masp_fee_payment_gas_limit_key_at_addr(ADDRESS)
 }
 
 /// Storage key used for the gas scale
 pub fn get_gas_scale_key() -> Key {
     get_gas_scale_key_at_addr(ADDRESS)
-}
-
-/// Storage key used for max_epected_time_per_block parameter.
-pub fn get_max_expected_time_per_block_key() -> Key {
-    get_max_expected_time_per_block_key_at_addr(ADDRESS)
 }
 
 /// Storage key used for implicit VP parameter.
@@ -165,11 +153,6 @@ pub fn get_max_block_gas_key() -> Key {
 /// Storage key used for the gas cost table
 pub fn get_gas_cost_key() -> Key {
     get_minimum_gas_price_key_at_addr(ADDRESS)
-}
-
-/// Storage key used for the max signatures per transaction key
-pub fn get_max_signatures_per_transaction_key() -> Key {
-    get_max_signatures_per_transaction_key_at_addr(ADDRESS)
 }
 
 /// Helper function to retrieve the `max_block_gas` protocol parameter from

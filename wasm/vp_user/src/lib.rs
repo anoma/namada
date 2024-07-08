@@ -102,6 +102,7 @@ fn validate_tx(
                 &addr,
             )?,
             Action::Masp(_) => (),
+            Action::IbcShielding => (),
         }
     }
 
@@ -1422,7 +1423,7 @@ mod tests {
     fn test_signed_vp_update_accepted() {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
-        tx_env.init_parameters(None, None, None, None);
+        tx_env.init_parameters(None, None, None);
 
         let vp_owner = address::testing::established_address_1();
         let keypair = key::testing::keypair_1();
@@ -1481,12 +1482,7 @@ mod tests {
         // for the update
         tx_env.store_wasm_code(vp_code);
 
-        tx_env.init_parameters(
-            None,
-            Some(vec![vp_hash.to_string()]),
-            None,
-            None,
-        );
+        tx_env.init_parameters(None, Some(vec![vp_hash.to_string()]), None);
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner]);

@@ -8,7 +8,7 @@ use std::fmt;
 
 use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::hash::Hash;
+use namada_core::masp::TxId;
 use namada_core::storage::KeySeg;
 use namada_core::{address, storage};
 
@@ -27,6 +27,7 @@ pub enum Action {
     Gov(GovAction),
     Pgf(PgfAction),
     Masp(MaspAction),
+    IbcShielding,
 }
 
 /// PoS tx actions.
@@ -67,7 +68,7 @@ pub enum PgfAction {
 #[derive(Clone, Debug, BorshDeserialize, BorshSerialize)]
 pub struct MaspAction {
     /// The hash of the masp [`crate::types::Section`]
-    pub masp_section_ref: Hash,
+    pub masp_section_ref: TxId,
 }
 
 /// Read actions from temporary storage
@@ -123,7 +124,7 @@ fn storage_key() -> storage::Key {
 /// first one
 pub fn get_masp_section_ref<T: Read>(
     reader: &T,
-) -> Result<Option<Hash>, <T as Read>::Err> {
+) -> Result<Option<TxId>, <T as Read>::Err> {
     Ok(reader.read_actions()?.into_iter().find_map(|action| {
         // In case of multiple masp actions we get the first one
         if let Action::Masp(MaspAction { masp_section_ref }) = action {
@@ -132,4 +133,14 @@ pub fn get_masp_section_ref<T: Read>(
             None
         }
     }))
+}
+
+/// Helper function to check if the action is IBC shielding transfer
+pub fn is_ibc_shielding_transfer<T: Read>(
+    reader: &T,
+) -> Result<bool, <T as Read>::Err> {
+    Ok(reader
+        .read_actions()?
+        .iter()
+        .any(|action| matches!(action, Action::IbcShielding)))
 }

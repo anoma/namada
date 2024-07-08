@@ -535,7 +535,7 @@ where
             amount,
         ) = result?;
         if epoch >= withdrawable {
-            total = checked!(total + amount)?;
+            checked!(total += amount)?;
         }
     }
     Ok(total)
@@ -733,32 +733,27 @@ fn enrich_bonds_and_unbonds(
 
                 for bond in &detail.bonds {
                     let slashed_bond = bond.slashed_amount.unwrap_or_default();
-                    bond_total = checked!(bond_total + bond.amount)?;
-                    bond_total_slashed =
-                        checked!(bond_total_slashed + slashed_bond)?;
+                    checked!(bond_total += bond.amount)?;
+                    checked!(bond_total_slashed += slashed_bond)?;
                 }
                 for unbond in &detail.unbonds {
                     let slashed_unbond =
                         unbond.slashed_amount.unwrap_or_default();
-                    unbond_total = checked!(unbond_total + unbond.amount)?;
-                    unbond_total_slashed =
-                        checked!(unbond_total_slashed + slashed_unbond)?;
+                    checked!(unbond_total += unbond.amount)?;
+                    checked!(unbond_total_slashed += slashed_unbond)?;
 
                     if current_epoch >= unbond.withdraw {
-                        withdrawable = checked!(
-                            withdrawable + unbond.amount - slashed_unbond
+                        checked!(
+                            withdrawable += unbond.amount - slashed_unbond
                         )?;
                     }
                 }
 
-                bonds_total = checked!(bonds_total + bond_total)?;
-                bonds_total_slashed =
-                    checked!(bonds_total_slashed + bond_total_slashed)?;
-                unbonds_total = checked!(unbonds_total + unbond_total)?;
-                unbonds_total_slashed =
-                    checked!(unbonds_total_slashed + unbond_total_slashed)?;
-                total_withdrawable =
-                    checked!(total_withdrawable + withdrawable)?;
+                checked!(bonds_total += bond_total)?;
+                checked!(bonds_total_slashed += bond_total_slashed)?;
+                checked!(unbonds_total += unbond_total)?;
+                checked!(unbonds_total_slashed += unbond_total_slashed)?;
+                checked!(total_withdrawable += withdrawable)?;
 
                 let enriched_detail = EnrichedBondsAndUnbondsDetail {
                     data: detail,

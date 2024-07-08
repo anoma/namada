@@ -296,15 +296,13 @@ impl Finalized {
     ) -> namada::ledger::parameters::Parameters {
         let templates::ChainParams {
             min_num_of_blocks,
-            max_expected_time_per_block,
             max_proposal_bytes,
             vp_allowlist,
             tx_allowlist,
             implicit_vp,
             epochs_per_year,
             masp_epoch_multiplier,
-            max_signatures_per_transaction,
-            fee_unshielding_gas_limit,
+            masp_fee_payment_gas_limit,
             gas_scale,
             max_block_gas,
             minimum_gas_price,
@@ -334,24 +332,19 @@ impl Finalized {
             min_duration: namada::core::time::Duration::seconds(min_duration)
                 .into(),
         };
-        let max_expected_time_per_block =
-            namada::core::time::Duration::seconds(max_expected_time_per_block)
-                .into();
         let vp_allowlist = vp_allowlist.unwrap_or_default();
         let tx_allowlist = tx_allowlist.unwrap_or_default();
 
         namada::ledger::parameters::Parameters {
             max_tx_bytes,
             epoch_duration,
-            max_expected_time_per_block,
             vp_allowlist,
             tx_allowlist,
             implicit_vp_code_hash,
             epochs_per_year,
             masp_epoch_multiplier,
             max_proposal_bytes,
-            max_signatures_per_transaction,
-            fee_unshielding_gas_limit,
+            masp_fee_payment_gas_limit,
             gas_scale,
             max_block_gas,
             minimum_gas_price: minimum_gas_price
@@ -761,6 +754,7 @@ impl FinalizedParameters {
             stewards: pgf_params.stewards,
             pgf_inflation_rate: pgf_params.pgf_inflation_rate,
             stewards_inflation_rate: pgf_params.stewards_inflation_rate,
+            maximum_number_of_stewards: pgf_params.maximum_number_of_stewards,
         };
         Self {
             parameters,
@@ -852,6 +846,8 @@ pub struct Metadata<ID> {
 mod test {
     use std::path::PathBuf;
 
+    use namada::core::time::test_utils::GENESIS_TIME;
+
     use super::*;
 
     /// Test that the [`finalize`] returns deterministic output with the same
@@ -870,8 +866,7 @@ mod test {
         let chain_id_prefix: ChainIdPrefix =
             FromStr::from_str("test-prefix").unwrap();
 
-        let genesis_time =
-            DateTimeUtc::from_str("2021-12-31T00:00:00Z").unwrap();
+        let genesis_time = DateTimeUtc::from_str(GENESIS_TIME).unwrap();
 
         let consensus_timeout_commit =
             crate::facade::tendermint::Timeout::from_str("1s").unwrap();

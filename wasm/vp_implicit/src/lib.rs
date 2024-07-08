@@ -102,6 +102,7 @@ fn validate_tx(
                 &addr,
             )?,
             Action::Masp(_) => (),
+            Action::IbcShielding => (),
         }
     }
 
@@ -300,7 +301,7 @@ mod tests {
 
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
-        tx_env.init_parameters(None, None, None, None);
+        tx_env.init_parameters(None, None, None);
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(addr.clone(), tx_env, |_address| {
@@ -509,7 +510,7 @@ mod tests {
         // Initialize a tx environment
         let mut tx_env = tx_host_env::take();
 
-        tx_env.init_parameters(None, Some(vec![]), Some(vec![]), None);
+        tx_env.init_parameters(None, Some(vec![]), Some(vec![]));
 
         let secret_key = key::testing::keypair_1();
         let public_key = secret_key.ref_to();
@@ -749,7 +750,7 @@ mod tests {
         let token = address::testing::nam();
         let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
 
-        tx_env.init_parameters(None, None, None, None);
+        tx_env.init_parameters(None, None, None);
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner, &target, &token]);

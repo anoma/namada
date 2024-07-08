@@ -32,8 +32,6 @@ pub struct Parameters {
     pub max_tx_bytes: u32,
     /// Epoch duration (read only)
     pub epoch_duration: EpochDuration,
-    /// Maximum expected time per block (read only)
-    pub max_expected_time_per_block: DurationSecs,
     /// Max payload size, in bytes, for a tx batch proposal.
     pub max_proposal_bytes: ProposalBytes,
     /// Max gas for block
@@ -49,10 +47,8 @@ pub struct Parameters {
     /// The multiplier for masp epochs (it requires this amount of epochs to
     /// transition to the next masp epoch)
     pub masp_epoch_multiplier: u64,
-    /// Maximum number of signature per transaction
-    pub max_signatures_per_transaction: u8,
-    /// Fee unshielding gas limit
-    pub fee_unshielding_gas_limit: u64,
+    /// The gas limit for a masp transaction paying fees
+    pub masp_fee_payment_gas_limit: u64,
     /// Gas scale
     pub gas_scale: u64,
     /// Map of the cost per gas unit for every token allowed for fee payment

@@ -1,12 +1,15 @@
 //! Shielded and transparent tokens related functions
 
+use std::collections::BTreeMap;
+
 use namada_core::address::Address;
+use namada_events::extend::UserAccount;
 use namada_events::{EmitEvents, EventLevel};
+use namada_token::event::{TokenEvent, TokenOperation};
 #[cfg(any(test, feature = "testing"))]
 pub use namada_token::testing;
 pub use namada_token::{
-    storage_key, utils, Amount, DenominatedAmount, ShieldedTransfer,
-    ShieldingTransfer, TransparentTransfer, UnshieldingTransfer,
+    storage_key, utils, Amount, DenominatedAmount, Transfer,
 };
 use namada_tx_env::TxEnv;
 
@@ -20,8 +23,6 @@ pub fn transfer(
     token: &Address,
     amount: Amount,
 ) -> TxResult {
-    use namada_token::event::{TokenEvent, TokenOperation, UserAccount};
-
     // The tx must be authorized by the source address
     ctx.insert_verifier(src)?;
     if token.is_internal() {
@@ -36,16 +37,74 @@ pub fn transfer(
     ctx.emit(TokenEvent {
         descriptor: "transfer-from-wasm".into(),
         level: EventLevel::Tx,
-        token: token.clone(),
+        operation: TokenOperation::transfer(
+            UserAccount::Internal(src.clone()),
+            UserAccount::Internal(dest.clone()),
+            token.clone(),
+            amount.into(),
+            namada_token::read_balance(ctx, token, src)?.into(),
+            Some(namada_token::read_balance(ctx, token, dest)?.into()),
+        ),
+    });
+
+    Ok(())
+}
+
+/// A transparent token transfer that can be used in a transaction.
+pub fn multi_transfer(
+    ctx: &mut Ctx,
+    sources: &BTreeMap<(Address, Address), Amount>,
+    dests: &BTreeMap<(Address, Address), Amount>,
+) -> TxResult {
+    namada_token::multi_transfer(ctx, sources, dests)?;
+
+    let mut evt_sources = BTreeMap::new();
+    let mut evt_targets = BTreeMap::new();
+    let mut post_balances = BTreeMap::new();
+
+    for ((src, token), amount) in sources {
+        // The tx must be authorized by the source address
+        ctx.insert_verifier(src)?;
+        if token.is_internal() {
+            // Established address tokens do not have VPs themselves, their
+            // validation is handled by the `Multitoken` internal address, but
+            // internal token addresses have to verify the transfer
+            ctx.insert_verifier(token)?;
+        }
+        evt_sources.insert(
+            (UserAccount::Internal(src.clone()), token.clone()),
+            (*amount).into(),
+        );
+        post_balances.insert(
+            (UserAccount::Internal(src.clone()), token.clone()),
+            namada_token::read_balance(ctx, token, src)?.into(),
+        );
+    }
+
+    for ((dest, token), amount) in dests {
+        if token.is_internal() {
+            // Established address tokens do not have VPs themselves, their
+            // validation is handled by the `Multitoken` internal address, but
+            // internal token addresses have to verify the transfer
+            ctx.insert_verifier(token)?;
+        }
+        evt_targets.insert(
+            (UserAccount::Internal(dest.clone()), token.clone()),
+            (*amount).into(),
+        );
+        post_balances.insert(
+            (UserAccount::Internal(dest.clone()), token.clone()),
+            namada_token::read_balance(ctx, token, dest)?.into(),
+        );
+    }
+
+    ctx.emit(TokenEvent {
+        descriptor: "transfer-from-wasm".into(),
+        level: EventLevel::Tx,
         operation: TokenOperation::Transfer {
-            amount: amount.into(),
-            source: UserAccount::Internal(src.clone()),
-            target: UserAccount::Internal(dest.clone()),
-            source_post_balance: namada_token::read_balance(ctx, token, src)?
-                .into(),
-            target_post_balance: Some(
-                namada_token::read_balance(ctx, token, dest)?.into(),
-            ),
+            sources: evt_sources,
+            targets: evt_targets,
+            post_balances,
         },
     });
 

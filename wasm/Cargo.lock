@@ -84,6 +84,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "anstyle"
+version = "1.0.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "038dfcf04a5feb68e9c60b21c9625a54c2c0616e79b72b0fd87075a056ae1d1b"
+
+[[package]]
 name = "anyhow"
 version = "1.0.75"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -789,6 +795,31 @@ checksum = "1d34327ead1c743a10db339de35fb58957564b99d248a67985c55638b22c59b5"
 dependencies = [
  "version_check",
 ]
+
+[[package]]
+name = "clap"
+version = "4.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "90bc066a67923782aa8515dbaea16946c5bcc5addbd668bb80af688e53e548a0"
+dependencies = [
+ "clap_builder",
+]
+
+[[package]]
+name = "clap_builder"
+version = "4.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae129e2e766ae0ec03484e609954119f123cc1fe650337e155d03b022f24f7b4"
+dependencies = [
+ "anstyle",
+ "clap_lex",
+]
+
+[[package]]
+name = "clap_lex"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "98cc8fbded0c607b7ba9dd60cd98df59af97e84d24e49c8557331cfc26d301ce"
 
 [[package]]
 name = "clru"
@@ -1558,9 +1589,9 @@ dependencies = [
 
 [[package]]
 name = "either"
-version = "1.9.0"
+version = "1.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a26ae43d7bcc3b814de94796a5e736d4029efb0ee900c12e2d54c993ad1a1e07"
+checksum = "3dca9240753cf90908d7e4aac30f630662b02aebaa1b58a3cadabdb23385b58b"
 
 [[package]]
 name = "elliptic-curve"
@@ -3487,7 +3518,7 @@ dependencies = [
 [[package]]
 name = "masp_note_encryption"
 version = "1.0.0"
-source = "git+https://github.com/anoma/masp?rev=4ede1c42d76d6348af8224bc8bfac4404321fe82#4ede1c42d76d6348af8224bc8bfac4404321fe82"
+source = "git+https://github.com/anoma/masp?rev=8d83b172698098fba393006016072bc201ed9ab7#8d83b172698098fba393006016072bc201ed9ab7"
 dependencies = [
  "borsh 1.4.0",
  "chacha20",
@@ -3500,7 +3531,7 @@ dependencies = [
 [[package]]
 name = "masp_primitives"
 version = "1.0.0"
-source = "git+https://github.com/anoma/masp?rev=4ede1c42d76d6348af8224bc8bfac4404321fe82#4ede1c42d76d6348af8224bc8bfac4404321fe82"
+source = "git+https://github.com/anoma/masp?rev=8d83b172698098fba393006016072bc201ed9ab7#8d83b172698098fba393006016072bc201ed9ab7"
 dependencies = [
  "aes",
  "bip0039",
@@ -3532,7 +3563,7 @@ dependencies = [
 [[package]]
 name = "masp_proofs"
 version = "1.0.0"
-source = "git+https://github.com/anoma/masp?rev=4ede1c42d76d6348af8224bc8bfac4404321fe82#4ede1c42d76d6348af8224bc8bfac4404321fe82"
+source = "git+https://github.com/anoma/masp?rev=8d83b172698098fba393006016072bc201ed9ab7#8d83b172698098fba393006016072bc201ed9ab7"
 dependencies = [
  "bellman",
  "blake2b_simd",
@@ -3663,12 +3694,13 @@ checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
 name = "namada"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "async-trait",
  "borsh 1.4.0",
  "borsh-ext",
  "clru",
+ "either",
  "ethers",
  "eyre",
  "itertools 0.12.1",
@@ -3719,7 +3751,7 @@ dependencies = [
 
 [[package]]
 name = "namada_account"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "borsh 1.4.0",
  "linkme",
@@ -3733,7 +3765,7 @@ dependencies = [
 
 [[package]]
 name = "namada_controller"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "namada_core",
  "smooth-operator",
@@ -3742,7 +3774,7 @@ dependencies = [
 
 [[package]]
 name = "namada_core"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "bech32 0.8.1",
  "borsh 1.4.0",
@@ -3773,6 +3805,7 @@ dependencies = [
  "prost-types",
  "rand 0.8.5",
  "rand_core 0.6.4",
+ "ripemd",
  "serde",
  "serde_json",
  "sha2 0.9.9",
@@ -3789,7 +3822,7 @@ dependencies = [
 
 [[package]]
 name = "namada_ethereum_bridge"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "borsh 1.4.0",
  "ethers",
@@ -3816,7 +3849,7 @@ dependencies = [
 
 [[package]]
 name = "namada_events"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "borsh 1.4.0",
  "linkme",
@@ -3831,7 +3864,7 @@ dependencies = [
 
 [[package]]
 name = "namada_gas"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "borsh 1.4.0",
  "linkme",
@@ -3845,7 +3878,7 @@ dependencies = [
 
 [[package]]
 name = "namada_governance"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "borsh 1.4.0",
  "itertools 0.12.1",
@@ -3868,9 +3901,10 @@ dependencies = [
 
 [[package]]
 name = "namada_ibc"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "borsh 1.4.0",
+ "data-encoding",
  "ibc",
  "ibc-derive",
  "ibc-testkit",
@@ -3891,13 +3925,14 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.9.9",
+ "smooth-operator",
  "thiserror",
  "tracing",
 ]
 
 [[package]]
 name = "namada_macros"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "data-encoding",
  "proc-macro2",
@@ -3908,7 +3943,7 @@ dependencies = [
 
 [[package]]
 name = "namada_merkle_tree"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "borsh 1.4.0",
  "eyre",
@@ -3922,7 +3957,7 @@ dependencies = [
 
 [[package]]
 name = "namada_migrations"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "lazy_static",
  "linkme",
@@ -3931,17 +3966,18 @@ dependencies = [
 
 [[package]]
 name = "namada_parameters"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "namada_core",
  "namada_macros",
  "namada_storage",
+ "smooth-operator",
  "thiserror",
 ]
 
 [[package]]
 name = "namada_proof_of_stake"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "borsh 1.4.0",
  "konst",
@@ -3966,24 +4002,25 @@ dependencies = [
 
 [[package]]
 name = "namada_replay_protection"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "namada_core",
 ]
 
 [[package]]
 name = "namada_sdk"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "async-trait",
  "bimap",
- "bls12_381",
  "borsh 1.4.0",
  "borsh-ext",
  "circular-queue",
+ "clap",
  "data-encoding",
  "derivation-path",
  "duration-str",
+ "either",
  "ethbridge-bridge-contract",
  "ethers",
  "eyre",
@@ -4022,7 +4059,6 @@ dependencies = [
  "rand 0.8.5",
  "rand_core 0.6.4",
  "regex",
- "ripemd",
  "serde",
  "serde_json",
  "sha2 0.9.9",
@@ -4041,15 +4077,20 @@ dependencies = [
 
 [[package]]
 name = "namada_shielded_token"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "borsh 1.4.0",
+ "lazy_static",
  "masp_primitives",
+ "masp_proofs",
  "namada_controller",
  "namada_core",
+ "namada_gas",
  "namada_parameters",
  "namada_storage",
  "namada_trans_token",
+ "rand_core 0.6.4",
+ "rayon",
  "serde",
  "smooth-operator",
  "tracing",
@@ -4057,7 +4098,7 @@ dependencies = [
 
 [[package]]
 name = "namada_state"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "borsh 1.4.0",
  "itertools 0.12.1",
@@ -4081,7 +4122,7 @@ dependencies = [
 
 [[package]]
 name = "namada_storage"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "borsh 1.4.0",
  "itertools 0.12.1",
@@ -4100,7 +4141,7 @@ dependencies = [
 
 [[package]]
 name = "namada_test_utils"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "borsh 1.4.0",
  "namada_core",
@@ -4109,7 +4150,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tests"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "concat-idents",
  "derivative",
@@ -4136,7 +4177,7 @@ dependencies = [
 
 [[package]]
 name = "namada_token"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "borsh 1.4.0",
  "namada_core",
@@ -4151,7 +4192,7 @@ dependencies = [
 
 [[package]]
 name = "namada_trans_token"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "konst",
  "namada_core",
@@ -4161,12 +4202,13 @@ dependencies = [
 
 [[package]]
 name = "namada_tx"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "ark-bls12-381",
  "bitflags 2.5.0",
  "borsh 1.4.0",
  "data-encoding",
+ "either",
  "konst",
  "linkme",
  "masp_primitives",
@@ -4180,6 +4222,7 @@ dependencies = [
  "proptest",
  "prost",
  "prost-types",
+ "rand_core 0.6.4",
  "serde",
  "serde_json",
  "sha2 0.9.9",
@@ -4189,7 +4232,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_env"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "namada_core",
  "namada_events",
@@ -4198,7 +4241,7 @@ dependencies = [
 
 [[package]]
 name = "namada_tx_prelude"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "borsh 1.4.0",
  "masp_primitives",
@@ -4219,7 +4262,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vm_env"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "borsh 1.4.0",
  "masp_primitives",
@@ -4228,7 +4271,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vote_ext"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "borsh 1.4.0",
  "linkme",
@@ -4241,7 +4284,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_env"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "derivative",
  "masp_primitives",
@@ -4255,7 +4298,7 @@ dependencies = [
 
 [[package]]
 name = "namada_vp_prelude"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "borsh 1.4.0",
  "namada_account",
@@ -6731,7 +6774,7 @@ checksum = "3528ecfd12c466c6f163363caf2d02a71161dd5e1cc6ae7b34207ea2d42d81ed"
 
 [[package]]
 name = "tx_become_validator"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6740,7 +6783,7 @@ dependencies = [
 
 [[package]]
 name = "tx_bond"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada",
@@ -6757,7 +6800,7 @@ dependencies = [
 
 [[package]]
 name = "tx_bridge_pool"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6766,7 +6809,7 @@ dependencies = [
 
 [[package]]
 name = "tx_change_consensus_key"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6775,7 +6818,7 @@ dependencies = [
 
 [[package]]
 name = "tx_change_validator_commission"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada",
@@ -6792,7 +6835,7 @@ dependencies = [
 
 [[package]]
 name = "tx_change_validator_metadata"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6801,7 +6844,7 @@ dependencies = [
 
 [[package]]
 name = "tx_claim_rewards"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6810,7 +6853,7 @@ dependencies = [
 
 [[package]]
 name = "tx_deactivate_validator"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6819,7 +6862,7 @@ dependencies = [
 
 [[package]]
 name = "tx_ibc"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6828,7 +6871,7 @@ dependencies = [
 
 [[package]]
 name = "tx_init_account"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6837,7 +6880,7 @@ dependencies = [
 
 [[package]]
 name = "tx_init_proposal"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6846,7 +6889,7 @@ dependencies = [
 
 [[package]]
 name = "tx_reactivate_validator"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6855,7 +6898,7 @@ dependencies = [
 
 [[package]]
 name = "tx_redelegate"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada",
@@ -6872,7 +6915,7 @@ dependencies = [
 
 [[package]]
 name = "tx_resign_steward"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6881,7 +6924,7 @@ dependencies = [
 
 [[package]]
 name = "tx_reveal_pk"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6889,26 +6932,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "tx_shielded_transfer"
-version = "0.39.0"
-dependencies = [
- "getrandom 0.2.15",
- "namada_tx_prelude",
- "rlsf",
-]
-
-[[package]]
-name = "tx_shielding_transfer"
-version = "0.39.0"
-dependencies = [
- "getrandom 0.2.15",
- "namada_tx_prelude",
- "rlsf",
-]
-
-[[package]]
-name = "tx_transparent_transfer"
-version = "0.39.0"
+name = "tx_transfer"
+version = "0.40.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6917,7 +6942,7 @@ dependencies = [
 
 [[package]]
 name = "tx_unbond"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada",
@@ -6934,16 +6959,7 @@ dependencies = [
 
 [[package]]
 name = "tx_unjail_validator"
-version = "0.39.0"
-dependencies = [
- "getrandom 0.2.15",
- "namada_tx_prelude",
- "rlsf",
-]
-
-[[package]]
-name = "tx_unshielding_transfer"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6952,7 +6968,7 @@ dependencies = [
 
 [[package]]
 name = "tx_update_account"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6961,7 +6977,7 @@ dependencies = [
 
 [[package]]
 name = "tx_update_steward_commission"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6970,7 +6986,7 @@ dependencies = [
 
 [[package]]
 name = "tx_vote_proposal"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6979,7 +6995,7 @@ dependencies = [
 
 [[package]]
 name = "tx_withdraw"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada",
@@ -7156,7 +7172,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
 name = "vp_implicit"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada",
@@ -7173,7 +7189,7 @@ dependencies = [
 
 [[package]]
 name = "vp_user"
-version = "0.39.0"
+version = "0.40.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada",

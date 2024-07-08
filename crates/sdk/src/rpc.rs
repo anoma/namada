@@ -19,6 +19,7 @@ use namada_core::masp::MaspEpoch;
 use namada_core::storage::{
     BlockHeight, BlockResults, Epoch, Key, PrefixValue,
 };
+use namada_core::time::DurationSecs;
 use namada_core::token::{
     Amount, DenominatedAmount, Denomination, MaspDigitPos,
 };
@@ -60,6 +61,16 @@ use crate::tendermint::block::Height;
 use crate::tendermint::merkle::proof::ProofOps;
 use crate::tendermint_rpc::query::Query;
 use crate::{display_line, edisplay_line, error, Namada, Tx};
+
+/// Query an estimate of the maximum block time.
+pub async fn query_max_block_time_estimate(
+    context: &impl Namada,
+) -> Result<DurationSecs, Error> {
+    RPC.shell()
+        .max_block_time(context.client())
+        .await
+        .map_err(|err| Error::from(QueryError::NoResponse(err.to_string())))
+}
 
 /// Identical to [`query_tx_status`], but does not need a [`Namada`]
 /// context.
@@ -347,6 +358,13 @@ pub async fn query_conversions<C: crate::queries::Client + Sync>(
     convert_response::<C, _>(RPC.shell().read_conversions(client).await)
 }
 
+/// Query the total rewards minted by MASP
+pub async fn query_masp_total_rewards<C: crate::queries::Client + Sync>(
+    client: &C,
+) -> Result<token::Amount, error::Error> {
+    convert_response::<C, _>(RPC.vp().token().masp_total_rewards(client).await)
+}
+
 /// Query to read the tokens that earn masp rewards.
 pub async fn query_masp_reward_tokens<C: crate::queries::Client + Sync>(
     client: &C,
@@ -542,18 +560,19 @@ pub async fn dry_run_tx<N: Namada>(
     let result_str = format!("Transaction consumed {} gas", result.1);
 
     let mut cmt_result_str = String::new();
-    for (cmt_hash, cmt_result) in &result.0.0 {
+    for (inner_hash, cmt_result) in result.0.iter() {
         match cmt_result {
             Ok(result) => {
                 if result.is_accepted() {
                     cmt_result_str.push_str(&format!(
-                        "Inner transaction {cmt_hash} was successfully applied",
+                        "Inner transaction {inner_hash} was successfully \
+                         applied",
                     ));
                 } else {
                     cmt_result_str.push_str(&format!(
                         "Inner transaction {} was rejected by VPs: \
                          {}\nErrors: {}\nChanged keys: {}",
-                        cmt_hash,
+                        inner_hash,
                         serde_json::to_string_pretty(
                             &result.vps_result.rejected_vps
                         )
@@ -566,7 +585,7 @@ pub async fn dry_run_tx<N: Namada>(
                 }
             }
             Err(msg) => cmt_result_str.push_str(&format!(
-                "Inner transaction {cmt_hash} failed with error: {msg}"
+                "Inner transaction {inner_hash} failed with error: {msg}"
             )),
         }
     }
@@ -675,7 +694,7 @@ impl TxResponse {
     pub fn batch_result(&self) -> HashMap<Hash, InnerTxResult<'_>> {
         if let Some(tx_result) = self.batch.as_ref() {
             let mut result = HashMap::default();
-            for (cmt_hash, cmt_result) in &tx_result.0 {
+            for (inner_hash, cmt_result) in tx_result.iter() {
                 let value = match cmt_result {
                     Ok(res) => {
                         if res.is_accepted() {
@@ -686,7 +705,7 @@ impl TxResponse {
                     }
                     Err(_) => InnerTxResult::OtherFailure,
                 };
-                result.insert(cmt_hash.to_owned(), value);
+                result.insert(inner_hash.to_owned(), value);
             }
             result
         } else {
@@ -995,7 +1014,7 @@ pub async fn query_and_print_unbonds(
     let mut not_yet_withdrawable = HashMap::<Epoch, token::Amount>::new();
     for ((_start_epoch, withdraw_epoch), amount) in unbonds.into_iter() {
         if withdraw_epoch <= current_epoch {
-            total_withdrawable = checked!(total_withdrawable + amount)?;
+            checked!(total_withdrawable += amount)?;
         } else {
             let withdrawable_amount =
                 not_yet_withdrawable.entry(withdraw_epoch).or_default();

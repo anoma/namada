@@ -8,6 +8,7 @@ use namada::core::hash::Hash;
 use namada::core::key::tm_raw_hash_to_string;
 use namada::core::storage::BlockHeight;
 use namada::proof_of_stake::storage::find_validator_by_raw_hash;
+use namada::state::DB;
 use namada::time::{DateTimeUtc, Utc};
 use namada::tx::data::hash_tx;
 use namada_sdk::migrations::ScheduledMigration;
@@ -16,7 +17,9 @@ use tokio::sync::mpsc::UnboundedSender;
 use tower::Service;
 
 use super::abcipp_shim_types::shim::request::{FinalizeBlock, ProcessedTx};
-use super::abcipp_shim_types::shim::{Error, Request, Response, TxBytes};
+use super::abcipp_shim_types::shim::{
+    Error, Request, Response, TakeSnapshot, TxBytes,
+};
 use crate::config;
 use crate::config::{Action, ActionAtHeight};
 use crate::facade::tendermint::v0_37::abci::{
@@ -24,6 +27,7 @@ use crate::facade::tendermint::v0_37::abci::{
 };
 use crate::facade::tower_abci::BoxError;
 use crate::shell::{EthereumOracleChannels, Shell};
+use crate::storage::DbSnapshot;
 
 /// The shim wraps the shell, which implements ABCI++.
 /// The shim makes a crude translation between the ABCI interface currently used
@@ -37,6 +41,7 @@ pub struct AbcippShim {
         Req,
         tokio::sync::oneshot::Sender<Result<Resp, BoxError>>,
     )>,
+    snapshot_task: Option<std::thread::JoinHandle<Result<(), std::io::Error>>>,
 }
 
 impl AbcippShim {
@@ -74,6 +79,7 @@ impl AbcippShim {
                 begin_block_request: None,
                 delivered_txs: vec![],
                 shell_recv,
+                snapshot_task: None,
             },
             AbciService {
                 shell_send,
@@ -160,6 +166,14 @@ impl AbcippShim {
                             _ => Err(Error::ConvertResp(res)),
                         })
                 }
+                Req::Commit => match self.service.call(Request::Commit) {
+                    Ok(Response::Commit(res, take_snapshot)) => {
+                        self.update_snapshot_task(take_snapshot);
+                        Ok(Resp::Commit(res))
+                    }
+                    Ok(resp) => Err(Error::ConvertResp(resp)),
+                    Err(e) => Err(Error::Shell(e)),
+                },
                 _ => match Request::try_from(req.clone()) {
                     Ok(request) => self
                         .service
@@ -175,6 +189,62 @@ impl AbcippShim {
             if resp_sender.send(resp).is_err() {
                 tracing::info!("ABCI response channel is closed")
             }
+        }
+    }
+
+    fn update_snapshot_task(&mut self, take_snapshot: TakeSnapshot) {
+        let snapshot_taken = self
+            .snapshot_task
+            .as_ref()
+            .map(|t| t.is_finished())
+            .unwrap_or_default();
+        if snapshot_taken {
+            let task = self.snapshot_task.take().unwrap();
+            match task.join() {
+                Ok(Err(e)) => tracing::error!(
+                    "Failed to create snapshot with error: {:?}",
+                    e
+                ),
+                Err(e) => tracing::error!(
+                    "Failed to join thread creating snapshot: {:?}",
+                    e
+                ),
+                _ => {}
+            }
+        }
+        let TakeSnapshot::Yes(db_path) = take_snapshot else {
+            return;
+        };
+        let base_dir = self.service.base_dir.clone();
+
+        let (snap_send, snap_recv) = tokio::sync::oneshot::channel();
+        let snapshot_task = std::thread::spawn(move || {
+            let db = crate::storage::open(db_path, true, None)
+                .expect("Could not open DB");
+            let snapshot = db.snapshot();
+            // signal to main thread that the snapshot has finished
+            snap_send.send(()).unwrap();
+
+            let last_height = db
+                .read_last_block()
+                .expect("Could not read database")
+                .expect("Last block should exists")
+                .height;
+            let cfs = db.column_families();
+            snapshot.write_to_file(cfs, base_dir.clone(), last_height)?;
+            DbSnapshot::cleanup(last_height, &base_dir)
+        });
+
+        // it's important that the thread is
+        // blocked until the snapshot is created so that no writes
+        // happen to the db while snapshotting. We want the db frozen
+        // at this specific point in time.
+        if snap_recv.blocking_recv().is_err() {
+            tracing::error!("Failed to start snapshot task.")
+        } else {
+            // N.B. If a task is still running, it will continue
+            // in the background but we will forget about it.
+            self.snapshot_task.replace(snapshot_task);
         }
     }
 }

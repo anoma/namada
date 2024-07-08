@@ -11,11 +11,13 @@ mod governance;
 mod init_chain;
 pub use init_chain::InitChainValidation;
 use namada::vm::wasm::run::check_tx_allowed;
+use namada_apps_lib::config::NodeLocalConfig;
 use namada_sdk::state::StateRead;
 pub mod prepare_proposal;
 use namada::state::State;
 pub mod process_proposal;
 pub(super) mod queries;
+mod snapshots;
 mod stats;
 #[cfg(any(test, feature = "testing"))]
 #[allow(dead_code)]
@@ -25,6 +27,7 @@ mod vote_extensions;
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
+use std::num::NonZeroU64;
 use std::path::{Path, PathBuf};
 #[allow(unused_imports)]
 use std::rc::Rc;
@@ -77,6 +80,7 @@ use crate::facade::tendermint::{self, validator};
 use crate::facade::tendermint_proto::v0_37::crypto::public_key;
 use crate::shims::abcipp_shim_types::shim;
 use crate::shims::abcipp_shim_types::shim::response::TxResult;
+use crate::shims::abcipp_shim_types::shim::TakeSnapshot;
 use crate::{storage, tendermint_node};
 
 fn key_to_tendermint(
@@ -120,6 +124,10 @@ pub enum Error {
     Storage(#[from] namada::state::StorageError),
     #[error("Transaction replay attempt: {0}")]
     ReplayAttempt(String),
+    #[error("Error with snapshots: {0}")]
+    Snapshot(std::io::Error),
+    #[error("Received an invalid block proposal")]
+    InvalidBlockProposal,
 }
 
 impl From<Error> for TxResult {
@@ -168,9 +176,12 @@ pub(super) enum ShellMode {
         data: ValidatorData,
         broadcast_sender: UnboundedSender<Vec<u8>>,
         eth_oracle: Option<EthereumOracleChannels>,
-        local_config: Option<ValidatorLocalConfig>,
+        validator_local_config: Option<ValidatorLocalConfig>,
+        local_config: Option<NodeLocalConfig>,
     },
-    Full,
+    Full {
+        local_config: Option<NodeLocalConfig>,
+    },
     Seed,
 }
 
@@ -341,8 +352,7 @@ where
     /// Path to the WASM directory for files used in the genesis block.
     pub(super) wasm_dir: PathBuf,
     /// Information about the running shell instance
-    #[allow(dead_code)]
-    mode: ShellMode,
+    pub(crate) mode: ShellMode,
     /// VP WASM compilation cache
     pub vp_wasm_cache: VpCache<WasmCacheRwAccess>,
     /// Tx WASM compilation cache
@@ -355,6 +365,9 @@ where
     event_log: EventLog,
     /// A migration that can be scheduled at a given block height
     pub scheduled_migration: Option<ScheduledMigration<D::Migrator>>,
+    /// When set, indicates after how many blocks a new snapshot
+    /// will be taken (counting from the first block)
+    pub blocks_between_snapshots: Option<NonZeroU64>,
 }
 
 /// Storage key filter to store the diffs into the storage. Return `false` for
@@ -466,6 +479,8 @@ where
                         .expect("Validator node must have a wallet");
                     let validator_local_config_path =
                         wallet_path.join("validator_local_config.toml");
+                    let local_config_path =
+                        wallet_path.join("local_config.toml");
 
                     let validator_local_config: Option<ValidatorLocalConfig> =
                         if Path::is_file(&validator_local_config_path) {
@@ -480,13 +495,26 @@ where
                             None
                         };
 
+                    let local_config: Option<NodeLocalConfig> =
+                        if Path::is_file(&local_config_path) {
+                            Some(
+                                toml::from_slice(
+                                    &std::fs::read(local_config_path).unwrap(),
+                                )
+                                .unwrap(),
+                            )
+                        } else {
+                            None
+                        };
+
                     wallet
                         .take_validator_data()
                         .map(|data| ShellMode::Validator {
                             data,
                             broadcast_sender,
                             eth_oracle,
-                            local_config: validator_local_config,
+                            validator_local_config,
+                            local_config,
                         })
                         .expect(
                             "Validator data should have been stored in the \
@@ -507,11 +535,37 @@ where
                         },
                         broadcast_sender,
                         eth_oracle,
+                        validator_local_config: None,
                         local_config: None,
                     }
                 }
             }
-            TendermintMode::Full => ShellMode::Full,
+            TendermintMode::Full => {
+                #[cfg(not(test))]
+                {
+                    let local_config_path = &base_dir
+                        .join(chain_id.as_str())
+                        .join("local_config.toml");
+
+                    let local_config: Option<NodeLocalConfig> =
+                        if Path::is_file(local_config_path) {
+                            Some(
+                                toml::from_slice(
+                                    &std::fs::read(local_config_path).unwrap(),
+                                )
+                                .unwrap(),
+                            )
+                        } else {
+                            None
+                        };
+
+                    ShellMode::Full { local_config }
+                }
+                #[cfg(test)]
+                {
+                    ShellMode::Full { local_config: None }
+                }
+            }
             TendermintMode::Seed => ShellMode::Seed,
         };
 
@@ -548,6 +602,7 @@ where
             // TODO(namada#3237): config event log params
             event_log: EventLog::default(),
             scheduled_migration,
+            blocks_between_snapshots: config.shell.blocks_between_snapshots,
         };
         shell.update_eth_oracle(&Default::default());
         shell
@@ -659,7 +714,7 @@ where
 
     /// Commit a block. Persist the application state and return the Merkle root
     /// hash.
-    pub fn commit(&mut self) -> response::Commit {
+    pub fn commit(&mut self) -> shim::Response {
         self.bump_last_processed_eth_block();
 
         self.state
@@ -678,13 +733,32 @@ where
         );
 
         self.broadcast_queued_txs();
+        let take_snapshot = self.check_snapshot_required();
 
-        response::Commit {
-            // NB: by passing 0, we forbid CometBFT from deleting
-            // data pertaining to past blocks
-            retain_height: tendermint::block::Height::from(0_u32),
-            // NB: current application hash
-            data: merkle_root.0.to_vec().into(),
+        shim::Response::Commit(
+            response::Commit {
+                // NB: by passing 0, we forbid CometBFT from deleting
+                // data pertaining to past blocks
+                retain_height: tendermint::block::Height::from(0_u32),
+                // NB: current application hash
+                data: merkle_root.0.to_vec().into(),
+            },
+            take_snapshot,
+        )
+    }
+
+    /// Check if we have reached a block height at which we should take a
+    /// snapshot
+    fn check_snapshot_required(&self) -> TakeSnapshot {
+        let committed_height = self.state.in_mem().get_last_block_height();
+        let take_snapshot = match self.blocks_between_snapshots {
+            Some(b) => committed_height.0 % b == 0,
+            _ => false,
+        };
+        if take_snapshot {
+            self.state.db().path().into()
+        } else {
+            TakeSnapshot::No
         }
     }
 
@@ -1145,22 +1219,6 @@ where
                     return response;
                 }
 
-                // TODO(namada#2597): validate masp fee payment if normal fee
-                // payment fails Validate wrapper fees
-                if let Err(e) = mempool_fee_check(
-                    &wrapper,
-                    &mut ShellParams::new(
-                        &RefCell::new(gas_meter),
-                        &mut self.state.with_temp_write_log(),
-                        &mut self.vp_wasm_cache.clone(),
-                        &mut self.tx_wasm_cache.clone(),
-                    ),
-                ) {
-                    response.code = ResultCode::FeeError.into();
-                    response.log = format!("{INVALID_MSG}: {e}");
-                    return response;
-                }
-
                 // Validate the inner txs after. Even if the batch is non-atomic
                 // we still reject it if just one of the inner txs is
                 // invalid
@@ -1177,6 +1235,22 @@ where
                         );
                         return response;
                     }
+                }
+
+                // Validate wrapper fees
+                if let Err(e) = mempool_fee_check(
+                    &mut ShellParams::new(
+                        &RefCell::new(gas_meter),
+                        &mut self.state.with_temp_write_log(),
+                        &mut self.vp_wasm_cache.clone(),
+                        &mut self.tx_wasm_cache.clone(),
+                    ),
+                    &tx,
+                    &wrapper,
+                ) {
+                    response.code = ResultCode::FeeError.into();
+                    response.log = format!("{INVALID_MSG}: {e}");
+                    return response;
                 }
             }
             TxType::Raw => {
@@ -1297,8 +1371,9 @@ where
 
 // Perform the fee check in mempool
 fn mempool_fee_check<D, H, CA>(
-    wrapper: &WrapperTx,
     shell_params: &mut ShellParams<'_, TempWlState<'_, D, H>, D, H, CA>,
+    tx: &Tx,
+    wrapper: &WrapperTx,
 ) -> Result<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -1316,7 +1391,9 @@ where
     ))))?;
 
     fee_data_check(wrapper, minimum_gas_price, shell_params)?;
-    protocol::check_fees(shell_params.state, wrapper).map_err(Error::TxApply)
+    protocol::check_fees(shell_params, tx, wrapper)
+        .map_err(Error::TxApply)
+        .map(|_| ())
 }
 
 /// Check the validity of the fee data

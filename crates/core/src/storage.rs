@@ -128,6 +128,18 @@ impl DbColFam {
             DbColFam::REPLAYPROT => REPLAY_PROTECTION_CF,
         }
     }
+
+    /// Return an array of all column families
+    pub fn all() -> [&'static str; 6] {
+        [
+            SUBSPACE_CF,
+            BLOCK_CF,
+            STATE_CF,
+            DIFFS_CF,
+            ROLLBACK_CF,
+            REPLAY_PROTECTION_CF,
+        ]
+    }
 }
 
 impl FromStr for DbColFam {
@@ -145,6 +157,7 @@ impl FromStr for DbColFam {
         }
     }
 }
+
 /// Transaction index within block.
 #[derive(
     Default,

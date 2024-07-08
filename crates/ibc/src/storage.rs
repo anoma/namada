@@ -12,19 +12,19 @@ use ibc::core::host::types::path::{
     ClientStatePath, CommitmentPath, ConnectionPath, Path, PortPath,
     ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath,
 };
-use namada_core::address::{Address, InternalAddress, HASH_LEN, SHA_HASH_LEN};
-use namada_core::ibc::IbcTokenHash;
+use namada_core::address::{Address, InternalAddress};
 use namada_core::storage::{DbKeySeg, Key, KeySeg};
 use namada_core::token::Amount;
+use namada_events::extend::UserAccount;
 use namada_events::{EmitEvents, EventLevel};
 use namada_state::{StorageRead, StorageResult, StorageWrite};
 use namada_token as token;
-use namada_token::event::{TokenEvent, TokenOperation, UserAccount};
-use sha2::{Digest, Sha256};
+use namada_token::event::{TokenEvent, TokenOperation};
 use thiserror::Error;
 
 use crate::event::TOKEN_EVENT_DESCRIPTOR;
 use crate::parameters::IbcParameters;
+use crate::trace::{ibc_token, ibc_token_for_nft};
 
 const CLIENTS_COUNTER_PREFIX: &str = "clients";
 const CONNECTIONS_COUNTER_PREFIX: &str = "connections";
@@ -47,8 +47,8 @@ pub enum Error {
     StorageKey(namada_core::storage::Error),
     #[error("Invalid Key: {0}")]
     InvalidKey(String),
-    #[error("Port capability error: {0}")]
-    InvalidPortCapability(String),
+    #[error("Invalid IBC trace: {0}")]
+    InvalidIbcTrace(String),
 }
 
 /// IBC storage functions result
@@ -75,8 +75,8 @@ where
     state.emit(TokenEvent {
         descriptor: TOKEN_EVENT_DESCRIPTOR.into(),
         level: EventLevel::Tx,
-        token: token.clone(),
         operation: TokenOperation::Mint {
+            token: token.clone(),
             amount: amount.into(),
             post_balance: token::read_balance(state, token, target)?.into(),
             target_account: UserAccount::Internal(target.clone()),
@@ -101,8 +101,8 @@ where
     state.emit(TokenEvent {
         descriptor: TOKEN_EVENT_DESCRIPTOR.into(),
         level: EventLevel::Tx,
-        token: token.clone(),
         operation: TokenOperation::Burn {
+            token: token.clone(),
             amount: amount.into(),
             post_balance: token::read_balance(state, token, target)?.into(),
             target_account: UserAccount::Internal(target.clone()),
@@ -480,45 +480,22 @@ pub fn ibc_trace_key(
         .expect("Cannot obtain a storage key")
 }
 
-/// Hash the denom
-#[inline]
-pub fn calc_hash(denom: impl AsRef<str>) -> String {
-    calc_ibc_token_hash(denom).to_string()
-}
-
-/// Hash the denom
-pub fn calc_ibc_token_hash(denom: impl AsRef<str>) -> IbcTokenHash {
-    let hash = {
-        let mut hasher = Sha256::new();
-        hasher.update(denom.as_ref());
-        hasher.finalize()
-    };
-
-    let input: &[u8; SHA_HASH_LEN] = hash.as_ref();
-    let mut output = [0; HASH_LEN];
-
-    output.copy_from_slice(&input[..HASH_LEN]);
-    IbcTokenHash(output)
-}
-
-/// Obtain the IbcToken with the hash from the given denom
-pub fn ibc_token(denom: impl AsRef<str>) -> Address {
-    let hash = calc_ibc_token_hash(&denom);
-    Address::Internal(InternalAddress::IbcToken(hash))
-}
-
-/// Obtain the IbcToken with the hash from the given NFT class ID and NFT ID
-pub fn ibc_token_for_nft(
-    class_id: &PrefixedClassId,
-    token_id: &TokenId,
-) -> Address {
-    ibc_token(format!("{class_id}/{token_id}"))
-}
-
 /// Returns true if the given key is for IBC
 pub fn is_ibc_key(key: &Key) -> bool {
     matches!(&key.segments[0],
              DbKeySeg::AddressSeg(addr) if *addr == Address::Internal(InternalAddress::Ibc))
+}
+
+/// Checks if the key is an IBC commitment key
+pub fn is_ibc_commitment_key(key: &Key) -> Option<CommitmentPath> {
+    let addr = Address::Internal(InternalAddress::Ibc);
+    let ibc_addr_key = Key::from(addr.to_db_key());
+    let suffix = key.split_prefix(&ibc_addr_key)??;
+    if let Ok(Path::Commitment(path)) = Path::from_str(&suffix.to_string()) {
+        Some(path)
+    } else {
+        None
+    }
 }
 
 /// Returns the owner and the token hash if the given key is the denom key

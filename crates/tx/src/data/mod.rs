@@ -16,6 +16,7 @@ use std::marker::PhantomData;
 use std::str::FromStr;
 
 use bitflags::bitflags;
+use either::Either;
 use namada_core::address::Address;
 use namada_core::borsh::{
     BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
@@ -36,6 +37,7 @@ use sha2::{Digest, Sha256};
 pub use wrapper::*;
 
 use crate::data::protocol::ProtocolTx;
+use crate::types::TxCommitments;
 
 /// The different result codes that the ledger may send back to a client
 /// indicating the status of their submitted tx.
@@ -164,6 +166,23 @@ pub fn hash_tx(tx_bytes: &[u8]) -> Hash {
     Hash(*digest.as_ref())
 }
 
+/// Compute the hash of the some inner tx in a batch.
+pub fn compute_inner_tx_hash(
+    wrapper_hash: Option<&Hash>,
+    commitments: Either<&Hash, &TxCommitments>,
+) -> Hash {
+    const ZERO_HASH: Hash = Hash([0; 32]);
+
+    let mut state = Sha256::new();
+    state.update(wrapper_hash.unwrap_or(&ZERO_HASH));
+    state.update(
+        commitments
+            .map_either(|hash| *hash, |commitments| commitments.get_hash()),
+    );
+
+    Hash(state.finalize_reset().into())
+}
+
 /// The extended transaction result, containing the references to masp
 /// sections (if any)
 pub struct ExtendedTxResult<T> {
@@ -171,6 +190,8 @@ pub struct ExtendedTxResult<T> {
     pub tx_result: TxResult<T>,
     /// The optional references to masp sections
     pub masp_tx_refs: MaspTxRefs,
+    /// The flag for IBC shielding transfer
+    pub is_ibc_shielding: bool,
 }
 
 impl<T> Default for ExtendedTxResult<T> {
@@ -178,6 +199,7 @@ impl<T> Default for ExtendedTxResult<T> {
         Self {
             tx_result: Default::default(),
             masp_tx_refs: Default::default(),
+            is_ibc_shielding: Default::default(),
         }
     }
 }
@@ -289,7 +311,76 @@ impl<T: Display> TxResult<T> {
         ExtendedTxResult {
             tx_result: self,
             masp_tx_refs: masp_tx_refs.unwrap_or_default(),
+            is_ibc_shielding: false,
         }
+    }
+}
+
+impl<T> TxResult<T> {
+    /// Return a new set of tx results.
+    pub const fn new() -> Self {
+        Self(BTreeMap::new())
+    }
+
+    /// Insert an inner tx result into this [`TxResult`].
+    #[inline]
+    pub fn insert_inner_tx_result(
+        &mut self,
+        wrapper_hash: Option<&Hash>,
+        commitments: Either<&Hash, &TxCommitments>,
+        result: Result<BatchedTxResult, T>,
+    ) {
+        self.0
+            .insert(compute_inner_tx_hash(wrapper_hash, commitments), result);
+    }
+
+    /// Retrieve an inner tx result, if it exists.
+    #[inline]
+    pub fn get_inner_tx_result(
+        &self,
+        wrapper_hash: Option<&Hash>,
+        commitments: Either<&Hash, &TxCommitments>,
+    ) -> Option<&Result<BatchedTxResult, T>> {
+        self.0
+            .get(&compute_inner_tx_hash(wrapper_hash, commitments))
+    }
+
+    /// Iterate over all the inner tx results.
+    #[inline]
+    pub fn iter(
+        &self,
+    ) -> impl Iterator<Item = (&Hash, &Result<BatchedTxResult, T>)> + '_ {
+        self.0.iter()
+    }
+
+    /// Return the length of the collecction of inner tx results.
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Check if the collecction of inner tx results is empty.
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Check if the collecction of inner tx results contains no errors.
+    #[inline]
+    pub fn are_results_ok(&self) -> bool {
+        self.iter().all(|(_, res)| res.is_ok())
+    }
+
+    /// Check if the collecction of inner tx results contains any ok results.
+    #[inline]
+    pub fn are_any_ok(&self) -> bool {
+        self.iter().any(|(_, res)| res.is_ok())
+    }
+
+    /// Check if the collecction of inner tx results contains any errors.
+    #[inline]
+    pub fn are_any_err(&self) -> bool {
+        self.iter().any(|(_, res)| res.is_err())
     }
 }
 

@@ -28,9 +28,10 @@ use thiserror::Error;
 
 use crate::ibc::core::host::types::identifiers::ChainId as IbcChainId;
 use crate::ledger::ibc::storage::{
-    calc_hash, deposit_key, get_limits, is_ibc_key, is_ibc_trace_key,
-    mint_amount_key, withdraw_key,
+    deposit_key, get_limits, is_ibc_key, is_ibc_trace_key, mint_amount_key,
+    withdraw_key,
 };
+use crate::ledger::ibc::trace::calc_hash;
 use crate::ledger::native_vp::{self, Ctx, NativeVp};
 use crate::ledger::parameters::read_epoch_duration_parameter;
 use crate::token::storage_key::is_any_token_balance_key;
@@ -353,10 +354,11 @@ fn match_value(
 /// A dummy header used for testing
 #[cfg(any(test, feature = "testing", feature = "benches"))]
 pub fn get_dummy_header() -> crate::storage::Header {
-    use crate::tendermint::time::Time as TmTime;
+    use namada_sdk::time::{DateTimeUtc, DurationSecs};
     crate::storage::Header {
         hash: crate::hash::Hash([0; 32]),
-        time: TmTime::now().try_into().unwrap(),
+        #[allow(clippy::disallowed_methods, clippy::arithmetic_side_effects)]
+        time: DateTimeUtc::now() + DurationSecs(5),
         next_validators_hash: crate::hash::Hash([0; 32]),
     }
 }
@@ -426,7 +428,6 @@ mod tests {
     use namada_ibc::event::IbcEventType;
     use namada_state::testing::TestState;
     use namada_state::StorageRead;
-    use namada_token::NATIVE_MAX_DECIMAL_PLACES;
     use namada_tx::data::TxType;
     use namada_tx::{Authorization, Code, Data, Section, Tx};
     use prost::Message;
@@ -507,20 +508,18 @@ mod tests {
     use crate::ibc::primitives::proto::{Any, Protobuf};
     use crate::ibc::primitives::{Timestamp, ToProto};
     use crate::ibc::storage::{
-        ack_key, calc_hash, channel_counter_key, channel_key,
-        client_connections_key, client_counter_key, client_state_key,
-        client_update_height_key, client_update_timestamp_key, commitment_key,
-        connection_counter_key, connection_key, consensus_state_key, ibc_token,
-        ibc_trace_key, mint_amount_key, next_sequence_ack_key,
-        next_sequence_recv_key, next_sequence_send_key, nft_class_key,
-        nft_metadata_key, receipt_key,
+        ack_key, channel_counter_key, channel_key, client_connections_key,
+        client_counter_key, client_state_key, client_update_height_key,
+        client_update_timestamp_key, commitment_key, connection_counter_key,
+        connection_key, consensus_state_key, ibc_trace_key, mint_amount_key,
+        next_sequence_ack_key, next_sequence_recv_key, next_sequence_send_key,
+        nft_class_key, nft_metadata_key, receipt_key,
     };
+    use crate::ibc::trace::{calc_hash, ibc_token};
     use crate::ibc::{MsgNftTransfer, MsgTransfer, NftClass, NftMetadata};
     use crate::key::testing::keypair_1;
     use crate::ledger::gas::VpGasMeter;
-    use crate::ledger::parameters::storage::{
-        get_epoch_duration_storage_key, get_max_expected_time_per_block_key,
-    };
+    use crate::ledger::parameters::storage::get_epoch_duration_storage_key;
     use crate::ledger::parameters::EpochDuration;
     use crate::ledger::{ibc, pos};
     use crate::storage::{BlockHeight, TxIndex};
@@ -566,13 +565,6 @@ mod tests {
         state
             .write_log_mut()
             .write(&epoch_duration_key, epoch_duration.serialize_to_vec())
-            .expect("write failed");
-        // max_expected_time_per_block
-        let time = DurationSecs::from(Duration::new(60, 0));
-        let time_key = get_max_expected_time_per_block_key();
-        state
-            .write_log_mut()
-            .write(&time_key, namada_core::encode(&time))
             .expect("write failed");
         // set a dummy header
         state
@@ -628,7 +620,7 @@ mod tests {
             .write_log_mut()
             .write(&client_update_height_key, host_height.encode_vec())
             .expect("write failed");
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
     }
 
     fn get_connection_id() -> ConnectionId {
@@ -952,7 +944,7 @@ mod tests {
             [(0, keypair_1())].into_iter().collect(),
             None,
         )));
-        let batched_tx = outer_tx.batch_ref_first_tx();
+        let batched_tx = outer_tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1028,7 +1020,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1054,7 +1046,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
         let mut state = init_storage();
         insert_init_client(&mut state);
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
         state.commit_block().expect("commit failed");
 
         // for next block
@@ -1153,7 +1145,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1178,7 +1170,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
         let mut state = init_storage();
         insert_init_client(&mut state);
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -1262,7 +1254,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = outer_tx.batch_ref_first_tx();
+        let batched_tx = outer_tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1356,7 +1348,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1381,7 +1373,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
         let mut state = init_storage();
         insert_init_client(&mut state);
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -1476,7 +1468,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1510,7 +1502,7 @@ mod tests {
             .write_log_mut()
             .write(&conn_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -1586,7 +1578,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = outer_tx.batch_ref_first_tx();
+        let batched_tx = outer_tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1619,7 +1611,7 @@ mod tests {
             .write_log_mut()
             .write(&conn_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -1681,7 +1673,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = outer_tx.batch_ref_first_tx();
+        let batched_tx = outer_tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1715,7 +1707,7 @@ mod tests {
             .write_log_mut()
             .write(&conn_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -1804,7 +1796,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = outer_tx.batch_ref_first_tx();
+        let batched_tx = outer_tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1837,7 +1829,7 @@ mod tests {
             .write_log_mut()
             .write(&conn_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -1926,7 +1918,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = outer_tx.batch_ref_first_tx();
+        let batched_tx = outer_tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1967,7 +1959,7 @@ mod tests {
             .write_log_mut()
             .write(&channel_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -2033,7 +2025,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = outer_tx.batch_ref_first_tx();
+        let batched_tx = outer_tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2074,7 +2066,7 @@ mod tests {
             .write_log_mut()
             .write(&channel_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -2135,7 +2127,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2187,7 +2179,7 @@ mod tests {
             .write_log_mut()
             .write(&balance_key, amount.serialize_to_vec())
             .expect("write failed");
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -2203,7 +2195,7 @@ mod tests {
             packet_data: PacketData {
                 token: PrefixedCoin {
                     denom: nam().to_string().parse().unwrap(),
-                    amount: 100.into(),
+                    amount: amount.into(),
                 },
                 sender: sender.to_string().into(),
                 receiver: "receiver".to_string().into(),
@@ -2235,12 +2227,7 @@ mod tests {
         keys_changed.insert(commitment_key);
         // withdraw
         let withdraw_key = withdraw_key(&nam());
-        let bytes = Amount::from_str(
-            msg.packet_data.token.amount.to_string(),
-            NATIVE_MAX_DECIMAL_PLACES,
-        )
-        .unwrap()
-        .serialize_to_vec();
+        let bytes = amount.serialize_to_vec();
         state
             .write_log_mut()
             .write(&withdraw_key, bytes)
@@ -2296,7 +2283,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2337,7 +2324,7 @@ mod tests {
             .write_log_mut()
             .write(&channel_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -2507,7 +2494,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2582,7 +2569,7 @@ mod tests {
             .write_log_mut()
             .write(&commitment_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -2662,7 +2649,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2718,7 +2705,7 @@ mod tests {
             packet_data: PacketData {
                 token: PrefixedCoin {
                     denom: nam().to_string().parse().unwrap(),
-                    amount: 100u64.into(),
+                    amount: amount.into(),
                 },
                 sender: established_address_1().to_string().into(),
                 receiver: "receiver".to_string().into(),
@@ -2745,7 +2732,7 @@ mod tests {
             .write_log_mut()
             .write(&commitment_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -2773,12 +2760,7 @@ mod tests {
         let data = serde_json::from_slice::<PacketData>(&packet.data)
             .expect("decoding packet data failed");
         let deposit_key = deposit_key(&nam());
-        let bytes = Amount::from_str(
-            data.token.amount.to_string(),
-            NATIVE_MAX_DECIMAL_PLACES,
-        )
-        .unwrap()
-        .serialize_to_vec();
+        let bytes = amount.serialize_to_vec();
         state
             .write_log_mut()
             .write(&deposit_key, bytes)
@@ -2824,7 +2806,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -2881,7 +2863,7 @@ mod tests {
             packet_data: PacketData {
                 token: PrefixedCoin {
                     denom: nam().to_string().parse().unwrap(),
-                    amount: 100u64.into(),
+                    amount: amount.into(),
                 },
                 sender: sender.to_string().into(),
                 receiver: "receiver".to_string().into(),
@@ -2907,7 +2889,7 @@ mod tests {
             .write_log_mut()
             .write(&commitment_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -2936,12 +2918,7 @@ mod tests {
         let data = serde_json::from_slice::<PacketData>(&packet.data)
             .expect("decoding packet data failed");
         let deposit_key = deposit_key(&nam());
-        let bytes = Amount::from_str(
-            data.token.amount.to_string(),
-            NATIVE_MAX_DECIMAL_PLACES,
-        )
-        .unwrap()
-        .serialize_to_vec();
+        let bytes = amount.serialize_to_vec();
         state
             .write_log_mut()
             .write(&deposit_key, bytes)
@@ -2987,7 +2964,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -3032,7 +3009,7 @@ mod tests {
         let class_id = get_nft_class_id();
         let token_id = get_nft_id();
         let sender = established_address_1();
-        let ibc_token = ibc::storage::ibc_token_for_nft(&class_id, &token_id);
+        let ibc_token = ibc::trace::ibc_token_for_nft(&class_id, &token_id);
         let balance_key = balance_key(&ibc_token, &sender);
         let amount = Amount::from_u64(1);
         state
@@ -3054,7 +3031,7 @@ mod tests {
             .write(&metadata_key, metadata.serialize_to_vec())
             .expect("write failed");
 
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -3165,7 +3142,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -3206,7 +3183,7 @@ mod tests {
             .write_log_mut()
             .write(&channel_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_tx();
+        state.write_log_mut().commit_batch();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -3399,7 +3376,7 @@ mod tests {
             wasm::compilation_cache::common::testing::cache();
 
         let verifiers = BTreeSet::new();
-        let batched_tx = tx.batch_ref_first_tx();
+        let batched_tx = tx.batch_ref_first_tx().unwrap();
         let ctx = Ctx::new(
             &ADDRESS,
             &state,

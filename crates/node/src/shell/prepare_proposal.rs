@@ -5,13 +5,12 @@ use std::cell::RefCell;
 use namada::core::address::Address;
 use namada::core::key::tm_raw_hash_to_string;
 use namada::gas::TxGasMeter;
-use namada::hash::Hash;
 use namada::ledger::protocol::{self, ShellParams};
 use namada::parameters::get_gas_scale;
 use namada::proof_of_stake::storage::find_validator_by_raw_hash;
-use namada::state::{DBIter, StorageHasher, TempWlState, DB};
+use namada::state::{DBIter, StorageHasher, TempWlState, TxIndex, DB};
 use namada::token::{Amount, DenominatedAmount};
-use namada::tx::data::{TxType, WrapperTx};
+use namada::tx::data::WrapperTx;
 use namada::tx::Tx;
 use namada::vm::wasm::{TxCache, VpCache};
 use namada::vm::WasmCacheAccess;
@@ -47,7 +46,8 @@ where
         mut req: RequestPrepareProposal,
     ) -> response::PrepareProposal {
         let txs = if let ShellMode::Validator {
-            ref local_config, ..
+            ref validator_local_config,
+            ..
         } = self.mode
         {
             // start counting allotted space for txs
@@ -71,7 +71,7 @@ where
                 &req.txs,
                 req.time,
                 &block_proposer,
-                local_config.as_ref(),
+                validator_local_config.as_ref(),
             );
             txs.append(&mut normal_txs);
             let mut remaining_txs =
@@ -124,14 +124,15 @@ where
 
         let txs = txs
             .iter()
-            .filter_map(|tx_bytes| {
-                match validate_wrapper_bytes(tx_bytes, block_time, block_proposer, proposer_local_config, &mut temp_state, &mut vp_wasm_cache, &mut tx_wasm_cache, ) {
+            .enumerate()
+            .filter_map(|(tx_index, tx_bytes)| {
+                match validate_wrapper_bytes(tx_bytes, &TxIndex::must_from_usize(tx_index),block_time, block_proposer, proposer_local_config, &mut temp_state, &mut vp_wasm_cache, &mut tx_wasm_cache, ) {
                     Ok(gas) => {
-                        temp_state.write_log_mut().commit_tx();
+                        temp_state.write_log_mut().commit_batch();
                         Some((tx_bytes.to_owned(), gas))
                     },
                     Err(()) => {
-                        temp_state.write_log_mut().drop_tx();
+                        temp_state.write_log_mut().drop_batch();
                         None
                     }
                 }
@@ -261,6 +262,7 @@ where
 #[allow(clippy::too_many_arguments)]
 fn validate_wrapper_bytes<D, H, CA>(
     tx_bytes: &[u8],
+    tx_index: &TxIndex,
     block_time: Option<DateTimeUtc>,
     block_proposer: &Address,
     proposer_local_config: Option<&ValidatorLocalConfig>,
@@ -274,6 +276,7 @@ where
     CA: 'static + WasmCacheAccess + Sync,
 {
     let tx = Tx::try_from(tx_bytes).map_err(|_| ())?;
+    let wrapper = tx.header.wrapper().ok_or(())?;
 
     // If tx doesn't have an expiration it is valid. If time cannot be
     // retrieved from block default to last block datetime which has
@@ -286,43 +289,39 @@ where
         }
     }
 
-    tx.validate_tx().map_err(|_| ())?;
-    if let TxType::Wrapper(wrapper) = tx.header().tx_type {
-        // Check tx gas limit for tx size
-        let gas_scale = get_gas_scale(temp_state).map_err(|_| ())?;
-        let gas_limit =
-            wrapper.gas_limit.as_scaled_gas(gas_scale).map_err(|_| ())?;
-        let mut tx_gas_meter = TxGasMeter::new(gas_limit);
-        tx_gas_meter.add_wrapper_gas(tx_bytes).map_err(|_| ())?;
+    // Check tx gas limit for tx size
+    let gas_scale = get_gas_scale(temp_state).map_err(|_| ())?;
+    let gas_limit =
+        wrapper.gas_limit.as_scaled_gas(gas_scale).map_err(|_| ())?;
+    let mut tx_gas_meter = TxGasMeter::new(gas_limit);
+    tx_gas_meter.add_wrapper_gas(tx_bytes).map_err(|_| ())?;
 
-        super::replay_protection_checks(&tx, temp_state).map_err(|_| ())?;
+    super::replay_protection_checks(&tx, temp_state).map_err(|_| ())?;
 
-        // Check fees and extract the gas limit of this transaction
-        // TODO(namada#2597): check if masp fee payment is required
-        match prepare_proposal_fee_check(
-            &wrapper,
-            tx.header_hash(),
-            block_proposer,
-            proposer_local_config,
-            &mut ShellParams::new(
-                &RefCell::new(tx_gas_meter),
-                temp_state,
-                vp_wasm_cache,
-                tx_wasm_cache,
-            ),
-        ) {
-            Ok(()) => Ok(u64::from(wrapper.gas_limit)),
-            Err(_) => Err(()),
-        }
-    } else {
-        Err(())
+    // Check fees and extract the gas limit of this transaction
+    // TODO(namada#2597): check if masp fee payment is required
+    match prepare_proposal_fee_check(
+        &wrapper,
+        &tx,
+        tx_index,
+        block_proposer,
+        proposer_local_config,
+        &mut ShellParams::new(
+            &RefCell::new(tx_gas_meter),
+            temp_state,
+            vp_wasm_cache,
+            tx_wasm_cache,
+        ),
+    ) {
+        Ok(()) => Ok(u64::from(wrapper.gas_limit)),
+        Err(_) => Err(()),
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn prepare_proposal_fee_check<D, H, CA>(
     wrapper: &WrapperTx,
-    wrapper_tx_hash: Hash,
+    tx: &Tx,
+    tx_index: &TxIndex,
     proposer: &Address,
     proposer_local_config: Option<&ValidatorLocalConfig>,
     shell_params: &mut ShellParams<'_, TempWlState<'_, D, H>, D, H, CA>,
@@ -340,13 +339,8 @@ where
 
     super::fee_data_check(wrapper, minimum_gas_price, shell_params)?;
 
-    protocol::transfer_fee(
-        shell_params.state,
-        proposer,
-        wrapper,
-        wrapper_tx_hash,
-    )
-    .map_err(Error::TxApply)
+    protocol::transfer_fee(shell_params, proposer, tx, wrapper, tx_index)
+        .map_or_else(|e| Err(Error::TxApply(e)), |_| Ok(()))
 }
 
 fn compute_min_gas_price<D, H>(
@@ -422,7 +416,7 @@ mod test_prepare_proposal {
     use namada::proof_of_stake::Epoch;
     use namada::state::collections::lazy_map::{NestedSubKey, SubKey};
     use namada::token::read_denom;
-    use namada::tx::data::Fee;
+    use namada::tx::data::{Fee, TxType};
     use namada::tx::{Authorization, Code, Data, Section, Signed};
     use namada::vote_ext::{ethereum_events, ethereum_tx_data_variants};
     use namada::{replay_protection, token};
@@ -1043,9 +1037,13 @@ mod test_prepare_proposal {
     fn test_fee_non_accepted_token() {
         let (mut shell, _recv, _, _) = test_utils::setup();
         // Update local validator configuration for gas tokens
-        if let ShellMode::Validator { local_config, .. } = &mut shell.mode {
+        if let ShellMode::Validator {
+            validator_local_config,
+            ..
+        } = &mut shell.mode
+        {
             // Remove the allowed btc
-            *local_config = Some(ValidatorLocalConfig {
+            *validator_local_config = Some(ValidatorLocalConfig {
                 accepted_gas_tokens: namada::core::collections::HashMap::from(
                     [(namada::core::address::testing::nam(), Amount::from(1))],
                 ),
@@ -1144,9 +1142,13 @@ mod test_prepare_proposal {
     fn test_fee_wrong_minimum_accepted_amount() {
         let (mut shell, _recv, _, _) = test_utils::setup();
         // Update local validator configuration for gas tokens
-        if let ShellMode::Validator { local_config, .. } = &mut shell.mode {
+        if let ShellMode::Validator {
+            validator_local_config,
+            ..
+        } = &mut shell.mode
+        {
             // Remove btc and increase minimum for nam
-            *local_config = Some(ValidatorLocalConfig {
+            *validator_local_config = Some(ValidatorLocalConfig {
                 accepted_gas_tokens: namada::core::collections::HashMap::from(
                     [(
                         namada::core::address::testing::nam(),

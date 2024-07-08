@@ -801,7 +801,7 @@ where
                 let rp =
                     rewards_products.get(storage, &ep)?.unwrap_or_default();
                 let slashed_rewards = slashed_amount.mul_floor(rp)?;
-                rewards = checked!(rewards + slashed_rewards)?;
+                checked!(rewards += slashed_rewards)?;
             }
         }
 
@@ -905,7 +905,7 @@ where
             bonds_for_removal.new_entry =
                 Some((bond_epoch, checked!(bond_amount - to_unbond)?));
         }
-        remaining = checked!(remaining - to_unbond)?;
+        checked!(remaining -= to_unbond)?;
         if remaining.is_zero() {
             break;
         }
@@ -2717,7 +2717,6 @@ pub mod test_utils {
                 min_num_of_blocks: 2,
                 min_duration: DurationSecs(4),
             },
-            max_expected_time_per_block: DurationSecs(2),
             max_proposal_bytes: ProposalBytes::default(),
             max_block_gas: 10000000,
             vp_allowlist: vec![],
@@ -2725,8 +2724,7 @@ pub mod test_utils {
             implicit_vp_code_hash: Some(Hash::default()),
             epochs_per_year: 10000000,
             masp_epoch_multiplier: 2,
-            max_signatures_per_transaction: 15,
-            fee_unshielding_gas_limit: 10000,
+            masp_fee_payment_gas_limit: 10000,
             gas_scale: 10_000_000,
             minimum_gas_price: BTreeMap::new(),
             is_native_token_transferable: true,
@@ -2811,7 +2809,7 @@ where
     // Add reward tokens tallied during previous withdrawals
     let counter_rewards =
         take_rewards_from_counter(storage, &source, validator)?;
-    reward_tokens = checked!(reward_tokens + counter_rewards)?;
+    checked!(reward_tokens += counter_rewards)?;
 
     // Update the last claim epoch in storage
     write_last_reward_claim_epoch(storage, &source, validator, current_epoch)?;
