@@ -3,7 +3,7 @@
 
 use namada_vm::wasm::run::VpEvalWasm;
 use namada_vm::wasm::VpCache;
-use namada_vp::native_vp::{self, CtxPreStorageRead};
+use namada_vp::native_vp::{self, CtxPostStorageRead, CtxPreStorageRead};
 
 use crate::state::StateRead;
 use crate::{eth_bridge, governance, ibc, parameters, proof_of_stake, token};
@@ -88,6 +88,8 @@ pub type MaspVp<'a, S, CA> = token::vp::MaspVp<
     Eval<S, CA>,
     ParamsPreStore<'a, S, CA>,
     GovPreStore<'a, S, CA>,
+    IbcPostStore<'a, S, CA>,
+    TokenKeys,
 >;
 
 /// Native ETH bridge VP
@@ -114,6 +116,10 @@ pub type ParamsPreStore<'a, S, CA> =
 pub type PosPreStore<'a, S, CA> = proof_of_stake::Store<
     CtxPreStorageRead<'a, 'a, S, VpCache<CA>, Eval<S, CA>>,
 >;
+
+/// Ibc store implementation over the native posterior context
+pub type IbcPostStore<'a, S, CA> =
+    ibc::Store<CtxPostStorageRead<'a, 'a, S, VpCache<CA>, Eval<S, CA>>>;
 
 /// Token store impl over IBC pseudo-execution storage
 pub type TokenStoreForIbcExec<'a, S, CA> = token::Store<
