@@ -611,4 +611,16 @@ pub mod testing {
             msg_transfer.to_any()
         }
     }
+
+    prop_compose! {
+        /// Generate an arbitrary IBC transfer message
+        pub fn arb_msg_transfer()(
+            message in arb_ibc_msg_transfer(),
+        ) -> crate::msg::MsgTransfer {
+            crate::msg::MsgTransfer {
+                message,
+                transfer: None,
+            }
+        }
+    }
 }

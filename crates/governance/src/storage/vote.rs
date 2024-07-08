@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
     Debug,
     Clone,
     PartialEq,
+    BorshSchema,
     BorshSerialize,
     BorshDeserialize,
     BorshDeserializer,

@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Display;
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use itertools::Itertools;
 use namada_core::address::Address;
 use namada_core::hash::Hash;
@@ -33,6 +33,7 @@ pub enum ProposalError {
     Debug,
     Clone,
     PartialEq,
+    BorshSchema,
     BorshSerialize,
     BorshDeserialize,
     BorshDeserializer,
@@ -69,6 +70,7 @@ impl InitProposalData {
     Debug,
     Clone,
     PartialEq,
+    BorshSchema,
     BorshSerialize,
     BorshDeserialize,
     BorshDeserializer,
@@ -191,6 +193,7 @@ impl StoragePgfFunding {
     Debug,
     Clone,
     PartialEq,
+    BorshSchema,
     BorshSerialize,
     BorshDeserialize,
     BorshDeserializer,
@@ -221,6 +224,7 @@ pub enum ProposalType {
     Eq,
     PartialOrd,
     Ord,
+    BorshSchema,
     BorshSerialize,
     BorshDeserialize,
     Serialize,
@@ -250,6 +254,7 @@ where
     Debug,
     Clone,
     PartialEq,
+    BorshSchema,
     BorshSerialize,
     BorshDeserialize,
     BorshDeserializer,
@@ -303,6 +308,7 @@ impl Display for PGFTarget {
     Debug,
     Clone,
     PartialEq,
+    BorshSchema,
     BorshSerialize,
     BorshDeserialize,
     BorshDeserializer,
@@ -413,6 +419,7 @@ impl borsh::BorshSchema for PGFIbcTarget {
     Debug,
     Clone,
     PartialEq,
+    BorshSchema,
     BorshSerialize,
     BorshDeserialize,
     BorshDeserializer,
