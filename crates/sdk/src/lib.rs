@@ -838,6 +838,8 @@ where
 /// Tests and strategies for transactions
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
+    use namada_ibc::{MsgNftTransfer, MsgTransfer};
+    use ::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
     use borsh_ext::BorshSerializeExt;
     use governance::ProposalType;
     use ibc::primitives::proto::Any;
@@ -853,7 +855,7 @@ pub mod testing {
         arb_init_proposal, arb_vote_proposal,
     };
     use namada_governance::{InitProposalData, VoteProposalData};
-    use namada_ibc::testing::arb_ibc_any;
+    use namada_ibc::testing::arb_msg_transfer;
     use namada_token::testing::arb_denominated_amount;
     use namada_token::Transfer;
     use namada_tx::data::pgf::UpdateStewardCommission;
@@ -885,7 +887,8 @@ pub mod testing {
         TxCommitments,
     };
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, BorshDeserialize, BorshSchema, BorshSerialize)]
+    #[borsh(crate = "::borsh")]
     #[allow(clippy::large_enum_variant)]
     #[allow(missing_docs)]
     /// To facilitate propagating debugging information
@@ -912,7 +915,7 @@ pub mod testing {
         UpdateStewardCommission(UpdateStewardCommission),
         ResignSteward(Address),
         PendingTransfer(PendingTransfer),
-        IbcAny(Any),
+        IbcMsgTransfer(MsgTransfer),
         Custom,
     }
 
@@ -1464,19 +1467,17 @@ pub mod testing {
 
     prop_compose! {
         /// Generate an arbitrary IBC any transaction
-        pub fn arb_ibc_any_tx()(
+        pub fn arb_ibc_msg_transfer_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
-            ibc_any in arb_ibc_any(),
+            msg_transfer in arb_msg_transfer(),
             code_hash in arb_hash(),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
-            let mut tx_data = vec![];
-            ibc_any.encode(&mut tx_data).expect("unable to encode IBC data");
-            tx.add_serialized_data(tx_data);
+            tx.add_serialized_data(msg_transfer.serialize_to_vec());
             tx.add_code_from_hash(code_hash, Some(TX_IBC_WASM.to_owned()));
-            (tx, TxData::IbcAny(ibc_any))
+            (tx, TxData::IbcMsgTransfer(msg_transfer))
         }
     }
 
@@ -1505,7 +1506,7 @@ pub mod testing {
             arb_update_steward_commission_tx(),
             arb_resign_steward_tx(),
             arb_pending_transfer_tx(),
-            arb_ibc_any_tx(),
+            arb_ibc_msg_transfer_tx(),
         ]
     }
 
