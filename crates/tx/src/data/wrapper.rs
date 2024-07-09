@@ -117,6 +117,12 @@ impl From<GasLimit> for WholeGas {
     }
 }
 
+impl From<WholeGas> for GasLimit {
+    fn from(value: WholeGas) -> Self {
+        u64::from(value).into()
+    }
+}
+
 impl GasLimit {
     /// Convert the gas limit into scaled gas
     pub fn as_scaled_gas(self, scale: u64) -> Result<Gas, std::io::Error> {
