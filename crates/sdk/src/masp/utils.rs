@@ -1,6 +1,7 @@
 //! Helper functions and types
 
-use std::collections::BTreeMap;
+use std::cmp::Ordering;
+use std::collections::{BTreeMap, BinaryHeap};
 use std::sync::{Arc, Mutex};
 
 use borsh::BorshDeserialize;
@@ -15,7 +16,6 @@ use crate::error::{Error, QueryError};
 use crate::io::Io;
 use crate::masp::{
     extract_masp_tx, get_indexed_masp_events_at_height, IndexedNoteEntry,
-    Unscanned,
 };
 use crate::queries::Client;
 
@@ -103,7 +103,7 @@ pub trait MaspClient {
         &self,
         progress: &impl ProgressTracker<IO>,
         shutdown_signal: &mut ShutdownSignal,
-        tx_sender: FetchQueueSender,
+        tx_sender: flume::Sender<Range>,
         from: BlockHeight,
         to: BlockHeight,
     ) -> Result<(), Error>;
@@ -157,6 +157,7 @@ pub trait MaspClient {
 /// An inefficient MASP client which simply uses a
 /// client to the blockchain to query it directly.
 #[cfg(not(target_family = "wasm"))]
+#[derive(Clone)]
 pub struct LedgerMaspClient<'client, C> {
     client: &'client C,
 }
@@ -180,13 +181,17 @@ impl<C: Client + Sync> MaspClient for LedgerMaspClient<'_, C> {
         &self,
         progress: &impl ProgressTracker<IO>,
         shutdown_signal: &mut ShutdownSignal,
-        mut tx_sender: FetchQueueSender,
-        BlockHeight(from): BlockHeight,
-        BlockHeight(to): BlockHeight,
+        mut tx_sender: flume::Sender<Range>,
+        from: BlockHeight,
+        to: BlockHeight,
     ) -> Result<(), Error> {
         // Fetch all the transactions we do not have yet
-        let mut fetch_iter = progress.fetch(from..=to);
-
+        let mut fetch_iter = progress.fetch(from.0..=to.0);
+        let mut range = Range {
+            from,
+            to,
+            txs: vec![],
+        };
         loop {
             let Some(height) = fetch_iter.peek().copied() else {
                 break;
@@ -198,9 +203,11 @@ impl<C: Client + Sync> MaspClient for LedgerMaspClient<'_, C> {
                     "[ShieldedSync::Fetching]".to_string(),
                 ));
             }
-            if tx_sender.contains_height(height) {
-                continue;
-            }
+
+            // TODO: Fix
+            // if tx_sender.contains_height(height) {
+            //     continue;
+            // }
 
             let txs_results = match get_indexed_masp_events_at_height(
                 self.client,
@@ -227,14 +234,12 @@ impl<C: Client + Sync> MaspClient for LedgerMaspClient<'_, C> {
                 .map_err(|e| Error::from(QueryError::General(e.to_string())))?
                 .block
                 .data;
-
             for (idx, masp_sections_refs) in txs_results {
                 let tx = Tx::try_from(block[idx.0 as usize].as_ref())
                     .map_err(|e| Error::Other(e.to_string()))?;
                 let extracted_masp_txs =
                     extract_masp_tx(&tx, &masp_sections_refs).await?;
-
-                tx_sender.send((
+                range.txs.push((
                     IndexedTx {
                         height: height.into(),
                         index: idx,
@@ -243,6 +248,7 @@ impl<C: Client + Sync> MaspClient for LedgerMaspClient<'_, C> {
                 ));
             }
         }
+        tx_sender.send(range).unwrap();
 
         Ok(())
     }
@@ -333,7 +339,7 @@ impl MaspClient for IndexerMaspClient {
         &self,
         progress: &impl ProgressTracker<IO>,
         shutdown_signal: &mut ShutdownSignal,
-        mut tx_sender: FetchQueueSender,
+        mut tx_sender: flume::Sender<Range>,
         BlockHeight(mut from): BlockHeight,
         BlockHeight(to): BlockHeight,
     ) -> Result<(), Error> {
@@ -366,6 +372,11 @@ impl MaspClient for IndexerMaspClient {
 
         const MAX_RANGE_THRES: u64 = 30;
         let mut fetch_iter = progress.fetch(from..=to);
+        let mut range = Range {
+            from: BlockHeight(from),
+            to: BlockHeight(to),
+            txs: vec![],
+        };
 
         loop {
             let from_height = from;
@@ -432,7 +443,7 @@ impl MaspClient for IndexerMaspClient {
                     );
                 }
 
-                tx_sender.send((
+                range.txs.push((
                     IndexedTx {
                         height: BlockHeight(block_height),
                         index: TxIndex(block_index),
@@ -456,7 +467,7 @@ impl MaspClient for IndexerMaspClient {
         // there were still some items left
         // TODO: improve this lol
         while fetch_iter.next().is_some() {}
-
+        tx_sender.send(range).unwrap();
         Ok(())
     }
 
@@ -612,93 +623,38 @@ impl MaspClient for IndexerMaspClient {
     }
 }
 
-/// A channel-like struct for "sending" newly fetched blocks
-/// to the scanning algorithm.
-///
-/// Holds a pointer to the unscanned cache which it can append to.
-/// Furthermore, has an actual channel for keeping track if
-/// 1. The process in possession of the channel is still alive
-/// 2. Quickly updating the latest block height scanned.
-#[derive(Clone)]
-pub struct FetchQueueSender {
-    cache: Unscanned,
-    last_fetched: flume::Sender<BlockHeight>,
+pub struct Range {
+    from: BlockHeight,
+    to: BlockHeight,
+    txs: Vec<IndexedNoteEntry>,
 }
 
-/// A channel-like struct for "receiving" new fetched
-/// blocks for the scanning algorithm.
-///
-/// This is implemented as an iterator for the scanning
-/// algorithm. This receiver pulls from the cache until
-/// it is empty. It then waits until new entries appear
-/// in the cache or the sender hangs up.
-#[derive(Clone)]
-pub(super) struct FetchQueueReceiver {
-    cache: Unscanned,
-    last_fetched: flume::Receiver<BlockHeight>,
-}
-
-impl FetchQueueReceiver {
-    /// Check if the sender has hung up.
-    fn sender_alive(&self) -> bool {
-        self.last_fetched.sender_count() > 0
+impl PartialEq<Self> for Range {
+    fn eq(&self, other: &Self) -> bool {
+        (self.from, self.to).eq(&(other.from, other.to))
     }
 }
 
-impl Iterator for FetchQueueReceiver {
-    type Item = IndexedNoteEntry;
+impl PartialOrd for Range {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        (other.from, other.to).partial_cmp(&(self.from, self.to))
+    }
+}
+pub struct FetchedTxs {
+    heap: BinaryHeap<Range>,
+    curr_block_height: BlockHeight,
+}
 
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(entry) = self.cache.pop_first() {
-            Some(entry)
+impl FetchedTxs {
+    fn next(&mut self) -> Option<Range> {
+        let maybe_next = self.heap.peek()?;
+
+        if maybe_next.from == self.curr_block_height {
+            self.curr_block_height = maybe_next.to + 1;
+            self.heap.pop()
         } else {
-            while self.sender_alive() {
-                if let Some(entry) = self.cache.pop_first() {
-                    return Some(entry);
-                }
-                core::hint::spin_loop();
-            }
             None
         }
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let size = self.last_fetched.len();
-        (size, Some(size))
-    }
-}
-
-impl FetchQueueSender {
-    /// Checks if the channel is already populated for the given block height
-    pub(super) fn contains_height(&self, height: u64) -> bool {
-        self.cache.contains_height(height)
-    }
-
-    /// Send a new value of the channel
-    pub(super) fn send(&mut self, data: IndexedNoteEntry) {
-        self.last_fetched.send(data.0.height).unwrap();
-        self.cache.insert(data);
-    }
-}
-
-/// A convenience for creating a channel for fetching blocks.
-pub mod fetch_channel {
-
-    use super::{FetchQueueReceiver, FetchQueueSender, Unscanned};
-    pub(in super::super) fn new(
-        cache: Unscanned,
-    ) -> (FetchQueueSender, FetchQueueReceiver) {
-        let (fetch_send, fetch_recv) = flume::unbounded();
-        (
-            FetchQueueSender {
-                cache: cache.clone(),
-                last_fetched: fetch_send,
-            },
-            FetchQueueReceiver {
-                cache: cache.clone(),
-                last_fetched: fetch_recv,
-            },
-        )
     }
 }
 
@@ -851,7 +807,14 @@ impl<'io, IO: Io> ProgressTracker<IO> for DefaultTracker<'io, IO> {
 
 #[cfg(test)]
 mod util_tests {
+    use std::collections::VecDeque;
+
+    use namada_core::storage::TxIndex;
+    use namada_tx::IndexedTx;
+
+    use crate::masp::test_utils::arbitrary_masp_tx;
     use crate::masp::utils::RetryStrategy;
+    use crate::masp::IndexedNoteEntry;
 
     #[test]
     fn test_retry_strategy() {
