@@ -884,6 +884,9 @@ pub mod testing {
         Authorization, Code, Commitment, Header, MaspBuilder, Section,
         TxCommitments,
     };
+    use namada_core::masp::AssetData;
+    use crate::masp::ShieldedTransfer;
+    use namada_core::collections::HashMap;
 
     #[derive(Debug, Clone, BorshDeserialize, BorshSchema, BorshSerialize)]
     #[borsh(crate = "::borsh")]
@@ -906,8 +909,7 @@ pub mod testing {
         UpdateAccount(UpdateAccount),
         VoteProposal(VoteProposalData),
         Withdraw(Withdraw),
-        TransparentTransfer(Transfer),
-        MaspTransfer(Transfer, (StoredBuildParams, String)),
+        Transfer(Transfer, Option<(StoredBuildParams, String)>),
         Bond(Bond),
         Redelegation(Redelegation),
         UpdateStewardCommission(UpdateStewardCommission),
@@ -1062,51 +1064,52 @@ pub mod testing {
         }
     }
 
-    prop_compose! {
-        /// Generate an arbitrary transfer transaction
-        pub fn arb_transparent_transfer_tx()(
-            mut header in arb_header(),
-            wrapper in arb_wrapper_tx(),
-            transfer in arb_transparent_transfer(..5),
-            code_hash in arb_hash(),
-        ) -> (Tx, TxData) {
-            header.tx_type = TxType::Wrapper(Box::new(wrapper));
-            let mut tx = Tx { header, sections: vec![] };
-            tx.add_data(transfer.clone());
-            tx.add_code_from_hash(code_hash, Some(TX_TRANSFER_WASM.to_owned()));
-            (tx, TxData::TransparentTransfer(transfer))
-        }
-    }
-
     // Maximum number of notes to include in a transaction
     const MAX_ASSETS: usize = 2;
 
     prop_compose! {
+        /// Generate an arbitrary transfer
+        pub fn arb_transfer()(
+            arb in prop_oneof![
+                arb_transparent_transfer(..5).prop_map(|xfer| (xfer, None)),
+                arb_shielded_transfer(0..MAX_ASSETS)
+                    .prop_map(|(w, x, y, z)| (w, Some((x, y, z))))
+            ],
+        ) -> (Transfer, Option<(ShieldedTransfer, HashMap<AssetData, u64>, StoredBuildParams)>) {
+            arb
+        }
+    }
+
+    prop_compose! {
         /// Generate an arbitrary masp transfer transaction
-        pub fn arb_masp_transfer_tx()(
+        pub fn arb_transfer_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
             code_hash in arb_hash(),
-            (data, shielded_transfer, asset_types, build_params) in arb_shielded_transfer(0..MAX_ASSETS),
+            (data, aux) in arb_transfer(),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
-            let shielded_section_hash = tx.add_masp_tx_section(shielded_transfer.masp_tx).1;
-            let build_param_bytes =
-                data_encoding::HEXLOWER.encode(&build_params.serialize_to_vec());
             tx.add_code_from_hash(code_hash, Some(TX_TRANSFER_WASM.to_owned()));
             tx.add_data(data.clone());
-            let tx_data = TxData::MaspTransfer(data, (build_params, build_param_bytes));
-            tx.add_masp_builder(MaspBuilder {
-                asset_types: asset_types.into_keys().collect(),
-                // Store how the Info objects map to Descriptors/Outputs
-                metadata: shielded_transfer.metadata,
-                // Store the data that was used to construct the Transaction
-                builder: shielded_transfer.builder,
-                // Link the Builder to the Transaction by hash code
-                target: shielded_section_hash,
-            });
-            (tx, tx_data)
+            if let Some((shielded_transfer, asset_types, build_params)) = aux {
+                let shielded_section_hash =
+                    tx.add_masp_tx_section(shielded_transfer.masp_tx).1;
+                tx.add_masp_builder(MaspBuilder {
+                    asset_types: asset_types.into_keys().collect(),
+                    // Store how the Info objects map to Descriptors/Outputs
+                    metadata: shielded_transfer.metadata,
+                    // Store the data that was used to construct the Transaction
+                    builder: shielded_transfer.builder,
+                    // Link the Builder to the Transaction by hash code
+                    target: shielded_section_hash,
+                });
+                let build_param_bytes =
+                    data_encoding::HEXLOWER.encode(&build_params.serialize_to_vec());
+                (tx, TxData::Transfer(data, Some((build_params, build_param_bytes))))
+            } else {
+                (tx, TxData::Transfer(data, None))
+            }
         }
     }
 
@@ -1499,8 +1502,7 @@ pub mod testing {
     /// Generate an arbitrary tx
     pub fn arb_tx() -> impl Strategy<Value = (Tx, TxData)> {
         prop_oneof![
-            arb_transparent_transfer_tx(),
-            arb_masp_transfer_tx(),
+            arb_transfer_tx(),
             arb_bond_tx(),
             arb_unbond_tx(),
             arb_init_account_tx(),
