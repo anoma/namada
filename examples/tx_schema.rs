@@ -3,8 +3,8 @@ use std::error::Error;
 
 use masp_primitives::transaction::components::sapling::builder::StoredBuildParams;
 use namada_sdk::borsh::BorshSchema;
-use namada_sdk::tx::Tx;
 use namada_sdk::testing::TxData;
+use namada_sdk::tx::Tx;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<_> = std::env::args().collect();

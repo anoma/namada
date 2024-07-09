@@ -1,5 +1,5 @@
 use namada_core::address::Address;
-use namada_core::borsh::{BorshSchema, BorshDeserialize, BorshSerialize};
+use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::collections::HashMap;
 use namada_core::dec::Dec;
 use namada_macros::BorshDeserializer;

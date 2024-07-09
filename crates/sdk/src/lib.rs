@@ -838,11 +838,9 @@ where
 /// Tests and strategies for transactions
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
-    use namada_ibc::{MsgNftTransfer, MsgTransfer};
     use ::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
     use borsh_ext::BorshSerializeExt;
     use governance::ProposalType;
-    use ibc::primitives::proto::Any;
     use masp_primitives::transaction::components::sapling::builder::StoredBuildParams;
     use namada_account::{InitAccount, UpdateAccount};
     use namada_core::address::testing::{
@@ -855,7 +853,8 @@ pub mod testing {
         arb_init_proposal, arb_vote_proposal,
     };
     use namada_governance::{InitProposalData, VoteProposalData};
-    use namada_ibc::testing::arb_msg_transfer;
+    use namada_ibc::testing::{arb_msg_nft_transfer, arb_msg_transfer};
+    use namada_ibc::{MsgNftTransfer, MsgTransfer};
     use namada_token::testing::arb_denominated_amount;
     use namada_token::Transfer;
     use namada_tx::data::pgf::UpdateStewardCommission;
@@ -866,7 +865,6 @@ pub mod testing {
     use namada_tx::data::{Fee, TxType, WrapperTx};
     use proptest::prelude::{Just, Strategy};
     use proptest::{arbitrary, collection, option, prop_compose, prop_oneof};
-    use prost::Message;
     use token::testing::arb_transparent_transfer;
 
     use super::*;
@@ -916,6 +914,7 @@ pub mod testing {
         ResignSteward(Address),
         PendingTransfer(PendingTransfer),
         IbcMsgTransfer(MsgTransfer),
+        IbcMsgNftTransfer(MsgNftTransfer),
         Custom,
     }
 
@@ -1481,6 +1480,22 @@ pub mod testing {
         }
     }
 
+    prop_compose! {
+        /// Generate an arbitrary IBC any transaction
+        pub fn arb_ibc_msg_nft_transfer_tx()(
+            mut header in arb_header(),
+            wrapper in arb_wrapper_tx(),
+            msg_transfer in arb_msg_nft_transfer(),
+            code_hash in arb_hash(),
+        ) -> (Tx, TxData) {
+            header.tx_type = TxType::Wrapper(Box::new(wrapper));
+            let mut tx = Tx { header, sections: vec![] };
+            tx.add_serialized_data(msg_transfer.serialize_to_vec());
+            tx.add_code_from_hash(code_hash, Some(TX_IBC_WASM.to_owned()));
+            (tx, TxData::IbcMsgNftTransfer(msg_transfer))
+        }
+    }
+
     /// Generate an arbitrary tx
     pub fn arb_tx() -> impl Strategy<Value = (Tx, TxData)> {
         prop_oneof![
@@ -1507,6 +1522,7 @@ pub mod testing {
             arb_resign_steward_tx(),
             arb_pending_transfer_tx(),
             arb_ibc_msg_transfer_tx(),
+            arb_ibc_msg_nft_transfer_tx(),
         ]
     }
 

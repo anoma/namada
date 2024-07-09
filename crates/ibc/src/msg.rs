@@ -1,5 +1,7 @@
-use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use std::collections::BTreeMap;
+
 use borsh::schema::{Declaration, Definition, Fields};
+use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::HEXUPPER;
 use ibc::apps::nft_transfer::types::msgs::transfer::MsgTransfer as IbcMsgNftTransfer;
 use ibc::apps::nft_transfer::types::packet::PacketData as NftPacketData;
@@ -15,7 +17,6 @@ use ibc::primitives::proto::Protobuf;
 use masp_primitives::transaction::Transaction as MaspTransaction;
 use namada_core::borsh::BorshSerializeExt;
 use namada_token::Transfer;
-use std::collections::BTreeMap;
 
 /// The different variants of an Ibc message
 #[derive(Debug, Clone)]
@@ -63,15 +64,15 @@ impl BorshDeserialize for MsgTransfer {
 
 impl BorshSchema for MsgTransfer {
     fn add_definitions_recursively(
-        definitions: &mut BTreeMap<Declaration, Definition>
+        definitions: &mut BTreeMap<Declaration, Definition>,
     ) {
-        <(Vec::<u8>, Option::<Transfer>)>::add_definitions_recursively(definitions);
+        <(Vec<u8>, Option<Transfer>)>::add_definitions_recursively(definitions);
         let fields = Fields::UnnamedFields(vec![
-            <(Vec::<u8>, Option::<Transfer>)>::declaration(),
+            <(Vec<u8>, Option<Transfer>)>::declaration(),
         ]);
         definitions.insert(Self::declaration(), Definition::Struct { fields });
     }
-    
+
     fn declaration() -> Declaration {
         "MsgTransfer".into()
     }
@@ -107,6 +108,22 @@ impl BorshDeserialize for MsgNftTransfer {
         let message = IbcMsgNftTransfer::decode_vec(&msg)
             .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
         Ok(Self { message, transfer })
+    }
+}
+
+impl BorshSchema for MsgNftTransfer {
+    fn add_definitions_recursively(
+        definitions: &mut BTreeMap<Declaration, Definition>,
+    ) {
+        <(Vec<u8>, Option<Transfer>)>::add_definitions_recursively(definitions);
+        let fields = Fields::UnnamedFields(vec![
+            <(Vec<u8>, Option<Transfer>)>::declaration(),
+        ]);
+        definitions.insert(Self::declaration(), Definition::Struct { fields });
+    }
+
+    fn declaration() -> Declaration {
+        "MsgNftTransfer".into()
     }
 }
 
