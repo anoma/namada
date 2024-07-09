@@ -22,6 +22,7 @@ use namada_governance::storage::proposal::{
     InitProposalData, ProposalType, VoteProposalData,
 };
 use namada_governance::storage::vote::ProposalVote;
+use namada_ibc::MsgTransfer;
 use namada_parameters::storage as parameter_storage;
 use namada_token as token;
 use namada_token::storage_key::balance_key;
@@ -29,7 +30,6 @@ use namada_tx::data::pgf::UpdateStewardCommission;
 use namada_tx::data::pos::BecomeValidator;
 use namada_tx::data::{pos, Fee};
 use namada_tx::{MaspBuilder, Section, Tx};
-use prost::Message;
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
@@ -38,8 +38,6 @@ use crate::args::SdkTypes;
 use crate::error::{EncodingError, Error, TxSubmitError};
 use crate::eth_bridge_pool::PendingTransfer;
 use crate::governance::storage::proposal::{AddRemove, PGFAction, PGFTarget};
-use crate::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
-use crate::ibc::primitives::proto::Any;
 use crate::io::*;
 use crate::rpc::validate_amount;
 use crate::token::Account;
@@ -1306,71 +1304,73 @@ pub async fn to_ledger_vector(
             )
             .await?;
         } else if code_sec.tag == Some(TX_IBC_WASM.to_string()) {
-            let any_msg = Any::decode(
-                tx.data(cmt)
-                    .ok_or_else(|| Error::Other("Invalid Data".to_string()))?
-                    .as_ref(),
-            )
-            .map_err(|x| {
-                Error::from(EncodingError::Conversion(x.to_string()))
-            })?;
+            let data = tx
+                .data(cmt)
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?;
 
-            tv.name = "IBC_0".to_string();
-            tv.output.push("Type : IBC".to_string());
+            tv.name = "IBC_Transfer_0".to_string();
+            tv.output.push("Type : IBC Transfer".to_string());
 
-            match MsgTransfer::try_from(any_msg.clone()) {
-                Ok(transfer) => {
-                    let transfer_token = format!(
-                        "{} {}",
-                        transfer.packet_data.token.amount,
-                        transfer.packet_data.token.denom
-                    );
-                    tv.output.extend(vec![
-                        format!("Source port : {}", transfer.port_id_on_a),
-                        format!("Source channel : {}", transfer.chan_id_on_a),
-                        format!("Token : {}", transfer_token),
-                        format!("Sender : {}", transfer.packet_data.sender),
-                        format!("Receiver : {}", transfer.packet_data.receiver),
-                        format!(
-                            "Timeout height : {}",
-                            transfer.timeout_height_on_b
-                        ),
-                        format!(
-                            "Timeout timestamp : {}",
-                            transfer
-                                .timeout_timestamp_on_b
-                                .into_tm_time()
-                                .map_or("(none)".to_string(), |time| time
-                                    .to_rfc3339())
-                        ),
-                    ]);
-                    tv.output_expert.extend(vec![
-                        format!("Source port : {}", transfer.port_id_on_a),
-                        format!("Source channel : {}", transfer.chan_id_on_a),
-                        format!("Token : {}", transfer_token),
-                        format!("Sender : {}", transfer.packet_data.sender),
-                        format!("Receiver : {}", transfer.packet_data.receiver),
-                        format!(
-                            "Timeout height : {}",
-                            transfer.timeout_height_on_b
-                        ),
-                        format!(
-                            "Timeout timestamp : {}",
-                            transfer
-                                .timeout_timestamp_on_b
-                                .into_tm_time()
-                                .map_or("(none)".to_string(), |time| time
-                                    .to_rfc3339())
-                        ),
-                    ]);
-                }
-                _ => {
-                    for line in format!("{:#?}", any_msg).split('\n') {
-                        let stripped = line.trim_start();
-                        tv.output.push(format!("Part : {}", stripped));
-                        tv.output_expert.push(format!("Part : {}", stripped));
-                    }
-                }
+            if let Ok(transfer) = MsgTransfer::try_from_slice(data.as_ref()) {
+                let transfer_token = format!(
+                    "{} {}",
+                    transfer.message.packet_data.token.amount,
+                    transfer.message.packet_data.token.denom
+                );
+                tv.output.extend(vec![
+                    format!("Source port : {}", transfer.message.port_id_on_a),
+                    format!(
+                        "Source channel : {}",
+                        transfer.message.chan_id_on_a
+                    ),
+                    format!("Token : {}", transfer_token),
+                    format!("Sender : {}", transfer.message.packet_data.sender),
+                    format!(
+                        "Receiver : {}",
+                        transfer.message.packet_data.receiver
+                    ),
+                    format!(
+                        "Timeout height : {}",
+                        transfer.message.timeout_height_on_b
+                    ),
+                    format!(
+                        "Timeout timestamp : {}",
+                        transfer
+                            .message
+                            .timeout_timestamp_on_b
+                            .into_tm_time()
+                            .map_or("(none)".to_string(), |time| time
+                                .to_rfc3339())
+                    ),
+                ]);
+                tv.output_expert.extend(vec![
+                    format!("Source port : {}", transfer.message.port_id_on_a),
+                    format!(
+                        "Source channel : {}",
+                        transfer.message.chan_id_on_a
+                    ),
+                    format!("Token : {}", transfer_token),
+                    format!("Sender : {}", transfer.message.packet_data.sender),
+                    format!(
+                        "Receiver : {}",
+                        transfer.message.packet_data.receiver
+                    ),
+                    format!(
+                        "Timeout height : {}",
+                        transfer.message.timeout_height_on_b
+                    ),
+                    format!(
+                        "Timeout timestamp : {}",
+                        transfer
+                            .message
+                            .timeout_timestamp_on_b
+                            .into_tm_time()
+                            .map_or("(none)".to_string(), |time| time
+                                .to_rfc3339())
+                    ),
+                ]);
+            } else {
+                return Result::Err(Error::Other("Invalid Data".to_string()));
             }
         } else if code_sec.tag == Some(TX_BOND_WASM.to_string()) {
             let bond = pos::Bond::try_from_slice(
