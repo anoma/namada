@@ -2184,10 +2184,7 @@ fn masp_fee_payment() -> Result<()> {
     let validator_one_rpc = "http://127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
-    let (mut node, _services) = setup::initialize_genesis(|mut genesis| {
-        genesis.parameters.parameters.masp_fee_payment_gas_limit = 200_000;
-        genesis
-    })?;
+    let (mut node, _services) = setup::setup()?;
     _ = node.next_masp_epoch();
 
     // Add the relevant viewing keys to the wallet otherwise the shielded
@@ -2549,10 +2546,7 @@ fn masp_fee_payment_with_non_disposable() -> Result<()> {
     let validator_one_rpc = "http://127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
-    let (mut node, _services) = setup::initialize_genesis(|mut genesis| {
-        genesis.parameters.parameters.masp_fee_payment_gas_limit = 200_000;
-        genesis
-    })?;
+    let (mut node, _services) = setup::setup()?;
     _ = node.next_masp_epoch();
 
     // Add the relevant viewing keys to the wallet otherwise the shielded
@@ -2741,10 +2735,7 @@ fn masp_fee_payment_with_custom_spending_key() -> Result<()> {
     let validator_one_rpc = "http://127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
-    let (mut node, _services) = setup::initialize_genesis(|mut genesis| {
-        genesis.parameters.parameters.masp_fee_payment_gas_limit = 200_000;
-        genesis
-    })?;
+    let (mut node, _services) = setup::setup()?;
     _ = node.next_masp_epoch();
 
     // Add the relevant viewing keys to the wallet otherwise the shielded
@@ -2978,7 +2969,6 @@ fn masp_fee_payment_with_different_token() -> Result<()> {
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
     let (mut node, _services) = setup::initialize_genesis(|mut genesis| {
-        genesis.parameters.parameters.masp_fee_payment_gas_limit = 200_000;
         // Whitelist BTC for gas payment
         genesis.parameters.parameters.minimum_gas_price.insert(
             "btc".into(),

@@ -23,7 +23,7 @@ max_signatures_per_transaction = 15
 # Max gas for block
 max_block_gas = 20000000
 # Masp fee payment gas limit
-masp_fee_payment_gas_limit = 20000
+masp_fee_payment_gas_limit = 150_000
 # Gas scale
 gas_scale = 10_000_000
 
