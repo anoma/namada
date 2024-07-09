@@ -640,7 +640,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        /// Generate an arbitrary IBC token ID
+        /// Generate an arbitrary IBC class ID
         pub fn arb_ibc_class_id()(token_id in "[a-zA-Z0-9_]+") -> ClassId {
             ClassId::from_str(&token_id).expect("generated invalid IBC class ID")
         }

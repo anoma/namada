@@ -15,7 +15,7 @@ use namada_core::address::{Address, ImplicitAddress, InternalAddress, MASP};
 use namada_core::arith::checked;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::*;
-use namada_core::masp::{AssetData, ExtendedViewingKey, PaymentAddress};
+use namada_core::masp::{AssetData, ExtendedViewingKey, PaymentAddress, TxId};
 use namada_core::sign::SignatureIndex;
 use namada_core::token::{Amount, DenominatedAmount};
 use namada_governance::storage::proposal::{
@@ -943,6 +943,30 @@ fn proposal_type_to_ledger_vector(
     }
 }
 
+// Find the MASP Builder that was used to construct the given Transaction.
+// Additionally record how to decode AssetTypes using information from the
+// builder.
+fn find_masp_builder<'a>(
+    tx: &'a Tx,
+    shielded_section_hash: Option<TxId>,
+    asset_types: &mut HashMap<AssetType, AssetData>,
+) -> Result<Option<&'a MaspBuilder>, std::io::Error> {
+    for section in &tx.sections {
+        match section {
+            Section::MaspBuilder(builder)
+                if Some(builder.target) == shielded_section_hash =>
+            {
+                for decoded in &builder.asset_types {
+                    asset_types.insert(decoded.encode()?, decoded.clone());
+                }
+                return Ok(Some(builder));
+            }
+            _ => {}
+        }
+    }
+    Ok(None)
+}
+
 /// Converts the given transaction to the form that is displayed on the Ledger
 /// device
 pub async fn to_ledger_vector(
@@ -1263,30 +1287,17 @@ pub async fn to_ledger_vector(
             .map_err(|err| {
                 Error::from(EncodingError::Conversion(err.to_string()))
             })?;
+            tv.name = "Transfer_0".to_string();
+            tv.output.push("Type : Transfer".to_string());
+
             // To facilitate lookups of MASP AssetTypes
             let mut asset_types = HashMap::new();
-            let builder = tx.sections.iter().find_map(|x| match x {
-                Section::MaspBuilder(builder)
-                    if Some(builder.target)
-                        == transfer.shielded_section_hash =>
-                {
-                    for decoded in &builder.asset_types {
-                        match decoded.encode() {
-                            Err(_) => None,
-                            Ok(asset) => {
-                                asset_types.insert(asset, decoded.clone());
-                                Some(builder)
-                            }
-                        }?;
-                    }
-                    Some(builder)
-                }
-                _ => None,
-            });
-
-            tv.name = "Transfer_0".to_string();
-
-            tv.output.push("Type : Transfer".to_string());
+            let builder = find_masp_builder(
+                tx,
+                transfer.shielded_section_hash,
+                &mut asset_types,
+            )
+            .map_err(|_| Error::Other("Invalid Data".to_string()))?;
             make_ledger_token_transfer_endpoints(
                 &tokens,
                 &mut tv.output,
@@ -1308,10 +1319,9 @@ pub async fn to_ledger_vector(
                 .data(cmt)
                 .ok_or_else(|| Error::Other("Invalid Data".to_string()))?;
 
-            tv.name = "IBC_Transfer_0".to_string();
-            tv.output.push("Type : IBC Transfer".to_string());
-
             if let Ok(transfer) = MsgTransfer::try_from_slice(data.as_ref()) {
+                tv.name = "IBC_Transfer_0".to_string();
+                tv.output.push("Type : IBC Transfer".to_string());
                 let transfer_token = format!(
                     "{} {}",
                     transfer.message.packet_data.token.amount,
@@ -1371,9 +1381,37 @@ pub async fn to_ledger_vector(
                                 .to_rfc3339())
                     ),
                 ]);
+                if let Some(transfer) = transfer.transfer {
+                    // To facilitate lookups of MASP AssetTypes
+                    let mut asset_types = HashMap::new();
+                    let builder = find_masp_builder(
+                        tx,
+                        transfer.shielded_section_hash,
+                        &mut asset_types,
+                    )
+                    .map_err(|_| Error::Other("Invalid Data".to_string()))?;
+                    make_ledger_token_transfer_endpoints(
+                        &tokens,
+                        &mut tv.output,
+                        &transfer,
+                        builder,
+                        &asset_types,
+                    )
+                    .await?;
+                    make_ledger_token_transfer_endpoints(
+                        &tokens,
+                        &mut tv.output_expert,
+                        &transfer,
+                        builder,
+                        &asset_types,
+                    )
+                    .await?;
+                }
             } else if let Ok(transfer) =
                 MsgNftTransfer::try_from_slice(data.as_ref())
             {
+                tv.name = "IBC_NFT_Transfer_0".to_string();
+                tv.output.push("Type : IBC NFT Transfer".to_string());
                 tv.output.extend(vec![
                     format!("Source port : {}", transfer.message.port_id_on_a),
                     format!(
@@ -1450,6 +1488,10 @@ pub async fn to_ledger_vector(
                         "Source channel : {}",
                         transfer.message.chan_id_on_a
                     ),
+                    format!(
+                        "Class ID: {}",
+                        transfer.message.packet_data.class_id
+                    ),
                 ]);
                 if let Some(class_uri) = &transfer.message.packet_data.class_uri
                 {
@@ -1511,6 +1553,32 @@ pub async fn to_ledger_vector(
                                 .to_rfc3339())
                     ),
                 ]);
+                if let Some(transfer) = transfer.transfer {
+                    // To facilitate lookups of MASP AssetTypes
+                    let mut asset_types = HashMap::new();
+                    let builder = find_masp_builder(
+                        tx,
+                        transfer.shielded_section_hash,
+                        &mut asset_types,
+                    )
+                    .map_err(|_| Error::Other("Invalid Data".to_string()))?;
+                    make_ledger_token_transfer_endpoints(
+                        &tokens,
+                        &mut tv.output,
+                        &transfer,
+                        builder,
+                        &asset_types,
+                    )
+                    .await?;
+                    make_ledger_token_transfer_endpoints(
+                        &tokens,
+                        &mut tv.output_expert,
+                        &transfer,
+                        builder,
+                        &asset_types,
+                    )
+                    .await?;
+                }
             } else {
                 return Result::Err(Error::Other("Invalid Data".to_string()));
             }
