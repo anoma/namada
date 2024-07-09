@@ -1329,10 +1329,7 @@ pub async fn to_ledger_vector(
                         "Receiver : {}",
                         transfer.message.packet_data.receiver
                     ),
-                    format!(
-                        "Memo : {}",
-                        transfer.message.packet_data.memo
-                    ),
+                    format!("Memo : {}", transfer.message.packet_data.memo),
                     format!(
                         "Timeout height : {}",
                         transfer.message.timeout_height_on_b
@@ -1359,10 +1356,7 @@ pub async fn to_ledger_vector(
                         "Receiver : {}",
                         transfer.message.packet_data.receiver
                     ),
-                    format!(
-                        "Memo : {}",
-                        transfer.message.packet_data.memo
-                    ),
+                    format!("Memo : {}", transfer.message.packet_data.memo),
                     format!(
                         "Timeout height : {}",
                         transfer.message.timeout_height_on_b
@@ -1377,33 +1371,51 @@ pub async fn to_ledger_vector(
                                 .to_rfc3339())
                     ),
                 ]);
-            } else if let Ok(transfer) = MsgNftTransfer::try_from_slice(data.as_ref()) {
+            } else if let Ok(transfer) =
+                MsgNftTransfer::try_from_slice(data.as_ref())
+            {
                 tv.output.extend(vec![
                     format!("Source port : {}", transfer.message.port_id_on_a),
                     format!(
                         "Source channel : {}",
                         transfer.message.chan_id_on_a
                     ),
-                    format!("Class ID: {}", transfer.message.packet_data.class_id),
+                    format!(
+                        "Class ID: {}",
+                        transfer.message.packet_data.class_id
+                    ),
                 ]);
-                if let Some(class_uri) = &transfer.message.packet_data.class_uri {
+                if let Some(class_uri) = &transfer.message.packet_data.class_uri
+                {
                     tv.output.push(format!("Class URI: {}", class_uri));
                 }
-                if let Some(class_data) = &transfer.message.packet_data.class_data {
+                if let Some(class_data) =
+                    &transfer.message.packet_data.class_data
+                {
                     tv.output.push(format!("Class data: {}", class_data));
                 }
-                for (idx, token_id) in transfer.message.packet_data.token_ids.0.iter().enumerate() {
+                for (idx, token_id) in
+                    transfer.message.packet_data.token_ids.0.iter().enumerate()
+                {
                     tv.output.push(format!("Token ID: {}", token_id));
-                    if let Some(token_uris) = &transfer.message.packet_data.token_uris {
+                    if let Some(token_uris) =
+                        &transfer.message.packet_data.token_uris
+                    {
                         tv.output.push(format!(
                             "Token URI: {}",
-                            token_uris.get(idx).ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+                            token_uris.get(idx).ok_or_else(|| Error::Other(
+                                "Invalid Data".to_string()
+                            ))?,
                         ));
                     }
-                    if let Some(token_data) = &transfer.message.packet_data.token_data {
+                    if let Some(token_data) =
+                        &transfer.message.packet_data.token_data
+                    {
                         tv.output.push(format!(
                             "Token data: {}",
-                            token_data.get(idx).ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+                            token_data.get(idx).ok_or_else(|| Error::Other(
+                                "Invalid Data".to_string()
+                            ))?,
                         ));
                     }
                 }
@@ -1439,24 +1451,38 @@ pub async fn to_ledger_vector(
                         transfer.message.chan_id_on_a
                     ),
                 ]);
-                if let Some(class_uri) = &transfer.message.packet_data.class_uri {
+                if let Some(class_uri) = &transfer.message.packet_data.class_uri
+                {
                     tv.output_expert.push(format!("Class URI: {}", class_uri));
                 }
-                if let Some(class_data) = &transfer.message.packet_data.class_data {
-                    tv.output_expert.push(format!("Class data: {}", class_data));
+                if let Some(class_data) =
+                    &transfer.message.packet_data.class_data
+                {
+                    tv.output_expert
+                        .push(format!("Class data: {}", class_data));
                 }
-                for (idx, token_id) in transfer.message.packet_data.token_ids.0.iter().enumerate() {
+                for (idx, token_id) in
+                    transfer.message.packet_data.token_ids.0.iter().enumerate()
+                {
                     tv.output_expert.push(format!("Token ID: {}", token_id));
-                    if let Some(token_uris) = &transfer.message.packet_data.token_uris {
+                    if let Some(token_uris) =
+                        &transfer.message.packet_data.token_uris
+                    {
                         tv.output_expert.push(format!(
                             "Token URI: {}",
-                            token_uris.get(idx).ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+                            token_uris.get(idx).ok_or_else(|| Error::Other(
+                                "Invalid Data".to_string()
+                            ))?,
                         ));
                     }
-                    if let Some(token_data) = &transfer.message.packet_data.token_data {
+                    if let Some(token_data) =
+                        &transfer.message.packet_data.token_data
+                    {
                         tv.output_expert.push(format!(
                             "Token data: {}",
-                            token_data.get(idx).ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+                            token_data.get(idx).ok_or_else(|| Error::Other(
+                                "Invalid Data".to_string()
+                            ))?,
                         ));
                     }
                 }

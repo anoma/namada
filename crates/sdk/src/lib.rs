@@ -846,14 +846,16 @@ pub mod testing {
     use namada_core::address::testing::{
         arb_established_address, arb_non_internal_address,
     };
+    use namada_core::collections::HashMap;
     use namada_core::eth_bridge_pool::PendingTransfer;
     use namada_core::hash::testing::arb_hash;
     use namada_core::key::testing::arb_common_keypair;
+    use namada_core::masp::AssetData;
     use namada_governance::storage::proposal::testing::{
         arb_init_proposal, arb_vote_proposal,
     };
     use namada_governance::{InitProposalData, VoteProposalData};
-    use namada_ibc::testing::{arb_msg_nft_transfer, arb_msg_transfer};
+    use namada_ibc::testing::{arb_ibc_msg_nft_transfer, arb_ibc_msg_transfer};
     use namada_ibc::{MsgNftTransfer, MsgTransfer};
     use namada_token::testing::arb_denominated_amount;
     use namada_token::Transfer;
@@ -873,6 +875,7 @@ pub mod testing {
     use crate::eth_bridge_pool::testing::arb_pending_transfer;
     use crate::key::testing::arb_common_pk;
     use crate::masp::testing::arb_shielded_transfer;
+    use crate::masp::ShieldedTransfer;
     use crate::time::{DateTime, DateTimeUtc, TimeZone, Utc};
     use crate::tx::data::pgf::tests::arb_update_steward_commission;
     use crate::tx::data::pos::tests::{
@@ -884,9 +887,6 @@ pub mod testing {
         Authorization, Code, Commitment, Header, MaspBuilder, Section,
         TxCommitments,
     };
-    use namada_core::masp::AssetData;
-    use crate::masp::ShieldedTransfer;
-    use namada_core::collections::HashMap;
 
     #[derive(Debug, Clone, BorshDeserialize, BorshSchema, BorshSerialize)]
     #[borsh(crate = "::borsh")]
@@ -915,8 +915,8 @@ pub mod testing {
         UpdateStewardCommission(UpdateStewardCommission),
         ResignSteward(Address),
         PendingTransfer(PendingTransfer),
-        IbcMsgTransfer(MsgTransfer),
-        IbcMsgNftTransfer(MsgNftTransfer),
+        IbcMsgTransfer(MsgTransfer, Option<(StoredBuildParams, String)>),
+        IbcMsgNftTransfer(MsgNftTransfer, Option<(StoredBuildParams, String)>),
         Custom,
     }
 
@@ -1086,12 +1086,12 @@ pub mod testing {
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
             code_hash in arb_hash(),
-            (data, aux) in arb_transfer(),
+            (transfer, aux) in arb_transfer(),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
             tx.add_code_from_hash(code_hash, Some(TX_TRANSFER_WASM.to_owned()));
-            tx.add_data(data.clone());
+            tx.add_data(transfer.clone());
             if let Some((shielded_transfer, asset_types, build_params)) = aux {
                 let shielded_section_hash =
                     tx.add_masp_tx_section(shielded_transfer.masp_tx).1;
@@ -1106,9 +1106,9 @@ pub mod testing {
                 });
                 let build_param_bytes =
                     data_encoding::HEXLOWER.encode(&build_params.serialize_to_vec());
-                (tx, TxData::Transfer(data, Some((build_params, build_param_bytes))))
+                (tx, TxData::Transfer(transfer, Some((build_params, build_param_bytes))))
             } else {
-                (tx, TxData::Transfer(data, None))
+                (tx, TxData::Transfer(transfer, None))
             }
         }
     }
@@ -1468,18 +1468,63 @@ pub mod testing {
     }
 
     prop_compose! {
+        /// Generate an arbitrary IBC transfer message
+        pub fn arb_msg_transfer()(
+            message in arb_ibc_msg_transfer(),
+            transfer_aux in option::of(arb_transfer()),
+        ) -> (MsgTransfer, Option<(ShieldedTransfer, HashMap<AssetData, u64>, StoredBuildParams)>) {
+            if let Some((transfer, aux)) = transfer_aux {
+                (MsgTransfer { message, transfer: Some(transfer) }, aux)
+            } else {
+                (MsgTransfer { message, transfer: None }, None)
+            }
+        }
+    }
+
+    prop_compose! {
         /// Generate an arbitrary IBC any transaction
         pub fn arb_ibc_msg_transfer_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
-            msg_transfer in arb_msg_transfer(),
+            (msg_transfer, aux) in arb_msg_transfer(),
             code_hash in arb_hash(),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
             tx.add_serialized_data(msg_transfer.serialize_to_vec());
             tx.add_code_from_hash(code_hash, Some(TX_IBC_WASM.to_owned()));
-            (tx, TxData::IbcMsgTransfer(msg_transfer))
+            if let Some((shielded_transfer, asset_types, build_params)) = aux {
+                let shielded_section_hash =
+                    tx.add_masp_tx_section(shielded_transfer.masp_tx).1;
+                tx.add_masp_builder(MaspBuilder {
+                    asset_types: asset_types.into_keys().collect(),
+                    // Store how the Info objects map to Descriptors/Outputs
+                    metadata: shielded_transfer.metadata,
+                    // Store the data that was used to construct the Transaction
+                    builder: shielded_transfer.builder,
+                    // Link the Builder to the Transaction by hash code
+                    target: shielded_section_hash,
+                });
+                let build_param_bytes =
+                    data_encoding::HEXLOWER.encode(&build_params.serialize_to_vec());
+                (tx, TxData::IbcMsgTransfer(msg_transfer, Some((build_params, build_param_bytes))))
+            } else {
+                (tx, TxData::IbcMsgTransfer(msg_transfer, None))
+            }
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary IBC NFT transfer message
+        pub fn arb_msg_nft_transfer()(
+            message in arb_ibc_msg_nft_transfer(),
+            transfer_aux in option::of(arb_transfer()),
+        ) -> (MsgNftTransfer, Option<(ShieldedTransfer, HashMap<AssetData, u64>, StoredBuildParams)>) {
+            if let Some((transfer, aux)) = transfer_aux {
+                (MsgNftTransfer { message, transfer: Some(transfer) }, aux)
+            } else {
+                (MsgNftTransfer { message, transfer: None }, None)
+            }
         }
     }
 
@@ -1488,14 +1533,31 @@ pub mod testing {
         pub fn arb_ibc_msg_nft_transfer_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
-            msg_transfer in arb_msg_nft_transfer(),
+            (msg_transfer, aux) in arb_msg_nft_transfer(),
             code_hash in arb_hash(),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
             tx.add_serialized_data(msg_transfer.serialize_to_vec());
             tx.add_code_from_hash(code_hash, Some(TX_IBC_WASM.to_owned()));
-            (tx, TxData::IbcMsgNftTransfer(msg_transfer))
+            if let Some((shielded_transfer, asset_types, build_params)) = aux {
+                let shielded_section_hash =
+                    tx.add_masp_tx_section(shielded_transfer.masp_tx).1;
+                tx.add_masp_builder(MaspBuilder {
+                    asset_types: asset_types.into_keys().collect(),
+                    // Store how the Info objects map to Descriptors/Outputs
+                    metadata: shielded_transfer.metadata,
+                    // Store the data that was used to construct the Transaction
+                    builder: shielded_transfer.builder,
+                    // Link the Builder to the Transaction by hash code
+                    target: shielded_section_hash,
+                });
+                let build_param_bytes =
+                    data_encoding::HEXLOWER.encode(&build_params.serialize_to_vec());
+                (tx, TxData::IbcMsgNftTransfer(msg_transfer, Some((build_params, build_param_bytes))))
+            } else {
+                (tx, TxData::IbcMsgNftTransfer(msg_transfer, None))
+            }
         }
     }
 

@@ -730,28 +730,4 @@ pub mod testing {
             any
         }
     }
-
-    prop_compose! {
-        /// Generate an arbitrary IBC transfer message
-        pub fn arb_msg_transfer()(
-            message in arb_ibc_msg_transfer(),
-        ) -> crate::msg::MsgTransfer {
-            crate::msg::MsgTransfer {
-                message,
-                transfer: None,
-            }
-        }
-    }
-
-    prop_compose! {
-        /// Generate an arbitrary IBC NFT transfer message
-        pub fn arb_msg_nft_transfer()(
-            message in arb_ibc_msg_nft_transfer(),
-        ) -> crate::msg::MsgNftTransfer {
-            crate::msg::MsgNftTransfer {
-                message,
-                transfer: None,
-            }
-        }
-    }
 }
