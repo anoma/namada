@@ -31,8 +31,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// A 256 bit number with [`POS_DECIMAL_PRECISION`] number of Dec places.
 ///
-/// To be precise, an instance X of this type should be interpreted as the Dec
-/// X * 10 ^ (-[`POS_DECIMAL_PRECISION`])
+/// To be precise, an instance MaspLocalTaskEnv of this type should be
+/// interpreted as the Dec MaspLocalTaskEnv * 10 ^ (-[`POS_DECIMAL_PRECISION`])
 #[derive(
     Clone,
     Copy,

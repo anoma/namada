@@ -109,6 +109,7 @@ expectrl = "0.7.0"
 eyre = "0.6.12"
 fd-lock = "3.0.12"
 flate2 = "1.0.22"
+flume = "0.11.0"
 fs_extra = "1.2.0"
 futures = "0.3"
 git2 = { version = "0.18.1", default-features = false }
@@ -191,6 +192,7 @@ tracing = "0.1.30"
 tracing-appender = "0.2.2"
 tracing-log = "0.2.0"
 tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
+typed-builder = "0.19.1"
 wasmparser = "0.107.0"
 wasm-instrument = {version = "0.4.0", features = ["sign_ext"]}
 wasmer = "4.3.5"

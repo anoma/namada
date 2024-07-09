@@ -19,7 +19,7 @@ use namada_core::chain::ChainIdPrefix;
 use namada_core::collections::HashMap;
 use namada_node::shell::testing::node::{
     mock_services, MockNode, MockServicesCfg, MockServicesController,
-    MockServicesPackage,
+    MockServicesPackage, SalvageableTestDir,
 };
 use namada_node::shell::testing::utils::TestDir;
 use namada_node::shell::Shell;
@@ -217,8 +217,10 @@ fn create_node(
             50 * 1024 * 1024, // 50 kiB
             50 * 1024 * 1024, // 50 kiB
         ))),
-        test_dir: ManuallyDrop::new(test_dir),
-        keep_temp,
+        test_dir: Arc::new(SalvageableTestDir {
+            keep_temp,
+            test_dir: ManuallyDrop::new(test_dir),
+        }),
         services: Arc::new(services),
         results: Arc::new(Mutex::new(vec![])),
         blocks: Arc::new(Mutex::new(HashMap::new())),

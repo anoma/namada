@@ -1,27 +1,153 @@
 //! Helper functions and types
 
 use std::collections::BTreeMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-use borsh::BorshDeserialize;
+use borsh::{BorshDeserialize, BorshSerialize};
+use masp_primitives::memo::MemoBytes;
 use masp_primitives::merkle_tree::{CommitmentTree, IncrementalWitness};
-use masp_primitives::sapling::Node;
+use masp_primitives::sapling::{Node, Note, PaymentAddress, ViewingKey};
+use masp_primitives::transaction::Transaction;
 use namada_core::collections::HashMap;
 use namada_core::storage::{BlockHeight, TxIndex};
-use namada_tx::{IndexedTx, Tx};
+use namada_tx::{IndexedTx, IndexedTxRange, Tx};
 
-use crate::control_flow::ShutdownSignal;
 use crate::error::{Error, QueryError};
-use crate::io::Io;
 use crate::masp::{
     extract_masp_tx, extract_masp_tx_from_ibc_message,
-    get_indexed_masp_events_at_height, IndexedNoteEntry, Unscanned,
+    get_indexed_masp_events_at_height,
 };
 use crate::queries::Client;
+
+/// Type alias for convenience and profit
+pub type IndexedNoteData = BTreeMap<IndexedTx, Vec<Transaction>>;
+
+/// Type alias for the entries of [`IndexedNoteData`] iterators
+pub type IndexedNoteEntry = (IndexedTx, Vec<Transaction>);
+
+/// Borrowed version of an [`IndexedNoteEntry`]
+pub type IndexedNoteEntryRefs<'a> = (&'a IndexedTx, &'a Vec<Transaction>);
+
+/// Type alias for a successful note decryption.
+pub type DecryptedData = (Note, PaymentAddress, MemoBytes);
+
+/// Cache of decrypted notes.
+#[derive(Default, BorshSerialize, BorshDeserialize)]
+pub struct TrialDecrypted {
+    inner: HashMap<IndexedTx, HashMap<ViewingKey, Vec<DecryptedData>>>,
+}
+
+impl TrialDecrypted {
+    /// Get cached notes decrypted with `vk`, indexed at `itx`.
+    pub fn get(
+        &self,
+        itx: &IndexedTx,
+        vk: &ViewingKey,
+    ) -> Option<&Vec<DecryptedData>> {
+        self.inner.get(itx).and_then(|h| h.get(vk))
+    }
+
+    /// Take cached notes decrypted with `vk`, indexed at `itx`.
+    pub fn take(
+        &mut self,
+        itx: &IndexedTx,
+        vk: &ViewingKey,
+    ) -> Option<Vec<DecryptedData>> {
+        let (notes, no_more_notes) = {
+            let viewing_keys_to_notes = self.inner.get_mut(itx)?;
+            let notes = viewing_keys_to_notes.swap_remove(vk)?;
+            (notes, viewing_keys_to_notes.is_empty())
+        };
+        if no_more_notes {
+            self.inner.swap_remove(itx);
+        }
+        Some(notes)
+    }
+
+    /// Cache `notes` decrypted with `vk`, indexed at `itx`.
+    pub fn insert(
+        &mut self,
+        itx: IndexedTx,
+        vk: ViewingKey,
+        notes: Vec<DecryptedData>,
+    ) {
+        self.inner.entry(itx).or_default().insert(vk, notes);
+    }
+
+    /// Check if empty
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+}
+
+/// A cache of fetched indexed transactions.
+///
+/// An invariant that shielded-sync maintains is that
+/// this cache either contains all transactions from
+/// a given height, or none.
+#[derive(Debug, Default, Clone, BorshSerialize, BorshDeserialize)]
+pub struct Fetched {
+    pub(crate) txs: IndexedNoteData,
+}
+
+impl Fetched {
+    /// Append elements to the cache from an iterator.
+    pub fn extend<I>(&mut self, items: I)
+    where
+        I: IntoIterator<Item = IndexedNoteEntry>,
+    {
+        self.txs.extend(items);
+    }
+
+    /// Iterates over the fetched transactions in the order
+    /// they appear in blocks.
+    pub fn iter(
+        &self,
+    ) -> impl IntoIterator<Item = IndexedNoteEntryRefs<'_>> + '_ {
+        &self.txs
+    }
+
+    /// Iterates over the fetched transactions in the order
+    /// they appear in blocks, whilst taking ownership of
+    /// the returned data.
+    pub fn take(&mut self) -> impl IntoIterator<Item = IndexedNoteEntry> {
+        std::mem::take(&mut self.txs)
+    }
+
+    /// Add a single entry to the cache.
+    pub fn insert(&mut self, (k, v): IndexedNoteEntry) {
+        self.txs.insert(k, v);
+    }
+
+    /// Check if this cache has already been populated for a given
+    /// block height.
+    pub fn contains_height(&self, height: BlockHeight) -> bool {
+        self.txs
+            .range(IndexedTxRange::with_height(height))
+            .next()
+            .is_some()
+    }
+
+    /// Check if empty
+    pub fn is_empty(&self) -> bool {
+        self.txs.is_empty()
+    }
+}
+
+impl IntoIterator for Fetched {
+    type IntoIter = <IndexedNoteData as IntoIterator>::IntoIter;
+    type Item = IndexedNoteEntry;
+
+    fn into_iter(mut self) -> Self::IntoIter {
+        let txs = std::mem::take(&mut self.txs);
+        txs.into_iter()
+    }
+}
 
 /// When retrying to fetch all notes in a
 /// loop, this dictates the strategy for
 /// how many attempts should be made.
+#[derive(Copy, Clone)]
 pub enum RetryStrategy {
     /// Always retry
     Forever,
@@ -29,18 +155,17 @@ pub enum RetryStrategy {
     Times(u64),
 }
 
-impl Iterator for RetryStrategy {
-    type Item = ();
-
-    fn next(&mut self) -> Option<Self::Item> {
+impl RetryStrategy {
+    /// Check if retries are exhausted.
+    pub fn may_retry(&mut self) -> bool {
         match self {
-            Self::Forever => Some(()),
-            Self::Times(count) => {
-                if *count == 0 {
-                    None
+            RetryStrategy::Forever => true,
+            RetryStrategy::Times(left) => {
+                if *left == 0 {
+                    false
                 } else {
-                    *count -= 1;
-                    Some(())
+                    *left -= 1;
+                    true
                 }
             }
         }
@@ -90,7 +215,7 @@ impl MaspClientCapabilities {
 /// of how shielded-sync fetches the necessary data
 /// from a remote server.
 // TODO: redesign this api with progress bars in mind
-pub trait MaspClient {
+pub trait MaspClient: Clone {
     /// Return the last block height we can retrieve data from.
     #[allow(async_fn_in_trait)]
     async fn last_block_height(&self) -> Result<Option<BlockHeight>, Error>;
@@ -99,14 +224,11 @@ pub trait MaspClient {
     /// keeping track of progress through `progress`. The fetched transfers
     /// are sent over to a separate worker through `tx_sender`.
     #[allow(async_fn_in_trait)]
-    async fn fetch_shielded_transfers<IO: Io>(
+    async fn fetch_shielded_transfers(
         &self,
-        progress: &impl ProgressTracker<IO>,
-        shutdown_signal: &mut ShutdownSignal,
-        tx_sender: FetchQueueSender,
         from: BlockHeight,
         to: BlockHeight,
-    ) -> Result<(), Error>;
+    ) -> Result<Vec<IndexedNoteEntry>, Error>;
 
     /// Return the capabilities of this client.
     fn capabilities(&self) -> MaspClientCapabilities;
@@ -136,53 +258,52 @@ pub trait MaspClient {
 /// An inefficient MASP client which simply uses a
 /// client to the blockchain to query it directly.
 #[cfg(not(target_family = "wasm"))]
-pub struct LedgerMaspClient<'client, C> {
-    client: &'client C,
+pub struct LedgerMaspClient<C> {
+    client: Arc<C>,
 }
 
-#[cfg(not(target_family = "wasm"))]
-impl<'client, C> LedgerMaspClient<'client, C> {
-    /// Create a new [`MaspClient`] given an rpc client.
-    pub const fn new(client: &'client C) -> Self {
-        Self { client }
+impl<C> Clone for LedgerMaspClient<C> {
+    fn clone(&self) -> Self {
+        Self {
+            client: Arc::clone(&self.client),
+        }
     }
 }
 
 #[cfg(not(target_family = "wasm"))]
-impl<C: Client + Sync> MaspClient for LedgerMaspClient<'_, C> {
+impl<C> LedgerMaspClient<C> {
+    /// Create a new [`MaspClient`] given an rpc client.
+    #[inline(always)]
+    pub fn new(client: C) -> Self {
+        Self {
+            client: Arc::new(client),
+        }
+    }
+}
+
+#[cfg(not(target_family = "wasm"))]
+impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
     async fn last_block_height(&self) -> Result<Option<BlockHeight>, Error> {
-        let maybe_block = crate::rpc::query_block(self.client).await?;
+        let maybe_block = crate::rpc::query_block(&*self.client).await?;
         Ok(maybe_block.map(|b| b.height))
     }
 
-    async fn fetch_shielded_transfers<IO: Io>(
+    async fn fetch_shielded_transfers(
         &self,
-        progress: &impl ProgressTracker<IO>,
-        shutdown_signal: &mut ShutdownSignal,
-        mut tx_sender: FetchQueueSender,
-        BlockHeight(from): BlockHeight,
-        BlockHeight(to): BlockHeight,
-    ) -> Result<(), Error> {
+        from: BlockHeight,
+        to: BlockHeight,
+    ) -> Result<Vec<IndexedNoteEntry>, Error> {
         // Fetch all the transactions we do not have yet
-        let mut fetch_iter = progress.fetch(from..=to);
+        let mut txs = vec![];
 
-        loop {
-            let Some(height) = fetch_iter.peek().copied() else {
-                break;
-            };
-            _ = fetch_iter.next();
-
-            if shutdown_signal.received() {
-                return Err(Error::Interrupt(
-                    "[ShieldedSync::Fetching]".to_string(),
-                ));
-            }
-            if tx_sender.contains_height(height) {
-                continue;
-            }
+        for height in from.0..=to.0 {
+            // TODO: Fix
+            // if tx_sender.contains_height(height) {
+            //     continue;
+            // }
 
             let txs_results = match get_indexed_masp_events_at_height(
-                self.client,
+                &*self.client,
                 height.into(),
                 None,
             )
@@ -221,7 +342,7 @@ impl<C: Client + Sync> MaspClient for LedgerMaspClient<'_, C> {
                         .extend(extract_masp_tx_from_ibc_message(&tx)?);
                 }
 
-                tx_sender.send((
+                txs.push((
                     IndexedTx {
                         height: height.into(),
                         index: idx,
@@ -231,7 +352,7 @@ impl<C: Client + Sync> MaspClient for LedgerMaspClient<'_, C> {
             }
         }
 
-        Ok(())
+        Ok(txs)
     }
 
     #[inline(always)]
@@ -332,11 +453,6 @@ impl IndexerMaspClient {
 
 #[cfg(not(target_family = "wasm"))]
 impl MaspClient for IndexerMaspClient {
-    #[inline(always)]
-    fn capabilities(&self) -> MaspClientCapabilities {
-        MaspClientCapabilities::AllData
-    }
-
     async fn last_block_height(&self) -> Result<Option<BlockHeight>, Error> {
         use serde::Deserialize;
 
@@ -376,14 +492,11 @@ impl MaspClient for IndexerMaspClient {
         })
     }
 
-    async fn fetch_shielded_transfers<IO: Io>(
+    async fn fetch_shielded_transfers(
         &self,
-        progress: &impl ProgressTracker<IO>,
-        shutdown_signal: &mut ShutdownSignal,
-        mut tx_sender: FetchQueueSender,
         BlockHeight(mut from): BlockHeight,
         BlockHeight(to): BlockHeight,
-    ) -> Result<(), Error> {
+    ) -> Result<Vec<IndexedNoteEntry>, Error> {
         use serde::Deserialize;
 
         #[derive(Deserialize)]
@@ -412,7 +525,7 @@ impl MaspClient for IndexerMaspClient {
         }
 
         const MAX_RANGE_THRES: u64 = 30;
-        let mut fetch_iter = progress.fetch(from..=to);
+        let mut txs = vec![];
 
         loop {
             let from_height = from;
@@ -420,7 +533,7 @@ impl MaspClient for IndexerMaspClient {
             let to_height = from + off;
             from += off;
 
-            let txs_fut = async {
+            let payload: TxResponse = {
                 let response = self
                     .client
                     .get(self.endpoint("/tx"))
@@ -441,29 +554,13 @@ impl MaspClient for IndexerMaspClient {
                          {from_height}-{to_height}: {err}"
                     )));
                 }
-                let payload: TxResponse =
-                    response.json().await.map_err(|err| {
-                        Error::Other(format!(
-                            "Could not deserialize the transactions JSON \
-                             response in the height range \
-                             {from_height}-{to_height}: {err}"
-                        ))
-                    })?;
-
-                Ok::<_, Error>(payload)
+                response.json().await.map_err(|err| {
+                    Error::Other(format!(
+                        "Could not deserialize the transactions JSON response \
+                         in the height range {from_height}-{to_height}: {err}"
+                    ))
+                })?
             };
-            let payload = tokio::select! {
-                maybe_payload = txs_fut => {
-                    maybe_payload?
-                }
-                _ = &mut *shutdown_signal => {
-                    return Err(Error::Interrupt(
-                        "[ShieldedSync::Fetching]".to_string(),
-                    ));
-                }
-            };
-
-            let mut last_height = None;
 
             for Transaction {
                 batch,
@@ -487,19 +584,13 @@ impl MaspClient for IndexerMaspClient {
                     );
                 }
 
-                tx_sender.send((
+                txs.push((
                     IndexedTx {
                         height: BlockHeight(block_height),
                         index: TxIndex(block_index),
                     },
                     extracted_masp_txs,
                 ));
-
-                let curr_height = Some(block_height);
-                if curr_height > last_height {
-                    last_height = curr_height;
-                    _ = fetch_iter.next();
-                }
             }
 
             if from >= to {
@@ -507,12 +598,12 @@ impl MaspClient for IndexerMaspClient {
             }
         }
 
-        // NB: a hack to drain the iterator in case
-        // there were still some items left
-        // TODO: improve this lol
-        while fetch_iter.next().is_some() {}
+        Ok(txs)
+    }
 
-        Ok(())
+    #[inline(always)]
+    fn capabilities(&self) -> MaspClientCapabilities {
+        MaspClientCapabilities::AllData
     }
 
     async fn fetch_commitment_tree(
@@ -686,254 +777,278 @@ impl MaspClient for IndexerMaspClient {
     }
 }
 
-/// A channel-like struct for "sending" newly fetched blocks
-/// to the scanning algorithm.
-///
-/// Holds a pointer to the unscanned cache which it can append to.
-/// Furthermore, has an actual channel for keeping track if
-/// 1. The process in possession of the channel is still alive
-/// 2. Quickly updating the latest block height scanned.
-#[derive(Clone)]
-pub struct FetchQueueSender {
-    cache: Unscanned,
-    last_fetched: flume::Sender<BlockHeight>,
-}
+/// Given a block height range we wish to request and a cache of fetched block
+/// heights, returns the set of sub-ranges we need to request so that all blocks
+/// in the inclusive range `[from, to]` get cached.
+pub fn blocks_left_to_fetch(
+    from: BlockHeight,
+    to: BlockHeight,
+    fetched: &Fetched,
+) -> Vec<[BlockHeight; 2]> {
+    const ZERO: BlockHeight = BlockHeight(0);
 
-/// A channel-like struct for "receiving" new fetched
-/// blocks for the scanning algorithm.
-///
-/// This is implemented as an iterator for the scanning
-/// algorithm. This receiver pulls from the cache until
-/// it is empty. It then waits until new entries appear
-/// in the cache or the sender hangs up.
-#[derive(Clone)]
-pub(super) struct FetchQueueReceiver {
-    cache: Unscanned,
-    last_fetched: flume::Receiver<BlockHeight>,
-}
-
-impl FetchQueueReceiver {
-    /// Check if the sender has hung up.
-    fn sender_alive(&self) -> bool {
-        self.last_fetched.sender_count() > 0
+    if from > to {
+        panic!("Empty range passed to `blocks_left_to_fetch`, [{from}, {to}]");
     }
-}
+    if from == ZERO || to == ZERO {
+        panic!("Block height values start at 1");
+    }
 
-impl Iterator for FetchQueueReceiver {
-    type Item = IndexedNoteEntry;
+    let mut to_fetch = Vec::with_capacity((to.0 - from.0 + 1) as usize);
+    let mut current_from = from;
+    let mut need_to_fetch = true;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(entry) = self.cache.pop_first() {
-            Some(entry)
-        } else {
-            while self.sender_alive() {
-                if let Some(entry) = self.cache.pop_first() {
-                    return Some(entry);
-                }
-                core::hint::spin_loop();
+    for height in (from.0..=to.0).map(BlockHeight) {
+        let height_in_cache = fetched.contains_height(height);
+
+        // cross an upper gap boundary
+        if need_to_fetch && height_in_cache {
+            if height > current_from {
+                to_fetch.push([
+                    current_from,
+                    height.checked_sub(1).expect("Height is greater than zero"),
+                ]);
             }
-            None
+            need_to_fetch = false;
+        } else if !need_to_fetch && !height_in_cache {
+            // cross a lower gap boundary
+            current_from = height;
+            need_to_fetch = true;
         }
     }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let size = self.last_fetched.len();
-        (size, Some(size))
+    if need_to_fetch {
+        to_fetch.push([current_from, to]);
     }
-}
-
-impl FetchQueueSender {
-    /// Checks if the channel is already populated for the given block height
-    pub(super) fn contains_height(&self, height: u64) -> bool {
-        self.cache.contains_height(height)
-    }
-
-    /// Send a new value of the channel
-    pub(super) fn send(&mut self, data: IndexedNoteEntry) {
-        self.last_fetched.send(data.0.height).unwrap();
-        self.cache.insert(data);
-    }
-}
-
-/// A convenience for creating a channel for fetching blocks.
-pub mod fetch_channel {
-
-    use super::{FetchQueueReceiver, FetchQueueSender, Unscanned};
-    pub(in super::super) fn new(
-        cache: Unscanned,
-    ) -> (FetchQueueSender, FetchQueueReceiver) {
-        let (fetch_send, fetch_recv) = flume::unbounded();
-        (
-            FetchQueueSender {
-                cache: cache.clone(),
-                last_fetched: fetch_send,
-            },
-            FetchQueueReceiver {
-                cache: cache.clone(),
-                last_fetched: fetch_recv,
-            },
-        )
-    }
-}
-
-/// An enum to indicate how to track progress depending on
-/// whether sync is currently fetch or scanning blocks.
-#[derive(Debug, Copy, Clone)]
-pub enum ProgressType {
-    /// Fetch
-    Fetch,
-    /// Scan
-    Scan,
-}
-
-/// A peekable iterator interface
-pub trait PeekableIter<I> {
-    /// Peek at next element
-    fn peek(&mut self) -> Option<&I>;
-
-    /// get next element
-    fn next(&mut self) -> Option<I>;
-}
-
-impl<I, J> PeekableIter<J> for std::iter::Peekable<I>
-where
-    I: Iterator<Item = J>,
-{
-    fn peek(&mut self) -> Option<&J> {
-        self.peek()
-    }
-
-    fn next(&mut self) -> Option<J> {
-        <Self as Iterator>::next(self)
-    }
-}
-
-/// This trait keeps track of how much progress the
-/// shielded sync algorithm has made relative to the inputs.
-///
-/// It should track how much has been fetched and scanned and
-/// whether the fetching has been finished.
-///
-/// Additionally, it has access to IO in case the struct implementing
-/// this trait wishes to log this progress.
-pub trait ProgressTracker<IO: Io> {
-    /// Get an IO handle
-    fn io(&self) -> &IO;
-
-    /// Return an iterator to fetched shielded transfers
-    fn fetch<I>(&self, items: I) -> impl PeekableIter<u64>
-    where
-        I: Iterator<Item = u64>;
-
-    /// Return an iterator over MASP transactions to be scanned
-    fn scan<I>(
-        &self,
-        items: I,
-    ) -> impl Iterator<Item = IndexedNoteEntry> + Send
-    where
-        I: Iterator<Item = IndexedNoteEntry> + Send;
-
-    /// The number of blocks that need to be fetched
-    fn left_to_fetch(&self) -> usize;
-}
-
-/// The default type for tracking the progress of shielded-sync.
-#[derive(Debug, Clone)]
-pub struct DefaultTracker<'io, IO: Io> {
-    io: &'io IO,
-    progress: Arc<Mutex<IterProgress>>,
-}
-
-impl<'io, IO: Io> DefaultTracker<'io, IO> {
-    /// New [`DefaultTracker`]
-    pub fn new(io: &'io IO) -> Self {
-        Self {
-            io,
-            progress: Arc::new(Mutex::new(Default::default())),
-        }
-    }
-}
-
-#[derive(Default, Copy, Clone, Debug)]
-pub(super) struct IterProgress {
-    pub index: usize,
-    pub length: usize,
-}
-
-pub(super) struct DefaultFetchIterator<I>
-where
-    I: Iterator<Item = u64>,
-{
-    pub inner: I,
-    pub progress: Arc<Mutex<IterProgress>>,
-    pub peeked: Option<u64>,
-}
-
-impl<I> PeekableIter<u64> for DefaultFetchIterator<I>
-where
-    I: Iterator<Item = u64>,
-{
-    fn peek(&mut self) -> Option<&u64> {
-        if self.peeked.is_none() {
-            self.peeked = self.inner.next();
-        }
-        self.peeked.as_ref()
-    }
-
-    fn next(&mut self) -> Option<u64> {
-        self.peek();
-        let item = self.peeked.take()?;
-        let mut locked = self.progress.lock().unwrap();
-        locked.index += 1;
-        Some(item)
-    }
-}
-
-impl<'io, IO: Io> ProgressTracker<IO> for DefaultTracker<'io, IO> {
-    fn io(&self) -> &IO {
-        self.io
-    }
-
-    fn fetch<I>(&self, items: I) -> impl PeekableIter<u64>
-    where
-        I: Iterator<Item = u64>,
-    {
-        {
-            let mut locked = self.progress.lock().unwrap();
-            locked.length = items.size_hint().0;
-        }
-        DefaultFetchIterator {
-            inner: items,
-            progress: self.progress.clone(),
-            peeked: None,
-        }
-    }
-
-    fn scan<I>(&self, items: I) -> impl Iterator<Item = IndexedNoteEntry> + Send
-    where
-        I: IntoIterator<Item = IndexedNoteEntry>,
-    {
-        let items: Vec<_> = items.into_iter().collect();
-        items.into_iter()
-    }
-
-    fn left_to_fetch(&self) -> usize {
-        let locked = self.progress.lock().unwrap();
-        locked.length - locked.index
-    }
+    to_fetch
 }
 
 #[cfg(test)]
-mod util_tests {
-    use crate::masp::utils::RetryStrategy;
+mod test_blocks_left_to_fetch {
+    use proptest::prelude::*;
+
+    use super::*;
+
+    struct ArbRange {
+        max_from: u64,
+        max_len: u64,
+    }
+
+    impl Default for ArbRange {
+        fn default() -> Self {
+            Self {
+                max_from: u64::MAX,
+                max_len: 1000,
+            }
+        }
+    }
+
+    fn fetched_cache_with_blocks(
+        blocks_in_cache: impl IntoIterator<Item = BlockHeight>,
+    ) -> Fetched {
+        let txs = blocks_in_cache
+            .into_iter()
+            .map(|height| {
+                (
+                    IndexedTx {
+                        height,
+                        index: TxIndex(0),
+                    },
+                    vec![],
+                )
+            })
+            .collect();
+        Fetched { txs }
+    }
+
+    fn blocks_in_range(
+        from: BlockHeight,
+        to: BlockHeight,
+    ) -> impl Iterator<Item = BlockHeight> {
+        (from.0..=to.0).map(BlockHeight)
+    }
+
+    prop_compose! {
+        fn arb_block_range(ArbRange { max_from, max_len }: ArbRange)
+        (
+            from in 1u64..=max_from,
+        )
+        (
+            from in Just(from),
+            to in from..from.saturating_add(max_len)
+        )
+        -> (BlockHeight, BlockHeight)
+        {
+            (BlockHeight(from), BlockHeight(to))
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn test_empty_cache_with_singleton_output((from, to) in arb_block_range(ArbRange::default())) {
+            let empty_cache = fetched_cache_with_blocks([]);
+
+            let &[[returned_from, returned_to]] = blocks_left_to_fetch(
+                from,
+                to,
+                &empty_cache,
+            )
+            .as_slice() else {
+                return Err(TestCaseError::Fail("Test failed".into()));
+            };
+
+            prop_assert_eq!(returned_from, from);
+            prop_assert_eq!(returned_to, to);
+        }
+
+        #[test]
+        fn test_non_empty_cache_with_empty_output((from, to) in arb_block_range(ArbRange::default())) {
+            let cache = fetched_cache_with_blocks(
+                blocks_in_range(from, to)
+            );
+
+            let &[] = blocks_left_to_fetch(
+                from,
+                to,
+                &cache,
+            )
+            .as_slice() else {
+                return Err(TestCaseError::Fail("Test failed".into()));
+            };
+        }
+
+        #[test]
+        fn test_non_empty_cache_with_singleton_input_and_maybe_singleton_output(
+            (from, to) in arb_block_range(ArbRange::default()),
+            block_height in 1u64..1000,
+        ) {
+            test_non_empty_cache_with_singleton_input_and_maybe_singleton_output_inner(
+                from,
+                to,
+                BlockHeight(block_height),
+            )?;
+        }
+
+        #[test]
+        fn test_non_empty_cache_with_singleton_hole_and_singleton_output(
+            (first_from, first_to) in
+                arb_block_range(ArbRange {
+                    max_from: 1_000_000,
+                    max_len: 1000,
+                }),
+        ) {
+            // [from, to], [to + 2, 2 * to - from + 2]
+
+            let hole = first_to + 1;
+            let second_from = BlockHeight(first_to.0 + 2);
+            let second_to = BlockHeight(2 * first_to.0 - first_from.0 + 2);
+
+            let cache = fetched_cache_with_blocks(
+                blocks_in_range(first_from, first_to)
+                    .chain(blocks_in_range(second_from, second_to)),
+            );
+
+            let &[[returned_from, returned_to]] = blocks_left_to_fetch(
+                first_from,
+                second_to,
+                &cache,
+            )
+            .as_slice() else {
+                return Err(TestCaseError::Fail("Test failed".into()));
+            };
+
+            prop_assert_eq!(returned_from, hole);
+            prop_assert_eq!(returned_to, hole);
+        }
+    }
+
+    fn test_non_empty_cache_with_singleton_input_and_maybe_singleton_output_inner(
+        from: BlockHeight,
+        to: BlockHeight,
+        block_height: BlockHeight,
+    ) -> Result<(), TestCaseError> {
+        let cache = fetched_cache_with_blocks(blocks_in_range(from, to));
+
+        if block_height >= from && block_height <= to {
+            // random height is inside the range of txs in cache
+
+            let &[] = blocks_left_to_fetch(block_height, block_height, &cache)
+                .as_slice()
+            else {
+                return Err(TestCaseError::Fail("Test failed".into()));
+            };
+        } else {
+            // random height is outside the range of txs in cache
+
+            let &[[returned_from, returned_to]] =
+                blocks_left_to_fetch(block_height, block_height, &cache)
+                    .as_slice()
+            else {
+                return Err(TestCaseError::Fail("Test failed".into()));
+            };
+
+            prop_assert_eq!(returned_from, block_height);
+            prop_assert_eq!(returned_to, block_height);
+        }
+
+        Ok(())
+    }
 
     #[test]
-    fn test_retry_strategy() {
-        let strategy = RetryStrategy::Times(3);
-        let mut counter = 0;
-        for _ in strategy {
-            counter += 1;
-        }
-        assert_eq!(counter, 3);
+    fn test_happy_flow() {
+        let cache = fetched_cache_with_blocks([
+            BlockHeight(1),
+            BlockHeight(5),
+            BlockHeight(6),
+            BlockHeight(8),
+            BlockHeight(11),
+        ]);
+
+        let from = BlockHeight(1);
+        let to = BlockHeight(10);
+
+        let blocks_to_fetch = blocks_left_to_fetch(from, to, &cache);
+        assert_eq!(
+            &blocks_to_fetch,
+            &[
+                [BlockHeight(2), BlockHeight(4)],
+                [BlockHeight(7), BlockHeight(7)],
+                [BlockHeight(9), BlockHeight(10)],
+            ],
+        );
+    }
+
+    #[test]
+    fn test_endpoint_cases() {
+        let cache =
+            fetched_cache_with_blocks(blocks_in_range(2.into(), 4.into()));
+        let blocks_to_fetch = blocks_left_to_fetch(1.into(), 3.into(), &cache);
+        assert_eq!(&blocks_to_fetch, &[[BlockHeight(1), BlockHeight(1)]]);
+
+        // -------------
+
+        let cache =
+            fetched_cache_with_blocks(blocks_in_range(1.into(), 3.into()));
+        let blocks_to_fetch = blocks_left_to_fetch(2.into(), 4.into(), &cache);
+        assert_eq!(&blocks_to_fetch, &[[BlockHeight(4), BlockHeight(4)]]);
+
+        // -------------
+
+        let cache =
+            fetched_cache_with_blocks(blocks_in_range(2.into(), 4.into()));
+        let blocks_to_fetch = blocks_left_to_fetch(1.into(), 5.into(), &cache);
+        assert_eq!(
+            &blocks_to_fetch,
+            &[
+                [BlockHeight(1), BlockHeight(1)],
+                [BlockHeight(5), BlockHeight(5)],
+            ],
+        );
+
+        // -------------
+
+        let cache =
+            fetched_cache_with_blocks(blocks_in_range(1.into(), 5.into()));
+        let blocks_to_fetch = blocks_left_to_fetch(2.into(), 4.into(), &cache);
+        assert!(blocks_to_fetch.is_empty());
     }
 }

@@ -1,16 +1,15 @@
 //! MASP verification wrappers.
 
+mod shielded_sync;
 #[cfg(test)]
 mod test_utils;
-pub mod utils;
+
 use std::cmp::Ordering;
 use std::collections::{btree_map, BTreeMap, BTreeSet};
 use std::fmt::Debug;
-use std::io::{Read, Write};
-use std::sync::{Arc, Mutex};
+use std::path::PathBuf;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
 use itertools::Itertools;
 use masp_primitives::asset_type::AssetType;
 #[cfg(feature = "mainnet")]
@@ -70,14 +69,18 @@ use rand_core::{CryptoRng, OsRng, RngCore, SeedableRng};
 use smooth_operator::checked;
 use thiserror::Error;
 
-use crate::control_flow::ShutdownSignal;
 use crate::error::{Error, QueryError};
 use crate::io::Io;
-use crate::masp::utils::{
-    fetch_channel, FetchQueueSender, MaspClient, ProgressTracker, RetryStrategy,
+use crate::masp::shielded_sync::dispatcher::DispatcherCache;
+use crate::masp::shielded_sync::utils::MaspClient;
+#[cfg(not(target_family = "wasm"))]
+pub use crate::masp::shielded_sync::MaspLocalTaskEnv;
+pub use crate::masp::shielded_sync::{
+    utils, ShieldedSyncConfig, ShieldedSyncConfigBuilder,
 };
 use crate::queries::Client;
 use crate::rpc::{query_conversion, query_denom};
+use crate::task_env::TaskEnvironment;
 use crate::{
     control_flow, display_line, edisplay_line, query_native_token, rpc,
     MaybeSend, MaybeSync, Namada,
@@ -89,12 +92,6 @@ pub const ENV_VAR_MASP_TEST_SEED: &str = "NAMADA_MASP_TEST_SEED";
 
 /// The network to use for MASP
 const NETWORK: Network = Network;
-
-/// Type alias for convenience and profit
-pub type IndexedNoteData = BTreeMap<IndexedTx, Vec<Transaction>>;
-
-/// Type alias for the entries of [`IndexedNoteData`] iterators
-pub type IndexedNoteEntry = (IndexedTx, Vec<Transaction>);
 
 /// Shielded transfer
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize, BorshDeserializer)]
@@ -241,6 +238,21 @@ pub trait ShieldedUtils:
         &self,
         ctx: &ShieldedContext<U>,
     ) -> std::io::Result<()>;
+
+    /// Save a cache of data as part of shielded sync if that
+    /// process gets interrupted.
+    async fn cache_save(
+        &self,
+        _cache: &DispatcherCache,
+    ) -> std::io::Result<()> {
+        unimplemented!()
+    }
+
+    /// Load a cache of data as part of shielded sync if that
+    /// process gets interrupted.
+    async fn cache_load(&self) -> std::io::Result<DispatcherCache> {
+        unimplemented!()
+    }
 }
 
 /// Make a ViewingKey that can view notes encrypted by given ExtendedSpendingKey
@@ -359,107 +371,12 @@ pub type TransferDelta = HashMap<Address, MaspChange>;
 /// Represents the changes that were made to a list of shielded accounts
 pub type TransactionDelta = HashMap<ViewingKey, I128Sum>;
 
-/// A cache of fetched indexed transactions.
-///
-/// An invariant that shielded-sync maintains is that
-/// this cache either contains all transactions from
-/// a given height, or none.
-#[derive(Debug, Default, Clone)]
-pub struct Unscanned {
-    txs: Arc<Mutex<IndexedNoteData>>,
-}
+/// Maps a shielded tx to the index of its first output note.
+pub type TxNoteMap = BTreeMap<IndexedTx, usize>;
 
-impl BorshSerialize for Unscanned {
-    fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        let locked = self.txs.lock().unwrap();
-        let bytes = locked.serialize_to_vec();
-        writer.write(&bytes).map(|_| ())
-    }
-}
+/// Maps the note index (in the commitment tree) to a witness
+pub type WitnessMap = HashMap<usize, IncrementalWitness<Node>>;
 
-impl BorshDeserialize for Unscanned {
-    fn deserialize_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
-        let unscanned = IndexedNoteData::deserialize_reader(reader)?;
-        Ok(Self {
-            txs: Arc::new(Mutex::new(unscanned)),
-        })
-    }
-}
-
-impl Unscanned {
-    /// Append elements to the cache from an iterator.
-    pub fn extend<I>(&self, items: I)
-    where
-        I: IntoIterator<Item = IndexedNoteEntry>,
-    {
-        let mut locked = self.txs.lock().unwrap();
-        locked.extend(items);
-    }
-
-    /// Add a single entry to the cache.
-    pub fn insert(&self, (k, v): IndexedNoteEntry) {
-        let mut locked = self.txs.lock().unwrap();
-        locked.insert(k, v);
-    }
-
-    /// Check if this cache has already been populated for a given
-    /// block height.
-    pub fn contains_height(&self, height: u64) -> bool {
-        let locked = self.txs.lock().unwrap();
-        locked.keys().any(|k| k.height.0 == height)
-    }
-
-    /// We remove all indices from blocks that have been entirely scanned.
-    /// If a block is only partially scanned, we leave all the events in the
-    /// cache.
-    pub fn scanned(&self, ix: &IndexedTx) {
-        let mut locked = self.txs.lock().unwrap();
-        locked.retain(|i, _| i.height >= ix.height);
-    }
-
-    /// Gets the latest block height present in the cache
-    pub fn latest_height(&self) -> BlockHeight {
-        let txs = self.txs.lock().unwrap();
-        txs.keys()
-            .max_by_key(|ix| ix.height)
-            .map(|ix| ix.height)
-            .unwrap_or_default()
-    }
-
-    /// Gets the first block height present in the cache
-    pub fn first_height(&self) -> BlockHeight {
-        let txs = self.txs.lock().unwrap();
-        txs.keys()
-            .min_by_key(|ix| ix.height)
-            .map(|ix| ix.height)
-            .unwrap_or_default()
-    }
-
-    /// Remove the first entry from the cache and return it.
-    pub fn pop_first(&self) -> Option<IndexedNoteEntry> {
-        let mut locked = self.txs.lock().unwrap();
-        locked.pop_first()
-    }
-
-    /// Check if empty
-    pub fn is_empty(&self) -> bool {
-        let locked = self.txs.lock().unwrap();
-        locked.is_empty()
-    }
-}
-
-impl IntoIterator for Unscanned {
-    type IntoIter = <IndexedNoteData as IntoIterator>::IntoIter;
-    type Item = IndexedNoteEntry;
-
-    fn into_iter(self) -> Self::IntoIter {
-        let txs = {
-            let mut locked = self.txs.lock().unwrap();
-            std::mem::take(&mut *locked)
-        };
-        txs.into_iter()
-    }
-}
 #[derive(BorshSerialize, BorshDeserialize, Debug)]
 /// The possible sync states of the shielded context
 pub enum ContextSyncStatus {
@@ -493,7 +410,7 @@ pub struct ShieldedContext<U: ShieldedUtils> {
     /// Maps note positions to the diversifier of their payment address
     pub div_map: HashMap<usize, Diversifier>,
     /// Maps note positions to their witness (used to make merkle paths)
-    pub witness_map: HashMap<usize, IncrementalWitness<Node>>,
+    pub witness_map: WitnessMap,
     /// The set of note positions that have been spent
     pub spents: HashSet<usize>,
     /// Maps asset types to their decodings
@@ -501,9 +418,7 @@ pub struct ShieldedContext<U: ShieldedUtils> {
     /// Maps note positions to their corresponding viewing keys
     pub vk_map: HashMap<usize, ViewingKey>,
     /// Maps a shielded tx to the index of its first output note.
-    pub tx_note_map: BTreeMap<IndexedTx, usize>,
-    /// A cache of fetched indexed txs.
-    pub unscanned: Unscanned,
+    pub tx_note_map: TxNoteMap,
     /// The sync state of the context
     pub sync_status: ContextSyncStatus,
 }
@@ -526,7 +441,6 @@ impl<U: ShieldedUtils + Default> Default for ShieldedContext<U> {
             spents: HashSet::default(),
             asset_types: HashMap::default(),
             vk_map: HashMap::default(),
-            unscanned: Default::default(),
             sync_status: ContextSyncStatus::Confirmed,
         }
     }
@@ -595,32 +509,51 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     /// ShieldedContext
     #[allow(clippy::too_many_arguments)]
     #[cfg(not(target_family = "wasm"))]
-    pub async fn fetch<IO, M>(
+    pub async fn fetch<M>(
         &mut self,
-        client: M,
-        progress: &impl ProgressTracker<IO>,
+        env: impl TaskEnvironment,
+        config: ShieldedSyncConfig<M>,
         start_query_height: Option<BlockHeight>,
         last_query_height: Option<BlockHeight>,
-        retry: RetryStrategy,
         sks: &[MaspExtendedSpendingKey],
         fvks: &[ViewingKey],
     ) -> Result<(), Error>
     where
-        IO: Io,
-        M: MaspClient,
+        M: MaspClient + Send + Sync + Unpin + 'static,
     {
         let shutdown_signal = control_flow::install_shutdown_signal();
-        self.fetch_aux(
-            client,
-            progress,
-            start_query_height,
-            last_query_height,
-            retry,
-            sks,
-            fvks,
-            shutdown_signal,
-        )
+
+        env.run(|spawner| async move {
+            let dispatcher = config.dispatcher(spawner, &self.utils).await;
+
+            if let Some(updated_ctx) = dispatcher
+                .run(
+                    shutdown_signal,
+                    start_query_height,
+                    last_query_height,
+                    sks,
+                    fvks,
+                )
+                .await?
+            {
+                *self = updated_ctx;
+            }
+
+            Ok(())
+        })
         .await
+
+        // self.fetch_aux(
+        //    client,
+        //    progress,
+        //    start_query_height,
+        //    last_query_height,
+        //    retry,
+        //    sks,
+        //    fvks,
+        //    shutdown_signal,
+        //)
+        //.await
     }
 
     fn min_height_to_sync_from(&self) -> Result<BlockHeight, Error> {
@@ -642,233 +575,49 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         Ok(last_height_in_witnesses.unwrap_or_else(BlockHeight::first))
     }
 
-    #[cfg(not(target_family = "wasm"))]
-    async fn update_with_pre_built_data<M>(
+    #[allow(missing_docs)]
+    pub fn save_decrypted_shielded_outputs(
         &mut self,
-        client: &M,
-        height: BlockHeight,
-    ) -> Result<(), Error>
-    where
-        M: MaspClient,
-    {
-        let tree_fut = async {
-            if client.capabilities().may_fetch_pre_built_tree() {
-                client.fetch_commitment_tree(height).await.map(Some)
-            } else {
-                Ok(None)
-            }
-        };
-        let notes_map_fut = async {
-            if client.capabilities().may_fetch_pre_built_notes_map() {
-                client.fetch_tx_notes_map(height).await.map(Some)
-            } else {
-                Ok(None)
-            }
-        };
-        let witness_map_fut = async {
-            if client.capabilities().may_fetch_pre_built_witness_map() {
-                client.fetch_witness_map(height).await.map(Some)
-            } else {
-                Ok(None)
-            }
-        };
-
-        let (maybe_tree, maybe_notes_map, maybe_witness_map) =
-            futures::try_join!(tree_fut, notes_map_fut, witness_map_fut)?;
-
-        if let Some(tree) = maybe_tree {
-            self.tree = tree;
-        }
-        if let Some(notes_map) = maybe_notes_map {
-            self.tx_note_map = notes_map;
-        }
-        if let Some(witness_map) = maybe_witness_map {
-            self.witness_map = witness_map;
-        }
-
+        vk: &ViewingKey,
+        note_pos: usize,
+        note: Note,
+        pa: masp_primitives::sapling::PaymentAddress,
+        memo: MemoBytes,
+    ) -> Result<(), Error> {
+        // Add this note to list of notes decrypted by this
+        // viewing key
+        self.pos_map.entry(*vk).or_default().insert(note_pos);
+        // Compute the nullifier now to quickly recognize when
+        // spent
+        let nf = note.nf(
+            &vk.nk,
+            note_pos.try_into().map_err(|_| {
+                Error::Other("Can not get nullifier".to_string())
+            })?,
+        );
+        self.note_map.insert(note_pos, note);
+        self.memo_map.insert(note_pos, memo);
+        // The payment address' diversifier is required to spend
+        // note
+        self.div_map.insert(note_pos, *pa.diversifier());
+        self.nf_map.insert(nf, note_pos);
+        self.vk_map.insert(note_pos, *vk);
         Ok(())
     }
 
-    #[allow(clippy::too_many_arguments)]
-    #[cfg(not(target_family = "wasm"))]
-    async fn fetch_aux<IO, M>(
-        &mut self,
-        client: M,
-        progress: &impl ProgressTracker<IO>,
-        start_query_height: Option<BlockHeight>,
-        last_query_height: Option<BlockHeight>,
-        retry: RetryStrategy,
-        sks: &[MaspExtendedSpendingKey],
-        fvks: &[ViewingKey],
-        mut shutdown_signal: ShutdownSignal,
-    ) -> Result<(), Error>
-    where
-        IO: Io,
-        M: MaspClient,
-    {
-        if start_query_height > last_query_height {
-            return Err(Error::Other(format!(
-                "The start height {start_query_height:?} cannot be higher \
-                 than the ending height {last_query_height:?} in the shielded \
-                 sync"
-            )));
-        }
-
-        // add new viewing keys
-        // Reload the state from file to get the last confirmed state and
-        // discard any speculative data, we cannot fetch on top of a
-        // speculative state
-        // Always reload the confirmed context or initialize a new one if not
-        // found
-        if self.load_confirmed().await.is_err() {
-            // Initialize a default context if we couldn't load a valid one
-            // from storage
-            *self = Self {
-                utils: std::mem::take(&mut self.utils),
-                ..Default::default()
-            };
-        }
-        for esk in sks {
-            let vk = to_viewing_key(esk).vk;
-            self.vk_heights.entry(vk).or_default();
-        }
-        for vk in fvks {
-            self.vk_heights.entry(*vk).or_default();
-        }
-
-        // Save the context to persist newly added keys
-        let _ = self.save().await;
-
-        // the latest block height which has been added to the witness Merkle
-        // tree
-        let last_witnessed_tx = self.tx_note_map.keys().max().cloned();
-
-        // Query for the last produced block height
-        let Some(last_block_height) = client.last_block_height().await? else {
-            return Err(Error::Other(
-                "No block has been committed yet".to_string(),
-            ));
-        };
-
-        let last_query_height = last_query_height
-            .unwrap_or(last_block_height)
-            // NB: limit fetching until the last committed height
-            .min(last_block_height);
-
-        let mut start_height = start_query_height
-            .map_or_else(|| self.min_height_to_sync_from(), Ok)?
-            // NB: the start height cannot be greater than
-            // `last_query_height`
-            .min(last_query_height);
-
-        self.update_with_pre_built_data(&client, last_query_height)
-            .await?;
-
-        for _ in retry {
-            debug_assert!(start_height <= last_query_height);
-
-            // a stateful channel that communicates notes fetched to the trial
-            // decryption process
-            let (fetch_send, fetch_recv) =
-                fetch_channel::new(self.unscanned.clone());
-            let fetch_res = self
-                .fetch_shielded_transfers(
-                    &client,
-                    progress,
-                    &mut shutdown_signal,
-                    fetch_send,
-                    start_height,
-                    last_query_height,
-                )
-                .await;
-            // if fetching errored, log it. But this is recoverable.
-            match fetch_res {
-                Err(e @ Error::Interrupt(_)) => {
-                    display_line!(progress.io(), "{}", e.to_string(),);
-                    return Err(e);
-                }
-                Err(e) => display_line!(
-                    progress.io(),
-                    "Error encountered while fetching: {}",
-                    e.to_string(),
-                ),
-                _ => {}
-            }
-            let txs = progress.scan(fetch_recv);
-            for (ref indexed_tx, ref stx) in txs {
-                if client.capabilities().needs_witness_map_update()
-                    && Some(indexed_tx) > last_witnessed_tx.as_ref()
-                {
-                    self.update_witness_map(indexed_tx.to_owned(), stx)?;
-                }
-                let mut vk_heights = BTreeMap::new();
-                std::mem::swap(&mut vk_heights, &mut self.vk_heights);
-                for (vk, h) in vk_heights
-                    .iter_mut()
-                    .filter(|(_vk, h)| h.as_ref() < Some(indexed_tx))
-                {
-                    self.scan_tx(indexed_tx.to_owned(), stx, vk)?;
-                    *h = Some(indexed_tx.to_owned());
-                }
-                // possibly remove unneeded elements from the cache.
-                self.unscanned.scanned(indexed_tx);
-                std::mem::swap(&mut vk_heights, &mut self.vk_heights);
-                if shutdown_signal.received() {
-                    let _ = self.save().await;
-                    return Err(Error::Interrupt(
-                        "[ShieldedSync::Scanning]".to_string(),
-                    ));
+    #[allow(missing_docs)]
+    pub fn save_shielded_spends(&mut self, transactions: &[Transaction]) {
+        for stx in transactions {
+            for ss in
+                stx.sapling_bundle().map_or(&vec![], |x| &x.shielded_spends)
+            {
+                // If the shielded spend's nullifier is in our map, then target
+                // note is rendered unusable
+                if let Some(note_pos) = self.nf_map.get(&ss.nullifier) {
+                    self.spents.insert(*note_pos);
                 }
             }
-
-            // If fetching failed before completing, we restart
-            // the process from the height we managed to sync to.
-            // Otherwise, we can break the loop.
-            if progress.left_to_fetch() == 0 {
-                break;
-            }
-
-            start_height = self.min_height_to_sync_from()?.clamp(
-                start_query_height.unwrap_or_else(BlockHeight::first),
-                last_query_height,
-            );
         }
-        _ = self.save().await;
-
-        if progress.left_to_fetch() != 0 {
-            Err(Error::Other(
-                "After retrying, could not fetch all MASP txs.".to_string(),
-            ))
-        } else {
-            Ok(())
-        }
-    }
-
-    /// Obtain a chronologically-ordered list of all accepted shielded
-    /// transactions from a node.
-    async fn fetch_shielded_transfers<IO: Io, M: MaspClient>(
-        &self,
-        client: &M,
-        progress: &impl ProgressTracker<IO>,
-        shutdown_signal: &mut ShutdownSignal,
-        block_sender: FetchQueueSender,
-        last_indexed_tx: BlockHeight,
-        last_query_height: BlockHeight,
-    ) -> Result<(), Error> {
-        // Fetch all the transactions we do not have yet
-        let first_height_to_query = last_indexed_tx;
-        let res = client
-            .fetch_shielded_transfers(
-                progress,
-                shutdown_signal,
-                block_sender,
-                first_height_to_query,
-                last_query_height,
-            )
-            .await;
-        // persist fetched notes
-        _ = self.save().await;
-        res
     }
 
     /// Applies the given transaction to the supplied context. More precisely,
@@ -893,7 +642,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         >;
 
         // For tracking the account changes caused by this Transaction
-        let mut transaction_delta = TransactionDelta::new();
         if let ContextSyncStatus::Confirmed = self.sync_status {
             let mut note_pos = self.tx_note_map[&indexed_tx];
             // Listen for notes sent to our viewing keys, only if we are syncing
@@ -904,7 +652,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 {
                     // Let's try to see if this viewing key can decrypt latest
                     // note
-                    let notes = self.pos_map.entry(*vk).or_default();
                     let decres = try_sapling_note_decryption::<_, Proof>(
                         &NETWORK,
                         1.into(),
@@ -914,40 +661,9 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     // So this current viewing key does decrypt this current
                     // note...
                     if let Some((note, pa, memo)) = decres {
-                        // Add this note to list of notes decrypted by this
-                        // viewing key
-                        notes.insert(note_pos);
-                        // Compute the nullifier now to quickly recognize when
-                        // spent
-                        let nf = note.nf(
-                            &vk.nk,
-                            note_pos.try_into().map_err(|_| {
-                                Error::Other(
-                                    "Can not get nullifier".to_string(),
-                                )
-                            })?,
-                        );
-                        self.note_map.insert(note_pos, note);
-                        self.memo_map.insert(note_pos, memo);
-                        // The payment address' diversifier is required to spend
-                        // note
-                        self.div_map.insert(note_pos, *pa.diversifier());
-                        self.nf_map.insert(nf, note_pos);
-                        // Note the account changes
-                        let balance = transaction_delta
-                            .entry(*vk)
-                            .or_insert_with(I128Sum::zero);
-                        *balance += I128Sum::from_nonnegative(
-                            note.asset_type,
-                            note.value as i128,
-                        )
-                        .map_err(|()| {
-                            Error::Other(
-                                "found note with invalid value or asset type"
-                                    .to_string(),
-                            )
-                        })?;
-                        self.vk_map.insert(note_pos, *vk);
+                        self.save_decrypted_shielded_outputs(
+                            vk, note_pos, note, pa, memo,
+                        )?;
                     }
                     note_pos += 1;
                 }
@@ -955,33 +671,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         }
 
         // Cancel out those of our notes that have been spent
-        for tx in shielded {
-            for ss in
-                tx.sapling_bundle().map_or(&vec![], |x| &x.shielded_spends)
-            {
-                // If the shielded spend's nullifier is in our map, then target
-                // note is rendered unusable
-                if let Some(note_pos) = self.nf_map.get(&ss.nullifier) {
-                    self.spents.insert(*note_pos);
-                    // Note the account changes
-                    let balance = transaction_delta
-                        .entry(self.vk_map[note_pos])
-                        .or_insert_with(I128Sum::zero);
-                    let note = self.note_map[note_pos];
-
-                    *balance -= I128Sum::from_nonnegative(
-                        note.asset_type,
-                        note.value as i128,
-                    )
-                    .map_err(|()| {
-                        Error::Other(
-                            "found note with invalid value or asset type"
-                                .to_string(),
-                        )
-                    })?;
-                }
-            }
-        }
+        self.save_shielded_spends(shielded);
 
         Ok(())
     }
@@ -2412,7 +2102,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         for vk in vks {
             self.vk_heights.entry(vk).or_default();
 
-            self.scan_tx(indexed_tx.clone(), masp_tx, &vk)?;
+            self.scan_tx(indexed_tx, masp_tx, &vk)?;
         }
         // Save the speculative state for future usage
         self.save().await.map_err(|e| Error::Other(e.to_string()))?;
@@ -3387,15 +3077,17 @@ pub mod fs {
 
     /// Shielded context file name
     const FILE_NAME: &str = "shielded.dat";
-    const TMP_FILE_NAME: &str = "shielded.tmp";
+    const TMP_FILE_PREFIX: &str = "shielded.tmp";
     const SPECULATIVE_FILE_NAME: &str = "speculative_shielded.dat";
-    const SPECULATIVE_TMP_FILE_NAME: &str = "speculative_shielded.tmp";
+    const SPECULATIVE_TMP_FILE_PREFIX: &str = "speculative_shielded.tmp";
+    const CACHE_FILE_NAME: &str = "shielded_sync.cache";
+    const CACHE_FILE_TMP_PREFIX: &str = "shielded_sync.cache.tmp";
 
     #[derive(Debug, BorshSerialize, BorshDeserialize, Clone)]
     /// An implementation of ShieldedUtils for standard filesystems
     pub struct FsShieldedUtils {
         #[borsh(skip)]
-        context_dir: PathBuf,
+        pub(crate) context_dir: PathBuf,
     }
 
     impl FsShieldedUtils {
@@ -3444,6 +3136,50 @@ pub mod fs {
                 sync_status,
                 ..Default::default()
             }
+        }
+
+        /// Write to a file ensuring that all contents of the file
+        /// were written by a single process (in case of multiple
+        /// concurrent write attempts).
+        ///
+        /// N.B. This is not the same as a file lock. If multiple
+        /// concurrent writes take place, this code ensures that
+        /// the result of exactly one will be persisted.
+        ///
+        /// N.B. This only truly works if each process uses
+        /// to a *unique* tmp file name.
+        fn atomic_file_write(
+            &self,
+            tmp_file_name: impl AsRef<std::path::Path>,
+            file_name: impl AsRef<std::path::Path>,
+            data: impl BorshSerialize,
+        ) -> std::io::Result<()> {
+            let tmp_path = self.context_dir.join(&tmp_file_name);
+            {
+                // First serialize the shielded context into a temporary file.
+                // Inability to create this file implies a simultaneuous write
+                // is in progress. In this case, immediately
+                // fail. This is unproblematic because the data
+                // intended to be stored can always be re-fetched
+                // from the blockchain.
+                let mut ctx_file = OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(tmp_path.clone())?;
+                let mut bytes = Vec::new();
+                data.serialize(&mut bytes).unwrap_or_else(|e| {
+                    panic!(
+                        "cannot serialize data to {} with error: {}",
+                        file_name.as_ref().to_string_lossy(),
+                        e,
+                    )
+                });
+                ctx_file.write_all(&bytes[..])?;
+            }
+            // Atomically update the old shielded context file with new data.
+            // Atomicity is required to prevent other client instances from
+            // reading corrupt data.
+            std::fs::rename(tmp_path, self.context_dir.join(file_name))
         }
     }
 
@@ -3504,34 +3240,19 @@ pub mod fs {
             &self,
             ctx: &ShieldedContext<U>,
         ) -> std::io::Result<()> {
-            // TODO: use mktemp crate?
-            let (tmp_file_name, file_name) = match ctx.sync_status {
-                ContextSyncStatus::Confirmed => (TMP_FILE_NAME, FILE_NAME),
+            let (tmp_file_pref, file_name) = match ctx.sync_status {
+                ContextSyncStatus::Confirmed => (TMP_FILE_PREFIX, FILE_NAME),
                 ContextSyncStatus::Speculative => {
-                    (SPECULATIVE_TMP_FILE_NAME, SPECULATIVE_FILE_NAME)
+                    (SPECULATIVE_TMP_FILE_PREFIX, SPECULATIVE_FILE_NAME)
                 }
             };
-            let tmp_path = self.context_dir.join(tmp_file_name);
-            {
-                // First serialize the shielded context into a temporary file.
-                // Inability to create this file implies a simultaneuous write
-                // is in progress. In this case, immediately
-                // fail. This is unproblematic because the data
-                // intended to be stored can always be re-fetched
-                // from the blockchain.
-                let mut ctx_file = OpenOptions::new()
-                    .write(true)
-                    .create_new(true)
-                    .open(tmp_path.clone())?;
-                let mut bytes = Vec::new();
-                ctx.serialize(&mut bytes)
-                    .expect("cannot serialize shielded context");
-                ctx_file.write_all(&bytes[..])?;
-            }
-            // Atomically update the old shielded context file with new data.
-            // Atomicity is required to prevent other client instances from
-            // reading corrupt data.
-            std::fs::rename(tmp_path, self.context_dir.join(file_name))?;
+            let tmp_file_name = {
+                let t = tempfile::Builder::new()
+                    .prefix(tmp_file_pref)
+                    .tempfile()?;
+                t.path().file_name().unwrap().to_owned()
+            };
+            self.atomic_file_write(tmp_file_name, file_name, ctx)?;
 
             // Remove the speculative file if present since it's state is
             // overruled by the confirmed one we just saved
@@ -3543,550 +3264,25 @@ pub mod fs {
 
             Ok(())
         }
-    }
-}
 
-#[cfg(test)]
-mod test_shielded_sync {
-    use core::str::FromStr;
-    use std::collections::BTreeSet;
+        async fn cache_save(
+            &self,
+            cache: &DispatcherCache,
+        ) -> std::io::Result<()> {
+            let tmp_file_name = {
+                let t = tempfile::Builder::new()
+                    .prefix(CACHE_FILE_TMP_PREFIX)
+                    .tempfile()?;
+                t.path().file_name().unwrap().to_owned()
+            };
 
-    use borsh::BorshDeserialize;
-    use masp_primitives::transaction::Transaction;
-    use masp_primitives::zip32::ExtendedFullViewingKey;
-    use namada_core::masp::ExtendedViewingKey;
-    use namada_core::storage::{BlockHeight, TxIndex};
-    use namada_tx::IndexedTx;
-    use tempfile::tempdir;
-
-    use crate::control_flow::testing_shutdown_signal;
-    use crate::error::Error;
-    use crate::io::StdIo;
-    use crate::masp::fs::FsShieldedUtils;
-    use crate::masp::test_utils::{
-        test_client, TestUnscannedTracker, TestingMaspClient,
-    };
-    use crate::masp::utils::{DefaultTracker, ProgressTracker, RetryStrategy};
-
-    // A viewing key derived from A_SPENDING_KEY
-    pub const AA_VIEWING_KEY: &str = "zvknam1qqqqqqqqqqqqqq9v0sls5r5de7njx8ehu49pqgmqr9ygelg87l5x8y4s9r0pjlvu6x74w9gjpw856zcu826qesdre628y6tjc26uhgj6d9zqur9l5u3p99d9ggc74ald6s8y3sdtka74qmheyqvdrasqpwyv2fsmxlz57lj4grm2pthzj3sflxc0jx0edrakx3vdcngrfjmru8ywkguru8mxss2uuqxdlglaz6undx5h8w7g70t2es850g48xzdkqay5qs0yw06rtxcpjdve6";
-
-    /// A serialized transaction that will work for testing.
-    /// Would love to do this in a less opaque fashion, but
-    /// making these things is a misery not worth my time.
-    ///
-    /// This a tx sending 1 BTC from Albert to Albert's PA,
-    /// that was extracted from a masp integration test.
-    ///
-    /// ```ignore
-    /// vec![
-    ///     "shield",
-    ///     "--source",
-    ///     ALBERT,
-    ///     "--target",
-    ///     AA_PAYMENT_ADDRESS,
-    ///     "--token",
-    ///     BTC,
-    ///     "--amount",
-    ///     "1",
-    ///     "--node",
-    ///     validator_one_rpc,
-    /// ]
-    /// ```
-    fn arbitrary_masp_tx() -> Transaction {
-        Transaction::try_from_slice(&[
-            2, 0, 0, 0, 10, 39, 167, 38, 166, 117, 255, 233, 0, 0, 0, 0, 255,
-            255, 255, 255, 1, 162, 120, 217, 193, 173, 117, 92, 126, 107, 199,
-            182, 72, 95, 60, 122, 52, 9, 134, 72, 4, 167, 41, 187, 171, 17,
-            124, 114, 84, 191, 75, 37, 2, 0, 225, 245, 5, 0, 0, 0, 0, 93, 213,
-            181, 21, 38, 32, 230, 52, 155, 4, 203, 26, 70, 63, 59, 179, 142, 7,
-            72, 76, 0, 0, 0, 1, 132, 100, 41, 23, 128, 97, 116, 40, 195, 40,
-            46, 55, 79, 106, 234, 32, 4, 216, 106, 88, 173, 65, 140, 99, 239,
-            71, 103, 201, 111, 149, 166, 13, 73, 224, 253, 98, 27, 199, 11,
-            142, 56, 214, 4, 96, 35, 72, 83, 86, 194, 107, 163, 194, 238, 37,
-            19, 171, 8, 129, 53, 246, 64, 220, 155, 47, 177, 165, 109, 232, 84,
-            247, 128, 184, 40, 26, 113, 196, 190, 181, 57, 213, 45, 144, 46,
-            12, 145, 128, 169, 116, 65, 51, 208, 239, 50, 217, 224, 98, 179,
-            53, 18, 130, 183, 114, 225, 21, 34, 175, 144, 125, 239, 240, 82,
-            100, 174, 1, 192, 32, 187, 208, 205, 31, 108, 59, 87, 201, 148,
-            214, 244, 255, 8, 150, 100, 225, 11, 245, 221, 170, 85, 241, 110,
-            50, 90, 151, 210, 169, 41, 3, 23, 160, 196, 117, 211, 217, 121, 9,
-            42, 236, 19, 149, 94, 62, 163, 222, 172, 128, 197, 56, 100, 233,
-            227, 239, 60, 182, 191, 55, 148, 17, 0, 168, 198, 84, 87, 191, 89,
-            229, 9, 129, 165, 98, 200, 127, 225, 192, 58, 0, 92, 104, 97, 26,
-            125, 169, 209, 40, 170, 29, 93, 16, 114, 174, 23, 233, 218, 112,
-            26, 175, 196, 198, 197, 159, 167, 157, 16, 232, 247, 193, 44, 82,
-            143, 238, 179, 77, 87, 153, 3, 33, 207, 215, 142, 104, 179, 17,
-            252, 148, 215, 150, 76, 56, 169, 13, 240, 4, 195, 221, 45, 250, 24,
-            51, 243, 174, 176, 47, 117, 38, 1, 124, 193, 191, 55, 11, 164, 97,
-            83, 188, 92, 202, 229, 106, 236, 165, 85, 236, 95, 255, 28, 71, 18,
-            173, 202, 47, 63, 226, 129, 203, 154, 54, 155, 177, 161, 106, 210,
-            220, 193, 142, 44, 105, 46, 164, 83, 136, 63, 24, 172, 157, 117, 9,
-            202, 99, 223, 144, 36, 26, 154, 84, 175, 119, 12, 102, 71, 33, 14,
-            131, 250, 86, 215, 153, 18, 94, 213, 61, 196, 67, 132, 204, 89,
-            235, 241, 188, 147, 236, 92, 46, 83, 169, 236, 12, 34, 33, 65, 243,
-            18, 23, 29, 41, 252, 207, 17, 196, 55, 56, 141, 158, 116, 227, 195,
-            159, 233, 72, 26, 69, 72, 213, 50, 101, 161, 127, 213, 35, 210,
-            223, 201, 219, 198, 192, 125, 129, 222, 178, 241, 116, 59, 255, 72,
-            163, 46, 21, 222, 74, 202, 117, 217, 22, 188, 203, 2, 150, 38, 78,
-            78, 250, 45, 36, 225, 240, 227, 115, 33, 114, 189, 25, 9, 219, 239,
-            57, 103, 19, 109, 11, 5, 156, 43, 35, 53, 219, 250, 215, 185, 173,
-            11, 101, 221, 29, 130, 74, 110, 225, 183, 77, 13, 52, 90, 183, 93,
-            212, 175, 132, 21, 229, 109, 188, 124, 103, 3, 39, 174, 140, 115,
-            67, 49, 100, 231, 129, 32, 24, 201, 196, 247, 33, 155, 20, 139, 34,
-            3, 183, 12, 164, 6, 10, 219, 207, 151, 160, 4, 201, 160, 12, 156,
-            82, 142, 226, 19, 134, 144, 53, 220, 140, 61, 74, 151, 129, 102,
-            214, 73, 107, 147, 4, 98, 68, 79, 225, 103, 242, 187, 170, 102,
-            225, 114, 4, 87, 96, 7, 212, 150, 127, 211, 158, 54, 86, 15, 191,
-            21, 116, 202, 195, 60, 65, 134, 22, 2, 44, 133, 64, 181, 121, 66,
-            218, 227, 72, 148, 63, 108, 227, 33, 66, 239, 77, 127, 139, 31, 16,
-            150, 119, 198, 119, 229, 88, 188, 113, 80, 222, 86, 122, 181, 142,
-            186, 130, 125, 236, 166, 95, 134, 243, 128, 65, 169, 33, 65, 73,
-            182, 183, 156, 248, 39, 46, 199, 181, 85, 96, 126, 155, 189, 10,
-            211, 145, 230, 94, 69, 232, 74, 87, 211, 46, 216, 30, 24, 38, 104,
-            192, 165, 28, 73, 36, 227, 194, 41, 168, 5, 181, 176, 112, 67, 92,
-            158, 212, 129, 207, 182, 223, 59, 185, 84, 210, 147, 32, 29, 61,
-            56, 185, 21, 156, 114, 34, 115, 29, 25, 89, 152, 56, 55, 238, 43,
-            0, 114, 89, 79, 95, 104, 143, 180, 51, 53, 108, 223, 236, 59, 47,
-            188, 174, 196, 101, 180, 207, 162, 198, 104, 52, 67, 132, 178, 9,
-            40, 10, 88, 206, 25, 132, 60, 136, 13, 213, 223, 81, 196, 131, 118,
-            15, 53, 125, 165, 177, 170, 170, 17, 94, 53, 151, 51, 16, 170, 23,
-            118, 255, 26, 46, 47, 37, 73, 165, 26, 43, 10, 221, 4, 132, 15, 78,
-            214, 161, 3, 220, 10, 87, 139, 85, 61, 39, 131, 242, 216, 235, 52,
-            93, 46, 180, 196, 151, 54, 207, 80, 223, 90, 252, 77, 10, 122, 175,
-            229, 7, 144, 41, 1, 162, 120, 217, 193, 173, 117, 92, 126, 107,
-            199, 182, 72, 95, 60, 122, 52, 9, 134, 72, 4, 167, 41, 187, 171,
-            17, 124, 114, 84, 191, 75, 37, 2, 0, 31, 10, 250, 255, 255, 255,
-            255, 255, 255, 255, 255, 255, 255, 255, 255, 151, 241, 211, 167,
-            49, 151, 215, 148, 38, 149, 99, 140, 79, 169, 172, 15, 195, 104,
-            140, 79, 151, 116, 185, 5, 161, 78, 58, 63, 23, 27, 172, 88, 108,
-            85, 232, 63, 249, 122, 26, 239, 251, 58, 240, 10, 219, 34, 198,
-            187, 147, 224, 43, 96, 82, 113, 159, 96, 125, 172, 211, 160, 136,
-            39, 79, 101, 89, 107, 208, 208, 153, 32, 182, 26, 181, 218, 97,
-            187, 220, 127, 80, 73, 51, 76, 241, 18, 19, 148, 93, 87, 229, 172,
-            125, 5, 93, 4, 43, 126, 2, 74, 162, 178, 240, 143, 10, 145, 38, 8,
-            5, 39, 45, 197, 16, 81, 198, 228, 122, 212, 250, 64, 59, 2, 180,
-            81, 11, 100, 122, 227, 209, 119, 11, 172, 3, 38, 168, 5, 187, 239,
-            212, 128, 86, 200, 193, 33, 189, 184, 151, 241, 211, 167, 49, 151,
-            215, 148, 38, 149, 99, 140, 79, 169, 172, 15, 195, 104, 140, 79,
-            151, 116, 185, 5, 161, 78, 58, 63, 23, 27, 172, 88, 108, 85, 232,
-            63, 249, 122, 26, 239, 251, 58, 240, 10, 219, 34, 198, 187, 37,
-            197, 248, 90, 113, 62, 149, 117, 145, 118, 42, 241, 60, 208, 83,
-            57, 96, 143, 17, 128, 92, 118, 158, 188, 77, 37, 184, 164, 135,
-            246, 196, 57, 198, 106, 139, 33, 15, 207, 0, 101, 143, 92, 178,
-            132, 19, 106, 221, 246, 176, 100, 20, 114, 26, 55, 163, 14, 173,
-            255, 121, 181, 58, 121, 140, 3,
-        ])
-        .expect("Test failed")
-    }
-
-    /// Test that if fetching fails before finishing,
-    /// we re-establish the fetching process
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn test_retry_fetch() {
-        let temp_dir = tempdir().unwrap();
-        let mut shielded_ctx =
-            FsShieldedUtils::new(temp_dir.path().to_path_buf());
-        let (client, masp_tx_sender) = test_client(2.into());
-        let io = StdIo;
-        let progress = DefaultTracker::new(&io);
-        let vk = ExtendedFullViewingKey::from(
-            ExtendedViewingKey::from_str(AA_VIEWING_KEY).expect("Test failed"),
-        )
-        .fvk
-        .vk;
-        masp_tx_sender.send(None).expect("Test failed");
-
-        // we first test that with no retries, a fetching failure
-        // stops process
-        let result = shielded_ctx
-            .fetch(
-                TestingMaspClient::new(&client),
-                &progress,
-                None,
-                None,
-                RetryStrategy::Times(1),
-                &[],
-                &[vk],
-            )
-            .await
-            .unwrap_err();
-        match result {
-            Error::Other(msg) => assert_eq!(
-                msg.as_str(),
-                "After retrying, could not fetch all MASP txs."
-            ),
-            other => panic!("{:?} does not match Error::Other(_)", other),
+            self.atomic_file_write(tmp_file_name, CACHE_FILE_NAME, cache)
         }
 
-        // We now have a fetch failure followed by two successful
-        // masp txs from the same block.
-        let masp_tx = arbitrary_masp_tx();
-        masp_tx_sender.send(None).expect("Test failed");
-        masp_tx_sender
-            .send(Some((
-                IndexedTx {
-                    height: 1.into(),
-                    index: TxIndex(1),
-                },
-                vec![masp_tx.clone()],
-            )))
-            .expect("Test failed");
-        masp_tx_sender
-            .send(Some((
-                IndexedTx {
-                    height: 1.into(),
-                    index: TxIndex(2),
-                },
-                vec![masp_tx.clone()],
-            )))
-            .expect("Test failed");
-
-        // This should complete successfully
-        shielded_ctx
-            .fetch(
-                TestingMaspClient::new(&client),
-                &progress,
-                None,
-                None,
-                RetryStrategy::Times(2),
-                &[],
-                &[vk],
-            )
-            .await
-            .expect("Test failed");
-
-        shielded_ctx.load_confirmed().await.expect("Test failed");
-        let keys = shielded_ctx
-            .tx_note_map
-            .keys()
-            .cloned()
-            .collect::<BTreeSet<_>>();
-        let expected = BTreeSet::from([
-            IndexedTx {
-                height: 1.into(),
-                index: TxIndex(1),
-            },
-            IndexedTx {
-                height: 1.into(),
-                index: TxIndex(2),
-            },
-        ]);
-
-        assert_eq!(keys, expected);
-        assert_eq!(
-            *shielded_ctx.vk_heights[&vk].as_ref().unwrap(),
-            IndexedTx {
-                height: 1.into(),
-                index: TxIndex(2),
-            }
-        );
-        assert_eq!(shielded_ctx.note_map.len(), 2);
-    }
-
-    /// Test that upon each retry, we either resume from the
-    /// latest height that had been previously stored in the
-    /// `tx_note_map`, or from the minimum height stored in
-    /// `vk_heights`.
-    #[test]
-    fn test_min_height_to_sync_from() {
-        let temp_dir = tempdir().unwrap();
-        let mut shielded_ctx =
-            FsShieldedUtils::new(temp_dir.path().to_path_buf());
-
-        let vk = ExtendedFullViewingKey::from(
-            ExtendedViewingKey::from_str(AA_VIEWING_KEY).expect("Test failed"),
-        )
-        .fvk
-        .vk;
-
-        // pretend we start with a tx observed at height 4 whose
-        // notes cannot be decrypted with `vk`
-        shielded_ctx.tx_note_map.insert(
-            IndexedTx {
-                height: 4.into(),
-                index: TxIndex(0),
-            },
-            0,
-        );
-
-        // the min height here should be 1, since
-        // this vk hasn't decrypted any note yet
-        shielded_ctx.vk_heights.insert(vk, None);
-
-        let height = shielded_ctx.min_height_to_sync_from().unwrap();
-        assert_eq!(height, BlockHeight(1));
-
-        // let's bump the vk height past 4
-        *shielded_ctx.vk_heights.get_mut(&vk).unwrap() = Some(IndexedTx {
-            height: 6.into(),
-            index: TxIndex(0),
-        });
-
-        // the min height should now be 4
-        let height = shielded_ctx.min_height_to_sync_from().unwrap();
-        assert_eq!(height, BlockHeight(4));
-
-        // and now we bump the last seen tx to height 8
-        shielded_ctx.tx_note_map.insert(
-            IndexedTx {
-                height: 8.into(),
-                index: TxIndex(0),
-            },
-            1,
-        );
-
-        // the min height should now be 6
-        let height = shielded_ctx.min_height_to_sync_from().unwrap();
-        assert_eq!(height, BlockHeight(6));
-    }
-
-    /// Test that the progress tracker correctly keeps
-    /// track of how many blocks there are left to fetch
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn test_left_to_fetch() {
-        let temp_dir = tempdir().unwrap();
-        let mut shielded_ctx =
-            FsShieldedUtils::new(temp_dir.path().to_path_buf());
-        let (client, masp_tx_sender) = test_client(2.into());
-        let io = StdIo;
-        let progress = DefaultTracker::new(&io);
-        let vk = ExtendedFullViewingKey::from(
-            ExtendedViewingKey::from_str(AA_VIEWING_KEY).expect("Test failed"),
-        )
-        .fvk
-        .vk;
-        let masp_tx = arbitrary_masp_tx();
-
-        // first fetch no blocks
-        masp_tx_sender.send(None).expect("Test failed");
-        shielded_ctx
-            .fetch(
-                TestingMaspClient::new(&client),
-                &progress,
-                None,
-                None,
-                RetryStrategy::Times(1),
-                &[],
-                &[vk],
-            )
-            .await
-            .unwrap_err();
-        assert_eq!(progress.left_to_fetch(), 2);
-
-        // fetch one of the two blocks
-        masp_tx_sender
-            .send(Some((
-                IndexedTx {
-                    height: 1.into(),
-                    index: Default::default(),
-                },
-                vec![masp_tx.clone()],
-            )))
-            .expect("Test failed");
-        masp_tx_sender.send(None).expect("Test failed");
-        shielded_ctx
-            .fetch(
-                TestingMaspClient::new(&client),
-                &progress,
-                None,
-                None,
-                RetryStrategy::Times(1),
-                &[],
-                &[vk],
-            )
-            .await
-            .unwrap_err();
-        assert_eq!(progress.left_to_fetch(), 1);
-
-        // fetch no blocks
-        masp_tx_sender.send(None).expect("Test failed");
-        shielded_ctx
-            .fetch(
-                TestingMaspClient::new(&client),
-                &progress,
-                None,
-                None,
-                RetryStrategy::Times(1),
-                &[],
-                &[vk],
-            )
-            .await
-            .unwrap_err();
-        assert_eq!(progress.left_to_fetch(), 1);
-
-        // fetch no blocks, but increase the latest block height
-        // thus the amount left to fetch should increase
-        let (client, masp_tx_sender) = test_client(3.into());
-        masp_tx_sender.send(None).expect("Test failed");
-        shielded_ctx
-            .fetch(
-                TestingMaspClient::new(&client),
-                &progress,
-                None,
-                None,
-                RetryStrategy::Times(1),
-                &[],
-                &[vk],
-            )
-            .await
-            .unwrap_err();
-        assert_eq!(progress.left_to_fetch(), 2);
-
-        // fetch remaining block
-        masp_tx_sender
-            .send(Some((
-                IndexedTx {
-                    height: 2.into(),
-                    index: Default::default(),
-                },
-                vec![masp_tx.clone()],
-            )))
-            .expect("Test failed");
-        masp_tx_sender
-            .send(Some((
-                IndexedTx {
-                    height: 3.into(),
-                    index: Default::default(),
-                },
-                vec![masp_tx.clone()],
-            )))
-            .expect("Test failed");
-        // this should not produce an error since we have fetched
-        // all expected blocks
-        masp_tx_sender.send(None).expect("Test failed");
-        shielded_ctx
-            .fetch(
-                TestingMaspClient::new(&client),
-                &progress,
-                None,
-                None,
-                RetryStrategy::Times(1),
-                &[],
-                &[vk],
-            )
-            .await
-            .expect("Test failed");
-        assert_eq!(progress.left_to_fetch(), 0);
-    }
-
-    /// Test that if we don't scan all fetched notes, they
-    /// are persisted in a cache
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn test_unscanned_cache() {
-        let (client, masp_tx_sender) = test_client(2.into());
-        let temp_dir = tempdir().unwrap();
-        let mut shielded_ctx =
-            FsShieldedUtils::new(temp_dir.path().to_path_buf());
-
-        let io = StdIo;
-        let progress = TestUnscannedTracker::new(&io);
-        let vk = ExtendedFullViewingKey::from(
-            ExtendedViewingKey::from_str(AA_VIEWING_KEY).expect("Test failed"),
-        )
-        .fvk
-        .vk;
-
-        // the fetched txs
-        let masp_tx = arbitrary_masp_tx();
-        masp_tx_sender
-            .send(Some((
-                IndexedTx {
-                    height: 1.into(),
-                    index: TxIndex(1),
-                },
-                vec![masp_tx.clone()],
-            )))
-            .expect("Test failed");
-        masp_tx_sender
-            .send(Some((
-                IndexedTx {
-                    height: 1.into(),
-                    index: TxIndex(2),
-                },
-                vec![masp_tx.clone()],
-            )))
-            .expect("Test failed");
-
-        shielded_ctx
-            .fetch(
-                TestingMaspClient::new(&client),
-                &progress,
-                None,
-                None,
-                RetryStrategy::Times(2),
-                &[],
-                &[vk],
-            )
-            .await
-            .expect("Test failed");
-
-        shielded_ctx.load_confirmed().await.expect("Test failed");
-        let keys = shielded_ctx
-            .unscanned
-            .txs
-            .lock()
-            .unwrap()
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>();
-        let expected = vec![IndexedTx {
-            height: 1.into(),
-            index: TxIndex(2),
-        }];
-        assert_eq!(keys, expected);
-    }
-
-    /// Test that if fetching gets interrupted,
-    /// we persist the fetched notes in a cache
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    async fn test_fetching_interrupt() {
-        let temp_dir = tempdir().unwrap();
-        let mut shielded_ctx =
-            FsShieldedUtils::new(temp_dir.path().to_path_buf());
-        let (client, masp_tx_sender) = test_client(2.into());
-        let io = StdIo;
-        let progress = DefaultTracker::new(&io);
-        let vk = ExtendedFullViewingKey::from(
-            ExtendedViewingKey::from_str(AA_VIEWING_KEY).expect("Test failed"),
-        )
-        .fvk
-        .vk;
-        let (shutdown_send, shutdown_signal) = testing_shutdown_signal();
-        // the fetched txs
-        let masp_tx = arbitrary_masp_tx();
-        // mock that we have already fetched a note
-        let expected = (
-            IndexedTx {
-                height: 1.into(),
-                index: TxIndex(1),
-            },
-            vec![masp_tx],
-        );
-        masp_tx_sender
-            .send(Some(expected.clone()))
-            .expect("Test failed");
-        shutdown_send.send(()).expect("Test failed");
-        let Error::Interrupt(ref proc) = shielded_ctx
-            .fetch_aux(
-                TestingMaspClient::new(&client),
-                &progress,
-                None,
-                None,
-                RetryStrategy::Forever,
-                &[],
-                &[vk],
-                shutdown_signal,
-            )
-            .await
-            .expect_err("Test failed")
-        else {
-            panic!("Test failed")
-        };
-        assert_eq!(proc, "[Testing::Fetch]");
-        shielded_ctx.load_confirmed().await.expect("Test failed");
-        let entry = shielded_ctx.unscanned.pop_first().expect("Test failed");
-        assert_eq!(entry, expected);
-        assert!(shielded_ctx.unscanned.is_empty());
+        async fn cache_load(&self) -> std::io::Result<DispatcherCache> {
+            let file_name = self.context_dir.join(CACHE_FILE_NAME);
+            let mut file = File::open(file_name)?;
+            DispatcherCache::try_from_reader(&mut file)
+        }
     }
 }

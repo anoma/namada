@@ -3,6 +3,7 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
+use std::ops::{Bound, RangeBounds};
 
 use data_encoding::HEXUPPER;
 use masp_primitives::transaction::builder::Builder;
@@ -1751,6 +1752,7 @@ impl<'tx> Tx {
 /// index inside that block
 #[derive(
     Debug,
+    Copy,
     Clone,
     BorshSerialize,
     BorshDeserialize,
@@ -1774,6 +1776,67 @@ impl Default for IndexedTx {
             height: BlockHeight::first(),
             index: TxIndex(0),
         }
+    }
+}
+
+/// Inclusive range of [`IndexedTx`] entries.
+pub struct IndexedTxRange {
+    lo: IndexedTx,
+    hi: IndexedTx,
+}
+
+impl IndexedTxRange {
+    /// Create a new [`IndexedTxRange`].
+    pub const fn new(lo: IndexedTx, hi: IndexedTx) -> Self {
+        Self { lo, hi }
+    }
+
+    /// Create a new [`IndexedTxRange`] over a range of [block
+    /// heights](BlockHeight).
+    pub const fn between_heights(from: BlockHeight, to: BlockHeight) -> Self {
+        Self::new(
+            IndexedTx {
+                height: from,
+                index: TxIndex(0),
+            },
+            IndexedTx {
+                height: to,
+                index: TxIndex(u32::MAX),
+            },
+        )
+    }
+
+    /// Create a new [`IndexedTxRange`] over a given [`BlockHeight`].
+    pub const fn with_height(height: BlockHeight) -> Self {
+        Self::between_heights(height, height)
+    }
+
+    /// The start of the range.
+    pub const fn start(&self) -> IndexedTx {
+        self.lo
+    }
+
+    /// The end of the range.
+    pub const fn end(&self) -> IndexedTx {
+        self.hi
+    }
+}
+
+impl RangeBounds<IndexedTx> for IndexedTxRange {
+    fn start_bound(&self) -> Bound<&IndexedTx> {
+        Bound::Included(&self.lo)
+    }
+
+    fn end_bound(&self) -> Bound<&IndexedTx> {
+        Bound::Included(&self.hi)
+    }
+
+    fn contains<U>(&self, item: &U) -> bool
+    where
+        IndexedTx: PartialOrd<U>,
+        U: PartialOrd<IndexedTx> + ?Sized,
+    {
+        *item >= self.lo && *item <= self.hi
     }
 }
 
