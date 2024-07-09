@@ -627,7 +627,7 @@ pub mod testing {
 
     prop_compose! {
         /// Generate an arbitrary IBC token ID vector
-        pub fn arb_ibc_token_ids()(token_ids in collection::vec(arb_ibc_token_id(), 0..10)) -> TokenIds {
+        pub fn arb_ibc_token_ids()(token_ids in collection::vec(arb_ibc_token_id(), 1..10)) -> TokenIds {
             TokenIds(token_ids)
         }
     }
