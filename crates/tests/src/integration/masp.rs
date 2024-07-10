@@ -13,6 +13,7 @@ use namada_node::shell::testing::client::run;
 use namada_node::shell::testing::node::NodeResults;
 use namada_node::shell::testing::utils::{Bin, CapturedOutput};
 use namada_sdk::masp::fs::FsShieldedUtils;
+use namada_sdk::DEFAULT_GAS_LIMIT;
 use test_log::test;
 
 use super::setup;
@@ -1504,7 +1505,7 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
                 token: native_token.clone(),
             },
             pk.clone(),
-            20000.into(),
+            DEFAULT_GAS_LIMIT.into(),
         );
         tx.sign_wrapper(sk.clone());
 
@@ -2183,10 +2184,7 @@ fn masp_fee_payment() -> Result<()> {
     let validator_one_rpc = "http://127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
-    let (mut node, _services) = setup::initialize_genesis(|mut genesis| {
-        genesis.parameters.parameters.masp_fee_payment_gas_limit = 20_000;
-        genesis
-    })?;
+    let (mut node, _services) = setup::setup()?;
     _ = node.next_masp_epoch();
 
     // Add the relevant viewing keys to the wallet otherwise the shielded
@@ -2231,7 +2229,7 @@ fn masp_fee_payment() -> Result<()> {
             "--token",
             NAM,
             "--amount",
-            "50000",
+            "500000",
             "--ledger-address",
             validator_one_rpc,
         ],
@@ -2261,7 +2259,7 @@ fn masp_fee_payment() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 50000"));
+    assert!(captured.contains("nam: 500000"));
 
     // 1. Out of gas for masp fee payment
     let captured = CapturedOutput::of(|| {
@@ -2279,7 +2277,7 @@ fn masp_fee_payment() -> Result<()> {
                 "--amount",
                 "1",
                 "--gas-limit",
-                "2000",
+                "20000",
                 "--gas-price",
                 "1",
                 "--disposable-gas-payer",
@@ -2312,7 +2310,7 @@ fn masp_fee_payment() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 50000"));
+    assert!(captured.contains("nam: 500000"));
 
     // 2. Valid masp fee payment
     run(
@@ -2329,7 +2327,7 @@ fn masp_fee_payment() -> Result<()> {
             "--amount",
             "10000",
             "--gas-limit",
-            "20000",
+            "200000",
             "--gas-price",
             "1",
             "--disposable-gas-payer",
@@ -2363,7 +2361,7 @@ fn masp_fee_payment() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 20000"));
+    assert!(captured.contains("nam: 290000"));
     let captured = CapturedOutput::of(|| {
         run(
             &node,
@@ -2396,7 +2394,7 @@ fn masp_fee_payment_gas_limit() -> Result<()> {
     let (mut node, _services) = setup::initialize_genesis(|mut genesis| {
         // Set an insufficient gas limit for masp fee payment to force all
         // transactions to fail
-        genesis.parameters.parameters.masp_fee_payment_gas_limit = 3_000;
+        genesis.parameters.parameters.masp_fee_payment_gas_limit = 10_000;
         genesis
     })?;
     _ = node.next_masp_epoch();
@@ -2548,10 +2546,7 @@ fn masp_fee_payment_with_non_disposable() -> Result<()> {
     let validator_one_rpc = "http://127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
-    let (mut node, _services) = setup::initialize_genesis(|mut genesis| {
-        genesis.parameters.parameters.masp_fee_payment_gas_limit = 20_000;
-        genesis
-    })?;
+    let (mut node, _services) = setup::setup()?;
     _ = node.next_masp_epoch();
 
     // Add the relevant viewing keys to the wallet otherwise the shielded
@@ -2596,7 +2591,7 @@ fn masp_fee_payment_with_non_disposable() -> Result<()> {
             "--token",
             NAM,
             "--amount",
-            // Drain balance of fee payer
+            // Decrease payer's balance to 1
             "1999999",
             // Pay gas transparently
             "--gas-payer",
@@ -2635,6 +2630,24 @@ fn masp_fee_payment_with_non_disposable() -> Result<()> {
     assert!(captured.result.is_ok());
     assert!(captured.contains("nam: 1999999"));
 
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                ALBERT_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 1"));
+
     // Masp fee payment to non-disposable address
     let captured = CapturedOutput::of(|| {
         run(
@@ -2651,7 +2664,7 @@ fn masp_fee_payment_with_non_disposable() -> Result<()> {
                 "--amount",
                 "1",
                 "--gas-limit",
-                "20000",
+                "200000",
                 "--gas-price",
                 "1",
                 "--gas-payer",
@@ -2690,7 +2703,7 @@ fn masp_fee_payment_with_non_disposable() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1979999"));
+    assert!(captured.contains("nam: 1799999"));
 
     let captured = CapturedOutput::of(|| {
         run(
@@ -2722,10 +2735,7 @@ fn masp_fee_payment_with_custom_spending_key() -> Result<()> {
     let validator_one_rpc = "http://127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
-    let (mut node, _services) = setup::initialize_genesis(|mut genesis| {
-        genesis.parameters.parameters.masp_fee_payment_gas_limit = 20_000;
-        genesis
-    })?;
+    let (mut node, _services) = setup::setup()?;
     _ = node.next_masp_epoch();
 
     // Add the relevant viewing keys to the wallet otherwise the shielded
@@ -2801,7 +2811,7 @@ fn masp_fee_payment_with_custom_spending_key() -> Result<()> {
             "--token",
             NAM,
             "--amount",
-            "30000",
+            "300000",
             "--ledger-address",
             validator_one_rpc,
         ],
@@ -2851,7 +2861,7 @@ fn masp_fee_payment_with_custom_spending_key() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 30000"));
+    assert!(captured.contains("nam: 300000"));
 
     // Masp fee payment with custom gas payer
     let captured = CapturedOutput::of(|| {
@@ -2869,7 +2879,7 @@ fn masp_fee_payment_with_custom_spending_key() -> Result<()> {
                 "--amount",
                 "9000",
                 "--gas-limit",
-                "20000",
+                "200000",
                 "--gas-price",
                 "1",
                 "--gas-spending-key",
@@ -2927,7 +2937,7 @@ fn masp_fee_payment_with_custom_spending_key() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 11000"));
+    assert!(captured.contains("nam: 101000"));
 
     let captured = CapturedOutput::of(|| {
         run(
@@ -2959,7 +2969,6 @@ fn masp_fee_payment_with_different_token() -> Result<()> {
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
     let (mut node, _services) = setup::initialize_genesis(|mut genesis| {
-        genesis.parameters.parameters.masp_fee_payment_gas_limit = 20_000;
         // Whitelist BTC for gas payment
         genesis.parameters.parameters.minimum_gas_price.insert(
             "btc".into(),
@@ -3049,7 +3058,7 @@ fn masp_fee_payment_with_different_token() -> Result<()> {
             "--token",
             BTC,
             "--amount",
-            "20000",
+            "200000",
             "--gas-payer",
             ALBERT_KEY,
             "--ledger-address",
@@ -3118,7 +3127,7 @@ fn masp_fee_payment_with_different_token() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("btc: 20000"));
+    assert!(captured.contains("btc: 200000"));
 
     // Masp fee payment with custom token and gas payer
     let captured = CapturedOutput::of(|| {
@@ -3138,7 +3147,7 @@ fn masp_fee_payment_with_different_token() -> Result<()> {
                 "--gas-token",
                 BTC,
                 "--gas-limit",
-                "20000",
+                "200000",
                 "--gas-price",
                 "1",
                 "--gas-spending-key",

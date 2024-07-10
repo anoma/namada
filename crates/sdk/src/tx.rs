@@ -66,7 +66,7 @@ use namada_token::DenominatedAmount;
 use namada_tx::data::pgf::UpdateStewardCommission;
 use namada_tx::data::pos::{BecomeValidator, ConsensusKeyChange};
 use namada_tx::data::{
-    compute_inner_tx_hash, pos, BatchedTxResult, ResultCode, TxResult,
+    compute_inner_tx_hash, pos, BatchedTxResult, DryRunResult, ResultCode,
 };
 pub use namada_tx::{Authorization, *};
 use num_traits::Zero;
@@ -158,7 +158,7 @@ pub enum ProcessTxResponse {
     /// Result of submitting a transaction to the mempool
     Broadcast(Response),
     /// Result of dry running transaction
-    DryRun(TxResult<String>),
+    DryRun(DryRunResult),
 }
 
 impl ProcessTxResponse {

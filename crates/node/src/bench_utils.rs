@@ -77,9 +77,7 @@ use namada::masp::MaspTxRefs;
 use namada::state::StorageRead;
 use namada::token::{Amount, DenominatedAmount, Transfer};
 use namada::tx::data::pos::Bond;
-use namada::tx::data::{
-    BatchResults, BatchedTxResult, Fee, TxResult, VpsResult,
-};
+use namada::tx::data::{BatchedTxResult, Fee, TxResult, VpsResult};
 use namada::tx::event::{new_tx_event, Batch};
 use namada::tx::{
     Authorization, BatchedTx, BatchedTxRef, Code, Data, Section, Tx,
@@ -919,24 +917,19 @@ impl Client for BenchShell {
                     .iter()
                     .enumerate()
                     .map(|(idx, (tx, changed_keys))| {
-                        let tx_result = TxResult::<String> {
-                            gas_used: 0.into(),
-                            batch_results: {
-                                let mut batch_results = BatchResults::new();
-                                batch_results.insert_inner_tx_result(
-                                    tx.wrapper_hash().as_ref(),
-                                    either::Right(
-                                        tx.first_commitments().unwrap(),
-                                    ),
-                                    Ok(BatchedTxResult {
-                                        changed_keys: changed_keys.to_owned(),
-                                        vps_result: VpsResult::default(),
-                                        initialized_accounts: vec![],
-                                        events: BTreeSet::default(),
-                                    }),
-                                );
-                                batch_results
-                            },
+                        let tx_result = {
+                            let mut batch_results = TxResult::new();
+                            batch_results.insert_inner_tx_result(
+                                tx.wrapper_hash().as_ref(),
+                                either::Right(tx.first_commitments().unwrap()),
+                                Ok(BatchedTxResult {
+                                    changed_keys: changed_keys.to_owned(),
+                                    vps_result: VpsResult::default(),
+                                    initialized_accounts: vec![],
+                                    events: BTreeSet::default(),
+                                }),
+                            );
+                            batch_results
                         };
                         let event: Event = new_tx_event(tx, height.value())
                             .with(Batch(&tx_result))

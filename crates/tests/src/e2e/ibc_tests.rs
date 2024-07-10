@@ -1966,6 +1966,8 @@ fn submit_ibc_tx(
             signer,
             "--gas-token",
             NAM,
+            "--gas-limit",
+            "150000",
             "--node",
             &rpc
         ],
@@ -2013,6 +2015,8 @@ fn transfer(
         &channel_id,
         "--port-id",
         &port_id,
+        "--gas-limit",
+        "150000",
         "--node",
         &rpc,
     ];

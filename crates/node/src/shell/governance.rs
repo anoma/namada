@@ -428,7 +428,6 @@ where
     match dispatch_result {
         Ok(extended_tx_result) => match extended_tx_result
             .tx_result
-            .batch_results
             .get_inner_tx_result(None, either::Right(&cmt))
         {
             Some(Ok(batched_result)) if batched_result.is_accepted() => {
