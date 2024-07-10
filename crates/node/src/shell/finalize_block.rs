@@ -292,11 +292,11 @@ where
             );
 
         // PoS inflation
-        proof_of_stake::rewards::apply_inflation::<_, governance::Store<_>>(
-            &mut self.state,
-            last_epoch,
-            num_blocks_in_last_epoch,
-        )?;
+        proof_of_stake::rewards::apply_inflation::<
+            _,
+            governance::Store<_>,
+            parameters::Store<_>,
+        >(&mut self.state, last_epoch, num_blocks_in_last_epoch)?;
 
         // Pgf inflation
         pgf_apply_inflation(self.state.restrict_writes_to_write_log())?;

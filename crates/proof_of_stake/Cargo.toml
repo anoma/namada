@@ -15,7 +15,7 @@ version.workspace = true
 [features]
 default = []
 # testing helpers
-testing = ["proptest", "namada_governance"]
+testing = ["proptest", "namada_governance", "namada_parameters"]
 migrations = [
     "namada_migrations",
     "linkme",
@@ -29,10 +29,10 @@ namada_events = { path = "../events", default-features = false }
 namada_governance = { path = "../governance", optional = true }
 namada_macros = { path = "../macros" }
 namada_migrations = { path = "../migrations", optional = true }
+namada_parameters = { path = "../parameters", optional = true }
 namada_state = { path = "../state" }
 namada_storage = { path = "../storage" }
 namada_systems = { path = "../systems" }
-namada_parameters = { path = "../parameters" }
 namada_trans_token = { path = "../trans_token" }
 namada_tx = { path = "../tx" }
 namada_vp = { path = "../vp" }
@@ -53,6 +53,7 @@ tracing.workspace = true
 namada_core = { path = "../core", features = ["testing"] }
 namada_events = { path = "../events", features = ["testing"] }
 namada_governance = { path = "../governance" }
+namada_parameters = { path = "../parameters" }
 namada_state = { path = "../state", features = ["testing"] }
 
 assert_matches.workspace = true

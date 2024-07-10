@@ -8,10 +8,9 @@ use namada_core::dec::Dec;
 use namada_core::storage::{BlockHeight, Epoch};
 use namada_core::token::{self, Amount};
 use namada_core::uint::{Uint, I256};
-use namada_parameters::storage as params_storage;
 use namada_storage::collections::lazy_map::NestedSubKey;
 use namada_storage::{ResultExt, StorageRead, StorageWrite};
-use namada_systems::governance;
+use namada_systems::{governance, parameters};
 use namada_trans_token::get_effective_total_native_supply;
 use thiserror::Error;
 
@@ -358,7 +357,7 @@ where
 }
 
 /// Apply inflation to the Proof of Stake system.
-pub fn apply_inflation<S, Gov>(
+pub fn apply_inflation<S, Gov, Parameters>(
     storage: &mut S,
     last_epoch: Epoch,
     num_blocks_in_last_epoch: u64,
@@ -366,11 +365,10 @@ pub fn apply_inflation<S, Gov>(
 where
     S: StorageRead + StorageWrite,
     Gov: governance::Read<S>,
+    Parameters: parameters::Read<S>,
 {
     // Read from Parameters storage
-    let epochs_per_year: u64 = storage
-        .read(&params_storage::get_epochs_per_year_key())?
-        .expect("Epochs per year should exist in parameters storage");
+    let epochs_per_year: u64 = Parameters::epochs_per_year(storage)?;
 
     let staking_token = staking_token_address(storage);
     let total_tokens = get_effective_total_native_supply(storage)?;
