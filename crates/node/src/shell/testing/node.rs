@@ -475,10 +475,15 @@ impl MockNode {
                 time: DateTimeUtc::now(),
                 next_validators_hash: Hash([0; 32]),
             },
+            block_hash: Hash([0; 32]),
             byzantine_validators: vec![],
             txs: txs.clone(),
             proposer_address,
-            votes,
+            height: height.try_into().unwrap(),
+            decided_last_commit: tendermint::abci::types::CommitInfo {
+                round: 0u8.into(),
+                votes,
+            },
         };
 
         let resp = locked.finalize_block(req).expect("Test failed");
@@ -589,6 +594,7 @@ impl MockNode {
                 time: DateTimeUtc::now(),
                 next_validators_hash: Hash([0; 32]),
             },
+            block_hash: Hash([0; 32]),
             byzantine_validators: vec![],
             txs: txs
                 .clone()
@@ -600,7 +606,11 @@ impl MockNode {
                 })
                 .collect(),
             proposer_address,
-            votes,
+            height: height.try_into().unwrap(),
+            decided_last_commit: tendermint::abci::types::CommitInfo {
+                round: 0u8.into(),
+                votes,
+            },
         };
 
         // process the results

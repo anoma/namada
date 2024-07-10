@@ -4101,6 +4101,7 @@ name = "namada_state"
 version = "0.40.0"
 dependencies = [
  "borsh 1.4.0",
+ "clru",
  "itertools 0.12.1",
  "linkme",
  "namada_core",
