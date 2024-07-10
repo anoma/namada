@@ -49,7 +49,7 @@ use namada_core::storage::{BlockHeight, TxIndex};
 use namada_core::time::DateTimeUtc;
 use namada_core::uint::Uint;
 use namada_events::extend::{
-    IbcTxBatchRefs as IbcTxBatchRefsAttr,
+    IbcMaspTxBatchRefs as IbcMaspTxBatchRefsAttr,
     MaspTxBatchRefs as MaspTxBatchRefsAttr,
     MaspTxBlockIndex as MaspTxBlockIndexAttr, ReadFromEventAttributes,
 };
@@ -2403,7 +2403,7 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
                             )
                             .ok();
                         let ibc_tx_data_refs =
-                            IbcTxBatchRefsAttr::read_from_event_attributes(
+                            IbcMaspTxBatchRefsAttr::read_from_event_attributes(
                                 &event.attributes,
                             )
                             .ok();

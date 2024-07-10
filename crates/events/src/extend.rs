@@ -519,9 +519,9 @@ impl EventAttributeEntry<'static> for MaspTxBatchRefs {
 }
 
 /// Extend an [`Event`] with data sections for IBC shielding transfer.
-pub struct IbcTxBatchRefs(pub IbcTxDataRefs);
+pub struct IbcMaspTxBatchRefs(pub IbcTxDataRefs);
 
-impl EventAttributeEntry<'static> for IbcTxBatchRefs {
+impl EventAttributeEntry<'static> for IbcMaspTxBatchRefs {
     type Value = IbcTxDataRefs;
     type ValueOwned = Self::Value;
 

@@ -18,7 +18,7 @@ use namada_parameters::get_gas_scale;
 use namada_state::TxWrites;
 use namada_token::event::{TokenEvent, TokenOperation};
 use namada_token::utils::is_masp_transfer;
-use namada_tx::action::Read;
+use namada_tx::action::{is_ibc_shielding_transfer, Read};
 use namada_tx::data::protocol::{ProtocolTx, ProtocolTxType};
 use namada_tx::data::{
     BatchResults, BatchedTxResult, ExtendedTxResult, TxResult, VpStatusFlags,
@@ -431,7 +431,7 @@ where
                             .0
                             .push(masp_section_ref);
                     }
-                    if namada_tx::action::is_ibc_shielding_transfer(state)
+                    if is_ibc_shielding_transfer(&*state)
                         .map_err(Error::StateError)?
                     {
                         extended_tx_result
@@ -765,20 +765,32 @@ where
                     );
                 }
 
-                let masp_section_ref =
-                    match namada_tx::action::get_masp_section_ref(*state)
-                        .map_err(Error::StateError)?
-                    {
-                        Some(masp_tx_id) => Either::Left(masp_tx_id),
-                        None => Either::Right(*first_tx.cmt.data_sechash()),
-                    };
                 // Ensure that the transaction is actually a masp one, otherwise
                 // reject
-                (is_masp_transfer(&result.changed_keys) && result.is_accepted())
-                    .then_some(MaspTxResult {
-                        tx_result: result,
-                        masp_section_ref,
-                    })
+                if is_masp_transfer(&result.changed_keys)
+                    && result.is_accepted()
+                {
+                    if let Some(masp_tx_id) =
+                        namada_tx::action::get_masp_section_ref(*state)
+                            .map_err(Error::StateError)?
+                    {
+                        Some(MaspTxResult {
+                            tx_result: result,
+                            masp_section_ref: Either::Left(masp_tx_id),
+                        })
+                    } else {
+                        is_ibc_shielding_transfer(*state)
+                            .map_err(Error::StateError)?
+                            .then_some(MaspTxResult {
+                                tx_result: result,
+                                masp_section_ref: Either::Right(
+                                    *first_tx.cmt.data_sechash(),
+                                ),
+                            })
+                    }
+                } else {
+                    None
+                }
             }
             Err(e) => {
                 state.write_log_mut().drop_tx();

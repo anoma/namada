@@ -9,7 +9,7 @@ use namada::gas::event::GasUsed;
 use namada::governance::pgf::inflation as pgf_inflation;
 use namada::hash::Hash;
 use namada::ledger::events::extend::{
-    ComposeEvent, Height, IbcTxBatchRefs, Info, MaspTxBatchRefs,
+    ComposeEvent, Height, IbcMaspTxBatchRefs, Info, MaspTxBatchRefs,
     MaspTxBlockIndex, TxHash,
 };
 use namada::ledger::events::EmitEvents;
@@ -1060,7 +1060,7 @@ impl<'finalize> TempTxLogs {
         if !extended_tx_result.ibc_tx_data_refs.0.is_empty() {
             self.tx_event
                 .extend(MaspTxBlockIndex(TxIndex::must_from_usize(tx_index)));
-            self.tx_event.extend(IbcTxBatchRefs(
+            self.tx_event.extend(IbcMaspTxBatchRefs(
                 extended_tx_result.ibc_tx_data_refs.clone(),
             ));
         }
