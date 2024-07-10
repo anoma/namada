@@ -292,7 +292,7 @@ where
         let mut sign_pre_genesis_txs = run_cmd(
             Bin::Client,
             args,
-            Some(5),
+            Some(15),
             &working_dir(),
             base_dir,
             format!("{}:{}", std::file!(), std::line!()),
@@ -434,7 +434,7 @@ pub fn network(
     let mut init_network = run_cmd(
         Bin::Client,
         args,
-        Some(5),
+        Some(15),
         &working_dir,
         &genesis_dir,
         format!("{}:{}", std::file!(), std::line!()),
