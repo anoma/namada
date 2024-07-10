@@ -2528,6 +2528,8 @@ pub mod testing {
     use masp_proofs::bellman::groth16::Proof;
     use masp_proofs::bls12_381;
     use masp_proofs::bls12_381::{Bls12, G1Affine, G2Affine};
+    use namada_core::address::testing::arb_non_internal_address;
+    use namada_token::{DenominatedAmount, Transfer};
     use proptest::prelude::*;
     use proptest::sample::SizeRange;
     use proptest::test_runner::TestRng;
@@ -2535,6 +2537,7 @@ pub mod testing {
 
     use super::*;
     use crate::address::testing::arb_address;
+    use crate::address::MASP;
     use crate::masp_primitives::consensus::BranchId;
     use crate::masp_primitives::constants::VALUE_COMMITMENT_RANDOMNESS_GENERATOR;
     use crate::masp_primitives::merkle_tree::FrozenCommitmentTree;
@@ -3024,11 +3027,26 @@ pub mod testing {
                 .iter()
                 .map(|(asset, values)| arb_output_descriptions(asset.clone(), values.clone()))
                 .collect::<Vec<_>>(),
+            input_data in collection::vec((any::<bool>(), arb_non_internal_address()), assets.len() * MAX_SPLITS),
+            output_data in collection::vec((any::<bool>(), arb_non_internal_address()), assets.len() * MAX_SPLITS),
             assets in Just(assets),
         ) -> (
+            Transfer,
             Builder::<Network>,
             HashMap<AssetData, u64>,
         ) {
+            // Enable assets to be more easily decoded
+            let mut asset_decoder = BTreeMap::new();
+            for asset_data in assets.keys() {
+                let asset_type = encode_asset_type(
+                    asset_data.token.clone(),
+                    asset_data.denom,
+                    asset_data.position,
+                    asset_data.epoch,
+                ).unwrap();
+                asset_decoder.insert(asset_type, asset_data);
+            }
+            let mut transfer = Transfer::default();
             let mut builder = Builder::<Network, _>::new(
                 NETWORK,
                 // NOTE: this is going to add 20 more blocks to the actual
@@ -3043,13 +3061,52 @@ pub mod testing {
             }
             let tree = FrozenCommitmentTree::new(&leaves);
             // Then use the notes knowing that they all have the same anchor
-            for (idx, (esk, div, note, _node)) in spend_descriptions.iter().flatten().enumerate() {
-                builder.add_sapling_spend(*esk, *div, *note, tree.path(idx)).unwrap();
+            for ((is_shielded, address), (idx, (esk, div, note, _node))) in
+                input_data.into_iter().zip(spend_descriptions.iter().flatten().enumerate())
+            {
+                // Compute the equivalent transparent movement
+                let asset_data = asset_decoder[&note.asset_type];
+                let amount = DenominatedAmount::new(
+                    token::Amount::from_masp_denominated(note.value, asset_data.position),
+                    asset_data.denom,
+                );
+                // Use either a transparent input or a shielded input
+                if is_shielded {
+                    builder.add_sapling_spend(*esk, *div, *note, tree.path(idx)).unwrap();
+                    transfer = transfer.debit(MASP, asset_data.token.clone(), amount).unwrap();
+                } else {
+                    let txout = TxOut {
+                        address: TAddrData::Addr(address.clone()).taddress(),
+                        asset_type: note.asset_type,
+                        value: note.value,
+                    };
+                    builder.add_transparent_input(txout).unwrap();
+                    transfer = transfer.debit(address, asset_data.token.clone(), amount).unwrap();
+                }
             }
-            for (ovk, payment_addr, asset_type, value, memo) in output_descriptions.into_iter().flatten() {
-                builder.add_sapling_output(ovk, payment_addr, asset_type, value, memo).unwrap();
+            for ((is_shielded, address), (ovk, payment_addr, asset_type, value, memo)) in
+                output_data.into_iter().zip(output_descriptions.into_iter().flatten())
+            {
+                // Compute the equivalent transparent movement
+                let asset_data = asset_decoder[&asset_type];
+                let amount = DenominatedAmount::new(
+                    token::Amount::from_masp_denominated(value, asset_data.position),
+                    asset_data.denom,
+                );
+                // Use either a transparent output or a shielded output
+                if is_shielded {
+                    builder.add_sapling_output(ovk, payment_addr, asset_type, value, memo).unwrap();
+                    transfer = transfer.credit(MASP, asset_data.token.clone(), amount).unwrap();
+                } else {
+                    builder.add_transparent_output(
+                        &TAddrData::Addr(address.clone()).taddress(),
+                        asset_type,
+                        value,
+                    ).unwrap();
+                    transfer = transfer.credit(address, asset_data.token.clone(), amount).unwrap();
+                }
             }
-            (builder, assets.into_iter().map(|(k, v)| (k, v.iter().sum())).collect())
+            (transfer, builder, assets.into_iter().map(|(k, v)| (k, v.iter().sum())).collect())
         }
     }
 
@@ -3078,109 +3135,16 @@ pub mod testing {
     }
 
     prop_compose! {
-        /// Generate an arbitrary shielding MASP transaction builder
-        pub fn arb_shielding_builder(
-            source: TransparentAddress,
-            asset_range: impl Into<SizeRange>,
-        )(
-            assets in collection::hash_map(
-                arb_pre_asset_type(),
-                collection::vec(..MAX_MONEY, ..MAX_SPLITS),
-                asset_range,
-            ),
-        )(
-            expiration_height in arb_height(BranchId::MASP, &Network),
-            txins in assets
-                .iter()
-                .map(|(asset, values)| arb_txouts(asset.clone(), values.clone(), source))
-                .collect::<Vec<_>>(),
-            output_descriptions in assets
-                .iter()
-                .map(|(asset, values)| arb_output_descriptions(asset.clone(), values.clone()))
-                .collect::<Vec<_>>(),
-            assets in Just(assets),
-        ) -> (
-            Builder::<Network>,
-            HashMap<AssetData, u64>,
-        ) {
-            let mut builder = Builder::<Network, _>::new(
-                NETWORK,
-                // NOTE: this is going to add 20 more blocks to the actual
-                // expiration but there's no other exposed function that we could
-                // use from the masp crate to specify the expiration better
-                expiration_height.unwrap(),
-            );
-            for txin in txins.into_iter().flatten() {
-                builder.add_transparent_input(txin).unwrap();
-            }
-            for (ovk, payment_addr, asset_type, value, memo) in output_descriptions.into_iter().flatten() {
-                builder.add_sapling_output(ovk, payment_addr, asset_type, value, memo).unwrap();
-            }
-            (builder, assets.into_iter().map(|(k, v)| (k, v.iter().sum())).collect())
-        }
-    }
-
-    prop_compose! {
-        /// Generate an arbitrary deshielding MASP transaction builder
-        pub fn arb_deshielding_builder(
-            target: TransparentAddress,
-            asset_range: impl Into<SizeRange>,
-        )(
-            assets in collection::hash_map(
-                arb_pre_asset_type(),
-                collection::vec(..MAX_MONEY, ..MAX_SPLITS),
-                asset_range,
-            ),
-        )(
-            expiration_height in arb_height(BranchId::MASP, &Network),
-            spend_descriptions in assets
-                .iter()
-                .map(|(asset, values)| arb_spend_descriptions(asset.clone(), values.clone()))
-                .collect::<Vec<_>>(),
-            txouts in assets
-                .iter()
-                .map(|(asset, values)| arb_txouts(asset.clone(), values.clone(), target))
-                .collect::<Vec<_>>(),
-            assets in Just(assets),
-        ) -> (
-            Builder::<Network>,
-            HashMap<AssetData, u64>,
-        ) {
-            let mut builder = Builder::<Network, _>::new(
-                NETWORK,
-                // NOTE: this is going to add 20 more blocks to the actual
-                // expiration but there's no other exposed function that we could
-                // use from the masp crate to specify the expiration better
-                expiration_height.unwrap(),
-            );
-            let mut leaves = Vec::new();
-            // First construct a Merkle tree containing all notes to be used
-            for (_esk, _div, _note, node) in spend_descriptions.iter().flatten() {
-                leaves.push(*node);
-            }
-            let tree = FrozenCommitmentTree::new(&leaves);
-            // Then use the notes knowing that they all have the same anchor
-            for (idx, (esk, div, note, _node)) in spend_descriptions.into_iter().flatten().enumerate() {
-                builder.add_sapling_spend(esk, div, note, tree.path(idx)).unwrap();
-            }
-            for txout in txouts.into_iter().flatten() {
-                builder.add_transparent_output(&txout.address, txout.asset_type, txout.value).unwrap();
-            }
-            (builder, assets.into_iter().map(|(k, v)| (k, v.iter().sum())).collect())
-        }
-    }
-
-    prop_compose! {
         /// Generate an arbitrary MASP shielded transfer
         pub fn arb_shielded_transfer(
             asset_range: impl Into<SizeRange>,
         )(asset_range in Just(asset_range.into()))(
-            (builder, asset_types) in arb_shielded_builder(asset_range),
+            (mut transfer, builder, asset_types) in arb_shielded_builder(asset_range),
             epoch in arb_masp_epoch(),
             prover_rng in arb_rng().prop_map(TestCsprng),
             mut rng in arb_rng().prop_map(TestCsprng),
             bparams_rng in arb_rng().prop_map(TestCsprng),
-        ) -> (ShieldedTransfer, HashMap<AssetData, u64>, StoredBuildParams) {
+        ) -> (Transfer, ShieldedTransfer, HashMap<AssetData, u64>, StoredBuildParams) {
             let mut rng_build_params = RngBuildParams::new(bparams_rng);
             let (masp_tx, metadata) = builder.clone().build(
                 &MockTxProver(Mutex::new(prover_rng)),
@@ -3188,69 +3152,8 @@ pub mod testing {
                 &mut rng,
                 &mut rng_build_params,
             ).unwrap();
-            (ShieldedTransfer {
-                builder: builder.map_builder(WalletMap),
-                metadata,
-                masp_tx,
-                epoch,
-            }, asset_types, rng_build_params.to_stored().unwrap())
-        }
-    }
-
-    prop_compose! {
-        /// Generate an arbitrary MASP shielded transfer
-        pub fn arb_shielding_transfer(
-            source: TransparentAddress,
-            asset_range: impl Into<SizeRange>,
-        )(asset_range in Just(asset_range.into()))(
-            (builder, asset_types) in arb_shielding_builder(
-                source,
-                asset_range,
-            ),
-            epoch in arb_masp_epoch(),
-            prover_rng in arb_rng().prop_map(TestCsprng),
-            mut rng in arb_rng().prop_map(TestCsprng),
-            bparams_rng in arb_rng().prop_map(TestCsprng),
-        ) -> (ShieldedTransfer, HashMap<AssetData, u64>, StoredBuildParams) {
-            let mut rng_build_params = RngBuildParams::new(bparams_rng);
-            let (masp_tx, metadata) = builder.clone().build(
-                &MockTxProver(Mutex::new(prover_rng)),
-                &FeeRule::non_standard(U64Sum::zero()),
-                &mut rng,
-                &mut rng_build_params,
-            ).unwrap();
-            (ShieldedTransfer {
-                builder: builder.map_builder(WalletMap),
-                metadata,
-                masp_tx,
-                epoch,
-            }, asset_types, rng_build_params.to_stored().unwrap())
-        }
-    }
-
-    prop_compose! {
-        /// Generate an arbitrary MASP shielded transfer
-        pub fn arb_deshielding_transfer(
-            target: TransparentAddress,
-            asset_range: impl Into<SizeRange>,
-        )(asset_range in Just(asset_range.into()))(
-            (builder, asset_types) in arb_deshielding_builder(
-                target,
-                asset_range,
-            ),
-            epoch in arb_masp_epoch(),
-            prover_rng in arb_rng().prop_map(TestCsprng),
-            mut rng in arb_rng().prop_map(TestCsprng),
-            bparams_rng in arb_rng().prop_map(TestCsprng),
-        ) -> (ShieldedTransfer, HashMap<AssetData, u64>, StoredBuildParams) {
-            let mut rng_build_params = RngBuildParams::new(bparams_rng);
-            let (masp_tx, metadata) = builder.clone().build(
-                &MockTxProver(Mutex::new(prover_rng)),
-                &FeeRule::non_standard(U64Sum::zero()),
-                &mut rng,
-                &mut rng_build_params,
-            ).unwrap();
-            (ShieldedTransfer {
+            transfer.shielded_section_hash = Some(masp_tx.txid().into());
+            (transfer, ShieldedTransfer {
                 builder: builder.map_builder(WalletMap),
                 metadata,
                 masp_tx,
