@@ -26,13 +26,13 @@ env:
   GIT_LFS_SKIP_SMUDGE: 1
   CARGO_INCREMENTAL: 0
   RUST_BACKTRACE: full
-  SCCACHE_BUCKET: github-runners-remote-cache-shared
+  SCCACHE_BUCKET: github-runners-remote-cache--usw2-az1--x-s3
   AWS_REGION: us-west-2
 
 jobs:
   lints:
     container: 
-      image: ghcr.io/heliaxdev/namada-ci:namada-latest
+      image: ghcr.io/heliaxdev/namada-ci:namada-main
     runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
 
     steps:
@@ -68,9 +68,13 @@ jobs:
         run: make fmt
         env:
           RUSTFLAGS: "-Z threads=8"
+      - name: Stop sccache
+        run: |
+          sccache --show-stats
+          sccache --stop-server
       - name: Clean cargo cache
         if: steps.cache.outputs.cache-hit != 'true'
-        run: cargo sweep --time 15
+        run: cargo sweep
 
   # build-wasm:
   #   timeout-minutes: 10
