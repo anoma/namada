@@ -28,6 +28,8 @@ env:
   RUST_BACKTRACE: full
   SCCACHE_BUCKET: github-runners-remote-cache--usw2-az1--x-s3
   AWS_REGION: us-west-2
+  SCCACHE_ERROR_LOG: /tmp/sccache_log.txt 
+  SCCACHE_LOG: debug
 
 jobs:
   lints:
@@ -72,6 +74,10 @@ jobs:
         run: make fmt
         env:
           RUSTFLAGS: "-Z threads=8"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sccache-logs.txt
+          path: /tmp/sccache_log.txt 
       - name: Clean cargo cache
         if: steps.cache.outputs.cache-hit != 'true'
         run: cargo sweep
