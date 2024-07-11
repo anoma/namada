@@ -586,7 +586,7 @@ async fn make_ledger_amount_asset(
             ));
         } else {
             output.extend(vec![
-                format!("{}Token : {}", prefix, token),
+                format!("{}Token : {}", prefix, decoded.token),
                 format!(
                     "{}Amount : {}",
                     prefix,
