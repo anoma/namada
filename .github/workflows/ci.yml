@@ -60,7 +60,7 @@ jobs:
           path: |
             ~/.cargo/
             target/
-          key: ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
       - name: Start sccache server
