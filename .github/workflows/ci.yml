@@ -22,7 +22,7 @@ permissions:
 
 env:
   RUSTC_WRAPPER: sccache
-  SCCACHE_S3_USE_SSL: false
+  SCCACHE_S3_USE_SSL: true
   GIT_LFS_SKIP_SMUDGE: 1
   CARGO_INCREMENTAL: 0
   RUST_BACKTRACE: full
@@ -55,10 +55,11 @@ jobs:
         with:
           path: |
             ~/.cargo/
-            target/   
+            target/
           key: ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
       - name: Start sccache server
+        id: sccache
         run: sccache --start-server
       - name: Clippy lints
         run: make clippy
@@ -68,13 +69,12 @@ jobs:
         run: make fmt
         env:
           RUSTFLAGS: "-Z threads=8"
-      - name: Stop sccache
-        run: |
-          sccache --show-stats
-          sccache --stop-server
       - name: Clean cargo cache
         if: steps.cache.outputs.cache-hit != 'true'
         run: cargo sweep
+      - name: Stop sccache
+        if: steps.sccache.outcome == 'success'
+        run: sccache --stop-server
 
   # build-wasm:
   #   timeout-minutes: 10
