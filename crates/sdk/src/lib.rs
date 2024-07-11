@@ -94,6 +94,18 @@ pub trait MaybeSend {}
 #[cfg(not(feature = "async-send"))]
 impl<T> MaybeSend for T where T: ?Sized {}
 
+#[cfg(feature = "async-send")]
+#[allow(missing_docs)]
+pub trait MaybeSendFuture<R>: std::future::Future<Output = R> + Send {}
+#[cfg(feature = "async-send")]
+impl<F: std::future::Future + Send> MaybeSendFuture<F::Output> for F {}
+
+#[cfg(not(feature = "async-send"))]
+#[allow(missing_docs)]
+pub trait MaybeSendFuture<R>: std::future::Future<Output = R> {}
+#[cfg(not(feature = "async-send"))]
+impl<F: std::future::Future> MaybeSendFuture<F::Output> for F {}
+
 #[cfg_attr(feature = "async-send", async_trait::async_trait)]
 #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
 /// An interface for high-level interaction with the Namada SDK

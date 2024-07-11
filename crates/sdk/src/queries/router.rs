@@ -403,29 +403,31 @@ macro_rules! pattern_and_handler_to_method {
                 `dry_run_tx`), optionally specified height (supported for \
                 `storage_value`) and optional proof (supported for \
                 `storage_value` and `storage_prefix`) from `storage_value`."]
-            pub async fn storage_value<CLIENT>(&self, client: &CLIENT,
+            pub fn storage_value<'a, CLIENT>(&'a self, client: &'a CLIENT,
                 data: Option<Vec<u8>>,
                 height: Option<namada_core::storage::BlockHeight>,
                 prove: bool,
-                $( $param: &$param_ty ),*
+                $( $param: &'a $param_ty ),*
             )
-                -> std::result::Result<
+                -> impl $crate::MaybeSendFuture<std::result::Result<
                     $crate::queries::ResponseQuery<Vec<u8>>,
                     <CLIENT as $crate::queries::Client>::Error
-                >
-                where CLIENT: $crate::queries::Client + std::marker::Sync {
-                    let path = self.storage_value_path( $( $param ),* );
+                >> + 'a
+                where CLIENT: $crate::queries::Client + $crate::MaybeSend + $crate::MaybeSync {
+                    async move {
+                        let path = self.storage_value_path( $( $param ),* );
 
-                    let $crate::queries::ResponseQuery {
-                        data, info, proof, height,
-                    } = client.request(path, data, height, prove).await?;
+                        let $crate::queries::ResponseQuery {
+                            data, info, proof, height,
+                        } = client.request(path, data, height, prove).await?;
 
-                    Ok($crate::queries::ResponseQuery {
-                        data,
-                        info,
-                        proof,
-                        height,
-                    })
+                        Ok($crate::queries::ResponseQuery {
+                            data,
+                            info,
+                            proof,
+                            height,
+                        })
+                    }
             }
         }
     };
@@ -456,32 +458,34 @@ macro_rules! pattern_and_handler_to_method {
                 `dry_run_tx`), optionally specified height (supported for \
                 `storage_value`) and optional proof (supported for \
                 `storage_value` and `storage_prefix`) from `" $handle "`."]
-            pub async fn $handle<CLIENT>(&self, client: &CLIENT,
+            pub fn $handle<'a, CLIENT>(&'a self, client: &'a CLIENT,
                 data: Option<Vec<u8>>,
                 height: Option<namada_core::storage::BlockHeight>,
                 prove: bool,
-                $( $param: &$param_ty ),*
+                $( $param: &'a $param_ty ),*
             )
-                -> std::result::Result<
+                -> impl $crate::MaybeSendFuture<std::result::Result<
                     $crate::queries::ResponseQuery<$return_type>,
                     <CLIENT as $crate::queries::Client>::Error
-                >
-                where CLIENT: $crate::queries::Client + std::marker::Sync {
-                    let path = self.[<$handle _path>]( $( $param ),* );
+                >> + 'a
+                where CLIENT: $crate::queries::Client + $crate::MaybeSend + $crate::MaybeSync {
+                    async move {
+                        let path = self.[<$handle _path>]( $( $param ),* );
 
-                    let $crate::queries::ResponseQuery {
-                        data, info, proof, height
-                    } = client.request(path, data, height, prove).await?;
+                        let $crate::queries::ResponseQuery {
+                            data, info, proof, height
+                        } = client.request(path, data, height, prove).await?;
 
-                    let decoded: $return_type =
-                        borsh::BorshDeserialize::try_from_slice(&data[..])?;
+                        let decoded: $return_type =
+                            borsh::BorshDeserialize::try_from_slice(&data[..])?;
 
-                    Ok($crate::queries::ResponseQuery {
-                        data: decoded,
-                        info,
-                        proof,
-                        height,
-                    })
+                        Ok($crate::queries::ResponseQuery {
+                            data: decoded,
+                            info,
+                            proof,
+                            height,
+                        })
+                    }
             }
         }
     };
@@ -511,21 +515,23 @@ macro_rules! pattern_and_handler_to_method {
             #[doc = "Request a simple borsh-encoded value from `" $handle "`, \
                 without any additional request data, specified block height or \
                 proof."]
-            pub async fn $handle<CLIENT>(&self, client: &CLIENT,
-                $( $param: &$param_ty ),*
+            pub fn $handle<'a, CLIENT>(&'a self, client: &'a CLIENT,
+                $( $param: &'a $param_ty ),*
             )
-                -> std::result::Result<
+                -> impl $crate::MaybeSendFuture<std::result::Result<
                     $return_type,
                     <CLIENT as $crate::queries::Client>::Error
-                >
-                where CLIENT: $crate::queries::Client + std::marker::Sync {
-                    let path = self.[<$handle _path>]( $( $param ),* );
+                >> + 'a
+                where CLIENT: $crate::queries::Client + $crate::MaybeSend + $crate::MaybeSync {
+                    async move {
+                        let path = self.[<$handle _path>]( $( $param ),* );
 
-                    let data = client.simple_request(path).await?;
+                        let data = client.simple_request(path).await?;
 
-                    let decoded: $return_type =
-                        borsh::BorshDeserialize::try_from_slice(&data[..])?;
-                    Ok(decoded)
+                        let decoded: $return_type =
+                            borsh::BorshDeserialize::try_from_slice(&data[..])?;
+                        Ok(decoded)
+                    }
             }
         }
     };
