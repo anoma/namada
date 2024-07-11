@@ -1239,7 +1239,6 @@ mod test {
     use namada_core::parameters::Parameters;
     use namada_core::storage::testing::get_dummy_header;
     use namada_core::time::DateTimeUtc;
-    use namada_core::token;
     use namada_gas::{TxGasMeter, VpGasMeter};
     use namada_proof_of_stake::bond_tokens;
     use namada_proof_of_stake::test_utils::get_dummy_genesis_validator;
@@ -1249,6 +1248,7 @@ mod test {
         BlockHeight, Epoch, FullAccessState, Key, Sha256Hasher, State,
         StateRead, StorageRead, TxIndex,
     };
+    use namada_token as token;
     use namada_token::storage_key::balance_key;
     use namada_tx::action::{Action, GovAction, Write};
     use namada_tx::data::TxType;
@@ -2727,7 +2727,7 @@ mod test {
             token::Amount::native_whole(1000000),
         );
 
-        bond_tokens::<_, crate::Store<_>>(
+        bond_tokens::<_, crate::Store<_>, token::Store<_>>(
             &mut state,
             Some(&delegator_address),
             &validator_address,
@@ -2873,7 +2873,7 @@ mod test {
             token::Amount::native_whole(1000000),
         );
 
-        bond_tokens::<_, crate::Store<_>>(
+        bond_tokens::<_, crate::Store<_>, token::Store<_>>(
             &mut state,
             Some(&delegator_address),
             &validator_address,
@@ -3019,7 +3019,7 @@ mod test {
             token::Amount::native_whole(1000000),
         );
 
-        bond_tokens::<_, crate::Store<_>>(
+        bond_tokens::<_, crate::Store<_>, token::Store<_>>(
             &mut state,
             Some(&delegator_address),
             &validator_address,

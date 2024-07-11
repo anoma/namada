@@ -21,6 +21,7 @@ use namada_storage::collections::lazy_map::{
     Collectable, NestedSubKey, SubKey,
 };
 use namada_storage::StorageRead;
+use namada_trans_token::{self as token, read_balance};
 use proptest::prelude::*;
 use proptest::test_runner::Config;
 use proptest_state_machine::{
@@ -45,7 +46,6 @@ use crate::tests::{
     read_below_threshold_validator_set_addresses, read_pos_params,
     redelegate_tokens, slash, unbond_tokens, unjail_validator, withdraw_tokens,
 };
-use crate::token::{self, read_balance};
 use crate::types::{
     BondId, EagerRedelegatedBondsMap, GenesisValidator, ReverseOrdTokenAmount,
     Slash, SlashType, ValidatorState, WeightedValidator,

@@ -48,12 +48,12 @@ use namada_core::key::common;
 use namada_core::storage::BlockHeight;
 pub use namada_core::storage::{Epoch, Key, KeySeg};
 use namada_core::tendermint::abci::types::Misbehavior;
+use namada_core::token;
 use namada_events::EmitEvents;
 use namada_storage::collections::lazy_map::{self, Collectable, LazyMap};
 use namada_storage::{OptionExt, StorageRead, StorageWrite};
-use namada_systems::governance;
 pub use namada_systems::proof_of_stake::*;
-pub use namada_trans_token as token;
+use namada_systems::{governance, trans_token};
 pub use parameters::{OwnedPosParams, PosParams};
 use storage::write_validator_name;
 pub use types::GenesisValidator;
@@ -253,7 +253,7 @@ where
 /// Self-bond tokens to a validator when `source` is `None` or equal to
 /// the `validator` address, or delegate tokens from the `source` to the
 /// `validator`.
-pub fn bond_tokens<S, Gov>(
+pub fn bond_tokens<S, Gov, Token>(
     storage: &mut S,
     source: Option<&Address>,
     validator: &Address,
@@ -264,6 +264,7 @@ pub fn bond_tokens<S, Gov>(
 where
     S: StorageRead + StorageWrite,
     Gov: governance::Read<S>,
+    Token: trans_token::Write<S>,
 {
     tracing::debug!(
         "Bonding token amount {} at epoch {current_epoch}",
@@ -286,7 +287,7 @@ where
     tracing::debug!("Source {source} --> Validator {validator}");
 
     let staking_token = staking_token_address(storage);
-    token::transfer(storage, &staking_token, source, &ADDRESS, amount)?;
+    Token::transfer(storage, &staking_token, source, &ADDRESS, amount)?;
 
     let params = read_pos_params::<S, Gov>(storage)?;
     let offset = offset_opt.unwrap_or(params.pipeline_len);
@@ -1454,7 +1455,7 @@ where
 }
 
 /// Withdraw tokens from those that have been unbonded from proof-of-stake
-pub fn withdraw_tokens<S, Gov>(
+pub fn withdraw_tokens<S, Gov, Token>(
     storage: &mut S,
     source: Option<&Address>,
     validator: &Address,
@@ -1463,6 +1464,7 @@ pub fn withdraw_tokens<S, Gov>(
 where
     S: StorageRead + StorageWrite,
     Gov: governance::Read<S>,
+    Token: trans_token::Write<S>,
 {
     let params = read_pos_params::<S, Gov>(storage)?;
     let source = source.unwrap_or(validator);
@@ -1572,7 +1574,7 @@ where
 
     // Transfer the withdrawable tokens from the PoS address back to the source
     let staking_token = staking_token_address(storage);
-    token::transfer(
+    Token::transfer(
         storage,
         &staking_token,
         &ADDRESS,
@@ -1582,7 +1584,7 @@ where
 
     // TODO: Transfer the slashed tokens from the PoS address to the Slash Pool
     // address
-    // token::transfer(
+    // Token::transfer(
     //     storage,
     //     &staking_token,
     //     &ADDRESS,
@@ -2735,13 +2737,12 @@ pub mod test_utils {
             let staking_token = staking_token_address(storage);
             credit_tokens(storage, &staking_token, &address, tokens)?;
 
-            bond_tokens::<S, namada_governance::Store<S>>(
-                storage,
-                None,
-                &address,
-                tokens,
-                current_epoch,
-                Some(0),
+            bond_tokens::<
+                S,
+                namada_governance::Store<S>,
+                namada_trans_token::Store<S>,
+            >(
+                storage, None, &address, tokens, current_epoch, Some(0)
             )?;
         }
         // Store the total consensus validator stake to storage
@@ -2896,7 +2897,7 @@ where
 
 /// Claim available rewards, triggering an immediate transfer of tokens from the
 /// PoS account to the source address.
-pub fn claim_reward_tokens<S, Gov>(
+pub fn claim_reward_tokens<S, Gov, Token>(
     storage: &mut S,
     source: Option<&Address>,
     validator: &Address,
@@ -2905,6 +2906,7 @@ pub fn claim_reward_tokens<S, Gov>(
 where
     S: StorageRead + StorageWrite,
     Gov: governance::Read<S>,
+    Token: trans_token::Write<S>,
 {
     tracing::debug!("Claiming rewards in epoch {current_epoch}");
 
@@ -2928,7 +2930,7 @@ where
 
     // Transfer the bonded tokens from PoS to the source
     let staking_token = staking_token_address(storage);
-    token::transfer(storage, &staking_token, &ADDRESS, &source, reward_tokens)?;
+    Token::transfer(storage, &staking_token, &ADDRESS, &source, reward_tokens)?;
 
     Ok(reward_tokens)
 }

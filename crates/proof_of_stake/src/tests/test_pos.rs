@@ -15,12 +15,15 @@ use namada_core::{address, key};
 use namada_state::testing::TestState;
 use namada_storage::collections::lazy_map::Collectable;
 use namada_storage::StorageRead;
+use namada_trans_token::{
+    self as token, credit_tokens, get_effective_total_native_supply,
+    read_balance,
+};
 use proptest::prelude::*;
 use proptest::test_runner::Config;
 // Use `RUST_LOG=info` (or another tracing level) and `--nocapture` to see
 // `tracing` logs from tests
 use test_log::test;
-use token::get_effective_total_native_supply;
 
 use crate::epoched::EpochOffset;
 use crate::parameters::testing::arb_pos_params;
@@ -48,7 +51,6 @@ use crate::tests::{
     read_below_threshold_validator_set_addresses, redelegate_tokens, slash,
     unbond_tokens, unjail_validator, withdraw_tokens, GovStore,
 };
-use crate::token::{credit_tokens, read_balance};
 use crate::types::{
     into_tm_voting_power, BondDetails, BondId, BondsAndUnbondsDetails,
     GenesisValidator, SlashType, UnbondDetails, ValidatorState, VoteInfo,
@@ -57,7 +59,7 @@ use crate::types::{
 use crate::{
     below_capacity_validator_set_handle, bond_handle,
     consensus_validator_set_handle, is_delegator, is_validator,
-    jail_for_liveness, read_validator_stake, staking_token_address, token,
+    jail_for_liveness, read_validator_stake, staking_token_address,
     unbond_handle, validator_consensus_key_handle,
     validator_set_positions_handle, validator_state_handle,
 };
@@ -1458,7 +1460,7 @@ fn test_update_rewards_products_aux(validators: Vec<GenesisValidator>) {
     // Distribute inflation into rewards
     let last_epoch = current_epoch.prev().unwrap();
     let inflation = token::Amount::native_whole(10_000_000);
-    update_rewards_products_and_mint_inflation(
+    update_rewards_products_and_mint_inflation::<_, token::Store<_>>(
         &mut s,
         &params,
         last_epoch,

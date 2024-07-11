@@ -678,16 +678,18 @@ where
                     amount,
                 );
 
-                if let Err(err) =
-                    proof_of_stake::bond_tokens::<_, governance::Store<_>>(
-                        &mut self.state,
-                        Some(&source.address()),
-                        validator,
-                        amount.amount(),
-                        current_epoch,
-                        Some(0),
-                    )
-                {
+                if let Err(err) = proof_of_stake::bond_tokens::<
+                    _,
+                    governance::Store<_>,
+                    token::Store<_>,
+                >(
+                    &mut self.state,
+                    Some(&source.address()),
+                    validator,
+                    amount.amount(),
+                    current_epoch,
+                    Some(0),
+                ) {
                     tracing::warn!(
                         "Genesis bond tx failed with: {err}. Skipping."
                     );

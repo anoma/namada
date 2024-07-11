@@ -15,7 +15,12 @@ version.workspace = true
 [features]
 default = []
 # testing helpers
-testing = ["proptest", "namada_governance", "namada_parameters"]
+testing = [
+    "namada_governance",
+    "namada_parameters",
+    "namada_trans_token",
+    "proptest",
+]
 migrations = [
     "namada_migrations",
     "linkme",
@@ -26,16 +31,18 @@ namada_account = { path = "../account" }
 namada_controller = { path = "../controller" }
 namada_core = { path = "../core" }
 namada_events = { path = "../events", default-features = false }
-namada_governance = { path = "../governance", optional = true }
 namada_macros = { path = "../macros" }
 namada_migrations = { path = "../migrations", optional = true }
-namada_parameters = { path = "../parameters", optional = true }
 namada_state = { path = "../state" }
 namada_storage = { path = "../storage" }
 namada_systems = { path = "../systems" }
-namada_trans_token = { path = "../trans_token" }
 namada_tx = { path = "../tx" }
 namada_vp = { path = "../vp" }
+
+# For `feature = "testing"` only
+namada_governance = { path = "../governance", optional = true }
+namada_parameters = { path = "../parameters", optional = true }
+namada_trans_token = { path = "../trans_token", optional = true }
 
 borsh.workspace = true
 konst.workspace = true
@@ -55,6 +62,7 @@ namada_events = { path = "../events", features = ["testing"] }
 namada_governance = { path = "../governance" }
 namada_parameters = { path = "../parameters" }
 namada_state = { path = "../state", features = ["testing"] }
+namada_trans_token = { path = "../trans_token" }
 
 assert_matches.workspace = true
 itertools.workspace = true

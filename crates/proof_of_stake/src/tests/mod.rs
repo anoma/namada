@@ -1,10 +1,10 @@
 use namada_core::address::Address;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::common;
-use namada_core::token;
 use namada_events::EmitEvents;
 use namada_state::storage::Result;
 use namada_state::{Epoch, StorageRead, StorageWrite};
+use namada_trans_token as token;
 
 use crate::types::{BondId, BondsAndUnbondsDetails, ResultSlashing, SlashType};
 use crate::{BecomeValidator, OwnedPosParams, PosParams};
@@ -41,7 +41,7 @@ pub fn bond_tokens<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    crate::bond_tokens::<S, GovStore<S>>(
+    crate::bond_tokens::<S, GovStore<S>, token::Store<_>>(
         storage,
         source,
         validator,
@@ -154,7 +154,7 @@ pub fn withdraw_tokens<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    crate::withdraw_tokens::<S, GovStore<S>>(
+    crate::withdraw_tokens::<S, GovStore<S>, token::Store<_>>(
         storage,
         source,
         validator,

@@ -20,6 +20,7 @@ use namada_governance::parameters::GovernanceParameters;
 use namada_state::testing::TestState;
 use namada_storage::collections::lazy_map::{NestedSubKey, SubKey};
 use namada_storage::StorageRead;
+use namada_trans_token::{self as token, read_balance};
 use proptest::prelude::*;
 use proptest::test_runner::Config;
 use proptest_state_machine::{
@@ -49,14 +50,13 @@ use crate::tests::{
     redelegate_tokens, slash, unbond_tokens, unjail_validator, withdraw_tokens,
     GovStore,
 };
-use crate::token::read_balance;
 use crate::types::{
     BondId, GenesisValidator, ReverseOrdTokenAmount, Slash, SlashType,
     ValidatorState, WeightedValidator,
 };
 use crate::{
     below_capacity_validator_set_handle, bond_handle,
-    consensus_validator_set_handle, delegator_redelegated_bonds_handle, token,
+    consensus_validator_set_handle, delegator_redelegated_bonds_handle,
     validator_deltas_handle, validator_slashes_handle, validator_state_handle,
     RedelegationError,
 };

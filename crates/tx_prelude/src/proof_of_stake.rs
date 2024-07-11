@@ -1,7 +1,7 @@
 //! Proof of Stake system integration with functions for transactions
 
 use namada_core::dec::Dec;
-use namada_core::{key, token};
+use namada_core::key;
 pub use namada_proof_of_stake::parameters::PosParams;
 pub use namada_proof_of_stake::queries::find_delegation_validators;
 use namada_proof_of_stake::storage::read_pos_params;
@@ -19,6 +19,7 @@ use namada_tx::action::{
 use namada_tx::data::pos::{BecomeValidator, Bond};
 
 use super::*;
+use crate::token;
 
 impl Ctx {
     /// Self-bond tokens to a validator when `source` is `None` or equal to
@@ -41,7 +42,7 @@ impl Ctx {
         })))?;
 
         let current_epoch = self.get_block_epoch()?;
-        bond_tokens::<_, governance::Store<_>>(
+        bond_tokens::<_, governance::Store<_>, token::Store<_>>(
             self,
             source,
             validator,
@@ -99,7 +100,7 @@ impl Ctx {
         })))?;
 
         let current_epoch = self.get_block_epoch()?;
-        withdraw_tokens::<_, governance::Store<_>>(
+        withdraw_tokens::<_, governance::Store<_>, token::Store<_>>(
             self,
             source,
             validator,
@@ -211,7 +212,7 @@ impl Ctx {
         })))?;
 
         let current_epoch = self.get_block_epoch()?;
-        claim_reward_tokens::<_, governance::Store<_>>(
+        claim_reward_tokens::<_, governance::Store<_>, token::Store<_>>(
             self,
             source,
             validator,

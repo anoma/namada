@@ -13,7 +13,6 @@ use namada_core::ethereum_events::EthAddress;
 use namada_core::keccak::KeccakHash;
 use namada_core::key::{self, RefTo};
 use namada_core::storage::{BlockHeight, Key};
-use namada_core::token;
 use namada_proof_of_stake::parameters::OwnedPosParams;
 use namada_proof_of_stake::types::GenesisValidator;
 use namada_proof_of_stake::{
@@ -22,6 +21,7 @@ use namada_proof_of_stake::{
 };
 use namada_state::testing::TestState;
 use namada_storage::{StorageRead, StorageWrite};
+use namada_trans_token as token;
 use namada_trans_token::credit_tokens;
 
 use crate::storage::bridge_pool::get_key_from_hash;
@@ -297,7 +297,7 @@ pub fn append_validators_to_storage(
         .expect("Test failed");
         credit_tokens(state, &staking_token, &validator, stake)
             .expect("Test failed");
-        bond_tokens::<_, GovStore<_>>(
+        bond_tokens::<_, GovStore<_>, token::Store<_>>(
             state,
             None,
             &validator,

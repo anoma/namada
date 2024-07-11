@@ -6,12 +6,11 @@ use namada_core::arith::{self, checked};
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::dec::Dec;
 use namada_core::storage::{BlockHeight, Epoch};
-use namada_core::token::{self, Amount};
+use namada_core::token;
 use namada_core::uint::{Uint, I256};
 use namada_storage::collections::lazy_map::NestedSubKey;
 use namada_storage::{ResultExt, StorageRead, StorageWrite};
-use namada_systems::{governance, parameters};
-use namada_trans_token::get_effective_total_native_supply;
+use namada_systems::{governance, parameters, trans_token};
 use thiserror::Error;
 
 use crate::storage::{
@@ -22,7 +21,6 @@ use crate::storage::{
     validator_state_handle, write_last_pos_inflation_amount,
     write_last_staked_ratio,
 };
-use crate::token::credit_tokens;
 use crate::types::{into_tm_voting_power, BondId, ValidatorState, VoteInfo};
 use crate::{
     bond_amounts_for_rewards, get_total_consensus_stake, staking_token_address,
@@ -109,9 +107,9 @@ pub struct PosRewardsCalculator {
     /// Rewards fraction that goes to the block signers
     pub signer_reward: Dec,
     /// Total stake of validators who signed the block
-    pub signing_stake: Amount,
+    pub signing_stake: token::Amount,
     /// Total stake of the whole consensus set
-    pub total_stake: Amount,
+    pub total_stake: token::Amount,
 }
 
 impl PosRewardsCalculator {
@@ -158,7 +156,7 @@ impl PosRewardsCalculator {
     }
 
     /// Implement as ceiling of (2/3) * validator set stake
-    fn get_min_required_votes(&self) -> Amount {
+    fn get_min_required_votes(&self) -> token::Amount {
         (self
             .total_stake
             .checked_mul(2_u64)
@@ -357,7 +355,7 @@ where
 }
 
 /// Apply inflation to the Proof of Stake system.
-pub fn apply_inflation<S, Gov, Parameters>(
+pub fn apply_inflation<S, Gov, Parameters, Token>(
     storage: &mut S,
     last_epoch: Epoch,
     num_blocks_in_last_epoch: u64,
@@ -366,12 +364,13 @@ where
     S: StorageRead + StorageWrite,
     Gov: governance::Read<S>,
     Parameters: parameters::Read<S>,
+    Token: trans_token::Read<S> + trans_token::Write<S>,
 {
     // Read from Parameters storage
     let epochs_per_year: u64 = Parameters::epochs_per_year(storage)?;
 
     let staking_token = staking_token_address(storage);
-    let total_tokens = get_effective_total_native_supply(storage)?;
+    let total_tokens = Token::get_effective_total_native_supply(storage)?;
 
     // Read from PoS storage
     let params = read_pos_params::<S, Gov>(storage)?;
@@ -402,7 +401,7 @@ where
 
     // Mint inflation and partition rewards among all accounts that earn a
     // portion of it
-    update_rewards_products_and_mint_inflation(
+    update_rewards_products_and_mint_inflation::<S, Token>(
         storage,
         &params,
         last_epoch,
@@ -434,7 +433,7 @@ struct Rewards {
 /// tokens into the PoS account.
 /// Any left-over inflation tokens from rounding error of the sum of the
 /// rewards is given to the governance address.
-pub fn update_rewards_products_and_mint_inflation<S>(
+pub fn update_rewards_products_and_mint_inflation<S, Token>(
     storage: &mut S,
     params: &PosParams,
     last_epoch: Epoch,
@@ -445,6 +444,7 @@ pub fn update_rewards_products_and_mint_inflation<S>(
 ) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
+    Token: trans_token::Write<S>,
 {
     // Read the rewards accumulator and calculate the new rewards products
     // for the previous epoch
@@ -521,7 +521,12 @@ where
         inflation.to_string_native(),
         total_native_tokens.to_string_native(),
     );
-    credit_tokens(storage, staking_token, &address::POS, pos_reward_tokens)?;
+    Token::credit_tokens(
+        storage,
+        staking_token,
+        &address::POS,
+        pos_reward_tokens,
+    )?;
 
     if reward_tokens_remaining > token::Amount::zero() {
         tracing::info!(
@@ -529,7 +534,7 @@ where
              Governance account. Amount: {}.",
             reward_tokens_remaining.to_string_native()
         );
-        credit_tokens(
+        Token::credit_tokens(
             storage,
             staking_token,
             &address::PGF,

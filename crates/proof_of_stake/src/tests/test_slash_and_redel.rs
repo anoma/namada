@@ -17,6 +17,7 @@ use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_state::testing::TestState;
 use namada_storage::collections::lazy_map::Collectable;
 use namada_storage::StorageRead;
+use namada_trans_token::{self as token, credit_tokens, read_balance};
 use proptest::prelude::*;
 use proptest::test_runner::Config;
 // Use `RUST_LOG=info` (or another tracing level) and `--nocapture` to see
@@ -42,9 +43,8 @@ use crate::tests::{
     bond_amount, bond_tokens, bonds_and_unbonds, process_slashes,
     redelegate_tokens, slash, unbond_tokens, withdraw_tokens,
 };
-use crate::token::{credit_tokens, read_balance};
 use crate::types::{BondId, GenesisValidator, Slash, SlashType};
-use crate::{staking_token_address, token, OwnedPosParams, RedelegationError};
+use crate::{staking_token_address, OwnedPosParams, RedelegationError};
 
 proptest! {
     // Generate arb valid input for `test_simple_redelegation_aux`

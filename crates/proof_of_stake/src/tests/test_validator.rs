@@ -13,6 +13,7 @@ use namada_core::storage::Epoch;
 use namada_core::token;
 use namada_state::testing::TestState;
 use namada_storage::collections::lazy_map;
+use namada_trans_token::credit_tokens;
 use proptest::prelude::*;
 use proptest::test_runner::Config;
 // Use `RUST_LOG=info` (or another tracing level) and `--nocapture` to see
@@ -39,7 +40,6 @@ use crate::tests::{
     read_below_threshold_validator_set_addresses, unbond_tokens,
     update_validator_deltas, withdraw_tokens, GovStore,
 };
-use crate::token::credit_tokens;
 use crate::types::{
     into_tm_voting_power, ConsensusValidator, GenesisValidator, Position,
     ReverseOrdTokenAmount, ValidatorSetUpdate, WeightedValidator,
