@@ -184,7 +184,7 @@ toml = "0.5.8"
 tonic = "0.8.3"
 tonic-build = "0.11.0"
 tower = "0.4"
-tower-abci = { git = "https://github.com/yito88/tower-abci", branch = "yuji/tendermint-0.37" }
+tower-abci = "0.15.0"
 tracing = "0.1.30"
 tracing-appender = "0.2.2"
 tracing-log = "0.2.0"
