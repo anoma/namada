@@ -76,7 +76,7 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         run: cargo sweep --time 15
       - name: Stop sccache
-        if: steps.sccache.outcome == 'success'
+        if: always() && steps.sccache.outcome == 'success'
         run: sccache --stop-server
 
   # build-wasm:
