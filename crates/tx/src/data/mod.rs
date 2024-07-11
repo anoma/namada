@@ -191,8 +191,8 @@ pub struct ExtendedTxResult<T> {
     pub tx_result: TxResult<T>,
     /// The optional references to masp sections
     pub masp_tx_refs: MaspTxRefs,
-    /// The flag for IBC shielding transfer
-    pub is_ibc_shielding: bool,
+    /// The optional data section hashes of IBC transaction
+    pub ibc_tx_data_refs: IbcTxDataRefs,
 }
 
 impl<T> Default for ExtendedTxResult<T> {
@@ -200,7 +200,7 @@ impl<T> Default for ExtendedTxResult<T> {
         Self {
             tx_result: Default::default(),
             masp_tx_refs: Default::default(),
-            is_ibc_shielding: Default::default(),
+            ibc_tx_data_refs: Default::default(),
         }
     }
 }
