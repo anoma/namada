@@ -525,7 +525,7 @@ impl EventAttributeEntry<'static> for IbcMaspTxBatchRefs {
     type Value = IbcTxDataRefs;
     type ValueOwned = Self::Value;
 
-    const KEY: &'static str = "ibc_tx_batch_refs";
+    const KEY: &'static str = "ibc_masp_tx_batch_refs";
 
     fn into_value(self) -> Self::Value {
         self.0
