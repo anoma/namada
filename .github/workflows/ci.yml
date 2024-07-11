@@ -51,13 +51,16 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE }}
       - name: Cache cargo
         id: cache
-        uses: actions/cache@v4
+        uses: runs-on/cache@v4
+        env:
+          RUNS_ON_S3_BUCKET_CACHE: ${{ env.SCCACHE_BUCKET }}
         with:
           path: |
             ~/.cargo/
             target/
           key: ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
+
       - name: Start sccache server
         id: sccache
         run: sccache --start-server
