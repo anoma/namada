@@ -111,7 +111,7 @@ fs_extra = "1.2.0"
 futures = "0.3"
 git2 = { version = "0.18.1", default-features = false }
 ibc = { git = "https://github.com/cosmos/ibc-rs", rev = "7ff41b3804cda649e0d7f7c21389b8d65f8d9b4b", features = ["serde"] }
-ibc-derive = "0.7.0"
+ibc-derive = { git = "https://github.com/cosmos/ibc-rs", rev = "7ff41b3804cda649e0d7f7c21389b8d65f8d9b4b" }
 ibc-testkit = { git = "https://github.com/cosmos/ibc-rs", rev = "7ff41b3804cda649e0d7f7c21389b8d65f8d9b4b", default-features = false }
 ics23 = "0.11.0"
 index-set = { git = "https://github.com/heliaxdev/index-set", tag = "v0.8.1", features = ["serialize-borsh", "serialize-serde"] }

@@ -2473,7 +2473,7 @@ dependencies = [
  "ibc-clients",
  "ibc-core",
  "ibc-core-host-cosmos",
- "ibc-derive 0.7.0 (git+https://github.com/cosmos/ibc-rs?rev=7ff41b3804cda649e0d7f7c21389b8d65f8d9b4b)",
+ "ibc-derive",
  "ibc-primitives",
 ]
 
@@ -2614,7 +2614,7 @@ dependencies = [
  "ibc-core-handler",
  "ibc-core-host",
  "ibc-core-router",
- "ibc-derive 0.7.0 (git+https://github.com/cosmos/ibc-rs?rev=7ff41b3804cda649e0d7f7c21389b8d65f8d9b4b)",
+ "ibc-derive",
  "ibc-primitives",
 ]
 
@@ -2884,17 +2884,6 @@ dependencies = [
  "serde",
  "subtle-encoding",
  "tendermint 0.37.0",
-]
-
-[[package]]
-name = "ibc-derive"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23d961d2194fd5229961835d2eb78091906ef8afbaaa55bce7ad41bf3ead8aa9"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.65",
 ]
 
 [[package]]
@@ -3728,7 +3717,7 @@ dependencies = [
  "borsh",
  "data-encoding",
  "ibc",
- "ibc-derive 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ibc-derive",
  "ibc-testkit",
  "ics23",
  "konst",
