@@ -1,0 +1,676 @@
+name: Lint 🧹 Build 🛠️ Test 🚦
+
+on:
+  push:
+    branches:
+      - main
+  # Run in PRs with conflicts (https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request)
+  pull_request_target:
+    branches:
+      - main
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  id-token: write
+  contents: read
+  packages: read
+
+env:
+  RUSTC_WRAPPER: sccache
+  SCCACHE_S3_USE_SSL: false
+  GIT_LFS_SKIP_SMUDGE: 1
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: full
+  SCCACHE_BUCKET: github-runners-remote-cache-shared
+  AWS_REGION: us-west-2
+
+jobs:
+  lints:
+    container: 
+      image: ghcr.io/heliaxdev/namada-ci:namada-latest
+    runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        if: ${{ github.event_name != 'pull_request_target' }}
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        if: ${{ github.event_name == 'pull_request_target' }}
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Configure AWS 
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE }}
+      - name: Cache cargo
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/
+            target/   
+          key: ${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+      - name: Start sccache server
+        run: sccache --start-server
+      - name: Clippy lints
+        run: make clippy
+        env:
+          RUSTFLAGS: "-Z threads=8"
+      - name: Format lints
+        run: make fmt
+        env:
+          RUSTFLAGS: "-Z threads=8"
+      - name: Clean cargo cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: cargo sweep --time 15
+
+  # build-wasm:
+  #   timeout-minutes: 10
+  #   runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
+  #   container: 
+  #     image: ghcr.io/anoma/namada:wasm-main
+  #   env:
+  #     RUSTC_WRAPPER: ""
+
+  #   steps:
+  #     - name: Checkout repo
+  #       uses: actions/checkout@v4
+  #       if: ${{ github.event_name != 'pull_request_target' }}
+  #     - name: Checkout PR
+  #       uses: actions/checkout@v4
+  #       if: ${{ github.event_name == 'pull_request_target' }}
+  #       # From https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request_target:
+  #       # "This event runs in the context of the base of the pull request, 
+  #       # rather than in the context of the merge commit, as the pull_request 
+  #       # event does."
+  #       # We set the ref to the head commit of the PR instead.
+  #       # For this, we have to make sure that we're not running CI on untrusted
+  #       # code (more info in the link above), so the repo MUST be configured
+  #       # to disallow that.
+  #       with:
+  #         ref: ${{ github.event.pull_request.head.sha }}
+  #     - name: Configure AWS 
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         aws-region: ${{ env.AWS_REGION }}
+  #         role-to-assume: ${{ secrets.AWS_ROLE }}
+  #     - name: ToBeDeleted
+  #       run: echo "$HOME/.cargo/bin:$PATH" >> $GITHUB_PATH
+  #     - name: Cache Cargo Home
+  #       uses: actions/cache@v4
+  #       id: cache
+  #       with:
+  #         path: |
+  #           /home/ubuntu/.cargo
+  #           target
+  #           wasm/wasm_source/target
+  #         key: ${{ runner.os }}-${{ github.job }}-wasm-${{ hashFiles('**/Cargo.lock') }}
+  #         restore-keys: ${{ runner.os }}-wasm-
+  #     - name: Build WASM
+  #       run: make build-wasm-scripts
+  #     - name: Upload wasm artifacts (github)
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: wasm-${{ github.event.pull_request.head.sha || github.sha }}
+  #         path: |
+  #           wasm/tx_*.wasm
+  #           wasm/vp_*.wasm
+  #           wasm/checksums.json
+  #     - name: Clean cargo cache
+  #       if: steps.cache.outputs.cache-hit != 'true'
+  #       run: |
+  #         cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache
+  #         cargo-cache
+
+  # test-wasm:
+  #   timeout-minutes: 15
+  #   runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
+  #   needs: [build-wasm]
+
+  #   steps:
+  #     - name: Checkout repo
+  #       uses: actions/checkout@v4
+  #       if: ${{ github.event_name != 'pull_request_target' }}
+  #     - name: Checkout PR
+  #       uses: actions/checkout@v4
+  #       if: ${{ github.event_name == 'pull_request_target' }}
+  #       with:
+  #         ref: ${{ github.event.pull_request.head.sha }}
+  #     - name: Configure AWS 
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         aws-region: ${{ env.AWS_REGION }}
+  #         role-to-assume: ${{ secrets.AWS_ROLE }}
+  #     - name: ToBeDeleted
+  #       run: echo "$HOME/.cargo/bin:$PATH" >> $GITHUB_PATH
+  #     - name: Setup sccache-cache
+  #       uses: mozilla-actions/sccache-action@v0.0.4
+  #     - name: Start sccache server
+  #       run: sccache --start-server
+  #     - name: Duplicate checksums file
+  #       run: cp wasm/checksums.json wasm/original-checksums.json
+  #     - name: Install mold linker
+  #       uses: rui314/setup-mold@v1
+  #       with:
+  #         mold-version: 2.4.1
+  #         make-default: false
+  #     - name: Download wasm artifacts
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: wasm-${{ github.event.pull_request.head.sha|| github.sha }}
+  #         path: ./wasm
+  #     - name: Cache Cargo Home
+  #       id: cache
+  #       uses: actions/cache@v4
+  #       with:
+  #         path: |
+  #           /home/ubuntu/.cargo
+  #           target
+  #           wasm/wasm_source/target
+  #         key: ${{ runner.os }}-${{ github.job }}-wasm-${{ hashFiles('**/Cargo.lock') }}
+  #         restore-keys: ${{ runner.os }}-wasm-
+  #     - name: Test Wasm
+  #       run: make test-wasm
+  #       env:
+  #         RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=mold"
+  #     - name: Check wasm checksums.json up-to-date
+  #       if: |
+  #         contains(github.ref, 'main') || contains(github.ref, '-rc')
+  #       run: cmp -- wasm/checksums.json wasm/original-checksums.json
+  #     - name: Print diff
+  #       if: |
+  #         contains(github.ref, 'main') || contains(github.ref, '-rc')
+  #       run: diff -y -W 150 wasm/checksums.json wasm/original-checksums.json --suppress-common-lines
+  #     - name: Clean cargo cache
+  #       if: steps.cache.outputs.cache-hit != 'true'
+  #       run: |
+  #         cargo cache --autoclean
+  #         cargo cache
+
+  # # upload-wasm:
+  # #   timeout-minutes: 5
+  # #   runs-on: ${{ matrix.os }}
+  # #   needs: [build-wasm]
+  # #   strategy:
+  # #     matrix:
+  # #       os: [ubuntu-latest]
+
+  # #   steps:
+  # #     - name: Download wasm artifacts
+  # #       uses: actions/download-artifact@v4
+  # #       with:
+  # #         name: wasm-${{ github.event.pull_request.head.sha|| github.sha }}
+  # #         path: ./wasm
+  # #     - name: Upload wasm artifacts (minio)
+  # #       run: |
+  # #         unset AWS_SESSION_TOKEN
+  # #         aws --endpoint-url $S3_ENDPOINT_URL s3 sync wasm s3://$BUCKET_NAME --acl public-read --exclude "*" --include "*.wasm" --exclude "*/*" --region $AWS_REGION
+  # #         aws --endpoint-url $S3_ENDPOINT_URL s3 cp wasm/checksums.json s3://$BUCKET_NAME/checksums.${{ github.event.pull_request.number || github.event.pull_request.head.sha || github.sha }}.json --acl public-read --region $AWS_REGION
+  # #       env:
+  # #         BUCKET_NAME: namada-wasm
+  # #         AWS_REGION: us-east-1
+  # #         S3_ENDPOINT_URL: https://minio.heliax.click
+  # #         AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_ACCESS_KEY }}
+  # #         AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+
+  # test-unit:
+  #   runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
+  #   timeout-minutes: 20
+  #   needs: [build-wasm]
+
+  #   env:
+  #     RUSTC_WRAPPER: sccache
+
+  #   steps:
+  #     - name: Checkout repo
+  #       uses: actions/checkout@v4
+  #       if: ${{ github.event_name != 'pull_request_target' }}
+  #     - name: Checkout PR
+  #       uses: actions/checkout@v4
+  #       if: ${{ github.event_name == 'pull_request_target' }}
+  #       # See comment in build-and-test.yml
+  #       with:
+  #         ref: ${{ github.event.pull_request.head.sha }}
+  #     - name: Configure AWS 
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         aws-region: ${{ env.AWS_REGION }}
+  #         role-to-assume: ${{ secrets.AWS_ROLE }}
+  #     - name: ToBeDeleted
+  #       run: echo "$HOME/.cargo/bin:$PATH" >> $GITHUB_PATH
+  #     - name: Cache Cargo Home
+  #       id: cache
+  #       uses: actions/cache@v4
+  #       with:
+  #         path: |
+  #           /home/ubuntu/.cargo
+  #         key: ${{ runner.os }}-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+  #         restore-keys: ${{ runner.os }}-cargo-
+  #     - name: Setup sccache-cache
+  #       uses: mozilla-actions/sccache-action@v0.0.4
+  #     - name: Start sccache server
+  #       run: sccache --start-server
+  #     - name: Install mold linker
+  #       uses: rui314/setup-mold@v1
+  #       with:
+  #         mold-version: 2.4.1
+  #         make-default: false
+  #     - name: Download MASP parameters
+  #       run: |
+  #         mkdir -p /home/ubuntu/.masp-params
+  #         curl -o /home/ubuntu/.masp-params/masp-spend.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-spend.params\?raw\=true
+  #         curl -o /home/ubuntu/.masp-params/masp-output.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-output.params?raw=true
+  #         curl -o /home/ubuntu/.masp-params/masp-convert.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-convert.params?raw=true
+  #     - name: Download wasm artifacts
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: wasm-${{ github.event.pull_request.head.sha|| github.sha }}
+  #         path: ./wasm
+  #     - uses: taiki-e/install-action@cargo-llvm-cov
+  #     - name: Run unit tests with coverage
+  #       run: make test-unit-with-coverage
+  #       env:
+  #         NAMADA_MASP_PARAMS_DIR: /home/ubuntu/.masp-params
+  #         RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=mold -Z threads=8"
+  #     - name: Upload coverage
+  #       uses: codecov/codecov-action@v3
+  #       with:
+  #         files: lcov.info
+  #         fail_ci_if_error: true
+  #     - name: Clean cargo cache
+  #       if: steps.cache.outputs.cache-hit != 'true'
+  #       run: |
+  #         cargo cache --autoclean
+  #         cargo cache
+  
+  # check-default-features:
+  #   runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
+  #   timeout-minutes: 20
+  #   needs: [build-wasm]
+
+  #   env:
+  #     RUSTC_WRAPPER: sccache
+
+  #   steps:
+  #     - name: Checkout repo
+  #       uses: actions/checkout@v4
+  #       if: ${{ github.event_name != 'pull_request_target' }}
+  #     - name: Checkout PR
+  #       uses: actions/checkout@v4
+  #       if: ${{ github.event_name == 'pull_request_target' }}
+  #       # See comment in build-and-test.yml
+  #       with:
+  #         ref: ${{ github.event.pull_request.head.sha }}
+  #     - name: Configure AWS 
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         aws-region: ${{ env.AWS_REGION }}
+  #         role-to-assume: ${{ secrets.AWS_ROLE }}
+  #     - name: ToBeDeleted
+  #       run: echo "$HOME/.cargo/bin:$PATH" >> $GITHUB_PATH
+  #     - name: Cache Cargo Home
+  #       id: cache
+  #       uses: actions/cache@v4
+  #       with:
+  #         path: |
+  #           /home/ubuntu/.cargo
+  #         key: ${{ runner.os }}-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+  #         restore-keys: ${{ runner.os }}-cargo-
+  #     - name: Setup sccache-cache
+  #       uses: mozilla-actions/sccache-action@v0.0.4
+  #     - name: Start sccache server
+  #       run: sccache --start-server
+  #     - name: Install mold linker
+  #       uses: rui314/setup-mold@v1
+  #       with:
+  #         mold-version: 2.4.1
+  #         make-default: false
+  #     - name: Check crates build with default features
+  #       run: make check-crates
+  #       env:
+  #         RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=mold"
+  #     - name: Clean cargo cache
+  #       if: steps.cache.outputs.cache-hit != 'true'
+  #       run: |
+  #         cargo cache --autoclean
+  #         cargo cache
+
+  # test-integration:
+  #   runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
+  #   timeout-minutes: 20
+  #   needs: [build-wasm]
+
+  #   env:
+  #     RUSTC_WRAPPER: sccache
+
+  #   steps:
+  #     - name: Checkout repo
+  #       uses: actions/checkout@v4
+  #       if: ${{ github.event_name != 'pull_request_target' }}
+  #     - name: Checkout PR
+  #       uses: actions/checkout@v4
+  #       if: ${{ github.event_name == 'pull_request_target' }}
+  #       # See comment in build-and-test.yml
+  #       with:
+  #         ref: ${{ github.event.pull_request.head.sha }}
+  #     - name: Configure AWS 
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         aws-region: ${{ env.AWS_REGION }}
+  #         role-to-assume: ${{ secrets.AWS_ROLE }}
+  #     - name: ToBeDeleted
+  #       run: echo "$HOME/.cargo/bin:$PATH" >> $GITHUB_PATH
+  #     - name: Cache Cargo Home
+  #       id: cache
+  #       uses: actions/cache@v4
+  #       with:
+  #         path: |
+  #           /home/ubuntu/.cargo
+  #         key: ${{ runner.os }}-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+  #         restore-keys: ${{ runner.os }}-cargo-
+  #     - name: Setup sccache-cache
+  #       uses: mozilla-actions/sccache-action@v0.0.4
+  #     - name: Start sccache server
+  #       run: sccache --start-server
+  #     - name: Install mold linker
+  #       uses: rui314/setup-mold@v1
+  #       with:
+  #         mold-version: 2.4.1
+  #         make-default: false
+  #     - name: Download MASP parameters
+  #       run: |
+  #         mkdir -p /home/ubuntu/.masp-params
+  #         curl -o /home/ubuntu/.masp-params/masp-spend.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-spend.params\?raw\=true
+  #         curl -o /home/ubuntu/.masp-params/masp-output.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-output.params?raw=true
+  #         curl -o /home/ubuntu/.masp-params/masp-convert.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-convert.params?raw=true
+  #     - name: Download wasm artifacts
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: wasm-${{ github.event.pull_request.head.sha|| github.sha }}
+  #         path: ./wasm
+  #     - name: Run integration tests
+  #       run: make test-integration
+  #       env:
+  #         NAMADA_MASP_PARAMS_DIR: /home/ubuntu/.masp-params
+  #         RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=mold -Z threads=16"
+  #     - name: Clean cargo cache
+  #       if: steps.cache.outputs.cache-hit != 'true'
+  #       run: |
+  #         cargo cache --autoclean
+  #         cargo cache
+
+  # check-benchmarks:
+  #   runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
+  #   timeout-minutes: 30
+  #   needs: [build-wasm]
+
+  #   env:
+  #     RUSTC_WRAPPER: sccache
+
+  #   steps:
+  #     - name: Checkout repo
+  #       uses: actions/checkout@v4
+  #       if: ${{ github.event_name != 'pull_request_target' }}
+  #     - name: Checkout PR
+  #       uses: actions/checkout@v4
+  #       if: ${{ github.event_name == 'pull_request_target' }}
+  #       # See comment in build-and-test.yml
+  #       with:
+  #         ref: ${{ github.event.pull_request.head.sha }}
+  #     - name: Configure AWS 
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         aws-region: ${{ env.AWS_REGION }}
+  #         role-to-assume: ${{ secrets.AWS_ROLE }}
+  #     - name: ToBeDeleted
+  #       run: echo "$HOME/.cargo/bin:$PATH" >> $GITHUB_PATH
+  #     - name: Configure AWS 
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         aws-region: ${{ env.AWS_REGION }}
+  #         role-to-assume: ${{ secrets.AWS_ROLE }}
+  #     - name: ToBeDeleted
+  #       run: echo "$HOME/.cargo/bin:$PATH" >> $GITHUB_PATH
+  #     - name: Cache Cargo Home
+  #       id: cache
+  #       uses: actions/cache@v4
+  #       with:
+  #         path: |
+  #           /home/ubuntu/.cargo
+  #         key: ${{ runner.os }}-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+  #         restore-keys: ${{ runner.os }}-cargo-
+  #     - name: Setup sccache-cache
+  #       uses: mozilla-actions/sccache-action@v0.0.4
+  #     - name: Start sccache server
+  #       run: sccache --start-server
+  #     - name: Install mold linker
+  #       uses: rui314/setup-mold@v1
+  #       with:
+  #         mold-version: 2.4.1
+  #         make-default: false
+  #     - name: Download MASP parameters
+  #       run: |
+  #         mkdir -p /home/ubuntu/.masp-params
+  #         curl -o /home/ubuntu/.masp-params/masp-spend.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-spend.params\?raw\=true
+  #         curl -o /home/ubuntu/.masp-params/masp-output.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-output.params?raw=true
+  #         curl -o /home/ubuntu/.masp-params/masp-convert.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-convert.params?raw=true
+  #     - name: Download wasm artifacts
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: wasm-${{ github.event.pull_request.head.sha|| github.sha }}
+  #         path: ./wasm
+  #     - name: Run benchmarks tests
+  #       run: make test-benches
+  #       env:
+  #         NAMADA_MASP_PARAMS_DIR: /home/ubuntu/.masp-params
+  #         RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=mold -Z threads=16"
+  #     - name: Clean cargo cache
+  #       if: steps.cache.outputs.cache-hit != 'true'
+  #       run: |
+  #         cargo cache --autoclean
+  #         cargo cache
+
+  # build-namada:
+  #   runs-on: [self-hosted, 16vcpu-32ram-ubuntu22-namada-x86]
+  #   timeout-minutes: 15
+
+  #   steps:
+  #     - name: Checkout repo
+  #       uses: actions/checkout@v4
+  #       if: ${{ github.event_name != 'pull_request_target' }}
+  #     - name: Checkout PR
+  #       uses: actions/checkout@v4
+  #       if: ${{ github.event_name == 'pull_request_target' }}
+  #       # See comment in build-and-test.yml
+  #       with:
+  #         ref: ${{ github.event.pull_request.head.sha }}
+  #     - name: Configure AWS 
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         aws-region: ${{ env.AWS_REGION }}
+  #         role-to-assume: ${{ secrets.AWS_ROLE }}
+  #     - name: ToBeDeleted
+  #       run: echo "$HOME/.cargo/bin:$PATH" >> $GITHUB_PATH
+  #     - name: Cache cargo directory
+  #       id: cache
+  #       uses: actions/cache@v4
+  #       continue-on-error: false
+  #       with:
+  #         path: |
+  #           /home/ubuntu/.cargo
+  #         key: ${{ runner.os }}-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+  #         restore-keys: ${{ runner.os }}-cargo-
+  #     - name: Install mold linker
+  #       uses: rui314/setup-mold@v1
+  #       with:
+  #         mold-version: 2.4.1
+  #         make-default: false
+  #     - name: Setup sccache-cache
+  #       uses: mozilla-actions/sccache-action@v0.0.4
+  #     - name: Start sccache server
+  #       run: sccache --start-server
+  #     - name: Release Build
+  #       run: make build-release
+  #       env:
+  #         RUSTFLAGS: "-C linker=clang -C debug_assertions=true -C link-arg=-fuse-ld=mold"
+  #         # ROCKSDB_LIB_DIR: "/home/ubuntu/rocksdb"
+  #     - name: Upload target binaries (github)
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: binaries-${{ github.event.pull_request.head.sha || github.sha }}
+  #         path: |
+  #           target/release/namada
+  #           target/release/namadac
+  #           target/release/namadaw
+  #           target/release/namadan
+  #           target/release/namadar
+  #     # - name: Upload namada binaries (minio)
+  #     #   run: |
+  #     #     unset AWS_SESSION_TOKEN
+  #     #     zip -9 $ZIP_FILENAME target/release/namada target/release/namadac target/release/namadaw target/release/namadan target/release/namadar
+  #     #     aws --endpoint-url $S3_ENDPOINT_URL s3 cp $ZIP_FILENAME s3://$BUCKET_NAME --region $AWS_REGION
+  #     #   env:
+  #     #     BUCKET_NAME: namada-binaries
+  #     #     AWS_REGION: us-east-1
+  #     #     S3_ENDPOINT_URL: https://minio.heliax.click
+  #     #     ZIP_FILENAME: binaries-${{ github.event.pull_request.number || github.event.pull_request.head.sha || github.sha }}.zip
+  #     #     AWS_ACCESS_KEY_ID: ${{ secrets.MINIO_ACCESS_KEY }}
+  #     #     AWS_SECRET_ACCESS_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+  #     - name: Upload build timing report
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: build-timings-${{ github.event.pull_request.head.sha || github.sha }}
+  #         path: target/cargo-timings/cargo-timing.html
+  #         retention-days: 1
+  #     - name: Clean cargo cache
+  #       if: steps.cache.outputs.cache-hit != 'true'
+  #       run: |
+  #         cargo cache --autoclean
+  #         cargo cache
+
+
+  # test-e2e:
+  #   runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
+  #   needs: [build-wasm, build-namada]
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       make:
+  #         - index: 0
+  #         - index: 1
+  #         - index: 2
+  #         - index: 3
+  #         - index: 4
+  #         - index: 5
+  #         - index: 6
+
+  #   env:
+  #     RUSTC_WRAPPER: sccache
+
+  #   steps:
+  #     - name: Checkout repo
+  #       uses: actions/checkout@v4
+  #       if: ${{ github.event_name != 'pull_request_target' }}
+  #     - name: Checkout PR
+  #       uses: actions/checkout@v4
+  #       if: ${{ github.event_name == 'pull_request_target' }}
+  #       # See comment in build-and-test.yml
+  #       with:
+  #         ref: ${{ github.event.pull_request.head.sha }}
+  #     - name: Configure AWS 
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         aws-region: ${{ env.AWS_REGION }}
+  #         role-to-assume: ${{ secrets.AWS_ROLE }}
+  #     - name: ToBeDeleted
+  #       run: echo "$HOME/.cargo/bin:$PATH" >> $GITHUB_PATH
+  #     - name: Cache Cargo Home
+  #       id: cache
+  #       uses: actions/cache@v4
+  #       with:
+  #         path: |
+  #           /home/ubuntu/.cargo
+  #         key: ${{ runner.os }}-${{ github.job }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+  #         restore-keys: ${{ runner.os }}-cargo-
+  #     - name: Setup sccache-cache
+  #       uses: mozilla-actions/sccache-action@v0.0.4
+  #     - name: Start sccache server
+  #       run: sccache --start-server
+  #     - name: Install mold linker
+  #       uses: rui314/setup-mold@v1
+  #       with:
+  #         mold-version: 2.4.1
+  #         make-default: false
+  #     - name: Download MASP parameters
+  #       run: |
+  #         mkdir -p /home/ubuntu/.masp-params
+  #         curl -o /home/ubuntu/.masp-params/masp-spend.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-spend.params\?raw\=true
+  #         curl -o /home/ubuntu/.masp-params/masp-output.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-output.params?raw=true
+  #         curl -o /home/ubuntu/.masp-params/masp-convert.params -L https://github.com/anoma/masp-mpc/releases/download/namada-trusted-setup/masp-convert.params?raw=true
+  #     - name: Download wasm artifacts
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: wasm-${{ github.event.pull_request.head.sha|| github.sha }}
+  #         path: ./wasm
+  #     - name: Download namada binaries
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: binaries-${{ github.event.pull_request.head.sha || github.sha }}
+  #         path: ./target/release/
+  #     - name: Download CometBFT
+  #       run: |
+  #         COMETBFT_VERSION=$(cat .github/workflows/scripts/versions.json | jq .cometbft -r)
+  #         echo "Using CometBFT version: ${COMETBFT_VERSION}" 
+  #         curl -o cometbft.tar.gz -LO https://github.com/cometbft/cometbft/releases/download/v${COMETBFT_VERSION}/cometbft_${COMETBFT_VERSION}_linux_amd64.tar.gz
+  #         tar -xvzf cometbft.tar.gz
+  #         sudo mv cometbft /usr/local/bin
+  #     - name: Download Hermes
+  #       run: |
+  #         HERMES_VERSION=$(cat .github/workflows/scripts/versions.json | jq .hermes -r)
+  #         echo "Using hermes version: ${HERMES_VERSION}"
+  #         curl -o hermes.zip -LO https://github.com/heliaxdev/hermes/releases/download/v${HERMES_VERSION}/hermes-v${HERMES_VERSION}-x86_64-unknown-linux-gnu.zip
+  #         unzip hermes.zip
+  #         sudo mv hermes /usr/local/bin
+  #     - name: Change permissions
+  #       run: |
+  #         chmod +x target/release/namada
+  #         chmod +x target/release/namadaw
+  #         chmod +x target/release/namadan
+  #         chmod +x target/release/namadac
+  #         chmod +x target/release/namadar
+  #         chmod +x /usr/local/bin/cometbft
+  #         chmod +x /usr/local/bin/hermes
+  #     - name: Run e2e test
+  #       run: python3 .github/workflows/scripts/schedule-e2e.py
+  #       env:
+  #         NAMADA_MASP_PARAMS_DIR: /home/ubuntu/.masp-params
+  #         NAMADA_E2E_USE_PREBUILT_BINARIES: "true"
+  #         NAMADA_E2E_KEEP_TEMP: "true"
+  #         NAMADA_TM_STDOUT: "false"
+  #         NAMADA_LOG_COLOR: "false"
+  #         NAMADA_LOG: "info"
+  #         RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=mold"
+  #         INDEX: ${{ matrix.make.index }}
+  #     - name: Upload e2e logs
+  #       if: success() || failure()
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: logs-e2e-${{ matrix.make.index }}-${{ github.event.pull_request.head.sha || github.sha }}
+  #         path: |
+  #           /tmp/.*/logs/
+  #           /tmp/.*/setup/validator-*/logs/
+  #           /tmp/.*/setup/valiator-*/e2e-test.*/*.toml 
+  #         retention-days: 5
+  #     - name: Clean cargo cache
+  #       if: steps.cache.outputs.cache-hit != 'true'
+  #       run: |
+  #         cargo cache --autoclean
+  #         cargo cache
