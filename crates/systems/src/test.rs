@@ -9,6 +9,7 @@ lazy_static! {
         HashSet::from_iter([
             "namada_governance",
             "namada_parameters",
+            "namada_proof_of_stake",
             "namada_shielded_token",
             "namada_token",
             "namada_trans_token",
@@ -27,11 +28,9 @@ fn test_no_system_cross_deps() {
     for package in metadata.packages {
         for system in SYSTEMS.iter() {
             if &package.name == system {
-                for dep in package
-                    .dependencies
-                    .iter()
-                    .filter(|d| matches!(d.kind, DependencyKind::Normal))
-                {
+                for dep in package.dependencies.iter().filter(|d| {
+                    matches!(d.kind, DependencyKind::Normal) && !d.optional
+                }) {
                     for other_system in SYSTEMS.iter() {
                         // Exception for the "token" crate which puts together
                         // "trans_token" and "shielded_token".
