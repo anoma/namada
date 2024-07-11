@@ -26,10 +26,9 @@ env:
   GIT_LFS_SKIP_SMUDGE: 1
   CARGO_INCREMENTAL: 0
   RUST_BACKTRACE: full
-  SCCACHE_BUCKET: github-runners-remote-cache--usw2-az1--x-s3
+  CACHE_BUCKET: github-runners-remote-cache-shared
+  SCCACHE_BUCKET: github-runners-remote-cache-shared # github-runners-remote-cache--usw2-az1--x-s3
   AWS_REGION: us-west-2
-  SCCACHE_ERROR_LOG: /tmp/sccache_log.txt 
-  SCCACHE_LOG: debug
 
 jobs:
   lints:
@@ -55,14 +54,13 @@ jobs:
         id: cache
         uses: runs-on/cache@v4
         env:
-          RUNS_ON_S3_BUCKET_CACHE: ${{ env.SCCACHE_BUCKET }}
+          RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
         with:
           path: |
             ~/.cargo/
             target/
           key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
-
       - name: Start sccache server
         id: sccache
         run: sccache --start-server
@@ -74,13 +72,9 @@ jobs:
         run: make fmt
         env:
           RUSTFLAGS: "-Z threads=8"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: sccache-logs.txt
-          path: /tmp/sccache_log.txt 
       - name: Clean cargo cache
         if: steps.cache.outputs.cache-hit != 'true'
-        run: cargo sweep
+        run: cargo sweep --time 15
       - name: Stop sccache
         if: steps.sccache.outcome == 'success'
         run: sccache --stop-server
