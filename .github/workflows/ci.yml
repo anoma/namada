@@ -34,7 +34,7 @@ jobs:
   lints:
     container: 
       image: ghcr.io/heliaxdev/namada-ci:namada-main
-    runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
+    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
 
     steps:
       - name: Checkout repo
@@ -79,63 +79,53 @@ jobs:
         if: always() && steps.sccache.outcome == 'success'
         run: sccache --stop-server
 
-  # build-wasm:
-  #   timeout-minutes: 10
-  #   runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
-  #   container: 
-  #     image: ghcr.io/anoma/namada:wasm-main
-  #   env:
-  #     RUSTC_WRAPPER: ""
+  build-wasm:
+    timeout-minutes: 10
+    runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
+    container: 
+      image: ghcr.io/heliaxdev/namada-ci:wasm-main
+    env:
+      RUSTC_WRAPPER: ""
 
-  #   steps:
-  #     - name: Checkout repo
-  #       uses: actions/checkout@v4
-  #       if: ${{ github.event_name != 'pull_request_target' }}
-  #     - name: Checkout PR
-  #       uses: actions/checkout@v4
-  #       if: ${{ github.event_name == 'pull_request_target' }}
-  #       # From https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request_target:
-  #       # "This event runs in the context of the base of the pull request, 
-  #       # rather than in the context of the merge commit, as the pull_request 
-  #       # event does."
-  #       # We set the ref to the head commit of the PR instead.
-  #       # For this, we have to make sure that we're not running CI on untrusted
-  #       # code (more info in the link above), so the repo MUST be configured
-  #       # to disallow that.
-  #       with:
-  #         ref: ${{ github.event.pull_request.head.sha }}
-  #     - name: Configure AWS 
-  #       uses: aws-actions/configure-aws-credentials@v4
-  #       with:
-  #         aws-region: ${{ env.AWS_REGION }}
-  #         role-to-assume: ${{ secrets.AWS_ROLE }}
-  #     - name: ToBeDeleted
-  #       run: echo "$HOME/.cargo/bin:$PATH" >> $GITHUB_PATH
-  #     - name: Cache Cargo Home
-  #       uses: actions/cache@v4
-  #       id: cache
-  #       with:
-  #         path: |
-  #           /home/ubuntu/.cargo
-  #           target
-  #           wasm/wasm_source/target
-  #         key: ${{ runner.os }}-${{ github.job }}-wasm-${{ hashFiles('**/Cargo.lock') }}
-  #         restore-keys: ${{ runner.os }}-wasm-
-  #     - name: Build WASM
-  #       run: make build-wasm-scripts
-  #     - name: Upload wasm artifacts (github)
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: wasm-${{ github.event.pull_request.head.sha || github.sha }}
-  #         path: |
-  #           wasm/tx_*.wasm
-  #           wasm/vp_*.wasm
-  #           wasm/checksums.json
-  #     - name: Clean cargo cache
-  #       if: steps.cache.outputs.cache-hit != 'true'
-  #       run: |
-  #         cargo install cargo-cache --no-default-features --features ci-autoclean cargo-cache
-  #         cargo-cache
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        if: ${{ github.event_name != 'pull_request_target' }}
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        if: ${{ github.event_name == 'pull_request_target' }}
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Configure AWS 
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE }}
+      - name: Cache cargo
+        id: cache
+        uses: runs-on/cache@v4
+        env:
+          RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
+        with:
+          path: |
+            ~/.cargo/
+            wasm/target
+            target
+          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+      - name: Build WASM
+        run: make build-wasm-scripts
+      - name: Upload wasm artifacts 
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            wasm/tx_*.wasm
+            wasm/vp_*.wasm
+            wasm/checksums.json
+      - name: Clean cargo cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: cargo sweep --time 15
 
   # test-wasm:
   #   timeout-minutes: 15
