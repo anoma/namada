@@ -22,6 +22,7 @@ use namada_core::borsh::{
     BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
 };
 use namada_core::hash::Hash;
+use namada_core::ibc::IbcTxDataRefs;
 use namada_core::masp::MaspTxRefs;
 use namada_core::storage;
 use namada_events::Event;
@@ -306,12 +307,21 @@ impl<T: Display> TxResult<T> {
     /// Converts this result to [`ExtendedTxResult`]
     pub fn to_extended_result(
         self,
-        masp_tx_refs: Option<MaspTxRefs>,
+        masp_section_refs: Option<Either<MaspTxRefs, IbcTxDataRefs>>,
     ) -> ExtendedTxResult<T> {
+        let (masp_tx_refs, ibc_tx_data_refs) = match masp_section_refs {
+            Some(Either::Left(masp_tx_refs)) => {
+                (masp_tx_refs, Default::default())
+            }
+            Some(Either::Right(ibc_tx_data_refs)) => {
+                (Default::default(), ibc_tx_data_refs)
+            }
+            None => (Default::default(), Default::default()),
+        };
         ExtendedTxResult {
             tx_result: self,
-            masp_tx_refs: masp_tx_refs.unwrap_or_default(),
-            is_ibc_shielding: false,
+            masp_tx_refs,
+            ibc_tx_data_refs,
         }
     }
 }

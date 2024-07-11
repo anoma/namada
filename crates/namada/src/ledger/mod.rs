@@ -109,15 +109,17 @@ mod dry_run_tx {
         let ExtendedTxResult {
             mut tx_result,
             ref masp_tx_refs,
-            is_ibc_shielding: _,
+            ref ibc_tx_data_refs,
         } = extended_tx_result;
         let tx_gas_meter = RefCell::new(tx_gas_meter);
-        for cmt in
-            crate::ledger::protocol::get_batch_txs_to_execute(&tx, masp_tx_refs)
-        {
+        for cmt in crate::ledger::protocol::get_batch_txs_to_execute(
+            &tx,
+            masp_tx_refs,
+            ibc_tx_data_refs,
+        ) {
             let batched_tx = tx.batch_ref_tx(cmt);
             let batched_tx_result = protocol::apply_wasm_tx(
-                batched_tx,
+                &batched_tx,
                 &TxIndex(0),
                 ShellParams::new(
                     &tx_gas_meter,
