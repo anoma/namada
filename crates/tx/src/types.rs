@@ -13,7 +13,7 @@ use namada_core::account::AccountPublicKeysMap;
 use namada_core::address::Address;
 use namada_core::borsh::schema::{add_definition, Declaration, Definition};
 use namada_core::borsh::{
-    BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
+    self, BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
 };
 use namada_core::chain::ChainId;
 use namada_core::collections::{HashMap, HashSet};
@@ -1483,6 +1483,20 @@ impl Tx {
         tx.encode(&mut bytes)
             .expect("encoding a transaction failed");
         bytes
+    }
+
+    /// Convert this transaction into protobufs bytes
+    pub fn try_to_bytes(&self) -> std::io::Result<Vec<u8>> {
+        use prost::Message;
+
+        let mut bytes = vec![];
+        let tx: proto::Tx = proto::Tx {
+            data: borsh::to_vec(self)?,
+        };
+        tx.encode(&mut bytes).map_err(|e| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, e)
+        })?;
+        Ok(bytes)
     }
 
     /// Verify that the section with the given hash has been signed by the given
