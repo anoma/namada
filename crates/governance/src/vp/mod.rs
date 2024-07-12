@@ -1282,7 +1282,12 @@ mod test {
     fn init_storage() -> TestState {
         let mut state = TestState::default();
 
-        namada_proof_of_stake::test_utils::test_init_genesis(
+        namada_proof_of_stake::test_utils::test_init_genesis::<
+            _,
+            namada_parameters::Store<_>,
+            crate::Store<_>,
+            namada_token::Store<_>,
+        >(
             &mut state,
             namada_proof_of_stake::OwnedPosParams::default(),
             vec![get_dummy_genesis_validator()].into_iter(),

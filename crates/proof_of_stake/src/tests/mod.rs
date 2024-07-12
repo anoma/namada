@@ -7,7 +7,7 @@ use namada_state::{Epoch, StorageRead, StorageWrite};
 use namada_trans_token as token;
 
 use crate::types::{BondId, BondsAndUnbondsDetails, ResultSlashing, SlashType};
-use crate::{BecomeValidator, OwnedPosParams, PosParams};
+use crate::{BecomeValidator, GenesisValidator, OwnedPosParams, PosParams};
 
 mod helpers;
 mod state_machine;
@@ -20,6 +20,42 @@ mod utils;
 
 /// Gov impl type
 pub type GovStore<S> = namada_governance::Store<S>;
+
+/// DI indirection
+pub fn init_genesis_helper<S>(
+    storage: &mut S,
+    params: &PosParams,
+    validators: impl Iterator<Item = GenesisValidator>,
+    current_epoch: namada_core::storage::Epoch,
+) -> Result<()>
+where
+    S: StorageRead + StorageWrite,
+{
+    crate::test_utils::init_genesis_helper::<S, GovStore<_>, token::Store<_>>(
+        storage,
+        params,
+        validators,
+        current_epoch,
+    )
+}
+
+/// DI indirection
+pub fn test_init_genesis<S>(
+    storage: &mut S,
+    owned: OwnedPosParams,
+    validators: impl Iterator<Item = GenesisValidator> + Clone,
+    current_epoch: namada_core::storage::Epoch,
+) -> Result<PosParams>
+where
+    S: StorageRead + StorageWrite,
+{
+    crate::test_utils::test_init_genesis::<
+        S,
+        namada_parameters::Store<_>,
+        GovStore<_>,
+        token::Store<_>,
+    >(storage, owned, validators, current_epoch)
+}
 
 /// DI indirection
 pub fn read_pos_params<S>(storage: &S) -> Result<PosParams>

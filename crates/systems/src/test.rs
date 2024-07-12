@@ -28,9 +28,11 @@ fn test_no_system_cross_deps() {
     for package in metadata.packages {
         for system in SYSTEMS.iter() {
             if &package.name == system {
-                for dep in package.dependencies.iter().filter(|d| {
-                    matches!(d.kind, DependencyKind::Normal) && !d.optional
-                }) {
+                for dep in package
+                    .dependencies
+                    .iter()
+                    .filter(|d| matches!(d.kind, DependencyKind::Normal))
+                {
                     for other_system in SYSTEMS.iter() {
                         // Exception for the "token" crate which puts together
                         // "trans_token" and "shielded_token".

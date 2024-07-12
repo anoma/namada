@@ -553,7 +553,12 @@ mod tests {
             default_per_epoch_throughput_limit: Amount::native_whole(100),
         };
         ibc_params.init_storage(&mut state).unwrap();
-        namada_proof_of_stake::test_utils::test_init_genesis(
+        namada_proof_of_stake::test_utils::test_init_genesis::<
+            _,
+            namada_parameters::Store<_>,
+            namada_governance::Store<_>,
+            namada_token::Store<_>,
+        >(
             &mut state,
             namada_proof_of_stake::OwnedPosParams::default(),
             vec![get_dummy_genesis_validator()].into_iter(),

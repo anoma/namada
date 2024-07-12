@@ -1951,7 +1951,7 @@ impl StateMachineTest for ConcretePosState {
         );
         let mut s = TestState::default();
         initial_state.gov_params.init_storage(&mut s).unwrap();
-        crate::test_utils::init_genesis_helper(
+        crate::tests::init_genesis_helper(
             &mut s,
             &initial_state.params,
             initial_state.genesis_validators.clone().into_iter(),

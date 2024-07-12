@@ -130,7 +130,12 @@ pub fn init_pos(
         //     .state
         //     .init_genesis(params, genesis_validators.iter(), start_epoch)
         //     .unwrap();
-        let params = init_genesis(
+        let params = init_genesis::<
+            _,
+            crate::parameters::Store<_>,
+            crate::governance::Store<_>,
+            crate::token::Store<_>,
+        >(
             &mut tx_env.state,
             params.clone(),
             genesis_validators.iter().cloned(),
@@ -150,6 +155,7 @@ mod tests {
     use std::cell::RefCell;
 
     use namada_sdk::gas::VpGasMeter;
+    use namada_sdk::governance::parameters::GovernanceParameters;
     use namada_sdk::key::common::PublicKey;
     use namada_sdk::validation::PosVp;
     use namada_sdk::{address, token};
@@ -336,7 +342,11 @@ mod tests {
                     // We're starting from an empty state
                     let state = vec![];
                     let epoch = Epoch(epoch);
-                    let params = params.with_default_gov_params();
+                    let params = PosParams {
+                        owned: params,
+                        max_proposal_period: GovernanceParameters::default()
+                            .max_proposal_period,
+                    };
                     arb_valid_pos_action(&state).prop_map(move |valid_action| {
                         Self {
                             epoch,

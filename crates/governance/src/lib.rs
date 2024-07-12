@@ -34,8 +34,9 @@ pub mod storage;
 pub mod utils;
 pub mod vp;
 
-use namada_state::StorageRead;
+use namada_state::{StorageRead, StorageWrite};
 pub use namada_systems::governance::*;
+use parameters::GovernanceParameters;
 pub use storage::proposal::{InitProposalData, ProposalType, VoteProposalData};
 pub use storage::vote::ProposalVote;
 pub use storage::{init_proposal, is_proposal_accepted, vote_proposal};
@@ -57,5 +58,15 @@ where
 
     fn max_proposal_period(storage: &S) -> Result<u64> {
         storage::get_max_proposal_period(storage)
+    }
+}
+
+impl<S> Write<S> for Store<S>
+where
+    S: StorageRead + StorageWrite,
+{
+    fn init_default_params(storage: &mut S) -> Result<()> {
+        let params = GovernanceParameters::default();
+        params.init_storage(storage)
     }
 }

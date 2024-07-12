@@ -8,7 +8,7 @@ use namada_core::dec::Dec;
 use namada_core::storage::Epoch;
 use namada_core::token;
 use namada_core::uint::Uint;
-#[cfg(any(test, feature = "testing"))]
+#[cfg(test)]
 use namada_governance::parameters::GovernanceParameters;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
@@ -107,7 +107,7 @@ impl Default for OwnedPosParams {
     }
 }
 
-#[cfg(any(test, feature = "testing"))]
+#[cfg(test)]
 impl Default for PosParams {
     fn default() -> Self {
         let owned = OwnedPosParams::default();
@@ -271,7 +271,7 @@ impl OwnedPosParams {
     }
 
     /// A test helper to add the default gov params to PoS params.
-    #[cfg(any(test, feature = "testing"))]
+    #[cfg(test)]
     pub fn with_default_gov_params(self) -> PosParams {
         let gov = GovernanceParameters::default();
         PosParams {
@@ -281,7 +281,7 @@ impl OwnedPosParams {
     }
 
     /// A test helper to add the default gov params to PoS params.
-    #[cfg(any(test, feature = "testing"))]
+    #[cfg(test)]
     pub fn with_gov_params(self, gov: &GovernanceParameters) -> PosParams {
         PosParams {
             owned: self,

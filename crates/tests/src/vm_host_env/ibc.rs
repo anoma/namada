@@ -214,7 +214,13 @@ pub fn init_storage() -> (Address, Address) {
             ),
         };
         ibc_params.init_storage(&mut env.state).unwrap();
-        proof_of_stake::test_utils::test_init_genesis(
+
+        proof_of_stake::test_utils::test_init_genesis::<
+            _,
+            crate::parameters::Store<_>,
+            crate::governance::Store<_>,
+            crate::token::Store<_>,
+        >(
             &mut env.state,
             OwnedPosParams::default(),
             vec![get_dummy_genesis_validator()].into_iter(),

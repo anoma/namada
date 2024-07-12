@@ -214,7 +214,12 @@ pub fn init_storage_with_validators(
         })
         .collect();
 
-    namada_proof_of_stake::test_utils::test_init_genesis(
+    namada_proof_of_stake::test_utils::test_init_genesis::<
+        _,
+        namada_parameters::Store<_>,
+        namada_governance::Store<_>,
+        namada_trans_token::Store<_>,
+    >(
         state,
         OwnedPosParams::default(),
         validators.into_iter(),

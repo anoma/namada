@@ -34,14 +34,14 @@ use crate::storage::{
     validator_total_redelegated_bonded_handle,
     validator_total_redelegated_unbonded_handle,
 };
-use crate::test_utils::test_init_genesis;
 use crate::tests::helpers::{
     advance_epoch, arb_genesis_validators, arb_redelegation_amounts,
     test_slashes_with_unbonding_params,
 };
 use crate::tests::{
     bond_amount, bond_tokens, bonds_and_unbonds, process_slashes,
-    redelegate_tokens, slash, unbond_tokens, withdraw_tokens,
+    redelegate_tokens, slash, test_init_genesis, unbond_tokens,
+    withdraw_tokens,
 };
 use crate::types::{BondId, GenesisValidator, Slash, SlashType};
 use crate::{staking_token_address, OwnedPosParams, RedelegationError};

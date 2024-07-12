@@ -30,15 +30,14 @@ use crate::storage::{
     validator_addresses_handle, validator_consensus_key_handle,
     validator_set_positions_handle, write_validator_address_raw_hash,
 };
-use crate::test_utils::{init_genesis_helper, test_init_genesis};
 use crate::tests::helpers::{
     advance_epoch, arb_genesis_validators, arb_params_and_genesis_validators,
     get_tendermint_set_updates,
 };
 use crate::tests::{
-    become_validator, bond_tokens, change_consensus_key,
-    read_below_threshold_validator_set_addresses, unbond_tokens,
-    update_validator_deltas, withdraw_tokens, GovStore,
+    become_validator, bond_tokens, change_consensus_key, init_genesis_helper,
+    read_below_threshold_validator_set_addresses, test_init_genesis,
+    unbond_tokens, update_validator_deltas, withdraw_tokens, GovStore,
 };
 use crate::types::{
     into_tm_voting_power, ConsensusValidator, GenesisValidator, Position,

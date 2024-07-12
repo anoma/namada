@@ -15,12 +15,7 @@ version.workspace = true
 [features]
 default = []
 # testing helpers
-testing = [
-    "namada_governance",
-    "namada_parameters",
-    "namada_trans_token",
-    "proptest",
-]
+testing = ["proptest"]
 migrations = [
     "namada_migrations",
     "linkme",
@@ -38,11 +33,6 @@ namada_storage = { path = "../storage" }
 namada_systems = { path = "../systems" }
 namada_tx = { path = "../tx" }
 namada_vp = { path = "../vp" }
-
-# For `feature = "testing"` only
-namada_governance = { path = "../governance", optional = true }
-namada_parameters = { path = "../parameters", optional = true }
-namada_trans_token = { path = "../trans_token", optional = true }
 
 borsh.workspace = true
 konst.workspace = true

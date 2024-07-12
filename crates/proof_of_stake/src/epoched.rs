@@ -1430,7 +1430,7 @@ mod test {
         let gov_params =
             namada_governance::parameters::GovernanceParameters::default();
         gov_params.init_storage(&mut s)?;
-        crate::test_utils::init_genesis_helper(
+        crate::tests::init_genesis_helper(
             &mut s,
             &PosParams::default(),
             [GenesisValidator {

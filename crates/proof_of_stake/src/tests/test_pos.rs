@@ -40,7 +40,6 @@ use crate::storage::{
     read_validator_deltas_value, rewards_accumulator_handle,
     total_deltas_handle,
 };
-use crate::test_utils::test_init_genesis;
 use crate::tests::helpers::{
     advance_epoch, arb_genesis_validators, arb_params_and_genesis_validators,
     get_genesis_validators,
@@ -49,7 +48,8 @@ use crate::tests::{
     bond_amount, bond_tokens, bonds_and_unbonds, change_consensus_key,
     find_delegations, process_slashes,
     read_below_threshold_validator_set_addresses, redelegate_tokens, slash,
-    unbond_tokens, unjail_validator, withdraw_tokens, GovStore,
+    test_init_genesis, unbond_tokens, unjail_validator, withdraw_tokens,
+    GovStore,
 };
 use crate::types::{
     into_tm_voting_power, BondDetails, BondId, BondsAndUnbondsDetails,

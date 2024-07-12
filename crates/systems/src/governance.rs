@@ -10,3 +10,9 @@ pub trait Read<S> {
     /// Get governance "max_proposal_period" parameter
     fn max_proposal_period(storage: &S) -> Result<u64>;
 }
+
+/// Abstract governance storage write interface
+pub trait Write<S>: Read<S> {
+    /// Initialize default governance parameters into storage
+    fn init_default_params(storage: &mut S) -> Result<()>;
+}

@@ -2680,172 +2680,6 @@ where
     Ok(())
 }
 
-#[cfg(any(test, feature = "testing"))]
-/// PoS related utility functions to help set up tests.
-pub mod test_utils {
-    use namada_core::chain::ProposalBytes;
-    use namada_core::hash::Hash;
-    use namada_core::time::DurationSecs;
-    use namada_parameters::{init_storage, EpochDuration};
-    use namada_trans_token::credit_tokens;
-
-    use super::*;
-    use crate::types::GenesisValidator;
-
-    /// Helper function to initialize storage with PoS data
-    /// about validators for tests.
-    pub fn init_genesis_helper<S>(
-        storage: &mut S,
-        params: &PosParams,
-        validators: impl Iterator<Item = GenesisValidator>,
-        current_epoch: namada_core::storage::Epoch,
-    ) -> Result<()>
-    where
-        S: StorageRead + StorageWrite,
-    {
-        init_genesis(storage, params, current_epoch)?;
-        for GenesisValidator {
-            address,
-            consensus_key,
-            protocol_key,
-            eth_cold_key,
-            eth_hot_key,
-            commission_rate,
-            max_commission_rate_change,
-            tokens,
-            metadata,
-        } in validators
-        {
-            become_validator::<S, namada_governance::Store<S>>(
-                storage,
-                BecomeValidator {
-                    params,
-                    address: &address,
-                    consensus_key: &consensus_key,
-                    protocol_key: &protocol_key,
-                    eth_cold_key: &eth_cold_key,
-                    eth_hot_key: &eth_hot_key,
-                    current_epoch,
-                    commission_rate,
-                    max_commission_rate_change,
-                    metadata,
-                    offset_opt: Some(0),
-                },
-            )?;
-            // Credit token amount to be bonded to the validator address so it
-            // can be bonded
-            let staking_token = staking_token_address(storage);
-            credit_tokens(storage, &staking_token, &address, tokens)?;
-
-            bond_tokens::<
-                S,
-                namada_governance::Store<S>,
-                namada_trans_token::Store<S>,
-            >(
-                storage, None, &address, tokens, current_epoch, Some(0)
-            )?;
-        }
-        // Store the total consensus validator stake to storage
-        compute_and_store_total_consensus_stake::<
-            S,
-            namada_governance::Store<S>,
-        >(storage, current_epoch)?;
-
-        // Copy validator sets and positions
-        copy_genesis_validator_sets::<S, namada_governance::Store<S>>(
-            storage,
-            params,
-            current_epoch,
-        )?;
-
-        Ok(())
-    }
-
-    /// Init PoS genesis wrapper helper that also initializes gov params that
-    /// are used in PoS with default values.
-    pub fn test_init_genesis<S>(
-        storage: &mut S,
-        owned: OwnedPosParams,
-        validators: impl Iterator<Item = GenesisValidator> + Clone,
-        current_epoch: namada_core::storage::Epoch,
-    ) -> Result<PosParams>
-    where
-        S: StorageRead + StorageWrite,
-    {
-        let gov_params =
-            namada_governance::parameters::GovernanceParameters::default();
-        gov_params.init_storage(storage)?;
-        let params = read_non_pos_owned_params::<_, namada_governance::Store<_>>(
-            storage, owned,
-        )?;
-        let chain_parameters = namada_parameters::Parameters {
-            max_tx_bytes: 123456789,
-            epoch_duration: EpochDuration {
-                min_num_of_blocks: 2,
-                min_duration: DurationSecs(4),
-            },
-            max_proposal_bytes: ProposalBytes::default(),
-            max_block_gas: 10000000,
-            vp_allowlist: vec![],
-            tx_allowlist: vec![],
-            implicit_vp_code_hash: Some(Hash::default()),
-            epochs_per_year: 10000000,
-            masp_epoch_multiplier: 2,
-            masp_fee_payment_gas_limit: 10000,
-            gas_scale: 10_000_000,
-            minimum_gas_price: BTreeMap::new(),
-            is_native_token_transferable: true,
-        };
-        init_storage(&chain_parameters, storage).unwrap();
-        init_genesis_helper(storage, &params, validators, current_epoch)?;
-        Ok(params)
-    }
-
-    /// A dummy validator used for testing
-    pub fn get_dummy_genesis_validator() -> types::GenesisValidator {
-        use namada_core::address::testing::established_address_1;
-        use namada_core::key::testing::common_sk_from_simple_seed;
-        use namada_core::{key, token};
-
-        let address = established_address_1();
-        let tokens = token::Amount::native_whole(1);
-        let consensus_sk = common_sk_from_simple_seed(0);
-        let consensus_key = consensus_sk.to_public();
-
-        let protocol_sk = common_sk_from_simple_seed(1);
-        let protocol_key = protocol_sk.to_public();
-
-        let commission_rate =
-            Dec::new(1, 1).expect("expected 0.1 to be a valid decimal");
-        let max_commission_rate_change =
-            Dec::new(1, 1).expect("expected 0.1 to be a valid decimal");
-
-        let eth_hot_sk =
-            key::common::SecretKey::Secp256k1(key::testing::gen_keypair::<
-                key::secp256k1::SigScheme,
-            >());
-        let eth_hot_key = eth_hot_sk.to_public();
-
-        let eth_cold_sk =
-            key::common::SecretKey::Secp256k1(key::testing::gen_keypair::<
-                key::secp256k1::SigScheme,
-            >());
-        let eth_cold_key = eth_cold_sk.to_public();
-
-        types::GenesisValidator {
-            address,
-            tokens,
-            consensus_key,
-            protocol_key,
-            eth_cold_key,
-            eth_hot_key,
-            commission_rate,
-            max_commission_rate_change,
-            metadata: Default::default(),
-        }
-    }
-}
-
 /// Change validator's metadata. In addition to changing any of the data from
 /// [`ValidatorMetaData`], the validator's commission rate can be changed within
 /// here as well.
@@ -3265,4 +3099,172 @@ fn prune_old_delegations(
         .retain(|_start, end| *end >= oldest_to_keep);
 
     Ok(())
+}
+
+#[cfg(any(test, feature = "testing"))]
+/// PoS related utility functions to help set up tests.
+pub mod test_utils {
+    use namada_core::chain::ProposalBytes;
+    use namada_core::hash::Hash;
+    use namada_core::parameters::EpochDuration;
+    use namada_core::time::DurationSecs;
+
+    use super::*;
+    use crate::types::GenesisValidator;
+
+    /// Helper function to initialize storage with PoS data
+    /// about validators for tests.
+    pub fn init_genesis_helper<S, Gov, Token>(
+        storage: &mut S,
+        params: &PosParams,
+        validators: impl Iterator<Item = GenesisValidator>,
+        current_epoch: namada_core::storage::Epoch,
+    ) -> Result<()>
+    where
+        S: StorageRead + StorageWrite,
+        Gov: governance::Read<S>,
+        Token: trans_token::Write<S>,
+    {
+        init_genesis(storage, params, current_epoch)?;
+        for GenesisValidator {
+            address,
+            consensus_key,
+            protocol_key,
+            eth_cold_key,
+            eth_hot_key,
+            commission_rate,
+            max_commission_rate_change,
+            tokens,
+            metadata,
+        } in validators
+        {
+            become_validator::<S, Gov>(
+                storage,
+                BecomeValidator {
+                    params,
+                    address: &address,
+                    consensus_key: &consensus_key,
+                    protocol_key: &protocol_key,
+                    eth_cold_key: &eth_cold_key,
+                    eth_hot_key: &eth_hot_key,
+                    current_epoch,
+                    commission_rate,
+                    max_commission_rate_change,
+                    metadata,
+                    offset_opt: Some(0),
+                },
+            )?;
+            // Credit token amount to be bonded to the validator address so it
+            // can be bonded
+            let staking_token = staking_token_address(storage);
+            Token::credit_tokens(storage, &staking_token, &address, tokens)?;
+
+            bond_tokens::<S, Gov, Token>(
+                storage,
+                None,
+                &address,
+                tokens,
+                current_epoch,
+                Some(0),
+            )?;
+        }
+        // Store the total consensus validator stake to storage
+        compute_and_store_total_consensus_stake::<S, Gov>(
+            storage,
+            current_epoch,
+        )?;
+
+        // Copy validator sets and positions
+        copy_genesis_validator_sets::<S, Gov>(storage, params, current_epoch)?;
+
+        Ok(())
+    }
+
+    /// Init PoS genesis wrapper helper that also initializes gov params that
+    /// are used in PoS with default values.
+    pub fn test_init_genesis<S, Params, Gov, Token>(
+        storage: &mut S,
+        owned: OwnedPosParams,
+        validators: impl Iterator<Item = GenesisValidator> + Clone,
+        current_epoch: namada_core::storage::Epoch,
+    ) -> Result<PosParams>
+    where
+        S: StorageRead + StorageWrite,
+        Params: namada_systems::parameters::Write<S>,
+        Gov: governance::Write<S>,
+        Token: trans_token::Write<S>,
+    {
+        Gov::init_default_params(storage)?;
+        let params = read_non_pos_owned_params::<_, Gov>(storage, owned)?;
+        let chain_parameters = namada_core::parameters::Parameters {
+            max_tx_bytes: 123456789,
+            epoch_duration: EpochDuration {
+                min_num_of_blocks: 2,
+                min_duration: DurationSecs(4),
+            },
+            max_proposal_bytes: ProposalBytes::default(),
+            max_block_gas: 10000000,
+            vp_allowlist: vec![],
+            tx_allowlist: vec![],
+            implicit_vp_code_hash: Some(Hash::default()),
+            epochs_per_year: 10000000,
+            masp_epoch_multiplier: 2,
+            masp_fee_payment_gas_limit: 10000,
+            gas_scale: 100_000_000,
+            minimum_gas_price: BTreeMap::new(),
+            is_native_token_transferable: true,
+        };
+        Params::write(storage, &chain_parameters).unwrap();
+        init_genesis_helper::<S, Gov, Token>(
+            storage,
+            &params,
+            validators,
+            current_epoch,
+        )?;
+        Ok(params)
+    }
+
+    /// A dummy validator used for testing
+    pub fn get_dummy_genesis_validator() -> types::GenesisValidator {
+        use namada_core::address::testing::established_address_1;
+        use namada_core::key;
+        use namada_core::key::testing::common_sk_from_simple_seed;
+
+        let address = established_address_1();
+        let tokens = token::Amount::native_whole(1);
+        let consensus_sk = common_sk_from_simple_seed(0);
+        let consensus_key = consensus_sk.to_public();
+
+        let protocol_sk = common_sk_from_simple_seed(1);
+        let protocol_key = protocol_sk.to_public();
+
+        let commission_rate =
+            Dec::new(1, 1).expect("expected 0.1 to be a valid decimal");
+        let max_commission_rate_change =
+            Dec::new(1, 1).expect("expected 0.1 to be a valid decimal");
+
+        let eth_hot_sk =
+            key::common::SecretKey::Secp256k1(key::testing::gen_keypair::<
+                key::secp256k1::SigScheme,
+            >());
+        let eth_hot_key = eth_hot_sk.to_public();
+
+        let eth_cold_sk =
+            key::common::SecretKey::Secp256k1(key::testing::gen_keypair::<
+                key::secp256k1::SigScheme,
+            >());
+        let eth_cold_key = eth_cold_sk.to_public();
+
+        types::GenesisValidator {
+            address,
+            tokens,
+            consensus_key,
+            protocol_key,
+            eth_cold_key,
+            eth_hot_key,
+            commission_rate,
+            max_commission_rate_change,
+            metadata: Default::default(),
+        }
+    }
 }
