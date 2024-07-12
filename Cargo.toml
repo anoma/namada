@@ -122,7 +122,7 @@ index-set = { git = "https://github.com/heliaxdev/index-set", tag = "v0.8.1", fe
 indexmap = { git = "https://github.com/heliaxdev/indexmap", tag = "2.2.4-heliax-1", features = ["borsh-schema", "serde"] }
 itertools = "0.12.1"
 # branch "tomas/arbitrary"
-jubjub = { git = "https://github.com/heliaxdev/jubjub.git", rev = "e887d6964985f267a1085d480756f20d9eaceb19" }
+jubjub = { git = "https://github.com/heliaxdev/jubjub.git", rev = "a373686962f4e9d0edb3b4716f86ff6bbd9aa86c" }
 k256 = { version = "0.13.0", default-features = false, features = ["ecdsa", "pkcs8", "precomputed-tables", "serde", "std"]}
 konst = { version = "0.3.8", default-features = false }
 lazy_static = "1.4.0"
@@ -135,8 +135,8 @@ libc = "0.2.97"
 libloading = "0.7.2"
 linkme = "0.3.24"
 # branch = "tomas/arbitrary"
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "9c5e3ad500066668fb253dcaac56f56c68c7bbc6" }
-masp_proofs = { git = "https://github.com/anoma/masp", rev = "9c5e3ad500066668fb253dcaac56f56c68c7bbc6", default-features = false, features = ["local-prover"] }
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "12ed8b060b295c06502a2ff8468e4a941cb7cca4" }
+masp_proofs = { git = "https://github.com/anoma/masp", rev = "12ed8b060b295c06502a2ff8468e4a941cb7cca4", default-features = false, features = ["local-prover"] }
 num256 = "0.3.5"
 num_cpus = "1.13.0"
 num-derive = "0.4"

@@ -4037,7 +4037,7 @@ dependencies = [
 [[package]]
 name = "jubjub"
 version = "0.10.0"
-source = "git+https://github.com/heliaxdev/jubjub.git?rev=e887d6964985f267a1085d480756f20d9eaceb19#e887d6964985f267a1085d480756f20d9eaceb19"
+source = "git+https://github.com/heliaxdev/jubjub.git?rev=a373686962f4e9d0edb3b4716f86ff6bbd9aa86c#a373686962f4e9d0edb3b4716f86ff6bbd9aa86c"
 dependencies = [
  "arbitrary",
  "bitvec",
@@ -4373,7 +4373,7 @@ dependencies = [
 [[package]]
 name = "masp_note_encryption"
 version = "1.0.0"
-source = "git+https://github.com/anoma/masp?rev=9c5e3ad500066668fb253dcaac56f56c68c7bbc6#9c5e3ad500066668fb253dcaac56f56c68c7bbc6"
+source = "git+https://github.com/anoma/masp?rev=12ed8b060b295c06502a2ff8468e4a941cb7cca4#12ed8b060b295c06502a2ff8468e4a941cb7cca4"
 dependencies = [
  "arbitrary",
  "borsh",
@@ -4387,7 +4387,7 @@ dependencies = [
 [[package]]
 name = "masp_primitives"
 version = "1.0.0"
-source = "git+https://github.com/anoma/masp?rev=9c5e3ad500066668fb253dcaac56f56c68c7bbc6#9c5e3ad500066668fb253dcaac56f56c68c7bbc6"
+source = "git+https://github.com/anoma/masp?rev=12ed8b060b295c06502a2ff8468e4a941cb7cca4#12ed8b060b295c06502a2ff8468e4a941cb7cca4"
 dependencies = [
  "aes",
  "arbitrary",
@@ -4403,7 +4403,7 @@ dependencies = [
  "group",
  "hex",
  "incrementalmerkletree",
- "jubjub 0.10.0 (git+https://github.com/heliaxdev/jubjub.git?rev=e887d6964985f267a1085d480756f20d9eaceb19)",
+ "jubjub 0.10.0 (git+https://github.com/heliaxdev/jubjub.git?rev=a373686962f4e9d0edb3b4716f86ff6bbd9aa86c)",
  "lazy_static",
  "masp_note_encryption",
  "memuse",
@@ -4420,7 +4420,7 @@ dependencies = [
 [[package]]
 name = "masp_proofs"
 version = "1.0.0"
-source = "git+https://github.com/anoma/masp?rev=9c5e3ad500066668fb253dcaac56f56c68c7bbc6#9c5e3ad500066668fb253dcaac56f56c68c7bbc6"
+source = "git+https://github.com/anoma/masp?rev=12ed8b060b295c06502a2ff8468e4a941cb7cca4#12ed8b060b295c06502a2ff8468e4a941cb7cca4"
 dependencies = [
  "bellman",
  "blake2b_simd",
@@ -4429,7 +4429,7 @@ dependencies = [
  "getrandom 0.2.15",
  "group",
  "itertools 0.11.0",
- "jubjub 0.10.0 (git+https://github.com/heliaxdev/jubjub.git?rev=e887d6964985f267a1085d480756f20d9eaceb19)",
+ "jubjub 0.10.0 (git+https://github.com/heliaxdev/jubjub.git?rev=a373686962f4e9d0edb3b4716f86ff6bbd9aa86c)",
  "lazy_static",
  "masp_primitives",
  "minreq",
@@ -5172,7 +5172,7 @@ dependencies = [
  "flume",
  "futures",
  "itertools 0.12.1",
- "jubjub 0.10.0 (git+https://github.com/heliaxdev/jubjub.git?rev=e887d6964985f267a1085d480756f20d9eaceb19)",
+ "jubjub 0.10.0 (git+https://github.com/heliaxdev/jubjub.git?rev=a373686962f4e9d0edb3b4716f86ff6bbd9aa86c)",
  "lazy_static",
  "linkme",
  "masp_primitives",
