@@ -52,10 +52,6 @@ jobs:
         with:
           aws-region: ${{ env.AWS_REGION }}
           role-to-assume: ${{ secrets.AWS_ROLE }}
-      - name: test 1 
-        run: ls /usr/local/cargo
-      - name: test 2
-        run: ls $HOME/.cargo
       - name: Cache cargo
         id: cache
         uses: runs-on/cache@v4
@@ -63,7 +59,7 @@ jobs:
           RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
         with:
           path: |
-            ~/.cargo/
+            /usr/local/cargo
             target/
           key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
@@ -121,10 +117,6 @@ jobs:
         with:
           aws-region: ${{ env.AWS_REGION }}
           role-to-assume: ${{ secrets.AWS_ROLE }}
-      - name: test 1 
-        run: ls /usr/local/cargo
-      - name: test 2
-        run: ls $HOME/.cargo
       - name: Cache cargo
         id: cache
         uses: runs-on/cache@v4
@@ -132,7 +124,7 @@ jobs:
           RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
         with:
           path: |
-            ~/.cargo/
+            /usr/local/cargo
             target/
           key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
@@ -175,7 +167,7 @@ jobs:
   #         RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
   #       with:
   #         path: |
-  #           ~/.cargo/
+  #           /usr/local/cargo
   #           target/
   #         key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
   #         restore-keys: ${{ runner.os }}-cargo-
@@ -237,7 +229,7 @@ jobs:
   #         RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
   #       with:
   #         path: |
-  #           ~/.cargo/
+  #           /usr/local/cargo
   #           target/
   #         key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
   #         restore-keys: ${{ runner.os }}-cargo-
@@ -295,7 +287,7 @@ jobs:
   #         RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
   #       with:
   #         path: |
-  #           ~/.cargo/
+  #           /usr/local/cargo
   #           target/
   #         key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
   #         restore-keys: ${{ runner.os }}-cargo-
@@ -339,7 +331,7 @@ jobs:
   #         RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
   #       with:
   #         path: |
-  #           ~/.cargo/
+  #           /usr/local/cargo
   #           target/
   #         key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
   #         restore-keys: ${{ runner.os }}-cargo-
@@ -393,7 +385,7 @@ jobs:
   #         RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
   #       with:
   #         path: |
-  #           ~/.cargo/
+  #           /usr/local/cargo
   #           target/
   #         key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
   #         restore-keys: ${{ runner.os }}-cargo-
@@ -446,7 +438,7 @@ jobs:
   #         RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
   #       with:
   #         path: |
-  #           ~/.cargo/
+  #           /usr/local/cargo
   #           target/
   #         key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
   #         restore-keys: ${{ runner.os }}-cargo-
@@ -518,7 +510,7 @@ jobs:
   #         RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
   #       with:
   #         path: |
-  #           ~/.cargo/
+  #           /usr/local/cargo
   #           target/
   #         key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
   #         restore-keys: ${{ runner.os }}-cargo-
