@@ -821,7 +821,7 @@ impl<'arbitrary> arbitrary::Arbitrary<'arbitrary> for Section {
         let result = (|| {
             Ok(
                 match (u64::from(<u32 as arbitrary::Arbitrary>::arbitrary(u)?)
-                    * 5u64)
+                    * 6u64)
                     >> 32
                 {
                     0u64 => Section::Data(arbitrary::Arbitrary::arbitrary(u)?),
@@ -832,11 +832,13 @@ impl<'arbitrary> arbitrary::Arbitrary<'arbitrary> for Section {
                     3u64 => Section::Authorization(
                         arbitrary::Arbitrary::arbitrary(u)?,
                     ),
-                    // 4u64 => Section::MaspTx(arbitrary::Arbitrary::arbitrary(u)?),
+                    4u64 => {
+                        Section::MaspTx(arbitrary::Arbitrary::arbitrary(u)?)
+                    }
                     // 5u64 => {
                     //     Section::MaspBuilder(arbitrary::Arbitrary::arbitrary(u)?)
                     // }
-                    4u64 => {
+                    5u64 => {
                         Section::Header(arbitrary::Arbitrary::arbitrary(u)?)
                     }
                     _ => panic!("internal error: entered unreachable code",),
@@ -868,7 +870,7 @@ impl<'arbitrary> arbitrary::Arbitrary<'arbitrary> for Section {
             Ok(
                 match (u64::from(<u32 as arbitrary::Arbitrary>::arbitrary(
                     &mut u,
-                )?) * 5u64)
+                )?) * 6u64)
                     >> 32
                 {
                     0u64 => Section::Data(
@@ -883,17 +885,15 @@ impl<'arbitrary> arbitrary::Arbitrary<'arbitrary> for Section {
                     3u64 => Section::Authorization(
                         arbitrary::Arbitrary::arbitrary_take_rest(u)?,
                     ),
-                    // 4u64 => {
-                    //     Section::MaspTx(
-                    //         arbitrary::Arbitrary::arbitrary_take_rest(u)?,
-                    //     )
-                    // }
+                    4u64 => Section::MaspTx(
+                        arbitrary::Arbitrary::arbitrary_take_rest(u)?,
+                    ),
                     // 5u64 => {
                     //     Section::MaspBuilder(
                     //         arbitrary::Arbitrary::arbitrary_take_rest(u)?,
                     //     )
                     // }
-                    4u64 => Section::Header(
+                    5u64 => Section::Header(
                         arbitrary::Arbitrary::arbitrary_take_rest(u)?,
                     ),
                     _ => panic!("internal error: entered unreachable code",),
