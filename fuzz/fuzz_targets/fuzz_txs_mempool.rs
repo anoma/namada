@@ -5,7 +5,7 @@ use libfuzzer_sys::fuzz_target;
 use namada_node::shell;
 use namada_node::shell::test_utils::TestShell;
 use namada_node::shell::MempoolTxType;
-use namada_tx::Tx;
+use namada_tx::{Section, Tx};
 
 lazy_static! {
     static ref SHELL: TestShell = {
@@ -15,9 +15,7 @@ lazy_static! {
 }
 
 fuzz_target!(|tx: Tx| {
-    // Sometimes the generated `Tx` cannot be serialized (due to e.g. broken
-    // invariants in the `Section::MaspTx`) and it may also panic
-    if let Ok(Ok(tx_bytes)) = std::panic::catch_unwind(|| tx.try_to_bytes()) {
+    if let Ok(tx_bytes) = tx.try_to_bytes() {
         SHELL.mempool_validate(&tx_bytes, MempoolTxType::NewTransaction);
     }
 });
