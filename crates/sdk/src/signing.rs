@@ -1302,7 +1302,6 @@ pub async fn to_ledger_vector(
                         "Receiver : {}",
                         transfer.message.packet_data.receiver
                     ),
-                    format!("Memo : {}", transfer.message.packet_data.memo),
                     format!(
                         "Timeout height : {}",
                         transfer.message.timeout_height_on_b
@@ -1427,9 +1426,6 @@ pub async fn to_ledger_vector(
                         transfer.message.packet_data.receiver
                     ),
                 ]);
-                if let Some(memo) = &transfer.message.packet_data.memo {
-                    tv.output.push(format!("Memo: {}", memo));
-                }
                 tv.output.extend(vec![
                     format!(
                         "Timeout height : {}",
