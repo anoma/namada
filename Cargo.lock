@@ -674,6 +674,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d7bc6d6292be3a19e6379786dac800f551e5865a5bb51ebbe3064ab80433f403"
 dependencies = [
  "ff",
+ "rand_core 0.6.4",
+ "subtle",
+]
+
+[[package]]
+name = "bls12_381"
+version = "0.8.0"
+source = "git+https://github.com/heliaxdev/bls12_381.git?rev=d3ebe9dd6488fac1923db120a7498079e55dd838#d3ebe9dd6488fac1923db120a7498079e55dd838"
+dependencies = [
+ "arbitrary",
+ "ff",
  "group",
  "pairing",
  "rand_core 0.6.4",
@@ -3846,6 +3857,7 @@ version = "2.2.4"
 source = "git+https://github.com/heliaxdev/indexmap?tag=2.2.4-heliax-1#b5b5b547bd6ab04bbb16e060326a50ddaeb6c909"
 dependencies = [
  "arbitrary",
+ "borsh",
  "equivalent",
  "hashbrown 0.14.3",
  "serde",
@@ -4015,7 +4027,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8499f7a74008aafbecb2a2e608a3e13e4dd3e84df198b604451efe93f2de6e61"
 dependencies = [
  "bitvec",
- "bls12_381",
+ "bls12_381 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ff",
+ "group",
+ "rand_core 0.6.4",
+ "subtle",
+]
+
+[[package]]
+name = "jubjub"
+version = "0.10.0"
+source = "git+https://github.com/heliaxdev/jubjub.git?rev=e887d6964985f267a1085d480756f20d9eaceb19#e887d6964985f267a1085d480756f20d9eaceb19"
+dependencies = [
+ "arbitrary",
+ "bitvec",
+ "bls12_381 0.8.0 (git+https://github.com/heliaxdev/bls12_381.git?rev=d3ebe9dd6488fac1923db120a7498079e55dd838)",
  "ff",
  "group",
  "rand_core 0.6.4",
@@ -4347,8 +4373,9 @@ dependencies = [
 [[package]]
 name = "masp_note_encryption"
 version = "1.0.0"
-source = "git+https://github.com/anoma/masp?rev=8d83b172698098fba393006016072bc201ed9ab7#8d83b172698098fba393006016072bc201ed9ab7"
+source = "git+https://github.com/anoma/masp?rev=9c5e3ad500066668fb253dcaac56f56c68c7bbc6#9c5e3ad500066668fb253dcaac56f56c68c7bbc6"
 dependencies = [
+ "arbitrary",
  "borsh",
  "chacha20",
  "chacha20poly1305",
@@ -4360,14 +4387,15 @@ dependencies = [
 [[package]]
 name = "masp_primitives"
 version = "1.0.0"
-source = "git+https://github.com/anoma/masp?rev=8d83b172698098fba393006016072bc201ed9ab7#8d83b172698098fba393006016072bc201ed9ab7"
+source = "git+https://github.com/anoma/masp?rev=9c5e3ad500066668fb253dcaac56f56c68c7bbc6#9c5e3ad500066668fb253dcaac56f56c68c7bbc6"
 dependencies = [
  "aes",
+ "arbitrary",
  "bip0039",
  "bitvec",
  "blake2b_simd",
  "blake2s_simd",
- "bls12_381",
+ "bls12_381 0.8.0 (git+https://github.com/heliaxdev/bls12_381.git?rev=d3ebe9dd6488fac1923db120a7498079e55dd838)",
  "borsh",
  "byteorder",
  "ff",
@@ -4375,7 +4403,7 @@ dependencies = [
  "group",
  "hex",
  "incrementalmerkletree",
- "jubjub",
+ "jubjub 0.10.0 (git+https://github.com/heliaxdev/jubjub.git?rev=e887d6964985f267a1085d480756f20d9eaceb19)",
  "lazy_static",
  "masp_note_encryption",
  "memuse",
@@ -4392,16 +4420,16 @@ dependencies = [
 [[package]]
 name = "masp_proofs"
 version = "1.0.0"
-source = "git+https://github.com/anoma/masp?rev=8d83b172698098fba393006016072bc201ed9ab7#8d83b172698098fba393006016072bc201ed9ab7"
+source = "git+https://github.com/anoma/masp?rev=9c5e3ad500066668fb253dcaac56f56c68c7bbc6#9c5e3ad500066668fb253dcaac56f56c68c7bbc6"
 dependencies = [
  "bellman",
  "blake2b_simd",
- "bls12_381",
+ "bls12_381 0.8.0 (git+https://github.com/heliaxdev/bls12_381.git?rev=d3ebe9dd6488fac1923db120a7498079e55dd838)",
  "directories",
  "getrandom 0.2.15",
  "group",
  "itertools 0.11.0",
- "jubjub",
+ "jubjub 0.10.0 (git+https://github.com/heliaxdev/jubjub.git?rev=e887d6964985f267a1085d480756f20d9eaceb19)",
  "lazy_static",
  "masp_primitives",
  "minreq",
@@ -4850,6 +4878,7 @@ version = "0.0.0"
 dependencies = [
  "lazy_static",
  "libfuzzer-sys",
+ "masp_primitives",
  "namada_node",
  "namada_tx",
 ]
@@ -5143,7 +5172,7 @@ dependencies = [
  "flume",
  "futures",
  "itertools 0.12.1",
- "jubjub",
+ "jubjub 0.10.0 (git+https://github.com/heliaxdev/jubjub.git?rev=e887d6964985f267a1085d480756f20d9eaceb19)",
  "lazy_static",
  "linkme",
  "masp_primitives",
@@ -6697,7 +6726,7 @@ dependencies = [
  "frost-rerandomized",
  "group",
  "hex",
- "jubjub",
+ "jubjub 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "pasta_curves",
  "rand_core 0.6.4",
  "serde",
