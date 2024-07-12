@@ -54,8 +54,14 @@ const COMPILE_GAS_PER_BYTE: u64 = 1_955;
 const PARALLEL_GAS_DIVIDER: u64 = 10;
 const WASM_CODE_VALIDATION_GAS_PER_BYTE: u64 = 67;
 const WRAPPER_TX_VALIDATION_GAS: u64 = 3_245_500;
+// There's no benchmark to calculate the cost of storage occupation, so we
+// define it as the cost of storage latency (which is needed for any storage
+// operation and it's based on actual execution time), plus the same cost
+// multiplied by an arbitrary factor that represents the higher cost of storage
+// space as a resource. This way, the storage occupation cost is not completely
+// free-floating but it's tied to the other costs
 const STORAGE_OCCUPATION_GAS_PER_BYTE: u64 =
-    100_000 + PHYSICAL_STORAGE_LATENCY_PER_BYTE;
+    PHYSICAL_STORAGE_LATENCY_PER_BYTE * (1 + 10);
 // NOTE: this accounts for the latency of a physical drive access. For read
 // accesses we have no way to tell if data was in cache or in storage. Moreover,
 // the latency shouldn't really be accounted per single byte but rather per
