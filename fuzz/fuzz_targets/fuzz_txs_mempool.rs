@@ -16,9 +16,8 @@ lazy_static! {
 
 fuzz_target!(|tx: Tx| {
     // Sometimes the generated `Tx` cannot be serialized (due to e.g. broken
-    // invariants in the `Section::MaspTx`) so we have to use the non-panicking
-    // serialization
-    if let Ok(tx_bytes) = tx.try_to_bytes() {
+    // invariants in the `Section::MaspTx`) and it may also panic
+    if let Ok(Ok(tx_bytes)) = std::panic::catch_unwind(|| tx.try_to_bytes()) {
         SHELL.mempool_validate(&tx_bytes, MempoolTxType::NewTransaction);
     }
 });
