@@ -67,26 +67,52 @@ pub enum Error {
 pub type VpResult<T> = std::result::Result<T, Error>;
 
 /// IBC VP
-pub struct Ibc<'ctx, S, CA, EVAL, Params, Gov, Token, PoS>
-where
+pub struct Ibc<
+    'ctx,
+    S,
+    CA,
+    EVAL,
+    Params,
+    ParamsPre,
+    ParamsPseudo,
+    Gov,
+    Token,
+    PoS,
+> where
     S: 'static + StateRead,
     EVAL: VpEvaluator<'ctx, S, CA, EVAL>,
 {
     /// Context to interact with the host structures.
     pub ctx: Ctx<'ctx, S, CA, EVAL>,
     /// Generic types for DI
-    pub _marker: PhantomData<(Params, Gov, Token, PoS)>,
+    pub _marker:
+        PhantomData<(Params, ParamsPre, ParamsPseudo, Gov, Token, PoS)>,
 }
 
-impl<'view, 'ctx: 'view, S, CA, EVAL, Params, Gov, Token, PoS> NativeVp<'view>
-    for Ibc<'ctx, S, CA, EVAL, Params, Gov, Token, PoS>
+impl<
+    'view,
+    'ctx: 'view,
+    S,
+    CA,
+    EVAL,
+    Params,
+    ParamsPre,
+    ParamsPseudo,
+    Gov,
+    Token,
+    PoS,
+> NativeVp<'view>
+    for Ibc<'ctx, S, CA, EVAL, Params, ParamsPre, ParamsPseudo, Gov, Token, PoS>
 where
     S: 'static + StateRead,
     EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL> + Debug,
     CA: 'static + Clone + Debug,
     Gov: governance::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
-    Params: parameters::Keys
+    Params: parameters::Read<VpValidationContext<'view, 'ctx, S, CA, EVAL>>,
+    ParamsPre: parameters::Keys
         + parameters::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
+    ParamsPseudo:
+        parameters::Read<PseudoExecutionStorage<'view, 'ctx, S, CA, EVAL>>,
     Token: token::Keys
         + token::Write<PseudoExecutionStorage<'view, 'ctx, S, CA, EVAL>>
         + Debug,
@@ -133,14 +159,28 @@ where
     }
 }
 
-impl<'view, 'ctx: 'view, S, CA, EVAL, Params, Gov, Token, PoS>
-    Ibc<'ctx, S, CA, EVAL, Params, Gov, Token, PoS>
+impl<
+    'view,
+    'ctx: 'view,
+    S,
+    CA,
+    EVAL,
+    Params,
+    ParamsPre,
+    ParamsPseudo,
+    Gov,
+    Token,
+    PoS,
+> Ibc<'ctx, S, CA, EVAL, Params, ParamsPre, ParamsPseudo, Gov, Token, PoS>
 where
     S: 'static + StateRead,
     EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL> + Debug,
     CA: 'static + Clone + Debug,
-    Params: parameters::Keys
+    Params: parameters::Read<VpValidationContext<'view, 'ctx, S, CA, EVAL>>,
+    ParamsPre: parameters::Keys
         + parameters::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
+    ParamsPseudo:
+        parameters::Read<PseudoExecutionStorage<'view, 'ctx, S, CA, EVAL>>,
     Token: token::Keys
         + token::Write<PseudoExecutionStorage<'view, 'ctx, S, CA, EVAL>>
         + Debug,
@@ -168,7 +208,8 @@ where
         // needed in actual txs to addresses whose VPs should be triggered
         let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
 
-        let mut actions = IbcActions::new(ctx.clone(), verifiers.clone());
+        let mut actions =
+            IbcActions::<_, ParamsPseudo>::new(ctx.clone(), verifiers.clone());
         let module = TransferModule::new(ctx.clone(), verifiers);
         actions.add_transfer_module(module);
         let module = NftTransferModule::new(ctx.clone());
@@ -223,7 +264,8 @@ where
         // needed in actual txs to addresses whose VPs should be triggered
         let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
 
-        let mut actions = IbcActions::new(ctx.clone(), verifiers.clone());
+        let mut actions =
+            IbcActions::<_, Params>::new(ctx.clone(), verifiers.clone());
         actions.set_validation_params(self.validation_params()?);
 
         let module = TransferModule::new(ctx.clone(), verifiers);
@@ -245,8 +287,9 @@ where
             namada_state::ics23_specs::ibc_proof_specs::<<S as StateRead>::H>();
         let pipeline_len =
             PoS::pipeline_len(&self.ctx.pre()).map_err(Error::NativeVpError)?;
-        let epoch_duration = Params::epoch_duration_parameter(&self.ctx.pre())
-            .map_err(Error::NativeVpError)?;
+        let epoch_duration =
+            ParamsPre::epoch_duration_parameter(&self.ctx.pre())
+                .map_err(Error::NativeVpError)?;
         let unbonding_period_secs =
             checked!(pipeline_len * epoch_duration.min_duration.0)?;
         Ok(ValidationParams {
@@ -519,7 +562,13 @@ mod tests {
         VpCache<CA>,
         Eval,
         namada_parameters::Store<
+            VpValidationContext<'ctx, 'ctx, TestState, VpCache<CA>, Eval>,
+        >,
+        namada_parameters::Store<
             CtxPreStorageRead<'ctx, 'ctx, TestState, VpCache<CA>, Eval>,
+        >,
+        namada_parameters::Store<
+            PseudoExecutionStorage<'ctx, 'ctx, TestState, VpCache<CA>, Eval>,
         >,
         namada_governance::Store<
             CtxPreStorageRead<'ctx, 'ctx, TestState, VpCache<CA>, Eval>,

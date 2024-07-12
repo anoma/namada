@@ -540,18 +540,19 @@ where
 
 /// IBC actions to handle IBC operations
 #[derive(Debug)]
-pub struct IbcActions<'a, C>
+pub struct IbcActions<'a, C, Params>
 where
     C: IbcCommonContext,
 {
-    ctx: IbcContext<C>,
+    ctx: IbcContext<C, Params>,
     router: IbcRouter<'a>,
     verifiers: Rc<RefCell<BTreeSet<Address>>>,
 }
 
-impl<'a, C> IbcActions<'a, C>
+impl<'a, C, Params> IbcActions<'a, C, Params>
 where
     C: IbcCommonContext + Debug,
+    Params: namada_systems::parameters::Read<C::Storage>,
 {
     /// Make new IBC actions
     pub fn new(

@@ -1173,11 +1173,15 @@ where
 /// Dependency-injection indirection for PGF inflation
 fn pgf_apply_inflation<S>(storage: &mut S) -> StorageResult<()>
 where
-    S: State + EmitEvents,
+    S: 'static + State + EmitEvents,
 {
     pgf_inflation::apply_inflation::<_, parameters::Store<_>, token::Store<_>, _>(
         storage,
-        ibc::transfer_over_ibc,
+        |state, token, source, target| {
+            ibc::transfer_over_ibc::<_, parameters::Store<_>>(
+                state, token, source, target,
+            )
+        },
     )
 }
 

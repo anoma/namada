@@ -14,11 +14,11 @@ use namada_core::tendermint::Time as TmTime;
 use namada_core::token::Amount;
 use namada_events::EmitEvents;
 use namada_governance::storage::proposal::PGFIbcTarget;
-use namada_parameters::read_epoch_duration_parameter;
 use namada_state::{
     Epochs, ResultExt, State, StorageError, StorageRead, StorageResult,
     StorageWrite,
 };
+use namada_systems::parameters;
 use namada_token as token;
 
 use crate::event::IbcEvent;
@@ -182,14 +182,17 @@ impl<S> IbcCommonContext for IbcProtocolContext<'_, S> where
 }
 
 /// Transfer tokens over IBC
-pub fn transfer_over_ibc<S>(
-    state: &mut S,
+pub fn transfer_over_ibc<'a, S, Params>(
+    state: &'a mut S,
     token: &Address,
     source: &Address,
     target: &PGFIbcTarget,
 ) -> StorageResult<()>
 where
-    S: State + EmitEvents,
+    S: 'a + State + EmitEvents,
+    Params: parameters::Read<
+            <IbcProtocolContext<'a, S> as IbcStorageContext>::Storage,
+        >,
 {
     let token = PrefixedCoin {
         denom: token.to_string().parse().expect("invalid token"),
@@ -201,14 +204,17 @@ where
         receiver: target.target.clone().into(),
         memo: String::default().into(),
     };
+    let ctx = IbcProtocolContext { state };
+    let min_duration = Params::epoch_duration_parameter(&ctx)?.min_duration;
     #[allow(clippy::arithmetic_side_effects)]
-    let timeout_timestamp = state
+    let timeout_timestamp = ctx
+        .state
         .in_mem()
         .header
         .as_ref()
         .expect("The header should exist")
         .time
-        + read_epoch_duration_parameter(state)?.min_duration;
+        + min_duration;
     let timeout_timestamp =
         TmTime::try_from(timeout_timestamp).into_storage_result()?;
     let message = IbcMsgTransfer {
@@ -224,12 +230,11 @@ where
     }
     .serialize_to_vec();
 
-    let ctx = IbcProtocolContext { state };
-
     // Use an empty verifiers set placeholder for validation, this is only
     // needed in txs and not protocol
     let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
-    let mut actions = IbcActions::new(Rc::new(RefCell::new(ctx)), verifiers);
+    let mut actions =
+        IbcActions::<_, Params>::new(Rc::new(RefCell::new(ctx)), verifiers);
     actions.execute(&data).into_storage_result()?;
 
     Ok(())

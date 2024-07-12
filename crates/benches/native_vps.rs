@@ -51,7 +51,7 @@ use namada_apps_lib::validation::{
     IbcVpContext, MaspVp, MultitokenVp, ParametersVp, PgfVp, PosVp,
 };
 use namada_apps_lib::wallet::defaults;
-use namada_apps_lib::{governance, proof_of_stake, storage, token};
+use namada_apps_lib::{governance, parameters, proof_of_stake, storage, token};
 use namada_node::bench_utils::{
     generate_foreign_key_tx, BenchShell, BenchShieldedCtx,
     ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
@@ -1674,7 +1674,10 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
 
         let exec_ctx = IbcVpContext::new(ibc.ctx.pre());
         let ctx = Rc::new(RefCell::new(exec_ctx));
-        let mut actions = IbcActions::new(ctx.clone(), verifiers.clone());
+        let mut actions = IbcActions::<_, parameters::Store<_>>::new(
+            ctx.clone(),
+            verifiers.clone(),
+        );
         actions.set_validation_params(ibc.validation_params().unwrap());
 
         let module = TransferModule::new(ctx.clone(), verifiers);
@@ -1731,7 +1734,10 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
         let exec_ctx = IbcVpContext::new(ibc.ctx.pre());
         let ctx = Rc::new(RefCell::new(exec_ctx));
 
-        let mut actions = IbcActions::new(ctx.clone(), verifiers.clone());
+        let mut actions = IbcActions::<_, parameters::Store<_>>::new(
+            ctx.clone(),
+            verifiers.clone(),
+        );
         actions.set_validation_params(ibc.validation_params().unwrap());
 
         let module = TransferModule::new(ctx.clone(), verifiers);

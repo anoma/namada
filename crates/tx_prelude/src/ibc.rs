@@ -23,7 +23,9 @@ use crate::{Ctx, Error};
 /// IBC actions to handle an IBC message. The `verifiers` inserted into the set
 /// must be inserted into the tx context with `Ctx::insert_verifier` after tx
 /// execution.
-pub fn ibc_actions(ctx: &mut Ctx) -> IbcActions<'_, Ctx> {
+pub fn ibc_actions(
+    ctx: &mut Ctx,
+) -> IbcActions<'_, Ctx, crate::parameters::Store<Ctx>> {
     let ctx = Rc::new(RefCell::new(ctx.clone()));
     let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
     let mut actions = IbcActions::new(ctx.clone(), verifiers.clone());

@@ -68,6 +68,18 @@ where
     fn epochs_per_year(storage: &S) -> Result<u64> {
         read_epochs_per_year(storage)
     }
+
+    fn estimate_max_block_time_from_blocks_and_params(
+        storage: &S,
+        last_block_height: BlockHeight,
+        num_blocks_to_read: u64,
+    ) -> Result<DurationSecs> {
+        estimate_max_block_time_from_blocks_and_params(
+            storage,
+            last_block_height,
+            num_blocks_to_read,
+        )
+    }
 }
 
 impl<S> Write<S> for Store<S>

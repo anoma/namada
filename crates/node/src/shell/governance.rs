@@ -27,7 +27,7 @@ use namada_sdk::storage::Epoch;
 use namada_sdk::token::event::{TokenEvent, TokenOperation};
 use namada_sdk::token::read_balance;
 use namada_sdk::tx::{Code, Data};
-use namada_sdk::{encode, ibc};
+use namada_sdk::{encode, ibc, parameters};
 
 use super::utils::force_read;
 use super::*;
@@ -573,7 +573,9 @@ where
                         },
                     ),
                     PGFTarget::Ibc(target) => (
-                        ibc::transfer_over_ibc(state, token, &ADDRESS, target),
+                        ibc::transfer_over_ibc::<_, parameters::Store<_>>(
+                            state, token, &ADDRESS, target,
+                        ),
                         TokenEvent {
                             descriptor: "pgf-payments-over-ibc".into(),
                             level: EventLevel::Block,
