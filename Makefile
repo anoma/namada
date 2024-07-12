@@ -102,8 +102,7 @@ check-mainnet:
 # Check that every crate can be built with default features and that namada crate
 # can be built for wasm
 check-crates:
-	rustup target add --toolchain $(nightly) wasm32-unknown-unknown
-	$(foreach p,$(crates), echo "Checking $(p)" && cargo +$(nightly) check -Z unstable-options --tests -p $(p) && ) \
+	cargo +$(nightly) check -Z unstable-options --tests -p namada -p namada_account -p namada_apps -p namada_apps_lib -p namada_benchmarks -p namada_core -p namada_encoding_spec -p namada_ethereum_bridge -p namada_events -p namada_gas -p namada_governance -p namada_ibc -p namada_light_sdk -p namada_macros -p namada_merkle_tree -p namada_parameters -p namada_proof_of_stake -p namada_replay_protection -p namada_node -p namada_sdk -p namada_shielded_token -p namada_state -p namada_storage -p namada_test_utils -p namada_tests -p namada_token -p namada_trans_token -p namada_tx -p namada_tx_env -p namada_tx_prelude -p namada_vm_env -p namada_vote_ext -p namada_vp_env -p namada_vp_prelude && \
 		make -C $(wasms) check && \
 		make -C $(wasms_for_tests) check && \
 		cargo check --package namada --target wasm32-unknown-unknown --no-default-features --features "namada-sdk" && \
@@ -242,7 +241,7 @@ test-debug:
 
 # Test that the benchmarks run successfully without performing measurement
 test-benches:
-	$(cargo) +$(nightly) test --package namada_benchmarks --benches
+	$(cargo) +$(nightly) test --release --package namada_benchmarks --benches
 
 # Run PoS state machine tests with shrinking disabled by default (can be 
 # overridden with `PROPTEST_MAX_SHRINK_ITERS`)
@@ -319,10 +318,29 @@ checksum-wasm:
 
 # this command needs wasm-opt installed
 opt-wasm:
-	@for file in $(shell ls wasm/*.wasm); do wasm-opt -Oz -o $${file} $${file}; done
+	@if command -v parallel >/dev/null 2>&1; then \
+		parallel -j 75% wasm-opt -Oz -o {} {} ::: wasm/*.wasm; \
+	else \
+		for file in wasm/*.wasm; do \
+			if [ -f "$$file" ]; then \
+				echo "Processing $$file..."; \
+				wasm-opt -Oz -o $${file} $${file}; \
+			fi; \
+		done; \
+	fi
+
 
 opt-wasm-tests:
-	@for file in $(shell ls wasm_for_tests/*.wasm); do wasm-opt -Oz -o $${file} $${file}; done
+	@if command -v parallel >/dev/null 2>&1; then \
+		parallel -j 75% wasm-opt -Oz -o {} {} ::: wasm_for_tests/*.wasm; \
+	else \
+		for file in wasm_for_tests/*.wasm; do \
+			if [ -f "$$file" ]; then \
+				echo "Processing $$file..."; \
+				wasm-opt -Oz -o $${file} $${file}; \
+			fi; \
+		done; \
+	fi
 
 clean-wasm-scripts:
 	make -C $(wasms) clean
