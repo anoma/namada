@@ -31,6 +31,7 @@ env:
   AWS_REGION: us-west-2
   NIGHTLY: nightly-2024-05-15
   NAMADA_MASP_PARAMS_DIR: .masp-params
+  CARGO_HOME: /__w/namada/namada/.cargo
 
 jobs:
   lints:
