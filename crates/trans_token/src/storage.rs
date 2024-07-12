@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use namada_core::address::{Address, InternalAddress};
+use namada_core::collections::HashSet;
 use namada_core::hints;
 use namada_core::token::{self, Amount, AmountError, DenominatedAmount};
 use namada_storage as storage;
@@ -263,15 +264,16 @@ where
 /// Transfer tokens from `sources` to `dests`. Returns an `Err` if any source
 /// has insufficient balance or if the transfer to any destination would
 /// overflow (This can only happen if the total supply doesn't fit in
-/// `token::Amount`).
+/// `token::Amount`). Returns the set of debited accounts.
 pub fn multi_transfer<S>(
     storage: &mut S,
     sources: &BTreeMap<(Address, Address), Amount>,
     dests: &BTreeMap<(Address, Address), Amount>,
-) -> storage::Result<()>
+) -> storage::Result<HashSet<Address>>
 where
     S: StorageRead + StorageWrite,
 {
+    let mut debited_accounts = HashSet::new();
     // Collect all the accounts whose balance has changed
     let mut accounts = BTreeSet::new();
     accounts.extend(sources.keys().cloned());
@@ -306,6 +308,7 @@ where
                 )
                 .ok_or_else(overflow_err)?
         } else {
+            debited_accounts.insert(owner.to_owned());
             owner_balance
                 .checked_sub(
                     src_amt.checked_sub(dest_amt).ok_or_else(unexpected_err)?,
@@ -315,7 +318,7 @@ where
         // Wite the new balance
         storage.write(&owner_key, new_owner_balance)?;
     }
-    Ok(())
+    Ok(debited_accounts)
 }
 
 /// Mint `amount` of `token` as `minter` to `dest`.

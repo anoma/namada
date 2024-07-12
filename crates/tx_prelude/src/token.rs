@@ -3,6 +3,7 @@
 use std::collections::BTreeMap;
 
 use namada_core::address::Address;
+use namada_core::collections::HashSet;
 use namada_events::extend::UserAccount;
 use namada_events::{EmitEvents, EventLevel};
 use namada_token::event::{TokenEvent, TokenOperation};
@@ -50,13 +51,14 @@ pub fn transfer(
     Ok(())
 }
 
-/// A transparent token transfer that can be used in a transaction.
+/// A transparent token transfer that can be used in a transaction. Returns the
+/// set of debited accounts.
 pub fn multi_transfer(
     ctx: &mut Ctx,
     sources: &BTreeMap<(Address, Address), Amount>,
     dests: &BTreeMap<(Address, Address), Amount>,
-) -> TxResult {
-    namada_token::multi_transfer(ctx, sources, dests)?;
+) -> crate::EnvResult<HashSet<Address>> {
+    let debited_accounts = namada_token::multi_transfer(ctx, sources, dests)?;
 
     let mut evt_sources = BTreeMap::new();
     let mut evt_targets = BTreeMap::new();
@@ -108,5 +110,5 @@ pub fn multi_transfer(
         },
     });
 
-    Ok(())
+    Ok(debited_accounts)
 }

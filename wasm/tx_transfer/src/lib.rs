@@ -2,9 +2,10 @@
 //! This tx uses `token::TransparentTransfer` wrapped inside `SignedTxData`
 //! as its input as declared in `namada` crate.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use namada_tx_prelude::action::{Action, MaspAction, Write};
+use namada_tx_prelude::masp::addr_taddr;
 use namada_tx_prelude::*;
 
 #[transaction]
@@ -33,7 +34,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
         .collect::<BTreeMap<_, _>>();
 
     // Effect the multi transfer
-    token::multi_transfer(ctx, &sources, &targets)
+    let debited_accounts = token::multi_transfer(ctx, &sources, &targets)
         .wrap_err("Token transfer failed")?;
 
     // Apply the shielded transfer if there is a link to one
@@ -53,9 +54,27 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
             .wrap_err("Encountered error while handling MASP transaction")?;
         update_masp_note_commitment_tree(&shielded)
             .wrap_err("Failed to update the MASP commitment tree")?;
+
         ctx.push_action(Action::Masp(MaspAction::MaspSectionRef(
             masp_section_ref,
         )))?;
+        let vins_addresses = shielded.transparent_bundle().map_or_else(
+            Default::default,
+            |bndl| {
+                bndl.vin
+                    .iter()
+                    .map(|vin| vin.address)
+                    .collect::<BTreeSet<_>>()
+            },
+        );
+        let masp_authorizers = debited_accounts.into_iter().filter(|account| {
+            vins_addresses.contains(&addr_taddr(account.clone()))
+        });
+        for authorizer in masp_authorizers {
+            ctx.push_action(Action::Masp(MaspAction::MaspAuthorizer(
+                authorizer,
+            )))?;
+        }
     }
 
     Ok(())
