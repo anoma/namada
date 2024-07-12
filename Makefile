@@ -273,8 +273,10 @@ clean:
 bench:
 	$(cargo) bench --package namada_benchmarks
 
+# NOTE: running in `--dev` as release build takes over 64GB memory, but 
+# dev is still configured for opt-level=3
 fuzz-txs-mempool:
-	$(cargo) +$(nightly) fuzz run fuzz_txs_mempool
+	$(cargo) +$(nightly) fuzz run fuzz_txs_mempool --dev
 
 build-doc:
 	$(cargo) doc --no-deps
