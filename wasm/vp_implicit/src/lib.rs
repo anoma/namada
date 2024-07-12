@@ -101,7 +101,7 @@ fn validate_tx(
                 &tx,
                 &addr,
             )?,
-            Action::Masp(MaspAction::MaspSigner(source)) => gadget
+            Action::Masp(MaspAction::MaspAuthorizer(source)) => gadget
                 .verify_signatures_when(|| source == addr, ctx, &tx, &addr)?,
             Action::Masp(MaspAction::MaspSectionRef(_)) => (),
             Action::IbcShielding => (),

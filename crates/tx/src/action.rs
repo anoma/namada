@@ -69,8 +69,8 @@ pub enum PgfAction {
 pub enum MaspAction {
     /// The hash of the masp [`crate::types::Section`]
     MaspSectionRef(TxId),
-    /// A required signer for the transaction
-    MaspSigner(Address),
+    /// A required authorizer for the transaction
+    MaspAuthorizer(Address),
 }
 
 /// Read actions from temporary storage
