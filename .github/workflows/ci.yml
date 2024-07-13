@@ -439,7 +439,6 @@ jobs:
         run: make build-release
         env:
           RUSTFLAGS: "-C linker=clang -C debug_assertions=true -C link-arg=-fuse-ld=/usr/local/bin/mold"
-          # ROCKSDB_LIB_DIR: "/home/ubuntu/rocksdb"
       - name: Upload binaries
         uses: actions/upload-artifact@v4
         with:
@@ -541,7 +540,7 @@ jobs:
           NAMADA_TM_STDOUT: "false"
           NAMADA_LOG_COLOR: "false"
           NAMADA_LOG: "info"
-          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=mold"
+          RUSTFLAGS: "-C linker=clang -C debug_assertions=true -C link-arg=-fuse-ld=/usr/local/bin/mold"
           INDEX: ${{ matrix.make.index }}
       - name: Upload e2e logs
         if: steps.e2e.outcome == 'success' || steps.e2e.outcome == 'failure'
