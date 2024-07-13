@@ -138,8 +138,8 @@ jobs:
   test-wasm:
     timeout-minutes: 30
     container: 
-      image: ghcr.io/heliaxdev/namada-ci:namada-main
-    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
+      image: ghcr.io/heliaxdev/namada-ci:wasm-main
+    runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
     needs: [build-wasm]
 
     steps:
