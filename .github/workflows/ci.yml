@@ -30,7 +30,7 @@ env:
   SCCACHE_BUCKET: github-runners-remote-cache-shared # github-runners-remote-cache--usw2-az1--x-s3
   AWS_REGION: us-west-2
   NIGHTLY: nightly-2024-05-15
-  NAMADA_MASP_PARAMS_DIR: /__w/namada/namada/.masp-params
+  NAMADA_MASP_PARAMS_DIR: /masp/.masp-params
 
 jobs:
   lints:
@@ -139,7 +139,7 @@ jobs:
     timeout-minutes: 30
     container: 
       image: ghcr.io/heliaxdev/namada-ci:namada-main
-    runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
+    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
     needs: [build-wasm]
 
     steps:
@@ -179,6 +179,8 @@ jobs:
           path: wasm_for_tests
       - name: Test Wasm
         run: cargo test --manifest-path wasm/Cargo.toml
+        env:
+          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Check if wasm checksums.json up-to-date
         if: contains(github.ref, 'master') || contains(github.ref, '-rc')
         run: cmp -- wasm/checksums.json wasm/original-checksums.json
@@ -234,6 +236,8 @@ jobs:
           path: wasm_for_tests
       - name: Run unit tests with coverage
         run: cargo +${{ env.NIGHTLY }} llvm-cov nextest run -E 'not test(e2e) & not test(integration) & not test(pos_state_machine_test)' --features namada/testing --no-fail-fast
+        env:
+          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       # - name: Upload coverage
       #   uses: codecov/codecov-action@v3
       #   with:
@@ -280,6 +284,8 @@ jobs:
         run: sccache --start-server
       - name: Check crates build with default features
         run: make check-crates
+        env:
+          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Clean cargo cache
         if: steps.cache.outputs.cache-hit != 'true'
         run: cargo cache --autoclean-expensive
@@ -332,6 +338,8 @@ jobs:
           path: wasm_for_tests
       - name: Run integration tests
         run: cargo +${{ env.NIGHTLY }} nextest run -E 'test(integration)' --test-threads 1 --no-fail-fast --features integration
+        env:
+          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Clean cargo cache
         if: steps.cache.outputs.cache-hit != 'true'
         run: cargo cache --autoclean-expensive
@@ -385,11 +393,12 @@ jobs:
           name: wasm-for-tests-${{ github.event.pull_request.head.sha|| github.sha }}
           path: wasm_for_tests
       - name: Test
-        run: ls /__w/namada/namada/.masp-params
+        run: ls /masp/.masp-params
       - name: Run benchmarks tests
         run: make test-benches
         env:
-          NAMADA_MASP_PARAMS_DIR: /__w/namada/namada/.masp-params
+          NAMADA_MASP_PARAMS_DIR: /masp/.masp-params
+          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
       - name: Clean cargo cache
         if: steps.cache.outputs.cache-hit != 'true'
         run: cargo cache --autoclean-expensive
@@ -423,15 +432,13 @@ jobs:
         env:
           RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
         with:
-          path: |
-            /usr/local/cargo
-            target/
+          path: /usr/local/cargo
           key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
       - name: Start sccache server
         id: sccache
         run: sccache --start-server
-      - name: Release Build
+      - name: Release build
         run: make build-release
         env:
           RUSTFLAGS: "-C linker=clang -C debug_assertions=true -C link-arg=-fuse-ld=/usr/local/bin/mold"
