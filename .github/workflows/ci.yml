@@ -531,7 +531,6 @@ jobs:
           chmod +x target/release/namadaw
           chmod +x target/release/namadan
           chmod +x target/release/namadac
-          chmod +x target/release/namadar
           chmod +x /usr/local/bin/hermes
       - name: Run e2e test
         run: python3 .github/workflows/scripts/schedule-e2e.py
