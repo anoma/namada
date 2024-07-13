@@ -184,7 +184,7 @@ jobs:
           name: wasm-for-tests-${{ github.event.pull_request.head.sha|| github.sha }}
           path: wasm_for_tests
       - name: Test Wasm
-        run: cargo +${{ env.NIGHTLY }} nextest run --manifest-path wasm/Cargo.toml
+        run: make test-unit-with-coverage # cargo +${{ env.NIGHTLY }} nextest run --manifest-path wasm/Cargo.toml
       - name: Check if wasm checksums.json up-to-date
         if: contains(github.ref, 'main') || contains(github.ref, '-rc')
         run: cmp -- wasm/checksums.json wasm/original-checksums.json
