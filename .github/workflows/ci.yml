@@ -533,6 +533,7 @@ jobs:
           chmod +x target/release/namadac
           chmod +x /usr/local/bin/hermes
       - name: Run e2e test
+        id: e2e
         run: python3 .github/workflows/scripts/schedule-e2e.py
         env:
           NAMADA_E2E_USE_PREBUILT_BINARIES: "true"
@@ -543,7 +544,7 @@ jobs:
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=mold"
           INDEX: ${{ matrix.make.index }}
       - name: Upload e2e logs
-        if: success() || failure()
+        if: steps.e2e.outcome == 'success' || steps.e2e.outcome == 'failure'
         uses: actions/upload-artifact@v4
         with:
           name: logs-e2e-${{ matrix.make.index }}-${{ github.event.pull_request.head.sha || github.sha }}
