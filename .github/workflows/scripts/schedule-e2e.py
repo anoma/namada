@@ -40,5 +40,4 @@ tasks = MACHINES[CURRENT_MACHINE_INDEX]['tasks']
 test_filter = ' + '.join(['test(={})'.format(task['name']) for task in tasks ])
 
 command = CARGO_TEST_COMMAND.format(NIGHTLY_VERSION, test_filter)
-print(command)
-# subprocess.check_call(command, shell=True, stdout=sys.stdout, stderr=subprocess.STDOUT)
+subprocess.check_call(command, shell=True, stdout=sys.stdout, stderr=subprocess.STDOUT)
