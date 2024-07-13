@@ -2,7 +2,6 @@ import json
 import os
 import subprocess
 import sys
-import time
 
 N_OF_MACHINES = 6
 
