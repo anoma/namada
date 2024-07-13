@@ -1,0 +1,6 @@
+[profile.default]
+retries = 0
+
+[[profile.default.overrides]]
+filter = 'test(=e2e::ledger_tests::double_signing_gets_slashed)'
+retries = 2

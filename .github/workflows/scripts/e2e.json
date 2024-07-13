@@ -1,122 +1,32 @@
 {
-    "e2e::eth_bridge_tests::everything": {
-        "duration": 4,
-        "retries": 0
-    },
-    "e2e::ibc_tests::run_ledger_ibc": {
-        "duration": 110,
-        "retries": 0
-    },
-    "e2e::ibc_tests::run_ledger_ibc_with_hermes": {
-        "duration": 230,
-        "retries": 0
-    },
-    "e2e::ibc_tests::pgf_over_ibc_with_hermes": {
-        "duration": 810,
-        "retries": 0
-    },
-    "e2e::ibc_tests::proposal_ibc_token_inflation": {
-        "duration": 1100,
-        "retries": 0
-    },
-    "e2e::ibc_tests::ibc_rate_limit": {
-        "duration": 430,
-        "retries": 0
-    },
-    "e2e::ibc_tests::ibc_namada_gaia": {
-        "duration": 180,
-        "retries": 0
-    },
-    "e2e::eth_bridge_tests::test_add_to_bridge_pool": {
-        "duration": 10,
-        "retries": 0
-    },
-    "e2e::ledger_tests::double_signing_gets_slashed": {
-        "duration": 12,
-        "retries": 2
-    },
-    "e2e::ledger_tests::ledger_many_txs_in_a_block": {
-        "duration": 55,
-        "retries": 0
-    },
-    "e2e::ledger_tests::pos_bonds": {
-        "duration": 77,
-        "retries": 0
-    },
-    "e2e::ledger_tests::pos_init_validator": {
-        "duration": 40,
-        "retries": 0
-    },
-    "e2e::ledger_tests::rollback": {
-        "duration": 21,
-        "retries": 0
-    },
-    "e2e::ledger_tests::proposal_change_shielded_reward": {
-        "duration": 200,
-        "retries": 0
-    },
-    "e2e::ledger_tests::run_ledger": {
-        "duration": 5,
-        "retries": 0
-    },
-    "e2e::ledger_tests::run_ledger_load_state_and_reset": {
-        "duration": 23,
-        "retries": 0
-    },
-    "e2e::ledger_tests::test_namada_shuts_down_if_tendermint_dies": {
-        "duration": 2,
-        "retries": 0
-    },
-    "e2e::ledger_tests::test_namada_db_migration": {
-        "duration": 30,
-        "retries": 0
-    },
-    "e2e::ledger_tests::test_genesis_validators": {
-        "duration": 14,
-        "retries": 0
-    },
-    "e2e::ledger_tests::test_node_connectivity_and_consensus": {
-        "duration": 28,
-        "retries": 0
-    },
-    "e2e::ledger_tests::test_epoch_sleep": {
-        "duration": 12,
-        "retries": 0
-    },
-    "e2e::ledger_tests::deactivate_and_reactivate_validator": {
-        "duration": 67,
-        "retries": 0
-    },
-    "e2e::ledger_tests::test_invalid_validator_txs": {
-        "duration": 73,
-        "retries": 0
-    },
-    "e2e::ledger_tests::suspend_ledger": {
-        "duration": 30,
-        "retries": 0
-    },
-    "e2e::ledger_tests::stop_ledger_at_height": {
-        "duration": 18,
-        "retries": 0
-    },
-    "e2e::ledger_tests::change_consensus_key": {
-        "duration": 91,
-        "retries": 0
-    },
-    "e2e::wallet_tests::wallet_address_cmds": {
-        "duration": 1,
-        "retries": 0
-    },
-    "e2e::wallet_tests::wallet_encrypted_key_cmds": {
-        "duration": 1,
-        "retries": 0
-    },
-    "e2e::wallet_tests::wallet_encrypted_key_cmds_env_var": {
-        "duration": 1,
-        "retries": 0
-    },
-    "e2e::wallet_tests::wallet_unencrypted_key_cmds": {
-        "duration": 1,
-        "retries": 0
-    }
+    "e2e::eth_bridge_tests::everything": 4,
+    "e2e::ibc_tests::run_ledger_ibc": 110,
+    "e2e::ibc_tests::run_ledger_ibc_with_hermes": 230,
+    "e2e::ibc_tests::pgf_over_ibc_with_hermes": 810,
+    "e2e::ibc_tests::proposal_ibc_token_inflation": 1100,
+    "e2e::ibc_tests::ibc_rate_limit": 430,
+    "e2e::ibc_tests::ibc_namada_gaia": 180,
+    "e2e::eth_bridge_tests::test_add_to_bridge_pool": 10,
+    "e2e::ledger_tests::double_signing_gets_slashed": 12,
+    "e2e::ledger_tests::ledger_many_txs_in_a_block": 55,
+    "e2e::ledger_tests::pos_bonds": 77,
+    "e2e::ledger_tests::pos_init_validator": 40,
+    "e2e::ledger_tests::rollback": 21,
+    "e2e::ledger_tests::proposal_change_shielded_reward": 200,
+    "e2e::ledger_tests::run_ledger": 5,
+    "e2e::ledger_tests::run_ledger_load_state_and_reset": 23,
+    "e2e::ledger_tests::test_namada_shuts_down_if_tendermint_dies": 2,
+    "e2e::ledger_tests::test_namada_db_migration": 30,
+    "e2e::ledger_tests::test_genesis_validators": 14,
+    "e2e::ledger_tests::test_node_connectivity_and_consensus": 28,
+    "e2e::ledger_tests::test_epoch_sleep": 12,
+    "e2e::ledger_tests::deactivate_and_reactivate_validator": 67,
+    "e2e::ledger_tests::test_invalid_validator_txs": 73,
+    "e2e::ledger_tests::suspend_ledger": 30,
+    "e2e::ledger_tests::stop_ledger_at_height": 18,
+    "e2e::ledger_tests::change_consensus_key": 91,
+    "e2e::wallet_tests::wallet_address_cmds": 1,
+    "e2e::wallet_tests::wallet_encrypted_key_cmds": 1,
+    "e2e::wallet_tests::wallet_encrypted_key_cmds_env_var": 1,
+    "e2e::wallet_tests::wallet_unencrypted_key_cmds": 1
 }
