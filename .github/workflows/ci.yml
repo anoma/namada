@@ -36,7 +36,7 @@ jobs:
   lints:
     container: 
       image: ghcr.io/heliaxdev/namada-ci:namada-main
-    runs-on: [ubuntu-latest]
+    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
 
     steps:
       - name: Checkout repo
@@ -81,7 +81,7 @@ jobs:
 
   build-wasm:
     timeout-minutes: 10
-    runs-on: [ubuntu-latest]
+    runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
     container: 
       image: ghcr.io/heliaxdev/namada-ci:wasm-main
     strategy:
@@ -139,7 +139,7 @@ jobs:
     timeout-minutes: 30
     container: 
       image: ghcr.io/heliaxdev/namada-ci:namada-main
-    runs-on: [ubuntu-latest]
+    runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
     needs: [build-wasm]
 
     steps:
@@ -190,7 +190,7 @@ jobs:
         run: cargo cache --autoclean-expensive
 
   test-unit:
-    runs-on: [ubuntu-latest]
+    runs-on: [self-hosted, 16vcpu-32ram-ubuntu22-namada-x86]
     container: 
       image: ghcr.io/heliaxdev/namada-ci:namada-main
     timeout-minutes: 40
@@ -247,7 +247,7 @@ jobs:
         run: sccache --stop-server
   
   check-packges:
-    runs-on: [ubuntu-latest]
+    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
     container: 
       image: ghcr.io/heliaxdev/namada-ci:namada-main
     timeout-minutes: 40
@@ -288,7 +288,7 @@ jobs:
         run: sccache --stop-server
 
   test-integration:
-    runs-on: [ubuntu-latest]
+    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
     container: 
       image: ghcr.io/heliaxdev/namada-ci:namada-main
     timeout-minutes: 40
@@ -340,7 +340,7 @@ jobs:
         run: sccache --stop-server
 
   check-benchmarks:
-    runs-on: [ubuntu-latest]
+    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
     container: 
       image: ghcr.io/heliaxdev/namada-ci:namada-main
     timeout-minutes: 50
@@ -398,7 +398,7 @@ jobs:
         run: sccache --stop-server
 
   build-binaries:
-    runs-on: [ubuntu-latest]
+    runs-on: [self-hosted, 16vcpu-32ram-ubuntu22-namada-x86]
     container: 
       image: ghcr.io/heliaxdev/namada-ci:namada-main
     timeout-minutes: 20
@@ -459,7 +459,7 @@ jobs:
         run: sccache --stop-server
 
   # test-e2e:
-  #   runs-on: [ubuntu-latest]
+  #   runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
   #   container: 
   #     image: ghcr.io/heliaxdev/namada-ci:namada-main
   #   needs: [build-wasm, build-binaries]
