@@ -186,10 +186,10 @@ jobs:
       - name: Test Wasm
         run: make test-unit # cargo +${{ env.NIGHTLY }} nextest run --manifest-path wasm/Cargo.toml
       - name: Check if wasm checksums.json up-to-date
-        if: contains(github.ref, 'main') || contains(github.ref, '-rc')
+        if: contains(github.ref, 'master') || contains(github.ref, '-rc')
         run: cmp -- wasm/checksums.json wasm/original-checksums.json
       - name: Print diff
-        if: contains(github.ref, 'main') || contains(github.ref, '-rc')
+        if: contains(github.ref, 'master') || contains(github.ref, '-rc')
         run: diff -y -W 150 wasm/checksums.json wasm/original-checksums.json --suppress-common-lines
       - name: Clean cargo cache
         if: steps.cache.outputs.cache-hit != 'true'
