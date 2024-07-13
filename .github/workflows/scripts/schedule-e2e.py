@@ -9,7 +9,7 @@ N_OF_MACHINES = 6
 NIGHTLY_VERSION = open("rust-nightly-version", "r").read().strip()
 
 E2E_FILE = ".github/workflows/scripts/e2e.json"
-CARGO_TEST_COMMAND = "cargo +{} test {} -- --test-threads=1 --nocapture --exact"
+CARGO_TEST_COMMAND = "cargo +{} nextest run -E 'test(={})' --test-threads 1 --no-fail-fast --retries {}"
 
 MACHINES = [{'tasks': [], 'time': [], 'total_time': 0} for _ in range(N_OF_MACHINES)]
 
@@ -25,20 +25,16 @@ def find_freer_machine():
     return minimum_work_machine_index
 
 e2e_list = json.load(open(E2E_FILE, "r"))
-sorted_task = dict(sorted(e2e_list.items(), key=lambda item: item[1], reverse=True))
+sorted_task = dict(sorted(e2e_list.items(), key=lambda item: item[1]['duration'], reverse=True))
 
 for task in sorted_task.items():
     machine_index = find_freer_machine()
-    MACHINES[machine_index]['total_time'] += task[1]
+    MACHINES[machine_index]['total_time'] += task[1]['duration']
     MACHINES[machine_index]['tasks'].append({
         'name': task[0],
-        'time': task[1]
+        'time': task[1]['duration'],
+        'retries': task[1]['retries']
     })
-
-for index, machine in enumerate(MACHINES):
-    print("Machine {}: {} tasks for a total of {}s".format(index, len(machine['tasks']), machine['total_time']))
-    for test in machine['tasks']:
-        cargo = CARGO_TEST_COMMAND.format(NIGHTLY_VERSION, test)
 
 tasks = MACHINES[CURRENT_MACHINE_INDEX]['tasks']
 
@@ -48,7 +44,7 @@ has_failures = False
 for task in tasks:
     try:
         start = time.time()
-        command = CARGO_TEST_COMMAND.format(NIGHTLY_VERSION, task['name'])
+        command = CARGO_TEST_COMMAND.format(NIGHTLY_VERSION, task['name'], task['retries'])
         end = time.time()
         subprocess.check_call(command, shell=True, stdout=sys.stdout, stderr=subprocess.STDOUT)
         test_results[task['name']] = {
