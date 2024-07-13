@@ -36,7 +36,7 @@ jobs:
   lints:
     container: 
       image: ghcr.io/heliaxdev/namada-ci:namada-main
-    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
+    runs-on: [ubuntu-latest]
 
     steps:
       - name: Checkout repo
@@ -81,7 +81,7 @@ jobs:
 
   build-wasm:
     timeout-minutes: 10
-    runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
+    runs-on: [ubuntu-latest]
     container: 
       image: ghcr.io/heliaxdev/namada-ci:wasm-main
     strategy:
@@ -135,62 +135,62 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         run: cargo cache --autoclean-expensive
 
-  # test-wasm:
-  #   timeout-minutes: 30
-  #   container: 
-  #     image: ghcr.io/heliaxdev/namada-ci:namada-main
-  #   runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
-  #   needs: [build-wasm]
+  test-wasm:
+    timeout-minutes: 30
+    container: 
+      image: ghcr.io/heliaxdev/namada-ci:namada-main
+    runs-on: [ubuntu-latest]
+    needs: [build-wasm]
 
-  #   steps:
-  #     - name: Checkout repo
-  #       uses: actions/checkout@v4
-  #       if: ${{ github.event_name != 'pull_request_target' }}
-  #     - name: Checkout PR
-  #       uses: actions/checkout@v4
-  #       if: ${{ github.event_name == 'pull_request_target' }}
-  #       with:
-  #         ref: ${{ github.event.pull_request.head.sha }}
-  #     - name: Configure AWS 
-  #       uses: aws-actions/configure-aws-credentials@v4
-  #       with:
-  #         aws-region: ${{ env.AWS_REGION }}
-  #         role-to-assume: ${{ secrets.AWS_ROLE }}
-  #     - name: Cache cargo
-  #       id: cache
-  #       uses: runs-on/cache@v4
-  #       env:
-  #         RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
-  #       with:
-  #         path: /usr/local/cargo
-  #         key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
-  #         restore-keys: ${{ runner.os }}-cargo-
-  #     - name: Duplicate checksums file
-  #       run: cp wasm/checksums.json wasm/original-checksums.json
-  #     - name: Download wasm artifacts
-  #       uses: actions/download-artifact@v4
-  #       with:
-  #         name: wasm-${{ github.event.pull_request.head.sha|| github.sha }}
-  #         path: wasm
-  #     - name: Download wasm-for-tests artifacts
-  #       uses: actions/download-artifact@v4
-  #       with:
-  #         name: wasm-for-tests-${{ github.event.pull_request.head.sha|| github.sha }}
-  #         path: wasm_for_tests
-  #     - name: Test Wasm
-  #       run: make test-wasm
-  #     - name: Check if wasm checksums.json up-to-date
-  #       if: contains(github.ref, 'master') || contains(github.ref, '-rc')
-  #       run: cmp -- wasm/checksums.json wasm/original-checksums.json
-  #     - name: Print diff
-  #       if: contains(github.ref, 'master') || contains(github.ref, '-rc')
-  #       run: diff -y -W 150 wasm/checksums.json wasm/original-checksums.json --suppress-common-lines
-  #     - name: Clean cargo cache
-  #       if: steps.cache.outputs.cache-hit != 'true'
-  #       run: cargo cache --autoclean-expensive
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        if: ${{ github.event_name != 'pull_request_target' }}
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        if: ${{ github.event_name == 'pull_request_target' }}
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Configure AWS 
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE }}
+      - name: Cache cargo
+        id: cache
+        uses: runs-on/cache@v4
+        env:
+          RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
+        with:
+          path: /usr/local/cargo
+          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+      - name: Duplicate checksums file
+        run: cp wasm/checksums.json wasm/original-checksums.json
+      - name: Download wasm artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-${{ github.event.pull_request.head.sha|| github.sha }}
+          path: wasm
+      - name: Download wasm-for-tests artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-for-tests-${{ github.event.pull_request.head.sha|| github.sha }}
+          path: wasm_for_tests
+      - name: Test Wasm
+        run: cargo test --manifest-path wasm/Cargo.toml
+      - name: Check if wasm checksums.json up-to-date
+        if: contains(github.ref, 'master') || contains(github.ref, '-rc')
+        run: cmp -- wasm/checksums.json wasm/original-checksums.json
+      - name: Print diff
+        if: contains(github.ref, 'master') || contains(github.ref, '-rc')
+        run: diff -y -W 150 wasm/checksums.json wasm/original-checksums.json --suppress-common-lines
+      - name: Clean cargo cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: cargo cache --autoclean-expensive
 
   test-unit:
-    runs-on: [self-hosted, 16vcpu-32ram-ubuntu22-namada-x86]
+    runs-on: [ubuntu-latest]
     container: 
       image: ghcr.io/heliaxdev/namada-ci:namada-main
     timeout-minutes: 40
@@ -247,7 +247,7 @@ jobs:
         run: sccache --stop-server
   
   check-packges:
-    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
+    runs-on: [ubuntu-latest]
     container: 
       image: ghcr.io/heliaxdev/namada-ci:namada-main
     timeout-minutes: 40
@@ -288,7 +288,7 @@ jobs:
         run: sccache --stop-server
 
   test-integration:
-    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
+    runs-on: [ubuntu-latest]
     container: 
       image: ghcr.io/heliaxdev/namada-ci:namada-main
     timeout-minutes: 40
@@ -340,7 +340,7 @@ jobs:
         run: sccache --stop-server
 
   check-benchmarks:
-    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
+    runs-on: [ubuntu-latest]
     container: 
       image: ghcr.io/heliaxdev/namada-ci:namada-main
     timeout-minutes: 50
@@ -384,8 +384,12 @@ jobs:
         with:
           name: wasm-for-tests-${{ github.event.pull_request.head.sha|| github.sha }}
           path: wasm_for_tests
+      - name: Test
+        run: ls /__w/namada/namada/.masp-params
       - name: Run benchmarks tests
         run: make test-benches
+        env:
+          NAMADA_MASP_PARAMS_DIR: /__w/namada/namada/.masp-params
       - name: Clean cargo cache
         if: steps.cache.outputs.cache-hit != 'true'
         run: cargo cache --autoclean-expensive
@@ -393,69 +397,69 @@ jobs:
         if: always() && steps.sccache.outcome == 'success'
         run: sccache --stop-server
 
-  # build-binaries:
-  #   runs-on: [self-hosted, 16vcpu-32ram-ubuntu22-namada-x86]
-  #   container: 
-  #     image: ghcr.io/heliaxdev/namada-ci:namada-main
-  #   timeout-minutes: 20
+  build-binaries:
+    runs-on: [ubuntu-latest]
+    container: 
+      image: ghcr.io/heliaxdev/namada-ci:namada-main
+    timeout-minutes: 20
 
-  #   steps:
-  #     - name: Checkout repo
-  #       uses: actions/checkout@v4
-  #       if: ${{ github.event_name != 'pull_request_target' }}
-  #     - name: Checkout PR
-  #       uses: actions/checkout@v4
-  #       if: ${{ github.event_name == 'pull_request_target' }}
-  #       with:
-  #         ref: ${{ github.event.pull_request.head.sha }}
-  #     - name: Configure AWS 
-  #       uses: aws-actions/configure-aws-credentials@v4
-  #       with:
-  #         aws-region: ${{ env.AWS_REGION }}
-  #         role-to-assume: ${{ secrets.AWS_ROLE }}
-  #     - name: Cache cargo
-  #       id: cache
-  #       uses: runs-on/cache@v4
-  #       env:
-  #         RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
-  #       with:
-  #         path: |
-  #           /usr/local/cargo
-  #           target/
-  #         key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
-  #         restore-keys: ${{ runner.os }}-cargo-
-  #     - name: Start sccache server
-  #       id: sccache
-  #       run: sccache --start-server
-  #     - name: Release Build
-  #       run: make build-release
-  #       env:
-  #         RUSTFLAGS: "-C linker=clang -C debug_assertions=true -C link-arg=-fuse-ld=/usr/local/bin/mold"
-  #         # ROCKSDB_LIB_DIR: "/home/ubuntu/rocksdb"
-  #     - name: Upload binaries
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: binaries-${{ github.event.pull_request.head.sha || github.sha }}
-  #         path: |
-  #           target/release/namada
-  #           target/release/namadac
-  #           target/release/namadaw
-  #           target/release/namadan
-  #     - name: Upload build timing report
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: build-timings-${{ github.event.pull_request.head.sha || github.sha }}
-  #         path: target/cargo-timings/cargo-timing.html
-  #         retention-days: 7
-  #     - name: Clean cargo cache
-  #       if: steps.cache.outputs.cache-hit != 'true'
-  #       run: cargo cache --autoclean-expensive
-  #     - name: Stop sccache
-  #       if: always() && steps.sccache.outcome == 'success'
-  #       run: sccache --stop-server
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        if: ${{ github.event_name != 'pull_request_target' }}
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        if: ${{ github.event_name == 'pull_request_target' }}
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Configure AWS 
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE }}
+      - name: Cache cargo
+        id: cache
+        uses: runs-on/cache@v4
+        env:
+          RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
+        with:
+          path: |
+            /usr/local/cargo
+            target/
+          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+      - name: Start sccache server
+        id: sccache
+        run: sccache --start-server
+      - name: Release Build
+        run: make build-release
+        env:
+          RUSTFLAGS: "-C linker=clang -C debug_assertions=true -C link-arg=-fuse-ld=/usr/local/bin/mold"
+          # ROCKSDB_LIB_DIR: "/home/ubuntu/rocksdb"
+      - name: Upload binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            target/release/namada
+            target/release/namadac
+            target/release/namadaw
+            target/release/namadan
+      - name: Upload build timing report
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-timings-${{ github.event.pull_request.head.sha || github.sha }}
+          path: target/cargo-timings/cargo-timing.html
+          retention-days: 7
+      - name: Clean cargo cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: cargo cache --autoclean-expensive
+      - name: Stop sccache
+        if: always() && steps.sccache.outcome == 'success'
+        run: sccache --stop-server
 
   # test-e2e:
-  #   runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
+  #   runs-on: [ubuntu-latest]
   #   container: 
   #     image: ghcr.io/heliaxdev/namada-ci:namada-main
   #   needs: [build-wasm, build-binaries]
