@@ -351,8 +351,8 @@ jobs:
     runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
     container: 
       image: ghcr.io/heliaxdev/namada-ci:namada-main
-    if: github.event.pull_request.draft == false
-    timeout-minutes: 50
+    if: github.event.pull_request.draft == false 
+    timeout-minutes: 25
     needs: [build-wasm]
 
     steps:
@@ -468,6 +468,7 @@ jobs:
       image: ghcr.io/heliaxdev/namada-ci:namada-main
     if: github.event.pull_request.draft == false
     needs: [build-wasm, build-binaries]
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:

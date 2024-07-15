@@ -1,0 +1,94 @@
+name: Release 🚢
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-[a-z]+"
+    branches:
+      - '.*-rc[0-9]*'
+
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The tag to release."
+        required: true
+
+permissions:
+  id-token: write
+  contents: write
+
+env:
+  GIT_LFS_SKIP_SMUDGE: 1
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: full
+
+jobs:
+  wasm:
+    runs-on: [ubuntu-latest]
+    container: 
+      image:  ghcr.io/heliaxdev/namada-ci:wasm-main
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - run: git fetch --tags --force origin # WA: https://github.com/actions/checkout/issues/882
+    - name: Switch to tag if specified
+      if: "${{ github.event.inputs.tag != '' }}"
+      run: git checkout ${{ github.event.inputs.tag }}
+    - name: Build wasm
+      run: make build-wasm-scripts
+    - name: Upload wasm artifacts 
+      uses: actions/upload-artifact@v4
+      with:
+        name: wasm-${{ matrix.os }}-${{ github.sha }}
+        path: |
+          wasm/tx_*.wasm
+          wasm/vp_*.wasm
+          wasm/checksums.json
+
+  binaries:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: git fetch --tags --force origin # WA: https://github.com/actions/checkout/issues/882
+      - name: Switch to tag if specified
+        if: "${{ github.event.inputs.tag != '' }}"
+        run: git checkout ${{ github.event.inputs.tag }}
+      - uses: cargo-bins/cargo-binstall@main
+      - name: Install cargo-about
+        run: cargo binstall cargo-about --no-confirm
+      - name: Build release package for ${{ matrix.os }}
+        run: make package
+      - name: Upload binaries package
+        uses: actions/upload-artifact@v3
+        with:
+          name: release-${{ matrix.os }}-${{ github.sha }}
+          path: ./*.tar.gz
+
+  release:
+    needs: [binaries, wasm]
+    runs-on: [ubuntu-latest]
+    if: always() && startsWith(github.ref, 'refs/tags/v') 
+
+    steps:
+      - id: get_version
+        uses: battila7/get-version-action@v2
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+      - name: Create github release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: ./**/*.tar.gz
+          tag_name: ${{ steps.get_version.outputs.version }}
+          name: Namada ${{ steps.get_version.outputs.version-without-v }}
