@@ -653,45 +653,26 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     where
         M: MaspClient,
     {
-        trait ThenAwait {
-            #[allow(async_fn_in_trait)]
-            async fn then_await<F>(self, fut: F) -> Option<F::Output>
-            where
-                F: std::future::Future;
-        }
-
-        impl ThenAwait for bool {
-            async fn then_await<F>(self, fut: F) -> Option<F::Output>
-            where
-                F: std::future::Future,
-            {
-                if self { Some(fut.await) } else { None }
-            }
-        }
-
         let tree_fut = async {
-            client
-                .capabilities()
-                .may_fetch_pre_built_tree()
-                .then_await(client.fetch_commitment_tree(height))
-                .await
-                .transpose()
+            if client.capabilities().may_fetch_pre_built_tree() {
+                client.fetch_commitment_tree(height).await.map(Some)
+            } else {
+                Ok(None)
+            }
         };
         let notes_map_fut = async {
-            client
-                .capabilities()
-                .may_fetch_pre_built_notes_map()
-                .then_await(client.fetch_tx_notes_map(height))
-                .await
-                .transpose()
+            if client.capabilities().may_fetch_pre_built_notes_map() {
+                client.fetch_tx_notes_map(height).await.map(Some)
+            } else {
+                Ok(None)
+            }
         };
         let witness_map_fut = async {
-            client
-                .capabilities()
-                .may_fetch_pre_built_witness_map()
-                .then_await(client.fetch_witness_map(height))
-                .await
-                .transpose()
+            if client.capabilities().may_fetch_pre_built_witness_map() {
+                client.fetch_witness_map(height).await.map(Some)
+            } else {
+                Ok(None)
+            }
         };
 
         let (maybe_tree, maybe_notes_map, maybe_witness_map) =
