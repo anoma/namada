@@ -78,6 +78,7 @@ blake2b-rs = "0.2.0"
 byte-unit = "4.0.13"
 byteorder = "1.4.2"
 borsh = {version = "1.2.0", features = ["unstable__schema", "derive"]}
+ibc-borsh = {package = "borsh", version = "0.10" }
 borsh-ext = { git = "https://github.com/heliaxdev/borsh-ext", tag = "v1.2.0" }
 chrono = {version = "0.4.22", default-features = false, features = ["clock", "std"]}
 circular-queue = "0.2.6"
@@ -110,7 +111,7 @@ flate2 = "1.0.22"
 fs_extra = "1.2.0"
 futures = "0.3"
 git2 = { version = "0.18.1", default-features = false }
-ibc = { version = "0.53.0", features = ["serde"] }
+ibc = { version = "0.53.0", features = ["serde", "borsh"] }
 ibc-derive = "0.7.0"
 ibc-testkit = { version = "0.53.0", default-features = false }
 ics23 = "0.11.0"

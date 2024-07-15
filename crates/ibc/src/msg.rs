@@ -13,7 +13,6 @@ use ibc::core::channel::types::msgs::PacketMsg;
 use ibc::core::channel::types::packet::Packet;
 use ibc::core::handler::types::msgs::MsgEnvelope;
 use ibc::core::host::types::identifiers::PortId;
-use ibc::primitives::proto::Protobuf;
 use masp_primitives::transaction::Transaction as MaspTransaction;
 use namada_core::borsh::BorshSerializeExt;
 use namada_token::Transfer;
@@ -43,9 +42,8 @@ impl BorshSerialize for MsgTransfer {
         &self,
         writer: &mut W,
     ) -> std::io::Result<()> {
-        let encoded_msg = self.message.clone().encode_vec();
-        let members = (encoded_msg, self.transfer.clone());
-        BorshSerialize::serialize(&members, writer)
+        ibc_borsh::BorshSerialize::serialize(&self.message, writer)?;
+        self.transfer.serialize(writer)
     }
 }
 
@@ -53,11 +51,8 @@ impl BorshDeserialize for MsgTransfer {
     fn deserialize_reader<R: std::io::Read>(
         reader: &mut R,
     ) -> std::io::Result<Self> {
-        use std::io::{Error, ErrorKind};
-        let (msg, transfer): (Vec<u8>, Option<Transfer>) =
-            BorshDeserialize::deserialize_reader(reader)?;
-        let message = IbcMsgTransfer::decode_vec(&msg)
-            .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
+        let message = ibc_borsh::BorshDeserialize::deserialize_reader(reader)?;
+        let transfer = BorshDeserialize::deserialize_reader(reader)?;
         Ok(Self { message, transfer })
     }
 }
@@ -66,9 +61,9 @@ impl BorshSchema for MsgTransfer {
     fn add_definitions_recursively(
         definitions: &mut BTreeMap<Declaration, Definition>,
     ) {
-        <(Vec<u8>, Option<Transfer>)>::add_definitions_recursively(definitions);
-        let fields = Fields::UnnamedFields(vec![
-            <(Vec<u8>, Option<Transfer>)>::declaration(),
+        Option::<Transfer>::add_definitions_recursively(definitions);
+        let fields = Fields::NamedFields(vec![
+            ("transfer".to_owned(), Option::<Transfer>::declaration()),
         ]);
         definitions.insert(Self::declaration(), Definition::Struct { fields });
     }
@@ -92,9 +87,8 @@ impl BorshSerialize for MsgNftTransfer {
         &self,
         writer: &mut W,
     ) -> std::io::Result<()> {
-        let encoded_msg = self.message.clone().encode_vec();
-        let members = (encoded_msg, self.transfer.clone());
-        BorshSerialize::serialize(&members, writer)
+        ibc_borsh::BorshSerialize::serialize(&self.message, writer)?;
+        self.transfer.serialize(writer)
     }
 }
 
@@ -102,11 +96,8 @@ impl BorshDeserialize for MsgNftTransfer {
     fn deserialize_reader<R: std::io::Read>(
         reader: &mut R,
     ) -> std::io::Result<Self> {
-        use std::io::{Error, ErrorKind};
-        let (msg, transfer): (Vec<u8>, Option<Transfer>) =
-            BorshDeserialize::deserialize_reader(reader)?;
-        let message = IbcMsgNftTransfer::decode_vec(&msg)
-            .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
+        let message = ibc_borsh::BorshDeserialize::deserialize_reader(reader)?;
+        let transfer = BorshDeserialize::deserialize_reader(reader)?;
         Ok(Self { message, transfer })
     }
 }
@@ -115,9 +106,9 @@ impl BorshSchema for MsgNftTransfer {
     fn add_definitions_recursively(
         definitions: &mut BTreeMap<Declaration, Definition>,
     ) {
-        <(Vec<u8>, Option<Transfer>)>::add_definitions_recursively(definitions);
-        let fields = Fields::UnnamedFields(vec![
-            <(Vec<u8>, Option<Transfer>)>::declaration(),
+        Option::<Transfer>::add_definitions_recursively(definitions);
+        let fields = Fields::NamedFields(vec![
+            ("transfer".to_owned(), Option::<Transfer>::declaration()),
         ]);
         definitions.insert(Self::declaration(), Definition::Struct { fields });
     }

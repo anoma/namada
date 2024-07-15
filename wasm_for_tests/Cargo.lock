@@ -2768,6 +2768,7 @@ version = "0.53.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "54b41444137be02cabc484079443f447d23e746fabd9ac6fd5d99faac0b30a5f"
 dependencies = [
+ "borsh 0.10.3",
  "displaydoc",
  "ibc-core-client-types",
  "ibc-core-commitment-types",
@@ -3035,6 +3036,7 @@ version = "0.53.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b25b5b45cf47b1e73211a83adf3a753f1acdba887cd3bc5357d6f547d4a3e8c"
 dependencies = [
+ "borsh 0.10.3",
  "derive_more",
  "displaydoc",
  "ibc-app-transfer-types",
@@ -3939,6 +3941,7 @@ dependencies = [
 name = "namada_ibc"
 version = "0.40.0"
 dependencies = [
+ "borsh 0.10.3",
  "borsh 1.2.1",
  "data-encoding",
  "ibc",
