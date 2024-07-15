@@ -70,6 +70,8 @@ where
     io: &'io IO,
     r#type: ProgressType,
     peeked: Option<T>,
+    #[cfg(not(unix))]
+    num_logs_counter: usize,
 }
 
 impl<'io, T, I, IO> LoggingIterator<'io, T, I, IO>
@@ -95,6 +97,8 @@ where
             io,
             r#type,
             peeked: None,
+            #[cfg(not(unix))]
+            num_logs_counter: 0,
         }
     }
 
@@ -124,6 +128,14 @@ where
         self.peek();
         let next_item = self.peeked.take()?;
         self.advance_index();
+
+        #[cfg(not(unix))]
+        {
+            if self.num_logs_counter % 20 != 0 {
+                return Some(next_item);
+            }
+        }
+
         let (index, length) = {
             let locked = self.progress.lock().unwrap();
             (locked.length, locked.index)
@@ -132,7 +144,12 @@ where
         let percent = std::cmp::min(100, (100 * index) / length);
         let completed: String = vec!['#'; percent].iter().collect();
         let incomplete: String = vec!['.'; 100 - percent].iter().collect();
-        display_line!(self.io, "\x1b[2A\x1b[J");
+
+        #[cfg(unix)]
+        {
+            clear_last_lines(self.io, 2);
+        }
+
         match self.r#type {
             ProgressType::Fetch => display_line!(
                 self.io,
@@ -145,9 +162,21 @@ where
             }
         }
         display!(self.io, "[{}{}] ~~ {} %", completed, incomplete, percent);
+
+        #[cfg(not(unix))]
+        {
+            self.num_logs_counter += 1;
+            display_line!(self.io, "\n");
+        }
+
         self.io.flush();
         Some(next_item)
     }
+}
+
+#[cfg(unix)]
+fn clear_last_lines<IO: Io>(io: &IO, num_lines: usize) {
+    display_line!(io, "\x1b[{num_lines}A\x1b[J");
 }
 
 impl<'io, T, I, IO> Drop for LoggingIterator<'io, T, I, IO>
