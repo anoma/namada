@@ -1,15 +1,21 @@
+use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex};
 
+use masp_primitives::merkle_tree::{CommitmentTree, IncrementalWitness};
+use masp_primitives::sapling::Node;
+use namada_core::collections::HashMap;
 use namada_core::storage::BlockHeight;
 use namada_state::LastBlock;
+use namada_tx::IndexedTx;
 use tendermint_rpc::SimpleRequest;
 
 use crate::control_flow::ShutdownSignal;
 use crate::error::Error;
 use crate::io::Io;
 use crate::masp::utils::{
-    FetchQueueSender, IterProgress, MaspClient, PeekableIter, ProgressTracker,
+    FetchQueueSender, IterProgress, MaspClient, MaspClientCapabilities,
+    PeekableIter, ProgressTracker,
 };
 use crate::masp::IndexedNoteEntry;
 use crate::queries::testing::TestClient;
@@ -142,6 +148,36 @@ impl MaspClient for TestingMaspClient<'_> {
             fetch_iter.next();
         }
         Ok(())
+    }
+
+    #[inline(always)]
+    fn capabilities(&self) -> MaspClientCapabilities {
+        MaspClientCapabilities::OnlyTransfers
+    }
+
+    async fn fetch_commitment_tree(
+        &self,
+        _: BlockHeight,
+    ) -> Result<CommitmentTree<Node>, Error> {
+        unimplemented!(
+            "Commitment tree fetching is not implemented by this client"
+        )
+    }
+
+    async fn fetch_tx_notes_map(
+        &self,
+        _: BlockHeight,
+    ) -> Result<BTreeMap<IndexedTx, usize>, Error> {
+        unimplemented!(
+            "Transaction notes map fetching is not implemented by this client"
+        )
+    }
+
+    async fn fetch_witness_map(
+        &self,
+        _: BlockHeight,
+    ) -> Result<HashMap<usize, IncrementalWitness<Node>>, Error> {
+        unimplemented!("Witness map fetching is not implemented by this client")
     }
 }
 

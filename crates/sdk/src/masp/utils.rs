@@ -109,49 +109,28 @@ pub trait MaspClient {
     ) -> Result<(), Error>;
 
     /// Return the capabilities of this client.
-    #[inline(always)]
-    fn capabilities(&self) -> MaspClientCapabilities {
-        MaspClientCapabilities::OnlyTransfers
-    }
+    fn capabilities(&self) -> MaspClientCapabilities;
 
     /// Fetch the commitment tree of height `height`.
     #[allow(async_fn_in_trait)]
     async fn fetch_commitment_tree(
         &self,
         height: BlockHeight,
-    ) -> Result<CommitmentTree<Node>, Error> {
-        _ = height;
-        Err(Error::Other(
-            "Commitment tree fetching is not implemented by this client"
-                .to_string(),
-        ))
-    }
+    ) -> Result<CommitmentTree<Node>, Error>;
 
     /// Fetch the tx notes map of height `height`.
     #[allow(async_fn_in_trait)]
     async fn fetch_tx_notes_map(
         &self,
         height: BlockHeight,
-    ) -> Result<BTreeMap<IndexedTx, usize>, Error> {
-        _ = height;
-        Err(Error::Other(
-            "Transaction notes map fetching is not implemented by this client"
-                .to_string(),
-        ))
-    }
+    ) -> Result<BTreeMap<IndexedTx, usize>, Error>;
 
     /// Fetch the witness map of height `height`.
     #[allow(async_fn_in_trait)]
     async fn fetch_witness_map(
         &self,
         height: BlockHeight,
-    ) -> Result<HashMap<usize, IncrementalWitness<Node>>, Error> {
-        _ = height;
-        Err(Error::Other(
-            "Witness map fetching is not implemented by this client"
-                .to_string(),
-        ))
-    }
+    ) -> Result<HashMap<usize, IncrementalWitness<Node>>, Error>;
 }
 
 /// An inefficient MASP client which simply uses a
@@ -248,6 +227,41 @@ impl<C: Client + Sync> MaspClient for LedgerMaspClient<'_, C> {
         }
 
         Ok(())
+    }
+
+    #[inline(always)]
+    fn capabilities(&self) -> MaspClientCapabilities {
+        MaspClientCapabilities::OnlyTransfers
+    }
+
+    async fn fetch_commitment_tree(
+        &self,
+        _: BlockHeight,
+    ) -> Result<CommitmentTree<Node>, Error> {
+        Err(Error::Other(
+            "Commitment tree fetching is not implemented by this client"
+                .to_string(),
+        ))
+    }
+
+    async fn fetch_tx_notes_map(
+        &self,
+        _: BlockHeight,
+    ) -> Result<BTreeMap<IndexedTx, usize>, Error> {
+        Err(Error::Other(
+            "Transaction notes map fetching is not implemented by this client"
+                .to_string(),
+        ))
+    }
+
+    async fn fetch_witness_map(
+        &self,
+        _: BlockHeight,
+    ) -> Result<HashMap<usize, IncrementalWitness<Node>>, Error> {
+        Err(Error::Other(
+            "Witness map fetching is not implemented by this client"
+                .to_string(),
+        ))
     }
 }
 
