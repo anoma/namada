@@ -372,16 +372,6 @@ impl TxGasMeter {
         }
     }
 
-    /// Initialize a new gas meter. Requires the gas limit expressed in sub
-    /// units
-    pub fn new_from_sub_limit(tx_gas_limit: Gas) -> Self {
-        Self {
-            gas_overflow: false,
-            tx_gas_limit,
-            transaction_gas: Gas::default(),
-        }
-    }
-
     /// Add the gas required by a wrapper transaction which is comprised of:
     ///  - cost of validating the wrapper tx
     ///  - space that the transaction requires in the block
@@ -596,7 +586,7 @@ mod tests {
 
     #[test]
     fn test_tx_gas_overflow() {
-        let mut meter = TxGasMeter::new_from_sub_limit(BLOCK_GAS_LIMIT.into());
+        let mut meter = TxGasMeter::new(BLOCK_GAS_LIMIT);
         meter.consume(1).expect("cannot add the gas");
         assert_matches!(
             meter.consume(u64::MAX).expect_err("unexpectedly succeeded"),
@@ -606,7 +596,7 @@ mod tests {
 
     #[test]
     fn test_tx_gas_limit() {
-        let mut meter = TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into());
+        let mut meter = TxGasMeter::new(TX_GAS_LIMIT);
         assert_matches!(
             meter
                 .consume(TX_GAS_LIMIT + 1)

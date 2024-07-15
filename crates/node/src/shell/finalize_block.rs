@@ -761,10 +761,7 @@ where
                             }
                         }
                     }
-                    (
-                        DispatchArgs::Protocol(protocol_tx),
-                        TxGasMeter::new_from_sub_limit(0.into()),
-                    )
+                    (DispatchArgs::Protocol(protocol_tx), TxGasMeter::new(0))
                 }
             };
             let tx_event = new_tx_event(&tx, height.0);
@@ -5460,7 +5457,7 @@ mod test_finalize_block {
             .write(&min_confirmations_key(), new_min_confirmations)
             .expect("Test failed");
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+            &TxGasMeter::new(u64::MAX),
         ));
         let keys_changed = BTreeSet::from([min_confirmations_key()]);
         let verifiers = BTreeSet::default();
