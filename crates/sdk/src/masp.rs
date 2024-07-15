@@ -3590,7 +3590,24 @@ mod test_shielded_sync {
     /// Would love to do this in a less opaque fashion, but
     /// making these things is a misery not worth my time.
     ///
-    /// This a tx sending 1 BTC from Albert to Albert's PA
+    /// This a tx sending 1 BTC from Albert to Albert's PA,
+    /// that was extracted from a masp integration test.
+    ///
+    /// ```ignore
+    /// vec![
+    ///     "shield",
+    ///     "--source",
+    ///     ALBERT,
+    ///     "--target",
+    ///     AA_PAYMENT_ADDRESS,
+    ///     "--token",
+    ///     BTC,
+    ///     "--amount",
+    ///     "1",
+    ///     "--node",
+    ///     validator_one_rpc,
+    /// ]
+    /// ```
     fn arbitrary_masp_tx() -> Transaction {
         Transaction::try_from_slice(&[
             2, 0, 0, 0, 10, 39, 167, 38, 166, 117, 255, 233, 0, 0, 0, 0, 255,
