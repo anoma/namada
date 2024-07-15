@@ -3258,6 +3258,7 @@ name = "ibc-client-tendermint-types"
 version = "0.53.0"
 source = "git+https://github.com/cosmos/ibc-rs?rev=7ff41b3804cda649e0d7f7c21389b8d65f8d9b4b#7ff41b3804cda649e0d7f7c21389b8d65f8d9b4b"
 dependencies = [
+ "borsh",
  "displaydoc",
  "ibc-core-client-types",
  "ibc-core-commitment-types",
@@ -3511,6 +3512,7 @@ name = "ibc-core-host-cosmos"
 version = "0.53.0"
 source = "git+https://github.com/cosmos/ibc-rs?rev=7ff41b3804cda649e0d7f7c21389b8d65f8d9b4b#7ff41b3804cda649e0d7f7c21389b8d65f8d9b4b"
 dependencies = [
+ "borsh",
  "derive_more",
  "displaydoc",
  "ibc-app-transfer-types",
