@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use color_eyre::owo_colors::OwoColorize;
 use masp_primitives::sapling::ViewingKey;
@@ -7,8 +8,8 @@ use masp_primitives::zip32::ExtendedSpendingKey;
 use namada_sdk::error::Error;
 use namada_sdk::io::Io;
 use namada_sdk::masp::utils::{
-    LedgerMaspClient, PeekableIter, ProgressTracker, ProgressType,
-    RetryStrategy,
+    IndexerMaspClient, LedgerMaspClient, PeekableIter, ProgressTracker,
+    ProgressType, RetryStrategy,
 };
 use namada_sdk::masp::{IndexedNoteEntry, ShieldedContext, ShieldedUtils};
 use namada_sdk::queries::Client;
@@ -23,30 +24,62 @@ pub async fn syncing<
 >(
     mut shielded: ShieldedContext<U>,
     client: &C,
+    indexer_addr: Option<&str>,
     io: &IO,
-    batch_size: u64,
     start_query_height: Option<BlockHeight>,
     last_query_height: Option<BlockHeight>,
     sks: &[ExtendedSpendingKey],
     fvks: &[ViewingKey],
 ) -> Result<ShieldedContext<U>, Error> {
-    display_line!(io, "{}", "==== Shielded sync started ====".on_white());
+    if indexer_addr.is_some() {
+        display_line!(
+            io,
+            "{}",
+            "==== Shielded sync started using indexer client ====".bold()
+        );
+    } else {
+        display_line!(
+            io,
+            "{}",
+            "==== Shielded sync started using ledger client ====".bold()
+        );
+    }
     display_line!(io, "\n\n");
     let tracker = CliProgressTracker::new(io);
 
-    let shielded = shielded
-        .fetch(
-            LedgerMaspClient::new(client),
-            &tracker,
-            start_query_height,
-            last_query_height,
-            RetryStrategy::Forever,
-            batch_size,
-            sks,
-            fvks,
-        )
-        .await
-        .map(|_| shielded)?;
+    macro_rules! dispatch_client {
+        ($client:expr) => {
+            shielded
+                .fetch(
+                    $client,
+                    &tracker,
+                    start_query_height,
+                    last_query_height,
+                    RetryStrategy::Forever,
+                    sks,
+                    fvks,
+                )
+                .await
+                .map(|_| shielded)
+        };
+    }
+
+    let shielded = if let Some(endpoint) = indexer_addr {
+        let client = reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(60))
+            .build()
+            .map_err(|err| {
+                Error::Other(format!("Failed to build http client: {err}"))
+            })?;
+        let url = endpoint.try_into().map_err(|err| {
+            Error::Other(format!(
+                "Failed to parse API endpoint {endpoint:?}: {err}"
+            ))
+        })?;
+        dispatch_client!(IndexerMaspClient::new(client, url))?
+    } else {
+        dispatch_client!(LedgerMaspClient::new(client))?
+    };
 
     display!(io, "Syncing finished\n");
     Ok(shielded)
