@@ -10,10 +10,10 @@ use ibc::apps::transfer::types::PrefixedCoin;
 use ibc::core::channel::types::timeout::TimeoutHeight;
 use namada_core::address::Address;
 use namada_core::borsh::BorshSerializeExt;
+use namada_core::ibc::PGFIbcTarget;
 use namada_core::tendermint::Time as TmTime;
 use namada_core::token::Amount;
 use namada_events::EmitEvents;
-use namada_governance::storage::proposal::PGFIbcTarget;
 use namada_state::{
     Epochs, ResultExt, State, StorageError, StorageRead, StorageResult,
     StorageWrite,
