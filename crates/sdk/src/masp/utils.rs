@@ -136,15 +136,20 @@ where
                 .block
                 .data;
 
-            for (idx, masp_sections_refs) in txs_results {
+            for (idx, masp_sections_refs, ibc_tx_data_refs) in txs_results {
                 let tx = Tx::try_from(block[idx.0 as usize].as_ref())
                     .map_err(|e| Error::Other(e.to_string()))?;
-                let extracted_masp_txs =
-                    if let Some(masp_sections_refs) = masp_sections_refs {
-                        extract_masp_tx(&tx, &masp_sections_refs).await?
-                    } else {
-                        extract_masp_tx_from_ibc_message(&tx)?
-                    };
+                let mut extracted_masp_txs = vec![];
+                if let Some(masp_sections_refs) = masp_sections_refs {
+                    extracted_masp_txs.extend(
+                        extract_masp_tx(&tx, &masp_sections_refs).await?,
+                    );
+                };
+                if ibc_tx_data_refs.is_some() {
+                    extracted_masp_txs
+                        .extend(extract_masp_tx_from_ibc_message(&tx)?);
+                }
+
                 tx_sender.send((
                     IndexedTx {
                         height: height.into(),
