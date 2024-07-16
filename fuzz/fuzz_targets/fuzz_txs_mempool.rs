@@ -5,7 +5,7 @@ use libfuzzer_sys::fuzz_target;
 use namada_node::shell;
 use namada_node::shell::test_utils::TestShell;
 use namada_node::shell::MempoolTxType;
-use namada_tx::{Section, Tx};
+use namada_tx::Tx;
 
 lazy_static! {
     static ref SHELL: TestShell = {
