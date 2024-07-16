@@ -19,6 +19,7 @@ use namada_core::{storage, token};
 use namada_governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal,
 };
+use namada_ibc::IbcShieldingData;
 use namada_tx::data::GasLimit;
 use namada_tx::Memo;
 use serde::{Deserialize, Serialize};
@@ -438,8 +439,10 @@ pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
     pub timeout_sec_offset: Option<u64>,
     /// Refund target address when the shielded transfer failure
     pub refund_target: Option<C::TransferTarget>,
-    /// Memo
-    pub memo: Option<String>,
+    /// IBC shielding transfer data for the destination chain
+    pub ibc_shielding_data: Option<IbcShieldingData>,
+    /// Memo for IBC transfer packet
+    pub ibc_memo: Option<String>,
     /// Optional additional keys for gas payment
     pub gas_spending_keys: Vec<C::SpendingKey>,
     /// Path to the TX WASM code file
@@ -513,10 +516,18 @@ impl<C: NamadaTypes> TxIbcTransfer<C> {
         }
     }
 
-    /// Memo
-    pub fn memo(self, memo: String) -> Self {
+    /// IBC shielding transfer data
+    pub fn ibc_shielding_data(self, shielding_data: IbcShieldingData) -> Self {
         Self {
-            memo: Some(memo),
+            ibc_shielding_data: Some(shielding_data),
+            ..self
+        }
+    }
+
+    /// Memo for IBC transfer packet
+    pub fn ibc_memo(self, ibc_memo: String) -> Self {
+        Self {
+            ibc_memo: Some(ibc_memo),
             ..self
         }
     }
