@@ -5194,7 +5194,7 @@ dependencies = [
  "futures",
  "init-once",
  "itertools 0.12.1",
- "jubjub 0.10.0 (git+https://github.com/heliaxdev/jubjub.git?rev=e887d6964985f267a1085d480756f20d9eaceb19)",
+ "jubjub 0.10.0 (git+https://github.com/heliaxdev/jubjub.git?rev=a373686962f4e9d0edb3b4716f86ff6bbd9aa86c)",
  "kdam",
  "lazy_static",
  "linkme",
