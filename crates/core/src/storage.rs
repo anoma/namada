@@ -1163,6 +1163,7 @@ impl KeySeg for common::PublicKey {
 }
 
 /// Epoch identifier. Epochs are identified by consecutive numbers.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     Copy,

@@ -760,9 +760,71 @@ impl MaspBuilder {
     }
 }
 
+#[cfg(feature = "arbitrary")]
+impl arbitrary::Arbitrary<'_> for MaspBuilder {
+    fn arbitrary(
+        u: &mut arbitrary::Unstructured<'_>,
+    ) -> arbitrary::Result<Self> {
+        use masp_primitives::transaction::builder::MapBuilder;
+        use masp_primitives::transaction::components::sapling::builder::MapBuilder as SapMapBuilder;
+        use masp_primitives::zip32::ExtendedSpendingKey;
+        struct WalletMap;
+
+        impl<P1>
+            SapMapBuilder<P1, ExtendedSpendingKey, (), ExtendedFullViewingKey>
+            for WalletMap
+        {
+            fn map_params(&self, _s: P1) {}
+
+            fn map_key(
+                &self,
+                s: ExtendedSpendingKey,
+            ) -> ExtendedFullViewingKey {
+                (&s).into()
+            }
+        }
+        impl<P1, N1>
+            MapBuilder<
+                P1,
+                ExtendedSpendingKey,
+                N1,
+                (),
+                ExtendedFullViewingKey,
+                (),
+            > for WalletMap
+        {
+            fn map_notifier(&self, _s: N1) {}
+        }
+
+        let target_height: masp_primitives::consensus::BlockHeight =
+            arbitrary::Arbitrary::arbitrary(u)?;
+        Ok(MaspBuilder {
+            target: arbitrary::Arbitrary::arbitrary(u)?,
+            asset_types: arbitrary::Arbitrary::arbitrary(u)?,
+            metadata: arbitrary::Arbitrary::arbitrary(u)?,
+            builder: Builder::new(
+                masp_primitives::consensus::TestNetwork,
+                target_height,
+            )
+            .map_builder(WalletMap),
+        })
+    }
+
+    fn size_hint(depth: usize) -> (usize, Option<usize>) {
+        arbitrary::size_hint::and_all(
+                        &[
+                            <masp_primitives::consensus::BlockHeight as arbitrary::Arbitrary>::size_hint(depth),
+                            <TxId as arbitrary::Arbitrary>::size_hint(depth),
+                            <HashSet<AssetData> as arbitrary::Arbitrary>::size_hint(depth),
+                            <SaplingMetadata as arbitrary::Arbitrary>::size_hint(depth),
+                        ],
+                    )
+    }
+}
+
 /// A section of a transaction. Carries an independent piece of information
 /// necessary for the processing of a transaction.
-// #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     Debug,
@@ -794,154 +856,6 @@ pub enum Section {
     MaspBuilder(MaspBuilder),
     /// Wrap a header with a section for the purposes of computing hashes
     Header(Header),
-}
-
-#[cfg(feature = "arbitrary")]
-std::thread_local! {
-    #[allow(non_upper_case_globals)]
-    static RECURSIVE_COUNT_Section: ::core::cell::Cell<u32> = ::core::cell::Cell::new(0);
-}
-
-#[cfg(feature = "arbitrary")]
-impl<'arbitrary> arbitrary::Arbitrary<'arbitrary> for Section {
-    fn arbitrary(
-        u: &mut arbitrary::Unstructured<'arbitrary>,
-    ) -> arbitrary::Result<Self> {
-        let guard_against_recursion = u.is_empty();
-        if guard_against_recursion {
-            RECURSIVE_COUNT_Section.with(|count| {
-                if count.get() > 0 {
-                    return Err(arbitrary::Error::NotEnoughData);
-                }
-                count.set(count.get() + 1);
-                Ok(())
-            })?;
-        }
-        let result = (|| {
-            Ok(
-                match (u64::from(<u32 as arbitrary::Arbitrary>::arbitrary(u)?)
-                    * 6u64)
-                    >> 32
-                {
-                    0u64 => Section::Data(arbitrary::Arbitrary::arbitrary(u)?),
-                    1u64 => {
-                        Section::ExtraData(arbitrary::Arbitrary::arbitrary(u)?)
-                    }
-                    2u64 => Section::Code(arbitrary::Arbitrary::arbitrary(u)?),
-                    3u64 => Section::Authorization(
-                        arbitrary::Arbitrary::arbitrary(u)?,
-                    ),
-                    4u64 => {
-                        Section::MaspTx(arbitrary::Arbitrary::arbitrary(u)?)
-                    }
-                    // 5u64 => {
-                    //     Section::MaspBuilder(arbitrary::Arbitrary::arbitrary(u)?)
-                    // }
-                    5u64 => {
-                        Section::Header(arbitrary::Arbitrary::arbitrary(u)?)
-                    }
-                    _ => panic!("internal error: entered unreachable code",),
-                },
-            )
-        })();
-        if guard_against_recursion {
-            RECURSIVE_COUNT_Section.with(|count| {
-                count.set(count.get() - 1);
-            });
-        }
-        result
-    }
-
-    fn arbitrary_take_rest(
-        mut u: arbitrary::Unstructured<'arbitrary>,
-    ) -> arbitrary::Result<Self> {
-        let guard_against_recursion = u.is_empty();
-        if guard_against_recursion {
-            RECURSIVE_COUNT_Section.with(|count| {
-                if count.get() > 0 {
-                    return Err(arbitrary::Error::NotEnoughData);
-                }
-                count.set(count.get() + 1);
-                Ok(())
-            })?;
-        }
-        let result = (|| {
-            Ok(
-                match (u64::from(<u32 as arbitrary::Arbitrary>::arbitrary(
-                    &mut u,
-                )?) * 6u64)
-                    >> 32
-                {
-                    0u64 => Section::Data(
-                        arbitrary::Arbitrary::arbitrary_take_rest(u)?,
-                    ),
-                    1u64 => Section::ExtraData(
-                        arbitrary::Arbitrary::arbitrary_take_rest(u)?,
-                    ),
-                    2u64 => Section::Code(
-                        arbitrary::Arbitrary::arbitrary_take_rest(u)?,
-                    ),
-                    3u64 => Section::Authorization(
-                        arbitrary::Arbitrary::arbitrary_take_rest(u)?,
-                    ),
-                    4u64 => Section::MaspTx(
-                        arbitrary::Arbitrary::arbitrary_take_rest(u)?,
-                    ),
-                    // 5u64 => {
-                    //     Section::MaspBuilder(
-                    //         arbitrary::Arbitrary::arbitrary_take_rest(u)?,
-                    //     )
-                    // }
-                    5u64 => Section::Header(
-                        arbitrary::Arbitrary::arbitrary_take_rest(u)?,
-                    ),
-                    _ => panic!("internal error: entered unreachable code",),
-                },
-            )
-        })();
-        if guard_against_recursion {
-            RECURSIVE_COUNT_Section.with(|count| {
-                count.set(count.get() - 1);
-            });
-        }
-        result
-    }
-
-    #[inline]
-    fn size_hint(depth: usize) -> (usize, Option<usize>) {
-        arbitrary::size_hint::and(
-            <u32 as arbitrary::Arbitrary>::size_hint(depth),
-            arbitrary::size_hint::recursion_guard(depth, |depth| {
-                arbitrary::size_hint::or_all(&[
-                    arbitrary::size_hint::and_all(&[
-                        <Data as arbitrary::Arbitrary>::size_hint(depth),
-                    ]),
-                    arbitrary::size_hint::and_all(&[
-                        <Code as arbitrary::Arbitrary>::size_hint(depth),
-                    ]),
-                    arbitrary::size_hint::and_all(&[
-                        <Code as arbitrary::Arbitrary>::size_hint(depth),
-                    ]),
-                    arbitrary::size_hint::and_all(&[
-                        <Authorization as arbitrary::Arbitrary>::size_hint(
-                            depth,
-                        ),
-                    ]),
-                    // arbitrary::size_hint::and_all(
-                    //     &[<Transaction as
-                    // arbitrary::Arbitrary>::size_hint(depth)],
-                    // ),
-                    // arbitrary::size_hint::and_all(
-                    //     &[<MaspBuilder as
-                    // arbitrary::Arbitrary>::size_hint(depth)],
-                    // ),
-                    arbitrary::size_hint::and_all(&[
-                        <Header as arbitrary::Arbitrary>::size_hint(depth),
-                    ]),
-                ])
-            }),
-        )
-    }
 }
 
 impl Section {
@@ -1985,8 +1899,8 @@ mod test {
     use std::collections::BTreeMap;
     use std::fs;
 
-    use borsh::schema::BorshSchema;
     use data_encoding::HEXLOWER;
+    use namada_core::borsh::schema::BorshSchema;
 
     use super::*;
 
