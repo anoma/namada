@@ -878,6 +878,7 @@ impl From<Uint> for Amount {
 
 /// The four possible u64 words in a [`Uint`].
 /// Used for converting to MASP amounts.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Copy,
     Clone,
