@@ -1,12 +1,17 @@
 //! Helper functions and types
 
 use std::sync::{Arc, Mutex};
+
 use namada_core::storage::BlockHeight;
 use namada_tx::{IndexedTx, Tx};
 
+use crate::control_flow::ShutdownSignal;
 use crate::error::{Error, QueryError};
 use crate::io::Io;
-use crate::masp::{extract_masp_tx, get_indexed_masp_events_at_height, IndexedNoteEntry, Unscanned};
+use crate::masp::{
+    extract_masp_tx, extract_masp_tx_from_ibc_message,
+    get_indexed_masp_events_at_height, IndexedNoteEntry, Unscanned,
+};
 use crate::queries::Client;
 
 /// When retrying to fetch all notes in a
@@ -25,7 +30,7 @@ impl Iterator for RetryStrategy {
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             Self::Forever => Some(()),
-            Self::Times(ref mut count) => {
+            Self::Times(count) => {
                 if *count == 0 {
                     None
                 } else {
@@ -41,16 +46,17 @@ impl Iterator for RetryStrategy {
 /// of how shielded-sync fetches the necessary data
 /// from a remote server.
 pub trait MaspClient<'client, C: Client> {
-    /// Create a new [`MaspClient`] given an rpc client.
-    fn new(client: &'client C) -> Self
-    where
-        Self: 'client;
+    /// Return the wrapped client.
+    fn rpc_client(&self) -> &C;
 
-    /// Fetches shielded transfers
+    /// Fetch shielded transfers from blocks heights in the range `[from, to]`,
+    /// keeping track of progress through `progress`. The fetched transfers
+    /// are sent over to a separate worker through `tx_sender`.
     #[allow(async_fn_in_trait)]
-    async fn fetch_shielded_transfer<IO: Io>(
+    async fn fetch_shielded_transfers<IO: Io>(
         &self,
         progress: &impl ProgressTracker<IO>,
+        shutdown_signal: &mut ShutdownSignal,
         tx_sender: FetchQueueSender,
         from: u64,
         to: u64,
@@ -59,26 +65,31 @@ pub trait MaspClient<'client, C: Client> {
 
 /// An inefficient MASP client which simply uses a
 /// client to the blockchain to query it directly.
-pub struct LedgerMaspClient<'client, C: Client> {
+pub struct LedgerMaspClient<'client, C> {
     client: &'client C,
 }
 
-#[cfg(not(target_family = "wasm"))]
-impl<'client, C: Client + Sync> MaspClient<'client, C> for LedgerMaspClient<'client, C>
-    where
-        LedgerMaspClient<'client, C>: 'client,
-{
-    fn new(client: &'client C) -> Self
-        where
-            Self: 'client,
-    {
+impl<'client, C> LedgerMaspClient<'client, C> {
+    /// Create a new [`MaspClient`] given an rpc client.
+    pub const fn new(client: &'client C) -> Self {
         Self { client }
     }
+}
 
+#[cfg(not(target_family = "wasm"))]
+impl<'client, C: Client + Sync> MaspClient<'client, C>
+    for LedgerMaspClient<'client, C>
+where
+    LedgerMaspClient<'client, C>: 'client,
+{
+    fn rpc_client(&self) -> &C {
+        self.client
+    }
 
-    async fn fetch_shielded_transfer<IO: Io>(
+    async fn fetch_shielded_transfers<IO: Io>(
         &self,
         progress: &impl ProgressTracker<IO>,
+        shutdown_signal: &mut ShutdownSignal,
         mut tx_sender: FetchQueueSender,
         from: u64,
         to: u64,
@@ -87,6 +98,11 @@ impl<'client, C: Client + Sync> MaspClient<'client, C> for LedgerMaspClient<'cli
         let mut fetch_iter = progress.fetch(from..=to);
 
         while let Some(height) = fetch_iter.peek() {
+            if shutdown_signal.received() {
+                return Err(Error::Interrupt(
+                    "[ShieldedSync::Fetching]".to_string(),
+                ));
+            }
             let height = *height;
             if tx_sender.contains_height(height) {
                 fetch_iter.next();
@@ -124,8 +140,11 @@ impl<'client, C: Client + Sync> MaspClient<'client, C> for LedgerMaspClient<'cli
                 let tx = Tx::try_from(block[idx.0 as usize].as_ref())
                     .map_err(|e| Error::Other(e.to_string()))?;
                 let extracted_masp_txs =
-                    extract_masp_tx(&tx, &masp_sections_refs).await?;
-
+                    if let Some(masp_sections_refs) = masp_sections_refs {
+                        extract_masp_tx(&tx, &masp_sections_refs).await?
+                    } else {
+                        extract_masp_tx_from_ibc_message(&tx)?
+                    };
                 tx_sender.send((
                     IndexedTx {
                         height: height.into(),
@@ -140,8 +159,6 @@ impl<'client, C: Client + Sync> MaspClient<'client, C> for LedgerMaspClient<'cli
         Ok(())
     }
 }
-
-
 
 /// A channel-like struct for "sending" newly fetched blocks
 /// to the scanning algorithm.
@@ -252,8 +269,8 @@ pub trait PeekableIter<I> {
 }
 
 impl<I, J> PeekableIter<J> for std::iter::Peekable<I>
-    where
-        I: Iterator<Item = J>,
+where
+    I: Iterator<Item = J>,
 {
     fn peek(&mut self) -> Option<&J> {
         self.peek()
@@ -278,16 +295,16 @@ pub trait ProgressTracker<IO: Io> {
 
     /// Return an iterator to fetched shielded transfers
     fn fetch<I>(&self, items: I) -> impl PeekableIter<u64>
-        where
-            I: Iterator<Item = u64>;
+    where
+        I: Iterator<Item = u64>;
 
     /// Return an iterator over MASP transactions to be scanned
     fn scan<I>(
         &self,
         items: I,
     ) -> impl Iterator<Item = IndexedNoteEntry> + Send
-        where
-            I: Iterator<Item = IndexedNoteEntry> + Send;
+    where
+        I: Iterator<Item = IndexedNoteEntry> + Send;
 
     /// The number of blocks that need to be fetched
     fn left_to_fetch(&self) -> usize;
@@ -317,8 +334,8 @@ pub(super) struct IterProgress {
 }
 
 pub(super) struct DefaultFetchIterator<I>
-    where
-        I: Iterator<Item = u64>,
+where
+    I: Iterator<Item = u64>,
 {
     pub inner: I,
     pub progress: Arc<Mutex<IterProgress>>,
@@ -326,8 +343,8 @@ pub(super) struct DefaultFetchIterator<I>
 }
 
 impl<I> PeekableIter<u64> for DefaultFetchIterator<I>
-    where
-        I: Iterator<Item = u64>,
+where
+    I: Iterator<Item = u64>,
 {
     fn peek(&mut self) -> Option<&u64> {
         if self.peeked.is_none() {
@@ -351,8 +368,8 @@ impl<'io, IO: Io> ProgressTracker<IO> for DefaultTracker<'io, IO> {
     }
 
     fn fetch<I>(&self, items: I) -> impl PeekableIter<u64>
-        where
-            I: Iterator<Item = u64>,
+    where
+        I: Iterator<Item = u64>,
     {
         {
             let mut locked = self.progress.lock().unwrap();
@@ -366,8 +383,8 @@ impl<'io, IO: Io> ProgressTracker<IO> for DefaultTracker<'io, IO> {
     }
 
     fn scan<I>(&self, items: I) -> impl Iterator<Item = IndexedNoteEntry> + Send
-        where
-            I: IntoIterator<Item = IndexedNoteEntry>,
+    where
+        I: IntoIterator<Item = IndexedNoteEntry>,
     {
         let items: Vec<_> = items.into_iter().collect();
         items.into_iter()
