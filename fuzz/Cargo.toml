@@ -16,6 +16,15 @@ lazy_static.workspace = true
 libfuzzer-sys = "0.4"
 
 [[bin]]
+name = "txs_mempool"
+path = "fuzz_targets/txs_mempool.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "txs_prepare_proposal"
+path = "fuzz_targets/txs_prepare_proposal.rs"
 test = false
 doc = false
 bench = false
