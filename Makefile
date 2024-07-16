@@ -117,8 +117,8 @@ clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --a
 
 # Need a separate command for benchmarks to prevent the "testing" feature flag from being activated
 clippy:
-	$(cargo) +$(nightly) clippy $(jobs) --all-targets --workspace --exclude namada_benchmarks -- -D warnings && \
-	$(cargo) +$(nightly) clippy $(jobs) --all-targets --package namada_benchmarks -- -D warnings && \
+	$(cargo) +$(nightly) clippy $(jobs) --all-targets --workspace --exclude namada_benchmarks -- -D warnings --check-cfg 'cfg(fuzzing)' && \
+	$(cargo) +$(nightly) clippy $(jobs) --all-targets --package namada_benchmarks -- -D warnings --check-cfg 'cfg(fuzzing)' && \
 	make -C $(wasms) clippy && \
 	make -C $(wasms_for_tests) clippy
 

@@ -1503,12 +1503,12 @@ pub mod test_utils {
 
     /// Generate a random public/private keypair
     #[inline]
-    pub(super) fn gen_keypair() -> common::SecretKey {
+    pub fn gen_keypair() -> common::SecretKey {
         gen_ed25519_keypair()
     }
 
     /// Generate a random ed25519 public/private keypair
-    pub(super) fn gen_ed25519_keypair() -> common::SecretKey {
+    pub fn gen_ed25519_keypair() -> common::SecretKey {
         use rand::prelude::ThreadRng;
         use rand::thread_rng;
 
@@ -1517,7 +1517,7 @@ pub mod test_utils {
     }
 
     /// Generate a random secp256k1 public/private keypair
-    pub(super) fn gen_secp256k1_keypair() -> common::SecretKey {
+    pub fn gen_secp256k1_keypair() -> common::SecretKey {
         use rand::prelude::ThreadRng;
         use rand::thread_rng;
 
@@ -1528,9 +1528,7 @@ pub mod test_utils {
     }
 
     /// Invalidate a valid signature `sig`.
-    pub(super) fn invalidate_signature(
-        sig: common::Signature,
-    ) -> common::Signature {
+    pub fn invalidate_signature(sig: common::Signature) -> common::Signature {
         match sig {
             common::Signature::Ed25519(ed25519::Signature(ref sig)) => {
                 let mut sig_bytes = sig.to_bytes();
@@ -1816,7 +1814,7 @@ pub mod test_utils {
     /// Start a new test shell and initialize it. Returns the shell paired with
     /// a broadcast receiver, which will receives any protocol txs sent by the
     /// shell.
-    pub(super) fn setup_with_cfg<H: Into<BlockHeight>>(
+    pub fn setup_with_cfg<H: Into<BlockHeight>>(
         SetupCfg {
             last_height,
             num_validators,
@@ -1877,7 +1875,7 @@ pub mod test_utils {
     /// Same as [`setup_at_height`], but returns a shell at the given block
     /// height, with a single validator.
     #[inline]
-    pub(super) fn setup_at_height<H: Into<BlockHeight>>(
+    pub fn setup_at_height<H: Into<BlockHeight>>(
         last_height: H,
     ) -> (
         TestShell,
@@ -1936,7 +1934,7 @@ pub mod test_utils {
     }
 
     /// Set the Ethereum bridge to be inactive
-    pub(super) fn deactivate_bridge(shell: &mut TestShell) {
+    pub fn deactivate_bridge(shell: &mut TestShell) {
         use eth_bridge::storage::active_key;
         use eth_bridge::storage::eth_bridge_queries::EthBridgeStatus;
         shell
@@ -1945,7 +1943,7 @@ pub mod test_utils {
             .expect("Test failed");
     }
 
-    pub(super) fn get_pkh_from_address<S>(
+    pub fn get_pkh_from_address<S>(
         storage: &S,
         params: &PosParams,
         address: Address,
@@ -1963,7 +1961,7 @@ pub mod test_utils {
         TryFrom::try_from(decoded).unwrap()
     }
 
-    pub(super) fn next_block_for_inflation(
+    pub fn next_block_for_inflation(
         shell: &mut TestShell,
         proposer_address: Vec<u8>,
         votes: Vec<VoteInfo>,
