@@ -206,6 +206,8 @@ async fn query_transparent_balance(
         owner,
         // The token to query
         token,
+        // Optional block height
+        height,
         ..
     } = args;
 
@@ -214,9 +216,13 @@ async fn query_transparent_balance(
         .expect("Balance owner should have been a transparent address");
 
     let token_alias = lookup_token_alias(context, &token, &owner).await;
-    let token_balance_result =
-        namada_sdk::rpc::get_token_balance(context.client(), &token, &owner)
-            .await;
+    let token_balance_result = namada_sdk::rpc::get_token_balance(
+        context.client(),
+        &token,
+        &owner,
+        height,
+    )
+    .await;
 
     match token_balance_result {
         Ok(balance) => {

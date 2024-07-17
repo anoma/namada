@@ -54,6 +54,7 @@ where
 pub mod client_only_methods {
     use borsh::BorshDeserialize;
     use namada_core::address::Address;
+    use namada_core::storage::BlockHeight;
     use namada_core::token;
     use namada_io::Client;
     use namada_token::storage_key::{balance_key, masp_total_rewards};
@@ -62,12 +63,14 @@ pub mod client_only_methods {
     use crate::queries::RPC;
 
     impl Token {
-        /// Get the balance of the given `token` belonging to the given `owner`.
+        /// Get the balance of the given `token` belonging to the given `owner`,
+        /// optionally at the given `height`.
         pub async fn balance<CLIENT>(
             &self,
             client: &CLIENT,
             token: &Address,
             owner: &Address,
+            height: Option<BlockHeight>,
         ) -> Result<token::Amount, <CLIENT as Client>::Error>
         where
             CLIENT: Client + Sync,
@@ -75,7 +78,7 @@ pub mod client_only_methods {
             let balance_key = balance_key(token, owner);
             let response = RPC
                 .shell()
-                .storage_value(client, None, None, false, &balance_key)
+                .storage_value(client, None, height, false, &balance_key)
                 .await?;
 
             let balance = if response.data.is_empty() {
