@@ -6,13 +6,17 @@
 use std::collections::BTreeMap;
 
 use namada_tx_prelude::action::{Action, MaspAction, Write};
+use namada_tx_prelude::ibc::IbcMessage;
 use namada_tx_prelude::*;
 
 #[transaction]
 fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
     let data = ctx.get_tx_data(&tx_data)?;
-    let (transfer, masp_tx) =
-        ibc::ibc_actions(ctx).execute(&data).into_storage_result()?;
+    let ibc_message = IbcMessage::try_from_slice(&data[..])
+        .wrap_err("Failed to decode IbcMessage tx data")?;
+    let (transfer, masp_tx) = ibc::ibc_actions(ctx)
+        .execute(&ibc_message)
+        .into_storage_result()?;
 
     let masp_section_ref = if let Some(transfers) = transfer {
         // Prepare the sources of the multi-transfer

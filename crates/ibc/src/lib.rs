@@ -153,9 +153,8 @@ where
     /// Execute according to the message in an IBC transaction or VP
     pub fn execute(
         &mut self,
-        tx_data: &[u8],
+        message: &IbcMessage,
     ) -> Result<(Option<Transfer>, Option<MaspTransaction>), Error> {
-        let message = decode_message(tx_data)?;
         match &message {
             IbcMessage::Transfer(msg) => {
                 let mut token_transfer_ctx = TokenTransferContext::new(
@@ -246,12 +245,11 @@ where
     }
 
     /// Validate according to the message in IBC VP
-    pub fn validate(&self, tx_data: &[u8]) -> Result<(), Error> {
+    pub fn validate(&self, message: IbcMessage) -> Result<(), Error> {
         // Use an empty verifiers set placeholder for validation, this is only
         // needed in actual txs to addresses whose VPs should be triggered
         let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
 
-        let message = decode_message(tx_data)?;
         match message {
             IbcMessage::Transfer(msg) => {
                 let token_transfer_ctx = TokenTransferContext::new(

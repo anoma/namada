@@ -7,6 +7,7 @@ use std::collections::BTreeSet;
 use std::rc::Rc;
 use std::time::Duration;
 
+use borsh::BorshDeserialize;
 use context::{PseudoExecutionContext, VpValidationContext};
 use namada_core::address::Address;
 use namada_core::arith::{self, checked};
@@ -16,12 +17,12 @@ use namada_gas::{IBC_ACTION_EXECUTE_GAS, IBC_ACTION_VALIDATE_GAS};
 use namada_governance::is_proposal_accepted;
 use namada_ibc::event::IbcEvent;
 use namada_ibc::{
-    Error as ActionError, IbcActions, NftTransferModule, TransferModule,
-    ValidationParams,
+    Error as ActionError, IbcActions, IbcMessage, NftTransferModule,
+    TransferModule, ValidationParams,
 };
 use namada_proof_of_stake::storage::read_pos_params;
 use namada_state::write_log::StorageModification;
-use namada_state::StateRead;
+use namada_state::{ResultExt, StateRead};
 use namada_tx::BatchedTxRef;
 use namada_vp_env::VpEnv;
 use thiserror::Error;
@@ -104,11 +105,16 @@ where
         let tx_data =
             batched_tx.tx.data(batched_tx.cmt).ok_or(Error::NoTxData)?;
 
+        // Message body must be an IbcMessage
+        let tx_data = IbcMessage::try_from_slice(&tx_data)
+            .into_storage_result()
+            .map_err(Error::NativeVpError)?;
+
         // Pseudo execution and compare them
         self.validate_state(&tx_data, keys_changed)?;
 
         // Validate the state according to the given IBC message
-        self.validate_with_msg(&tx_data)?;
+        self.validate_with_msg(tx_data)?;
 
         // Validate the denom store if a denom key has been changed
         self.validate_trace(keys_changed)?;
@@ -127,7 +133,7 @@ where
 {
     fn validate_state(
         &self,
-        tx_data: &[u8],
+        message: &IbcMessage,
         keys_changed: &BTreeSet<Key>,
     ) -> VpResult<()> {
         let exec_ctx = PseudoExecutionContext::new(self.ctx.pre());
@@ -145,7 +151,7 @@ where
         self.ctx
             .charge_gas(IBC_ACTION_EXECUTE_GAS)
             .map_err(Error::NativeVpError)?;
-        actions.execute(tx_data)?;
+        actions.execute(message)?;
 
         let changed_ibc_keys: HashSet<&Key> =
             keys_changed.iter().filter(|k| is_ibc_key(k)).collect();
@@ -184,7 +190,7 @@ where
         Ok(())
     }
 
-    fn validate_with_msg(&self, tx_data: &[u8]) -> VpResult<()> {
+    fn validate_with_msg(&self, tx_data: IbcMessage) -> VpResult<()> {
         let validation_ctx = VpValidationContext::new(self.ctx.pre());
         let ctx = Rc::new(RefCell::new(validation_ctx));
         // Use an empty verifiers set placeholder for validation, this is only
@@ -425,12 +431,15 @@ mod tests {
     use namada_core::address::InternalAddress;
     use namada_gas::TxGasMeter;
     use namada_governance::parameters::GovernanceParameters;
+    use namada_ibc::core::channel::types::msgs::{ChannelMsg, PacketMsg};
+    use namada_ibc::core::client::types::msgs::ClientMsg;
+    use namada_ibc::core::connection::types::msgs::ConnectionMsg;
+    use namada_ibc::core::handler::types::msgs::MsgEnvelope;
     use namada_ibc::event::IbcEventType;
     use namada_state::testing::TestState;
     use namada_state::StorageRead;
     use namada_tx::data::TxType;
-    use namada_tx::{Authorization, Code, Data, Section, Tx};
-    use prost::Message;
+    use namada_tx::{Authorization, Code, Section, Tx};
     use sha2::Digest;
 
     use super::*;
@@ -506,7 +515,7 @@ mod tests {
     use crate::ibc::core::router::types::event::ModuleEvent;
     use crate::ibc::parameters::IbcParameters;
     use crate::ibc::primitives::proto::{Any, Protobuf};
-    use crate::ibc::primitives::{Timestamp, ToProto};
+    use crate::ibc::primitives::Timestamp;
     use crate::ibc::storage::{
         ack_key, channel_counter_key, channel_key, client_connections_key,
         client_counter_key, client_state_key, client_update_height_key,
@@ -926,8 +935,9 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+        let tx_data = IbcMessage::Envelope(Box::new(
+            MsgEnvelope::from(ClientMsg::from(msg)).into(),
+        ));
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
         ));
@@ -938,7 +948,7 @@ mod tests {
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.header.chain_id = state.in_mem().chain_id.clone();
         outer_tx.set_code(Code::new(tx_code, None));
-        outer_tx.set_data(Data::new(tx_data));
+        outer_tx.add_data(&tx_data);
         outer_tx.add_section(Section::Authorization(Authorization::new(
             vec![outer_tx.header_hash()],
             [(0, keypair_1())].into_iter().collect(),
@@ -1005,12 +1015,13 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+        let tx_data = IbcMessage::Envelope(Box::new(
+            MsgEnvelope::from(ClientMsg::from(msg)).into(),
+        ));
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_code(tx_code, None)
-            .add_serialized_data(tx_data)
+            .add_data(&tx_data)
             .sign_wrapper(keypair_1());
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
@@ -1130,12 +1141,13 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+        let tx_data = IbcMessage::Envelope(Box::new(
+            MsgEnvelope::from(ClientMsg::from(msg)).into(),
+        ));
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_code(tx_code, None)
-            .add_serialized_data(tx_data)
+            .add_data(&tx_data)
             .sign_wrapper(keypair_1());
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
@@ -1236,12 +1248,13 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.header.chain_id = state.in_mem().chain_id.clone();
         outer_tx.set_code(Code::new(tx_code, None));
-        outer_tx.set_data(Data::new(tx_data));
+        let tx_data = IbcMessage::Envelope(Box::new(
+            MsgEnvelope::from(ConnectionMsg::from(msg)).into(),
+        ));
+        outer_tx.add_data(&tx_data);
         outer_tx.add_section(Section::Authorization(Authorization::new(
             vec![outer_tx.header_hash()],
             [(0, keypair_1())].into_iter().collect(),
@@ -1333,12 +1346,13 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
+        let tx_data = IbcMessage::Envelope(Box::new(
+            MsgEnvelope::from(ConnectionMsg::from(msg)).into(),
+        ));
         tx.add_code(tx_code, None)
-            .add_serialized_data(tx_data)
+            .add_data(&tx_data)
             .sign_wrapper(keypair_1());
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
@@ -1454,11 +1468,12 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
+        let tx_data = IbcMessage::Envelope(Box::new(
+            MsgEnvelope::from(ConnectionMsg::from(msg)).into(),
+        ));
         tx.add_code(tx_code, None)
-            .add_serialized_data(tx_data)
+            .add_data(&tx_data)
             .sign_wrapper(keypair_1());
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
@@ -1560,12 +1575,13 @@ mod tests {
 
         let tx_code = vec![];
         let tx_index = TxIndex::default();
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+        let tx_data = IbcMessage::Envelope(Box::new(
+            MsgEnvelope::from(ConnectionMsg::from(msg)).into(),
+        ));
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.header.chain_id = state.in_mem().chain_id.clone();
         outer_tx.set_code(Code::new(tx_code, None));
-        outer_tx.set_data(Data::new(tx_data));
+        outer_tx.add_data(&tx_data);
         outer_tx.add_section(Section::Authorization(Authorization::new(
             vec![outer_tx.header_hash()],
             [(0, keypair_1())].into_iter().collect(),
@@ -1655,12 +1671,13 @@ mod tests {
 
         let tx_code = vec![];
         let tx_index = TxIndex::default();
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+        let tx_data = IbcMessage::Envelope(Box::new(
+            MsgEnvelope::from(ConnectionMsg::from(msg)).into(),
+        ));
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.header.chain_id = state.in_mem().chain_id.clone();
         outer_tx.set_code(Code::new(tx_code, None));
-        outer_tx.set_data(Data::new(tx_data));
+        outer_tx.add_data(&tx_data);
         outer_tx.add_section(Section::Authorization(Authorization::new(
             vec![outer_tx.header_hash()],
             [(0, keypair_1())].into_iter().collect(),
@@ -1778,12 +1795,13 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+        let tx_data = IbcMessage::Envelope(Box::new(
+            MsgEnvelope::from(ChannelMsg::from(msg)).into(),
+        ));
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.header.chain_id = state.in_mem().chain_id.clone();
         outer_tx.set_code(Code::new(tx_code, None));
-        outer_tx.set_data(Data::new(tx_data));
+        outer_tx.add_data(tx_data);
         outer_tx.add_section(Section::Authorization(Authorization::new(
             vec![outer_tx.header_hash()],
             [(0, keypair_1())].into_iter().collect(),
@@ -1900,12 +1918,13 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+        let tx_data = IbcMessage::Envelope(Box::new(
+            MsgEnvelope::from(ChannelMsg::from(msg)).into(),
+        ));
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.header.chain_id = state.in_mem().chain_id.clone();
         outer_tx.set_code(Code::new(tx_code, None));
-        outer_tx.set_data(Data::new(tx_data));
+        outer_tx.add_data(&tx_data);
         outer_tx.add_section(Section::Authorization(Authorization::new(
             vec![outer_tx.header_hash()],
             [(0, keypair_1())].into_iter().collect(),
@@ -2007,12 +2026,13 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+        let tx_data = IbcMessage::Envelope(Box::new(
+            MsgEnvelope::from(ChannelMsg::from(msg)).into(),
+        ));
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.header.chain_id = state.in_mem().chain_id.clone();
         outer_tx.set_code(Code::new(tx_code, None));
-        outer_tx.set_data(Data::new(tx_data));
+        outer_tx.add_data(&tx_data);
         outer_tx.add_section(Section::Authorization(Authorization::new(
             vec![outer_tx.header_hash()],
             [(0, keypair_1())].into_iter().collect(),
@@ -2112,12 +2132,13 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+        let tx_data = IbcMessage::Envelope(Box::new(
+            MsgEnvelope::from(ChannelMsg::from(msg)).into(),
+        ));
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_code(tx_code, None)
-            .add_serialized_data(tx_data)
+            .add_data(&tx_data)
             .sign_wrapper(keypair_1());
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
@@ -2268,12 +2289,11 @@ mod tests {
         let tx_data = MsgTransfer {
             message: msg.into(),
             transfer: None,
-        }
-        .serialize_to_vec();
+        };
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_code(tx_code, None)
-            .add_serialized_data(tx_data)
+            .add_data(IbcMessage::Transfer(tx_data))
             .sign_wrapper(keypair_1());
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
@@ -2479,12 +2499,13 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+        let tx_data = IbcMessage::Envelope(Box::new(
+            MsgEnvelope::from(PacketMsg::from(msg)).into(),
+        ));
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_code(tx_code, None)
-            .add_serialized_data(tx_data)
+            .add_data(&tx_data)
             .sign_wrapper(keypair_1());
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
@@ -2634,12 +2655,13 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+        let tx_data = IbcMessage::Envelope(Box::new(
+            MsgEnvelope::from(PacketMsg::from(msg)).into(),
+        ));
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_code(tx_code, None)
-            .add_serialized_data(tx_data)
+            .add_data(&tx_data)
             .sign_wrapper(keypair_1());
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
@@ -2791,12 +2813,13 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+        let tx_data = IbcMessage::Envelope(Box::new(
+            MsgEnvelope::from(PacketMsg::from(msg)).into(),
+        ));
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_code(tx_code, None)
-            .add_serialized_data(tx_data)
+            .add_data(&tx_data)
             .sign_wrapper(keypair_1());
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
@@ -2949,12 +2972,13 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+        let tx_data = IbcMessage::Envelope(Box::new(
+            MsgEnvelope::from(PacketMsg::from(msg)).into(),
+        ));
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_code(tx_code, None)
-            .add_serialized_data(tx_data)
+            .add_data(&tx_data)
             .sign_wrapper(keypair_1());
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
@@ -3127,12 +3151,11 @@ mod tests {
         let tx_data = MsgNftTransfer {
             message: msg.into(),
             transfer: None,
-        }
-        .serialize_to_vec();
+        };
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_code(tx_code, None)
-            .add_serialized_data(tx_data)
+            .add_data(IbcMessage::NftTransfer(tx_data))
             .sign_wrapper(keypair_1());
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
@@ -3361,12 +3384,13 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
+        let tx_data = IbcMessage::Envelope(Box::new(
+            MsgEnvelope::from(PacketMsg::from(msg)).into(),
+        ));
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_code(tx_code, None)
-            .add_serialized_data(tx_data)
+            .add_data(&tx_data)
             .sign_wrapper(keypair_1());
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(

@@ -22,7 +22,7 @@ use namada_governance::storage::proposal::{
     InitProposalData, ProposalType, VoteProposalData,
 };
 use namada_governance::storage::vote::ProposalVote;
-use namada_ibc::{MsgNftTransfer, MsgTransfer};
+use namada_ibc::IbcMessage;
 use namada_parameters::storage as parameter_storage;
 use namada_token as token;
 use namada_token::storage_key::balance_key;
@@ -1315,268 +1315,322 @@ pub async fn to_ledger_vector(
             )
             .await?;
         } else if code_sec.tag == Some(TX_IBC_WASM.to_string()) {
-            let data = tx
-                .data(cmt)
-                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?;
+            let data = IbcMessage::try_from_slice(
+                &tx.data(cmt)
+                    .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
+            )
+            .map_err(|err| {
+                Error::from(EncodingError::Conversion(err.to_string()))
+            })?;
 
-            if let Ok(transfer) = MsgTransfer::try_from_slice(data.as_ref()) {
-                tv.name = "IBC_Transfer_0".to_string();
-                tv.output.push("Type : IBC Transfer".to_string());
-                let transfer_token = format!(
-                    "{} {}",
-                    transfer.message.packet_data.token.amount,
-                    transfer.message.packet_data.token.denom
-                );
-                tv.output.extend(vec![
-                    format!("Source port : {}", transfer.message.port_id_on_a),
-                    format!(
-                        "Source channel : {}",
-                        transfer.message.chan_id_on_a
-                    ),
-                    format!("Token : {}", transfer_token),
-                    format!("Sender : {}", transfer.message.packet_data.sender),
-                    format!(
-                        "Receiver : {}",
-                        transfer.message.packet_data.receiver
-                    ),
-                    format!(
-                        "Timeout height : {}",
-                        transfer.message.timeout_height_on_b
-                    ),
-                    format!(
-                        "Timeout timestamp : {}",
-                        transfer
-                            .message
-                            .timeout_timestamp_on_b
-                            .into_tm_time()
-                            .map_or("no timestamp".to_string(), |time| time
-                                .to_rfc3339())
-                    ),
-                ]);
-                tv.output_expert.extend(vec![
-                    format!("Source port : {}", transfer.message.port_id_on_a),
-                    format!(
-                        "Source channel : {}",
-                        transfer.message.chan_id_on_a
-                    ),
-                    format!("Token : {}", transfer_token),
-                    format!("Sender : {}", transfer.message.packet_data.sender),
-                    format!(
-                        "Receiver : {}",
-                        transfer.message.packet_data.receiver
-                    ),
-                    format!("Memo : {}", transfer.message.packet_data.memo),
-                    format!(
-                        "Timeout height : {}",
-                        transfer.message.timeout_height_on_b
-                    ),
-                    format!(
-                        "Timeout timestamp : {}",
-                        transfer
-                            .message
-                            .timeout_timestamp_on_b
-                            .into_tm_time()
-                            .map_or("no timestamp".to_string(), |time| time
-                                .to_rfc3339())
-                    ),
-                ]);
-                if let Some(transfer) = transfer.transfer {
-                    // To facilitate lookups of MASP AssetTypes
-                    let mut asset_types = HashMap::new();
-                    let builder = find_masp_builder(
-                        tx,
-                        transfer.shielded_section_hash,
-                        &mut asset_types,
-                    )
-                    .map_err(|_| Error::Other("Invalid Data".to_string()))?;
-                    make_ledger_token_transfer_endpoints(
-                        &tokens,
-                        &mut tv.output,
-                        &transfer,
-                        builder,
-                        &asset_types,
-                    )
-                    .await?;
-                    make_ledger_token_transfer_endpoints(
-                        &tokens,
-                        &mut tv.output_expert,
-                        &transfer,
-                        builder,
-                        &asset_types,
-                    )
-                    .await?;
-                }
-            } else if let Ok(transfer) =
-                MsgNftTransfer::try_from_slice(data.as_ref())
-            {
-                tv.name = "IBC_NFT_Transfer_0".to_string();
-                tv.output.push("Type : IBC NFT Transfer".to_string());
-                tv.output.extend(vec![
-                    format!("Source port : {}", transfer.message.port_id_on_a),
-                    format!(
-                        "Source channel : {}",
-                        transfer.message.chan_id_on_a
-                    ),
-                    format!(
-                        "Class ID: {}",
-                        transfer.message.packet_data.class_id
-                    ),
-                ]);
-                if let Some(class_uri) = &transfer.message.packet_data.class_uri
-                {
-                    tv.output.push(format!("Class URI: {}", class_uri));
-                }
-                if let Some(class_data) =
-                    &transfer.message.packet_data.class_data
-                {
-                    tv.output.push(format!("Class data: {}", class_data));
-                }
-                for (idx, token_id) in
-                    transfer.message.packet_data.token_ids.0.iter().enumerate()
-                {
-                    tv.output.push(format!("Token ID: {}", token_id));
-                    if let Some(token_uris) =
-                        &transfer.message.packet_data.token_uris
-                    {
-                        tv.output.push(format!(
-                            "Token URI: {}",
-                            token_uris.get(idx).ok_or_else(|| Error::Other(
-                                "Invalid Data".to_string()
-                            ))?,
-                        ));
-                    }
-                    if let Some(token_data) =
-                        &transfer.message.packet_data.token_data
-                    {
-                        tv.output.push(format!(
-                            "Token data: {}",
-                            token_data.get(idx).ok_or_else(|| Error::Other(
-                                "Invalid Data".to_string()
-                            ))?,
-                        ));
+            match data {
+                IbcMessage::Transfer(transfer) => {
+                    tv.name = "IBC_Transfer_0".to_string();
+                    tv.output.push("Type : IBC Transfer".to_string());
+                    let transfer_token = format!(
+                        "{} {}",
+                        transfer.message.packet_data.token.amount,
+                        transfer.message.packet_data.token.denom
+                    );
+                    tv.output.extend(vec![
+                        format!(
+                            "Source port : {}",
+                            transfer.message.port_id_on_a
+                        ),
+                        format!(
+                            "Source channel : {}",
+                            transfer.message.chan_id_on_a
+                        ),
+                        format!("Token : {}", transfer_token),
+                        format!(
+                            "Sender : {}",
+                            transfer.message.packet_data.sender
+                        ),
+                        format!(
+                            "Receiver : {}",
+                            transfer.message.packet_data.receiver
+                        ),
+                        format!(
+                            "Timeout height : {}",
+                            transfer.message.timeout_height_on_b
+                        ),
+                        format!(
+                            "Timeout timestamp : {}",
+                            transfer
+                                .message
+                                .timeout_timestamp_on_b
+                                .into_tm_time()
+                                .map_or("no timestamp".to_string(), |time| {
+                                    time.to_rfc3339()
+                                })
+                        ),
+                    ]);
+                    tv.output_expert.extend(vec![
+                        format!(
+                            "Source port : {}",
+                            transfer.message.port_id_on_a
+                        ),
+                        format!(
+                            "Source channel : {}",
+                            transfer.message.chan_id_on_a
+                        ),
+                        format!("Token : {}", transfer_token),
+                        format!(
+                            "Sender : {}",
+                            transfer.message.packet_data.sender
+                        ),
+                        format!(
+                            "Receiver : {}",
+                            transfer.message.packet_data.receiver
+                        ),
+                        format!("Memo : {}", transfer.message.packet_data.memo),
+                        format!(
+                            "Timeout height : {}",
+                            transfer.message.timeout_height_on_b
+                        ),
+                        format!(
+                            "Timeout timestamp : {}",
+                            transfer
+                                .message
+                                .timeout_timestamp_on_b
+                                .into_tm_time()
+                                .map_or("no timestamp".to_string(), |time| {
+                                    time.to_rfc3339()
+                                })
+                        ),
+                    ]);
+                    if let Some(transfer) = transfer.transfer {
+                        // To facilitate lookups of MASP AssetTypes
+                        let mut asset_types = HashMap::new();
+                        let builder = find_masp_builder(
+                            tx,
+                            transfer.shielded_section_hash,
+                            &mut asset_types,
+                        )
+                        .map_err(|_| {
+                            Error::Other("Invalid Data".to_string())
+                        })?;
+                        make_ledger_token_transfer_endpoints(
+                            &tokens,
+                            &mut tv.output,
+                            &transfer,
+                            builder,
+                            &asset_types,
+                        )
+                        .await?;
+                        make_ledger_token_transfer_endpoints(
+                            &tokens,
+                            &mut tv.output_expert,
+                            &transfer,
+                            builder,
+                            &asset_types,
+                        )
+                        .await?;
                     }
                 }
-                tv.output.extend(vec![
-                    format!("Sender : {}", transfer.message.packet_data.sender),
-                    format!(
-                        "Receiver : {}",
-                        transfer.message.packet_data.receiver
-                    ),
-                ]);
-                tv.output.extend(vec![
-                    format!(
-                        "Timeout height : {}",
-                        transfer.message.timeout_height_on_b
-                    ),
-                    format!(
-                        "Timeout timestamp : {}",
-                        transfer
-                            .message
-                            .timeout_timestamp_on_b
-                            .into_tm_time()
-                            .map_or("no timestamp".to_string(), |time| time
-                                .to_rfc3339())
-                    ),
-                ]);
-                tv.output_expert.extend(vec![
-                    format!("Source port : {}", transfer.message.port_id_on_a),
-                    format!(
-                        "Source channel : {}",
-                        transfer.message.chan_id_on_a
-                    ),
-                    format!(
-                        "Class ID: {}",
-                        transfer.message.packet_data.class_id
-                    ),
-                ]);
-                if let Some(class_uri) = &transfer.message.packet_data.class_uri
-                {
-                    tv.output_expert.push(format!("Class URI: {}", class_uri));
-                }
-                if let Some(class_data) =
-                    &transfer.message.packet_data.class_data
-                {
-                    tv.output_expert
-                        .push(format!("Class data: {}", class_data));
-                }
-                for (idx, token_id) in
-                    transfer.message.packet_data.token_ids.0.iter().enumerate()
-                {
-                    tv.output_expert.push(format!("Token ID: {}", token_id));
-                    if let Some(token_uris) =
-                        &transfer.message.packet_data.token_uris
+                IbcMessage::NftTransfer(transfer) => {
+                    tv.name = "IBC_NFT_Transfer_0".to_string();
+                    tv.output.push("Type : IBC NFT Transfer".to_string());
+                    tv.output.extend(vec![
+                        format!(
+                            "Source port : {}",
+                            transfer.message.port_id_on_a
+                        ),
+                        format!(
+                            "Source channel : {}",
+                            transfer.message.chan_id_on_a
+                        ),
+                        format!(
+                            "Class ID: {}",
+                            transfer.message.packet_data.class_id
+                        ),
+                    ]);
+                    if let Some(class_uri) =
+                        &transfer.message.packet_data.class_uri
                     {
-                        tv.output_expert.push(format!(
-                            "Token URI: {}",
-                            token_uris.get(idx).ok_or_else(|| Error::Other(
-                                "Invalid Data".to_string()
-                            ))?,
-                        ));
+                        tv.output.push(format!("Class URI: {}", class_uri));
                     }
-                    if let Some(token_data) =
-                        &transfer.message.packet_data.token_data
+                    if let Some(class_data) =
+                        &transfer.message.packet_data.class_data
                     {
-                        tv.output_expert.push(format!(
-                            "Token data: {}",
-                            token_data.get(idx).ok_or_else(|| Error::Other(
-                                "Invalid Data".to_string()
-                            ))?,
-                        ));
+                        tv.output.push(format!("Class data: {}", class_data));
+                    }
+                    for (idx, token_id) in transfer
+                        .message
+                        .packet_data
+                        .token_ids
+                        .0
+                        .iter()
+                        .enumerate()
+                    {
+                        tv.output.push(format!("Token ID: {}", token_id));
+                        if let Some(token_uris) =
+                            &transfer.message.packet_data.token_uris
+                        {
+                            tv.output.push(format!(
+                                "Token URI: {}",
+                                token_uris.get(idx).ok_or_else(|| {
+                                    Error::Other("Invalid Data".to_string())
+                                })?,
+                            ));
+                        }
+                        if let Some(token_data) =
+                            &transfer.message.packet_data.token_data
+                        {
+                            tv.output.push(format!(
+                                "Token data: {}",
+                                token_data.get(idx).ok_or_else(|| {
+                                    Error::Other("Invalid Data".to_string())
+                                })?,
+                            ));
+                        }
+                    }
+                    tv.output.extend(vec![
+                        format!(
+                            "Sender : {}",
+                            transfer.message.packet_data.sender
+                        ),
+                        format!(
+                            "Receiver : {}",
+                            transfer.message.packet_data.receiver
+                        ),
+                    ]);
+                    tv.output.extend(vec![
+                        format!(
+                            "Timeout height : {}",
+                            transfer.message.timeout_height_on_b
+                        ),
+                        format!(
+                            "Timeout timestamp : {}",
+                            transfer
+                                .message
+                                .timeout_timestamp_on_b
+                                .into_tm_time()
+                                .map_or("no timestamp".to_string(), |time| {
+                                    time.to_rfc3339()
+                                })
+                        ),
+                    ]);
+                    tv.output_expert.extend(vec![
+                        format!(
+                            "Source port : {}",
+                            transfer.message.port_id_on_a
+                        ),
+                        format!(
+                            "Source channel : {}",
+                            transfer.message.chan_id_on_a
+                        ),
+                        format!(
+                            "Class ID: {}",
+                            transfer.message.packet_data.class_id
+                        ),
+                    ]);
+                    if let Some(class_uri) =
+                        &transfer.message.packet_data.class_uri
+                    {
+                        tv.output_expert
+                            .push(format!("Class URI: {}", class_uri));
+                    }
+                    if let Some(class_data) =
+                        &transfer.message.packet_data.class_data
+                    {
+                        tv.output_expert
+                            .push(format!("Class data: {}", class_data));
+                    }
+                    for (idx, token_id) in transfer
+                        .message
+                        .packet_data
+                        .token_ids
+                        .0
+                        .iter()
+                        .enumerate()
+                    {
+                        tv.output_expert
+                            .push(format!("Token ID: {}", token_id));
+                        if let Some(token_uris) =
+                            &transfer.message.packet_data.token_uris
+                        {
+                            tv.output_expert.push(format!(
+                                "Token URI: {}",
+                                token_uris.get(idx).ok_or_else(|| {
+                                    Error::Other("Invalid Data".to_string())
+                                })?,
+                            ));
+                        }
+                        if let Some(token_data) =
+                            &transfer.message.packet_data.token_data
+                        {
+                            tv.output_expert.push(format!(
+                                "Token data: {}",
+                                token_data.get(idx).ok_or_else(|| {
+                                    Error::Other("Invalid Data".to_string())
+                                })?,
+                            ));
+                        }
+                    }
+                    tv.output_expert.extend(vec![
+                        format!(
+                            "Sender : {}",
+                            transfer.message.packet_data.sender
+                        ),
+                        format!(
+                            "Receiver : {}",
+                            transfer.message.packet_data.receiver
+                        ),
+                    ]);
+                    if let Some(memo) = &transfer.message.packet_data.memo {
+                        tv.output_expert.push(format!("Memo: {}", memo));
+                    }
+                    tv.output_expert.extend(vec![
+                        format!(
+                            "Timeout height : {}",
+                            transfer.message.timeout_height_on_b
+                        ),
+                        format!(
+                            "Timeout timestamp : {}",
+                            transfer
+                                .message
+                                .timeout_timestamp_on_b
+                                .into_tm_time()
+                                .map_or("no timestamp".to_string(), |time| {
+                                    time.to_rfc3339()
+                                })
+                        ),
+                    ]);
+                    if let Some(transfer) = transfer.transfer {
+                        // To facilitate lookups of MASP AssetTypes
+                        let mut asset_types = HashMap::new();
+                        let builder = find_masp_builder(
+                            tx,
+                            transfer.shielded_section_hash,
+                            &mut asset_types,
+                        )
+                        .map_err(|_| {
+                            Error::Other("Invalid Data".to_string())
+                        })?;
+                        make_ledger_token_transfer_endpoints(
+                            &tokens,
+                            &mut tv.output,
+                            &transfer,
+                            builder,
+                            &asset_types,
+                        )
+                        .await?;
+                        make_ledger_token_transfer_endpoints(
+                            &tokens,
+                            &mut tv.output_expert,
+                            &transfer,
+                            builder,
+                            &asset_types,
+                        )
+                        .await?;
                     }
                 }
-                tv.output_expert.extend(vec![
-                    format!("Sender : {}", transfer.message.packet_data.sender),
-                    format!(
-                        "Receiver : {}",
-                        transfer.message.packet_data.receiver
-                    ),
-                ]);
-                if let Some(memo) = &transfer.message.packet_data.memo {
-                    tv.output_expert.push(format!("Memo: {}", memo));
+                _ => {
+                    return Result::Err(Error::Other(
+                        "Invalid Data".to_string(),
+                    ));
                 }
-                tv.output_expert.extend(vec![
-                    format!(
-                        "Timeout height : {}",
-                        transfer.message.timeout_height_on_b
-                    ),
-                    format!(
-                        "Timeout timestamp : {}",
-                        transfer
-                            .message
-                            .timeout_timestamp_on_b
-                            .into_tm_time()
-                            .map_or("no timestamp".to_string(), |time| time
-                                .to_rfc3339())
-                    ),
-                ]);
-                if let Some(transfer) = transfer.transfer {
-                    // To facilitate lookups of MASP AssetTypes
-                    let mut asset_types = HashMap::new();
-                    let builder = find_masp_builder(
-                        tx,
-                        transfer.shielded_section_hash,
-                        &mut asset_types,
-                    )
-                    .map_err(|_| Error::Other("Invalid Data".to_string()))?;
-                    make_ledger_token_transfer_endpoints(
-                        &tokens,
-                        &mut tv.output,
-                        &transfer,
-                        builder,
-                        &asset_types,
-                    )
-                    .await?;
-                    make_ledger_token_transfer_endpoints(
-                        &tokens,
-                        &mut tv.output_expert,
-                        &transfer,
-                        builder,
-                        &asset_types,
-                    )
-                    .await?;
-                }
-            } else {
-                return Result::Err(Error::Other("Invalid Data".to_string()));
             }
         } else if code_sec.tag == Some(TX_BOND_WASM.to_string()) {
             let bond = pos::Bond::try_from_slice(

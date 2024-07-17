@@ -86,9 +86,10 @@ impl BorshSchema for BorshAdapter<IbcMsgTransfer> {
         definitions: &mut BTreeMap<Declaration, Definition>,
     ) {
         Option::<Transfer>::add_definitions_recursively(definitions);
-        let fields = Fields::NamedFields(vec![
-            ("transfer".to_owned(), Option::<Transfer>::declaration()),
-        ]);
+        let fields = Fields::NamedFields(vec![(
+            "transfer".to_owned(),
+            Option::<Transfer>::declaration(),
+        )]);
         definitions.insert(Self::declaration(), Definition::Struct { fields });
     }
 
@@ -111,9 +112,10 @@ impl BorshSchema for BorshAdapter<IbcMsgNftTransfer> {
         definitions: &mut BTreeMap<Declaration, Definition>,
     ) {
         Option::<Transfer>::add_definitions_recursively(definitions);
-        let fields = Fields::NamedFields(vec![
-            ("transfer".to_owned(), Option::<Transfer>::declaration()),
-        ]);
+        let fields = Fields::NamedFields(vec![(
+            "transfer".to_owned(),
+            Option::<Transfer>::declaration(),
+        )]);
         definitions.insert(Self::declaration(), Definition::Struct { fields });
     }
 

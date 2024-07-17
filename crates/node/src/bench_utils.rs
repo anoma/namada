@@ -64,7 +64,7 @@ use namada::ibc::core::host::types::path::{
 use namada::ibc::primitives::proto::{Any, Protobuf};
 use namada::ibc::primitives::Timestamp as IbcTimestamp;
 use namada::ibc::storage::{mint_limit_key, port_key, throughput_limit_key};
-use namada::ibc::MsgTransfer;
+use namada::ibc::{IbcMessage, MsgTransfer};
 use namada::io::StdIo;
 use namada::ledger::dry_run_tx;
 use namada::ledger::gas::TxGasMeter;
@@ -343,7 +343,7 @@ impl BenchShell {
     pub fn generate_ibc_tx(
         &self,
         wasm_code_path: &str,
-        data: Vec<u8>,
+        data: IbcMessage,
     ) -> BatchedTx {
         // This function avoid serializaing the tx data with Borsh
         let mut tx = Tx::from_type(namada::tx::data::TxType::Raw);
@@ -355,7 +355,7 @@ impl BenchShell {
             Some(wasm_code_path.to_string()),
         ));
 
-        tx.set_data(Data::new(data));
+        tx.add_data(&data);
         // NOTE: the Ibc VP doesn't actually check the signature
         let cmt = tx.first_commitments().unwrap().clone();
         tx.batch_tx(cmt)
@@ -401,7 +401,7 @@ impl BenchShell {
             transfer: None,
         };
 
-        self.generate_ibc_tx(TX_IBC_WASM, msg.serialize_to_vec())
+        self.generate_ibc_tx(TX_IBC_WASM, IbcMessage::Transfer(msg))
     }
 
     /// Execute the tx and return a set of verifiers inserted by the tx.
@@ -1249,7 +1249,7 @@ impl BenchShieldedCtx {
 
         let mut ibc_tx = ctx
             .shell
-            .generate_ibc_tx(TX_IBC_WASM, msg.serialize_to_vec());
+            .generate_ibc_tx(TX_IBC_WASM, IbcMessage::Transfer(msg));
         ibc_tx.tx.add_masp_tx_section(masp_tx);
 
         (ctx, ibc_tx)

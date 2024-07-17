@@ -1,9 +1,10 @@
 use std::str::FromStr;
 
 use namada_sdk::address::Address;
+use namada_sdk::borsh::BorshSerializeExt;
 use namada_sdk::hash::Hash;
-pub use namada_sdk::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
-use namada_sdk::ibc::primitives::ToProto;
+use namada_sdk::ibc::IbcMessage;
+pub use namada_sdk::ibc::MsgTransfer;
 use namada_sdk::key::common;
 use namada_sdk::time::DateTimeUtc;
 use namada_sdk::token::DenominatedAmount;
@@ -34,9 +35,9 @@ impl IbcTransfer {
             DateTimeUtc::from_str("2000-01-01T00:00:00Z").unwrap();
         tx.add_code_from_hash(code_hash, Some(TX_IBC_WASM.to_string()));
 
-        let mut data = vec![];
-        prost::Message::encode(&packet_data.to_any(), &mut data).unwrap();
-        tx.set_data(namada_sdk::tx::Data::new(data));
+        tx.set_data(namada_sdk::tx::Data::new(
+            IbcMessage::Transfer(packet_data).serialize_to_vec(),
+        ));
 
         Self(tx)
     }
