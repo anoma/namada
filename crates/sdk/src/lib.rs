@@ -19,7 +19,7 @@ pub use namada_core::*;
 pub use tendermint_rpc;
 pub use {
     bip39, masp_primitives, masp_proofs, namada_account as account,
-    namada_gas as gas, namada_governance as governance,
+    namada_gas as gas, namada_governance as governance, namada_ibc as ibc,
     namada_proof_of_stake as proof_of_stake, namada_state as state,
     namada_storage as storage, namada_token as token, zeroize,
 };
@@ -857,7 +857,7 @@ pub mod testing {
     };
     use namada_governance::{InitProposalData, VoteProposalData};
     use namada_ibc::testing::{arb_ibc_msg_nft_transfer, arb_ibc_msg_transfer};
-    use namada_ibc::{MsgNftTransfer, MsgTransfer};
+    use namada_ibc::{IbcMessage, MsgNftTransfer, MsgTransfer};
     use namada_token::testing::arb_denominated_amount;
     use namada_token::Transfer;
     use namada_tx::data::pgf::UpdateStewardCommission;
@@ -1492,7 +1492,7 @@ pub mod testing {
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
-            tx.add_serialized_data(msg_transfer.serialize_to_vec());
+            tx.add_data(IbcMessage::Transfer(msg_transfer.clone()));
             tx.add_code_from_hash(code_hash, Some(TX_IBC_WASM.to_owned()));
             if let Some((shielded_transfer, asset_types, build_params)) = aux {
                 let shielded_section_hash =
@@ -1539,7 +1539,7 @@ pub mod testing {
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
-            tx.add_serialized_data(msg_transfer.serialize_to_vec());
+            tx.add_data(IbcMessage::NftTransfer(msg_transfer.clone()));
             tx.add_code_from_hash(code_hash, Some(TX_IBC_WASM.to_owned()));
             if let Some((shielded_transfer, asset_types, build_params)) = aux {
                 let shielded_section_hash =

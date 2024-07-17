@@ -7,7 +7,6 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use borsh::BorshSerialize;
-use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::transaction::builder::Builder;
 use masp_primitives::transaction::components::sapling::fees::{
@@ -53,7 +52,7 @@ use namada_governance::storage::proposal::{
 use namada_governance::storage::vote::ProposalVote;
 use namada_ibc::storage::channel_key;
 use namada_ibc::trace::is_nft_trace;
-use namada_ibc::{IbcShieldingData, MsgNftTransfer, MsgTransfer};
+use namada_ibc::{IbcMessage, IbcShieldingData, MsgNftTransfer, MsgTransfer};
 use namada_proof_of_stake::parameters::{
     PosParams, MAX_VALIDATOR_METADATA_LEN,
 };
@@ -2693,7 +2692,7 @@ pub async fn build_ibc_transfer(
             timeout_height_on_b: timeout_height,
             timeout_timestamp_on_b: timeout_timestamp,
         };
-        MsgTransfer { message, transfer }.serialize_to_vec()
+        IbcMessage::Transfer(MsgTransfer { message, transfer })
     } else if let Some((trace_path, base_class_id, token_id)) =
         is_nft_trace(&ibc_denom)
     {
@@ -2724,7 +2723,7 @@ pub async fn build_ibc_transfer(
             timeout_height_on_b: timeout_height,
             timeout_timestamp_on_b: timeout_timestamp,
         };
-        MsgNftTransfer { message, transfer }.serialize_to_vec()
+        IbcMessage::NftTransfer(MsgNftTransfer { message, transfer })
     } else {
         return Err(Error::Other(format!("Invalid IBC denom: {ibc_denom}")));
     };
@@ -2733,7 +2732,7 @@ pub async fn build_ibc_transfer(
         tx_code_hash,
         Some(args.tx_code_path.to_string_lossy().into_owned()),
     )
-    .add_serialized_data(data);
+    .add_data(&data);
 
     prepare_tx(
         &args.tx,
