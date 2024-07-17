@@ -2266,7 +2266,7 @@ mod tests {
         let tx_index = TxIndex::default();
         let tx_code = vec![];
         let tx_data = MsgTransfer {
-            message: msg,
+            message: msg.into(),
             transfer: None,
         }
         .serialize_to_vec();
@@ -3125,7 +3125,7 @@ mod tests {
         let tx_index = TxIndex::default();
         let tx_code = vec![];
         let tx_data = MsgNftTransfer {
-            message: msg,
+            message: msg.into(),
             transfer: None,
         }
         .serialize_to_vec();

@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::ops::{Deref, DerefMut};
 
 use borsh::schema::{Declaration, Definition, Fields};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
@@ -17,11 +18,54 @@ use masp_primitives::transaction::Transaction as MaspTransaction;
 use namada_core::borsh::BorshSerializeExt;
 use namada_token::Transfer;
 
-/// The different variants of an Ibc message
+/// Supports types that implement older Borsh versions
 #[derive(Debug, Clone)]
+pub struct BorshAdapter<T>(pub T);
+
+impl<T> Deref for BorshAdapter<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> DerefMut for BorshAdapter<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<T> From<T> for BorshAdapter<T> {
+    fn from(value: T) -> Self {
+        Self(value)
+    }
+}
+
+impl<T: ibc_borsh::BorshSerialize> BorshSerialize for BorshAdapter<T> {
+    fn serialize<W: std::io::Write>(
+        &self,
+        writer: &mut W,
+    ) -> std::io::Result<()> {
+        // Defer serialization to older trait implementation
+        ibc_borsh::BorshSerialize::serialize(&self.0, writer)
+    }
+}
+
+impl<T: ibc_borsh::BorshDeserialize> BorshDeserialize for BorshAdapter<T> {
+    fn deserialize_reader<R: std::io::Read>(
+        reader: &mut R,
+    ) -> std::io::Result<Self> {
+        // Defer deserialization to older trait implementation
+        ibc_borsh::BorshDeserialize::deserialize_reader(reader).map(Self)
+    }
+}
+
+/// The different variants of an Ibc message
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 pub enum IbcMessage {
     /// Ibc Envelop
-    Envelope(Box<MsgEnvelope>),
+    Envelope(Box<BorshAdapter<MsgEnvelope>>),
     /// Ibc transaprent transfer
     Transfer(MsgTransfer),
     /// NFT transfer
@@ -29,35 +73,15 @@ pub enum IbcMessage {
 }
 
 /// IBC transfer message with `Transfer`
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshSchema)]
 pub struct MsgTransfer {
     /// IBC transfer message
-    pub message: IbcMsgTransfer,
+    pub message: BorshAdapter<IbcMsgTransfer>,
     /// Shieleded transfer for MASP transaction
     pub transfer: Option<Transfer>,
 }
 
-impl BorshSerialize for MsgTransfer {
-    fn serialize<W: std::io::Write>(
-        &self,
-        writer: &mut W,
-    ) -> std::io::Result<()> {
-        ibc_borsh::BorshSerialize::serialize(&self.message, writer)?;
-        self.transfer.serialize(writer)
-    }
-}
-
-impl BorshDeserialize for MsgTransfer {
-    fn deserialize_reader<R: std::io::Read>(
-        reader: &mut R,
-    ) -> std::io::Result<Self> {
-        let message = ibc_borsh::BorshDeserialize::deserialize_reader(reader)?;
-        let transfer = BorshDeserialize::deserialize_reader(reader)?;
-        Ok(Self { message, transfer })
-    }
-}
-
-impl BorshSchema for MsgTransfer {
+impl BorshSchema for BorshAdapter<IbcMsgTransfer> {
     fn add_definitions_recursively(
         definitions: &mut BTreeMap<Declaration, Definition>,
     ) {
@@ -74,35 +98,15 @@ impl BorshSchema for MsgTransfer {
 }
 
 /// IBC NFT transfer message with `Transfer`
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshSchema)]
 pub struct MsgNftTransfer {
     /// IBC NFT transfer message
-    pub message: IbcMsgNftTransfer,
+    pub message: BorshAdapter<IbcMsgNftTransfer>,
     /// Shieleded transfer for MASP transaction
     pub transfer: Option<Transfer>,
 }
 
-impl BorshSerialize for MsgNftTransfer {
-    fn serialize<W: std::io::Write>(
-        &self,
-        writer: &mut W,
-    ) -> std::io::Result<()> {
-        ibc_borsh::BorshSerialize::serialize(&self.message, writer)?;
-        self.transfer.serialize(writer)
-    }
-}
-
-impl BorshDeserialize for MsgNftTransfer {
-    fn deserialize_reader<R: std::io::Read>(
-        reader: &mut R,
-    ) -> std::io::Result<Self> {
-        let message = ibc_borsh::BorshDeserialize::deserialize_reader(reader)?;
-        let transfer = BorshDeserialize::deserialize_reader(reader)?;
-        Ok(Self { message, transfer })
-    }
-}
-
-impl BorshSchema for MsgNftTransfer {
+impl BorshSchema for BorshAdapter<IbcMsgNftTransfer> {
     fn add_definitions_recursively(
         definitions: &mut BTreeMap<Declaration, Definition>,
     ) {

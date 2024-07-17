@@ -1474,9 +1474,9 @@ pub mod testing {
             transfer_aux in option::of(arb_transfer()),
         ) -> (MsgTransfer, Option<(ShieldedTransfer, HashMap<AssetData, u64>, StoredBuildParams)>) {
             if let Some((transfer, aux)) = transfer_aux {
-                (MsgTransfer { message, transfer: Some(transfer) }, aux)
+                (MsgTransfer { message: message.into(), transfer: Some(transfer) }, aux)
             } else {
-                (MsgTransfer { message, transfer: None }, None)
+                (MsgTransfer { message: message.into(), transfer: None }, None)
             }
         }
     }
@@ -1521,9 +1521,9 @@ pub mod testing {
             transfer_aux in option::of(arb_transfer()),
         ) -> (MsgNftTransfer, Option<(ShieldedTransfer, HashMap<AssetData, u64>, StoredBuildParams)>) {
             if let Some((transfer, aux)) = transfer_aux {
-                (MsgNftTransfer { message, transfer: Some(transfer) }, aux)
+                (MsgNftTransfer { message: message.into(), transfer: Some(transfer) }, aux)
             } else {
-                (MsgNftTransfer { message, transfer: None }, None)
+                (MsgNftTransfer { message: message.into(), transfer: None }, None)
             }
         }
     }

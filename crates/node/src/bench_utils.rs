@@ -397,7 +397,7 @@ impl BenchShell {
         };
 
         let msg = MsgTransfer {
-            message,
+            message: message.into(),
             transfer: None,
         };
 
@@ -1243,7 +1243,7 @@ impl BenchShieldedCtx {
             .unwrap()
             .clone();
         let msg = MsgTransfer {
-            message: msg,
+            message: msg.into(),
             transfer: Some(transfer),
         };
 

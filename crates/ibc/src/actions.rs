@@ -210,7 +210,7 @@ where
         timeout_timestamp_on_b: timeout_timestamp.into(),
     };
     let data = MsgTransfer {
-        message,
+        message: message.into(),
         transfer: None,
     }
     .serialize_to_vec();

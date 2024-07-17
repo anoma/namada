@@ -593,7 +593,7 @@ where
             IbcMessage::Transfer(msg) => {
                 // Get the packet commitment from post-storage that corresponds
                 // to this event
-                let ibc_transfer = IbcTransferInfo::try_from(msg.message)?;
+                let ibc_transfer = IbcTransferInfo::try_from(msg.message.0)?;
                 let receiver = ibc_transfer.receiver.clone();
                 let addr = TAddrData::Ibc(receiver.clone());
                 acc.decoder.insert(ibc_taddr(receiver), addr);
@@ -601,7 +601,7 @@ where
                     self.apply_transfer_msg(acc, &ibc_transfer, keys_changed)?;
             }
             IbcMessage::NftTransfer(msg) => {
-                let ibc_transfer = IbcTransferInfo::try_from(msg.message)?;
+                let ibc_transfer = IbcTransferInfo::try_from(msg.message.0)?;
                 let receiver = ibc_transfer.receiver.clone();
                 let addr = TAddrData::Ibc(receiver.clone());
                 acc.decoder.insert(ibc_taddr(receiver), addr);
@@ -610,7 +610,7 @@ where
             }
             // This event is emitted on the receiver
             IbcMessage::Envelope(envelope) => {
-                if let MsgEnvelope::Packet(PacketMsg::Recv(msg)) = *envelope {
+                if let MsgEnvelope::Packet(PacketMsg::Recv(msg)) = (*envelope).0 {
                     if msg.packet.port_id_on_b.as_str() == PORT_ID_STR {
                         let packet_data = serde_json::from_slice::<PacketData>(
                             &msg.packet.data,

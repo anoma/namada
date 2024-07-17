@@ -646,7 +646,7 @@ pub fn msg_transfer(
         timeout_timestamp_on_b: timestamp,
     };
     MsgTransfer {
-        message,
+        message: message.into(),
         transfer: None,
     }
 }
