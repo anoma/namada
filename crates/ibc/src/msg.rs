@@ -18,7 +18,7 @@ use namada_core::borsh::BorshSerializeExt;
 use namada_token::Transfer;
 
 /// The different variants of an Ibc message
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 pub enum IbcMessage {
     /// Ibc Envelop
     Envelope(Box<MsgEnvelope>),
@@ -29,55 +29,63 @@ pub enum IbcMessage {
 }
 
 /// IBC transfer message with `Transfer`
-#[derive(BorshDeserialize, BorshSerialize, Debug, Clone)]
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshSchema)]
 pub struct MsgTransfer {
     /// IBC transfer message
+    #[borsh(schema(with_funcs(
+        declaration = "msg_transfer_declaration",
+        definitions = "msg_transfer_add_definitions_recursively"
+    ),))]
     pub message: IbcMsgTransfer,
     /// Shieleded transfer for MASP transaction
     pub transfer: Option<Transfer>,
 }
 
-impl BorshSchema for MsgTransfer {
-    fn add_definitions_recursively(
-        definitions: &mut BTreeMap<Declaration, Definition>,
-    ) {
-        Option::<Transfer>::add_definitions_recursively(definitions);
-        let fields = Fields::NamedFields(vec![(
-            "transfer".to_owned(),
-            Option::<Transfer>::declaration(),
-        )]);
-        definitions.insert(Self::declaration(), Definition::Struct { fields });
-    }
+fn msg_transfer_add_definitions_recursively(
+    definitions: &mut BTreeMap<Declaration, Definition>,
+) {
+    Option::<Transfer>::add_definitions_recursively(definitions);
+    let fields = Fields::NamedFields(vec![(
+        "transfer".to_owned(),
+        Option::<Transfer>::declaration(),
+    )]);
+    definitions
+        .insert(msg_transfer_declaration(), Definition::Struct { fields });
+}
 
-    fn declaration() -> Declaration {
-        "MsgTransfer".into()
-    }
+fn msg_transfer_declaration() -> Declaration {
+    "MsgTransfer".into()
 }
 
 /// IBC NFT transfer message with `Transfer`
-#[derive(BorshDeserialize, BorshSerialize, Debug, Clone)]
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshSchema)]
 pub struct MsgNftTransfer {
     /// IBC NFT transfer message
+    #[borsh(schema(with_funcs(
+        declaration = "msg_nft_transfer_declaration",
+        definitions = "msg_nft_transfer_add_definitions_recursively"
+    ),))]
     pub message: IbcMsgNftTransfer,
     /// Shieleded transfer for MASP transaction
     pub transfer: Option<Transfer>,
 }
 
-impl BorshSchema for MsgNftTransfer {
-    fn add_definitions_recursively(
-        definitions: &mut BTreeMap<Declaration, Definition>,
-    ) {
-        Option::<Transfer>::add_definitions_recursively(definitions);
-        let fields = Fields::NamedFields(vec![(
-            "transfer".to_owned(),
-            Option::<Transfer>::declaration(),
-        )]);
-        definitions.insert(Self::declaration(), Definition::Struct { fields });
-    }
+fn msg_nft_transfer_add_definitions_recursively(
+    definitions: &mut BTreeMap<Declaration, Definition>,
+) {
+    Option::<Transfer>::add_definitions_recursively(definitions);
+    let fields = Fields::NamedFields(vec![(
+        "transfer".to_owned(),
+        Option::<Transfer>::declaration(),
+    )]);
+    definitions.insert(
+        msg_nft_transfer_declaration(),
+        Definition::Struct { fields },
+    );
+}
 
-    fn declaration() -> Declaration {
-        "MsgNftTransfer".into()
-    }
+fn msg_nft_transfer_declaration() -> Declaration {
+    "MsgNftTransfer".into()
 }
 
 /// Shielding data in IBC packet memo

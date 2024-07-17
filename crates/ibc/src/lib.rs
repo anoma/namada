@@ -183,7 +183,7 @@ where
                 Ok((msg.transfer.clone(), None))
             }
             IbcMessage::Envelope(envelope) => {
-                execute(&mut self.ctx, &mut self.router, *envelope.clone())
+                execute(&mut self.ctx, &mut self.router, (**envelope).clone())
                     .map_err(|e| Error::Context(Box::new(e)))?;
                 // Extract MASP tx from the memo in the packet if needed
                 let masp_tx = match &**envelope {
