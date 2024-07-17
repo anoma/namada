@@ -163,11 +163,11 @@ pub fn extract_masp_tx_from_envelope(
     }
 }
 
-/// Decode IBC shielding data from the memo string
-pub fn decode_masp_tx_from_memo(
-    memo: impl AsRef<str>,
+/// Decode IBC shielding data from the string
+pub fn decode_ibc_shielding_data(
+    s: impl AsRef<str>,
 ) -> Option<IbcShieldingData> {
-    let bytes = HEXUPPER.decode(memo.as_ref().as_bytes()).ok()?;
+    let bytes = HEXUPPER.decode(s.as_ref().as_bytes()).ok()?;
     IbcShieldingData::try_from_slice(&bytes).ok()
 }
 
@@ -182,7 +182,7 @@ pub fn extract_masp_tx_from_packet(
         &packet.port_id_on_b
     };
     let memo = extract_memo_from_packet(packet, port_id)?;
-    let shielding_data = decode_masp_tx_from_memo(memo)?;
+    let shielding_data = decode_ibc_shielding_data(memo)?;
     if is_sender {
         shielding_data.refund
     } else {

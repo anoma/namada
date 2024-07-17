@@ -53,9 +53,7 @@ use namada_governance::storage::proposal::{
 use namada_governance::storage::vote::ProposalVote;
 use namada_ibc::storage::channel_key;
 use namada_ibc::trace::is_nft_trace;
-use namada_ibc::{
-    decode_masp_tx_from_memo, IbcShieldingData, MsgNftTransfer, MsgTransfer,
-};
+use namada_ibc::{IbcShieldingData, MsgNftTransfer, MsgTransfer};
 use namada_proof_of_stake::parameters::{
     PosParams, MAX_VALIDATOR_METADATA_LEN,
 };
@@ -2463,6 +2461,14 @@ pub async fn build_ibc_transfer(
     context: &impl Namada,
     args: &args::TxIbcTransfer,
 ) -> Result<(Tx, SigningTxData, Option<MaspEpoch>)> {
+    if args.ibc_shielding_data.is_some() && args.ibc_memo.is_some() {
+        return Err(Error::Other(
+            "The memo field of the IBC packet can't be used for both \
+             shielding transfer and another purpose at the same time"
+                .to_string(),
+        ));
+    }
+
     let refund_target =
         get_refund_target(context, &args.source, &args.refund_target).await?;
 
@@ -2643,28 +2649,20 @@ pub async fn build_ibc_transfer(
         )
         .await?
         .map(|(shielded_transfer, _)| shielded_transfer.masp_tx);
-        let shielding_data = match &args.memo {
-            Some(memo) => {
-                if let Some(mut shielding_data) = decode_masp_tx_from_memo(memo)
-                {
-                    shielding_data.refund = masp_tx;
-                    shielding_data
-                } else {
-                    return Err(Error::Other(
-                        "The memo has been already set. The refunding for the \
-                         spending key can't be set"
-                            .to_string(),
-                    ));
-                }
-            }
-            None => IbcShieldingData {
-                shielding: None,
-                refund: masp_tx,
-            },
+        let shielding_data = IbcShieldingData {
+            shielding: args
+                .ibc_shielding_data
+                .as_ref()
+                .and_then(|data| data.shielding.clone()),
+            refund: masp_tx,
         };
         Some(shielding_data.into())
     } else {
-        args.memo.clone()
+        args.ibc_shielding_data
+            .as_ref()
+            .map_or(args.ibc_memo.clone(), |shielding_data| {
+                Some(shielding_data.clone().into())
+            })
     };
     // If the refund address is given, set the refund address. It is used only
     // when refunding and won't affect the actual transfer because the actual
@@ -2717,7 +2715,7 @@ pub async fn build_ibc_transfer(
             token_data: None,
             sender,
             receiver: args.receiver.clone().into(),
-            memo: args.memo.clone().map(|m| m.into()),
+            memo: memo.map(|s| s.into()),
         };
         let message = IbcMsgNftTransfer {
             port_id_on_a: args.port_id.clone(),
