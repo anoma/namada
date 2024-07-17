@@ -2750,25 +2750,7 @@ pub async fn build_ibc_transfer(
 
 /// Abstraction for helping build transactions
 #[allow(clippy::too_many_arguments)]
-pub async fn build<F, D>(
-    context: &impl Namada,
-    tx_args: &crate::args::Tx,
-    path: PathBuf,
-    data: D,
-    on_tx: F,
-    fee_amount: DenominatedAmount,
-    gas_payer: &common::PublicKey,
-) -> Result<Tx>
-where
-    F: FnOnce(&mut Tx, &mut D) -> Result<()>,
-    D: BorshSerialize,
-{
-    build_pow_flag(context, tx_args, path, data, on_tx, fee_amount, gas_payer)
-        .await
-}
-
-#[allow(clippy::too_many_arguments)]
-async fn build_pow_flag<F, D>(
+async fn build<F, D>(
     context: &impl Namada,
     tx_args: &crate::args::Tx,
     path: PathBuf,
@@ -2989,7 +2971,7 @@ pub async fn build_transparent_transfer<N: Namada>(
             .ok_or(Error::Other("Combined transfer overflows".to_string()))?;
     }
 
-    let tx = build_pow_flag(
+    let tx = build(
         context,
         &args.tx,
         args.tx_code_path.clone(),
@@ -3096,7 +3078,7 @@ pub async fn build_shielded_transfer<N: Namada>(
         Ok(())
     };
 
-    let tx = build_pow_flag(
+    let tx = build(
         context,
         &args.tx,
         args.tx_code_path.clone(),
@@ -3256,7 +3238,7 @@ pub async fn build_shielding_transfer<N: Namada>(
         Ok(())
     };
 
-    let tx = build_pow_flag(
+    let tx = build(
         context,
         &args.tx,
         args.tx_code_path.clone(),
@@ -3370,7 +3352,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
         Ok(())
     };
 
-    let tx = build_pow_flag(
+    let tx = build(
         context,
         &args.tx,
         args.tx_code_path.clone(),
