@@ -1,6 +1,6 @@
 [package]
 name = "tx_ibc"
-description = "WASM transaction for an IBC transfer"
+description = "WASM transaction for an IBC operation"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true

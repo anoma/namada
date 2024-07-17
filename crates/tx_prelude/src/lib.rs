@@ -16,6 +16,7 @@
 pub mod account;
 pub mod ibc;
 pub mod key;
+pub mod masp;
 pub mod pgf;
 pub mod proof_of_stake;
 pub mod token;
@@ -130,6 +131,25 @@ impl Ctx {
             self.set_commitment_sentinel();
             err
         })
+    }
+
+    /// Get the MASP transaction for the specified inner tx
+    pub fn get_masp_tx(
+        &mut self,
+        batched_tx: &BatchedTx,
+        masp_section_ref: &masp::MaspTxId,
+    ) -> EnvResult<Transaction> {
+        batched_tx
+            .tx
+            .get_masp_section(masp_section_ref)
+            .cloned()
+            .ok_or_err_msg(
+                "Unable to find required shielded section in tx data",
+            )
+            .map_err(|err| {
+                self.set_commitment_sentinel();
+                err
+            })
     }
 }
 
@@ -451,23 +471,6 @@ pub fn verify_signatures_of_pks(
             public_keys_map.as_ptr() as _,
             public_keys_map.len() as _,
             threshold,
-        )
-    };
-
-    Ok(HostEnvResult::is_success(valid))
-}
-
-/// Update the masp note commitment tree in storage with the new notes
-pub fn update_masp_note_commitment_tree(
-    transaction: &Transaction,
-) -> EnvResult<bool> {
-    // Serialize transaction
-    let transaction = transaction.serialize_to_vec();
-
-    let valid = unsafe {
-        namada_tx_update_masp_note_commitment_tree(
-            transaction.as_ptr() as _,
-            transaction.len() as _,
         )
     };
 

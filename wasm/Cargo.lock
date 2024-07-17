@@ -6870,6 +6870,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "tx_ibc_nft_transfer"
+version = "0.40.0"
+dependencies = [
+ "getrandom 0.2.15",
+ "namada_tx_prelude",
+ "rlsf",
+]
+
+[[package]]
+name = "tx_ibc_transfer"
+version = "0.40.0"
+dependencies = [
+ "getrandom 0.2.15",
+ "namada_tx_prelude",
+ "rlsf",
+]
+
+[[package]]
 name = "tx_init_account"
 version = "0.40.0"
 dependencies = [

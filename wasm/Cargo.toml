@@ -11,6 +11,8 @@ members = [
     "tx_claim_rewards",
     "tx_deactivate_validator",
     "tx_ibc",
+    "tx_ibc_nft_transfer",
+    "tx_ibc_transfer",
     "tx_init_account",
     "tx_init_proposal",
     "tx_reactivate_validator",

@@ -51,12 +51,26 @@ pub fn transfer(
 }
 
 /// A transparent token transfer that can be used in a transaction.
-pub fn multi_transfer(
-    ctx: &mut Ctx,
-    sources: &BTreeMap<(Address, Address), Amount>,
-    dests: &BTreeMap<(Address, Address), Amount>,
-) -> TxResult {
-    namada_token::multi_transfer(ctx, sources, dests)?;
+pub fn multi_transfer(ctx: &mut Ctx, transfers: &Transfer) -> TxResult {
+    let sources = transfers
+        .sources
+        .clone()
+        .into_iter()
+        .map(|(account, amount)| {
+            ((account.owner, account.token), amount.amount())
+        })
+        .collect::<BTreeMap<_, _>>();
+
+    let targets = transfers
+        .targets
+        .clone()
+        .into_iter()
+        .map(|(account, amount)| {
+            ((account.owner, account.token), amount.amount())
+        })
+        .collect::<BTreeMap<_, _>>();
+
+    namada_token::multi_transfer(ctx, &sources, &targets)?;
 
     let mut evt_sources = BTreeMap::new();
     let mut evt_targets = BTreeMap::new();
@@ -64,37 +78,37 @@ pub fn multi_transfer(
 
     for ((src, token), amount) in sources {
         // The tx must be authorized by the source address
-        ctx.insert_verifier(src)?;
+        ctx.insert_verifier(&src)?;
         if token.is_internal() {
             // Established address tokens do not have VPs themselves, their
             // validation is handled by the `Multitoken` internal address, but
             // internal token addresses have to verify the transfer
-            ctx.insert_verifier(token)?;
+            ctx.insert_verifier(&token)?;
         }
         evt_sources.insert(
             (UserAccount::Internal(src.clone()), token.clone()),
-            (*amount).into(),
+            amount.into(),
         );
         post_balances.insert(
             (UserAccount::Internal(src.clone()), token.clone()),
-            namada_token::read_balance(ctx, token, src)?.into(),
+            namada_token::read_balance(ctx, &token, &src)?.into(),
         );
     }
 
-    for ((dest, token), amount) in dests {
+    for ((dest, token), amount) in targets {
         if token.is_internal() {
             // Established address tokens do not have VPs themselves, their
             // validation is handled by the `Multitoken` internal address, but
             // internal token addresses have to verify the transfer
-            ctx.insert_verifier(token)?;
+            ctx.insert_verifier(&token)?;
         }
         evt_targets.insert(
             (UserAccount::Internal(dest.clone()), token.clone()),
-            (*amount).into(),
+            amount.into(),
         );
         post_balances.insert(
             (UserAccount::Internal(dest.clone()), token.clone()),
-            namada_token::read_balance(ctx, token, dest)?.into(),
+            namada_token::read_balance(ctx, &token, &dest)?.into(),
         );
     }
 

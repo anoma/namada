@@ -157,70 +157,84 @@ where
     ) -> Result<(Option<Transfer>, Option<MaspTransaction>), Error> {
         let message = decode_message(tx_data)?;
         match &message {
-            IbcMessage::Transfer(msg) => {
-                let mut token_transfer_ctx = TokenTransferContext::new(
-                    self.ctx.inner.clone(),
-                    self.verifiers.clone(),
-                );
-                self.insert_verifiers()?;
-                send_transfer_execute(
-                    &mut self.ctx,
-                    &mut token_transfer_ctx,
-                    msg.message.clone(),
-                )
-                .map_err(Error::TokenTransfer)?;
-                Ok((msg.transfer.clone(), None))
-            }
-            IbcMessage::NftTransfer(msg) => {
-                let mut nft_transfer_ctx =
-                    NftTransferContext::new(self.ctx.inner.clone());
-                send_nft_transfer_execute(
-                    &mut self.ctx,
-                    &mut nft_transfer_ctx,
-                    msg.message.clone(),
-                )
-                .map_err(Error::NftTransfer)?;
-                Ok((msg.transfer.clone(), None))
-            }
+            IbcMessage::Transfer(msg) => self.execute_transfer(msg),
+            IbcMessage::NftTransfer(msg) => self.execute_nft_transfer(msg),
             IbcMessage::Envelope(envelope) => {
-                execute(&mut self.ctx, &mut self.router, *envelope.clone())
-                    .map_err(|e| Error::Context(Box::new(e)))?;
-                // Extract MASP tx from the memo in the packet if needed
-                let masp_tx = match &**envelope {
-                    MsgEnvelope::Packet(packet_msg) => {
-                        match packet_msg {
-                            PacketMsg::Recv(msg) => {
-                                if self.is_receiving_success(msg)? {
-                                    extract_masp_tx_from_packet(
-                                        &msg.packet,
-                                        false,
-                                    )
-                                } else {
-                                    None
-                                }
-                            }
-                            PacketMsg::Ack(msg) => {
-                                if is_ack_successful(&msg.acknowledgement)? {
-                                    // No refund
-                                    None
-                                } else {
-                                    extract_masp_tx_from_packet(
-                                        &msg.packet,
-                                        true,
-                                    )
-                                }
-                            }
-                            PacketMsg::Timeout(msg) => {
-                                extract_masp_tx_from_packet(&msg.packet, true)
-                            }
-                            _ => None,
-                        }
-                    }
-                    _ => None,
-                };
-                Ok((None, masp_tx))
+                self.execute_with_envelope(envelope)
             }
         }
+    }
+
+    /// Execute with MsgTransfer
+    pub fn execute_transfer(
+        &mut self,
+        message: &MsgTransfer,
+    ) -> Result<(Option<Transfer>, Option<MaspTransaction>), Error> {
+        let mut token_transfer_ctx = TokenTransferContext::new(
+            self.ctx.inner.clone(),
+            self.verifiers.clone(),
+        );
+        self.insert_verifiers()?;
+        send_transfer_execute(
+            &mut self.ctx,
+            &mut token_transfer_ctx,
+            message.message.clone(),
+        )
+        .map_err(Error::TokenTransfer)?;
+        Ok((message.transfer.clone(), None))
+    }
+
+    /// Execute with MsgNftTransfer
+    pub fn execute_nft_transfer(
+        &mut self,
+        message: &MsgNftTransfer,
+    ) -> Result<(Option<Transfer>, Option<MaspTransaction>), Error> {
+        let mut nft_transfer_ctx =
+            NftTransferContext::new(self.ctx.inner.clone());
+        send_nft_transfer_execute(
+            &mut self.ctx,
+            &mut nft_transfer_ctx,
+            message.message.clone(),
+        )
+        .map_err(Error::NftTransfer)?;
+        Ok((message.transfer.clone(), None))
+    }
+
+    /// Execute with MsgEnvelope
+    pub fn execute_with_envelope(
+        &mut self,
+        envelope: &MsgEnvelope,
+    ) -> Result<(Option<Transfer>, Option<MaspTransaction>), Error> {
+        execute(&mut self.ctx, &mut self.router, envelope.clone())
+            .map_err(|e| Error::Context(Box::new(e)))?;
+        // Extract MASP tx from the memo in the packet if needed
+        let masp_tx = match envelope {
+            MsgEnvelope::Packet(packet_msg) => {
+                match packet_msg {
+                    PacketMsg::Recv(msg) => {
+                        if self.is_receiving_success(msg)? {
+                            extract_masp_tx_from_packet(&msg.packet, false)
+                        } else {
+                            None
+                        }
+                    }
+                    PacketMsg::Ack(msg) => {
+                        if is_ack_successful(&msg.acknowledgement)? {
+                            // No refund
+                            None
+                        } else {
+                            extract_masp_tx_from_packet(&msg.packet, true)
+                        }
+                    }
+                    PacketMsg::Timeout(msg) => {
+                        extract_masp_tx_from_packet(&msg.packet, true)
+                    }
+                    _ => None,
+                }
+            }
+            _ => None,
+        };
+        Ok((None, masp_tx))
     }
 
     /// Check the result of receiving the packet by checking the packet
