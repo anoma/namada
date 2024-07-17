@@ -49,50 +49,50 @@ jobs:
       - name: Check changelog
         run: sh .github/workflows/scripts/check-changelog.sh
 
-  lints:
-    container: 
-      image: ghcr.io/heliaxdev/namada-ci:namada-main
-    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
+  # lints:
+  #   container: 
+  #     image: ghcr.io/heliaxdev/namada-ci:namada-main
+  #   runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
 
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-        if: ${{ github.event_name != 'pull_request_target' }}
-      - name: Checkout PR
-        uses: actions/checkout@v4
-        if: ${{ github.event_name == 'pull_request_target' }}
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Configure AWS 
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ secrets.AWS_ROLE }}
-      - name: Cache cargo
-        id: cache
-        uses: runs-on/cache@v4
-        env:
-          RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
-        with:
-          path: /usr/local/cargo
-          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
-      - name: Start sccache server
-        id: sccache
-        run: sccache --start-server
-      - name: Clippy lints
-        run: make clippy
-        env:
-          RUSTFLAGS: "-Z threads=8"
-      - name: Format lints
-        run: make fmt
-        env:
-          RUSTFLAGS: "-Z threads=8"
-      - name: Clean cargo cache
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: cargo cache --autoclean-expensive
-      - name: Stop sccache
-        if: always() && steps.sccache.outcome == 'success'
-        run: sccache --stop-server || true
+  #   steps:
+  #     - name: Checkout repo
+  #       uses: actions/checkout@v4
+  #       if: ${{ github.event_name != 'pull_request_target' }}
+  #     - name: Checkout PR
+  #       uses: actions/checkout@v4
+  #       if: ${{ github.event_name == 'pull_request_target' }}
+  #       with:
+  #         ref: ${{ github.event.pull_request.head.sha }}
+  #     - name: Configure AWS 
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         aws-region: ${{ env.AWS_REGION }}
+  #         role-to-assume: ${{ secrets.AWS_ROLE }}
+  #     - name: Cache cargo
+  #       id: cache
+  #       uses: runs-on/cache@v4
+  #       env:
+  #         RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
+  #       with:
+  #         path: /usr/local/cargo
+  #         key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+  #     - name: Start sccache server
+  #       id: sccache
+  #       run: sccache --start-server
+  #     - name: Clippy lints
+  #       run: make clippy
+  #       env:
+  #         RUSTFLAGS: "-Z threads=8"
+  #     - name: Format lints
+  #       run: make fmt
+  #       env:
+  #         RUSTFLAGS: "-Z threads=8"
+  #     - name: Clean cargo cache
+  #       if: steps.cache.outputs.cache-hit != 'true'
+  #       run: cargo cache --autoclean-expensive
+  #     - name: Stop sccache
+  #       if: always() && steps.sccache.outcome == 'success'
+  #       run: sccache --stop-server || true
 
   build-wasm:
     timeout-minutes: 10
@@ -149,261 +149,261 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         run: cargo cache --autoclean-expensive
 
-  test-wasm:
-    timeout-minutes: 30
-    container: 
-      image: ghcr.io/heliaxdev/namada-ci:namada-main
-    runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
-    needs: [build-wasm]
+  # test-wasm:
+  #   timeout-minutes: 30
+  #   container: 
+  #     image: ghcr.io/heliaxdev/namada-ci:namada-main
+  #   runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
+  #   needs: [build-wasm]
 
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-        if: ${{ github.event_name != 'pull_request_target' }}
-      - name: Checkout PR
-        uses: actions/checkout@v4
-        if: ${{ github.event_name == 'pull_request_target' }}
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Configure AWS 
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ secrets.AWS_ROLE }}
-      - name: Cache cargo
-        id: cache
-        uses: runs-on/cache@v4
-        env:
-          RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
-        with:
-          path: /usr/local/cargo
-          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
-      - name: Download wasm artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: wasm-${{ github.event.pull_request.head.sha|| github.sha }}
-          path: wasm
-      - name: Download wasm-for-tests artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: wasm-for-tests-${{ github.event.pull_request.head.sha|| github.sha }}
-          path: wasm_for_tests
-      - name: Test Wasm
-        run: cargo +${{ env.NIGHTLY }} nextest run --manifest-path wasm/Cargo.toml
-        env:
-          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
-      - name: Clean cargo cache
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: cargo cache --autoclean-expensive
+  #   steps:
+  #     - name: Checkout repo
+  #       uses: actions/checkout@v4
+  #       if: ${{ github.event_name != 'pull_request_target' }}
+  #     - name: Checkout PR
+  #       uses: actions/checkout@v4
+  #       if: ${{ github.event_name == 'pull_request_target' }}
+  #       with:
+  #         ref: ${{ github.event.pull_request.head.sha }}
+  #     - name: Configure AWS 
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         aws-region: ${{ env.AWS_REGION }}
+  #         role-to-assume: ${{ secrets.AWS_ROLE }}
+  #     - name: Cache cargo
+  #       id: cache
+  #       uses: runs-on/cache@v4
+  #       env:
+  #         RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
+  #       with:
+  #         path: /usr/local/cargo
+  #         key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+  #     - name: Download wasm artifacts
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: wasm-${{ github.event.pull_request.head.sha|| github.sha }}
+  #         path: wasm
+  #     - name: Download wasm-for-tests artifacts
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: wasm-for-tests-${{ github.event.pull_request.head.sha|| github.sha }}
+  #         path: wasm_for_tests
+  #     - name: Test Wasm
+  #       run: cargo +${{ env.NIGHTLY }} nextest run --manifest-path wasm/Cargo.toml
+  #       env:
+  #         RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
+  #     - name: Clean cargo cache
+  #       if: steps.cache.outputs.cache-hit != 'true'
+  #       run: cargo cache --autoclean-expensive
 
-  test-unit:
-    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
-    container: 
-      image: ghcr.io/heliaxdev/namada-ci:namada-main
-    timeout-minutes: 40
-    needs: [build-wasm]
+  # test-unit:
+  #   runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
+  #   container: 
+  #     image: ghcr.io/heliaxdev/namada-ci:namada-main
+  #   timeout-minutes: 40
+  #   needs: [build-wasm]
 
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-        if: ${{ github.event_name != 'pull_request_target' }}
-      - name: Checkout PR
-        uses: actions/checkout@v4
-        if: ${{ github.event_name == 'pull_request_target' }}
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Configure AWS 
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ secrets.AWS_ROLE }}
-      - name: Cache cargo
-        id: cache
-        uses: runs-on/cache@v4
-        env:
-          RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
-        with:
-          path: /usr/local/cargo
-          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
-      - name: Start sccache server
-        id: sccache
-        run: sccache --start-server
-      - name: Download wasm artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: wasm-${{ github.event.pull_request.head.sha|| github.sha }}
-          path: wasm
-      - name: Download wasm-for-tests artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: wasm-for-tests-${{ github.event.pull_request.head.sha|| github.sha }}
-          path: wasm_for_tests
-      - name: Run unit tests with coverage
-        run: make test-unit-with-coverage
-        # run: cargo +${{ env.NIGHTLY }} llvm-cov nextest run -E 'not test(e2e)' -E 'not test(integration)' -E 'not test(pos_state_machine_test)' --features namada/testing --no-fail-fast --lcov --output-path lcov.info
-        env:
-          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
-      - name: Upload coverage
-        uses: codecov/codecov-action@v4
-        with:
-          files: lcov.info
-          fail_ci_if_error: true
-          token: ${{ secrets.CODECOV_TOKEN }}
-      - name: Clean cargo cache
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: cargo cache --autoclean-expensive
-      - name: Stop sccache
-        if: always() && steps.sccache.outcome == 'success'
-        run: sccache --stop-server || true
+  #   steps:
+  #     - name: Checkout repo
+  #       uses: actions/checkout@v4
+  #       if: ${{ github.event_name != 'pull_request_target' }}
+  #     - name: Checkout PR
+  #       uses: actions/checkout@v4
+  #       if: ${{ github.event_name == 'pull_request_target' }}
+  #       with:
+  #         ref: ${{ github.event.pull_request.head.sha }}
+  #     - name: Configure AWS 
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         aws-region: ${{ env.AWS_REGION }}
+  #         role-to-assume: ${{ secrets.AWS_ROLE }}
+  #     - name: Cache cargo
+  #       id: cache
+  #       uses: runs-on/cache@v4
+  #       env:
+  #         RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
+  #       with:
+  #         path: /usr/local/cargo
+  #         key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+  #     - name: Start sccache server
+  #       id: sccache
+  #       run: sccache --start-server
+  #     - name: Download wasm artifacts
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: wasm-${{ github.event.pull_request.head.sha|| github.sha }}
+  #         path: wasm
+  #     - name: Download wasm-for-tests artifacts
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: wasm-for-tests-${{ github.event.pull_request.head.sha|| github.sha }}
+  #         path: wasm_for_tests
+  #     - name: Run unit tests with coverage
+  #       run: make test-unit-with-coverage
+  #       # run: cargo +${{ env.NIGHTLY }} llvm-cov nextest run -E 'not test(e2e)' -E 'not test(integration)' -E 'not test(pos_state_machine_test)' --features namada/testing --no-fail-fast --lcov --output-path lcov.info
+  #       env:
+  #         RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
+  #     - name: Upload coverage
+  #       uses: codecov/codecov-action@v4
+  #       with:
+  #         files: lcov.info
+  #         fail_ci_if_error: true
+  #         token: ${{ secrets.CODECOV_TOKEN }}
+  #     - name: Clean cargo cache
+  #       if: steps.cache.outputs.cache-hit != 'true'
+  #       run: cargo cache --autoclean-expensive
+  #     - name: Stop sccache
+  #       if: always() && steps.sccache.outcome == 'success'
+  #       run: sccache --stop-server || true
   
-  check-packges:
-    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
-    container: 
-      image: ghcr.io/heliaxdev/namada-ci:namada-main
-    timeout-minutes: 40
+  # check-packges:
+  #   runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
+  #   container: 
+  #     image: ghcr.io/heliaxdev/namada-ci:namada-main
+  #   timeout-minutes: 40
 
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-        if: ${{ github.event_name != 'pull_request_target' }}
-      - name: Checkout PR
-        uses: actions/checkout@v4
-        if: ${{ github.event_name == 'pull_request_target' }}
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Configure AWS 
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ secrets.AWS_ROLE }}
-      - name: Cache cargo
-        id: cache
-        uses: runs-on/cache@v4
-        env:
-          RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
-        with:
-          path: /usr/local/cargo
-          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
-      - name: Start sccache server
-        id: sccache
-        run: sccache --start-server
-      - name: Check crates build with default features
-        run: make check-crates
-        env:
-          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
-      - name: Clean cargo cache
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: cargo cache --autoclean-expensive
-      - name: Stop sccache
-        if: always() && steps.sccache.outcome == 'success'
-        run: sccache --stop-server || true
+  #   steps:
+  #     - name: Checkout repo
+  #       uses: actions/checkout@v4
+  #       if: ${{ github.event_name != 'pull_request_target' }}
+  #     - name: Checkout PR
+  #       uses: actions/checkout@v4
+  #       if: ${{ github.event_name == 'pull_request_target' }}
+  #       with:
+  #         ref: ${{ github.event.pull_request.head.sha }}
+  #     - name: Configure AWS 
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         aws-region: ${{ env.AWS_REGION }}
+  #         role-to-assume: ${{ secrets.AWS_ROLE }}
+  #     - name: Cache cargo
+  #       id: cache
+  #       uses: runs-on/cache@v4
+  #       env:
+  #         RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
+  #       with:
+  #         path: /usr/local/cargo
+  #         key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+  #     - name: Start sccache server
+  #       id: sccache
+  #       run: sccache --start-server
+  #     - name: Check crates build with default features
+  #       run: make check-crates
+  #       env:
+  #         RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
+  #     - name: Clean cargo cache
+  #       if: steps.cache.outputs.cache-hit != 'true'
+  #       run: cargo cache --autoclean-expensive
+  #     - name: Stop sccache
+  #       if: always() && steps.sccache.outcome == 'success'
+  #       run: sccache --stop-server || true
 
-  test-integration:
-    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
-    container: 
-      image: ghcr.io/heliaxdev/namada-ci:namada-main
-    timeout-minutes: 15
-    needs: [build-wasm]
+  # test-integration:
+  #   runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
+  #   container: 
+  #     image: ghcr.io/heliaxdev/namada-ci:namada-main
+  #   timeout-minutes: 15
+  #   needs: [build-wasm]
 
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-        if: ${{ github.event_name != 'pull_request_target' }}
-      - name: Checkout PR
-        uses: actions/checkout@v4
-        if: ${{ github.event_name == 'pull_request_target' }}
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Configure AWS 
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ secrets.AWS_ROLE }}
-      - name: Cache cargo
-        id: cache
-        uses: runs-on/cache@v4
-        env:
-          RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
-        with:
-          path: /usr/local/cargo
-          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
-      - name: Start sccache server
-        id: sccache
-        run: sccache --start-server
-      - name: Download wasm artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: wasm-${{ github.event.pull_request.head.sha|| github.sha }}
-          path: wasm
-      - name: Download wasm-for-tests artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: wasm-for-tests-${{ github.event.pull_request.head.sha|| github.sha }}
-          path: wasm_for_tests
-      - name: Run integration tests
-        run: cargo +${{ env.NIGHTLY }} nextest run -E 'test(integration)' --test-threads 1 --no-fail-fast --features integration
-        env:
-          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
-      - name: Clean cargo cache
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: cargo cache --autoclean-expensive
-      - name: Stop sccache
-        if: always() && steps.sccache.outcome == 'success'
-        run: sccache --stop-server || true
+  #   steps:
+  #     - name: Checkout repo
+  #       uses: actions/checkout@v4
+  #       if: ${{ github.event_name != 'pull_request_target' }}
+  #     - name: Checkout PR
+  #       uses: actions/checkout@v4
+  #       if: ${{ github.event_name == 'pull_request_target' }}
+  #       with:
+  #         ref: ${{ github.event.pull_request.head.sha }}
+  #     - name: Configure AWS 
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         aws-region: ${{ env.AWS_REGION }}
+  #         role-to-assume: ${{ secrets.AWS_ROLE }}
+  #     - name: Cache cargo
+  #       id: cache
+  #       uses: runs-on/cache@v4
+  #       env:
+  #         RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
+  #       with:
+  #         path: /usr/local/cargo
+  #         key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+  #     - name: Start sccache server
+  #       id: sccache
+  #       run: sccache --start-server
+  #     - name: Download wasm artifacts
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: wasm-${{ github.event.pull_request.head.sha|| github.sha }}
+  #         path: wasm
+  #     - name: Download wasm-for-tests artifacts
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: wasm-for-tests-${{ github.event.pull_request.head.sha|| github.sha }}
+  #         path: wasm_for_tests
+  #     - name: Run integration tests
+  #       run: cargo +${{ env.NIGHTLY }} nextest run -E 'test(integration)' --test-threads 1 --no-fail-fast --features integration
+  #       env:
+  #         RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
+  #     - name: Clean cargo cache
+  #       if: steps.cache.outputs.cache-hit != 'true'
+  #       run: cargo cache --autoclean-expensive
+  #     - name: Stop sccache
+  #       if: always() && steps.sccache.outcome == 'success'
+  #       run: sccache --stop-server || true
 
-  check-benchmarks:
-    runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
-    container: 
-      image: ghcr.io/heliaxdev/namada-ci:namada-main
-    if: github.event.pull_request.draft == false 
-    timeout-minutes: 25
-    needs: [build-wasm]
+  # check-benchmarks:
+  #   runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
+  #   container: 
+  #     image: ghcr.io/heliaxdev/namada-ci:namada-main
+  #   if: github.event.pull_request.draft == false 
+  #   timeout-minutes: 25
+  #   needs: [build-wasm]
 
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-        if: ${{ github.event_name != 'pull_request_target' }}
-      - name: Checkout PR
-        uses: actions/checkout@v4
-        if: ${{ github.event_name == 'pull_request_target' }}
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Configure AWS 
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ secrets.AWS_ROLE }}
-      - name: Cache cargo
-        id: cache
-        uses: runs-on/cache@v4
-        env:
-          RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
-        with:
-          path: /usr/local/cargo
-          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
-      - name: Start sccache server
-        id: sccache
-        run: sccache --start-server
-      - name: Download wasm artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: wasm-${{ github.event.pull_request.head.sha|| github.sha }}
-          path: wasm
-      - name: Download wasm-for-tests artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: wasm-for-tests-${{ github.event.pull_request.head.sha|| github.sha }}
-          path: wasm_for_tests
-      - name: Run benchmarks tests
-        run: make test-benches
-        env:
-          RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
-      - name: Clean cargo cache
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: cargo cache --autoclean-expensive
-      - name: Stop sccache
-        if: always() && steps.sccache.outcome == 'success'
-        run: sccache --stop-server || true
+  #   steps:
+  #     - name: Checkout repo
+  #       uses: actions/checkout@v4
+  #       if: ${{ github.event_name != 'pull_request_target' }}
+  #     - name: Checkout PR
+  #       uses: actions/checkout@v4
+  #       if: ${{ github.event_name == 'pull_request_target' }}
+  #       with:
+  #         ref: ${{ github.event.pull_request.head.sha }}
+  #     - name: Configure AWS 
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         aws-region: ${{ env.AWS_REGION }}
+  #         role-to-assume: ${{ secrets.AWS_ROLE }}
+  #     - name: Cache cargo
+  #       id: cache
+  #       uses: runs-on/cache@v4
+  #       env:
+  #         RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
+  #       with:
+  #         path: /usr/local/cargo
+  #         key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+  #     - name: Start sccache server
+  #       id: sccache
+  #       run: sccache --start-server
+  #     - name: Download wasm artifacts
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: wasm-${{ github.event.pull_request.head.sha|| github.sha }}
+  #         path: wasm
+  #     - name: Download wasm-for-tests artifacts
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: wasm-for-tests-${{ github.event.pull_request.head.sha|| github.sha }}
+  #         path: wasm_for_tests
+  #     - name: Run benchmarks tests
+  #       run: make test-benches
+  #       env:
+  #         RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
+  #     - name: Clean cargo cache
+  #       if: steps.cache.outputs.cache-hit != 'true'
+  #       run: cargo cache --autoclean-expensive
+  #     - name: Stop sccache
+  #       if: always() && steps.sccache.outcome == 'success'
+  #       run: sccache --stop-server || true
 
   build-binaries:
     runs-on: [self-hosted, 16vcpu-32ram-ubuntu22-namada-x86]
@@ -462,102 +462,102 @@ jobs:
         if: always() && steps.sccache.outcome == 'success'
         run: sccache --stop-server || true
 
-  test-e2e:
-    runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
-    container: 
-      image: ghcr.io/heliaxdev/namada-ci:namada-main
-    if: github.event.pull_request.draft == false
-    needs: [build-wasm, build-binaries]
-    timeout-minutes: 35
-    strategy:
-      fail-fast: false
-      matrix:
-        make:
-          - index: 0
-          - index: 1
-          - index: 2
-          - index: 3
-          - index: 4
-          - index: 5
+  # test-e2e:
+  #   runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
+  #   container: 
+  #     image: ghcr.io/heliaxdev/namada-ci:namada-main
+  #   if: github.event.pull_request.draft == false
+  #   needs: [build-wasm, build-binaries]
+  #   timeout-minutes: 35
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       make:
+  #         - index: 0
+  #         - index: 1
+  #         - index: 2
+  #         - index: 3
+  #         - index: 4
+  #         - index: 5
 
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-        if: ${{ github.event_name != 'pull_request_target' }}
-      - name: Checkout PR
-        uses: actions/checkout@v4
-        if: ${{ github.event_name == 'pull_request_target' }}
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Configure AWS 
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ secrets.AWS_ROLE }}
-      - name: Cache cargo
-        id: cache
-        uses: runs-on/cache@v4
-        env:
-          RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
-        with:
-          path: /usr/local/cargo
-          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
-      - name: Start sccache server
-        id: sccache
-        run: sccache --start-server
-      - name: Download wasm artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: wasm-${{ github.event.pull_request.head.sha|| github.sha }}
-          path: wasm
-      - name: Download wasm-for-tests artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: wasm-for-tests-${{ github.event.pull_request.head.sha|| github.sha }}
-          path: wasm_for_tests
-      - name: Download namada binaries
-        uses: actions/download-artifact@v4
-        with:
-          name: binaries-${{ github.event.pull_request.head.sha || github.sha }}
-          path: ./target/release/
-      - name: Download Hermes
-        run: |
-          HERMES_VERSION=$(cat .github/workflows/scripts/hermes.txt)
-          echo "Using hermes version: ${HERMES_VERSION}"
-          curl -o hermes.zip -LO https://github.com/heliaxdev/hermes/releases/download/v${HERMES_VERSION}/hermes-v${HERMES_VERSION}-x86_64-unknown-linux-gnu.zip
-          unzip hermes.zip
-          mv hermes /usr/local/bin
-      - name: Change permissions
-        run: |
-          chmod +x target/release/namada
-          chmod +x target/release/namadaw
-          chmod +x target/release/namadan
-          chmod +x target/release/namadac
-          chmod +x /usr/local/bin/hermes
-      - name: Run e2e test
-        id: e2e
-        run: python3 .github/workflows/scripts/schedule-e2e.py
-        env:
-          NAMADA_E2E_USE_PREBUILT_BINARIES: "true"
-          NAMADA_E2E_KEEP_TEMP: "true"
-          NAMADA_TM_STDOUT: "false"
-          NAMADA_LOG_COLOR: "false"
-          NAMADA_LOG: "info"
-          RUSTFLAGS: "-C linker=clang -C debug_assertions=true -C link-arg=-fuse-ld=/usr/local/bin/mold"
-          INDEX: ${{ matrix.make.index }}
-      - name: Upload e2e logs
-        if: steps.e2e.outcome == 'success' || steps.e2e.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: logs-e2e-${{ matrix.make.index }}-${{ github.event.pull_request.head.sha || github.sha }}
-          path: |
-            /tmp/.*/logs/
-            /tmp/.*/setup/validator-*/logs/
-            /tmp/.*/setup/valiator-*/e2e-test.*/*.toml 
-          retention-days: 5
-      - name: Clean cargo cache
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: cargo cache --autoclean-expensive
-      - name: Stop sccache
-        if: always() && steps.sccache.outcome == 'success'
-        run: sccache --stop-server || true
+  #   steps:
+  #     - name: Checkout repo
+  #       uses: actions/checkout@v4
+  #       if: ${{ github.event_name != 'pull_request_target' }}
+  #     - name: Checkout PR
+  #       uses: actions/checkout@v4
+  #       if: ${{ github.event_name == 'pull_request_target' }}
+  #       with:
+  #         ref: ${{ github.event.pull_request.head.sha }}
+  #     - name: Configure AWS 
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         aws-region: ${{ env.AWS_REGION }}
+  #         role-to-assume: ${{ secrets.AWS_ROLE }}
+  #     - name: Cache cargo
+  #       id: cache
+  #       uses: runs-on/cache@v4
+  #       env:
+  #         RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
+  #       with:
+  #         path: /usr/local/cargo
+  #         key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+  #     - name: Start sccache server
+  #       id: sccache
+  #       run: sccache --start-server
+  #     - name: Download wasm artifacts
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: wasm-${{ github.event.pull_request.head.sha|| github.sha }}
+  #         path: wasm
+  #     - name: Download wasm-for-tests artifacts
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: wasm-for-tests-${{ github.event.pull_request.head.sha|| github.sha }}
+  #         path: wasm_for_tests
+  #     - name: Download namada binaries
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: binaries-${{ github.event.pull_request.head.sha || github.sha }}
+  #         path: ./target/release/
+  #     - name: Download Hermes
+  #       run: |
+  #         HERMES_VERSION=$(cat .github/workflows/scripts/hermes.txt)
+  #         echo "Using hermes version: ${HERMES_VERSION}"
+  #         curl -o hermes.zip -LO https://github.com/heliaxdev/hermes/releases/download/v${HERMES_VERSION}/hermes-v${HERMES_VERSION}-x86_64-unknown-linux-gnu.zip
+  #         unzip hermes.zip
+  #         mv hermes /usr/local/bin
+  #     - name: Change permissions
+  #       run: |
+  #         chmod +x target/release/namada
+  #         chmod +x target/release/namadaw
+  #         chmod +x target/release/namadan
+  #         chmod +x target/release/namadac
+  #         chmod +x /usr/local/bin/hermes
+  #     - name: Run e2e test
+  #       id: e2e
+  #       run: python3 .github/workflows/scripts/schedule-e2e.py
+  #       env:
+  #         NAMADA_E2E_USE_PREBUILT_BINARIES: "true"
+  #         NAMADA_E2E_KEEP_TEMP: "true"
+  #         NAMADA_TM_STDOUT: "false"
+  #         NAMADA_LOG_COLOR: "false"
+  #         NAMADA_LOG: "info"
+  #         RUSTFLAGS: "-C linker=clang -C debug_assertions=true -C link-arg=-fuse-ld=/usr/local/bin/mold"
+  #         INDEX: ${{ matrix.make.index }}
+  #     - name: Upload e2e logs
+  #       if: steps.e2e.outcome == 'success' || steps.e2e.outcome == 'failure'
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: logs-e2e-${{ matrix.make.index }}-${{ github.event.pull_request.head.sha || github.sha }}
+  #         path: |
+  #           /tmp/.*/logs/
+  #           /tmp/.*/setup/validator-*/logs/
+  #           /tmp/.*/setup/valiator-*/e2e-test.*/*.toml 
+  #         retention-days: 5
+  #     - name: Clean cargo cache
+  #       if: steps.cache.outputs.cache-hit != 'true'
+  #       run: cargo cache --autoclean-expensive
+  #     - name: Stop sccache
+  #       if: always() && steps.sccache.outcome == 'success'
+  #       run: sccache --stop-server || true

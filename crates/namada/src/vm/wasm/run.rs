@@ -276,10 +276,12 @@ where
                     Error::MissingSection(err.to_string())
                 }
             }
-        })?;
+        });
 
     // NB: early drop this data to avoid memory errors
     _ = (instance, env);
+
+    let ok = ok?;
 
     if ok == 1 {
         Ok(verifiers)
