@@ -366,6 +366,7 @@ where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
 {
+    #[cfg(not(fuzzing))]
     let consensus_min_gas_price =
         namada_sdk::parameters::read_gas_cost(temp_state, fee_token)
             .expect("Must be able to read gas cost parameter")
@@ -375,6 +376,8 @@ where
                      payment",
                 )))
             })?;
+    #[cfg(fuzzing)]
+    let consensus_min_gas_price = Amount::from_u64(10);
 
     let Some(config) = proposer_local_config else {
         return Ok(consensus_min_gas_price);
