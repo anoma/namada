@@ -698,7 +698,7 @@ mod tests {
 
         // create a client with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute::<token::Transfer>(&tx_data)
             .expect("creating a client failed");
 
         // Check
@@ -731,7 +731,7 @@ mod tests {
             .sign_wrapper(keypair);
         // update the client with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute::<token::Transfer>(&tx_data)
             .expect("updating a client failed");
 
         // Check
@@ -774,7 +774,7 @@ mod tests {
             .sign_wrapper(keypair.clone());
         // init a connection with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute::<token::Transfer>(&tx_data)
             .expect("creating a connection failed");
 
         // Check
@@ -807,7 +807,7 @@ mod tests {
             .sign_wrapper(keypair);
         // open the connection with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute::<token::Transfer>(&tx_data)
             .expect("opening the connection failed");
 
         // Check
@@ -851,7 +851,7 @@ mod tests {
             .sign_wrapper(keypair.clone());
         // open try a connection with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute::<token::Transfer>(&tx_data)
             .expect("creating a connection failed");
 
         // Check
@@ -884,7 +884,7 @@ mod tests {
             .sign_wrapper(keypair);
         // open the connection with the mssage
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute::<token::Transfer>(&tx_data)
             .expect("opening the connection failed");
 
         // Check
@@ -930,7 +930,7 @@ mod tests {
             .sign_wrapper(keypair.clone());
         // init a channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute::<token::Transfer>(&tx_data)
             .expect("creating a channel failed");
 
         // Check
@@ -963,7 +963,7 @@ mod tests {
             .sign_wrapper(keypair);
         // open the channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute::<token::Transfer>(&tx_data)
             .expect("opening the channel failed");
 
         // Check
@@ -1009,7 +1009,7 @@ mod tests {
             .sign_wrapper(keypair.clone());
         // try open a channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute::<token::Transfer>(&tx_data)
             .expect("creating a channel failed");
 
         // Check
@@ -1043,7 +1043,7 @@ mod tests {
             .sign_wrapper(keypair);
         // open a channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute::<token::Transfer>(&tx_data)
             .expect("opening the channel failed");
 
         // Check
@@ -1098,7 +1098,7 @@ mod tests {
         let dummy_module = DummyNftTransferModule {};
         actions.add_transfer_module(dummy_module);
         actions
-            .execute(&tx_data)
+            .execute::<token::Transfer>(&tx_data)
             .expect("closing the channel failed");
 
         // Check
@@ -1152,7 +1152,7 @@ mod tests {
 
         // close the channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute::<token::Transfer>(&tx_data)
             .expect("closing the channel failed");
 
         // Check
@@ -1201,7 +1201,7 @@ mod tests {
             .sign_wrapper(keypair.clone());
         // send the token and a packet with the data
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute::<token::Transfer>(&tx_data)
             .expect("sending a token failed");
 
         // Check
@@ -1251,7 +1251,7 @@ mod tests {
             .sign_wrapper(keypair);
         // ack the packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute::<token::Transfer>(&tx_data)
             .expect("ack failed");
 
         // Check
@@ -1338,7 +1338,7 @@ mod tests {
             .sign_wrapper(keypair);
         // send the token and a packet with the data
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute::<token::Transfer>(&tx_data)
             .expect("sending a token failed");
 
         // Check
@@ -1422,7 +1422,7 @@ mod tests {
             .sign_wrapper(keypair);
         // receive a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute::<token::Transfer>(&tx_data)
             .expect("receiving the token failed");
 
         // Check
@@ -1517,7 +1517,7 @@ mod tests {
             .sign_wrapper(keypair);
         // Receive the packet, but no token is received
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute::<token::Transfer>(&tx_data)
             .expect("receiving the token failed");
 
         // Check if the transaction is valid
@@ -1612,7 +1612,7 @@ mod tests {
             .sign_wrapper(keypair);
         // receive a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute::<token::Transfer>(&tx_data)
             .expect("receiving a token failed");
 
         // Check
@@ -1716,7 +1716,7 @@ mod tests {
             .sign_wrapper(keypair);
         // receive a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute::<token::Transfer>(&tx_data)
             .expect("receiving a token failed");
 
         // Check
@@ -1780,7 +1780,7 @@ mod tests {
         let tx_data = msg.serialize_to_vec();
         // send a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute::<token::Transfer>(&tx_data)
             .expect("sending a token failed");
 
         // Commit
@@ -1812,7 +1812,7 @@ mod tests {
 
         // timeout the packet
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute::<token::Transfer>(&tx_data)
             .expect("timeout failed");
 
         // Check
@@ -1866,7 +1866,7 @@ mod tests {
         let tx_data = msg.serialize_to_vec();
         // send a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute::<token::Transfer>(&tx_data)
             .expect("sending a token failed");
 
         // Commit
@@ -1898,7 +1898,7 @@ mod tests {
 
         // timeout the packet
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute::<token::Transfer>(&tx_data)
             .expect("timeout on close failed");
 
         // Check

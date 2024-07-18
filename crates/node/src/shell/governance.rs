@@ -573,8 +573,13 @@ where
                         },
                     ),
                     PGFTarget::Ibc(target) => (
-                        ibc::transfer_over_ibc::<_, parameters::Store<_>>(
-                            state, token, &ADDRESS, target,
+                        ibc::transfer_over_ibc::<
+                            _,
+                            parameters::Store<_>,
+                            token::Store<_>,
+                            token::Transfer,
+                        >(
+                            state, token, &ADDRESS, target
                         ),
                         TokenEvent {
                             descriptor: "pgf-payments-over-ibc".into(),

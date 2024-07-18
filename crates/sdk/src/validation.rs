@@ -36,6 +36,7 @@ pub type IbcVp<'a, S, CA> = ibc::vp::Ibc<
     GovPreStore<'a, S, CA>,
     TokenStoreForIbcExec<'a, S, CA>,
     PosPreStore<'a, S, CA>,
+    token::Transfer,
 >;
 
 /// IBC VP pseudo-execution context
@@ -92,6 +93,7 @@ pub type MaspVp<'a, S, CA> = token::vp::MaspVp<
     GovPreStore<'a, S, CA>,
     IbcPostStore<'a, S, CA>,
     TokenPreStore<'a, S, CA>,
+    token::Transfer,
 >;
 
 /// Native ETH bridge VP

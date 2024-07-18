@@ -9,6 +9,7 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 use std::time::Duration;
 
+use borsh::BorshDeserialize;
 use context::{
     PseudoExecutionContext, PseudoExecutionStorage, VpValidationContext,
 };
@@ -78,6 +79,7 @@ pub struct Ibc<
     Gov,
     Token,
     PoS,
+    Transfer,
 > where
     S: 'static + StateRead,
     EVAL: VpEvaluator<'ctx, S, CA, EVAL>,
@@ -85,8 +87,15 @@ pub struct Ibc<
     /// Context to interact with the host structures.
     pub ctx: Ctx<'ctx, S, CA, EVAL>,
     /// Generic types for DI
-    pub _marker:
-        PhantomData<(Params, ParamsPre, ParamsPseudo, Gov, Token, PoS)>,
+    pub _marker: PhantomData<(
+        Params,
+        ParamsPre,
+        ParamsPseudo,
+        Gov,
+        Token,
+        PoS,
+        Transfer,
+    )>,
 }
 
 impl<
@@ -101,8 +110,21 @@ impl<
     Gov,
     Token,
     PoS,
+    Transfer,
 > NativeVp<'view>
-    for Ibc<'ctx, S, CA, EVAL, Params, ParamsPre, ParamsPseudo, Gov, Token, PoS>
+    for Ibc<
+        'ctx,
+        S,
+        CA,
+        EVAL,
+        Params,
+        ParamsPre,
+        ParamsPseudo,
+        Gov,
+        Token,
+        PoS,
+        Transfer,
+    >
 where
     S: 'static + StateRead,
     EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL> + Debug,
@@ -117,6 +139,7 @@ where
         + token::Write<PseudoExecutionStorage<'view, 'ctx, S, CA, EVAL>>
         + Debug,
     PoS: proof_of_stake::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
+    Transfer: BorshDeserialize,
 {
     type Error = Error;
 
@@ -171,7 +194,21 @@ impl<
     Gov,
     Token,
     PoS,
-> Ibc<'ctx, S, CA, EVAL, Params, ParamsPre, ParamsPseudo, Gov, Token, PoS>
+    Transfer,
+>
+    Ibc<
+        'ctx,
+        S,
+        CA,
+        EVAL,
+        Params,
+        ParamsPre,
+        ParamsPseudo,
+        Gov,
+        Token,
+        PoS,
+        Transfer,
+    >
 where
     S: 'static + StateRead,
     EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL> + Debug,
@@ -185,6 +222,7 @@ where
         + token::Write<PseudoExecutionStorage<'view, 'ctx, S, CA, EVAL>>
         + Debug,
     PoS: proof_of_stake::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
+    Transfer: BorshDeserialize,
 {
     /// Instantiate IBC VP
     pub fn new(ctx: Ctx<'ctx, S, CA, EVAL>) -> Self {
@@ -208,17 +246,19 @@ where
         // needed in actual txs to addresses whose VPs should be triggered
         let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
 
-        let mut actions =
-            IbcActions::<_, ParamsPseudo>::new(ctx.clone(), verifiers.clone());
+        let mut actions = IbcActions::<_, ParamsPseudo, Token>::new(
+            ctx.clone(),
+            verifiers.clone(),
+        );
         let module = TransferModule::new(ctx.clone(), verifiers);
         actions.add_transfer_module(module);
-        let module = NftTransferModule::new(ctx.clone());
+        let module = NftTransferModule::<_, Token>::new(ctx.clone());
         actions.add_transfer_module(module);
         // Charge gas for the expensive execution
         self.ctx
             .charge_gas(IBC_ACTION_EXECUTE_GAS)
             .map_err(Error::NativeVpError)?;
-        actions.execute(tx_data)?;
+        actions.execute::<Transfer>(tx_data)?;
 
         let changed_ibc_keys: HashSet<&Key> =
             keys_changed.iter().filter(|k| is_ibc_key(k)).collect();
@@ -265,18 +305,20 @@ where
         let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
 
         let mut actions =
-            IbcActions::<_, Params>::new(ctx.clone(), verifiers.clone());
+            IbcActions::<_, Params, Token>::new(ctx.clone(), verifiers.clone());
         actions.set_validation_params(self.validation_params()?);
 
         let module = TransferModule::new(ctx.clone(), verifiers);
         actions.add_transfer_module(module);
-        let module = NftTransferModule::new(ctx);
+        let module = NftTransferModule::<_, Token>::new(ctx);
         actions.add_transfer_module(module);
         // Charge gas for the expensive validation
         self.ctx
             .charge_gas(IBC_ACTION_VALIDATE_GAS)
             .map_err(Error::NativeVpError)?;
-        actions.validate(tx_data).map_err(Error::IbcAction)
+        actions
+            .validate::<Transfer>(tx_data)
+            .map_err(Error::IbcAction)
     }
 
     /// Retrieve the validation params
@@ -457,6 +499,7 @@ mod tests {
     use namada_state::testing::TestState;
     use namada_state::StorageRead;
     use namada_token::storage_key::balance_key;
+    use namada_token::Transfer;
     use namada_tx::data::TxType;
     use namada_tx::{Authorization, Code, Data, Section, Tx};
     use namada_vm::wasm::run::VpEvalWasm;
@@ -579,6 +622,7 @@ mod tests {
         namada_proof_of_stake::Store<
             CtxPreStorageRead<'ctx, 'ctx, TestState, VpCache<CA>, Eval>,
         >,
+        Transfer,
     >;
 
     const ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
@@ -2322,7 +2366,7 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
-        let tx_data = MsgTransfer {
+        let tx_data = MsgTransfer::<Transfer> {
             message: msg,
             transfer: None,
         }
@@ -3181,7 +3225,7 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
-        let tx_data = MsgNftTransfer {
+        let tx_data = MsgNftTransfer::<Transfer> {
             message: msg,
             transfer: None,
         }

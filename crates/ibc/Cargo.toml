@@ -29,7 +29,6 @@ namada_migrations = {path = "../migrations", optional = true}
 namada_state = { path = "../state" }
 namada_storage = { path = "../storage" }
 namada_systems = { path = "../systems" }
-namada_token = { path = "../token" }
 namada_tx = { path = "../tx" }
 namada_vp = { path = "../vp" }
 
@@ -58,6 +57,7 @@ namada_governance = { path = "../governance" }
 namada_parameters = { path = "../parameters", features = ["testing"] }
 namada_proof_of_stake = { path = "../proof_of_stake", features = ["testing"] }
 namada_state = { path = "../state", features = ["testing"] }
+namada_token = { path = "../token" }
 namada_tx = { path = "../tx", features = ["testing"] }
 namada_vm = { path = "../vm", features = ["testing"] }
 

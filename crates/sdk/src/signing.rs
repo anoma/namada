@@ -1319,7 +1319,9 @@ pub async fn to_ledger_vector(
                 .data(cmt)
                 .ok_or_else(|| Error::Other("Invalid Data".to_string()))?;
 
-            if let Ok(transfer) = MsgTransfer::try_from_slice(data.as_ref()) {
+            if let Ok(transfer) =
+                MsgTransfer::<token::Transfer>::try_from_slice(data.as_ref())
+            {
                 tv.name = "IBC_Transfer_0".to_string();
                 tv.output.push("Type : IBC Transfer".to_string());
                 let transfer_token = format!(
@@ -1408,7 +1410,7 @@ pub async fn to_ledger_vector(
                     .await?;
                 }
             } else if let Ok(transfer) =
-                MsgNftTransfer::try_from_slice(data.as_ref())
+                MsgNftTransfer::<token::Transfer>::try_from_slice(data.as_ref())
             {
                 tv.name = "IBC_NFT_Transfer_0".to_string();
                 tv.output.push("Type : IBC NFT Transfer".to_string());

@@ -2,14 +2,17 @@
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
+use std::fmt::Debug;
+use std::marker::PhantomData;
 use std::rc::Rc;
 
+use borsh::BorshDeserialize;
 use ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
 use ibc::apps::transfer::types::packet::PacketData;
 use ibc::apps::transfer::types::PrefixedCoin;
 use ibc::core::channel::types::timeout::TimeoutHeight;
 use namada_core::address::Address;
-use namada_core::borsh::BorshSerializeExt;
+use namada_core::borsh::{BorshSerialize, BorshSerializeExt};
 use namada_core::ibc::PGFIbcTarget;
 use namada_core::tendermint::Time as TmTime;
 use namada_core::token::Amount;
@@ -18,8 +21,7 @@ use namada_state::{
     Epochs, ResultExt, State, StorageError, StorageRead, StorageResult,
     StorageWrite,
 };
-use namada_systems::parameters;
-use namada_token as token;
+use namada_systems::{parameters, trans_token};
 
 use crate::event::IbcEvent;
 use crate::{
@@ -29,11 +31,13 @@ use crate::{
 
 /// IBC protocol context
 #[derive(Debug)]
-pub struct IbcProtocolContext<'a, S> {
+pub struct IbcProtocolContext<'a, S, Token> {
     state: &'a mut S,
+    /// Marker for DI types
+    _marker: PhantomData<Token>,
 }
 
-impl<S> StorageRead for IbcProtocolContext<'_, S>
+impl<S, Token> StorageRead for IbcProtocolContext<'_, S, Token>
 where
     S: State,
 {
@@ -96,7 +100,7 @@ where
     }
 }
 
-impl<S> StorageWrite for IbcProtocolContext<'_, S>
+impl<S, Token> StorageWrite for IbcProtocolContext<'_, S, Token>
 where
     S: State,
 {
@@ -113,9 +117,13 @@ where
     }
 }
 
-impl<S> IbcStorageContext for IbcProtocolContext<'_, S>
+impl<S, Token> IbcStorageContext for IbcProtocolContext<'_, S, Token>
 where
     S: State + EmitEvents,
+    Token: trans_token::Keys
+        + trans_token::Read<S>
+        + trans_token::Write<S>
+        + trans_token::Events<S>,
 {
     type Storage = Self;
 
@@ -141,7 +149,7 @@ where
         token: &Address,
         amount: Amount,
     ) -> Result<(), StorageError> {
-        token::transfer(self.state, token, src, dest, amount)
+        Token::transfer(self.state, token, src, dest, amount)
     }
 
     /// Mint token
@@ -151,7 +159,9 @@ where
         token: &Address,
         amount: Amount,
     ) -> Result<(), StorageError> {
-        ibc_storage::mint_tokens(self.state, target, token, amount)
+        ibc_storage::mint_tokens_and_emit_event::<_, Token>(
+            self.state, target, token, amount,
+        )
     }
 
     /// Burn token
@@ -161,7 +171,7 @@ where
         token: &Address,
         amount: Amount,
     ) -> Result<(), StorageError> {
-        ibc_storage::burn_tokens(self.state, target, token, amount)
+        ibc_storage::burn_tokens::<_, Token>(self.state, target, token, amount)
     }
 
     fn insert_verifier(
@@ -176,13 +186,18 @@ where
     }
 }
 
-impl<S> IbcCommonContext for IbcProtocolContext<'_, S> where
-    S: State + EmitEvents
+impl<S, Token> IbcCommonContext for IbcProtocolContext<'_, S, Token>
+where
+    S: State + EmitEvents,
+    Token: trans_token::Keys
+        + trans_token::Read<S>
+        + trans_token::Write<S>
+        + trans_token::Events<S>,
 {
 }
 
 /// Transfer tokens over IBC
-pub fn transfer_over_ibc<'a, S, Params>(
+pub fn transfer_over_ibc<'a, S, Params, Token, Transfer>(
     state: &'a mut S,
     token: &Address,
     source: &Address,
@@ -191,8 +206,13 @@ pub fn transfer_over_ibc<'a, S, Params>(
 where
     S: 'a + State + EmitEvents,
     Params: parameters::Read<
-            <IbcProtocolContext<'a, S> as IbcStorageContext>::Storage,
+            <IbcProtocolContext<'a, S, Token> as IbcStorageContext>::Storage,
         >,
+    Token: trans_token::Keys
+        + trans_token::Write<S>
+        + trans_token::Events<S>
+        + Debug,
+    Transfer: BorshSerialize + BorshDeserialize,
 {
     let token = PrefixedCoin {
         denom: token.to_string().parse().expect("invalid token"),
@@ -204,7 +224,10 @@ where
         receiver: target.target.clone().into(),
         memo: String::default().into(),
     };
-    let ctx = IbcProtocolContext { state };
+    let ctx = IbcProtocolContext {
+        state,
+        _marker: PhantomData,
+    };
     let min_duration = Params::epoch_duration_parameter(&ctx)?.min_duration;
     #[allow(clippy::arithmetic_side_effects)]
     let timeout_timestamp = ctx
@@ -224,7 +247,7 @@ where
         timeout_height_on_b: TimeoutHeight::Never,
         timeout_timestamp_on_b: timeout_timestamp.into(),
     };
-    let data = MsgTransfer {
+    let data = MsgTransfer::<Transfer> {
         message,
         transfer: None,
     }
@@ -233,9 +256,11 @@ where
     // Use an empty verifiers set placeholder for validation, this is only
     // needed in txs and not protocol
     let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
-    let mut actions =
-        IbcActions::<_, Params>::new(Rc::new(RefCell::new(ctx)), verifiers);
-    actions.execute(&data).into_storage_result()?;
+    let mut actions = IbcActions::<_, Params, Token>::new(
+        Rc::new(RefCell::new(ctx)),
+        verifiers,
+    );
+    actions.execute::<Transfer>(&data).into_storage_result()?;
 
     Ok(())
 }

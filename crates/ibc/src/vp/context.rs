@@ -3,9 +3,8 @@
 use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
-use namada_core::address::{Address, InternalAddress};
+use namada_core::address::Address;
 use namada_core::arith::checked;
-use namada_core::borsh::BorshSerializeExt;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::storage::{BlockHeight, Epoch, Epochs, Header, Key, TxIndex};
 use namada_events::Event;
@@ -20,7 +19,7 @@ use namada_vp::native_vp::{CtxPreStorageRead, VpEvaluator};
 use namada_vp::VpEnv;
 
 use crate::event::IbcEvent;
-use crate::storage::is_ibc_key;
+use crate::storage::{self, is_ibc_key};
 use crate::{IbcCommonContext, IbcStorageContext};
 
 /// Pseudo execution environment context for ibc native vp
@@ -247,14 +246,7 @@ where
         amount: Amount,
     ) -> Result<()> {
         let storage = self.storage_mut();
-        Token::credit_tokens(storage, token, target, amount)?;
-
-        let minter_key = Token::minter_key(token);
-        StorageWrite::write(
-            storage,
-            &minter_key,
-            Address::Internal(InternalAddress::Ibc).serialize_to_vec(),
-        )
+        storage::mint_tokens::<_, Token>(storage, target, token, amount)
     }
 
     fn burn_token(

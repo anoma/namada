@@ -394,7 +394,7 @@ impl BenchShell {
             timeout_timestamp_on_b: timeout_timestamp,
         };
 
-        let msg = MsgTransfer {
+        let msg = MsgTransfer::<token::Transfer> {
             message,
             transfer: None,
         };
@@ -1252,7 +1252,7 @@ impl BenchShieldedCtx {
             .get_masp_section(&transfer.shielded_section_hash.unwrap())
             .unwrap()
             .clone();
-        let msg = MsgTransfer {
+        let msg = MsgTransfer::<token::Transfer> {
             message: msg,
             transfer: Some(transfer),
         };

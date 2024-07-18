@@ -612,7 +612,7 @@ pub fn msg_transfer(
     channel_id: ChannelId,
     denom: String,
     sender: &Address,
-) -> MsgTransfer {
+) -> MsgTransfer<token::Transfer> {
     let timestamp = (Timestamp::now() + Duration::from_secs(100)).unwrap();
     let message = IbcMsgTransfer {
         port_id_on_a: port_id,

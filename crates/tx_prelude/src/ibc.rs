@@ -25,13 +25,14 @@ use crate::{Ctx, Error};
 /// execution.
 pub fn ibc_actions(
     ctx: &mut Ctx,
-) -> IbcActions<'_, Ctx, crate::parameters::Store<Ctx>> {
+) -> IbcActions<'_, Ctx, crate::parameters::Store<Ctx>, crate::token::Store<Ctx>>
+{
     let ctx = Rc::new(RefCell::new(ctx.clone()));
     let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
     let mut actions = IbcActions::new(ctx.clone(), verifiers.clone());
     let module = TransferModule::new(ctx.clone(), verifiers);
     actions.add_transfer_module(module);
-    let module = NftTransferModule::new(ctx);
+    let module = NftTransferModule::<Ctx, crate::token::Store<Ctx>>::new(ctx);
     actions.add_transfer_module(module);
     actions
 }
@@ -74,7 +75,7 @@ impl IbcStorageContext for Ctx {
         token: &Address,
         amount: Amount,
     ) -> Result<(), Error> {
-        mint_tokens(self, target, token, amount)
+        mint_tokens::<_, crate::token::Store<_>>(self, target, token, amount)
     }
 
     fn burn_token(
@@ -83,7 +84,7 @@ impl IbcStorageContext for Ctx {
         token: &Address,
         amount: Amount,
     ) -> Result<(), Error> {
-        burn_tokens(self, target, token, amount)
+        burn_tokens::<_, crate::token::Store<_>>(self, target, token, amount)
     }
 
     fn insert_verifier(&mut self, addr: &Address) -> Result<(), Error> {

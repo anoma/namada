@@ -1178,9 +1178,12 @@ where
     pgf_inflation::apply_inflation::<_, parameters::Store<_>, token::Store<_>, _>(
         storage,
         |state, token, source, target| {
-            ibc::transfer_over_ibc::<_, parameters::Store<_>>(
-                state, token, source, target,
-            )
+            ibc::transfer_over_ibc::<
+                _,
+                parameters::Store<_>,
+                token::Store<_>,
+                token::Transfer,
+            >(state, token, source, target)
         },
     )
 }

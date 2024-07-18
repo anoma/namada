@@ -22,9 +22,9 @@ use ibc::primitives::Timestamp;
 use namada_core::address::Address;
 use namada_core::storage::{BlockHeight, Key};
 use namada_core::tendermint::Time as TmTime;
+use namada_core::token::Amount;
 use namada_state::{StorageError, StorageRead, StorageWrite};
-use namada_token::storage_key::balance_key;
-use namada_token::Amount;
+use namada_systems::trans_token;
 use prost::Message;
 
 use super::client::{AnyClientState, AnyConsensusState};
@@ -689,14 +689,17 @@ pub trait IbcCommonContext: IbcStorageContext {
     }
 
     /// Return true if the NFT is owned by the owner
-    fn is_nft_owned(
+    fn is_nft_owned<Token>(
         &self,
         class_id: &PrefixedClassId,
         token_id: &TokenId,
         owner: &Address,
-    ) -> Result<bool> {
+    ) -> Result<bool>
+    where
+        Token: trans_token::Keys,
+    {
         let ibc_token = trace::ibc_token_for_nft(class_id, token_id);
-        let balance_key = balance_key(&ibc_token, owner);
+        let balance_key = Token::balance_key(&ibc_token, owner);
         let amount = self.storage().read::<Amount>(&balance_key)?;
         Ok(amount == Some(Amount::from_u64(1)))
     }

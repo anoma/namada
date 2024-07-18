@@ -1674,19 +1674,20 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
 
         let exec_ctx = IbcVpContext::new(ibc.ctx.pre());
         let ctx = Rc::new(RefCell::new(exec_ctx));
-        let mut actions = IbcActions::<_, parameters::Store<_>>::new(
-            ctx.clone(),
-            verifiers.clone(),
-        );
+        let mut actions =
+            IbcActions::<_, parameters::Store<_>, token::Store<()>>::new(
+                ctx.clone(),
+                verifiers.clone(),
+            );
         actions.set_validation_params(ibc.validation_params().unwrap());
 
         let module = TransferModule::new(ctx.clone(), verifiers);
         actions.add_transfer_module(module);
-        let module = NftTransferModule::new(ctx);
+        let module = NftTransferModule::<_, token::Store<()>>::new(ctx);
         actions.add_transfer_module(module);
 
         group.bench_function(bench_name, |b| {
-            b.iter(|| actions.validate(&tx_data).unwrap())
+            b.iter(|| actions.validate::<Transfer>(&tx_data).unwrap())
         });
     }
 
@@ -1734,19 +1735,20 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
         let exec_ctx = IbcVpContext::new(ibc.ctx.pre());
         let ctx = Rc::new(RefCell::new(exec_ctx));
 
-        let mut actions = IbcActions::<_, parameters::Store<_>>::new(
-            ctx.clone(),
-            verifiers.clone(),
-        );
+        let mut actions =
+            IbcActions::<_, parameters::Store<_>, token::Store<()>>::new(
+                ctx.clone(),
+                verifiers.clone(),
+            );
         actions.set_validation_params(ibc.validation_params().unwrap());
 
         let module = TransferModule::new(ctx.clone(), verifiers);
         actions.add_transfer_module(module);
-        let module = NftTransferModule::new(ctx);
+        let module = NftTransferModule::<_, token::Store<()>>::new(ctx);
         actions.add_transfer_module(module);
 
         group.bench_function(bench_name, |b| {
-            b.iter(|| actions.execute(&tx_data).unwrap())
+            b.iter(|| actions.execute::<token::Transfer>(&tx_data).unwrap())
         });
     }
 
