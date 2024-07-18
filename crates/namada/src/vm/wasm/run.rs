@@ -204,7 +204,7 @@ where
     let sentinel = RefCell::new(TxSentinel::default());
     let (write_log, in_mem, db) = state.split_borrow();
     let mut env = TxVmEnv::new(
-        WasmMemory::new(Rc::clone(&store)),
+        WasmMemory::new(Rc::downgrade(&store)),
         write_log,
         in_mem,
         db,
@@ -341,7 +341,7 @@ where
         };
     let BatchedTxRef { tx, cmt } = batched_tx;
     let mut env = VpVmEnv::new(
-        WasmMemory::new(Rc::clone(&store)),
+        WasmMemory::new(Rc::downgrade(&store)),
         address,
         state.write_log(),
         state.in_mem(),
@@ -576,7 +576,7 @@ where
         let store = Rc::new(RefCell::new(store));
 
         let mut env = VpVmEnv {
-            memory: WasmMemory::new(Rc::clone(&store)),
+            memory: WasmMemory::new(Rc::downgrade(&store)),
             ctx,
         };
         let yielded_value_borrow = env.ctx.yielded_value;
