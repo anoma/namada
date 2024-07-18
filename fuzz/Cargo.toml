@@ -28,3 +28,10 @@ path = "fuzz_targets/txs_prepare_proposal.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "txs_process_proposal"
+path = "fuzz_targets/txs_process_proposal.rs"
+test = false
+doc = false
+bench = false
