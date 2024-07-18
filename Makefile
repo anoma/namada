@@ -281,6 +281,9 @@ fuzz-txs-mempool:
 fuzz-txs-prepare-proposal:
 	$(cargo) +$(nightly) fuzz run txs_prepare_proposal --dev
 
+fuzz-txs-process-proposal:
+	$(cargo) +$(nightly) fuzz run txs_process_proposal --dev
+
 build-doc:
 	$(cargo) doc --no-deps
 

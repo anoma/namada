@@ -377,7 +377,10 @@ where
                 )))
             })?;
     #[cfg(fuzzing)]
-    let consensus_min_gas_price = Amount::from_u64(10);
+    let consensus_min_gas_price = {
+        let _ = temp_state;
+        Amount::from_u64(10)
+    };
 
     let Some(config) = proposer_local_config else {
         return Ok(consensus_min_gas_price);
