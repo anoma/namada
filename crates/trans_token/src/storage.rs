@@ -405,12 +405,21 @@ pub fn denom_to_amount(
     token: &Address,
     storage: &impl StorageRead,
 ) -> storage::Result<Amount> {
-    let denom = read_denom(storage, token)?.ok_or_else(|| {
-        storage::Error::SimpleMessage(
-            "No denomination found in storage for the given token",
-        )
-    })?;
-    denom_amount.scale(denom).map_err(storage::Error::new)
+    #[cfg(not(fuzzing))]
+    {
+        let denom = read_denom(storage, token)?.ok_or_else(|| {
+            storage::Error::SimpleMessage(
+                "No denomination found in storage for the given token",
+            )
+        })?;
+        denom_amount.scale(denom).map_err(storage::Error::new)
+    }
+
+    #[cfg(fuzzing)]
+    {
+        let _ = (token, storage);
+        Ok(denom_amount.amount())
+    }
 }
 
 #[cfg(test)]
