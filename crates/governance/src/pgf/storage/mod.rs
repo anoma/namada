@@ -61,7 +61,9 @@ where
 }
 
 /// Query the current pgf continuous payments
-pub fn get_payments<S>(storage: &S) -> Result<Vec<StoragePgfFunding>>
+pub fn get_continuous_pgf_payments<S>(
+    storage: &S,
+) -> Result<Vec<StoragePgfFunding>>
 where
     S: StorageRead,
 {

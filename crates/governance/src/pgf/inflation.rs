@@ -5,7 +5,9 @@ use namada_parameters::storage as params_storage;
 use namada_storage::{Result, StorageRead, StorageWrite};
 use namada_trans_token::{credit_tokens, get_effective_total_native_supply};
 
-use crate::pgf::storage::{get_parameters, get_payments, get_stewards};
+use crate::pgf::storage::{
+    get_continuous_pgf_payments, get_parameters, get_stewards,
+};
 use crate::storage::proposal::{PGFIbcTarget, PGFTarget};
 
 /// Apply the PGF inflation.
@@ -44,8 +46,8 @@ where
         total_supply.to_string_native()
     );
 
-    let mut pgf_fundings = get_payments(storage)?;
-    // we want to pay first the oldest fundings
+    let mut pgf_fundings = get_continuous_pgf_payments(storage)?;
+    // prioritize the payments by oldest gov proposal ID
     pgf_fundings.sort_by(|a, b| a.id.cmp(&b.id));
 
     for funding in pgf_fundings {
@@ -82,7 +84,7 @@ where
         }
     }
 
-    // Pgf steward inflation
+    // PGF steward inflation
     let stewards = get_stewards(storage)?;
     let pgf_steward_inflation = total_supply
         .mul_floor(pgf_parameters.stewards_inflation_rate)?
