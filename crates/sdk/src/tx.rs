@@ -119,6 +119,10 @@ pub const TX_UPDATE_ACCOUNT_WASM: &str = "tx_update_account.wasm";
 pub const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
 /// IBC transaction WASM path
 pub const TX_IBC_WASM: &str = "tx_ibc.wasm";
+/// IBC transfer transaction WASM path
+pub const TX_IBC_TRANSFER_WASM: &str = "tx_ibc_transfer.wasm";
+/// IBC NFT transfer transaction WASM path
+pub const TX_IBC_NFT_TRANSFER_WASM: &str = "tx_ibc_nft_transfer.wasm";
 /// User validity predicate WASM path
 pub const VP_USER_WASM: &str = "vp_user.wasm";
 /// Bond WASM path

@@ -3168,6 +3168,8 @@ pub mod args {
     use namada::core::token;
     use namada::core::token::NATIVE_MAX_DECIMAL_PLACES;
     use namada::hash::Hash;
+    use namada::ibc::apps::nft_transfer::types::PORT_ID_STR as NFT_PORT_ID_STR;
+    use namada::ibc::apps::transfer::types::PORT_ID_STR as FT_PORT_ID_STR;
     use namada::ibc::core::host::types::identifiers::{ChannelId, PortId};
     use namada::masp::MaspEpoch;
     use namada::tx::data::GasLimit;
@@ -3176,7 +3178,8 @@ pub mod args {
         TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
         TX_CHANGE_COMMISSION_WASM, TX_CHANGE_CONSENSUS_KEY_WASM,
         TX_CHANGE_METADATA_WASM, TX_CLAIM_REWARDS_WASM,
-        TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM, TX_INIT_ACCOUNT_WASM,
+        TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_NFT_TRANSFER_WASM,
+        TX_IBC_TRANSFER_WASM, TX_IBC_WASM, TX_INIT_ACCOUNT_WASM,
         TX_INIT_PROPOSAL, TX_REACTIVATE_VALIDATOR_WASM, TX_REDELEGATE_WASM,
         TX_RESIGN_STEWARD, TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM,
         TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
@@ -4752,6 +4755,16 @@ pub mod args {
                 .iter()
                 .map(|key| chain_ctx.get_cached(key))
                 .collect();
+            let tx_code_path = PathBuf::from(match self.port_id.as_str() {
+                FT_PORT_ID_STR => TX_IBC_TRANSFER_WASM,
+                NFT_PORT_ID_STR => TX_IBC_NFT_TRANSFER_WASM,
+                _ => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        format!("Unsupported Port ID: {}", self.port_id),
+                    ));
+                }
+            });
 
             Ok(TxIbcTransfer::<SdkTypes> {
                 tx,
@@ -4766,7 +4779,7 @@ pub mod args {
                 refund_target: chain_ctx.get_opt(&self.refund_target),
                 memo: self.memo,
                 gas_spending_keys,
-                tx_code_path: self.tx_code_path.to_path_buf(),
+                tx_code_path,
             })
         }
     }
@@ -4791,7 +4804,7 @@ pub mod args {
             if let Some(key) = GAS_SPENDING_KEY.parse(matches) {
                 gas_spending_keys.push(key);
             }
-            let tx_code_path = PathBuf::from(TX_IBC_WASM);
+            let tx_code_path = PathBuf::from(TX_IBC_TRANSFER_WASM);
             Self {
                 tx,
                 source,

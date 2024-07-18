@@ -50,13 +50,16 @@ use ibc::apps::nft_transfer::types::msgs::transfer::MsgTransfer as IbcMsgNftTran
 use ibc::apps::nft_transfer::types::{
     ack_success_b64, is_receiver_chain_source as is_nft_receiver_chain_source,
     PrefixedClassId, TokenId, TracePrefix as NftTracePrefix,
+    PORT_ID_STR as NFT_PORT_ID_STR,
 };
 use ibc::apps::transfer::handler::{
     send_transfer_execute, send_transfer_validate,
 };
 use ibc::apps::transfer::types::error::TokenTransferError;
 use ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
-use ibc::apps::transfer::types::{is_receiver_chain_source, TracePrefix};
+use ibc::apps::transfer::types::{
+    is_receiver_chain_source, TracePrefix, PORT_ID_STR as FT_PORT_ID_STR,
+};
 use ibc::core::channel::types::acknowledgement::{
     Acknowledgement, AcknowledgementStatus,
 };
@@ -209,29 +212,24 @@ where
             .map_err(|e| Error::Context(Box::new(e)))?;
         // Extract MASP tx from the memo in the packet if needed
         let masp_tx = match envelope {
-            MsgEnvelope::Packet(packet_msg) => {
-                match packet_msg {
-                    PacketMsg::Recv(msg) => {
-                        if self.is_receiving_success(msg)? {
-                            extract_masp_tx_from_packet(&msg.packet, false)
-                        } else {
-                            None
-                        }
-                    }
-                    PacketMsg::Ack(msg) => {
-                        if is_ack_successful(&msg.acknowledgement)? {
-                            // No refund
-                            None
-                        } else {
-                            extract_masp_tx_from_packet(&msg.packet, true)
-                        }
-                    }
-                    PacketMsg::Timeout(msg) => {
-                        extract_masp_tx_from_packet(&msg.packet, true)
-                    }
-                    _ => None,
+            MsgEnvelope::Packet(packet_msg) => match packet_msg {
+                PacketMsg::Recv(msg) => self
+                    .is_receiving_success(msg)?
+                    .then_some(extract_masp_tx_from_packet(&msg.packet, false))
+                    .flatten(),
+                PacketMsg::Ack(msg) => {
+                    (!is_ack_successful(&msg.acknowledgement)?)
+                        .then_some(extract_masp_tx_from_packet(
+                            &msg.packet,
+                            true,
+                        ))
+                        .flatten()
                 }
-            }
+                PacketMsg::Timeout(msg) => {
+                    extract_masp_tx_from_packet(&msg.packet, true)
+                }
+                _ => None,
+            },
             _ => None,
         };
         Ok((None, masp_tx))
@@ -373,6 +371,25 @@ pub fn get_last_sequence_send<S: StorageRead>(
     Ok(checked!(next_seq - 1)?.into())
 }
 
+/// Get the IbcToken from the source/destination ports and channels
+pub fn received_ibc_token(
+    base_trace: impl AsRef<str>,
+    src_port_id: &PortId,
+    src_channel_id: &ChannelId,
+    dest_port_id: &PortId,
+    dest_channel_id: &ChannelId,
+) -> Result<Address, Error> {
+    let ibc_trace = received_ibc_trace(
+        base_trace,
+        src_port_id,
+        src_channel_id,
+        dest_port_id,
+        dest_channel_id,
+    )?;
+    trace::convert_to_address(ibc_trace)
+        .map_err(|e| Error::Trace(format!("Invalid base token: {e}")))
+}
+
 fn received_ibc_trace(
     base_trace: impl AsRef<str>,
     src_port_id: &PortId,
@@ -380,25 +397,57 @@ fn received_ibc_trace(
     dest_port_id: &PortId,
     dest_channel_id: &ChannelId,
 ) -> Result<String, Error> {
-    if *dest_port_id == PortId::transfer() {
-        let mut prefixed_denom =
-            base_trace.as_ref().parse().map_err(Error::TokenTransfer)?;
-        if is_receiver_chain_source(
-            src_port_id.clone(),
-            src_channel_id.clone(),
-            &prefixed_denom,
-        ) {
-            let prefix =
-                TracePrefix::new(src_port_id.clone(), src_channel_id.clone());
-            prefixed_denom.remove_trace_prefix(&prefix);
-        } else {
-            let prefix =
-                TracePrefix::new(dest_port_id.clone(), dest_channel_id.clone());
-            prefixed_denom.add_trace_prefix(prefix);
-        }
-        return Ok(prefixed_denom.to_string());
+    match dest_port_id.as_str() {
+        FT_PORT_ID_STR => received_ibc_denom(
+            base_trace,
+            src_port_id,
+            src_channel_id,
+            dest_port_id,
+            dest_channel_id,
+        ),
+        NFT_PORT_ID_STR => received_ibc_nft_trace(
+            base_trace,
+            src_port_id,
+            src_channel_id,
+            dest_port_id,
+            dest_channel_id,
+        ),
+        _ => Err(Error::Trace(format!("Unsupported Port ID: {dest_port_id}"))),
     }
+}
 
+fn received_ibc_denom(
+    base_trace: impl AsRef<str>,
+    src_port_id: &PortId,
+    src_channel_id: &ChannelId,
+    dest_port_id: &PortId,
+    dest_channel_id: &ChannelId,
+) -> Result<String, Error> {
+    let mut prefixed_denom =
+        base_trace.as_ref().parse().map_err(Error::TokenTransfer)?;
+    if is_receiver_chain_source(
+        src_port_id.clone(),
+        src_channel_id.clone(),
+        &prefixed_denom,
+    ) {
+        let prefix =
+            TracePrefix::new(src_port_id.clone(), src_channel_id.clone());
+        prefixed_denom.remove_trace_prefix(&prefix);
+    } else {
+        let prefix =
+            TracePrefix::new(dest_port_id.clone(), dest_channel_id.clone());
+        prefixed_denom.add_trace_prefix(prefix);
+    }
+    Ok(prefixed_denom.to_string())
+}
+
+fn received_ibc_nft_trace(
+    base_trace: impl AsRef<str>,
+    src_port_id: &PortId,
+    src_channel_id: &ChannelId,
+    dest_port_id: &PortId,
+    dest_channel_id: &ChannelId,
+) -> Result<String, Error> {
     if let Some((trace_path, base_class_id, token_id)) =
         trace::is_nft_trace(&base_trace)
     {
@@ -424,32 +473,13 @@ fn received_ibc_trace(
             class_id.add_trace_prefix(prefix);
         }
         let token_id: TokenId = token_id.parse().map_err(Error::NftTransfer)?;
-        return Ok(format!("{class_id}/{token_id}"));
+        Ok(trace::ibc_trace_for_nft(&class_id, &token_id))
+    } else {
+        Err(Error::Trace(format!(
+            "Invalid IBC NFT trace: {}",
+            base_trace.as_ref()
+        )))
     }
-
-    Err(Error::Trace(format!(
-        "Invalid IBC trace: {}",
-        base_trace.as_ref()
-    )))
-}
-
-/// Get the IbcToken from the source/destination ports and channels
-pub fn received_ibc_token(
-    ibc_denom: impl AsRef<str>,
-    src_port_id: &PortId,
-    src_channel_id: &ChannelId,
-    dest_port_id: &PortId,
-    dest_channel_id: &ChannelId,
-) -> Result<Address, Error> {
-    let ibc_trace = received_ibc_trace(
-        ibc_denom,
-        src_port_id,
-        src_channel_id,
-        dest_port_id,
-        dest_channel_id,
-    )?;
-    trace::convert_to_address(ibc_trace)
-        .map_err(|e| Error::Trace(format!("Invalid base token: {e}")))
 }
 
 #[cfg(any(test, feature = "testing"))]
