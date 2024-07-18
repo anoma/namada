@@ -16,8 +16,8 @@ use namada_gas::{IBC_ACTION_EXECUTE_GAS, IBC_ACTION_VALIDATE_GAS};
 use namada_governance::is_proposal_accepted;
 use namada_ibc::event::IbcEvent;
 use namada_ibc::{
-    Error as ActionError, IbcActions, NftTransferModule, TransferModule,
-    ValidationParams,
+    decode_message, Error as ActionError, IbcActions, IbcMessage,
+    NftTransferModule, TransferModule, ValidationParams,
 };
 use namada_proof_of_stake::storage::read_pos_params;
 use namada_state::write_log::StorageModification;
@@ -145,7 +145,18 @@ where
         self.ctx
             .charge_gas(IBC_ACTION_EXECUTE_GAS)
             .map_err(Error::NativeVpError)?;
-        actions.execute(tx_data)?;
+        let message = decode_message(tx_data)?;
+        match &message {
+            IbcMessage::Transfer(msg) => {
+                actions.execute_transfer(msg)?;
+            }
+            IbcMessage::NftTransfer(msg) => {
+                actions.execute_nft_transfer(msg)?;
+            }
+            IbcMessage::Envelope(envelope) => {
+                actions.execute_with_envelope(envelope)?;
+            }
+        };
 
         let changed_ibc_keys: HashSet<&Key> =
             keys_changed.iter().filter(|k| is_ibc_key(k)).collect();

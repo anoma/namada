@@ -32,7 +32,7 @@ mod tests {
     use namada::ibc::context::nft_transfer_mod::testing::DummyNftTransferModule;
     use namada::ibc::context::transfer_mod::testing::DummyTransferModule;
     use namada::ibc::primitives::ToProto;
-    use namada::ibc::Error as IbcActionError;
+    use namada::ibc::{Error as IbcActionError, IbcMessage};
     use namada::ledger::ibc::{storage as ibc_storage, trace as ibc_trace};
     use namada::ledger::native_vp::ibc::{
         get_dummy_header as tm_dummy_header, Error as IbcError,
@@ -687,17 +687,15 @@ mod tests {
 
         // Start a transaction to create a new client
         let msg = ibc::msg_create_client();
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
-            .add_serialized_data(tx_data.clone())
+            .add_data(IbcMessage::Envelope(Box::new(msg.clone())))
             .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
 
         // create a client with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute_with_envelope(&msg)
             .expect("creating a client failed");
 
         // Check
@@ -721,16 +719,14 @@ mod tests {
         tx_host_env::set(env);
         let client_id = ibc::client_id();
         let msg = ibc::msg_update_client(client_id);
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
-            .add_serialized_data(tx_data.clone())
+            .add_data(IbcMessage::Envelope(Box::new(msg.clone())))
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // update the client with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute_with_envelope(&msg)
             .expect("updating a client failed");
 
         // Check
@@ -764,16 +760,14 @@ mod tests {
 
         // Start a transaction for ConnectionOpenInit
         let msg = ibc::msg_connection_open_init(client_id);
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
-            .add_serialized_data(tx_data.clone())
+            .add_data(IbcMessage::Envelope(Box::new(msg.clone())))
             .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
         // init a connection with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute_with_envelope(&msg)
             .expect("creating a connection failed");
 
         // Check
@@ -797,16 +791,14 @@ mod tests {
         // Start the next transaction for ConnectionOpenAck
         let conn_id = ibc::ConnectionId::new(0);
         let msg = ibc::msg_connection_open_ack(conn_id, client_state);
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
-            .add_serialized_data(tx_data.clone())
+            .add_data(IbcMessage::Envelope(Box::new(msg.clone())))
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // open the connection with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute_with_envelope(&msg)
             .expect("opening the connection failed");
 
         // Check
@@ -841,16 +833,14 @@ mod tests {
 
         // Start a transaction for ConnectionOpenTry
         let msg = ibc::msg_connection_open_try(client_id, client_state);
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
-            .add_serialized_data(tx_data.clone())
+            .add_data(IbcMessage::Envelope(Box::new(msg.clone())))
             .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
         // open try a connection with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute_with_envelope(&msg)
             .expect("creating a connection failed");
 
         // Check
@@ -874,16 +864,14 @@ mod tests {
         // Start the next transaction for ConnectionOpenConfirm
         let conn_id = ibc::ConnectionId::new(0);
         let msg = ibc::msg_connection_open_confirm(conn_id);
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
-            .add_serialized_data(tx_data.clone())
+            .add_data(IbcMessage::Envelope(Box::new(msg.clone())))
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // open the connection with the mssage
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute_with_envelope(&msg)
             .expect("opening the connection failed");
 
         // Check
@@ -920,16 +908,14 @@ mod tests {
         // Start a transaction for ChannelOpenInit
         let port_id = ibc::PortId::transfer();
         let msg = ibc::msg_channel_open_init(port_id.clone(), conn_id);
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
-            .add_serialized_data(tx_data.clone())
+            .add_data(IbcMessage::Envelope(Box::new(msg.clone())))
             .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
         // init a channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute_with_envelope(&msg)
             .expect("creating a channel failed");
 
         // Check
@@ -953,16 +939,14 @@ mod tests {
         // Start the next transaction for ChannelOpenAck
         let channel_id = ibc::ChannelId::new(0);
         let msg = ibc::msg_channel_open_ack(port_id, channel_id);
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
-            .add_serialized_data(tx_data.clone())
+            .add_data(IbcMessage::Envelope(Box::new(msg.clone())))
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // open the channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute_with_envelope(&msg)
             .expect("opening the channel failed");
 
         // Check
@@ -999,16 +983,14 @@ mod tests {
         // Start a transaction for ChannelOpenTry
         let port_id = ibc::PortId::transfer();
         let msg = ibc::msg_channel_open_try(port_id.clone(), conn_id);
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
-            .add_serialized_data(tx_data.clone())
+            .add_data(IbcMessage::Envelope(Box::new(msg.clone())))
             .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
         // try open a channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute_with_envelope(&msg)
             .expect("creating a channel failed");
 
         // Check
@@ -1032,17 +1014,14 @@ mod tests {
         // Start the next transaction for ChannelOpenConfirm
         let channel_id = ibc::ChannelId::new(0);
         let msg = ibc::msg_channel_open_confirm(port_id, channel_id);
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
-
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
-            .add_serialized_data(tx_data.clone())
+            .add_data(IbcMessage::Envelope(Box::new(msg.clone())))
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // open a channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute_with_envelope(&msg)
             .expect("opening the channel failed");
 
         // Check
@@ -1081,12 +1060,9 @@ mod tests {
 
         // Start a transaction to close the channel
         let msg = ibc::msg_channel_close_init(port_id, channel_id);
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
-
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
-            .add_serialized_data(tx_data.clone())
+            .add_data(IbcMessage::Envelope(Box::new(msg.clone())))
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // close the channel with the message
@@ -1097,7 +1073,7 @@ mod tests {
         let dummy_module = DummyNftTransferModule {};
         actions.add_transfer_module(dummy_module);
         actions
-            .execute(&tx_data)
+            .execute_with_envelope(&msg)
             .expect("closing the channel failed");
 
         // Check
@@ -1140,18 +1116,15 @@ mod tests {
 
         // Start a transaction to close the channel
         let msg = ibc::msg_channel_close_confirm(port_id, channel_id);
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
-
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
-            .add_serialized_data(tx_data.clone())
+            .add_data(IbcMessage::Envelope(Box::new(msg.clone())))
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
 
         // close the channel with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute_with_envelope(&msg)
             .expect("closing the channel failed");
 
         // Check
@@ -1191,16 +1164,14 @@ mod tests {
         // Start a transaction to send a packet
         let msg =
             ibc::msg_transfer(port_id, channel_id, token.to_string(), &sender);
-        let tx_data = msg.serialize_to_vec();
-
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
-            .add_serialized_data(tx_data.clone())
+            .add_data(IbcMessage::Transfer(msg.clone()))
             .sign_raw(keypairs.clone(), pks_map.clone(), None)
             .sign_wrapper(keypair.clone());
         // send the token and a packet with the data
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute_transfer(&msg)
             .expect("sending a token failed");
 
         // Check
@@ -1240,17 +1211,14 @@ mod tests {
             &counterparty,
         );
         let msg = ibc::msg_packet_ack(packet);
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
-
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
-            .add_serialized_data(tx_data.clone())
+            .add_data(IbcMessage::Envelope(Box::new(msg.clone())))
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // ack the packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute_with_envelope(&msg)
             .expect("ack failed");
 
         // Check
@@ -1328,16 +1296,14 @@ mod tests {
         // Start a transaction to send a packet
         // Set this chain is the sink zone
         let msg = ibc::msg_transfer(port_id, channel_id, denom, &sender);
-        let tx_data = msg.serialize_to_vec();
-
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
-            .add_serialized_data(tx_data.clone())
+            .add_data(IbcMessage::Transfer(msg.clone()))
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // send the token and a packet with the data
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute_transfer(&msg)
             .expect("sending a token failed");
 
         // Check
@@ -1411,17 +1377,14 @@ mod tests {
 
         // Start a transaction to receive a packet
         let msg = ibc::msg_packet_recv(packet);
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
-
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
-            .add_serialized_data(tx_data.clone())
+            .add_data(IbcMessage::Envelope(Box::new(msg.clone())))
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // receive a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute_with_envelope(&msg)
             .expect("receiving the token failed");
 
         // Check
@@ -1506,17 +1469,14 @@ mod tests {
 
         // Start a transaction to receive a packet
         let msg = ibc::msg_packet_recv(packet);
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
-
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
-            .add_serialized_data(tx_data.clone())
+            .add_data(IbcMessage::Envelope(Box::new(msg.clone())))
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // Receive the packet, but no token is received
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute_with_envelope(&msg)
             .expect("receiving the token failed");
 
         // Check if the transaction is valid
@@ -1602,16 +1562,14 @@ mod tests {
 
         // Start a transaction to receive a packet
         let msg = ibc::msg_packet_recv(packet);
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
-            .add_serialized_data(tx_data.clone())
+            .add_data(IbcMessage::Envelope(Box::new(msg.clone())))
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // receive a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute_with_envelope(&msg)
             .expect("receiving a token failed");
 
         // Check
@@ -1705,17 +1663,14 @@ mod tests {
 
         // Start a transaction to receive a packet
         let msg = ibc::msg_packet_recv(packet);
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
-
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
-            .add_serialized_data(tx_data.clone())
+            .add_data(IbcMessage::Envelope(Box::new(msg.clone())))
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
         // receive a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute_with_envelope(&msg)
             .expect("receiving a token failed");
 
         // Check
@@ -1776,10 +1731,9 @@ mod tests {
         let mut msg =
             ibc::msg_transfer(port_id, channel_id, token.to_string(), &sender);
         ibc::set_timeout_timestamp(&mut msg.message);
-        let tx_data = msg.serialize_to_vec();
         // send a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute_transfer(&msg)
             .expect("sending a token failed");
 
         // Commit
@@ -1801,17 +1755,15 @@ mod tests {
             &counterparty,
         );
         let msg = ibc::msg_timeout(packet, ibc::Sequence::from(1));
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
-            .add_serialized_data(tx_data.clone())
+            .add_data(IbcMessage::Envelope(Box::new(msg.clone())))
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
 
         // timeout the packet
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute_with_envelope(&msg)
             .expect("timeout failed");
 
         // Check
@@ -1862,10 +1814,9 @@ mod tests {
         // Start a transaction to send a packet
         let msg =
             ibc::msg_transfer(port_id, channel_id, token.to_string(), &sender);
-        let tx_data = msg.serialize_to_vec();
         // send a packet with the message
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute_transfer(&msg)
             .expect("sending a token failed");
 
         // Commit
@@ -1887,17 +1838,15 @@ mod tests {
             &counterparty,
         );
         let msg = ibc::msg_timeout_on_close(packet, ibc::Sequence::from(1));
-        let mut tx_data = vec![];
-        msg.to_any().encode(&mut tx_data).expect("encoding failed");
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
-            .add_serialized_data(tx_data.clone())
+            .add_data(IbcMessage::Envelope(Box::new(msg.clone())))
             .sign_raw(keypairs, pks_map, None)
             .sign_wrapper(keypair);
 
         // timeout the packet
         tx_host_env::ibc::ibc_actions(tx::ctx())
-            .execute(&tx_data)
+            .execute_with_envelope(&msg)
             .expect("timeout on close failed");
 
         // Check

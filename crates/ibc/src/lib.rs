@@ -153,26 +153,11 @@ where
         self.ctx.validation_params = params;
     }
 
-    /// Execute according to the message in an IBC transaction or VP
-    pub fn execute(
-        &mut self,
-        tx_data: &[u8],
-    ) -> Result<(Option<Transfer>, Option<MaspTransaction>), Error> {
-        let message = decode_message(tx_data)?;
-        match &message {
-            IbcMessage::Transfer(msg) => self.execute_transfer(msg),
-            IbcMessage::NftTransfer(msg) => self.execute_nft_transfer(msg),
-            IbcMessage::Envelope(envelope) => {
-                self.execute_with_envelope(envelope)
-            }
-        }
-    }
-
     /// Execute with MsgTransfer
     pub fn execute_transfer(
         &mut self,
         message: &MsgTransfer,
-    ) -> Result<(Option<Transfer>, Option<MaspTransaction>), Error> {
+    ) -> Result<Option<Transfer>, Error> {
         let mut token_transfer_ctx = TokenTransferContext::new(
             self.ctx.inner.clone(),
             self.verifiers.clone(),
@@ -184,14 +169,14 @@ where
             message.message.clone(),
         )
         .map_err(Error::TokenTransfer)?;
-        Ok((message.transfer.clone(), None))
+        Ok(message.transfer.clone())
     }
 
     /// Execute with MsgNftTransfer
     pub fn execute_nft_transfer(
         &mut self,
         message: &MsgNftTransfer,
-    ) -> Result<(Option<Transfer>, Option<MaspTransaction>), Error> {
+    ) -> Result<Option<Transfer>, Error> {
         let mut nft_transfer_ctx =
             NftTransferContext::new(self.ctx.inner.clone());
         send_nft_transfer_execute(
@@ -200,14 +185,14 @@ where
             message.message.clone(),
         )
         .map_err(Error::NftTransfer)?;
-        Ok((message.transfer.clone(), None))
+        Ok(message.transfer.clone())
     }
 
     /// Execute with MsgEnvelope
     pub fn execute_with_envelope(
         &mut self,
         envelope: &MsgEnvelope,
-    ) -> Result<(Option<Transfer>, Option<MaspTransaction>), Error> {
+    ) -> Result<Option<MaspTransaction>, Error> {
         execute(&mut self.ctx, &mut self.router, envelope.clone())
             .map_err(|e| Error::Context(Box::new(e)))?;
         // Extract MASP tx from the memo in the packet if needed
@@ -232,7 +217,7 @@ where
             },
             _ => None,
         };
-        Ok((None, masp_tx))
+        Ok(masp_tx)
     }
 
     /// Check the result of receiving the packet by checking the packet

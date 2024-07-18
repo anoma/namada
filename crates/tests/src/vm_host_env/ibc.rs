@@ -81,6 +81,7 @@ use namada::token::{self, Amount};
 use namada::tx::BatchedTxRef;
 use namada::vm::{wasm, WasmCacheRwAccess};
 use namada_core::collections::HashMap;
+use namada_core::ibc::core::handler::types::msgs::MsgEnvelope;
 use namada_sdk::state::StateRead;
 use namada_test_utils::TestWasms;
 use namada_tx_prelude::BorshSerializeExt;
@@ -399,42 +400,45 @@ pub fn prepare_opened_channel(
     (port_id, channel_id, writes)
 }
 
-pub fn msg_create_client() -> MsgCreateClient {
+pub fn msg_create_client() -> MsgEnvelope {
     let (client_state, consensus_state) = dummy_client();
-    MsgCreateClient {
+    let msg = MsgCreateClient {
         client_state: client_state.into(),
         consensus_state: consensus_state.into(),
         signer: "test".to_string().into(),
-    }
+    };
+    MsgEnvelope::Client(msg.into())
 }
 
-pub fn msg_update_client(client_id: ClientId) -> MsgUpdateClient {
+pub fn msg_update_client(client_id: ClientId) -> MsgEnvelope {
     let height = Height::new(0, 2).unwrap();
     let header = MockHeader {
         height,
         timestamp: Timestamp::now(),
     }
     .into();
-    MsgUpdateClient {
+    let msg = MsgUpdateClient {
         client_id,
         client_message: header,
         signer: "test".to_string().into(),
-    }
+    };
+    MsgEnvelope::Client(msg.into())
 }
 
-pub fn msg_upgrade_client(client_id: ClientId) -> MsgUpgradeClient {
+pub fn msg_upgrade_client(client_id: ClientId) -> MsgEnvelope {
     let (client_state, consensus_state) = dummy_client();
-    MsgUpgradeClient {
+    let msg = MsgUpgradeClient {
         client_id,
         upgraded_client_state: client_state.into(),
         upgraded_consensus_state: consensus_state.into(),
         proof_upgrade_client: dummy_proof(),
         proof_upgrade_consensus_state: dummy_proof(),
         signer: "test".to_string().into(),
-    }
+    };
+    MsgEnvelope::Client(msg.into())
 }
 
-pub fn msg_connection_open_init(client_id: ClientId) -> MsgConnectionOpenInit {
+pub fn msg_connection_open_init(client_id: ClientId) -> MsgEnvelope {
     let counterparty_client_id =
         ClientId::new(&client_type().to_string(), 42).unwrap();
     let commitment_prefix =
@@ -442,22 +446,23 @@ pub fn msg_connection_open_init(client_id: ClientId) -> MsgConnectionOpenInit {
     let counterparty =
         ConnCounterparty::new(counterparty_client_id, None, commitment_prefix);
 
-    MsgConnectionOpenInit {
+    let msg = MsgConnectionOpenInit {
         client_id_on_a: client_id,
         counterparty,
         version: None,
         delay_period: Duration::new(0, 0),
         signer: "test".to_string().into(),
-    }
+    };
+    MsgEnvelope::Connection(msg.into())
 }
 
 pub fn msg_connection_open_try(
     client_id: ClientId,
     client_state: Any,
-) -> MsgConnectionOpenTry {
+) -> MsgEnvelope {
     let consensus_height = Height::new(0, 1).expect("invalid height");
     #[allow(deprecated)]
-    MsgConnectionOpenTry {
+    let msg = MsgConnectionOpenTry {
         client_id_on_b: client_id,
         client_state_of_b_on_a: client_state,
         counterparty: dummy_connection_counterparty(),
@@ -471,16 +476,17 @@ pub fn msg_connection_open_try(
         signer: "test".to_string().into(),
         proof_consensus_state_of_b: Some(dummy_proof()),
         previous_connection_id: ConnectionId::zero().to_string(),
-    }
+    };
+    MsgEnvelope::Connection(msg.into())
 }
 
 pub fn msg_connection_open_ack(
     connection_id: ConnectionId,
     client_state: Any,
-) -> MsgConnectionOpenAck {
+) -> MsgEnvelope {
     let consensus_height = Height::new(0, 1).expect("invalid height");
     let counterparty = dummy_connection_counterparty();
-    MsgConnectionOpenAck {
+    let msg = MsgConnectionOpenAck {
         conn_id_on_a: connection_id,
         conn_id_on_b: counterparty.connection_id().cloned().unwrap(),
         client_state_of_a_on_b: client_state,
@@ -492,18 +498,18 @@ pub fn msg_connection_open_ack(
         version: ConnVersion::compatibles().first().unwrap().clone(),
         signer: "test".to_string().into(),
         proof_consensus_state_of_a: None,
-    }
+    };
+    MsgEnvelope::Connection(msg.into())
 }
 
-pub fn msg_connection_open_confirm(
-    connection_id: ConnectionId,
-) -> MsgConnectionOpenConfirm {
-    MsgConnectionOpenConfirm {
+pub fn msg_connection_open_confirm(connection_id: ConnectionId) -> MsgEnvelope {
+    let msg = MsgConnectionOpenConfirm {
         conn_id_on_b: connection_id,
         proof_conn_end_on_a: dummy_proof(),
         proof_height_on_a: dummy_proof_height(),
         signer: "test".to_string().into(),
-    }
+    };
+    MsgEnvelope::Connection(msg.into())
 }
 
 fn dummy_proof() -> CommitmentProofBytes {
@@ -527,24 +533,25 @@ fn dummy_connection_counterparty() -> ConnCounterparty {
 pub fn msg_channel_open_init(
     port_id: PortId,
     conn_id: ConnectionId,
-) -> MsgChannelOpenInit {
-    MsgChannelOpenInit {
+) -> MsgEnvelope {
+    let msg = MsgChannelOpenInit {
         port_id_on_a: port_id,
         connection_hops_on_a: vec![conn_id],
         port_id_on_b: PortId::transfer(),
         ordering: Order::Unordered,
         signer: "test".to_string().into(),
         version_proposal: ChanVersion::new(VERSION.to_string()),
-    }
+    };
+    MsgEnvelope::Channel(msg.into())
 }
 
 pub fn msg_channel_open_try(
     port_id: PortId,
     conn_id: ConnectionId,
-) -> MsgChannelOpenTry {
+) -> MsgEnvelope {
     let counterparty = dummy_channel_counterparty();
     #[allow(deprecated)]
-    MsgChannelOpenTry {
+    let msg = MsgChannelOpenTry {
         port_id_on_b: port_id,
         connection_hops_on_b: vec![conn_id],
         port_id_on_a: counterparty.port_id().clone(),
@@ -555,15 +562,16 @@ pub fn msg_channel_open_try(
         ordering: Order::Unordered,
         signer: "test".to_string().into(),
         version_proposal: ChanVersion::empty(),
-    }
+    };
+    MsgEnvelope::Channel(msg.into())
 }
 
 pub fn msg_channel_open_ack(
     port_id: PortId,
     channel_id: ChannelId,
-) -> MsgChannelOpenAck {
+) -> MsgEnvelope {
     let counterparty = dummy_channel_counterparty();
-    MsgChannelOpenAck {
+    let msg = MsgChannelOpenAck {
         port_id_on_a: port_id,
         chan_id_on_a: channel_id,
         chan_id_on_b: counterparty.channel_id().cloned().unwrap(),
@@ -571,44 +579,48 @@ pub fn msg_channel_open_ack(
         proof_chan_end_on_b: dummy_proof(),
         proof_height_on_b: dummy_proof_height(),
         signer: "test".to_string().into(),
-    }
+    };
+    MsgEnvelope::Channel(msg.into())
 }
 
 pub fn msg_channel_open_confirm(
     port_id: PortId,
     channel_id: ChannelId,
-) -> MsgChannelOpenConfirm {
-    MsgChannelOpenConfirm {
+) -> MsgEnvelope {
+    let msg = MsgChannelOpenConfirm {
         port_id_on_b: port_id,
         chan_id_on_b: channel_id,
         proof_chan_end_on_a: dummy_proof(),
         proof_height_on_a: dummy_proof_height(),
         signer: "test".to_string().into(),
-    }
+    };
+    MsgEnvelope::Channel(msg.into())
 }
 
 pub fn msg_channel_close_init(
     port_id: PortId,
     channel_id: ChannelId,
-) -> MsgChannelCloseInit {
-    MsgChannelCloseInit {
+) -> MsgEnvelope {
+    let msg = MsgChannelCloseInit {
         port_id_on_a: port_id,
         chan_id_on_a: channel_id,
         signer: "test".to_string().into(),
-    }
+    };
+    MsgEnvelope::Channel(msg.into())
 }
 
 pub fn msg_channel_close_confirm(
     port_id: PortId,
     channel_id: ChannelId,
-) -> MsgChannelCloseConfirm {
-    MsgChannelCloseConfirm {
+) -> MsgEnvelope {
+    let msg = MsgChannelCloseConfirm {
         port_id_on_b: port_id,
         chan_id_on_b: channel_id,
         proof_chan_end_on_a: dummy_proof(),
         proof_height_on_a: dummy_proof_height(),
         signer: "test".to_string().into(),
-    }
+    };
+    MsgEnvelope::Channel(msg.into())
 }
 
 pub fn dummy_channel_counterparty() -> ChanCounterparty {
@@ -656,24 +668,26 @@ pub fn set_timeout_timestamp(msg: &mut IbcMsgTransfer) {
         (msg.timeout_timestamp_on_b - Duration::from_secs(201)).unwrap();
 }
 
-pub fn msg_packet_recv(packet: Packet) -> MsgRecvPacket {
-    MsgRecvPacket {
+pub fn msg_packet_recv(packet: Packet) -> MsgEnvelope {
+    let msg = MsgRecvPacket {
         packet,
         proof_commitment_on_a: dummy_proof(),
         proof_height_on_a: dummy_proof_height(),
         signer: "test".to_string().into(),
-    }
+    };
+    MsgEnvelope::Packet(msg.into())
 }
 
-pub fn msg_packet_ack(packet: Packet) -> MsgAcknowledgement {
+pub fn msg_packet_ack(packet: Packet) -> MsgEnvelope {
     let packet_ack = AcknowledgementStatus::success(ack_success_b64()).into();
-    MsgAcknowledgement {
+    let msg = MsgAcknowledgement {
         packet,
         acknowledgement: packet_ack,
         proof_acked_on_b: dummy_proof(),
         proof_height_on_b: dummy_proof_height(),
         signer: "test".to_string().into(),
-    }
+    };
+    MsgEnvelope::Packet(msg.into())
 }
 
 pub fn received_packet(
@@ -708,28 +722,33 @@ pub fn received_packet(
     }
 }
 
-pub fn msg_timeout(packet: Packet, next_sequence_recv: Sequence) -> MsgTimeout {
-    MsgTimeout {
+pub fn msg_timeout(
+    packet: Packet,
+    next_sequence_recv: Sequence,
+) -> MsgEnvelope {
+    let msg = MsgTimeout {
         packet,
         next_seq_recv_on_b: next_sequence_recv,
         proof_unreceived_on_b: dummy_proof(),
         proof_height_on_b: dummy_proof_height(),
         signer: "test".to_string().into(),
-    }
+    };
+    MsgEnvelope::Packet(msg.into())
 }
 
 pub fn msg_timeout_on_close(
     packet: Packet,
     next_sequence_recv: Sequence,
-) -> MsgTimeoutOnClose {
-    MsgTimeoutOnClose {
+) -> MsgEnvelope {
+    let msg = MsgTimeoutOnClose {
         packet,
         next_seq_recv_on_b: next_sequence_recv,
         proof_unreceived_on_b: dummy_proof(),
         proof_close_on_b: dummy_proof(),
         proof_height_on_b: dummy_proof_height(),
         signer: "test".to_string().into(),
-    }
+    };
+    MsgEnvelope::Packet(msg.into())
 }
 
 pub fn packet_from_message(

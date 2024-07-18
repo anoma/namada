@@ -9,7 +9,6 @@ use ibc::apps::transfer::types::packet::PacketData;
 use ibc::apps::transfer::types::PrefixedCoin;
 use ibc::core::channel::types::timeout::TimeoutHeight;
 use namada_core::address::Address;
-use namada_core::borsh::BorshSerializeExt;
 use namada_core::tendermint::Time as TmTime;
 use namada_core::token::Amount;
 use namada_events::EmitEvents;
@@ -209,11 +208,10 @@ where
         timeout_height_on_b: TimeoutHeight::Never,
         timeout_timestamp_on_b: timeout_timestamp.into(),
     };
-    let data = MsgTransfer {
+    let msg = MsgTransfer {
         message,
         transfer: None,
-    }
-    .serialize_to_vec();
+    };
 
     let ctx = IbcProtocolContext { state };
 
@@ -221,7 +219,7 @@ where
     // needed in txs and not protocol
     let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
     let mut actions = IbcActions::new(Rc::new(RefCell::new(ctx)), verifiers);
-    actions.execute(&data).into_storage_result()?;
+    actions.execute_transfer(&msg).into_storage_result()?;
 
     Ok(())
 }
