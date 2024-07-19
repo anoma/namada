@@ -58,7 +58,9 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
         ctx.push_action(Action::Masp(MaspAction::MaspSectionRef(
             masp_section_ref,
         )))?;
-        let vins_addresses = shielded.transparent_bundle().map_or_else(
+        // Extract the debited accounts for the masp part of the transfer and
+        // push the relative actions
+        let vin_addresses = shielded.transparent_bundle().map_or_else(
             Default::default,
             |bndl| {
                 bndl.vin
@@ -67,9 +69,18 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
                     .collect::<BTreeSet<_>>()
             },
         );
-        let masp_authorizers = debited_accounts.into_iter().filter(|account| {
-            vins_addresses.contains(&addr_taddr(account.clone()))
-        });
+        let masp_authorizers: Vec<_> = debited_accounts
+            .into_iter()
+            .filter(|account| {
+                vin_addresses.contains(&addr_taddr(account.clone()))
+            })
+            .collect();
+        if masp_authorizers.len() != vin_addresses.len() {
+            return Err(Error::SimpleMessage(
+                "Transfer transaction does not debit all the expected accounts",
+            ));
+        }
+
         for authorizer in masp_authorizers {
             ctx.push_action(Action::Masp(MaspAction::MaspAuthorizer(
                 authorizer,
