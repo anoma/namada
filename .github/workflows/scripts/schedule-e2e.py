@@ -2,18 +2,16 @@ import json
 import os
 import subprocess
 import sys
-import time
 
-N_OF_MACHINES = 6
+N_OF_MACHINES = int(os.environ.get("N_OF_MACHINES", 5))
+CURRENT_MACHINE_INDEX = int(os.environ.get("INDEX", 1))
 
 NIGHTLY_VERSION = open("rust-nightly-version", "r").read().strip()
 
 E2E_FILE = ".github/workflows/scripts/e2e.json"
-CARGO_TEST_COMMAND = "cargo +{} test {} -- --test-threads=1 --nocapture --exact"
+CARGO_TEST_COMMAND = "cargo +{} nextest run -E '{}' --test-threads 1 --no-fail-fast"
 
 MACHINES = [{'tasks': [], 'time': [], 'total_time': 0} for _ in range(N_OF_MACHINES)]
-
-CURRENT_MACHINE_INDEX = int(os.environ.get("INDEX", 1))
 
 def find_freer_machine():
     minimum_work = 60 * 60 * 24 # 1 day in seconds
@@ -35,45 +33,9 @@ for task in sorted_task.items():
         'time': task[1]
     })
 
-for index, machine in enumerate(MACHINES):
-    print("Machine {}: {} tasks for a total of {}s".format(index, len(machine['tasks']), machine['total_time']))
-    for test in machine['tasks']:
-        cargo = CARGO_TEST_COMMAND.format(NIGHTLY_VERSION, test)
-
 tasks = MACHINES[CURRENT_MACHINE_INDEX]['tasks']
 
-test_results = {}
-has_failures = False
+test_filter = ' + '.join(['test(={})'.format(task['name']) for task in tasks ])
 
-for task in tasks:
-    try:
-        start = time.time()
-        command = CARGO_TEST_COMMAND.format(NIGHTLY_VERSION, task['name'])
-        end = time.time()
-        subprocess.check_call(command, shell=True, stdout=sys.stdout, stderr=subprocess.STDOUT)
-        test_results[task['name']] = {
-            'status': 'ok',
-            'time': round(end - start),
-            'command': command
-        }
-    except:
-        test_results[task['name']] = {
-            'status': 'fail',
-            'time': -1,
-            'command': command
-        }
-        has_failures = True
-        continue
-
-print("\nTest run:")
-
-for test_name in test_results.keys():
-    test_status = test_results[test_name]['status']
-    time = test_results[test_name]['time']
-    print("- Test {} ({}s) -> status: {}".format(test_name, time, test_status))
-    if test_results[test_name]['status'] != 'ok':
-        test_command = test_results[test_name]['command']
-        print("     Run locally with: {}".format(test_command))
-
-if has_failures:
-    exit(1)
+command = CARGO_TEST_COMMAND.format(NIGHTLY_VERSION, test_filter)
+subprocess.check_call(command, shell=True, stdout=sys.stdout, stderr=subprocess.STDOUT)
