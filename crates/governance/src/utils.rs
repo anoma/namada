@@ -248,6 +248,7 @@ impl Display for ProposalResult {
             TallyType::TwoThirds => {
                 self.total_voting_power.mul_ceil(Dec::two_thirds())
             }
+            TallyType::LessOneHalfOverOneThirdNay => Ok(token::Amount::zero()),
             _ => self.total_voting_power.mul_ceil(Dec::one_third()),
         }
         .unwrap();
