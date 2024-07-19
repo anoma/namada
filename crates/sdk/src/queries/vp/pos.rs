@@ -20,12 +20,13 @@ use namada_proof_of_stake::storage::{
     bond_handle, read_all_validator_addresses,
     read_below_capacity_validator_set_addresses_with_stake,
     read_consensus_validator_set_addresses_with_stake, read_pos_params,
-    read_total_stake, read_validator_avatar, read_validator_description,
-    read_validator_discord_handle, read_validator_email,
-    read_validator_last_slash_epoch, read_validator_max_commission_rate_change,
-    read_validator_name, read_validator_stake, read_validator_website,
-    unbond_handle, validator_commission_rate_handle,
-    validator_incoming_redelegations_handle, validator_slashes_handle,
+    read_total_active_stake, read_total_stake, read_validator_avatar,
+    read_validator_description, read_validator_discord_handle,
+    read_validator_email, read_validator_last_slash_epoch,
+    read_validator_max_commission_rate_change, read_validator_name,
+    read_validator_stake, read_validator_website, unbond_handle,
+    validator_commission_rate_handle, validator_incoming_redelegations_handle,
+    validator_slashes_handle,
 };
 pub use namada_proof_of_stake::types::ValidatorStateInfo;
 use namada_proof_of_stake::types::{
@@ -83,6 +84,9 @@ router! {POS,
 
     ( "total_stake" / [epoch: opt Epoch] )
         -> token::Amount = total_stake,
+
+    ( "total_active_voting_power" / [epoch: opt Epoch] )
+        -> token::Amount = total_active_voting_power,
 
     ( "delegations" / [owner: Address] / [epoch: opt Epoch] )
         -> HashSet<Address> = delegation_validators,
@@ -405,6 +409,21 @@ where
     let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
     let params = read_pos_params(ctx.state)?;
     read_total_stake(ctx.state, &params, epoch)
+}
+
+/// Get the total active voting power in PoS system at the given epoch or
+/// current when `None`.
+fn total_active_voting_power<D, H, V, T>(
+    ctx: RequestCtx<'_, D, H, V, T>,
+    epoch: Option<Epoch>,
+) -> namada_storage::Result<token::Amount>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
+    let params = read_pos_params(ctx.state)?;
+    read_total_active_stake(ctx.state, &params, epoch)
 }
 
 fn bond_deltas<D, H, V, T>(
