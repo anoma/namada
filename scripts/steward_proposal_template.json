@@ -1,0 +1,22 @@
+{
+  "proposal": {
+    "content": {
+      "title": "XXX",
+      "authors": "XXX, XXX",
+      "discussions-to": "XXX@YYY.ZZZ",
+      "created": "YYYY-MM-DDTHH:MM:SSZ",
+      "abstract": "XXX",
+      "motivation": "XXX",
+      "details": "XXX",
+      "requires": "0"
+    },
+    "author": "tnamXXX",
+    "voting_start_epoch": 0,
+    "voting_end_epoch": 0,
+    "activation_epoch": 0
+  },
+  "data": {
+    "add": "",
+    "remove": []
+  }
+}
