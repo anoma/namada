@@ -687,33 +687,26 @@ where
             .read_post(&counterpart_balance_key)?
             .unwrap_or_default();
         // Public keys must be the hash of the sources/targets
-        let address_hash = addr_taddr(counterpart.clone());
+        let addr_hash = addr_taddr(counterpart.clone());
         // Enable the decoding of these counterpart addresses
         result
             .decoder
-            .insert(address_hash, TAddrData::Addr(counterpart.clone()));
+            .insert(addr_hash, TAddrData::Addr(counterpart.clone()));
+        let zero = ValueSum::zero();
         // Finally record the actual balance change starting with the initial
         // state
-        let pre_entry = result
-            .pre
-            .get(&address_hash)
-            .cloned()
-            .unwrap_or(ValueSum::zero());
+        let pre_entry = result.pre.get(&addr_hash).unwrap_or(&zero).clone();
         result.pre.insert(
-            address_hash,
+            addr_hash,
             checked!(
                 pre_entry + &ValueSum::from_pair((*token).clone(), pre_balance)
             )
             .map_err(native_vp::Error::new)?,
         );
         // And then record thee final state
-        let post_entry = result
-            .post
-            .get(&address_hash)
-            .cloned()
-            .unwrap_or(ValueSum::zero());
+        let post_entry = result.post.get(&addr_hash).cloned().unwrap_or(zero);
         result.post.insert(
-            address_hash,
+            addr_hash,
             checked!(
                 post_entry
                     + &ValueSum::from_pair((*token).clone(), post_balance)
@@ -809,19 +802,21 @@ where
         }
 
         // Check the validity of the keys and get the transfer data
-        let mut changed_balances =
+        let changed_balances =
             self.validate_state_and_get_transfer_data(keys_changed, ibc_msg)?;
 
+        // Some constants that will be used repeatedly
+        let zero = ValueSum::zero();
         let masp_address_hash = addr_taddr(MASP);
         verify_sapling_balancing_value(
             changed_balances
                 .pre
                 .get(&masp_address_hash)
-                .unwrap_or(&ValueSum::zero()),
+                .unwrap_or(&zero),
             changed_balances
                 .post
                 .get(&masp_address_hash)
-                .unwrap_or(&ValueSum::zero()),
+                .unwrap_or(&zero),
             &shielded_tx.sapling_value_balance(),
             masp_epoch,
             &changed_balances.tokens,
@@ -845,24 +840,35 @@ where
         self.valid_note_commitment_update(&shielded_tx)?;
 
         // Checks on the transparent bundle, if present
+        let mut changed_bals_minus_txn = changed_balances.clone();
         validate_transparent_bundle(
             &shielded_tx,
-            &mut changed_balances,
+            &mut changed_bals_minus_txn,
             masp_epoch,
             conversion_state,
             &mut signers,
         )?;
 
-        // Ensure that every account for which balance has gone down has
-        // authorized this transaction
-        for (addr, pre) in changed_balances.pre {
-            if changed_balances
-                .post
-                .get(&addr)
-                .unwrap_or(&ValueSum::zero())
-                < &pre
-                && addr != masp_address_hash
+        // Ensure that every account for which balance has gone down as a result
+        // of the Transaction has authorized this transaction
+        for (addr, minus_txn_pre) in changed_bals_minus_txn.pre {
+            // The pre-balance seen by all VPs including this one
+            let pre = changed_balances.pre.get(&addr).unwrap_or(&zero);
+            // The post-balance seen by all VPs including this one
+            let post = changed_balances.post.get(&addr).unwrap_or(&zero);
+            // The post-balance if the effects of the Transaction are removed
+            let minus_txn_post =
+                changed_bals_minus_txn.post.get(&addr).unwrap_or(&zero);
+            // Never require a signature from the MASP VP
+            if addr != masp_address_hash &&
+            // Only require further authorization if without the Transaction,
+            // this Tx would decrease the balance of this address
+                minus_txn_post < &minus_txn_pre &&
+            // Only require further authorization from this address if the
+            // Transaction alters its balance
+                (minus_txn_pre, minus_txn_post) != (pre.clone(), post)
             {
+                // This address will need to provide further authorization
                 signers.insert(addr);
             }
         }
@@ -870,7 +876,7 @@ where
         // Ensure that this transaction is authorized by all involved parties
         for signer in signers {
             if let Some(TAddrData::Addr(IBC)) =
-                changed_balances.decoder.get(&signer)
+                changed_bals_minus_txn.decoder.get(&signer)
             {
                 // If the IBC address is a signatory, then it means that either
                 // Tx - Transaction(s) causes a decrease in the IBC balance or
@@ -887,7 +893,7 @@ where
                 if let Some(transp_bundle) = shielded_tx.transparent_bundle() {
                     for vout in transp_bundle.vout.iter() {
                         if let Some(TAddrData::Ibc(_)) =
-                            changed_balances.decoder.get(&vout.address)
+                            changed_bals_minus_txn.decoder.get(&vout.address)
                         {
                             let error = native_vp::Error::new_const(
                                 "Simultaneous credit and debit of IBC account \
@@ -900,7 +906,7 @@ where
                     }
                 }
             } else if let Some(TAddrData::Addr(signer)) =
-                changed_balances.decoder.get(&signer)
+                changed_bals_minus_txn.decoder.get(&signer)
             {
                 // Otherwise the signer must be decodable so that we can
                 // manually check the signatures
