@@ -915,8 +915,7 @@ pub mod testing {
         UpdateStewardCommission(UpdateStewardCommission),
         ResignSteward(Address),
         PendingTransfer(PendingTransfer),
-        IbcMsgTransfer(MsgTransfer, Option<(StoredBuildParams, String)>),
-        IbcMsgNftTransfer(MsgNftTransfer, Option<(StoredBuildParams, String)>),
+        IbcMessage(IbcMessage, Option<(StoredBuildParams, String)>),
         Custom,
     }
 
@@ -1491,7 +1490,8 @@ pub mod testing {
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
-            tx.add_data(IbcMessage::Transfer(msg_transfer.clone()));
+            let ibc_message = IbcMessage::Transfer(msg_transfer);
+            tx.add_data(&ibc_message);
             tx.add_code_from_hash(code_hash, Some(TX_IBC_WASM.to_owned()));
             if let Some((shielded_transfer, asset_types, build_params)) = aux {
                 let shielded_section_hash =
@@ -1507,9 +1507,9 @@ pub mod testing {
                 });
                 let build_param_bytes =
                     data_encoding::HEXLOWER.encode(&build_params.serialize_to_vec());
-                (tx, TxData::IbcMsgTransfer(msg_transfer, Some((build_params, build_param_bytes))))
+                (tx, TxData::IbcMessage(ibc_message, Some((build_params, build_param_bytes))))
             } else {
-                (tx, TxData::IbcMsgTransfer(msg_transfer, None))
+                (tx, TxData::IbcMessage(ibc_message, None))
             }
         }
     }
@@ -1538,7 +1538,8 @@ pub mod testing {
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
-            tx.add_data(IbcMessage::NftTransfer(msg_transfer.clone()));
+            let ibc_message = IbcMessage::NftTransfer(msg_transfer);
+            tx.add_data(&ibc_message);
             tx.add_code_from_hash(code_hash, Some(TX_IBC_WASM.to_owned()));
             if let Some((shielded_transfer, asset_types, build_params)) = aux {
                 let shielded_section_hash =
@@ -1554,9 +1555,9 @@ pub mod testing {
                 });
                 let build_param_bytes =
                     data_encoding::HEXLOWER.encode(&build_params.serialize_to_vec());
-                (tx, TxData::IbcMsgNftTransfer(msg_transfer, Some((build_params, build_param_bytes))))
+                (tx, TxData::IbcMessage(ibc_message, Some((build_params, build_param_bytes))))
             } else {
-                (tx, TxData::IbcMsgNftTransfer(msg_transfer, None))
+                (tx, TxData::IbcMessage(ibc_message, None))
             }
         }
     }
