@@ -32,7 +32,6 @@ use std::fmt::Debug;
 use std::rc::Rc;
 
 pub use actions::transfer_over_ibc;
-use borsh::BorshDeserialize;
 pub use context::common::IbcCommonContext;
 pub use context::nft_transfer::NftTransferContext;
 pub use context::nft_transfer_mod::NftTransferModule;
@@ -80,7 +79,6 @@ use namada_core::arith::checked;
 use namada_storage::{Error as StorageError, StorageRead};
 use namada_token::Transfer;
 pub use nft::*;
-use prost::Message;
 use thiserror::Error;
 
 /// The event type defined in ibc-rs for receiving a token
@@ -303,39 +301,25 @@ fn is_ack_successful(ack: &Acknowledgement) -> Result<bool, Error> {
 }
 
 /// Tries to decode transaction data to an `IbcMessage`
-pub fn decode_message(tx_data: &[u8]) -> Result<IbcMessage, Error> {
+pub fn decode_message(any_msg: Any) -> Result<IbcMessage, Error> {
     // ibc-rs message
-    if let Ok(any_msg) = Any::decode(tx_data) {
-        if let Ok(envelope) = MsgEnvelope::try_from(any_msg.clone()) {
-            return Ok(IbcMessage::Envelope(Box::new(envelope.into())));
-        }
-        if let Ok(message) = IbcMsgTransfer::try_from(any_msg.clone()) {
-            let msg = MsgTransfer {
-                message: message.into(),
-                transfer: None,
-            };
-            return Ok(IbcMessage::Transfer(msg));
-        }
-        if let Ok(message) = IbcMsgNftTransfer::try_from(any_msg) {
-            let msg = MsgNftTransfer {
-                message: message.into(),
-                transfer: None,
-            };
-            return Ok(IbcMessage::NftTransfer(msg));
-        }
+    if let Ok(envelope) = MsgEnvelope::try_from(any_msg.clone()) {
+        Ok(IbcMessage::Envelope(Box::new(envelope.into())))
+    } else if let Ok(message) = IbcMsgTransfer::try_from(any_msg.clone()) {
+        let msg = MsgTransfer {
+            message: message.into(),
+            transfer: None,
+        };
+        Ok(IbcMessage::Transfer(msg))
+    } else if let Ok(message) = IbcMsgNftTransfer::try_from(any_msg) {
+        let msg = MsgNftTransfer {
+            message: message.into(),
+            transfer: None,
+        };
+        Ok(IbcMessage::NftTransfer(msg))
+    } else {
+        Err(Error::DecodingData)
     }
-
-    // Transfer message with `ShieldingTransfer`
-    if let Ok(msg) = MsgTransfer::try_from_slice(tx_data) {
-        return Ok(IbcMessage::Transfer(msg));
-    }
-
-    // NFT transfer message with `ShieldingTransfer`
-    if let Ok(msg) = MsgNftTransfer::try_from_slice(tx_data) {
-        return Ok(IbcMessage::NftTransfer(msg));
-    }
-
-    Err(Error::DecodingData)
 }
 
 /// Return the last sequence send
