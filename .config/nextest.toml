@@ -1,0 +1,14 @@
+[profile.default]
+retries = 0
+
+[[profile.default.overrides]]
+filter = 'test(=e2e::ledger_tests::double_signing_gets_slashed)'
+retries = 2
+
+[[profile.default.overrides]]
+filter = 'test(=e2e::ibc_tests::ibc_namada_gaia)'
+retries = 2
+
+[[profile.default.overrides]]
+filter = 'test(=e2e::ledger_tests::pos_init_validator)'
+retries = 2

@@ -25,11 +25,16 @@ target/
 
 # wasm artifacts
 wasm/*.wasm
+wasm/checksums.json
+wasm_for_tests/*.wasm
 
 # app version string file
 /crates/apps_lib/version.rs
 # app version string file (previously at this path, left for transition)
 /crates/apps/version.rs
+
+# coverage
+lcov.info
 
 # Hidden to stop from re-appearing. Moved to `tx/src/proto/generated/types.rs`.
 core/src/proto/generated/types.rs
