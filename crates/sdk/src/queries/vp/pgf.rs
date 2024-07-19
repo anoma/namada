@@ -45,7 +45,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    namada_governance::pgf::storage::get_payments(ctx.state)
+    namada_governance::pgf::storage::get_continuous_pgf_payments(ctx.state)
 }
 
 /// Query the PGF parameters

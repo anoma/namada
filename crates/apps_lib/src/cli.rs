@@ -1290,7 +1290,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about(wrap!("Query pgf stewards and continuous funding."))
+                .about(wrap!("Query PGF stewards and continuous funding."))
                 .add_args::<args::QueryPgf<args::CliTypes>>()
         }
     }
@@ -5632,7 +5632,7 @@ pub mod args {
                         .def()
                         .help(wrap!(
                             "Flag if the proposal is of type pgf-funding. \
-                             Used to control continuous/retro pgf fundings."
+                             Used to control continuous/retro PGF fundings."
                         ))
                         .conflicts_with_all([
                             PROPOSAL_ETH.name,

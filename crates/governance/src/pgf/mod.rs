@@ -1,17 +1,17 @@
-//! Pgf library code
+//! PGF library code
 
 use namada_core::address::{Address, InternalAddress};
 
-/// Pgf CLI
+/// PGF CLI
 pub mod cli;
-/// Pgf inflation code
+/// PGF inflation code
 pub mod inflation;
-/// Pgf parameters
+/// PGF parameters
 pub mod parameters;
-/// Pgf storage
+/// PGF storage
 pub mod storage;
 
-/// The Pgf internal address
+/// The PGF internal address
 pub const ADDRESS: Address = Address::Internal(InternalAddress::Pgf);
 
 /// Upper limit on the number of reward distribution per steawrd

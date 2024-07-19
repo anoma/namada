@@ -11,7 +11,7 @@ use crate::pgf::REWARD_DISTRIBUTION_LIMIT;
 #[derive(
     Clone, Debug, BorshSerialize, BorshDeserialize, BorshDeserializer, PartialEq,
 )]
-/// Struct holding data about a pgf steward
+/// Struct holding data about a PGF steward
 pub struct StewardDetail {
     /// The steward address
     pub address: Address,
