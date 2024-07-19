@@ -25,7 +25,7 @@ use namada_core::borsh::BorshDeserialize;
 use namada_core::hash::Hash;
 use namada_core::storage::{BlockHeight, Epoch, Epochs, Header, Key, TxIndex};
 use namada_events::{Event, EventType};
-use namada_ibc::{decode_message, IbcMessage};
+use namada_ibc::IbcMessage;
 use namada_storage::{OptionExt, ResultExt, StorageRead};
 use namada_tx::BatchedTxRef;
 
@@ -129,7 +129,7 @@ where
             .tx
             .data(batched_tx.cmt)
             .ok_or_err_msg("No transaction data")?;
-        decode_message(&data).into_storage_result()
+        IbcMessage::try_from_slice(&data).into_storage_result()
     }
 
     /// Charge the provided gas for the current vp

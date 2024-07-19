@@ -59,7 +59,7 @@ use namada_events::extend::{
     MaspTxBatchRefs as MaspTxBatchRefsAttr,
     MaspTxBlockIndex as MaspTxBlockIndexAttr, ReadFromEventAttributes,
 };
-use namada_ibc::{decode_message, extract_masp_tx_from_envelope, IbcMessage};
+use namada_ibc::{extract_masp_tx_from_envelope, IbcMessage};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
@@ -2542,7 +2542,7 @@ fn extract_masp_tx_from_ibc_message(
         let tx_data = tx.data(cmt).ok_or_else(|| {
             Error::Other("Missing transaction data".to_string())
         })?;
-        let ibc_msg = decode_message(&tx_data)
+        let ibc_msg = IbcMessage::try_from_slice(&tx_data)
             .map_err(|_| Error::Other("Invalid IBC message".to_string()))?;
         if let IbcMessage::Envelope(ref envelope) = ibc_msg {
             if let Some(masp_tx) = extract_masp_tx_from_envelope(envelope) {
