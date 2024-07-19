@@ -195,10 +195,6 @@ pub async fn submit_reveal_aux(
     args: args::Tx,
     address: &Address,
 ) -> Result<(), error::Error> {
-    if args.dump_tx {
-        return Ok(());
-    }
-
     if let Address::Implicit(ImplicitAddress(pkh)) = address {
         let public_key = context
             .wallet_mut()
@@ -207,13 +203,24 @@ pub async fn submit_reveal_aux(
             .map_err(|e| error::Error::Other(e.to_string()))?;
 
         if tx::is_reveal_pk_needed(context.client(), address).await? {
+            let (mut tx, signing_data) =
+                tx::build_reveal_pk(context, &args, &public_key).await?;
+
+            if args.dump_tx {
+                display_line!(
+                    context.io(),
+                    "A tx to reveal the public key for address \
+                     {address} is needed..."
+                );
+                tx::dump_tx(context.io(), &args, tx.clone());
+                return Ok(());
+            }
+
             display_line!(
                 context.io(),
                 "Submitting a tx to reveal the public key for address \
                  {address}..."
             );
-            let (mut tx, signing_data) =
-                tx::build_reveal_pk(context, &args, &public_key).await?;
 
             sign(context, &mut tx, &args, signing_data).await?;
 
