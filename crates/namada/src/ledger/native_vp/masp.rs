@@ -875,6 +875,19 @@ where
             }
         }
 
+        let mut actions_authorizers: HashSet<&Address> = actions
+            .iter()
+            .filter_map(|action| {
+                if let namada_tx::action::Action::Masp(
+                    namada_tx::action::MaspAction::MaspAuthorizer(addr),
+                ) = action
+                {
+                    Some(addr)
+                } else {
+                    None
+                }
+            })
+            .collect();
         // Ensure that this transaction is authorized by all involved parties
         for authorizer in authorizers {
             if let Some(TAddrData::Addr(IBC)) =
@@ -926,11 +939,7 @@ where
                 // is required to validate a discrepancy in its balance change
                 // because of a masp transaction, which might require a
                 // different validation than a normal balance change
-                if !actions.contains(&namada_tx::action::Action::Masp(
-                    namada_tx::action::MaspAction::MaspAuthorizer(
-                        signer.to_owned(),
-                    ),
-                )) {
+                if !actions_authorizers.swap_remove(signer) {
                     let error = native_vp::Error::new_alloc(format!(
                         "The required masp authorizer action for address \
                          {signer} is missing"
@@ -948,6 +957,16 @@ where
                 tracing::debug!("{error}");
                 return Err(error);
             }
+        }
+        // The transaction shall not push masp authorizer actions that are not
+        // needed cause this might lead vps to run a wrong validation logic
+        if !actions_authorizers.is_empty() {
+            let error = native_vp::Error::new_const(
+                "Found masp authorizer actions that are not required",
+            )
+            .into();
+            tracing::debug!("{error}");
+            return Err(error);
         }
 
         // Verify the proofs
