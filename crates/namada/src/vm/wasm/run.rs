@@ -1093,8 +1093,7 @@ mod tests {
     #[test]
     fn test_tx_memory_limiter_in_guest() {
         let mut state = TestState::default();
-        let gas_meter =
-            RefCell::new(TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()));
+        let gas_meter = RefCell::new(TxGasMeter::new(TX_GAS_LIMIT));
         let tx_index = TxIndex::default();
 
         // This code will allocate memory of the given size
@@ -1161,7 +1160,7 @@ mod tests {
         let mut state = TestState::default();
         let addr = state.in_mem_mut().address_gen.generate_address("rng seed");
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new(TX_GAS_LIMIT),
         ));
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
@@ -1262,7 +1261,7 @@ mod tests {
         let mut state = TestState::default();
         let addr = state.in_mem_mut().address_gen.generate_address("rng seed");
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new(TX_GAS_LIMIT),
         ));
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
@@ -1329,8 +1328,7 @@ mod tests {
     #[test]
     fn test_tx_memory_limiter_in_host_input() {
         let mut state = TestState::default();
-        let gas_meter =
-            RefCell::new(TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()));
+        let gas_meter = RefCell::new(TxGasMeter::new(TX_GAS_LIMIT));
         let tx_index = TxIndex::default();
 
         let tx_no_op = TestWasms::TxNoOp.read_bytes();
@@ -1395,7 +1393,7 @@ mod tests {
         let mut state = TestState::default();
         let addr = state.in_mem_mut().address_gen.generate_address("rng seed");
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new(TX_GAS_LIMIT),
         ));
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
@@ -1460,8 +1458,7 @@ mod tests {
     #[test]
     fn test_tx_memory_limiter_in_host_env() {
         let mut state = TestState::default();
-        let gas_meter =
-            RefCell::new(TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()));
+        let gas_meter = RefCell::new(TxGasMeter::new(TX_GAS_LIMIT));
         let tx_index = TxIndex::default();
 
         let tx_read_key = TestWasms::TxReadStorageKey.read_bytes();
@@ -1518,7 +1515,7 @@ mod tests {
         let mut state = TestState::default();
         let addr = state.in_mem_mut().address_gen.generate_address("rng seed");
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new(TX_GAS_LIMIT),
         ));
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
@@ -1575,7 +1572,7 @@ mod tests {
         let mut state = TestState::default();
         let addr = state.in_mem_mut().address_gen.generate_address("rng seed");
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new(TX_GAS_LIMIT),
         ));
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
@@ -1715,9 +1712,7 @@ mod tests {
     #[test]
     fn test_tx_out_of_gas_in_guest() {
         let mut state = TestState::default();
-        let gas_meter = RefCell::new(TxGasMeter::new_from_sub_limit(
-            OUT_OF_GAS_LIMIT.into(),
-        ));
+        let gas_meter = RefCell::new(TxGasMeter::new(OUT_OF_GAS_LIMIT));
         let tx_index = TxIndex::default();
 
         // This code will charge gas in a host function indefinetely
@@ -1756,9 +1751,7 @@ mod tests {
     #[test]
     fn test_tx_out_of_gas_in_host() {
         let mut state = TestState::default();
-        let gas_meter = RefCell::new(TxGasMeter::new_from_sub_limit(
-            OUT_OF_GAS_LIMIT.into(),
-        ));
+        let gas_meter = RefCell::new(TxGasMeter::new(OUT_OF_GAS_LIMIT));
         let tx_index = TxIndex::default();
 
         // This code will charge gas in a host function indefinetely
@@ -1800,7 +1793,7 @@ mod tests {
 
         let addr = state.in_mem_mut().address_gen.generate_address("rng seed");
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(OUT_OF_GAS_LIMIT.into()),
+            &TxGasMeter::new(OUT_OF_GAS_LIMIT),
         ));
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
@@ -1843,7 +1836,7 @@ mod tests {
 
         let addr = state.in_mem_mut().address_gen.generate_address("rng seed");
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(OUT_OF_GAS_LIMIT.into()),
+            &TxGasMeter::new(OUT_OF_GAS_LIMIT),
         ));
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
@@ -1961,7 +1954,7 @@ mod tests {
         let mut state = TestState::default();
         let addr = state.in_mem_mut().address_gen.generate_address("rng seed");
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()),
+            &TxGasMeter::new(TX_GAS_LIMIT),
         ));
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
@@ -1991,8 +1984,7 @@ mod tests {
         let tx_data = vec![];
         let tx_index = TxIndex::default();
         let mut state = TestState::default();
-        let gas_meter =
-            RefCell::new(TxGasMeter::new_from_sub_limit(TX_GAS_LIMIT.into()));
+        let gas_meter = RefCell::new(TxGasMeter::new(TX_GAS_LIMIT));
         let (mut vp_cache, _) =
             wasm::compilation_cache::common::testing::cache();
         let (mut tx_cache, _) =

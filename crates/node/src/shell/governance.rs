@@ -418,7 +418,7 @@ where
             tx_wasm_cache: &mut shell.tx_wasm_cache,
         },
         // No gas limit for governance proposal
-        &RefCell::new(TxGasMeter::new_from_sub_limit(u64::MAX.into())),
+        &RefCell::new(TxGasMeter::new(u64::MAX)),
         &mut shell.state,
     );
     shell

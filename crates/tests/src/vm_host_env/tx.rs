@@ -74,9 +74,7 @@ impl Default for TestTxEnv {
         Self {
             state,
             iterators: PrefixIterators::default(),
-            gas_meter: RefCell::new(TxGasMeter::new_from_sub_limit(
-                100_000_000_000.into(),
-            )),
+            gas_meter: RefCell::new(TxGasMeter::new(1_000_000_000_000)),
             sentinel: RefCell::new(TxSentinel::default()),
             tx_index: TxIndex::default(),
             verifiers: BTreeSet::default(),

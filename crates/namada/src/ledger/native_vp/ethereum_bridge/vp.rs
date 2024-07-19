@@ -391,7 +391,7 @@ mod tests {
         let mut tx = Tx::from_type(TxType::Raw);
         tx.push_default_inner_tx();
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+            &TxGasMeter::new(u64::MAX),
         ));
         let batched_tx = tx.batch_ref_first_tx().unwrap();
         let vp = EthBridge {
@@ -445,7 +445,7 @@ mod tests {
         let mut tx = Tx::from_type(TxType::Raw);
         tx.push_default_inner_tx();
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+            &TxGasMeter::new(u64::MAX),
         ));
         let batched_tx = tx.batch_ref_first_tx().unwrap();
         let vp = EthBridge {
@@ -502,7 +502,7 @@ mod tests {
         let mut tx = Tx::from_type(TxType::Raw);
         tx.push_default_inner_tx();
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+            &TxGasMeter::new(u64::MAX),
         ));
         let batched_tx = tx.batch_ref_first_tx().unwrap();
         let vp = EthBridge {

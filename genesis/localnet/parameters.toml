@@ -6,7 +6,7 @@ is_native_token_transferable = true
 min_num_of_blocks = 4
 # Max payload size, in bytes, for a tx.
 max_tx_bytes = 1048576
-# Max payload size, in bytes, for a tx batch proposal.
+# Max payload size, in bytes, for a block proposal.
 max_proposal_bytes = 6291456
 # vp allowlist
 vp_allowlist = []
