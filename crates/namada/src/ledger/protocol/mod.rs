@@ -755,8 +755,7 @@ where
                     && result.is_accepted()
                 {
                     if let Some(masp_tx_id) =
-                        namada_tx::action::get_masp_section_ref(*state)
-                            .map_err(Error::StateError)?
+                        namada_tx::action::get_masp_section_ref(&actions)
                     {
                         Some(MaspTxResult {
                             tx_result: result,
