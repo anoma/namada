@@ -3888,6 +3888,8 @@ version = "0.42.0"
 dependencies = [
  "borsh",
  "namada_core",
+ "namada_state",
+ "prost",
  "strum 0.24.1",
 ]
 
@@ -6760,6 +6762,21 @@ version = "0.41.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_proof_of_stake",
+ "namada_tests",
+ "namada_tx_prelude",
+ "proptest",
+ "rlsf",
+ "test-log",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "tx_proposal_ibc_client_upgrade"
+version = "0.40.0"
+dependencies = [
+ "getrandom 0.2.15",
+ "namada_test_utils",
  "namada_tests",
  "namada_tx_prelude",
  "proptest",
