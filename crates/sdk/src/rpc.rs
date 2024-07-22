@@ -744,6 +744,19 @@ pub async fn get_total_staked_tokens<C: crate::queries::Client + Sync>(
     )
 }
 
+/// Get the total active voting power in the given epoch
+pub async fn get_total_active_voting_power<C: crate::queries::Client + Sync>(
+    client: &C,
+    epoch: Epoch,
+) -> Result<token::Amount, error::Error> {
+    convert_response::<C, _>(
+        RPC.vp()
+            .pos()
+            .total_active_voting_power(client, &Some(epoch))
+            .await,
+    )
+}
+
 /// Get the given validator's stake at the given epoch
 pub async fn get_validator_stake<C: crate::queries::Client + Sync>(
     client: &C,
@@ -947,8 +960,8 @@ pub async fn query_proposal_result<C: crate::queries::Client + Sync>(
                 .await
                 .unwrap_or_default();
             let tally_type = proposal.get_tally_type(is_author_pgf_steward);
-            let total_staked_token =
-                get_total_staked_tokens(client, tally_epoch)
+            let total_active_voting_power =
+                get_total_active_voting_power(client, tally_epoch)
                     .await
                     .unwrap_or_default();
 
@@ -992,7 +1005,7 @@ pub async fn query_proposal_result<C: crate::queries::Client + Sync>(
             }
             compute_proposal_result(
                 proposal_votes,
-                total_staked_token,
+                total_active_voting_power,
                 tally_type,
             )?
         }
