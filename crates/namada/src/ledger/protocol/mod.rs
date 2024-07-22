@@ -406,9 +406,10 @@ where
                 if is_accepted {
                     // If the transaction was a masp one append the
                     // transaction refs for the events
+                    let actions =
+                        state.read_actions().map_err(Error::StateError)?;
                     if let Some(masp_section_ref) =
-                        namada_tx::action::get_masp_section_ref(state)
-                            .map_err(Error::StateError)?
+                        namada_tx::action::get_masp_section_ref(&actions)
                     {
                         extended_tx_result
                             .masp_tx_refs
@@ -744,6 +745,9 @@ where
                         result.vps_result.rejected_vps
                     );
                 }
+
+                let actions =
+                    state.read_actions().map_err(Error::StateError)?;
 
                 // Ensure that the transaction is actually a masp one, otherwise
                 // reject
