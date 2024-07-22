@@ -103,6 +103,8 @@ use crate::strings::{
 };
 use crate::{run, run_as};
 
+const UPGRADE_HEIGHT: u64 = 500;
+
 #[test]
 fn run_ledger_ibc() -> Result<()> {
     let update_genesis =
@@ -731,6 +733,103 @@ fn proposal_ibc_token_inflation() -> Result<()> {
 }
 
 #[test]
+fn ibc_upgrade_client() -> Result<()> {
+    const MASP_EPOCH_MULTIPLIER: u64 = 2;
+    let update_genesis =
+        |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
+            genesis.parameters.parameters.epochs_per_year =
+                epochs_per_year_from_min_duration(20);
+            // for the trusting period of IBC client
+            genesis.parameters.pos_params.pipeline_len = 5;
+            genesis.parameters.parameters.masp_epoch_multiplier =
+                MASP_EPOCH_MULTIPLIER;
+            genesis.parameters.ibc_params.default_mint_limit =
+                Amount::max_signed();
+            genesis
+                .parameters
+                .ibc_params
+                .default_per_epoch_throughput_limit = Amount::max_signed();
+            setup::set_validators(1, genesis, base_dir, |_| 0)
+        };
+    let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
+    let _bg_ledger_a = ledger_a.background();
+    let _bg_ledger_b = ledger_b.background();
+
+    // Proposal on Chain A
+    // Delegate some token
+    delegate_token(&test_a)?;
+    let rpc_a = get_actor_rpc(&test_a, Who::Validator(0));
+    let mut epoch = get_epoch(&test_a, &rpc_a).unwrap();
+    let delegated = epoch + 5u64;
+    while epoch <= delegated {
+        sleep(10);
+        epoch = get_epoch(&test_a, &rpc_a).unwrap_or_default();
+    }
+    // upgrade proposal on Chain A
+    // The transaction will store the upgraded client state and consensus state
+    // as if Chain A was upgraded
+    let start_epoch = propose_upgrade_client(&test_a)?;
+    let mut epoch = get_epoch(&test_a, &rpc_a).unwrap();
+    // Vote
+    while epoch <= start_epoch {
+        sleep(10);
+        epoch = get_epoch(&test_a, &rpc_a).unwrap_or_default();
+    }
+    submit_votes(&test_a)?;
+
+    // creating IBC channel while waiting the grace epoch
+    setup_hermes(&test_a, &test_b)?;
+    let port_id_a = "transfer".parse().unwrap();
+    let port_id_b = "transfer".parse().unwrap();
+    let (channel_id_a, channel_id_b) =
+        create_channel_with_hermes(&test_a, &test_b)?;
+    // Start relaying
+    let hermes = run_hermes(&test_a)?;
+    let _bg_hermes = hermes.background();
+
+    let height = query_height(&test_a)?;
+    println!("DEBUG: height before: {height}");
+
+    // wait for the grace epoch
+    let grace_epoch = start_epoch + 12u64 + 6u64 + 1u64;
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
+    while epoch < grace_epoch {
+        sleep(10);
+        epoch = get_epoch(&test_a, &rpc_a).unwrap_or_default();
+    }
+
+    // upgrade the IBC client of Chain A with Hermes
+    let target_reference_height = query_height(&test_b)?.revision_height() + 10;
+    upgrade_client(
+        &test_a,
+        test_a.net.chain_id.to_string(),
+        target_reference_height,
+    )?;
+
+    // Check if IBC transfer works
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
+    let receiver = find_address(&test_b, BERTHA)?;
+    transfer(
+        &test_a,
+        ALBERT,
+        receiver.to_string(),
+        NAM,
+        100000.0,
+        Some(ALBERT_KEY),
+        &port_id_a,
+        &channel_id_a,
+        None,
+        None,
+        None,
+        false,
+    )?;
+    wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
+    check_balances(&port_id_b, &channel_id_b, &test_a, &test_b)?;
+
+    Ok(())
+}
+
+#[test]
 fn ibc_rate_limit() -> Result<()> {
     // Mint limit 2 transfer/channel-0/nam, per-epoch throughput limit 1 NAM
     let update_genesis =
@@ -1089,6 +1188,27 @@ fn wait_for_packet_relay(
         }
     }
     Err(eyre!("Pending packet is still left"))
+}
+
+fn upgrade_client(
+    test: &Test,
+    host_chain_id: impl AsRef<str>,
+    upgrade_height: u64,
+) -> Result<()> {
+    let args = [
+        "upgrade",
+        "client",
+        "--host-chain",
+        host_chain_id.as_ref(),
+        "--client",
+        "07-tendermint-0",
+        "--upgrade-height",
+        &upgrade_height.to_string(),
+    ];
+    let mut hermes = run_hermes_cmd(test, args, Some(40))?;
+    hermes.exp_string("upgraded")?;
+
+    Ok(())
 }
 
 fn wait_epochs(test: &Test, duration_epochs: u64) -> Result<()> {
@@ -2170,6 +2290,33 @@ fn propose_inflation(test: &Test) -> Result<Epoch> {
         &rpc,
     ]);
     let mut client = run!(test, Bin::Client, submit_proposal_args, Some(100))?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
+    client.assert_success();
+    Ok(start_epoch.into())
+}
+
+fn propose_upgrade_client(test_a: &Test) -> Result<Epoch> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
+    let albert = find_address(test_a, ALBERT)?;
+    let rpc_a = get_actor_rpc(test_a, Who::Validator(0));
+    let epoch = get_epoch(test_a, &rpc_a)?;
+    let start_epoch = (epoch.0 + 6) / 3 * 3;
+    let proposal_json_path = prepare_proposal_data(
+        test_a.test_dir.path(),
+        0,
+        albert,
+        TestWasms::TxProposalIbcClientUpgrade.read_bytes(),
+        start_epoch,
+    );
+
+    let submit_proposal_args = vec![
+        "init-proposal",
+        "--data-path",
+        proposal_json_path.to_str().unwrap(),
+        "--node",
+        &rpc_a,
+    ];
+    let mut client = run!(test_a, Bin::Client, submit_proposal_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
     Ok(start_epoch.into())

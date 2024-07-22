@@ -6,6 +6,7 @@
     "e2e::ibc_tests::proposal_ibc_token_inflation": 1100,
     "e2e::ibc_tests::ibc_rate_limit": 430,
     "e2e::ibc_tests::ibc_namada_gaia": 180,
+    "e2e::ibc_tests::ibc_upgrade_client": 700,
     "e2e::eth_bridge_tests::test_add_to_bridge_pool": 10,
     "e2e::ledger_tests::double_signing_gets_slashed": 12,
     "e2e::ledger_tests::ledger_many_txs_in_a_block": 55,
