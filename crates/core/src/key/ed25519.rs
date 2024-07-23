@@ -390,8 +390,17 @@ impl super::SigScheme for SigScheme {
     where
         H: 'static + StorageHasher,
     {
-        pk.0.verify(&sig.0, &data.signable_hash::<H>())
-            .map_err(|err| VerifySigError::SigVerifyError(err.to_string()))
+        #[cfg(not(fuzzing))]
+        {
+            pk.0.verify(&sig.0, &data.signable_hash::<H>())
+                .map_err(|err| VerifySigError::SigVerifyError(err.to_string()))
+        }
+
+        #[cfg(fuzzing)]
+        {
+            let _ = (pk, data, sig);
+            Ok(())
+        }
     }
 }
 
