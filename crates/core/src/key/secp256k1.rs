@@ -586,16 +586,25 @@ impl super::SigScheme for SigScheme {
     where
         H: 'static + StorageHasher,
     {
-        use k256::ecdsa::signature::hazmat::PrehashVerifier;
+        #[cfg(not(fuzzing))]
+        {
+            use k256::ecdsa::signature::hazmat::PrehashVerifier;
 
-        let vrf_key = k256::ecdsa::VerifyingKey::from(&pk.0);
-        let msg = data.signable_hash::<H>();
-        vrf_key.verify_prehash(&msg, &sig.0).map_err(|e| {
-            VerifySigError::SigVerifyError(format!(
-                "Error verifying secp256k1 signature: {}",
-                e
-            ))
-        })
+            let vrf_key = k256::ecdsa::VerifyingKey::from(&pk.0);
+            let msg = data.signable_hash::<H>();
+            vrf_key.verify_prehash(&msg, &sig.0).map_err(|e| {
+                VerifySigError::SigVerifyError(format!(
+                    "Error verifying secp256k1 signature: {}",
+                    e
+                ))
+            })
+        }
+
+        #[cfg(fuzzing)]
+        {
+            let _ = (pk, data, sig);
+            Ok(())
+        }
     }
 }
 

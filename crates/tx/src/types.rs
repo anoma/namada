@@ -567,9 +567,15 @@ impl Authorization {
             Signer::PubKeys(pks) => {
                 let hash = self.get_raw_hash();
                 for (idx, pk) in pks.iter().enumerate() {
-                    if let Some(map_idx) =
-                        public_keys_index_map.get_index_from_public_key(pk)
-                    {
+                    let map_idx =
+                        public_keys_index_map.get_index_from_public_key(pk);
+
+                    // Use the first signature when fuzzing as the map is
+                    // unlikely to contain matching PKs
+                    #[cfg(fuzzing)]
+                    let map_idx = map_idx.or(Some(0_u8));
+
+                    if let Some(map_idx) = map_idx {
                         let sig_idx = u8::try_from(idx)
                             .map_err(|_| VerifySigError::PksOverflow)?;
                         consume_verify_sig_gas()?;
@@ -588,6 +594,14 @@ impl Authorization {
                 }
             }
         }
+
+        // There's usually not enough signatures when fuzzing, this makes it
+        // more likely to pass authorization.
+        #[cfg(fuzzing)]
+        {
+            verifications = 1;
+        }
+
         Ok(verifications)
     }
 }
@@ -1437,13 +1451,21 @@ impl Tx {
                 // Check that the hashes being checked are a subset of those in
                 // this section. Also ensure that all the sections the signature
                 // signs over are present.
-                if hashes.iter().all(|x| {
+                let matching_hashes = hashes.iter().all(|x| {
                     signatures.targets.contains(x) || section.get_hash() == *x
                 }) && signatures
                     .targets
                     .iter()
-                    .all(|x| self.get_section(x).is_some())
-                {
+                    .all(|x| self.get_section(x).is_some());
+
+                // Don't require matching hashes when fuzzing as it's unlikely
+                // to be true
+                #[cfg(fuzzing)]
+                let _ = matching_hashes;
+                #[cfg(fuzzing)]
+                let matching_hashes = true;
+
+                if matching_hashes {
                     // Finally verify that the signature itself is valid
                     let amt_verifieds = signatures
                         .verify_signature(
