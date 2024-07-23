@@ -48,6 +48,8 @@ pub enum VerifySigError {
     InvalidSectionSignature(String),
     #[error("The number of PKs overflows u8::MAX")]
     PksOverflow,
+    #[error("An expected signature is missing.")]
+    MissingSignature,
 }
 
 #[allow(missing_docs)]
@@ -558,6 +560,7 @@ impl Authorization {
             // Verify the signatures against the subset of this section's public
             // keys that are also in the given map
             Signer::PubKeys(pks) => {
+                let hash = self.get_raw_hash();
                 for (idx, pk) in pks.iter().enumerate() {
                     if let Some(map_idx) =
                         public_keys_index_map.get_index_from_public_key(pk)
@@ -565,11 +568,11 @@ impl Authorization {
                         let sig_idx = u8::try_from(idx)
                             .map_err(|_| VerifySigError::PksOverflow)?;
                         consume_verify_sig_gas()?;
-                        common::SigScheme::verify_signature(
-                            pk,
-                            &self.get_raw_hash(),
-                            &self.signatures[&sig_idx],
-                        )?;
+                        let sig = self
+                            .signatures
+                            .get(&sig_idx)
+                            .ok_or(VerifySigError::MissingSignature)?;
+                        common::SigScheme::verify_signature(pk, &hash, sig)?;
                         verified_pks.insert(map_idx);
                         // Cannot overflow
                         #[allow(clippy::arithmetic_side_effects)]
