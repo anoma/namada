@@ -21,7 +21,6 @@ use namada_core::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcM
 use namada_core::ibc::apps::transfer::types::packet::PacketData;
 use namada_core::masp::{addr_taddr, encode_asset_type, ibc_taddr, MaspEpoch};
 use namada_core::storage::Key;
-use namada_gas::GasMetering;
 use namada_governance::storage::is_proposal_accepted;
 use namada_ibc::core::channel::types::commitment::{
     compute_packet_commitment, PacketCommitment,
@@ -43,6 +42,7 @@ use namada_sdk::masp::TAddrData;
 use namada_state::{ConversionState, OptionExt, ResultExt, StateRead};
 use namada_token::read_denom;
 use namada_token::validation::verify_shielded_tx;
+use namada_tx::action::Read;
 use namada_tx::BatchedTxRef;
 use namada_vp_env::VpEnv;
 use thiserror::Error;
@@ -703,7 +703,7 @@ where
             )
             .map_err(native_vp::Error::new)?,
         );
-        // And then record thee final state
+        // And then record the final state
         let post_entry = result.post.get(&addr_hash).cloned().unwrap_or(zero);
         result.post.insert(
             addr_hash,
@@ -750,6 +750,7 @@ where
         &self,
         tx_data: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
+        verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
         let masp_epoch_multiplier =
             namada_parameters::read_masp_epoch_multiplier_parameter(
@@ -764,6 +765,7 @@ where
         })?;
         let conversion_state = self.ctx.state.in_mem().get_conversion_state();
         let ibc_msg = self.ctx.get_ibc_message(tx_data).ok();
+        let actions = self.ctx.read_actions()?;
         let shielded_tx =
             if let Some(IbcMessage::Envelope(ref envelope)) = ibc_msg {
                 extract_masp_tx_from_envelope(envelope).ok_or_else(|| {
@@ -774,7 +776,7 @@ where
             } else {
                 // Get the Transaction object from the actions
                 let masp_section_ref =
-                    namada_tx::action::get_masp_section_ref(&self.ctx)?
+                    namada_tx::action::get_masp_section_ref(&actions)
                         .ok_or_else(|| {
                             native_vp::Error::new_const(
                                 "Missing MASP section reference in action",
@@ -824,7 +826,7 @@ where
         )?;
 
         // The set of addresses that are required to authorize this transaction
-        let mut signers = BTreeSet::new();
+        let mut authorizers = BTreeSet::new();
 
         // Checks on the sapling bundle
         // 1. The spend descriptions' anchors are valid
@@ -846,7 +848,7 @@ where
             &mut changed_bals_minus_txn,
             masp_epoch,
             conversion_state,
-            &mut signers,
+            &mut authorizers,
         )?;
 
         // Ensure that every account for which balance has gone down as a result
@@ -869,14 +871,27 @@ where
                 (minus_txn_pre, minus_txn_post) != (pre.clone(), post)
             {
                 // This address will need to provide further authorization
-                signers.insert(addr);
+                authorizers.insert(addr);
             }
         }
 
+        let mut actions_authorizers: HashSet<&Address> = actions
+            .iter()
+            .filter_map(|action| {
+                if let namada_tx::action::Action::Masp(
+                    namada_tx::action::MaspAction::MaspAuthorizer(addr),
+                ) = action
+                {
+                    Some(addr)
+                } else {
+                    None
+                }
+            })
+            .collect();
         // Ensure that this transaction is authorized by all involved parties
-        for signer in signers {
+        for authorizer in authorizers {
             if let Some(TAddrData::Addr(IBC)) =
-                changed_bals_minus_txn.decoder.get(&signer)
+                changed_bals_minus_txn.decoder.get(&authorizer)
             {
                 // If the IBC address is a signatory, then it means that either
                 // Tx - Transaction(s) causes a decrease in the IBC balance or
@@ -906,38 +921,52 @@ where
                     }
                 }
             } else if let Some(TAddrData::Addr(signer)) =
-                changed_bals_minus_txn.decoder.get(&signer)
+                changed_bals_minus_txn.decoder.get(&authorizer)
             {
-                // Otherwise the signer must be decodable so that we can
-                // manually check the signatures
-                let public_keys_index_map =
-                    crate::account::public_keys_index_map(
-                        &self.ctx.pre(),
-                        signer,
-                    )?;
-                let threshold =
-                    crate::account::threshold(&self.ctx.pre(), signer)?
-                        .unwrap_or(1);
-                let mut gas_meter = self.ctx.gas_meter.borrow_mut();
-                tx_data
-                    .tx
-                    .verify_signatures(
-                        &[tx_data.tx.raw_header_hash()],
-                        public_keys_index_map,
-                        &Some(signer.clone()),
-                        threshold,
-                        || gas_meter.consume(crate::gas::VERIFY_TX_SIG_GAS),
-                    )
-                    .map_err(native_vp::Error::new)?;
+                // Otherwise the owner's vp must have been triggered and the
+                // relative action must have been written
+                if !verifiers.contains(signer) {
+                    let error = native_vp::Error::new_alloc(format!(
+                        "The required vp of address {signer} was not triggered"
+                    ))
+                    .into();
+                    tracing::debug!("{error}");
+                    return Err(error);
+                }
+
+                // The action is required becuse the target vp might have been
+                // triggered for other reasons but we need to signal it that it
+                // is required to validate a discrepancy in its balance change
+                // because of a masp transaction, which might require a
+                // different validation than a normal balance change
+                if !actions_authorizers.swap_remove(signer) {
+                    let error = native_vp::Error::new_alloc(format!(
+                        "The required masp authorizer action for address \
+                         {signer} is missing"
+                    ))
+                    .into();
+                    tracing::debug!("{error}");
+                    return Err(error);
+                }
             } else {
-                // We are not able to decode the signer, so just fail
+                // We are not able to decode the authorizer, so just fail
                 let error = native_vp::Error::new_const(
-                    "Unable to decode a transaction signer",
+                    "Unable to decode a transaction authorizer",
                 )
                 .into();
                 tracing::debug!("{error}");
                 return Err(error);
             }
+        }
+        // The transaction shall not push masp authorizer actions that are not
+        // needed cause this might lead vps to run a wrong validation logic
+        if !actions_authorizers.is_empty() {
+            let error = native_vp::Error::new_const(
+                "Found masp authorizer actions that are not required",
+            )
+            .into();
+            tracing::debug!("{error}");
+            return Err(error);
         }
 
         // Verify the proofs
@@ -963,18 +992,17 @@ fn unepoched_tokens(
     Ok(())
 }
 
-// Handle transparent input
 fn validate_transparent_input<A: Authorization>(
     vin: &TxIn<A>,
     changed_balances: &mut ChangedBalances,
     transparent_tx_pool: &mut I128Sum,
     epoch: MaspEpoch,
     conversion_state: &ConversionState,
-    signers: &mut BTreeSet<TransparentAddress>,
+    authorizers: &mut BTreeSet<TransparentAddress>,
 ) -> Result<()> {
     // A decrease in the balance of an account needs to be
     // authorized by the account of this transparent input
-    signers.insert(vin.address);
+    authorizers.insert(vin.address);
     // Non-masp sources add to the transparent tx pool
     *transparent_tx_pool = transparent_tx_pool
         .checked_add(
@@ -1050,7 +1078,6 @@ fn validate_transparent_input<A: Authorization>(
     Ok(())
 }
 
-// Handle transparent output
 fn validate_transparent_output(
     out: &TxOut,
     changed_balances: &mut ChangedBalances,
@@ -1122,7 +1149,7 @@ fn validate_transparent_bundle(
     changed_balances: &mut ChangedBalances,
     epoch: MaspEpoch,
     conversion_state: &ConversionState,
-    signers: &mut BTreeSet<TransparentAddress>,
+    authorizers: &mut BTreeSet<TransparentAddress>,
 ) -> Result<()> {
     // The Sapling value balance adds to the transparent tx pool
     let mut transparent_tx_pool = shielded_tx.sapling_value_balance();
@@ -1135,7 +1162,7 @@ fn validate_transparent_bundle(
                 &mut transparent_tx_pool,
                 epoch,
                 conversion_state,
-                signers,
+                authorizers,
             )?;
         }
 
@@ -1259,7 +1286,7 @@ where
         &self,
         tx_data: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
-        _verifiers: &BTreeSet<Address>,
+        verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
         let masp_keys_changed: Vec<&Key> =
             keys_changed.iter().filter(|key| is_masp_key(key)).collect();
@@ -1289,7 +1316,7 @@ where
             self.is_valid_parameter_change(tx_data)
         } else if masp_transfer_changes {
             // The MASP transfer keys can only be changed by a valid Transaction
-            self.is_valid_masp_transfer(tx_data, keys_changed)
+            self.is_valid_masp_transfer(tx_data, keys_changed, verifiers)
         } else {
             // Changing no MASP keys at all is also fine
             Ok(())

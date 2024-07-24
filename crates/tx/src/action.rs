@@ -21,7 +21,7 @@ pub type Actions = Vec<Action>;
 
 /// An action applied from a tx.
 #[allow(missing_docs)]
-#[derive(Clone, Debug, BorshDeserialize, BorshSerialize)]
+#[derive(Clone, Debug, BorshDeserialize, BorshSerialize, PartialEq)]
 pub enum Action {
     Pos(PosAction),
     Gov(GovAction),
@@ -32,7 +32,7 @@ pub enum Action {
 
 /// PoS tx actions.
 #[allow(missing_docs)]
-#[derive(Clone, Debug, BorshDeserialize, BorshSerialize)]
+#[derive(Clone, Debug, BorshDeserialize, BorshSerialize, PartialEq)]
 pub enum PosAction {
     BecomeValidator(Address),
     DeactivateValidator(Address),
@@ -50,7 +50,7 @@ pub enum PosAction {
 
 /// Gov tx actions.
 #[allow(missing_docs)]
-#[derive(Clone, Debug, BorshDeserialize, BorshSerialize)]
+#[derive(Clone, Debug, BorshDeserialize, BorshSerialize, PartialEq)]
 pub enum GovAction {
     InitProposal { author: Address },
     VoteProposal { id: u64, voter: Address },
@@ -58,17 +58,19 @@ pub enum GovAction {
 
 /// PGF tx actions.
 #[allow(missing_docs)]
-#[derive(Clone, Debug, BorshDeserialize, BorshSerialize)]
+#[derive(Clone, Debug, BorshDeserialize, BorshSerialize, PartialEq)]
 pub enum PgfAction {
     ResignSteward(Address),
     UpdateStewardCommission(Address),
 }
 
-/// MASP tx action.
-#[derive(Clone, Debug, BorshDeserialize, BorshSerialize)]
-pub struct MaspAction {
+/// MASP tx actions.
+#[derive(Clone, Debug, BorshDeserialize, BorshSerialize, PartialEq)]
+pub enum MaspAction {
     /// The hash of the masp [`crate::types::Section`]
-    pub masp_section_ref: TxId,
+    MaspSectionRef(TxId),
+    /// A required authorizer for the transaction
+    MaspAuthorizer(Address),
 }
 
 /// Read actions from temporary storage
@@ -122,17 +124,16 @@ fn storage_key() -> storage::Key {
 /// Helper function to get the optional masp section reference from the
 /// [`Actions`]. If more than one [`MaspAction`] has been found we return the
 /// first one
-pub fn get_masp_section_ref<T: Read>(
-    reader: &T,
-) -> Result<Option<TxId>, <T as Read>::Err> {
-    Ok(reader.read_actions()?.into_iter().find_map(|action| {
-        // In case of multiple masp actions we get the first one
-        if let Action::Masp(MaspAction { masp_section_ref }) = action {
-            Some(masp_section_ref)
+pub fn get_masp_section_ref(actions: &Actions) -> Option<TxId> {
+    actions.iter().find_map(|action| {
+        if let Action::Masp(MaspAction::MaspSectionRef(masp_section_ref)) =
+            action
+        {
+            Some(masp_section_ref.to_owned())
         } else {
             None
         }
-    }))
+    })
 }
 
 /// Helper function to check if the action is IBC shielding transfer
