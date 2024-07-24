@@ -1,5 +1,5 @@
 use namada_core::address::Address;
-use namada_core::borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::collections::HashMap;
 use namada_core::dec::Dec;
 use namada_macros::BorshDeserializer;
@@ -20,6 +20,7 @@ pub enum PgfError {
     Debug,
     Clone,
     PartialEq,
+    BorshSchema,
     BorshSerialize,
     BorshDeserialize,
     BorshDeserializer,

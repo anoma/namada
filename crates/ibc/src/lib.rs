@@ -443,6 +443,12 @@ pub fn received_ibc_token(
 pub mod testing {
     use std::str::FromStr;
 
+    use ibc::apps::nft_transfer::types::msgs::transfer::MsgTransfer as MsgNftTransfer;
+    use ibc::apps::nft_transfer::types::packet::PacketData as NftPacketData;
+    use ibc::apps::nft_transfer::types::{
+        ClassData, ClassId, ClassUri, Memo as NftMemo, PrefixedClassId,
+        TokenData, TokenId, TokenIds, TokenUri,
+    };
     use ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
     use ibc::apps::transfer::types::packet::PacketData;
     use ibc::apps::transfer::types::{
@@ -456,7 +462,7 @@ pub mod testing {
     use ibc::primitives::proto::Any;
     use ibc::primitives::{Timestamp, ToProto};
     use proptest::prelude::{Just, Strategy};
-    use proptest::{collection, prop_compose, prop_oneof};
+    use proptest::{collection, option, prop_compose, prop_oneof};
 
     prop_compose! {
         /// Generate an arbitrary port ID
@@ -501,6 +507,13 @@ pub mod testing {
     prop_compose! {
         /// Generate an arbitrary IBC memo
         pub fn arb_ibc_memo()(memo in "[a-zA-Z0-9_]*") -> Memo {
+            memo.into()
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary IBC NFT memo
+        pub fn arb_ibc_nft_memo()(memo in "[a-zA-Z0-9_]*") -> NftMemo {
             memo.into()
         }
     }
@@ -606,9 +619,115 @@ pub mod testing {
     }
 
     prop_compose! {
+        /// Generate an arbitrary IBC token ID
+        pub fn arb_ibc_token_id()(token_id in "[a-zA-Z0-9_]+") -> TokenId {
+            TokenId::from_str(&token_id).expect("generated invalid IBC token ID")
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary IBC token ID vector
+        pub fn arb_ibc_token_ids()(token_ids in collection::vec(arb_ibc_token_id(), 1..10)) -> TokenIds {
+            TokenIds(token_ids)
+        }
+    }
+
+    prop_compose! {
+        /// Generate arbitrary IBC class data
+        pub fn arb_ibc_class_data()(class_data in "[a-zA-Z0-9_]*") -> ClassData {
+            ClassData::from_str(&class_data).expect("generated invalid IBC class data")
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary IBC class ID
+        pub fn arb_ibc_class_id()(token_id in "[a-zA-Z0-9_]+") -> ClassId {
+            ClassId::from_str(&token_id).expect("generated invalid IBC class ID")
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary IBC prefixed class ID
+        pub fn arb_ibc_prefixed_class_id()(
+            trace_path in arb_ibc_trace_path(),
+            base_class_id in arb_ibc_class_id(),
+        ) -> PrefixedClassId {
+            PrefixedClassId {
+                trace_path,
+                base_class_id,
+            }
+        }
+    }
+
+    prop_compose! {
+        /// Generate arbitrary IBC token data
+        pub fn arb_ibc_token_data()(
+            token_data in "[a-zA-Z0-9_]*",
+        ) -> TokenData {
+            TokenData::from_str(&token_data).expect("generated invalid IBC token data")
+        }
+    }
+
+    // An arbitrary URI for the tests. Generating random URIs would not increase
+    // test coverage since they are encoded as length-prefixed strings.
+    const ARBITRARY_URI: &str = "https://namada.net/#ibc-interoperability";
+
+    prop_compose! {
+        /// Generate arbitrary NFT packet data
+        pub fn arb_ibc_nft_packet_data()(
+            token_ids in arb_ibc_token_ids(),
+            token_uri in Just(TokenUri::from_str(ARBITRARY_URI).unwrap()),
+        )(
+            sender in arb_ibc_signer(),
+            receiver in arb_ibc_signer(),
+            memo in option::of(arb_ibc_nft_memo()),
+            class_data in option::of(arb_ibc_class_data()),
+            class_id in arb_ibc_prefixed_class_id(),
+            class_uri in option::of(Just(ClassUri::from_str(ARBITRARY_URI).unwrap())),
+            token_uris in option::of(collection::vec(Just(token_uri), token_ids.0.len())),
+            token_data in option::of(collection::vec(arb_ibc_token_data(), token_ids.0.len())),
+            token_ids in Just(token_ids),
+        ) -> NftPacketData {
+            NftPacketData {
+                token_ids,
+                sender,
+                receiver,
+                memo,
+                class_data,
+                class_id,
+                class_uri,
+                token_uris,
+                token_data,
+            }
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary IBC NFT transfer message
+        pub fn arb_ibc_msg_nft_transfer()(
+            port_id_on_a in arb_ibc_port_id(),
+            chan_id_on_a in arb_ibc_channel_id(),
+            packet_data in arb_ibc_nft_packet_data(),
+            timeout_height_on_b in arb_ibc_timeout_data(),
+            timeout_timestamp_on_b in arb_ibc_timestamp(),
+        ) -> MsgNftTransfer {
+            MsgNftTransfer {
+                port_id_on_a,
+                chan_id_on_a,
+                packet_data,
+                timeout_height_on_b,
+                timeout_timestamp_on_b,
+            }
+        }
+    }
+
+    prop_compose! {
         /// Generate an arbitrary IBC any object
-        pub fn arb_ibc_any()(msg_transfer in arb_ibc_msg_transfer()) -> Any {
-            msg_transfer.to_any()
+        pub fn arb_ibc_any()(any in prop_oneof![
+            arb_ibc_msg_transfer().prop_map(|x| x.to_any()),
+            arb_ibc_msg_nft_transfer().prop_map(|x| x.to_any()),
+        ]) -> Any {
+            any
         }
     }
 }

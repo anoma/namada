@@ -1,4 +1,7 @@
-use borsh::{BorshDeserialize, BorshSerialize};
+use std::collections::BTreeMap;
+
+use borsh::schema::{Declaration, Definition, Fields};
+use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::HEXUPPER;
 use ibc::apps::nft_transfer::types::msgs::transfer::MsgTransfer as IbcMsgNftTransfer;
 use ibc::apps::nft_transfer::types::packet::PacketData as NftPacketData;
@@ -59,6 +62,22 @@ impl BorshDeserialize for MsgTransfer {
     }
 }
 
+impl BorshSchema for MsgTransfer {
+    fn add_definitions_recursively(
+        definitions: &mut BTreeMap<Declaration, Definition>,
+    ) {
+        <(Vec<u8>, Option<Transfer>)>::add_definitions_recursively(definitions);
+        let fields = Fields::UnnamedFields(vec![
+            <(Vec<u8>, Option<Transfer>)>::declaration(),
+        ]);
+        definitions.insert(Self::declaration(), Definition::Struct { fields });
+    }
+
+    fn declaration() -> Declaration {
+        "MsgTransfer".into()
+    }
+}
+
 /// IBC NFT transfer message with `Transfer`
 #[derive(Debug, Clone)]
 pub struct MsgNftTransfer {
@@ -89,6 +108,22 @@ impl BorshDeserialize for MsgNftTransfer {
         let message = IbcMsgNftTransfer::decode_vec(&msg)
             .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
         Ok(Self { message, transfer })
+    }
+}
+
+impl BorshSchema for MsgNftTransfer {
+    fn add_definitions_recursively(
+        definitions: &mut BTreeMap<Declaration, Definition>,
+    ) {
+        <(Vec<u8>, Option<Transfer>)>::add_definitions_recursively(definitions);
+        let fields = Fields::UnnamedFields(vec![
+            <(Vec<u8>, Option<Transfer>)>::declaration(),
+        ]);
+        definitions.insert(Self::declaration(), Definition::Struct { fields });
+    }
+
+    fn declaration() -> Declaration {
+        "MsgNftTransfer".into()
     }
 }
 
