@@ -2110,7 +2110,6 @@ fn propose_funding(
     let start_epoch = (epoch.0 + 6) / 3 * 3;
     let proposal_json_path = prepare_proposal_data(
         test_a.test_dir.path(),
-        0,
         albert,
         pgf_funding,
         start_epoch,
@@ -2138,7 +2137,6 @@ fn propose_inflation(test: &Test) -> Result<Epoch> {
     let start_epoch = (epoch.0 + 3) / 3 * 3;
     let proposal_json = serde_json::json!({
         "proposal": {
-            "id": 0,
             "content": {
                 "title": "TheTitle",
                 "authors": "test@test.com",

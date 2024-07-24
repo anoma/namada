@@ -132,8 +132,7 @@ where
                             proposal_code.clone(),
                         )?;
                         tracing::info!(
-                            "Default Governance proposal {} has been executed \
-                             and passed.",
+                            "Governance proposal #{} (default) has passed.",
                             id,
                         );
 
@@ -149,8 +148,8 @@ where
                             proposal_code.clone(),
                         )?;
                         tracing::info!(
-                            "DefaultWithWasm Governance proposal {} has been \
-                             executed and passed, wasm executiong was {}.",
+                            "Governance proposal #{} (default with wasm) has \
+                             passed and been executed, wasm execution: {}.",
                             id,
                             if result { "successful" } else { "unsuccessful" }
                         );
@@ -186,8 +185,8 @@ where
                             id,
                         )?;
                         tracing::info!(
-                            "Governance proposal (pgf funding) {} has been \
-                             executed and passed.",
+                            "Governance proposal #{} for PGF funding has \
+                             passed and been executed.",
                             id
                         );
 
@@ -528,8 +527,8 @@ where
                         StoragePgfFunding::new(target.clone(), proposal_id),
                     )?;
                     tracing::info!(
-                        "Added/Updated ContinuousPgf from proposal id {}: set \
-                         {} to {}.",
+                        "Added/Updated Continuous PGF from proposal id {}: \
+                         set {} to {}.",
                         proposal_id,
                         target.amount().to_string_native(),
                         target.target()
@@ -539,8 +538,8 @@ where
                     pgf_storage::fundings_handle()
                         .remove(state, &target.target())?;
                     tracing::info!(
-                        "Removed ContinuousPgf from proposal id {}: set {} to \
-                         {}.",
+                        "Removed Continuous PGF from proposal id {}: set {} \
+                         to {}.",
                         proposal_id,
                         target.amount().to_string_native(),
                         target.target()
@@ -592,8 +591,8 @@ where
                 match result {
                     Ok(()) => {
                         tracing::info!(
-                            "Execute RetroPgf from proposal id {}: sent {} to \
-                             {}.",
+                            "Execute Retroactive PGF from proposal id {}: \
+                             sent {} to {}.",
                             proposal_id,
                             target.amount().to_string_native(),
                             target.target()
@@ -601,8 +600,8 @@ where
                         events.emit(event);
                     }
                     Err(e) => tracing::warn!(
-                        "Error in RetroPgf transfer from proposal id {}, \
-                         amount {} to {}: {}",
+                        "Error in Retroactive PGF transfer from proposal id \
+                         {}, amount {} to {}: {}",
                         proposal_id,
                         target.amount().to_string_native(),
                         target.target(),

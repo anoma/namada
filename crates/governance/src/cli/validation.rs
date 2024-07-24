@@ -58,10 +58,10 @@ pub enum ProposalValidation {
          ({0}) is to big (max {1})"
     )]
     InvalidDefaultProposalExtraData(u64, u64),
-    /// The pgf stewards data is not valid
+    /// The PGF stewards data is not valid
     #[error("Invalid proposal extra data: cannot be empty.")]
     InvalidPgfStewardsExtraData,
-    /// The pgf funding data is not valid
+    /// The PGF funding data is not valid
     #[error("invalid proposal extra data: cannot be empty.")]
     InvalidPgfFundingExtraData,
     #[error("Arithmetic {0}.")]
