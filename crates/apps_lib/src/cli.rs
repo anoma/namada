@@ -3355,7 +3355,7 @@ pub mod args {
     pub const MEMO_OPT: ArgOpt<String> = arg_opt("memo");
     pub const MIGRATION_PATH: ArgOpt<PathBuf> = arg_opt("migration-path");
     pub const MODE: ArgOpt<String> = arg_opt("mode");
-    pub const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
+    pub const NET_ADDRESS: ArgOpt<SocketAddr> = arg_opt("net-address");
     pub const NAMADA_START_TIME: ArgOpt<DateTimeUtc> = arg_opt("time");
     pub const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
     pub const NO_EXPIRATION: ArgFlag = flag("no-expiration");
@@ -8012,7 +8012,7 @@ pub mod args {
         pub alias: String,
         pub commission_rate: Dec,
         pub max_commission_rate_change: Dec,
-        pub net_address: SocketAddr,
+        pub net_address: Option<SocketAddr>,
         pub unsafe_dont_encrypt: bool,
         pub key_scheme: SchemeType,
         pub self_bond_amount: token::DenominatedAmount,

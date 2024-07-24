@@ -149,7 +149,7 @@ pub struct GenesisValidatorData {
     pub address: EstablishedAddress,
     pub commission_rate: Dec,
     pub max_commission_rate_change: Dec,
-    pub net_address: SocketAddr,
+    pub net_address: Option<SocketAddr>,
     pub self_bond_amount: token::DenominatedAmount,
     pub email: String,
     pub description: Option<String>,
@@ -599,7 +599,7 @@ pub struct ValidatorAccountTx<PK: Ord> {
     /// Maximum change in commission rate permitted per epoch
     pub max_commission_rate_change: Dec,
     /// P2P IP:port
-    pub net_address: SocketAddr,
+    pub net_address: Option<SocketAddr>,
     /// PKs have to come last in TOML to avoid `ValueAfterTable` error
     pub consensus_key: PK,
     pub protocol_key: PK,

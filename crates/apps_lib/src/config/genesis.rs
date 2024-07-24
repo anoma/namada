@@ -496,10 +496,10 @@ pub fn make_dev_genesis(
                     avatar: None,
                     name: None,
                 },
-                net_address: SocketAddr::new(
+                net_address: Some(SocketAddr::new(
                     IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
                     8080,
-                ),
+                )),
                 consensus_key: StringEncoded {
                     raw: consensus_keypair.to_public(),
                 },

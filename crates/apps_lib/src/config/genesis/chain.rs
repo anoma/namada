@@ -239,14 +239,19 @@ impl Finalized {
             config.ledger.cometbft.p2p.persistent_peers = config.ledger.cometbft.p2p.persistent_peers.iter()
                         .filter_map(|peer|
                             // we do not add the validator in its own persistent peer list
-                            if peer != &tm_address  {
-                                Some(peer.to_owned())
+                            if let Some(net_address) = &tm_address {
+                                if peer != net_address {
+                                    Some(peer.to_owned())
+                                } else {
+                                    None
+                                }
                             } else {
                                 None
                             })
                         .collect();
 
-            let first_port = net_address.port();
+            let first_port =
+                net_address.map(|address| address.port()).unwrap_or(26656);
             if !is_localhost {
                 set_ip(&mut config.ledger.cometbft.p2p.laddr, "0.0.0.0");
             }
@@ -281,7 +286,7 @@ impl Finalized {
                 .as_ref()
                 .map(|txs| {
                     txs.iter()
-                        .map(FinalizedValidatorAccountTx::derive_tendermint_address)
+                        .filter_map(FinalizedValidatorAccountTx::derive_tendermint_address)
                         .collect()
                 })
                 .unwrap_or_default()
@@ -801,17 +806,17 @@ pub struct FinalizedValidatorAccountTx {
 }
 
 impl FinalizedValidatorAccountTx {
-    pub fn derive_tendermint_address(&self) -> TendermintAddress {
-        // Derive the node ID from the node key
-        let node_id: TendermintNodeId =
-            id_from_pk(&self.tx.data.tendermint_node_key.pk.raw);
+    pub fn derive_tendermint_address(&self) -> Option<TendermintAddress> {
+        if let Some(net_address) = self.tx.data.net_address {
+            // Derive the node ID from the node key
+            let node_id: TendermintNodeId =
+                id_from_pk(&self.tx.data.tendermint_node_key.pk.raw);
 
-        // Build the list of persistent peers from the validators' node IDs
-        TendermintAddress::from_str(&format!(
-            "{}@{}",
-            node_id, self.tx.data.net_address,
-        ))
-        .expect("Validator address must be valid")
+            TendermintAddress::from_str(&format!("{}@{}", node_id, net_address))
+                .ok()
+        } else {
+            None
+        }
     }
 }
 
