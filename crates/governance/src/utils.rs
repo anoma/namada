@@ -63,24 +63,25 @@ impl Vote {
     }
 }
 
-/// Represent a tally type
+/// Represents a tally type that describes the voting requirements for a
+/// proposal to pass.
 #[derive(
     Copy, Debug, Clone, BorshSerialize, BorshDeserialize, BorshDeserializer,
 )]
 pub enum TallyType {
-    /// Represent a tally type for proposal requiring 2/3 of the total voting
-    /// power to be yay
+    /// The `yay` votes are at least 2/3 of the non-abstain votes, and 2/3 of
+    /// the total voting power has voted
     TwoThirds,
-    /// Represent a tally type for proposal requiring 1/2 of yay votes over at
-    /// least 1/3 of the voting power
+    /// There are more `yay` votes than `nay` votes, and at least 1/3 of the
+    /// total voting power has voted
     OneHalfOverOneThird,
-    /// Represent a tally type for proposal requiring less than 1/2 of nay
-    /// votes over at least 1/3 of the voting power
+    /// Either less than 1/3 of the total voting power voted, or there are more
+    /// `yay` votes than `nay` votes
     LessOneHalfOverOneThirdNay,
 }
 
 impl TallyType {
-    /// Compute the type of tally for a proposal
+    /// The type of tally used for each proposal type
     pub fn from(proposal_type: ProposalType, is_steward: bool) -> Self {
         match (proposal_type, is_steward) {
             (ProposalType::Default, _) => TallyType::TwoThirds,
@@ -149,9 +150,9 @@ impl TallyResult {
                 )? >= total_voting_power
                     .mul_ceil(Dec::two_thirds())?;
 
+                // yay >= 2/3 * (yay + nay) ---> yay >= 2 * nay
                 let at_least_two_third_voted_yay = yay_voting_power
-                    >= checked!(nay_voting_power + yay_voting_power)?
-                        .mul_ceil(Dec::two_thirds())?;
+                    >= checked!(nay_voting_power + nay_voting_power)?;
 
                 at_least_two_third_voted && at_least_two_third_voted_yay
             }
@@ -230,9 +231,9 @@ impl ProposalResult {
                     >= two_thirds_power
             )?;
 
+            // nay >= 2/3 * (yay + nay) ---> nay >= 2 * yay
             let at_least_two_thirds_voted_nay = self.total_nay_power
-                >= checked!(self.total_yay_power + self.total_nay_power)?
-                    .mul_ceil(Dec::two_thirds())?;
+                >= checked!(self.total_yay_power + self.total_yay_power)?;
 
             Ok::<bool, arith::Error>(
                 at_least_two_third_voted && at_least_two_thirds_voted_nay,
@@ -248,6 +249,7 @@ impl Display for ProposalResult {
             TallyType::TwoThirds => {
                 self.total_voting_power.mul_ceil(Dec::two_thirds())
             }
+            TallyType::LessOneHalfOverOneThirdNay => Ok(token::Amount::zero()),
             _ => self.total_voting_power.mul_ceil(Dec::one_third()),
         }
         .unwrap();
