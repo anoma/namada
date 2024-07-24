@@ -1,5 +1,63 @@
 # CHANGELOG
 
+## v0.41.0
+
+Namada 0.41.0 is a minor release that primarily improves gas, fixes bugs related to signature verification and a memory leak from a dependency, and includes shielded sync upgrades.
+
+### BUG FIXES
+
+- Adds SDK builder to shielded and shielding transfers.
+  ([\#3518](https://github.com/anoma/namada/pull/3518))
+- Workaround a leak in wasmer store.
+  ([\#3529](https://github.com/anoma/namada/pull/3529))
+- Client fixes that include using the correct total voting power to compute a
+  proposal result and also the correct voting threshold for steward proposals.
+  ([\#3540](https://github.com/anoma/namada/pull/3540))
+- Fixed a possible panic in transaction signatures verification missing expected
+  signature(s). ([\#3543](https://github.com/anoma/namada/pull/3543))
+
+### CI
+
+ * Fixed a broken e2e test for db migrations. Added it to the list of e2e test to be run by the CI. 
+  ([\#3481](https://github.com/anoma/namada/pull/3481))
+
+### IMPROVEMENTS
+
+- Moved the signature verifications out of the masp vp and into the affected
+  addresses' vps. ([\#3312](https://github.com/anoma/namada/issues/3312))
+ - Implements phase 1 of Issue [\#3385](https://github.com/anoma/namada/issues/3385)
+   - When fetching notes, connections and related failures should not halt shielded sync. Instead, the process
+     should be restarted
+   - If fetching is interrupted, the data fetched should be persisted locally so that progress isn't lost.
+   -  A trait for fetching behavior should be added to provide modularity
+
+      ([\#3498](https://github.com/anoma/namada/pull/3498))
+- Improved the interface of the gas type. Removed the duplicated gas used from
+  events. ([\#3428](https://github.com/anoma/namada/pull/3428))
+- Implement the phase 2 masp shielded sync client. This client uses
+  a [`namada-masp-indexer`](https://github.com/anoma/namada-masp-
+  indexer) instance to query the state of the shielded context.
+  ([\#3456](https://github.com/anoma/namada/pull/3456))
+- Minor improvements to governance and PGF code quality, including
+  template gov proposal jsons and a python script to attach wasm code.
+  ([\#3471](https://github.com/anoma/namada/pull/3471))
+- Modified rechecks of process proposal to actually use `process_proposal`
+  instead of `process_txs`. Added a caching mechanism to avoid
+  running the check for a given proposed block more than once.
+  ([\#3473](https://github.com/anoma/namada/pull/3473))
+- Expanded the scope of test vector generation and updated outdated components
+  of the test vector code. ([\#3494](https://github.com/anoma/namada/pull/3494))
+- Removes redundant  function.
+  ([\#3502](https://github.com/anoma/namada/pull/3502))
+- Bump tendermint-rs to 0.37
+  ([\#3506](https://github.com/anoma/namada/issues/3506))
+- Increased the gas cost for storage occupation and tied it to the other gas
+  costs. ([\#3510](https://github.com/anoma/namada/pull/3510))
+- Eliminates the MASP VPs requirement for all debited accounts to sign a Tx.
+  ([\#3516](https://github.com/anoma/namada/pull/3516))
+- Rename and split --memo-path into --ibc-shielding-data and --ibc-memo
+  ([\#3517](https://github.com/anoma/namada/issues/3517))
+
 ## v0.40.0
 
 Namada 0.40.0 is a minor release that makes many important improvements to shielded actions, DB snapshotting capabilities, batched transactions, and much more.
@@ -23,6 +81,8 @@ Namada 0.40.0 is a minor release that makes many important improvements to shiel
   relayer ([\#3438](https://github.com/anoma/namada/issues/3438))
 - Fixed MASP witness data malleability in the Tx
   ([\#3463](https://github.com/anoma/namada/pull/3463))
+- Fix to extract MASP transaction when IBC shielding transfer
+  ([\#3488](https://github.com/anoma/namada/issues/3488))
 
 ### FEATURES
 
