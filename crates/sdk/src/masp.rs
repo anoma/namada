@@ -39,6 +39,7 @@ use namada_core::address::Address;
 use namada_core::arith::CheckedAdd;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::dec::Dec;
+use namada_core::ibc::IbcTxDataRefs;
 pub use namada_core::masp::{
     encode_asset_type, AssetData, BalanceOwner, ExtendedViewingKey,
     PaymentAddress, TAddrData, TransferSource, TransferTarget, TxId,
@@ -48,6 +49,7 @@ use namada_core::storage::{BlockHeight, TxIndex};
 use namada_core::time::DateTimeUtc;
 use namada_core::uint::Uint;
 use namada_events::extend::{
+    IbcMaspTxBatchRefs as IbcMaspTxBatchRefsAttr,
     MaspTxBatchRefs as MaspTxBatchRefsAttr,
     MaspTxBlockIndex as MaspTxBlockIndexAttr, ReadFromEventAttributes,
 };
@@ -654,15 +656,23 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 .block
                 .data;
 
-            for (idx, masp_sections_refs) in txs_results {
+            for (idx, masp_sections_refs, ibc_tx_data_refs) in txs_results {
                 let tx = Tx::try_from(block[idx.0 as usize].as_ref())
                     .map_err(|e| Error::Other(e.to_string()))?;
-                let extracted_masp_txs =
-                    if let Some(masp_sections_refs) = masp_sections_refs {
-                        Self::extract_masp_tx(&tx, &masp_sections_refs).await?
-                    } else {
-                        Self::extract_masp_tx_from_ibc_message(&tx)?
-                    };
+                let mut extracted_masp_txs = vec![];
+                if let Some(masp_sections_refs) = masp_sections_refs {
+                    extracted_masp_txs.extend(
+                        Self::extract_masp_tx(&tx, &masp_sections_refs).await?,
+                    );
+                }
+                if let Some(ibc_tx_data_refs) = ibc_tx_data_refs {
+                    extracted_masp_txs.extend(
+                        Self::extract_masp_tx_from_ibc_message(
+                            &tx,
+                            ibc_tx_data_refs,
+                        )?,
+                    );
+                }
                 // Collect the current transactions
                 shielded_txs.insert(
                     IndexedTx {
@@ -709,10 +719,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     /// Extract the relevant shield portions from the IBC messages in [`Tx`]
     fn extract_masp_tx_from_ibc_message(
         tx: &Tx,
+        ibc_tx_data_refs: IbcTxDataRefs,
     ) -> Result<Vec<Transaction>, Error> {
         let mut masp_txs = Vec::new();
-        for cmt in &tx.header.batch {
-            let tx_data = tx.data(cmt).ok_or_else(|| {
+        for section in ibc_tx_data_refs.0 {
+            let tx_data = tx.get_data_section(&section).ok_or_else(|| {
                 Error::Other("Missing transaction data".to_string())
             })?;
             let ibc_msg = decode_message(&tx_data)
@@ -2363,7 +2374,10 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
     client: &C,
     height: BlockHeight,
     first_idx_to_query: Option<TxIndex>,
-) -> Result<Option<Vec<(TxIndex, Option<MaspTxRefs>)>>, Error> {
+) -> Result<
+    Option<Vec<(TxIndex, Option<MaspTxRefs>, Option<IbcTxDataRefs>)>>,
+    Error,
+> {
     let first_idx_to_query = first_idx_to_query.unwrap_or_default();
 
     Ok(client
@@ -2388,8 +2402,13 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
                                 &event.attributes,
                             )
                             .ok();
+                        let ibc_tx_data_refs =
+                            IbcMaspTxBatchRefsAttr::read_from_event_attributes(
+                                &event.attributes,
+                            )
+                            .ok();
 
-                        Some((tx_index, masp_section_refs))
+                        Some((tx_index, masp_section_refs, ibc_tx_data_refs))
                     } else {
                         None
                     }

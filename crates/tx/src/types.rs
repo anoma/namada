@@ -1298,7 +1298,15 @@ impl Tx {
     /// Get the data designated by the transaction data hash in the header at
     /// the specified commitment
     pub fn data(&self, cmt: &TxCommitments) -> Option<Vec<u8>> {
-        match self.get_section(&cmt.data_hash).as_ref().map(Cow::as_ref) {
+        self.get_data_section(&cmt.data_hash)
+    }
+
+    /// Get the data designated by the transaction data hash
+    pub fn get_data_section(
+        &self,
+        data_hash: &namada_core::hash::Hash,
+    ) -> Option<Vec<u8>> {
+        match self.get_section(data_hash).as_ref().map(Cow::as_ref) {
             Some(Section::Data(data)) => Some(data.data.clone()),
             _ => None,
         }

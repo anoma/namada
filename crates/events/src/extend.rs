@@ -8,6 +8,7 @@ use std::str::FromStr;
 use namada_core::address::Address;
 use namada_core::collections::HashMap;
 use namada_core::hash::Hash;
+use namada_core::ibc::IbcTxDataRefs;
 use namada_core::masp::MaspTxRefs;
 use namada_core::storage::{BlockHeight, TxIndex};
 use serde::Deserializer;
@@ -511,6 +512,20 @@ impl EventAttributeEntry<'static> for MaspTxBatchRefs {
     type ValueOwned = Self::Value;
 
     const KEY: &'static str = "masp_tx_batch_refs";
+
+    fn into_value(self) -> Self::Value {
+        self.0
+    }
+}
+
+/// Extend an [`Event`] with data sections for IBC shielding transfer.
+pub struct IbcMaspTxBatchRefs(pub IbcTxDataRefs);
+
+impl EventAttributeEntry<'static> for IbcMaspTxBatchRefs {
+    type Value = IbcTxDataRefs;
+    type ValueOwned = Self::Value;
+
+    const KEY: &'static str = "ibc_masp_tx_batch_refs";
 
     fn into_value(self) -> Self::Value {
         self.0
