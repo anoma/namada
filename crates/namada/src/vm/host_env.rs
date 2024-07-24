@@ -2422,6 +2422,7 @@ pub mod testing {
         tx_index: &TxIndex,
         result_buffer: &mut Option<Vec<u8>>,
         yielded_value: &mut Option<Vec<u8>>,
+        store: Rc<RefCell<wasmer::Store>>,
         #[cfg(feature = "wasm-runtime")] vp_wasm_cache: &mut VpCache<CA>,
         #[cfg(feature = "wasm-runtime")] tx_wasm_cache: &mut TxCache<CA>,
     ) -> TxVmEnv<WasmMemory, <S as StateRead>::D, <S as StateRead>::H, CA>
@@ -2429,14 +2430,15 @@ pub mod testing {
         S: State,
         CA: WasmCacheAccess,
     {
-        let mut store = crate::vm::wasm::compilation_cache::common::store();
-
-        let wasm_memory =
-            crate::vm::wasm::memory::prepare_tx_memory(&mut store).unwrap();
+        let wasm_memory = {
+            let mut borrowed_store = store.borrow_mut();
+            crate::vm::wasm::memory::prepare_tx_memory(&mut *borrowed_store)
+                .unwrap()
+        };
 
         let (write_log, in_mem, db) = state.split_borrow();
         let mut env = TxVmEnv::new(
-            WasmMemory::new(Rc::new(RefCell::new(store))),
+            WasmMemory::new(Rc::downgrade(&store)),
             write_log,
             in_mem,
             db,

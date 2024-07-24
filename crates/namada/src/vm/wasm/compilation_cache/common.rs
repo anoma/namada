@@ -36,6 +36,15 @@ pub struct Cache<N: CacheName, A: WasmCacheAccess> {
     name: PhantomData<N>,
     /// Cache access level
     access: PhantomData<A>,
+    /// Wasmer store - The store that's used to compile the modules.
+    // N.B.: This has to be kept alive to avoid segfaults when running them
+    // from cache (otherwise `wasmer_compiler::FRAME_INFO` gets cleared out
+    // when the `Store` is dropped and the next run of this `Module`
+    // doesn't re-instantiate it and crashes when it tries to access it).
+    // Related issues:
+    // - https://github.com/wasmerio/wasmer/issues/4377
+    // - https://github.com/wasmerio/wasmer/issues/4949
+    store: Arc<Store>,
 }
 
 /// This trait is used to give names to different caches
@@ -100,6 +109,7 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
             in_memory,
             name: Default::default(),
             access: Default::default(),
+            store: Arc::new(store()),
         }
     }
 
@@ -112,9 +122,12 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
         code_hash: &Hash,
     ) -> Result<Option<(Module, Store)>, wasm::run::Error> {
         if A::is_read_write() {
-            self.get(code_hash)
+            let module = self.get(code_hash)?;
+            Ok(module.map(|module| (module, store())))
         } else {
-            self.peek(code_hash)
+            let store = store();
+            let module = self.peek(code_hash, &store)?;
+            Ok(module.map(|module| (module, store)))
         }
     }
 
@@ -130,10 +143,7 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
 
     /// Get a WASM module from LRU cache, from a file or compile it and cache
     /// it. Updates the position in the LRU cache.
-    fn get(
-        &mut self,
-        hash: &Hash,
-    ) -> Result<Option<(Module, Store)>, wasm::run::Error> {
+    fn get(&mut self, hash: &Hash) -> Result<Option<Module>, wasm::run::Error> {
         let mut in_memory = self.in_memory.write().unwrap();
         if let Some(module) = in_memory.get(hash) {
             tracing::trace!(
@@ -141,7 +151,7 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                 N::name(),
                 hash.to_string()
             );
-            return Ok(Some((module.clone(), store())));
+            return Ok(Some(module.clone()));
         }
         drop(in_memory);
 
@@ -164,11 +174,11 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                             N::name(),
                             hash.to_string()
                         );
-                        return Ok(Some((module.clone(), store())));
+                        return Ok(Some(module.clone()));
                     }
 
-                    if let Ok((module, store)) =
-                        file_load_module(&self.dir, hash)
+                    if let Ok(module) =
+                        file_load_module(&self.dir, hash, &self.store)
                     {
                         tracing::info!(
                             "{} found {} in file cache.",
@@ -179,7 +189,7 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                         let _ =
                             in_memory.put_with_weight(*hash, module.clone());
 
-                        return Ok(Some((module, store)));
+                        return Ok(Some(module));
                     } else {
                         return Ok(None);
                     }
@@ -201,15 +211,16 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                 }
                 None => {
                     drop(progress);
-                    let (module, store) = if module_file_exists(&self.dir, hash)
-                    {
+                    let module = if module_file_exists(&self.dir, hash) {
                         tracing::info!(
                             "Trying to load {} {} from file.",
                             N::name(),
                             hash.to_string()
                         );
-                        if let Ok(res) = file_load_module(&self.dir, hash) {
-                            res
+                        if let Ok(module) =
+                            file_load_module(&self.dir, hash, &self.store)
+                        {
+                            module
                         } else {
                             return Ok(None);
                         }
@@ -226,7 +237,7 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                     let mut in_memory = self.in_memory.write().unwrap();
                     let _ = in_memory.put_with_weight(*hash, module.clone());
 
-                    return Ok(Some((module, store)));
+                    return Ok(Some(module));
                 }
             }
         }
@@ -237,7 +248,8 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
     fn peek(
         &self,
         hash: &Hash,
-    ) -> Result<Option<(Module, Store)>, wasm::run::Error> {
+        store: &Store,
+    ) -> Result<Option<Module>, wasm::run::Error> {
         let in_memory = self.in_memory.read().unwrap();
         if let Some(module) = in_memory.peek(hash) {
             tracing::info!(
@@ -245,7 +257,7 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                 N::name(),
                 hash.to_string()
             );
-            return Ok(Some((module.clone(), store())));
+            return Ok(Some(module.clone()));
         }
         drop(in_memory);
 
@@ -268,18 +280,17 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                             N::name(),
                             hash.to_string()
                         );
-                        return Ok(Some((module.clone(), store())));
+                        return Ok(Some(module.clone()));
                     }
 
-                    if let Ok((module, store)) =
-                        file_load_module(&self.dir, hash)
+                    if let Ok(module) = file_load_module(&self.dir, hash, store)
                     {
                         tracing::info!(
                             "{} found {} in file cache.",
                             N::name(),
                             hash.to_string()
                         );
-                        return Ok(Some((module, store)));
+                        return Ok(Some(module));
                     } else {
                         return Ok(None);
                     }
@@ -308,8 +319,10 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                             N::name(),
                             hash.to_string()
                         );
-                        if let Ok(res) = file_load_module(&self.dir, hash) {
-                            return Ok(Some(res));
+                        if let Ok(module) =
+                            file_load_module(&self.dir, hash, store)
+                        {
+                            return Ok(Some(module));
                         } else {
                             return Ok(None);
                         }
@@ -332,10 +345,16 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
             // It doesn't update the cache and files
             let progress = self.progress.read().unwrap();
             match progress.get(&hash) {
-                Some(_) => return self.peek(&hash),
+                Some(_) => {
+                    let store = store();
+                    let module = self.peek(&hash, &store)?;
+                    return Ok(module.map(|module| (module, store)));
+                }
                 None => {
                     let code = wasm::run::prepare_wasm_code(code)?;
-                    return Ok(Some(compile(code)?));
+                    let store = store();
+                    let module = compile(code, &store)?;
+                    return Ok(Some((module, store)));
                 }
             }
         }
@@ -351,8 +370,8 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
         tracing::info!("Compiling {} {}.", N::name(), hash.to_string());
 
         match wasm::run::prepare_wasm_code(code) {
-            Ok(code) => match compile(code) {
-                Ok((module, store)) => {
+            Ok(code) => match compile(code, &self.store) {
+                Ok(module) => {
                     // Write the file
                     file_write_module(&self.dir, &module, &hash);
 
@@ -364,7 +383,7 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                     let mut in_memory = self.in_memory.write().unwrap();
                     let _ = in_memory.put_with_weight(hash, module.clone());
 
-                    Ok(Some((module, store)))
+                    Ok(Some((module, store())))
                 }
                 Err(err) => {
                     tracing::info!(
@@ -410,13 +429,14 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                     let progress = self.progress.clone();
                     let code = code.as_ref().to_vec();
                     let dir = self.dir.clone();
+                    let store = self.store.clone();
                     std::thread::spawn(move || {
                         tracing::info!("Compiling WASM {}.", hash.to_string());
 
-                        let (_module, _store) =
-                            match wasm::run::prepare_wasm_code(code) {
-                                Ok(code) => match compile(code) {
-                                    Ok((module, store)) => {
+                        let _module = match wasm::run::prepare_wasm_code(code) {
+                            Ok(code) => {
+                                match compile(code, &store) {
+                                    Ok(module) => {
                                         // Write the file
                                         file_write_module(&dir, &module, &hash);
 
@@ -441,7 +461,7 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                                                 N::name()
                                             )
                                         }
-                                        (module, store)
+                                        module
                                     }
                                     Err(err) => {
                                         let mut progress =
@@ -454,19 +474,19 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
                                         progress.swap_remove(&hash);
                                         return Err(err);
                                     }
-                                },
-                                Err(err) => {
-                                    let mut progress =
-                                        progress.write().unwrap();
-                                    tracing::info!(
-                                        "Failed to prepare WASM {} with {}",
-                                        hash.to_string(),
-                                        err
-                                    );
-                                    progress.swap_remove(&hash);
-                                    return Err(err);
                                 }
-                            };
+                            }
+                            Err(err) => {
+                                let mut progress = progress.write().unwrap();
+                                tracing::info!(
+                                    "Failed to prepare WASM {} with {}",
+                                    hash.to_string(),
+                                    err
+                                );
+                                progress.swap_remove(&hash);
+                                return Err(err);
+                            }
+                        };
 
                         let res: Result<(), wasm::run::Error> = Ok(());
                         res
@@ -484,6 +504,7 @@ impl<N: CacheName, A: WasmCacheAccess> Cache<N, A> {
             in_memory: self.in_memory.clone(),
             name: Default::default(),
             access: Default::default(),
+            store: self.store.clone(),
         }
     }
 }
@@ -494,8 +515,9 @@ fn hash_of_code(code: impl AsRef<[u8]>) -> Hash {
 
 fn compile(
     code: impl AsRef<[u8]>,
-) -> Result<(Module, Store), wasm::run::Error> {
-    universal::compile(code).map_err(wasm::run::Error::CompileError)
+    store: &Store,
+) -> Result<Module, wasm::run::Error> {
+    universal::compile(code, store).map_err(wasm::run::Error::CompileError)
 }
 
 fn file_ext() -> &'static str {
@@ -519,19 +541,19 @@ fn file_write_module(dir: impl AsRef<Path>, module: &Module, hash: &Hash) {
 fn file_load_module(
     dir: impl AsRef<Path>,
     hash: &Hash,
-) -> Result<(Module, Store), wasmer::DeserializeError> {
+    store: &Store,
+) -> Result<Module, wasmer::DeserializeError> {
     use wasmer_cache::Cache;
     let fs_cache = fs_cache(dir, hash);
-    let store = store();
     let hash = CacheHash::new(hash.0);
-    let module = unsafe { fs_cache.load(&store, hash) };
+    let module = unsafe { fs_cache.load(store, hash) };
     if let Err(err) = module.as_ref() {
         tracing::error!(
             "Error loading cached wasm {}: {err}.",
             hash.to_string()
         );
     }
-    Ok((module?, store))
+    module
 }
 
 fn fs_cache(dir: impl AsRef<Path>, hash: &Hash) -> FileSystemCache {
@@ -564,10 +586,9 @@ mod universal {
     #[allow(dead_code)]
     pub fn compile(
         code: impl AsRef<[u8]>,
-    ) -> Result<(Module, Store), wasmer::CompileError> {
-        let store = store();
-        let module = Module::new(&store, code.as_ref())?;
-        Ok((module, store))
+        store: &Store,
+    ) -> Result<Module, wasmer::CompileError> {
+        Module::new(store, code.as_ref())
     }
 
     /// Universal WASM store
@@ -585,8 +606,14 @@ pub mod testing {
     use super::*;
     use crate::vm::WasmCacheRwAccess;
 
+    /// Instantiate the default wasmer store.
+    pub fn store() -> Store {
+        super::store()
+    }
+
     /// Cache with a temp dir for testing
-    pub fn cache<N: CacheName>() -> (Cache<N, WasmCacheRwAccess>, TempDir) {
+    pub fn cache<N: CacheName + Send>() -> (Cache<N, WasmCacheRwAccess>, TempDir)
+    {
         let dir = tempdir().unwrap();
         let cache = Cache::new(
             dir.path(),

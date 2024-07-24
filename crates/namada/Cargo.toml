@@ -169,3 +169,5 @@ tempfile.workspace = true
 test-log.workspace = true
 tokio = { workspace = true, features = ["rt", "macros"] }
 tracing-subscriber.workspace = true
+wasmer-compiler = { workspace = true }
+wasmer-types = { workspace = true }

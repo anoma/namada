@@ -3,7 +3,7 @@
 
 use std::cell::RefCell;
 use std::ptr::NonNull;
-use std::rc::Rc;
+use std::rc::{self, Rc};
 use std::str::Utf8Error;
 
 use borsh_ext::BorshSerializeExt;
@@ -297,7 +297,7 @@ fn write_memory_bytes(
 /// The wasm memory
 #[derive(Debug, Clone)]
 pub struct WasmMemory {
-    store: Rc<RefCell<Store>>,
+    store: rc::Weak<RefCell<Store>>,
     memory: Rc<RefCell<Option<wasmer::Memory>>>,
 }
 
@@ -308,7 +308,7 @@ unsafe impl Sync for WasmMemory {}
 
 impl WasmMemory {
     /// Build a new wasm memory.
-    pub fn new(store: Rc<RefCell<Store>>) -> Self {
+    pub fn new(store: rc::Weak<RefCell<Store>>) -> Self {
         Self {
             store,
             memory: Rc::new(RefCell::new(None)),
@@ -347,7 +347,11 @@ impl VmMemory for WasmMemory {
         len: usize,
     ) -> Result<(Vec<u8>, u64)> {
         self.access(|memory| {
-            let mut store = self.store.borrow_mut();
+            let store = self
+                .store
+                .upgrade()
+                .expect("Store must be accessible while the WASM is running");
+            let mut store = store.borrow_mut();
             let bytes = read_memory_bytes(&mut *store, memory, offset, len)?;
             let len = bytes.len() as u64;
             let gas = checked!(len * MEMORY_ACCESS_GAS_PER_BYTE)?;
@@ -367,7 +371,11 @@ impl VmMemory for WasmMemory {
             // every memory page allocated
             let len = bytes.as_ref().len() as u64;
             let gas = checked!(len * MEMORY_ACCESS_GAS_PER_BYTE)?;
-            let mut store = self.store.borrow_mut();
+            let store = self
+                .store
+                .upgrade()
+                .expect("Store must be accessible while the WASM is running");
+            let mut store = store.borrow_mut();
             write_memory_bytes(&mut *store, memory, offset, bytes)?;
             Ok(gas)
         })

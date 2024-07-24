@@ -1,6 +1,7 @@
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
+use std::rc::Rc;
 
 use namada::core::address::Address;
 use namada::core::hash::Hash;
@@ -59,6 +60,7 @@ pub struct TestTxEnv {
     pub tx_wasm_cache: TxCache<WasmCacheRwAccess>,
     pub tx_cache_dir: TempDir,
     pub batched_tx: BatchedTx,
+    pub wasmer_store: Rc<RefCell<wasmer::Store>>,
 }
 impl Default for TestTxEnv {
     fn default() -> Self {
@@ -71,6 +73,11 @@ impl Default for TestTxEnv {
         tx.header.chain_id = state.in_mem().chain_id.clone();
         tx.push_default_inner_tx();
         let batched_tx = tx.batch_first_tx();
+
+        let wasmer_store = Rc::new(RefCell::new(
+            wasm::compilation_cache::common::testing::store(),
+        ));
+
         Self {
             state,
             iterators: PrefixIterators::default(),
@@ -85,6 +92,7 @@ impl Default for TestTxEnv {
             tx_wasm_cache,
             tx_cache_dir,
             batched_tx,
+            wasmer_store,
         }
     }
 }
@@ -344,6 +352,7 @@ mod native_tx_host_env {
                                 tx_wasm_cache,
                                 tx_cache_dir: _,
                                 batched_tx,
+                                wasmer_store: _,
                             }: &mut TestTxEnv| {
 
                             let mut tx_env = vm::host_env::testing::tx_env(
@@ -375,7 +384,7 @@ mod native_tx_host_env {
                     #[no_mangle]
                     extern "C" fn extern_fn_name( $($arg: $type),* ) -> $ret {
                         with(|TestTxEnv {
-                            tx_index,
+                                tx_index,
                                 state,
                                 iterators,
                                 verifiers,
@@ -387,7 +396,8 @@ mod native_tx_host_env {
                                 vp_cache_dir: _,
                                 tx_wasm_cache,
                                 tx_cache_dir: _,
-                                batched_tx
+                                batched_tx,
+                                wasmer_store: _,
                             }: &mut TestTxEnv| {
 
                             let mut tx_env = vm::host_env::testing::tx_env(
@@ -432,6 +442,7 @@ mod native_tx_host_env {
                                 tx_wasm_cache,
                                 tx_cache_dir: _,
                                 batched_tx,
+                                wasmer_store: _,
                             }: &mut TestTxEnv| {
 
                             let mut tx_env = vm::host_env::testing::tx_env(
@@ -747,6 +758,7 @@ mod tests {
             tx_wasm_cache,
             tx_cache_dir: _,
             batched_tx,
+            wasmer_store,
         } = test_env;
 
         let mut tx_env = vm::host_env::testing::tx_env_with_wasm_memory(
@@ -760,6 +772,7 @@ mod tests {
             tx_index,
             result_buffer,
             yielded_value,
+            wasmer_store.clone(),
             vp_wasm_cache,
             tx_wasm_cache,
         );

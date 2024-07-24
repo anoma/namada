@@ -204,7 +204,7 @@ where
     let sentinel = RefCell::new(TxSentinel::default());
     let (write_log, in_mem, db) = state.split_borrow();
     let mut env = TxVmEnv::new(
-        WasmMemory::new(Rc::clone(&store)),
+        WasmMemory::new(Rc::downgrade(&store)),
         write_log,
         in_mem,
         db,
@@ -282,6 +282,9 @@ where
     _ = (instance, env);
 
     if ok == 1 {
+        let store = Rc::into_inner(store)
+            .expect("The store must be dropped after execution to avoid leaks");
+        let _store = RefCell::into_inner(store);
         Ok(verifiers)
     } else {
         let err = yielded_value.take().map_or_else(
@@ -341,7 +344,7 @@ where
         };
     let BatchedTxRef { tx, cmt } = batched_tx;
     let mut env = VpVmEnv::new(
-        WasmMemory::new(Rc::clone(&store)),
+        WasmMemory::new(Rc::downgrade(&store)),
         address,
         state.write_log(),
         state.in_mem(),
@@ -490,6 +493,9 @@ where
     _ = (instance, vp_imports);
 
     if is_valid == 1 {
+        let store = Rc::into_inner(store)
+            .expect("The store must be dropped after execution to avoid leaks");
+        let _store = RefCell::into_inner(store);
         Ok(())
     } else {
         unsafe { yielded_value.get_mut() }.take().map_or_else(
@@ -576,7 +582,7 @@ where
         let store = Rc::new(RefCell::new(store));
 
         let mut env = VpVmEnv {
-            memory: WasmMemory::new(Rc::clone(&store)),
+            memory: WasmMemory::new(Rc::downgrade(&store)),
             ctx,
         };
         let yielded_value_borrow = env.ctx.yielded_value;
@@ -936,6 +942,7 @@ impl wasm_instrument::gas_metering::Rules for GasRules {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
     use std::error::Error as StdErrorTrait;
 
     use borsh_ext::BorshSerializeExt;
@@ -985,7 +992,7 @@ mod tests {
         const PANIC_MSG: &str =
             "Test should have failed with a wasm runtime memory error";
 
-        let error = execute_tx_with_code(tx_code).expect_err(PANIC_MSG);
+        let error = execute_tx_with_code(&tx_code).expect_err(PANIC_MSG);
         assert!(
             matches!(
                 assert_tx_rt_mem_error(&error, PANIC_MSG),
@@ -1897,7 +1904,7 @@ mod tests {
         const PANIC_MSG: &str =
             "Test should have failed with a wasm runtime memory error";
 
-        let error = execute_tx_with_code(tx_code).expect_err(PANIC_MSG);
+        let error = execute_tx_with_code(&tx_code).expect_err(PANIC_MSG);
         assert!(
             matches!(
                 assert_tx_rt_mem_error(&error, PANIC_MSG),
@@ -1937,7 +1944,7 @@ mod tests {
         const PANIC_MSG: &str =
             "Test should have failed with a wasm runtime memory error";
 
-        let error = execute_vp_with_code(vp_code).expect_err(PANIC_MSG);
+        let error = execute_vp_with_code(&vp_code).expect_err(PANIC_MSG);
         assert!(
             matches!(
                 assert_vp_rt_mem_error(&error, PANIC_MSG),
@@ -1947,7 +1954,71 @@ mod tests {
         );
     }
 
-    fn execute_vp_with_code(vp_code: Vec<u8>) -> Result<()> {
+    #[test]
+    fn test_tx_leak() {
+        let tx_code = TestWasms::TxNoOp.read_bytes();
+        let (mut vp_cache, _) =
+            wasm::compilation_cache::common::testing::cache();
+        let (mut tx_cache, _) =
+            wasm::compilation_cache::common::testing::cache();
+        let mut last_cache_size: Option<usize> = None;
+        for _ in 0..3 {
+            let _verifiers = execute_tx_with_code_and_cache(
+                &tx_code,
+                &mut tx_cache,
+                &mut vp_cache,
+            )
+            .unwrap();
+
+            let info = &wasmer_compiler::FRAME_INFO.read().unwrap();
+            let info: &GlobalFrameInfo = unsafe { std::mem::transmute(info) };
+            if let Some(last_cache_size) = last_cache_size {
+                assert_eq!(
+                    last_cache_size,
+                    info.ranges.len(),
+                    "The frame info must not be growing - we're using the \
+                     same WASM in each loop"
+                );
+            } else {
+                last_cache_size = Some(info.ranges.len());
+            }
+        }
+    }
+
+    #[test]
+    fn test_vp_leak() {
+        let vp_code = TestWasms::VpAlwaysTrue.read_bytes();
+        let (mut vp_cache, _) =
+            wasm::compilation_cache::common::testing::cache();
+        let mut last_cache_size: Option<usize> = None;
+        for _ in 0..3 {
+            execute_vp_with_code_and_cache(&vp_code, &mut vp_cache).unwrap();
+
+            let info = &wasmer_compiler::FRAME_INFO.read().unwrap();
+            let info: &GlobalFrameInfo = unsafe { std::mem::transmute(info) };
+            if let Some(last_cache_size) = last_cache_size {
+                assert_eq!(
+                    last_cache_size,
+                    info.ranges.len(),
+                    "The frame info must not be growing - we're using the \
+                     same WASM in each loop"
+                );
+            } else {
+                last_cache_size = Some(info.ranges.len());
+            }
+        }
+    }
+
+    fn execute_vp_with_code(vp_code: &[u8]) -> Result<()> {
+        let (mut vp_cache, _) =
+            wasm::compilation_cache::common::testing::cache();
+        execute_vp_with_code_and_cache(vp_code, &mut vp_cache)
+    }
+
+    fn execute_vp_with_code_and_cache<CA: 'static + WasmCacheAccess>(
+        vp_code: &[u8],
+        vp_cache: &mut VpCache<CA>,
+    ) -> Result<()> {
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.push_default_inner_tx();
         let tx_index = TxIndex::default();
@@ -1958,9 +2029,8 @@ mod tests {
         ));
         let keys_changed = BTreeSet::new();
         let verifiers = BTreeSet::new();
-        let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
         // store the vp code
-        let code_hash = Hash::sha256(&vp_code);
+        let code_hash = Hash::sha256(vp_code);
         let code_len = vp_code.len() as u64;
         let key = Key::wasm_code(&code_hash);
         let len_key = Key::wasm_code_len(&code_hash);
@@ -1976,22 +2046,30 @@ mod tests {
             &gas_meter,
             &keys_changed,
             &verifiers,
-            vp_cache,
+            vp_cache.clone(),
         )
     }
 
-    fn execute_tx_with_code(tx_code: Vec<u8>) -> Result<BTreeSet<Address>> {
+    fn execute_tx_with_code(tx_code: &[u8]) -> Result<BTreeSet<Address>> {
+        let (mut tx_cache, _) =
+            wasm::compilation_cache::common::testing::cache();
+        let (mut vp_cache, _) =
+            wasm::compilation_cache::common::testing::cache();
+        execute_tx_with_code_and_cache(tx_code, &mut tx_cache, &mut vp_cache)
+    }
+
+    fn execute_tx_with_code_and_cache<CA: 'static + WasmCacheAccess>(
+        tx_code: &[u8],
+        tx_cache: &mut TxCache<CA>,
+        vp_cache: &mut VpCache<CA>,
+    ) -> Result<BTreeSet<Address>> {
         let tx_data = vec![];
         let tx_index = TxIndex::default();
         let mut state = TestState::default();
         let gas_meter = RefCell::new(TxGasMeter::new(TX_GAS_LIMIT));
-        let (mut vp_cache, _) =
-            wasm::compilation_cache::common::testing::cache();
-        let (mut tx_cache, _) =
-            wasm::compilation_cache::common::testing::cache();
 
         // store the tx code
-        let code_hash = Hash::sha256(&tx_code);
+        let code_hash = Hash::sha256(tx_code);
         let code_len = (tx_code.len() as u64).serialize_to_vec();
         let key = Key::wasm_code(&code_hash);
         let len_key = Key::wasm_code_len(&code_hash);
@@ -2012,8 +2090,8 @@ mod tests {
             &tx_index,
             batched_tx.tx,
             batched_tx.cmt,
-            &mut vp_cache,
-            &mut tx_cache,
+            vp_cache,
+            tx_cache,
         )
     }
 
@@ -2050,7 +2128,7 @@ mod tests {
         .expect("unexpected error converting wat2wasm")
         .into_owned();
 
-        execute_tx_with_code(tx_code)
+        execute_tx_with_code(&tx_code)
     }
 
     fn loop_in_vp_wasm(loops: u32) -> Result<()> {
@@ -2082,7 +2160,7 @@ mod tests {
         )
             .expect("unexpected error converting wat2wasm").into_owned();
 
-        execute_vp_with_code(vp_code)
+        execute_vp_with_code(&vp_code)
     }
 
     fn get_trap_code(error: &Error) -> Either<TrapCode, String> {
@@ -2108,5 +2186,23 @@ mod tests {
                 trap_code ==
                 Either::Left(wasmer_vm::TrapCode::StackOverflow),
         );
+    }
+
+    /// The following definitions are copied from wasmer v4.3.5
+    /// `lib/compiler/src/engine/trap/frame_info.rs` to access internal
+    /// fields that are otherwise private. This must be carefully maintained
+    /// while we workaround the leak before it's fixed in wasmer.
+    pub struct GlobalFrameInfo {
+        ranges: BTreeMap<usize, ModuleInfoFrameInfo>,
+    }
+    struct ModuleInfoFrameInfo {
+        _start: usize,
+        _functions: BTreeMap<usize, FunctionInfo>,
+        _module: std::sync::Arc<wasmer_types::ModuleInfo>,
+        _frame_infos: wasmer_compiler::FrameInfosVariant,
+    }
+    struct FunctionInfo {
+        _start: usize,
+        _local_index: wasmer_types::LocalFunctionIndex,
     }
 }

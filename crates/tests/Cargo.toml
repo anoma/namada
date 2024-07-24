@@ -17,7 +17,7 @@ default = ["wasm-runtime", "migrations"]
 mainnet = [
   "namada/mainnet",
 ]
-wasm-runtime = ["namada/wasm-runtime"]
+wasm-runtime = ["namada/wasm-runtime", "wasmer"]
 integration = ["namada_node/integration", "namada_apps_lib/integration"]
 migrations = [
   "namada/migrations",
@@ -52,6 +52,7 @@ sha2.workspace = true
 tempfile.workspace = true
 test-log.workspace = true
 tokio = {workspace = true, features = ["full"]}
+wasmer = { workspace = true, optional = true }
 
 [dev-dependencies]
 namada_apps_lib = {path = "../apps_lib", features = ["testing"]}
