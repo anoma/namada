@@ -3213,8 +3213,6 @@ pub mod args {
             Err(_) => config::get_default_namada_folder(),
         }),
     );
-    pub const BATCH_SIZE_OPT: ArgDefault<u64> =
-        arg_default("batch-size", DefaultFn(|| 1));
     pub const BLOCK_HEIGHT: Arg<BlockHeight> = arg("block-height");
     pub const BLOCK_HEIGHT_OPT: ArgOpt<BlockHeight> = arg_opt("height");
     pub const BLOCK_HEIGHT_FROM_OPT: ArgOpt<BlockHeight> =
@@ -3468,6 +3466,7 @@ pub mod args {
     pub const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
     pub const WASM_DIR: ArgOpt<PathBuf> = arg_opt("wasm-dir");
     pub const WEBSITE_OPT: ArgOpt<String> = arg_opt("website");
+    pub const WITH_INDEXER: ArgOpt<String> = arg_opt("with-indexer");
     pub const TX_PATH: Arg<PathBuf> = arg("tx-path");
     pub const TX_PATH_OPT: ArgOpt<PathBuf> = TX_PATH.opt();
 
@@ -6575,27 +6574,23 @@ pub mod args {
     impl Args for ShieldedSync<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let ledger_address = CONFIG_RPC_LEDGER_ADDRESS.parse(matches);
-            let batch_size = BATCH_SIZE_OPT.parse(matches);
             let start_query_height = BLOCK_HEIGHT_FROM_OPT.parse(matches);
             let last_query_height = BLOCK_HEIGHT_TO_OPT.parse(matches);
             let spending_keys = SPENDING_KEYS.parse(matches);
             let viewing_keys = VIEWING_KEYS.parse(matches);
+            let with_indexer = WITH_INDEXER.parse(matches);
             Self {
                 ledger_address,
-                batch_size,
                 start_query_height,
                 last_query_height,
                 spending_keys,
                 viewing_keys,
+                with_indexer,
             }
         }
 
         fn def(app: App) -> App {
             app.arg(CONFIG_RPC_LEDGER_ADDRESS.def().help(LEDGER_ADDRESS_ABOUT))
-                .arg(BATCH_SIZE_OPT.def().help(wrap!(
-                    "Optional batch size which determines how many txs to \
-                     fetch before caching locally. Default is 1."
-                )))
                 .arg(BLOCK_HEIGHT_TO_OPT.def().help(wrap!(
                     "Option block height to sync up to. Default is latest."
                 )))
@@ -6612,6 +6607,11 @@ pub mod args {
                     "List of new viewing keys with which to check note \
                      ownership. These will be added to the shielded context."
                 )))
+                .arg(WITH_INDEXER.def().help(wrap!(
+                    "Address of a `namada-masp-indexer` live instance. If \
+                     present, the shielded sync will be performed using data \
+                     retrieved from the given indexer."
+                )))
         }
     }
 
@@ -6626,7 +6626,6 @@ pub mod args {
 
             Ok(ShieldedSync {
                 ledger_address: chain_ctx.get(&self.ledger_address),
-                batch_size: self.batch_size,
                 start_query_height: self.start_query_height,
                 last_query_height: self.last_query_height,
                 spending_keys: self
@@ -6639,6 +6638,7 @@ pub mod args {
                     .iter()
                     .map(|vk| chain_ctx.get_cached(vk))
                     .collect(),
+                with_indexer: self.with_indexer.map(|_| ()),
             })
         }
     }
@@ -6962,6 +6962,7 @@ pub mod args {
         type Data = PathBuf;
         type EthereumAddress = String;
         type Keypair = WalletKeypair;
+        type MaspIndexerAddress = String;
         type PaymentAddress = WalletPaymentAddr;
         type PublicKey = WalletPublicKey;
         type SpendingKey = WalletSpendingKey;

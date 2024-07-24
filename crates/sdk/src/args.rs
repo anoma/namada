@@ -79,6 +79,8 @@ pub trait NamadaTypes: Clone + std::fmt::Debug {
     type Data: Clone + std::fmt::Debug;
     /// Bridge pool recommendations conversion rates table.
     type BpConversionTable: Clone + std::fmt::Debug;
+    /// Address of a `namada-masp-indexer` live instance
+    type MaspIndexerAddress: Clone + std::fmt::Debug;
 }
 
 /// The concrete types being used in Namada SDK
@@ -105,6 +107,7 @@ impl NamadaTypes for SdkTypes {
     type Data = Vec<u8>;
     type EthereumAddress = ();
     type Keypair = namada_core::key::common::SecretKey;
+    type MaspIndexerAddress = ();
     type PaymentAddress = namada_core::masp::PaymentAddress;
     type PublicKey = namada_core::key::common::PublicKey;
     type SpendingKey = namada_core::masp::ExtendedSpendingKey;
@@ -2082,8 +2085,6 @@ pub struct SignTx<C: NamadaTypes = SdkTypes> {
 pub struct ShieldedSync<C: NamadaTypes = SdkTypes> {
     /// The ledger address
     pub ledger_address: C::ConfigRpcTendermintAddress,
-    /// The number of txs to fetch before caching
-    pub batch_size: u64,
     /// Height to start syncing from. Defaults to the correct one.
     pub start_query_height: Option<BlockHeight>,
     /// Height to sync up to. Defaults to most recent
@@ -2092,6 +2093,11 @@ pub struct ShieldedSync<C: NamadaTypes = SdkTypes> {
     pub spending_keys: Vec<C::SpendingKey>,
     /// Viewing keys used to determine note ownership
     pub viewing_keys: Vec<C::ViewingKey>,
+    /// Address of a `namada-masp-indexer` live instance
+    ///
+    /// If present, the shielded sync will be performed
+    /// using data retrieved from the given indexer
+    pub with_indexer: Option<C::MaspIndexerAddress>,
 }
 
 /// Query PoS commission rate

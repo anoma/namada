@@ -1,15 +1,21 @@
+use std::collections::BTreeMap;
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex};
 
+use masp_primitives::merkle_tree::{CommitmentTree, IncrementalWitness};
+use masp_primitives::sapling::Node;
+use namada_core::collections::HashMap;
 use namada_core::storage::BlockHeight;
 use namada_state::LastBlock;
+use namada_tx::IndexedTx;
 use tendermint_rpc::SimpleRequest;
 
 use crate::control_flow::ShutdownSignal;
 use crate::error::Error;
 use crate::io::Io;
 use crate::masp::utils::{
-    FetchQueueSender, IterProgress, MaspClient, PeekableIter, ProgressTracker,
+    FetchQueueSender, IterProgress, MaspClient, MaspClientCapabilities,
+    PeekableIter, ProgressTracker,
 };
 use crate::masp::IndexedNoteEntry;
 use crate::queries::testing::TestClient;
@@ -102,9 +108,15 @@ impl<'client> TestingMaspClient<'client> {
     }
 }
 
-impl<'a> MaspClient<'a, TestingClient> for TestingMaspClient<'a> {
-    fn rpc_client(&self) -> &TestingClient {
-        self.client
+impl MaspClient for TestingMaspClient<'_> {
+    async fn last_block_height(&self) -> Result<Option<BlockHeight>, Error> {
+        Ok(self
+            .client
+            .state
+            .in_mem()
+            .last_block
+            .as_ref()
+            .map(|b| b.height))
     }
 
     async fn fetch_shielded_transfers<IO: Io>(
@@ -112,8 +124,8 @@ impl<'a> MaspClient<'a, TestingClient> for TestingMaspClient<'a> {
         progress: &impl ProgressTracker<IO>,
         shutdown_signal: &mut ShutdownSignal,
         mut tx_sender: FetchQueueSender,
-        from: u64,
-        to: u64,
+        BlockHeight(from): BlockHeight,
+        BlockHeight(to): BlockHeight,
     ) -> Result<(), Error> {
         // N.B. this assumes one masp tx per block
         let mut fetch_iter = progress.fetch(from..=to);
@@ -136,6 +148,36 @@ impl<'a> MaspClient<'a, TestingClient> for TestingMaspClient<'a> {
             fetch_iter.next();
         }
         Ok(())
+    }
+
+    #[inline(always)]
+    fn capabilities(&self) -> MaspClientCapabilities {
+        MaspClientCapabilities::OnlyTransfers
+    }
+
+    async fn fetch_commitment_tree(
+        &self,
+        _: BlockHeight,
+    ) -> Result<CommitmentTree<Node>, Error> {
+        unimplemented!(
+            "Commitment tree fetching is not implemented by this client"
+        )
+    }
+
+    async fn fetch_tx_notes_map(
+        &self,
+        _: BlockHeight,
+    ) -> Result<BTreeMap<IndexedTx, usize>, Error> {
+        unimplemented!(
+            "Transaction notes map fetching is not implemented by this client"
+        )
+    }
+
+    async fn fetch_witness_map(
+        &self,
+        _: BlockHeight,
+    ) -> Result<HashMap<usize, IncrementalWitness<Node>>, Error> {
+        unimplemented!("Witness map fetching is not implemented by this client")
     }
 }
 
