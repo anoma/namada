@@ -19,8 +19,8 @@ use namada_token::utils::is_masp_transfer;
 use namada_tx::action::Read;
 use namada_tx::data::protocol::{ProtocolTx, ProtocolTxType};
 use namada_tx::data::{
-    BatchResults, BatchedTxResult, ExtendedTxResult, TxResult, VpStatusFlags,
-    VpsResult, WrapperTx,
+    BatchedTxResult, ExtendedTxResult, TxResult, VpStatusFlags, VpsResult,
+    WrapperTx,
 };
 use namada_tx::{BatchedTxRef, Tx, TxCommitments};
 use namada_vote_ext::EthereumTxData;
@@ -275,17 +275,14 @@ where
                     },
                 )?;
 
-                Ok(TxResult {
-                    gas_used: tx_gas_meter.borrow().get_tx_consumed_gas(),
-                    batch_results: {
-                        let mut batch_results = BatchResults::new();
-                        batch_results.insert_inner_tx_result(
-                            wrapper_hash,
-                            either::Right(cmt),
-                            Ok(batched_tx_result),
-                        );
-                        batch_results
-                    },
+                Ok({
+                    let mut batch_results = TxResult::new();
+                    batch_results.insert_inner_tx_result(
+                        wrapper_hash,
+                        either::Right(cmt),
+                        Ok(batched_tx_result),
+                    );
+                    batch_results
                 }
                 .to_extended_result(None))
             }
@@ -296,17 +293,14 @@ where
             let batched_tx_result =
                 apply_protocol_tx(protocol_tx.tx, tx.data(cmt), state)?;
 
-            Ok(TxResult {
-                batch_results: {
-                    let mut batch_results = BatchResults::new();
-                    batch_results.insert_inner_tx_result(
-                        None,
-                        either::Right(cmt),
-                        Ok(batched_tx_result),
-                    );
-                    batch_results
-                },
-                ..Default::default()
+            Ok({
+                let mut batch_results = TxResult::new();
+                batch_results.insert_inner_tx_result(
+                    None,
+                    either::Right(cmt),
+                    Ok(batched_tx_result),
+                );
+                batch_results
             }
             .to_extended_result(None))
         }
@@ -382,16 +376,11 @@ where
         ) {
             Err(Error::GasError(ref msg)) => {
                 // Gas error aborts the execution of the entire batch
-                extended_tx_result.tx_result.gas_used =
-                    tx_gas_meter.borrow().get_tx_consumed_gas();
-                extended_tx_result
-                    .tx_result
-                    .batch_results
-                    .insert_inner_tx_result(
-                        wrapper_hash,
-                        either::Right(cmt),
-                        Err(Error::GasError(msg.to_owned())),
-                    );
+                extended_tx_result.tx_result.insert_inner_tx_result(
+                    wrapper_hash,
+                    either::Right(cmt),
+                    Err(Error::GasError(msg.to_owned())),
+                );
                 state.write_log_mut().drop_tx();
                 return Err(DispatchError {
                     error: Error::GasError(msg.to_owned()),
@@ -402,16 +391,11 @@ where
                 let is_accepted =
                     matches!(&res, Ok(result) if result.is_accepted());
 
-                extended_tx_result
-                    .tx_result
-                    .batch_results
-                    .insert_inner_tx_result(
-                        wrapper_hash,
-                        either::Right(cmt),
-                        res,
-                    );
-                extended_tx_result.tx_result.gas_used =
-                    tx_gas_meter.borrow().get_tx_consumed_gas();
+                extended_tx_result.tx_result.insert_inner_tx_result(
+                    wrapper_hash,
+                    either::Right(cmt),
+                    res,
+                );
                 if is_accepted {
                     // If the transaction was a masp one append the
                     // transaction refs for the events
@@ -488,9 +472,9 @@ where
     shell_params.state.write_log_mut().commit_batch();
 
     let (batch_results, masp_tx_refs) = payment_result.map_or_else(
-        || (BatchResults::default(), None),
+        || (TxResult::default(), None),
         |(batched_result, masp_section_ref)| {
-            let mut batch = BatchResults::default();
+            let mut batch = TxResult::default();
             batch.insert_inner_tx_result(
                 // Ok to unwrap cause if we have a batched result it means
                 // we've executed the first tx in the batch
@@ -508,11 +492,7 @@ where
         .add_wrapper_gas(tx_bytes)
         .map_err(|err| Error::GasError(err.to_string()))?;
 
-    Ok(TxResult {
-        gas_used: tx_gas_meter.borrow().get_tx_consumed_gas(),
-        batch_results,
-    }
-    .to_extended_result(masp_tx_refs))
+    Ok(batch_results.to_extended_result(masp_tx_refs))
 }
 
 /// Perform the actual transfer of fees from the fee payer to the block
@@ -702,7 +682,7 @@ where
     let gas_scale = get_gas_scale(&**state).map_err(Error::StorageError)?;
 
     let mut gas_meter = TxGasMeter::new(
-        namada_gas::Gas::from_whole_units(max_gas_limit, gas_scale)
+        namada_gas::Gas::from_whole_units(max_gas_limit.into(), gas_scale)
             .ok_or_else(|| {
                 Error::GasError("Overflow in gas expansion".to_string())
             })?,

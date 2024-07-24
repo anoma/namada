@@ -21,9 +21,9 @@ masp_epoch_multiplier = 2
 # Max gas for block
 max_block_gas = 20000000
 # Masp fee payment gas limit
-masp_fee_payment_gas_limit = 20000
+masp_fee_payment_gas_limit = 150_000
 # Gas scale
-gas_scale = 100_000_000
+gas_scale = 10_000_000
 
 # Map of the cost per gas unit for every token allowed for fee payment
 [parameters.minimum_gas_price]

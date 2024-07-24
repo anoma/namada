@@ -25,7 +25,7 @@ mod dry_run_tx {
 
     use namada_sdk::queries::{EncodedResponseQuery, RequestCtx, RequestQuery};
     use namada_state::{DBIter, ResultExt, StorageHasher, DB};
-    use namada_tx::data::{ExtendedTxResult, GasLimit, TxResult};
+    use namada_tx::data::{DryRunResult, ExtendedTxResult, GasLimit, TxResult};
 
     use super::protocol;
     use crate::vm::wasm::{TxCache, VpCache};
@@ -132,18 +132,22 @@ mod dry_run_tx {
             } else {
                 temp_state.write_log_mut().drop_tx();
             }
-            tx_result.batch_results.insert_inner_tx_result(
+            tx_result.insert_inner_tx_result(
                 wrapper_hash.as_ref(),
                 either::Right(cmt),
                 batched_tx_result,
             );
         }
         // Account gas for both batch and wrapper
-        tx_result.gas_used = tx_gas_meter.borrow().get_tx_consumed_gas();
+        let gas_used = tx_gas_meter
+            .borrow()
+            .get_tx_consumed_gas()
+            .get_whole_gas_units(gas_scale);
         let tx_result_string = tx_result.to_result_string();
-        let data = tx_result_string.serialize_to_vec();
+        let dry_run_result = DryRunResult(tx_result_string, gas_used);
+
         Ok(EncodedResponseQuery {
-            data,
+            data: dry_run_result.serialize_to_vec(),
             proof: None,
             info: Default::default(),
             height: ctx.state.in_mem().get_last_block_height(),
@@ -331,7 +335,7 @@ mod test {
         assert!(
             result
                 .data
-                .batch_results
+                .0
                 .get_inner_tx_result(None, either::Right(cmt))
                 .unwrap()
                 .as_ref()

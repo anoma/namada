@@ -375,12 +375,10 @@ where
                 );
                 let gas_scale = get_gas_scale(&self.state)
                     .expect("Failed to get gas scale from parameters");
-                let scaled_gas = Gas::from(
-                    tx_data
-                        .tx_gas_meter
-                        .get_tx_consumed_gas()
-                        .get_whole_gas_units(gas_scale),
-                );
+                let scaled_gas = tx_data
+                    .tx_gas_meter
+                    .get_tx_consumed_gas()
+                    .get_whole_gas_units(gas_scale);
                 tx_logs
                     .tx_event
                     .extend(GasUsed(scaled_gas))
@@ -410,12 +408,10 @@ where
 
                 let gas_scale = get_gas_scale(&self.state)
                     .expect("Failed to get gas scale from parameters");
-                let scaled_gas = Gas::from(
-                    tx_data
-                        .tx_gas_meter
-                        .get_tx_consumed_gas()
-                        .get_whole_gas_units(gas_scale),
-                );
+                let scaled_gas = tx_data
+                    .tx_gas_meter
+                    .get_tx_consumed_gas()
+                    .get_whole_gas_units(gas_scale);
 
                 tx_logs
                     .tx_event
@@ -463,10 +459,8 @@ where
             let unrun_txs = tx_data
                 .commitments_len
                 .checked_sub(
-                    u64::try_from(
-                        extended_tx_result.tx_result.batch_results.len(),
-                    )
-                    .expect("Should be able to convert to u64"),
+                    u64::try_from(extended_tx_result.tx_result.len())
+                        .expect("Should be able to convert to u64"),
                 )
                 .expect("Shouldn't underflow");
             temp_log.stats.set_failing_atomic_batch(unrun_txs);
@@ -495,12 +489,10 @@ where
 
         let gas_scale = get_gas_scale(&self.state)
             .expect("Failed to get gas scale from parameters");
-        let scaled_gas = Gas::from(
-            tx_data
-                .tx_gas_meter
-                .get_tx_consumed_gas()
-                .get_whole_gas_units(gas_scale),
-        );
+        let scaled_gas = tx_data
+            .tx_gas_meter
+            .get_tx_consumed_gas()
+            .get_whole_gas_units(gas_scale);
 
         tx_logs
             .tx_event
@@ -531,7 +523,7 @@ where
         let unrun_txs = tx_data
             .commitments_len
             .checked_sub(
-                u64::try_from(extended_tx_result.tx_result.batch_results.len())
+                u64::try_from(extended_tx_result.tx_result.len())
                     .expect("Should be able to convert to u64"),
             )
             .expect("Shouldn't underflow");
@@ -984,9 +976,7 @@ impl<'finalize> TempTxLogs {
     ) -> ValidityFlags {
         let mut flags = ValidityFlags::default();
 
-        for (cmt_hash, batched_result) in
-            extended_tx_result.tx_result.batch_results.iter()
-        {
+        for (cmt_hash, batched_result) in extended_tx_result.tx_result.iter() {
             match batched_result {
                 Ok(result) => {
                     if result.is_accepted() {
@@ -1208,7 +1198,7 @@ mod test_finalize_block {
         FinalizeBlock, ProcessedTx,
     };
 
-    const WRAPPER_GAS_LIMIT: u64 = 11_000;
+    const WRAPPER_GAS_LIMIT: u64 = 150_000;
     const STORAGE_VALUE: &str = "test_value";
 
     /// Make a wrapper tx and a processed tx from the wrapped tx that can be
@@ -3282,7 +3272,6 @@ mod test_finalize_block {
         assert_eq!(code, ResultCode::Ok);
         let inner_tx_result = event[0].read_attribute::<Batch<'_>>().unwrap();
         let first_tx_result = inner_tx_result
-            .batch_results
             .get_inner_tx_result(
                 Some(&wrapper.header_hash()),
                 either::Right(wrapper.first_commitments().unwrap()),
@@ -3433,7 +3422,6 @@ mod test_finalize_block {
         assert_eq!(code, ResultCode::Ok);
         let inner_tx_result = event[1].read_attribute::<Batch<'_>>().unwrap();
         let inner_result = inner_tx_result
-            .batch_results
             .get_inner_tx_result(
                 Some(&unsigned_wrapper.header_hash()),
                 either::Right(unsigned_wrapper.first_commitments().unwrap()),
@@ -3445,7 +3433,6 @@ mod test_finalize_block {
         assert_eq!(code, ResultCode::Ok);
         let inner_tx_result = event[2].read_attribute::<Batch<'_>>().unwrap();
         let inner_result = inner_tx_result
-            .batch_results
             .get_inner_tx_result(
                 Some(&wrong_commitment_wrapper.header_hash()),
                 either::Right(
@@ -3459,7 +3446,6 @@ mod test_finalize_block {
         assert_eq!(code, ResultCode::Ok);
         let inner_tx_result = event[3].read_attribute::<Batch<'_>>().unwrap();
         let inner_result = inner_tx_result
-            .batch_results
             .get_inner_tx_result(
                 Some(&failing_wrapper.header_hash()),
                 either::Right(failing_wrapper.first_commitments().unwrap()),
@@ -3664,7 +3650,6 @@ mod test_finalize_block {
         assert_eq!(code, ResultCode::Ok);
         let inner_tx_result = event.read_attribute::<Batch<'_>>().unwrap();
         let inner_result = inner_tx_result
-            .batch_results
             .get_inner_tx_result(
                 Some(&wrapper.header_hash()),
                 either::Right(wrapper.first_commitments().unwrap()),
@@ -5570,7 +5555,7 @@ mod test_finalize_block {
         let code = event[0].read_attribute::<CodeAttr>().unwrap();
         assert_eq!(code, ResultCode::Ok);
         let inner_tx_result = event[0].read_attribute::<Batch<'_>>().unwrap();
-        let inner_results = inner_tx_result.batch_results;
+        let inner_results = inner_tx_result;
 
         for cmt in batch.commitments() {
             assert!(
@@ -5618,7 +5603,7 @@ mod test_finalize_block {
         let code = event[0].read_attribute::<CodeAttr>().unwrap();
         assert_eq!(code, ResultCode::WasmRuntimeError);
         let inner_tx_result = event[0].read_attribute::<Batch<'_>>().unwrap();
-        let inner_results = inner_tx_result.batch_results;
+        let inner_results = inner_tx_result;
 
         assert!(
             inner_results
@@ -5677,7 +5662,7 @@ mod test_finalize_block {
         let code = event[0].read_attribute::<CodeAttr>().unwrap();
         assert_eq!(code, ResultCode::Ok);
         let inner_tx_result = event[0].read_attribute::<Batch<'_>>().unwrap();
-        let inner_results = inner_tx_result.batch_results;
+        let inner_results = inner_tx_result;
 
         assert!(
             inner_results
@@ -5754,7 +5739,7 @@ mod test_finalize_block {
         let code = event[0].read_attribute::<CodeAttr>().unwrap();
         assert_eq!(code, ResultCode::WasmRuntimeError);
         let inner_tx_result = event[0].read_attribute::<Batch<'_>>().unwrap();
-        let inner_results = inner_tx_result.batch_results;
+        let inner_results = inner_tx_result;
 
         assert!(
             inner_results
@@ -5812,7 +5797,7 @@ mod test_finalize_block {
         let code = event[0].read_attribute::<CodeAttr>().unwrap();
         assert_eq!(code, ResultCode::WasmRuntimeError);
         let inner_tx_result = event[0].read_attribute::<Batch<'_>>().unwrap();
-        let inner_results = inner_tx_result.batch_results;
+        let inner_results = inner_tx_result;
 
         assert!(
             inner_results
@@ -5921,10 +5906,10 @@ mod test_finalize_block {
 
         // multiple tx results (2)
         let tx_results = event.read_attribute::<Batch<'_>>().unwrap();
-        assert_eq!(tx_results.batch_results.len(), 2);
+        assert_eq!(tx_results.len(), 2);
 
         // all txs should have succeeded
-        assert!(tx_results.batch_results.are_results_ok());
+        assert!(tx_results.are_results_ok());
     }
 
     #[test]
@@ -5994,10 +5979,10 @@ mod test_finalize_block {
 
         // multiple tx results (2)
         let tx_results = event.read_attribute::<Batch<'_>>().unwrap();
-        assert_eq!(tx_results.batch_results.len(), 2);
+        assert_eq!(tx_results.len(), 2);
 
         // check one succeeded and the other failed
-        assert!(tx_results.batch_results.are_any_ok());
-        assert!(tx_results.batch_results.are_any_err());
+        assert!(tx_results.are_any_ok());
+        assert!(tx_results.are_any_err());
     }
 }

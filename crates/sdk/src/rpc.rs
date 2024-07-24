@@ -25,7 +25,7 @@ use namada_core::token::{
 };
 use namada_core::{storage, token};
 use namada_gas::event::GasUsed as GasUsedAttr;
-use namada_gas::Gas;
+use namada_gas::WholeGas;
 use namada_governance::parameters::GovernanceParameters;
 use namada_governance::pgf::parameters::PgfParameters;
 use namada_governance::pgf::storage::steward::StewardDetail;
@@ -42,7 +42,7 @@ use namada_proof_of_stake::types::{
     BondsAndUnbondsDetails, CommissionPair, ValidatorMetaData,
 };
 use namada_state::LastBlock;
-use namada_tx::data::{BatchedTxResult, ResultCode, TxResult};
+use namada_tx::data::{BatchedTxResult, DryRunResult, ResultCode, TxResult};
 use namada_tx::event::{Batch as BatchAttr, Code as CodeAttr};
 use serde::Serialize;
 
@@ -549,7 +549,7 @@ pub async fn query_tx_events<C: crate::queries::Client + Sync>(
 pub async fn dry_run_tx<N: Namada>(
     context: &N,
     tx_bytes: Vec<u8>,
-) -> Result<namada_tx::data::TxResult<String>, Error> {
+) -> Result<DryRunResult, Error> {
     let (data, height, prove) = (Some(tx_bytes), None, false);
     let result = convert_response::<N::Client, _>(
         RPC.shell()
@@ -557,10 +557,10 @@ pub async fn dry_run_tx<N: Namada>(
             .await,
     )?
     .data;
-    let result_str = format!("Transaction consumed {} gas", result.gas_used);
+    let result_str = format!("Transaction consumed {} gas", result.1);
 
     let mut cmt_result_str = String::new();
-    for (inner_hash, cmt_result) in result.batch_results.iter() {
+    for (inner_hash, cmt_result) in result.0.iter() {
         match cmt_result {
             Ok(result) => {
                 if result.is_accepted() {
@@ -631,7 +631,7 @@ pub struct TxResponse {
     /// Response code
     pub code: ResultCode,
     /// Gas used.
-    pub gas_used: Gas,
+    pub gas_used: WholeGas,
 }
 
 /// Determines a result of an inner tx from
@@ -692,9 +692,9 @@ impl TxResponse {
     /// Check the result of the batch. This should not be used with wrapper
     /// txs.
     pub fn batch_result(&self) -> HashMap<Hash, InnerTxResult<'_>> {
-        if let Some(tx) = self.batch.as_ref() {
+        if let Some(tx_result) = self.batch.as_ref() {
             let mut result = HashMap::default();
-            for (inner_hash, cmt_result) in tx.batch_results.iter() {
+            for (inner_hash, cmt_result) in tx_result.iter() {
                 let value = match cmt_result {
                     Ok(res) => {
                         if res.is_accepted() {
