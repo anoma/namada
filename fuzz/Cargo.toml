@@ -8,8 +8,12 @@ edition = "2021"
 cargo-fuzz = true
 
 [dependencies]
+namada_apps_lib = { path = "../crates/apps_lib", features = ["testing"] }
+namada_core = { path = "../crates/core", features = ["testing"] }
 namada_node = { path = "../crates/node", features = ["testing"] }
 namada_tx = { path = "../crates/tx", features = ["arbitrary"] }
+
+data-encoding = { workspace = true }
 masp_primitives = { workspace = true, features = ["arbitrary"] }
 
 lazy_static.workspace = true
@@ -32,6 +36,13 @@ bench = false
 [[bin]]
 name = "txs_process_proposal"
 path = "fuzz_targets/txs_process_proposal.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "txs_finalize_block"
+path = "fuzz_targets/txs_finalize_block.rs"
 test = false
 doc = false
 bench = false
