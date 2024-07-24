@@ -302,7 +302,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
     // Shieded transfer from Chain A to Chain B
     std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
     let token_addr = find_address(&test_a, BTC)?.to_string();
-    let memo_path = gen_masp_tx(
+    let shielding_data_path = gen_ibc_shielding_data(
         &test_b,
         AB_PAYMENT_ADDRESS,
         token_addr,
@@ -320,7 +320,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         &port_id_a,
         &channel_id_a,
         None,
-        Some(memo_path),
+        Some(shielding_data_path),
         None,
         false,
     )?;
@@ -494,7 +494,7 @@ fn ibc_namada_gaia() -> Result<()> {
     check_gaia_balance(&test_gaia, GAIA_USER, GAIA_COIN, 900)?;
 
     // Shielding transfer from Gaia to Namada
-    let memo_path = gen_masp_tx(
+    let memo_path = gen_ibc_shielding_data(
         &test,
         AA_PAYMENT_ADDRESS,
         GAIA_COIN,
@@ -696,7 +696,7 @@ fn proposal_ibc_token_inflation() -> Result<()> {
     // Transfer 1 from Chain A to a z-address on Chain B
     std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
     let token_addr = find_address(&test_a, APFEL)?.to_string();
-    let memo_path = gen_masp_tx(
+    let shielding_data_path = gen_ibc_shielding_data(
         &test_b,
         AB_PAYMENT_ADDRESS,
         token_addr,
@@ -714,7 +714,7 @@ fn proposal_ibc_token_inflation() -> Result<()> {
         &port_id_a,
         &channel_id_a,
         None,
-        Some(memo_path),
+        Some(shielding_data_path),
         None,
         false,
     )?;
@@ -1991,7 +1991,7 @@ fn transfer(
     port_id: &PortId,
     channel_id: &ChannelId,
     timeout_sec: Option<Duration>,
-    memo_path: Option<PathBuf>,
+    shielding_data_path: Option<PathBuf>,
     expected_err: Option<&str>,
     wait_reveal_pk: bool,
 ) -> Result<u32> {
@@ -2033,12 +2033,12 @@ fn transfer(
         tx_args.push(&timeout);
     }
 
-    let memo = memo_path
+    let memo = shielding_data_path
         .as_ref()
         .map(|path| path.to_string_lossy().to_string())
         .unwrap_or_default();
-    if memo_path.is_some() {
-        tx_args.push("--memo-path");
+    if shielding_data_path.is_some() {
+        tx_args.push("--ibc-shielding-data");
         tx_args.push(&memo);
     }
 
@@ -2692,8 +2692,9 @@ fn shielded_sync(test: &Test, viewing_key: impl AsRef<str>) -> Result<()> {
     Ok(())
 }
 
-/// Get masp proof for the following IBC transfer from the destination chain
-fn gen_masp_tx(
+/// Get IBC shielding data for the following IBC transfer from the destination
+/// chain
+fn gen_ibc_shielding_data(
     dst_test: &Test,
     receiver: impl AsRef<str>,
     token: impl AsRef<str>,

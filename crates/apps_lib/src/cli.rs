@@ -3328,7 +3328,9 @@ pub mod args {
         flag("allow-non-compliant");
     pub const HD_PROMPT_BIP39_PASSPHRASE: ArgFlag = flag("bip39-passphrase");
     pub const HISTORIC: ArgFlag = flag("historic");
-    pub const IBC_TRANSFER_MEMO_PATH: ArgOpt<PathBuf> = arg_opt("memo-path");
+    pub const IBC_SHIELDING_DATA_PATH: ArgOpt<PathBuf> =
+        arg_opt("ibc-shielding-data");
+    pub const IBC_MEMO: ArgOpt<String> = arg_opt("ibc-memo");
     pub const INPUT_OPT: ArgOpt<PathBuf> = arg_opt("input");
     pub const LEDGER_ADDRESS_ABOUT: &str = textwrap_macros::fill!(
         "Address of a ledger node as \"{scheme}://{host}:{port}\". If the \
@@ -4763,7 +4765,8 @@ pub mod args {
                 timeout_height: self.timeout_height,
                 timeout_sec_offset: self.timeout_sec_offset,
                 refund_target: chain_ctx.get_opt(&self.refund_target),
-                memo: self.memo,
+                ibc_shielding_data: self.ibc_shielding_data,
+                ibc_memo: self.ibc_memo,
                 gas_spending_keys,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
@@ -4782,10 +4785,14 @@ pub mod args {
             let timeout_height = TIMEOUT_HEIGHT.parse(matches);
             let timeout_sec_offset = TIMEOUT_SEC_OFFSET.parse(matches);
             let refund_target = REFUND_TARGET.parse(matches);
-            let memo = IBC_TRANSFER_MEMO_PATH.parse(matches).map(|path| {
-                std::fs::read_to_string(path)
-                    .expect("Expected a file at given path")
-            });
+            let ibc_shielding_data =
+                IBC_SHIELDING_DATA_PATH.parse(matches).map(|path| {
+                    let data = std::fs::read_to_string(path)
+                        .expect("Failed to open IBC shielding data file");
+                    namada::ibc::decode_ibc_shielding_data(data)
+                        .expect("Failed to decode IBC shielding data")
+                });
+            let ibc_memo = IBC_MEMO.parse(matches);
             let mut gas_spending_keys = vec![];
             if let Some(key) = GAS_SPENDING_KEY.parse(matches) {
                 gas_spending_keys.push(key);
@@ -4802,7 +4809,8 @@ pub mod args {
                 timeout_height,
                 timeout_sec_offset,
                 refund_target,
-                memo,
+                ibc_shielding_data,
+                ibc_memo,
                 gas_spending_keys,
                 tx_code_path,
             }
@@ -4837,9 +4845,16 @@ pub mod args {
                     "The refund target address when IBC shielded transfer \
                      failure."
                 )))
-                .arg(IBC_TRANSFER_MEMO_PATH.def().help(wrap!(
-                    "The path for the memo field of ICS20 transfer."
+                .arg(IBC_SHIELDING_DATA_PATH.def().help(wrap!(
+                    "The file path of the IBC shielding data for the \
+                     destination Namada. This can't be set with --ibc-memo at \
+                     the same time."
                 )))
+                .arg(
+                    IBC_MEMO
+                        .def()
+                        .help(wrap!("The memo for IBC transfer packet.")),
+                )
                 .arg(GAS_SPENDING_KEY.def().help(wrap!(
                     "The optional spending key that will be used in addition \
                      to the source for gas payment (if this is a shielded \
