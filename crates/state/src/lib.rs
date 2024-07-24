@@ -26,7 +26,9 @@ use std::fmt::Debug;
 use std::iter::Peekable;
 
 pub use host_env::{TxHostEnvState, VpHostEnvState};
-pub use in_memory::{BlockStorage, InMemory, LastBlock};
+pub use in_memory::{
+    BlockStorage, InMemory, LastBlock, ProcessProposalCachedResult,
+};
 use namada_core::address::Address;
 use namada_core::arith::{self, checked};
 use namada_core::eth_bridge_pool::is_pending_transfer_key;
@@ -602,6 +604,9 @@ where
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
 
+    use std::num::NonZeroUsize;
+
+    use clru::CLruCache;
     use namada_core::address;
     use namada_core::address::EstablishedAddressGen;
     use namada_core::chain::ChainId;
@@ -665,6 +670,9 @@ pub mod testing {
                 eth_events_queue: EthEventsQueue::default(),
                 storage_read_past_height_limit: Some(1000),
                 commit_only_data: CommitOnlyData::default(),
+                block_proposals_cache: CLruCache::new(
+                    NonZeroUsize::new(10).unwrap(),
+                ),
             }
         }
     }

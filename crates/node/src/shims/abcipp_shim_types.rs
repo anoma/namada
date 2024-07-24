@@ -7,7 +7,6 @@ pub mod shim {
     use thiserror::Error;
 
     use super::{Request as Req, Response as Resp};
-    use crate::facade::tendermint::abci::types::VoteInfo;
     use crate::facade::tendermint::v0_37::abci::{
         request as tm_request, response as tm_response,
     };
@@ -169,11 +168,15 @@ pub mod shim {
     /// Custom types for request payloads
     pub mod request {
 
+        use bytes::Bytes;
         use namada::core::hash::Hash;
         use namada::core::storage::Header;
         use namada::core::time::DateTimeUtc;
+        use namada::tendermint::abci::types::CommitInfo;
+        use namada::tendermint::account::Id;
+        use namada::tendermint::block::Height;
+        use namada::tendermint::time::Time;
 
-        use super::VoteInfo;
         use crate::facade::tendermint::abci::types::Misbehavior;
         use crate::facade::tendermint::v0_37::abci::request as tm_request;
 
@@ -191,10 +194,23 @@ pub mod shim {
         #[derive(Debug, Clone)]
         pub struct FinalizeBlock {
             pub header: Header,
+            pub block_hash: Hash,
             pub byzantine_validators: Vec<Misbehavior>,
             pub txs: Vec<ProcessedTx>,
             pub proposer_address: Vec<u8>,
-            pub votes: Vec<VoteInfo>,
+            pub height: Height,
+            pub decided_last_commit: CommitInfo,
+        }
+
+        // Type to run process proposal checks outside of the CometBFT call
+        pub(crate) struct CheckProcessProposal {
+            proposed_last_commit: Option<CommitInfo>,
+            misbehavior: Vec<Misbehavior>,
+            hash: namada::tendermint::Hash,
+            height: Height,
+            time: Time,
+            next_validators_hash: namada::tendermint::Hash,
+            proposer_address: Id,
         }
 
         impl From<tm_request::BeginBlock> for FinalizeBlock {
@@ -205,16 +221,90 @@ pub mod shim {
                         hash: Hash::try_from(header.app_hash.as_bytes())
                             .unwrap_or_default(),
                         time: DateTimeUtc::try_from(header.time).unwrap(),
-                        next_validators_hash: Hash::try_from(
-                            header.next_validators_hash.as_bytes(),
-                        )
-                        .unwrap(),
+                        next_validators_hash: header
+                            .next_validators_hash
+                            .try_into()
+                            .unwrap(),
                     },
+                    block_hash: req.hash.try_into().unwrap(),
                     byzantine_validators: req.byzantine_validators,
                     txs: vec![],
                     proposer_address: header.proposer_address.into(),
-                    votes: req.last_commit_info.votes,
+                    height: header.height,
+                    decided_last_commit: req.last_commit_info,
                 }
+            }
+        }
+
+        impl From<tm_request::BeginBlock> for CheckProcessProposal {
+            fn from(req: tm_request::BeginBlock) -> CheckProcessProposal {
+                let header = req.header;
+                CheckProcessProposal {
+                    proposed_last_commit: Some(req.last_commit_info),
+                    misbehavior: req.byzantine_validators,
+                    hash: req.hash,
+                    height: header.height,
+                    time: header.time,
+                    next_validators_hash: header.next_validators_hash,
+                    proposer_address: header.proposer_address,
+                }
+            }
+        }
+
+        impl CheckProcessProposal {
+            pub(crate) fn cast_to_tendermint_req(
+                self,
+                txs: Vec<Bytes>,
+            ) -> tm_request::ProcessProposal {
+                let Self {
+                    proposed_last_commit,
+                    misbehavior,
+                    hash,
+                    height,
+                    time,
+                    next_validators_hash,
+                    proposer_address,
+                } = self;
+
+                tm_request::ProcessProposal {
+                    txs,
+                    proposed_last_commit,
+                    misbehavior,
+                    hash,
+                    height,
+                    time,
+                    next_validators_hash,
+                    proposer_address,
+                }
+            }
+        }
+
+        impl FinalizeBlock {
+            pub(crate) fn cast_to_process_proposal_req(
+                self,
+            ) -> Result<tm_request::ProcessProposal, super::Error> {
+                let header = self.header;
+                Ok(tm_request::ProcessProposal {
+                    txs: self.txs.into_iter().map(|tx| tx.tx).collect(),
+                    proposed_last_commit: Some(self.decided_last_commit),
+                    misbehavior: self.byzantine_validators,
+                    hash: self.block_hash.into(),
+                    height: self.height,
+                    time: header.time.try_into().map_err(|_| {
+                        super::Error::Shell(
+                            super::shell::Error::InvalidBlockProposal,
+                        )
+                    })?,
+                    next_validators_hash: header.next_validators_hash.into(),
+                    proposer_address: self
+                        .proposer_address
+                        .try_into()
+                        .map_err(|_| {
+                            super::Error::Shell(
+                                super::shell::Error::InvalidBlockProposal,
+                            )
+                        })?,
+                })
             }
         }
     }
@@ -263,6 +353,21 @@ pub mod shim {
                     validator_updates: resp.validator_updates,
                     consensus_param_updates: resp.consensus_param_updates,
                 }
+            }
+        }
+
+        impl From<(u32, String)> for TxResult {
+            fn from(value: (u32, String)) -> Self {
+                Self {
+                    code: value.0,
+                    info: value.1,
+                }
+            }
+        }
+
+        impl From<TxResult> for (u32, String) {
+            fn from(value: TxResult) -> Self {
+                (value.code, value.info)
             }
         }
     }

@@ -126,6 +126,11 @@ pub enum Error {
     ReplayAttempt(String),
     #[error("Error with snapshots: {0}")]
     Snapshot(std::io::Error),
+    #[error(
+        "Received a finalize request for a block that was rejected by process \
+         proposal"
+    )]
+    RejectedBlockProposal,
     #[error("Received an invalid block proposal")]
     InvalidBlockProposal,
 }
@@ -1902,6 +1907,7 @@ mod test_utils {
                     time: DateTimeUtc::now(),
                     next_validators_hash: Hash([0; 32]),
                 },
+                block_hash: Hash([0; 32]),
                 byzantine_validators: vec![],
                 txs: vec![],
                 proposer_address: HEXUPPER
@@ -1912,7 +1918,11 @@ mod test_utils {
                             .as_bytes(),
                     )
                     .unwrap(),
-                votes: vec![],
+                height: 0u8.into(),
+                decided_last_commit: tendermint::abci::types::CommitInfo {
+                    round: 0u8.into(),
+                    votes: vec![],
+                },
             }
         }
     }
@@ -1959,7 +1969,10 @@ mod test_utils {
         let mut req = FinalizeBlock {
             header,
             proposer_address,
-            votes,
+            decided_last_commit: tendermint::abci::types::CommitInfo {
+                round: 0u8.into(),
+                votes,
+            },
             ..Default::default()
         };
         if let Some(byz_vals) = byzantine_validators {
