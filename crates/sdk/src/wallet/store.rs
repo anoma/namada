@@ -418,6 +418,7 @@ impl Store {
         alias: Alias,
         viewkey: ExtendedViewingKey,
         birthday: Option<BlockHeight>,
+        path: Option<DerivationPath>,
         force: bool,
     ) -> Option<Alias> {
         // abort if the alias is reserved
@@ -435,7 +436,7 @@ impl Store {
                 ConfirmationResponse::Replace => {}
                 ConfirmationResponse::Reselect(new_alias) => {
                     return self.insert_viewing_key::<U>(
-                        new_alias, viewkey, birthday, false,
+                        new_alias, viewkey, birthday, path, false,
                     );
                 }
                 ConfirmationResponse::Skip => return None,
@@ -444,6 +445,7 @@ impl Store {
         self.remove_alias(&alias);
         self.view_keys
             .insert(alias.clone(), DatedKeypair::new(viewkey, birthday));
+        path.map(|p| self.derivation_paths.insert(alias.clone(), p));
         Some(alias)
     }
 
