@@ -4876,9 +4876,12 @@ dependencies = [
 name = "namada_fuzz"
 version = "0.0.0"
 dependencies = [
+ "data-encoding",
  "lazy_static",
  "libfuzzer-sys",
  "masp_primitives",
+ "namada_apps_lib",
+ "namada_core",
  "namada_node",
  "namada_tx",
 ]
