@@ -75,7 +75,7 @@ impl Default for TestVpEnv {
             state,
             iterators: PrefixIterators::default(),
             gas_meter: RefCell::new(VpGasMeter::new_from_tx_meter(
-                &TxGasMeter::new_from_sub_limit(1_000_000_000_000.into()),
+                &TxGasMeter::new(1_000_000_000_000),
             )),
             batched_tx,
             tx_index: TxIndex::default(),

@@ -407,8 +407,7 @@ impl BenchShell {
         &mut self,
         batched_tx: &BatchedTxRef<'_>,
     ) -> BTreeSet<Address> {
-        let gas_meter =
-            RefCell::new(TxGasMeter::new_from_sub_limit(u64::MAX.into()));
+        let gas_meter = RefCell::new(TxGasMeter::new(u64::MAX));
         run::tx(
             &mut self.inner.state,
             &gas_meter,

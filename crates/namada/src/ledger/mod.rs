@@ -87,7 +87,7 @@ mod dry_run_tx {
                     (
                         Some(tx.header_hash()),
                         tx_result,
-                        TxGasMeter::new_from_sub_limit(available_gas),
+                        TxGasMeter::new(available_gas),
                     )
                 }
                 _ => {

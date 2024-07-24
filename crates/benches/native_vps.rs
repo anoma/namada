@@ -209,7 +209,7 @@ fn governance(c: &mut Criterion) {
             .verifiers_and_changed_keys(&verifiers_from_tx);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+            &TxGasMeter::new(u64::MAX),
         ));
         let governance = GovernanceVp {
             ctx: Ctx::new(
@@ -433,7 +433,7 @@ fn ibc(c: &mut Criterion) {
             .verifiers_and_changed_keys(&verifiers_from_tx);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+            &TxGasMeter::new(u64::MAX),
         ));
         let ibc = Ibc {
             ctx: Ctx::new(
@@ -500,7 +500,7 @@ fn vp_multitoken(c: &mut Criterion) {
             .verifiers_and_changed_keys(&verifiers_from_tx);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+            &TxGasMeter::new(u64::MAX),
         ));
         let multitoken = MultitokenVp {
             ctx: Ctx::new(
@@ -613,7 +613,7 @@ fn masp(c: &mut Criterion) {
                 .verifiers_and_changed_keys(&verifiers_from_tx);
 
             let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-                &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+                &TxGasMeter::new(u64::MAX),
             ));
             let masp = MaspVp {
                 ctx: Ctx::new(
@@ -1226,7 +1226,7 @@ fn pgf(c: &mut Criterion) {
             .verifiers_and_changed_keys(&verifiers_from_tx);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+            &TxGasMeter::new(u64::MAX),
         ));
         let pgf = PgfVp {
             ctx: Ctx::new(
@@ -1302,9 +1302,8 @@ fn eth_bridge_nut(c: &mut Criterion) {
 
     let vp_address =
         Address::Internal(InternalAddress::Nut(native_erc20_addres));
-    let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-        &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
-    ));
+    let gas_meter =
+        RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(u64::MAX)));
     let nut = NonUsableTokens {
         ctx: Ctx::new(
             &vp_address,
@@ -1375,9 +1374,8 @@ fn eth_bridge(c: &mut Criterion) {
         .verifiers_and_changed_keys(&verifiers_from_tx);
 
     let vp_address = Address::Internal(InternalAddress::EthBridge);
-    let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-        &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
-    ));
+    let gas_meter =
+        RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(u64::MAX)));
     let eth_bridge = EthBridge {
         ctx: Ctx::new(
             &vp_address,
@@ -1474,9 +1472,8 @@ fn eth_bridge_pool(c: &mut Criterion) {
         .verifiers_and_changed_keys(&verifiers_from_tx);
 
     let vp_address = Address::Internal(InternalAddress::EthBridgePool);
-    let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-        &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
-    ));
+    let gas_meter =
+        RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(u64::MAX)));
     let bridge_pool = BridgePoolVp {
         ctx: Ctx::new(
             &vp_address,
@@ -1546,7 +1543,7 @@ fn parameters(c: &mut Criterion) {
 
         let vp_address = Address::Internal(InternalAddress::Parameters);
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+            &TxGasMeter::new(u64::MAX),
         ));
         let parameters = ParametersVp {
             ctx: Ctx::new(
@@ -1620,7 +1617,7 @@ fn pos(c: &mut Criterion) {
 
         let vp_address = Address::Internal(InternalAddress::PoS);
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+            &TxGasMeter::new(u64::MAX),
         ));
         let pos = PosVP {
             ctx: Ctx::new(
@@ -1674,7 +1671,7 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
             .verifiers_and_changed_keys(&verifiers_from_tx);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+            &TxGasMeter::new(u64::MAX),
         ));
         let ibc = Ibc {
             ctx: Ctx::new(
@@ -1732,7 +1729,7 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
             .verifiers_and_changed_keys(&verifiers_from_tx);
 
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
-            &TxGasMeter::new_from_sub_limit(u64::MAX.into()),
+            &TxGasMeter::new(u64::MAX),
         ));
         let ibc = Ibc {
             ctx: Ctx::new(
