@@ -24,7 +24,7 @@ RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
 RUN make build-release
 
-FROM golang:1.18.0 as tendermint-builder
+FROM golang:1.21.0 as tendermint-builder
 WORKDIR /app
 
 RUN git clone -b v0.37.9 --single-branch https://github.com/cometbft/cometbft.git && cd cometbft && make build
