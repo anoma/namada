@@ -36,16 +36,20 @@ jobs:
   changelog:
     runs-on: [ubuntu-latest]
     if: github.event_name == 'pull_request_target' && github.event.pull_request.draft == false
+    timeout-minutes: 15
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
         if: ${{ github.event_name != 'pull_request_target' }}
-      - name: Checkout PR
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Checkout PR
         if: ${{ github.event_name == 'pull_request_target' }}
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
       - name: Check changelog
         run: bash .github/workflows/scripts/check-changelog.sh
 
