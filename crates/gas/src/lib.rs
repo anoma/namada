@@ -50,10 +50,10 @@ pub enum GasParseError {
     Overflow,
 }
 
-const COMPILE_GAS_PER_BYTE: u64 = 1_955;
+const COMPILE_GAS_PER_BYTE: u64 = 1_664;
 const PARALLEL_GAS_DIVIDER: u64 = 10;
-const WASM_CODE_VALIDATION_GAS_PER_BYTE: u64 = 67;
-const WRAPPER_TX_VALIDATION_GAS: u64 = 3_245_500;
+const WASM_CODE_VALIDATION_GAS_PER_BYTE: u64 = 59;
+const WRAPPER_TX_VALIDATION_GAS: u64 = 1_526_700;
 // There's no benchmark to calculate the cost of storage occupation, so we
 // define it as the cost of storage latency (which is needed for any storage
 // operation and it's based on actual execution time), plus the same cost
@@ -73,48 +73,48 @@ const PHYSICAL_STORAGE_LATENCY_PER_BYTE: u64 = 1_000_000;
 const NETWORK_TRANSMISSION_GAS_PER_BYTE: u64 = 848;
 
 /// The cost of accessing data from memory (both read and write mode), per byte
-pub const MEMORY_ACCESS_GAS_PER_BYTE: u64 = 104;
+pub const MEMORY_ACCESS_GAS_PER_BYTE: u64 = 39;
 /// The cost of accessing data from storage, per byte
 pub const STORAGE_ACCESS_GAS_PER_BYTE: u64 =
-    163 + PHYSICAL_STORAGE_LATENCY_PER_BYTE;
+    93 + PHYSICAL_STORAGE_LATENCY_PER_BYTE;
 /// The cost of writing data to storage, per byte
 pub const STORAGE_WRITE_GAS_PER_BYTE: u64 =
-    MEMORY_ACCESS_GAS_PER_BYTE + 69_634 + STORAGE_OCCUPATION_GAS_PER_BYTE;
+    MEMORY_ACCESS_GAS_PER_BYTE + 17_583 + STORAGE_OCCUPATION_GAS_PER_BYTE;
 /// The cost of removing data from storage, per byte
 pub const STORAGE_DELETE_GAS_PER_BYTE: u64 =
-    MEMORY_ACCESS_GAS_PER_BYTE + 69_634 + PHYSICAL_STORAGE_LATENCY_PER_BYTE;
+    MEMORY_ACCESS_GAS_PER_BYTE + 17_583 + PHYSICAL_STORAGE_LATENCY_PER_BYTE;
 /// The cost of verifying a single signature of a transaction
-pub const VERIFY_TX_SIG_GAS: u64 = 594_290;
+pub const VERIFY_TX_SIG_GAS: u64 = 435_190;
 /// The cost for requesting one more page in wasm (64KiB)
 #[allow(clippy::cast_possible_truncation)] // const in u32 range
 pub const WASM_MEMORY_PAGE_GAS: u32 =
     MEMORY_ACCESS_GAS_PER_BYTE as u32 * 64 * 1_024;
 /// The cost to validate an Ibc action
-pub const IBC_ACTION_VALIDATE_GAS: u64 = 1_472_023;
+pub const IBC_ACTION_VALIDATE_GAS: u64 = 290_935;
 /// The cost to execute an Ibc action
-pub const IBC_ACTION_EXECUTE_GAS: u64 = 3_678_745;
+pub const IBC_ACTION_EXECUTE_GAS: u64 = 1_685_733;
 /// The cost of masp sig verification
-pub const MASP_VERIFY_SIG_GAS: u64 = 5_443_000;
+pub const MASP_VERIFY_SIG_GAS: u64 = 3_817_500;
 /// The fixed cost of spend note verification
-pub const MASP_FIXED_SPEND_GAS: u64 = 87_866_000;
+pub const MASP_FIXED_SPEND_GAS: u64 = 59_521_000;
 /// The variable cost of spend note verification
-pub const MASP_VARIABLE_SPEND_GAS: u64 = 14_384_000;
+pub const MASP_VARIABLE_SPEND_GAS: u64 = 9_849_000;
 /// The fixed cost of convert note verification
-pub const MASP_FIXED_CONVERT_GAS: u64 = 70_308_000;
+pub const MASP_FIXED_CONVERT_GAS: u64 = 46_197_000;
 /// The variable cost of convert note verification
-pub const MASP_VARIABLE_CONVERT_GAS: u64 = 12_664_000;
+pub const MASP_VARIABLE_CONVERT_GAS: u64 = 10_245_000;
 /// The fixed cost of output note verification
-pub const MASP_FIXED_OUTPUT_GAS: u64 = 78_203_000;
+pub const MASP_FIXED_OUTPUT_GAS: u64 = 53_439_000;
 /// The variable cost of output note verification
-pub const MASP_VARIABLE_OUTPUT_GAS: u64 = 14_586_000;
+pub const MASP_VARIABLE_OUTPUT_GAS: u64 = 9_710_000;
 /// The cost to process a masp spend note in the bundle
-pub const MASP_SPEND_CHECK_GAS: u64 = 479_730;
+pub const MASP_SPEND_CHECK_GAS: u64 = 405_070;
 /// The cost to process a masp convert note in the bundle
-pub const MASP_CONVERT_CHECK_GAS: u64 = 173_570;
+pub const MASP_CONVERT_CHECK_GAS: u64 = 188_590;
 /// The cost to process a masp output note in the bundle
-pub const MASP_OUTPUT_CHECK_GAS: u64 = 310_260;
+pub const MASP_OUTPUT_CHECK_GAS: u64 = 204_430;
 /// The cost to run the final masp check in the bundle
-pub const MASP_FINAL_CHECK_GAS: u64 = 44;
+pub const MASP_FINAL_CHECK_GAS: u64 = 43;
 /// Gas divider specific for the masp vp. Only allocates half of the cores to
 /// the masp vp since we can expect the other half to be busy with other vps
 pub const MASP_PARALLEL_GAS_DIVIDER: u64 = PARALLEL_GAS_DIVIDER / 2;
