@@ -1059,9 +1059,9 @@ pub async fn to_ledger_vector(
                 Error::from(EncodingError::Conversion(err.to_string()))
             })?;
 
-            tv.name = "Init_Validator_0".to_string();
+            tv.name = "Become_Validator_0".to_string();
 
-            tv.output.extend(vec!["Type : Init Validator".to_string()]);
+            tv.output.extend(vec!["Type : Become Validator".to_string()]);
             tv.output.extend(vec![
                 format!("Address : {}", init_validator.address),
                 format!("Consensus key : {}", init_validator.consensus_key),
@@ -1075,6 +1075,9 @@ pub async fn to_ledger_vector(
                 ),
                 format!("Email : {}", init_validator.email),
             ]);
+            if let Some(name) = &init_validator.name {
+                tv.output.push(format!("Name : {}", name));
+            }
             if let Some(description) = &init_validator.description {
                 tv.output.push(format!("Description : {}", description));
             }
@@ -1084,6 +1087,10 @@ pub async fn to_ledger_vector(
             if let Some(discord_handle) = &init_validator.discord_handle {
                 tv.output
                     .push(format!("Discord handle : {}", discord_handle));
+            }
+            if let Some(avatar) = &init_validator.avatar {
+                tv.output
+                    .push(format!("Avatar : {}", avatar));
             }
 
             tv.output_expert.extend(vec![
@@ -1099,6 +1106,9 @@ pub async fn to_ledger_vector(
                 ),
                 format!("Email : {}", init_validator.email),
             ]);
+            if let Some(name) = &init_validator.name {
+                tv.output_expert.push(format!("Name : {}", name));
+            }
             if let Some(description) = &init_validator.description {
                 tv.output_expert
                     .push(format!("Description : {}", description));
@@ -1109,6 +1119,10 @@ pub async fn to_ledger_vector(
             if let Some(discord_handle) = &init_validator.discord_handle {
                 tv.output_expert
                     .push(format!("Discord handle : {}", discord_handle));
+            }
+            if let Some(avatar) = &init_validator.avatar {
+                tv.output_expert
+                    .push(format!("Avatar : {}", avatar));
             }
         } else if code_sec.tag == Some(TX_INIT_PROPOSAL.to_string()) {
             let init_proposal_data = InitProposalData::try_from_slice(
@@ -1726,6 +1740,9 @@ pub async fn to_ledger_vector(
             let mut other_items = vec![];
             other_items
                 .push(format!("Validator : {}", metadata_change.validator));
+            if let Some(name) = metadata_change.name {
+                other_items.push(format!("Name : {}", name));
+            }
             if let Some(email) = metadata_change.email {
                 other_items.push(format!("Email : {}", email));
             }
