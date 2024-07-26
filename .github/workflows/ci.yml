@@ -52,6 +52,8 @@ jobs:
           fetch-depth: 0
       - name: Check changelog
         run: bash .github/workflows/scripts/check-changelog.sh
+        env:
+          SHA: ${{ github.sha }}
 
   lints:
     container: 
