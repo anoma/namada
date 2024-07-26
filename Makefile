@@ -66,6 +66,10 @@ crates += namada_vp
 crates += namada_vp_env
 crates += namada_vp_prelude
 
+# All crates format as `cargo check --package` arguments
+all-crates := $(foreach crate,$(crates), -p $(crate))
+
+
 build:
 	$(cargo) build $(jobs) --workspace --exclude namada_benchmarks
 
@@ -103,7 +107,7 @@ check-mainnet:
 # Check that every crate can be built with default features and that SDK crate
 # can be built for wasm and with all features enabled
 check-crates:
-	cargo +$(nightly) check -Z unstable-options --tests -p namada -p namada_account -p namada_apps -p namada_apps_lib -p namada_benchmarks -p namada_core -p namada_encoding_spec -p namada_ethereum_bridge -p namada_events -p namada_gas -p namada_governance -p namada_ibc -p namada_light_sdk -p namada_macros -p namada_merkle_tree -p namada_parameters -p namada_proof_of_stake -p namada_replay_protection -p namada_node -p namada_sdk -p namada_shielded_token -p namada_state -p namada_storage -p namada_test_utils -p namada_tests -p namada_token -p namada_trans_token -p namada_tx -p namada_tx_env -p namada_tx_prelude -p namada_vm_env -p namada_vote_ext -p namada_vp_env -p namada_vp_prelude && \
+	cargo +$(nightly) check -Z unstable-options --tests $(all-crates) && \
 		make -C $(wasms) check && \
 		make -C $(wasms_for_tests) check && \
 		cargo check --package namada_sdk --target wasm32-unknown-unknown --no-default-features && \
