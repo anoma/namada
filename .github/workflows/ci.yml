@@ -53,7 +53,7 @@ jobs:
       - name: Check changelog
         run: bash .github/workflows/scripts/check-changelog.sh
         env:
-          SHA: ${{ github.sha }}
+          SHA: ${{ github.event.pull_request.head.sha }}
 
   lints:
     container: 
