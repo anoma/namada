@@ -1,0 +1,51 @@
+queue_rules:
+  - name: main-queue
+    speculative_checks: 3
+    batch_size: 3
+    queue_conditions:
+      - check-success = build-binaries
+      - check-success = lints
+      - check-success = test-unit
+      - check-success = test-integration
+      - check-success = test-e2e
+      - check-success = check-benchmarks
+      - check-success = check-packages
+      - check-success = build-binaries
+      - check-success = changelog
+      - "#approved-reviews-by >= 1"
+      - base = main
+    merge_method: merge
+        
+
+pull_request_rules:
+  - name: main-automatic-merge
+    conditions:
+        - label = "ready-for-draft"
+        - label != "do-not-merge"
+        - check-success = build-binaries
+        - check-success = lints
+        - check-success = test-unit
+        - check-success = test-integration
+        - check-success = test-e2e
+        - check-success = check-benchmarks
+        - check-success = check-packages
+        - check-success = build-binaries
+        - check-success = changelog
+        - "#approved-reviews-by >= 1"
+        - base = main
+    actions:
+      queue:
+        autosquash: true   
+
+  - name: notify when a PR is removed from the queue
+    conditions:
+    - queue-dequeue-reason != none
+    - queue-dequeue-reason != pr-merged
+    actions:
+      comment:
+        message: >
+          Hey @{{author}}, your pull request has been dequeued due to the following
+          reason: {{queue_dequeue_reason}}.
+
+          Sorry about that, but you can requeue the PR by using `@mergifyio requeue`
+          if you think this was a mistake.
