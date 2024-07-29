@@ -13,7 +13,7 @@ check_changelog_added_in_subfolders() {
     subfolder_pattern=$(printf "|%s" "${subfolders[@]}")
     subfolder_pattern=${subfolder_pattern:1} # Remove the leading '|'
 
-    added_files=$(git diff --diff-filter=A --name-only "main..$head_commit" | grep "\.changelog/")
+    added_files=$(git diff --diff-filter=A --name-only "origin/main..$head_commit" | grep "\.changelog/")
 
     relevant_files=$(echo "$added_files" | grep -E "\.changelog/unreleased/($subfolder_pattern)/")
 
