@@ -757,10 +757,10 @@ fn proposal_ibc_token_inflation() -> Result<()> {
 
 #[test]
 fn ibc_upgrade_client() -> Result<()> {
-    // To avoid the client expiration, set the pseudo upgrade height near the
-    // first height of the grace epoch. It is set 620 because the grace epoch in
-    // this test will be Epoch 34 and the number of blocks per epoch is 20.
-    const UPGRADE_HEIGHT: u64 = 680;
+    // To avoid the client expiration, stop updating the client near the
+    // first height of the grace epoch. It is set 700 because the grace epoch in
+    // this test will be Epoch 35 and the number of blocks per epoch is 20.
+    const MIN_UPGRADE_HEIGHT: u64 = 700;
     const MASP_EPOCH_MULTIPLIER: u64 = 2;
 
     let update_genesis =
@@ -793,9 +793,9 @@ fn ibc_upgrade_client() -> Result<()> {
         sleep(10);
         epoch = get_epoch(&test_b, &rpc_b).unwrap_or_default();
     }
-    // upgrade proposal on Chain B
+    // Upgrade proposal on Chain B
     // The transaction will store the upgraded client state and consensus state
-    // as if Chain B was upgraded
+    // as if Chain B will be upgraded
     let start_epoch = propose_upgrade_client(&test_b)?;
     let mut epoch = get_epoch(&test_b, &rpc_b).unwrap();
     // Vote
@@ -816,9 +816,8 @@ fn ibc_upgrade_client() -> Result<()> {
     let bg_hermes = hermes.background();
 
     let mut height = query_height(&test_b)?;
-    while height.revision_height() < UPGRADE_HEIGHT {
-        println!("DEBUG: checking the height: {height}");
-        sleep(5);
+    while height.revision_height() < MIN_UPGRADE_HEIGHT {
+        sleep(10);
         height = query_height(&test_b)?;
     }
     // Stop Hermes not to update a client after the upgrade height
@@ -832,10 +831,11 @@ fn ibc_upgrade_client() -> Result<()> {
         sleep(10);
         epoch = get_epoch(&test_b, &rpc_b).unwrap_or_default();
     }
-    println!("DEBUG: checking the epoch: {epoch}");
 
-    // upgrade the IBC client of Chain B on Chain A with Hermes
-    upgrade_client(&test_a, test_a.net.chain_id.to_string(), UPGRADE_HEIGHT)?;
+    // Check the upgraded height
+    let upgraded_height = get_upgraded_height(&test_b, MIN_UPGRADE_HEIGHT)?;
+    // Upgrade the IBC client of Chain B on Chain A with Hermes
+    upgrade_client(&test_a, test_a.net.chain_id.to_string(), upgraded_height)?;
 
     // Start relaying
     let hermes = run_hermes(&test_a)?;
@@ -1224,6 +1224,33 @@ fn wait_for_packet_relay(
     Err(eyre!("Pending packet is still left"))
 }
 
+fn get_upgraded_height(test: &Test, min_upgrade_height: u64) -> Result<u64> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
+    // Search the storage for the upgraded client state
+    let rpc = get_actor_rpc(test, Who::Validator(0));
+    let max_height = min_upgrade_height + 100;
+    let mut height = min_upgrade_height;
+    while height < max_height {
+        height += 1;
+        let key = upgraded_client_state_key(Height::new(0, height).unwrap());
+        let query_args = [
+            "query-bytes",
+            "--storage-key",
+            &key.to_string(),
+            "--node",
+            &rpc,
+        ];
+        let mut client = run!(test, Bin::Client, query_args, Some(10))?;
+        if client.exp_string("No data found").is_ok() {
+            sleep(1);
+            continue;
+        } else {
+            return Ok(height);
+        }
+    }
+    panic!("No upgraded client state on the chain");
+}
+
 fn upgrade_client(
     test: &Test,
     host_chain_id: impl AsRef<str>,
@@ -1240,7 +1267,8 @@ fn upgrade_client(
         &upgrade_height.to_string(),
     ];
     let mut hermes = run_hermes_cmd(test, args, Some(120))?;
-    hermes.exp_string("upgraded")?;
+    hermes.exp_string("upgraded-chain")?;
+    hermes.assert_success();
 
     Ok(())
 }
