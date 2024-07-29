@@ -21,6 +21,7 @@ use namada_tx::IndexedTx;
 use super::utils::{IndexedNoteEntry, MaspClient};
 use crate::control_flow::ShutdownSignal;
 use crate::error::Error;
+use crate::io::ProgressBar;
 use crate::masp::shielded_sync::trial_decrypt;
 use crate::masp::utils::{
     blocks_left_to_fetch, DecryptedData, Fetched, RetryStrategy, TrialDecrypted,
@@ -209,13 +210,15 @@ struct InitialState {
     last_query_height: BlockHeight,
 }
 
-pub struct Config {
+pub struct Config<T> {
     pub retry_strategy: RetryStrategy,
     pub block_batch_size: usize,
     pub channel_buffer_size: usize,
+    pub fetched_tracker: T,
+    pub scanned_tracker: T,
 }
 
-pub struct Dispatcher<M, U, S>
+pub struct Dispatcher<S, M, U, T>
 where
     U: ShieldedUtils,
 {
@@ -223,7 +226,7 @@ where
     state: DispatcherState,
     tasks: DispatcherTasks<S>,
     ctx: ShieldedContext<U>,
-    config: Config,
+    config: Config<T>,
     cache: DispatcherCache,
     /// We are syncing up to this height
     height_to_sync: BlockHeight,
@@ -234,12 +237,12 @@ where
 ///
 /// This function assumes that the provided shielded context has
 /// already been loaded from storage.
-pub async fn new<S, M, U>(
+pub async fn new<S, M, U, T>(
     spawner: S,
     client: M,
     utils: &U,
-    config: Config,
-) -> Dispatcher<M, U, S>
+    config: Config<T>,
+) -> Dispatcher<S, M, U, T>
 where
     U: ShieldedUtils,
 {
@@ -291,11 +294,12 @@ where
     }
 }
 
-impl<M, U, S> Dispatcher<M, U, S>
+impl<S, M, U, T> Dispatcher<S, M, U, T>
 where
+    S: TaskSpawner,
     M: MaspClient + Send + Sync + Unpin + 'static,
     U: ShieldedUtils,
-    S: TaskSpawner,
+    T: ProgressBar,
 {
     pub async fn run(
         mut self,
@@ -455,6 +459,13 @@ where
         self.height_to_sync = initial_state.last_query_height;
         self.spawn_initial_set_of_tasks(&initial_state);
 
+        self.config
+            .fetched_tracker
+            .set_upper_limit(last_query_height.0 - start_height.0 + 1);
+        self.config
+            .scanned_tracker
+            .set_upper_limit(self.cache.fetched.len() as u64);
+
         Ok(initial_state)
     }
 
@@ -547,10 +558,30 @@ where
                 }
             }
             Message::FetchTxs(Ok(tx_batch)) => {
+                let mut min_height = BlockHeight(u64::MAX);
+                let mut max_height = BlockHeight(0);
+
                 for (itx, txs) in &tx_batch {
                     self.spawn_trial_decryptions(*itx, txs);
+
+                    if itx.height < min_height {
+                        min_height = itx.height;
+                    }
+                    if itx.height > max_height {
+                        max_height = itx.height;
+                    }
                 }
+
+                if !tx_batch.is_empty() {
+                    debug_assert!(min_height <= max_height);
+                    let amount = max_height.0 - min_height.0 + 1;
+                    self.config.fetched_tracker.increment_by(amount);
+                }
+
                 self.cache.fetched.extend(tx_batch);
+                self.config
+                    .scanned_tracker
+                    .set_upper_limit(self.cache.fetched.len() as u64);
             }
             Message::FetchTxs(Err(TaskError {
                 error,
@@ -563,6 +594,7 @@ where
             Message::TrialDecrypt(itx, vk, decrypted_data) => {
                 if let ControlFlow::Continue(decrypted_data) = decrypted_data {
                     self.cache.trial_decrypted.insert(itx, vk, decrypted_data);
+                    self.config.scanned_tracker.increment_by(1);
                 }
             }
         }
@@ -735,6 +767,7 @@ mod dispatcher_tests {
 
     use super::*;
     use crate::control_flow::testing::shutdown_signal;
+    use crate::io::DevNullProgressBar;
     use crate::masp::fs::FsShieldedUtils;
     use crate::masp::test_utils::{
         arbitrary_masp_tx, arbitrary_masp_tx_with_fee_unshielding,
@@ -746,7 +779,11 @@ mod dispatcher_tests {
     #[tokio::test]
     async fn test_applying_cache_drains_decrypted_data() {
         let (client, _) = TestingMaspClient::new(BlockHeight::first());
-        let config = ShieldedSyncConfig::builder().client(client).build();
+        let config = ShieldedSyncConfig::builder()
+            .client(client)
+            .fetched_tracker(DevNullProgressBar)
+            .scanned_tracker(DevNullProgressBar)
+            .build();
         let temp_dir = tempdir().unwrap();
         let utils = FsShieldedUtils {
             context_dir: temp_dir.path().to_path_buf(),
@@ -848,7 +885,11 @@ mod dispatcher_tests {
 
     async fn test_panic_flag_aux(sync: bool) {
         let (client, _) = TestingMaspClient::new(BlockHeight::first());
-        let config = ShieldedSyncConfig::builder().client(client).build();
+        let config = ShieldedSyncConfig::builder()
+            .fetched_tracker(DevNullProgressBar)
+            .scanned_tracker(DevNullProgressBar)
+            .client(client)
+            .build();
         let temp_dir = tempdir().unwrap();
         let utils = FsShieldedUtils {
             context_dir: temp_dir.path().to_path_buf(),
@@ -1019,6 +1060,8 @@ mod dispatcher_tests {
         };
         let (client, masp_tx_sender) = TestingMaspClient::new(2.into());
         let mut config = ShieldedSyncConfig::builder()
+            .fetched_tracker(DevNullProgressBar)
+            .scanned_tracker(DevNullProgressBar)
             .client(client)
             .retry_strategy(RetryStrategy::Times(0))
             .build();
@@ -1117,6 +1160,8 @@ mod dispatcher_tests {
         };
         let (client, masp_tx_sender) = TestingMaspClient::new(3.into());
         let config = ShieldedSyncConfig::builder()
+            .fetched_tracker(DevNullProgressBar)
+            .scanned_tracker(DevNullProgressBar)
             .client(client)
             .retry_strategy(RetryStrategy::Times(0))
             .block_batch_size(1)
@@ -1192,6 +1237,8 @@ mod dispatcher_tests {
         };
         let (client, masp_tx_sender) = TestingMaspClient::new(2.into());
         let config = ShieldedSyncConfig::builder()
+            .fetched_tracker(DevNullProgressBar)
+            .scanned_tracker(DevNullProgressBar)
             .client(client)
             .retry_strategy(RetryStrategy::Times(0))
             .block_batch_size(2)

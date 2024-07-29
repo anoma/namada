@@ -53,6 +53,7 @@ eyre.workspace = true
 fd-lock.workspace = true
 flate2.workspace = true
 futures.workspace = true
+indicatif.workspace = true
 itertools.workspace = true
 lazy_static = { workspace = true, optional = true }
 linkme = { workspace = true, optional = true }

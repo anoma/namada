@@ -6,6 +6,51 @@
 
 use crate::{MaybeSend, MaybeSync};
 
+/// NOOP progress bar implementation.
+#[derive(Debug, Clone, Copy)]
+pub struct DevNullProgressBar;
+
+/// Mechanism that allows keeping track of the progress
+/// of some operation.
+pub trait ProgressBar {
+    /// Query the amount of virtual elements the progress tracker
+    /// is tracking.
+    fn upper_limit(&self) -> u64;
+
+    /// Set the amount of virtual elements the progress tracker
+    /// is tracking.
+    fn set_upper_limit(&mut self, limit: u64);
+
+    /// Announce that `amount` virtual elements have been
+    /// processed.
+    fn increment_by(&mut self, amount: u64);
+}
+
+impl ProgressBar for DevNullProgressBar {
+    fn upper_limit(&self) -> u64 {
+        0
+    }
+
+    fn set_upper_limit(&mut self, _: u64) {}
+
+    fn increment_by(&mut self, _: u64) {}
+}
+
+#[cfg(not(target_family = "wasm"))]
+impl ProgressBar for indicatif::ProgressBar {
+    fn upper_limit(&self) -> u64 {
+        self.length().unwrap_or_default()
+    }
+
+    fn set_upper_limit(&mut self, limit: u64) {
+        self.set_length(limit);
+    }
+
+    fn increment_by(&mut self, amount: u64) {
+        self.inc(amount);
+    }
+}
+
 /// A trait that abstracts out I/O operations
 #[cfg_attr(feature = "async-send", async_trait::async_trait)]
 #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]

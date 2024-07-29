@@ -27,8 +27,10 @@ const DEFAULT_BATCH_SIZE: usize = 10;
 /// A configuration used to tune the concurrency parameters of
 /// the shielded sync and the client used to fetch data.
 #[derive(Clone, TypedBuilder)]
-pub struct ShieldedSyncConfig<M> {
+pub struct ShieldedSyncConfig<M, T> {
     client: M,
+    fetched_tracker: T,
+    scanned_tracker: T,
     #[builder(default = RetryStrategy::Forever)]
     retry_strategy: RetryStrategy,
     #[builder(default = DEFAULT_BUF_SIZE)]
@@ -70,7 +72,7 @@ impl TaskEnvironment for MaspLocalTaskEnv {
     }
 }
 
-impl<M> ShieldedSyncConfig<M>
+impl<M, T> ShieldedSyncConfig<M, T>
 where
     M: MaspClient,
 {
@@ -79,7 +81,7 @@ where
         self,
         spawner: S,
         utils: &U,
-    ) -> Dispatcher<M, U, S>
+    ) -> Dispatcher<S, M, U, T>
     where
         U: ShieldedUtils,
     {
@@ -88,6 +90,8 @@ where
             self.client,
             utils,
             dispatcher::Config {
+                fetched_tracker: self.fetched_tracker,
+                scanned_tracker: self.scanned_tracker,
                 retry_strategy: self.retry_strategy,
                 block_batch_size: self.block_batch_size,
                 channel_buffer_size: self.channel_buffer_size,

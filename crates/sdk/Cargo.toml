@@ -126,6 +126,7 @@ typed-builder.workspace = true
 zeroize.workspace = true
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
+indicatif.workspace = true
 rayon.workspace = true
 reqwest.workspace = true
 tempfile.workspace = true

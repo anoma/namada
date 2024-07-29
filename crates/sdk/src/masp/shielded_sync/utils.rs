@@ -132,6 +132,11 @@ impl Fetched {
     pub fn is_empty(&self) -> bool {
         self.txs.is_empty()
     }
+
+    /// Check the length of the fetched cache
+    pub fn len(&self) -> usize {
+        self.txs.len()
+    }
 }
 
 impl IntoIterator for Fetched {

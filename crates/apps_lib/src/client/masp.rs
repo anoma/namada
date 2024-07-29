@@ -45,9 +45,20 @@ pub async fn syncing<
     display_line!(io, "\n\n");
     let env = MaspLocalTaskEnv::new(500)?;
 
+    let (_multi_progress, fetched, scanned) = {
+        let multi = indicatif::MultiProgress::new();
+        let fetched = multi.add(indicatif::ProgressBar::new(0));
+        let scanned = multi.add(indicatif::ProgressBar::new(0));
+        (multi, fetched, scanned)
+    };
+
     macro_rules! dispatch_client {
         ($client:expr) => {{
-            let config = ShieldedSyncConfig::builder().client($client).build();
+            let config = ShieldedSyncConfig::builder()
+                .client($client)
+                .fetched_tracker(fetched)
+                .scanned_tracker(scanned)
+                .build();
             shielded
                 .fetch(
                     install_shutdown_signal(),

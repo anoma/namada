@@ -70,7 +70,7 @@ use smooth_operator::checked;
 use thiserror::Error;
 
 use crate::error::{Error, QueryError};
-use crate::io::Io;
+use crate::io::{Io, ProgressBar};
 use crate::masp::shielded_sync::dispatcher::DispatcherCache;
 use crate::masp::shielded_sync::utils::MaspClient;
 #[cfg(not(target_family = "wasm"))]
@@ -509,11 +509,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     /// ShieldedContext
     #[allow(clippy::too_many_arguments)]
     #[cfg(not(target_family = "wasm"))]
-    pub async fn fetch<M>(
+    pub async fn fetch<M, T>(
         &mut self,
         shutdown_signal: impl control_flow::ShutdownSignal,
         env: impl TaskEnvironment,
-        config: ShieldedSyncConfig<M>,
+        config: ShieldedSyncConfig<M, T>,
         start_query_height: Option<BlockHeight>,
         last_query_height: Option<BlockHeight>,
         sks: &[MaspExtendedSpendingKey],
@@ -521,6 +521,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     ) -> Result<(), Error>
     where
         M: MaspClient + Send + Sync + Unpin + 'static,
+        T: ProgressBar,
     {
         env.run(|spawner| async move {
             let dispatcher = config.dispatcher(spawner, &self.utils).await;
