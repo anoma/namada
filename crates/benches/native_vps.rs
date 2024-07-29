@@ -24,12 +24,10 @@ use namada::governance::storage::proposal::ProposalType;
 use namada::governance::storage::vote::ProposalVote;
 use namada::governance::{InitProposalData, VoteProposalData};
 use namada::ibc::core::channel::types::channel::Order;
-use namada::ibc::core::channel::types::msgs::{ChannelMsg, MsgChannelOpenInit};
+use namada::ibc::core::channel::types::msgs::MsgChannelOpenInit;
 use namada::ibc::core::channel::types::Version as ChannelVersion;
 use namada::ibc::core::commitment_types::commitment::CommitmentPrefix;
-use namada::ibc::core::connection::types::msgs::{
-    ConnectionMsg, MsgConnectionOpenInit,
-};
+use namada::ibc::core::connection::types::msgs::MsgConnectionOpenInit;
 use namada::ibc::core::connection::types::version::Version;
 use namada::ibc::core::connection::types::Counterparty;
 use namada::ibc::core::handler::types::msgs::MsgEnvelope;
@@ -341,8 +339,8 @@ fn prepare_ibc_tx_and_ctx(bench_name: &str) -> (BenchShieldedCtx, BatchedTx) {
                 delay_period: std::time::Duration::new(100, 0),
                 signer: defaults::albert_address().to_string().into(),
             };
-            let data = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-                ConnectionMsg::from(msg),
+            let data = IbcMessage::Envelope(Box::new(MsgEnvelope::Connection(
+                msg.into(),
             )));
             let open_connection =
                 shielded_ctx.shell.generate_ibc_tx(TX_IBC_WASM, data);
@@ -363,8 +361,8 @@ fn prepare_ibc_tx_and_ctx(bench_name: &str) -> (BenchShieldedCtx, BatchedTx) {
             };
 
             // Avoid serializing the data again with borsh
-            let data = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-                ChannelMsg::from(msg),
+            let data = IbcMessage::Envelope(Box::new(MsgEnvelope::Channel(
+                msg.into(),
             )));
             let open_channel =
                 shielded_ctx.shell.generate_ibc_tx(TX_IBC_WASM, data);

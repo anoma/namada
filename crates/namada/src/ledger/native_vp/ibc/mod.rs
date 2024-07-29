@@ -106,15 +106,15 @@ where
             batched_tx.tx.data(batched_tx.cmt).ok_or(Error::NoTxData)?;
 
         // Message body must be an IbcMessage
-        let tx_data = IbcMessage::try_from_slice(&tx_data)
+        let message = IbcMessage::try_from_slice(&tx_data)
             .into_storage_result()
             .map_err(Error::NativeVpError)?;
 
         // Pseudo execution and compare them
-        self.validate_state(&tx_data, keys_changed)?;
+        self.validate_state(&message, keys_changed)?;
 
         // Validate the state according to the given IBC message
-        self.validate_with_msg(tx_data)?;
+        self.validate_with_msg(message)?;
 
         // Validate the denom store if a denom key has been changed
         self.validate_trace(keys_changed)?;
@@ -190,7 +190,7 @@ where
         Ok(())
     }
 
-    fn validate_with_msg(&self, tx_data: IbcMessage) -> VpResult<()> {
+    fn validate_with_msg(&self, message: IbcMessage) -> VpResult<()> {
         let validation_ctx = VpValidationContext::new(self.ctx.pre());
         let ctx = Rc::new(RefCell::new(validation_ctx));
         // Use an empty verifiers set placeholder for validation, this is only
@@ -208,7 +208,7 @@ where
         self.ctx
             .charge_gas(IBC_ACTION_VALIDATE_GAS)
             .map_err(Error::NativeVpError)?;
-        actions.validate(tx_data).map_err(Error::IbcAction)
+        actions.validate(message).map_err(Error::IbcAction)
     }
 
     /// Retrieve the validation params
@@ -431,9 +431,6 @@ mod tests {
     use namada_core::address::InternalAddress;
     use namada_gas::TxGasMeter;
     use namada_governance::parameters::GovernanceParameters;
-    use namada_ibc::core::channel::types::msgs::{ChannelMsg, PacketMsg};
-    use namada_ibc::core::client::types::msgs::ClientMsg;
-    use namada_ibc::core::connection::types::msgs::ConnectionMsg;
     use namada_ibc::core::handler::types::msgs::MsgEnvelope;
     use namada_ibc::event::IbcEventType;
     use namada_state::testing::TestState;
@@ -935,9 +932,8 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
-        let tx_data = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            ClientMsg::from(msg),
-        )));
+        let tx_data =
+            IbcMessage::Envelope(Box::new(MsgEnvelope::Client(msg.into())));
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new(TX_GAS_LIMIT),
         ));
@@ -1015,9 +1011,8 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
-        let tx_data = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            ClientMsg::from(msg),
-        )));
+        let tx_data =
+            IbcMessage::Envelope(Box::new(MsgEnvelope::Client(msg.into())));
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_code(tx_code, None)
@@ -1141,9 +1136,8 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
-        let tx_data = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            ClientMsg::from(msg),
-        )));
+        let tx_data =
+            IbcMessage::Envelope(Box::new(MsgEnvelope::Client(msg.into())));
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_code(tx_code, None)
@@ -1251,9 +1245,8 @@ mod tests {
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.header.chain_id = state.in_mem().chain_id.clone();
         outer_tx.set_code(Code::new(tx_code, None));
-        let tx_data = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            ConnectionMsg::from(msg),
-        )));
+        let tx_data =
+            IbcMessage::Envelope(Box::new(MsgEnvelope::Connection(msg.into())));
         outer_tx.add_data(&tx_data);
         outer_tx.add_section(Section::Authorization(Authorization::new(
             vec![outer_tx.header_hash()],
@@ -1348,9 +1341,8 @@ mod tests {
         let tx_code = vec![];
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
-        let tx_data = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            ConnectionMsg::from(msg),
-        )));
+        let tx_data =
+            IbcMessage::Envelope(Box::new(MsgEnvelope::Connection(msg.into())));
         tx.add_code(tx_code, None)
             .add_data(&tx_data)
             .sign_wrapper(keypair_1());
@@ -1469,9 +1461,8 @@ mod tests {
         let tx_index = TxIndex::default();
         let tx_code = vec![];
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
-        let tx_data = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            ConnectionMsg::from(msg),
-        )));
+        let tx_data =
+            IbcMessage::Envelope(Box::new(MsgEnvelope::Connection(msg.into())));
         tx.add_code(tx_code, None)
             .add_data(&tx_data)
             .sign_wrapper(keypair_1());
@@ -1575,9 +1566,8 @@ mod tests {
 
         let tx_code = vec![];
         let tx_index = TxIndex::default();
-        let tx_data = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            ConnectionMsg::from(msg),
-        )));
+        let tx_data =
+            IbcMessage::Envelope(Box::new(MsgEnvelope::Connection(msg.into())));
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.header.chain_id = state.in_mem().chain_id.clone();
         outer_tx.set_code(Code::new(tx_code, None));
@@ -1671,9 +1661,8 @@ mod tests {
 
         let tx_code = vec![];
         let tx_index = TxIndex::default();
-        let tx_data = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            ConnectionMsg::from(msg),
-        )));
+        let tx_data =
+            IbcMessage::Envelope(Box::new(MsgEnvelope::Connection(msg.into())));
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.header.chain_id = state.in_mem().chain_id.clone();
         outer_tx.set_code(Code::new(tx_code, None));
@@ -1795,9 +1784,8 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
-        let tx_data = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            ChannelMsg::from(msg),
-        )));
+        let tx_data =
+            IbcMessage::Envelope(Box::new(MsgEnvelope::Channel(msg.into())));
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.header.chain_id = state.in_mem().chain_id.clone();
         outer_tx.set_code(Code::new(tx_code, None));
@@ -1918,9 +1906,8 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
-        let tx_data = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            ChannelMsg::from(msg),
-        )));
+        let tx_data =
+            IbcMessage::Envelope(Box::new(MsgEnvelope::Channel(msg.into())));
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.header.chain_id = state.in_mem().chain_id.clone();
         outer_tx.set_code(Code::new(tx_code, None));
@@ -2026,9 +2013,8 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
-        let tx_data = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            ChannelMsg::from(msg),
-        )));
+        let tx_data =
+            IbcMessage::Envelope(Box::new(MsgEnvelope::Channel(msg.into())));
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.header.chain_id = state.in_mem().chain_id.clone();
         outer_tx.set_code(Code::new(tx_code, None));
@@ -2132,9 +2118,8 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
-        let tx_data = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            ChannelMsg::from(msg),
-        )));
+        let tx_data =
+            IbcMessage::Envelope(Box::new(MsgEnvelope::Channel(msg.into())));
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_code(tx_code, None)
@@ -2499,9 +2484,8 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
-        let tx_data = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            PacketMsg::from(msg),
-        )));
+        let tx_data =
+            IbcMessage::Envelope(Box::new(MsgEnvelope::Packet(msg.into())));
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_code(tx_code, None)
@@ -2655,9 +2639,8 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
-        let tx_data = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            PacketMsg::from(msg),
-        )));
+        let tx_data =
+            IbcMessage::Envelope(Box::new(MsgEnvelope::Packet(msg.into())));
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_code(tx_code, None)
@@ -2813,9 +2796,8 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
-        let tx_data = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            PacketMsg::from(msg),
-        )));
+        let tx_data =
+            IbcMessage::Envelope(Box::new(MsgEnvelope::Packet(msg.into())));
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_code(tx_code, None)
@@ -2972,9 +2954,8 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
-        let tx_data = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            PacketMsg::from(msg),
-        )));
+        let tx_data =
+            IbcMessage::Envelope(Box::new(MsgEnvelope::Packet(msg.into())));
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_code(tx_code, None)
@@ -3384,9 +3365,8 @@ mod tests {
 
         let tx_index = TxIndex::default();
         let tx_code = vec![];
-        let tx_data = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            PacketMsg::from(msg),
-        )));
+        let tx_data =
+            IbcMessage::Envelope(Box::new(MsgEnvelope::Packet(msg.into())));
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_code(tx_code, None)

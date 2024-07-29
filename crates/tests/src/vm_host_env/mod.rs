@@ -39,9 +39,6 @@ mod tests {
     use namada::ledger::tx_env::TxEnv;
     use namada::token::{self, Amount};
     use namada::tx::Tx;
-    use namada_core::ibc::core::channel::types::msgs::{ChannelMsg, PacketMsg};
-    use namada_core::ibc::core::client::types::msgs::ClientMsg;
-    use namada_core::ibc::core::connection::types::msgs::ConnectionMsg;
     use namada_core::ibc::core::handler::types::msgs::MsgEnvelope;
     use namada_test_utils::TestWasms;
     use namada_tx_prelude::address::InternalAddress;
@@ -688,8 +685,8 @@ mod tests {
         ]);
 
         // Start a transaction to create a new client
-        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            ClientMsg::from(ibc::msg_create_client()),
+        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::Client(
+            ibc::msg_create_client().into(),
         )));
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
@@ -722,8 +719,8 @@ mod tests {
         // Start a transaction to update the client
         tx_host_env::set(env);
         let client_id = ibc::client_id();
-        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            ClientMsg::from(ibc::msg_update_client(client_id)),
+        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::Client(
+            ibc::msg_update_client(client_id).into(),
         )));
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
@@ -765,8 +762,8 @@ mod tests {
         });
 
         // Start a transaction for ConnectionOpenInit
-        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            ConnectionMsg::from(ibc::msg_connection_open_init(client_id)),
+        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::Connection(
+            ibc::msg_connection_open_init(client_id).into(),
         )));
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
@@ -798,11 +795,8 @@ mod tests {
 
         // Start the next transaction for ConnectionOpenAck
         let conn_id = ibc::ConnectionId::new(0);
-        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            ConnectionMsg::from(ibc::msg_connection_open_ack(
-                conn_id,
-                client_state,
-            )),
+        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::Connection(
+            ibc::msg_connection_open_ack(conn_id, client_state).into(),
         )));
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
@@ -845,11 +839,8 @@ mod tests {
         });
 
         // Start a transaction for ConnectionOpenTry
-        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            ConnectionMsg::from(ibc::msg_connection_open_try(
-                client_id,
-                client_state,
-            )),
+        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::Connection(
+            ibc::msg_connection_open_try(client_id, client_state).into(),
         )));
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
@@ -881,8 +872,8 @@ mod tests {
 
         // Start the next transaction for ConnectionOpenConfirm
         let conn_id = ibc::ConnectionId::new(0);
-        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            ConnectionMsg::from(ibc::msg_connection_open_confirm(conn_id)),
+        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::Connection(
+            ibc::msg_connection_open_confirm(conn_id).into(),
         )));
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
@@ -927,11 +918,8 @@ mod tests {
 
         // Start a transaction for ChannelOpenInit
         let port_id = ibc::PortId::transfer();
-        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            ChannelMsg::from(ibc::msg_channel_open_init(
-                port_id.clone(),
-                conn_id,
-            )),
+        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::Channel(
+            ibc::msg_channel_open_init(port_id.clone(), conn_id).into(),
         )));
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
@@ -963,8 +951,8 @@ mod tests {
 
         // Start the next transaction for ChannelOpenAck
         let channel_id = ibc::ChannelId::new(0);
-        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            ChannelMsg::from(ibc::msg_channel_open_ack(port_id, channel_id)),
+        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::Channel(
+            ibc::msg_channel_open_ack(port_id, channel_id).into(),
         )));
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
@@ -1009,11 +997,8 @@ mod tests {
 
         // Start a transaction for ChannelOpenTry
         let port_id = ibc::PortId::transfer();
-        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            ChannelMsg::from(ibc::msg_channel_open_try(
-                port_id.clone(),
-                conn_id,
-            )),
+        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::Channel(
+            ibc::msg_channel_open_try(port_id.clone(), conn_id).into(),
         )));
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
@@ -1045,10 +1030,8 @@ mod tests {
 
         // Start the next transaction for ChannelOpenConfirm
         let channel_id = ibc::ChannelId::new(0);
-        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            ChannelMsg::from(ibc::msg_channel_open_confirm(
-                port_id, channel_id,
-            )),
+        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::Channel(
+            ibc::msg_channel_open_confirm(port_id, channel_id).into(),
         )));
 
         let mut tx = Tx::new(ChainId::default(), None);
@@ -1096,8 +1079,8 @@ mod tests {
         ]);
 
         // Start a transaction to close the channel
-        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            ChannelMsg::from(ibc::msg_channel_close_init(port_id, channel_id)),
+        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::Channel(
+            ibc::msg_channel_close_init(port_id, channel_id).into(),
         )));
 
         let mut tx = Tx::new(ChainId::default(), None);
@@ -1153,10 +1136,8 @@ mod tests {
         ]);
 
         // Start a transaction to close the channel
-        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            ChannelMsg::from(ibc::msg_channel_close_confirm(
-                port_id, channel_id,
-            )),
+        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::Channel(
+            ibc::msg_channel_close_confirm(port_id, channel_id).into(),
         )));
 
         let mut tx = Tx::new(ChainId::default(), None);
@@ -1255,8 +1236,8 @@ mod tests {
             ibc::Sequence::from(1),
             &counterparty,
         );
-        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            PacketMsg::from(ibc::msg_packet_ack(packet)),
+        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::Packet(
+            ibc::msg_packet_ack(packet).into(),
         )));
 
         let mut tx = Tx::new(ChainId::default(), None);
@@ -1426,8 +1407,8 @@ mod tests {
         );
 
         // Start a transaction to receive a packet
-        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            PacketMsg::from(ibc::msg_packet_recv(packet)),
+        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::Packet(
+            ibc::msg_packet_recv(packet).into(),
         )));
 
         let mut tx = Tx::new(ChainId::default(), None);
@@ -1521,8 +1502,8 @@ mod tests {
         packet.data = vec![0];
 
         // Start a transaction to receive a packet
-        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            PacketMsg::from(ibc::msg_packet_recv(packet)),
+        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::Packet(
+            ibc::msg_packet_recv(packet).into(),
         )));
 
         let mut tx = Tx::new(ChainId::default(), None);
@@ -1617,8 +1598,8 @@ mod tests {
         );
 
         // Start a transaction to receive a packet
-        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            PacketMsg::from(ibc::msg_packet_recv(packet)),
+        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::Packet(
+            ibc::msg_packet_recv(packet).into(),
         )));
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
@@ -1720,8 +1701,8 @@ mod tests {
         );
 
         // Start a transaction to receive a packet
-        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            PacketMsg::from(ibc::msg_packet_recv(packet)),
+        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::Packet(
+            ibc::msg_packet_recv(packet).into(),
         )));
 
         let mut tx = Tx::new(ChainId::default(), None);
@@ -1815,8 +1796,8 @@ mod tests {
             ibc::Sequence::from(1),
             &counterparty,
         );
-        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::from(
-            PacketMsg::from(ibc::msg_timeout(packet, ibc::Sequence::from(1))),
+        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::Packet(
+            ibc::msg_timeout(packet, ibc::Sequence::from(1)).into(),
         )));
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
@@ -1900,10 +1881,9 @@ mod tests {
             ibc::Sequence::from(1),
             &counterparty,
         );
-        let msg =
-            IbcMessage::Envelope(Box::new(MsgEnvelope::from(PacketMsg::from(
-                ibc::msg_timeout_on_close(packet, ibc::Sequence::from(1)),
-            ))));
+        let msg = IbcMessage::Envelope(Box::new(MsgEnvelope::Packet(
+            ibc::msg_timeout_on_close(packet, ibc::Sequence::from(1)).into(),
+        )));
         let mut tx = Tx::new(ChainId::default(), None);
         tx.add_code(vec![], None)
             .add_data(&msg)
