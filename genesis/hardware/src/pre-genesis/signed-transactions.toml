@@ -1,0 +1,22 @@
+[[established_account]]
+vp = "vp_user"
+threshold = 1
+public_keys = ["tpknam1qquurf975axryz4sf0jmyxpknkxp4cs7g8e8ahhpw089u6j3q9dy6qssdhz"]
+
+[[established_account]]
+vp = "vp_user"
+threshold = 1
+public_keys = ["tpknam1qp7r3et2usz538fxzkm69h3awr7t0kgk7h6528za7pk4g2jldk5dz0qjkhx"]
+
+[[established_account]]
+vp = "vp_user"
+threshold = 1
+public_keys = ["tpknam1qrg6qx72e0vqhg8plg20hv97g3p3q092gl88jlngkly0hpmca2h2we44uzw"]
+
+[[bond]]
+source = "tnam1qye83lg3ncsen8wjedgz27rxjktn0gcrc574p78e"
+validator = "tnam1q9q3lph40w88cs5000k48thkw3f7s0m6mqrtfgss"
+amount = "20000"
+
+[bond.signatures]
+tpknam1qquurf975axryz4sf0jmyxpknkxp4cs7g8e8ahhpw089u6j3q9dy6qssdhz = "signam1qzgqntx4tqsrlwn2g2lwwhkcvwkjpd768fup0yr9ctunrc6yj89h57uxgv74vn3y5unz55slmlkyj0td5nu8wjvf52el3azn95uk3xcfjmzcpl"

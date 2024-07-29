@@ -1,0 +1,48 @@
+[view_keys]
+
+[spend_keys]
+
+[payment_addrs]
+
+[secret_keys]
+faucet-key = "unencrypted:00548aa8393422b88dce5f4be8ee0320638061c3e0649ada1b0dacbec4c0c75bb2"
+
+[public_keys]
+albert-key = "ED25519_PK_PREFIXtpknam1qquurf975axryz4sf0jmyxpknkxp4cs7g8e8ahhpw089u6j3q9dy6qssdhz"
+bertha-key = "ED25519_PK_PREFIXtpknam1qrg6qx72e0vqhg8plg20hv97g3p3q092gl88jlngkly0hpmca2h2we44uzw"
+christel-key = "ED25519_PK_PREFIXtpknam1qp7r3et2usz538fxzkm69h3awr7t0kgk7h6528za7pk4g2jldk5dz0qjkhx"
+daewon = "ED25519_PK_PREFIXtpknam1qzdgg0q7c2szvx67q84r859axuwmyvsku0t9w97kwdvz7ff89xy4xrqxfmv"
+ester = "ED25519_PK_PREFIXtpknam1qplr7n6ej99zyvzvjy0w726p0809m6a279a02rn5zw0c52k8wdw8q5gfc8y"
+faucet-key = "ED25519_PK_PREFIXtpknam1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgyq0vra4"
+validator-0-account-key = "ED25519_PK_PREFIXtpknam1qrulnacf6l6lt2vlpc8y2yudlgzs9hzrfa9p66fv4p7vk8utf6m4554t3ak"
+
+[derivation_paths]
+albert-key = "m/44'/877'/0'/0'/0'"
+bertha-key = "m/44'/877'/0'/0'/1'"
+christel-key = "m/44'/877'/0'/0'/2'"
+daewon = "m/44'/877'/0'/0'/3'"
+ester = "m/44'/877'/0'/0'/4'"
+validator-0-account-key = "m/44'/877'/0'/0'/5'"
+
+[addresses]
+albert = "tnam1qye83lg3ncsen8wjedgz27rxjktn0gcrc574p78e"
+bertha = "tnam1qyvmxf6r5e9gjtq2pwsndgq77hmx4vw2rghnmt8v"
+christel = "tnam1q8wemh6ws8vctdyg3dh9339qusttefzp0qw0qhvm"
+albert-key = "tnam1qq6qyugak0gd4up6lma8z8wr88w3pq9lgvfhw6yu"
+bertha-key = "tnam1qp7z909dsdv4qw5jcasywzm9p7xa3qeqqghcjqxe"
+christel-key = "tnam1qq8kszasdp30f2j2pkhz40zpfvztdakwqvkm0xy4"
+daewon = "tnam1qqnxq04amahj5yuwux7pdsjp3dyu07at3u3f742p"
+ester = "tnam1qr2y927swt2ax66m9fgc9ejs40m7m77rry53cvkv"
+faucet-key = "tnam1qzgcl2znamndmku7ujw6e79dmvd4v7rfd5c89dfz"
+validator-0 = "tnam1q9q3lph40w88cs5000k48thkw3f7s0m6mqrtfgss"
+
+[pkhs]
+7C22BCAD8359503A92C760470B650F8DD8832002 = "bertha-key"
+3402711DB3D0DAF03AFEFA711DC339DD1080BF43 = "albert-key"
+26603EBDDF6F2A138EE1BC16C2418B49C7FBAB8F = "daewon"
+918FA853EEE6DDDB9EE49DACF8ADDB1B5678696D = "faucet-key"
+0F680BB06862F4AA4A0DAE2ABC414B04B6F6CE03 = "christel-key"
+D442ABD072D5D36B5B2A5182E650ABF7EDFBC319 = "ester"
+E9A42797AA7E25F01F0DA8FCD1B69C8C76627715 = "validator-0-account-key"
+
+[address_vp_types]

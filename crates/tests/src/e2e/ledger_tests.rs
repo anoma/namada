@@ -44,7 +44,7 @@ use crate::e2e::helpers::{
     is_debug_mode, parse_reached_epoch,
 };
 use crate::e2e::setup::{
-    self, allow_duplicate_ips, default_port_offset, sleep, Bin, Who,
+    self, allow_duplicate_ips, apply_use_device, default_port_offset, sleep, Bin, Who,
 };
 use crate::strings::{
     LEDGER_SHUTDOWN, LEDGER_STARTED, NON_VALIDATOR_NODE, TX_APPLIED_SUCCESS,
@@ -167,7 +167,7 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
     let _ = epoch_sleep(&test, &validator_one_rpc, 720)?;
 
     // 3. Submit a valid token transfer tx
-    let tx_args = [
+    let tx_args = apply_use_device(vec![
         "transparent-transfer",
         "--source",
         BERTHA,
@@ -183,7 +183,7 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
         BERTHA_KEY,
         "--node",
         &validator_one_rpc,
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
@@ -557,7 +557,7 @@ fn pos_bonds() -> Result<()> {
     client.assert_success();
 
     // 3. Submit a delegation to the first genesis validator
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "bond",
         "--validator",
         "validator-0",
@@ -569,13 +569,13 @@ fn pos_bonds() -> Result<()> {
         BERTHA_KEY,
         "--node",
         &validator_0_rpc,
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // 4. Submit a re-delegation from the first to the second genesis validator
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "redelegate",
         "--source-validator",
         "validator-0",
@@ -589,7 +589,7 @@ fn pos_bonds() -> Result<()> {
         BERTHA_KEY,
         "--node",
         &validator_0_rpc,
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
@@ -613,7 +613,7 @@ fn pos_bonds() -> Result<()> {
     client.assert_success();
 
     // 6. Submit an unbond of the delegation from the first validator
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "unbond",
         "--validator",
         "validator-0",
@@ -625,14 +625,14 @@ fn pos_bonds() -> Result<()> {
         BERTHA_KEY,
         "--node",
         &validator_0_rpc,
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     let expected = "Amount 1600.000000 withdrawable starting from epoch ";
     let _ = client.exp_regex(&format!("{expected}.*\n"))?;
     client.assert_success();
 
     // 7. Submit an unbond of the re-delegation from the second validator
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "unbond",
         "--validator",
         "validator-1",
@@ -644,7 +644,7 @@ fn pos_bonds() -> Result<()> {
         BERTHA_KEY,
         "--node",
         &validator_0_rpc,
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     let expected = "Amount 1600.000000 withdrawable starting from epoch ";
     let (_unread, matched) = client.exp_regex(&format!("{expected}.*\n"))?;
@@ -698,7 +698,7 @@ fn pos_bonds() -> Result<()> {
     client.assert_success();
 
     // 10. Submit a withdrawal of the delegation
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "withdraw",
         "--validator",
         "validator-0",
@@ -708,13 +708,13 @@ fn pos_bonds() -> Result<()> {
         BERTHA_KEY,
         "--node",
         &validator_0_rpc,
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // 11. Submit an withdrawal of the re-delegation
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "withdraw",
         "--validator",
         "validator-1",
@@ -724,7 +724,7 @@ fn pos_bonds() -> Result<()> {
         BERTHA_KEY,
         "--node",
         &validator_0_rpc,
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
@@ -799,7 +799,7 @@ fn pos_init_validator() -> Result<()> {
     // 2. Initialize a new validator account with the non-validator node
     let new_validator = "new-validator";
     let _new_validator_key = format!("{}-key", new_validator);
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "init-validator",
         "--alias",
         new_validator,
@@ -818,7 +818,7 @@ fn pos_init_validator() -> Result<()> {
         "--node",
         &non_validator_rpc,
         "--unsafe-dont-encrypt",
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
@@ -853,7 +853,7 @@ fn pos_init_validator() -> Result<()> {
 
     // 3. Submit a delegation to the new validator First, transfer some tokens
     //    to the validator's key for fees:
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "transparent-transfer",
         "--source",
         BERTHA,
@@ -867,14 +867,14 @@ fn pos_init_validator() -> Result<()> {
         BERTHA_KEY,
         "--node",
         &non_validator_rpc,
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
     //     Then self-bond the tokens:
     let delegation = 5_u64;
     let delegation_str = &delegation.to_string();
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "bond",
         "--validator",
         new_validator,
@@ -886,14 +886,14 @@ fn pos_init_validator() -> Result<()> {
         BERTHA_KEY,
         "--node",
         &non_validator_rpc,
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // 4. Transfer some NAM to the new validator
     let validator_stake_str = &validator_stake.to_string_native();
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "transparent-transfer",
         "--source",
         BERTHA,
@@ -907,13 +907,13 @@ fn pos_init_validator() -> Result<()> {
         BERTHA_KEY,
         "--node",
         &non_validator_rpc,
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // 5. Submit a self-bond for the new validator
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "bond",
         "--validator",
         new_validator,
@@ -921,7 +921,7 @@ fn pos_init_validator() -> Result<()> {
         validator_stake_str,
         "--node",
         &non_validator_rpc,
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
@@ -995,7 +995,7 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
     let validator_one_rpc = Arc::new(get_actor_rpc(&test, Who::Validator(0)));
 
     // A token transfer tx args
-    let tx_args = Arc::new(vec![
+    let tx_args = Arc::new(apply_use_device(vec![
         "transparent-transfer",
         "--source",
         BERTHA,
@@ -1007,30 +1007,42 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
         "1.01",
         "--signing-keys",
         BERTHA_KEY,
-        "--node",
-    ]);
+    ]));
 
-    // 2. Spawn threads each submitting token transfer tx
-    // We collect to run the threads in parallel.
-    #[allow(clippy::needless_collect)]
-    let tasks: Vec<std::thread::JoinHandle<_>> = (0..4)
-        .map(|_| {
-            let test = Arc::clone(&test);
-            let validator_one_rpc = Arc::clone(&validator_one_rpc);
-            let tx_args = Arc::clone(&tx_args);
-            std::thread::spawn(move || {
-                let mut args = (*tx_args).clone();
-                args.push(&*validator_one_rpc);
-                let mut client = run!(*test, Bin::Client, args, Some(80))?;
-                client.exp_string(TX_APPLIED_SUCCESS)?;
-                client.assert_success();
-                let res: Result<()> = Ok(());
-                res
+    if tx_args.contains(&"--use-device") {
+        // Sequentialize transaction signing when hardware wallet is involved
+        for _ in 0..4 {
+            let mut args = (*tx_args).clone();
+            args.push("--node");
+            args.push(&*validator_one_rpc);
+            let mut client = run!(*test, Bin::Client, args, Some(80))?;
+            client.exp_string(TX_APPLIED_SUCCESS)?;
+            client.assert_success();
+        }
+    } else {
+        // 2. Spawn threads each submitting token transfer tx
+        // We collect to run the threads in parallel.
+        #[allow(clippy::needless_collect)]
+        let tasks: Vec<std::thread::JoinHandle<_>> = (0..4)
+            .map(|_| {
+                let test = Arc::clone(&test);
+                let validator_one_rpc = Arc::clone(&validator_one_rpc);
+                let tx_args = Arc::clone(&tx_args);
+                std::thread::spawn(move || {
+                    let mut args = (*tx_args).clone();
+                    args.push("--node");
+                    args.push(&*validator_one_rpc);
+                    let mut client = run!(*test, Bin::Client, args, Some(80))?;
+                    client.exp_string(TX_APPLIED_SUCCESS)?;
+                    client.assert_success();
+                    let res: Result<()> = Ok(());
+                    res
+                })
             })
-        })
-        .collect();
-    for task in tasks.into_iter() {
-        task.join().unwrap()?;
+            .collect();
+        for task in tasks.into_iter() {
+            task.join().unwrap()?;
+        }
     }
     // Wait to commit a block
     let mut ledger = bg_ledger.foreground();
@@ -1224,7 +1236,7 @@ fn double_signing_gets_slashed() -> Result<()> {
 
     // 5. Submit a valid token transfer tx to validator 0
     let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
-    let tx_args = [
+    let tx_args = apply_use_device(vec![
         "transparent-transfer",
         "--source",
         BERTHA,
@@ -1236,7 +1248,7 @@ fn double_signing_gets_slashed() -> Result<()> {
         "10.1",
         "--node",
         &validator_one_rpc,
-    ];
+    ]);
     let _client = run!(test, Bin::Client, tx_args, Some(100))?;
     // We don't wait for tx result - sometimes the node may crash before while
     // it's being applied, because the slashed validator will stop voting and
@@ -1929,7 +1941,7 @@ fn proposal_change_shielded_reward() -> Result<()> {
     let validator_0_rpc = get_actor_rpc(&test, Who::Validator(0));
 
     // 1.1 Delegate some token
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "bond",
         "--validator",
         "validator-0",
@@ -1939,7 +1951,7 @@ fn proposal_change_shielded_reward() -> Result<()> {
         "900",
         "--node",
         &validator_0_rpc,
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
@@ -1954,7 +1966,7 @@ fn proposal_change_shielded_reward() -> Result<()> {
     );
     let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
 
-    let submit_proposal_args = vec![
+    let submit_proposal_args = apply_use_device(vec![
         "init-proposal",
         "--data-path",
         valid_proposal_json_path.to_str().unwrap(),
@@ -1962,7 +1974,7 @@ fn proposal_change_shielded_reward() -> Result<()> {
         "2000000",
         "--node",
         &validator_one_rpc,
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
@@ -2014,7 +2026,7 @@ fn proposal_change_shielded_reward() -> Result<()> {
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
-    let submit_proposal_vote_delagator = vec![
+    let submit_proposal_vote_delagator = apply_use_device(vec![
         "vote-proposal",
         "--proposal-id",
         "0",
@@ -2024,7 +2036,7 @@ fn proposal_change_shielded_reward() -> Result<()> {
         BERTHA,
         "--node",
         &validator_one_rpc,
-    ];
+    ]);
 
     let mut client =
         run!(test, Bin::Client, submit_proposal_vote_delagator, Some(40))?;
@@ -2258,7 +2270,7 @@ fn rollback() -> Result<()> {
     let ledger = ledger.background();
 
     // send a few transactions
-    let txs_args = vec![vec![
+    let txs_args = vec![apply_use_device(vec![
         "transparent-transfer",
         "--source",
         BERTHA,
@@ -2272,7 +2284,7 @@ fn rollback() -> Result<()> {
         BERTHA_KEY,
         "--node",
         &validator_one_rpc,
-    ]];
+    ])];
 
     for tx_args in &txs_args {
         let mut client = run!(test, Bin::Client, tx_args, Some(40))?;

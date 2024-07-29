@@ -66,12 +66,10 @@ const ENV_VAR_TEMP_PATH: &str = "NAMADA_E2E_TEMP_PATH";
 pub const ENV_VAR_USE_PREBUILT_BINARIES: &str =
     "NAMADA_E2E_USE_PREBUILT_BINARIES";
 
-/// The E2E tests genesis config source.
-/// This file must contain a single validator with alias "validator-0".
-/// To add more validators, use the [`set_validators`] function in the call to
-/// setup the [`network`].
-#[allow(dead_code)]
-pub const SINGLE_NODE_NET_GENESIS: &str = "genesis/localnet";
+/// Env. var to enable the usage of hardware wallets in tests
+pub const ENV_VAR_USE_DEVICE: &str =
+    "NAMADA_E2E_USE_DEVICE";
+
 /// An E2E test network.
 #[derive(Debug, Clone)]
 pub struct Network {
@@ -80,6 +78,35 @@ pub struct Network {
 
 /// Offset the ports used in the network configuration to avoid shared resources
 pub const ANOTHER_CHAIN_PORT_OFFSET: u16 = 1000;
+
+/// Check whether the ENV_VAR_USE_DEVICE environment variable is set
+pub fn is_use_device() -> bool {
+    match std::env::var(ENV_VAR_USE_DEVICE) {
+        Ok(val) => val.to_ascii_lowercase() != "false",
+        _ => false,
+    }
+}
+
+/// Apply the --use-device flag depending on the environment variables
+pub fn apply_use_device(mut tx_args: Vec<&str>) -> Vec<&str> {
+    if is_use_device() {
+        tx_args.push("--use-device");
+    }
+    tx_args
+}
+
+/// Derive the genesis path depending on whether the hardware wallet is in use
+pub fn derive_template_dir(working_dir: &PathBuf) -> PathBuf {
+    // The E2E tests genesis config source.
+    // This file must contain a single validator with alias "validator-0".
+    // To add more validators, use the [`set_validators`] function in the call to
+    // setup the [`network`].
+    if is_use_device() {
+        working_dir.join("genesis").join("hardware")
+    } else {
+        working_dir.join("genesis").join("localnet")
+    }
+}
 
 /// Default functions for offsetting ports when
 /// adding multiple validators to a network
@@ -348,7 +375,7 @@ pub fn network(
     let test_dir = TestDir::new();
 
     // Open the source genesis file templates
-    let templates_dir = working_dir.join("genesis").join("localnet");
+    let templates_dir = derive_template_dir(&working_dir);
     println!(
         "{} {}.",
         "Loading genesis templates from".yellow(),
