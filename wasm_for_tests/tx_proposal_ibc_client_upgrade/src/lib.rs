@@ -3,24 +3,21 @@ use namada_test_utils::ibc::{
 };
 use namada_tx_prelude::*;
 
-const UPGRADE_HEIGHT: u64 = 680;
-
 #[transaction]
 fn apply_tx(ctx: &mut Ctx, _tx_data: BatchedTx) -> TxResult {
     // This transaction will just store the IBC client state and the consensus
     // state as if the chain was upgraded
-    let chain_id = ctx.get_chain_id()?;
-    let client_state = make_new_client_state_bytes(chain_id, UPGRADE_HEIGHT);
-    log_string("made the client state");
+    let current_height = ctx.get_block_height()?.0;
+    // Make the states with the last committed height
+    let target_height = current_height - 1;
+    let client_state = make_new_client_state_bytes(target_height);
 
-    let height = ctx.get_block_height();
-    log_string(format!("current height: {height:?}"));
-    let header = ctx.get_block_header(UPGRADE_HEIGHT.into())?.unwrap();
-    log_string("got the header");
+    let header = ctx.get_block_header(target_height.into())?.unwrap();
     let consensus_state = make_new_consensus_state_bytes(header);
-    log_string("made the consensus state");
 
-    let height = format!("0-{UPGRADE_HEIGHT}").parse().unwrap();
+    // Need to read the upgrade state with the next height
+    let upgrade_height = current_height + 1;
+    let height = format!("0-{upgrade_height}").parse().unwrap();
     let upgraded_client_state_key = ibc::upgraded_client_state_key(height);
     ctx.write_bytes(&upgraded_client_state_key, client_state)?;
     let upgraded_consensus_state_key =
