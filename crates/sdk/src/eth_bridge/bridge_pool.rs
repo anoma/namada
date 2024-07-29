@@ -27,7 +27,6 @@ use owo_colors::OwoColorize;
 use serde::Serialize;
 
 use super::{block_on_eth_sync, eth_sync_or_exit, BlockOnEthSync};
-use crate::control_flow::install_shutdown_signal;
 use crate::control_flow::time::{Duration, Instant};
 use crate::error::{
     EncodingError, Error, EthereumBridgeError, QueryError, TxSubmitError,
@@ -578,8 +577,6 @@ where
     E: Middleware,
     E::Error: std::fmt::Debug + std::fmt::Display,
 {
-    let _signal_receiver = args.safe_mode.then(install_shutdown_signal);
-
     if args.sync {
         block_on_eth_sync(
             &*eth_client,

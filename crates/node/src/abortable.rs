@@ -1,7 +1,9 @@
 use std::future::Future;
 use std::pin::Pin;
 
-use namada_sdk::control_flow::{install_shutdown_signal, ShutdownSignal};
+use namada_sdk::control_flow::{
+    install_shutdown_signal, ShutdownSignal, ShutdownSignalChan,
+};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
 
@@ -12,7 +14,7 @@ pub type AbortingTask = &'static str;
 /// An [`AbortableSpawner`] will spawn abortable tasks into the asynchronous
 /// runtime.
 pub struct AbortableSpawner {
-    shutdown_recv: ShutdownSignal,
+    shutdown_recv: ShutdownSignalChan,
     abort_send: UnboundedSender<AbortingTask>,
     abort_recv: UnboundedReceiver<AbortingTask>,
     cleanup_jobs: Vec<Pin<Box<dyn Future<Output = ()>>>>,
@@ -83,7 +85,7 @@ impl AbortableSpawner {
     /// These two scenarios are represented by the [`AborterStatus`] enum.
     pub async fn wait_for_abort(mut self) -> AborterStatus {
         let status = tokio::select! {
-            _ = self.shutdown_recv => AborterStatus::UserShutdownLedger,
+            _ = self.shutdown_recv.wait_for_shutdown() => AborterStatus::UserShutdownLedger,
             msg = self.abort_recv.recv() => {
                 // When the msg is `None`, there are no more abort senders, so both
                 // Tendermint and the shell must have already exited

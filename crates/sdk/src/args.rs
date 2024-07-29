@@ -2737,9 +2737,6 @@ pub struct RelayBridgePoolProof<C: NamadaTypes = SdkTypes> {
     /// Synchronize with the network, or exit immediately,
     /// if the Ethereum node has fallen behind.
     pub sync: bool,
-    /// Safe mode overrides keyboard interrupt signals, to ensure
-    /// Ethereum transfers aren't canceled midway through.
-    pub safe_mode: bool,
 }
 
 /// Bridge validator set arguments.
@@ -2801,9 +2798,6 @@ pub struct ValidatorSetUpdateRelay<C: NamadaTypes = SdkTypes> {
     /// The amount of time to sleep between successful
     /// daemon mode relays.
     pub success_dur: Option<StdDuration>,
-    /// Safe mode overrides keyboard interrupt signals, to ensure
-    /// Ethereum transfers aren't canceled midway through.
-    pub safe_mode: bool,
 }
 
 /// IBC shielding transfer generation arguments

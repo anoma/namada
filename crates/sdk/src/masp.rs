@@ -511,6 +511,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     #[cfg(not(target_family = "wasm"))]
     pub async fn fetch<M>(
         &mut self,
+        shutdown_signal: impl control_flow::ShutdownSignal,
         env: impl TaskEnvironment,
         config: ShieldedSyncConfig<M>,
         start_query_height: Option<BlockHeight>,
@@ -521,8 +522,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     where
         M: MaspClient + Send + Sync + Unpin + 'static,
     {
-        let shutdown_signal = control_flow::install_shutdown_signal();
-
         env.run(|spawner| async move {
             let dispatcher = config.dispatcher(spawner, &self.utils).await;
 
@@ -542,18 +541,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             Ok(())
         })
         .await
-
-        // self.fetch_aux(
-        //    client,
-        //    progress,
-        //    start_query_height,
-        //    last_query_height,
-        //    retry,
-        //    sks,
-        //    fvks,
-        //    shutdown_signal,
-        //)
-        //.await
     }
 
     fn min_height_to_sync_from(&self) -> Result<BlockHeight, Error> {

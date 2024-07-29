@@ -299,7 +299,7 @@ where
 {
     pub async fn run(
         mut self,
-        mut shutdown_signal: ShutdownSignal,
+        mut shutdown_signal: impl ShutdownSignal,
         start_query_height: Option<BlockHeight>,
         last_query_height: Option<BlockHeight>,
         sks: &[ExtendedSpendingKey],
@@ -313,7 +313,9 @@ where
                 fvks,
             )
             .await?;
+
         self.check_exit_conditions(&mut shutdown_signal);
+
         while let Some(message) = self.tasks.get_next_message().await {
             self.check_exit_conditions(&mut shutdown_signal);
             self.handle_incoming_message(message);
@@ -456,7 +458,10 @@ where
         Ok(initial_state)
     }
 
-    fn check_exit_conditions(&mut self, shutdown_signal: &mut ShutdownSignal) {
+    fn check_exit_conditions(
+        &mut self,
+        shutdown_signal: &mut impl ShutdownSignal,
+    ) {
         if hints::unlikely(self.tasks.panic_flag.panicked()) {
             self.state = DispatcherState::Errored(Error::Other(
                 "A worker thread panicked during the shielded sync".into(),
@@ -729,7 +734,7 @@ mod dispatcher_tests {
     use tempfile::tempdir;
 
     use super::*;
-    use crate::control_flow::testing_shutdown_signal;
+    use crate::control_flow::testing::shutdown_signal;
     use crate::masp::fs::FsShieldedUtils;
     use crate::masp::test_utils::{
         arbitrary_masp_tx, arbitrary_masp_tx_with_fee_unshielding,
@@ -874,7 +879,7 @@ mod dispatcher_tests {
                 }
 
                 // run the dispatcher
-                let (_sender, shutdown_signal) = testing_shutdown_signal();
+                let (_sender, shutdown_signal) = shutdown_signal();
                 let flag = dispatcher.tasks.panic_flag.clone();
                 let dispatcher_fut = dispatcher.run(
                     shutdown_signal,
@@ -1027,7 +1032,7 @@ mod dispatcher_tests {
                 masp_tx_sender.send(None).expect("Test failed");
                 let dispatcher = config.clone().dispatcher(s, &utils).await;
 
-                let (_send, shutdown_sig) = testing_shutdown_signal();
+                let (_send, shutdown_sig) = shutdown_signal();
                 let result =
                     dispatcher.run(shutdown_sig, None, None, &[], &[vk]).await;
                 match result {
@@ -1069,7 +1074,7 @@ mod dispatcher_tests {
                     .expect("Test failed");
                 config.retry_strategy = RetryStrategy::Times(1);
                 let dispatcher = config.dispatcher(s, &utils).await;
-                let (_send, shutdown_sig) = testing_shutdown_signal();
+                let (_send, shutdown_sig) = shutdown_signal();
                 // This should complete successfully
                 let ctx = dispatcher
                     .run(shutdown_sig, None, None, &[], &[vk])
@@ -1143,7 +1148,7 @@ mod dispatcher_tests {
                     )))
                     .expect("Test failed");
                 masp_tx_sender.send(None).expect("Test failed");
-                let (_send, shutdown_sig) = testing_shutdown_signal();
+                let (_send, shutdown_sig) = shutdown_signal();
                 let result =
                     dispatcher.run(shutdown_sig, None, None, &[], &[vk]).await;
                 match result {
@@ -1209,8 +1214,8 @@ mod dispatcher_tests {
                     )))
                     .expect("Test failed");
 
-                let (send, shutdown_sig) = testing_shutdown_signal();
-                send.send(()).expect("Test failed");
+                let (send, shutdown_sig) = shutdown_signal();
+                send.send_replace(true);
                 let res = dispatcher
                     .run(shutdown_sig, None, None, &[], &[arbitrary_vk()])
                     .await

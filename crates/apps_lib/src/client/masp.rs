@@ -3,6 +3,7 @@ use std::time::Duration;
 use color_eyre::owo_colors::OwoColorize;
 use masp_primitives::sapling::ViewingKey;
 use masp_primitives::zip32::ExtendedSpendingKey;
+use namada_sdk::control_flow::install_shutdown_signal;
 use namada_sdk::error::Error;
 use namada_sdk::io::Io;
 use namada_sdk::masp::utils::{IndexerMaspClient, LedgerMaspClient};
@@ -49,6 +50,7 @@ pub async fn syncing<
             let config = ShieldedSyncConfig::builder().client($client).build();
             shielded
                 .fetch(
+                    install_shutdown_signal(),
                     env,
                     config,
                     start_query_height,
