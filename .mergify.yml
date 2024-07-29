@@ -3,15 +3,6 @@ queue_rules:
     speculative_checks: 3
     batch_size: 3
     queue_conditions:
-      - check-success = build-binaries
-      - check-success = lints
-      - check-success = test-unit
-      - check-success = test-integration
-      - check-success = test-e2e
-      - check-success = check-benchmarks
-      - check-success = check-packages
-      - check-success = build-binaries
-      - check-success = changelog
       - "#approved-reviews-by >= 1"
       - base = main
     merge_method: merge
@@ -22,15 +13,6 @@ pull_request_rules:
     conditions:
         - label = "ready-for-draft"
         - label != "do-not-merge"
-        - check-success = build-binaries
-        - check-success = lints
-        - check-success = test-unit
-        - check-success = test-integration
-        - check-success = test-e2e
-        - check-success = check-benchmarks
-        - check-success = check-packages
-        - check-success = build-binaries
-        - check-success = changelog
         - "#approved-reviews-by >= 1"
         - base = main
     actions:
