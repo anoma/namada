@@ -11,6 +11,8 @@ use masp_primitives::transaction::Transaction;
 use namada_core::collections::HashMap;
 use namada_core::storage::{BlockHeight, TxIndex};
 use namada_tx::{IndexedTx, IndexedTxRange, Tx};
+#[cfg(not(target_family = "wasm"))]
+use tokio::sync::Semaphore;
 
 use crate::error::{Error, QueryError};
 use crate::masp::{
@@ -18,6 +20,9 @@ use crate::masp::{
     get_indexed_masp_events_at_height,
 };
 use crate::queries::Client;
+
+#[cfg(not(target_family = "wasm"))]
+const MAX_CONCURRENT_REQUESTS: usize = 100;
 
 /// Type alias for convenience and profit
 pub type IndexedNoteData = BTreeMap<IndexedTx, Vec<Transaction>>;
@@ -260,17 +265,23 @@ pub trait MaspClient: Clone {
     ) -> Result<HashMap<usize, IncrementalWitness<Node>>, Error>;
 }
 
+#[cfg(not(target_family = "wasm"))]
+struct LedgerMaspClientInner<C> {
+    client: C,
+    semaphore: Semaphore,
+}
+
 /// An inefficient MASP client which simply uses a
 /// client to the blockchain to query it directly.
 #[cfg(not(target_family = "wasm"))]
 pub struct LedgerMaspClient<C> {
-    client: Arc<C>,
+    inner: Arc<LedgerMaspClientInner<C>>,
 }
 
 impl<C> Clone for LedgerMaspClient<C> {
     fn clone(&self) -> Self {
         Self {
-            client: Arc::clone(&self.client),
+            inner: Arc::clone(&self.inner),
         }
     }
 }
@@ -281,7 +292,10 @@ impl<C> LedgerMaspClient<C> {
     #[inline(always)]
     pub fn new(client: C) -> Self {
         Self {
-            client: Arc::new(client),
+            inner: Arc::new(LedgerMaspClientInner {
+                client,
+                semaphore: Semaphore::new(MAX_CONCURRENT_REQUESTS),
+            }),
         }
     }
 }
@@ -289,7 +303,7 @@ impl<C> LedgerMaspClient<C> {
 #[cfg(not(target_family = "wasm"))]
 impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
     async fn last_block_height(&self) -> Result<Option<BlockHeight>, Error> {
-        let maybe_block = crate::rpc::query_block(&*self.client).await?;
+        let maybe_block = crate::rpc::query_block(&self.inner.client).await?;
         Ok(maybe_block.map(|b| b.height))
     }
 
@@ -302,36 +316,43 @@ impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
         let mut txs = vec![];
 
         for height in from.0..=to.0 {
-            // TODO: Fix
-            // if tx_sender.contains_height(height) {
-            //     continue;
-            // }
+            let maybe_txs_results = async {
+                let _permit = self.inner.semaphore.acquire().await.unwrap();
 
-            let txs_results = match get_indexed_masp_events_at_height(
-                &*self.client,
-                height.into(),
-                None,
-            )
-            .await?
-            {
+                get_indexed_masp_events_at_height(
+                    &self.inner.client,
+                    height.into(),
+                    None,
+                )
+                .await
+            };
+
+            let txs_results = match maybe_txs_results.await? {
                 Some(events) => events,
                 None => {
                     continue;
                 }
             };
 
-            // Query the actual block to get the txs bytes. If we only need one
-            // tx it might be slightly better to query the /tx endpoint to
-            // reduce the amount of data sent over the network, but this is a
-            // minimal improvement and it's even hard to tell how many times
-            // we'd need a single masp tx to make this worth it
-            let block = self
-                .client
-                .block(height as u32)
-                .await
-                .map_err(|e| Error::from(QueryError::General(e.to_string())))?
-                .block
-                .data;
+            let block = {
+                let _permit = self.inner.semaphore.acquire().await.unwrap();
+
+                // Query the actual block to get the txs bytes. If we only need
+                // one tx it might be slightly better to query
+                // the /tx endpoint to reduce the amount of data
+                // sent over the network, but this is a
+                // minimal improvement and it's even hard to tell how many times
+                // we'd need a single masp tx to make this worth it
+                self.inner
+                    .client
+                    .block(height as u32)
+                    .await
+                    .map_err(|e| {
+                        Error::from(QueryError::General(e.to_string()))
+                    })?
+                    .block
+                    .data
+            };
 
             for (idx, masp_sections_refs, ibc_tx_data_refs) in txs_results {
                 let tx = Tx::try_from(block[idx.0 as usize].as_ref())
