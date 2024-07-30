@@ -11,13 +11,15 @@ cargo-fuzz = true
 namada_apps_lib = { path = "../crates/apps_lib", features = ["testing"] }
 namada_core = { path = "../crates/core", features = ["testing"] }
 namada_node = { path = "../crates/node", features = ["testing"] }
+namada_sdk = { path = "../crates/sdk", features = ["testing", "arbitrary"] }
 namada_tx = { path = "../crates/tx", features = ["arbitrary"] }
 
+arbitrary = { workspace = true }
 data-encoding = { workspace = true }
-masp_primitives = { workspace = true, features = ["arbitrary"] }
-
 lazy_static.workspace = true
 libfuzzer-sys = "0.4"
+masp_primitives = { workspace = true, features = ["arbitrary"] }
+prost = { workspace = true }
 
 [[bin]]
 name = "txs_mempool"
@@ -43,6 +45,13 @@ bench = false
 [[bin]]
 name = "txs_finalize_block"
 path = "fuzz_targets/txs_finalize_block.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "txs_wasm_run"
+path = "fuzz_targets/txs_wasm_run.rs"
 test = false
 doc = false
 bench = false
