@@ -362,7 +362,7 @@ jobs:
     runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
     container: 
       image: ghcr.io/heliaxdev/namada-ci:namada-main
-    if: github.event.pull_request.draft == false 
+    if: github.event.pull_request.draft == false || startsWith(github.ref, 'mergify/merge-queue')
     timeout-minutes: 25
     needs: [build-wasm]
 
@@ -473,7 +473,7 @@ jobs:
     runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
     container: 
       image: ghcr.io/heliaxdev/namada-ci:namada-main
-    if: github.event.pull_request.draft == false
+    if: github.event.pull_request.draft == false || startsWith(github.ref, 'mergify/merge-queue')
     needs: [build-wasm, build-binaries]
     timeout-minutes: 35
     strategy:
