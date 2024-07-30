@@ -843,11 +843,11 @@ mod dispatcher_tests {
                 // to increment its internal ref count
                 let guard = active_tasks.clone();
 
-                let mut future = Box::pin(async move {
+                let mut never_yielding_future = Box::pin(async move {
                     let _guard = guard;
 
                     // this future never yields, so the only
-                    // wait to early exit is to be interrupted
+                    // way to early exit is to be interrupted
                     // through the wrapped future
                     std::future::pending::<()>().await;
                 });
@@ -857,7 +857,7 @@ mod dispatcher_tests {
                         // which we immediately set above
                         Poll::Ready(())
                     } else {
-                        Pin::new(&mut future).poll(cx)
+                        Pin::new(&mut never_yielding_future).poll(cx)
                     }
                 });
 
