@@ -469,9 +469,6 @@ where
         self.spawn_initial_set_of_tasks(&initial_state);
 
         self.config
-            .fetched_tracker
-            .set_upper_limit(last_query_height.0 - start_height.0 + 1);
-        self.config
             .scanned_tracker
             .set_upper_limit(self.cache.fetched.len() as u64);
 
@@ -513,6 +510,7 @@ where
             self.spawn_update_witness_map(initial_state.last_query_height);
         }
 
+        let mut number_of_fetches = 0;
         let batch_size = self.config.block_batch_size;
         for from in (initial_state.start_height.0
             ..=initial_state.last_query_height.0)
@@ -520,8 +518,13 @@ where
         {
             let to = (from + batch_size as u64 - 1)
                 .min(initial_state.last_query_height.0);
-            self.spawn_fetch_txs(BlockHeight(from), BlockHeight(to));
+            number_of_fetches +=
+                self.spawn_fetch_txs(BlockHeight(from), BlockHeight(to));
         }
+
+        self.config
+            .fetched_tracker
+            .set_upper_limit(number_of_fetches);
 
         for (itx, txs) in self.cache.fetched.iter() {
             self.spawn_trial_decryptions(*itx, txs);
@@ -664,9 +667,12 @@ where
         }));
     }
 
-    fn spawn_fetch_txs(&self, from: BlockHeight, to: BlockHeight) {
+    fn spawn_fetch_txs(&self, from: BlockHeight, to: BlockHeight) -> u64 {
+        let mut spawned_tasks = 0;
+
         for [from, to] in blocks_left_to_fetch(from, to, &self.cache.fetched) {
             let client = self.client.clone();
+            spawned_tasks += to.0 - from.0 + 1;
             self.spawn_async(Box::pin(async move {
                 Message::FetchTxs(
                     client
@@ -680,6 +686,8 @@ where
                 )
             }));
         }
+
+        spawned_tasks
     }
 
     fn spawn_trial_decryptions(&self, itx: IndexedTx, txs: &[Transaction]) {
