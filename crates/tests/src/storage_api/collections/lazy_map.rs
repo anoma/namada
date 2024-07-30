@@ -3,8 +3,8 @@ mod tests {
     use std::collections::BTreeMap;
 
     use borsh::{BorshDeserialize, BorshSerialize};
-    use namada::core::address::{self, Address};
-    use namada::core::storage;
+    use namada_sdk::address::{self, Address};
+    use namada_sdk::storage;
     use namada_tx_prelude::collections::{LazyCollection, LazyMap};
     use namada_tx_prelude::storage::KeySeg;
     use namada_vp_prelude::collection_validation::{self, LazyCollectionExt};

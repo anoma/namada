@@ -1,8 +1,8 @@
 use std::net::SocketAddr;
 use std::ops::ControlFlow;
 
-use namada::control_flow::time;
-use namada::time::{DateTimeUtc, Utc};
+use namada_sdk::control_flow::time;
+use namada_sdk::time::{DateTimeUtc, Utc};
 use tokio::sync::mpsc::UnboundedReceiver;
 
 use crate::facade::tendermint_rpc::client::CompatMode;

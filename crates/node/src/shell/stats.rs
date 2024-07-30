@@ -2,7 +2,7 @@
 
 use std::fmt::Display;
 
-use namada::core::collections::HashMap;
+use namada_sdk::collections::HashMap;
 
 #[derive(Debug, Default, Clone)]
 pub struct InternalStats {

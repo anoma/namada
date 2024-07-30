@@ -34,7 +34,6 @@ namada_gas = { path = "../gas" }
 namada_macros = { path = "../macros" }
 namada_merkle_tree = { path = "../merkle_tree" }
 namada_migrations = { path = "../migrations", optional = true }
-namada_parameters = { path = "../parameters" }
 namada_replay_protection = { path = "../replay_protection" }
 namada_storage = { path = "../storage" }
 namada_tx = { path = "../tx" }
@@ -52,6 +51,7 @@ proptest = { workspace = true, optional = true }
 [dev-dependencies]
 namada_core = { path = "../core", features = ["testing"] }
 namada_merkle_tree = { path = "../merkle_tree", features = ["testing"] }
+namada_parameters = { path = "../parameters", features = ["testing"] }
 
 assert_matches.workspace = true
 chrono.workspace = true

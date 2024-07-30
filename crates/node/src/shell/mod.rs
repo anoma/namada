@@ -10,11 +10,12 @@ mod finalize_block;
 mod governance;
 mod init_chain;
 pub use init_chain::InitChainValidation;
-use namada::vm::wasm::run::check_tx_allowed;
 use namada_apps_lib::config::NodeLocalConfig;
 use namada_sdk::state::StateRead;
+use namada_vm::wasm::run::check_tx_allowed;
 pub mod prepare_proposal;
-use namada::state::State;
+use namada_sdk::ibc;
+use namada_sdk::state::State;
 pub mod process_proposal;
 pub(super) mod queries;
 mod snapshots;
@@ -34,42 +35,40 @@ use std::rc::Rc;
 
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
-use namada::core::address::Address;
-use namada::core::chain::ChainId;
-use namada::core::ethereum_events::EthereumEvent;
-use namada::core::hints;
-use namada::core::key::*;
-use namada::core::storage::{BlockHeight, Key, TxIndex};
-use namada::core::time::DateTimeUtc;
-use namada::ethereum_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
-use namada::ethereum_bridge::protocol::validation::ethereum_events::validate_eth_events_vext;
-use namada::ethereum_bridge::protocol::validation::validator_set_update::validate_valset_upd_vext;
-use namada::ledger::events::log::EventLog;
-use namada::ledger::gas::{Gas, TxGasMeter};
-use namada::ledger::pos::namada_proof_of_stake::types::{
+use namada_apps_lib::wallet::{self, ValidatorData, ValidatorKeys};
+use namada_sdk::address::Address;
+use namada_sdk::chain::ChainId;
+use namada_sdk::eth_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
+use namada_sdk::eth_bridge::protocol::validation::ethereum_events::validate_eth_events_vext;
+use namada_sdk::eth_bridge::protocol::validation::validator_set_update::validate_valset_upd_vext;
+use namada_sdk::eth_bridge::{EthBridgeQueries, EthereumOracleConfig};
+use namada_sdk::ethereum_events::EthereumEvent;
+use namada_sdk::events::log::EventLog;
+use namada_sdk::gas::{Gas, TxGasMeter};
+use namada_sdk::key::*;
+use namada_sdk::migrations::ScheduledMigration;
+use namada_sdk::parameters::{get_gas_scale, validate_tx_bytes};
+use namada_sdk::proof_of_stake::storage::read_pos_params;
+use namada_sdk::proof_of_stake::types::{
     ConsensusValidator, ValidatorSetUpdate,
 };
-use namada::ledger::protocol::ShellParams;
-use namada::ledger::{parameters, protocol};
-use namada::parameters::{get_gas_scale, validate_tx_bytes};
-use namada::proof_of_stake::storage::read_pos_params;
-use namada::state::tx_queue::ExpiredTx;
-use namada::state::{
+use namada_sdk::state::tx_queue::ExpiredTx;
+use namada_sdk::state::{
     DBIter, FullAccessState, Sha256Hasher, StorageHasher, StorageRead,
     TempWlState, WlState, DB, EPOCH_SWITCH_BLOCKS_DELAY,
 };
-use namada::token;
-pub use namada::tx::data::ResultCode;
-use namada::tx::data::{TxType, WrapperTx};
-use namada::tx::{Section, Tx};
-use namada::vm::wasm::{TxCache, VpCache};
-use namada::vm::{WasmCacheAccess, WasmCacheRwAccess};
-use namada::vote_ext::EthereumTxData;
-use namada_apps_lib::wallet::{self, ValidatorData, ValidatorKeys};
-use namada_sdk::eth_bridge::{EthBridgeQueries, EthereumOracleConfig};
-use namada_sdk::migrations;
-use namada_sdk::migrations::ScheduledMigration;
+use namada_sdk::storage::{BlockHeight, Key, TxIndex};
 use namada_sdk::tendermint::AppHash;
+use namada_sdk::time::DateTimeUtc;
+pub use namada_sdk::tx::data::ResultCode;
+use namada_sdk::tx::data::{TxType, WrapperTx};
+use namada_sdk::tx::{Section, Tx};
+use namada_sdk::{
+    eth_bridge, hints, migrations, parameters, proof_of_stake, token,
+};
+use namada_vm::wasm::{TxCache, VpCache};
+use namada_vm::{WasmCacheAccess, WasmCacheRwAccess};
+use namada_vote_ext::EthereumTxData;
 use thiserror::Error;
 use tokio::sync::mpsc::{Receiver, UnboundedSender};
 
@@ -78,10 +77,11 @@ use crate::config::{self, genesis, TendermintMode, ValidatorLocalConfig};
 use crate::facade::tendermint::v0_37::abci::{request, response};
 use crate::facade::tendermint::{self, validator};
 use crate::facade::tendermint_proto::v0_37::crypto::public_key;
+use crate::protocol::ShellParams;
 use crate::shims::abcipp_shim_types::shim;
 use crate::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::shims::abcipp_shim_types::shim::TakeSnapshot;
-use crate::{storage, tendermint_node};
+use crate::{protocol, storage, tendermint_node};
 
 fn key_to_tendermint(
     pk: &common::PublicKey,
@@ -103,7 +103,7 @@ pub enum Error {
     #[error("chain ID mismatch: {0}")]
     ChainId(String),
     #[error("Error decoding a transaction from bytes: {0}")]
-    TxDecoding(namada::tx::DecodeError),
+    TxDecoding(namada_sdk::tx::DecodeError),
     #[error("Error trying to apply a transaction: {0}")]
     TxApply(protocol::Error),
     #[error("{0}")]
@@ -121,7 +121,7 @@ pub enum Error {
     #[error("Error loading wasm: {0}")]
     LoadingWasm(String),
     #[error("Error reading from or writing to storage: {0}")]
-    Storage(#[from] namada::state::StorageError),
+    Storage(#[from] namada_sdk::state::StorageError),
     #[error("Transaction replay attempt: {0}")]
     ReplayAttempt(String),
     #[error("Error with snapshots: {0}")]
@@ -171,7 +171,7 @@ pub fn rollback(config: config::Ledger) -> Result<()> {
     tracing::info!("Rollback Namada state");
 
     db.rollback(tendermint_block_height)
-        .map_err(|e| Error::Storage(namada::state::StorageError::new(e)))
+        .map_err(|e| Error::Storage(namada_sdk::state::StorageError::new(e)))
 }
 
 #[derive(Debug)]
@@ -383,8 +383,8 @@ pub fn is_key_diff_storable(key: &namada_sdk::storage::Key) -> bool {
         && *key != token::storage_key::masp_token_map_key()
         && *key != token::storage_key::masp_assets_hash_key()
         && !token::storage_key::is_masp_commitment_anchor_key(key)
-        || namada::ibc::storage::is_ibc_counter_key(key)
-        || namada::proof_of_stake::storage_key::is_delegation_targets_key(key))
+        || ibc::storage::is_ibc_counter_key(key)
+        || proof_of_stake::storage_key::is_delegation_targets_key(key))
 }
 
 /// Channels for communicating with an Ethereum oracle.
@@ -443,7 +443,7 @@ where
             any(test, feature = "testing", feature = "benches"),
             not(feature = "integration"),
         ))]
-        let native_token = namada::address::testing::nam();
+        let native_token = namada_sdk::address::testing::nam();
         // ... Otherwise, look it up from the genesis file
         #[cfg(not(all(
             any(test, feature = "testing", feature = "benches"),
@@ -851,7 +851,7 @@ where
                 .expect("Validators should have protocol keys");
 
             let signed_tx = EthereumTxData::EthEventsVext(
-                namada::vote_ext::ethereum_events::SignedVext(vote_extension),
+                namada_vote_ext::ethereum_events::SignedVext(vote_extension),
             )
             .sign(protocol_key, self.chain_id.clone())
             .to_bytes();
@@ -886,7 +886,7 @@ where
             // initialized yet.
             let has_key = self
                 .state
-                .has_key(&namada::eth_bridge::storage::active_key())
+                .has_key(&eth_bridge::storage::active_key())
                 .expect(
                     "We should always be able to check whether a key exists \
                      in storage or not",
@@ -906,9 +906,7 @@ where
                 return;
             };
             let active = if !self.state.ethbridge_queries().is_bridge_active() {
-                if !changed_keys
-                    .contains(&namada::eth_bridge::storage::active_key())
-                {
+                if !changed_keys.contains(&eth_bridge::storage::active_key()) {
                     tracing::debug!(
                         "Not starting oracle as the Ethereum bridge is \
                          disabled"
@@ -935,7 +933,7 @@ where
                 "Found Ethereum height from which the Ethereum oracle should \
                  be updated"
             );
-            let config = namada::eth_bridge::oracle::config::Config {
+            let config = eth_bridge::oracle::config::Config {
                 min_confirmations: config.min_confirmations.into(),
                 bridge_contract: config.contracts.bridge.address,
                 start_block,
@@ -974,8 +972,8 @@ where
         tx_bytes: &[u8],
         r#_type: MempoolTxType,
     ) -> response::CheckTx {
-        use namada::tx::data::protocol::ProtocolTxType;
-        use namada::vote_ext::ethereum_tx_data_variants;
+        use namada_sdk::tx::data::protocol::ProtocolTxType;
+        use namada_vote_ext::ethereum_tx_data_variants;
 
         let mut response = response::CheckTx::default();
 
@@ -1182,9 +1180,7 @@ where
 
                 // Max block gas
                 let block_gas_limit: Gas = Gas::from_whole_units(
-                    namada::parameters::get_max_block_gas(&self.state)
-                        .unwrap()
-                        .into(),
+                    parameters::get_max_block_gas(&self.state).unwrap().into(),
                     gas_scale,
                 )
                 .expect("Gas limit from parameter must not overflow");
@@ -1242,11 +1238,18 @@ where
                     }
                 }
 
+                // This is safe as neither the inner `db` nor `in_mem` are
+                // actually mutable, only the `write_log` which is owned by
+                // the `TempWlState` struct. The `TempWlState` will be dropped
+                // before any other ABCI request is processed.
+                let mut temp_state =
+                    unsafe { self.state.with_static_temp_write_log() };
+
                 // Validate wrapper fees
                 if let Err(e) = mempool_fee_check(
                     &mut ShellParams::new(
                         &RefCell::new(gas_meter),
-                        &mut self.state.with_temp_write_log(),
+                        &mut temp_state,
                         &mut self.vp_wasm_cache.clone(),
                         &mut self.tx_wasm_cache.clone(),
                     ),
@@ -1280,21 +1283,18 @@ where
         // because we're using domain types in InitChain, but FinalizeBlock is
         // shimmed with a different old type. The joy...
         mut validator_conv: F,
-    ) -> namada::state::StorageResult<Vec<V>>
+    ) -> namada_sdk::state::StorageResult<Vec<V>>
     where
         F: FnMut(common::PublicKey, i64) -> V,
     {
-        use namada::ledger::pos::namada_proof_of_stake;
-
         let (current_epoch, _gas) = self.state.in_mem().get_current_epoch();
-        let pos_params =
-            namada_proof_of_stake::storage::read_pos_params(&self.state)
-                .expect("Could not find the PoS parameters");
+        let pos_params = proof_of_stake::storage::read_pos_params(&self.state)
+            .expect("Could not find the PoS parameters");
 
         let validator_set_update_fn = if is_genesis {
-            namada_proof_of_stake::genesis_validator_set_tendermint
+            proof_of_stake::genesis_validator_set_tendermint
         } else {
-            namada_proof_of_stake::validator_set_update::validator_set_update_comet
+            proof_of_stake::validator_set_update::validator_set_update_comet
         };
 
         validator_set_update_fn(
@@ -1376,7 +1376,7 @@ where
 
 // Perform the fee check in mempool
 fn mempool_fee_check<D, H, CA>(
-    shell_params: &mut ShellParams<'_, TempWlState<'_, D, H>, D, H, CA>,
+    shell_params: &mut ShellParams<'_, TempWlState<'static, D, H>, D, H, CA>,
     tx: &Tx,
     wrapper: &WrapperTx,
 ) -> Result<()>
@@ -1385,15 +1385,13 @@ where
     H: StorageHasher + Sync + 'static,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    let minimum_gas_price = namada::ledger::parameters::read_gas_cost(
-        shell_params.state,
-        &wrapper.fee.token,
-    )
-    .expect("Must be able to read gas cost parameter")
-    .ok_or(Error::TxApply(protocol::Error::FeeError(format!(
-        "The provided {} token is not allowed for fee payment",
-        wrapper.fee.token
-    ))))?;
+    let minimum_gas_price =
+        parameters::read_gas_cost(shell_params.state, &wrapper.fee.token)
+            .expect("Must be able to read gas cost parameter")
+            .ok_or(Error::TxApply(protocol::Error::FeeError(format!(
+                "The provided {} token is not allowed for fee payment",
+                wrapper.fee.token
+            ))))?;
 
     fee_data_check(wrapper, minimum_gas_price, shell_params)?;
     protocol::check_fees(shell_params, tx, wrapper)
@@ -1447,17 +1445,17 @@ mod test_utils {
     use std::ops::{Deref, DerefMut};
 
     use data_encoding::HEXUPPER;
-    use namada::core::ethereum_events::Uint;
-    use namada::core::hash::Hash;
-    use namada::core::keccak::KeccakHash;
-    use namada::core::key::*;
-    use namada::core::storage::{Epoch, Header};
-    use namada::ledger::events::Event;
-    use namada::proof_of_stake::parameters::PosParams;
-    use namada::proof_of_stake::storage::validator_consensus_key_handle;
-    use namada::state::mockdb::MockDB;
-    use namada::state::{LastBlock, StorageWrite};
-    use namada::tendermint::abci::types::VoteInfo;
+    use namada_sdk::ethereum_events::Uint;
+    use namada_sdk::events::Event;
+    use namada_sdk::hash::Hash;
+    use namada_sdk::keccak::KeccakHash;
+    use namada_sdk::key::*;
+    use namada_sdk::proof_of_stake::parameters::PosParams;
+    use namada_sdk::proof_of_stake::storage::validator_consensus_key_handle;
+    use namada_sdk::state::mockdb::MockDB;
+    use namada_sdk::state::{LastBlock, StorageWrite};
+    use namada_sdk::storage::{Epoch, Header};
+    use namada_sdk::tendermint::abci::types::VoteInfo;
     use tempfile::tempdir;
     use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 
@@ -1550,7 +1548,7 @@ mod test_utils {
 
     /// Get the default bridge pool vext bytes to be signed.
     pub fn get_bp_bytes_to_sign() -> KeccakHash {
-        use namada::core::keccak::{Hasher, Keccak};
+        use namada_sdk::keccak::{Hasher, Keccak};
 
         let root = [0; 32];
         let nonce = Uint::from(0).to_bytes();
@@ -1931,8 +1929,8 @@ mod test_utils {
 
     /// Set the Ethereum bridge to be inactive
     pub(super) fn deactivate_bridge(shell: &mut TestShell) {
-        use namada::eth_bridge::storage::active_key;
-        use namada::eth_bridge::storage::eth_bridge_queries::EthBridgeStatus;
+        use eth_bridge::storage::active_key;
+        use eth_bridge::storage::eth_bridge_queries::EthBridgeStatus;
         shell
             .state
             .write(&active_key(), EthBridgeStatus::Disabled)
@@ -1987,17 +1985,17 @@ mod test_utils {
 
 #[cfg(test)]
 mod shell_tests {
-    use namada::core::storage::Epoch;
-    use namada::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
-    use namada::token::read_denom;
-    use namada::tx::data::protocol::{ProtocolTx, ProtocolTxType};
-    use namada::tx::data::Fee;
-    use namada::tx::{Authorization, Code, Data, Signed};
-    use namada::vote_ext::{
+    use eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
+    use namada_sdk::address;
+    use namada_sdk::storage::Epoch;
+    use namada_sdk::token::read_denom;
+    use namada_sdk::tx::data::protocol::{ProtocolTx, ProtocolTxType};
+    use namada_sdk::tx::data::Fee;
+    use namada_sdk::tx::{Authorization, Code, Data, Signed};
+    use namada_vote_ext::{
         bridge_pool_roots, ethereum_events, ethereum_tx_data_variants,
     };
-    use namada::{address, replay_protection};
-    use wallet;
+    use {namada_replay_protection as replay_protection, wallet};
 
     use super::*;
     use crate::shell::token::DenominatedAmount;
@@ -2102,7 +2100,7 @@ mod shell_tests {
     /// not validated by `CheckTx`.
     #[test]
     fn test_outdated_nonce_mempool_validate() {
-        use namada::core::storage::InnerEthEventsQueue;
+        use namada_sdk::storage::InnerEthEventsQueue;
 
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
 
@@ -2457,7 +2455,7 @@ mod shell_tests {
         )));
 
         // Write wrapper hash to storage
-        let mut batch = namada::state::testing::TestState::batch();
+        let mut batch = namada_sdk::state::testing::TestState::batch();
         let wrapper_hash = wrapper.header_hash();
         let wrapper_hash_key = replay_protection::current_key(&wrapper_hash);
         shell

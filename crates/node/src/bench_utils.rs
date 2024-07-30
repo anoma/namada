@@ -17,79 +17,76 @@ use borsh_ext::BorshSerializeExt;
 use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use masp_proofs::prover::LocalTxProver;
-use namada::address::MASP;
-use namada::core::address::{self, Address, InternalAddress};
-use namada::core::chain::ChainId;
-use namada::core::key::common::SecretKey;
-use namada::core::masp::{
-    ExtendedViewingKey, PaymentAddress, TransferSource, TransferTarget,
-};
-use namada::core::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
-use namada::core::time::DateTimeUtc;
-use namada::events::extend::{ComposeEvent, MaspTxBatchRefs, MaspTxBlockIndex};
-use namada::events::Event;
-use namada::governance::storage::proposal::ProposalType;
-use namada::governance::InitProposalData;
-use namada::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
-use namada::ibc::apps::transfer::types::packet::PacketData;
-use namada::ibc::apps::transfer::types::PrefixedCoin;
-use namada::ibc::clients::tendermint::client_state::ClientState;
-use namada::ibc::clients::tendermint::consensus_state::ConsensusState;
-use namada::ibc::clients::tendermint::types::{
-    AllowUpdate, ClientState as ClientStateType,
-    ConsensusState as ConsensusStateType, TrustThreshold,
-};
-use namada::ibc::core::channel::types::channel::{
-    ChannelEnd, Counterparty as ChannelCounterparty, Order, State,
-};
-use namada::ibc::core::channel::types::timeout::TimeoutHeight;
-use namada::ibc::core::channel::types::Version as ChannelVersion;
-use namada::ibc::core::client::types::Height as IbcHeight;
-use namada::ibc::core::commitment_types::commitment::{
-    CommitmentPrefix, CommitmentRoot,
-};
-use namada::ibc::core::commitment_types::specs::ProofSpecs;
-use namada::ibc::core::connection::types::version::Version;
-use namada::ibc::core::connection::types::{
-    ConnectionEnd, Counterparty, State as ConnectionState,
-};
-use namada::ibc::core::host::types::identifiers::{
-    ChainId as IbcChainId, ChannelId as NamadaChannelId, ChannelId, ClientId,
-    ConnectionId, ConnectionId as NamadaConnectionId, PortId as NamadaPortId,
-    PortId,
-};
-use namada::ibc::core::host::types::path::{
-    ClientConsensusStatePath, ClientStatePath, Path as IbcPath,
-};
-use namada::ibc::primitives::proto::{Any, Protobuf};
-use namada::ibc::primitives::Timestamp as IbcTimestamp;
-use namada::ibc::storage::{mint_limit_key, port_key, throughput_limit_key};
-use namada::ibc::MsgTransfer;
-use namada::io::StdIo;
-use namada::ledger::dry_run_tx;
-use namada::ledger::gas::TxGasMeter;
-use namada::ledger::ibc::storage::{channel_key, connection_key};
-use namada::ledger::native_vp::ibc::get_dummy_header;
-use namada::ledger::queries::{
-    Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
-};
-use namada::masp::MaspTxRefs;
-use namada::state::StorageRead;
-use namada::token::{Amount, DenominatedAmount, Transfer};
-use namada::tx::data::pos::Bond;
-use namada::tx::data::{BatchedTxResult, Fee, TxResult, VpsResult};
-use namada::tx::event::{new_tx_event, Batch};
-use namada::tx::{
-    Authorization, BatchedTx, BatchedTxRef, Code, Data, Section, Tx,
-};
-use namada::vm::wasm::run;
-use namada::{proof_of_stake, tendermint};
 use namada_apps_lib::cli;
 use namada_apps_lib::cli::context::FromContext;
 use namada_apps_lib::cli::Context;
 use namada_apps_lib::wallet::{defaults, CliWalletUtils};
+use namada_sdk::address::{self, Address, InternalAddress, MASP};
+use namada_sdk::chain::ChainId;
+use namada_sdk::events::extend::{
+    ComposeEvent, MaspTxBatchRefs, MaspTxBlockIndex,
+};
+use namada_sdk::events::Event;
+use namada_sdk::gas::TxGasMeter;
+use namada_sdk::governance::storage::proposal::ProposalType;
+use namada_sdk::governance::InitProposalData;
+use namada_sdk::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
+use namada_sdk::ibc::apps::transfer::types::packet::PacketData;
+use namada_sdk::ibc::apps::transfer::types::PrefixedCoin;
+use namada_sdk::ibc::clients::tendermint::client_state::ClientState;
+use namada_sdk::ibc::clients::tendermint::consensus_state::ConsensusState;
+use namada_sdk::ibc::clients::tendermint::types::{
+    AllowUpdate, ClientState as ClientStateType,
+    ConsensusState as ConsensusStateType, TrustThreshold,
+};
+use namada_sdk::ibc::core::channel::types::channel::{
+    ChannelEnd, Counterparty as ChannelCounterparty, Order, State,
+};
+use namada_sdk::ibc::core::channel::types::timeout::TimeoutHeight;
+use namada_sdk::ibc::core::channel::types::Version as ChannelVersion;
+use namada_sdk::ibc::core::client::types::Height as IbcHeight;
+use namada_sdk::ibc::core::commitment_types::commitment::{
+    CommitmentPrefix, CommitmentRoot,
+};
+use namada_sdk::ibc::core::commitment_types::specs::ProofSpecs;
+use namada_sdk::ibc::core::connection::types::version::Version;
+use namada_sdk::ibc::core::connection::types::{
+    ConnectionEnd, Counterparty, State as ConnectionState,
+};
+use namada_sdk::ibc::core::host::types::identifiers::{
+    ChainId as IbcChainId, ChannelId as NamadaChannelId, ChannelId, ClientId,
+    ConnectionId, ConnectionId as NamadaConnectionId, PortId as NamadaPortId,
+    PortId,
+};
+use namada_sdk::ibc::core::host::types::path::{
+    ClientConsensusStatePath, ClientStatePath, Path as IbcPath,
+};
+use namada_sdk::ibc::primitives::proto::{Any, Protobuf};
+use namada_sdk::ibc::primitives::Timestamp as IbcTimestamp;
+use namada_sdk::ibc::storage::{
+    channel_key, connection_key, mint_limit_key, port_key, throughput_limit_key,
+};
+use namada_sdk::ibc::MsgTransfer;
+use namada_sdk::io::StdIo;
+use namada_sdk::key::common::SecretKey;
 use namada_sdk::masp::{
-    self, ContextSyncStatus, MaspTransferData, ShieldedContext, ShieldedUtils,
+    self, ContextSyncStatus, ExtendedViewingKey, MaspTransferData, MaspTxRefs,
+    PaymentAddress, ShieldedContext, ShieldedUtils, TransferSource,
+    TransferTarget,
+};
+use namada_sdk::queries::{
+    Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
+};
+use namada_sdk::state::StorageRead;
+use namada_sdk::storage::testing::get_dummy_header;
+use namada_sdk::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
+use namada_sdk::time::DateTimeUtc;
+use namada_sdk::token::{Amount, DenominatedAmount, Transfer};
+use namada_sdk::tx::data::pos::Bond;
+use namada_sdk::tx::data::{BatchedTxResult, Fee, TxResult, VpsResult};
+use namada_sdk::tx::event::{new_tx_event, Batch};
+use namada_sdk::tx::{
+    Authorization, BatchedTx, BatchedTxRef, Code, Data, Section, Tx,
 };
 pub use namada_sdk::tx::{
     TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
@@ -105,18 +102,19 @@ pub use namada_sdk::tx::{
     TX_WITHDRAW_WASM, VP_USER_WASM,
 };
 use namada_sdk::wallet::Wallet;
-use namada_sdk::{Namada, NamadaImpl};
+use namada_sdk::{parameters, proof_of_stake, tendermint, Namada, NamadaImpl};
 use namada_test_utils::tx_data::TxWriteData;
+use namada_vm::wasm::run;
 use rand_core::OsRng;
 use tempfile::TempDir;
 
-use crate::config;
 use crate::config::global::GlobalConfig;
 use crate::config::TendermintMode;
 use crate::facade::tendermint::v0_37::abci::request::InitChain;
 use crate::facade::tendermint_proto::google::protobuf::Timestamp;
 use crate::facade::tendermint_rpc;
 use crate::shell::Shell;
+use crate::{config, dry_run_tx};
 
 pub const WASM_DIR: &str = "../../wasm";
 
@@ -299,7 +297,7 @@ impl BenchShell {
         extra_sections: Option<Vec<Section>>,
         signers: Vec<&SecretKey>,
     ) -> BatchedTx {
-        let mut tx = Tx::from_type(namada::tx::data::TxType::Raw);
+        let mut tx = Tx::from_type(namada_sdk::tx::data::TxType::Raw);
 
         // NOTE: here we use the code hash to avoid including the cost for the
         // wasm validation. The wasm codes (both txs and vps) are always
@@ -344,7 +342,7 @@ impl BenchShell {
         data: Vec<u8>,
     ) -> BatchedTx {
         // This function avoid serializaing the tx data with Borsh
-        let mut tx = Tx::from_type(namada::tx::data::TxType::Raw);
+        let mut tx = Tx::from_type(namada_sdk::tx::data::TxType::Raw);
         let code_hash = self
             .read_storage_key(&Key::wasm_hash(wasm_code_path))
             .unwrap();
@@ -375,7 +373,7 @@ impl BenchShell {
         let timeout_height = TimeoutHeight::At(IbcHeight::new(0, 100).unwrap());
 
         #[allow(clippy::disallowed_methods)]
-        let now: namada::tendermint::Time =
+        let now: namada_sdk::tendermint::Time =
             DateTimeUtc::now().try_into().unwrap();
         let now: IbcTimestamp = now.into();
         let timeout_timestamp =
@@ -437,8 +435,15 @@ impl BenchShell {
         )
         .unwrap();
 
-        if self.state.is_masp_new_epoch(true).unwrap() {
-            namada::token::conversion::update_allowed_conversions(
+        let masp_epoch_multiplier =
+            parameters::read_masp_epoch_multiplier_parameter(&self.state)
+                .unwrap();
+        if self
+            .state
+            .is_masp_new_epoch(true, masp_epoch_multiplier)
+            .unwrap()
+        {
+            namada_sdk::token::conversion::update_allowed_conversions(
                 &mut self.state,
             )
             .unwrap();
@@ -481,7 +486,7 @@ impl BenchShell {
 
         // Set consensus state
         #[allow(clippy::disallowed_methods)]
-        let now: namada::tendermint::Time =
+        let now: namada_sdk::tendermint::Time =
             DateTimeUtc::now().try_into().unwrap();
         let consensus_key = addr_key.join(&Key::from(
             IbcPath::ClientConsensusState(ClientConsensusStatePath {
@@ -607,7 +612,7 @@ impl BenchShell {
     // Commit a masp transaction and cache the tx and the changed keys for
     // client queries
     pub fn commit_masp_tx(&mut self, mut masp_tx: Tx) {
-        use namada::core::key::RefTo;
+        use namada_sdk::key::RefTo;
         masp_tx.add_wrapper(
             Fee {
                 amount_per_gas_unit: DenominatedAmount::native(0.into()),
@@ -626,7 +631,7 @@ pub fn generate_foreign_key_tx(signer: &SecretKey) -> BatchedTx {
     let wasm_code =
         std::fs::read("../../wasm_for_tests/tx_write.wasm").unwrap();
 
-    let mut tx = Tx::from_type(namada::tx::data::TxType::Raw);
+    let mut tx = Tx::from_type(namada_sdk::tx::data::TxType::Raw);
     tx.set_code(Code::new(wasm_code, None));
     tx.set_data(Data::new(
         TxWriteData {
@@ -790,17 +795,24 @@ impl Client for BenchShell {
             prove,
         };
 
-        let ctx = RequestCtx {
-            state: &self.state,
-            event_log: self.event_log(),
-            vp_wasm_cache: self.vp_wasm_cache.read_only(),
-            tx_wasm_cache: self.tx_wasm_cache.read_only(),
-            storage_read_past_height_limit: None,
-        };
-
         if request.path == RPC.shell().dry_run_tx_path() {
-            dry_run_tx(ctx, &request)
+            dry_run_tx(
+                // This is safe because nothing else is using `self.state`
+                // concurrently and the `TempWlState` will be dropped right
+                // after dry-run.
+                unsafe { self.state.read_only().with_static_temp_write_log() },
+                self.vp_wasm_cache.read_only(),
+                self.tx_wasm_cache.read_only(),
+                &request,
+            )
         } else {
+            let ctx = RequestCtx {
+                state: &self.state,
+                event_log: self.event_log(),
+                vp_wasm_cache: self.vp_wasm_cache.read_only(),
+                tx_wasm_cache: self.tx_wasm_cache.read_only(),
+                storage_read_past_height_limit: None,
+            };
             RPC.handle(ctx, &request)
         }
         .map_err(|_| std::io::Error::from(std::io::ErrorKind::NotFound))
@@ -896,7 +908,7 @@ impl Client for BenchShell {
         tendermint_rpc::Error,
     >
     where
-        H: TryInto<namada::tendermint::block::Height> + Send,
+        H: TryInto<namada_sdk::tendermint::block::Height> + Send,
     {
         // NOTE: atm this is only needed to query block results at a specific
         // height for masp transactions
@@ -950,7 +962,7 @@ impl Client for BenchShell {
                                     .unwrap(),
                             ])))
                             .into();
-                        namada::tendermint::abci::Event::from(event)
+                        namada_sdk::tendermint::abci::Event::from(event)
                     })
                     .collect(),
             )
@@ -966,7 +978,7 @@ impl Client for BenchShell {
             end_block_events,
             validator_updates: vec![],
             consensus_param_updates: None,
-            app_hash: namada::tendermint::hash::AppHash::default(),
+            app_hash: namada_sdk::tendermint::hash::AppHash::default(),
         })
     }
 }
@@ -1193,7 +1205,7 @@ impl BenchShieldedCtx {
         let timeout_height = TimeoutHeight::At(IbcHeight::new(0, 100).unwrap());
 
         #[allow(clippy::disallowed_methods)]
-        let now: namada::tendermint::Time =
+        let now: namada_sdk::tendermint::Time =
             DateTimeUtc::now().try_into().unwrap();
         let now: IbcTimestamp = now.into();
         let timeout_timestamp =

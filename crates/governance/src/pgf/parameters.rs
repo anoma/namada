@@ -6,7 +6,7 @@ use namada_core::dec::Dec;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
-use namada_storage::{Result, StorageRead, StorageWrite};
+use namada_state::{StorageRead, StorageResult, StorageWrite};
 use serde::{Deserialize, Serialize};
 
 use super::storage::keys as pgf_storage;
@@ -51,7 +51,7 @@ impl Default for PgfParameters {
 
 impl PgfParameters {
     /// Initialize governance parameters into storage
-    pub fn init_storage<S>(&self, storage: &mut S) -> Result<()>
+    pub fn init_storage<S>(&self, storage: &mut S) -> StorageResult<()>
     where
         S: StorageRead + StorageWrite,
     {

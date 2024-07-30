@@ -24,7 +24,6 @@ mod shell;
 mod types;
 pub mod vp;
 
-#[cfg(any(test, feature = "async-client"))]
 const HEIGHT_CAST_ERR: &str = "Failed to cast block height";
 
 // Most commonly expected patterns should be declared first
@@ -212,7 +211,6 @@ use crate::tendermint::block::Height;
 /// A client with async request dispatcher method, which can be used to invoke
 /// type-safe methods from a root [`Router`], generated
 /// via `router!` macro.
-#[cfg(any(test, feature = "async-client"))]
 #[cfg_attr(feature = "async-send", async_trait::async_trait)]
 #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
 pub trait Client {

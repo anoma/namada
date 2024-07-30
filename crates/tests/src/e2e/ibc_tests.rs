@@ -16,58 +16,6 @@ use std::path::{Path, PathBuf};
 
 use color_eyre::eyre::Result;
 use eyre::eyre;
-use namada::core::address::{Address, InternalAddress};
-use namada::core::key::PublicKey;
-use namada::core::storage::{BlockHeight, Epoch, Key};
-use namada::core::token::Amount;
-use namada::governance::cli::onchain::PgfFunding;
-use namada::governance::storage::proposal::{PGFIbcTarget, PGFTarget};
-use namada::ibc::apps::transfer::types::VERSION as ICS20_VERSION;
-use namada::ibc::clients::tendermint::client_state::ClientState as TmClientState;
-use namada::ibc::clients::tendermint::consensus_state::ConsensusState as TmConsensusState;
-use namada::ibc::clients::tendermint::types::{
-    AllowUpdate, ClientState as TmClientStateType, Header as IbcTmHeader,
-    TrustThreshold,
-};
-use namada::ibc::core::channel::types::channel::Order as ChanOrder;
-use namada::ibc::core::channel::types::msgs::{
-    MsgAcknowledgement, MsgChannelOpenAck, MsgChannelOpenConfirm,
-    MsgChannelOpenInit, MsgChannelOpenTry, MsgRecvPacket as IbcMsgRecvPacket,
-    MsgTimeout as IbcMsgTimeout,
-};
-use namada::ibc::core::channel::types::packet::Packet;
-use namada::ibc::core::channel::types::Version as ChanVersion;
-use namada::ibc::core::client::context::client_state::ClientStateCommon;
-use namada::ibc::core::client::types::msgs::{
-    MsgCreateClient, MsgUpdateClient,
-};
-use namada::ibc::core::client::types::Height;
-use namada::ibc::core::commitment_types::commitment::{
-    CommitmentPrefix, CommitmentProofBytes,
-};
-use namada::ibc::core::commitment_types::merkle::MerkleProof;
-use namada::ibc::core::connection::types::msgs::{
-    MsgConnectionOpenAck, MsgConnectionOpenConfirm, MsgConnectionOpenInit,
-    MsgConnectionOpenTry,
-};
-use namada::ibc::core::connection::types::version::Version as ConnVersion;
-use namada::ibc::core::connection::types::Counterparty as ConnCounterparty;
-use namada::ibc::core::host::types::identifiers::{
-    ChainId, ChannelId, ClientId, ConnectionId, PortId,
-};
-use namada::ibc::event as ibc_events;
-use namada::ibc::event::IbcEventType;
-use namada::ibc::primitives::proto::Any;
-use namada::ibc::primitives::{Signer, ToProto};
-use namada::ledger::ibc::storage::*;
-use namada::ledger::parameters::{storage as param_storage, EpochDuration};
-use namada::ledger::pgf::ADDRESS as PGF_ADDRESS;
-use namada::ledger::queries::RPC;
-use namada::ledger::storage::ics23_specs::ibc_proof_specs;
-use namada::sdk::events::extend::ReadFromEventAttributes;
-use namada::state::Sha256Hasher;
-use namada::tendermint::abci::Event as AbciEvent;
-use namada::tendermint::block::Height as TmHeight;
 use namada_apps_lib::cli::context::ENV_VAR_CHAIN_ID;
 use namada_apps_lib::client::rpc::{
     query_pos_parameters, query_storage_value, query_storage_value_bytes,
@@ -80,7 +28,59 @@ use namada_apps_lib::facade::tendermint::block::Header as TmHeader;
 use namada_apps_lib::facade::tendermint::merkle::proof::ProofOps as TmProof;
 use namada_apps_lib::facade::tendermint_rpc::{Client, HttpClient, Url};
 use namada_core::string_encoding::StringEncoded;
+use namada_sdk::address::{Address, InternalAddress};
+use namada_sdk::events::extend::ReadFromEventAttributes;
+use namada_sdk::governance::cli::onchain::PgfFunding;
+use namada_sdk::governance::pgf::ADDRESS as PGF_ADDRESS;
+use namada_sdk::governance::storage::proposal::{PGFIbcTarget, PGFTarget};
+use namada_sdk::ibc::apps::transfer::types::VERSION as ICS20_VERSION;
+use namada_sdk::ibc::clients::tendermint::client_state::ClientState as TmClientState;
+use namada_sdk::ibc::clients::tendermint::consensus_state::ConsensusState as TmConsensusState;
+use namada_sdk::ibc::clients::tendermint::types::{
+    AllowUpdate, ClientState as TmClientStateType, Header as IbcTmHeader,
+    TrustThreshold,
+};
+use namada_sdk::ibc::core::channel::types::channel::Order as ChanOrder;
+use namada_sdk::ibc::core::channel::types::msgs::{
+    MsgAcknowledgement, MsgChannelOpenAck, MsgChannelOpenConfirm,
+    MsgChannelOpenInit, MsgChannelOpenTry, MsgRecvPacket as IbcMsgRecvPacket,
+    MsgTimeout as IbcMsgTimeout,
+};
+use namada_sdk::ibc::core::channel::types::packet::Packet;
+use namada_sdk::ibc::core::channel::types::Version as ChanVersion;
+use namada_sdk::ibc::core::client::context::client_state::ClientStateCommon;
+use namada_sdk::ibc::core::client::types::msgs::{
+    MsgCreateClient, MsgUpdateClient,
+};
+use namada_sdk::ibc::core::client::types::Height;
+use namada_sdk::ibc::core::commitment_types::commitment::{
+    CommitmentPrefix, CommitmentProofBytes,
+};
+use namada_sdk::ibc::core::commitment_types::merkle::MerkleProof;
+use namada_sdk::ibc::core::connection::types::msgs::{
+    MsgConnectionOpenAck, MsgConnectionOpenConfirm, MsgConnectionOpenInit,
+    MsgConnectionOpenTry,
+};
+use namada_sdk::ibc::core::connection::types::version::Version as ConnVersion;
+use namada_sdk::ibc::core::connection::types::Counterparty as ConnCounterparty;
+use namada_sdk::ibc::core::host::types::identifiers::{
+    ChainId, ChannelId, ClientId, ConnectionId, PortId,
+};
+use namada_sdk::ibc::event as ibc_events;
+use namada_sdk::ibc::event::IbcEventType;
+use namada_sdk::ibc::primitives::proto::Any;
+use namada_sdk::ibc::primitives::{Signer, ToProto};
+use namada_sdk::ibc::storage::*;
+use namada_sdk::key::PublicKey;
 use namada_sdk::masp::fs::FsShieldedUtils;
+use namada_sdk::parameters::{storage as param_storage, EpochDuration};
+use namada_sdk::queries::RPC;
+use namada_sdk::state::ics23_specs::ibc_proof_specs;
+use namada_sdk::state::Sha256Hasher;
+use namada_sdk::storage::{BlockHeight, Epoch, Key};
+use namada_sdk::tendermint::abci::Event as AbciEvent;
+use namada_sdk::tendermint::block::Height as TmHeight;
+use namada_sdk::token::Amount;
 use namada_test_utils::TestWasms;
 use prost::Message;
 use setup::constants::*;

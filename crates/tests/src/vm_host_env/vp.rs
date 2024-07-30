@@ -1,18 +1,17 @@
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 
-use namada::core::address::{self, Address};
-use namada::core::storage::{self, Key, TxIndex};
-use namada::gas::TxGasMeter;
-use namada::ledger::gas::VpGasMeter;
-use namada::ledger::storage::mockdb::MockDB;
-use namada::ledger::storage::testing::TestState;
-use namada::tx::data::TxType;
-use namada::tx::Tx;
-use namada::vm::prefix_iter::PrefixIterators;
-use namada::vm::wasm::{self, VpCache};
-use namada::vm::{self, WasmCacheRwAccess};
+use namada_sdk::address::{self, Address};
+use namada_sdk::gas::{TxGasMeter, VpGasMeter};
+use namada_sdk::state::mockdb::MockDB;
+use namada_sdk::state::prefix_iter::PrefixIterators;
+use namada_sdk::state::testing::TestState;
+use namada_sdk::storage::{self, Key, TxIndex};
+use namada_sdk::tx::data::TxType;
+use namada_sdk::tx::Tx;
 use namada_tx_prelude::BatchedTx;
+use namada_vm::wasm::{self, VpCache};
+use namada_vm::WasmCacheRwAccess;
 use namada_vp_prelude::Ctx;
 use tempfile::TempDir;
 
@@ -57,10 +56,7 @@ pub struct TestVpEnv {
 
 impl Default for TestVpEnv {
     fn default() -> Self {
-        #[cfg(feature = "wasm-runtime")]
-        let eval_runner = namada::vm::wasm::run::VpEvalWasm::default();
-        #[cfg(not(feature = "wasm-runtime"))]
-        let eval_runner = native_vp_host_env::VpEval;
+        let eval_runner = wasm::run::VpEvalWasm::default();
 
         let (vp_wasm_cache, vp_cache_dir) =
             wasm::compilation_cache::common::testing::cache();
@@ -112,19 +108,16 @@ mod native_vp_host_env {
 
     // TODO replace with `std::concat_idents` once stabilized (https://github.com/rust-lang/rust/issues/29599)
     use concat_idents::concat_idents;
-    use namada::state::StateRead;
-    use namada::vm::host_env::*;
+    use namada_sdk::state::StateRead;
+    use namada_vm::host_env::*;
 
     use super::*;
 
-    #[cfg(feature = "wasm-runtime")]
-    pub type VpEval = namada::vm::wasm::run::VpEvalWasm<
+    pub type VpEval = namada_vm::wasm::run::VpEvalWasm<
         <TestState as StateRead>::D,
         <TestState as StateRead>::H,
         WasmCacheRwAccess,
     >;
-    #[cfg(not(feature = "wasm-runtime"))]
-    pub struct VpEval;
 
     thread_local! {
         /// A [`TestVpEnv`] that can be used for VP host env functions calls
@@ -222,26 +215,6 @@ mod native_vp_host_env {
         set(vp_env);
     }
 
-    #[cfg(not(feature = "wasm-runtime"))]
-    impl VpEvaluator for VpEval {
-        type CA = WasmCacheRwAccess;
-        type Db = MockDB;
-        type Eval = VpEval;
-        type H = Sha256Hasher;
-
-        fn eval(
-            &self,
-            _ctx: VpCtx<'static, Self::Db, Self::H, Self::Eval, Self::CA>,
-            _vp_code_hash: Vec<u8>,
-            _input_data: Vec<u8>,
-        ) -> namada::core::internal::HostEnvResult {
-            unimplemented!(
-                "The \"wasm-runtime\" feature must be enabled to test with \
-                 the `eval` function."
-            )
-        }
-    }
-
     /// A helper macro to create implementations of the host environment
     /// functions exported to wasm, which uses the environment from the
     /// `ENV` variable.
@@ -267,7 +240,7 @@ mod native_vp_host_env {
                                 vp_cache_dir: _,
                             }: &mut TestVpEnv| {
 
-                            let mut env = vm::host_env::testing::vp_env(
+                            let mut env = namada_vm::host_env::testing::vp_env(
                                 addr,
                                 state,
                                 iterators,
@@ -312,7 +285,7 @@ mod native_vp_host_env {
                                 vp_cache_dir: _,
                             }: &mut TestVpEnv| {
 
-                            let mut env = vm::host_env::testing::vp_env(
+                            let mut env = namada_vm::host_env::testing::vp_env(
                                 addr,
                                 state,
                                 iterators,

@@ -117,6 +117,16 @@ impl<S> IbcStorageContext for IbcProtocolContext<'_, S>
 where
     S: State + EmitEvents,
 {
+    type Storage = Self;
+
+    fn storage(&self) -> &Self::Storage {
+        self
+    }
+
+    fn storage_mut(&mut self) -> &mut Self::Storage {
+        self
+    }
+
     fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<(), StorageError> {
         // There's no gas cost for protocol, we can ignore result
         self.state.write_log_mut().emit_event(event);

@@ -28,7 +28,7 @@ pub mod storage;
 pub mod storage_key;
 pub mod types;
 pub mod validator_set_update;
-// pub mod validation;
+pub mod vp;
 
 mod error;
 #[cfg(test)]
@@ -37,13 +37,14 @@ mod tests;
 use core::fmt::Debug;
 use std::cmp;
 use std::collections::{BTreeMap, BTreeSet};
+use std::marker::PhantomData;
 
 use epoched::EpochOffset;
 pub use error::*;
 use namada_core::address::{Address, InternalAddress};
 use namada_core::arith::checked;
 use namada_core::collections::HashSet;
-use namada_core::dec::Dec;
+pub use namada_core::dec::Dec;
 use namada_core::key::common;
 use namada_core::storage::BlockHeight;
 pub use namada_core::storage::{Epoch, Key, KeySeg};
@@ -53,7 +54,9 @@ use namada_storage::collections::lazy_map::{self, Collectable, LazyMap};
 use namada_storage::{OptionExt, StorageRead, StorageWrite};
 pub use namada_trans_token as token;
 pub use parameters::{OwnedPosParams, PosParams};
+pub use pos_queries::PosQueries;
 use storage::write_validator_name;
+pub use types::GenesisValidator;
 use types::{into_tm_voting_power, DelegationEpochs};
 
 use crate::queries::{find_bonds, has_bonds};
@@ -104,6 +107,34 @@ use crate::validator_set_update::{
     remove_below_capacity_validator, remove_consensus_validator,
     update_validator_set,
 };
+
+/// PoS storage `Keys/Read/Write` implementation
+#[derive(Debug)]
+pub struct Store<S>(PhantomData<S>);
+
+impl<S> namada_core::proof_of_stake::Read<S> for Store<S>
+where
+    S: StorageRead,
+{
+    type Err = namada_storage::Error;
+
+    fn is_validator(storage: &S, address: &Address) -> Result<bool, Self::Err> {
+        is_validator(storage, address)
+    }
+
+    fn is_delegator(
+        storage: &S,
+        address: &Address,
+        epoch: Option<namada_core::storage::Epoch>,
+    ) -> Result<bool, Self::Err> {
+        is_delegator(storage, address, epoch)
+    }
+
+    fn pipeline_len(storage: &S) -> Result<u64, Self::Err> {
+        let params = storage::read_owned_pos_params(storage)?;
+        Ok(params.pipeline_len)
+    }
+}
 
 /// Address of the PoS account implemented as a native VP
 pub const ADDRESS: Address = Address::Internal(InternalAddress::PoS);
@@ -2732,6 +2763,50 @@ pub mod test_utils {
         init_storage(&chain_parameters, storage).unwrap();
         init_genesis_helper(storage, &params, validators, current_epoch)?;
         Ok(params)
+    }
+
+    /// A dummy validator used for testing
+    pub fn get_dummy_genesis_validator() -> types::GenesisValidator {
+        use namada_core::address::testing::established_address_1;
+        use namada_core::key::testing::common_sk_from_simple_seed;
+        use namada_core::{key, token};
+
+        let address = established_address_1();
+        let tokens = token::Amount::native_whole(1);
+        let consensus_sk = common_sk_from_simple_seed(0);
+        let consensus_key = consensus_sk.to_public();
+
+        let protocol_sk = common_sk_from_simple_seed(1);
+        let protocol_key = protocol_sk.to_public();
+
+        let commission_rate =
+            Dec::new(1, 1).expect("expected 0.1 to be a valid decimal");
+        let max_commission_rate_change =
+            Dec::new(1, 1).expect("expected 0.1 to be a valid decimal");
+
+        let eth_hot_sk =
+            key::common::SecretKey::Secp256k1(key::testing::gen_keypair::<
+                key::secp256k1::SigScheme,
+            >());
+        let eth_hot_key = eth_hot_sk.to_public();
+
+        let eth_cold_sk =
+            key::common::SecretKey::Secp256k1(key::testing::gen_keypair::<
+                key::secp256k1::SigScheme,
+            >());
+        let eth_cold_key = eth_cold_sk.to_public();
+
+        types::GenesisValidator {
+            address,
+            tokens,
+            consensus_key,
+            protocol_key,
+            eth_cold_key,
+            eth_hot_key,
+            commission_rate,
+            max_commission_rate_change,
+            metadata: Default::default(),
+        }
     }
 }
 

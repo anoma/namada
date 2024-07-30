@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use namada::core::key::*;
+use namada_sdk::key::*;
 use namada_sdk::wallet::{
     gen_secret_key, LoadStoreError, Store, ValidatorKeys,
 };
@@ -59,7 +59,7 @@ pub fn gen_validator_keys(
 
 #[cfg(test)]
 mod test_wallet {
-    use namada::core::address::Address;
+    use namada_sdk::address::Address;
 
     use super::*;
 

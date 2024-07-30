@@ -29,12 +29,16 @@ namada_events = { path = "../events", default-features = false }
 namada_governance = { path = "../governance" }
 namada_macros = { path = "../macros" }
 namada_migrations = { path = "../migrations", optional = true }
+namada_state = { path = "../state" }
 namada_storage = { path = "../storage" }
 namada_parameters = { path = "../parameters" }
 namada_trans_token = { path = "../trans_token" }
+namada_tx = { path = "../tx" }
+namada_vp = { path = "../vp" }
 
 borsh.workspace = true
 konst.workspace = true
+itertools.workspace = true
 linkme = {workspace = true, optional = true}
 once_cell.workspace = true
 proptest = { workspace = true, optional = true }

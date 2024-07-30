@@ -22,6 +22,16 @@ use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_macros::BorshDeserializer;
 pub use namada_shielded_token::*;
 pub use namada_trans_token::*;
+
+/// Validity predicates
+pub mod vp {
+    pub use namada_shielded_token::vp::{
+        Error as MaspError, MaspVp, Result as MaspResult,
+    };
+    pub use namada_trans_token::vp::{
+        Error as MultitokenError, MultitokenVp, Result as MultitokenResult,
+    };
+}
 use serde::{Deserialize, Serialize};
 
 /// Token storage keys

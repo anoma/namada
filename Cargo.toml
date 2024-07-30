@@ -21,7 +21,6 @@ members = [
   "crates/parameters",
   "crates/proof_of_stake",
   "crates/replay_protection",
-  "crates/namada",
   "crates/node",
   "crates/sdk",
   "crates/shielded_token",
@@ -31,11 +30,13 @@ members = [
   "crates/tests",
   "crates/token",
   "crates/trans_token",
+  "crates/tx",
   "crates/tx_env",
   "crates/tx_prelude",
-  "crates/tx",
+  "crates/vm",
   "crates/vm_env",
   "crates/vote_ext",
+  "crates/vp",
   "crates/vp_env",
   "crates/vp_prelude",
   "examples",
@@ -197,6 +198,7 @@ wasmer-compiler = "4.3.5"
 wasmer-compiler-singlepass = "4.3.5"
 wasmer-types = "4.3.5"
 wasmer-vm = "4.3.5"
+wasmtimer = "0.2.0"
 winapi = "0.3.9"
 yansi = "0.5.1"
 zeroize = { version = "1.5.5", features = ["zeroize_derive"] }

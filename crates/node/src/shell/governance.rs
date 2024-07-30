@@ -1,34 +1,32 @@
-use namada::core::collections::HashMap;
-use namada::core::encode;
-use namada::core::storage::Epoch;
-use namada::governance::event::GovernanceEvent;
-use namada::governance::pgf::storage::keys as pgf_storage;
-use namada::governance::pgf::storage::steward::StewardDetail;
-use namada::governance::pgf::{storage as pgf, ADDRESS};
-use namada::governance::storage::proposal::{
+use namada_sdk::collections::HashMap;
+use namada_sdk::events::extend::{ComposeEvent, Height, UserAccount};
+use namada_sdk::events::{EmitEvents, EventLevel};
+use namada_sdk::governance::event::GovernanceEvent;
+use namada_sdk::governance::pgf::storage::keys as pgf_storage;
+use namada_sdk::governance::pgf::storage::steward::StewardDetail;
+use namada_sdk::governance::pgf::{storage as pgf, ADDRESS};
+use namada_sdk::governance::storage::proposal::{
     AddRemove, PGFAction, PGFTarget, ProposalType, StoragePgfFunding,
 };
-use namada::governance::storage::{keys as gov_storage, load_proposals};
-use namada::governance::utils::{
+use namada_sdk::governance::storage::{keys as gov_storage, load_proposals};
+use namada_sdk::governance::utils::{
     compute_proposal_result, ProposalVotes, TallyResult, TallyType, VotePower,
 };
-use namada::governance::{
+use namada_sdk::governance::{
     storage as gov_api, ProposalVote, ADDRESS as gov_address,
 };
-use namada::ibc;
-use namada::ledger::events::extend::{ComposeEvent, Height, UserAccount};
-use namada::proof_of_stake::bond_amount;
-use namada::proof_of_stake::parameters::PosParams;
-use namada::proof_of_stake::storage::{
-    read_total_active_stake, validator_state_handle,
+use namada_sdk::proof_of_stake::bond_amount;
+use namada_sdk::proof_of_stake::parameters::PosParams;
+use namada_sdk::proof_of_stake::storage::{
+    read_total_active_stake, read_validator_stake, validator_state_handle,
 };
-use namada::proof_of_stake::types::{BondId, ValidatorState};
-use namada::sdk::events::{EmitEvents, EventLevel};
-use namada::state::StorageWrite;
-use namada::token::event::{TokenEvent, TokenOperation};
-use namada::token::read_balance;
-use namada::tx::{Code, Data};
-use namada_sdk::proof_of_stake::storage::read_validator_stake;
+use namada_sdk::proof_of_stake::types::{BondId, ValidatorState};
+use namada_sdk::state::StorageWrite;
+use namada_sdk::storage::Epoch;
+use namada_sdk::token::event::{TokenEvent, TokenOperation};
+use namada_sdk::token::read_balance;
+use namada_sdk::tx::{Code, Data};
+use namada_sdk::{encode, ibc};
 
 use super::utils::force_read;
 use super::*;
@@ -309,7 +307,7 @@ fn compute_proposal_votes<S>(
     params: &PosParams,
     proposal_id: u64,
     epoch: Epoch,
-) -> namada::state::StorageResult<ProposalVotes>
+) -> namada_sdk::state::StorageResult<ProposalVotes>
 where
     S: StorageRead,
 {
@@ -392,7 +390,7 @@ fn execute_default_proposal<D, H>(
     shell: &mut Shell<D, H>,
     id: u64,
     proposal_code: Vec<u8>,
-) -> namada::state::StorageResult<bool>
+) -> namada_sdk::state::StorageResult<bool>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,

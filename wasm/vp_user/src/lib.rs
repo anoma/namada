@@ -217,18 +217,20 @@ mod tests {
     use std::panic;
 
     use address::testing::arb_non_internal_address;
-    use namada::core::dec::Dec;
-    use namada::core::storage::Epoch;
-    use namada::ledger::pos::{GenesisValidator, PosParams};
-    use namada::tx::data::{self, TxType};
-    use namada::tx::{Authorization, Code, Data};
     use namada_test_utils::TestWasms;
     // Use this as `#[test]` annotation to enable logging
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
-    use namada_tests::tx::{self, tx_host_env, TestTxEnv};
+    use namada_tests::tx::data::{self, TxType};
+    use namada_tests::tx::{
+        self, tx_host_env, Authorization, Code, Data, TestTxEnv,
+    };
     use namada_tests::vp::vp_host_env::storage::Key;
     use namada_tests::vp::*;
+    use namada_tx_prelude::dec::Dec;
+    use namada_tx_prelude::proof_of_stake::parameters::PosParams;
+    use namada_tx_prelude::proof_of_stake::types::GenesisValidator;
+    use namada_tx_prelude::storage::Epoch;
     use namada_tx_prelude::{StorageWrite, TxEnv};
     use namada_vp_prelude::account::AccountPublicKeysMap;
     use namada_vp_prelude::key::RefTo;

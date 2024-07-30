@@ -259,15 +259,24 @@ pub fn delegation_targets_handle(delegator: &Address) -> DelegationTargets {
 
 // ---- Storage read + write ----
 
+/// Read owned PoS parameters
+pub fn read_owned_pos_params<S>(
+    storage: &S,
+) -> namada_storage::Result<OwnedPosParams>
+where
+    S: StorageRead,
+{
+    Ok(storage
+        .read(&storage_key::params_key())?
+        .expect("PosParams should always exist in storage after genesis"))
+}
+
 /// Read PoS parameters
 pub fn read_pos_params<S>(storage: &S) -> namada_storage::Result<PosParams>
 where
     S: StorageRead,
 {
-    let params = storage
-        .read(&storage_key::params_key())
-        .transpose()
-        .expect("PosParams should always exist in storage after genesis")?;
+    let params = read_owned_pos_params(storage)?;
     read_non_pos_owned_params(storage, params)
 }
 

@@ -8,7 +8,16 @@ use namada_storage::{Error, StorageRead, StorageWrite};
 use crate::event::IbcEvent;
 
 /// IBC context trait to be implemented in integration that can read and write
-pub trait IbcStorageContext: StorageRead + StorageWrite {
+pub trait IbcStorageContext {
+    /// Storage read/write type
+    type Storage: StorageRead + StorageWrite;
+
+    /// Read-only storage access
+    fn storage(&self) -> &Self::Storage;
+
+    /// Read/write storage access
+    fn storage_mut(&mut self) -> &mut Self::Storage;
+
     /// Emit an IBC event
     fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<(), Error>;
 

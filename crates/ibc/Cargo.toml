@@ -23,6 +23,7 @@ testing = ["namada_core/testing", "ibc-testkit", "proptest"]
 [dependencies]
 namada_core = { path = "../core" }
 namada_events = { path = "../events", default-features = false }
+namada_gas = { path = "../gas" }
 namada_governance = { path = "../governance" }
 namada_macros = {path = "../macros"}
 namada_migrations = {path = "../migrations", optional = true}
@@ -30,6 +31,8 @@ namada_parameters = { path = "../parameters" }
 namada_state = { path = "../state" }
 namada_storage = { path = "../storage" }
 namada_token = { path = "../token" }
+namada_tx = { path = "../tx" }
+namada_vp = { path = "../vp" }
 
 borsh.workspace = true
 data-encoding.workspace = true
@@ -51,5 +54,13 @@ thiserror.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
+namada_core = { path = "../core", features = ["testing"] }
+namada_parameters = { path = "../parameters", features = ["testing"] }
+namada_proof_of_stake = { path = "../proof_of_stake", features = ["testing"] }
+namada_state = { path = "../state", features = ["testing"] }
+namada_tx = { path = "../tx", features = ["testing"] }
+namada_vm = { path = "../vm", features = ["testing"] }
+
+assert_matches.workspace = true
 ibc-testkit.workspace = true
 proptest.workspace = true

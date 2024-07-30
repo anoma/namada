@@ -6,15 +6,14 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use color_eyre::eyre::Result;
-use namada::core::address::{Address, InternalAddress};
-use namada::core::chain::ChainId;
-use namada::core::ethereum_events::EthAddress;
-use namada::core::key::*;
-use namada::core::masp::*;
-use namada::ibc::trace::{ibc_token, is_ibc_denom, is_nft_trace};
-use namada::io::Io;
+use namada_sdk::address::{Address, InternalAddress};
+use namada_sdk::chain::ChainId;
+use namada_sdk::ethereum_events::EthAddress;
+use namada_sdk::ibc::trace::{ibc_token, is_ibc_denom, is_nft_trace};
+use namada_sdk::io::Io;
+use namada_sdk::key::*;
 use namada_sdk::masp::fs::FsShieldedUtils;
-use namada_sdk::masp::ShieldedContext;
+use namada_sdk::masp::{ShieldedContext, *};
 use namada_sdk::wallet::Wallet;
 use namada_sdk::{Namada, NamadaImpl};
 
@@ -225,7 +224,7 @@ impl Context {
     /// Make an implementation of Namada from this object and parameters.
     pub fn to_sdk<C, IO>(self, client: C, io: IO) -> impl Namada
     where
-        C: namada::ledger::queries::Client + Sync,
+        C: namada_sdk::queries::Client + Sync,
         IO: Io,
     {
         let chain_ctx = self.take_chain_or_exit();

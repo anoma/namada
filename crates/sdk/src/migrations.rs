@@ -1,10 +1,6 @@
 #![allow(missing_docs)]
 
-#[cfg(not(feature = "migrations"))]
-use core::fmt::Formatter;
-#[cfg(feature = "migrations")]
 use core::fmt::{Display, Formatter};
-#[cfg(feature = "migrations")]
 use core::str::FromStr;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
@@ -15,20 +11,13 @@ use data_encoding::HEXUPPER;
 use eyre::eyre;
 use namada_core::hash::Hash;
 use namada_core::storage::{BlockHeight, Key};
-#[cfg(feature = "migrations")]
-use namada_macros::derive_borshdeserializer;
-#[cfg(feature = "migrations")]
-use namada_macros::typehash;
-#[cfg(feature = "migrations")]
-use namada_migrations::TypeHash;
-#[cfg(feature = "migrations")]
-use namada_migrations::*;
+use namada_macros::{derive_borshdeserializer, typehash};
+use namada_migrations::{TypeHash, *};
 use namada_storage::{DbColFam, DbMigration, DB};
 use regex::Regex;
 use serde::de::{DeserializeOwned, Error, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-#[cfg(feature = "migrations")]
 /// The maximum number of character printed per value.
 const PRINTLN_CUTOFF: usize = 300;
 
@@ -58,7 +47,6 @@ pub struct UpdateValue {
     bytes: UpdateBytes,
 }
 
-#[cfg(feature = "migrations")]
 impl UpdateValue {
     /// Using a type that is a thin wrapper around bytes but with a custom
     /// serialization when we don't want to use Borsh necessarily
@@ -119,7 +107,6 @@ impl UpdateValue {
     }
 }
 
-#[cfg(feature = "migrations")]
 impl<T: TypeHash + BorshSerialize + BorshDeserialize> From<T> for UpdateValue {
     fn from(value: T) -> Self {
         Self {
@@ -196,7 +183,6 @@ pub enum DbUpdateType {
 
 impl DbMigration for DbUpdateType {}
 
-#[cfg(feature = "migrations")]
 impl DbUpdateType {
     /// Get the key or pattern being modified as string
     pub fn pattern(&self) -> String {
@@ -432,7 +418,6 @@ impl<D: DbMigration> IntoIterator for DbChanges<D> {
         self.changes.into_iter()
     }
 }
-#[cfg(feature = "migrations")]
 impl Display for DbUpdateType {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
@@ -484,7 +469,6 @@ pub enum UpdateStatus {
     Add(Vec<(String, String)>),
 }
 
-#[cfg(feature = "migrations")]
 impl Display for UpdateStatus {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
@@ -543,18 +527,14 @@ pub fn commit<D: DB>(
     }
 }
 
-#[cfg(feature = "migrations")]
 derive_borshdeserializer!(Vec::<u8>);
-#[cfg(feature = "migrations")]
 derive_borshdeserializer!(Vec::<String>);
-#[cfg(feature = "migrations")]
 derive_borshdeserializer!(u64);
 
 #[derive(BorshSerialize, BorshDeserialize)]
 #[repr(transparent)]
 pub struct SerializeWrapper<T: BorshSerialize + BorshDeserialize>(T);
 
-#[cfg(feature = "migrations")]
 impl TypeHash
     for SerializeWrapper<
         std::collections::BTreeMap<String, namada_core::address::Address>,
@@ -564,7 +544,6 @@ impl TypeHash
         typehash!(SerializeWrapper<BTreeMap<String, Address>>);
 }
 
-#[cfg(feature = "migrations")]
 #[distributed_slice(REGISTER_DESERIALIZERS)]
 static BTREEMAP_STRING_ADDRESS: fn() = || {
     use std::collections::BTreeMap;
