@@ -1119,7 +1119,6 @@ impl BenchShieldedCtx {
                 None,
                 &StdIo,
                 None,
-                None,
                 &[spending_key.into()],
                 &[],
             ))

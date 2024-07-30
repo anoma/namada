@@ -309,18 +309,12 @@ where
     pub async fn run(
         mut self,
         mut shutdown_signal: impl ShutdownSignal,
-        start_query_height: Option<BlockHeight>,
         last_query_height: Option<BlockHeight>,
         sks: &[ExtendedSpendingKey],
         fvks: &[ViewingKey],
     ) -> Result<Option<ShieldedContext<U>>, Error> {
         let initial_state = self
-            .perform_initial_setup(
-                start_query_height,
-                last_query_height,
-                sks,
-                fvks,
-            )
+            .perform_initial_setup(last_query_height, sks, fvks)
             .await?;
 
         self.check_exit_conditions(&mut shutdown_signal);
@@ -429,19 +423,10 @@ where
 
     async fn perform_initial_setup(
         &mut self,
-        start_query_height: Option<BlockHeight>,
         last_query_height: Option<BlockHeight>,
         sks: &[ExtendedSpendingKey],
         fvks: &[ViewingKey],
     ) -> Result<InitialState, Error> {
-        if start_query_height > last_query_height {
-            return Err(Error::Other(format!(
-                "The start height {start_query_height:?} cannot be higher \
-                 than the ending height {last_query_height:?} in the shielded \
-                 sync"
-            )));
-        }
-
         for esk in sks {
             let vk = to_viewing_key(esk).vk;
             self.ctx.vk_heights.entry(vk).or_default();
@@ -467,8 +452,9 @@ where
             // NB: limit fetching until the last committed height
             .min(last_block_height);
 
-        let start_height = start_query_height
-            .map_or_else(|| self.ctx.min_height_to_sync_from(), Ok)?
+        let start_height = self
+            .ctx
+            .min_height_to_sync_from()?
             // NB: the start height cannot be greater than
             // `last_query_height`
             .min(last_query_height);
@@ -934,7 +920,6 @@ mod dispatcher_tests {
                 let flag = dispatcher.tasks.panic_flag.clone();
                 let dispatcher_fut = dispatcher.run(
                     shutdown_signal,
-                    Some(BlockHeight::first()),
                     Some(BlockHeight(10)),
                     &[],
                     &[],
@@ -1087,7 +1072,7 @@ mod dispatcher_tests {
 
                 let (_send, shutdown_sig) = shutdown_signal();
                 let result =
-                    dispatcher.run(shutdown_sig, None, None, &[], &[vk]).await;
+                    dispatcher.run(shutdown_sig, None, &[], &[vk]).await;
                 match result {
                     Err(Error::Other(msg)) => assert_eq!(
                         msg.as_str(),
@@ -1130,7 +1115,7 @@ mod dispatcher_tests {
                 let (_send, shutdown_sig) = shutdown_signal();
                 // This should complete successfully
                 let ctx = dispatcher
-                    .run(shutdown_sig, None, None, &[], &[vk])
+                    .run(shutdown_sig, None, &[], &[vk])
                     .await
                     .expect("Test failed")
                     .expect("Test failed");
@@ -1205,7 +1190,7 @@ mod dispatcher_tests {
                 masp_tx_sender.send(None).expect("Test failed");
                 let (_send, shutdown_sig) = shutdown_signal();
                 let result =
-                    dispatcher.run(shutdown_sig, None, None, &[], &[vk]).await;
+                    dispatcher.run(shutdown_sig, None, &[], &[vk]).await;
                 match result {
                     Err(Error::Other(msg)) => assert_eq!(
                         msg.as_str(),
@@ -1274,7 +1259,7 @@ mod dispatcher_tests {
                 let (send, shutdown_sig) = shutdown_signal();
                 send.send_replace(true);
                 let res = dispatcher
-                    .run(shutdown_sig, None, None, &[], &[arbitrary_vk()])
+                    .run(shutdown_sig, None, &[], &[arbitrary_vk()])
                     .await
                     .expect("Test failed");
                 assert!(res.is_none());

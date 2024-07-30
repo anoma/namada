@@ -3213,8 +3213,6 @@ pub mod args {
     );
     pub const BLOCK_HEIGHT: Arg<BlockHeight> = arg("block-height");
     pub const BLOCK_HEIGHT_OPT: ArgOpt<BlockHeight> = arg_opt("height");
-    pub const BLOCK_HEIGHT_FROM_OPT: ArgOpt<BlockHeight> =
-        arg_opt("from-height");
     pub const BLOCK_HEIGHT_TO_OPT: ArgOpt<BlockHeight> = arg_opt("to-height");
     pub const BRIDGE_POOL_GAS_AMOUNT: ArgDefault<token::DenominatedAmount> =
         arg_default(
@@ -6572,14 +6570,12 @@ pub mod args {
     impl Args for ShieldedSync<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let ledger_address = CONFIG_RPC_LEDGER_ADDRESS.parse(matches);
-            let start_query_height = BLOCK_HEIGHT_FROM_OPT.parse(matches);
             let last_query_height = BLOCK_HEIGHT_TO_OPT.parse(matches);
             let spending_keys = SPENDING_KEYS.parse(matches);
             let viewing_keys = VIEWING_KEYS.parse(matches);
             let with_indexer = WITH_INDEXER.parse(matches);
             Self {
                 ledger_address,
-                start_query_height,
                 last_query_height,
                 spending_keys,
                 viewing_keys,
@@ -6592,11 +6588,6 @@ pub mod args {
                 .arg(BLOCK_HEIGHT_TO_OPT.def().help(wrap!(
                     "Option block height to sync up to. Default is latest."
                 )))
-                .arg(
-                    BLOCK_HEIGHT_FROM_OPT
-                        .def()
-                        .help(wrap!("Option block height to sync from.")),
-                )
                 .arg(SPENDING_KEYS.def().help(wrap!(
                     "List of new spending keys with which to check note \
                      ownership. These will be added to the shielded context."
@@ -6624,7 +6615,6 @@ pub mod args {
 
             Ok(ShieldedSync {
                 ledger_address: chain_ctx.get(&self.ledger_address),
-                start_query_height: self.start_query_height,
                 last_query_height: self.last_query_height,
                 spending_keys: self
                     .spending_keys
