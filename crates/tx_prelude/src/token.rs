@@ -10,7 +10,7 @@ use namada_token::event::{TokenEvent, TokenOperation};
 #[cfg(any(test, feature = "testing"))]
 pub use namada_token::testing;
 pub use namada_token::{
-    storage_key, utils, Amount, DenominatedAmount, Transfer,
+    storage_key, utils, Amount, DenominatedAmount, Store, Transfer,
 };
 use namada_tx_env::TxEnv;
 

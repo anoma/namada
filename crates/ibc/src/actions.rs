@@ -16,8 +16,8 @@ use namada_events::EmitEvents;
 use namada_governance::storage::proposal::PGFIbcTarget;
 use namada_parameters::read_epoch_duration_parameter;
 use namada_state::{
-    DBIter, Epochs, ResultExt, State, StorageError, StorageHasher, StorageRead,
-    StorageResult, StorageWrite, WlState, DB,
+    Epochs, ResultExt, State, StorageError, StorageRead, StorageResult,
+    StorageWrite,
 };
 use namada_token as token;
 
@@ -182,15 +182,14 @@ impl<S> IbcCommonContext for IbcProtocolContext<'_, S> where
 }
 
 /// Transfer tokens over IBC
-pub fn transfer_over_ibc<D, H>(
-    state: &mut WlState<D, H>,
+pub fn transfer_over_ibc<S>(
+    state: &mut S,
     token: &Address,
     source: &Address,
     target: &PGFIbcTarget,
 ) -> StorageResult<()>
 where
-    D: DB + for<'iter> DBIter<'iter> + 'static,
-    H: StorageHasher + 'static,
+    S: State + EmitEvents,
 {
     let token = PrefixedCoin {
         denom: token.to_string().parse().expect("invalid token"),

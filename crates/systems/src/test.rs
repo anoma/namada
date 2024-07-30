@@ -7,10 +7,11 @@ lazy_static! {
     /// cross-dependencies (with an exception of dev-deps).
     static ref SYSTEMS: HashSet<&'static str> =
         HashSet::from_iter([
-            "namada_shielded_token",
+            "namada_governance",
             "namada_parameters",
-            "namada_trans_token",
+            "namada_shielded_token",
             "namada_token",
+            "namada_trans_token",
         ]);
 }
 

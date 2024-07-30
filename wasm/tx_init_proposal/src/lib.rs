@@ -55,9 +55,10 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
 
     log_string("apply_tx called to create a new governance proposal");
 
-    let proposal_id =
-        governance::init_proposal(ctx, &tx_data, content, code)
-            .wrap_err("Failed to initialize new governance proposal")?;
+    let proposal_id = governance::init_proposal::<_, token::Store<_>>(
+        ctx, &tx_data, content, code,
+    )
+    .wrap_err("Failed to initialize new governance proposal")?;
 
     ctx.emit_event(GovernanceEvent::new_proposal(proposal_id, tx_data.r#type))
 }

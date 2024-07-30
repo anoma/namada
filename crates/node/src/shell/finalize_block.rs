@@ -298,10 +298,7 @@ where
         )?;
 
         // Pgf inflation
-        pgf_inflation::apply_inflation(
-            self.state.restrict_writes_to_write_log(),
-            ibc::transfer_over_ibc,
-        )?;
+        pgf_apply_inflation(self.state.restrict_writes_to_write_log())?;
 
         // Take events that may be emitted from PGF
         for event in self.state.write_log_mut().take_events() {
@@ -1149,6 +1146,17 @@ where
     )
 }
 
+/// Dependency-injection indirection for PGF inflation
+fn pgf_apply_inflation<S>(storage: &mut S) -> StorageResult<()>
+where
+    S: State + EmitEvents,
+{
+    pgf_inflation::apply_inflation::<_, parameters::Store<_>, token::Store<_>, _>(
+        storage,
+        ibc::transfer_over_ibc,
+    )
+}
+
 /// We test the failure cases of [`finalize_block`]. The happy flows
 /// are covered by the e2e tests.
 #[allow(clippy::arithmetic_side_effects, clippy::cast_possible_truncation)]
@@ -1830,7 +1838,7 @@ mod test_finalize_block {
                 r#type: ProposalType::Default,
             };
 
-            namada_sdk::governance::init_proposal(
+            namada_sdk::governance::init_proposal::<_, token::Store<_>>(
                 &mut shell.state,
                 &proposal,
                 vec![],
