@@ -417,6 +417,12 @@ impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
     }
 }
 
+#[derive(Debug)]
+struct IndexerMaspClientShared {
+    semaphore: Semaphore,
+    indexer_api: reqwest::Url,
+}
+
 /// MASP client implementation that queries data from the
 /// [`namada-masp-indexer`].
 ///
@@ -424,8 +430,8 @@ impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
 #[cfg(not(target_family = "wasm"))]
 #[derive(Clone, Debug)]
 pub struct IndexerMaspClient {
-    indexer_api: Arc<reqwest::Url>,
     client: reqwest::Client,
+    shared: Arc<IndexerMaspClientShared>,
 }
 
 #[cfg(not(target_family = "wasm"))]
@@ -446,15 +452,15 @@ impl IndexerMaspClient {
     /// Create a new [`IndexerMaspClient`].
     #[inline]
     pub fn new(client: reqwest::Client, indexer_api: reqwest::Url) -> Self {
-        let indexer_api = Arc::new(indexer_api);
-        Self {
-            client,
+        let shared = Arc::new(IndexerMaspClientShared {
             indexer_api,
-        }
+            semaphore: Semaphore::new(MAX_CONCURRENT_REQUESTS),
+        });
+        Self { client, shared }
     }
 
     fn endpoint(&self, which: &str) -> String {
-        format!("{}{which}", self.indexer_api)
+        format!("{}{which}", self.shared.indexer_api)
     }
 
     async fn get_server_error(
@@ -486,6 +492,8 @@ impl MaspClient for IndexerMaspClient {
         struct Response {
             block_height: u64,
         }
+
+        let _permit = self.shared.semaphore.acquire().await.unwrap();
 
         let response = self
             .client
@@ -558,6 +566,8 @@ impl MaspClient for IndexerMaspClient {
             let off = (to - from).min(MAX_RANGE_THRES);
             let to_height = from + off;
             from += off;
+
+            let _permit = self.shared.semaphore.acquire().await.unwrap();
 
             let payload: TxResponse = {
                 let response = self
@@ -643,6 +653,8 @@ impl MaspClient for IndexerMaspClient {
             commitment_tree: Vec<u8>,
         }
 
+        let _permit = self.shared.semaphore.acquire().await.unwrap();
+
         let response = self
             .client
             .get(self.endpoint("/commitment-tree"))
@@ -696,6 +708,8 @@ impl MaspClient for IndexerMaspClient {
         struct Response {
             notes_map: Vec<Note>,
         }
+
+        let _permit = self.shared.semaphore.acquire().await.unwrap();
 
         let response = self
             .client
@@ -759,6 +773,8 @@ impl MaspClient for IndexerMaspClient {
         struct WitnessMapResponse {
             witnesses: Vec<Witness>,
         }
+
+        let _permit = self.shared.semaphore.acquire().await.unwrap();
 
         let response = self
             .client
