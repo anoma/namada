@@ -159,7 +159,12 @@ enum Message {
             TaskError<BlockHeight>,
         >,
     ),
-    FetchTxs(Result<Vec<IndexedNoteEntry>, TaskError<[BlockHeight; 2]>>),
+    FetchTxs(
+        Result<
+            (BlockHeight, BlockHeight, Vec<IndexedNoteEntry>),
+            TaskError<[BlockHeight; 2]>,
+        >,
+    ),
     TrialDecrypt(IndexedTx, ViewingKey, ControlFlow<(), Vec<DecryptedData>>),
 }
 
@@ -575,28 +580,13 @@ where
                     self.spawn_update_witness_map(height);
                 }
             }
-            Message::FetchTxs(Ok(tx_batch)) => {
-                let mut min_height = BlockHeight(u64::MAX);
-                let mut max_height = BlockHeight(0);
-
+            Message::FetchTxs(Ok((from, to, tx_batch))) => {
                 for (itx, txs) in &tx_batch {
                     self.spawn_trial_decryptions(*itx, txs);
-
-                    if itx.height < min_height {
-                        min_height = itx.height;
-                    }
-                    if itx.height > max_height {
-                        max_height = itx.height;
-                    }
                 }
-
-                if !tx_batch.is_empty() {
-                    debug_assert!(min_height <= max_height);
-                    let amount = max_height.0 - min_height.0 + 1;
-                    self.config.fetched_tracker.increment_by(amount);
-                }
-
                 self.cache.fetched.extend(tx_batch);
+
+                self.config.fetched_tracker.increment_by(to.0 - from.0 + 1);
                 self.config
                     .scanned_tracker
                     .set_upper_limit(self.cache.fetched.len() as u64);
@@ -693,12 +683,14 @@ where
             let client = self.client.clone();
             self.spawn_async(Box::pin(async move {
                 Message::FetchTxs(
-                    client.fetch_shielded_transfers(from, to).await.map_err(
-                        |error| TaskError {
+                    client
+                        .fetch_shielded_transfers(from, to)
+                        .await
+                        .map_err(|error| TaskError {
                             error,
                             context: [from, to],
-                        },
-                    ),
+                        })
+                        .map(|batch| (from, to, batch)),
                 )
             }));
         }
