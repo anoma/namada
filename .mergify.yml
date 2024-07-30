@@ -11,7 +11,7 @@ queue_rules:
 pull_request_rules:
   - name: main-automatic-merge
     conditions:
-        - label = "ready-for-draft"
+        - label = "merge"
         - label != "do-not-merge"
         - "#approved-reviews-by >= 1"
         - base = main
