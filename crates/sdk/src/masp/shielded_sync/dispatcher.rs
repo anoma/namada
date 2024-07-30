@@ -147,8 +147,6 @@ struct TaskError<C> {
     context: C,
 }
 
-// TODO: avoid cloning viewing keys w/ arc-swap+lazy_static or
-// rwlock+lazy_static
 #[allow(clippy::large_enum_variant)]
 enum Message {
     UpdateCommitmentTree(Result<CommitmentTree<Node>, TaskError<BlockHeight>>),
@@ -257,9 +255,6 @@ where
             ..Default::default()
         };
 
-        // TODO: defer loading of shielded context;
-        // the only thing we need from it are potentially
-        // viewking keys that had been stored on it
         if ctx.load_confirmed().await.is_err() {
             ctx = ShieldedContext {
                 utils: utils.clone(),
@@ -293,8 +288,6 @@ where
         client,
         config,
         cache,
-        // TODO: add progress tracking mechanism to
-        // `handle_incoming_message`
         interrupt_flag: Default::default(),
     }
 }

@@ -224,7 +224,6 @@ impl MaspClientCapabilities {
 /// This abstracts away the implementation details
 /// of how shielded-sync fetches the necessary data
 /// from a remote server.
-// TODO: redesign this api with progress bars in mind
 pub trait MaspClient: Clone {
     /// Return the last block height we can retrieve data from.
     #[allow(async_fn_in_trait)]
