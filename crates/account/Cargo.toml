@@ -15,6 +15,7 @@ version.workspace = true
 [features]
 default = []
 testing = ["namada_core/testing", "proptest"]
+arbitrary = ["dep:arbitrary", "namada_core/arbitrary"]
 migrations = ["namada_migrations", "linkme"]
 
 [dependencies]
@@ -23,6 +24,7 @@ namada_macros = { path = "../macros" }
 namada_migrations = { path = "../migrations", optional = true }
 namada_storage = { path = "../storage" }
 
+arbitrary = { workspace = true, optional = true }
 borsh.workspace = true
 linkme = {workspace = true, optional = true }
 proptest = { workspace = true, optional = true }

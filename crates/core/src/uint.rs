@@ -481,6 +481,7 @@ pub const MAX_SIGNED_VALUE: Uint =
 const MINUS_ZERO: Uint = Uint([0u64, 0u64, 0u64, 9223372036854775808]);
 
 /// A signed 256 big integer.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Copy,
     Clone,
