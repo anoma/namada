@@ -23,7 +23,6 @@ use masp_primitives::merkle_tree::{
     CommitmentTree, IncrementalWitness, MerklePath,
 };
 use masp_primitives::sapling::keys::FullViewingKey;
-use masp_primitives::sapling::note_encryption::*;
 use masp_primitives::sapling::{
     Diversifier, Node, Note, Nullifier, ViewingKey,
 };
@@ -32,7 +31,7 @@ use masp_primitives::transaction::components::sapling::builder::{
     RngBuildParams, SaplingMetadata,
 };
 use masp_primitives::transaction::components::{
-    I128Sum, OutputDescription, TxOut, U64Sum, ValueSum,
+    I128Sum, TxOut, U64Sum, ValueSum,
 };
 use masp_primitives::transaction::fees::fixed::FeeRule;
 use masp_primitives::transaction::{Authorization, Authorized, Transaction};
@@ -594,62 +593,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 }
             }
         }
-    }
-
-    /// Applies the given transaction to the supplied context. More precisely,
-    /// the shielded transaction's outputs are added to the commitment tree.
-    /// Newly discovered notes are associated to the supplied viewing keys. Note
-    /// nullifiers are mapped to their originating notes. Note positions are
-    /// associated to notes, memos, and diversifiers. And the set of notes that
-    /// we have spent are updated. The witness map is maintained to make it
-    /// easier to construct note merkle paths in other code. See
-    /// <https://zips.z.cash/protocol/protocol.pdf#scan>
-    pub fn scan_tx(
-        &mut self,
-        indexed_tx: IndexedTx,
-        shielded: &[Transaction],
-        vk: &ViewingKey,
-    ) -> Result<(), Error> {
-        type Proof = OutputDescription<
-            <
-                <Authorized as Authorization>::SaplingAuth
-                as masp_primitives::transaction::components::sapling::Authorization
-            >::Proof
-        >;
-
-        // For tracking the account changes caused by this Transaction
-        if let ContextSyncStatus::Confirmed = self.sync_status {
-            let mut note_pos = self.tx_note_map[&indexed_tx];
-            // Listen for notes sent to our viewing keys, only if we are syncing
-            // (i.e. in a confirmed status)
-            for tx in shielded {
-                for so in
-                    tx.sapling_bundle().map_or(&vec![], |x| &x.shielded_outputs)
-                {
-                    // Let's try to see if this viewing key can decrypt latest
-                    // note
-                    let decres = try_sapling_note_decryption::<_, Proof>(
-                        &NETWORK,
-                        1.into(),
-                        &PreparedIncomingViewingKey::new(&vk.ivk()),
-                        so,
-                    );
-                    // So this current viewing key does decrypt this current
-                    // note...
-                    if let Some((note, pa, memo)) = decres {
-                        self.save_decrypted_shielded_outputs(
-                            vk, note_pos, note, pa, memo,
-                        )?;
-                    }
-                    note_pos += 1;
-                }
-            }
-        }
-
-        // Cancel out those of our notes that have been spent
-        self.save_shielded_spends(shielded);
-
-        Ok(())
     }
 
     /// Compute the total unspent notes associated with the viewing key in the
@@ -2368,12 +2311,19 @@ pub mod testing {
     use masp_primitives::consensus::testing::arb_height;
     use masp_primitives::constants::SPENDING_KEY_GENERATOR;
     use masp_primitives::group::GroupEncoding;
+    use masp_primitives::sapling::note_encryption::{
+        try_sapling_note_decryption, PreparedIncomingViewingKey,
+    };
     use masp_primitives::sapling::prover::TxProver;
     use masp_primitives::sapling::redjubjub::{PublicKey, Signature};
     use masp_primitives::sapling::{ProofGenerationKey, Rseed};
     use masp_primitives::transaction::components::sapling::builder::StoredBuildParams;
-    use masp_primitives::transaction::components::GROTH_PROOF_SIZE;
-    use masp_primitives::transaction::TransparentAddress;
+    use masp_primitives::transaction::components::{
+        OutputDescription, GROTH_PROOF_SIZE,
+    };
+    use masp_primitives::transaction::{
+        Authorization, Authorized, TransparentAddress,
+    };
     use masp_proofs::bellman::groth16::Proof;
     use masp_proofs::bls12_381;
     use masp_proofs::bls12_381::{Bls12, G1Affine, G2Affine};
