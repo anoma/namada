@@ -15,7 +15,7 @@ use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::ExtendedSpendingKey;
 use namada_core::collections::HashMap;
 use namada_core::hints;
-use namada_core::storage::BlockHeight;
+use namada_core::storage::{BlockHeight, TxIndex};
 use namada_tx::IndexedTx;
 
 use super::utils::{IndexedNoteEntry, MaspClient};
@@ -358,7 +358,9 @@ where
     fn apply_cache_to_shielded_context(
         &mut self,
         InitialState {
-            last_witnessed_tx, ..
+            last_witnessed_tx,
+            last_query_height,
+            ..
         }: &InitialState,
     ) -> Result<(), Error> {
         if let Some((_, cmt)) = self.cache.commitment_tree.take() {
@@ -380,8 +382,9 @@ where
             let mut note_pos = self.ctx.tx_note_map[&indexed_tx];
             let mut vk_heights = BTreeMap::new();
             std::mem::swap(&mut vk_heights, &mut self.ctx.vk_heights);
-            for (vk, h) in vk_heights
-                .iter_mut()
+            for (vk, _) in vk_heights
+                .iter()
+                // NB: skip keys that are synced past the given `indexed_tx`
                 .filter(|(_vk, h)| h.as_ref() < Some(&indexed_tx))
             {
                 for (note, pa, memo) in self
@@ -395,10 +398,25 @@ where
                     )?;
                     note_pos += 1;
                 }
-                *h = Some(indexed_tx);
             }
             self.ctx.save_shielded_spends(&stx_batch);
             std::mem::swap(&mut vk_heights, &mut self.ctx.vk_heights);
+        }
+
+        for (_, h) in self
+            .ctx
+            .vk_heights
+            .iter_mut()
+            // NB: skip keys that are synced past the last input height
+            .filter(|(_vk, h)| {
+                h.as_ref().map(|itx| &itx.height) < Some(last_query_height)
+            })
+        {
+            *h = Some(IndexedTx {
+                height: *last_query_height,
+                // NB: the entire block is synced
+                index: TxIndex(u32::MAX),
+            });
         }
 
         Ok(())
@@ -761,7 +779,7 @@ mod dispatcher_tests {
     use std::hint::spin_loop;
 
     use futures::join;
-    use namada_core::storage::{BlockHeight, TxIndex};
+    use namada_core::storage::BlockHeight;
     use namada_tx::IndexedTx;
     use tempfile::tempdir;
 
