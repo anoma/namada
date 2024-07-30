@@ -25,8 +25,8 @@ pub mod vp;
 use std::marker::PhantomData;
 
 use namada_core::address::Address;
-pub use namada_core::token::*;
 use namada_storage::{StorageRead, StorageWrite};
+pub use namada_systems::trans_token::*;
 pub use storage::*;
 
 /// Transparent token storage `Keys/Read/Write` implementation
@@ -59,14 +59,9 @@ impl<S> Keys for Store<S> {
     }
 }
 
-impl<S> namada_core::token::Read<S> for Store<S>
-where
-    S: StorageRead,
-{
-    type Err = namada_storage::Error;
-}
+impl<S> Read<S> for Store<S> where S: StorageRead {}
 
-impl<S> namada_core::token::Write<S> for Store<S>
+impl<S> Write<S> for Store<S>
 where
     S: StorageWrite + StorageRead,
 {
@@ -76,7 +71,7 @@ where
         src: &Address,
         dest: &Address,
         amount: Amount,
-    ) -> Result<(), Self::Err> {
+    ) -> Result<()> {
         storage::transfer(storage, token, src, dest, amount)
     }
 
@@ -85,7 +80,7 @@ where
         token: &Address,
         source: &Address,
         amount: Amount,
-    ) -> Result<(), Self::Err> {
+    ) -> Result<()> {
         storage::burn_tokens(storage, token, source, amount)
     }
 
@@ -94,7 +89,7 @@ where
         token: &Address,
         dest: &Address,
         amount: Amount,
-    ) -> Result<(), Self::Err> {
+    ) -> Result<()> {
         storage::credit_tokens(storage, token, dest, amount)
     }
 }

@@ -35,7 +35,6 @@ use namada_core::arith::{self, checked};
 use namada_core::eth_bridge_pool::is_pending_transfer_key;
 pub use namada_core::hash::Sha256Hasher;
 use namada_core::hash::{Error as HashError, Hash};
-use namada_core::parameters;
 pub use namada_core::storage::{
     BlockHash, BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue,
     Header, Key, KeySeg, TxIndex, BLOCK_HASH_LENGTH, BLOCK_HEIGHT_LENGTH,
@@ -60,6 +59,7 @@ pub use namada_storage::{
     Result as StorageResult, ResultExt, StorageHasher, StorageRead,
     StorageWrite, DB,
 };
+use namada_systems::parameters;
 use thiserror::Error;
 use wl_state::TxWlState;
 pub use wl_state::{FullAccessState, TempWlState, WlState};

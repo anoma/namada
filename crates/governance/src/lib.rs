@@ -35,6 +35,7 @@ pub mod utils;
 pub mod vp;
 
 use namada_state::StorageRead;
+pub use namada_systems::governance::*;
 pub use storage::proposal::{InitProposalData, ProposalType, VoteProposalData};
 pub use storage::vote::ProposalVote;
 pub use storage::{init_proposal, is_proposal_accepted, vote_proposal};
@@ -46,16 +47,11 @@ pub const ADDRESS: Address = address::GOV;
 #[derive(Debug)]
 pub struct Store<S>(PhantomData<S>);
 
-impl<S> namada_core::governance::Read<S> for Store<S>
+impl<S> Read<S> for Store<S>
 where
     S: StorageRead,
 {
-    type Err = namada_state::StorageError;
-
-    fn is_proposal_accepted(
-        storage: &S,
-        tx_data: &[u8],
-    ) -> Result<bool, Self::Err> {
+    fn is_proposal_accepted(storage: &S, tx_data: &[u8]) -> Result<bool> {
         storage::is_proposal_accepted(storage, tx_data)
     }
 }
