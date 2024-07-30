@@ -6773,7 +6773,7 @@ dependencies = [
 
 [[package]]
 name = "tx_proposal_ibc_client_upgrade"
-version = "0.40.0"
+version = "0.41.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_test_utils",

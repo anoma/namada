@@ -2365,7 +2365,6 @@ fn propose_upgrade_client(test_a: &Test) -> Result<Epoch> {
     let start_epoch = (epoch.0 + 6) / 3 * 3;
     let proposal_json_path = prepare_proposal_data(
         test_a.test_dir.path(),
-        0,
         albert,
         TestWasms::TxProposalIbcClientUpgrade.read_bytes(),
         start_epoch,
@@ -2375,6 +2374,8 @@ fn propose_upgrade_client(test_a: &Test) -> Result<Epoch> {
         "init-proposal",
         "--data-path",
         proposal_json_path.to_str().unwrap(),
+        "--gas-limit",
+        "2000000",
         "--node",
         &rpc_a,
     ];
