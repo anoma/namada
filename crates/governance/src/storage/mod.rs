@@ -13,10 +13,11 @@ use namada_core::address::Address;
 use namada_core::borsh::BorshDeserialize;
 use namada_core::collections::HashSet;
 use namada_core::storage::Epoch;
+use namada_core::token;
 use namada_state::{
     iter_prefix, StorageError, StorageRead, StorageResult, StorageWrite,
 };
-use namada_trans_token as token;
+use namada_systems::trans_token;
 
 use crate::parameters::GovernanceParameters;
 use crate::storage::keys as governance_keys;
@@ -28,7 +29,7 @@ use crate::utils::{ProposalResult, Vote};
 use crate::ADDRESS as governance_address;
 
 /// A proposal creation transaction.
-pub fn init_proposal<S>(
+pub fn init_proposal<S, TransToken>(
     storage: &mut S,
     data: &InitProposalData,
     content: Vec<u8>,
@@ -36,6 +37,7 @@ pub fn init_proposal<S>(
 ) -> StorageResult<u64>
 where
     S: StorageRead + StorageWrite,
+    TransToken: trans_token::Write<S>,
 {
     let counter_key = governance_keys::get_counter_key();
     let proposal_id = storage.read(&counter_key)?.expect(
@@ -98,7 +100,7 @@ where
         );
     storage.write(&committing_proposals_key, ())?;
 
-    token::transfer(
+    TransToken::transfer(
         storage,
         &storage.get_native_token()?,
         &data.author,
