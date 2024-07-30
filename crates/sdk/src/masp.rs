@@ -506,8 +506,6 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
     /// Fetch the current state of the multi-asset shielded pool into a
     /// ShieldedContext
-    #[allow(clippy::too_many_arguments)]
-    #[cfg(not(target_family = "wasm"))]
     pub async fn fetch<M, T>(
         &mut self,
         shutdown_signal: impl control_flow::ShutdownSignal,
