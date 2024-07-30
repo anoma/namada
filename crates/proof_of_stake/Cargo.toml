@@ -31,6 +31,7 @@ namada_macros = { path = "../macros" }
 namada_migrations = { path = "../migrations", optional = true }
 namada_state = { path = "../state" }
 namada_storage = { path = "../storage" }
+namada_systems = { path = "../systems" }
 namada_parameters = { path = "../parameters" }
 namada_trans_token = { path = "../trans_token" }
 namada_tx = { path = "../tx" }

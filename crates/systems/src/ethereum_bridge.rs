@@ -1,0 +1,1 @@
+//! Ethereum bridge abstract interfaces

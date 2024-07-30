@@ -35,6 +35,7 @@ namada_parameters = {path = "../parameters"}
 namada_proof_of_stake = {path = "../proof_of_stake", default-features = false}
 namada_state = {path = "../state"}
 namada_storage = {path = "../storage"}
+namada_systems = { path = "../systems" }
 namada_trans_token = {path = "../trans_token"}
 namada_tx = {path = "../tx"}
 namada_vote_ext = {path = "../vote_ext"}
