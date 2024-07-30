@@ -1403,7 +1403,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             // Cache the generated transfer
             let mut shielded_ctx = context.shielded_mut().await;
             shielded_ctx
-                .pre_cache_transaction(context, &[masp_tx.clone()])
+                .pre_cache_transaction(std::slice::from_ref(&masp_tx))
                 .await?;
         }
 
@@ -2051,36 +2051,12 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     // tree
     async fn pre_cache_transaction(
         &mut self,
-        context: &impl Namada,
-        masp_tx: &[Transaction],
+        masp_txs: &[Transaction],
     ) -> Result<(), Error> {
-        let vks: Vec<_> = context
-            .wallet()
-            .await
-            .get_viewing_keys()
-            .values()
-            .map(|evk| ExtendedFullViewingKey::from(*evk).fvk.vk)
-            .collect();
-        let last_witnessed_tx = self.tx_note_map.keys().max();
-        // This data will be discarded at the next fetch so we don't need to
-        // populate it accurately
-        let indexed_tx =
-            last_witnessed_tx.map_or_else(IndexedTx::default, |indexed| {
-                IndexedTx {
-                    height: indexed.height,
-                    index: indexed
-                        .index
-                        .checked_add(1)
-                        .expect("Tx index shouldn't overflow"),
-                }
-            });
-        self.sync_status = ContextSyncStatus::Speculative;
-        for vk in vks {
-            self.vk_heights.entry(vk).or_default();
+        self.save_shielded_spends(masp_txs);
 
-            self.scan_tx(indexed_tx, masp_tx, &vk)?;
-        }
         // Save the speculative state for future usage
+        self.sync_status = ContextSyncStatus::Speculative;
         self.save().await.map_err(|e| Error::Other(e.to_string()))?;
 
         Ok(())
