@@ -44,7 +44,7 @@ pub fn balance_prefix(token_addr: &Address) -> storage::Key {
     .expect("Cannot obtain a storage key")
 }
 
-/// Obtain a storage key prefix for all users' balances.
+/// Obtain a storage key prefix for token parameters.
 pub fn parameter_prefix(token_addr: &Address) -> storage::Key {
     storage::Key::from(
         Address::Internal(InternalAddress::Multitoken).to_db_key(),

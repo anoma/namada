@@ -5157,6 +5157,8 @@ dependencies = [
 name = "namada_systems"
 version = "0.41.0"
 dependencies = [
+ "cargo_metadata",
+ "lazy_static",
  "namada_core",
  "namada_storage",
 ]
@@ -5231,6 +5233,7 @@ dependencies = [
  "namada_macros",
  "namada_shielded_token",
  "namada_storage",
+ "namada_systems",
  "namada_trans_token",
  "proptest",
  "serde",

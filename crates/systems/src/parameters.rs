@@ -15,15 +15,17 @@ pub trait Read<S> {
     /// Read all parameters
     fn read(storage: &S) -> Result<Parameters>;
 
-    /// Read MASP epoch multiplier
+    /// Read MASP epoch multiplier parameter
     fn masp_epoch_multiplier(storage: &S) -> Result<u64>;
 
-    /// Read the the epoch duration parameter from store
+    /// Read the the epoch duration parameter
     fn epoch_duration_parameter(storage: &S) -> Result<EpochDuration>;
 
-    /// Helper function to retrieve the `is_native_token_transferable` protocol
-    /// parameter from storage
+    /// Read the `is_native_token_transferable` parameter
     fn is_native_token_transferable(storage: &S) -> Result<bool>;
+
+    /// Read the number of epochs per year parameter
+    fn epochs_per_year(storage: &S) -> Result<u64>;
 }
 
 /// Abstract parameters storage write interface

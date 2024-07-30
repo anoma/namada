@@ -81,7 +81,7 @@ use namada_sdk::state::StorageRead;
 use namada_sdk::storage::testing::get_dummy_header;
 use namada_sdk::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
 use namada_sdk::time::DateTimeUtc;
-use namada_sdk::token::{Amount, DenominatedAmount, Transfer};
+use namada_sdk::token::{self, Amount, DenominatedAmount, Transfer};
 use namada_sdk::tx::data::pos::Bond;
 use namada_sdk::tx::data::{BatchedTxResult, Fee, TxResult, VpsResult};
 use namada_sdk::tx::event::{new_tx_event, Batch};
@@ -443,9 +443,11 @@ impl BenchShell {
             .is_masp_new_epoch(true, masp_epoch_multiplier)
             .unwrap()
         {
-            namada_sdk::token::conversion::update_allowed_conversions(
-                &mut self.state,
-            )
+            token::conversion::update_allowed_conversions::<
+                _,
+                parameters::Store<_>,
+                token::Store<_>,
+            >(&mut self.state)
             .unwrap();
         }
     }

@@ -64,6 +64,10 @@ where
     fn is_native_token_transferable(storage: &S) -> Result<bool> {
         storage::is_native_token_transferable(storage)
     }
+
+    fn epochs_per_year(storage: &S) -> Result<u64> {
+        read_epochs_per_year(storage)
+    }
 }
 
 impl<S> Write<S> for Store<S>
@@ -324,6 +328,18 @@ where
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
     Ok(gas_cost_table.get(token).map(|amount| amount.to_owned()))
+}
+
+/// Read the number of epochs per year parameter
+pub fn read_epochs_per_year<S>(storage: &S) -> namada_storage::Result<u64>
+where
+    S: StorageRead,
+{
+    let key = storage::get_epochs_per_year_key();
+    let epochs_per_year = storage.read(&key)?;
+    epochs_per_year
+        .ok_or(ReadError::ParametersMissing)
+        .into_storage_result()
 }
 
 /// Read all the parameters from storage. Returns the parameters and gas

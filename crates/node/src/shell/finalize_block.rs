@@ -17,7 +17,9 @@ use namada_sdk::proof_of_stake::storage::{
     find_validator_by_raw_hash, write_last_block_proposer_address,
 };
 use namada_sdk::state::write_log::StorageModification;
-use namada_sdk::state::{ResultExt, StorageWrite, EPOCH_SWITCH_BLOCKS_DELAY};
+use namada_sdk::state::{
+    ResultExt, StorageResult, StorageWrite, EPOCH_SWITCH_BLOCKS_DELAY,
+};
 use namada_sdk::storage::{BlockResults, Epoch, Header};
 use namada_sdk::tx::data::protocol::ProtocolTxType;
 use namada_sdk::tx::data::VpStatusFlags;
@@ -102,7 +104,7 @@ where
             new_epoch,
         )?;
         // - Token
-        token::finalize_block(&mut self.state, emit_events, is_masp_new_epoch)?;
+        token_finalize_block(&mut self.state, emit_events, is_masp_new_epoch)?;
         // - PoS
         //    - Must be applied after governance in case it changes PoS params
         proof_of_stake::finalize_block(
@@ -1129,6 +1131,22 @@ fn pos_votes_from_abci(
             },
         )
         .collect()
+}
+
+/// Dependency-injection indirection for token system
+fn token_finalize_block<S>(
+    storage: &mut S,
+    events: &mut Vec<Event>,
+    is_new_masp_epoch: bool,
+) -> StorageResult<()>
+where
+    S: StorageWrite + StorageRead + token::WithConversionState,
+{
+    token::finalize_block::<S, parameters::Store<_>>(
+        storage,
+        events,
+        is_new_masp_epoch,
+    )
 }
 
 /// We test the failure cases of [`finalize_block`]. The happy flows
