@@ -52,6 +52,7 @@ use namada_core::tendermint::abci::types::Misbehavior;
 use namada_events::EmitEvents;
 use namada_storage::collections::lazy_map::{self, Collectable, LazyMap};
 use namada_storage::{OptionExt, StorageRead, StorageWrite};
+pub use namada_systems::proof_of_stake::*;
 pub use namada_trans_token as token;
 pub use parameters::{OwnedPosParams, PosParams};
 pub use pos_queries::PosQueries;
@@ -112,13 +113,11 @@ use crate::validator_set_update::{
 #[derive(Debug)]
 pub struct Store<S>(PhantomData<S>);
 
-impl<S> namada_core::proof_of_stake::Read<S> for Store<S>
+impl<S> Read<S> for Store<S>
 where
     S: StorageRead,
 {
-    type Err = namada_storage::Error;
-
-    fn is_validator(storage: &S, address: &Address) -> Result<bool, Self::Err> {
+    fn is_validator(storage: &S, address: &Address) -> Result<bool> {
         is_validator(storage, address)
     }
 
@@ -126,11 +125,11 @@ where
         storage: &S,
         address: &Address,
         epoch: Option<namada_core::storage::Epoch>,
-    ) -> Result<bool, Self::Err> {
+    ) -> Result<bool> {
         is_delegator(storage, address, epoch)
     }
 
-    fn pipeline_len(storage: &S) -> Result<u64, Self::Err> {
+    fn pipeline_len(storage: &S) -> Result<u64> {
         let params = storage::read_owned_pos_params(storage)?;
         Ok(params.pipeline_len)
     }
@@ -155,7 +154,7 @@ pub fn init_genesis<S>(
     storage: &mut S,
     params: &OwnedPosParams,
     current_epoch: Epoch,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -181,7 +180,7 @@ pub fn copy_genesis_validator_sets<S>(
     storage: &mut S,
     params: &OwnedPosParams,
     current_epoch: Epoch,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -200,10 +199,7 @@ where
 }
 
 /// Check if the provided address is a validator address
-pub fn is_validator<S>(
-    storage: &S,
-    address: &Address,
-) -> namada_storage::Result<bool>
+pub fn is_validator<S>(storage: &S, address: &Address) -> Result<bool>
 where
     S: StorageRead,
 {
@@ -220,7 +216,7 @@ pub fn is_delegator<S>(
     storage: &S,
     address: &Address,
     epoch: Option<namada_core::storage::Epoch>,
-) -> namada_storage::Result<bool>
+) -> Result<bool>
 where
     S: StorageRead,
 {
@@ -265,7 +261,7 @@ pub fn bond_tokens<S>(
     amount: token::Amount,
     current_epoch: Epoch,
     offset_opt: Option<u64>,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -372,7 +368,7 @@ where
 fn compute_total_consensus_stake<S>(
     storage: &S,
     epoch: Epoch,
-) -> namada_storage::Result<token::Amount>
+) -> Result<token::Amount>
 where
     S: StorageRead,
 {
@@ -397,7 +393,7 @@ where
 pub fn compute_and_store_total_consensus_stake<S>(
     storage: &mut S,
     epoch: Epoch,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -422,7 +418,7 @@ pub fn unbond_tokens<S>(
     amount: token::Amount,
     current_epoch: Epoch,
     is_redelegation: bool,
-) -> namada_storage::Result<ResultSlashing>
+) -> Result<ResultSlashing>
 where
     S: StorageRead + StorageWrite,
 {
@@ -552,7 +548,7 @@ where
             };
             Ok((epoch, value))
         })
-        .collect::<namada_storage::Result<BTreeMap<Epoch, token::Amount>>>()?;
+        .collect::<Result<BTreeMap<Epoch, token::Amount>>>()?;
 
     // `updatedBonded`
     // Remove bonds for all the full unbonds.
@@ -859,7 +855,7 @@ fn fold_and_slash_redelegated_bonds<S>(
     start_epoch: Epoch,
     list_slashes: &[Slash],
     slash_epoch_filter: impl Fn(Epoch) -> bool,
-) -> namada_storage::Result<FoldRedelegatedBondsResult>
+) -> Result<FoldRedelegatedBondsResult>
 where
     S: StorageRead,
 {
@@ -870,7 +866,7 @@ where
             let validator_slashes: Vec<Slash> =
                 validator_slashes_handle(src_validator)
                     .iter(storage)?
-                    .collect::<namada_storage::Result<Vec<Slash>>>()?;
+                    .collect::<Result<Vec<Slash>>>()?;
             // Merge the two lists of slashes
             let mut merged: Vec<Slash> = validator_slashes
                 .into_iter()
@@ -917,12 +913,12 @@ fn find_bonds_to_remove<S>(
     storage: &S,
     bonds_handle: &LazyMap<Epoch, token::Amount>,
     amount: token::Amount,
-) -> namada_storage::Result<BondsForRemovalRes>
+) -> Result<BondsForRemovalRes>
 where
     S: StorageRead,
 {
     #[allow(clippy::needless_collect)]
-    let bonds: Vec<Result<_, _>> = bonds_handle.iter(storage)?.collect();
+    let bonds: Vec<Result<_>> = bonds_handle.iter(storage)?.collect();
 
     let mut bonds_for_removal = BondsForRemovalRes::default();
     let mut remaining = amount;
@@ -961,7 +957,7 @@ fn compute_modified_redelegation<S>(
     redelegated_bonds: &RedelegatedTokens,
     start_epoch: Epoch,
     amount_to_unbond: token::Amount,
-) -> namada_storage::Result<ModifiedRedelegation>
+) -> Result<ModifiedRedelegation>
 where
     S: StorageRead,
 {
@@ -1002,7 +998,7 @@ where
                     let (_, amount) = res?;
                     Ok(amount)
                 })
-                .collect::<namada_storage::Result<Vec<token::Amount>>>()?
+                .collect::<Result<Vec<token::Amount>>>()?
                 .into_iter(),
         )
         .ok_or_err_msg("token amount overflow")?;
@@ -1060,7 +1056,7 @@ fn update_redelegated_bonds<S>(
     storage: &mut S,
     redelegated_bonds: &RedelegatedTokens,
     modified_redelegation: &ModifiedRedelegation,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -1136,7 +1132,7 @@ fn compute_new_redelegated_unbonds<S>(
     redelegated_bonds: &RedelegatedBondsOrUnbonds,
     epochs_to_remove: &BTreeSet<Epoch>,
     modified: &ModifiedRedelegation,
-) -> namada_storage::Result<EagerRedelegatedUnbonds>
+) -> Result<EagerRedelegatedUnbonds>
 where
     S: StorageRead + StorageWrite,
 {
@@ -1258,7 +1254,7 @@ where
                 Ok((start, rbonds))
             }
         })
-        .collect::<namada_storage::Result<EagerRedelegatedUnbonds>>()?;
+        .collect::<Result<EagerRedelegatedUnbonds>>()?;
 
     Ok(new_redelegated_unbonds)
 }
@@ -1293,7 +1289,7 @@ pub struct BecomeValidator<'a> {
 pub fn become_validator<S>(
     storage: &mut S,
     args: BecomeValidator<'_>,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -1416,7 +1412,7 @@ pub fn change_consensus_key<S>(
     validator: &Address,
     consensus_key: &common::PublicKey,
     current_epoch: Epoch,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -1454,7 +1450,7 @@ pub fn withdraw_tokens<S>(
     source: Option<&Address>,
     validator: &Address,
     current_epoch: Epoch,
-) -> namada_storage::Result<token::Amount>
+) -> Result<token::Amount>
 where
     S: StorageRead + StorageWrite,
 {
@@ -1593,7 +1589,7 @@ pub fn change_validator_commission_rate<S>(
     validator: &Address,
     new_rate: Dec,
     current_epoch: Epoch,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -1654,7 +1650,7 @@ fn bond_amounts_for_query<S>(
     params: &PosParams,
     bond_id: &BondId,
     epoch: Epoch,
-) -> namada_storage::Result<BTreeMap<Epoch, token::Amount>>
+) -> Result<BTreeMap<Epoch, token::Amount>>
 where
     S: StorageRead,
 {
@@ -1772,7 +1768,7 @@ pub fn raw_bond_amount<S>(
     storage: &S,
     bond_id: &BondId,
     epoch: Epoch,
-) -> namada_storage::Result<token::Amount>
+) -> Result<token::Amount>
 where
     S: StorageRead,
 {
@@ -1789,7 +1785,7 @@ pub fn bond_amount<S>(
     storage: &S,
     bond_id: &BondId,
     epoch: Epoch,
-) -> namada_storage::Result<token::Amount>
+) -> Result<token::Amount>
 where
     S: StorageRead,
 {
@@ -1866,7 +1862,7 @@ pub fn bond_amounts_for_rewards<S>(
     bond_id: &BondId,
     claim_start: Epoch,
     claim_end: Epoch,
-) -> namada_storage::Result<BTreeMap<Epoch, token::Amount>>
+) -> Result<BTreeMap<Epoch, token::Amount>>
 where
     S: StorageRead,
 {
@@ -1971,7 +1967,7 @@ pub fn genesis_validator_set_tendermint<S, T>(
     params: &PosParams,
     current_epoch: Epoch,
     mut f: impl FnMut(ValidatorSetUpdate) -> T,
-) -> namada_storage::Result<Vec<T>>
+) -> Result<Vec<T>>
 where
     S: StorageRead,
 {
@@ -2006,7 +2002,7 @@ pub fn unjail_validator<S>(
     storage: &mut S,
     validator: &Address,
     current_epoch: Epoch,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -2074,7 +2070,7 @@ pub fn is_validator_frozen<S>(
     validator: &Address,
     current_epoch: Epoch,
     params: &PosParams,
-) -> namada_storage::Result<bool>
+) -> Result<bool>
 where
     S: StorageRead,
 {
@@ -2095,7 +2091,7 @@ pub fn get_total_consensus_stake<S>(
     storage: &S,
     epoch: Epoch,
     params: &PosParams,
-) -> namada_storage::Result<token::Amount>
+) -> Result<token::Amount>
 where
     S: StorageRead,
 {
@@ -2112,7 +2108,7 @@ pub fn redelegate_tokens<S>(
     dest_validator: &Address,
     current_epoch: Epoch,
     amount: token::Amount,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -2338,7 +2334,7 @@ pub fn deactivate_validator<S>(
     storage: &mut S,
     validator: &Address,
     current_epoch: Epoch,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -2419,7 +2415,7 @@ pub fn reactivate_validator<S>(
     storage: &mut S,
     validator: &Address,
     current_epoch: Epoch,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -2482,7 +2478,7 @@ where
 pub fn prune_liveness_data<S>(
     storage: &mut S,
     current_epoch: Epoch,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -2519,7 +2515,7 @@ pub fn record_liveness_data<S>(
     votes_epoch: Epoch,
     votes_height: BlockHeight,
     pos_params: &PosParams,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -2601,7 +2597,7 @@ pub fn jail_for_liveness<S>(
     params: &PosParams,
     current_epoch: Epoch,
     jail_epoch: Epoch,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -2671,7 +2667,7 @@ pub mod test_utils {
         params: &PosParams,
         validators: impl Iterator<Item = GenesisValidator>,
         current_epoch: namada_core::storage::Epoch,
-    ) -> namada_storage::Result<()>
+    ) -> Result<()>
     where
         S: StorageRead + StorageWrite,
     {
@@ -2734,7 +2730,7 @@ pub mod test_utils {
         owned: OwnedPosParams,
         validators: impl Iterator<Item = GenesisValidator> + Clone,
         current_epoch: namada_core::storage::Epoch,
-    ) -> namada_storage::Result<PosParams>
+    ) -> Result<PosParams>
     where
         S: StorageRead + StorageWrite,
     {
@@ -2825,7 +2821,7 @@ pub fn change_validator_metadata<S>(
     name: Option<String>,
     commission_rate: Option<Dec>,
     current_epoch: Epoch,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -2865,7 +2861,7 @@ pub fn claim_reward_tokens<S>(
     source: Option<&Address>,
     validator: &Address,
     current_epoch: Epoch,
-) -> namada_storage::Result<token::Amount>
+) -> Result<token::Amount>
 where
     S: StorageRead + StorageWrite,
 {
@@ -2902,7 +2898,7 @@ pub fn query_reward_tokens<S>(
     source: Option<&Address>,
     validator: &Address,
     current_epoch: Epoch,
-) -> namada_storage::Result<token::Amount>
+) -> Result<token::Amount>
 where
     S: StorageRead,
 {
@@ -2930,7 +2926,7 @@ pub fn jail_validator<S>(
     validator: &Address,
     current_epoch: Epoch,
     validator_set_update_epoch: Epoch,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -3026,7 +3022,7 @@ pub fn finalize_block<S>(
     validator_set_update_epoch: Epoch,
     votes: Vec<VoteInfo>,
     byzantine_validators: Vec<Misbehavior>,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageWrite + StorageRead,
 {
@@ -3133,7 +3129,7 @@ fn add_delegation_target<S>(
     validator: &Address,
     epoch: Epoch,
     _current_epoch: Epoch,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -3182,7 +3178,7 @@ fn remove_delegation_target<S>(
     validator: &Address,
     epoch: Epoch,
     current_epoch: Epoch,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -3208,7 +3204,7 @@ fn prune_old_delegations(
     params: &PosParams,
     delegations: &mut DelegationEpochs,
     current_epoch: Epoch,
-) -> namada_storage::Result<()> {
+) -> Result<()> {
     let delta =
         crate::epoched::OffsetMaxProposalPeriodOrSlashProcessingLenPlus::value(
             params,

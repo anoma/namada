@@ -30,6 +30,7 @@ namada_migrations = {path = "../migrations", optional = true}
 namada_parameters = { path = "../parameters" }
 namada_state = { path = "../state" }
 namada_storage = { path = "../storage" }
+namada_systems = { path = "../systems" }
 namada_token = { path = "../token" }
 namada_tx = { path = "../tx" }
 namada_vp = { path = "../vp" }

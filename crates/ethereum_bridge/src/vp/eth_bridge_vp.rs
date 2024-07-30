@@ -7,8 +7,8 @@ use namada_core::address::Address;
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::collections::HashSet;
 use namada_core::storage::Key;
-use namada_core::token::{self, Amount};
 use namada_state::StateRead;
+use namada_systems::trans_token::{self as token, Amount};
 use namada_tx::BatchedTxRef;
 use namada_vp::native_vp::{self, Ctx, NativeVp, StorageReader, VpEvaluator};
 

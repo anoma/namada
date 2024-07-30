@@ -9,9 +9,10 @@ use std::marker::PhantomData;
 use borsh::BorshDeserialize;
 use namada_core::arith::{self, checked};
 use namada_core::booleans::{BoolResultUnitExt, ResultBoolExt};
+use namada_core::storage;
 use namada_core::storage::Epoch;
-use namada_core::{proof_of_stake, storage, token};
 use namada_state::{StateRead, StorageRead};
+use namada_systems::{proof_of_stake, trans_token as token};
 use namada_tx::action::{Action, GovAction, Read};
 use namada_tx::BatchedTxRef;
 use namada_vp::native_vp::{Ctx, CtxPreStorageRead, NativeVp, VpEvaluator};
@@ -65,10 +66,7 @@ where
     S: StateRead,
     CA: 'static + Clone,
     EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
-    PoS: proof_of_stake::Read<
-            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
-            Err = namada_state::StorageError,
-        >,
+    PoS: proof_of_stake::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
     TokenKeys: token::Keys,
 {
     type Error = Error;
@@ -219,10 +217,7 @@ where
     S: StateRead,
     CA: 'static + Clone,
     EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
-    PoS: proof_of_stake::Read<
-            CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>,
-            Err = namada_state::StorageError,
-        >,
+    PoS: proof_of_stake::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
     TokenKeys: token::Keys,
 {
     /// Instantiate a Governance VP

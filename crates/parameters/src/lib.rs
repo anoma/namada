@@ -26,11 +26,11 @@ use std::marker::PhantomData;
 use namada_core::address::{Address, InternalAddress};
 use namada_core::arith::checked;
 use namada_core::chain::ProposalBytes;
-pub use namada_core::parameters::*;
 use namada_core::storage::BlockHeight;
 use namada_core::time::DurationSecs;
 use namada_core::{hints, token};
 use namada_storage::{ResultExt, StorageRead, StorageWrite};
+pub use namada_systems::parameters::*;
 pub use storage::{get_gas_scale, get_max_block_gas};
 use thiserror::Error;
 pub use wasm_allowlist::{is_tx_allowed, is_vp_allowed};
@@ -49,23 +49,19 @@ impl<S> Read<S> for Store<S>
 where
     S: StorageRead,
 {
-    type Err = namada_storage::Error;
-
-    fn read(storage: &S) -> Result<Parameters, Self::Err> {
+    fn read(storage: &S) -> Result<Parameters> {
         read(storage)
     }
 
-    fn masp_epoch_multiplier(storage: &S) -> Result<u64, Self::Err> {
+    fn masp_epoch_multiplier(storage: &S) -> Result<u64> {
         read_masp_epoch_multiplier_parameter(storage)
     }
 
-    fn epoch_duration_parameter(
-        storage: &S,
-    ) -> Result<EpochDuration, Self::Err> {
+    fn epoch_duration_parameter(storage: &S) -> Result<EpochDuration> {
         read_epoch_duration_parameter(storage)
     }
 
-    fn is_native_token_transferable(storage: &S) -> Result<bool, Self::Err> {
+    fn is_native_token_transferable(storage: &S) -> Result<bool> {
         storage::is_native_token_transferable(storage)
     }
 }
@@ -74,10 +70,7 @@ impl<S> Write<S> for Store<S>
 where
     S: StorageRead + StorageWrite,
 {
-    fn write(
-        storage: &mut S,
-        parameters: &Parameters,
-    ) -> Result<(), Self::Err> {
+    fn write(storage: &mut S, parameters: &Parameters) -> Result<()> {
         init_storage(parameters, storage)
     }
 }
