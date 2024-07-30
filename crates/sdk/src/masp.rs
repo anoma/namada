@@ -547,13 +547,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     .to_string(),
             ));
         };
-        let maybe_last_witnessed_tx = self.tx_note_map.keys().max().cloned();
-        let last_height_in_witnesses = std::cmp::min(
-            maybe_last_witnessed_tx.as_ref(),
-            maybe_least_synced_vk_height.as_ref(),
-        )
-        .map(|ix| ix.height);
-        Ok(last_height_in_witnesses.unwrap_or_else(BlockHeight::first))
+        Ok(maybe_least_synced_vk_height
+            .map_or_else(BlockHeight::first, |itx| itx.height))
     }
 
     #[allow(missing_docs)]
