@@ -2169,7 +2169,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 }
 
 /// Extract the relevant shield portions of a [`Tx`], if any.
-async fn extract_masp_tx(
+fn extract_masp_tx(
     tx: &Tx,
     masp_section_refs: &MaspTxRefs,
 ) -> Result<Vec<Transaction>, Error> {

@@ -359,9 +359,8 @@ impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
                     .map_err(|e| Error::Other(e.to_string()))?;
                 let mut extracted_masp_txs = vec![];
                 if let Some(masp_sections_refs) = masp_sections_refs {
-                    extracted_masp_txs.extend(
-                        extract_masp_tx(&tx, &masp_sections_refs).await?,
-                    );
+                    extracted_masp_txs
+                        .extend(extract_masp_tx(&tx, &masp_sections_refs)?);
                 };
                 if ibc_tx_data_refs.is_some() {
                     extracted_masp_txs
