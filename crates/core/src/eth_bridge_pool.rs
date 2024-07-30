@@ -72,6 +72,7 @@ const VERSION: u8 = 1;
 const NAMESPACE: &str = "transfer";
 
 /// Transfer to Ethereum kinds.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Copy,
     Clone,
@@ -170,6 +171,7 @@ impl<'transfer> PendingTransferAppendix<'transfer> {
 
 /// A transfer message to be submitted to Ethereum
 /// to move assets from Namada across the bridge.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Clone,
@@ -200,6 +202,7 @@ pub struct TransferToEthereum {
 
 /// A transfer message to Ethereum sitting in the
 /// bridge pool, waiting to be relayed
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Clone,
@@ -338,6 +341,7 @@ impl From<&PendingTransfer> for Key {
 /// The amount of fees to be paid, in Namada, to the relayer
 /// of a transfer across the Ethereum Bridge, compensating
 /// for Ethereum gas costs.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Clone,

@@ -76,6 +76,7 @@ impl FromStr for IbcTxDataRefs {
 }
 
 /// The target of a PGF payment
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Clone,

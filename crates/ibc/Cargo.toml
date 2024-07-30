@@ -19,6 +19,7 @@ migrations = [
   "linkme",
 ]
 testing = ["namada_core/testing", "ibc-testkit", "proptest"]
+arbitrary = ["dep:arbitrary", "namada_core/arbitrary", "namada_token/arbitrary"]
 
 [dependencies]
 namada_core = { path = "../core" }
@@ -32,6 +33,7 @@ namada_systems = { path = "../systems" }
 namada_tx = { path = "../tx" }
 namada_vp = { path = "../vp" }
 
+arbitrary = { workspace = true, optional = true }
 borsh.workspace = true
 data-encoding.workspace = true
 konst.workspace = true
