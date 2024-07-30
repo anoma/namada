@@ -1,8 +1,8 @@
 //! Transparent token abstract interfaces
 
 use namada_core::address::Address;
-use namada_core::storage;
 pub use namada_core::token::*;
+use namada_core::{storage, token};
 pub use namada_storage::Result;
 
 /// Abstract token keys interface
@@ -23,10 +23,38 @@ pub trait Keys {
 
     /// Obtain a storage key for the multitoken minter.
     fn minter_key(token_addr: &Address) -> storage::Key;
+
+    /// Obtain a storage key prefix for token parameters.
+    fn parameter_prefix(token_addr: &Address) -> storage::Key;
+
+    /// Obtain a storage key for the minted multitoken balance.
+    fn minted_balance_key(token_addr: &Address) -> storage::Key;
+
+    /// Check if the given storage key is for total supply of a unspecified
+    /// token. If it is, returns the token.
+    fn is_any_minted_balance_key(key: &storage::Key) -> Option<&Address>;
 }
 
 /// Abstract token storage read interface
-pub trait Read<S> {}
+pub trait Read<S> {
+    /// Read the denomination of a given token, if any. Note that native
+    /// transparent tokens do not have this set and instead use the constant
+    /// [`token::NATIVE_MAX_DECIMAL_PLACES`].
+    fn read_denom(
+        storage: &S,
+        token: &Address,
+    ) -> Result<Option<token::Denomination>>;
+
+    /// Get the effective circulating total supply of native tokens.
+    fn get_effective_total_native_supply(storage: &S) -> Result<token::Amount>;
+
+    /// Read the balance of a given token and owner.
+    fn read_balance(
+        storage: &S,
+        token: &Address,
+        owner: &Address,
+    ) -> Result<token::Amount>;
+}
 
 /// Abstract token storage write interface
 pub trait Write<S>: Read<S> {

@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use namada_core::address::{Address, InternalAddress};
 use namada_core::collections::HashSet;
 use namada_core::hints;
+pub use namada_core::storage::Key;
 use namada_core::token::{self, Amount, AmountError, DenominatedAmount};
 use namada_storage as storage;
 use namada_storage::{StorageRead, StorageWrite};

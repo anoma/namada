@@ -18,11 +18,11 @@ use namada_core::booleans::BoolResultUnitExt;
 use namada_core::collections::HashSet;
 use namada_core::masp::{addr_taddr, encode_asset_type, MaspEpoch, TAddrData};
 use namada_core::storage::Key;
+use namada_core::token;
+use namada_core::token::{Amount, MaspDigitPos};
 use namada_core::uint::I320;
 use namada_state::{ConversionState, OptionExt, ResultExt, StateRead};
-use namada_systems::trans_token::{Amount, MaspDigitPos};
-use namada_systems::{governance, ibc, parameters, trans_token as token};
-use namada_trans_token::read_denom;
+use namada_systems::{governance, ibc, parameters, trans_token};
 use namada_tx::action::Read;
 use namada_tx::BatchedTxRef;
 use namada_vp::native_vp::{
@@ -82,7 +82,8 @@ where
     Params: parameters::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
     Gov: governance::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
     Ibc: ibc::Read<CtxPostStorageRead<'view, 'ctx, S, CA, EVAL>>,
-    TransToken: token::Keys,
+    TransToken: trans_token::Keys
+        + trans_token::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
 {
     /// Instantiate MASP VP
     pub fn new(ctx: Ctx<'ctx, S, CA, EVAL>) -> Self {
@@ -291,13 +292,14 @@ where
 
     // Apply the balance change to the changed balances structure
     fn apply_balance_change(
-        &self,
+        &'view self,
         mut result: ChangedBalances,
         [token, counterpart]: [&Address; 2],
     ) -> Result<ChangedBalances> {
-        let denom = read_denom(&self.ctx.pre(), token)?.ok_or_err_msg(
-            "No denomination found in storage for the given token",
-        )?;
+        let denom = TransToken::read_denom(&self.ctx.pre(), token)?
+            .ok_or_err_msg(
+                "No denomination found in storage for the given token",
+            )?;
         // Record the token without an epoch to facilitate later decoding
         unepoched_tokens(token, denom, &mut result.tokens)?;
         let counterpart_balance_key =
@@ -922,7 +924,8 @@ where
     Params: parameters::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
     Gov: governance::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
     Ibc: ibc::Read<CtxPostStorageRead<'view, 'ctx, S, CA, EVAL>>,
-    TransToken: token::Keys,
+    TransToken: trans_token::Keys
+        + trans_token::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
 {
     type Error = Error;
 

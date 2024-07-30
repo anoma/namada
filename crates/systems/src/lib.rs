@@ -25,3 +25,6 @@ pub mod pgf;
 pub mod proof_of_stake;
 pub mod shielded_token;
 pub mod trans_token;
+
+#[cfg(test)]
+pub mod test;

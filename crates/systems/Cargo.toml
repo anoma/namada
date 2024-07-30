@@ -15,3 +15,7 @@ version.workspace = true
 [dependencies]
 namada_core = { path = "../core" }
 namada_storage = { path = "../storage" }
+
+[dev-dependencies]
+cargo_metadata = "0.18.1"
+lazy_static.workspace = true
