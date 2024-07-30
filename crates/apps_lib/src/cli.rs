@@ -15,7 +15,7 @@ pub mod wallet;
 
 use clap::{ArgGroup, ArgMatches, ColorChoice};
 use color_eyre::eyre::Result;
-use namada::io::StdIo;
+use namada_sdk::io::StdIo;
 use utils::*;
 pub use utils::{safe_exit, Cmd};
 
@@ -3155,23 +3155,21 @@ pub mod args {
     use std::str::FromStr;
 
     use data_encoding::HEXUPPER;
-    use namada::core::address::{Address, EstablishedAddress};
-    use namada::core::chain::{ChainId, ChainIdPrefix};
-    use namada::core::collections::HashMap;
-    use namada::core::dec::Dec;
-    use namada::core::ethereum_events::EthAddress;
-    use namada::core::keccak::KeccakHash;
-    use namada::core::key::*;
-    use namada::core::masp::PaymentAddress;
-    use namada::core::storage::{self, BlockHeight, Epoch};
-    use namada::core::time::DateTimeUtc;
-    use namada::core::token;
-    use namada::core::token::NATIVE_MAX_DECIMAL_PLACES;
-    use namada::hash::Hash;
-    use namada::ibc::core::host::types::identifiers::{ChannelId, PortId};
-    use namada::masp::MaspEpoch;
-    use namada::tx::data::GasLimit;
+    use namada_sdk::address::{Address, EstablishedAddress};
     pub use namada_sdk::args::*;
+    use namada_sdk::chain::{ChainId, ChainIdPrefix};
+    use namada_sdk::collections::HashMap;
+    use namada_sdk::dec::Dec;
+    use namada_sdk::ethereum_events::EthAddress;
+    use namada_sdk::hash::Hash;
+    use namada_sdk::ibc::core::host::types::identifiers::{ChannelId, PortId};
+    use namada_sdk::keccak::KeccakHash;
+    use namada_sdk::key::*;
+    use namada_sdk::masp::{MaspEpoch, PaymentAddress};
+    use namada_sdk::storage::{self, BlockHeight, Epoch};
+    use namada_sdk::time::DateTimeUtc;
+    use namada_sdk::token::NATIVE_MAX_DECIMAL_PLACES;
+    use namada_sdk::tx::data::GasLimit;
     pub use namada_sdk::tx::{
         TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
         TX_CHANGE_COMMISSION_WASM, TX_CHANGE_CONSENSUS_KEY_WASM,
@@ -3183,7 +3181,7 @@ pub mod args {
         TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
         VP_USER_WASM,
     };
-    use namada_sdk::DEFAULT_GAS_LIMIT;
+    use namada_sdk::{token, DEFAULT_GAS_LIMIT};
 
     use super::context::*;
     use super::utils::*;
@@ -4789,7 +4787,7 @@ pub mod args {
                 IBC_SHIELDING_DATA_PATH.parse(matches).map(|path| {
                     let data = std::fs::read_to_string(path)
                         .expect("Failed to open IBC shielding data file");
-                    namada::ibc::decode_ibc_shielding_data(data)
+                    namada_sdk::ibc::decode_ibc_shielding_data(data)
                         .expect("Failed to decode IBC shielding data")
                 });
             let ibc_memo = IBC_MEMO.parse(matches);

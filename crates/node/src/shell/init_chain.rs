@@ -5,19 +5,18 @@ use std::ops::ControlFlow;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use masp_proofs::bls12_381;
-use namada::account::protocol_pk_key;
-use namada::core::collections::HashMap;
-use namada::core::hash::Hash as CodeHash;
-use namada::core::time::{TimeZone, Utc};
-use namada::ledger::parameters::Parameters;
-use namada::ledger::{ibc, pos};
-use namada::proof_of_stake::BecomeValidator;
-use namada::state::StorageWrite;
-use namada::token::storage_key::masp_token_map_key;
-use namada::token::{credit_tokens, write_denom};
-use namada::vm::validate_untrusted_wasm;
+use namada_sdk::account::protocol_pk_key;
+use namada_sdk::collections::HashMap;
 use namada_sdk::eth_bridge::EthBridgeStatus;
-use namada_sdk::proof_of_stake::PosParams;
+use namada_sdk::hash::Hash as CodeHash;
+use namada_sdk::parameters::Parameters;
+use namada_sdk::proof_of_stake::{self, BecomeValidator, PosParams};
+use namada_sdk::state::StorageWrite;
+use namada_sdk::time::{TimeZone, Utc};
+use namada_sdk::token::storage_key::masp_token_map_key;
+use namada_sdk::token::{credit_tokens, write_denom};
+use namada_sdk::{eth_bridge, ibc};
+use namada_vm::validate_untrusted_wasm;
 
 use super::*;
 use crate::config::genesis::chain::{
@@ -184,7 +183,7 @@ where
         let convert_anchor_key = token::storage_key::masp_convert_anchor_key();
         self.state.write(
             &convert_anchor_key,
-            namada::core::hash::Hash(
+            namada_sdk::hash::Hash(
                 bls12_381::Scalar::from(
                     self.state.in_mem().conversion_state.tree.root(),
                 )
@@ -246,7 +245,7 @@ where
         } else {
             self.state
                 .write(
-                    &namada::eth_bridge::storage::active_key(),
+                    &eth_bridge::storage::active_key(),
                     EthBridgeStatus::Disabled,
                 )
                 .unwrap();
@@ -265,7 +264,7 @@ where
         // PoS system depends on epoch being initialized
         let pos_params = genesis.get_pos_params();
         let (current_epoch, _gas) = self.state.in_mem().get_current_epoch();
-        pos::namada_proof_of_stake::init_genesis(
+        proof_of_stake::init_genesis(
             &mut self.state,
             &pos_params,
             current_epoch,
@@ -291,13 +290,13 @@ where
         );
         self.apply_genesis_txs_bonds(&genesis);
 
-        pos::namada_proof_of_stake::compute_and_store_total_consensus_stake(
+        proof_of_stake::compute_and_store_total_consensus_stake(
             &mut self.state,
             current_epoch,
         )
         .expect("Could not compute total consensus stake at genesis");
         // This has to be done after `apply_genesis_txs_validator_account`
-        pos::namada_proof_of_stake::copy_genesis_validator_sets(
+        proof_of_stake::copy_genesis_validator_sets(
             &mut self.state,
             &pos_params,
             current_epoch,
@@ -315,7 +314,7 @@ where
         genesis: &genesis::chain::Finalized,
         vp_cache: &mut HashMap<String, Vec<u8>>,
     ) -> ControlFlow<(), Vec<u8>> {
-        use namada::core::collections::hash_map::Entry;
+        use namada_sdk::collections::hash_map::Entry;
         let Some(vp_filename) = self
             .validate(
                 genesis
@@ -469,7 +468,7 @@ where
             } = token;
             // associate a token with its denomination.
             write_denom(&mut self.state, address, *denom).unwrap();
-            namada::token::write_params(
+            namada_sdk::token::write_params(
                 masp_params,
                 &mut self.state,
                 address,
@@ -514,7 +513,7 @@ where
 
             for (owner, balance) in balances {
                 if let genesis::GenesisAddress::PublicKey(pk) = owner {
-                    namada::account::init_account_storage(
+                    namada_sdk::account::init_account_storage(
                         &mut self.state,
                         &owner.address(),
                         std::slice::from_ref(&pk.raw),
@@ -569,7 +568,7 @@ where
 
                 let public_keys: Vec<_> =
                     public_keys.iter().map(|pk| pk.raw.clone()).collect();
-                namada::account::init_account_storage(
+                namada_sdk::account::init_account_storage(
                     &mut self.state,
                     address,
                     &public_keys,
@@ -587,7 +586,7 @@ where
         genesis: &genesis::chain::Finalized,
         vp_cache: &mut HashMap<String, Vec<u8>>,
         params: &PosParams,
-        current_epoch: namada::core::storage::Epoch,
+        current_epoch: namada_sdk::storage::Epoch,
     ) -> ControlFlow<()> {
         if let Some(txs) = genesis.transactions.validator_account.as_ref() {
             for FinalizedValidatorAccountTx {
@@ -628,7 +627,7 @@ where
                     .write(&protocol_pk_key(address), &protocol_key.pk.raw)
                     .expect("Unable to set genesis user protocol public key");
 
-                if let Err(err) = pos::namada_proof_of_stake::become_validator(
+                if let Err(err) = proof_of_stake::become_validator(
                     &mut self.state,
                     BecomeValidator {
                         params,
@@ -676,7 +675,7 @@ where
                     amount,
                 );
 
-                if let Err(err) = pos::namada_proof_of_stake::bond_tokens(
+                if let Err(err) = proof_of_stake::bond_tokens(
                     &mut self.state,
                     Some(&source.address()),
                     validator,
@@ -969,8 +968,8 @@ impl<T> Policy<T> {
 mod test {
     use std::str::FromStr;
 
-    use namada::core::string_encoding::StringEncoded;
     use namada_apps_lib::wallet::defaults;
+    use namada_sdk::string_encoding::StringEncoded;
     use namada_sdk::wallet::alias::Alias;
 
     use super::*;
@@ -1166,7 +1165,7 @@ mod test {
         let pos_params = genesis.get_pos_params();
         let (current_epoch, _gas) =
             initializer.state.in_mem().get_current_epoch();
-        pos::namada_proof_of_stake::init_genesis(
+        proof_of_stake::init_genesis(
             &mut initializer.state,
             &pos_params,
             current_epoch,

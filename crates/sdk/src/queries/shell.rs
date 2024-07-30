@@ -24,7 +24,6 @@ use namada_ibc::event::IbcEventType;
 use namada_state::{DBIter, LastBlock, StateRead, StorageHasher, DB};
 use namada_storage::{ResultExt, StorageRead};
 use namada_token::storage_key::masp_token_map_key;
-#[cfg(any(test, feature = "async-client"))]
 use namada_tx::data::DryRunResult;
 
 use self::eth_bridge::{EthBridge, ETH_BRIDGE};

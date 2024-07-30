@@ -17,7 +17,6 @@ namada_core = { path = "../core" }
 namada_events = { path = "../events", default-features = false }
 namada_storage = { path = "../storage" }
 namada_tx = { path = "../tx" }
-namada_ibc = { path = "../ibc" }
 
 derivative.workspace = true
 masp_primitives.workspace = true

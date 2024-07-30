@@ -4,13 +4,13 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use futures::future::FutureExt;
-use namada::core::hash::Hash;
-use namada::core::storage::BlockHeight;
-use namada::state::{ProcessProposalCachedResult, DB};
-use namada::tendermint::abci::response::ProcessProposal;
-use namada::time::{DateTimeUtc, Utc};
-use namada::tx::data::hash_tx;
+use namada_sdk::hash::Hash;
 use namada_sdk::migrations::ScheduledMigration;
+use namada_sdk::state::{ProcessProposalCachedResult, DB};
+use namada_sdk::storage::BlockHeight;
+use namada_sdk::tendermint::abci::response::ProcessProposal;
+use namada_sdk::time::{DateTimeUtc, Utc};
+use namada_sdk::tx::data::hash_tx;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc::UnboundedSender;
 use tower::Service;
@@ -247,7 +247,7 @@ impl AbcippShim {
         &mut self,
         begin_block_request: request::BeginBlock,
     ) -> ProcessProposalCachedResult {
-        match namada::core::hash::Hash::try_from(begin_block_request.hash) {
+        match namada_sdk::hash::Hash::try_from(begin_block_request.hash) {
             Ok(block_hash) => {
                 match self
                     .service

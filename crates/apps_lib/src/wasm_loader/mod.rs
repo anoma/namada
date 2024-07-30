@@ -6,7 +6,7 @@ use std::path::Path;
 use data_encoding::HEXLOWER;
 use eyre::{eyre, WrapErr};
 use futures::future::join_all;
-use namada::core::collections::HashMap;
+use namada_sdk::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;

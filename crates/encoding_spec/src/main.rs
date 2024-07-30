@@ -23,13 +23,13 @@ use borsh::{schema, schema_container_of};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use madato::types::TableRow;
-use namada::core::address::Address;
-use namada::core::collections::HashSet;
-use namada::core::key::ed25519::{PublicKey, Signature};
-use namada::core::storage::{self, Epoch};
-use namada::ledger::parameters::Parameters;
-use namada::tx::data::{pos, TxType, WrapperTx};
-use namada::{account, token};
+use namada_core::address::Address;
+use namada_core::collections::HashSet;
+use namada_core::key::ed25519::{PublicKey, Signature};
+use namada_core::parameters::Parameters;
+use namada_core::storage::{self, Epoch};
+use namada_tx::data::{pos, TxType, WrapperTx};
+use {namada_account as account, namada_token as token};
 
 /// This generator will write output into this `docs` file.
 const OUTPUT_PATH: &str =
@@ -93,7 +93,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // PoS
     // TODO add after <https://github.com/anoma/namada/issues/439>
-    // TODO imported from `use namada::ledger::pos::Bonds;`
+    // TODO imported from `use namada_sdk::proof_of_stake::Bonds;`
     // let pos_bonds_schema = schema_container_of::<Bonds>();
 
     // Merge type definitions

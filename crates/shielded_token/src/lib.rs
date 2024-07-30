@@ -22,6 +22,7 @@ mod storage;
 pub mod storage_key;
 pub mod utils;
 pub mod validation;
+pub mod vp;
 
 use std::str::FromStr;
 

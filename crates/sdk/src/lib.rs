@@ -15,13 +15,12 @@
 extern crate alloc;
 
 pub use namada_core::*;
-#[cfg(feature = "tendermint-rpc")]
-pub use tendermint_rpc;
 pub use {
     bip39, masp_primitives, masp_proofs, namada_account as account,
-    namada_gas as gas, namada_governance as governance,
-    namada_proof_of_stake as proof_of_stake, namada_state as state,
-    namada_storage as storage, namada_token as token, zeroize,
+    namada_gas as gas, namada_governance as governance, namada_ibc as ibc,
+    namada_parameters as parameters, namada_proof_of_stake as proof_of_stake,
+    namada_state as state, namada_storage as storage, namada_token as token,
+    tendermint_rpc, zeroize,
 };
 
 pub mod eth_bridge;
@@ -33,12 +32,14 @@ pub mod masp;
 pub mod signing;
 #[allow(clippy::result_large_err)]
 pub mod tx;
+#[cfg(feature = "wasm-runtime")]
+pub mod validation;
 
-pub mod control_flow;
 pub mod error;
 pub mod events;
 pub(crate) mod internal_macros;
 pub mod io;
+#[cfg(feature = "migrations")]
 pub mod migrations;
 pub mod queries;
 pub mod wallet;
@@ -55,6 +56,7 @@ use io::Io;
 use masp::{ShieldedContext, ShieldedUtils};
 use namada_core::address::Address;
 use namada_core::collections::HashSet;
+pub use namada_core::control_flow;
 use namada_core::dec::Dec;
 use namada_core::ethereum_events::EthAddress;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};

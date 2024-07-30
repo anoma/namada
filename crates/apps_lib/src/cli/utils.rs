@@ -8,10 +8,10 @@ use std::sync::Arc;
 use clap::{ArgAction, ArgMatches};
 use color_eyre::eyre::Result;
 use data_encoding::HEXLOWER_PERMISSIVE;
-use namada::eth_bridge::ethers::core::k256::elliptic_curve::SecretKey as Secp256k1Sk;
-use namada::eth_bridge::ethers::middleware::SignerMiddleware;
-use namada::eth_bridge::ethers::providers::{Http, Middleware, Provider};
-use namada::eth_bridge::ethers::signers::{Signer, Wallet};
+use namada_sdk::eth_bridge::ethers::core::k256::elliptic_curve::SecretKey as Secp256k1Sk;
+use namada_sdk::eth_bridge::ethers::middleware::SignerMiddleware;
+use namada_sdk::eth_bridge::ethers::providers::{Http, Middleware, Provider};
+use namada_sdk::eth_bridge::ethers::signers::{Signer, Wallet};
 
 use super::args;
 use super::context::Context;

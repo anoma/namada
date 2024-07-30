@@ -2,7 +2,7 @@
 
 use namada_core::address::Address;
 use namada_parameters::storage as params_storage;
-use namada_storage::{Result, StorageRead, StorageWrite};
+use namada_state::{StorageRead, StorageResult, StorageWrite};
 use namada_trans_token::{credit_tokens, get_effective_total_native_supply};
 
 use crate::pgf::storage::{
@@ -14,10 +14,10 @@ use crate::storage::proposal::{PGFIbcTarget, PGFTarget};
 pub fn apply_inflation<S, F>(
     storage: &mut S,
     transfer_over_ibc: F,
-) -> Result<()>
+) -> StorageResult<()>
 where
     S: StorageWrite + StorageRead,
-    F: Fn(&mut S, &Address, &Address, &PGFIbcTarget) -> Result<()>,
+    F: Fn(&mut S, &Address, &Address, &PGFIbcTarget) -> StorageResult<()>,
 {
     let pgf_parameters = get_parameters(storage)?;
     let staking_token = storage.get_native_token()?;
