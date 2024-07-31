@@ -3548,11 +3548,10 @@ pub async fn build_update_account(
         let threshold = *threshold;
 
         let invalid_threshold = threshold.is_zero();
-        let invalid_too_few_pks: bool = (public_keys.is_empty()
-            && public_keys.len() < threshold as usize)
-            || (account.get_all_public_keys().len() < threshold as usize);
+        let invalid_threshold_updated = !public_keys.is_empty() && public_keys.len() < threshold as usize;
+        let invalid_threshold_current = public_keys.is_empty() && account.get_all_public_keys().len() < threshold as usize;
 
-        if invalid_threshold || invalid_too_few_pks {
+        if invalid_threshold || invalid_threshold_updated || invalid_threshold_current {
             edisplay_line!(
                 context.io(),
                 "Invalid account threshold: either the provided threshold is \
@@ -3567,10 +3566,7 @@ pub async fn build_update_account(
 
         Some(threshold)
     } else {
-        let invalid_too_few_pks = (!public_keys.is_empty()
-            && public_keys.len() < account.threshold as usize)
-            || (account.get_all_public_keys().len()
-                < account.threshold as usize);
+        let invalid_too_few_pks = !public_keys.is_empty() && public_keys.len() < account.threshold as usize;
 
         if invalid_too_few_pks {
             return Err(Error::from(TxSubmitError::InvalidAccountThreshold));
