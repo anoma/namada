@@ -746,6 +746,7 @@ fn ibc_upgrade_client() -> Result<()> {
             genesis.parameters.pos_params.pipeline_len = 8;
             genesis.parameters.parameters.masp_epoch_multiplier =
                 MASP_EPOCH_MULTIPLIER;
+            genesis.parameters.gov_params.min_proposal_grace_epochs = 3;
             genesis.parameters.ibc_params.default_mint_limit =
                 Amount::max_signed();
             genesis
@@ -800,7 +801,7 @@ fn ibc_upgrade_client() -> Result<()> {
     hermes.interrupt()?;
 
     // wait for the grace epoch
-    let grace_epoch = start_epoch + 12u64 + 6u64 + 1u64;
+    let grace_epoch = start_epoch + 6u64;
     std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
     while epoch < grace_epoch {
         sleep(10);
@@ -2332,18 +2333,34 @@ fn propose_inflation(test: &Test) -> Result<Epoch> {
     Ok(start_epoch.into())
 }
 
-fn propose_upgrade_client(test_a: &Test) -> Result<Epoch> {
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
-    let albert = find_address(test_a, ALBERT)?;
-    let rpc_a = get_actor_rpc(test_a, Who::Validator(0));
-    let epoch = get_epoch(test_a, &rpc_a)?;
+fn propose_upgrade_client(test: &Test) -> Result<Epoch> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
+    let albert = find_address(test, ALBERT)?;
+    let rpc = get_actor_rpc(test, Who::Validator(0));
+    let epoch = get_epoch(test, &rpc)?;
     let start_epoch = (epoch.0 + 6) / 3 * 3;
-    let proposal_json_path = prepare_proposal_data(
-        test_a.test_dir.path(),
-        albert,
-        TestWasms::TxProposalIbcClientUpgrade.read_bytes(),
-        start_epoch,
-    );
+    let proposal_json = serde_json::json!({
+        "proposal": {
+            "content": {
+                "title": "TheTitle",
+                "authors": "test@test.com",
+                "discussions-to": "www.github.com/anoma/aip/1",
+                "created": "2022-03-10T08:54:37Z",
+                "license": "MIT",
+                "abstract": "upgrade chain",
+                "motivation": "upgrade chain",
+                "details": "upgrade chain",
+                "requires": "2"
+            },
+            "author": albert,
+            "voting_start_epoch": start_epoch,
+            "voting_end_epoch": start_epoch + 3_u64,
+            "activation_epoch": start_epoch + 6_u64,
+        },
+        "data": TestWasms::TxProposalIbcClientUpgrade.read_bytes()
+    });
+    let proposal_json_path = test.test_dir.path().join("proposal.json");
+    write_json_file(proposal_json_path.as_path(), proposal_json);
 
     let submit_proposal_args = vec![
         "init-proposal",
@@ -2352,9 +2369,9 @@ fn propose_upgrade_client(test_a: &Test) -> Result<Epoch> {
         "--gas-limit",
         "2000000",
         "--node",
-        &rpc_a,
+        &rpc,
     ];
-    let mut client = run!(test_a, Bin::Client, submit_proposal_args, Some(40))?;
+    let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
     Ok(start_epoch.into())
