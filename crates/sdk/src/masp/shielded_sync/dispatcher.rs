@@ -163,7 +163,11 @@ enum Message {
             TaskError<[BlockHeight; 2]>,
         >,
     ),
-    TrialDecrypt(IndexedTx, ViewingKey, ControlFlow<(), Vec<DecryptedData>>),
+    TrialDecrypt(
+        IndexedTx,
+        ViewingKey,
+        ControlFlow<(), BTreeMap<usize, DecryptedData>>,
+    ),
 }
 
 struct DispatcherTasks<Spawner> {
@@ -371,7 +375,7 @@ where
             {
                 self.ctx.update_witness_map(indexed_tx, &stx_batch)?;
             }
-            let note_pos = self.ctx.tx_note_map[&indexed_tx];
+            let first_note_pos = self.ctx.tx_note_map[&indexed_tx];
             let mut vk_heights = BTreeMap::new();
             std::mem::swap(&mut vk_heights, &mut self.ctx.vk_heights);
             for (vk, _) in vk_heights
@@ -379,24 +383,19 @@ where
                 // NB: skip keys that are synced past the given `indexed_tx`
                 .filter(|(_vk, h)| h.as_ref() < Some(&indexed_tx))
             {
-                let mut vk_note_pos = note_pos;
-
-                for trial_decrypted in self
+                for (note_pos_offset, (note, pa, memo)) in self
                     .cache
                     .trial_decrypted
                     .take(&indexed_tx, vk)
                     .unwrap_or_default()
                 {
-                    if let Some((note, pa, memo)) = trial_decrypted {
-                        self.ctx.save_decrypted_shielded_outputs(
-                            vk,
-                            vk_note_pos,
-                            note,
-                            pa,
-                            memo,
-                        )?;
-                    }
-                    vk_note_pos += 1;
+                    self.ctx.save_decrypted_shielded_outputs(
+                        vk,
+                        first_note_pos + note_pos_offset,
+                        note,
+                        pa,
+                        memo,
+                    )?;
                 }
             }
             self.ctx.save_shielded_spends(&stx_batch);
@@ -810,7 +809,7 @@ mod dispatcher_tests {
                     dispatcher.cache.trial_decrypted.insert(
                         itx,
                         arbitrary_vk(),
-                        vec![],
+                        BTreeMap::new(),
                     )
                 }
 

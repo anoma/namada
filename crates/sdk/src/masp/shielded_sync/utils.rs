@@ -34,12 +34,13 @@ pub type IndexedNoteEntry = (IndexedTx, Vec<Transaction>);
 pub type IndexedNoteEntryRefs<'a> = (&'a IndexedTx, &'a Vec<Transaction>);
 
 /// Type alias for a successful note decryption.
-pub type DecryptedData = Option<(Note, PaymentAddress, MemoBytes)>;
+pub type DecryptedData = (Note, PaymentAddress, MemoBytes);
 
 /// Cache of decrypted notes.
 #[derive(Default, BorshSerialize, BorshDeserialize)]
 pub struct TrialDecrypted {
-    inner: HashMap<IndexedTx, HashMap<ViewingKey, Vec<DecryptedData>>>,
+    inner:
+        HashMap<IndexedTx, HashMap<ViewingKey, BTreeMap<usize, DecryptedData>>>,
 }
 
 impl TrialDecrypted {
@@ -48,7 +49,7 @@ impl TrialDecrypted {
         &self,
         itx: &IndexedTx,
         vk: &ViewingKey,
-    ) -> Option<&Vec<DecryptedData>> {
+    ) -> Option<&BTreeMap<usize, DecryptedData>> {
         self.inner.get(itx).and_then(|h| h.get(vk))
     }
 
@@ -57,7 +58,7 @@ impl TrialDecrypted {
         &mut self,
         itx: &IndexedTx,
         vk: &ViewingKey,
-    ) -> Option<Vec<DecryptedData>> {
+    ) -> Option<BTreeMap<usize, DecryptedData>> {
         let (notes, no_more_notes) = {
             let viewing_keys_to_notes = self.inner.get_mut(itx)?;
             let notes = viewing_keys_to_notes.swap_remove(vk)?;
@@ -74,7 +75,7 @@ impl TrialDecrypted {
         &mut self,
         itx: IndexedTx,
         vk: ViewingKey,
-        notes: Vec<DecryptedData>,
+        notes: BTreeMap<usize, DecryptedData>,
     ) {
         self.inner.entry(itx).or_default().insert(vk, notes);
     }

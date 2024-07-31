@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::future::Future;
 use std::ops::ControlFlow;
 
@@ -106,7 +107,7 @@ pub fn trial_decrypt(
     shielded: Transaction,
     vk: ViewingKey,
     mut interrupted: impl FnMut() -> bool,
-) -> ControlFlow<(), Vec<DecryptedData>> {
+) -> ControlFlow<(), BTreeMap<usize, DecryptedData>> {
     type Proof = OutputDescription<
         <
         <Authorized as Authorization>::SaplingAuth
@@ -118,18 +119,21 @@ pub fn trial_decrypt(
         .sapling_bundle()
         .map_or(&vec![], |x| &x.shielded_outputs)
         .iter()
-        .try_fold(vec![], |mut accum, so| {
+        .enumerate()
+        .try_fold(BTreeMap::new(), |mut accum, (note_pos_offset, so)| {
             if interrupted() {
                 return ControlFlow::Break(());
             }
             // Let's try to see if this viewing key can decrypt latest
             // note
-            accum.push(try_sapling_note_decryption::<_, Proof>(
+            if let Some(decrypted) = try_sapling_note_decryption::<_, Proof>(
                 &NETWORK,
                 1.into(),
                 &PreparedIncomingViewingKey::new(&vk.ivk()),
                 so,
-            ));
+            ) {
+                accum.insert(note_pos_offset, decrypted);
+            }
             ControlFlow::Continue(accum)
         })
 }
