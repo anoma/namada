@@ -366,11 +366,7 @@ pub async fn init_validator_signing_data(
     args: &args::Tx<SdkTypes>,
     validator_keys: Vec<common::PublicKey>,
 ) -> Result<SigningTxData, Error> {
-    let mut public_keys = if args.wrapper_fee_payer.is_none() {
-        tx_signers(context, args, None).await?
-    } else {
-        vec![]
-    };
+    let mut public_keys = tx_signers(context, args, None).await?;
     public_keys.extend(validator_keys.clone());
 
     let account_public_keys_map =
