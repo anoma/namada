@@ -98,7 +98,7 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         run: cargo cache --autoclean-expensive
       - name: Stop sccache
-        if: always() && steps.sccache.outcome == 'success'
+        if: always() && steps.sccache.conclusion == 'success'
         run: sccache --stop-server || true
 
   build-wasm:
@@ -260,7 +260,7 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         run: cargo cache --autoclean-expensive
       - name: Stop sccache
-        if: always() && steps.sccache.outcome == 'success'
+        if: always() && steps.sccache.conclusion == 'success'
         run: sccache --stop-server || true
   
   check-packages:
@@ -302,7 +302,7 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         run: cargo cache --autoclean-expensive
       - name: Stop sccache
-        if: always() && steps.sccache.outcome == 'success'
+        if: always() && steps.sccache.conclusion == 'success'
         run: sccache --stop-server || true
 
   test-integration:
@@ -355,7 +355,7 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         run: cargo cache --autoclean-expensive
       - name: Stop sccache
-        if: always() && steps.sccache.outcome == 'success'
+        if: always() && steps.sccache.conclusion == 'success'
         run: sccache --stop-server || true
 
   check-benchmarks:
@@ -409,7 +409,7 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         run: cargo cache --autoclean-expensive
       - name: Stop sccache
-        if: always() && steps.sccache.outcome == 'success'
+        if: always() && steps.sccache.conclusion == 'success'
         run: sccache --stop-server || true
 
   build-binaries:
@@ -466,7 +466,7 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         run: cargo cache --autoclean-expensive
       - name: Stop sccache
-        if: always() && steps.sccache.outcome == 'success'
+        if: always() && steps.sccache.conclusion == 'success'
         run: sccache --stop-server || true
 
   test-e2e:
@@ -553,7 +553,7 @@ jobs:
           N_OF_MACHINES: 5
           INDEX: ${{ matrix.make.index }}
       - name: Upload e2e logs
-        if: steps.e2e.outcome == 'success' || steps.e2e.outcome == 'failure'
+        if: success() || steps.e2e.conclusion == 'failure' || steps.e2e.conclusion == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: logs-e2e-${{ matrix.make.index }}-${{ github.event.pull_request.head.sha || github.sha }}
@@ -566,5 +566,5 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         run: cargo cache --autoclean-expensive
       - name: Stop sccache
-        if: always() && steps.sccache.outcome == 'success'
+        if: always() && steps.sccache.conclusion == 'success'
         run: sccache --stop-server || true
