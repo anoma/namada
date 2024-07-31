@@ -758,9 +758,9 @@ fn proposal_ibc_token_inflation() -> Result<()> {
 #[test]
 fn ibc_upgrade_client() -> Result<()> {
     // To avoid the client expiration, stop updating the client near the
-    // first height of the grace epoch. It is set 700 because the grace epoch in
-    // this test will be Epoch 35 and the number of blocks per epoch is 20.
-    const MIN_UPGRADE_HEIGHT: u64 = 700;
+    // first height of the grace epoch. It is set 420 because the grace epoch in
+    // this test will be Epoch 21 and the number of blocks per epoch is 20.
+    const MIN_UPGRADE_HEIGHT: u64 = 420;
     const MASP_EPOCH_MULTIPLIER: u64 = 2;
 
     let update_genesis =
