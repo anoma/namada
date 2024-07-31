@@ -739,8 +739,8 @@ where
                 if !result.is_accepted() {
                     state.write_log_mut().drop_tx();
                     tracing::error!(
-                        "The fee unshielding tx is invalid, some VPs rejected \
-                         it: {:#?}",
+                        "The first transaction in the batch failed to pay \
+                         fees via the MASP, some VPs rejected it: {:#?}",
                         result.vps_result.rejected_vps
                     );
                 }
@@ -777,7 +777,8 @@ where
             Err(e) => {
                 state.write_log_mut().drop_tx();
                 tracing::error!(
-                    "The fee unshielding tx is invalid, wasm run failed: {}",
+                    "The first transaction in the batch failed to pay fees \
+                     via the MASP, wasm run failed: {}",
                     e
                 );
                 if let Error::GasError(_) = e {
