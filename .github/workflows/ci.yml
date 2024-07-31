@@ -475,7 +475,7 @@ jobs:
       image: ghcr.io/heliaxdev/namada-ci:namada-main
     if: github.event.pull_request.draft == false || contains(github.head_ref, 'mergify/merge-queue') || contains(github.ref_name, 'mergify/merge-queue')
     needs: [build-wasm, build-binaries]
-    timeout-minutes: 35
+    timeout-minutes: 50
     strategy:
       fail-fast: false
       matrix:
