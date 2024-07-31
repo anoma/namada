@@ -124,14 +124,12 @@ pub fn trial_decrypt(
             }
             // Let's try to see if this viewing key can decrypt latest
             // note
-            if let Some(data) = try_sapling_note_decryption::<_, Proof>(
+            accum.push(try_sapling_note_decryption::<_, Proof>(
                 &NETWORK,
                 1.into(),
                 &PreparedIncomingViewingKey::new(&vk.ivk()),
                 so,
-            ) {
-                accum.push(data);
-            }
+            ));
             ControlFlow::Continue(accum)
         })
 }

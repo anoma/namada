@@ -371,7 +371,7 @@ where
             {
                 self.ctx.update_witness_map(indexed_tx, &stx_batch)?;
             }
-            let mut note_pos = self.ctx.tx_note_map[&indexed_tx];
+            let note_pos = self.ctx.tx_note_map[&indexed_tx];
             let mut vk_heights = BTreeMap::new();
             std::mem::swap(&mut vk_heights, &mut self.ctx.vk_heights);
             for (vk, _) in vk_heights
@@ -379,16 +379,24 @@ where
                 // NB: skip keys that are synced past the given `indexed_tx`
                 .filter(|(_vk, h)| h.as_ref() < Some(&indexed_tx))
             {
-                for (note, pa, memo) in self
+                let mut vk_note_pos = note_pos;
+
+                for trial_decrypted in self
                     .cache
                     .trial_decrypted
                     .take(&indexed_tx, vk)
                     .unwrap_or_default()
                 {
-                    self.ctx.save_decrypted_shielded_outputs(
-                        vk, note_pos, note, pa, memo,
-                    )?;
-                    note_pos += 1;
+                    if let Some((note, pa, memo)) = trial_decrypted {
+                        self.ctx.save_decrypted_shielded_outputs(
+                            vk,
+                            vk_note_pos,
+                            note,
+                            pa,
+                            memo,
+                        )?;
+                    }
+                    vk_note_pos += 1;
                 }
             }
             self.ctx.save_shielded_spends(&stx_batch);

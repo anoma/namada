@@ -34,7 +34,7 @@ pub type IndexedNoteEntry = (IndexedTx, Vec<Transaction>);
 pub type IndexedNoteEntryRefs<'a> = (&'a IndexedTx, &'a Vec<Transaction>);
 
 /// Type alias for a successful note decryption.
-pub type DecryptedData = (Note, PaymentAddress, MemoBytes);
+pub type DecryptedData = Option<(Note, PaymentAddress, MemoBytes)>;
 
 /// Cache of decrypted notes.
 #[derive(Default, BorshSerialize, BorshDeserialize)]
