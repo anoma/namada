@@ -14,20 +14,33 @@ pub trait ShutdownSignal {
 
 #[cfg(not(target_family = "wasm"))]
 mod non_wasm {
+    use std::ops::Drop;
+    use std::sync::atomic::{self, AtomicBool};
+
     use lazy_static::lazy_static;
     use tokio::sync::watch;
 
     use super::ShutdownSignal;
 
+    struct InterruptChannel {
+        sender: watch::Sender<bool>,
+        receiver: watch::Receiver<bool>,
+    }
+
+    static LISTENING_TO_INTERRUPT_SIG: AtomicBool = AtomicBool::new(false);
+
+    struct ListeningToInterruptGuard;
+
+    impl Drop for ListeningToInterruptGuard {
+        fn drop(&mut self) {
+            LISTENING_TO_INTERRUPT_SIG.store(false, atomic::Ordering::SeqCst);
+        }
+    }
+
     lazy_static! {
-        static ref SHUTDOWN_SIGNAL_RECV: watch::Receiver<bool> = {
-            let (tx, rx) = watch::channel(false);
-
-            tokio::spawn(async move {
-                shutdown_send(tx).await;
-            });
-
-            rx
+        static ref SHUTDOWN_SIGNAL: InterruptChannel = {
+            let (sender, receiver) = watch::channel(false);
+            InterruptChannel { sender, receiver }
         };
     }
 
@@ -42,21 +55,36 @@ mod non_wasm {
         }
 
         fn received(&mut self) -> bool {
-            self.rx.has_changed().unwrap_or(true)
+            self.rx.has_changed().unwrap()
         }
     }
 
     /// Install a shutdown signal handler, and retrieve the associated
     /// signal's receiver.
     pub fn install_shutdown_signal() -> ShutdownSignalChan {
+        if LISTENING_TO_INTERRUPT_SIG
+            .compare_exchange(
+                false,
+                true,
+                atomic::Ordering::SeqCst,
+                atomic::Ordering::SeqCst,
+            )
+            .is_ok()
+        {
+            let guard = ListeningToInterruptGuard;
+
+            tokio::spawn(async move {
+                shutdown_send(guard).await;
+            });
+        }
         ShutdownSignalChan {
-            rx: SHUTDOWN_SIGNAL_RECV.clone(),
+            rx: SHUTDOWN_SIGNAL.receiver.clone(),
         }
     }
 
     /// Shutdown signal receiver
     #[cfg(unix)]
-    pub async fn shutdown_send(tx: watch::Sender<bool>) {
+    async fn shutdown_send(_guard: ListeningToInterruptGuard) {
         use tokio::signal::unix::{signal, SignalKind};
         let mut sigterm = signal(SignalKind::terminate()).unwrap();
         let mut sighup = signal(SignalKind::hangup()).unwrap();
@@ -91,12 +119,12 @@ mod non_wasm {
                 }
             },
         };
-        tx.send_replace(true);
+        SHUTDOWN_SIGNAL.sender.send_replace(true);
     }
 
     /// Shutdown signal receiver
     #[cfg(windows)]
-    pub async fn shutdown_send(tx: watch::Sender<bool>) {
+    async fn shutdown_send(_guard: ListeningToInterruptGuard) {
         let mut sigbreak = tokio::signal::windows::ctrl_break().unwrap();
         tokio::select! {
             signal = tokio::signal::ctrl_c() => {
@@ -112,7 +140,7 @@ mod non_wasm {
                 }
             },
         };
-        tx.send_replace(true);
+        SHUTDOWN_SIGNAL.sender.send_replace(true);
     }
 }
 
