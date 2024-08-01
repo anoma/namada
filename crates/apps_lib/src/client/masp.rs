@@ -110,7 +110,7 @@ pub async fn syncing<
             ))
         })?;
 
-        dispatch_client!(IndexerMaspClient::new(client, url))?
+        dispatch_client!(IndexerMaspClient::new(client, url, true))?
     } else {
         display_line!(
             io,
