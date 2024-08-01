@@ -131,6 +131,7 @@ rayon.workspace = true
 reqwest.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["full"] }
+xorf.workspace = true
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 tokio = { workspace = true, default-features = false, features = ["sync"] }

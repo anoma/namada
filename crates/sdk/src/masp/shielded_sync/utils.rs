@@ -480,6 +480,44 @@ impl IndexerMaspClient {
 
         Ok(payload.message)
     }
+
+    #[allow(dead_code)]
+    async fn last_block_index(&self) -> Result<xorf::BinaryFuse16, Error> {
+        use serde::Deserialize;
+
+        #[derive(Deserialize)]
+        struct Response {
+            index: xorf::BinaryFuse16,
+        }
+
+        let _permit = self.shared.semaphore.acquire().await.unwrap();
+
+        let response = self
+            .client
+            .get(self.endpoint("/block-index"))
+            .keep_alive()
+            .send()
+            .await
+            .map_err(|err| {
+                Error::Other(format!(
+                    "Failed to fetch latest masp tx block index: {err}"
+                ))
+            })?;
+        if !response.status().is_success() {
+            let err = Self::get_server_error(response).await?;
+            return Err(Error::Other(format!(
+                "Failed to fetch latest masp tx block index: {err}"
+            )));
+        }
+        let payload: Response = response.json().await.map_err(|err| {
+            Error::Other(format!(
+                "Could not deserialize latest masp tx block index JSON \
+                 response: {err}"
+            ))
+        })?;
+
+        Ok(payload.index)
+    }
 }
 
 #[cfg(not(target_family = "wasm"))]
