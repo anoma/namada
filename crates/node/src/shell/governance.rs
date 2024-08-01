@@ -12,6 +12,7 @@ use namada_sdk::governance::storage::{keys as gov_storage, load_proposals};
 use namada_sdk::governance::utils::{
     compute_proposal_result, ProposalVotes, TallyResult, TallyType, VotePower,
 };
+pub use namada_sdk::governance::Store;
 use namada_sdk::governance::{
     storage as gov_api, ProposalVote, ADDRESS as gov_address,
 };
@@ -26,7 +27,7 @@ use namada_sdk::storage::Epoch;
 use namada_sdk::token::event::{TokenEvent, TokenOperation};
 use namada_sdk::token::read_balance;
 use namada_sdk::tx::{Code, Data};
-use namada_sdk::{encode, ibc};
+use namada_sdk::{encode, ibc, parameters};
 
 use super::utils::force_read;
 use super::*;
@@ -80,7 +81,7 @@ where
     H: StorageHasher + Sync + 'static,
 {
     let mut proposals_result = ProposalsResult::default();
-    let params = read_pos_params(&shell.state)?;
+    let params = read_pos_params::<_, Store<_>>(&shell.state)?;
 
     for id in proposal_ids {
         let proposal_funds_key = gov_storage::get_funds_key(id);
@@ -364,7 +365,8 @@ where
                 source: delegator.clone(),
                 validator: validator.clone(),
             };
-            let delegator_stake = bond_amount(storage, &bond_id, epoch);
+            let delegator_stake =
+                bond_amount::<_, Store<_>>(storage, &bond_id, epoch);
 
             if let Ok(stake) = delegator_stake {
                 delegators_vote.insert(delegator.clone(), vote_data);
@@ -571,7 +573,14 @@ where
                         },
                     ),
                     PGFTarget::Ibc(target) => (
-                        ibc::transfer_over_ibc(state, token, &ADDRESS, target),
+                        ibc::transfer_over_ibc::<
+                            _,
+                            parameters::Store<_>,
+                            token::Store<_>,
+                            token::Transfer,
+                        >(
+                            state, token, &ADDRESS, target
+                        ),
                         TokenEvent {
                             descriptor: "pgf-payments-over-ibc".into(),
                             level: EventLevel::Block,

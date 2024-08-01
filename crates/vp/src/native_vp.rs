@@ -54,7 +54,6 @@ pub trait NativeVp<'a> {
 pub struct Ctx<'a, S, CA, EVAL>
 where
     S: StateRead,
-    EVAL: VpEvaluator<'a, S, CA, EVAL>,
 {
     /// The address of the account that owns the VP
     pub address: &'a Address,
@@ -86,7 +85,6 @@ where
 pub trait VpEvaluator<'a, S, CA, EVAL>
 where
     S: 'a + StateRead,
-    EVAL: VpEvaluator<'a, S, CA, EVAL>,
 {
     /// Evaluate a given validity predicate code with the given input data.
     /// Currently, we can only evaluate VPs using WASM runner with WASM memory.
@@ -106,7 +104,6 @@ where
 pub struct CtxPreStorageRead<'view, 'a, S, CA, EVAL>
 where
     S: StateRead,
-    EVAL: VpEvaluator<'a, S, CA, EVAL>,
 {
     /// The inner context
     pub ctx: &'view Ctx<'a, S, CA, EVAL>,
@@ -118,7 +115,6 @@ where
 pub struct CtxPostStorageRead<'view, 'a, S, CA, EVAL>
 where
     S: StateRead,
-    EVAL: VpEvaluator<'a, S, CA, EVAL>,
 {
     /// The inner context
     pub ctx: &'view Ctx<'a, S, CA, EVAL>,

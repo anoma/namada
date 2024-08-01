@@ -51,7 +51,7 @@ use namada_apps_lib::validation::{
     IbcVpContext, MaspVp, MultitokenVp, ParametersVp, PgfVp, PosVp,
 };
 use namada_apps_lib::wallet::defaults;
-use namada_apps_lib::{governance, proof_of_stake, storage, token};
+use namada_apps_lib::{governance, parameters, proof_of_stake, storage, token};
 use namada_node::bench_utils::{
     generate_foreign_key_tx, BenchShell, BenchShieldedCtx,
     ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
@@ -110,9 +110,11 @@ fn governance(c: &mut Criterion) {
             "minimal_proposal" => {
                 let content_section =
                     Section::ExtraData(Code::new(vec![], None));
-                let params =
-                    proof_of_stake::storage::read_pos_params(&shell.state)
-                        .unwrap();
+                let params = proof_of_stake::storage::read_pos_params::<
+                    _,
+                    governance::Store<_>,
+                >(&shell.state)
+                .unwrap();
                 let voting_start_epoch =
                     Epoch(2 + params.pipeline_len + params.unbonding_len);
                 // Must start after current epoch
@@ -163,9 +165,11 @@ fn governance(c: &mut Criterion) {
                     None,
                 ));
 
-                let params =
-                    proof_of_stake::storage::read_pos_params(&shell.state)
-                        .unwrap();
+                let params = proof_of_stake::storage::read_pos_params::<
+                    _,
+                    governance::Store<_>,
+                >(&shell.state)
+                .unwrap();
                 let voting_start_epoch =
                     Epoch(2 + params.pipeline_len + params.unbonding_len);
                 // Must start after current epoch
@@ -1670,16 +1674,20 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
 
         let exec_ctx = IbcVpContext::new(ibc.ctx.pre());
         let ctx = Rc::new(RefCell::new(exec_ctx));
-        let mut actions = IbcActions::new(ctx.clone(), verifiers.clone());
+        let mut actions =
+            IbcActions::<_, parameters::Store<_>, token::Store<()>>::new(
+                ctx.clone(),
+                verifiers.clone(),
+            );
         actions.set_validation_params(ibc.validation_params().unwrap());
 
         let module = TransferModule::new(ctx.clone(), verifiers);
         actions.add_transfer_module(module);
-        let module = NftTransferModule::new(ctx);
+        let module = NftTransferModule::<_, token::Store<()>>::new(ctx);
         actions.add_transfer_module(module);
 
         group.bench_function(bench_name, |b| {
-            b.iter(|| actions.validate(&tx_data).unwrap())
+            b.iter(|| actions.validate::<Transfer>(&tx_data).unwrap())
         });
     }
 
@@ -1727,16 +1735,20 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
         let exec_ctx = IbcVpContext::new(ibc.ctx.pre());
         let ctx = Rc::new(RefCell::new(exec_ctx));
 
-        let mut actions = IbcActions::new(ctx.clone(), verifiers.clone());
+        let mut actions =
+            IbcActions::<_, parameters::Store<_>, token::Store<()>>::new(
+                ctx.clone(),
+                verifiers.clone(),
+            );
         actions.set_validation_params(ibc.validation_params().unwrap());
 
         let module = TransferModule::new(ctx.clone(), verifiers);
         actions.add_transfer_module(module);
-        let module = NftTransferModule::new(ctx);
+        let module = NftTransferModule::<_, token::Store<()>>::new(ctx);
         actions.add_transfer_module(module);
 
         group.bench_function(bench_name, |b| {
-            b.iter(|| actions.execute(&tx_data).unwrap())
+            b.iter(|| actions.execute::<token::Transfer>(&tx_data).unwrap())
         });
     }
 

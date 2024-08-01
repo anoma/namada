@@ -20,6 +20,7 @@ use namada_governance::parameters::GovernanceParameters;
 use namada_state::testing::TestState;
 use namada_storage::collections::lazy_map::{NestedSubKey, SubKey};
 use namada_storage::StorageRead;
+use namada_trans_token::{self as token, read_balance};
 use proptest::prelude::*;
 use proptest::test_runner::Config;
 use proptest_state_machine::{
@@ -34,18 +35,21 @@ use super::helpers::advance_epoch;
 use super::utils::DbgPrintDiff;
 use crate::parameters::testing::arb_rate;
 use crate::parameters::PosParams;
-use crate::queries::find_delegations;
 use crate::slashing::find_slashes_in_range;
 use crate::storage::{
     enqueued_slashes_handle, read_all_validator_addresses,
     read_below_capacity_validator_set_addresses,
     read_below_capacity_validator_set_addresses_with_stake,
-    read_below_threshold_validator_set_addresses,
     read_consensus_validator_set_addresses_with_stake,
 };
 use crate::tests::helpers::arb_params_and_genesis_validators;
 use crate::tests::utils::pause_for_enter;
-use crate::token::read_balance;
+use crate::tests::{
+    become_validator, bond_tokens, find_delegations, process_slashes,
+    read_below_threshold_validator_set_addresses, read_pos_params,
+    redelegate_tokens, slash, unbond_tokens, unjail_validator, withdraw_tokens,
+    GovStore,
+};
 use crate::types::{
     BondId, GenesisValidator, ReverseOrdTokenAmount, Slash, SlashType,
     ValidatorState, WeightedValidator,
@@ -53,8 +57,8 @@ use crate::types::{
 use crate::{
     below_capacity_validator_set_handle, bond_handle,
     consensus_validator_set_handle, delegator_redelegated_bonds_handle,
-    read_pos_params, redelegate_tokens, token, validator_deltas_handle,
-    validator_slashes_handle, validator_state_handle, RedelegationError,
+    validator_deltas_handle, validator_slashes_handle, validator_state_handle,
+    RedelegationError,
 };
 
 prop_state_machine! {
@@ -1947,7 +1951,7 @@ impl StateMachineTest for ConcretePosState {
         );
         let mut s = TestState::default();
         initial_state.gov_params.init_storage(&mut s).unwrap();
-        crate::test_utils::init_genesis_helper(
+        crate::tests::init_genesis_helper(
             &mut s,
             &initial_state.params,
             initial_state.genesis_validators.clone().into_iter(),
@@ -1978,7 +1982,7 @@ impl StateMachineTest for ConcretePosState {
 
         pause_for_enter();
 
-        let params = crate::read_pos_params(&state.s).unwrap();
+        let params = read_pos_params(&state.s).unwrap();
         let pos_balance = read_balance(
             &state.s,
             &state.s.in_mem().native_token,
@@ -1993,7 +1997,7 @@ impl StateMachineTest for ConcretePosState {
 
                 // Need to apply some slashing
                 let current_epoch = state.s.in_mem().block.epoch;
-                crate::slashing::process_slashes(
+                process_slashes(
                     &mut state.s,
                     &mut namada_events::testing::VoidEventSink,
                     current_epoch,
@@ -2015,7 +2019,7 @@ impl StateMachineTest for ConcretePosState {
                 tracing::debug!("\nCONCRETE Init validator");
                 let current_epoch = state.current_epoch();
 
-                crate::become_validator(
+                become_validator(
                     &mut state.s,
                     crate::BecomeValidator {
                         params: &params,
@@ -2087,7 +2091,7 @@ impl StateMachineTest for ConcretePosState {
                 );
 
                 // Apply the bond
-                crate::bond_tokens(
+                bond_tokens(
                     &mut state.s,
                     Some(&id.source),
                     &id.validator,
@@ -2152,7 +2156,7 @@ impl StateMachineTest for ConcretePosState {
                     .unwrap();
 
                 // Apply the unbond
-                crate::unbond_tokens(
+                unbond_tokens(
                     &mut state.s,
                     Some(&id.source),
                     &id.validator,
@@ -2228,7 +2232,7 @@ impl StateMachineTest for ConcretePosState {
                 //         .unwrap();
 
                 // Apply the withdrawal
-                let withdrawn = crate::withdraw_tokens(
+                let withdrawn = withdraw_tokens(
                     &mut state.s,
                     Some(&source),
                     &validator,
@@ -2684,7 +2688,7 @@ impl StateMachineTest for ConcretePosState {
                 tracing::debug!("\nCONCRETE Misbehavior");
                 let current_epoch = state.current_epoch();
                 // Record the slash evidence
-                crate::slashing::slash(
+                slash(
                     &mut state.s,
                     &params,
                     current_epoch,
@@ -2714,7 +2718,7 @@ impl StateMachineTest for ConcretePosState {
                 let current_epoch = state.current_epoch();
 
                 // Unjail the validator
-                crate::unjail_validator(&mut state.s, &address, current_epoch)
+                unjail_validator(&mut state.s, &address, current_epoch)
                     .unwrap();
 
                 // Post-conditions
@@ -3551,7 +3555,10 @@ impl ConcretePosState {
                     let max_slash_round_err =
                         records.slash_round_err_tolerance(epoch);
                     let conc_bond_amount =
-                        crate::bond_amount(&self.s, &bond_id, epoch).unwrap();
+                        crate::bond_amount::<_, GovStore<_>>(
+                            &self.s, &bond_id, epoch,
+                        )
+                        .unwrap();
                     let ref_bond_amount = records.amount(epoch);
                     assert!(
                         ref_bond_amount

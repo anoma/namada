@@ -1,5 +1,7 @@
 //! Transparent token abstract interfaces
 
+use std::borrow::Cow;
+
 use namada_core::address::Address;
 pub use namada_core::token::*;
 use namada_core::{storage, token};
@@ -87,5 +89,26 @@ pub trait Write<S>: Read<S> {
         token: &Address,
         dest: &Address,
         amount: token::Amount,
+    ) -> Result<()>;
+}
+
+/// Abstract token events interface
+pub trait Events<S>: Read<S> {
+    /// Emit mint token event
+    fn emit_mint_event(
+        storage: &mut S,
+        descriptor: Cow<'static, str>,
+        token: &Address,
+        amount: token::Amount,
+        target: &Address,
+    ) -> Result<()>;
+
+    /// Emit burn token event
+    fn emit_burn_event(
+        storage: &mut S,
+        descriptor: Cow<'static, str>,
+        token: &Address,
+        amount: token::Amount,
+        target: &Address,
     ) -> Result<()>;
 }

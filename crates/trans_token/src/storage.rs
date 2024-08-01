@@ -334,7 +334,7 @@ where
     S: StorageRead + StorageWrite,
 {
     credit_tokens(storage, token, dest, amount)?;
-    storage.write(&minter_key(token), minter.clone())
+    storage.write(&minter_key(token), minter)
 }
 
 /// Credit tokens to an account, to be used only by protocol. In transactions,

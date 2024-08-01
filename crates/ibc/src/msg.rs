@@ -16,40 +16,39 @@ use ibc::core::host::types::identifiers::PortId;
 use ibc::primitives::proto::Protobuf;
 use masp_primitives::transaction::Transaction as MaspTransaction;
 use namada_core::borsh::BorshSerializeExt;
-use namada_token::Transfer;
 
 /// The different variants of an Ibc message
 #[derive(Debug, Clone)]
-pub enum IbcMessage {
+pub enum IbcMessage<Transfer> {
     /// Ibc Envelop
     Envelope(Box<MsgEnvelope>),
     /// Ibc transaprent transfer
-    Transfer(MsgTransfer),
+    Transfer(Box<MsgTransfer<Transfer>>),
     /// NFT transfer
-    NftTransfer(MsgNftTransfer),
+    NftTransfer(MsgNftTransfer<Transfer>),
 }
 
 /// IBC transfer message with `Transfer`
 #[derive(Debug, Clone)]
-pub struct MsgTransfer {
+pub struct MsgTransfer<Transfer> {
     /// IBC transfer message
     pub message: IbcMsgTransfer,
     /// Shieleded transfer for MASP transaction
     pub transfer: Option<Transfer>,
 }
 
-impl BorshSerialize for MsgTransfer {
+impl<Transfer: BorshSerialize> BorshSerialize for MsgTransfer<Transfer> {
     fn serialize<W: std::io::Write>(
         &self,
         writer: &mut W,
     ) -> std::io::Result<()> {
         let encoded_msg = self.message.clone().encode_vec();
-        let members = (encoded_msg, self.transfer.clone());
+        let members = (encoded_msg, &self.transfer);
         BorshSerialize::serialize(&members, writer)
     }
 }
 
-impl BorshDeserialize for MsgTransfer {
+impl<Transfer: BorshDeserialize> BorshDeserialize for MsgTransfer<Transfer> {
     fn deserialize_reader<R: std::io::Read>(
         reader: &mut R,
     ) -> std::io::Result<Self> {
@@ -62,7 +61,7 @@ impl BorshDeserialize for MsgTransfer {
     }
 }
 
-impl BorshSchema for MsgTransfer {
+impl<Transfer: BorshSchema> BorshSchema for MsgTransfer<Transfer> {
     fn add_definitions_recursively(
         definitions: &mut BTreeMap<Declaration, Definition>,
     ) {
@@ -80,25 +79,25 @@ impl BorshSchema for MsgTransfer {
 
 /// IBC NFT transfer message with `Transfer`
 #[derive(Debug, Clone)]
-pub struct MsgNftTransfer {
+pub struct MsgNftTransfer<Transfer> {
     /// IBC NFT transfer message
     pub message: IbcMsgNftTransfer,
     /// Shieleded transfer for MASP transaction
     pub transfer: Option<Transfer>,
 }
 
-impl BorshSerialize for MsgNftTransfer {
+impl<Transfer: BorshSerialize> BorshSerialize for MsgNftTransfer<Transfer> {
     fn serialize<W: std::io::Write>(
         &self,
         writer: &mut W,
     ) -> std::io::Result<()> {
         let encoded_msg = self.message.clone().encode_vec();
-        let members = (encoded_msg, self.transfer.clone());
+        let members = (encoded_msg, &self.transfer);
         BorshSerialize::serialize(&members, writer)
     }
 }
 
-impl BorshDeserialize for MsgNftTransfer {
+impl<Transfer: BorshDeserialize> BorshDeserialize for MsgNftTransfer<Transfer> {
     fn deserialize_reader<R: std::io::Read>(
         reader: &mut R,
     ) -> std::io::Result<Self> {
@@ -111,7 +110,7 @@ impl BorshDeserialize for MsgNftTransfer {
     }
 }
 
-impl BorshSchema for MsgNftTransfer {
+impl<Transfer: BorshSchema> BorshSchema for MsgNftTransfer<Transfer> {
     fn add_definitions_recursively(
         definitions: &mut BTreeMap<Declaration, Definition>,
     ) {

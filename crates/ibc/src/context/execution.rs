@@ -18,15 +18,17 @@ use ibc::core::host::types::path::{
 };
 use ibc::core::host::ExecutionContext;
 use ibc::primitives::Timestamp;
+use namada_systems::parameters;
 
 use super::client::AnyClientState;
 use super::common::IbcCommonContext;
 use super::IbcContext;
 use crate::storage;
 
-impl<C> ClientExecutionContext for IbcContext<C>
+impl<C, Params> ClientExecutionContext for IbcContext<C, Params>
 where
     C: IbcCommonContext,
+    Params: parameters::Read<C::Storage>,
 {
     type ClientStateMut = AnyClientState;
 
@@ -94,9 +96,10 @@ where
     }
 }
 
-impl<C> ExecutionContext for IbcContext<C>
+impl<C, Params> ExecutionContext for IbcContext<C, Params>
 where
     C: IbcCommonContext,
+    Params: parameters::Read<C::Storage>,
 {
     type E = Self;
 

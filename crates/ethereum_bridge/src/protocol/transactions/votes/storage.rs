@@ -5,6 +5,7 @@ use namada_core::storage::Key;
 use namada_core::voting_power::FractionalVotingPower;
 use namada_state::{DBIter, PrefixIter, StorageHasher, WlState, DB};
 use namada_storage::{StorageRead, StorageWrite};
+use namada_systems::governance;
 
 use super::{EpochedVotingPower, EpochedVotingPowerExt, Tally, Votes};
 use crate::storage::vote_tallies;
@@ -39,13 +40,14 @@ where
 /// type `T` being voted on, in case it has accumulated more than 1/3
 /// of fractional voting power behind it.
 #[must_use = "The storage value returned by this function must be used"]
-pub fn delete<D, H, T>(
+pub fn delete<D, H, Gov, T>(
     state: &mut WlState<D, H>,
     keys: &vote_tallies::Keys<T>,
 ) -> Result<Option<T>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
+    Gov: governance::Read<WlState<D, H>>,
     T: BorshDeserialize,
 {
     let opt_body = {
@@ -53,7 +55,7 @@ where
             super::read::value(state, &keys.voting_power())?;
 
         if hints::unlikely(
-            voting_power.fractional_stake(state)
+            voting_power.fractional_stake::<D, H, Gov>(state)
                 > FractionalVotingPower::ONE_THIRD,
         ) {
             let body: T = super::read::value(state, &keys.body())?;
@@ -137,7 +139,7 @@ mod tests {
     use namada_core::ethereum_events::EthereumEvent;
 
     use super::*;
-    use crate::test_utils;
+    use crate::test_utils::{self, GovStore};
 
     #[test]
     fn test_delete_expired_tally() {
@@ -166,7 +168,8 @@ mod tests {
         assert!(write(&mut state, &keys, &event, &tally, false).is_ok());
 
         // delete the tally and check that the body is returned
-        let opt_body = delete(&mut state, &keys).unwrap();
+        let opt_body =
+            delete::<_, _, GovStore<_>, _>(&mut state, &keys).unwrap();
         assert_matches!(opt_body, Some(e) if e == event);
 
         // now, we write another tally, with <=1/3 voting power
@@ -175,7 +178,8 @@ mod tests {
         assert!(write(&mut state, &keys, &event, &tally, false).is_ok());
 
         // delete the tally and check that no body is returned
-        let opt_body = delete(&mut state, &keys).unwrap();
+        let opt_body =
+            delete::<_, _, GovStore<_>, _>(&mut state, &keys).unwrap();
         assert_matches!(opt_body, None);
     }
 

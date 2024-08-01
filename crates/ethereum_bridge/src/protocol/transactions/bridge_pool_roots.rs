@@ -7,9 +7,9 @@ use namada_core::keccak::keccak_hash;
 use namada_core::key::{common, SignableEthMessage};
 use namada_core::storage::BlockHeight;
 use namada_core::token::Amount;
-use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_state::{DBIter, StorageHasher, WlState, DB};
 use namada_storage::{StorageRead, StorageWrite};
+use namada_systems::governance;
 use namada_tx::data::BatchedTxResult;
 use namada_tx::Signed;
 use namada_vote_ext::bridge_pool_roots::{self, MultiSignedVext, SignedVext};
@@ -58,13 +58,14 @@ where
 /// For roots + nonces which have been seen by a quorum of
 /// validators, the signature is made available for bridge
 /// pool proofs.
-pub fn apply_derived_tx<D, H>(
+pub fn apply_derived_tx<D, H, Gov>(
     state: &mut WlState<D, H>,
     vext: MultiSignedVext,
 ) -> Result<BatchedTxResult>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
+    Gov: governance::Read<WlState<D, H>>,
 {
     if vext.is_empty() {
         return Ok(BatchedTxResult::default());
@@ -76,7 +77,7 @@ where
     );
     let voting_powers = utils::get_voting_powers(state, &vext)?;
     let root_height = vext.iter().next().unwrap().data.block_height;
-    let (partial_proof, seen_by) = parse_vexts(state, vext);
+    let (partial_proof, seen_by) = parse_vexts::<D, H, Gov>(state, vext);
 
     // return immediately if a complete proof has already been acquired
     let bp_key = vote_tallies::Keys::from((&partial_proof, root_height));
@@ -92,8 +93,13 @@ where
     }
 
     // apply updates to the bridge pool root.
-    let (mut changed, confirmed_update) =
-        apply_update(state, bp_key, partial_proof, seen_by, &voting_powers)?;
+    let (mut changed, confirmed_update) = apply_update::<D, H, Gov>(
+        state,
+        bp_key,
+        partial_proof,
+        seen_by,
+        &voting_powers,
+    )?;
 
     // if the root is confirmed, update storage and add
     // relevant key to changed.
@@ -150,16 +156,17 @@ impl GetVoters for &MultiSignedVext {
 
 /// Convert a set of signatures over bridge pool roots and nonces (at a certain
 /// height) into a partial proof and a new set of votes.
-fn parse_vexts<D, H>(
+fn parse_vexts<D, H, Gov>(
     state: &WlState<D, H>,
     multisigned: MultiSignedVext,
 ) -> (BridgePoolRoot, Votes)
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
+    Gov: governance::Read<WlState<D, H>>,
 {
     let height = multisigned.iter().next().unwrap().data.block_height;
-    let epoch = state.pos_queries().get_epoch(height);
+    let epoch = state.get_epoch_at_height(height).unwrap();
     let root = state
         .ethbridge_queries()
         .get_bridge_pool_root_at_height(height)
@@ -173,7 +180,10 @@ where
             (
                 state
                     .ethbridge_queries()
-                    .get_eth_addr_book(&signed.data.validator_addr, epoch)
+                    .get_eth_addr_book::<Gov>(
+                        &signed.data.validator_addr,
+                        epoch,
+                    )
                     .unwrap(),
                 signed.data.sig,
             )
@@ -195,7 +205,7 @@ where
 /// indicating that it has been confirmed.
 ///
 /// In all instances, the changed storage keys are returned.
-fn apply_update<D, H>(
+fn apply_update<D, H, Gov>(
     state: &mut WlState<D, H>,
     bp_key: vote_tallies::Keys<BridgePoolRoot>,
     mut update: BridgePoolRoot,
@@ -205,6 +215,7 @@ fn apply_update<D, H>(
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
+    Gov: governance::Read<WlState<D, H>>,
 {
     let partial_proof = votes::storage::read_body(state, &bp_key);
     let (vote_tracking, changed, confirmed, already_present) = if let Ok(
@@ -218,8 +229,9 @@ where
         );
         update.0.attach_signature_batch(partial.0.signatures);
         let new_votes = NewVotes::new(seen_by, voting_powers)?;
-        let (vote_tracking, changed) =
-            votes::update::calculate(state, &bp_key, new_votes)?;
+        let (vote_tracking, changed) = votes::update::calculate::<D, H, Gov, _>(
+            state, &bp_key, new_votes,
+        )?;
         if changed.is_empty() {
             return Ok((changed, None));
         }
@@ -227,7 +239,8 @@ where
         (vote_tracking, changed, confirmed, true)
     } else {
         tracing::debug!(%bp_key.prefix, "No validator has signed this bridge pool update before.");
-        let vote_tracking = calculate_new(state, seen_by, voting_powers)?;
+        let vote_tracking =
+            calculate_new::<D, H, Gov>(state, seen_by, voting_powers)?;
         let changed = bp_key.into_iter().collect();
         let confirmed = vote_tracking.seen;
         (vote_tracking, changed, confirmed, false)
@@ -245,6 +258,7 @@ where
 
 #[cfg(test)]
 mod test_apply_bp_roots_to_storage {
+
     use std::collections::BTreeSet;
 
     use assert_matches::assert_matches;
@@ -254,7 +268,10 @@ mod test_apply_bp_roots_to_storage {
     use namada_core::storage::Key;
     use namada_core::voting_power::FractionalVotingPower;
     use namada_proof_of_stake::parameters::OwnedPosParams;
-    use namada_proof_of_stake::storage::write_pos_params;
+    use namada_proof_of_stake::queries::get_total_voting_power;
+    use namada_proof_of_stake::storage::{
+        read_consensus_validator_set_addresses_with_stake, write_pos_params,
+    };
     use namada_state::testing::TestState;
 
     use super::*;
@@ -263,7 +280,7 @@ mod test_apply_bp_roots_to_storage {
     };
     use crate::storage::bridge_pool::{get_key_from_hash, get_nonce_key};
     use crate::storage::vp;
-    use crate::test_utils;
+    use crate::test_utils::{self, GovStore};
 
     /// The data needed to run a test.
     struct TestPackage {
@@ -344,7 +361,8 @@ mod test_apply_bp_roots_to_storage {
         }
         .sign(&keys[&validators[0]].protocol);
         let BatchedTxResult { changed_keys, .. } =
-            apply_derived_tx(&mut state, vext.into()).expect("Test failed");
+            apply_derived_tx::<_, _, GovStore<_>>(&mut state, vext.into())
+                .expect("Test failed");
         let bp_root_key = vote_tallies::Keys::from((
             &BridgePoolRoot(BridgePoolRootProof::new((root, nonce))),
             100.into(),
@@ -361,7 +379,8 @@ mod test_apply_bp_roots_to_storage {
         .sign(&keys[&validators[2]].protocol);
 
         let BatchedTxResult { changed_keys, .. } =
-            apply_derived_tx(&mut state, vext.into()).expect("Test failed");
+            apply_derived_tx::<_, _, GovStore<_>>(&mut state, vext.into())
+                .expect("Test failed");
 
         let expected: BTreeSet<Key> =
             [bp_root_key.seen_by(), bp_root_key.voting_power()]
@@ -401,7 +420,8 @@ mod test_apply_bp_roots_to_storage {
         .sign(&keys[&validators[1]].protocol);
         vexts.insert(vext);
         let BatchedTxResult { changed_keys, .. } =
-            apply_derived_tx(&mut state, vexts).expect("Test failed");
+            apply_derived_tx::<_, _, GovStore<_>>(&mut state, vexts)
+                .expect("Test failed");
         let bp_root_key = vote_tallies::Keys::from((
             &BridgePoolRoot(BridgePoolRootProof::new((root, nonce))),
             100.into(),
@@ -433,7 +453,8 @@ mod test_apply_bp_roots_to_storage {
                 .sig,
         }
         .sign(&keys[&validators[0]].protocol);
-        _ = apply_derived_tx(&mut state, vext.into()).expect("Test failed");
+        _ = apply_derived_tx::<_, _, GovStore<_>>(&mut state, vext.into())
+            .expect("Test failed");
 
         let hot_key = &keys[&validators[1]].eth_bridge;
         let vext = bridge_pool_roots::Vext {
@@ -443,7 +464,8 @@ mod test_apply_bp_roots_to_storage {
         }
         .sign(&keys[&validators[1]].protocol);
         let BatchedTxResult { changed_keys, .. } =
-            apply_derived_tx(&mut state, vext.into()).expect("Test failed");
+            apply_derived_tx::<_, _, GovStore<_>>(&mut state, vext.into())
+                .expect("Test failed");
         let bp_root_key = vote_tallies::Keys::from((
             &BridgePoolRoot(BridgePoolRootProof::new((root, nonce))),
             100.into(),
@@ -483,12 +505,13 @@ mod test_apply_bp_roots_to_storage {
                 .sig,
         }
         .sign(&keys[&validators[0]].protocol);
-        _ = apply_derived_tx(&mut state, vext.into()).expect("Test failed");
+        _ = apply_derived_tx::<_, _, GovStore<_>>(&mut state, vext.into())
+            .expect("Test failed");
         let voting_power = state
             .read::<EpochedVotingPower>(&bp_root_key.voting_power())
             .expect("Test failed")
             .expect("Test failed")
-            .fractional_stake(&state);
+            .fractional_stake::<_, _, GovStore<_>>(&state);
         assert_eq!(
             voting_power,
             FractionalVotingPower::new_u64(5, 12).unwrap()
@@ -501,12 +524,13 @@ mod test_apply_bp_roots_to_storage {
             sig: Signed::<_, SignableEthMessage>::new(hot_key, to_sign).sig,
         }
         .sign(&keys[&validators[1]].protocol);
-        _ = apply_derived_tx(&mut state, vext.into()).expect("Test failed");
+        _ = apply_derived_tx::<_, _, GovStore<_>>(&mut state, vext.into())
+            .expect("Test failed");
         let voting_power = state
             .read::<EpochedVotingPower>(&bp_root_key.voting_power())
             .expect("Test failed")
             .expect("Test failed")
-            .fractional_stake(&state);
+            .fractional_stake::<_, _, GovStore<_>>(&state);
         assert_eq!(voting_power, FractionalVotingPower::new_u64(5, 6).unwrap());
     }
 
@@ -535,7 +559,8 @@ mod test_apply_bp_roots_to_storage {
                 .sig,
         }
         .sign(&keys[&validators[0]].protocol);
-        _ = apply_derived_tx(&mut state, vext.into()).expect("Test failed");
+        _ = apply_derived_tx::<_, _, GovStore<_>>(&mut state, vext.into())
+            .expect("Test failed");
 
         let seen: bool = state
             .read(&bp_root_key.seen())
@@ -550,7 +575,8 @@ mod test_apply_bp_roots_to_storage {
             sig: Signed::<_, SignableEthMessage>::new(hot_key, to_sign).sig,
         }
         .sign(&keys[&validators[1]].protocol);
-        _ = apply_derived_tx(&mut state, vext.into()).expect("Test failed");
+        _ = apply_derived_tx::<_, _, GovStore<_>>(&mut state, vext.into())
+            .expect("Test failed");
 
         let seen: bool = state
             .read(&bp_root_key.seen())
@@ -584,7 +610,8 @@ mod test_apply_bp_roots_to_storage {
                 .sig,
         }
         .sign(&keys[&validators[0]].protocol);
-        _ = apply_derived_tx(&mut state, vext.into()).expect("Test failed");
+        _ = apply_derived_tx::<_, _, GovStore<_>>(&mut state, vext.into())
+            .expect("Test failed");
 
         let expected = Votes::from([(validators[0].clone(), 100.into())]);
         let seen_by: Votes = state
@@ -600,7 +627,8 @@ mod test_apply_bp_roots_to_storage {
             sig: Signed::<_, SignableEthMessage>::new(hot_key, to_sign).sig,
         }
         .sign(&keys[&validators[1]].protocol);
-        _ = apply_derived_tx(&mut state, vext.into()).expect("Test failed");
+        _ = apply_derived_tx::<_, _, GovStore<_>>(&mut state, vext.into())
+            .expect("Test failed");
 
         let expected = Votes::from([
             (validators[0].clone(), 100.into()),
@@ -637,15 +665,16 @@ mod test_apply_bp_roots_to_storage {
         expected.0.attach_signature(
             state
                 .ethbridge_queries()
-                .get_eth_addr_book(
+                .get_eth_addr_book::<GovStore<_>>(
                     &validators[0],
-                    state.pos_queries().get_epoch(100.into()),
+                    state.get_epoch_at_height(100.into()).unwrap(),
                 )
                 .expect("Test failed"),
             vext.sig.clone(),
         );
         let vext = vext.sign(&keys[&validators[0]].protocol);
-        _ = apply_derived_tx(&mut state, vext.into()).expect("Test failed");
+        _ = apply_derived_tx::<_, _, GovStore<_>>(&mut state, vext.into())
+            .expect("Test failed");
 
         let proof: BridgePoolRootProof = state
             .read(&bp_root_key.body())
@@ -694,21 +723,25 @@ mod test_apply_bp_roots_to_storage {
         .sign(&keys[&validators[1]].protocol);
 
         vexts.insert(vext);
-        let epoch = state.pos_queries().get_epoch(100.into());
+        let epoch = state.get_epoch_at_height(100.into()).unwrap();
         let sigs: Vec<_> = vexts
             .iter()
             .map(|s| {
                 (
                     state
                         .ethbridge_queries()
-                        .get_eth_addr_book(&s.data.validator_addr, epoch)
+                        .get_eth_addr_book::<GovStore<_>>(
+                            &s.data.validator_addr,
+                            epoch,
+                        )
                         .expect("Test failed"),
                     s.data.sig.clone(),
                 )
             })
             .collect();
 
-        _ = apply_derived_tx(&mut state, vexts).expect("Test failed");
+        _ = apply_derived_tx::<_, _, GovStore<_>>(&mut state, vexts)
+            .expect("Test failed");
         let (proof, _): (BridgePoolRootProof, BlockHeight) = state
             .read(&get_signed_root_key())
             .expect("Test failed")
@@ -759,14 +792,16 @@ mod test_apply_bp_roots_to_storage {
         macro_rules! query_validators {
             () => {
                 |epoch: u64| {
-                    state
-                        .pos_queries()
-                        .get_consensus_validators(Some(epoch.into()))
-                        .iter()
-                        .map(|validator| {
-                            (validator.address, validator.bonded_stake)
-                        })
-                        .collect::<HashMap<_, _>>()
+                    read_consensus_validator_set_addresses_with_stake(
+                        &state,
+                        epoch.into(),
+                    )
+                    .unwrap()
+                    .into_iter()
+                    .map(|validator| {
+                        (validator.address, validator.bonded_stake)
+                    })
+                    .collect::<HashMap<_, _>>()
                 }
             };
         }
@@ -779,7 +814,7 @@ mod test_apply_bp_roots_to_storage {
             HashMap::from([(validator_1.clone(), validator_1_stake)])
         );
         assert_eq!(
-            state.pos_queries().get_total_voting_power(Some(0.into())),
+            get_total_voting_power::<_, GovStore<_>>(&state, 0.into()),
             validator_1_stake,
         );
         assert_eq!(
@@ -791,7 +826,7 @@ mod test_apply_bp_roots_to_storage {
             ])
         );
         assert_eq!(
-            state.pos_queries().get_total_voting_power(Some(1.into())),
+            get_total_voting_power::<_, GovStore<_>>(&state, 1.into()),
             validator_1_stake + validator_2_stake + validator_3_stake,
         );
 
@@ -815,7 +850,8 @@ mod test_apply_bp_roots_to_storage {
         }
         .sign(&keys[&validator_1].protocol);
 
-        _ = apply_derived_tx(&mut state, vext.into()).expect("Test failed");
+        _ = apply_derived_tx::<_, _, GovStore<_>>(&mut state, vext.into())
+            .expect("Test failed");
 
         // query validator set of the proof
         // (should be the one from epoch 0)
@@ -824,8 +860,8 @@ mod test_apply_bp_roots_to_storage {
             .get_signed_bridge_pool_root()
             .expect("Test failed");
         let root_epoch = state
-            .pos_queries()
-            .get_epoch(root_height)
+            .get_epoch_at_height(root_height)
+            .unwrap()
             .expect("Test failed");
 
         let query_validators = query_validators!();
@@ -861,8 +897,11 @@ mod test_apply_bp_roots_to_storage {
                     .sig,
                 }
                 .sign(&keys[&validators[0]].protocol);
-                _ = apply_derived_tx(&mut state, vext.into())
-                    .expect("Test failed");
+                _ = apply_derived_tx::<_, _, GovStore<_>>(
+                    &mut state,
+                    vext.into(),
+                )
+                .expect("Test failed");
                 let hot_key = &keys[&validators[1]].eth_bridge;
                 let vext = bridge_pool_roots::Vext {
                     validator_addr: validators[1].clone(),
@@ -874,8 +913,11 @@ mod test_apply_bp_roots_to_storage {
                     .sig,
                 }
                 .sign(&keys[&validators[1]].protocol);
-                _ = apply_derived_tx(&mut state, vext.into())
-                    .expect("Test failed");
+                _ = apply_derived_tx::<_, _, GovStore<_>>(
+                    &mut state,
+                    vext.into(),
+                )
+                .expect("Test failed");
             };
         }
 

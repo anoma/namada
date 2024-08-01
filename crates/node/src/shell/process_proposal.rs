@@ -4,7 +4,6 @@
 use data_encoding::HEXUPPER;
 use namada_sdk::parameters;
 use namada_sdk::proof_of_stake::storage::find_validator_by_raw_hash;
-use namada_sdk::proof_of_stake::PosQueries;
 use namada_sdk::tx::data::protocol::ProtocolTxType;
 use namada_vote_ext::ethereum_tx_data_variants;
 
@@ -31,12 +30,12 @@ where
     H: 'static + StorageHasher,
 {
     fn from(state: &WlState<D, H>) -> Self {
-        let max_proposal_bytes =
-            state.pos_queries().get_max_proposal_bytes().get();
+        let max_proposal_bytes = parameters::read_max_proposal_bytes(state)
+            .expect("Must be able to read ProposalBytes from storage");
         let max_block_gas = parameters::get_max_block_gas(state).unwrap();
 
         let user_gas = TxBin::init(max_block_gas);
-        let txs_bin = TxBin::init(max_proposal_bytes);
+        let txs_bin = TxBin::init(max_proposal_bytes.get());
         Self { user_gas, txs_bin }
     }
 }
@@ -310,7 +309,11 @@ where
                         ethereum_tx_data_variants::EthEventsVext::try_from(&tx)
                             .map_err(|err| err.to_string())
                             .and_then(|ext| {
-                                validate_eth_events_vext(
+                                validate_eth_events_vext::<
+                                    _,
+                                    _,
+                                    governance::Store<_>,
+                                >(
                                     &self.state,
                                     &ext.0,
                                     self.state.in_mem().get_last_block_height(),
@@ -336,7 +339,11 @@ where
                         ethereum_tx_data_variants::BridgePoolVext::try_from(&tx)
                             .map_err(|err| err.to_string())
                             .and_then(|ext| {
-                                validate_bp_roots_vext(
+                                validate_bp_roots_vext::<
+                                    _,
+                                    _,
+                                    governance::Store<_>,
+                                >(
                                     &self.state,
                                     &ext.0,
                                     self.state.in_mem().get_last_block_height(),
@@ -364,7 +371,7 @@ where
                         )
                         .map_err(|err| err.to_string())
                         .and_then(|ext| {
-                            validate_valset_upd_vext(
+                            validate_valset_upd_vext::<_, _, governance::Store<_>>(
                                 &self.state,
                                 &ext,
                                 // n.b. only accept validator set updates
@@ -606,8 +613,7 @@ mod test_process_proposal {
             let voting_powers = shell
                 .state
                 .ethbridge_queries()
-                .get_consensus_eth_addresses(Some(next_epoch))
-                .iter()
+                .get_consensus_eth_addresses::<governance::Store<_>>(next_epoch)
                 .map(|(eth_addr_book, _, voting_power)| {
                     (eth_addr_book, voting_power)
                 })
