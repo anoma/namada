@@ -278,6 +278,7 @@ pub struct LedgerMaspClient<C> {
     inner: Arc<LedgerMaspClientInner<C>>,
 }
 
+#[cfg(not(target_family = "wasm"))]
 impl<C> Clone for LedgerMaspClient<C> {
     fn clone(&self) -> Self {
         Self {
@@ -417,9 +418,11 @@ impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
 }
 
 #[derive(Debug)]
+#[cfg(not(target_family = "wasm"))]
 struct IndexerMaspClientShared {
     semaphore: Semaphore,
     indexer_api: reqwest::Url,
+    block_index: init_once::InitOnce<Option<xorf::BinaryFuse16>>,
 }
 
 /// MASP client implementation that queries data from the
@@ -454,6 +457,7 @@ impl IndexerMaspClient {
         let shared = Arc::new(IndexerMaspClientShared {
             indexer_api,
             semaphore: Semaphore::new(MAX_CONCURRENT_REQUESTS),
+            block_index: init_once::InitOnce::new(),
         });
         Self { client, shared }
     }
@@ -481,7 +485,6 @@ impl IndexerMaspClient {
         Ok(payload.message)
     }
 
-    #[allow(dead_code)]
     async fn last_block_index(&self) -> Result<xorf::BinaryFuse16, Error> {
         use serde::Deserialize;
 
@@ -569,6 +572,7 @@ impl MaspClient for IndexerMaspClient {
         BlockHeight(to): BlockHeight,
     ) -> Result<Vec<IndexedNoteEntry>, Error> {
         use serde::Deserialize;
+        use xorf::Filter;
 
         #[derive(Deserialize)]
         struct TransactionSlot {
@@ -598,72 +602,100 @@ impl MaspClient for IndexerMaspClient {
         const MAX_RANGE_THRES: u64 = 30;
         let mut txs = vec![];
 
+        let maybe_block_index = self
+            .shared
+            .block_index
+            .try_init_async(async {
+                let _permit = self.shared.semaphore.acquire().await.unwrap();
+                self.last_block_index().await.ok()
+            })
+            .await
+            .and_then(Option::as_ref);
+
         loop {
-            let from_height = from;
-            let off = (to - from).min(MAX_RANGE_THRES);
-            let to_height = from + off;
-            from += off;
+            'do_while: {
+                let from_height = from;
+                let off = (to - from).min(MAX_RANGE_THRES);
+                let to_height = from + off;
+                from += off;
 
-            let _permit = self.shared.semaphore.acquire().await.unwrap();
+                if let Some(block_index) = maybe_block_index {
+                    let at_least_one_block_with_masp_txs = (from_height
+                        ..=to_height)
+                        .any(|height| block_index.contains(&height));
 
-            let payload: TxResponse = {
-                let response = self
-                    .client
-                    .get(self.endpoint("/tx"))
-                    .keep_alive()
-                    .query(&[("height", from_height), ("height_offset", off)])
-                    .send()
-                    .await
-                    .map_err(|err| {
+                    if !at_least_one_block_with_masp_txs {
+                        // NB: skips code below, so it's more like a `continue`
+                        break 'do_while;
+                    }
+                }
+
+                let _permit = self.shared.semaphore.acquire().await.unwrap();
+
+                let payload: TxResponse = {
+                    let response = self
+                        .client
+                        .get(self.endpoint("/tx"))
+                        .keep_alive()
+                        .query(&[
+                            ("height", from_height),
+                            ("height_offset", off),
+                        ])
+                        .send()
+                        .await
+                        .map_err(|err| {
+                            Error::Other(format!(
+                                "Failed to fetch transactions in the height \
+                                 range {from_height}-{to_height}: {err}"
+                            ))
+                        })?;
+                    if !response.status().is_success() {
+                        let err = Self::get_server_error(response).await?;
+                        return Err(Error::Other(format!(
+                            "Failed to fetch transactions in the range \
+                             {from_height}-{to_height}: {err}"
+                        )));
+                    }
+                    response.json().await.map_err(|err| {
                         Error::Other(format!(
-                            "Failed to fetch transactions in the height range \
+                            "Could not deserialize the transactions JSON \
+                             response in the height range \
                              {from_height}-{to_height}: {err}"
                         ))
-                    })?;
-                if !response.status().is_success() {
-                    let err = Self::get_server_error(response).await?;
-                    return Err(Error::Other(format!(
-                        "Failed to fetch transactions in the range \
-                         {from_height}-{to_height}: {err}"
-                    )));
+                    })?
+                };
+
+                for Transaction {
+                    batch,
+                    block_index,
+                    block_height,
+                } in payload.txs
+                {
+                    let mut extracted_masp_txs =
+                        Vec::with_capacity(batch.len());
+
+                    for TransactionSlot { bytes } in batch {
+                        type MaspTx = masp_primitives::transaction::Transaction;
+
+                        extracted_masp_txs.push(
+                            MaspTx::try_from_slice(&bytes).map_err(|err| {
+                                Error::Other(format!(
+                                    "Could not deserialize the masp txs borsh \
+                                     data at height {block_height} and index \
+                                     {block_index}: {err}"
+                                ))
+                            })?,
+                        );
+                    }
+
+                    txs.push((
+                        IndexedTx {
+                            height: BlockHeight(block_height),
+                            index: TxIndex(block_index),
+                        },
+                        extracted_masp_txs,
+                    ));
                 }
-                response.json().await.map_err(|err| {
-                    Error::Other(format!(
-                        "Could not deserialize the transactions JSON response \
-                         in the height range {from_height}-{to_height}: {err}"
-                    ))
-                })?
-            };
-
-            for Transaction {
-                batch,
-                block_index,
-                block_height,
-            } in payload.txs
-            {
-                let mut extracted_masp_txs = Vec::with_capacity(batch.len());
-
-                for TransactionSlot { bytes } in batch {
-                    type MaspTx = masp_primitives::transaction::Transaction;
-
-                    extracted_masp_txs.push(
-                        MaspTx::try_from_slice(&bytes).map_err(|err| {
-                            Error::Other(format!(
-                                "Could not deserialize the masp txs borsh \
-                                 data at height {block_height} and index \
-                                 {block_index}: {err}"
-                            ))
-                        })?,
-                    );
-                }
-
-                txs.push((
-                    IndexedTx {
-                        height: BlockHeight(block_height),
-                        index: TxIndex(block_index),
-                    },
-                    extracted_masp_txs,
-                ));
             }
 
             if from >= to {

@@ -94,6 +94,7 @@ eyre.workspace = true
 fd-lock = { workspace = true, optional = true }
 flume.workspace = true
 futures.workspace = true
+init-once.workspace = true
 itertools.workspace = true
 jubjub = { workspace = true, optional = true }
 kdam.workspace = true
