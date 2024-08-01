@@ -30,61 +30,50 @@ pub async fn syncing<
     sks: &[ExtendedSpendingKey],
     fvks: &[ViewingKey],
 ) -> Result<ShieldedContext<U>, Error> {
-    if indexer_addr.is_some() {
-        display_line!(
-            io,
-            "{}",
-            "==== Shielded sync started using indexer client ====".bold()
-        );
-    } else {
-        display_line!(
-            io,
-            "{}",
-            "==== Shielded sync started using ledger client ====".bold()
-        );
-    }
-    display_line!(io, "\n");
-    let env = MaspLocalTaskEnv::new(500)?;
+    let (fetched_bar, scanned_bar) = {
+        #[cfg(any(test, feature = "testing"))]
+        {
+            (DevNullProgressBar, DevNullProgressBar)
+        }
 
-    let (fetched, scanned) = {
-        let (fetched, scanned) = {
-            #[cfg(any(test, feature = "testing"))]
-            {
-                (DevNullProgressBar, DevNullProgressBar)
-            }
-            #[cfg(not(any(test, feature = "testing")))]
-            {
-                let mut fetched = kdam::tqdm!(
-                    total = 0,
-                    desc = "fetched ",
-                    animation = "fillup",
-                    position = 0,
-                    force_refresh = true
-                );
-                let mut scanned = kdam::tqdm!(
-                    total = 0,
-                    desc = "scanned ",
-                    animation = "fillup",
-                    position = 1,
-                    force_refresh = true
-                );
-                fetched.ncols = Some(100);
-                scanned.ncols = Some(100);
-                (fetched, scanned)
-            }
-        };
+        #[cfg(not(any(test, feature = "testing")))]
+        {
+            let fetched = kdam::tqdm!(
+                total = 0,
+                desc = "fetched ",
+                animation = "fillup",
+                position = 0,
+                force_refresh = true,
+                dynamic_ncols = true,
+                miniters = 0,
+                mininterval = 0.05
+            );
 
-        (fetched, scanned)
+            let scanned = kdam::tqdm!(
+                total = 0,
+                desc = "scanned ",
+                animation = "fillup",
+                position = 1,
+                force_refresh = true,
+                dynamic_ncols = true,
+                miniters = 0,
+                mininterval = 0.05
+            );
+
+            (fetched, scanned)
+        }
     };
 
     macro_rules! dispatch_client {
         ($client:expr) => {{
             let config = ShieldedSyncConfig::builder()
                 .client($client)
-                .fetched_tracker(fetched)
-                .scanned_tracker(scanned)
+                .fetched_tracker(fetched_bar)
+                .scanned_tracker(scanned_bar)
                 .build();
-            shielded
+
+            let env = MaspLocalTaskEnv::new(500)?;
+            let ctx = shielded
                 .fetch(
                     install_shutdown_signal(),
                     env,
@@ -94,11 +83,21 @@ pub async fn syncing<
                     fvks,
                 )
                 .await
-                .map(|_| shielded)
+                .map(|_| shielded);
+
+            display!(io, "\nSyncing finished\n");
+
+            ctx
         }};
     }
 
     let shielded = if let Some(endpoint) = indexer_addr {
+        display_line!(
+            io,
+            "{}\n",
+            "==== Shielded sync started using indexer client ====".bold()
+        );
+
         let client = reqwest::Client::builder()
             .connect_timeout(Duration::from_secs(60))
             .build()
@@ -110,11 +109,17 @@ pub async fn syncing<
                 "Failed to parse API endpoint {endpoint:?}: {err}"
             ))
         })?;
+
         dispatch_client!(IndexerMaspClient::new(client, url))?
     } else {
+        display_line!(
+            io,
+            "{}\n",
+            "==== Shielded sync started using ledger client ====".bold()
+        );
+
         dispatch_client!(LedgerMaspClient::new(client))?
     };
 
-    display!(io, "\nSyncing finished\n");
     Ok(shielded)
 }

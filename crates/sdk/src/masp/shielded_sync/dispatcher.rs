@@ -326,8 +326,10 @@ where
             self.check_exit_conditions(&mut shutdown_signal);
             self.handle_incoming_message(message);
         }
+
         self.config.fetched_tracker.finish();
         self.config.scanned_tracker.finish();
+
         match std::mem::replace(&mut self.state, DispatcherState::Normal) {
             DispatcherState::Errored(err) => {
                 self.save_cache().await;
