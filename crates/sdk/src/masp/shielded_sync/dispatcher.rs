@@ -814,7 +814,11 @@ mod dispatcher_tests {
                 }
 
                 dispatcher
-                    .apply_cache_to_shielded_context(&Default::default())
+                    .apply_cache_to_shielded_context(&InitialState{
+                        last_witnessed_tx: None,
+                        start_height: Default::default(),
+                        last_query_height: 9.into(),
+                    })
                     .expect("Test failed");
                 assert!(dispatcher.cache.fetched.is_empty());
                 assert!(dispatcher.cache.trial_decrypted.is_empty());
@@ -822,7 +826,7 @@ mod dispatcher_tests {
                     arbitrary_vk(),
                     Some(IndexedTx {
                         height: 9.into(),
-                        index: Default::default(),
+                        index: TxIndex(u32::MAX),
                     }),
                 )]);
                 assert_eq!(expected, dispatcher.ctx.vk_heights);
@@ -983,7 +987,6 @@ mod dispatcher_tests {
 
     /// Test that upon each retry, we either resume from the
     /// latest height that had been previously stored in the
-    /// `tx_note_map`, or from the minimum height stored in
     /// `vk_heights`.
     #[test]
     fn test_min_height_to_sync_from() {
@@ -993,15 +996,9 @@ mod dispatcher_tests {
 
         let vk = arbitrary_vk();
 
-        // pretend we start with a tx observed at height 4 whose
-        // notes cannot be decrypted with `vk`
-        shielded_ctx.tx_note_map.insert(
-            IndexedTx {
-                height: 4.into(),
-                index: TxIndex(0),
-            },
-            0,
-        );
+        // Test that this function errors if not keys are
+        // present in the shielded context
+        assert!(shielded_ctx.min_height_to_sync_from().is_err());
 
         // the min height here should be 1, since
         // this vk hasn't decrypted any note yet
@@ -1010,24 +1007,11 @@ mod dispatcher_tests {
         let height = shielded_ctx.min_height_to_sync_from().unwrap();
         assert_eq!(height, BlockHeight(1));
 
-        // let's bump the vk height past 4
+        // let's bump the vk height
         *shielded_ctx.vk_heights.get_mut(&vk).unwrap() = Some(IndexedTx {
             height: 6.into(),
             index: TxIndex(0),
         });
-
-        // the min height should now be 4
-        let height = shielded_ctx.min_height_to_sync_from().unwrap();
-        assert_eq!(height, BlockHeight(4));
-
-        // and now we bump the last seen tx to height 8
-        shielded_ctx.tx_note_map.insert(
-            IndexedTx {
-                height: 8.into(),
-                index: TxIndex(0),
-            },
-            1,
-        );
 
         // the min height should now be 6
         let height = shielded_ctx.min_height_to_sync_from().unwrap();
@@ -1144,8 +1128,8 @@ mod dispatcher_tests {
                 assert_eq!(
                     *ctx.vk_heights[&vk].as_ref().unwrap(),
                     IndexedTx {
-                        height: 1.into(),
-                        index: TxIndex(2),
+                        height: 2.into(),
+                        index: TxIndex(u32::MAX),
                     }
                 );
                 assert_eq!(ctx.note_map.len(), 2);
