@@ -5,6 +5,8 @@ use masp_primitives::sapling::ViewingKey;
 use masp_primitives::zip32::ExtendedSpendingKey;
 use namada_sdk::control_flow::install_shutdown_signal;
 use namada_sdk::error::Error;
+#[cfg(any(test, feature = "testing"))]
+use namada_sdk::io::DevNullProgressBar;
 use namada_sdk::io::Io;
 use namada_sdk::masp::utils::{IndexerMaspClient, LedgerMaspClient};
 use namada_sdk::masp::{
@@ -41,14 +43,38 @@ pub async fn syncing<
             "==== Shielded sync started using ledger client ====".bold()
         );
     }
-    display_line!(io, "\n\n");
+    display_line!(io, "\n");
     let env = MaspLocalTaskEnv::new(500)?;
 
-    let (_multi_progress, fetched, scanned) = {
-        let multi = indicatif::MultiProgress::new();
-        let fetched = multi.add(indicatif::ProgressBar::new(0));
-        let scanned = multi.add(indicatif::ProgressBar::new(0));
-        (multi, fetched, scanned)
+    let (fetched, scanned) = {
+        let (fetched, scanned) = {
+            #[cfg(any(test, feature = "testing"))]
+            {
+                (DevNullProgressBar, DevNullProgressBar)
+            }
+            #[cfg(not(any(test, feature = "testing")))]
+            {
+                let mut fetched = kdam::tqdm!(
+                    total = 0,
+                    desc = "fetched ",
+                    animation = "fillup",
+                    position = 0,
+                    force_refresh = true
+                );
+                let mut scanned = kdam::tqdm!(
+                    total = 0,
+                    desc = "scanned ",
+                    animation = "fillup",
+                    position = 1,
+                    force_refresh = true
+                );
+                fetched.ncols = Some(100);
+                scanned.ncols = Some(100);
+                (fetched, scanned)
+            }
+        };
+
+        (fetched, scanned)
     };
 
     macro_rules! dispatch_client {
@@ -89,6 +115,6 @@ pub async fn syncing<
         dispatch_client!(LedgerMaspClient::new(client))?
     };
 
-    display!(io, "Syncing finished\n");
+    display!(io, "\nSyncing finished\n");
     Ok(shielded)
 }

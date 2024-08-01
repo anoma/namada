@@ -96,6 +96,7 @@ flume.workspace = true
 futures.workspace = true
 itertools.workspace = true
 jubjub = { workspace = true, optional = true }
+kdam.workspace = true
 lazy_static.workspace = true
 linkme = {workspace = true, optional = true}
 masp_primitives.workspace = true
@@ -124,6 +125,8 @@ toml.workspace = true
 tracing.workspace = true
 typed-builder.workspace = true
 zeroize.workspace = true
+
+
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 indicatif.workspace = true

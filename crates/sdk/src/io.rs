@@ -24,6 +24,9 @@ pub trait ProgressBar {
     /// Announce that `amount` virtual elements have been
     /// processed.
     fn increment_by(&mut self, amount: u64);
+
+    /// Signal that a progress bar has completed
+    fn finish(&mut self);
 }
 
 impl ProgressBar for DevNullProgressBar {
@@ -34,20 +37,25 @@ impl ProgressBar for DevNullProgressBar {
     fn set_upper_limit(&mut self, _: u64) {}
 
     fn increment_by(&mut self, _: u64) {}
+
+    fn finish(&mut self) {}
 }
 
-#[cfg(not(target_family = "wasm"))]
-impl ProgressBar for indicatif::ProgressBar {
+impl ProgressBar for kdam::Bar {
     fn upper_limit(&self) -> u64 {
-        self.length().unwrap_or_default()
+        self.total as u64
     }
 
     fn set_upper_limit(&mut self, limit: u64) {
-        self.set_length(limit);
+        self.total = limit as usize;
     }
 
     fn increment_by(&mut self, amount: u64) {
-        self.inc(amount);
+        kdam::BarExt::update(self, amount as usize).unwrap();
+    }
+
+    fn finish(&mut self) {
+        println!();
     }
 }
 

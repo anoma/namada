@@ -123,6 +123,7 @@ indicatif = "0.17.8"
 itertools = "0.12.1"
 jubjub = "0.10"
 k256 = { version = "0.13.0", default-features = false, features = ["ecdsa", "pkcs8", "precomputed-tables", "serde", "std"]}
+kdam = "0.5.2"
 konst = { version = "0.3.8", default-features = false }
 lazy_static = "1.4.0"
 ledger-namada-rs = { git = "https://github.com/Zondax/ledger-namada", tag = "v0.0.24" }
