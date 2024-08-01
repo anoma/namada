@@ -28,6 +28,12 @@ vp = "vp_user"
 threshold = 1
 public_keys = ["tpknam1qp7r3et2usz538fxzkm69h3awr7t0kgk7h6528za7pk4g2jldk5dz0qjkhx"]
 
+# Frank
+[[established_account]]
+vp = "vp_user"
+threshold = 1
+public_keys = ["tpknam1qqwfpuvn8x7yqtquejhppef4vddv9ghusec2rkaxav38amamxaxpgj9cs79"]
+
 ##########################################################################################
 
 # Albert bonds to `validator-0`

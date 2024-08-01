@@ -6,6 +6,7 @@
 
 [secret_keys]
 faucet-key = "unencrypted:00548aa8393422b88dce5f4be8ee0320638061c3e0649ada1b0dacbec4c0c75bb2"
+frank-key = "unencrypted:00a08de8d33b9798328d2e4476fade49f515dc82754451fc6ef7060ea0bd1e8f1a"
 
 [public_keys]
 albert-key = "ED25519_PK_PREFIXtpknam1qquurf975axryz4sf0jmyxpknkxp4cs7g8e8ahhpw089u6j3q9dy6qssdhz"
@@ -15,6 +16,7 @@ daewon = "ED25519_PK_PREFIXtpknam1qzdgg0q7c2szvx67q84r859axuwmyvsku0t9w97kwdvz7f
 ester = "ED25519_PK_PREFIXtpknam1qplr7n6ej99zyvzvjy0w726p0809m6a279a02rn5zw0c52k8wdw8q5gfc8y"
 faucet-key = "ED25519_PK_PREFIXtpknam1qzh2d8vk9wvj2j63fa3cvjru9uldpdjctjjxpafl5r8vwwf56pdgyq0vra4"
 validator-0-account-key = "ED25519_PK_PREFIXtpknam1qrulnacf6l6lt2vlpc8y2yudlgzs9hzrfa9p66fv4p7vk8utf6m4554t3ak"
+frank-key = "ED25519_PK_PREFIXtpknam1qqwfpuvn8x7yqtquejhppef4vddv9ghusec2rkaxav38amamxaxpgj9cs79"
 
 [derivation_paths]
 albert-key = "m/44'/877'/0'/0'/0'"
@@ -35,6 +37,8 @@ daewon = "tnam1qqnxq04amahj5yuwux7pdsjp3dyu07at3u3f742p"
 ester = "tnam1qr2y927swt2ax66m9fgc9ejs40m7m77rry53cvkv"
 faucet-key = "tnam1qzgcl2znamndmku7ujw6e79dmvd4v7rfd5c89dfz"
 validator-0 = "tnam1q9q3lph40w88cs5000k48thkw3f7s0m6mqrtfgss"
+frank = "tnam1q9sx4ekzqaq3xdxtruxkm764nhl00cvcsc7df5jf"
+frank-key = "tnam1qz0nvec686e9pks8ynhm5ddq8ke7j2eey50uagtr"
 
 [pkhs]
 7C22BCAD8359503A92C760470B650F8DD8832002 = "bertha-key"
@@ -44,5 +48,6 @@ validator-0 = "tnam1q9q3lph40w88cs5000k48thkw3f7s0m6mqrtfgss"
 0F680BB06862F4AA4A0DAE2ABC414B04B6F6CE03 = "christel-key"
 D442ABD072D5D36B5B2A5182E650ABF7EDFBC319 = "ester"
 E9A42797AA7E25F01F0DA8FCD1B69C8C76627715 = "validator-0-account-key"
+9F36671A3EB250DA0724EFBA35A03DB3E92B3925 = "frank-key"
 
 [address_vp_types]

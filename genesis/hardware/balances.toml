@@ -33,6 +33,9 @@ tnam1q9q3lph40w88cs5000k48thkw3f7s0m6mqrtfgss = "200000"
 tpknam1qpzrttnzfyt6xfu2vy092eruasll3z52rjfexwapdw0rdww5uktlk3j73dw = "200000"
 # validator-0-account-key
 tpknam1qrulnacf6l6lt2vlpc8y2yudlgzs9hzrfa9p66fv4p7vk8utf6m4554t3ak = "1000000"
+# frank
+tnam1q9sx4ekzqaq3xdxtruxkm764nhl00cvcsc7df5jf = "2000000"
+tpknam1qqwfpuvn8x7yqtquejhppef4vddv9ghusec2rkaxav38amamxaxpgj9cs79 = "2000000"
 
 [token.BTC]
 # albert
@@ -47,6 +50,8 @@ tpknam1qzdgg0q7c2szvx67q84r859axuwmyvsku0t9w97kwdvz7ff89xy4xrqxfmv = "1000000"
 tpknam1qplr7n6ej99zyvzvjy0w726p0809m6a279a02rn5zw0c52k8wdw8q5gfc8y = "1000000"
 # validator-0
 tnam1q9q3lph40w88cs5000k48thkw3f7s0m6mqrtfgss = "1000000"
+# frank
+tnam1q9sx4ekzqaq3xdxtruxkm764nhl00cvcsc7df5jf = "1000000"
 
 [token.ETH]
 # albert
@@ -61,6 +66,8 @@ tpknam1qzdgg0q7c2szvx67q84r859axuwmyvsku0t9w97kwdvz7ff89xy4xrqxfmv = "1000000"
 tpknam1qplr7n6ej99zyvzvjy0w726p0809m6a279a02rn5zw0c52k8wdw8q5gfc8y = "1000000"
 # validator-0
 tnam1q9q3lph40w88cs5000k48thkw3f7s0m6mqrtfgss = "1000000"
+# frank
+tnam1q9sx4ekzqaq3xdxtruxkm764nhl00cvcsc7df5jf = "1000000"
 
 
 [token.DOT]
@@ -76,6 +83,8 @@ tpknam1qzdgg0q7c2szvx67q84r859axuwmyvsku0t9w97kwdvz7ff89xy4xrqxfmv = "1000000"
 tpknam1qplr7n6ej99zyvzvjy0w726p0809m6a279a02rn5zw0c52k8wdw8q5gfc8y = "1000000"
 # validator-0
 tnam1q9q3lph40w88cs5000k48thkw3f7s0m6mqrtfgss = "1000000"
+# frank
+tnam1q9sx4ekzqaq3xdxtruxkm764nhl00cvcsc7df5jf = "1000000"
 
 [token.Schnitzel]
 # albert
@@ -90,6 +99,8 @@ tpknam1qzdgg0q7c2szvx67q84r859axuwmyvsku0t9w97kwdvz7ff89xy4xrqxfmv = "1000000"
 tpknam1qplr7n6ej99zyvzvjy0w726p0809m6a279a02rn5zw0c52k8wdw8q5gfc8y = "1000000"
 # validator-0
 tnam1q9q3lph40w88cs5000k48thkw3f7s0m6mqrtfgss = "1000000"
+# frank
+tnam1q9sx4ekzqaq3xdxtruxkm764nhl00cvcsc7df5jf = "1000000"
 
 [token.Apfel]
 # albert
@@ -104,6 +115,8 @@ tpknam1qzdgg0q7c2szvx67q84r859axuwmyvsku0t9w97kwdvz7ff89xy4xrqxfmv = "1000000"
 tpknam1qplr7n6ej99zyvzvjy0w726p0809m6a279a02rn5zw0c52k8wdw8q5gfc8y = "1000000"
 # validator-0
 tnam1q9q3lph40w88cs5000k48thkw3f7s0m6mqrtfgss = "1000000"
+# frank
+tnam1q9sx4ekzqaq3xdxtruxkm764nhl00cvcsc7df5jf = "1000000"
 
 [token.Kartoffel]
 # albert
@@ -118,3 +131,5 @@ tpknam1qzdgg0q7c2szvx67q84r859axuwmyvsku0t9w97kwdvz7ff89xy4xrqxfmv = "1000000"
 tpknam1qplr7n6ej99zyvzvjy0w726p0809m6a279a02rn5zw0c52k8wdw8q5gfc8y = "1000000"
 # validator-0
 tnam1q9q3lph40w88cs5000k48thkw3f7s0m6mqrtfgss = "1000000"
+# frank
+tnam1q9sx4ekzqaq3xdxtruxkm764nhl00cvcsc7df5jf = "1000000"

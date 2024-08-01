@@ -32,8 +32,8 @@ use namada_sdk::wallet::Wallet;
 use toml::Value;
 
 use super::setup::{
-    self, run_gaia_cmd, sleep, NamadaBgCmd, NamadaCmd, Test, ENV_VAR_DEBUG,
-    ENV_VAR_USE_PREBUILT_BINARIES,
+    self, ensure_hot_key, run_gaia_cmd, sleep, NamadaBgCmd, NamadaCmd, Test,
+    ENV_VAR_DEBUG, ENV_VAR_USE_PREBUILT_BINARIES,
 };
 use crate::e2e::setup::{constants, Bin, Who, APPS_PACKAGE};
 use crate::strings::{LEDGER_STARTED, TX_APPLIED_SUCCESS};
@@ -219,9 +219,8 @@ pub fn get_pregenesis_pk<P: AsRef<Path>>(
     alias: &str,
     base_dir_path: P,
 ) -> Option<common::PublicKey> {
-    let mut wallet = get_pregenesis_wallet(base_dir_path);
-    let sk = wallet.find_secret_key(alias, None).ok()?;
-    Some(sk.ref_to())
+    let wallet = get_pregenesis_wallet(base_dir_path);
+    wallet.find_public_key(alias).ok()
 }
 
 /// Get a pregenesis public key.
@@ -610,7 +609,7 @@ fn make_hermes_chain_config(test: &Test) -> Value {
     chain.insert("account_prefix".to_owned(), Value::String("".to_owned()));
     chain.insert(
         "key_name".to_owned(),
-        Value::String(setup::constants::CHRISTEL_KEY.to_owned()),
+        Value::String(ensure_hot_key(setup::constants::CHRISTEL_KEY).to_owned()),
     );
     chain.insert("store_prefix".to_owned(), Value::String("ibc".to_owned()));
     let mut table = toml::map::Map::new();

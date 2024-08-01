@@ -95,6 +95,27 @@ pub fn apply_use_device(mut tx_args: Vec<&str>) -> Vec<&str> {
     tx_args
 }
 
+/// Replace the given key with a key that is stored unencrypted in the wallet.
+/// This is useful for IBC tests where a keypair needs to be added to the Hermes
+/// keyring or where IBC messages unsupported by the hardware wallet need to be
+/// signed
+pub fn ensure_hot_key(key: &str) -> &str {
+    if is_use_device() {
+        constants::FRANK_KEY
+    } else {
+        key
+    }
+}
+
+/// Same as ensure_hot_key but for addressees
+pub fn ensure_hot_addr(key: &str) -> &str {
+    if is_use_device() {
+        constants::FRANK
+    } else {
+        key
+    }
+}
+
 /// Derive the genesis path depending on whether the hardware wallet is in use
 pub fn derive_template_dir(working_dir: &PathBuf) -> PathBuf {
     // The E2E tests genesis config source.
@@ -1439,6 +1460,9 @@ pub mod constants {
     pub const DAEWON_KEY: &str = "Daewon-key";
     pub const ESTER: &str = "Ester";
     pub const MATCHMAKER_KEY: &str = "matchmaker-key";
+    // Special user that must be stored unencrypted for IBC tests
+    pub const FRANK: &str = "Frank";
+    pub const FRANK_KEY: &str = "Frank-key";
 
     // Shielded spending and viewing keys and payment addresses
     pub const A_SPENDING_KEY: &str = "zsknam1qdrk9kd8qqqqpqy3pxzxu2kexydl7ug22s3808htl604emmz9qlde9cl9mx6euhvh3cpl9w7guustfzjxsyaeqtefhden6q8776t9cr9vkqztj7u0mgs5k9nz945sypev9ppptn5d85as3ccsnu3q6g3acqp2gpsrwe6naqg3stqp43uk9x2cj79gcxuum8a7jayjqlv4ptcfnunqkqzsj6m2r3sn8ft0tyqqpv28nghe4ag68eccaqx7v5f65he95g5uwq2wr4yuqc06jgc7";

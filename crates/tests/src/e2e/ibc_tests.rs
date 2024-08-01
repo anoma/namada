@@ -94,8 +94,9 @@ use crate::e2e::helpers::{
 };
 use crate::e2e::ledger_tests::{prepare_proposal_data, write_json_file};
 use crate::e2e::setup::{
-    self, run_gaia_cmd, run_hermes_cmd, set_ethereum_bridge_mode, setup_gaia,
-    setup_hermes, sleep, Bin, NamadaCmd, Test, Who,
+    self, apply_use_device, ensure_hot_addr, ensure_hot_key, run_gaia_cmd,
+    run_hermes_cmd, set_ethereum_bridge_mode, setup_gaia, setup_hermes, sleep,
+    Bin, NamadaCmd, Test, Who,
 };
 use crate::strings::{
     LEDGER_STARTED, TX_APPLIED_SUCCESS, TX_FAILED, VALIDATOR_NODE,
@@ -1126,8 +1127,8 @@ fn create_client(test_a: &Test, test_b: &Test) -> Result<(ClientId, ClientId)> {
     let height_a = submit_ibc_tx(
         test_a,
         make_ibc_data(message.to_any()),
-        ALBERT,
-        ALBERT_KEY,
+        ensure_hot_addr(ALBERT),
+        ensure_hot_key(ALBERT_KEY),
         false,
     )?;
 
@@ -1142,8 +1143,8 @@ fn create_client(test_a: &Test, test_b: &Test) -> Result<(ClientId, ClientId)> {
     let height_b = submit_ibc_tx(
         test_b,
         make_ibc_data(message.to_any()),
-        ALBERT,
-        ALBERT_KEY,
+        ensure_hot_addr(ALBERT),
+        ensure_hot_key(ALBERT_KEY),
         false,
     )?;
 
@@ -1275,8 +1276,8 @@ fn update_client(
     submit_ibc_tx(
         target_test,
         make_ibc_data(message.to_any()),
-        ALBERT,
-        ALBERT_KEY,
+        ensure_hot_addr(ALBERT),
+        ensure_hot_key(ALBERT_KEY),
         false,
     )?;
 
@@ -1321,8 +1322,8 @@ fn connection_handshake(
     let height = submit_ibc_tx(
         test_a,
         make_ibc_data(msg.to_any()),
-        ALBERT,
-        ALBERT_KEY,
+        ensure_hot_addr(ALBERT),
+        ensure_hot_key(ALBERT_KEY),
         false,
     )?;
     let events = get_events(test_a, height)?;
@@ -1361,8 +1362,8 @@ fn connection_handshake(
     let height = submit_ibc_tx(
         test_b,
         make_ibc_data(msg.to_any()),
-        ALBERT,
-        ALBERT_KEY,
+        ensure_hot_addr(ALBERT),
+        ensure_hot_key(ALBERT_KEY),
         false,
     )?;
     let events = get_events(test_b, height)?;
@@ -1394,8 +1395,8 @@ fn connection_handshake(
     submit_ibc_tx(
         test_a,
         make_ibc_data(msg.to_any()),
-        ALBERT,
-        ALBERT_KEY,
+        ensure_hot_addr(ALBERT),
+        ensure_hot_key(ALBERT_KEY),
         false,
     )?;
 
@@ -1414,8 +1415,8 @@ fn connection_handshake(
     submit_ibc_tx(
         test_b,
         make_ibc_data(msg.to_any()),
-        ALBERT,
-        ALBERT_KEY,
+        ensure_hot_addr(ALBERT),
+        ensure_hot_key(ALBERT_KEY),
         false,
     )?;
 
@@ -1458,8 +1459,8 @@ fn channel_handshake(
     let height = submit_ibc_tx(
         test_a,
         make_ibc_data(msg.to_any()),
-        ALBERT,
-        ALBERT_KEY,
+        ensure_hot_addr(ALBERT),
+        ensure_hot_key(ALBERT_KEY),
         false,
     )?;
     let events = get_events(test_a, height)?;
@@ -1491,8 +1492,8 @@ fn channel_handshake(
     let height = submit_ibc_tx(
         test_b,
         make_ibc_data(msg.to_any()),
-        ALBERT,
-        ALBERT_KEY,
+        ensure_hot_addr(ALBERT),
+        ensure_hot_key(ALBERT_KEY),
         false,
     )?;
     let events = get_events(test_b, height)?;
@@ -1518,8 +1519,8 @@ fn channel_handshake(
     submit_ibc_tx(
         test_a,
         make_ibc_data(msg.to_any()),
-        ALBERT,
-        ALBERT_KEY,
+        ensure_hot_addr(ALBERT),
+        ensure_hot_key(ALBERT_KEY),
         false,
     )?;
 
@@ -1540,8 +1541,8 @@ fn channel_handshake(
     submit_ibc_tx(
         test_b,
         make_ibc_data(msg.to_any()),
-        ALBERT,
-        ALBERT_KEY,
+        ensure_hot_addr(ALBERT),
+        ensure_hot_key(ALBERT_KEY),
         false,
     )?;
 
@@ -1640,8 +1641,8 @@ fn transfer_token(
     let height = submit_ibc_tx(
         test_b,
         make_ibc_data(msg.to_any()),
-        ALBERT,
-        ALBERT_KEY,
+        ensure_hot_addr(ALBERT),
+        ensure_hot_key(ALBERT_KEY),
         false,
     )?;
     let events = get_events(test_b, height)?;
@@ -1665,8 +1666,8 @@ fn transfer_token(
     submit_ibc_tx(
         test_a,
         make_ibc_data(msg.to_any()),
-        ALBERT,
-        ALBERT_KEY,
+        ensure_hot_addr(ALBERT),
+        ensure_hot_key(ALBERT_KEY),
         false,
     )?;
 
@@ -1733,7 +1734,7 @@ fn transfer_on_chain(
     std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let rpc = get_actor_rpc(test, Who::Validator(0));
     let amount = amount.to_string();
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         kind.as_ref(),
         "--source",
         sender.as_ref(),
@@ -1747,7 +1748,7 @@ fn transfer_on_chain(
         signer.as_ref(),
         "--node",
         &rpc,
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
@@ -1801,8 +1802,8 @@ fn transfer_back(
     let height = submit_ibc_tx(
         test_a,
         make_ibc_data(msg.to_any()),
-        ALBERT,
-        ALBERT_KEY,
+        ensure_hot_addr(ALBERT),
+        ensure_hot_key(ALBERT_KEY),
         false,
     )?;
     let events = get_events(test_a, height)?;
@@ -1825,8 +1826,8 @@ fn transfer_back(
     submit_ibc_tx(
         test_b,
         make_ibc_data(msg.to_any()),
-        ALBERT,
-        ALBERT_KEY,
+        ensure_hot_addr(ALBERT),
+        ensure_hot_key(ALBERT_KEY),
         false,
     )?;
 
@@ -1880,8 +1881,8 @@ fn transfer_timeout(
     submit_ibc_tx(
         test_a,
         make_ibc_data(msg.to_any()),
-        ALBERT,
-        ALBERT_KEY,
+        ensure_hot_addr(ALBERT),
+        ensure_hot_key(ALBERT_KEY),
         false,
     )?;
 
@@ -1954,7 +1955,7 @@ fn submit_ibc_tx(
     let mut client = run!(
         test,
         Bin::Client,
-        [
+        apply_use_device(vec![
             "tx",
             "--code-path",
             TX_IBC_WASM,
@@ -1970,7 +1971,7 @@ fn submit_ibc_tx(
             "150000",
             "--node",
             &rpc
-        ],
+        ]),
         Some(40)
     )?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
@@ -2001,7 +2002,7 @@ fn transfer(
     let channel_id = channel_id.to_string();
     let port_id = port_id.to_string();
     let amount = amount.to_string();
-    let mut tx_args = vec![
+    let mut tx_args = apply_use_device(vec![
         "ibc-transfer",
         "--source",
         sender.as_ref(),
@@ -2019,7 +2020,7 @@ fn transfer(
         "150000",
         "--node",
         &rpc,
-    ];
+    ]);
 
     if let Some(signer) = signer {
         tx_args.extend_from_slice(&["--signing-keys", signer]);
@@ -2061,7 +2062,7 @@ fn transfer(
 fn delegate_token(test: &Test) -> Result<()> {
     std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let rpc = get_actor_rpc(test, Who::Validator(0));
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "bond",
         "--validator",
         "validator-0",
@@ -2071,7 +2072,7 @@ fn delegate_token(test: &Test) -> Result<()> {
         "900",
         "--node",
         &rpc,
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
@@ -2115,14 +2116,14 @@ fn propose_funding(
         start_epoch,
     );
 
-    let submit_proposal_args = vec![
+    let submit_proposal_args = apply_use_device(vec![
         "init-proposal",
         "--pgf-funding",
         "--data-path",
         proposal_json_path.to_str().unwrap(),
         "--node",
         &rpc_a,
-    ];
+    ]);
     let mut client = run!(test_a, Bin::Client, submit_proposal_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
@@ -2159,7 +2160,7 @@ fn propose_inflation(test: &Test) -> Result<Epoch> {
     let proposal_json_path = test.test_dir.path().join("proposal.json");
     write_json_file(proposal_json_path.as_path(), proposal_json);
 
-    let submit_proposal_args = vec![
+    let submit_proposal_args = apply_use_device(vec![
         "init-proposal",
         "--data-path",
         proposal_json_path.to_str().unwrap(),
@@ -2167,7 +2168,7 @@ fn propose_inflation(test: &Test) -> Result<Epoch> {
         "2000000",
         "--node",
         &rpc,
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, submit_proposal_args, Some(100))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
@@ -2200,7 +2201,7 @@ fn submit_votes(test: &Test) -> Result<()> {
     client.assert_success();
 
     // Send different yay vote from delegator to check majority on 1/3
-    let submit_proposal_vote_delagator = vec![
+    let submit_proposal_vote_delagator = apply_use_device(vec![
         "vote-proposal",
         "--proposal-id",
         "0",
@@ -2210,7 +2211,7 @@ fn submit_votes(test: &Test) -> Result<()> {
         BERTHA,
         "--node",
         &rpc,
-    ];
+    ]);
     let mut client =
         run!(test, Bin::Client, submit_proposal_vote_delagator, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;

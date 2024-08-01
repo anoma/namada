@@ -1,6 +1,11 @@
 [[established_account]]
 vp = "vp_user"
 threshold = 1
+public_keys = ["tpknam1qqwfpuvn8x7yqtquejhppef4vddv9ghusec2rkaxav38amamxaxpgj9cs79"]
+
+[[established_account]]
+vp = "vp_user"
+threshold = 1
 public_keys = ["tpknam1qquurf975axryz4sf0jmyxpknkxp4cs7g8e8ahhpw089u6j3q9dy6qssdhz"]
 
 [[established_account]]
