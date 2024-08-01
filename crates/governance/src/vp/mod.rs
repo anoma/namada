@@ -52,7 +52,6 @@ pub enum Error {
 pub struct GovernanceVp<'ctx, S, CA, EVAL, PoS, TokenKeys>
 where
     S: StateRead,
-    EVAL: VpEvaluator<'ctx, S, CA, EVAL>,
 {
     /// Context to interact with the host structures.
     pub ctx: Ctx<'ctx, S, CA, EVAL>,

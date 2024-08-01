@@ -40,7 +40,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub struct PosVp<'ctx, S, CA, EVAL, Gov>
 where
     S: StateRead,
-    EVAL: VpEvaluator<'ctx, S, CA, EVAL>,
 {
     /// Context to interact with the host structures.
     pub ctx: Ctx<'ctx, S, CA, EVAL>,

@@ -53,7 +53,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub struct MaspVp<'ctx, S, CA, EVAL, Params, Gov, Ibc, TransToken, Transfer>
 where
     S: 'static + StateRead,
-    EVAL: VpEvaluator<'ctx, S, CA, EVAL>,
 {
     /// Context to interact with the host structures.
     pub ctx: Ctx<'ctx, S, CA, EVAL>,

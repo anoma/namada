@@ -27,7 +27,6 @@ use crate::{IbcCommonContext, IbcStorageContext};
 pub struct PseudoExecutionContext<'view, 'a, S, CA, EVAL, Token>
 where
     S: 'static + StateRead,
-    EVAL: VpEvaluator<'a, S, CA, EVAL>,
 {
     /// Execution context and storage
     pub storage: PseudoExecutionStorage<'view, 'a, S, CA, EVAL>,
@@ -40,7 +39,6 @@ where
 pub struct PseudoExecutionStorage<'view, 'a, S, CA, EVAL>
 where
     S: 'static + StateRead,
-    EVAL: VpEvaluator<'a, S, CA, EVAL>,
 {
     /// Temporary store for pseudo execution
     store: HashMap<Key, StorageModification>,
