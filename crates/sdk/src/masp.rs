@@ -523,7 +523,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             let dispatcher = config.dispatcher(spawner, &self.utils).await;
 
             if let Some(updated_ctx) = dispatcher
-                .run(shutdown_signal, last_query_height, sks, fvks)
+                .run(shutdown_signal, None, last_query_height, sks, fvks)
                 .await?
             {
                 *self = updated_ctx;
