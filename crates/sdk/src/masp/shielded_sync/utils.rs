@@ -462,9 +462,9 @@ impl IndexerMaspClient {
             indexer_api,
             semaphore: Semaphore::new(MAX_CONCURRENT_REQUESTS),
             block_index: {
-                let index = init_once::InitOnce::new();
+                let mut index = init_once::InitOnce::new();
                 if !using_block_index {
-                    debug_assert!(index.try_init(|| None).is_some());
+                    index.init(|| None);
                 }
                 index
             },
