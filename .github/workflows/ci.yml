@@ -90,8 +90,8 @@ jobs:
         run: make clippy
         env:
           RUSTFLAGS: "-Z threads=8"
-      - name: Format lints
-        run: make fmt
+      - name: Check format
+        run: make fmt-check
         env:
           RUSTFLAGS: "-Z threads=8"
       - name: Clean cargo cache
