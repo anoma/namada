@@ -70,9 +70,9 @@ use namada_sdk::ibc::MsgTransfer;
 use namada_sdk::io::StdIo;
 use namada_sdk::key::common::SecretKey;
 use namada_sdk::masp::{
-    self, ContextSyncStatus, ExtendedViewingKey, MaspTransferData, MaspTxRefs,
-    PaymentAddress, ShieldedContext, ShieldedUtils, TransferSource,
-    TransferTarget,
+    self, ContextSyncStatus, DispatcherCache, ExtendedViewingKey,
+    MaspTransferData, MaspTxRefs, PaymentAddress, ShieldedContext,
+    ShieldedUtils, TransferSource, TransferTarget,
 };
 use namada_sdk::queries::{
     Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
@@ -127,6 +127,8 @@ const FILE_NAME: &str = "shielded.dat";
 const TMP_FILE_NAME: &str = "shielded.tmp";
 const SPECULATIVE_FILE_NAME: &str = "speculative_shielded.dat";
 const SPECULATIVE_TMP_FILE_NAME: &str = "speculative_shielded.tmp";
+const CACHE_FILE_NAME: &str = "shielded_sync.cache";
+const CACHE_FILE_TMP_PREFIX: &str = "shielded_sync.cache.tmp";
 
 /// For `tracing_subscriber`, which fails if called more than once in the same
 /// process
@@ -702,6 +704,42 @@ pub struct BenchShieldedUtils {
     context_dir: WrapperTempDir,
 }
 
+impl BenchShieldedUtils {
+    fn atomic_file_write(
+        &self,
+        tmp_file_name: impl AsRef<std::path::Path>,
+        file_name: impl AsRef<std::path::Path>,
+        data: impl BorshSerialize,
+    ) -> std::io::Result<()> {
+        let tmp_path = self.context_dir.0.path().join(&tmp_file_name);
+        {
+            // First serialize the shielded context into a temporary file.
+            // Inability to create this file implies a simultaneuous write
+            // is in progress. In this case, immediately
+            // fail. This is unproblematic because the data
+            // intended to be stored can always be re-fetched
+            // from the blockchain.
+            let mut ctx_file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(tmp_path.clone())?;
+            let mut bytes = Vec::new();
+            data.serialize(&mut bytes).unwrap_or_else(|e| {
+                panic!(
+                    "cannot serialize data to {} with error: {}",
+                    file_name.as_ref().to_string_lossy(),
+                    e,
+                )
+            });
+            ctx_file.write_all(&bytes[..])?;
+        }
+        // Atomically update the old shielded context file with new data.
+        // Atomicity is required to prevent other client instances from
+        // reading corrupt data.
+        std::fs::rename(tmp_path, self.context_dir.0.path().join(file_name))
+    }
+}
+
 #[async_trait::async_trait(?Send)]
 impl ShieldedUtils for BenchShieldedUtils {
     fn local_tx_prover(&self) -> LocalTxProver {
@@ -794,6 +832,23 @@ impl ShieldedUtils for BenchShieldedUtils {
             );
         }
         Ok(())
+    }
+
+    async fn cache_save(&self, cache: &DispatcherCache) -> std::io::Result<()> {
+        let tmp_file_name = {
+            let t = tempfile::Builder::new()
+                .prefix(CACHE_FILE_TMP_PREFIX)
+                .tempfile()?;
+            t.path().file_name().unwrap().to_owned()
+        };
+
+        self.atomic_file_write(tmp_file_name, CACHE_FILE_NAME, cache)
+    }
+
+    async fn cache_load(&self) -> std::io::Result<DispatcherCache> {
+        let file_name = self.context_dir.0.path().join(CACHE_FILE_NAME);
+        let mut file = File::open(file_name)?;
+        DispatcherCache::try_from_reader(&mut file)
     }
 }
 

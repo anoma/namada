@@ -69,7 +69,7 @@ use thiserror::Error;
 
 use crate::error::{Error, QueryError};
 use crate::io::{Io, ProgressBar};
-use crate::masp::shielded_sync::dispatcher::DispatcherCache;
+pub use crate::masp::shielded_sync::dispatcher::DispatcherCache;
 use crate::masp::shielded_sync::utils::MaspClient;
 #[cfg(not(target_family = "wasm"))]
 pub use crate::masp::shielded_sync::MaspLocalTaskEnv;
@@ -239,18 +239,12 @@ pub trait ShieldedUtils:
 
     /// Save a cache of data as part of shielded sync if that
     /// process gets interrupted.
-    async fn cache_save(
-        &self,
-        _cache: &DispatcherCache,
-    ) -> std::io::Result<()> {
-        unimplemented!()
-    }
+    async fn cache_save(&self, _cache: &DispatcherCache)
+    -> std::io::Result<()>;
 
     /// Load a cache of data as part of shielded sync if that
     /// process gets interrupted.
-    async fn cache_load(&self) -> std::io::Result<DispatcherCache> {
-        unimplemented!()
-    }
+    async fn cache_load(&self) -> std::io::Result<DispatcherCache>;
 }
 
 /// Make a ViewingKey that can view notes encrypted by given ExtendedSpendingKey

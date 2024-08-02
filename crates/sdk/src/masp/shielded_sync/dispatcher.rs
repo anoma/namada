@@ -195,6 +195,7 @@ impl<Spawner> DispatcherTasks<Spawner> {
     }
 }
 
+/// Shielded sync cache.
 #[derive(Default, BorshSerialize, BorshDeserialize)]
 pub struct DispatcherCache {
     pub(crate) commitment_tree: Option<(BlockHeight, CommitmentTree<Node>)>,
