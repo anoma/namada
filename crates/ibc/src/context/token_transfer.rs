@@ -13,8 +13,8 @@ use ibc::core::channel::types::error::ChannelError;
 use ibc::core::handler::types::error::ContextError;
 use ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::address::{Address, InternalAddress};
+use namada_core::token::Amount;
 use namada_core::uint::Uint;
-use namada_token::Amount;
 
 use super::common::IbcCommonContext;
 use crate::{trace, IBC_ESCROW_ADDRESS};

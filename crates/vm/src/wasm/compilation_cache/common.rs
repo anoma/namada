@@ -25,7 +25,7 @@ use crate::{WasmCacheAccess, WasmCacheRoAccess};
 
 /// Cache handle. Thread-safe.
 #[derive(Debug, Clone)]
-pub struct Cache<N: CacheName, A: WasmCacheAccess> {
+pub struct Cache<N, A> {
     /// Cached files directory
     dir: PathBuf,
     /// Compilation progress

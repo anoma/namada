@@ -14,15 +14,13 @@ use namada_sdk::collections::HashMap;
 use namada_sdk::control_flow::time::Duration;
 use namada_sdk::eth_bridge::oracle::config::Config as OracleConfig;
 use namada_sdk::ethereum_events::EthereumEvent;
-use namada_sdk::ethereum_structs;
 use namada_sdk::events::extend::Height as HeightAttr;
 use namada_sdk::events::log::dumb_queries;
 use namada_sdk::events::Event;
 use namada_sdk::hash::Hash;
 use namada_sdk::key::tm_consensus_key_raw_hash;
-use namada_sdk::proof_of_stake::pos_queries::PosQueries;
 use namada_sdk::proof_of_stake::storage::{
-    read_consensus_validator_set_addresses_with_stake,
+    read_consensus_validator_set_addresses_with_stake, read_pos_params,
     validator_consensus_key_handle,
 };
 use namada_sdk::proof_of_stake::types::WeightedValidator;
@@ -39,6 +37,7 @@ use namada_sdk::tendermint_proto::google::protobuf::Timestamp;
 use namada_sdk::time::DateTimeUtc;
 use namada_sdk::tx::data::ResultCode;
 use namada_sdk::tx::event::Code as CodeAttr;
+use namada_sdk::{ethereum_structs, governance};
 use regex::Regex;
 use tokio::sync::mpsc;
 
@@ -402,7 +401,9 @@ impl MockNode {
     fn prepare_request(&self) -> (Vec<u8>, Vec<VoteInfo>) {
         let (val1, ck) = {
             let locked = self.shell.lock().unwrap();
-            let params = locked.state.pos_queries().get_pos_params();
+            let params =
+                read_pos_params::<_, governance::Store<_>>(&locked.state)
+                    .unwrap();
             let current_epoch = locked.state.in_mem().get_current_epoch().0;
             let consensus_set: Vec<WeightedValidator> =
                 read_consensus_validator_set_addresses_with_stake(

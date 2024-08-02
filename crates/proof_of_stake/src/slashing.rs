@@ -18,6 +18,7 @@ use namada_storage::collections::lazy_map::{
 };
 use namada_storage::collections::LazyMap;
 use namada_storage::{OptionExt, ResultExt, StorageRead, StorageWrite};
+use namada_systems::governance;
 
 use crate::event::PosEvent;
 use crate::storage::{
@@ -41,7 +42,7 @@ use crate::{
 };
 
 /// Apply PoS slashes from the evidence
-pub(crate) fn record_slashes_from_evidence<S>(
+pub(crate) fn record_slashes_from_evidence<S, Gov>(
     storage: &mut S,
     byzantine_validators: Vec<Misbehavior>,
     pos_params: &PosParams,
@@ -50,6 +51,7 @@ pub(crate) fn record_slashes_from_evidence<S>(
 ) -> namada_storage::Result<()>
 where
     S: StorageWrite + StorageRead,
+    Gov: governance::Read<S>,
 {
     if !byzantine_validators.is_empty() {
         let pred_epochs = storage.get_pred_epochs()?;
@@ -118,7 +120,7 @@ where
                 evidence_height,
                 current_epoch
             );
-            if let Err(err) = slash(
+            if let Err(err) = slash::<S, Gov>(
                 storage,
                 pos_params,
                 current_epoch,
@@ -139,7 +141,7 @@ where
 /// then jail the validator, removing it from the validator set. The slash rate
 /// will be computed at a later epoch.
 #[allow(clippy::too_many_arguments)]
-pub fn slash<S>(
+pub fn slash<S, Gov>(
     storage: &mut S,
     params: &PosParams,
     current_epoch: Epoch,
@@ -151,6 +153,7 @@ pub fn slash<S>(
 ) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
+    Gov: governance::Read<S>,
 {
     let evidence_block_height: u64 = evidence_block_height.into();
     let slash = Slash {
@@ -184,7 +187,7 @@ where
     }
 
     // Jail the validator and update validator sets
-    jail_validator(
+    jail_validator::<S, Gov>(
         storage,
         params,
         validator,
@@ -203,15 +206,16 @@ where
 /// cubic slashing rate is computed. Then, each slash is recorded in storage
 /// along with its computed rate, and stake is deducted from the affected
 /// validators.
-pub fn process_slashes<S>(
+pub fn process_slashes<S, Gov>(
     storage: &mut S,
     events: &mut impl EmitEvents,
     current_epoch: Epoch,
 ) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
+    Gov: governance::Read<S>,
 {
-    let params = read_pos_params(storage)?;
+    let params = read_pos_params::<S, Gov>(storage)?;
 
     if current_epoch.0 < params.slash_processing_epoch_offset() {
         return Ok(());
@@ -316,7 +320,7 @@ where
                 ValidatorState::Jailed | ValidatorState::Inactive
             );
             if !is_jailed_or_inactive {
-                update_validator_set(
+                update_validator_set::<S, Gov>(
                     storage,
                     &params,
                     &validator,
@@ -337,7 +341,7 @@ where
             checked!(slash_acc += slash_delta)?;
 
             let neg_slash_delta = checked!(-slash_delta.change())?;
-            update_validator_deltas(
+            update_validator_deltas::<S, Gov>(
                 storage,
                 &params,
                 &validator,
@@ -352,7 +356,7 @@ where
                     .unwrap(),
                 ValidatorState::Jailed | ValidatorState::Inactive
             );
-            update_total_deltas(
+            update_total_deltas::<S, Gov>(
                 storage,
                 &params,
                 neg_slash_delta,

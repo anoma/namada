@@ -13,8 +13,9 @@ use namada_core::voting_power::FractionalVotingPower;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
-use namada_proof_of_stake::pos_queries::PosQueries;
-use namada_state::{DBIter, StorageHasher, WlState, DB};
+use namada_proof_of_stake::queries::get_total_voting_power;
+use namada_state::{DBIter, StorageHasher, StorageRead, WlState, DB};
+use namada_systems::governance;
 
 use super::{read, ChangedKeys};
 
@@ -37,13 +38,14 @@ pub trait EpochedVotingPowerExt {
     /// Query the stake of the most secure [`Epoch`] referenced by an
     /// [`EpochedVotingPower`]. This translates to the [`Epoch`] with
     /// the most staked tokens.
-    fn epoch_max_voting_power<D, H>(
+    fn epoch_max_voting_power<D, H, Gov>(
         &self,
         state: &WlState<D, H>,
     ) -> Option<token::Amount>
     where
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
-        H: 'static + StorageHasher + Sync;
+        H: 'static + StorageHasher + Sync,
+        Gov: governance::Read<WlState<D, H>>;
 
     /// Fetch the sum of the stake tallied on an
     /// [`EpochedVotingPower`].
@@ -53,15 +55,18 @@ pub trait EpochedVotingPowerExt {
     /// [`EpochedVotingPower`], as a fraction over
     /// the maximum stake seen in the epochs voted on.
     #[inline]
-    fn fractional_stake<D, H>(
+    fn fractional_stake<D, H, Gov>(
         &self,
         state: &WlState<D, H>,
     ) -> FractionalVotingPower
     where
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync,
+        Gov: governance::Read<WlState<D, H>>,
     {
-        let Some(max_voting_power) = self.epoch_max_voting_power(state) else {
+        let Some(max_voting_power) =
+            self.epoch_max_voting_power::<_, _, Gov>(state)
+        else {
             return FractionalVotingPower::NULL;
         };
         FractionalVotingPower::new(
@@ -74,12 +79,15 @@ pub trait EpochedVotingPowerExt {
     /// Check if the [`Tally`] associated with an [`EpochedVotingPower`]
     /// can be considered `seen`.
     #[inline]
-    fn has_majority_quorum<D, H>(&self, state: &WlState<D, H>) -> bool
+    fn has_majority_quorum<D, H, Gov>(&self, state: &WlState<D, H>) -> bool
     where
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync,
+        Gov: governance::Read<WlState<D, H>>,
     {
-        let Some(max_voting_power) = self.epoch_max_voting_power(state) else {
+        let Some(max_voting_power) =
+            self.epoch_max_voting_power::<_, _, Gov>(state)
+        else {
             return false;
         };
         // NB: Preserve the safety property of the Tendermint protocol across
@@ -100,19 +108,18 @@ pub trait EpochedVotingPowerExt {
 }
 
 impl EpochedVotingPowerExt for EpochedVotingPower {
-    fn epoch_max_voting_power<D, H>(
+    fn epoch_max_voting_power<D, H, Gov>(
         &self,
         state: &WlState<D, H>,
     ) -> Option<token::Amount>
     where
         D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
         H: 'static + StorageHasher + Sync,
+        Gov: governance::Read<WlState<D, H>>,
     {
         self.keys()
             .copied()
-            .map(|epoch| {
-                state.pos_queries().get_total_voting_power(Some(epoch))
-            })
+            .map(|epoch| get_total_voting_power::<_, Gov>(state, epoch))
             .max()
     }
 
@@ -149,7 +156,7 @@ pub struct Tally {
 
 /// Calculate a new [`Tally`] based on some validators' fractional voting powers
 /// as specific block heights
-pub fn calculate_new<D, H>(
+pub fn calculate_new<D, H, Gov>(
     state: &WlState<D, H>,
     seen_by: Votes,
     voting_powers: &HashMap<(Address, BlockHeight), token::Amount>,
@@ -157,6 +164,7 @@ pub fn calculate_new<D, H>(
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
+    Gov: governance::Read<WlState<D, H>>,
 {
     let mut seen_by_voting_power = EpochedVotingPower::new();
     for (validator, block_height) in seen_by.iter() {
@@ -165,8 +173,8 @@ where
         {
             Some(&voting_power) => {
                 let epoch = state
-                    .pos_queries()
-                    .get_epoch(*block_height)
+                    .get_epoch_at_height(*block_height)
+                    .unwrap()
                     .expect("The queried epoch should be known");
                 let aggregated = seen_by_voting_power
                     .entry(epoch)
@@ -184,7 +192,8 @@ where
         };
     }
 
-    let newly_confirmed = seen_by_voting_power.has_majority_quorum(state);
+    let newly_confirmed =
+        seen_by_voting_power.has_majority_quorum::<D, H, Gov>(state);
     Ok(Tally {
         voting_power: seen_by_voting_power,
         seen_by,
@@ -203,10 +212,12 @@ pub fn dedupe(signers: BTreeSet<(Address, BlockHeight)>) -> Votes {
 mod tests {
     use namada_core::address;
     use namada_proof_of_stake::parameters::OwnedPosParams;
-    use namada_proof_of_stake::storage::write_pos_params;
+    use namada_proof_of_stake::storage::{
+        read_consensus_validator_set_addresses_with_stake, write_pos_params,
+    };
 
     use super::*;
-    use crate::test_utils;
+    use crate::test_utils::{self, GovStore};
 
     #[test]
     fn test_dedupe_empty() {
@@ -306,7 +317,7 @@ mod tests {
             FractionalVotingPower::HALF * dummy_validator_stake,
         )]);
         assert_eq!(
-            aggregated.fractional_stake(&dummy_storage),
+            aggregated.fractional_stake::<_, _, GovStore<_>>(&dummy_storage),
             FractionalVotingPower::HALF
         );
     }
@@ -351,12 +362,14 @@ mod tests {
 
         // query validators to make sure they were inserted correctly
         let query_validators = |epoch: u64| {
-            state
-                .pos_queries()
-                .get_consensus_validators(Some(epoch.into()))
-                .iter()
-                .map(|validator| (validator.address, validator.bonded_stake))
-                .collect::<HashMap<_, _>>()
+            read_consensus_validator_set_addresses_with_stake(
+                &state,
+                epoch.into(),
+            )
+            .unwrap()
+            .into_iter()
+            .map(|validator| (validator.address, validator.bonded_stake))
+            .collect::<HashMap<_, _>>()
         };
         let epoch_0_validators = query_validators(0);
         let epoch_1_validators = query_validators(1);
@@ -365,7 +378,7 @@ mod tests {
             HashMap::from([(validator_1.clone(), validator_1_stake)])
         );
         assert_eq!(
-            state.pos_queries().get_total_voting_power(Some(0.into())),
+            get_total_voting_power::<_, GovStore<_>>(&state, 0.into()),
             validator_1_stake,
         );
         assert_eq!(
@@ -377,7 +390,7 @@ mod tests {
             ])
         );
         assert_eq!(
-            state.pos_queries().get_total_voting_power(Some(1.into())),
+            get_total_voting_power::<_, GovStore<_>>(&state, 1.into()),
             total_stake,
         );
 
@@ -387,7 +400,7 @@ mod tests {
             (1.into(), FractionalVotingPower::ONE_THIRD * total_stake),
         ]);
         assert_eq!(
-            aggregated.fractional_stake(&state),
+            aggregated.fractional_stake::<_, _, GovStore<_>>(&state),
             FractionalVotingPower::TWO_THIRDS
         );
     }

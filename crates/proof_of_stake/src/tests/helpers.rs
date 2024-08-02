@@ -16,6 +16,7 @@ use namada_state::testing::TestState;
 use proptest::prop_oneof;
 use proptest::strategy::{Just, Strategy};
 
+use super::GovStore;
 use crate::parameters::testing::arb_pos_params;
 use crate::types::{GenesisValidator, ValidatorSetUpdate};
 use crate::validator_set_update::{
@@ -68,7 +69,8 @@ pub fn get_tendermint_set_updates(
 pub fn advance_epoch(s: &mut TestState, params: &PosParams) -> Epoch {
     s.in_mem_mut().block.epoch = s.in_mem().block.epoch.next();
     let current_epoch = s.in_mem().block.epoch;
-    compute_and_store_total_consensus_stake(s, current_epoch).unwrap();
+    compute_and_store_total_consensus_stake::<_, GovStore<_>>(s, current_epoch)
+        .unwrap();
     copy_validator_sets_and_positions(
         s,
         params,

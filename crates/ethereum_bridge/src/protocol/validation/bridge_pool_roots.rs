@@ -2,8 +2,11 @@
 
 use namada_core::keccak::keccak_hash;
 use namada_core::storage::BlockHeight;
-use namada_proof_of_stake::pos_queries::PosQueries;
-use namada_state::{DBIter, StorageHasher, WlState, DB};
+use namada_proof_of_stake::queries::{
+    get_validator_eth_hot_key, get_validator_protocol_key,
+};
+use namada_state::{DBIter, StorageHasher, StorageRead, WlState, DB};
+use namada_systems::governance;
 use namada_tx::{SignableEthMessage, Signed};
 use namada_vote_ext::bridge_pool_roots;
 
@@ -20,7 +23,7 @@ use crate::storage::eth_bridge_queries::EthBridgeQueries;
 ///  * The validator correctly signed the extension.
 ///  * The validator signed over the correct height inside of the extension.
 ///  * Check that the inner signature is valid.
-pub fn validate_bp_roots_vext<D, H>(
+pub fn validate_bp_roots_vext<D, H, Gov>(
     state: &WlState<D, H>,
     ext: &Signed<bridge_pool_roots::Vext>,
     last_height: BlockHeight,
@@ -28,11 +31,12 @@ pub fn validate_bp_roots_vext<D, H>(
 where
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
+    Gov: governance::Read<WlState<D, H>>,
 {
     // NOTE: for ABCI++, we should pass
     // `last_height` here, instead of `ext.data.block_height`
     let ext_height_epoch =
-        match state.pos_queries().get_epoch(ext.data.block_height) {
+        match state.get_epoch_at_height(ext.data.block_height).unwrap() {
             Some(epoch) => epoch,
             _ => {
                 tracing::debug!(
@@ -71,18 +75,21 @@ where
 
     // get the public key associated with this validator
     let validator = &ext.data.validator_addr;
-    let (_, pk) = state
-        .pos_queries()
-        .get_validator_from_address(validator, Some(ext_height_epoch))
-        .map_err(|err| {
-            tracing::debug!(
-                ?err,
-                %validator,
-                "Could not get public key from Storage for some validator, \
-                 while validating Bridge pool root's vote extension"
-            );
-            VoteExtensionError::PubKeyNotInStorage
-        })?;
+    let pk = get_validator_protocol_key::<_, Gov>(
+        state,
+        validator,
+        ext_height_epoch,
+    )
+    .ok()
+    .flatten()
+    .ok_or_else(|| {
+        tracing::debug!(
+            %validator,
+            "Could not get public key from Storage for some validator, \
+             while validating Bridge pool root's vote extension"
+        );
+        VoteExtensionError::PubKeyNotInStorage
+    })?;
     // verify the signature of the vote extension
     ext.verify(&pk).map_err(|err| {
         tracing::debug!(
@@ -109,10 +116,11 @@ where
         keccak_hash([bp_root, nonce].concat()),
         ext.data.sig.clone(),
     );
-    let pk = state
-        .pos_queries()
-        .read_validator_eth_hot_key(validator, Some(ext_height_epoch))
-        .expect("A validator should have an Ethereum hot key in storage.");
+    let pk =
+        get_validator_eth_hot_key::<_, Gov>(state, validator, ext_height_epoch)
+            .ok()
+            .flatten()
+            .expect("A validator should have an Ethereum hot key in storage.");
     signed.verify(&pk).map_err(|err| {
         tracing::debug!(
             ?err,
