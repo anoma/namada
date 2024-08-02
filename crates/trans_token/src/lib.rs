@@ -24,8 +24,12 @@ pub mod vp;
 
 use std::marker::PhantomData;
 
+use event::{TokenEvent, TokenOperation};
 use namada_core::address::Address;
 use namada_core::token;
+use namada_core::uint::Uint;
+use namada_events::extend::UserAccount;
+use namada_events::{EmitEvents, EventLevel};
 use namada_storage::{StorageRead, StorageWrite};
 pub use namada_systems::trans_token::*;
 pub use storage::*;
@@ -123,5 +127,56 @@ where
         amount: Amount,
     ) -> Result<()> {
         storage::credit_tokens(storage, token, dest, amount)
+    }
+}
+
+impl<S> Events<S> for Store<S>
+where
+    S: StorageRead + EmitEvents,
+{
+    fn emit_mint_event(
+        storage: &mut S,
+        descriptor: std::borrow::Cow<'static, str>,
+        token: &Address,
+        amount: token::Amount,
+        target: &Address,
+    ) -> Result<()> {
+        let post_balance: Uint =
+            Self::read_balance(storage, token, target)?.into();
+
+        storage.emit(TokenEvent {
+            descriptor,
+            level: EventLevel::Tx,
+            operation: TokenOperation::Mint {
+                token: token.clone(),
+                amount: amount.into(),
+                post_balance,
+                target_account: UserAccount::Internal(target.clone()),
+            },
+        });
+        Ok(())
+    }
+
+    fn emit_burn_event(
+        storage: &mut S,
+        descriptor: std::borrow::Cow<'static, str>,
+        token: &Address,
+        amount: token::Amount,
+        target: &Address,
+    ) -> Result<()> {
+        let post_balance: Uint =
+            Self::read_balance(storage, token, target)?.into();
+
+        storage.emit(TokenEvent {
+            descriptor,
+            level: EventLevel::Tx,
+            operation: TokenOperation::Burn {
+                token: token.clone(),
+                amount: amount.into(),
+                post_balance,
+                target_account: UserAccount::Internal(target.clone()),
+            },
+        });
+        Ok(())
     }
 }

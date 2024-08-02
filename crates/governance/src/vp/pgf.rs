@@ -35,7 +35,6 @@ pub enum Error {
 pub struct PgfVp<'ctx, S, CA, EVAL>
 where
     S: 'static + StateRead,
-    EVAL: VpEvaluator<'ctx, S, CA, EVAL>,
 {
     /// Context to interact with the host structures.
     pub ctx: Ctx<'ctx, S, CA, EVAL>,

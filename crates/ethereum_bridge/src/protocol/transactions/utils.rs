@@ -6,9 +6,9 @@ use namada_core::address::Address;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::storage::BlockHeight;
 use namada_core::token;
-use namada_proof_of_stake::pos_queries::PosQueries;
+use namada_proof_of_stake::storage::read_consensus_validator_set_addresses_with_stake;
 use namada_proof_of_stake::types::WeightedValidator;
-use namada_state::{DBIter, StorageHasher, WlState, DB};
+use namada_state::{DBIter, StorageHasher, StorageRead, WlState, DB};
 
 /// Proof of some arbitrary tally whose voters can be queried.
 pub(super) trait GetVoters {
@@ -64,16 +64,13 @@ where
 {
     let mut consensus_validators = BTreeMap::default();
     for height in block_heights.into_iter() {
-        let epoch = state.pos_queries().get_epoch(height).expect(
+        let epoch = state.get_epoch_at_height(height).unwrap().expect(
             "The epoch of the last block height should always be known",
         );
         _ = consensus_validators.insert(
             height,
-            state
-                .pos_queries()
-                .get_consensus_validators(Some(epoch))
-                .iter()
-                .collect(),
+            read_consensus_validator_set_addresses_with_stake(state, epoch)
+                .unwrap(),
         );
     }
     consensus_validators

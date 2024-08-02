@@ -33,7 +33,6 @@ use namada_ethereum_bridge::storage::{
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
-use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_state::MembershipProof::BridgePool;
 use namada_state::{DBIter, StorageHasher, StoreRef, StoreType, DB};
 use namada_storage::{CustomError, ResultExt, StorageRead};
@@ -43,6 +42,7 @@ use namada_vote_ext::validator_set_update::{
 use serde::{Deserialize, Serialize};
 
 use crate::eth_bridge::ethers::abi::AbiDecode;
+use crate::governance;
 use crate::queries::{EncodedResponseQuery, RequestCtx, RequestQuery};
 
 /// Container for the status of queried transfers to Ethereum.
@@ -574,7 +574,7 @@ where
                 let (validator_args, voting_powers) = ctx
                     .state
                     .ethbridge_queries()
-                    .get_bridge_validator_set(None);
+                    .get_bridge_validator_set::<governance::Store<_>>(None);
                 let relay_proof = ethereum_structs::RelayProof {
                     transfers,
                     pool_root: signed_root.data.0.0,
@@ -667,7 +667,7 @@ where
                     "Iterating over storage should not yield keys without \
                      values.",
                 )
-                .fractional_stake(ctx.state);
+                .fractional_stake::<_, _, governance::Store<_>>(ctx.state);
             for transfer in transfers {
                 let key = get_key_from_hash(&transfer.keccak256());
                 let transfer = ctx
@@ -757,7 +757,7 @@ where
         Ok(ctx
             .state
             .ethbridge_queries()
-            .get_bridge_validator_set(Some(epoch))
+            .get_bridge_validator_set::<governance::Store<_>>(Some(epoch))
             .0)
     }
 }
@@ -787,7 +787,7 @@ where
         Ok(ctx
             .state
             .ethbridge_queries()
-            .get_governance_validator_set(Some(epoch))
+            .get_governance_validator_set::<governance::Store<_>>(Some(epoch))
             .0)
     }
 }
@@ -802,7 +802,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let maybe_epoch = ctx.state.pos_queries().get_epoch(height);
+    let maybe_epoch = ctx.state.get_epoch_at_height(height).unwrap();
     let Some(epoch) = maybe_epoch else {
         return Err(namada_storage::Error::SimpleMessage(
             "The epoch of the requested height does not exist",
@@ -830,7 +830,7 @@ where
     let (_, voting_powers) = ctx
         .state
         .ethbridge_queries()
-        .get_bridge_validator_set(Some(epoch));
+        .get_bridge_validator_set::<governance::Store<_>>(Some(epoch));
     Ok(voting_powers)
 }
 
@@ -850,6 +850,8 @@ mod test_ethbridge_router {
     };
     use namada_ethereum_bridge::storage::proof::BridgePoolRootProof;
     use namada_ethereum_bridge::storage::whitelist;
+    use namada_ethereum_bridge::test_utils::GovStore;
+    use namada_proof_of_stake::queries::get_total_voting_power;
     use namada_storage::mockdb::MockDBWriteBatch;
     use namada_storage::StorageWrite;
     use namada_vote_ext::validator_set_update;
@@ -886,17 +888,14 @@ mod test_ethbridge_router {
             .await
             .unwrap();
         let expected = {
-            let total_power = client
-                .state
-                .pos_queries()
-                .get_total_voting_power(Some(epoch))
-                .into();
+            let total_power =
+                get_total_voting_power::<_, GovStore<_>>(&client.state, epoch)
+                    .into();
 
             let voting_powers_map: VotingPowersMap = client
                 .state
                 .ethbridge_queries()
-                .get_consensus_eth_addresses(Some(epoch))
-                .iter()
+                .get_consensus_eth_addresses::<governance::Store<_>>(epoch)
                 .map(|(addr_book, _, power)| (addr_book, power))
                 .collect();
             let (validators, voting_powers) = voting_powers_map
@@ -976,7 +975,7 @@ mod test_ethbridge_router {
                 .expect("Test failed")
                 .eth_bridge,
         );
-        let tx_result = aggregate_votes(
+        let tx_result = aggregate_votes::<_, _, GovStore<_>>(
             &mut client.state,
             validator_set_update::VextDigest::singleton(vext.clone()),
             0.into(),
@@ -1004,7 +1003,10 @@ mod test_ethbridge_router {
                 client
                     .state
                     .ethbridge_queries()
-                    .get_eth_addr_book(&established_address_1(), Some(0.into()))
+                    .get_eth_addr_book::<governance::Store<_>>(
+                        &established_address_1(),
+                        Some(0.into()),
+                    )
                     .expect("Test failed"),
                 vext.0.sig,
             );
@@ -1232,10 +1234,11 @@ mod test_ethbridge_router {
             .get_membership_proof(vec![transfer.clone()])
             .expect("Test failed");
 
-        let (validator_args, voting_powers) = client
-            .state
-            .ethbridge_queries()
-            .get_bridge_validator_set(None);
+        let (validator_args, voting_powers) =
+            client
+                .state
+                .ethbridge_queries()
+                .get_bridge_validator_set::<governance::Store<_>>(None);
         let relay_proof = ethereum_structs::RelayProof {
             transfers: vec![(&transfer).into()],
             pool_root: signed_root.data.0.0,

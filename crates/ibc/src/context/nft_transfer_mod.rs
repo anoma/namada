@@ -27,6 +27,7 @@ use ibc::core::host::types::identifiers::{ChannelId, ConnectionId, PortId};
 use ibc::core::router::module::Module;
 use ibc::core::router::types::module::{ModuleExtras, ModuleId};
 use ibc::primitives::Signer;
+use namada_systems::trans_token;
 
 use super::common::IbcCommonContext;
 use super::nft_transfer::NftTransferContext;
@@ -34,17 +35,18 @@ use super::transfer_mod::ModuleWrapper;
 
 /// IBC module for NFT transfer
 #[derive(Debug)]
-pub struct NftTransferModule<C>
+pub struct NftTransferModule<C, Token>
 where
     C: IbcCommonContext,
 {
     /// IBC actions
-    pub ctx: NftTransferContext<C>,
+    pub ctx: NftTransferContext<C, Token>,
 }
 
-impl<C> NftTransferModule<C>
+impl<C, Token> NftTransferModule<C, Token>
 where
     C: IbcCommonContext,
+    Token: trans_token::Keys,
 {
     /// Make a new module
     pub fn new(ctx: Rc<RefCell<C>>) -> Self {
@@ -54,9 +56,10 @@ where
     }
 }
 
-impl<C> ModuleWrapper for NftTransferModule<C>
+impl<C, Token> ModuleWrapper for NftTransferModule<C, Token>
 where
     C: IbcCommonContext + Debug,
+    Token: trans_token::Keys + Debug,
 {
     fn as_module(&self) -> &dyn Module {
         self
@@ -75,9 +78,10 @@ where
     }
 }
 
-impl<C> Module for NftTransferModule<C>
+impl<C, Token> Module for NftTransferModule<C, Token>
 where
     C: IbcCommonContext + Debug,
+    Token: trans_token::Keys + Debug,
 {
     #[allow(clippy::too_many_arguments)]
     fn on_chan_open_init_validate(

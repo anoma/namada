@@ -15,11 +15,9 @@ use ibc::core::host::types::path::{
 use namada_core::address::{Address, InternalAddress};
 use namada_core::storage::{DbKeySeg, Key, KeySeg};
 use namada_core::token::Amount;
-use namada_events::extend::UserAccount;
-use namada_events::{EmitEvents, EventLevel};
+use namada_events::EmitEvents;
 use namada_state::{StorageRead, StorageResult, StorageWrite};
-use namada_token as token;
-use namada_token::event::{TokenEvent, TokenOperation};
+use namada_systems::trans_token;
 use thiserror::Error;
 
 use crate::event::TOKEN_EVENT_DESCRIPTOR;
@@ -54,60 +52,76 @@ pub enum Error {
 /// IBC storage functions result
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// Mint IBC tokens. This function doesn't emit event (see
+/// `mint_tokens_and_emit_event` below)
+pub fn mint_tokens<S, Token>(
+    storage: &mut S,
+    target: &Address,
+    token: &Address,
+    amount: Amount,
+) -> StorageResult<()>
+where
+    S: StorageRead + StorageWrite,
+    Token: trans_token::Keys + trans_token::Read<S> + trans_token::Write<S>,
+{
+    Token::credit_tokens(storage, token, target, amount)?;
+
+    let minter_key = Token::minter_key(token);
+    StorageWrite::write(
+        storage,
+        &minter_key,
+        Address::Internal(InternalAddress::Ibc),
+    )
+}
+
 /// Mint tokens, and emit an IBC token mint event.
-pub fn mint_tokens<S>(
-    state: &mut S,
+pub fn mint_tokens_and_emit_event<S, Token>(
+    storage: &mut S,
     target: &Address,
     token: &Address,
     amount: Amount,
 ) -> StorageResult<()>
 where
     S: StorageRead + StorageWrite + EmitEvents,
+    Token: trans_token::Keys
+        + trans_token::Read<S>
+        + trans_token::Write<S>
+        + trans_token::Events<S>,
 {
-    token::mint_tokens(
-        state,
-        &Address::Internal(InternalAddress::Ibc),
-        token,
-        target,
-        amount,
-    )?;
+    mint_tokens::<S, Token>(storage, target, token, amount)?;
 
-    state.emit(TokenEvent {
-        descriptor: TOKEN_EVENT_DESCRIPTOR.into(),
-        level: EventLevel::Tx,
-        operation: TokenOperation::Mint {
-            token: token.clone(),
-            amount: amount.into(),
-            post_balance: token::read_balance(state, token, target)?.into(),
-            target_account: UserAccount::Internal(target.clone()),
-        },
-    });
+    Token::emit_mint_event(
+        storage,
+        TOKEN_EVENT_DESCRIPTOR.into(),
+        token,
+        amount,
+        target,
+    )?;
 
     Ok(())
 }
 
 /// Burn tokens, and emit an IBC token burn event.
-pub fn burn_tokens<S>(
-    state: &mut S,
+pub fn burn_tokens<S, Token>(
+    storage: &mut S,
     target: &Address,
     token: &Address,
     amount: Amount,
 ) -> StorageResult<()>
 where
     S: StorageRead + StorageWrite + EmitEvents,
+    Token:
+        trans_token::Read<S> + trans_token::Write<S> + trans_token::Events<S>,
 {
-    token::burn_tokens(state, token, target, amount)?;
+    Token::burn_tokens(storage, token, target, amount)?;
 
-    state.emit(TokenEvent {
-        descriptor: TOKEN_EVENT_DESCRIPTOR.into(),
-        level: EventLevel::Tx,
-        operation: TokenOperation::Burn {
-            token: token.clone(),
-            amount: amount.into(),
-            post_balance: token::read_balance(state, token, target)?.into(),
-            target_account: UserAccount::Internal(target.clone()),
-        },
-    });
+    Token::emit_burn_event(
+        storage,
+        TOKEN_EVENT_DESCRIPTOR.into(),
+        token,
+        amount,
+        target,
+    )?;
 
     Ok(())
 }

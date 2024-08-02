@@ -981,12 +981,20 @@ where
         ) => {
             let ethereum_events::VextDigest { events, .. } =
                 ethereum_events::VextDigest::singleton(ext);
-            transactions::ethereum_events::apply_derived_tx(state, events)
-                .map_err(Error::ProtocolTxError)
+            transactions::ethereum_events::apply_derived_tx::<
+                _,
+                _,
+                governance::Store<_>,
+            >(state, events)
+            .map_err(Error::ProtocolTxError)
         }
         EthereumTxData::BridgePoolVext(ext) => {
-            transactions::bridge_pool_roots::apply_derived_tx(state, ext.into())
-                .map_err(Error::ProtocolTxError)
+            transactions::bridge_pool_roots::apply_derived_tx::<
+                _,
+                _,
+                governance::Store<_>,
+            >(state, ext.into())
+            .map_err(Error::ProtocolTxError)
         }
         EthereumTxData::ValSetUpdateVext(ext) => {
             // NOTE(feature = "abcipp"): with ABCI++, we can write the
@@ -995,7 +1003,11 @@ where
             // with ABCI+, multiple vote extension protocol txs may be needed
             // to reach a complete proof.
             let signing_epoch = ext.data.signing_epoch;
-            transactions::validator_set_update::aggregate_votes(
+            transactions::validator_set_update::aggregate_votes::<
+                _,
+                _,
+                governance::Store<_>,
+            >(
                 state,
                 validator_set_update::VextDigest::singleton(ext),
                 signing_epoch,

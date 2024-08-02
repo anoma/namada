@@ -130,7 +130,12 @@ pub fn init_pos(
         //     .state
         //     .init_genesis(params, genesis_validators.iter(), start_epoch)
         //     .unwrap();
-        let params = init_genesis(
+        let params = init_genesis::<
+            _,
+            crate::parameters::Store<_>,
+            crate::governance::Store<_>,
+            crate::token::Store<_>,
+        >(
             &mut tx_env.state,
             params.clone(),
             genesis_validators.iter().cloned(),
@@ -150,6 +155,7 @@ mod tests {
     use std::cell::RefCell;
 
     use namada_sdk::gas::VpGasMeter;
+    use namada_sdk::governance::parameters::GovernanceParameters;
     use namada_sdk::key::common::PublicKey;
     use namada_sdk::validation::PosVp;
     use namada_sdk::{address, token};
@@ -336,7 +342,11 @@ mod tests {
                     // We're starting from an empty state
                     let state = vec![];
                     let epoch = Epoch(epoch);
-                    let params = params.with_default_gov_params();
+                    let params = PosParams {
+                        owned: params,
+                        max_proposal_period: GovernanceParameters::default()
+                            .max_proposal_period,
+                    };
                     arb_valid_pos_action(&state).prop_map(move |valid_action| {
                         Self {
                             epoch,
@@ -594,7 +604,7 @@ pub mod testing {
     use namada_sdk::proof_of_stake::ADDRESS as POS_ADDRESS;
     use namada_sdk::storage::Epoch;
     use namada_sdk::token::{Amount, Change};
-    use namada_sdk::{address, key, token};
+    use namada_sdk::{address, governance, key, token};
     use namada_tx_prelude::{Address, StorageRead, StorageWrite};
     use proptest::prelude::*;
 
@@ -861,7 +871,8 @@ pub mod testing {
         /// the VP.
         pub fn apply(self, is_current_tx_valid: bool) {
             // Read the PoS parameters
-            let params = read_pos_params(tx::ctx()).unwrap();
+            let params =
+                read_pos_params::<_, governance::Store<_>>(tx::ctx()).unwrap();
 
             let current_epoch = tx_host_env::with(|env| {
                 // Reset the gas meter on each change, so that we never run
@@ -1575,7 +1586,8 @@ pub mod testing {
         /// Apply an invalid PoS storage action.
         pub fn apply(self) {
             // Read the PoS parameters
-            let params = read_pos_params(tx::ctx()).unwrap();
+            let params =
+                read_pos_params::<_, governance::Store<_>>(tx::ctx()).unwrap();
 
             for (epoch, changes) in self.changes {
                 for change in changes {

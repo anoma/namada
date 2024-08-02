@@ -24,7 +24,6 @@ pub struct Error(#[from] native_vp::Error);
 pub struct NonUsableTokens<'ctx, S, CA, EVAL, TokenKeys>
 where
     S: 'static + StateRead,
-    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
 {
     /// Context to interact with the host structures.
     pub ctx: Ctx<'ctx, S, CA, EVAL>,

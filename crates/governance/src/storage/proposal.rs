@@ -5,7 +5,7 @@ use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use itertools::Itertools;
 use namada_core::address::Address;
 use namada_core::hash::Hash;
-use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
+pub use namada_core::ibc::PGFIbcTarget;
 use namada_core::storage::Epoch;
 use namada_core::token;
 use namada_macros::BorshDeserializer;
@@ -326,95 +326,6 @@ pub struct PGFInternalTarget {
     pub amount: token::Amount,
 }
 
-/// The target of a PGF payment
-#[derive(
-    Debug,
-    Clone,
-    PartialEq,
-    Serialize,
-    Deserialize,
-    Ord,
-    Eq,
-    PartialOrd,
-    BorshDeserializer,
-    Hash,
-)]
-pub struct PGFIbcTarget {
-    /// The target address on the target chain
-    pub target: String,
-    /// The amount of token to fund the target address
-    pub amount: token::Amount,
-    /// Port ID to fund
-    pub port_id: PortId,
-    /// Channel ID to fund
-    pub channel_id: ChannelId,
-}
-
-impl BorshSerialize for PGFIbcTarget {
-    fn serialize<W: std::io::Write>(
-        &self,
-        writer: &mut W,
-    ) -> std::io::Result<()> {
-        BorshSerialize::serialize(&self.target, writer)?;
-        BorshSerialize::serialize(&self.amount, writer)?;
-        BorshSerialize::serialize(&self.port_id.to_string(), writer)?;
-        BorshSerialize::serialize(&self.channel_id.to_string(), writer)
-    }
-}
-
-impl borsh::BorshDeserialize for PGFIbcTarget {
-    fn deserialize_reader<R: std::io::Read>(
-        reader: &mut R,
-    ) -> std::io::Result<Self> {
-        use std::io::{Error, ErrorKind};
-        let target: String = BorshDeserialize::deserialize_reader(reader)?;
-        let amount: token::Amount =
-            BorshDeserialize::deserialize_reader(reader)?;
-        let port_id: String = BorshDeserialize::deserialize_reader(reader)?;
-        let port_id: PortId = port_id.parse().map_err(|err| {
-            Error::new(
-                ErrorKind::InvalidData,
-                format!("Error decoding port ID: {}", err),
-            )
-        })?;
-        let channel_id: String = BorshDeserialize::deserialize_reader(reader)?;
-        let channel_id: ChannelId = channel_id.parse().map_err(|err| {
-            Error::new(
-                ErrorKind::InvalidData,
-                format!("Error decoding channel ID: {}", err),
-            )
-        })?;
-        Ok(Self {
-            target,
-            amount,
-            port_id,
-            channel_id,
-        })
-    }
-}
-
-impl borsh::BorshSchema for PGFIbcTarget {
-    fn add_definitions_recursively(
-        definitions: &mut BTreeMap<
-            borsh::schema::Declaration,
-            borsh::schema::Definition,
-        >,
-    ) {
-        let fields = borsh::schema::Fields::NamedFields(vec![
-            ("target".into(), String::declaration()),
-            ("amount".into(), token::Amount::declaration()),
-            ("port_id".into(), String::declaration()),
-            ("channel_id".into(), String::declaration()),
-        ]);
-        let definition = borsh::schema::Definition::Struct { fields };
-        definitions.insert(Self::declaration(), definition);
-    }
-
-    fn declaration() -> borsh::schema::Declaration {
-        std::any::type_name::<Self>().into()
-    }
-}
-
 /// The actions that a PGF Steward can propose to execute
 #[derive(
     Debug,
@@ -659,6 +570,7 @@ impl Display for StorageProposal {
 pub mod testing {
     use namada_core::address::testing::arb_non_internal_address;
     use namada_core::hash::testing::arb_hash;
+    use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
     use namada_core::storage::testing::arb_epoch;
     use namada_core::token::testing::arb_amount;
     use proptest::prelude::*;

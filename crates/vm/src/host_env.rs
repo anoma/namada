@@ -90,7 +90,6 @@ pub struct TxVmEnv<MEM, D, H, CA>
 where
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
-    CA: WasmCacheAccess,
 {
     /// The VM memory for bi-directional data passing
     pub memory: MEM,
@@ -104,7 +103,6 @@ pub struct TxCtx<D, H, CA>
 where
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
-    CA: WasmCacheAccess,
 {
     /// Mutable access to write log.
     pub write_log: HostRef<RwAccess, WriteLog>,
@@ -302,8 +300,6 @@ pub struct VpVmEnv<MEM, D, H, EVAL, CA>
 where
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
-    EVAL: VpEvaluator,
-    CA: WasmCacheAccess,
 {
     /// The VM memory for bi-directional data passing
     pub memory: MEM,
@@ -316,8 +312,6 @@ pub struct VpCtx<D, H, EVAL, CA>
 where
     D: DB + for<'iter> DBIter<'iter>,
     H: StorageHasher,
-    EVAL: VpEvaluator,
-    CA: WasmCacheAccess,
 {
     /// The address of the account that owns the VP
     pub address: HostRef<RoAccess, Address>,

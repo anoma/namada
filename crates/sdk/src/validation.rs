@@ -30,10 +30,13 @@ pub type IbcVp<'a, S, CA> = ibc::vp::Ibc<
     S,
     VpCache<CA>,
     Eval<S, CA>,
+    ParamsIbcVpStore<'a, S, CA>,
     ParamsPreStore<'a, S, CA>,
+    ParamsIbcPseudoStore<'a, S, CA>,
     GovPreStore<'a, S, CA>,
     TokenStoreForIbcExec<'a, S, CA>,
     PosPreStore<'a, S, CA>,
+    token::Transfer,
 >;
 
 /// IBC VP pseudo-execution context
@@ -90,6 +93,7 @@ pub type MaspVp<'a, S, CA> = token::vp::MaspVp<
     GovPreStore<'a, S, CA>,
     IbcPostStore<'a, S, CA>,
     TokenPreStore<'a, S, CA>,
+    token::Transfer,
 >;
 
 /// Native ETH bridge VP
@@ -127,6 +131,22 @@ pub type IbcPostStore<'a, S, CA> =
 
 /// Token store impl over IBC pseudo-execution storage
 pub type TokenStoreForIbcExec<'a, S, CA> = token::Store<
+    ibc::vp::context::PseudoExecutionStorage<
+        'a,
+        'a,
+        S,
+        VpCache<CA>,
+        Eval<S, CA>,
+    >,
+>;
+
+/// Parameters store implementation over the native prior context
+pub type ParamsIbcVpStore<'a, S, CA> = parameters::Store<
+    ibc::vp::context::VpValidationContext<'a, 'a, S, VpCache<CA>, Eval<S, CA>>,
+>;
+
+/// Parameters store implementation over the native prior context
+pub type ParamsIbcPseudoStore<'a, S, CA> = parameters::Store<
     ibc::vp::context::PseudoExecutionStorage<
         'a,
         'a,

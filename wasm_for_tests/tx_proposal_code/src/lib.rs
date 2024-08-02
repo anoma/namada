@@ -39,7 +39,7 @@ fn apply_tx(ctx: &mut Ctx, _tx_data: BatchedTx) -> TxResult {
     ctx.write(&pgf_inflation_key, pgf_inflation_rate)?;
 
     // change pos parameter
-    let mut pos_params = read_pos_params(ctx)?.owned;
+    let mut pos_params = read_pos_params::<_, governance::Store<_>>(ctx)?.owned;
     pos_params.max_inflation_rate = Dec::from_str("0.15").unwrap();
     pos_params.target_staked_ratio = Dec::from_str("0.33").unwrap();
     pos_params.rewards_gain_p = Dec::from_str("1.5").unwrap();
