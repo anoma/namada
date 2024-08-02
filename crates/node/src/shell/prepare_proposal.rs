@@ -423,16 +423,18 @@ mod test_prepare_proposal {
     use namada_sdk::key::RefTo;
     use namada_sdk::proof_of_stake::storage::{
         consensus_validator_set_handle,
-        read_consensus_validator_set_addresses_with_stake,
+        read_consensus_validator_set_addresses_with_stake, read_pos_params,
     };
     use namada_sdk::proof_of_stake::types::WeightedValidator;
-    use namada_sdk::proof_of_stake::{Epoch, PosQueries};
+    use namada_sdk::proof_of_stake::Epoch;
     use namada_sdk::state::collections::lazy_map::{NestedSubKey, SubKey};
-    use namada_sdk::storage::{BlockHeight, InnerEthEventsQueue, StorageWrite};
+    use namada_sdk::storage::{
+        BlockHeight, InnerEthEventsQueue, StorageRead, StorageWrite,
+    };
     use namada_sdk::token::read_denom;
     use namada_sdk::tx::data::{Fee, TxType};
     use namada_sdk::tx::{Authorization, Code, Data, Section, Signed};
-    use namada_sdk::{address, token};
+    use namada_sdk::{address, governance, token};
     use namada_vote_ext::{ethereum_events, ethereum_tx_data_variants};
 
     use super::*;
@@ -616,15 +618,16 @@ mod test_prepare_proposal {
                 ..Default::default()
             });
 
-        let params = shell.state.pos_queries().get_pos_params();
+        let params =
+            read_pos_params::<_, governance::Store<_>>(&shell.state).unwrap();
 
         // artificially change the voting power of the default validator to
         // one, change the block height, and commit a dummy block,
         // to move to a new epoch
         let events_epoch = shell
             .state
-            .pos_queries()
-            .get_epoch(FIRST_HEIGHT)
+            .get_epoch_at_height(FIRST_HEIGHT)
+            .unwrap()
             .expect("Test failed");
         let validators_handle =
             consensus_validator_set_handle().at(&events_epoch);
@@ -710,8 +713,8 @@ mod test_prepare_proposal {
         assert_eq!(
             shell
                 .state
-                .pos_queries()
-                .get_epoch(shell.get_current_decision_height()),
+                .get_epoch_at_height(shell.get_current_decision_height())
+                .unwrap(),
             Some(Epoch(1))
         );
 

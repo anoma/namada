@@ -38,6 +38,7 @@ use namada_state::{DBIter, KeySeg, StorageHasher, DB};
 use namada_storage::collections::lazy_map;
 use namada_storage::OptionExt;
 
+use crate::governance;
 use crate::queries::types::RequestCtx;
 
 // PoS validity predicate queries
@@ -189,7 +190,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    read_pos_params(ctx.state)
+    read_pos_params::<_, governance::Store<_>>(ctx.state)
 }
 
 /// Find if the given address belongs to a validator account.
@@ -214,7 +215,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let current_epoch = ctx.state.in_mem().last_epoch;
-    namada_proof_of_stake::storage::get_consensus_key(
+    namada_proof_of_stake::storage::get_consensus_key::<_, governance::Store<_>>(
         ctx.state,
         &addr,
         current_epoch,
@@ -259,7 +260,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
-    let params = read_pos_params(ctx.state)?;
+    let params = read_pos_params::<_, governance::Store<_>>(ctx.state)?;
     let commission_rate = validator_commission_rate_handle(&validator)
         .get(ctx.state, epoch, &params)?;
     let max_commission_change_per_epoch =
@@ -313,9 +314,10 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
-    let state = namada_proof_of_stake::storage::read_validator_state(
-        ctx.state, &validator, &epoch,
-    )?;
+    let state = namada_proof_of_stake::storage::read_validator_state::<
+        _,
+        governance::Store<_>,
+    >(ctx.state, &validator, &epoch)?;
     Ok((state, epoch))
 }
 
@@ -346,7 +348,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
-    let params = read_pos_params(ctx.state)?;
+    let params = read_pos_params::<_, governance::Store<_>>(ctx.state)?;
     if namada_proof_of_stake::is_validator(ctx.state, &validator)? {
         let stake =
             read_validator_stake(ctx.state, &params, &validator, epoch)?;
@@ -407,7 +409,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
-    let params = read_pos_params(ctx.state)?;
+    let params = read_pos_params::<_, governance::Store<_>>(ctx.state)?;
     read_total_stake(ctx.state, &params, epoch)
 }
 
@@ -422,7 +424,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
-    let params = read_pos_params(ctx.state)?;
+    let params = read_pos_params::<_, governance::Store<_>>(ctx.state)?;
     read_total_active_stake(ctx.state, &params, epoch)
 }
 
@@ -450,7 +452,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let params = read_pos_params(ctx.state)?;
+    let params = read_pos_params::<_, governance::Store<_>>(ctx.state)?;
     let epoch = epoch.unwrap_or(
         ctx.state
             .in_mem()
@@ -477,7 +479,7 @@ where
     let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
     let bond_id = BondId { source, validator };
 
-    bond_amount(ctx.state, &bond_id, epoch)
+    bond_amount::<_, governance::Store<_>>(ctx.state, &bond_id, epoch)
 }
 
 fn unbond<D, H, V, T>(
@@ -570,7 +572,12 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let current_epoch = ctx.state.in_mem().last_epoch;
-    query_reward_tokens(ctx.state, source.as_ref(), &validator, current_epoch)
+    query_reward_tokens::<_, governance::Store<_>>(
+        ctx.state,
+        source.as_ref(),
+        &validator,
+        current_epoch,
+    )
 }
 
 fn bonds_and_unbonds<D, H, V, T>(
@@ -582,7 +589,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    namada_proof_of_stake::queries::bonds_and_unbonds(
+    namada_proof_of_stake::queries::bonds_and_unbonds::<_, governance::Store<_>>(
         ctx.state, source, validator,
     )
 }
@@ -614,7 +621,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let epoch: Epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
-    find_delegations(ctx.state, &owner, &epoch)
+    find_delegations::<_, governance::Store<_>>(ctx.state, &owner, &epoch)
 }
 
 /// Validator slashes
@@ -694,7 +701,9 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    namada_proof_of_stake::queries::has_bonds(ctx.state, &source)
+    namada_proof_of_stake::queries::has_bonds::<_, governance::Store<_>>(
+        ctx.state, &source,
+    )
 }
 
 /// Client-only methods for the router type are composed from router functions.

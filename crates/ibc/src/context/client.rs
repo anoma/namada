@@ -12,6 +12,7 @@ use ibc_derive::{IbcClientState, IbcConsensusState};
 use ibc_testkit::testapp::ibc::clients::mock::client_state::MockClientState;
 #[cfg(any(test, feature = "testing"))]
 use ibc_testkit::testapp::ibc::clients::mock::consensus_state::MockConsensusState;
+use namada_systems::parameters;
 use prost::Message;
 
 use super::common::IbcCommonContext;
@@ -19,8 +20,8 @@ use super::IbcContext;
 
 /// ClientState for light clients
 #[derive(Clone, Debug, IbcClientState)]
-#[validation(IbcContext<C: IbcCommonContext>)]
-#[execution(IbcContext<C: IbcCommonContext>)]
+#[validation(IbcContext<C: IbcCommonContext, Params: parameters::Read<C::Storage>>)]
+#[execution(IbcContext<C: IbcCommonContext, Params: parameters::Read<C::Storage>>)]
 pub enum AnyClientState {
     /// Tendermint client state
     Tendermint(TmClientState),

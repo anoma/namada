@@ -2,6 +2,8 @@
 
 pub use namada_core::parameters::*;
 use namada_core::storage;
+use namada_core::storage::BlockHeight;
+use namada_core::time::DurationSecs;
 pub use namada_storage::Result;
 
 /// Abstract parameters storage keys interface
@@ -26,6 +28,15 @@ pub trait Read<S> {
 
     /// Read the number of epochs per year parameter
     fn epochs_per_year(storage: &S) -> Result<u64>;
+
+    /// Return an estimate of the maximum time taken to decide a block,
+    /// by sourcing block headers from up to `num_blocks_to_read`, and
+    /// from chain parameters.
+    fn estimate_max_block_time_from_blocks_and_params(
+        storage: &S,
+        last_block_height: BlockHeight,
+        num_blocks_to_read: u64,
+    ) -> Result<DurationSecs>;
 }
 
 /// Abstract parameters storage write interface

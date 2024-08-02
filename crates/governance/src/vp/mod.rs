@@ -52,7 +52,6 @@ pub enum Error {
 pub struct GovernanceVp<'ctx, S, CA, EVAL, PoS, TokenKeys>
 where
     S: StateRead,
-    EVAL: VpEvaluator<'ctx, S, CA, EVAL>,
 {
     /// Context to interact with the host structures.
     pub ctx: Ctx<'ctx, S, CA, EVAL>,
@@ -1239,7 +1238,6 @@ mod test {
     use namada_core::parameters::Parameters;
     use namada_core::storage::testing::get_dummy_header;
     use namada_core::time::DateTimeUtc;
-    use namada_core::token;
     use namada_gas::{TxGasMeter, VpGasMeter};
     use namada_proof_of_stake::bond_tokens;
     use namada_proof_of_stake::test_utils::get_dummy_genesis_validator;
@@ -1249,6 +1247,7 @@ mod test {
         BlockHeight, Epoch, FullAccessState, Key, Sha256Hasher, State,
         StateRead, StorageRead, TxIndex,
     };
+    use namada_token as token;
     use namada_token::storage_key::balance_key;
     use namada_tx::action::{Action, GovAction, Write};
     use namada_tx::data::TxType;
@@ -1282,7 +1281,12 @@ mod test {
     fn init_storage() -> TestState {
         let mut state = TestState::default();
 
-        namada_proof_of_stake::test_utils::test_init_genesis(
+        namada_proof_of_stake::test_utils::test_init_genesis::<
+            _,
+            namada_parameters::Store<_>,
+            crate::Store<_>,
+            namada_token::Store<_>,
+        >(
             &mut state,
             namada_proof_of_stake::OwnedPosParams::default(),
             vec![get_dummy_genesis_validator()].into_iter(),
@@ -2727,7 +2731,7 @@ mod test {
             token::Amount::native_whole(1000000),
         );
 
-        bond_tokens(
+        bond_tokens::<_, crate::Store<_>, token::Store<_>>(
             &mut state,
             Some(&delegator_address),
             &validator_address,
@@ -2873,7 +2877,7 @@ mod test {
             token::Amount::native_whole(1000000),
         );
 
-        bond_tokens(
+        bond_tokens::<_, crate::Store<_>, token::Store<_>>(
             &mut state,
             Some(&delegator_address),
             &validator_address,
@@ -3019,7 +3023,7 @@ mod test {
             token::Amount::native_whole(1000000),
         );
 
-        bond_tokens(
+        bond_tokens::<_, crate::Store<_>, token::Store<_>>(
             &mut state,
             Some(&delegator_address),
             &validator_address,

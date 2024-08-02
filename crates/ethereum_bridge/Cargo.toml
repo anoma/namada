@@ -19,6 +19,7 @@ testing = [
     "namada_account",
     "namada_core/testing",
     "namada_state/testing",
+    "namada_governance",
 ]
 migrations = [
     "namada_migrations",
@@ -29,6 +30,7 @@ migrations = [
 namada_account = {path = "../account", optional = true}
 namada_core = {path = "../core", default-features = false, features = ["ethers-derive"]}
 namada_events = { path = "../events", default-features = false }
+namada_governance = {path = "../governance", optional = true}
 namada_macros = {path = "../macros"}
 namada_migrations = {path = "../migrations", optional = true}
 namada_parameters = {path = "../parameters"}
@@ -53,10 +55,10 @@ thiserror.workspace = true
 tracing = "0.1.30"
 
 [dev-dependencies]
-# Added "testing" feature.
 namada_account = {path = "../account"}
 namada_core = {path = "../core", default-features = false, features = ["ethers-derive", "testing"]}
 namada_gas = {path = "../gas"}
+namada_governance = {path = "../governance"}
 namada_proof_of_stake = {path = "../proof_of_stake", default-features = false, features = ["testing"]}
 namada_state = { path = "../state", features = ["testing"] }
 namada_token = {path = "../token", features = ["testing"]}

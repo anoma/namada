@@ -68,6 +68,18 @@ where
     fn epochs_per_year(storage: &S) -> Result<u64> {
         read_epochs_per_year(storage)
     }
+
+    fn estimate_max_block_time_from_blocks_and_params(
+        storage: &S,
+        last_block_height: BlockHeight,
+        num_blocks_to_read: u64,
+    ) -> Result<DurationSecs> {
+        estimate_max_block_time_from_blocks_and_params(
+            storage,
+            last_block_height,
+            num_blocks_to_read,
+        )
+    }
 }
 
 impl<S> Write<S> for Store<S>
@@ -338,6 +350,20 @@ where
     let key = storage::get_epochs_per_year_key();
     let epochs_per_year = storage.read(&key)?;
     epochs_per_year
+        .ok_or(ReadError::ParametersMissing)
+        .into_storage_result()
+}
+
+/// Retrieve the `max_proposal_bytes` consensus parameter from storage.
+pub fn read_max_proposal_bytes<S>(
+    storage: &S,
+) -> namada_storage::Result<ProposalBytes>
+where
+    S: StorageRead,
+{
+    let key = storage::get_max_proposal_bytes_key();
+    let result = storage.read(&key)?;
+    result
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()
 }

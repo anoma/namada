@@ -28,6 +28,7 @@ use namada_sdk::tx::new_tx_event;
 use namada_sdk::{ibc, proof_of_stake};
 use namada_vote_ext::ethereum_events::MultiSignedEthEvent;
 use namada_vote_ext::ethereum_tx_data_variants;
+use tendermint::abci::types::Misbehavior;
 
 use super::*;
 use crate::facade::tendermint::abci::types::VoteInfo;
@@ -107,7 +108,7 @@ where
         token_finalize_block(&mut self.state, emit_events, is_masp_new_epoch)?;
         // - PoS
         //    - Must be applied after governance in case it changes PoS params
-        proof_of_stake::finalize_block(
+        pos_finalize_block(
             &mut self.state,
             emit_events,
             new_epoch,
@@ -291,11 +292,12 @@ where
             );
 
         // PoS inflation
-        proof_of_stake::rewards::apply_inflation(
-            &mut self.state,
-            last_epoch,
-            num_blocks_in_last_epoch,
-        )?;
+        proof_of_stake::rewards::apply_inflation::<
+            _,
+            governance::Store<_>,
+            parameters::Store<_>,
+            token::Store<_>,
+        >(&mut self.state, last_epoch, num_blocks_in_last_epoch)?;
 
         // Pgf inflation
         pgf_apply_inflation(self.state.restrict_writes_to_write_log())?;
@@ -1146,14 +1148,43 @@ where
     )
 }
 
+/// Dependency-injection indirection for PoS system
+fn pos_finalize_block<S>(
+    storage: &mut S,
+    events: &mut impl EmitEvents,
+    is_new_epoch: bool,
+    validator_set_update_epoch: Epoch,
+    votes: Vec<proof_of_stake::types::VoteInfo>,
+    byzantine_validators: Vec<Misbehavior>,
+) -> StorageResult<()>
+where
+    S: StorageWrite + StorageRead,
+{
+    proof_of_stake::finalize_block::<_, governance::Store<_>>(
+        storage,
+        events,
+        is_new_epoch,
+        validator_set_update_epoch,
+        votes,
+        byzantine_validators,
+    )
+}
+
 /// Dependency-injection indirection for PGF inflation
 fn pgf_apply_inflation<S>(storage: &mut S) -> StorageResult<()>
 where
-    S: State + EmitEvents,
+    S: 'static + State + EmitEvents,
 {
     pgf_inflation::apply_inflation::<_, parameters::Store<_>, token::Store<_>, _>(
         storage,
-        ibc::transfer_over_ibc,
+        |state, token, source, target| {
+            ibc::transfer_over_ibc::<
+                _,
+                parameters::Store<_>,
+                token::Store<_>,
+                token::Transfer,
+            >(state, token, source, target)
+        },
     )
 }
 
@@ -1226,6 +1257,7 @@ mod test_finalize_block {
     use namada_test_utils::TestWasms;
     use namada_vote_ext::ethereum_events;
     use namada_vp::native_vp::NativeVp;
+    use proof_of_stake::{bond_tokens, PosParams};
     use test_log::test;
 
     use super::*;
@@ -1887,8 +1919,7 @@ mod test_finalize_block {
 
         // Keep applying finalize block
         let validator = shell.mode.get_validator_address().unwrap();
-        let pos_params =
-            proof_of_stake::storage::read_pos_params(&shell.state).unwrap();
+        let pos_params = read_pos_params(&shell.state).unwrap();
         let consensus_key =
             proof_of_stake::storage::validator_consensus_key_handle(validator)
                 .get(&shell.state, Epoch::default(), &pos_params)
@@ -2326,35 +2357,39 @@ mod test_finalize_block {
         total_rewards += inflation;
 
         // Query the available rewards
-        let query_rewards = proof_of_stake::query_reward_tokens(
-            &shell.state,
-            None,
-            &validator.address,
-            current_epoch,
-        )
-        .unwrap();
+        let query_rewards =
+            proof_of_stake::query_reward_tokens::<_, governance::Store<_>>(
+                &shell.state,
+                None,
+                &validator.address,
+                current_epoch,
+            )
+            .unwrap();
 
         // Claim the rewards from the initial epoch
-        let reward_1 = proof_of_stake::claim_reward_tokens(
-            &mut shell.state,
-            None,
-            &validator.address,
-            current_epoch,
-        )
-        .unwrap();
+        let reward_1 =
+            proof_of_stake::claim_reward_tokens::<
+                _,
+                governance::Store<_>,
+                token::Store<_>,
+            >(
+                &mut shell.state, None, &validator.address, current_epoch
+            )
+            .unwrap();
         total_claimed += reward_1;
         assert_eq!(reward_1, query_rewards);
         assert!(is_reward_equal_enough(total_rewards, total_claimed, 1));
 
         // Query the available rewards again and check that it is 0 now after
         // the claim
-        let query_rewards = proof_of_stake::query_reward_tokens(
-            &shell.state,
-            None,
-            &validator.address,
-            current_epoch,
-        )
-        .unwrap();
+        let query_rewards =
+            proof_of_stake::query_reward_tokens::<_, governance::Store<_>>(
+                &shell.state,
+                None,
+                &validator.address,
+                current_epoch,
+            )
+            .unwrap();
         assert_eq!(query_rewards, token::Amount::zero());
 
         // Try a claim the next block and ensure we get 0 tokens back
@@ -2364,11 +2399,12 @@ mod test_finalize_block {
             votes.clone(),
             None,
         );
-        let att = proof_of_stake::claim_reward_tokens(
-            &mut shell.state,
-            None,
-            &validator.address,
-            current_epoch,
+        let att = proof_of_stake::claim_reward_tokens::<
+            _,
+            governance::Store<_>,
+            token::Store<_>,
+        >(
+            &mut shell.state, None, &validator.address, current_epoch
         )
         .unwrap();
         assert_eq!(att, token::Amount::zero());
@@ -2380,31 +2416,34 @@ mod test_finalize_block {
 
         // Unbond some tokens
         let unbond_amount = token::Amount::native_whole(50_000);
-        let unbond_res = proof_of_stake::unbond_tokens(
-            &mut shell.state,
-            None,
-            &validator.address,
-            unbond_amount,
-            current_epoch,
-            false,
-        )
-        .unwrap();
+        let unbond_res =
+            proof_of_stake::unbond_tokens::<_, governance::Store<_>>(
+                &mut shell.state,
+                None,
+                &validator.address,
+                unbond_amount,
+                current_epoch,
+                false,
+            )
+            .unwrap();
         assert_eq!(unbond_res.sum, unbond_amount);
 
         // Query the available rewards
-        let query_rewards = proof_of_stake::query_reward_tokens(
-            &shell.state,
-            None,
-            &validator.address,
-            current_epoch,
-        )
-        .unwrap();
+        let query_rewards =
+            proof_of_stake::query_reward_tokens::<_, governance::Store<_>>(
+                &shell.state,
+                None,
+                &validator.address,
+                current_epoch,
+            )
+            .unwrap();
 
-        let rew = proof_of_stake::claim_reward_tokens(
-            &mut shell.state,
-            None,
-            &validator.address,
-            current_epoch,
+        let rew = proof_of_stake::claim_reward_tokens::<
+            _,
+            governance::Store<_>,
+            token::Store<_>,
+        >(
+            &mut shell.state, None, &validator.address, current_epoch
         )
         .unwrap();
         total_claimed += rew;
@@ -2420,7 +2459,10 @@ mod test_finalize_block {
                 &validator.address,
             )
             .unwrap();
-        let bond_amounts = proof_of_stake::bond_amounts_for_rewards(
+        let bond_amounts = proof_of_stake::bond_amounts_for_rewards::<
+            _,
+            governance::Store<_>,
+        >(
             &shell.state,
             &bond_id,
             last_claim_epoch.unwrap_or_default(),
@@ -2460,32 +2502,37 @@ mod test_finalize_block {
         }
 
         // Withdraw tokens
-        let withdraw_amount = proof_of_stake::withdraw_tokens(
-            &mut shell.state,
-            None,
-            &validator.address,
-            current_epoch,
-        )
-        .unwrap();
+        let withdraw_amount =
+            proof_of_stake::withdraw_tokens::<
+                _,
+                governance::Store<_>,
+                token::Store<_>,
+            >(
+                &mut shell.state, None, &validator.address, current_epoch
+            )
+            .unwrap();
         assert_eq!(withdraw_amount, unbond_amount);
 
         // Query the available rewards
-        let query_rewards = proof_of_stake::query_reward_tokens(
-            &shell.state,
-            None,
-            &validator.address,
-            current_epoch,
-        )
-        .unwrap();
+        let query_rewards =
+            proof_of_stake::query_reward_tokens::<_, governance::Store<_>>(
+                &shell.state,
+                None,
+                &validator.address,
+                current_epoch,
+            )
+            .unwrap();
 
         // Claim tokens
-        let reward_2 = proof_of_stake::claim_reward_tokens(
-            &mut shell.state,
-            None,
-            &validator.address,
-            current_epoch,
-        )
-        .unwrap();
+        let reward_2 =
+            proof_of_stake::claim_reward_tokens::<
+                _,
+                governance::Store<_>,
+                token::Store<_>,
+            >(
+                &mut shell.state, None, &validator.address, current_epoch
+            )
+            .unwrap();
         total_claimed += reward_2;
         assert_eq!(query_rewards, reward_2);
 
@@ -2501,13 +2548,14 @@ mod test_finalize_block {
         assert!(token_diff < token_uncertainty);
 
         // Query the available rewards to check that they are 0
-        let query_rewards = proof_of_stake::query_reward_tokens(
-            &shell.state,
-            None,
-            &validator.address,
-            current_epoch,
-        )
-        .unwrap();
+        let query_rewards =
+            proof_of_stake::query_reward_tokens::<_, governance::Store<_>>(
+                &shell.state,
+                None,
+                &validator.address,
+                current_epoch,
+            )
+            .unwrap();
         assert_eq!(query_rewards, token::Amount::zero());
     }
 
@@ -2582,7 +2630,7 @@ mod test_finalize_block {
         )
         .unwrap();
         let mut current_epoch = shell.state.in_mem().block.epoch;
-        proof_of_stake::bond_tokens(
+        bond_tokens::<_, governance::Store<_>, token::Store<_>>(
             &mut shell.state,
             Some(&delegator),
             &validator.address,
@@ -2605,13 +2653,15 @@ mod test_finalize_block {
         }
 
         // Claim the rewards for the validator for the first two epochs
-        let val_reward_1 = proof_of_stake::claim_reward_tokens(
-            &mut shell.state,
-            None,
-            &validator.address,
-            current_epoch,
-        )
-        .unwrap();
+        let val_reward_1 =
+            proof_of_stake::claim_reward_tokens::<
+                _,
+                governance::Store<_>,
+                token::Store<_>,
+            >(
+                &mut shell.state, None, &validator.address, current_epoch
+            )
+            .unwrap();
         total_claimed += val_reward_1;
         assert!(is_reward_equal_enough(
             total_rewards,
@@ -2631,16 +2681,22 @@ mod test_finalize_block {
         total_rewards += inflation_3;
 
         // Claim again for the validator
-        let val_reward_2 = proof_of_stake::claim_reward_tokens(
-            &mut shell.state,
-            None,
-            &validator.address,
-            current_epoch,
-        )
-        .unwrap();
+        let val_reward_2 =
+            proof_of_stake::claim_reward_tokens::<
+                _,
+                governance::Store<_>,
+                token::Store<_>,
+            >(
+                &mut shell.state, None, &validator.address, current_epoch
+            )
+            .unwrap();
 
         // Claim for the delegator
-        let del_reward_1 = proof_of_stake::claim_reward_tokens(
+        let del_reward_1 = proof_of_stake::claim_reward_tokens::<
+            _,
+            governance::Store<_>,
+            token::Store<_>,
+        >(
             &mut shell.state,
             Some(&delegator),
             &validator.address,
@@ -2753,7 +2809,7 @@ mod test_finalize_block {
 
         // Validator1 bonds 1 NAM
         let bond_amount = token::Amount::native_whole(1);
-        proof_of_stake::bond_tokens(
+        bond_tokens::<_, governance::Store<_>, token::Store<_>>(
             &mut shell.state,
             None,
             &validator1.address,
@@ -2765,7 +2821,7 @@ mod test_finalize_block {
 
         // Validator2 changes consensus key
         let new_ck2 = common_sk_from_simple_seed(1).ref_to();
-        proof_of_stake::change_consensus_key(
+        proof_of_stake::change_consensus_key::<_, governance::Store<_>>(
             &mut shell.state,
             &validator2.address,
             &new_ck2,
@@ -2774,7 +2830,7 @@ mod test_finalize_block {
         .unwrap();
 
         // Validator3 bonds 1 NAM and changes consensus key
-        proof_of_stake::bond_tokens(
+        bond_tokens::<_, governance::Store<_>, token::Store<_>>(
             &mut shell.state,
             None,
             &validator3.address,
@@ -2784,7 +2840,7 @@ mod test_finalize_block {
         )
         .unwrap();
         let new_ck3 = common_sk_from_simple_seed(2).ref_to();
-        proof_of_stake::change_consensus_key(
+        proof_of_stake::change_consensus_key::<_, governance::Store<_>>(
             &mut shell.state,
             &validator3.address,
             &new_ck3,
@@ -2834,7 +2890,7 @@ mod test_finalize_block {
 
         // Val 1 changes consensus key
         let new_ck1 = common_sk_from_simple_seed(3).ref_to();
-        proof_of_stake::change_consensus_key(
+        proof_of_stake::change_consensus_key::<_, governance::Store<_>>(
             &mut shell.state,
             &validator1.address,
             &new_ck1,
@@ -2843,7 +2899,7 @@ mod test_finalize_block {
         .unwrap();
 
         // Val 2 is fully unbonded
-        proof_of_stake::unbond_tokens(
+        proof_of_stake::unbond_tokens::<_, governance::Store<_>>(
             &mut shell.state,
             None,
             &validator2.address,
@@ -2854,7 +2910,7 @@ mod test_finalize_block {
         .unwrap();
 
         // Val 3 is fully unbonded and changes consensus key
-        proof_of_stake::unbond_tokens(
+        proof_of_stake::unbond_tokens::<_, governance::Store<_>>(
             &mut shell.state,
             None,
             &validator3.address,
@@ -2864,7 +2920,7 @@ mod test_finalize_block {
         )
         .unwrap();
         let new2_ck3 = common_sk_from_simple_seed(4).ref_to();
-        proof_of_stake::change_consensus_key(
+        proof_of_stake::change_consensus_key::<_, governance::Store<_>>(
             &mut shell.state,
             &validator1.address,
             &new2_ck3,
@@ -2906,7 +2962,7 @@ mod test_finalize_block {
         // set, along with consensus key changes
 
         // Val2 bonds 1 NAM and changes consensus key
-        proof_of_stake::bond_tokens(
+        bond_tokens::<_, governance::Store<_>, token::Store<_>>(
             &mut shell.state,
             None,
             &validator2.address,
@@ -2916,7 +2972,7 @@ mod test_finalize_block {
         )
         .unwrap();
         let new2_ck2 = common_sk_from_simple_seed(5).ref_to();
-        proof_of_stake::change_consensus_key(
+        proof_of_stake::change_consensus_key::<_, governance::Store<_>>(
             &mut shell.state,
             &validator2.address,
             &new2_ck2,
@@ -2925,7 +2981,7 @@ mod test_finalize_block {
         .unwrap();
 
         // Val3 bonds 1 NAM
-        proof_of_stake::bond_tokens(
+        bond_tokens::<_, governance::Store<_>, token::Store<_>>(
             &mut shell.state,
             None,
             &validator3.address,
@@ -3792,8 +3848,7 @@ mod test_finalize_block {
         let (mut shell, _, _, _) = setup();
 
         let validator = shell.mode.get_validator_address().unwrap().to_owned();
-        let pos_params =
-            proof_of_stake::storage::read_pos_params(&shell.state).unwrap();
+        let pos_params = read_pos_params(&shell.state).unwrap();
         let consensus_key =
             proof_of_stake::storage::validator_consensus_key_handle(&validator)
                 .get(&shell.state, Epoch::default(), &pos_params)
@@ -4212,7 +4267,11 @@ mod test_finalize_block {
 
         // Unjail one of the validators
         let current_epoch = shell.state.in_mem().block.epoch;
-        unjail_validator(&mut shell.state, &val1.address, current_epoch)?;
+        unjail_validator::<_, governance::Store<_>>(
+            &mut shell.state,
+            &val1.address,
+            current_epoch,
+        )?;
         let pipeline_epoch = current_epoch + params.pipeline_len;
 
         // Check that the state is the same until the pipeline epoch, at which
@@ -4350,7 +4409,7 @@ mod test_finalize_block {
             token::Amount::native_whole(200_000),
         )
         .unwrap();
-        proof_of_stake::bond_tokens(
+        bond_tokens::<_, governance::Store<_>, token::Store<_>>(
             &mut shell.state,
             Some(&delegator),
             &val1.address,
@@ -4362,7 +4421,7 @@ mod test_finalize_block {
 
         // Self-unbond
         let self_unbond_1_amount = token::Amount::native_whole(84_654);
-        proof_of_stake::unbond_tokens(
+        proof_of_stake::unbond_tokens::<_, governance::Store<_>>(
             &mut shell.state,
             None,
             &val1.address,
@@ -4405,7 +4464,7 @@ mod test_finalize_block {
         let (current_epoch, _) = advance_epoch(&mut shell, &pkh1, &votes, None);
         tracing::debug!("\nUnbonding in epoch 2");
         let del_unbond_1_amount = token::Amount::native_whole(18_000);
-        proof_of_stake::unbond_tokens(
+        proof_of_stake::unbond_tokens::<_, governance::Store<_>>(
             &mut shell.state,
             Some(&delegator),
             &val1.address,
@@ -4451,7 +4510,7 @@ mod test_finalize_block {
         tracing::debug!("\nBonding in epoch 3");
 
         let self_bond_1_amount = token::Amount::native_whole(9_123);
-        proof_of_stake::bond_tokens(
+        bond_tokens::<_, governance::Store<_>, token::Store<_>>(
             &mut shell.state,
             None,
             &val1.address,
@@ -4471,7 +4530,7 @@ mod test_finalize_block {
         assert_eq!(current_epoch.0, 4_u64);
 
         let self_unbond_2_amount = token::Amount::native_whole(15_000);
-        proof_of_stake::unbond_tokens(
+        proof_of_stake::unbond_tokens::<_, governance::Store<_>>(
             &mut shell.state,
             None,
             &val1.address,
@@ -4493,7 +4552,7 @@ mod test_finalize_block {
 
         // Delegate
         let del_2_amount = token::Amount::native_whole(8_144);
-        proof_of_stake::bond_tokens(
+        bond_tokens::<_, governance::Store<_>, token::Store<_>>(
             &mut shell.state,
             Some(&delegator),
             &val1.address,
@@ -4909,11 +4968,10 @@ mod test_finalize_block {
         assert_eq!(current_epoch.0, 12_u64);
 
         tracing::debug!("\nCHECK BOND AND UNBOND DETAILS");
-        let details = proof_of_stake::queries::bonds_and_unbonds(
-            &shell.state,
-            None,
-            None,
-        )
+        let details = proof_of_stake::queries::bonds_and_unbonds::<
+            _,
+            governance::Store<_>,
+        >(&shell.state, None, None)
         .unwrap();
 
         let del_id = BondId {
@@ -5028,7 +5086,11 @@ mod test_finalize_block {
         // let slash_pool_balance_pre_withdraw = slash_pool_balance;
         // Withdraw the delegation unbonds, which total to 18_000. This should
         // only be affected by the slashes in epoch 3
-        let del_withdraw = proof_of_stake::withdraw_tokens(
+        let del_withdraw = proof_of_stake::withdraw_tokens::<
+            _,
+            governance::Store<_>,
+            token::Store<_>,
+        >(
             &mut shell.state,
             Some(&delegator),
             &val1.address,
@@ -5178,7 +5240,7 @@ mod test_finalize_block {
         // Completely unbond one of the validator to test the pruning at the
         // pipeline epoch
         let mut current_epoch = shell.state.in_mem().block.epoch;
-        proof_of_stake::unbond_tokens(
+        proof_of_stake::unbond_tokens::<_, governance::Store<_>>(
             &mut shell.state,
             None,
             &val5,
@@ -5381,7 +5443,7 @@ mod test_finalize_block {
         }
 
         // Validator 2 unjail itself
-        proof_of_stake::unjail_validator(
+        proof_of_stake::unjail_validator::<_, governance::Store<_>>(
             &mut shell.state,
             &val2,
             current_epoch,
@@ -6020,5 +6082,17 @@ mod test_finalize_block {
         // check one succeeded and the other failed
         assert!(tx_results.are_any_ok());
         assert!(tx_results.are_any_err());
+    }
+
+    /// DI indirection
+    pub fn read_pos_params<S>(
+        storage: &S,
+    ) -> namada_sdk::storage::Result<PosParams>
+    where
+        S: StorageRead,
+    {
+        proof_of_stake::storage::read_pos_params::<S, governance::Store<S>>(
+            storage,
+        )
     }
 }
