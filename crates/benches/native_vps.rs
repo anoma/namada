@@ -321,9 +321,10 @@ fn prepare_ibc_tx_and_ctx(bench_name: &str) -> (BenchShieldedCtx, BatchedTx) {
         "open_connection" => {
             let shielded_ctx = BenchShieldedCtx::default();
             let _ = shielded_ctx.shell.write().init_ibc_client_state(
-                namada::core::storage::Key::from(
+                storage::Key::from(
                     Address::Internal(InternalAddress::Ibc).to_db_key(),
-                ));
+                ),
+            );
             let msg = MsgConnectionOpenInit {
                 client_id_on_a: ClientId::new("07-tendermint", 1).unwrap(),
                 counterparty: Counterparty::new(
@@ -435,16 +436,16 @@ fn ibc(c: &mut Criterion) {
         ));
         let shell_read = shielded_ctx.shell.read();
         let ibc = IbcVp::new(Ctx::new(
-                &Address::Internal(InternalAddress::Ibc),
-                &shell_read.state,
-                &signed_tx.tx,
-                &signed_tx.cmt,
-                &TxIndex(0),
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-                shell_read.vp_wasm_cache.clone(),
-            ));
+            &Address::Internal(InternalAddress::Ibc),
+            &shell_read.state,
+            &signed_tx.tx,
+            &signed_tx.cmt,
+            &TxIndex(0),
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            shell_read.vp_wasm_cache.clone(),
+        ));
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
@@ -564,7 +565,7 @@ fn setup_storage_for_masp_verification(
     shielded_ctx.shell.write().commit_masp_tx(shield_tx.tx);
 
     // Update the anchor in storage
-    let tree_key = namada::token::storage_key::masp_commitment_tree_key();
+    let tree_key = token::storage_key::masp_commitment_tree_key();
     let updated_tree: CommitmentTree<Node> = shielded_ctx
         .shell
         .read()
@@ -572,9 +573,8 @@ fn setup_storage_for_masp_verification(
         .read(&tree_key)
         .unwrap()
         .unwrap();
-    let anchor_key = namada::token::storage_key::masp_commitment_anchor_key(
-        updated_tree.root(),
-    );
+    let anchor_key =
+        token::storage_key::masp_commitment_anchor_key(updated_tree.root());
     shielded_ctx
         .shell
         .write()
@@ -624,16 +624,16 @@ fn masp(c: &mut Criterion) {
                 &TxGasMeter::new(u64::MAX),
             ));
             let masp = MaspVp::new(Ctx::new(
-                    &Address::Internal(InternalAddress::Masp),
-                    &shell_read.state,
-                    &signed_tx.tx,
-                    &signed_tx.cmt,
-                    &TxIndex(0),
-                    &gas_meter,
-                    &keys_changed,
-                    &verifiers,
-                    shell_read.vp_wasm_cache.clone(),
-                ));
+                &Address::Internal(InternalAddress::Masp),
+                &shell_read.state,
+                &signed_tx.tx,
+                &signed_tx.cmt,
+                &TxIndex(0),
+                &gas_meter,
+                &keys_changed,
+                &verifiers,
+                shell_read.vp_wasm_cache.clone(),
+            ));
 
             b.iter(|| {
                 assert!(
@@ -1681,16 +1681,16 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
             &TxGasMeter::new(u64::MAX),
         ));
         let ibc = IbcVp::new(Ctx::new(
-                &Address::Internal(InternalAddress::Ibc),
-                &shell_read.state,
-                &signed_tx.tx,
-                &signed_tx.cmt,
-                &TxIndex(0),
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-                shell_read.vp_wasm_cache.clone(),
-            ));
+            &Address::Internal(InternalAddress::Ibc),
+            &shell_read.state,
+            &signed_tx.tx,
+            &signed_tx.cmt,
+            &TxIndex(0),
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            shell_read.vp_wasm_cache.clone(),
+        ));
         // Use an empty verifiers set placeholder for validation, this is only
         // needed in actual txs to addresses whose VPs should be triggered
         let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
@@ -1740,17 +1740,17 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new(u64::MAX),
         ));
-        let ibc = IbVp::new(Ctx::new(
-                &Address::Internal(InternalAddress::Ibc),
-                &shell_read.state,
-                &signed_tx.tx,
-                &signed_tx.cmt,
-                &TxIndex(0),
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-                shell_read.vp_wasm_cache.clone(),
-            ));
+        let ibc = IbcVp::new(Ctx::new(
+            &Address::Internal(InternalAddress::Ibc),
+            &shell_read.state,
+            &signed_tx.tx,
+            &signed_tx.cmt,
+            &TxIndex(0),
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            shell_read.vp_wasm_cache.clone(),
+        ));
         // Use an empty verifiers set placeholder for validation, this is only
         // needed in actual txs to addresses whose VPs should be triggered
         let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));

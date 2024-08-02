@@ -7,7 +7,6 @@ mod test_utils;
 use std::cmp::Ordering;
 use std::collections::{btree_map, BTreeMap, BTreeSet};
 use std::fmt::Debug;
-use std::path::PathBuf;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use itertools::Itertools;
@@ -34,7 +33,7 @@ use masp_primitives::transaction::components::{
     I128Sum, TxOut, U64Sum, ValueSum,
 };
 use masp_primitives::transaction::fees::fixed::FeeRule;
-use masp_primitives::transaction::{Authorization, Authorized, Transaction};
+use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::{
     ExtendedFullViewingKey, ExtendedSpendingKey as MaspExtendedSpendingKey,
 };

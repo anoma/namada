@@ -195,6 +195,7 @@ tracing-appender = "0.2.2"
 tracing-log = "0.2.0"
 tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
 typed-builder = "0.19.1"
+wasmparser = "0.107.0"
 wasm-instrument = {version = "0.4.0", features = ["sign_ext"]}
 wasmer = "4.3.5"
 wasmer-cache = "4.3.5"
