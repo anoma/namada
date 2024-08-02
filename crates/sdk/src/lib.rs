@@ -918,8 +918,14 @@ pub mod testing {
         UpdateStewardCommission(UpdateStewardCommission),
         ResignSteward(Address),
         PendingTransfer(PendingTransfer),
-        IbcMsgTransfer(MsgTransfer, Option<(StoredBuildParams, String)>),
-        IbcMsgNftTransfer(MsgNftTransfer, Option<(StoredBuildParams, String)>),
+        IbcMsgTransfer(
+            MsgTransfer<token::Transfer>,
+            Option<(StoredBuildParams, String)>,
+        ),
+        IbcMsgNftTransfer(
+            MsgNftTransfer<token::Transfer>,
+            Option<(StoredBuildParams, String)>,
+        ),
         Custom,
     }
 
@@ -1475,7 +1481,10 @@ pub mod testing {
         pub fn arb_msg_transfer()(
             message in arb_ibc_msg_transfer(),
             transfer_aux in option::of(arb_transfer()),
-        ) -> (MsgTransfer, Option<(ShieldedTransfer, HashMap<AssetData, u64>, StoredBuildParams)>) {
+        ) -> (
+            MsgTransfer<token::Transfer>,
+            Option<(ShieldedTransfer, HashMap<AssetData, u64>, StoredBuildParams)>,
+        ) {
             if let Some((transfer, aux)) = transfer_aux {
                 (MsgTransfer { message, transfer: Some(transfer) }, aux)
             } else {
@@ -1522,7 +1531,10 @@ pub mod testing {
         pub fn arb_msg_nft_transfer()(
             message in arb_ibc_msg_nft_transfer(),
             transfer_aux in option::of(arb_transfer()),
-        ) -> (MsgNftTransfer, Option<(ShieldedTransfer, HashMap<AssetData, u64>, StoredBuildParams)>) {
+        ) -> (
+            MsgNftTransfer<token::Transfer>,
+            Option<(ShieldedTransfer, HashMap<AssetData, u64>, StoredBuildParams)>,
+        ) {
             if let Some((transfer, aux)) = transfer_aux {
                 (MsgNftTransfer { message, transfer: Some(transfer) }, aux)
             } else {

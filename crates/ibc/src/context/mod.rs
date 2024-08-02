@@ -13,6 +13,7 @@ pub mod validation;
 
 use std::cell::RefCell;
 use std::fmt::Debug;
+use std::marker::PhantomData;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -23,7 +24,7 @@ use namada_state::merkle_tree::ics23_specs::proof_specs;
 
 /// IBC context to handle IBC-related data
 #[derive(Debug)]
-pub struct IbcContext<C>
+pub struct IbcContext<C, Params>
 where
     C: common::IbcCommonContext,
 {
@@ -31,9 +32,11 @@ where
     pub inner: Rc<RefCell<C>>,
     /// Validation parameters for IBC VP
     pub validation_params: ValidationParams,
+    /// Marker for DI types
+    pub _marker: PhantomData<Params>,
 }
 
-impl<C> IbcContext<C>
+impl<C, Params> IbcContext<C, Params>
 where
     C: common::IbcCommonContext,
 {
@@ -42,6 +45,7 @@ where
         Self {
             inner,
             validation_params: ValidationParams::default(),
+            _marker: PhantomData,
         }
     }
 }

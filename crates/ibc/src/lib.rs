@@ -88,6 +88,7 @@ use namada_core::ibc::core::channel::types::commitment::{
 };
 pub use namada_core::ibc::*;
 use namada_core::masp::{addr_taddr, ibc_taddr, TAddrData};
+use namada_core::masp_primitives::transaction::components::ValueSum;
 use namada_core::token::Amount;
 use namada_events::EmitEvents;
 use namada_state::{
@@ -95,8 +96,7 @@ use namada_state::{
     StorageWrite, WlState, DB,
 };
 use namada_systems::ibc::ChangedBalances;
-use namada_token::transaction::components::ValueSum;
-use namada_token::Transfer;
+use namada_systems::trans_token;
 pub use nft::*;
 use primitives::Timestamp;
 use prost::Message;
@@ -217,11 +217,13 @@ impl<S> namada_systems::ibc::Read<S> for Store<S>
 where
     S: StorageRead,
 {
-    fn try_extract_masp_tx_from_envelope(
+    fn try_extract_masp_tx_from_envelope<Transfer: BorshDeserialize>(
         tx_data: &[u8],
     ) -> namada_storage::Result<Option<masp_primitives::transaction::Transaction>>
     {
-        let msg = decode_message(tx_data).into_storage_result().ok();
+        let msg = decode_message::<Transfer>(tx_data)
+            .into_storage_result()
+            .ok();
         let tx = if let Some(IbcMessage::Envelope(ref envelope)) = msg {
             Some(extract_masp_tx_from_envelope(envelope).ok_or_else(|| {
                 namada_storage::Error::new_const(
@@ -234,13 +236,15 @@ where
         Ok(tx)
     }
 
-    fn apply_ibc_packet(
+    fn apply_ibc_packet<Transfer: BorshDeserialize>(
         storage: &S,
         tx_data: &[u8],
         mut accum: ChangedBalances,
         keys_changed: &BTreeSet<namada_core::storage::Key>,
     ) -> namada_storage::Result<ChangedBalances> {
-        let msg = decode_message(tx_data).into_storage_result().ok();
+        let msg = decode_message::<Transfer>(tx_data)
+            .into_storage_result()
+            .ok();
         match msg {
             None => {}
             // This event is emitted on the sender
@@ -540,18 +544,21 @@ where
 
 /// IBC actions to handle IBC operations
 #[derive(Debug)]
-pub struct IbcActions<'a, C>
+pub struct IbcActions<'a, C, Params, Token>
 where
     C: IbcCommonContext,
 {
-    ctx: IbcContext<C>,
+    ctx: IbcContext<C, Params>,
     router: IbcRouter<'a>,
     verifiers: Rc<RefCell<BTreeSet<Address>>>,
+    _marker: PhantomData<Token>,
 }
 
-impl<'a, C> IbcActions<'a, C>
+impl<'a, C, Params, Token> IbcActions<'a, C, Params, Token>
 where
-    C: IbcCommonContext + Debug,
+    C: IbcCommonContext,
+    Params: namada_systems::parameters::Read<C::Storage>,
+    Token: trans_token::Keys,
 {
     /// Make new IBC actions
     pub fn new(
@@ -562,6 +569,7 @@ where
             ctx: IbcContext::new(ctx),
             router: IbcRouter::new(),
             verifiers,
+            _marker: PhantomData,
         }
     }
 
@@ -576,12 +584,12 @@ where
     }
 
     /// Execute according to the message in an IBC transaction or VP
-    pub fn execute(
+    pub fn execute<Transfer: BorshDeserialize>(
         &mut self,
         tx_data: &[u8],
     ) -> Result<(Option<Transfer>, Option<MaspTransaction>), Error> {
-        let message = decode_message(tx_data)?;
-        match &message {
+        let message = decode_message::<Transfer>(tx_data)?;
+        match message {
             IbcMessage::Transfer(msg) => {
                 let mut token_transfer_ctx = TokenTransferContext::new(
                     self.ctx.inner.clone(),
@@ -591,27 +599,27 @@ where
                 send_transfer_execute(
                     &mut self.ctx,
                     &mut token_transfer_ctx,
-                    msg.message.clone(),
+                    msg.message,
                 )
                 .map_err(Error::TokenTransfer)?;
-                Ok((msg.transfer.clone(), None))
+                Ok((msg.transfer, None))
             }
             IbcMessage::NftTransfer(msg) => {
                 let mut nft_transfer_ctx =
-                    NftTransferContext::new(self.ctx.inner.clone());
+                    NftTransferContext::<_, Token>::new(self.ctx.inner.clone());
                 send_nft_transfer_execute(
                     &mut self.ctx,
                     &mut nft_transfer_ctx,
-                    msg.message.clone(),
+                    msg.message,
                 )
                 .map_err(Error::NftTransfer)?;
-                Ok((msg.transfer.clone(), None))
+                Ok((msg.transfer, None))
             }
             IbcMessage::Envelope(envelope) => {
                 execute(&mut self.ctx, &mut self.router, *envelope.clone())
                     .map_err(|e| Error::Context(Box::new(e)))?;
                 // Extract MASP tx from the memo in the packet if needed
-                let masp_tx = match &**envelope {
+                let masp_tx = match &*envelope {
                     MsgEnvelope::Packet(packet_msg) => {
                         match packet_msg {
                             PacketMsg::Recv(msg) => {
@@ -671,12 +679,15 @@ where
     }
 
     /// Validate according to the message in IBC VP
-    pub fn validate(&self, tx_data: &[u8]) -> Result<(), Error> {
+    pub fn validate<Transfer: BorshDeserialize>(
+        &self,
+        tx_data: &[u8],
+    ) -> Result<(), Error> {
         // Use an empty verifiers set placeholder for validation, this is only
         // needed in actual txs to addresses whose VPs should be triggered
         let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
 
-        let message = decode_message(tx_data)?;
+        let message = decode_message::<Transfer>(tx_data)?;
         match message {
             IbcMessage::Transfer(msg) => {
                 let token_transfer_ctx = TokenTransferContext::new(
@@ -693,7 +704,7 @@ where
             }
             IbcMessage::NftTransfer(msg) => {
                 let nft_transfer_ctx =
-                    NftTransferContext::new(self.ctx.inner.clone());
+                    NftTransferContext::<_, Token>::new(self.ctx.inner.clone());
                 send_nft_transfer_validate(
                     &self.ctx,
                     &nft_transfer_ctx,
@@ -730,7 +741,9 @@ fn is_ack_successful(ack: &Acknowledgement) -> Result<bool, Error> {
 }
 
 /// Tries to decode transaction data to an `IbcMessage`
-pub fn decode_message(tx_data: &[u8]) -> Result<IbcMessage, Error> {
+pub fn decode_message<Transfer: BorshDeserialize>(
+    tx_data: &[u8],
+) -> Result<IbcMessage<Transfer>, Error> {
     // ibc-rs message
     if let Ok(any_msg) = Any::decode(tx_data) {
         if let Ok(envelope) = MsgEnvelope::try_from(any_msg.clone()) {
@@ -741,7 +754,7 @@ pub fn decode_message(tx_data: &[u8]) -> Result<IbcMessage, Error> {
                 message,
                 transfer: None,
             };
-            return Ok(IbcMessage::Transfer(msg));
+            return Ok(IbcMessage::Transfer(Box::new(msg)));
         }
         if let Ok(message) = IbcMsgNftTransfer::try_from(any_msg) {
             let msg = MsgNftTransfer {
@@ -753,12 +766,12 @@ pub fn decode_message(tx_data: &[u8]) -> Result<IbcMessage, Error> {
     }
 
     // Transfer message with `ShieldingTransfer`
-    if let Ok(msg) = MsgTransfer::try_from_slice(tx_data) {
-        return Ok(IbcMessage::Transfer(msg));
+    if let Ok(msg) = MsgTransfer::<Transfer>::try_from_slice(tx_data) {
+        return Ok(IbcMessage::Transfer(Box::new(msg)));
     }
 
     // NFT transfer message with `ShieldingTransfer`
-    if let Ok(msg) = MsgNftTransfer::try_from_slice(tx_data) {
+    if let Ok(msg) = MsgNftTransfer::<Transfer>::try_from_slice(tx_data) {
         return Ok(IbcMessage::NftTransfer(msg));
     }
 

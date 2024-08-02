@@ -27,6 +27,7 @@ use ibc::primitives::{Signer, Timestamp};
 #[cfg(any(test, feature = "testing"))]
 use ibc_testkit::testapp::ibc::clients::mock::client_state::MockClientState;
 use namada_state::StorageRead;
+use namada_systems::parameters;
 
 use super::client::{AnyClientState, AnyConsensusState};
 use super::common::IbcCommonContext;
@@ -35,9 +36,10 @@ use crate::storage;
 
 const COMMITMENT_PREFIX: &[u8] = b"ibc";
 
-impl<C> ExtClientValidationContext for IbcContext<C>
+impl<C, Params> ExtClientValidationContext for IbcContext<C, Params>
 where
     C: IbcCommonContext,
+    Params: parameters::Read<C::Storage>,
 {
     fn host_timestamp(&self) -> Result<Timestamp, ContextError> {
         ValidationContext::host_timestamp(self)
@@ -74,9 +76,10 @@ where
 #[cfg(any(test, feature = "testing"))]
 use ibc_testkit::testapp::ibc::clients::mock::client_state::MockClientContext;
 #[cfg(any(test, feature = "testing"))]
-impl<C> MockClientContext for IbcContext<C>
+impl<C, Params> MockClientContext for IbcContext<C, Params>
 where
     C: IbcCommonContext,
+    Params: parameters::Read<<C as crate::IbcStorageContext>::Storage>,
 {
     fn host_timestamp(&self) -> Result<Timestamp, ContextError> {
         ValidationContext::host_timestamp(self)
@@ -87,9 +90,10 @@ where
     }
 }
 
-impl<C> ClientValidationContext for IbcContext<C>
+impl<C, Params> ClientValidationContext for IbcContext<C, Params>
 where
     C: IbcCommonContext,
+    Params: parameters::Read<C::Storage>,
 {
     type ClientStateRef = AnyClientState;
     type ConsensusStateRef = AnyConsensusState;
@@ -123,9 +127,10 @@ where
     }
 }
 
-impl<C> ValidationContext for IbcContext<C>
+impl<C, Params> ValidationContext for IbcContext<C, Params>
 where
     C: IbcCommonContext,
+    Params: parameters::Read<C::Storage>,
 {
     type HostClientState = AnyClientState;
     type HostConsensusState = AnyConsensusState;
@@ -271,15 +276,14 @@ where
             .get_block_height()
             .expect("The height should exist");
 
-        let estimate =
-            namada_parameters::estimate_max_block_time_from_blocks_and_params(
-                self.inner.borrow().storage(),
-                height,
-                // NB: estimate max height with up to 5 blocks in the past,
-                // which will not result in too many reads
-                5,
-            )
-            .expect("Failed to estimate max block time");
+        let estimate = Params::estimate_max_block_time_from_blocks_and_params(
+            self.inner.borrow().storage(),
+            height,
+            // NB: estimate max height with up to 5 blocks in the past,
+            // which will not result in too many reads
+            5,
+        )
+        .expect("Failed to estimate max block time");
 
         // NB: pick a lower max blocktime estimate during tests,
         // to avoid flakes in CI
@@ -298,7 +302,7 @@ where
     }
 }
 
-impl<C> ValidateSelfClientContext for IbcContext<C>
+impl<C, Params> ValidateSelfClientContext for IbcContext<C, Params>
 where
     C: IbcCommonContext,
 {

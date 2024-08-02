@@ -214,7 +214,13 @@ pub fn init_storage() -> (Address, Address) {
             ),
         };
         ibc_params.init_storage(&mut env.state).unwrap();
-        proof_of_stake::test_utils::test_init_genesis(
+
+        proof_of_stake::test_utils::test_init_genesis::<
+            _,
+            crate::parameters::Store<_>,
+            crate::governance::Store<_>,
+            crate::token::Store<_>,
+        >(
             &mut env.state,
             OwnedPosParams::default(),
             vec![get_dummy_genesis_validator()].into_iter(),
@@ -606,7 +612,7 @@ pub fn msg_transfer(
     channel_id: ChannelId,
     denom: String,
     sender: &Address,
-) -> MsgTransfer {
+) -> MsgTransfer<token::Transfer> {
     let timestamp = (Timestamp::now() + Duration::from_secs(100)).unwrap();
     let message = IbcMsgTransfer {
         port_id_on_a: port_id,

@@ -6,8 +6,8 @@ use namada_core::address::Address;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::storage::BlockHeight;
 use namada_core::token;
-use namada_proof_of_stake::pos_queries::PosQueries;
-use namada_state::{DBIter, StorageHasher, WlState, DB};
+use namada_state::{DBIter, StorageHasher, StorageRead, WlState, DB};
+use namada_systems::governance;
 
 use super::{ChangedKeys, EpochedVotingPowerExt, Tally, Votes};
 use crate::storage::vote_tallies;
@@ -90,7 +90,7 @@ impl IntoIterator for NewVotes {
 /// would change. If [`Tally`] is already `seen = true` in storage, then no
 /// votes from `vote_info` should be applied, and the returned changed keys will
 /// be empty.
-pub(in super::super) fn calculate<D, H, T>(
+pub(in super::super) fn calculate<D, H, Gov, T>(
     state: &mut WlState<D, H>,
     keys: &vote_tallies::Keys<T>,
     vote_info: NewVotes,
@@ -98,6 +98,7 @@ pub(in super::super) fn calculate<D, H, T>(
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
+    Gov: governance::Read<WlState<D, H>>,
     T: BorshDeserialize,
 {
     tracing::info!(
@@ -119,7 +120,7 @@ where
             "Ignoring duplicate voter"
         );
     }
-    let tally_post = apply(state, &tally_pre, vote_info)
+    let tally_post = apply::<D, H, Gov>(state, &tally_pre, vote_info)
         .expect("We deduplicated voters already, so this should never error");
 
     let changed_keys = keys_changed(keys, &tally_pre, &tally_post);
@@ -147,7 +148,7 @@ where
 /// Takes an existing [`Tally`] and calculates the new [`Tally`] based on new
 /// voters from `vote_info`. An error is returned if any validator which
 /// previously voted is present in `vote_info`.
-fn apply<D, H>(
+fn apply<D, H, Gov>(
     state: &WlState<D, H>,
     tally: &Tally,
     vote_info: NewVotes,
@@ -155,6 +156,7 @@ fn apply<D, H>(
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
+    Gov: governance::Read<WlState<D, H>>,
 {
     // TODO(namada#1305): remove the clone here
     let mut voting_power_post = tally.voting_power.clone();
@@ -169,8 +171,8 @@ where
             ));
         };
         let epoch = state
-            .pos_queries()
-            .get_epoch(vote_height)
+            .get_epoch_at_height(vote_height)
+            .unwrap()
             .expect("The queried epoch should be known");
         let aggregated = voting_power_post
             .entry(epoch)
@@ -180,7 +182,7 @@ where
             .ok_or_else(|| eyre!("Aggregated voting power overflow"))?;
     }
 
-    let seen_post = voting_power_post.has_majority_quorum(state);
+    let seen_post = voting_power_post.has_majority_quorum::<D, H, Gov>(state);
 
     Ok(Tally {
         voting_power: voting_power_post,
@@ -221,10 +223,11 @@ mod tests {
     use self::helpers::{default_event, default_total_stake, TallyParams};
     use super::*;
     use crate::protocol::transactions::votes::{self, EpochedVotingPower};
-    use crate::test_utils;
+    use crate::test_utils::{self, GovStore};
 
     mod helpers {
         use namada_proof_of_stake::storage::total_consensus_stake_handle;
+        use test_utils::GovStore;
 
         use super::*;
 
@@ -283,7 +286,7 @@ mod tests {
                         > FractionalVotingPower::TWO_THIRDS * total_stake,
                 };
                 votes::storage::write(state, &keys, event, &tally, false)?;
-                total_consensus_stake_handle().set(
+                total_consensus_stake_handle().set::<_, GovStore<_>>(
                     state,
                     total_stake,
                     0u64.into(),
@@ -406,7 +409,7 @@ mod tests {
         )]);
         let vote_info = NewVotes::new(votes, &voting_powers)?;
 
-        let result = apply(&state, &tally_pre, vote_info);
+        let result = apply::<_, _, GovStore<_>>(&state, &tally_pre, vote_info);
 
         assert!(result.is_err());
         Ok(())
@@ -443,7 +446,7 @@ mod tests {
         let vote_info = NewVotes::new(votes, &voting_powers)?;
 
         let (tally_post, changed_keys) =
-            calculate(&mut state, &keys, vote_info)?;
+            calculate::<_, _, GovStore<_>, _>(&mut state, &keys, vote_info)?;
 
         assert_eq!(tally_post, tally_pre);
         assert!(changed_keys.is_empty());
@@ -470,7 +473,7 @@ mod tests {
         let vote_info = NewVotes::new(Votes::default(), &HashMap::default())?;
 
         let (tally_post, changed_keys) =
-            calculate(&mut state, &keys, vote_info)?;
+            calculate::<_, _, GovStore<_>, _>(&mut state, &keys, vote_info)?;
 
         assert_eq!(tally_post, tally_pre);
         assert!(changed_keys.is_empty());
@@ -507,7 +510,7 @@ mod tests {
         let vote_info = NewVotes::new(votes, &voting_powers)?;
 
         let (tally_post, changed_keys) =
-            calculate(&mut state, &keys, vote_info)?;
+            calculate::<_, _, GovStore<_>, _>(&mut state, &keys, vote_info)?;
 
         assert_eq!(
             tally_post,
@@ -563,7 +566,7 @@ mod tests {
         let vote_info = NewVotes::new(votes, &voting_powers)?;
 
         let (tally_post, changed_keys) =
-            calculate(&mut state, &keys, vote_info)?;
+            calculate::<_, _, GovStore<_>, _>(&mut state, &keys, vote_info)?;
 
         assert_eq!(
             tally_post,

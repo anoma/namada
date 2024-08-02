@@ -24,6 +24,7 @@ use crate::storage::{
     validator_slashes_handle, validator_total_redelegated_bonded_handle,
     validator_total_redelegated_unbonded_handle, write_pos_params,
 };
+use crate::tests::GovStore;
 use crate::types::{
     EagerRedelegatedBondsMap, RedelegatedTokens, Slash, SlashType,
 };
@@ -50,13 +51,13 @@ fn test_find_bonds_to_remove() {
     let (e1, e2, e6) = (Epoch(1), Epoch(2), Epoch(6));
 
     bond_handle
-        .set(&mut storage, token::Amount::from(5), e1, 0)
+        .set::<_, GovStore<_>>(&mut storage, token::Amount::from(5), e1, 0)
         .unwrap();
     bond_handle
-        .set(&mut storage, token::Amount::from(3), e2, 0)
+        .set::<_, GovStore<_>>(&mut storage, token::Amount::from(3), e2, 0)
         .unwrap();
     bond_handle
-        .set(&mut storage, token::Amount::from(8), e6, 0)
+        .set::<_, GovStore<_>>(&mut storage, token::Amount::from(8), e6, 0)
         .unwrap();
 
     // Test 1
@@ -1330,7 +1331,7 @@ fn test_slash_validator() {
 
     // Test case 1
     total_bonded
-        .set(&mut storage, 23.into(), infraction_epoch - 2, 0)
+        .set::<_, GovStore<_>>(&mut storage, 23.into(), infraction_epoch - 2, 0)
         .unwrap();
     let res = slash_validator(
         &storage,
@@ -1345,7 +1346,7 @@ fn test_slash_validator() {
 
     // Test case 2
     total_bonded
-        .set(&mut storage, 17.into(), infraction_epoch - 2, 0)
+        .set::<_, GovStore<_>>(&mut storage, 17.into(), infraction_epoch - 2, 0)
         .unwrap();
     total_unbonded
         .at(&(current_epoch + params.pipeline_len))
@@ -1421,7 +1422,7 @@ fn test_slash_validator() {
 
     // Test case 5
     total_bonded_handle(&bob)
-        .set(&mut storage, 19.into(), infraction_epoch - 2, 0)
+        .set::<_, GovStore<_>>(&mut storage, 19.into(), infraction_epoch - 2, 0)
         .unwrap();
     total_unbonded_handle(&bob)
         .at(&(current_epoch + params.pipeline_len))
@@ -1468,10 +1469,10 @@ fn test_slash_validator() {
         .remove_all(&mut storage, &current_epoch)
         .unwrap();
     total_bonded_handle(&bob)
-        .set(&mut storage, 23.into(), infraction_epoch - 2, 0)
+        .set::<_, GovStore<_>>(&mut storage, 23.into(), infraction_epoch - 2, 0)
         .unwrap();
     total_bonded_handle(&bob)
-        .set(&mut storage, 6.into(), current_epoch, 0)
+        .set::<_, GovStore<_>>(&mut storage, 6.into(), current_epoch, 0)
         .unwrap();
 
     let res = slash_validator(
@@ -1531,7 +1532,7 @@ fn test_slash_validator() {
         .remove_all(&mut storage, &current_epoch.next())
         .unwrap();
     total_bonded
-        .set(&mut storage, 6.into(), current_epoch, 0)
+        .set::<_, GovStore<_>>(&mut storage, 6.into(), current_epoch, 0)
         .unwrap();
     total_redelegated_bonded
         .at(&current_epoch)
@@ -1587,7 +1588,7 @@ fn test_slash_validator() {
 
     // Test case 11
     total_bonded
-        .set(&mut storage, 2.into(), current_epoch, 0)
+        .set::<_, GovStore<_>>(&mut storage, 2.into(), current_epoch, 0)
         .unwrap();
     total_redelegated_unbonded
         .at(&current_epoch.next())
@@ -1624,10 +1625,10 @@ fn test_slash_validator() {
 
     // Test case 12
     total_bonded
-        .set(&mut storage, 6.into(), current_epoch, 0)
+        .set::<_, GovStore<_>>(&mut storage, 6.into(), current_epoch, 0)
         .unwrap();
     total_bonded
-        .set(&mut storage, 2.into(), current_epoch.next(), 0)
+        .set::<_, GovStore<_>>(&mut storage, 2.into(), current_epoch.next(), 0)
         .unwrap();
     total_redelegated_bonded
         .remove_all(&mut storage, &current_epoch)
@@ -1971,7 +1972,7 @@ fn test_from_sm_case_1() {
     // Insert the data - bonds and redelegated bonds
     let bonds_handle = bond_handle(&owner, &validator);
     bonds_handle
-        .add(
+        .add::<_, GovStore<_>>(
             &mut storage,
             epoch_1_redeleg_1 + epoch_1_redeleg_2,
             outer_epoch_1,
@@ -1979,7 +1980,12 @@ fn test_from_sm_case_1() {
         )
         .unwrap();
     bonds_handle
-        .add(&mut storage, epoch_2_redeleg_2, outer_epoch_2, 0)
+        .add::<_, GovStore<_>>(
+            &mut storage,
+            epoch_2_redeleg_2,
+            outer_epoch_2,
+            0,
+        )
         .unwrap();
 
     let redelegated_bonds_map_1 = delegator_redelegated_bonds_handle(&owner)

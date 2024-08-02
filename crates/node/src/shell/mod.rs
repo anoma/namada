@@ -1066,11 +1066,13 @@ where
                         response,
                         ethereum_tx_data_variants::EthEventsVext::try_from(&tx),
                     );
-                    if let Err(err) = validate_eth_events_vext(
-                        &self.state,
-                        &ext.0,
-                        self.state.in_mem().get_last_block_height(),
-                    ) {
+                    if let Err(err) =
+                        validate_eth_events_vext::<_, _, governance::Store<_>>(
+                            &self.state,
+                            &ext.0,
+                            self.state.in_mem().get_last_block_height(),
+                        )
+                    {
                         response.code = ResultCode::InvalidVoteExtension.into();
                         response.log = format!(
                             "{INVALID_MSG}: Invalid Ethereum events vote \
@@ -1088,11 +1090,13 @@ where
                             &tx
                         ),
                     );
-                    if let Err(err) = validate_bp_roots_vext(
-                        &self.state,
-                        &ext.0,
-                        self.state.in_mem().get_last_block_height(),
-                    ) {
+                    if let Err(err) =
+                        validate_bp_roots_vext::<_, _, governance::Store<_>>(
+                            &self.state,
+                            &ext.0,
+                            self.state.in_mem().get_last_block_height(),
+                        )
+                    {
                         response.code = ResultCode::InvalidVoteExtension.into();
                         response.log = format!(
                             "{INVALID_MSG}: Invalid Bridge pool roots vote \
@@ -1110,19 +1114,21 @@ where
                             &tx
                         ),
                     );
-                    if let Err(err) = validate_valset_upd_vext(
-                        &self.state,
-                        &ext,
-                        // n.b. only accept validator set updates
-                        // issued at the last committed epoch
-                        // (signing off on the validators of the
-                        // next epoch). at the second height
-                        // within an epoch, the new epoch is
-                        // committed to storage, so `last_epoch`
-                        // reflects the current value of the
-                        // epoch.
-                        self.state.in_mem().last_epoch,
-                    ) {
+                    if let Err(err) =
+                        validate_valset_upd_vext::<_, _, governance::Store<_>>(
+                            &self.state,
+                            &ext,
+                            // n.b. only accept validator set updates
+                            // issued at the last committed epoch
+                            // (signing off on the validators of the
+                            // next epoch). at the second height
+                            // within an epoch, the new epoch is
+                            // committed to storage, so `last_epoch`
+                            // reflects the current value of the
+                            // epoch.
+                            self.state.in_mem().last_epoch,
+                        )
+                    {
                         response.code = ResultCode::InvalidVoteExtension.into();
                         response.log = format!(
                             "{INVALID_MSG}: Invalid validator set update vote \
@@ -1288,8 +1294,9 @@ where
         F: FnMut(common::PublicKey, i64) -> V,
     {
         let (current_epoch, _gas) = self.state.in_mem().get_current_epoch();
-        let pos_params = proof_of_stake::storage::read_pos_params(&self.state)
-            .expect("Could not find the PoS parameters");
+        let pos_params =
+            read_pos_params::<_, governance::Store<_>>(&self.state)
+                .expect("Could not find the PoS parameters");
 
         let validator_set_update_fn = if is_genesis {
             proof_of_stake::genesis_validator_set_tendermint
