@@ -15,9 +15,11 @@ use crate::error::Error;
 use crate::masp::shielded_sync::dispatcher::Dispatcher;
 use crate::masp::utils::DecryptedData;
 use crate::masp::{ShieldedUtils, NETWORK};
+#[cfg(not(target_family = "wasm"))]
 use crate::task_env::{
     LocalSetSpawner, LocalSetTaskEnvironment, TaskEnvironment,
 };
+use crate::{MaybeSend, MaybeSync};
 
 pub mod dispatcher;
 pub mod utils;
@@ -84,7 +86,7 @@ where
         utils: &U,
     ) -> Dispatcher<S, M, U, T>
     where
-        U: ShieldedUtils,
+        U: ShieldedUtils + MaybeSend + MaybeSync,
     {
         dispatcher::new(
             spawner,

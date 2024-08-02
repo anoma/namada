@@ -41,6 +41,7 @@ impl ProgressBar for DevNullProgressBar {
     fn finish(&mut self) {}
 }
 
+#[cfg(not(target_family = "wasm"))]
 impl ProgressBar for kdam::Bar {
     fn upper_limit(&self) -> u64 {
         self.total as u64

@@ -30,6 +30,7 @@ use crate::masp::{
     to_viewing_key, ShieldedContext, ShieldedUtils, TxNoteMap, WitnessMap,
 };
 use crate::task_env::TaskSpawner;
+use crate::{MaybeSend, MaybeSync};
 
 struct AsyncCounterInner {
     waker: AtomicWaker,
@@ -251,7 +252,7 @@ pub async fn new<S, M, U, T>(
     config: Config<T>,
 ) -> Dispatcher<S, M, U, T>
 where
-    U: ShieldedUtils,
+    U: ShieldedUtils + MaybeSend + MaybeSync,
 {
     let ctx = {
         let mut ctx = ShieldedContext {
@@ -300,7 +301,7 @@ impl<S, M, U, T> Dispatcher<S, M, U, T>
 where
     S: TaskSpawner,
     M: MaspClient + Send + Sync + Unpin + 'static,
-    U: ShieldedUtils,
+    U: ShieldedUtils + MaybeSend + MaybeSync,
     T: ProgressBar,
 {
     pub async fn run(

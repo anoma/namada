@@ -97,7 +97,6 @@ futures.workspace = true
 init-once.workspace = true
 itertools.workspace = true
 jubjub = { workspace = true, optional = true }
-kdam.workspace = true
 lazy_static.workspace = true
 linkme = {workspace = true, optional = true}
 masp_primitives.workspace = true
@@ -128,6 +127,7 @@ typed-builder.workspace = true
 zeroize.workspace = true
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
+kdam.workspace = true
 rayon.workspace = true
 reqwest.workspace = true
 tempfile.workspace = true
