@@ -609,7 +609,9 @@ fn make_hermes_chain_config(test: &Test) -> Value {
     chain.insert("account_prefix".to_owned(), Value::String("".to_owned()));
     chain.insert(
         "key_name".to_owned(),
-        Value::String(ensure_hot_key(setup::constants::CHRISTEL_KEY).to_owned()),
+        Value::String(
+            ensure_hot_key(setup::constants::CHRISTEL_KEY).to_owned(),
+        ),
     );
     chain.insert("store_prefix".to_owned(), Value::String("ibc".to_owned()));
     let mut table = toml::map::Map::new();

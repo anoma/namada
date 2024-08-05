@@ -6,7 +6,9 @@ use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use color_eyre::eyre::Result;
 use data_encoding::HEXLOWER;
-use namada_apps_lib::wallet::defaults::{self, get_unencrypted_keypair};
+use namada_apps_lib::wallet::defaults::{
+    self, get_unencrypted_keypair, is_use_device,
+};
 use namada_core::dec::Dec;
 use namada_core::hash::Hash;
 use namada_core::storage::{DbColFam, Epoch, Key};
@@ -28,7 +30,7 @@ use crate::e2e::setup::constants::{
     ALBERT, ALBERT_KEY, APFEL, BERTHA, BERTHA_KEY, BTC, CHRISTEL, CHRISTEL_KEY,
     DAEWON, DOT, ESTER, ETH, GOVERNANCE_ADDRESS, KARTOFFEL, NAM, SCHNITZEL,
 };
-use crate::e2e::setup::{apply_use_device, ensure_hot_key, is_use_device};
+use crate::e2e::setup::{apply_use_device, ensure_hot_key};
 use crate::integration::helpers::{
     find_address, prepare_steward_commission_update_data,
 };

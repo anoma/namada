@@ -44,7 +44,8 @@ use crate::e2e::helpers::{
     is_debug_mode, parse_reached_epoch,
 };
 use crate::e2e::setup::{
-    self, allow_duplicate_ips, apply_use_device, default_port_offset, sleep, Bin, Who,
+    self, allow_duplicate_ips, apply_use_device, default_port_offset, sleep,
+    Bin, Who,
 };
 use crate::strings::{
     LEDGER_SHUTDOWN, LEDGER_STARTED, NON_VALIDATOR_NODE, TX_APPLIED_SUCCESS,

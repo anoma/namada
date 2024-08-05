@@ -4,13 +4,15 @@
 pub use dev::{
     addresses, albert_address, albert_keypair, bertha_address, bertha_keypair,
     christel_address, christel_keypair, daewon_address, daewon_keypair,
-    ester_address, ester_keypair, get_unencrypted_keypair, keys, tokens,
-    validator_account_keypair, validator_address, validator_keypair,
-    validator_keys,
+    derive_template_dir, ester_address, ester_keypair, get_unencrypted_keypair,
+    is_use_device, keys, tokens, validator_account_keypair, validator_address,
+    validator_keypair, validator_keys,
 };
 
 #[cfg(any(test, feature = "testing", feature = "benches"))]
 mod dev {
+    use std::path::{Path, PathBuf};
+
     use lazy_static::lazy_static;
     use namada_sdk::address::testing::{
         apfel, btc, dot, eth, kartoffel, nam, schnitzel,
@@ -24,7 +26,6 @@ mod dev {
     use namada_sdk::wallet::Wallet;
     use namada_sdk::{governance, proof_of_stake};
 
-    use std::path::PathBuf;
     use crate::wallet::CliWalletUtils;
 
     /// Get protocol, eth_bridge, and dkg keys from the validator pre-genesis
@@ -185,8 +186,7 @@ mod dev {
     }
 
     /// Env. var to enable the usage of hardware wallets in tests
-    pub const ENV_VAR_USE_DEVICE: &str =
-        "NAMADA_E2E_USE_DEVICE";
+    pub const ENV_VAR_USE_DEVICE: &str = "NAMADA_E2E_USE_DEVICE";
 
     /// Check whether the ENV_VAR_USE_DEVICE environment variable is set
     pub fn is_use_device() -> bool {
@@ -196,12 +196,13 @@ mod dev {
         }
     }
 
-    /// Derive the genesis path depending on whether the hardware wallet is in use
-    pub fn derive_template_dir(working_dir: &PathBuf) -> PathBuf {
+    /// Derive the genesis path depending on whether the hardware wallet is in
+    /// use
+    pub fn derive_template_dir(working_dir: &Path) -> PathBuf {
         // The E2E tests genesis config source.
         // This file must contain a single validator with alias "validator-0".
-        // To add more validators, use the [`set_validators`] function in the call to
-        // setup the [`network`].
+        // To add more validators, use the [`set_validators`] function in the
+        // call to setup the [`network`].
         if is_use_device() {
             working_dir.join("genesis").join("hardware")
         } else {
@@ -213,8 +214,7 @@ mod dev {
     const PROJECT_ROOT_UNIQUE_FILE: &str = "rust-toolchain.toml";
 
     /// The pre-genesis directory of `validator-0`.
-    const VALIDATOR_0_PREGENESIS_DIR: &str =
-        "src/pre-genesis/validator-0";
+    const VALIDATOR_0_PREGENESIS_DIR: &str = "src/pre-genesis/validator-0";
 
     lazy_static! {
         static ref PREGENESIS_WALLET: Wallet<CliWalletUtils> = {
