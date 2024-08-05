@@ -3102,9 +3102,9 @@ dependencies = [
 
 [[package]]
 name = "init-once"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "27e911af9abae473c0421b6532c8cb9ee27eaa82617c417d2d9c967bfc0e4bb9"
+checksum = "e0863329819ed5ecf33446da6cb9104d2f8943ff8530d2b6c51adbc6be4f0632"
 dependencies = [
  "portable-atomic",
 ]
