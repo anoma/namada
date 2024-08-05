@@ -7044,7 +7044,8 @@ pub mod args {
                 DRY_RUN_TX
                     .def()
                     .help(wrap!("Simulate the transaction application."))
-                    .conflicts_with(DRY_RUN_WRAPPER_TX.name),
+                    .conflicts_with(DRY_RUN_WRAPPER_TX.name)
+                    .conflicts_with(USE_DEVICE.name),
             )
             .arg(
                 DRY_RUN_WRAPPER_TX
@@ -7154,10 +7155,15 @@ pub mod args {
                     ))
                     .conflicts_with(DISPOSABLE_SIGNING_KEY.name),
             )
-            .arg(USE_DEVICE.def().help(wrap!(
-                "Use an attached hardware wallet device to sign the \
-                 transaction."
-            )))
+            .arg(
+                USE_DEVICE
+                    .def()
+                    .help(wrap!(
+                        "Use an attached hardware wallet device to sign the \
+                         transaction."
+                    ))
+                    .conflicts_with(DRY_RUN_TX.name),
+            )
             .arg(
                 MEMO_OPT
                     .def()
