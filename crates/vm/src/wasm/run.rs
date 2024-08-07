@@ -759,10 +759,17 @@ where
         }
         Commitment::Id(code) => {
             let tx_len = code.len() as u64;
+            // FIXME: can remove this gas? I can remove it only if I find a way
+            // to discriminate between normal txs and governacne txs. For
+            // governacne txs I run this piece of code, for the others I don't
+            // and I don't need to charge the gas
             gas_meter
                 .borrow_mut()
                 .add_wasm_validation_gas(tx_len)
                 .map_err(|e| Error::GasError(e.to_string()))?;
+            // Validation is only needed for governance proposals. The other
+            // transactions are subject to the allowlist and are guaranteed to
+            // not contain invalid opcodes.
             validate_untrusted_wasm(code).map_err(Error::ValidationError)?;
 
             gas_meter
@@ -790,13 +797,19 @@ impl wasm_instrument::gas_metering::Rules for GasRules {
         // NOTE: these costs are taken from the benchmarks crate. None of them
         // should be zero
         let gas = match instruction {
-            Unreachable => 57_330,
-            // Just a flag, aribitrary cost of 1
+            // NOTE: the real cost of this operation is 57_330 but because of
+            // the behavior of the instrumentaiton tools which doesn't account
+            // for traps in called functions we need to reduce it to 1 otherwise
+            // the gas costs explode
+            Unreachable => 1,
+            // Just a label, aribitrary cost of 1
             End => 1,
-            // Just a flag, aribitrary cost of 1
+            // Just a label, aribitrary cost of 1
             Else => 1,
             Nop => 1,
+            // Just a label, cost of 1
             Block(_) => 1,
+            // Just a label, cost of 1
             Loop(_) => 1,
             If(_) => 5,
             Br(_) => 14,
@@ -986,7 +999,7 @@ impl wasm_instrument::gas_metering::Rules for GasRules {
     }
 
     fn call_per_local_cost(&self) -> u32 {
-        1
+        0
     }
 }
 
