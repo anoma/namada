@@ -25,6 +25,20 @@ const ITERATIONS: u64 = 10_000;
 const ENTRY_POINT: &str = "op";
 
 lazy_static! {
+    static ref EMPTY_MODULE: String = format!(
+        r#"
+            (module
+                (func $f0 nop)
+                (func $f1 (result i32) i32.const 1 return)
+                (table 1 funcref)
+                (elem (i32.const 0) $f0)
+                (global $iter (mut i32) (i32.const 0))
+                (memory 1)
+                (func (export "{ENTRY_POINT}") (param $local_var i32)"#
+    );
+}
+
+lazy_static! {
     static ref WASM_OPTS: Vec<wasm_instrument::parity_wasm::elements::Instruction> = vec![
         // Unreachable unconditionally traps, so no need to divide its cost by ITERATIONS because we only execute it once
         Unreachable,
@@ -386,18 +400,7 @@ struct WatBuilder {
 
 impl Display for WatBuilder {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(
-            f,
-            r#"
-            (module
-                (func $f0 nop)
-                (func $f1 (result i32) i32.const 1 return)
-                (table 1 funcref)
-                (elem (i32.const 0) $f0)
-                (global $iter (mut i32) (i32.const 0))
-                (memory 1)
-                (func (export "{ENTRY_POINT}") (param $local_var i32)"#
-        )?;
+        writeln!(f, r#"{}"#, *EMPTY_MODULE)?;
 
         for _ in 0..ITERATIONS {
             writeln!(f, r#"{}"#, self.wat)?;
@@ -420,20 +423,19 @@ fn get_wasm_store() -> Store {
 // An empty wasm module to serve as the base reference for all the other
 // instructions since the bigger part of the cost is the function call itself
 fn empty_module(c: &mut Criterion) {
-    let module_wat = format!(
-        r#"
-        (module
-          (func (export "{ENTRY_POINT}") (param $local_var i32))
-        )
-        "#,
-    );
+    let module_wat = format!(r#"{}))"#, *EMPTY_MODULE);
     let mut store = get_wasm_store();
     let module = Module::new(&store, module_wat).unwrap();
     let instance = Instance::new(&mut store, &module, &imports! {}).unwrap();
-    let function = instance.exports.get_function(ENTRY_POINT).unwrap();
+    let function = instance
+        .exports
+        .get_function(ENTRY_POINT)
+        .unwrap()
+        .typed::<i32, ()>(&store)
+        .unwrap();
 
     c.bench_function("empty_module", |b| {
-        b.iter(|| function.call(&mut store, &[Value::I32(0)]).unwrap());
+        b.iter(|| function.call(&mut store, 0).unwrap());
     });
 }
 
@@ -445,15 +447,18 @@ fn ops(c: &mut Criterion) {
         let module = Module::new(&store, builder.to_string()).unwrap();
         let instance =
             Instance::new(&mut store, &module, &imports! {}).unwrap();
-        let function = instance.exports.get_function(ENTRY_POINT).unwrap();
+        let function = instance
+            .exports
+            .get_function(ENTRY_POINT)
+            .unwrap()
+            .typed::<i32, ()>(&store)
+            .unwrap();
 
         group.bench_function(format!("{}", builder.instruction), |b| {
             if let Unreachable = builder.instruction {
-                b.iter(|| {
-                    function.call(&mut store, &[Value::I32(0)]).unwrap_err()
-                });
+                b.iter(|| function.call(&mut store, 0).unwrap_err());
             } else {
-                b.iter(|| function.call(&mut store, &[Value::I32(0)]).unwrap());
+                b.iter(|| function.call(&mut store, 0).unwrap());
             }
         });
     }
