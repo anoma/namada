@@ -24,6 +24,7 @@ pub async fn syncing<
 >(
     mut shielded: ShieldedContext<U>,
     client: C,
+    wait_for_last_query_height: bool,
     indexer_addr: Option<&str>,
     io: &IO,
     last_query_height: Option<BlockHeight>,
@@ -70,6 +71,7 @@ pub async fn syncing<
                 .client($client)
                 .fetched_tracker(fetched_bar)
                 .scanned_tracker(scanned_bar)
+                .wait_for_last_query_height(wait_for_last_query_height)
                 .build();
 
             let env = MaspLocalTaskEnv::new(500)?;

@@ -1171,6 +1171,7 @@ impl BenchShieldedCtx {
             .block_on(namada_apps_lib::client::masp::syncing(
                 self.shielded,
                 self.shell.clone(),
+                false,
                 None,
                 &StdIo,
                 None,

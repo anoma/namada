@@ -3459,6 +3459,8 @@ pub mod args {
     pub const VIEWING_KEYS: ArgMulti<WalletViewingKey, GlobStar> =
         arg_multi("viewing-keys");
     pub const VP: ArgOpt<String> = arg_opt("vp");
+    pub const WAIT_FOR_LAST_QUERY_HEIGHT: ArgFlag =
+        flag("wait-for-last-query-height");
     pub const WALLET_ALIAS_FORCE: ArgFlag = flag("wallet-alias-force");
     pub const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
     pub const WASM_DIR: ArgOpt<PathBuf> = arg_opt("wasm-dir");
@@ -6574,12 +6576,15 @@ pub mod args {
             let spending_keys = SPENDING_KEYS.parse(matches);
             let viewing_keys = VIEWING_KEYS.parse(matches);
             let with_indexer = WITH_INDEXER.parse(matches);
+            let wait_for_last_query_height =
+                WAIT_FOR_LAST_QUERY_HEIGHT.parse(matches);
             Self {
                 ledger_address,
                 last_query_height,
                 spending_keys,
                 viewing_keys,
                 with_indexer,
+                wait_for_last_query_height,
             }
         }
 
@@ -6601,6 +6606,10 @@ pub mod args {
                      present, the shielded sync will be performed using data \
                      retrieved from the given indexer."
                 )))
+                .arg(WAIT_FOR_LAST_QUERY_HEIGHT.def().help(wrap!(
+                    "Wait until the last height to sync is available instead \
+                     of returning early from the shielded sync."
+                )))
         }
     }
 
@@ -6614,6 +6623,7 @@ pub mod args {
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
 
             Ok(ShieldedSync {
+                wait_for_last_query_height: self.wait_for_last_query_height,
                 ledger_address: chain_ctx.get(&self.ledger_address),
                 last_query_height: self.last_query_height,
                 spending_keys: self

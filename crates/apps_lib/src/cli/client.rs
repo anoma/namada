@@ -364,6 +364,7 @@ impl CliApi {
                         crate::client::masp::syncing(
                             chain_ctx.shielded,
                             client,
+                            args.wait_for_last_query_height,
                             indexer_addr.as_ref().map(|s| s.as_ref()),
                             &io,
                             args.last_query_height,

@@ -2131,6 +2131,8 @@ pub struct ShieldedSync<C: NamadaTypes = SdkTypes> {
     /// If present, the shielded sync will be performed
     /// using data retrieved from the given indexer
     pub with_indexer: Option<C::MaspIndexerAddress>,
+    /// Wait for the last query height.
+    pub wait_for_last_query_height: bool,
 }
 
 /// Query PoS commission rate

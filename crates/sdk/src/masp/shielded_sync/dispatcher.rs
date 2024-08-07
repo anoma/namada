@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::future::Future;
 use std::ops::ControlFlow;
@@ -14,6 +15,7 @@ use masp_primitives::sapling::{Node, ViewingKey};
 use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::ExtendedSpendingKey;
 use namada_core::collections::HashMap;
+use namada_core::control_flow::time::{Duration, LinearBackoff, Sleep};
 use namada_core::hints;
 use namada_core::storage::{BlockHeight, TxIndex};
 use namada_tx::IndexedTx;
@@ -220,6 +222,7 @@ struct InitialState {
 }
 
 pub struct Config<T> {
+    pub wait_for_last_query_height: bool,
     pub retry_strategy: RetryStrategy,
     pub block_batch_size: usize,
     pub channel_buffer_size: usize,
@@ -315,6 +318,7 @@ where
     ) -> Result<Option<ShieldedContext<U>>, Error> {
         let initial_state = self
             .perform_initial_setup(
+                &mut shutdown_signal,
                 start_query_height,
                 last_query_height,
                 sks,
@@ -434,6 +438,7 @@ where
 
     async fn perform_initial_setup(
         &mut self,
+        shutdown_signal: &mut impl ShutdownSignal,
         start_query_height: Option<BlockHeight>,
         last_query_height: Option<BlockHeight>,
         sks: &[ExtendedSpendingKey],
@@ -459,13 +464,47 @@ where
         // tree
         let last_witnessed_tx = self.ctx.tx_note_map.keys().max().cloned();
 
-        // Query for the last produced block height
-        let Some(last_block_height) = self.client.last_block_height().await?
-        else {
-            return Err(Error::Other(
-                "No block has been committed yet".to_string(),
-            ));
-        };
+        let shutdown_signal = RefCell::new(shutdown_signal);
+
+        let last_block_height = Sleep {
+            strategy: LinearBackoff {
+                delta: Duration::from_millis(100),
+            },
+        }
+        .run(|| async {
+            if self.config.wait_for_last_query_height
+                && shutdown_signal.borrow_mut().received()
+            {
+                return ControlFlow::Break(Err(Error::Other(
+                    "Interrupted while waiting for lats que".to_string(),
+                )));
+            }
+
+            // Query for the last produced block height
+            let last_block_height = match self.client.last_block_height().await
+            {
+                Ok(Some(last_block_height)) => last_block_height,
+                Ok(None) => {
+                    return if self.config.wait_for_last_query_height {
+                        ControlFlow::Continue(())
+                    } else {
+                        ControlFlow::Break(Err(Error::Other(
+                            "No block has been committed yet".to_string(),
+                        )))
+                    };
+                }
+                Err(err) => return ControlFlow::Break(Err(err)),
+            };
+
+            if self.config.wait_for_last_query_height
+                && Some(last_block_height) < last_query_height
+            {
+                ControlFlow::Continue(())
+            } else {
+                ControlFlow::Break(Ok(last_block_height))
+            }
+        })
+        .await?;
 
         let last_query_height = last_query_height
             .unwrap_or(last_block_height)
