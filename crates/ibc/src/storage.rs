@@ -10,7 +10,8 @@ use ibc::core::host::types::identifiers::{
 use ibc::core::host::types::path::{
     AckPath, ChannelEndPath, ClientConnectionPath, ClientConsensusStatePath,
     ClientStatePath, CommitmentPath, ConnectionPath, Path, PortPath,
-    ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath, UpgradeClientPath,
+    ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath, UpgradeClientStatePath,
+    UpgradeConsensusStatePath, UPGRADED_IBC_STATE,
 };
 use namada_core::address::{Address, InternalAddress};
 use namada_core::storage::{DbKeySeg, Key, KeySeg};
@@ -188,19 +189,20 @@ pub fn consensus_state_prefix(client_id: &ClientId) -> Key {
 
 /// Returns a key for the upgraded client state
 pub fn upgraded_client_state_key(upgraded_height: Height) -> Key {
-    let path = Path::UpgradeClient(UpgradeClientPath::UpgradedClientState(
-        upgraded_height.revision_height(),
-    ));
+    let path = Path::UpgradeClientState(UpgradeClientStatePath {
+        upgrade_path: UPGRADED_IBC_STATE.to_string(),
+        height: upgraded_height.revision_height(),
+    });
     ibc_key(path.to_string())
         .expect("Creating a key for the upgraded client state shouldn't fail")
 }
 
 /// Returns a key for the upgraded consensus state
 pub fn upgraded_consensus_state_key(upgraded_height: Height) -> Key {
-    let path =
-        Path::UpgradeClient(UpgradeClientPath::UpgradedClientConsensusState(
-            upgraded_height.revision_height(),
-        ));
+    let path = Path::UpgradeConsensusState(UpgradeConsensusStatePath {
+        upgrade_path: UPGRADED_IBC_STATE.to_string(),
+        height: upgraded_height.revision_height(),
+    });
     ibc_key(path.to_string()).expect(
         "Creating a key for the upgraded consensus state shouldn't fail",
     )
