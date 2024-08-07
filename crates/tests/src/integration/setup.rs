@@ -14,6 +14,7 @@ use namada_apps_lib::config::genesis::templates::load_and_validate;
 use namada_apps_lib::config::TendermintMode;
 use namada_apps_lib::facade::tendermint::Timeout;
 use namada_apps_lib::facade::tendermint_proto::google::protobuf::Timestamp;
+use namada_apps_lib::wallet::defaults::derive_template_dir;
 use namada_apps_lib::wallet::pre_genesis;
 use namada_core::chain::ChainIdPrefix;
 use namada_core::collections::HashMap;
@@ -27,7 +28,7 @@ use namada_sdk::dec::Dec;
 use namada_sdk::token;
 use namada_sdk::wallet::alias::Alias;
 
-use crate::e2e::setup::{copy_wasm_to_chain_dir, SINGLE_NODE_NET_GENESIS};
+use crate::e2e::setup::copy_wasm_to_chain_dir;
 
 /// Env. var for keeping temporary files created by the integration tests
 const ENV_VAR_KEEP_TEMP: &str = "NAMADA_INT_KEEP_TEMP";
@@ -49,7 +50,7 @@ pub fn initialize_genesis(
         _ => false,
     };
     let test_dir = TestDir::new();
-    let template_dir = working_dir.join(SINGLE_NODE_NET_GENESIS);
+    let template_dir = derive_template_dir(&working_dir);
 
     // Copy genesis files to test directory.
     let mut templates = templates::All::read_toml_files(&template_dir)

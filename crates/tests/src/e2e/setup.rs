@@ -27,6 +27,7 @@ use namada_apps_lib::config::genesis::{
     templates, transactions, GenesisAddress,
 };
 use namada_apps_lib::config::{ethereum_bridge, genesis, Config};
+use namada_apps_lib::wallet::defaults::{derive_template_dir, is_use_device};
 use namada_apps_lib::{config, wallet};
 use namada_core::address::Address;
 use namada_core::collections::HashMap;
@@ -66,12 +67,6 @@ const ENV_VAR_TEMP_PATH: &str = "NAMADA_E2E_TEMP_PATH";
 pub const ENV_VAR_USE_PREBUILT_BINARIES: &str =
     "NAMADA_E2E_USE_PREBUILT_BINARIES";
 
-/// The E2E tests genesis config source.
-/// This file must contain a single validator with alias "validator-0".
-/// To add more validators, use the [`set_validators`] function in the call to
-/// setup the [`network`].
-#[allow(dead_code)]
-pub const SINGLE_NODE_NET_GENESIS: &str = "genesis/localnet";
 /// An E2E test network.
 #[derive(Debug, Clone)]
 pub struct Network {
@@ -80,6 +75,35 @@ pub struct Network {
 
 /// Offset the ports used in the network configuration to avoid shared resources
 pub const ANOTHER_CHAIN_PORT_OFFSET: u16 = 1000;
+
+/// Apply the --use-device flag depending on the environment variables
+pub fn apply_use_device(mut tx_args: Vec<&str>) -> Vec<&str> {
+    if is_use_device() {
+        tx_args.push("--use-device");
+    }
+    tx_args
+}
+
+/// Replace the given key with a key that is stored unencrypted in the wallet.
+/// This is useful for IBC tests where a keypair needs to be added to the Hermes
+/// keyring or where IBC messages unsupported by the hardware wallet need to be
+/// signed
+pub fn ensure_hot_key(key: &str) -> &str {
+    if is_use_device() {
+        constants::FRANK_KEY
+    } else {
+        key
+    }
+}
+
+/// Same as ensure_hot_key but for addressees
+pub fn ensure_hot_addr(key: &str) -> &str {
+    if is_use_device() {
+        constants::FRANK
+    } else {
+        key
+    }
+}
 
 /// Default functions for offsetting ports when
 /// adding multiple validators to a network
@@ -348,7 +372,7 @@ pub fn network(
     let test_dir = TestDir::new();
 
     // Open the source genesis file templates
-    let templates_dir = working_dir.join("genesis").join("localnet");
+    let templates_dir = derive_template_dir(&working_dir);
     println!(
         "{} {}.",
         "Loading genesis templates from".yellow(),
@@ -1412,6 +1436,9 @@ pub mod constants {
     pub const DAEWON_KEY: &str = "Daewon-key";
     pub const ESTER: &str = "Ester";
     pub const MATCHMAKER_KEY: &str = "matchmaker-key";
+    // Special user that must be stored unencrypted for IBC tests
+    pub const FRANK: &str = "Frank";
+    pub const FRANK_KEY: &str = "Frank-key";
 
     // Shielded spending and viewing keys and payment addresses
     pub const A_SPENDING_KEY: &str = "zsknam1qdrk9kd8qqqqpqy3pxzxu2kexydl7ug22s3808htl604emmz9qlde9cl9mx6euhvh3cpl9w7guustfzjxsyaeqtefhden6q8776t9cr9vkqztj7u0mgs5k9nz945sypev9ppptn5d85as3ccsnu3q6g3acqp2gpsrwe6naqg3stqp43uk9x2cj79gcxuum8a7jayjqlv4ptcfnunqkqzsj6m2r3sn8ft0tyqqpv28nghe4ag68eccaqx7v5f65he95g5uwq2wr4yuqc06jgc7";
