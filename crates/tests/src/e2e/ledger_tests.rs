@@ -2358,7 +2358,7 @@ fn masp_txs_and_queries() -> Result<()> {
             .background();
 
     let rpc_address = get_actor_rpc(&test, who);
-    let _ep1 = epoch_sleep(&test, &rpc_address, 720)?;
+    wait_for_block_height(&test, &rpc_address, 1, 30)?;
 
     // add necessary viewing keys to shielded context
     let mut sync = run_as!(
