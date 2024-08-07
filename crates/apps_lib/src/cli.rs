@@ -3469,8 +3469,16 @@ pub mod args {
     pub const WITH_INDEXER: ArgOpt<String> = arg_opt("with-indexer");
     pub const TX_PATH: Arg<PathBuf> = arg("tx-path");
     pub const TX_PATH_OPT: ArgOpt<PathBuf> = TX_PATH.opt();
-    pub const DEVICE_TRANSPORT: ArgDefault<DeviceTransport> =
-        arg_default("device-transport", DefaultFn(DeviceTransport::default));
+    pub const DEVICE_TRANSPORT: ArgDefault<DeviceTransport> = arg_default(
+        "device-transport",
+        DefaultFn(|| {
+            if let Ok(val) = std::env::var(DEVICE_TRANSPORT_ENV_VAR) {
+                return DeviceTransport::from_str(&val).unwrap();
+            }
+            DeviceTransport::default()
+        }),
+    );
+    pub const DEVICE_TRANSPORT_ENV_VAR: &str = "NAMADA_DEVICE_TRANSPORT";
 
     /// Global command arguments
     #[derive(Clone, Debug)]

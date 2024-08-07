@@ -1026,6 +1026,21 @@ mod tests {
         );
     }
 
+    /// Validate the `genesis/hardware` genesis templates.
+    #[test]
+    fn test_validate_hardware_genesis_templates() {
+        let templates_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("genesis/hardware");
+        assert!(
+            load_and_validate(&templates_dir).is_some(),
+            "Hardware genesis templates must be valid"
+        );
+    }
+
     #[test]
     fn test_read_balances() {
         let test_dir = tempdir().unwrap();
