@@ -34,8 +34,6 @@ use super::common::IbcCommonContext;
 use super::IbcContext;
 use crate::storage;
 
-const COMMITMENT_PREFIX: &[u8] = b"ibc";
-
 impl<C, Params> ExtClientValidationContext for IbcContext<C, Params>
 where
     C: IbcCommonContext,
@@ -193,8 +191,7 @@ where
     }
 
     fn commitment_prefix(&self) -> CommitmentPrefix {
-        CommitmentPrefix::try_from(COMMITMENT_PREFIX.to_vec())
-            .expect("the prefix should be parsable")
+        CommitmentPrefix::from(crate::COMMITMENT_PREFIX.as_bytes().to_vec())
     }
 
     fn connection_counter(&self) -> Result<u64, ContextError> {

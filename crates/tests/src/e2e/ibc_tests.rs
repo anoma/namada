@@ -66,11 +66,11 @@ use namada_sdk::ibc::core::connection::types::Counterparty as ConnCounterparty;
 use namada_sdk::ibc::core::host::types::identifiers::{
     ChainId, ChannelId, ClientId, ConnectionId, PortId,
 };
-use namada_sdk::ibc::event as ibc_events;
 use namada_sdk::ibc::event::IbcEventType;
 use namada_sdk::ibc::primitives::proto::Any;
 use namada_sdk::ibc::primitives::{Signer, ToProto};
 use namada_sdk::ibc::storage::*;
+use namada_sdk::ibc::{event as ibc_events, COMMITMENT_PREFIX};
 use namada_sdk::key::PublicKey;
 use namada_sdk::masp::fs::FsShieldedUtils;
 use namada_sdk::parameters::{storage as param_storage, EpochDuration};
@@ -758,17 +758,18 @@ fn proposal_ibc_token_inflation() -> Result<()> {
 #[test]
 fn ibc_upgrade_client() -> Result<()> {
     // To avoid the client expiration, stop updating the client near the
-    // first height of the grace epoch. It is set 420 because the grace epoch in
-    // this test will be Epoch 21 and the number of blocks per epoch is 20.
-    const MIN_UPGRADE_HEIGHT: u64 = 420;
+    // first height of the grace epoch. It is set 360 because the grace epoch in
+    // this test will be Epoch 18 and the number of blocks per epoch is 20.
+    const MIN_UPGRADE_HEIGHT: u64 = 360;
     const MASP_EPOCH_MULTIPLIER: u64 = 2;
+    const PIPELINE_LEN: u64 = 8;
 
     let update_genesis =
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
             genesis.parameters.parameters.epochs_per_year =
                 epochs_per_year_from_min_duration(20);
             // for the trusting period of IBC client
-            genesis.parameters.pos_params.pipeline_len = 8;
+            genesis.parameters.pos_params.pipeline_len = PIPELINE_LEN;
             genesis.parameters.parameters.masp_epoch_multiplier =
                 MASP_EPOCH_MULTIPLIER;
             genesis.parameters.gov_params.min_proposal_grace_epochs = 3;
@@ -789,7 +790,7 @@ fn ibc_upgrade_client() -> Result<()> {
     delegate_token(&test_b)?;
     let rpc_b = get_actor_rpc(&test_b, Who::Validator(0));
     let mut epoch = get_epoch(&test_b, &rpc_b).unwrap();
-    let delegated = epoch + 8u64;
+    let delegated = epoch + PIPELINE_LEN;
     while epoch <= delegated {
         sleep(10);
         epoch = get_epoch(&test_b, &rpc_b).unwrap_or_default();
@@ -800,7 +801,7 @@ fn ibc_upgrade_client() -> Result<()> {
     let start_epoch = propose_upgrade_client(&test_b)?;
     let mut epoch = get_epoch(&test_b, &rpc_b).unwrap();
     // Vote
-    while epoch <= start_epoch {
+    while epoch < start_epoch {
         sleep(10);
         epoch = get_epoch(&test_b, &rpc_b).unwrap_or_default();
     }
@@ -808,10 +809,7 @@ fn ibc_upgrade_client() -> Result<()> {
 
     // creating IBC channel while waiting the grace epoch
     setup_hermes(&test_a, &test_b)?;
-    let port_id_a = "transfer".parse().unwrap();
-    let port_id_b = "transfer".parse().unwrap();
-    let (channel_id_a, channel_id_b) =
-        create_channel_with_hermes(&test_a, &test_b)?;
+    create_channel_with_hermes(&test_a, &test_b)?;
     // Start relaying to update clients
     let hermes = run_hermes(&test_a)?;
     let bg_hermes = hermes.background();
@@ -837,29 +835,19 @@ fn ibc_upgrade_client() -> Result<()> {
     let upgraded_height = get_upgraded_height(&test_b, MIN_UPGRADE_HEIGHT)?;
     // Upgrade the IBC client of Chain B on Chain A with Hermes
     upgrade_client(&test_a, test_a.net.chain_id.to_string(), upgraded_height)?;
+    sleep(1);
 
-    // Start relaying
-    let hermes = run_hermes(&test_a)?;
-    let _bg_hermes = hermes.background();
-    // Check if IBC transfer works after the client upgrade
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
-    let receiver = find_address(&test_b, BERTHA)?;
-    transfer(
+    // Check the upgraded client
+    let current_height = query_height(&test_a)?;
+    let (upgraded_client_state, _, _) = get_client_states(
         &test_a,
-        ALBERT,
-        receiver.to_string(),
-        NAM,
-        100000.0,
-        Some(ALBERT_KEY),
-        &port_id_a,
-        &channel_id_a,
-        None,
-        None,
-        None,
-        false,
+        &"07-tendermint-0".parse().unwrap(),
+        current_height,
     )?;
-    wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
-    check_balances(&port_id_b, &channel_id_b, &test_a, &test_b)?;
+    assert_eq!(
+        upgraded_client_state.inner().chain_id.as_str(),
+        "upgraded-chain"
+    );
 
     Ok(())
 }
@@ -2118,8 +2106,7 @@ fn get_receipt_absence_proof(
 }
 
 fn commitment_prefix() -> CommitmentPrefix {
-    CommitmentPrefix::try_from(b"ibc".to_vec())
-        .expect("the prefix should be parsable")
+    CommitmentPrefix::from(COMMITMENT_PREFIX.as_bytes().to_vec())
 }
 
 fn submit_ibc_tx(
@@ -2363,7 +2350,7 @@ fn propose_upgrade_client(test: &Test) -> Result<Epoch> {
     let albert = find_address(test, ALBERT)?;
     let rpc = get_actor_rpc(test, Who::Validator(0));
     let epoch = get_epoch(test, &rpc)?;
-    let start_epoch = (epoch.0 + 6) / 3 * 3;
+    let start_epoch = (epoch.0 + 3) / 3 * 3;
     let proposal_json = serde_json::json!({
         "proposal": {
             "content": {

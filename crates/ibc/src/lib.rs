@@ -118,6 +118,8 @@ pub const EVENT_TYPE_PACKET: &str = "fungible_token_packet";
 pub const EVENT_TYPE_NFT_PACKET: &str = "non_fungible_token_packet";
 /// The escrow address for IBC transfer
 pub const IBC_ESCROW_ADDRESS: Address = address::IBC;
+/// The commitment prefix for the ICS23 commitment proof
+pub const COMMITMENT_PREFIX: &str = "ibc";
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
