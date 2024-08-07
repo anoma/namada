@@ -51,7 +51,7 @@ pub enum GasParseError {
 }
 
 const COMPILE_GAS_PER_BYTE: u64 = 1_664;
-const PARALLEL_GAS_DIVIDER: u64 = 10;
+const PARALLEL_GAS_DIVIDER: u64 = 1;
 const WASM_CODE_VALIDATION_GAS_PER_BYTE: u64 = 59;
 const WRAPPER_TX_VALIDATION_GAS: u64 = 1_526_700;
 // There's no benchmark to calculate the cost of storage occupation, so we
@@ -68,7 +68,7 @@ const STORAGE_OCCUPATION_GAS_PER_BYTE: u64 =
 // storage blob but this would make it more tedious to compute gas in the
 // codebase. For these two reasons we just set an arbitrary value (based on
 // actual SSDs latency) per byte here
-const PHYSICAL_STORAGE_LATENCY_PER_BYTE: u64 = 1_000_000;
+const PHYSICAL_STORAGE_LATENCY_PER_BYTE: u64 = 20;
 // This is based on the global average bandwidth
 const NETWORK_TRANSMISSION_GAS_PER_BYTE: u64 = 848;
 
@@ -94,7 +94,7 @@ pub const IBC_ACTION_VALIDATE_GAS: u64 = 290_935;
 /// The cost to execute an Ibc action
 pub const IBC_ACTION_EXECUTE_GAS: u64 = 1_685_733;
 /// The cost of masp sig verification
-pub const MASP_VERIFY_SIG_GAS: u64 = 3_817_500;
+pub const MASP_VERIFY_SIG_GAS: u64 = 1_908_750;
 /// The fixed cost of spend note verification
 pub const MASP_FIXED_SPEND_GAS: u64 = 59_521_000;
 /// The variable cost of spend note verification
@@ -117,7 +117,7 @@ pub const MASP_OUTPUT_CHECK_GAS: u64 = 204_430;
 pub const MASP_FINAL_CHECK_GAS: u64 = 43;
 /// Gas divider specific for the masp vp. Only allocates half of the cores to
 /// the masp vp since we can expect the other half to be busy with other vps
-pub const MASP_PARALLEL_GAS_DIVIDER: u64 = PARALLEL_GAS_DIVIDER / 2;
+pub const MASP_PARALLEL_GAS_DIVIDER: u64 = 1;
 
 /// Gas module result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;
@@ -470,12 +470,19 @@ impl VpGasMeter {
             current_gas: Gas::default(),
         }
     }
+
+    // FIXME: remove
+    pub fn get_vp_consumed_gas(&self) -> Gas {
+        self.current_gas
+    }
 }
 
 impl VpsGas {
     /// Set the gas cost from a VP run. It consumes the [`VpGasMeter`]
     /// instance which shouldn't be accessed passed this point.
     pub fn set(&mut self, vp_gas_meter: VpGasMeter) -> Result<()> {
+        // FIXME: remove
+        eprintln!("GAS USED ONLY BY VP: {:#?}", vp_gas_meter.current_gas);
         if vp_gas_meter.current_gas > self.max {
             self.rest.push(self.max);
             self.max = vp_gas_meter.current_gas;
