@@ -15,7 +15,7 @@ use namada_macros::BorshDeserializer;
 use namada_migrations::*;
 use namada_sdk::account::AccountPublicKeysMap;
 use namada_sdk::address::{Address, EstablishedAddress};
-use namada_sdk::args::Tx as TxArgs;
+use namada_sdk::args::{DeviceTransport, Tx as TxArgs};
 use namada_sdk::chain::ChainId;
 use namada_sdk::collections::HashSet;
 use namada_sdk::dec::Dec;
@@ -93,6 +93,7 @@ fn get_tx_args(use_device: bool) -> TxArgs {
         password: None,
         memo: None,
         use_device,
+        device_transport: DeviceTransport::default(),
     }
 }
 
