@@ -3469,6 +3469,8 @@ pub mod args {
     pub const WITH_INDEXER: ArgOpt<String> = arg_opt("with-indexer");
     pub const TX_PATH: Arg<PathBuf> = arg("tx-path");
     pub const TX_PATH_OPT: ArgOpt<PathBuf> = TX_PATH.opt();
+    pub const DEVICE_TRANSPORT: ArgDefault<DeviceTransport> =
+        arg_default("device-transport", DefaultFn(DeviceTransport::default));
 
     /// Global command arguments
     #[derive(Clone, Debug)]
@@ -7034,6 +7036,7 @@ pub mod args {
                 wrapper_fee_payer: self.wrapper_fee_payer.map(|x| ctx.get(&x)),
                 memo: self.memo,
                 use_device: self.use_device,
+                device_transport: self.device_transport,
             })
         }
     }
@@ -7165,6 +7168,15 @@ pub mod args {
                     .conflicts_with(DRY_RUN_TX.name),
             )
             .arg(
+                DEVICE_TRANSPORT
+                    .def()
+                    .help(wrap!(
+                        "Select transport for hardware wallet from \"hid\" \
+                         (default) or \"tcp\"."
+                    ))
+                    .conflicts_with(DRY_RUN_TX.name),
+            )
+            .arg(
                 MEMO_OPT
                     .def()
                     .help(wrap!("Attach a plaintext memo to the transaction.")),
@@ -7205,6 +7217,7 @@ pub mod args {
                     None => TxExpiration::Default,
                 }
             };
+            let device_transport = DEVICE_TRANSPORT.parse(matches);
             Self {
                 dry_run,
                 dry_run_wrapper,
@@ -7228,6 +7241,7 @@ pub mod args {
                 output_folder,
                 memo,
                 use_device,
+                device_transport,
             }
         }
     }
@@ -7357,22 +7371,24 @@ pub mod args {
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
-            let use_device = USE_DEVICE.parse(matches);
             let derivation_path = HD_DERIVATION_PATH.parse(matches);
             let allow_non_compliant =
                 HD_ALLOW_NON_COMPLIANT_DERIVATION_PATH.parse(matches);
             let prompt_bip39_passphrase =
                 HD_PROMPT_BIP39_PASSPHRASE.parse(matches);
+            let use_device = USE_DEVICE.parse(matches);
+            let device_transport = DEVICE_TRANSPORT.parse(matches);
             Self {
                 scheme,
                 shielded,
                 alias,
                 alias_force,
                 unsafe_dont_encrypt,
-                use_device,
                 derivation_path,
                 allow_non_compliant,
                 prompt_bip39_passphrase,
+                use_device,
+                device_transport,
             }
         }
 
@@ -7401,6 +7417,10 @@ pub mod args {
             .arg(USE_DEVICE.def().help(wrap!(
                 "Derive an address and public key from the seed stored on the \
                  connected hardware wallet."
+            )))
+            .arg(DEVICE_TRANSPORT.def().help(wrap!(
+                "Select transport for hardware wallet from \"hid\" (default) \
+                 or \"tcp\"."
             )))
             .arg(HD_DERIVATION_PATH.def().help(wrap!(
                 "HD key derivation path. Use keyword `default` to refer to a \
@@ -8198,6 +8218,7 @@ pub mod args {
         pub output: Option<PathBuf>,
         pub validator_alias: Option<String>,
         pub use_device: bool,
+        pub device_transport: DeviceTransport,
     }
 
     impl Args for SignGenesisTxs {
@@ -8206,11 +8227,13 @@ pub mod args {
             let output = OUTPUT.parse(matches);
             let validator_alias = ALIAS_OPT.parse(matches);
             let use_device = USE_DEVICE.parse(matches);
+            let device_transport = DEVICE_TRANSPORT.parse(matches);
             Self {
                 path,
                 output,
                 validator_alias,
                 use_device,
+                device_transport,
             }
         }
 
@@ -8232,6 +8255,10 @@ pub mod args {
             .arg(USE_DEVICE.def().help(wrap!(
                 "Derive an address and public key from the seed stored on the \
                  connected hardware wallet."
+            )))
+            .arg(DEVICE_TRANSPORT.def().help(wrap!(
+                "Select transport for hardware wallet from \"hid\" (default) \
+                 or \"tcp\"."
             )))
         }
     }

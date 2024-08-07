@@ -51,7 +51,7 @@ pub use std::marker::Sync as MaybeSync;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use args::{InputAmount, SdkTypes};
+use args::{DeviceTransport, InputAmount, SdkTypes};
 use io::Io;
 use masp::{ShieldedContext, ShieldedUtils};
 use namada_core::address::Address;
@@ -168,6 +168,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             password: None,
             memo: None,
             use_device: false,
+            device_transport: DeviceTransport::default(),
         }
     }
 
@@ -739,6 +740,7 @@ where
                 password: None,
                 memo: None,
                 use_device: false,
+                device_transport: DeviceTransport::default(),
             },
         }
     }
