@@ -13,6 +13,7 @@ use ledger_transport_hid::hidapi::HidApi;
 use ledger_transport_hid::TransportNativeHID;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada_sdk::address::{Address, DecodeError};
+use namada_sdk::args::DeviceTransport;
 use namada_sdk::io::Io;
 use namada_sdk::key::*;
 use namada_sdk::masp::{
@@ -28,6 +29,7 @@ use crate::cli;
 use crate::cli::api::CliApi;
 use crate::cli::args::CliToSdk;
 use crate::cli::{args, cmds, Context};
+use crate::client::tx::NamadaAppTcpTransport;
 use crate::client::utils::PRE_GENESIS_DIR;
 use crate::tendermint_node::validator_key_to_json;
 use crate::wallet::{
@@ -446,7 +448,8 @@ async fn transparent_key_and_address_derive(
         allow_non_compliant,
         prompt_bip39_passphrase,
         use_device,
-        ..
+        shielded: _,
+        device_transport,
     }: args::KeyDerive,
 ) {
     let mut wallet = load_wallet(ctx);
@@ -485,33 +488,49 @@ async fn transparent_key_and_address_derive(
             })
             .0
     } else {
-        let hidapi = HidApi::new().unwrap_or_else(|err| {
-            edisplay_line!(io, "Failed to create HidApi: {}", err);
-            cli::safe_exit(1)
-        });
-        let app = NamadaApp::new(
-            TransportNativeHID::new(&hidapi).unwrap_or_else(|err| {
-                edisplay_line!(io, "Unable to connect to Ledger: {}", err);
-                cli::safe_exit(1)
-            }),
-        );
-        let response = app
-            .get_address_and_pubkey(
-                &BIP44Path {
-                    path: derivation_path.to_string(),
-                },
-                true,
-            )
-            .await
-            .unwrap_or_else(|err| {
-                edisplay_line!(
-                    io,
-                    "Unable to connect to query address and public key from \
-                     Ledger: {}",
-                    err
-                );
-                cli::safe_exit(1)
-            });
+        macro_rules! get_address_and_pubkey {
+            ($app:expr) => {
+                $app.get_address_and_pubkey(
+                    &BIP44Path {
+                        path: derivation_path.to_string(),
+                    },
+                    true,
+                )
+                .await
+                .unwrap_or_else(|err| {
+                    edisplay_line!(
+                        io,
+                        "Unable to connect to query address and public key \
+                         from Ledger (HID): {}",
+                        err
+                    );
+                    cli::safe_exit(1)
+                })
+            };
+        }
+        let response = match device_transport {
+            DeviceTransport::Hid => {
+                let hidapi = HidApi::new().unwrap_or_else(|err| {
+                    edisplay_line!(io, "Failed to create HidApi: {}", err);
+                    cli::safe_exit(1)
+                });
+                let transport = TransportNativeHID::new(&hidapi)
+                    .unwrap_or_else(|err| {
+                        edisplay_line!(
+                            io,
+                            "Unable to connect to Ledger: {}",
+                            err
+                        );
+                        cli::safe_exit(1)
+                    });
+                let app = NamadaApp::new(transport);
+                get_address_and_pubkey!(app)
+            }
+            DeviceTransport::Tcp => {
+                let app = NamadaApp::new(NamadaAppTcpTransport);
+                get_address_and_pubkey!(app)
+            }
+        };
 
         let pubkey = common::PublicKey::try_from_slice(&response.public_key)
             .expect("unable to decode public key from hardware wallet");
