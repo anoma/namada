@@ -142,8 +142,10 @@ const GAS_COST_CORRECTION: u64 = 5;
 //
 
 const PARALLEL_GAS_DIVIDER: u64 = 1;
+// The compilation cost is reduced by a factor to compensate for the (most
+// likely) presence of the cache
 const COMPILE_GAS_PER_BYTE: u64 =
-    COMPILE_GAS_PER_BYTE_RAW * GAS_COST_CORRECTION;
+    COMPILE_GAS_PER_BYTE_RAW * GAS_COST_CORRECTION / 100;
 const WASM_CODE_VALIDATION_GAS_PER_BYTE: u64 =
     WASM_CODE_VALIDATION_GAS_PER_BYTE_RAW * GAS_COST_CORRECTION;
 const WRAPPER_TX_VALIDATION_GAS: u64 =
@@ -347,7 +349,6 @@ pub trait GasMetering {
 
     /// Add the compiling cost proportionate to the code length
     fn add_compiling_gas(&mut self, bytes_len: u64) -> Result<()> {
-        // FIXME: need discount here
         self.consume(
             bytes_len
                 .checked_mul(COMPILE_GAS_PER_BYTE)
@@ -357,7 +358,6 @@ pub trait GasMetering {
 
     /// Add the gas for loading the wasm code from storage
     fn add_wasm_load_from_storage_gas(&mut self, bytes_len: u64) -> Result<()> {
-        // FIXME: need discount here
         self.consume(
             bytes_len
                 .checked_mul(STORAGE_ACCESS_GAS_PER_BYTE)
