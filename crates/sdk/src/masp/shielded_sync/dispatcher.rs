@@ -192,7 +192,13 @@ impl<Spawner> DispatcherTasks<Spawner> {
             };
             Some(message)
         } else {
-            None
+            // NB: queueing a message to a channel doesn't mean we
+            // actually consume it. we must wait for the channel to
+            // be drained when all tasks have returned. the spin loop
+            // hint below helps the compiler to optimize the `try_recv`
+            // branch, to avoid maxing out the cpu.
+            std::hint::spin_loop();
+            self.message_receiver.try_recv().ok()
         }
     }
 }
