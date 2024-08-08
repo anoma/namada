@@ -43,7 +43,8 @@ pub async fn aux_signing_data(
     default_signer: Option<Address>,
 ) -> Result<signing::SigningTxData, error::Error> {
     let signing_data =
-        signing::aux_signing_data(context, args, owner, default_signer).await?;
+        signing::aux_signing_data(context, args, owner, default_signer, vec![])
+            .await?;
 
     if args.disposable_signing_key {
         if !(args.dry_run || args.dry_run_wrapper) {
