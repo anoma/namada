@@ -295,25 +295,24 @@ where
 }
 
 /// Return the necessary data regarding an account to be able to generate a
-/// multisignature section
+/// signature section
 pub async fn aux_signing_data(
     context: &impl Namada,
     args: &args::Tx<SdkTypes>,
     owner: Option<Address>,
     default_signer: Option<Address>,
+    extra_public_keys: Vec<common::PublicKey>,
 ) -> Result<SigningTxData, Error> {
-    let public_keys = if owner.is_some() || args.wrapper_fee_payer.is_none() {
-        tx_signers(context, args, default_signer.clone()).await?
-    } else {
-        vec![]
-    };
+    let mut public_keys =
+        tx_signers(context, args, default_signer.clone()).await?;
+    public_keys.extend(extra_public_keys.clone());
 
     let (account_public_keys_map, threshold) = match &owner {
         Some(owner @ Address::Established(_)) => {
             let account =
                 rpc::get_account_info(context.client(), owner).await?;
             if let Some(account) = account {
-                (Some(account.public_keys_map), account.threshold)
+                (Some(account.clone().public_keys_map), account.threshold)
             } else {
                 return Err(Error::from(TxSubmitError::InvalidAccount(
                     owner.encode(),
@@ -332,7 +331,10 @@ pub async fn aux_signing_data(
                 )));
             }
         },
-        None => (None, 0u8),
+        None => (
+            Some(AccountPublicKeysMap::from_iter(public_keys.clone())),
+            0u8,
+        ),
     };
 
     let fee_payer = if args.disposable_signing_key {
@@ -355,47 +357,6 @@ pub async fn aux_signing_data(
         owner,
         public_keys,
         threshold,
-        account_public_keys_map,
-        fee_payer,
-    })
-}
-
-/// Initialize validator signing data
-pub async fn init_validator_signing_data(
-    context: &impl Namada,
-    args: &args::Tx<SdkTypes>,
-    validator_keys: Vec<common::PublicKey>,
-) -> Result<SigningTxData, Error> {
-    let mut public_keys = if args.wrapper_fee_payer.is_none() {
-        tx_signers(context, args, None).await?
-    } else {
-        vec![]
-    };
-    public_keys.extend(validator_keys.clone());
-
-    let account_public_keys_map =
-        Some(AccountPublicKeysMap::from_iter(validator_keys));
-
-    let fee_payer = if args.disposable_signing_key {
-        context
-            .wallet_mut()
-            .await
-            .gen_disposable_signing_key(&mut OsRng)
-            .to_public()
-    } else {
-        match &args.wrapper_fee_payer {
-            Some(keypair) => keypair.clone(),
-            None => public_keys
-                .first()
-                .ok_or(TxSubmitError::InvalidFeePayer)?
-                .clone(),
-        }
-    };
-
-    Ok(SigningTxData {
-        owner: None,
-        public_keys,
-        threshold: 0,
         account_public_keys_map,
         fee_payer,
     })
