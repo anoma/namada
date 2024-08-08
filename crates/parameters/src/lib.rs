@@ -622,18 +622,9 @@ where
         last_block_height,
         num_blocks_to_read,
     )?;
-    let max_block_time_estimate =
-        estimate_max_block_time_from_parameters(storage)?;
 
-    Ok(maybe_max_block_time.map_or(
-        max_block_time_estimate,
-        |max_block_time_over_num_blocks_to_read| {
-            std::cmp::max(
-                max_block_time_over_num_blocks_to_read,
-                max_block_time_estimate,
-            )
-        },
-    ))
+    maybe_max_block_time
+        .map_or_else(|| estimate_max_block_time_from_parameters(storage), Ok)
 }
 
 #[cfg(test)]
