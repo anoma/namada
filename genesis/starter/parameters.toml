@@ -21,7 +21,7 @@ masp_epoch_multiplier = 2
 # Max gas for block
 max_block_gas = 15_000_000
 # Masp fee payment gas limit
-masp_fee_payment_gas_limit = 150_000
+masp_fee_payment_gas_limit = 200_000
 # Gas scale
 gas_scale = 10_000
 
