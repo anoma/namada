@@ -759,6 +759,14 @@ where
             native_token,
         ))
     }
+
+    /// Clone the rpc client.
+    pub fn clone_client(&self) -> C
+    where
+        C: Clone,
+    {
+        self.client.clone()
+    }
 }
 
 #[cfg_attr(feature = "async-send", async_trait::async_trait)]
