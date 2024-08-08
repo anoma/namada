@@ -220,6 +220,7 @@ pub async fn sign<N: Namada>(
         }
         match args.device_transport {
             DeviceTransport::Hid => {
+                tracing::info!("Signing over HID");
                 let hidapi = HidApi::new().map_err(|err| {
                     error::Error::Other(format!(
                         "Failed to create Hidapi: {}",
@@ -238,6 +239,7 @@ pub async fn sign<N: Namada>(
                 sign!(app);
             }
             DeviceTransport::Tcp => {
+                tracing::info!("Signing over TCP");
                 let app = NamadaApp::new(NamadaAppTcpTransport);
                 sign!(app);
             }
