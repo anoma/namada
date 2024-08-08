@@ -52,9 +52,8 @@ pub enum GasParseError {
 
 // RAW GAS COSTS
 // ================================================================================
-// These are the raw gas costs exctracted from the benchmarks.
+// The raw gas costs exctracted from the benchmarks.
 //
-
 const COMPILE_GAS_PER_BYTE_RAW: u64 = 1_664;
 const WASM_CODE_VALIDATION_GAS_PER_BYTE_RAW: u64 = 59;
 const WRAPPER_TX_VALIDATION_GAS_RAW: u64 = 1_526_700;
@@ -122,7 +121,7 @@ const MASP_OUTPUT_CHECK_GAS_RAW: u64 = 204_430;
 const MASP_FINAL_CHECK_GAS_RAW: u64 = 43;
 // ================================================================================
 
-// This is a correction factor for non-WASM-opcodes costs. We can see that the
+// A correction factor for non-WASM-opcodes costs. We can see that the
 // gas cost we get for wasm codes (txs and vps) is much greater than what we
 // would expect from the benchmarks. This is likely due to some imperfections in
 // the injection tool but, most importantly, to the fact that the code we end up
@@ -134,13 +133,10 @@ const MASP_FINAL_CHECK_GAS_RAW: u64 = 43;
 // prefer to go with the latter.
 const GAS_COST_CORRECTION: u64 = 5;
 
-// FIXME: actually, can we use a macro for this?
-
 // ADJUSTED GAS COSTS
 // ================================================================================
-// These are the gas costs adjusted for the correction factor.
+// The gas costs adjusted for the correction factor.
 //
-
 const PARALLEL_GAS_DIVIDER: u64 = 1;
 // The compilation cost is reduced by a factor to compensate for the (most
 // likely) presence of the cache
@@ -567,19 +563,12 @@ impl VpGasMeter {
             current_gas: Gas::default(),
         }
     }
-
-    // FIXME: remove
-    pub fn get_vp_consumed_gas(&self) -> Gas {
-        self.current_gas
-    }
 }
 
 impl VpsGas {
     /// Set the gas cost from a VP run. It consumes the [`VpGasMeter`]
     /// instance which shouldn't be accessed passed this point.
     pub fn set(&mut self, vp_gas_meter: VpGasMeter) -> Result<()> {
-        // FIXME: remove
-        eprintln!("GAS USED ONLY BY VP: {:#?}", vp_gas_meter.current_gas);
         if vp_gas_meter.current_gas > self.max {
             self.rest.push(self.max);
             self.max = vp_gas_meter.current_gas;

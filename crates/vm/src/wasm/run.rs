@@ -759,10 +759,6 @@ where
         }
         Commitment::Id(code) => {
             let tx_len = code.len() as u64;
-            // FIXME: can remove this gas? I can remove it only if I find a way
-            // to discriminate between normal txs and governacne txs. For
-            // governacne txs I run this piece of code, for the others I don't
-            // and I don't need to charge the gas
             gas_meter
                 .borrow_mut()
                 .add_wasm_validation_gas(tx_len)
