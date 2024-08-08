@@ -82,9 +82,11 @@ impl MockDB {
     where
         T: BorshSerialize,
     {
+        println!("DO write_value");
         self.0
             .borrow_mut()
             .insert(key.as_ref().to_string(), encode(value));
+        println!("DONE write_value");
     }
 }
 
@@ -250,9 +252,11 @@ impl DB for MockDB {
                 self.write_value(root_key, merkle_tree_stores.root(st));
                 let store_key =
                     format!("{key_prefix}/{MERKLE_TREE_STORE_KEY_SEGMENT}");
+                println!("DO insert merkle tree stores");
                 self.0
                     .borrow_mut()
                     .insert(store_key, merkle_tree_stores.store(st).encode());
+                println!("DONE insert merkle tree stores");
             }
         }
         // Block header
@@ -431,6 +435,7 @@ impl DB for MockDB {
             Key::parse(SUBSPACE_CF).map_err(Error::KeyError)?.join(key);
         let current_len = value.len() as i64;
         let diff_prefix = Key::from(height.to_db_key());
+        println!("DO batch_write_subspace_val");
         let mut db = self.0.borrow_mut();
 
         // Diffs - Note that this is different from RocksDB that has a separate
@@ -478,6 +483,7 @@ impl DB for MockDB {
             }
         }
 
+        println!("DONE batch_write_subspace_val");
         Ok(size_diff)
     }
 
@@ -491,6 +497,7 @@ impl DB for MockDB {
         let subspace_key =
             Key::parse(SUBSPACE_CF).map_err(Error::KeyError)?.join(key);
         let diff_prefix = Key::from(height.to_db_key());
+        println!("DO batch_delete_subspace_val");
         let mut db = self.0.borrow_mut();
 
         // Diffs - Note that this is different from RocksDB that has a separate
@@ -526,6 +533,7 @@ impl DB for MockDB {
             None => 0,
         };
 
+        println!("DONE batch_delete_subspace_val");
         Ok(size_diff)
     }
 
@@ -537,9 +545,11 @@ impl DB for MockDB {
     ) -> Result<()> {
         let key_prefix = tree_key_prefix_with_epoch(store_type, epoch);
         let root_key = format!("{key_prefix}/{MERKLE_TREE_ROOT_KEY_SEGMENT}");
+        println!("DO prune_merkle_tree_store");
         self.0.borrow_mut().remove(&root_key);
         let store_key = format!("{key_prefix}/{MERKLE_TREE_STORE_KEY_SEGMENT}");
         self.0.borrow_mut().remove(&store_key);
+        println!("DONE prune_merkle_tree_store");
         Ok(())
     }
 
@@ -560,12 +570,15 @@ impl DB for MockDB {
             .map_err(Error::KeyError)?
             .join(key);
 
-        match self.0.borrow_mut().insert(key.to_string(), vec![]) {
+        println!("DO write_replay_protection_entry");
+        let res = match self.0.borrow_mut().insert(key.to_string(), vec![]) {
             Some(_) => Err(Error::DBError(format!(
                 "Replay protection key {key} already in storage"
             ))),
             None => Ok(()),
-        }
+        };
+        println!("DONE write_replay_protection_entry");
+        res
     }
 
     fn move_current_replay_protection_entries(
@@ -597,8 +610,10 @@ impl DB for MockDB {
                 .push(&hash)
                 .map_err(Error::KeyError)?;
 
+            println!("DO move replay protection");
             self.0.borrow_mut().remove(&current_key.to_string());
             self.0.borrow_mut().insert(key.to_string(), vec![]);
+            println!("DONE move replay protection");
         }
 
         Ok(())
