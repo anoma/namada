@@ -522,8 +522,7 @@ async fn run_aux_setup(
     wasm_dir: &PathBuf,
     scheduled_migration: Option<ScheduledMigration>,
 ) -> RunAuxSetup {
-    // Prefetch needed wasm artifacts
-    wasm_loader::pre_fetch_wasm(wasm_dir).await;
+    wasm_loader::validate_wasm_artifacts(wasm_dir).await;
 
     // Find the system available memory
     let available_memory_bytes = Lazy::new(|| {

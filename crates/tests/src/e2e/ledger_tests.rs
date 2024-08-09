@@ -2143,13 +2143,7 @@ fn test_sync_chain() -> Result<()> {
     // Setup the chain
     let mut join_network = setup::run_cmd(
         Bin::Client,
-        [
-            "utils",
-            "join-network",
-            "--chain-id",
-            chain_id_raw.as_str(),
-            "--dont-prefetch-wasm",
-        ],
+        ["utils", "join-network", "--chain-id", chain_id_raw.as_str()],
         Some(60),
         &test.working_dir,
         base_dir,

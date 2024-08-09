@@ -54,7 +54,6 @@ pub async fn join_network(
         chain_id,
         genesis_validator,
         pre_genesis_path,
-        dont_prefetch_wasm,
         allow_duplicate_ip,
         add_persistent_peers,
     }: args::JoinNetwork,
@@ -250,9 +249,8 @@ pub async fn join_network(
         config.wasm_dir = wasm_dir_full;
     }
 
-    if !dont_prefetch_wasm {
-        fetch_wasms_aux(&chain_id, &config.wasm_dir).await;
-    }
+    // Validate the wasm artifacts checksums
+    validate_wasm_artifacts_aux(&chain_id, &config.wasm_dir).await;
 
     // Save the config and the wallet
     config.write(&base_dir, &chain_id, true).unwrap();
@@ -261,9 +259,9 @@ pub async fn join_network(
     println!("Successfully configured for chain ID {chain_id}");
 }
 
-async fn fetch_wasms_aux(chain_id: &ChainId, wasm_dir: &Path) {
-    println!("Fetching missing wasms for chain ID {chain_id}...");
-    wasm_loader::pre_fetch_wasm(wasm_dir).await;
+async fn validate_wasm_artifacts_aux(chain_id: &ChainId, wasm_dir: &Path) {
+    println!("Validating wasms artifacts for chain ID {chain_id}...");
+    wasm_loader::validate_wasm_artifacts(wasm_dir).await;
 }
 
 pub fn validate_wasm(args::ValidateWasm { code_path }: args::ValidateWasm) {
