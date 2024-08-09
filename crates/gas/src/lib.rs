@@ -50,74 +50,167 @@ pub enum GasParseError {
     Overflow,
 }
 
-const COMPILE_GAS_PER_BYTE: u64 = 1_955;
-const PARALLEL_GAS_DIVIDER: u64 = 10;
-const WASM_CODE_VALIDATION_GAS_PER_BYTE: u64 = 67;
-const WRAPPER_TX_VALIDATION_GAS: u64 = 3_245_500;
+// RAW GAS COSTS
+// ================================================================================
+// The raw gas costs exctracted from the benchmarks.
+//
+const COMPILE_GAS_PER_BYTE_RAW: u64 = 1_664;
+const WASM_CODE_VALIDATION_GAS_PER_BYTE_RAW: u64 = 59;
+const WRAPPER_TX_VALIDATION_GAS_RAW: u64 = 1_526_700;
 // There's no benchmark to calculate the cost of storage occupation, so we
 // define it as the cost of storage latency (which is needed for any storage
 // operation and it's based on actual execution time), plus the same cost
 // multiplied by an arbitrary factor that represents the higher cost of storage
 // space as a resource. This way, the storage occupation cost is not completely
 // free-floating but it's tied to the other costs
-const STORAGE_OCCUPATION_GAS_PER_BYTE: u64 =
-    PHYSICAL_STORAGE_LATENCY_PER_BYTE * (1 + 10);
+const STORAGE_OCCUPATION_GAS_PER_BYTE_RAW: u64 =
+    PHYSICAL_STORAGE_LATENCY_PER_BYTE_RAW * (1 + 10);
 // NOTE: this accounts for the latency of a physical drive access. For read
 // accesses we have no way to tell if data was in cache or in storage. Moreover,
 // the latency shouldn't really be accounted per single byte but rather per
 // storage blob but this would make it more tedious to compute gas in the
 // codebase. For these two reasons we just set an arbitrary value (based on
 // actual SSDs latency) per byte here
-const PHYSICAL_STORAGE_LATENCY_PER_BYTE: u64 = 1_000_000;
+const PHYSICAL_STORAGE_LATENCY_PER_BYTE_RAW: u64 = 20;
 // This is based on the global average bandwidth
-const NETWORK_TRANSMISSION_GAS_PER_BYTE: u64 = 848;
+const NETWORK_TRANSMISSION_GAS_PER_BYTE_RAW: u64 = 848;
 
+// The cost of accessing data from memory (both read and write mode), per byte
+const MEMORY_ACCESS_GAS_PER_BYTE_RAW: u64 = 39;
+// The cost of accessing data from storage, per byte
+const STORAGE_ACCESS_GAS_PER_BYTE_RAW: u64 =
+    93 + PHYSICAL_STORAGE_LATENCY_PER_BYTE_RAW;
+// The cost of writing data to storage, per byte
+const STORAGE_WRITE_GAS_PER_BYTE_RAW: u64 = MEMORY_ACCESS_GAS_PER_BYTE_RAW
+    + 17_583
+    + STORAGE_OCCUPATION_GAS_PER_BYTE_RAW;
+// The cost of removing data from storage, per byte
+const STORAGE_DELETE_GAS_PER_BYTE_RAW: u64 = MEMORY_ACCESS_GAS_PER_BYTE_RAW
+    + 17_583
+    + PHYSICAL_STORAGE_LATENCY_PER_BYTE_RAW;
+// The cost of verifying a single signature of a transaction
+const VERIFY_TX_SIG_GAS_RAW: u64 = 435_190;
+// The cost for requesting one more page in wasm (64KiB)
+const WASM_MEMORY_PAGE_GAS_RAW: u64 =
+    MEMORY_ACCESS_GAS_PER_BYTE_RAW * 64 * 1_024;
+// The cost to validate an Ibc action
+const IBC_ACTION_VALIDATE_GAS_RAW: u64 = 290_935;
+// The cost to execute an Ibc action
+const IBC_ACTION_EXECUTE_GAS_RAW: u64 = 1_685_733;
+// The cost of masp sig verification
+const MASP_VERIFY_SIG_GAS_RAW: u64 = 1_908_750;
+// The fixed cost of spend note verification
+const MASP_FIXED_SPEND_GAS_RAW: u64 = 59_521_000;
+// The variable cost of spend note verification
+const MASP_VARIABLE_SPEND_GAS_RAW: u64 = 9_849_000;
+// The fixed cost of convert note verification
+const MASP_FIXED_CONVERT_GAS_RAW: u64 = 46_197_000;
+// The variable cost of convert note verification
+const MASP_VARIABLE_CONVERT_GAS_RAW: u64 = 10_245_000;
+// The fixed cost of output note verification
+const MASP_FIXED_OUTPUT_GAS_RAW: u64 = 53_439_000;
+// The variable cost of output note verification
+const MASP_VARIABLE_OUTPUT_GAS_RAW: u64 = 9_710_000;
+// The cost to process a masp spend note in the bundle
+const MASP_SPEND_CHECK_GAS_RAW: u64 = 405_070;
+// The cost to process a masp convert note in the bundle
+const MASP_CONVERT_CHECK_GAS_RAW: u64 = 188_590;
+// The cost to process a masp output note in the bundle
+const MASP_OUTPUT_CHECK_GAS_RAW: u64 = 204_430;
+// The cost to run the final masp check in the bundle
+const MASP_FINAL_CHECK_GAS_RAW: u64 = 43;
+// ================================================================================
+
+// A correction factor for non-WASM-opcodes costs. We can see that the
+// gas cost we get for wasm codes (txs and vps) is much greater than what we
+// would expect from the benchmarks. This is likely due to some imperfections in
+// the injection tool but, most importantly, to the fact that the code we end up
+// executing is an optimized version of the one we instrument. Therefore we
+// provide this factor to correct the costs of non-WASM gas based on the avarage
+// speedup we can observe. NOTE: we should really reduce the gas costs of WASM
+// opcodes instead of increasing the gas costs of non-WASM gas, but the former
+// would involve some complicated adjustments for host function calls so we
+// prefer to go with the latter.
+const GAS_COST_CORRECTION: u64 = 5;
+
+// ADJUSTED GAS COSTS
+// ================================================================================
+// The gas costs adjusted for the correction factor.
+//
+const PARALLEL_GAS_DIVIDER: u64 = 1;
+// The compilation cost is reduced by a factor to compensate for the (most
+// likely) presence of the cache
+const COMPILE_GAS_PER_BYTE: u64 =
+    COMPILE_GAS_PER_BYTE_RAW * GAS_COST_CORRECTION / 100;
+const WASM_CODE_VALIDATION_GAS_PER_BYTE: u64 =
+    WASM_CODE_VALIDATION_GAS_PER_BYTE_RAW * GAS_COST_CORRECTION;
+const WRAPPER_TX_VALIDATION_GAS: u64 =
+    WRAPPER_TX_VALIDATION_GAS_RAW * GAS_COST_CORRECTION;
+const STORAGE_OCCUPATION_GAS_PER_BYTE: u64 =
+    STORAGE_OCCUPATION_GAS_PER_BYTE_RAW * GAS_COST_CORRECTION;
+const NETWORK_TRANSMISSION_GAS_PER_BYTE: u64 =
+    NETWORK_TRANSMISSION_GAS_PER_BYTE_RAW * GAS_COST_CORRECTION;
 /// The cost of accessing data from memory (both read and write mode), per byte
-pub const MEMORY_ACCESS_GAS_PER_BYTE: u64 = 104;
+pub const MEMORY_ACCESS_GAS_PER_BYTE: u64 =
+    MEMORY_ACCESS_GAS_PER_BYTE_RAW * GAS_COST_CORRECTION;
 /// The cost of accessing data from storage, per byte
 pub const STORAGE_ACCESS_GAS_PER_BYTE: u64 =
-    163 + PHYSICAL_STORAGE_LATENCY_PER_BYTE;
+    STORAGE_ACCESS_GAS_PER_BYTE_RAW * GAS_COST_CORRECTION;
 /// The cost of writing data to storage, per byte
 pub const STORAGE_WRITE_GAS_PER_BYTE: u64 =
-    MEMORY_ACCESS_GAS_PER_BYTE + 69_634 + STORAGE_OCCUPATION_GAS_PER_BYTE;
+    STORAGE_WRITE_GAS_PER_BYTE_RAW * GAS_COST_CORRECTION;
 /// The cost of removing data from storage, per byte
 pub const STORAGE_DELETE_GAS_PER_BYTE: u64 =
-    MEMORY_ACCESS_GAS_PER_BYTE + 69_634 + PHYSICAL_STORAGE_LATENCY_PER_BYTE;
+    STORAGE_DELETE_GAS_PER_BYTE_RAW * GAS_COST_CORRECTION;
 /// The cost of verifying a single signature of a transaction
-pub const VERIFY_TX_SIG_GAS: u64 = 594_290;
+pub const VERIFY_TX_SIG_GAS: u64 = VERIFY_TX_SIG_GAS_RAW * GAS_COST_CORRECTION;
 /// The cost for requesting one more page in wasm (64KiB)
 #[allow(clippy::cast_possible_truncation)] // const in u32 range
 pub const WASM_MEMORY_PAGE_GAS: u32 =
-    MEMORY_ACCESS_GAS_PER_BYTE as u32 * 64 * 1_024;
+    (WASM_MEMORY_PAGE_GAS_RAW * GAS_COST_CORRECTION) as u32;
 /// The cost to validate an Ibc action
-pub const IBC_ACTION_VALIDATE_GAS: u64 = 1_472_023;
+pub const IBC_ACTION_VALIDATE_GAS: u64 =
+    IBC_ACTION_VALIDATE_GAS_RAW * GAS_COST_CORRECTION;
 /// The cost to execute an Ibc action
-pub const IBC_ACTION_EXECUTE_GAS: u64 = 3_678_745;
+pub const IBC_ACTION_EXECUTE_GAS: u64 =
+    IBC_ACTION_EXECUTE_GAS_RAW * GAS_COST_CORRECTION;
 /// The cost of masp sig verification
-pub const MASP_VERIFY_SIG_GAS: u64 = 5_443_000;
+pub const MASP_VERIFY_SIG_GAS: u64 =
+    MASP_VERIFY_SIG_GAS_RAW * GAS_COST_CORRECTION;
 /// The fixed cost of spend note verification
-pub const MASP_FIXED_SPEND_GAS: u64 = 87_866_000;
+pub const MASP_FIXED_SPEND_GAS: u64 =
+    MASP_FIXED_SPEND_GAS_RAW * GAS_COST_CORRECTION;
 /// The variable cost of spend note verification
-pub const MASP_VARIABLE_SPEND_GAS: u64 = 14_384_000;
+pub const MASP_VARIABLE_SPEND_GAS: u64 =
+    MASP_VARIABLE_SPEND_GAS_RAW * GAS_COST_CORRECTION;
 /// The fixed cost of convert note verification
-pub const MASP_FIXED_CONVERT_GAS: u64 = 70_308_000;
+pub const MASP_FIXED_CONVERT_GAS: u64 =
+    MASP_FIXED_CONVERT_GAS_RAW * GAS_COST_CORRECTION;
 /// The variable cost of convert note verification
-pub const MASP_VARIABLE_CONVERT_GAS: u64 = 12_664_000;
+pub const MASP_VARIABLE_CONVERT_GAS: u64 =
+    MASP_VARIABLE_CONVERT_GAS_RAW * GAS_COST_CORRECTION;
 /// The fixed cost of output note verification
-pub const MASP_FIXED_OUTPUT_GAS: u64 = 78_203_000;
+pub const MASP_FIXED_OUTPUT_GAS: u64 =
+    MASP_FIXED_OUTPUT_GAS_RAW * GAS_COST_CORRECTION;
 /// The variable cost of output note verification
-pub const MASP_VARIABLE_OUTPUT_GAS: u64 = 14_586_000;
+pub const MASP_VARIABLE_OUTPUT_GAS: u64 =
+    MASP_VARIABLE_OUTPUT_GAS_RAW * GAS_COST_CORRECTION;
 /// The cost to process a masp spend note in the bundle
-pub const MASP_SPEND_CHECK_GAS: u64 = 479_730;
+pub const MASP_SPEND_CHECK_GAS: u64 =
+    MASP_SPEND_CHECK_GAS_RAW * GAS_COST_CORRECTION;
 /// The cost to process a masp convert note in the bundle
-pub const MASP_CONVERT_CHECK_GAS: u64 = 173_570;
+pub const MASP_CONVERT_CHECK_GAS: u64 =
+    MASP_CONVERT_CHECK_GAS_RAW * GAS_COST_CORRECTION;
 /// The cost to process a masp output note in the bundle
-pub const MASP_OUTPUT_CHECK_GAS: u64 = 310_260;
+pub const MASP_OUTPUT_CHECK_GAS: u64 =
+    MASP_OUTPUT_CHECK_GAS_RAW * GAS_COST_CORRECTION;
 /// The cost to run the final masp check in the bundle
-pub const MASP_FINAL_CHECK_GAS: u64 = 44;
+pub const MASP_FINAL_CHECK_GAS: u64 =
+    MASP_FINAL_CHECK_GAS_RAW * GAS_COST_CORRECTION;
 /// Gas divider specific for the masp vp. Only allocates half of the cores to
 /// the masp vp since we can expect the other half to be busy with other vps
-pub const MASP_PARALLEL_GAS_DIVIDER: u64 = PARALLEL_GAS_DIVIDER / 2;
+pub const MASP_PARALLEL_GAS_DIVIDER: u64 = 1;
+// ================================================================================
 
 /// Gas module result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;

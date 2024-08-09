@@ -84,6 +84,13 @@ fn process_tx(c: &mut Criterion) {
             )| {
                 assert_eq!(
                     // Assert that the wrapper transaction was valid
+                    // NOTE: this function invovles a loop on the inner txs to
+                    // check that they are allowlisted. The cost of that should
+                    // technically depend on the number of inner txs and should
+                    // be computed at runtime. From some tests though, we can
+                    // see that the cost of that operation is minimale (200
+                    // ns), so we can just approximate it to a constant cost
+                    // included in this benchmark
                     shell
                         .check_proposal_tx(
                             &wrapper,
@@ -104,5 +111,5 @@ fn process_tx(c: &mut Criterion) {
     });
 }
 
-criterion_group!(process_wrapper, process_tx);
+criterion_group!(process_wrapper, process_tx,);
 criterion_main!(process_wrapper);

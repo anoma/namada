@@ -1968,7 +1968,7 @@ fn submit_ibc_tx(
             "--gas-token",
             NAM,
             "--gas-limit",
-            "150000",
+            "200000",
             "--node",
             &rpc
         ]),
@@ -2017,7 +2017,7 @@ fn transfer(
         "--port-id",
         &port_id,
         "--gas-limit",
-        "150000",
+        "200000",
         "--node",
         &rpc,
     ]);
@@ -2165,7 +2165,7 @@ fn propose_inflation(test: &Test) -> Result<Epoch> {
         "--data-path",
         proposal_json_path.to_str().unwrap(),
         "--gas-limit",
-        "2000000",
+        "4000000",
         "--node",
         &rpc,
     ]);
