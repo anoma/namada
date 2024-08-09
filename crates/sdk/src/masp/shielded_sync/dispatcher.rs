@@ -234,6 +234,7 @@ pub struct Config<T> {
     pub channel_buffer_size: usize,
     pub fetched_tracker: T,
     pub scanned_tracker: T,
+    pub applied_tracker: T,
 }
 
 pub struct Dispatcher<S, M, U, T>
@@ -339,20 +340,20 @@ where
             self.handle_incoming_message(message);
         }
 
-        self.config.fetched_tracker.finish();
-        self.config.scanned_tracker.finish();
-
         match std::mem::replace(&mut self.state, DispatcherState::Normal) {
             DispatcherState::Errored(err) => {
+                self.finish_progress_bars();
                 self.save_cache().await;
                 Err(err)
             }
             DispatcherState::Interrupted => {
+                self.finish_progress_bars();
                 self.save_cache().await;
                 Ok(None)
             }
             DispatcherState::Normal => {
                 self.apply_cache_to_shielded_context(&initial_state)?;
+                self.finish_progress_bars();
                 self.ctx.save().await.map_err(|err| {
                     Error::Other(format!(
                         "Failed to save the shielded context: {err}"
@@ -362,6 +363,18 @@ where
                 Ok(Some(self.ctx))
             }
         }
+    }
+
+    fn force_redraw_progress_bars(&mut self) {
+        self.config.fetched_tracker.increment_by(0);
+        self.config.scanned_tracker.increment_by(0);
+        self.config.applied_tracker.increment_by(0);
+    }
+
+    fn finish_progress_bars(&mut self) {
+        self.config.fetched_tracker.finish();
+        self.config.scanned_tracker.finish();
+        self.config.applied_tracker.finish();
     }
 
     async fn save_cache(&self) {
@@ -417,6 +430,7 @@ where
                         pa,
                         memo,
                     )?;
+                    self.config.applied_tracker.increment_by(1);
                 }
             }
             self.ctx.save_shielded_spends(&stx_batch);
@@ -535,6 +549,11 @@ where
         self.config
             .scanned_tracker
             .set_upper_limit(self.cache.fetched.len() as u64);
+        self.config.applied_tracker.set_upper_limit(
+            self.cache.trial_decrypted.successful_decryptions() as u64,
+        );
+
+        self.force_redraw_progress_bars();
 
         Ok(initial_state)
     }
@@ -654,6 +673,10 @@ where
             }
             Message::TrialDecrypt(itx, vk, decrypted_data) => {
                 if let ControlFlow::Continue(decrypted_data) = decrypted_data {
+                    self.config.applied_tracker.set_upper_limit(
+                        self.config.applied_tracker.upper_limit()
+                            + decrypted_data.len() as u64,
+                    );
                     self.cache.trial_decrypted.insert(itx, vk, decrypted_data);
                     self.config.scanned_tracker.increment_by(1);
                 }
@@ -851,6 +874,7 @@ mod dispatcher_tests {
             .client(client)
             .fetched_tracker(DevNullProgressBar)
             .scanned_tracker(DevNullProgressBar)
+            .applied_tracker(DevNullProgressBar)
             .build();
         let temp_dir = tempdir().unwrap();
         let utils = FsShieldedUtils {
@@ -960,6 +984,7 @@ mod dispatcher_tests {
         let config = ShieldedSyncConfig::builder()
             .fetched_tracker(DevNullProgressBar)
             .scanned_tracker(DevNullProgressBar)
+            .applied_tracker(DevNullProgressBar)
             .client(client)
             .build();
         let temp_dir = tempdir().unwrap();
@@ -1114,6 +1139,7 @@ mod dispatcher_tests {
         let mut config = ShieldedSyncConfig::builder()
             .fetched_tracker(DevNullProgressBar)
             .scanned_tracker(DevNullProgressBar)
+            .applied_tracker(DevNullProgressBar)
             .client(client)
             .retry_strategy(RetryStrategy::Times(0))
             .build();
@@ -1214,6 +1240,7 @@ mod dispatcher_tests {
         let config = ShieldedSyncConfig::builder()
             .fetched_tracker(DevNullProgressBar)
             .scanned_tracker(DevNullProgressBar)
+            .applied_tracker(DevNullProgressBar)
             .client(client)
             .retry_strategy(RetryStrategy::Times(0))
             .block_batch_size(1)
@@ -1291,6 +1318,7 @@ mod dispatcher_tests {
         let config = ShieldedSyncConfig::builder()
             .fetched_tracker(DevNullProgressBar)
             .scanned_tracker(DevNullProgressBar)
+            .applied_tracker(DevNullProgressBar)
             .client(client)
             .retry_strategy(RetryStrategy::Times(0))
             .block_batch_size(2)

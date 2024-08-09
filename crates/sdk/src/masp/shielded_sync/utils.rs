@@ -44,6 +44,15 @@ pub struct TrialDecrypted {
 }
 
 impl TrialDecrypted {
+    /// Returns the number of successful trial decryptions in cache.
+    pub fn successful_decryptions(&self) -> usize {
+        self.inner
+            .values()
+            .flat_map(|viewing_keys_to_notes| viewing_keys_to_notes.values())
+            .map(|decrypted_notes| decrypted_notes.len())
+            .sum::<usize>()
+    }
+
     /// Get cached notes decrypted with `vk`, indexed at `itx`.
     pub fn get(
         &self,

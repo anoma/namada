@@ -31,10 +31,10 @@ pub async fn syncing<
     sks: &[ExtendedSpendingKey],
     fvks: &[ViewingKey],
 ) -> Result<ShieldedContext<U>, Error> {
-    let (fetched_bar, scanned_bar) = {
+    let (fetched_bar, scanned_bar, applied_bar) = {
         #[cfg(any(test, feature = "testing"))]
         {
-            (DevNullProgressBar, DevNullProgressBar)
+            (DevNullProgressBar, DevNullProgressBar, DevNullProgressBar)
         }
 
         #[cfg(not(any(test, feature = "testing")))]
@@ -61,7 +61,18 @@ pub async fn syncing<
                 mininterval = 0.05
             );
 
-            (fetched, scanned)
+            let applied = kdam::tqdm!(
+                total = 0,
+                desc = "applied ",
+                animation = "fillup",
+                position = 2,
+                force_refresh = true,
+                dynamic_ncols = true,
+                miniters = 0,
+                mininterval = 0.05
+            );
+
+            (fetched, scanned, applied)
         }
     };
 
@@ -71,6 +82,7 @@ pub async fn syncing<
                 .client($client)
                 .fetched_tracker(fetched_bar)
                 .scanned_tracker(scanned_bar)
+                .applied_tracker(applied_bar)
                 .wait_for_last_query_height(wait_for_last_query_height)
                 .build();
 

@@ -34,6 +34,7 @@ pub struct ShieldedSyncConfig<M, T> {
     client: M,
     fetched_tracker: T,
     scanned_tracker: T,
+    applied_tracker: T,
     #[builder(default = false)]
     wait_for_last_query_height: bool,
     #[builder(default = RetryStrategy::Forever)]
@@ -97,6 +98,7 @@ where
             dispatcher::Config {
                 fetched_tracker: self.fetched_tracker,
                 scanned_tracker: self.scanned_tracker,
+                applied_tracker: self.applied_tracker,
                 retry_strategy: self.retry_strategy,
                 block_batch_size: self.block_batch_size,
                 channel_buffer_size: self.channel_buffer_size,
