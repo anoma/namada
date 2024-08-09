@@ -12,6 +12,7 @@ wasms += tx_invalid_data
 wasms += tx_memory_limit
 wasms += tx_no_op
 wasms += tx_proposal_code
+wasms += tx_proposal_ibc_client_upgrade
 wasms += tx_proposal_ibc_token_inflation
 wasms += tx_proposal_masp_reward
 wasms += tx_read_storage_key

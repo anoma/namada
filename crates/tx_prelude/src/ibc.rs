@@ -8,7 +8,9 @@ use namada_core::address::Address;
 use namada_core::token::Amount;
 pub use namada_ibc::event::{IbcEvent, IbcEventType};
 pub use namada_ibc::storage::{
-    burn_tokens, is_ibc_key, mint_limit_key, mint_tokens, throughput_limit_key,
+    burn_tokens, client_state_key, is_ibc_key, mint_limit_key, mint_tokens,
+    throughput_limit_key, upgraded_client_state_key,
+    upgraded_consensus_state_key,
 };
 pub use namada_ibc::trace::ibc_token;
 pub use namada_ibc::{

@@ -59,7 +59,7 @@ pub use namada_sdk::ibc::storage::{
     connection_counter_key, connection_key, consensus_state_key, port_key,
 };
 pub use namada_sdk::ibc::trace::ibc_token;
-use namada_sdk::ibc::MsgTransfer;
+use namada_sdk::ibc::{MsgTransfer, COMMITMENT_PREFIX};
 use namada_sdk::parameters::storage::get_epoch_duration_storage_key;
 use namada_sdk::parameters::EpochDuration;
 use namada_sdk::proof_of_stake::test_utils::get_dummy_genesis_validator;
@@ -83,7 +83,6 @@ use crate::tx::*;
 
 const ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
 pub const ANY_DENOMINATION: u8 = token::NATIVE_MAX_DECIMAL_PLACES;
-const COMMITMENT_PREFIX: &[u8] = b"ibc";
 
 pub struct TestIbcVp<'a> {
     pub ibc: IbcVp<'a, TestState, WasmCacheRwAccess>,
@@ -428,7 +427,7 @@ pub fn msg_connection_open_init(client_id: ClientId) -> MsgConnectionOpenInit {
     let counterparty_client_id =
         ClientId::new(&client_type().to_string(), 42).unwrap();
     let commitment_prefix =
-        CommitmentPrefix::try_from(COMMITMENT_PREFIX.to_vec()).unwrap();
+        CommitmentPrefix::from(COMMITMENT_PREFIX.as_bytes().to_vec());
     let counterparty =
         ConnCounterparty::new(counterparty_client_id, None, commitment_prefix);
 
@@ -509,8 +508,7 @@ fn dummy_connection_counterparty() -> ConnCounterparty {
         .expect("invalid client ID");
     let conn_id = ConnectionId::new(12);
     let commitment_prefix =
-        CommitmentPrefix::try_from(COMMITMENT_PREFIX.to_vec())
-            .expect("the prefix should be parsable");
+        CommitmentPrefix::from(COMMITMENT_PREFIX.as_bytes().to_vec());
     ConnCounterparty::new(client_id, Some(conn_id), commitment_prefix)
 }
 

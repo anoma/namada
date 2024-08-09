@@ -9,6 +9,7 @@ members = [
     "tx_memory_limit",
     "tx_no_op",
     "tx_proposal_code",
+    "tx_proposal_ibc_client_upgrade",
     "tx_proposal_ibc_token_inflation",
     "tx_proposal_masp_reward",
     "tx_read_storage_key",
