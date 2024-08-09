@@ -21,7 +21,7 @@ TAG_NAME="v$1"
 git clean -fxd
 
 # update the main workspace crate versions (1 commit)
-HASH_BEFORE=$(git rev-parse HEAD)
+g=$(git rev-parse HEAD)
 cargo release --execute $VERSION
 HASH_AFTER=$(git rev-parse HEAD)
 
@@ -38,13 +38,10 @@ cargo update -w
 git add Cargo.lock
 git commit --fixup=$HASH_AFTER
 cargo release --execute $VERSION
-make all
-git add ../*.wasm
 git commit --fixup=$HASH_AFTER
 
-# build the wasm checksums (1 fixup)
+# add the wasm checksums (1 fixup)
 cd $REPO_ROOT
-make build-wasm-scripts-docker
 git add wasm/checksums.json
 git commit --fixup=$HASH_AFTER
 
