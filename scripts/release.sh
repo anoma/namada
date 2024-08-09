@@ -38,14 +38,6 @@ cargo update -w
 git add Cargo.lock
 git commit --fixup=$HASH_AFTER
 cargo release --execute $VERSION
-make all
-git add ../*.wasm
-git commit --fixup=$HASH_AFTER
-
-# build the wasm checksums (1 fixup)
-cd $REPO_ROOT
-make build-wasm-scripts-docker
-git add wasm/checksums.json
 git commit --fixup=$HASH_AFTER
 
 # update the changelog (1 fixup)
