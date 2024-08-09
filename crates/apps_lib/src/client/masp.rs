@@ -25,6 +25,7 @@ pub async fn syncing<
     mut shielded: ShieldedContext<U>,
     client: C,
     wait_for_last_query_height: bool,
+    max_concurrent_fetches: usize,
     indexer_addr: Option<&str>,
     io: &IO,
     last_query_height: Option<BlockHeight>,
@@ -118,7 +119,12 @@ pub async fn syncing<
             ))
         })?;
 
-        dispatch_client!(IndexerMaspClient::new(client, url, true))?
+        dispatch_client!(IndexerMaspClient::new(
+            client,
+            url,
+            true,
+            max_concurrent_fetches,
+        ))?
     } else {
         display_line!(
             io,
@@ -126,7 +132,9 @@ pub async fn syncing<
             "==== Shielded sync started using ledger client ====".bold()
         );
 
-        dispatch_client!(LedgerMaspClient::new(client))?
+        dispatch_client!(
+            LedgerMaspClient::new(client, max_concurrent_fetches,)
+        )?
     };
 
     Ok(shielded)

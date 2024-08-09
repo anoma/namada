@@ -2133,6 +2133,9 @@ pub struct ShieldedSync<C: NamadaTypes = SdkTypes> {
     pub with_indexer: Option<C::MaspIndexerAddress>,
     /// Wait for the last query height.
     pub wait_for_last_query_height: bool,
+    /// Maximum number of fetch jobs that will ever
+    /// execute concurrently during the shielded sync.
+    pub max_concurrent_fetches: usize,
 }
 
 /// Query PoS commission rate

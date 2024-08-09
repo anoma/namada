@@ -3347,6 +3347,8 @@ pub mod args {
     pub const MASP_EPOCH: ArgOpt<MaspEpoch> = arg_opt("masp-epoch");
     pub const MAX_COMMISSION_RATE_CHANGE: Arg<Dec> =
         arg("max-commission-rate-change");
+    pub const MAX_CONCURRENT_FETCHES: ArgDefault<usize> =
+        arg_default("max-concurrent-fetches", DefaultFn(|| 100));
     pub const MAX_ETH_GAS: ArgOpt<u64> = arg_opt("max_eth-gas");
     pub const MEMO_OPT: ArgOpt<String> = arg_opt("memo");
     pub const MIGRATION_PATH: ArgOpt<PathBuf> = arg_opt("migration-path");
@@ -6578,6 +6580,7 @@ pub mod args {
             let with_indexer = WITH_INDEXER.parse(matches);
             let wait_for_last_query_height =
                 WAIT_FOR_LAST_QUERY_HEIGHT.parse(matches);
+            let max_concurrent_fetches = MAX_CONCURRENT_FETCHES.parse(matches);
             Self {
                 ledger_address,
                 last_query_height,
@@ -6585,6 +6588,7 @@ pub mod args {
                 viewing_keys,
                 with_indexer,
                 wait_for_last_query_height,
+                max_concurrent_fetches,
             }
         }
 
@@ -6610,6 +6614,10 @@ pub mod args {
                     "Wait until the last height to sync is available instead \
                      of returning early from the shielded sync."
                 )))
+                .arg(MAX_CONCURRENT_FETCHES.def().help(wrap!(
+                    "Maximum number of fetch jobs that will ever execute \
+                     concurrently during the shielded sync."
+                )))
         }
     }
 
@@ -6623,6 +6631,7 @@ pub mod args {
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
 
             Ok(ShieldedSync {
+                max_concurrent_fetches: self.max_concurrent_fetches,
                 wait_for_last_query_height: self.wait_for_last_query_height,
                 ledger_address: chain_ctx.get(&self.ledger_address),
                 last_query_height: self.last_query_height,

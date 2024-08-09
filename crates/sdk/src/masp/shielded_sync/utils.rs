@@ -21,9 +21,6 @@ use crate::masp::{
 };
 use crate::queries::Client;
 
-#[cfg(not(target_family = "wasm"))]
-const MAX_CONCURRENT_REQUESTS: usize = 100;
-
 /// Type alias for convenience and profit
 pub type IndexedNoteData = BTreeMap<IndexedTx, Vec<Transaction>>;
 
@@ -300,11 +297,11 @@ impl<C> Clone for LedgerMaspClient<C> {
 impl<C> LedgerMaspClient<C> {
     /// Create a new [`MaspClient`] given an rpc client.
     #[inline(always)]
-    pub fn new(client: C) -> Self {
+    pub fn new(client: C, max_concurrent_fetches: usize) -> Self {
         Self {
             inner: Arc::new(LedgerMaspClientInner {
                 client,
-                semaphore: Semaphore::new(MAX_CONCURRENT_REQUESTS),
+                semaphore: Semaphore::new(max_concurrent_fetches),
             }),
         }
     }
@@ -466,10 +463,11 @@ impl IndexerMaspClient {
         client: reqwest::Client,
         indexer_api: reqwest::Url,
         using_block_index: bool,
+        max_concurrent_fetches: usize,
     ) -> Self {
         let shared = Arc::new(IndexerMaspClientShared {
             indexer_api,
-            semaphore: Semaphore::new(MAX_CONCURRENT_REQUESTS),
+            semaphore: Semaphore::new(max_concurrent_fetches),
             block_index: {
                 let mut index = init_once::InitOnce::new();
                 if !using_block_index {

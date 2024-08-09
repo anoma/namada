@@ -365,6 +365,7 @@ impl CliApi {
                             chain_ctx.shielded,
                             client,
                             args.wait_for_last_query_height,
+                            args.max_concurrent_fetches,
                             indexer_addr.as_ref().map(|s| s.as_ref()),
                             &io,
                             args.last_query_height,

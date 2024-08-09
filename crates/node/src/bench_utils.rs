@@ -1172,6 +1172,7 @@ impl BenchShieldedCtx {
                 self.shielded,
                 self.shell.clone(),
                 false,
+                100,
                 None,
                 &StdIo,
                 None,
