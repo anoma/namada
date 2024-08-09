@@ -15,7 +15,8 @@ use namada_vm::wasm::TxCache;
 // Benchmarks the validation of a single signature on a single `Section` of a
 // transaction
 fn tx_section_signature_validation(c: &mut Criterion) {
-    let shell = BenchShell::default();
+    let bench_shell = BenchShell::default();
+    let shell = bench_shell.read();
     let transfer_data = Transfer::default()
         .transfer(
             defaults::albert_address(),
@@ -82,17 +83,21 @@ fn compile_wasm(c: &mut Criterion) {
         group.bench_function(format!("Wasm: {wasm}, size: {len}"), |b| {
             b.iter_batched_ref(
                 || {
-                    let mut shell = BenchShell::default();
+                    let bench_shell = BenchShell::default();
                     // Re-initialize the tx cache to make sure we are not
                     // reading the precompiled modules from there
                     let tempdir = tempfile::tempdir().unwrap();
-                    let path = tempdir.path().canonicalize().unwrap();
-                    shell.tx_wasm_cache = TxCache::new(path, 50 * 1024 * 1024);
-
-                    (shell, tempdir)
+                    {
+                        let mut shell = bench_shell.write();
+                        let path = tempdir.path().canonicalize().unwrap();
+                        shell.tx_wasm_cache =
+                            TxCache::new(path, 50 * 1024 * 1024);
+                    }
+                    (bench_shell, tempdir)
                 },
                 |(shell, _tempdir)| {
                     shell
+                        .write()
                         .tx_wasm_cache
                         .compile_or_fetch(&wasm_code)
                         .unwrap()
@@ -178,7 +183,8 @@ fn generate_random_keys_sized() -> Vec<(String, u64)> {
 
 fn write_log_read(c: &mut Criterion) {
     let mut group = c.benchmark_group("write_log_read");
-    let mut shell = BenchShell::default();
+    let bench_shell = BenchShell::default();
+    let mut shell = bench_shell.write();
 
     for (key, value_len) in generate_random_keys_sized() {
         let key = storage::Key::parse(key).unwrap();
@@ -209,7 +215,8 @@ fn write_log_read(c: &mut Criterion) {
 
 fn storage_read(c: &mut Criterion) {
     let mut group = c.benchmark_group("storage_read");
-    let mut shell = BenchShell::default();
+    let bench_shell = BenchShell::default();
+    let mut shell = bench_shell.write();
 
     for (key, value_len) in generate_random_keys_sized() {
         let key = storage::Key::parse(key).unwrap();
@@ -243,7 +250,8 @@ fn storage_read(c: &mut Criterion) {
 
 fn write_log_write(c: &mut Criterion) {
     let mut group = c.benchmark_group("write_log_write");
-    let mut shell = BenchShell::default();
+    let bench_shell = BenchShell::default();
+    let mut shell = bench_shell.write();
 
     for (key, value_len) in generate_random_keys_sized() {
         let key = storage::Key::parse(key).unwrap();
@@ -278,7 +286,8 @@ fn write_log_write(c: &mut Criterion) {
 
 fn storage_write(c: &mut Criterion) {
     let mut group = c.benchmark_group("storage_write");
-    let mut shell = BenchShell::default();
+    let bench_shell = BenchShell::default();
+    let mut shell = bench_shell.write();
 
     for (key, value_len) in generate_random_keys_sized() {
         let key = storage::Key::parse(key).unwrap();

@@ -12,7 +12,9 @@ use namada_node::bench_utils::{BenchShell, TX_TRANSFER_WASM};
 use namada_node::shell::process_proposal::ValidationMeta;
 
 fn process_tx(c: &mut Criterion) {
-    let mut shell = BenchShell::default();
+    let bench_shell = BenchShell::default();
+    let mut shell = bench_shell.write();
+
     // Advance chain height to allow the inclusion of wrapper txs by the block
     // space allocator
     shell.state.in_mem_mut().last_block.as_mut().unwrap().height =

@@ -48,7 +48,7 @@ pub fn run(
                 }
             };
             rt.block_on(CliApi::handle_client_command(
-                Some(node),
+                Some(node.clone()),
                 cmd,
                 TestingIo,
             ))
@@ -84,7 +84,7 @@ pub fn run(
                 }
             };
             rt.block_on(CliApi::handle_relayer_command(
-                Some(node),
+                Some(node.clone()),
                 cmd,
                 TestingIo,
             ))
@@ -93,7 +93,7 @@ pub fn run(
 }
 
 #[async_trait::async_trait(?Send)]
-impl<'a> CliClient for &'a MockNode {
+impl CliClient for MockNode {
     fn from_tendermint_address(_: &crate::facade::tendermint_rpc::Url) -> Self {
         unreachable!("MockNode should always be instantiated at test start.")
     }

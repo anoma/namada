@@ -363,10 +363,11 @@ impl CliApi {
                             .collect::<Vec<_>>();
                         crate::client::masp::syncing(
                             chain_ctx.shielded,
-                            &client,
+                            client,
+                            args.wait_for_last_query_height,
+                            args.max_concurrent_fetches,
                             indexer_addr.as_ref().map(|s| s.as_ref()),
                             &io,
-                            args.start_query_height,
                             args.last_query_height,
                             &sks,
                             &vks,

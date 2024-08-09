@@ -4,12 +4,11 @@ use std::cmp::Ordering;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::task::Poll;
 
 use data_encoding::HEXLOWER;
 use ethbridge_bridge_contract::Bridge;
 use ethers::providers::Middleware;
-use futures::future::{self, FutureExt};
+use futures::future::FutureExt;
 use namada_core::eth_abi::EncodeCell;
 use namada_core::ethereum_events::EthAddress;
 use namada_core::hints;
@@ -20,7 +19,6 @@ use namada_vote_ext::validator_set_update::{
 };
 
 use super::{block_on_eth_sync, eth_sync_or, eth_sync_or_exit, BlockOnEthSync};
-use crate::control_flow::install_shutdown_signal;
 use crate::control_flow::time::{self, Duration, Instant};
 use crate::error::{Error as SdkError, EthereumBridgeError, QueryError};
 use crate::eth_bridge::ethers::abi::{AbiDecode, AbiType, Tokenizable};
@@ -399,8 +397,6 @@ where
     E: Middleware,
     E::Error: std::fmt::Debug + std::fmt::Display,
 {
-    let mut signal_receiver = args.safe_mode.then(install_shutdown_signal);
-
     if args.sync {
         block_on_eth_sync(
             &*eth_client,
@@ -417,14 +413,7 @@ where
     }
 
     if args.daemon {
-        relay_validator_set_update_daemon(
-            args,
-            eth_client,
-            client,
-            io,
-            &mut signal_receiver,
-        )
-        .await
+        relay_validator_set_update_daemon(args, eth_client, client, io).await
     } else {
         relay_validator_set_update_once::<CheckNonce, _, _, _>(
             &args,
@@ -477,17 +466,15 @@ where
     .or_else(|err| err.handle())
 }
 
-async fn relay_validator_set_update_daemon<'a, E, F>(
+async fn relay_validator_set_update_daemon<'a, E>(
     mut args: args::ValidatorSetUpdateRelay,
     eth_client: Arc<E>,
     client: &(impl Client + Sync),
     io: &impl Io,
-    shutdown_receiver: &mut Option<F>,
 ) -> Result<(), Error>
 where
     E: Middleware,
     E::Error: std::fmt::Debug + std::fmt::Display,
-    F: Future<Output = ()> + Unpin,
 {
     const DEFAULT_RETRY_DURATION: Duration = Duration::from_secs(1);
     const DEFAULT_SUCCESS_DURATION: Duration = Duration::from_secs(10);
@@ -500,21 +487,6 @@ where
     tracing::info!("The validator set update relayer daemon has started");
 
     loop {
-        let should_exit = if let Some(fut) = shutdown_receiver.as_mut() {
-            let fut = future::poll_fn(|cx| match fut.poll_unpin(cx) {
-                Poll::Pending => Poll::Ready(false),
-                Poll::Ready(_) => Poll::Ready(true),
-            });
-            futures::pin_mut!(fut);
-            fut.as_mut().await
-        } else {
-            false
-        };
-
-        if should_exit {
-            return Ok(());
-        }
-
         let sleep_for = if last_call_succeeded {
             success_duration
         } else {

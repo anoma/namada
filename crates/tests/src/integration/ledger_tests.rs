@@ -1826,7 +1826,7 @@ fn scheduled_migration() -> Result<()> {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let bytes = rt
         .block_on(RPC.shell().storage_value(
-            &&node,
+            &node,
             None,
             None,
             false,
@@ -1841,7 +1841,7 @@ fn scheduled_migration() -> Result<()> {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let bytes = rt
         .block_on(RPC.shell().storage_value(
-            &&node,
+            &node,
             None,
             None,
             false,

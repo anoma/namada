@@ -482,7 +482,7 @@ cors_allowed_origins = []
 cors_allowed_methods = ["HEAD", "GET", "POST", ]
 
 # A list of non simple headers the client is allowed to use with cross-domain requests
-cors_allowed_headers = ["Origin", "Accept", "Content-Type", "X-Requested-With", "X-Server-Time", ]
+cors_allowed_headers = ["Origin", "Accept", "Content-Type", "MaspLocalTaskEnv-Requested-With", "MaspLocalTaskEnv-Server-Time", ]
 
 # TCP or UNIX socket address for the gRPC server to listen on
 # NOTE: This server only supports /broadcast_tx_commit

@@ -6,6 +6,69 @@
 
 use crate::{MaybeSend, MaybeSync};
 
+/// NOOP progress bar implementation.
+#[derive(Debug, Clone, Copy)]
+pub struct DevNullProgressBar;
+
+/// Mechanism that allows keeping track of the progress
+/// of some operation.
+pub trait ProgressBar {
+    /// Query the amount of virtual elements the progress tracker
+    /// is tracking.
+    fn upper_limit(&self) -> u64;
+
+    /// Set the amount of virtual elements the progress tracker
+    /// is tracking.
+    fn set_upper_limit(&mut self, limit: u64);
+
+    /// Announce that `amount` virtual elements have been
+    /// processed.
+    fn increment_by(&mut self, amount: u64);
+
+    /// Specify a message to be display alongside the bar.
+    fn message(&mut self, message: String);
+
+    /// Signal that a progress bar has completed
+    fn finish(&mut self);
+}
+
+impl ProgressBar for DevNullProgressBar {
+    fn upper_limit(&self) -> u64 {
+        0
+    }
+
+    fn set_upper_limit(&mut self, _: u64) {}
+
+    fn increment_by(&mut self, _: u64) {}
+
+    fn message(&mut self, _: String) {}
+
+    fn finish(&mut self) {}
+}
+
+#[cfg(not(target_family = "wasm"))]
+impl ProgressBar for kdam::Bar {
+    fn upper_limit(&self) -> u64 {
+        self.total as u64
+    }
+
+    fn set_upper_limit(&mut self, limit: u64) {
+        self.total = limit as usize;
+    }
+
+    fn increment_by(&mut self, amount: u64) {
+        kdam::BarExt::update(self, amount as usize).unwrap();
+    }
+
+    fn message(&mut self, message: String) {
+        kdam::BarExt::write(self, message).unwrap();
+    }
+
+    fn finish(&mut self) {
+        println!();
+    }
+}
+
 /// A trait that abstracts out I/O operations
 #[cfg_attr(feature = "async-send", async_trait::async_trait)]
 #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]

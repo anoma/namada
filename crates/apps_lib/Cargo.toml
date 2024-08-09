@@ -54,6 +54,7 @@ fd-lock.workspace = true
 flate2.workspace = true
 futures.workspace = true
 itertools.workspace = true
+kdam.workspace = true
 lazy_static = { workspace = true, optional = true }
 linkme = { workspace = true, optional = true }
 ledger-namada-rs.workspace = true

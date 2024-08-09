@@ -29,7 +29,7 @@ migrations = [
   "linkme",
 ]
 benches = ["proptest"]
-control_flow = ["futures", "tokio", "wasmtimer"]
+control_flow = ["futures", "lazy_static", "tokio", "wasmtimer"]
 
 [dependencies]
 namada_macros = {path = "../macros"}
@@ -52,6 +52,7 @@ impl-num-traits = "0.1.2"
 index-set.workspace = true
 indexmap.workspace = true
 k256.workspace = true
+lazy_static = { workspace = true, optional = true }
 linkme = {workspace = true, optional = true}
 masp_primitives.workspace = true
 num256.workspace = true

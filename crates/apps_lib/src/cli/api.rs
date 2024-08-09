@@ -8,7 +8,7 @@ use crate::facade::tendermint_rpc::{HttpClient, Url as TendermintUrl};
 
 /// Trait for clients that can be used with the CLI.
 #[async_trait::async_trait(?Send)]
-pub trait CliClient: Client + Sync {
+pub trait CliClient: Client + Send + Sync + 'static {
     fn from_tendermint_address(address: &TendermintUrl) -> Self;
     async fn wait_until_node_is_synced(
         &self,
