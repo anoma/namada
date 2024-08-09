@@ -278,7 +278,7 @@ where
             .get(usize::from(val))
             .copied()
             .unwrap_or(token::Amount::native_whole(100_000))
-            .to_string();
+            .to_string_native();
         let args = vec![
             "utils",
             "init-genesis-validator",
