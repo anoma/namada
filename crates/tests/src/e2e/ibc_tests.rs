@@ -115,7 +115,7 @@ fn run_ledger_ibc() -> Result<()> {
                 .parameters
                 .ibc_params
                 .default_per_epoch_throughput_limit = Amount::max_signed();
-            setup::set_validators(1, genesis, base_dir, |_| 0)
+            setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
         };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
     let _bg_ledger_a = ledger_a.background();
@@ -206,7 +206,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
                 .parameters
                 .ibc_params
                 .default_per_epoch_throughput_limit = Amount::max_signed();
-            setup::set_validators(1, genesis, base_dir, |_| 0)
+            setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
         };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
     let _bg_ledger_a = ledger_a.background();
@@ -393,7 +393,7 @@ fn ibc_namada_gaia() -> Result<()> {
                 .parameters
                 .ibc_params
                 .default_per_epoch_throughput_limit = Amount::max_signed();
-            setup::set_validators(1, genesis, base_dir, |_| 0)
+            setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
         };
     let (ledger, mut ledger_b, test, _test_b) = run_two_nets(update_genesis)?;
     let _bg_ledger = ledger.background();
@@ -575,7 +575,7 @@ fn pgf_over_ibc_with_hermes() -> Result<()> {
             .parameters
             .ibc_params
             .default_per_epoch_throughput_limit = Amount::max_signed();
-        setup::set_validators(1, genesis, base_dir, |_| 0)
+        setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
     };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
     let _bg_ledger_a = ledger_a.background();
@@ -652,7 +652,7 @@ fn proposal_ibc_token_inflation() -> Result<()> {
                 .parameters
                 .ibc_params
                 .default_per_epoch_throughput_limit = Amount::max_signed();
-            setup::set_validators(1, genesis, base_dir, |_| 0)
+            setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
         };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
     let _bg_ledger_a = ledger_a.background();
@@ -744,7 +744,7 @@ fn ibc_rate_limit() -> Result<()> {
                 .ibc_params
                 .default_per_epoch_throughput_limit =
                 Amount::from_u64(1_000_000);
-            setup::set_validators(1, genesis, base_dir, |_| 0)
+            setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
         };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
     let _bg_ledger_a = ledger_a.background();
