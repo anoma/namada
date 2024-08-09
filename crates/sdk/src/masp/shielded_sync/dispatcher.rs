@@ -227,7 +227,7 @@ struct InitialState {
     last_query_height: BlockHeight,
 }
 
-pub struct Config<T> {
+pub struct Config<T, I> {
     pub wait_for_last_query_height: bool,
     pub retry_strategy: RetryStrategy,
     pub block_batch_size: usize,
@@ -235,9 +235,10 @@ pub struct Config<T> {
     pub fetched_tracker: T,
     pub scanned_tracker: T,
     pub applied_tracker: T,
+    pub shutdown_signal: I,
 }
 
-pub struct Dispatcher<S, M, U, T>
+pub struct Dispatcher<S, M, U, T, I>
 where
     U: ShieldedUtils,
 {
@@ -245,7 +246,7 @@ where
     state: DispatcherState,
     tasks: DispatcherTasks<S>,
     ctx: ShieldedContext<U>,
-    config: Config<T>,
+    config: Config<T, I>,
     cache: DispatcherCache,
     /// We are syncing up to this height
     height_to_sync: BlockHeight,
@@ -256,12 +257,12 @@ where
 ///
 /// This function assumes that the provided shielded context has
 /// already been loaded from storage.
-pub async fn new<S, M, U, T>(
+pub async fn new<S, M, U, T, I>(
     spawner: S,
     client: M,
     utils: &U,
-    config: Config<T>,
-) -> Dispatcher<S, M, U, T>
+    config: Config<T, I>,
+) -> Dispatcher<S, M, U, T, I>
 where
     U: ShieldedUtils + MaybeSend + MaybeSync,
 {
@@ -308,16 +309,16 @@ where
     }
 }
 
-impl<S, M, U, T> Dispatcher<S, M, U, T>
+impl<S, M, U, T, I> Dispatcher<S, M, U, T, I>
 where
     S: TaskSpawner,
     M: MaspClient + Send + Sync + Unpin + 'static,
     U: ShieldedUtils + MaybeSend + MaybeSync,
     T: ProgressBar,
+    I: ShutdownSignal,
 {
     pub async fn run(
         mut self,
-        mut shutdown_signal: impl ShutdownSignal,
         start_query_height: Option<BlockHeight>,
         last_query_height: Option<BlockHeight>,
         sks: &[ExtendedSpendingKey],
@@ -325,7 +326,6 @@ where
     ) -> Result<Option<ShieldedContext<U>>, Error> {
         let initial_state = self
             .perform_initial_setup(
-                &mut shutdown_signal,
                 start_query_height,
                 last_query_height,
                 sks,
@@ -333,10 +333,10 @@ where
             )
             .await?;
 
-        self.check_exit_conditions(&mut shutdown_signal);
+        self.check_exit_conditions();
 
         while let Some(message) = self.tasks.get_next_message().await {
-            self.check_exit_conditions(&mut shutdown_signal);
+            self.check_exit_conditions();
             self.handle_incoming_message(message);
         }
 
@@ -458,7 +458,6 @@ where
 
     async fn perform_initial_setup(
         &mut self,
-        shutdown_signal: &mut impl ShutdownSignal,
         start_query_height: Option<BlockHeight>,
         last_query_height: Option<BlockHeight>,
         sks: &[ExtendedSpendingKey],
@@ -484,7 +483,7 @@ where
         // tree
         let last_witnessed_tx = self.ctx.tx_note_map.keys().max().cloned();
 
-        let shutdown_signal = RefCell::new(shutdown_signal);
+        let shutdown_signal = RefCell::new(&mut self.config.shutdown_signal);
 
         let last_block_height = Sleep {
             strategy: LinearBackoff {
@@ -558,10 +557,7 @@ where
         Ok(initial_state)
     }
 
-    fn check_exit_conditions(
-        &mut self,
-        shutdown_signal: &mut impl ShutdownSignal,
-    ) {
+    fn check_exit_conditions(&mut self) {
         if hints::unlikely(self.tasks.panic_flag.panicked()) {
             self.state = DispatcherState::Errored(Error::Other(
                 "A worker thread panicked during the shielded sync".into(),
@@ -573,7 +569,7 @@ where
         ) {
             return;
         }
-        if shutdown_signal.received() {
+        if self.config.shutdown_signal.received() {
             self.config.fetched_tracker.message(
                 "Interrupt received, shutting down shielded sync".into(),
             );
@@ -872,11 +868,13 @@ mod dispatcher_tests {
     #[tokio::test]
     async fn test_applying_cache_drains_decrypted_data() {
         let (client, _) = TestingMaspClient::new(BlockHeight::first());
+        let (_sender, shutdown_sig) = shutdown_signal();
         let config = ShieldedSyncConfig::builder()
             .client(client)
             .fetched_tracker(DevNullProgressBar)
             .scanned_tracker(DevNullProgressBar)
             .applied_tracker(DevNullProgressBar)
+            .shutdown_signal(shutdown_sig)
             .build();
         let temp_dir = tempdir().unwrap();
         let utils = FsShieldedUtils {
@@ -983,10 +981,12 @@ mod dispatcher_tests {
 
     async fn test_panic_flag_aux(sync: bool) {
         let (client, _) = TestingMaspClient::new(BlockHeight::first());
+        let (_sender, shutdown_signal) = shutdown_signal();
         let config = ShieldedSyncConfig::builder()
             .fetched_tracker(DevNullProgressBar)
             .scanned_tracker(DevNullProgressBar)
             .applied_tracker(DevNullProgressBar)
+            .shutdown_signal(shutdown_signal)
             .client(client)
             .build();
         let temp_dir = tempdir().unwrap();
@@ -1019,10 +1019,8 @@ mod dispatcher_tests {
                 }
 
                 // run the dispatcher
-                let (_sender, shutdown_signal) = shutdown_signal();
                 let flag = dispatcher.tasks.panic_flag.clone();
                 let dispatcher_fut = dispatcher.run(
-                    shutdown_signal,
                     Some(BlockHeight::first()),
                     Some(BlockHeight(10)),
                     &[],
@@ -1138,10 +1136,12 @@ mod dispatcher_tests {
             context_dir: temp_dir.path().to_path_buf(),
         };
         let (client, masp_tx_sender) = TestingMaspClient::new(2.into());
+        let (_send, shutdown_sig) = shutdown_signal();
         let mut config = ShieldedSyncConfig::builder()
             .fetched_tracker(DevNullProgressBar)
             .scanned_tracker(DevNullProgressBar)
             .applied_tracker(DevNullProgressBar)
+            .shutdown_signal(shutdown_sig)
             .client(client)
             .retry_strategy(RetryStrategy::Times(0))
             .build();
@@ -1155,9 +1155,7 @@ mod dispatcher_tests {
                 masp_tx_sender.send(None).expect("Test failed");
                 let dispatcher = config.clone().dispatcher(s, &utils).await;
 
-                let (_send, shutdown_sig) = shutdown_signal();
-                let result =
-                    dispatcher.run(shutdown_sig, None, None, &[], &[vk]).await;
+                let result = dispatcher.run(None, None, &[], &[vk]).await;
                 match result {
                     Err(Error::Other(msg)) => assert_eq!(
                         msg.as_str(),
@@ -1197,10 +1195,9 @@ mod dispatcher_tests {
                     .expect("Test failed");
                 config.retry_strategy = RetryStrategy::Times(1);
                 let dispatcher = config.dispatcher(s, &utils).await;
-                let (_send, shutdown_sig) = shutdown_signal();
                 // This should complete successfully
                 let ctx = dispatcher
-                    .run(shutdown_sig, None, None, &[], &[vk])
+                    .run(None, None, &[], &[vk])
                     .await
                     .expect("Test failed")
                     .expect("Test failed");
@@ -1239,10 +1236,12 @@ mod dispatcher_tests {
             context_dir: temp_dir.path().to_path_buf(),
         };
         let (client, masp_tx_sender) = TestingMaspClient::new(3.into());
+        let (_send, shutdown_sig) = shutdown_signal();
         let config = ShieldedSyncConfig::builder()
             .fetched_tracker(DevNullProgressBar)
             .scanned_tracker(DevNullProgressBar)
             .applied_tracker(DevNullProgressBar)
+            .shutdown_signal(shutdown_sig)
             .client(client)
             .retry_strategy(RetryStrategy::Times(0))
             .block_batch_size(1)
@@ -1274,9 +1273,7 @@ mod dispatcher_tests {
                     )))
                     .expect("Test failed");
                 masp_tx_sender.send(None).expect("Test failed");
-                let (_send, shutdown_sig) = shutdown_signal();
-                let result =
-                    dispatcher.run(shutdown_sig, None, None, &[], &[vk]).await;
+                let result = dispatcher.run(None, None, &[], &[vk]).await;
                 match result {
                     Err(Error::Other(msg)) => assert_eq!(
                         msg.as_str(),
@@ -1317,10 +1314,12 @@ mod dispatcher_tests {
             context_dir: temp_dir.path().to_path_buf(),
         };
         let (client, masp_tx_sender) = TestingMaspClient::new(2.into());
+        let (send, shutdown_sig) = shutdown_signal();
         let config = ShieldedSyncConfig::builder()
             .fetched_tracker(DevNullProgressBar)
             .scanned_tracker(DevNullProgressBar)
             .applied_tracker(DevNullProgressBar)
+            .shutdown_signal(shutdown_sig)
             .client(client)
             .retry_strategy(RetryStrategy::Times(0))
             .block_batch_size(2)
@@ -1343,10 +1342,9 @@ mod dispatcher_tests {
                     )))
                     .expect("Test failed");
 
-                let (send, shutdown_sig) = shutdown_signal();
                 send.send_replace(true);
                 let res = dispatcher
-                    .run(shutdown_sig, None, None, &[], &[arbitrary_vk()])
+                    .run(None, None, &[], &[arbitrary_vk()])
                     .await
                     .expect("Test failed");
                 assert!(res.is_none());

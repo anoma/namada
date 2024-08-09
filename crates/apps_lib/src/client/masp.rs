@@ -83,19 +83,13 @@ pub async fn syncing<
                 .fetched_tracker(fetched_bar)
                 .scanned_tracker(scanned_bar)
                 .applied_tracker(applied_bar)
+                .shutdown_signal(install_shutdown_signal(false))
                 .wait_for_last_query_height(wait_for_last_query_height)
                 .build();
 
             let env = MaspLocalTaskEnv::new(500)?;
             let ctx = shielded
-                .fetch(
-                    install_shutdown_signal(false),
-                    env,
-                    config,
-                    last_query_height,
-                    sks,
-                    fvks,
-                )
+                .fetch(env, config, last_query_height, sks, fvks)
                 .await
                 .map(|_| shielded);
 

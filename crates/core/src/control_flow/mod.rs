@@ -45,6 +45,7 @@ mod non_wasm {
     }
 
     /// Shutdown signal receiver.
+    #[derive(Debug, Clone)]
     pub struct ShutdownSignalChan {
         pub(crate) rx: watch::Receiver<bool>,
     }

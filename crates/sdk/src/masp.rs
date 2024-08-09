@@ -499,11 +499,10 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
 
     /// Fetch the current state of the multi-asset shielded pool into a
     /// ShieldedContext
-    pub async fn fetch<M, T>(
+    pub async fn fetch<M, T, I>(
         &mut self,
-        shutdown_signal: impl control_flow::ShutdownSignal,
         env: impl TaskEnvironment,
-        config: ShieldedSyncConfig<M, T>,
+        config: ShieldedSyncConfig<M, T, I>,
         last_query_height: Option<BlockHeight>,
         sks: &[MaspExtendedSpendingKey],
         fvks: &[ViewingKey],
@@ -511,13 +510,13 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     where
         M: MaspClient + Send + Sync + Unpin + 'static,
         T: ProgressBar,
+        I: control_flow::ShutdownSignal,
     {
         env.run(|spawner| async move {
             let dispatcher = config.dispatcher(spawner, &self.utils).await;
 
-            if let Some(updated_ctx) = dispatcher
-                .run(shutdown_signal, None, last_query_height, sks, fvks)
-                .await?
+            if let Some(updated_ctx) =
+                dispatcher.run(None, last_query_height, sks, fvks).await?
             {
                 *self = updated_ctx;
             }
