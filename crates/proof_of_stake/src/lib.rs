@@ -1478,11 +1478,7 @@ where
 
     // Check that there are unbonded tokens available for withdrawal
     if unbond_handle.is_empty(storage)? {
-        return Err(WithdrawError::NoUnbondFound(BondId {
-            source: source.clone(),
-            validator: validator.clone(),
-        })
-        .into());
+        return Ok(token::Amount::zero());
     }
 
     let mut unbonds_and_redelegated_unbonds: BTreeMap<
