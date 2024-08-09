@@ -37,7 +37,7 @@ impl Default for AbortableSpawner {
 impl AbortableSpawner {
     /// Creates a new [`AbortableSpawner`].
     pub fn new() -> Self {
-        let shutdown_recv = install_shutdown_signal();
+        let shutdown_recv = install_shutdown_signal(true);
         let (abort_send, abort_recv) = mpsc::unbounded_channel();
         Self {
             abort_send,

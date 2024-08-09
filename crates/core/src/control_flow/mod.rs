@@ -61,7 +61,7 @@ mod non_wasm {
 
     /// Install a shutdown signal handler, and retrieve the associated
     /// signal's receiver.
-    pub fn install_shutdown_signal() -> ShutdownSignalChan {
+    pub fn install_shutdown_signal(announce: bool) -> ShutdownSignalChan {
         if LISTENING_TO_INTERRUPT_SIG
             .compare_exchange(
                 false,
@@ -74,7 +74,7 @@ mod non_wasm {
             let guard = ListeningToInterruptGuard;
 
             tokio::spawn(async move {
-                shutdown_send(guard).await;
+                shutdown_send(announce, guard).await;
             });
         }
         ShutdownSignalChan {
@@ -84,7 +84,10 @@ mod non_wasm {
 
     /// Shutdown signal receiver
     #[cfg(unix)]
-    async fn shutdown_send(_guard: ListeningToInterruptGuard) {
+    async fn shutdown_send(
+        announce_exit: bool,
+        _guard: ListeningToInterruptGuard,
+    ) {
         use tokio::signal::unix::{signal, SignalKind};
         let mut sigterm = signal(SignalKind::terminate()).unwrap();
         let mut sighup = signal(SignalKind::hangup()).unwrap();
@@ -92,30 +95,32 @@ mod non_wasm {
         tokio::select! {
             signal = tokio::signal::ctrl_c() => {
                 match signal {
-                    Ok(()) => tracing::info!("Received interrupt signal, exiting..."),
-                    Err(err) => tracing::error!("Failed to listen for CTRL+C signal: {err}"),
+                    Ok(()) => if announce_exit { tracing::info!("Received interrupt signal, exiting...") },
+                    Err(err) => if announce_exit { tracing::error!("Failed to listen for CTRL+C signal: {err}") },
                 }
             },
             signal = sigterm.recv() => {
                 match signal {
-                    Some(()) => tracing::info!("Received termination signal, exiting..."),
+                    Some(()) => if announce_exit { tracing::info!("Received termination signal, exiting...") },
                     None => {
-                        tracing::error!(
-                            "Termination signal cannot be caught anymore, exiting..."
-                        )
+                        if announce_exit {
+                            tracing::error!(
+                                "Termination signal cannot be caught anymore, exiting..."
+                            )
+                        }
                     }
                 }
             },
             signal = sighup.recv() => {
                 match signal {
-                    Some(()) => tracing::info!("Received hangup signal, exiting..."),
-                    None => tracing::error!("Hangup signal cannot be caught anymore, exiting..."),
+                    Some(()) => if announce_exit { tracing::info!("Received hangup signal, exiting...") },
+                    None => if announce_exit { tracing::error!("Hangup signal cannot be caught anymore, exiting...") },
                 }
             },
             signal = sigpipe.recv() => {
                 match signal {
-                    Some(()) => tracing::info!("Received pipe signal, exiting..."),
-                    None => tracing::error!("Pipe signal cannot be caught anymore, exiting..."),
+                    Some(()) => if announce_exit { tracing::info!("Received pipe signal, exiting...") },
+                    None => if announce_exit { tracing::error!("Pipe signal cannot be caught anymore, exiting...") },
                 }
             },
         };
@@ -124,19 +129,22 @@ mod non_wasm {
 
     /// Shutdown signal receiver
     #[cfg(windows)]
-    async fn shutdown_send(_guard: ListeningToInterruptGuard) {
+    async fn shutdown_send(
+        announce_exit: bool,
+        _guard: ListeningToInterruptGuard,
+    ) {
         let mut sigbreak = tokio::signal::windows::ctrl_break().unwrap();
         tokio::select! {
             signal = tokio::signal::ctrl_c() => {
                 match signal {
-                    Ok(()) => tracing::info!("Received interrupt signal, exiting..."),
-                    Err(err) => tracing::error!("Failed to listen for CTRL+C signal: {err}"),
+                    Ok(()) => if announce_exit { tracing::info!("Received interrupt signal, exiting...") },
+                    Err(err) => if announce_exit { tracing::error!("Failed to listen for CTRL+C signal: {err}") },
                 }
             },
             signal = sigbreak.recv() => {
                 match signal {
-                    Some(()) => tracing::info!("Received break signal, exiting..."),
-                    None => tracing::error!("Break signal cannot be caught anymore, exiting..."),
+                    Some(()) => if announce_exit { tracing::info!("Received break signal, exiting...") },
+                    None => if announce_exit { tracing::error!("Break signal cannot be caught anymore, exiting...") },
                 }
             },
         };

@@ -89,7 +89,7 @@ pub async fn syncing<
             let env = MaspLocalTaskEnv::new(500)?;
             let ctx = shielded
                 .fetch(
-                    install_shutdown_signal(),
+                    install_shutdown_signal(false),
                     env,
                     config,
                     last_query_height,
