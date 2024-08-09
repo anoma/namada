@@ -609,7 +609,7 @@ impl Display for InternalAddress {
                 Self::Erc20(eth_addr) => format!("Erc20: {}", eth_addr),
                 Self::Nut(eth_addr) => format!("Non-usable token: {eth_addr}"),
                 Self::Multitoken => "Multitoken".to_string(),
-                Self::Pgf => "PublicGoodFundings".to_string(),
+                Self::Pgf => "PGF".to_string(),
                 Self::Masp => "MASP".to_string(),
                 Self::ReplayProtection => "ReplayProtection".to_string(),
                 Self::TempStorage => "TempStorage".to_string(),
@@ -629,6 +629,7 @@ impl InternalAddress {
             "governance" => Some(InternalAddress::Governance),
             "masp" => Some(InternalAddress::Masp),
             "replayprotection" => Some(InternalAddress::ReplayProtection),
+            "pgf" => Some(InternalAddress::Pgf),
             _ => None,
         }
     }
