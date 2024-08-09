@@ -422,7 +422,7 @@ impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
 struct IndexerMaspClientShared {
     semaphore: Semaphore,
     indexer_api: reqwest::Url,
-    block_index: init_once::InitOnce<Option<xorf::BinaryFuse16>>,
+    block_index: init_once::InitOnce<Option<(BlockHeight, xorf::BinaryFuse16)>>,
 }
 
 /// MASP client implementation that queries data from the
@@ -495,11 +495,14 @@ impl IndexerMaspClient {
         Ok(payload.message)
     }
 
-    async fn last_block_index(&self) -> Result<xorf::BinaryFuse16, Error> {
+    async fn last_block_index(
+        &self,
+    ) -> Result<(BlockHeight, xorf::BinaryFuse16), Error> {
         use serde::Deserialize;
 
         #[derive(Deserialize)]
         struct Response {
+            block_height: u64,
             index: xorf::BinaryFuse16,
         }
 
@@ -529,7 +532,7 @@ impl IndexerMaspClient {
             ))
         })?;
 
-        Ok(payload.index)
+        Ok((BlockHeight(payload.block_height), payload.index))
     }
 }
 
@@ -581,6 +584,8 @@ impl MaspClient for IndexerMaspClient {
         BlockHeight(mut from): BlockHeight,
         BlockHeight(to): BlockHeight,
     ) -> Result<Vec<IndexedNoteEntry>, Error> {
+        use std::ops::ControlFlow;
+
         use serde::Deserialize;
         use xorf::Filter;
 
@@ -600,6 +605,105 @@ impl MaspClient for IndexerMaspClient {
         #[derive(Deserialize)]
         struct TxResponse {
             txs: Vec<Transaction>,
+        }
+
+        #[derive(Copy, Clone)]
+        #[allow(clippy::enum_variant_names)]
+        enum BlockIndex {
+            BelowRange {
+                from: u64,
+                to: u64,
+            },
+            InRange {
+                from: u64,
+                to: u64,
+                block_index_height: u64,
+            },
+            AboveRange {
+                from: u64,
+                to: u64,
+            },
+        }
+
+        fn check_block_index(
+            block_index_height: u64,
+            from: u64,
+            to: u64,
+        ) -> BlockIndex {
+            if block_index_height > to {
+                return BlockIndex::AboveRange { from, to };
+            }
+
+            if block_index_height < from {
+                return BlockIndex::BelowRange { from, to };
+            }
+
+            BlockIndex::InRange {
+                from,
+                to,
+                block_index_height,
+            }
+        }
+
+        impl BlockIndex {
+            fn needs_to_fetch(
+                self,
+                block_index: &xorf::BinaryFuse16,
+            ) -> ControlFlow<(), (u64, u64)> {
+                match self {
+                    Self::BelowRange { from, to } => {
+                        ControlFlow::Continue((from, to))
+                    }
+                    Self::InRange {
+                        from,
+                        block_index_height,
+                        to,
+                    } => {
+                        let lowest_height_in_index = (from
+                            ..=block_index_height)
+                            .find(|height| block_index.contains(height));
+
+                        match lowest_height_in_index {
+                            Some(from_height_in_index) => {
+                                ControlFlow::Continue((
+                                    from_height_in_index,
+                                    to,
+                                ))
+                            }
+                            None if block_index_height == to => {
+                                ControlFlow::Break(())
+                            }
+                            None => {
+                                ControlFlow::Continue((block_index_height, to))
+                            }
+                        }
+                    }
+                    Self::AboveRange { from, to } => {
+                        let lowest_height_in_index = (from..=to)
+                            .find(|height| block_index.contains(height));
+
+                        let maybe_bounds = lowest_height_in_index.and_then(
+                            |lowest_height_in_index| {
+                                let highest_height_in_index =
+                                    (from..=to).rev().find(|height| {
+                                        block_index.contains(height)
+                                    })?;
+
+                                Some((
+                                    lowest_height_in_index,
+                                    highest_height_in_index,
+                                ))
+                            },
+                        );
+
+                        if let Some((from, to)) = maybe_bounds {
+                            ControlFlow::Continue((from, to))
+                        } else {
+                            ControlFlow::Break(())
+                        }
+                    }
+                }
+            }
         }
 
         if from > to {
@@ -624,19 +728,31 @@ impl MaspClient for IndexerMaspClient {
 
         loop {
             'do_while: {
-                let from_height = from;
-                let off = (to - from).min(MAX_RANGE_THRES);
-                let to_height = from + off;
+                let mut from_height = from;
+                let mut off = (to - from).min(MAX_RANGE_THRES);
+                let mut to_height = from + off;
                 from += off;
 
-                if let Some(block_index) = maybe_block_index {
-                    let at_least_one_block_with_masp_txs = (from_height
-                        ..=to_height)
-                        .any(|height| block_index.contains(&height));
-
-                    if !at_least_one_block_with_masp_txs {
-                        // NB: skips code below, so it's more like a `continue`
-                        break 'do_while;
+                if let Some((BlockHeight(block_index_height), block_index)) =
+                    maybe_block_index
+                {
+                    match check_block_index(
+                        *block_index_height,
+                        from_height,
+                        to_height,
+                    )
+                    .needs_to_fetch(block_index)
+                    {
+                        ControlFlow::Break(()) => {
+                            // NB: skips code below, so it's more like a
+                            // `continue`
+                            break 'do_while;
+                        }
+                        ControlFlow::Continue((from, to)) => {
+                            from_height = from;
+                            to_height = to;
+                            off = to_height - from_height;
+                        }
                     }
                 }
 
