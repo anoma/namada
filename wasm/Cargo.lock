@@ -6662,7 +6662,7 @@ checksum = "3528ecfd12c466c6f163363caf2d02a71161dd5e1cc6ae7b34207ea2d42d81ed"
 
 [[package]]
 name = "tx_become_validator"
-version = "0.41.0"
+version = "0.42.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6671,7 +6671,7 @@ dependencies = [
 
 [[package]]
 name = "tx_bond"
-version = "0.41.0"
+version = "0.42.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_test_utils",
@@ -6687,7 +6687,7 @@ dependencies = [
 
 [[package]]
 name = "tx_bridge_pool"
-version = "0.41.0"
+version = "0.42.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6696,7 +6696,7 @@ dependencies = [
 
 [[package]]
 name = "tx_change_consensus_key"
-version = "0.41.0"
+version = "0.42.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6705,7 +6705,7 @@ dependencies = [
 
 [[package]]
 name = "tx_change_validator_commission"
-version = "0.41.0"
+version = "0.42.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_test_utils",
@@ -6721,7 +6721,7 @@ dependencies = [
 
 [[package]]
 name = "tx_change_validator_metadata"
-version = "0.41.0"
+version = "0.42.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6730,7 +6730,7 @@ dependencies = [
 
 [[package]]
 name = "tx_claim_rewards"
-version = "0.41.0"
+version = "0.42.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6739,7 +6739,7 @@ dependencies = [
 
 [[package]]
 name = "tx_deactivate_validator"
-version = "0.41.0"
+version = "0.42.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6748,7 +6748,7 @@ dependencies = [
 
 [[package]]
 name = "tx_ibc"
-version = "0.41.0"
+version = "0.42.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6757,7 +6757,7 @@ dependencies = [
 
 [[package]]
 name = "tx_init_account"
-version = "0.41.0"
+version = "0.42.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6766,7 +6766,7 @@ dependencies = [
 
 [[package]]
 name = "tx_init_proposal"
-version = "0.41.0"
+version = "0.42.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6775,7 +6775,7 @@ dependencies = [
 
 [[package]]
 name = "tx_reactivate_validator"
-version = "0.41.0"
+version = "0.42.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6784,7 +6784,7 @@ dependencies = [
 
 [[package]]
 name = "tx_redelegate"
-version = "0.41.0"
+version = "0.42.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_test_utils",
@@ -6800,7 +6800,7 @@ dependencies = [
 
 [[package]]
 name = "tx_resign_steward"
-version = "0.41.0"
+version = "0.42.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6809,7 +6809,7 @@ dependencies = [
 
 [[package]]
 name = "tx_reveal_pk"
-version = "0.41.0"
+version = "0.42.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6818,7 +6818,7 @@ dependencies = [
 
 [[package]]
 name = "tx_transfer"
-version = "0.41.0"
+version = "0.42.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6827,7 +6827,7 @@ dependencies = [
 
 [[package]]
 name = "tx_unbond"
-version = "0.41.0"
+version = "0.42.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_test_utils",
@@ -6843,7 +6843,7 @@ dependencies = [
 
 [[package]]
 name = "tx_unjail_validator"
-version = "0.41.0"
+version = "0.42.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6852,7 +6852,7 @@ dependencies = [
 
 [[package]]
 name = "tx_update_account"
-version = "0.41.0"
+version = "0.42.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6861,7 +6861,7 @@ dependencies = [
 
 [[package]]
 name = "tx_update_steward_commission"
-version = "0.41.0"
+version = "0.42.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6870,7 +6870,7 @@ dependencies = [
 
 [[package]]
 name = "tx_vote_proposal"
-version = "0.41.0"
+version = "0.42.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_tx_prelude",
@@ -6879,7 +6879,7 @@ dependencies = [
 
 [[package]]
 name = "tx_withdraw"
-version = "0.41.0"
+version = "0.42.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_test_utils",
@@ -7061,7 +7061,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
 name = "vp_implicit"
-version = "0.41.0"
+version = "0.42.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_test_utils",
@@ -7077,7 +7077,7 @@ dependencies = [
 
 [[package]]
 name = "vp_user"
-version = "0.41.0"
+version = "0.42.0"
 dependencies = [
  "getrandom 0.2.15",
  "namada_test_utils",
