@@ -25,6 +25,9 @@ pub trait ProgressBar {
     /// processed.
     fn increment_by(&mut self, amount: u64);
 
+    /// Specify a message to be display alongside the bar.
+    fn message(&mut self, message: String);
+
     /// Signal that a progress bar has completed
     fn finish(&mut self);
 }
@@ -37,6 +40,8 @@ impl ProgressBar for DevNullProgressBar {
     fn set_upper_limit(&mut self, _: u64) {}
 
     fn increment_by(&mut self, _: u64) {}
+
+    fn message(&mut self, _: String) {}
 
     fn finish(&mut self) {}
 }
@@ -53,6 +58,10 @@ impl ProgressBar for kdam::Bar {
 
     fn increment_by(&mut self, amount: u64) {
         kdam::BarExt::update(self, amount as usize).unwrap();
+    }
+
+    fn message(&mut self, message: String) {
+        kdam::BarExt::write(self, message).unwrap();
     }
 
     fn finish(&mut self) {

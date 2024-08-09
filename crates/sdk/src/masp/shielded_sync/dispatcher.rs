@@ -377,11 +377,11 @@ where
         self.config.applied_tracker.finish();
     }
 
-    async fn save_cache(&self) {
+    async fn save_cache(&mut self) {
         if let Err(e) = self.ctx.utils.cache_save(&self.cache).await {
-            tracing::error!(
+            self.config.fetched_tracker.message(format!(
                 "Failed to save shielded sync cache with error {e}"
-            );
+            ));
         }
     }
 
@@ -574,7 +574,9 @@ where
             return;
         }
         if shutdown_signal.received() {
-            tracing::info!("Interrupt received, shutting down shielded sync");
+            self.config.fetched_tracker.message(
+                "Interrupt received, shutting down shielded sync".into(),
+            );
             self.state = DispatcherState::Interrupted;
             self.interrupt_flag.set();
         }
@@ -694,7 +696,7 @@ where
         }
 
         if self.config.retry_strategy.may_retry() {
-            tracing::warn!(reason = %error, "Fetch failure, retrying...");
+            self.config.fetched_tracker.message(format!("{error}"));
             true
         } else {
             // NB: store last encountered error
