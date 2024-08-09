@@ -43,7 +43,7 @@ pub mod eth_events {
 
     impl PendingEvent {
         /// Decodes bytes into an [`EthereumEvent`] based on the signature.
-        /// This is is turned into a [`PendingEvent`] along with the block
+        /// This is turned into a [`PendingEvent`] along with the block
         /// height passed in here.
         ///
         /// If the event contains a confirmations field,

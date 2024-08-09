@@ -2281,7 +2281,7 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about(wrap!(
-                    "Submit a tx to reveal the public key an implicit \
+                    "Submit a tx to reveal the public key of an implicit \
                      account. Typically, you don't have to do this manually \
                      and the client will detect when a tx to reveal PK is \
                      needed and submit it automatically. This will write the \

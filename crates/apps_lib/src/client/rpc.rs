@@ -669,7 +669,7 @@ pub async fn query_protocol_parameters(
         display_line!(context.io(), "{:8}{}: {:?}", "", token, gas_cost);
     }
 
-    display_line!(context.io(), "PoS parameters");
+    display_line!(context.io(), "\nPoS parameters");
     let pos_params = query_pos_parameters(context.client()).await;
     display_line!(
         context.io(),
@@ -697,9 +697,9 @@ pub async fn query_protocol_parameters(
     );
     display_line!(
         context.io(),
-        "{:4}Validator stake threshold: {}",
+        "{:4}Validator stake threshold: {} NAM",
         "",
-        pos_params.validator_stake_threshold
+        pos_params.validator_stake_threshold.to_string_native()
     );
     display_line!(
         context.io(),
