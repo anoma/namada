@@ -693,6 +693,7 @@ mod tests {
     use merkle_tree::NO_DIFF_KEY_PREFIX;
     use namada_core::address::InternalAddress;
     use namada_core::borsh::{BorshDeserialize, BorshSerializeExt};
+    use namada_core::keccak::KeccakHash;
     use namada_core::parameters::{EpochDuration, Parameters};
     use namada_core::storage::DbKeySeg;
     use namada_core::time::{self, DateTimeUtc, Duration};
@@ -1279,15 +1280,22 @@ mod tests {
         )
         .prop_map(|kvs| {
             kvs.into_iter()
-                .filter_map(|(key, val)| {
+                .map(|(mut key, val)| {
                     if let DbKeySeg::AddressSeg(Address::Internal(
                         InternalAddress::EthBridgePool,
                     )) = key.segments[0]
                     {
-                        None
-                    } else {
-                        Some((key, Level::Storage(val)))
+                        // This is needed to be able to write this key to DB -
+                        // the merkle tree's `BridgePoolTree::parse_key`
+                        // requires a `KeccakHash` on the 2nd segment
+                        key.segments.insert(
+                            1,
+                            DbKeySeg::StringSeg(
+                                KeccakHash::default().to_string(),
+                            ),
+                        );
                     }
+                    (key, Level::Storage(val))
                 })
                 .collect::<Vec<_>>()
         });
