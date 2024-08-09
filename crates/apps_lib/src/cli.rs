@@ -3267,7 +3267,6 @@ pub mod args {
         arg("destination-validator");
     pub const DISCORD_OPT: ArgOpt<String> = arg_opt("discord-handle");
     pub const DO_IT: ArgFlag = flag("do-it");
-    pub const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
     pub const DRY_RUN_TX: ArgFlag = flag("dry-run");
     pub const DRY_RUN_WRAPPER_TX: ArgFlag = flag("dry-run-wrapper");
     pub const DUMP_TX: ArgFlag = flag("dump-tx");
@@ -7767,7 +7766,6 @@ pub mod args {
         pub chain_id: ChainId,
         pub genesis_validator: Option<String>,
         pub pre_genesis_path: Option<PathBuf>,
-        pub dont_prefetch_wasm: bool,
         pub allow_duplicate_ip: bool,
         pub add_persistent_peers: bool,
     }
@@ -7777,14 +7775,12 @@ pub mod args {
             let chain_id = CHAIN_ID.parse(matches);
             let genesis_validator = GENESIS_VALIDATOR.parse(matches);
             let pre_genesis_path = PRE_GENESIS_PATH.parse(matches);
-            let dont_prefetch_wasm = DONT_PREFETCH_WASM.parse(matches);
             let allow_duplicate_ip = ALLOW_DUPLICATE_IP.parse(matches);
             let add_persistent_peers = ADD_PERSISTENT_PEERS.parse(matches);
             Self {
                 chain_id,
                 genesis_validator,
                 pre_genesis_path,
-                dont_prefetch_wasm,
                 allow_duplicate_ip,
                 add_persistent_peers,
             }
@@ -7795,9 +7791,6 @@ pub mod args {
                                           https://github.com/heliaxdev/anoma-network-config")))
                 .arg(GENESIS_VALIDATOR.def().help(wrap!("The alias of the genesis validator that you want to set up as, if any.")))
                 .arg(PRE_GENESIS_PATH.def().help(wrap!("The path to the pre-genesis directory for genesis validator, if any. Defaults to \"{base-dir}/pre-genesis/{genesis-validator}\".")))
-            .arg(DONT_PREFETCH_WASM.def().help(wrap!(
-                "Do not pre-fetch WASM.")
-            ))
             .arg(ALLOW_DUPLICATE_IP.def().help(wrap!(
                 "Toggle to disable guard against peers connecting from the \
                  same IP. This option shouldn't be used in mainnet.")
