@@ -130,7 +130,13 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
     // Setup 2 genesis validator nodes
     let test = setup::network(
         |genesis, base_dir| {
-            setup::set_validators(2, genesis, base_dir, default_port_offset)
+            setup::set_validators(
+                2,
+                genesis,
+                base_dir,
+                default_port_offset,
+                vec![],
+            )
         },
         None,
     )?;
@@ -505,6 +511,7 @@ fn pos_bonds() -> Result<()> {
                 genesis,
                 base_dir,
                 default_port_offset,
+                vec![],
             );
             genesis.transactions.bond = Some({
                 let wallet = get_pregenesis_wallet(base_dir);
@@ -757,6 +764,7 @@ fn pos_init_validator() -> Result<()> {
                 genesis,
                 base_dir,
                 default_port_offset,
+                vec![],
             );
             println!("{:?}", genesis.transactions.bond);
             let stake = genesis
@@ -974,7 +982,7 @@ fn pos_init_validator() -> Result<()> {
 fn ledger_many_txs_in_a_block() -> Result<()> {
     let test = Arc::new(setup::network(
         |genesis, base_dir: &_| {
-            setup::set_validators(1, genesis, base_dir, |_| 0)
+            setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
         },
         // Set 10s consensus timeout to have more time to submit txs
         Some("10s"),
@@ -1099,7 +1107,19 @@ fn double_signing_gets_slashed() -> Result<()> {
             );
             // Make faster epochs to be more likely to discover boundary issues
             genesis.parameters.parameters.min_num_of_blocks = 2;
-            setup::set_validators(4, genesis, base_dir, default_port_offset)
+            setup::set_validators(
+                2,
+                genesis,
+                base_dir,
+                default_port_offset,
+                vec![
+                    // The validator who will double sign and get slashed has
+                    // less stake so that the 2nd validator has majority to
+                    // continue producing blocks
+                    token::Amount::native_whole(30_000),
+                    token::Amount::native_whole(100_000),
+                ],
+            )
         },
         None,
     )?;
@@ -1130,18 +1150,6 @@ fn double_signing_gets_slashed() -> Result<()> {
     let bg_validator_1 =
         start_namada_ledger_node_wait_wasm(&test, Some(1), Some(40))?
             .background();
-
-    let mut validator_2 =
-        run_as!(test, Who::Validator(2), Bin::Node, &["ledger"], Some(40))?;
-    validator_2.exp_string(LEDGER_STARTED)?;
-    validator_2.exp_string(VALIDATOR_NODE)?;
-    let _bg_validator_2 = validator_2.background();
-
-    let mut validator_3 =
-        run_as!(test, Who::Validator(3), Bin::Node, &["ledger"], Some(40))?;
-    validator_3.exp_string(LEDGER_STARTED)?;
-    validator_3.exp_string(VALIDATOR_NODE)?;
-    let _bg_validator_3 = validator_3.background();
 
     // 2. Copy the first genesis validator base-dir
     let validator_0_base_dir = test.get_base_dir(Who::Validator(0));
@@ -1384,7 +1392,7 @@ fn test_epoch_sleep() -> Result<()> {
             genesis.parameters.parameters.epochs_per_year =
                 epochs_per_year_from_min_duration(30);
             genesis.parameters.parameters.min_num_of_blocks = 1;
-            setup::set_validators(1, genesis, base_dir, |_| 0)
+            setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
         },
         None,
     )?;
@@ -1467,6 +1475,7 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
                 genesis,
                 base_dir,
                 default_port_offset,
+                vec![],
             );
             genesis.transactions.bond = Some({
                 let wallet = get_pregenesis_wallet(base_dir);
@@ -1640,6 +1649,7 @@ fn test_invalid_validator_txs() -> Result<()> {
                 genesis,
                 base_dir,
                 default_port_offset,
+                vec![],
             );
             genesis.transactions.bond = Some({
                 let wallet = get_pregenesis_wallet(base_dir);
@@ -1812,7 +1822,13 @@ fn change_consensus_key() -> Result<()> {
             genesis.parameters.parameters.epochs_per_year = 31_536_000;
             genesis.parameters.pos_params.pipeline_len = pipeline_len;
             genesis.parameters.pos_params.unbonding_len = 4;
-            setup::set_validators(2, genesis, base_dir, default_port_offset)
+            setup::set_validators(
+                2,
+                genesis,
+                base_dir,
+                default_port_offset,
+                vec![],
+            )
         },
         None,
     )?;
@@ -1921,7 +1937,7 @@ fn proposal_change_shielded_reward() -> Result<()> {
     let test = setup::network(
         |mut genesis, base_dir: &_| {
             genesis.parameters.gov_params.max_proposal_code_size = 600000;
-            setup::set_validators(1, genesis, base_dir, |_| 0u16)
+            setup::set_validators(1, genesis, base_dir, |_| 0u16, vec![])
         },
         None,
     )?;
@@ -2246,7 +2262,13 @@ where
 fn rollback() -> Result<()> {
     let test = setup::network(
         |genesis, base_dir| {
-            setup::set_validators(1, genesis, base_dir, default_port_offset)
+            setup::set_validators(
+                1,
+                genesis,
+                base_dir,
+                default_port_offset,
+                vec![],
+            )
         },
         // slow block production rate
         Some("5s"),
@@ -2351,7 +2373,13 @@ fn masp_txs_and_queries() -> Result<()> {
             genesis.parameters.parameters.epochs_per_year =
                 epochs_per_year_from_min_duration(3600);
             genesis.parameters.parameters.min_num_of_blocks = 1;
-            setup::set_validators(1, genesis, base_dir, default_port_offset)
+            setup::set_validators(
+                1,
+                genesis,
+                base_dir,
+                default_port_offset,
+                vec![],
+            )
         },
         None,
     )?;
