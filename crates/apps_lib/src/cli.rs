@@ -6079,6 +6079,7 @@ pub mod args {
                 owner: chain_ctx.get_cached(&self.owner),
                 token: chain_ctx.get(&self.token),
                 no_conversions: self.no_conversions,
+                height: self.height,
             })
         }
     }
@@ -6089,11 +6090,13 @@ pub mod args {
             let owner = BALANCE_OWNER.parse(matches);
             let token = TOKEN.parse(matches);
             let no_conversions = NO_CONVERSIONS.parse(matches);
+            let height = BLOCK_HEIGHT_OPT.parse(matches);
             Self {
                 query,
                 owner,
                 token,
                 no_conversions,
+                height,
             }
         }
 
@@ -6111,6 +6114,10 @@ pub mod args {
                 )
                 .arg(NO_CONVERSIONS.def().help(wrap!(
                     "Whether not to automatically perform conversions."
+                )))
+                .arg(BLOCK_HEIGHT_OPT.def().help(wrap!(
+                    "The block height at which to query the balance. \
+                     (Optional)"
                 )))
         }
     }
@@ -6970,6 +6977,7 @@ pub mod args {
         type AddrOrNativeToken = WalletAddrOrNativeToken;
         type Address = WalletAddress;
         type BalanceOwner = WalletBalanceOwner;
+        type BlockHeight = BlockHeight;
         type BpConversionTable = PathBuf;
         type ConfigRpcTendermintAddress = ConfigRpcAddress;
         type Data = PathBuf;

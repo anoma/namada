@@ -937,6 +937,7 @@ where
             namada.client(),
             &namada.native_token(),
             &proposal.proposal.author,
+            None,
         )
         .await
         .unwrap();
@@ -966,6 +967,7 @@ where
             namada.client(),
             &namada.native_token(),
             &proposal.proposal.author,
+            None,
         )
         .await
         .unwrap();

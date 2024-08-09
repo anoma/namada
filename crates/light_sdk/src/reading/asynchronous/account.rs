@@ -1,5 +1,6 @@
 use namada_sdk::account::Account;
 use namada_sdk::key::common;
+use namada_sdk::storage::BlockHeight;
 
 use super::*;
 
@@ -8,13 +9,14 @@ pub async fn get_token_balance(
     tendermint_addr: &str,
     token: &Address,
     owner: &Address,
+    height: Option<BlockHeight>, // Specify block height or None for latest
 ) -> Result<token::Amount, Error> {
     let client = HttpClient::new(
         TendermintAddress::from_str(tendermint_addr)
             .map_err(|e| Error::Other(e.to_string()))?,
     )
     .map_err(|e| Error::Other(e.to_string()))?;
-    rpc::get_token_balance(&client, token, owner).await
+    rpc::get_token_balance(&client, token, owner, height).await
 }
 
 /// Check if the address exists on chain. Established address exists if it

@@ -211,9 +211,10 @@ pub async fn get_token_balance<C: crate::queries::Client + Sync>(
     client: &C,
     token: &Address,
     owner: &Address,
+    height: Option<namada_storage::BlockHeight>,
 ) -> Result<token::Amount, error::Error> {
     convert_response::<C, _>(
-        RPC.vp().token().balance(client, token, owner).await,
+        RPC.vp().token().balance(client, token, owner, height).await,
     )
 }
 
