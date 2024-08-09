@@ -51,7 +51,7 @@ pub enum GasParseError {
 }
 
 // RAW GAS COSTS
-// ================================================================================
+// =============================================================================
 // The raw gas costs exctracted from the benchmarks.
 //
 const COMPILE_GAS_PER_BYTE_RAW: u64 = 1_664;
@@ -119,7 +119,7 @@ const MASP_CONVERT_CHECK_GAS_RAW: u64 = 188_590;
 const MASP_OUTPUT_CHECK_GAS_RAW: u64 = 204_430;
 // The cost to run the final masp check in the bundle
 const MASP_FINAL_CHECK_GAS_RAW: u64 = 43;
-// ================================================================================
+// =============================================================================
 
 // A correction factor for non-WASM-opcodes costs. We can see that the
 // gas cost we get for wasm codes (txs and vps) is much greater than what we
@@ -134,10 +134,10 @@ const MASP_FINAL_CHECK_GAS_RAW: u64 = 43;
 const GAS_COST_CORRECTION: u64 = 5;
 
 // ADJUSTED GAS COSTS
-// ================================================================================
+// =============================================================================
 // The gas costs adjusted for the correction factor.
 //
-const PARALLEL_GAS_DIVIDER: u64 = 1;
+
 // The compilation cost is reduced by a factor to compensate for the (most
 // likely) presence of the cache
 const COMPILE_GAS_PER_BYTE: u64 =
@@ -207,10 +207,7 @@ pub const MASP_OUTPUT_CHECK_GAS: u64 =
 /// The cost to run the final masp check in the bundle
 pub const MASP_FINAL_CHECK_GAS: u64 =
     MASP_FINAL_CHECK_GAS_RAW * GAS_COST_CORRECTION;
-/// Gas divider specific for the masp vp. Only allocates half of the cores to
-/// the masp vp since we can expect the other half to be busy with other vps
-pub const MASP_PARALLEL_GAS_DIVIDER: u64 = 1;
-// ================================================================================
+// =============================================================================
 
 /// Gas module result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;
@@ -295,8 +292,10 @@ impl From<Gas> for u64 {
 
 /// Gas represented in whole units. Used for fee payment and to display
 /// information to the user.
+// FIXME: remove Default trait if we remove WholeGas from VpsResult
 #[derive(
     Debug,
+    Default,
     Clone,
     Copy,
     PartialEq,
@@ -375,6 +374,21 @@ pub trait GasMetering {
 
     /// Get the gas limit
     fn get_gas_limit(&self) -> Gas;
+
+    /// Check if the vps went out of gas. Starts with the gas consumed by the
+    /// transaction.
+    ///
+    fn check_vps_limit(&self, vps_gas: Gas) -> Result<()> {
+        let total = self
+            .get_tx_consumed_gas()
+            .checked_add(vps_gas)
+            .ok_or(Error::GasOverflow)?;
+        if total > self.get_gas_limit() {
+            return Err(Error::TransactionGasExceededError);
+        }
+
+        Ok(())
+    }
 }
 
 /// Gas metering in a transaction
@@ -389,6 +403,7 @@ pub struct TxGasMeter {
 
 /// Gas metering in a validity predicate
 #[derive(Debug, Clone)]
+// FIXME: can we simplify this type?
 pub struct VpGasMeter {
     /// Track gas overflow
     gas_overflow: bool,
@@ -398,23 +413,6 @@ pub struct VpGasMeter {
     initial_gas: Gas,
     /// The current gas usage in the VP
     current_gas: Gas,
-}
-
-/// Gas meter for VPs parallel runs
-#[derive(
-    Clone,
-    Debug,
-    Default,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshDeserializer,
-    BorshSchema,
-    Serialize,
-    Deserialize,
-)]
-pub struct VpsGas {
-    max: Gas,
-    rest: Vec<Gas>,
 }
 
 impl GasMetering for TxGasMeter {
@@ -482,11 +480,6 @@ impl TxGasMeter {
                 )
                 .ok_or(Error::GasOverflow)?,
         )
-    }
-
-    /// Add the gas cost used in validity predicates to the current transaction.
-    pub fn add_vps_gas(&mut self, vps_gas: &VpsGas) -> Result<()> {
-        self.consume(vps_gas.get_current_gas()?.into())
     }
 
     /// Get the amount of gas still available to the transaction
@@ -563,64 +556,10 @@ impl VpGasMeter {
             current_gas: Gas::default(),
         }
     }
-}
 
-impl VpsGas {
-    /// Set the gas cost from a VP run. It consumes the [`VpGasMeter`]
-    /// instance which shouldn't be accessed passed this point.
-    pub fn set(&mut self, vp_gas_meter: VpGasMeter) -> Result<()> {
-        if vp_gas_meter.current_gas > self.max {
-            self.rest.push(self.max);
-            self.max = vp_gas_meter.current_gas;
-        } else {
-            self.rest.push(vp_gas_meter.current_gas);
-        }
-
-        self.check_limit(&vp_gas_meter)
-    }
-
-    /// Merge validity predicates gas meters from parallelized runs. Consumes
-    /// the other `VpsGas` instance which shouldn't be used passed this point.
-    pub fn merge(
-        &mut self,
-        mut other: VpsGas,
-        tx_gas_meter: &TxGasMeter,
-    ) -> Result<()> {
-        if self.max < other.max {
-            self.rest.push(self.max);
-            self.max = other.max;
-        } else {
-            self.rest.push(other.max);
-        }
-        self.rest.append(&mut other.rest);
-
-        self.check_limit(tx_gas_meter)
-    }
-
-    /// Check if the vp went out of gas. Starts from the gas consumed by the
-    /// transaction.
-    fn check_limit(&self, gas_meter: &impl GasMetering) -> Result<()> {
-        let total = gas_meter
-            .get_tx_consumed_gas()
-            .checked_add(self.get_current_gas()?)
-            .ok_or(Error::GasOverflow)?;
-        if total > gas_meter.get_gas_limit() {
-            return Err(Error::TransactionGasExceededError);
-        }
-        Ok(())
-    }
-
-    /// Get the gas consumed by the parallelized VPs
-    fn get_current_gas(&self) -> Result<Gas> {
-        let parallel_gas = self
-            .rest
-            .iter()
-            .try_fold(Gas::default(), |acc, gas| {
-                acc.checked_add(*gas).ok_or(Error::GasOverflow)
-            })?
-            .checked_div(PARALLEL_GAS_DIVIDER)
-            .expect("Div by non-zero int cannot fail");
-        self.max.checked_add(parallel_gas).ok_or(Error::GasOverflow)
+    /// Get the gas consumed by the VP alone
+    pub fn get_vp_consumed_gas(&self) -> Gas {
+        self.current_gas
     }
 }
 
