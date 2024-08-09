@@ -160,7 +160,6 @@ def join_network(
         genesis_validator,
         "--pre-genesis-path",
         genesis_validator_path,
-        "--dont-prefetch-wasm",
     )
 
     info(f"Validator {genesis_validator} joined {chain_id}")
