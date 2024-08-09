@@ -82,7 +82,7 @@ use tx::{
 use wallet::{Wallet, WalletIo, WalletStorage};
 
 /// Default gas-limit
-pub const DEFAULT_GAS_LIMIT: u64 = 100_000;
+pub const DEFAULT_GAS_LIMIT: u64 = 150_000;
 
 #[allow(missing_docs)]
 #[cfg(not(feature = "async-send"))]

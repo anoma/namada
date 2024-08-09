@@ -685,6 +685,8 @@ fn masp_incentives() -> Result<()> {
             CHRISTEL,
             "--token",
             NAM,
+            "--gas-limit",
+            "200000",
             "--amount",
             "1.451732",
             "--signing-keys",

@@ -751,7 +751,7 @@ fn masp_check_convert(c: &mut Criterion) {
 }
 
 fn masp_check_output(c: &mut Criterion) {
-    c.bench_function("masp_vp_check_output", |b| {
+    c.bench_function("vp_masp_check_output", |b| {
         b.iter_batched(
             || {
                 let (_, _verifiers_from_tx, signed_tx) =
@@ -977,7 +977,9 @@ fn customize_masp_tx_data(
     )
 }
 
-// benchmark the cost of validating two signatures in a batch.
+// Benchmark the cost of validating two signatures in a batch (two leverage
+// multiscalar multiplication speedups). The gas cost per single signature
+// verification should be the result of this bench divided by two.
 fn masp_batch_signature_verification(c: &mut Criterion) {
     let (_, _, tx) = setup_storage_for_masp_verification("unshielding");
     let transaction = tx
@@ -1023,8 +1025,7 @@ fn masp_batch_signature_verification(c: &mut Criterion) {
 
 // Benchmark both one and two proofs and take the difference as the variable
 // cost for every proofs. Charge the full cost for the first note and then
-// charge the variable cost multiplied by the number of remaining notes and
-// divided by the number of cores
+// charge the variable cost multiplied by the number of remaining notes
 fn masp_batch_spend_proofs_validate(c: &mut Criterion) {
     let mut group = c.benchmark_group("masp_batch_spend_proofs_validate");
     let PVKs { spend_vk, .. } = preload_verifying_keys();
@@ -1069,8 +1070,7 @@ fn masp_batch_spend_proofs_validate(c: &mut Criterion) {
 
 // Benchmark both one and two proofs and take the difference as the variable
 // cost for every proofs. Charge the full cost for the first note and then
-// charge the variable cost multiplied by the number of remaining notes and
-// divided by the number of cores
+// charge the variable cost multiplied by the number of remaining notes
 fn masp_batch_convert_proofs_validate(c: &mut Criterion) {
     let mut group = c.benchmark_group("masp_batch_convert_proofs_validate");
     let PVKs { convert_vk, .. } = preload_verifying_keys();
@@ -1115,8 +1115,7 @@ fn masp_batch_convert_proofs_validate(c: &mut Criterion) {
 
 // Benchmark both one and two proofs and take the difference as the variable
 // cost for every proofs. Charge the full cost for the first note and then
-// charge the variable cost multiplied by the number of remaining notes and
-// divided by the number of cores
+// charge the variable cost multiplied by the number of remaining notes
 fn masp_batch_output_proofs_validate(c: &mut Criterion) {
     let mut group = c.benchmark_group("masp_batch_output_proofs_validate");
     let PVKs { output_vk, .. } = preload_verifying_keys();
