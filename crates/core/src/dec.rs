@@ -33,6 +33,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 ///
 /// To be precise, an instance X of this type should be interpreted as the Dec
 /// X * 10 ^ (-[`POS_DECIMAL_PRECISION`])
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     Copy,

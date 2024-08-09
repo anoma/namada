@@ -1935,8 +1935,7 @@ fn get_receipt_absence_proof(
 }
 
 fn commitment_prefix() -> CommitmentPrefix {
-    CommitmentPrefix::try_from(b"ibc".to_vec())
-        .expect("the prefix should be parsable")
+    CommitmentPrefix::from(b"ibc".to_vec())
 }
 
 fn submit_ibc_tx(

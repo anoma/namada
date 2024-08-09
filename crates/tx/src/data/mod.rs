@@ -575,6 +575,7 @@ fn iterable_to_string<T: fmt::Display>(
 
 /// Struct that classifies that kind of Tx
 /// based on the contents of its data.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     Debug,

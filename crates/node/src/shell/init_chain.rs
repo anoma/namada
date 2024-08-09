@@ -132,7 +132,7 @@ where
         // Read the genesis files
         #[cfg(any(
             feature = "integration",
-            not(any(test, feature = "benches"))
+            not(any(test, fuzzing, feature = "benches"))
         ))]
         let genesis = {
             let chain_dir = self.base_dir.join(chain_id);
@@ -140,7 +140,7 @@ where
                 .expect("Missing genesis files")
         };
         #[cfg(all(
-            any(test, feature = "benches"),
+            any(test, fuzzing, feature = "benches"),
             not(feature = "integration")
         ))]
         let genesis = {
@@ -148,7 +148,7 @@ where
             genesis::make_dev_genesis(_num_validators, &chain_dir)
         };
         #[cfg(all(
-            any(test, feature = "benches"),
+            any(test, fuzzing, feature = "benches"),
             not(feature = "integration")
         ))]
         {
@@ -418,7 +418,7 @@ where
                 )
                 .or_placeholder(None)?;
 
-                #[cfg(not(test))]
+                #[cfg(not(any(test, fuzzing)))]
                 if name.starts_with("tx_") {
                     self.tx_wasm_cache.pre_compile(&code);
                 } else if name.starts_with("vp_") {

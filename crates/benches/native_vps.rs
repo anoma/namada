@@ -328,7 +328,7 @@ fn prepare_ibc_tx_and_ctx(bench_name: &str) -> (BenchShieldedCtx, BatchedTx) {
                 counterparty: Counterparty::new(
                     ClientId::from_str("07-tendermint-1").unwrap(),
                     None,
-                    CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
+                    CommitmentPrefix::from(b"ibc".to_vec()),
                 ),
                 version: Some(Version::compatibles().first().unwrap().clone()),
                 delay_period: std::time::Duration::new(100, 0),

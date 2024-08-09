@@ -427,8 +427,7 @@ pub fn msg_update_client(client_id: ClientId) -> MsgUpdateClient {
 pub fn msg_connection_open_init(client_id: ClientId) -> MsgConnectionOpenInit {
     let counterparty_client_id =
         ClientId::new(&client_type().to_string(), 42).unwrap();
-    let commitment_prefix =
-        CommitmentPrefix::try_from(COMMITMENT_PREFIX.to_vec()).unwrap();
+    let commitment_prefix = CommitmentPrefix::from(COMMITMENT_PREFIX.to_vec());
     let counterparty =
         ConnCounterparty::new(counterparty_client_id, None, commitment_prefix);
 
@@ -508,9 +507,7 @@ fn dummy_connection_counterparty() -> ConnCounterparty {
     let client_id = ClientId::new(&client_type().to_string(), 42)
         .expect("invalid client ID");
     let conn_id = ConnectionId::new(12);
-    let commitment_prefix =
-        CommitmentPrefix::try_from(COMMITMENT_PREFIX.to_vec())
-            .expect("the prefix should be parsable");
+    let commitment_prefix = CommitmentPrefix::from(COMMITMENT_PREFIX.to_vec());
     ConnCounterparty::new(client_id, Some(conn_id), commitment_prefix)
 }
 

@@ -127,6 +127,7 @@ impl From<DurationNanos> for std::time::Duration {
 pub struct Rfc3339String(pub String);
 
 /// A duration in seconds precision.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     Copy,

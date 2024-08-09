@@ -193,8 +193,7 @@ where
     }
 
     fn commitment_prefix(&self) -> CommitmentPrefix {
-        CommitmentPrefix::try_from(COMMITMENT_PREFIX.to_vec())
-            .expect("the prefix should be parsable")
+        CommitmentPrefix::from(COMMITMENT_PREFIX.to_vec())
     }
 
     fn connection_counter(&self) -> Result<u64, ContextError> {

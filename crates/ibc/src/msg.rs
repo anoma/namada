@@ -29,6 +29,7 @@ pub enum IbcMessage<Transfer> {
 }
 
 /// IBC transfer message with `Transfer`
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Debug, Clone)]
 pub struct MsgTransfer<Transfer> {
     /// IBC transfer message
@@ -78,6 +79,7 @@ impl<Transfer: BorshSchema> BorshSchema for MsgTransfer<Transfer> {
 }
 
 /// IBC NFT transfer message with `Transfer`
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Debug, Clone)]
 pub struct MsgNftTransfer<Transfer> {
     /// IBC NFT transfer message

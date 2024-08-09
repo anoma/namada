@@ -549,12 +549,18 @@ where
             )
             .map_err(Error::StorageError)?;
 
+            #[cfg(not(fuzzing))]
             let balance = token::read_balance(
                 shell_params.state,
                 &wrapper.fee.token,
                 &wrapper.fee_payer(),
             )
             .map_err(Error::StorageError)?;
+
+            // Use half of the max value to make the balance check pass
+            // sometimes with arbitrary fees
+            #[cfg(fuzzing)]
+            let balance = Amount::max().checked_div_u64(2).unwrap();
 
             let (post_bal, valid_batched_tx_result) = if let Some(post_bal) =
                 balance.checked_sub(fees)
@@ -574,12 +580,15 @@ where
                 if let Ok(Some(valid_batched_tx_result)) =
                     try_masp_fee_payment(shell_params, tx, tx_index)
                 {
+                    #[cfg(not(fuzzing))]
                     let balance = token::read_balance(
                         shell_params.state,
                         &wrapper.fee.token,
                         &wrapper.fee_payer(),
                     )
                     .expect("Could not read balance key from storage");
+                    #[cfg(fuzzing)]
+                    let balance = Amount::max().checked_div_u64(2).unwrap();
 
                     let post_bal = match balance.checked_sub(fees) {
                         Some(post_bal) => {

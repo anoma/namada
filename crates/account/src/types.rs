@@ -8,6 +8,7 @@ use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 
 /// A tx data type to initialize a new established account
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Clone,
@@ -31,6 +32,7 @@ pub struct InitAccount {
 }
 
 /// A tx data type to update an account's validity predicate
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Clone,

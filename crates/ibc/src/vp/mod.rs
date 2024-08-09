@@ -756,8 +756,7 @@ mod tests {
             ClientId::new(&client_type().to_string(), 22).unwrap();
         let counterpart_conn_id = ConnectionId::new(32);
         let commitment_prefix =
-            CommitmentPrefix::try_from(COMMITMENT_PREFIX.to_vec())
-                .expect("the prefix should be parsable");
+            CommitmentPrefix::from(COMMITMENT_PREFIX.to_vec());
         ConnCounterparty::new(
             counterpart_client_id,
             Some(counterpart_conn_id),

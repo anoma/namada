@@ -112,6 +112,7 @@ impl From<u64> for Uint {
 
 /// Representation of address on Ethereum. The inner value is the last 20 bytes
 /// of the public key that controls the account.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Copy,
     Clone,

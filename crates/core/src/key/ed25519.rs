@@ -390,7 +390,48 @@ impl super::SigScheme for SigScheme {
     where
         H: 'static + StorageHasher,
     {
-        pk.0.verify(&sig.0, &data.signable_hash::<H>())
-            .map_err(|err| VerifySigError::SigVerifyError(err.to_string()))
+        #[cfg(not(fuzzing))]
+        {
+            pk.0.verify(&sig.0, &data.signable_hash::<H>())
+                .map_err(|err| VerifySigError::SigVerifyError(err.to_string()))
+        }
+
+        #[cfg(fuzzing)]
+        {
+            let _ = (pk, data, sig);
+            Ok(())
+        }
+    }
+}
+
+#[cfg(feature = "arbitrary")]
+impl arbitrary::Arbitrary<'_> for PublicKey {
+    fn arbitrary(
+        u: &mut arbitrary::Unstructured<'_>,
+    ) -> arbitrary::Result<Self> {
+        let seed: [u8; 32] = arbitrary::Arbitrary::arbitrary(u)?;
+        let sk = ed25519_consensus::SigningKey::from(seed);
+        Ok(Self(sk.verification_key()))
+    }
+
+    fn size_hint(_depth: usize) -> (usize, Option<usize>) {
+        // Signing key seed size
+        (32, Some(32))
+    }
+}
+
+#[cfg(feature = "arbitrary")]
+impl arbitrary::Arbitrary<'_> for Signature {
+    fn arbitrary(
+        u: &mut arbitrary::Unstructured<'_>,
+    ) -> arbitrary::Result<Self> {
+        let seed: [u8; 32] = arbitrary::Arbitrary::arbitrary(u)?;
+        let sk = ed25519_consensus::SigningKey::from(seed);
+        Ok(Self(sk.sign(&[0_u8])))
+    }
+
+    fn size_hint(_depth: usize) -> (usize, Option<usize>) {
+        // Signing key seed size
+        (32, Some(32))
     }
 }
