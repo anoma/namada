@@ -112,9 +112,9 @@ flate2 = "1.0.22"
 fs_extra = "1.2.0"
 futures = "0.3"
 git2 = { version = "0.18.1", default-features = false }
-ibc = { git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "30fa65406bd35fa5db0c047e16357ff260d51a60", features = ["serde"] }
-ibc-derive = { git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "30fa65406bd35fa5db0c047e16357ff260d51a60" }
-ibc-testkit = { git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "30fa65406bd35fa5db0c047e16357ff260d51a60", default-features = false }
+ibc = { git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "1dd9be8c1cdc773e6b5b0b3609f3390a9a69eb9b", features = ["serde"] }
+ibc-derive = { git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "1dd9be8c1cdc773e6b5b0b3609f3390a9a69eb9b" }
+ibc-testkit = { git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "1dd9be8c1cdc773e6b5b0b3609f3390a9a69eb9b", default-features = false }
 ics23 = "0.11.0"
 index-set = { git = "https://github.com/heliaxdev/index-set", tag = "v0.8.1", features = ["serialize-borsh", "serialize-serde"] }
 indexmap = { git = "https://github.com/heliaxdev/indexmap", tag = "2.2.4-heliax-1", features = ["borsh-schema", "serde"] }
