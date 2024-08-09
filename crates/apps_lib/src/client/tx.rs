@@ -766,18 +766,9 @@ pub async fn submit_transparent_transfer(
         ));
     }
 
-    submit_reveal_aux(
-        namada,
-        args.tx.clone(),
-        &args
-            .data
-            .first()
-            .ok_or_else(|| {
-                error::Error::Other("Missing transfer data".to_string())
-            })?
-            .source,
-    )
-    .await?;
+    for datum in args.data.iter() {
+        submit_reveal_aux(namada, args.tx.clone(), &datum.source).await?;
+    }
 
     let (mut tx, signing_data) = args.clone().build(namada).await?;
 
@@ -810,6 +801,10 @@ pub async fn submit_shielding_transfer(
     namada: &impl Namada,
     args: args::TxShieldingTransfer,
 ) -> Result<(), error::Error> {
+    for datum in args.data.iter() {
+        submit_reveal_aux(namada, args.tx.clone(), &datum.source).await?;
+    }
+
     // Repeat once if the tx fails on a crossover of an epoch
     for _ in 0..2 {
         let (mut tx, signing_data, tx_epoch) =
