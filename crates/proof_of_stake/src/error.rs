@@ -7,7 +7,7 @@ use namada_core::storage::Epoch;
 use thiserror::Error;
 
 use crate::rewards;
-use crate::types::{BondId, ValidatorState};
+use crate::types::ValidatorState;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -65,15 +65,6 @@ pub enum UnbondError {
     VotingPowerOverflow(TryFromIntError),
     #[error("Trying to unbond from a frozen validator: {0}")]
     ValidatorIsFrozen(Address),
-}
-
-#[allow(missing_docs)]
-#[derive(Error, Debug)]
-pub enum WithdrawError {
-    #[error("No unbond could be found for {0}")]
-    NoUnbondFound(BondId),
-    #[error("No unbond may be withdrawn yet for {0}")]
-    NoWithdrawableUnbond(BondId),
 }
 
 #[allow(missing_docs)]
@@ -190,12 +181,6 @@ impl From<BondError> for namada_storage::Error {
 
 impl From<UnbondError> for namada_storage::Error {
     fn from(err: UnbondError) -> Self {
-        Self::new(err)
-    }
-}
-
-impl From<WithdrawError> for namada_storage::Error {
-    fn from(err: WithdrawError) -> Self {
         Self::new(err)
     }
 }
