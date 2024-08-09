@@ -309,9 +309,9 @@ dependencies = [
 
 [[package]]
 name = "async-trait"
-version = "0.1.77"
+version = "0.1.81"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c980ee35e870bd1a4d2c8294d4c04d0499e67bca1e4b5cefcc693c2fa00caea9"
+checksum = "6e0c28dcc82d7c8ead5cb13beb15405b57b8546e93215673ff8ca0349a028107"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1976,6 +1976,51 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ef1a6892d9eef45c8fa6b9e0086428a2cca8491aca8f787c534a3d6d0bcb3ced"
 
 [[package]]
+name = "encdec"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "25de94e10baa85551f7c65730423239370ed5bed60bf8d2a9cbf2683327ba421"
+dependencies = [
+ "encdec-base 0.9.0",
+ "encdec-macros",
+]
+
+[[package]]
+name = "encdec-base"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f8542ff2a35da7fc94ffcf280f35dc759219c4b48fa930e0a0f268220d7fb6a"
+dependencies = [
+ "byteorder",
+ "num-traits 0.2.17",
+]
+
+[[package]]
+name = "encdec-base"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "516ae3c7d00515548bf26a6531883335ceac2e9cde4938e70feea7456569be09"
+dependencies = [
+ "byteorder",
+ "heapless",
+ "num-traits 0.2.17",
+ "thiserror",
+]
+
+[[package]]
+name = "encdec-macros"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b15497932aae6b53bf8548cc63c65929b4fab6be54e28709c80fc72f5707eeed"
+dependencies = [
+ "darling 0.14.4",
+ "encdec-base 0.8.3",
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "encoding_rs"
 version = "0.8.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2281,7 +2326,7 @@ dependencies = [
  "ethabi",
  "generic-array",
  "k256",
- "num_enum",
+ "num_enum 0.7.1",
  "once_cell",
  "open-fastrlp",
  "rand 0.8.5",
@@ -4029,6 +4074,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "ledger-lib"
+version = "0.1.0"
+source = "git+https://github.com/heliaxdev/rust-ledger?rev=f96f4559b3237d09218f7583df01acf36034ea79#f96f4559b3237d09218f7583df01acf36034ea79"
+dependencies = [
+ "async-trait",
+ "displaydoc",
+ "encdec",
+ "futures",
+ "ledger-proto",
+ "once_cell",
+ "strum 0.24.1",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid 1.8.0",
+]
+
+[[package]]
 name = "ledger-namada-rs"
 version = "0.0.1"
 source = "git+https://github.com/Zondax/ledger-namada?tag=v0.0.24#ca9da5e0129f676934809f58acffbd855d280664"
@@ -4042,6 +4106,18 @@ dependencies = [
  "prost 0.11.9",
  "prost-types 0.11.9",
  "sha2 0.10.8",
+ "thiserror",
+]
+
+[[package]]
+name = "ledger-proto"
+version = "0.1.0"
+source = "git+https://github.com/heliaxdev/rust-ledger?rev=f96f4559b3237d09218f7583df01acf36034ea79#f96f4559b3237d09218f7583df01acf36034ea79"
+dependencies = [
+ "bitflags 2.5.0",
+ "displaydoc",
+ "encdec",
+ "num_enum 0.6.1",
  "thiserror",
 ]
 
@@ -4517,7 +4593,9 @@ dependencies = [
  "git2",
  "itertools 0.12.1",
  "lazy_static",
+ "ledger-lib",
  "ledger-namada-rs",
+ "ledger-transport",
  "ledger-transport-hid",
  "linkme",
  "masp_primitives",
@@ -4616,7 +4694,7 @@ dependencies = [
  "num-rational",
  "num-traits 0.2.17",
  "num256",
- "num_enum",
+ "num_enum 0.7.1",
  "pretty_assertions",
  "primitive-types",
  "proptest",
@@ -5646,11 +5724,31 @@ dependencies = [
 
 [[package]]
 name = "num_enum"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a015b430d3c108a207fd776d2e2196aaf8b1cf8cf93253e3a097ff3085076a1"
+dependencies = [
+ "num_enum_derive 0.6.1",
+]
+
+[[package]]
+name = "num_enum"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "683751d591e6d81200c39fb0d1032608b77724f34114db54f571ff1317b337c0"
 dependencies = [
- "num_enum_derive",
+ "num_enum_derive 0.7.1",
+]
+
+[[package]]
+name = "num_enum_derive"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "96667db765a921f7b295ffee8b60472b686a51d4f21c2ee4ffdb94c7013b65a6"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.52",
 ]
 
 [[package]]
@@ -8563,6 +8661,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sharded-slab",
+ "smallvec",
  "thread_local",
  "tracing",
  "tracing-core",

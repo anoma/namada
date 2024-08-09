@@ -15,7 +15,7 @@ use namada_macros::BorshDeserializer;
 use namada_migrations::*;
 use namada_sdk::account::AccountPublicKeysMap;
 use namada_sdk::address::{Address, EstablishedAddress};
-use namada_sdk::args::Tx as TxArgs;
+use namada_sdk::args::{DeviceTransport, Tx as TxArgs};
 use namada_sdk::chain::ChainId;
 use namada_sdk::collections::HashSet;
 use namada_sdk::dec::Dec;
@@ -40,6 +40,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
 use super::templates::{DenominatedBalances, Parameters, ValidityPredicates};
+use crate::client::tx::NamadaAppTcpTransport;
 use crate::config::genesis::chain::DeriveEstablishedAddress;
 use crate::config::genesis::templates::{
     TemplateValidation, Unvalidated, Validated,
@@ -93,6 +94,7 @@ fn get_tx_args(use_device: bool) -> TxArgs {
         password: None,
         memo: None,
         use_device,
+        device_transport: DeviceTransport::default(),
     }
 }
 
@@ -165,6 +167,7 @@ pub async fn sign_txs(
     wallet: &RwLock<Wallet<CliWalletUtils>>,
     validator_wallet: Option<&ValidatorWallet>,
     use_device: bool,
+    device_transport: DeviceTransport,
 ) -> Transactions<Unvalidated> {
     let UnsignedTransactions {
         established_account,
@@ -182,6 +185,7 @@ pub async fn sign_txs(
                     wallet,
                     &established_account,
                     use_device,
+                    device_transport,
                 )
                 .await,
             );
@@ -208,6 +212,7 @@ pub async fn sign_txs(
                              validator account txs",
                         ),
                         use_device,
+                        device_transport,
                     )
                     .await,
                 );
@@ -354,6 +359,7 @@ pub async fn sign_validator_account_tx(
     wallet: &RwLock<Wallet<CliWalletUtils>>,
     established_accounts: &[EstablishedAccountTx],
     use_device: bool,
+    device_transport: DeviceTransport,
 ) -> SignedValidatorAccountTx {
     let mut to_sign = match to_sign {
         Either::Right(signed_tx) => signed_tx,
@@ -434,7 +440,9 @@ pub async fn sign_validator_account_tx(
         }
     };
 
-    to_sign.sign(established_accounts, wallet, use_device).await;
+    to_sign
+        .sign(established_accounts, wallet, use_device, device_transport)
+        .await;
     to_sign
 }
 
@@ -443,11 +451,14 @@ pub async fn sign_delegation_bond_tx(
     wallet: &RwLock<Wallet<CliWalletUtils>>,
     established_accounts: &Option<Vec<EstablishedAccountTx>>,
     use_device: bool,
+    device_transport: DeviceTransport,
 ) -> SignedBondTx<Unvalidated> {
     let default = vec![];
     let established_accounts =
         established_accounts.as_ref().unwrap_or(&default);
-    to_sign.sign(established_accounts, wallet, use_device).await;
+    to_sign
+        .sign(established_accounts, wallet, use_device, device_transport)
+        .await;
     to_sign
 }
 
@@ -741,6 +752,7 @@ impl<T> Signed<T> {
         established_accounts: &[EstablishedAccountTx],
         wallet_lock: &RwLock<Wallet<CliWalletUtils>>,
         use_device: bool,
+        device_transport: DeviceTransport,
     ) where
         T: BorshSerialize + TxToSign,
     {
@@ -756,22 +768,36 @@ impl<T> Signed<T> {
 
         let mut tx = self.data.tx_to_sign();
 
-        if use_device {
-            let hidapi = HidApi::new().expect("Failed to create Hidapi");
-            let transport = TransportNativeHID::new(&hidapi)
-                .expect("Failed to create hardware wallet connection");
-            let app = NamadaApp::new(transport);
+        macro_rules! sign_tx {
+            ($app:expr) => {
+                sign_tx(
+                    wallet_lock,
+                    &get_tx_args(use_device),
+                    &mut tx,
+                    signing_data,
+                    utils::with_hardware_wallet,
+                    (wallet_lock, &$app),
+                )
+                .await
+                .expect("Failed to sign pre-genesis transaction.")
+            };
+        }
 
-            sign_tx(
-                wallet_lock,
-                &get_tx_args(use_device),
-                &mut tx,
-                signing_data,
-                utils::with_hardware_wallet,
-                (wallet_lock, &app),
-            )
-            .await
-            .expect("Failed to sign pre-genesis transaction.");
+        if use_device {
+            match device_transport {
+                DeviceTransport::Hid => {
+                    let hidapi =
+                        HidApi::new().expect("Failed to create Hidapi");
+                    let transport = TransportNativeHID::new(&hidapi)
+                        .expect("Failed to create hardware wallet connection");
+                    let app = NamadaApp::new(transport);
+                    sign_tx!(app);
+                }
+                DeviceTransport::Tcp => {
+                    let app = NamadaApp::new(NamadaAppTcpTransport);
+                    sign_tx!(app);
+                }
+            }
         } else {
             async fn software_wallet_sign(
                 tx: Tx,
