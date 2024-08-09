@@ -11,7 +11,7 @@ use namada_sdk::events::extend::{
     ComposeEvent, Height as HeightAttr, TxHash as TxHashAttr, UserAccount,
 };
 use namada_sdk::events::EventLevel;
-use namada_sdk::gas::{Gas, GasMetering, TxGasMeter, VpGasMeter};
+use namada_sdk::gas::{self, Gas, GasMetering, TxGasMeter, VpGasMeter};
 use namada_sdk::hash::Hash;
 use namada_sdk::ibc::{IbcTxDataHash, IbcTxDataRefs};
 use namada_sdk::masp::{MaspTxRefs, TxId};
@@ -1104,7 +1104,7 @@ where
     tracing::debug!("Total VPs gas cost {:?}", vps_result.gas_used);
 
     tx_gas_meter
-        .add_vps_gas(&vps_result.gas_used)
+        .consume(vps_result.gas_used.into())
         .map_err(|err| Error::GasError(err.to_string()))?;
 
     Ok(vps_result)
@@ -1324,9 +1324,13 @@ where
             // all the other errors we keep evaluating the vps. This
             // allows to display a consistent VpsResult across all
             // nodes and find any invalid signatures
-            result
+            result.gas_used = result
                 .gas_used
-                .set(gas_meter.into_inner())
+                .checked_add(gas_meter.borrow().get_vp_consumed_gas())
+                .ok_or(Error::GasError(gas::Error::GasOverflow.to_string()))?;
+            gas_meter
+                .borrow()
+                .check_vps_limit(result.gas_used)
                 .map_err(|err| Error::GasError(err.to_string()))?;
 
             Ok(result)
@@ -1351,10 +1355,13 @@ fn merge_vp_results(
     let mut errors = a.errors;
     errors.append(&mut b.errors);
     let status_flags = a.status_flags | b.status_flags;
-    let mut gas_used = a.gas_used;
 
-    gas_used
-        .merge(b.gas_used, tx_gas_meter)
+    let gas_used = a
+        .gas_used
+        .checked_add(b.gas_used)
+        .ok_or(Error::GasError(gas::Error::GasOverflow.to_string()))?;
+    tx_gas_meter
+        .check_vps_limit(gas_used)
         .map_err(|err| Error::GasError(err.to_string()))?;
 
     Ok(VpsResult {
