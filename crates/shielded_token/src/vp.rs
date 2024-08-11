@@ -60,16 +60,16 @@ where
     pub _marker: PhantomData<(Params, Gov, Ibc, TransToken, Transfer)>,
 }
 
-// The balances changed by the transaction, split between masp and non-masp
-// balances. The masp collection carries the token addresses. The collection of
-// the other balances maps the token address to the addresses of the
-// senders/receivers, their balance diff and whether this is positive or
-// negative diff
+// Balances changed by a transaction
 #[derive(Default, Debug, Clone)]
 struct ChangedBalances {
+    // Maps asset types to their decodings
     tokens: BTreeMap<AssetType, (Address, token::Denomination, MaspDigitPos)>,
+    // Map between MASP transparent address and Namada types
     decoder: BTreeMap<TransparentAddress, TAddrData>,
+    // Balances before the tx
     pre: BTreeMap<TransparentAddress, ValueSum<Address, Amount>>,
+    // Balances after the tx
     post: BTreeMap<TransparentAddress, ValueSum<Address, Amount>>,
 }
 
@@ -945,18 +945,19 @@ where
             !is_masp_transfer_key(key) && !is_masp_token_map_key(key)
         });
 
+        // Check that the transaction didn't write unallowed masp keys
+        if non_allowed_changes {
+            return Err(Error::NativeVpError(native_vp::Error::SimpleMessage(
+                "Found modifications to non-allowed masp keys",
+            )));
+        }
         let masp_token_map_changed = masp_keys_changed
             .iter()
             .any(|key| is_masp_token_map_key(key));
         let masp_transfer_changes = masp_keys_changed
             .iter()
             .any(|key| is_masp_transfer_key(key));
-        // Check that the transaction didn't write unallowed masp keys
-        if non_allowed_changes {
-            Err(Error::NativeVpError(native_vp::Error::SimpleMessage(
-                "Found modifications to non-allowed masp keys",
-            )))
-        } else if masp_token_map_changed && masp_transfer_changes {
+        if masp_token_map_changed && masp_transfer_changes {
             Err(Error::NativeVpError(native_vp::Error::SimpleMessage(
                 "Cannot simultaneously do governance proposal and MASP \
                  transfer",

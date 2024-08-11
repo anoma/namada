@@ -390,6 +390,7 @@ where
     Ok(())
 }
 
+// Check that the packet receipt key has been changed
 fn check_packet_receiving(
     msg: &IbcMsgRecvPacket,
     keys_changed: &BTreeSet<Key>,
@@ -401,7 +402,7 @@ fn check_packet_receiving(
     );
     if !keys_changed.contains(&receipt_key) {
         return Err(namada_storage::Error::new_alloc(format!(
-            "The packet has not been received: Port ID  {}, Channel ID {}, \
+            "The packet has not been received: Port ID {}, Channel ID {}, \
              Sequence {}",
             msg.packet.port_id_on_b,
             msg.packet.chan_id_on_b,
@@ -478,7 +479,8 @@ where
     S: StorageRead,
 {
     // Ensure that the event corresponds to the current changes to storage
-    let ack_key = storage::ack_key(dst_port_id, dst_channel_id, sequence); // If the receive is a success, then the commitment is unique
+    let ack_key = storage::ack_key(dst_port_id, dst_channel_id, sequence);
+    // If the receive is a success, then the commitment is unique
     let succ_ack_commitment = compute_ack_commitment(
         &AcknowledgementStatus::success(ack_success_b64()).into(),
     );
@@ -504,8 +506,8 @@ fn apply_recv_msg<S>(
 where
     S: StorageRead,
 {
+    // First check that the packet receipt is reflecteed in the state changes
     check_packet_receiving(msg, keys_changed)?;
-
     // If the transfer was a failure, then enable funds to
     // be withdrawn from the IBC internal address
     if is_receiving_success(
