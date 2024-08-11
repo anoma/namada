@@ -101,7 +101,10 @@ pub use nft::*;
 use primitives::Timestamp;
 use prost::Message;
 use thiserror::Error;
-use trace::{convert_to_address, ibc_trace_for_nft, is_sender_chain_source};
+use trace::{
+    convert_to_address, ibc_trace_for_nft, is_receiver_chain_source_str,
+    is_sender_chain_source_str,
+};
 
 use crate::storage::{
     channel_counter_key, client_counter_key, connection_counter_key,
@@ -434,8 +437,8 @@ where
         let token = convert_to_address(ibc_trace).into_storage_result()?;
         let delta = ValueSum::from_pair(token, *amount);
         // If there is a transfer to the IBC account, then deduplicate the
-        // balance increase since we already accounted for it above
-        if is_sender_chain_source(ibc_trace, src_port_id, src_channel_id) {
+        // balance increase since we already account for it below
+        if is_sender_chain_source_str(ibc_trace, src_port_id, src_channel_id) {
             let ibc_taddr = addr_taddr(address::IBC);
             let post_entry = accum
                 .post
@@ -512,31 +515,41 @@ where
         msg.packet.seq_on_a,
     )? {
         for ibc_trace in ibc_traces {
-            // Get the received token
-            let token = received_ibc_token(
-                ibc_trace,
+            // Only artificially increase the IBC internal address pre-balance
+            // if receiving involves minting. We do not do this in the unescrow
+            // case since the pre-balance already accounts for the amount being
+            // received.
+            if !is_receiver_chain_source_str(
+                &ibc_trace,
                 &msg.packet.port_id_on_a,
                 &msg.packet.chan_id_on_a,
-                &msg.packet.port_id_on_b,
-                &msg.packet.chan_id_on_b,
-            )
-            .into_storage_result()?;
-            let delta = ValueSum::from_pair(token.clone(), amount);
-            // Enable funds to be taken from the IBC internal
-            // address and be deposited elsewhere
-            // Required for the IBC internal Address to release
-            // funds
-            let ibc_taddr = addr_taddr(address::IBC);
-            let pre_entry = accum
-                .pre
-                .get(&ibc_taddr)
-                .cloned()
-                .unwrap_or(ValueSum::zero());
-            accum.pre.insert(
-                ibc_taddr,
-                checked!(pre_entry + &delta)
-                    .map_err(namada_storage::Error::new)?,
-            );
+            ) {
+                // Get the received token
+                let token = received_ibc_token(
+                    ibc_trace,
+                    &msg.packet.port_id_on_a,
+                    &msg.packet.chan_id_on_a,
+                    &msg.packet.port_id_on_b,
+                    &msg.packet.chan_id_on_b,
+                )
+                .into_storage_result()?;
+                let delta = ValueSum::from_pair(token.clone(), amount);
+                // Enable funds to be taken from the IBC internal
+                // address and be deposited elsewhere
+                // Required for the IBC internal Address to release
+                // funds
+                let ibc_taddr = addr_taddr(address::IBC);
+                let pre_entry = accum
+                    .pre
+                    .get(&ibc_taddr)
+                    .cloned()
+                    .unwrap_or(ValueSum::zero());
+                accum.pre.insert(
+                    ibc_taddr,
+                    checked!(pre_entry + &delta)
+                        .map_err(namada_storage::Error::new)?,
+                );
+            }
         }
     }
     Ok(accum)

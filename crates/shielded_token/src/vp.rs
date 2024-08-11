@@ -673,7 +673,7 @@ fn validate_transparent_input<A: Authorization>(
                 .checked_sub(&ValueSum::from_pair(asset.token.clone(), amount))
                 .ok_or_else(|| {
                     Error::NativeVpError(native_vp::Error::SimpleMessage(
-                        "Overflow in bundle balance",
+                        "Underflow in bundle balance",
                     ))
                 })?;
         }
@@ -703,7 +703,7 @@ fn validate_transparent_input<A: Authorization>(
                     .checked_sub(&ValueSum::from_pair(token.clone(), amount))
                     .ok_or_else(|| {
                         Error::NativeVpError(native_vp::Error::SimpleMessage(
-                            "Overflow in bundle balance",
+                            "Underflow in bundle balance",
                         ))
                     })?;
             }
@@ -751,7 +751,7 @@ fn validate_transparent_output(
                 .checked_sub(&ValueSum::from_pair(asset.token.clone(), amount))
                 .ok_or_else(|| {
                     Error::NativeVpError(native_vp::Error::SimpleMessage(
-                        "Overflow in bundle balance",
+                        "Underflow in bundle balance",
                     ))
                 })?;
         }
@@ -766,7 +766,7 @@ fn validate_transparent_output(
                 .checked_sub(&ValueSum::from_pair(token.clone(), amount))
                 .ok_or_else(|| {
                     Error::NativeVpError(native_vp::Error::SimpleMessage(
-                        "Overflow in bundle balance",
+                        "Underflow in bundle balance",
                     ))
                 })?;
         }
@@ -869,7 +869,7 @@ fn apply_balance_component(
     })
 }
 
-// Verify that the pre balance + the Sapling value balance = the post balance
+// Verify that the pre balance - the Sapling value balance = the post balance
 // using the decodings in tokens and conversion_state for assistance.
 fn verify_sapling_balancing_value(
     pre: &ValueSum<Address, Amount>,

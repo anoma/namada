@@ -108,13 +108,24 @@ pub fn is_nft_trace(
     }
 }
 
-/// Return true if the source of the given IBC trace is this chain
-pub fn is_sender_chain_source(
+/// Returns true if the denomination originally came from the sender chain, and
+/// false otherwise.
+pub fn is_sender_chain_source_str(
     trace: impl AsRef<str>,
     src_port_id: &PortId,
     src_channel_id: &ChannelId,
 ) -> bool {
-    !trace
+    !is_receiver_chain_source_str(trace, src_port_id, src_channel_id)
+}
+
+/// Returns true if the denomination originally came from the receiving chain,
+/// and false otherwise.
+pub fn is_receiver_chain_source_str(
+    trace: impl AsRef<str>,
+    src_port_id: &PortId,
+    src_channel_id: &ChannelId,
+) -> bool {
+    trace
         .as_ref()
         .starts_with(&format!("{src_port_id}/{src_channel_id}"))
 }
