@@ -2282,6 +2282,33 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     pub memo: Option<Memo>,
     /// Use device to sign the transaction
     pub use_device: bool,
+    /// Hardware Wallet transport - HID (USB) or TCP
+    pub device_transport: DeviceTransport,
+}
+
+/// Hardware Wallet transport - HID (USB) or TCP
+#[derive(Debug, Clone, Copy, Default)]
+pub enum DeviceTransport {
+    /// HID transport (USB connected hardware wallet)
+    #[default]
+    Hid,
+    /// TCP transport
+    Tcp,
+}
+
+impl FromStr for DeviceTransport {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "hid" => Ok(Self::Hid),
+            "tcp" => Ok(Self::Tcp),
+            raw => Err(format!(
+                "Unexpected device transport \"{raw}\". Valid options are \
+                 \"hid\" or \"tcp\"."
+            )),
+        }
+    }
 }
 
 /// Builder functions for Tx
@@ -2470,6 +2497,8 @@ pub struct KeyDerive {
     pub prompt_bip39_passphrase: bool,
     /// Use device to generate key and address
     pub use_device: bool,
+    /// Hardware Wallet transport - HID (USB) or TCP
+    pub device_transport: DeviceTransport,
 }
 
 /// Wallet list arguments

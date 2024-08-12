@@ -9,6 +9,7 @@ use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use itertools::Either;
+use namada_sdk::args::DeviceTransport;
 use namada_sdk::chain::ChainId;
 use namada_sdk::dec::Dec;
 use namada_sdk::key::*;
@@ -863,6 +864,7 @@ async fn append_signature_to_signed_toml(
     input_txs: &Path,
     wallet: &RwLock<Wallet<CliWalletUtils>>,
     use_device: bool,
+    device_transport: DeviceTransport,
 ) -> genesis::transactions::Transactions<genesis::templates::Unvalidated> {
     // Parse signed txs toml to append new signatures to
     let mut genesis_txs = genesis::templates::read_transactions(input_txs)
@@ -883,6 +885,7 @@ async fn append_signature_to_signed_toml(
                     wallet,
                     &genesis_txs.established_account,
                     use_device,
+                    device_transport,
                 )
                 .await,
             );
@@ -902,6 +905,7 @@ async fn append_signature_to_signed_toml(
                          validator account txs",
                     ),
                     use_device,
+                    device_transport,
                 )
                 .await,
             );
@@ -919,6 +923,7 @@ pub async fn sign_genesis_tx(
         output,
         validator_alias,
         use_device,
+        device_transport,
     }: args::SignGenesisTxs,
 ) {
     let (wallet, _wallet_file) =
@@ -945,6 +950,7 @@ pub async fn sign_genesis_tx(
             &wallet_lock,
             maybe_pre_genesis_wallet.as_ref(),
             use_device,
+            device_transport,
         )
         .await;
         if let Some(output_path) = output.as_ref() {
@@ -962,7 +968,13 @@ pub async fn sign_genesis_tx(
         // In case we fail to parse unsigned txs, we will attempt to
         // parse signed txs and append new signatures to the existing
         // toml file
-        append_signature_to_signed_toml(&path, &wallet_lock, use_device).await
+        append_signature_to_signed_toml(
+            &path,
+            &wallet_lock,
+            use_device,
+            device_transport,
+        )
+        .await
     };
     match output {
         Some(output_path) => {
