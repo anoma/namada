@@ -1,6 +1,7 @@
 pub mod defaults;
 pub mod pre_genesis;
 mod store;
+mod transport;
 
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -17,6 +18,7 @@ use namada_sdk::wallet::{
 pub use namada_sdk::wallet::{ValidatorData, ValidatorKeys};
 use rand_core::OsRng;
 pub use store::wallet_file;
+pub use transport::{TransportTcp, WalletTransport};
 use zeroize::Zeroizing;
 
 use crate::cli;
