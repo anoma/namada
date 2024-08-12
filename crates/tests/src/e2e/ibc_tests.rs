@@ -64,7 +64,8 @@ const IBC_REFUND_TARGET_ALIAS: &str = "ibc-refund-target";
 /// 1. Transparent transfers
 ///   - Namada -> Gaia -> Namada
 ///   - Gaia -> Namada -> Gaia
-/// 2. Shielding transfers
+/// 2. Invalid transfers
+/// 3. Shielding/Unshielding transfers
 ///   - Gaia -> Namada -> (shielded transfer) -> Namada -> Gaia
 /// 3. Shielding transfer the received token back to a shielded account on
 ///    Namada
@@ -74,7 +75,7 @@ const IBC_REFUND_TARGET_ALIAS: &str = "ibc-refund-target";
 ///   - when unshielding transfer failure
 #[test]
 fn ibc_transfers() -> Result<()> {
-    let mut update_genesis =
+    let update_genesis =
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
             genesis.parameters.parameters.epochs_per_year =
                 epochs_per_year_from_min_duration(1800);
@@ -86,24 +87,8 @@ fn ibc_transfers() -> Result<()> {
                 .default_per_epoch_throughput_limit = Amount::max_signed();
             setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
         };
-    let test = setup::network(&mut update_genesis, None)?;
-
-    set_ethereum_bridge_mode(
-        &test,
-        &test.net.chain_id,
-        Who::Validator(0),
-        ethereum_bridge::ledger::Mode::Off,
-        None,
-    );
-
-    let _bg_ledger =
-        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
-            .background();
-
-    // gaia
-    let test_gaia = setup_gaia()?;
-    let gaia = run_gaia(&test_gaia)?;
-    sleep(5);
+    let (ledger, gaia, test, test_gaia) = run_namada_gaia(update_genesis)?;
+    let _bg_ledger = ledger.background();
     let _bg_gaia = gaia.background();
 
     setup_hermes(&test, &test_gaia)?;
@@ -123,7 +108,7 @@ fn ibc_transfers() -> Result<()> {
         ALBERT,
         &gaia_receiver,
         APFEL,
-        2.0,
+        2,
         Some(ALBERT_KEY),
         &port_id_namada,
         &channel_id_namada,
@@ -134,7 +119,7 @@ fn ibc_transfers() -> Result<()> {
     )?;
     wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
 
-    // Check the received token on Gaia
+    check_balance(&test, ALBERT, APFEL, 999_998)?;
     let token_addr = find_address(&test, APFEL)?;
     let ibc_denom_on_gaia =
         format!("{port_id_gaia}/{channel_id_gaia}/{token_addr}");
@@ -155,8 +140,9 @@ fn ibc_transfers() -> Result<()> {
     )?;
     wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test)?;
 
-    // Check the token on Namada
+    // Check the balances
     check_balance(&test, ALBERT, APFEL, 999_999)?;
+    check_gaia_balance(&test_gaia, GAIA_USER, &ibc_denom_on_gaia, 1_000_000)?;
 
     // Transfer 200 samoleans from Gaia to Namada
     transfer_from_gaia(
@@ -176,6 +162,7 @@ fn ibc_transfers() -> Result<()> {
     let ibc_denom_on_namada =
         format!("{port_id_namada}/{channel_id_namada}/{GAIA_COIN}");
     check_balance(&test, ALBERT, &ibc_denom_on_namada, 200)?;
+    check_gaia_balance(&test_gaia, GAIA_USER, GAIA_COIN, 800)?;
 
     // Transfer 100 samoleans back from Namada to Gaia
     transfer(
@@ -183,7 +170,7 @@ fn ibc_transfers() -> Result<()> {
         ALBERT,
         &gaia_receiver,
         &ibc_denom_on_namada,
-        100.0,
+        100,
         Some(ALBERT_KEY),
         &port_id_namada,
         &channel_id_namada,
@@ -193,7 +180,9 @@ fn ibc_transfers() -> Result<()> {
         false,
     )?;
     wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
-    // Check the received token on Gaia
+
+    // Check the balances
+    check_balance(&test, ALBERT, &ibc_denom_on_namada, 100)?;
     check_gaia_balance(&test_gaia, GAIA_USER, GAIA_COIN, 900)?;
 
     // Invalid transfers
@@ -227,6 +216,7 @@ fn ibc_transfers() -> Result<()> {
     wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test_gaia)?;
     // Check the token on Namada
     check_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 100)?;
+    check_gaia_balance(&test_gaia, GAIA_USER, GAIA_COIN, 800)?;
 
     // Shielded transfer 50 samoleans on Namada
     transfer_on_chain(
@@ -247,7 +237,7 @@ fn ibc_transfers() -> Result<()> {
         B_SPENDING_KEY,
         &gaia_receiver,
         &ibc_denom_on_namada,
-        10.0,
+        10,
         Some(BERTHA_KEY),
         &port_id_namada,
         &channel_id_namada,
@@ -292,7 +282,7 @@ fn ibc_transfers() -> Result<()> {
         ALBERT,
         "invalid_receiver",
         APFEL,
-        10.0,
+        10,
         Some(ALBERT_KEY),
         &port_id_namada,
         &channel_id_namada,
@@ -315,7 +305,7 @@ fn ibc_transfers() -> Result<()> {
         ALBERT,
         &gaia_receiver,
         &ibc_denom_on_namada,
-        10.0,
+        10,
         Some(ALBERT_KEY),
         &port_id_namada,
         &channel_id_namada,
@@ -342,7 +332,7 @@ fn ibc_transfers() -> Result<()> {
         A_SPENDING_KEY,
         "invalid_receiver",
         &ibc_denom_on_namada,
-        10.0,
+        10,
         Some(ALBERT_KEY),
         &port_id_namada,
         &channel_id_namada,
@@ -361,7 +351,7 @@ fn ibc_transfers() -> Result<()> {
 #[test]
 fn pgf_over_ibc() -> Result<()> {
     const PIPELINE_LEN: u64 = 5;
-    let mut update_genesis =
+    let update_genesis =
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
             genesis.parameters.parameters.epochs_per_year =
                 epochs_per_year_from_min_duration(20);
@@ -374,24 +364,8 @@ fn pgf_over_ibc() -> Result<()> {
                 .default_per_epoch_throughput_limit = Amount::max_signed();
             setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
         };
-    let test = setup::network(&mut update_genesis, None)?;
-
-    set_ethereum_bridge_mode(
-        &test,
-        &test.net.chain_id,
-        Who::Validator(0),
-        ethereum_bridge::ledger::Mode::Off,
-        None,
-    );
-
-    let _bg_ledger =
-        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
-            .background();
-
-    // gaia
-    let test_gaia = setup_gaia()?;
-    let gaia = run_gaia(&test_gaia)?;
-    sleep(5);
+    let (ledger, gaia, test, test_gaia) = run_namada_gaia(update_genesis)?;
+    let _bg_ledger = ledger.background();
     let _bg_gaia = gaia.background();
 
     setup_hermes(&test, &test_gaia)?;
@@ -468,7 +442,7 @@ fn pgf_over_ibc() -> Result<()> {
 fn ibc_token_inflation() -> Result<()> {
     const PIPELINE_LEN: u64 = 2;
     const MASP_EPOCH_MULTIPLIER: u64 = 2;
-    let mut update_genesis =
+    let update_genesis =
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
             genesis.parameters.parameters.epochs_per_year =
                 epochs_per_year_from_min_duration(60);
@@ -483,24 +457,8 @@ fn ibc_token_inflation() -> Result<()> {
                 .default_per_epoch_throughput_limit = Amount::max_signed();
             setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
         };
-    let test = setup::network(&mut update_genesis, None)?;
-
-    set_ethereum_bridge_mode(
-        &test,
-        &test.net.chain_id,
-        Who::Validator(0),
-        ethereum_bridge::ledger::Mode::Off,
-        None,
-    );
-
-    let _bg_ledger =
-        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
-            .background();
-
-    // gaia
-    let test_gaia = setup_gaia()?;
-    let gaia = run_gaia(&test_gaia)?;
-    sleep(5);
+    let (ledger, gaia, test, test_gaia) = run_namada_gaia(update_genesis)?;
+    let _bg_ledger = ledger.background();
     let _bg_gaia = gaia.background();
 
     // Proposal on Namada
@@ -677,10 +635,10 @@ fn ibc_upgrade_client() -> Result<()> {
 #[test]
 fn ibc_rate_limit() -> Result<()> {
     // Mint limit 2 transfer/channel-0/nam, per-epoch throughput limit 1 NAM
-    let mut update_genesis = |mut genesis: templates::All<
+    let update_genesis = |mut genesis: templates::All<
         templates::Unvalidated,
     >,
-                              base_dir: &_| {
+                          base_dir: &_| {
         genesis.parameters.parameters.epochs_per_year =
             epochs_per_year_from_min_duration(50);
         genesis.parameters.ibc_params.default_mint_limit = Amount::from_u64(1);
@@ -690,24 +648,8 @@ fn ibc_rate_limit() -> Result<()> {
             .default_per_epoch_throughput_limit = Amount::from_u64(1_000_000);
         setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
     };
-    let test = setup::network(&mut update_genesis, None)?;
-
-    set_ethereum_bridge_mode(
-        &test,
-        &test.net.chain_id,
-        Who::Validator(0),
-        ethereum_bridge::ledger::Mode::Off,
-        None,
-    );
-
-    let _bg_ledger =
-        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
-            .background();
-
-    // gaia
-    let test_gaia = setup_gaia()?;
-    let gaia = run_gaia(&test_gaia)?;
-    sleep(5);
+    let (ledger, gaia, test, test_gaia) = run_namada_gaia(update_genesis)?;
+    let _bg_ledger = ledger.background();
     let _bg_gaia = gaia.background();
 
     setup_hermes(&test, &test_gaia)?;
@@ -736,7 +678,7 @@ fn ibc_rate_limit() -> Result<()> {
         ALBERT,
         &gaia_receiver,
         NAM,
-        1.0,
+        1,
         Some(ALBERT_KEY),
         &port_id_namada,
         &channel_id_namada,
@@ -752,7 +694,7 @@ fn ibc_rate_limit() -> Result<()> {
         ALBERT,
         &gaia_receiver,
         NAM,
-        1.0,
+        1,
         Some(ALBERT_KEY),
         &port_id_namada,
         &channel_id_namada,
@@ -779,7 +721,7 @@ fn ibc_rate_limit() -> Result<()> {
         ALBERT,
         &gaia_receiver,
         NAM,
-        1.0,
+        1,
         Some(ALBERT_KEY),
         &port_id_namada,
         &channel_id_namada,
@@ -815,9 +757,38 @@ fn ibc_rate_limit() -> Result<()> {
 
     // Check if Namada hasn't receive it
     let ibc_denom = format!("{port_id_namada}/{channel_id_namada}/{GAIA_COIN}");
-    check_balance(&test, ALBERT, ibc_denom, 0)?;
+    // Need the raw address to check the balance because the token shouldn't be
+    // received
+    let token_addr = ibc_token(ibc_denom).to_string();
+    check_balance(&test, ALBERT, token_addr, 0)?;
 
     Ok(())
+}
+
+fn run_namada_gaia(
+    mut update_genesis: impl FnMut(
+        templates::All<templates::Unvalidated>,
+        &Path,
+    ) -> templates::All<templates::Unvalidated>,
+) -> Result<(NamadaCmd, NamadaCmd, Test, Test)> {
+    let test = setup::network(&mut update_genesis, None)?;
+
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+
+    let ledger = start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?;
+
+    // gaia
+    let test_gaia = setup_gaia()?;
+    let gaia = run_gaia(&test_gaia)?;
+    sleep(5);
+
+    Ok((ledger, gaia, test, test_gaia))
 }
 
 fn run_two_nets(
@@ -1087,7 +1058,6 @@ fn upgrade_client(
     Ok(())
 }
 
-// get the client state
 fn get_client_states(
     test: &Test,
     client_id: &ClientId,
@@ -1130,7 +1100,7 @@ fn try_invalid_transfers(
         ALBERT,
         receiver.as_ref(),
         NAM,
-        10.0,
+        10,
         Some(ALBERT_KEY),
         &"port".parse().unwrap(),
         channel_id,
@@ -1147,7 +1117,7 @@ fn try_invalid_transfers(
         ALBERT,
         receiver.as_ref(),
         NAM,
-        10.0,
+        10,
         Some(ALBERT_KEY),
         port_id,
         &"channel-42".parse().unwrap(),
@@ -1201,7 +1171,7 @@ fn transfer(
     sender: impl AsRef<str>,
     receiver: impl AsRef<str>,
     token: impl AsRef<str>,
-    amount: f64,
+    amount: u64,
     signer: Option<&str>,
     port_id: &PortId,
     channel_id: &ChannelId,
@@ -1630,13 +1600,8 @@ fn check_balance(
         &rpc,
     ];
     let mut client = run!(test, Bin::Client, query_args, Some(40))?;
-    let token_alias = if expected_amount == 0 {
-        // the alias should be a raw address since the token hasn't received
-        ibc_token(token).to_string()
-    } else {
-        token.as_ref().to_lowercase()
-    };
-    let expected = format!("{}: {expected_amount}", token_alias);
+    let expected =
+        format!("{}: {expected_amount}", token.as_ref().to_lowercase());
     client.exp_string(&expected)?;
     client.assert_success();
     Ok(())
