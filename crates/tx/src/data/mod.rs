@@ -26,7 +26,7 @@ use namada_core::ibc::IbcTxDataRefs;
 use namada_core::masp::MaspTxRefs;
 use namada_core::storage;
 use namada_events::Event;
-use namada_gas::{Gas, WholeGas};
+use namada_gas::WholeGas;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
@@ -481,9 +481,6 @@ pub struct VpsResult {
     pub accepted_vps: BTreeSet<Address>,
     /// The addresses whose VPs rejected the transaction
     pub rejected_vps: BTreeSet<Address>,
-    /// The total gas used by all the VPs
-    // FIXME: can't we just remove it?
-    pub gas_used: Gas,
     /// Errors occurred in any of the VPs, if any
     pub errors: Vec<(Address, String)>,
     /// Validity predicate status flags, containing info

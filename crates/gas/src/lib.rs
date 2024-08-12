@@ -292,10 +292,8 @@ impl From<Gas> for u64 {
 
 /// Gas represented in whole units. Used for fee payment and to display
 /// information to the user.
-// FIXME: remove Default trait if we remove WholeGas from VpsResult
 #[derive(
     Debug,
-    Default,
     Clone,
     Copy,
     PartialEq,
@@ -377,7 +375,6 @@ pub trait GasMetering {
 
     /// Check if the vps went out of gas. Starts with the gas consumed by the
     /// transaction.
-    ///
     fn check_vps_limit(&self, vps_gas: Gas) -> Result<()> {
         let total = self
             .get_tx_consumed_gas()
@@ -403,7 +400,6 @@ pub struct TxGasMeter {
 
 /// Gas metering in a validity predicate
 #[derive(Debug, Clone)]
-// FIXME: can we simplify this type?
 pub struct VpGasMeter {
     /// Track gas overflow
     gas_overflow: bool,
