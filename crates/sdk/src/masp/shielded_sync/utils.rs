@@ -164,7 +164,7 @@ impl IntoIterator for Fetched {
 /// When retrying to fetch all notes in a
 /// loop, this dictates the strategy for
 /// how many attempts should be made.
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum RetryStrategy {
     /// Always retry
     Forever,

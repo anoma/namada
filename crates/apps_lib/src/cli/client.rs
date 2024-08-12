@@ -1,7 +1,6 @@
 use std::io::Read;
 
 use color_eyre::eyre::Result;
-use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada_sdk::io::Io;
 use namada_sdk::{display_line, Namada, NamadaImpl};
 
@@ -338,7 +337,7 @@ impl CliApi {
                     }
                     Sub::ShieldedSync(ShieldedSync(mut args)) => {
                         let indexer_addr = args.with_indexer.take();
-                        let args = args.to_sdk(&mut ctx)?;
+                        let mut args = args.to_sdk(&mut ctx)?;
                         let chain_ctx = ctx.take_chain_or_exit();
                         let client = client.unwrap_or_else(|| {
                             C::from_tendermint_address(&args.ledger_address)
@@ -346,31 +345,19 @@ impl CliApi {
                         if indexer_addr.is_none() {
                             client.wait_until_node_is_synced(&io).await?;
                         }
-                        let vks = chain_ctx
-                            .wallet
-                            .get_viewing_keys()
-                            .values()
-                            .copied()
-                            .map(|vk| ExtendedFullViewingKey::from(vk).fvk.vk)
-                            .chain(args.viewing_keys.into_iter().map(|vk| {
-                                ExtendedFullViewingKey::from(vk).fvk.vk
-                            }))
-                            .collect::<Vec<_>>();
-                        let sks = args
-                            .spending_keys
-                            .into_iter()
-                            .map(|sk| sk.into())
-                            .collect::<Vec<_>>();
+                        args.viewing_keys.extend(
+                            chain_ctx
+                                .wallet
+                                .get_viewing_keys()
+                                .values()
+                                .copied(),
+                        );
+
                         crate::client::masp::syncing(
                             chain_ctx.shielded,
                             client,
-                            args.wait_for_last_query_height,
-                            args.max_concurrent_fetches,
-                            indexer_addr.as_ref().map(|s| s.as_ref()),
+                            args,
                             &io,
-                            args.last_query_height,
-                            &sks,
-                            &vks,
                         )
                         .await?;
                     }

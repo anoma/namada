@@ -27,6 +27,7 @@ use zeroize::Zeroizing;
 
 use crate::eth_bridge::bridge_pool;
 use crate::ibc::core::host::types::identifiers::{ChannelId, PortId};
+use crate::masp::utils::RetryStrategy;
 use crate::signing::SigningTxData;
 use crate::{rpc, tx, Namada};
 
@@ -108,7 +109,7 @@ impl NamadaTypes for SdkTypes {
     type Data = Vec<u8>;
     type EthereumAddress = ();
     type Keypair = namada_core::key::common::SecretKey;
-    type MaspIndexerAddress = ();
+    type MaspIndexerAddress = String;
     type PaymentAddress = namada_core::masp::PaymentAddress;
     type PublicKey = namada_core::key::common::PublicKey;
     type SpendingKey = namada_core::masp::ExtendedSpendingKey;
@@ -2136,6 +2137,9 @@ pub struct ShieldedSync<C: NamadaTypes = SdkTypes> {
     /// Maximum number of fetch jobs that will ever
     /// execute concurrently during the shielded sync.
     pub max_concurrent_fetches: usize,
+    /// Maximum number of times to retry fetching. If `None`
+    /// is provided, defaults to "forever".
+    pub retry_strategy: RetryStrategy,
 }
 
 /// Query PoS commission rate

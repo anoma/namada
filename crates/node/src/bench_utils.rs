@@ -22,6 +22,7 @@ use namada_apps_lib::cli::context::FromContext;
 use namada_apps_lib::cli::Context;
 use namada_apps_lib::wallet::{defaults, CliWalletUtils};
 use namada_sdk::address::{self, Address, InternalAddress, MASP};
+use namada_sdk::args::ShieldedSync;
 use namada_sdk::chain::ChainId;
 use namada_sdk::events::extend::{
     ComposeEvent, MaspTxBatchRefs, MaspTxBlockIndex,
@@ -69,6 +70,7 @@ use namada_sdk::ibc::storage::{
 use namada_sdk::ibc::MsgTransfer;
 use namada_sdk::io::StdIo;
 use namada_sdk::key::common::SecretKey;
+use namada_sdk::masp::utils::RetryStrategy;
 use namada_sdk::masp::{
     self, ContextSyncStatus, DispatcherCache, ExtendedViewingKey,
     MaspTransferData, MaspTxRefs, PaymentAddress, ShieldedContext,
@@ -1171,13 +1173,18 @@ impl BenchShieldedCtx {
             .block_on(namada_apps_lib::client::masp::syncing(
                 self.shielded,
                 self.shell.clone(),
-                false,
-                100,
-                None,
+                ShieldedSync {
+                    ledger_address: FromStr::from_str("http://127.0.0.1:1337")
+                        .unwrap(),
+                    last_query_height: None,
+                    spending_keys: vec![spending_key],
+                    viewing_keys: vec![],
+                    with_indexer: None,
+                    wait_for_last_query_height: false,
+                    max_concurrent_fetches: 0,
+                    retry_strategy: RetryStrategy::Forever,
+                },
                 &StdIo,
-                None,
-                &[spending_key.into()],
-                &[],
             ))
             .unwrap();
         let native_token =

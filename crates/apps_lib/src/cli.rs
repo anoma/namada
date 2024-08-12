@@ -3165,6 +3165,7 @@ pub mod args {
     use namada_sdk::ibc::core::host::types::identifiers::{ChannelId, PortId};
     use namada_sdk::keccak::KeccakHash;
     use namada_sdk::key::*;
+    use namada_sdk::masp::utils::RetryStrategy;
     use namada_sdk::masp::{MaspEpoch, PaymentAddress};
     use namada_sdk::storage::{self, BlockHeight, Epoch};
     use namada_sdk::time::DateTimeUtc;
@@ -3402,6 +3403,7 @@ pub mod args {
     pub const REFUND_TARGET: ArgOpt<WalletTransferTarget> =
         arg_opt("refund-target");
     pub const RELAYER: Arg<Address> = arg("relayer");
+    pub const RETRIES: ArgOpt<u64> = arg_opt("retries");
     pub const SCHEME: ArgDefault<SchemeType> =
         arg_default("scheme", DefaultFn(|| SchemeType::Ed25519));
     pub const SHELL: Arg<Shell> = arg("shell");
@@ -6581,6 +6583,10 @@ pub mod args {
             let wait_for_last_query_height =
                 WAIT_FOR_LAST_QUERY_HEIGHT.parse(matches);
             let max_concurrent_fetches = MAX_CONCURRENT_FETCHES.parse(matches);
+            let retry_strategy = match RETRIES.parse(matches) {
+                Some(times) => RetryStrategy::Times(times),
+                None => RetryStrategy::Forever,
+            };
             Self {
                 ledger_address,
                 last_query_height,
@@ -6589,6 +6595,7 @@ pub mod args {
                 with_indexer,
                 wait_for_last_query_height,
                 max_concurrent_fetches,
+                retry_strategy,
             }
         }
 
@@ -6618,6 +6625,10 @@ pub mod args {
                     "Maximum number of fetch jobs that will ever execute \
                      concurrently during the shielded sync."
                 )))
+                .arg(RETRIES.def().help(wrap!(
+                    "Maximum number of times to retry fetching. If `None`
+                     is provided, defaults to \"forever\"."
+                )))
         }
     }
 
@@ -6645,7 +6656,8 @@ pub mod args {
                     .iter()
                     .map(|vk| chain_ctx.get_cached(vk))
                     .collect(),
-                with_indexer: self.with_indexer.map(|_| ()),
+                with_indexer: self.with_indexer,
+                retry_strategy: self.retry_strategy,
             })
         }
     }

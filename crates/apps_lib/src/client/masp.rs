@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use color_eyre::owo_colors::OwoColorize;
-use masp_primitives::sapling::ViewingKey;
-use masp_primitives::zip32::ExtendedSpendingKey;
+use masp_primitives::zip32::ExtendedFullViewingKey;
+use namada_sdk::args::ShieldedSync;
 use namada_sdk::control_flow::install_shutdown_signal;
 use namada_sdk::error::Error;
 #[cfg(any(test, feature = "testing"))]
@@ -13,7 +13,6 @@ use namada_sdk::masp::{
     MaspLocalTaskEnv, ShieldedContext, ShieldedSyncConfig, ShieldedUtils,
 };
 use namada_sdk::queries::Client;
-use namada_sdk::storage::BlockHeight;
 use namada_sdk::{display, display_line, MaybeSend, MaybeSync};
 
 #[allow(clippy::too_many_arguments)]
@@ -24,13 +23,8 @@ pub async fn syncing<
 >(
     mut shielded: ShieldedContext<U>,
     client: C,
-    wait_for_last_query_height: bool,
-    max_concurrent_fetches: usize,
-    indexer_addr: Option<&str>,
+    args: ShieldedSync,
     io: &IO,
-    last_query_height: Option<BlockHeight>,
-    sks: &[ExtendedSpendingKey],
-    fvks: &[ViewingKey],
 ) -> Result<ShieldedContext<U>, Error> {
     let (fetched_bar, scanned_bar, applied_bar) = {
         #[cfg(any(test, feature = "testing"))]
@@ -77,6 +71,16 @@ pub async fn syncing<
         }
     };
 
+    let sks = args
+        .spending_keys
+        .into_iter()
+        .map(|sk| sk.into())
+        .collect::<Vec<_>>();
+    let fvks = args
+        .viewing_keys
+        .into_iter()
+        .map(|vk| ExtendedFullViewingKey::from(vk).fvk.vk)
+        .collect::<Vec<_>>();
     macro_rules! dispatch_client {
         ($client:expr) => {{
             let config = ShieldedSyncConfig::builder()
@@ -85,12 +89,13 @@ pub async fn syncing<
                 .scanned_tracker(scanned_bar)
                 .applied_tracker(applied_bar)
                 .shutdown_signal(install_shutdown_signal(false))
-                .wait_for_last_query_height(wait_for_last_query_height)
+                .wait_for_last_query_height(args.wait_for_last_query_height)
+                .retry_strategy(args.retry_strategy)
                 .build();
 
             let env = MaspLocalTaskEnv::new(500)?;
             let ctx = shielded
-                .fetch(env, config, last_query_height, sks, fvks)
+                .fetch(env, config, args.last_query_height, &sks, &fvks)
                 .await
                 .map(|_| shielded);
 
@@ -100,7 +105,7 @@ pub async fn syncing<
         }};
     }
 
-    let shielded = if let Some(endpoint) = indexer_addr {
+    let shielded = if let Some(endpoint) = args.with_indexer {
         display_line!(
             io,
             "{}\n",
@@ -113,7 +118,7 @@ pub async fn syncing<
             .map_err(|err| {
                 Error::Other(format!("Failed to build http client: {err}"))
             })?;
-        let url = endpoint.try_into().map_err(|err| {
+        let url = endpoint.as_str().try_into().map_err(|err| {
             Error::Other(format!(
                 "Failed to parse API endpoint {endpoint:?}: {err}"
             ))
@@ -123,7 +128,7 @@ pub async fn syncing<
             client,
             url,
             true,
-            max_concurrent_fetches,
+            args.max_concurrent_fetches,
         ))?
     } else {
         display_line!(
@@ -132,9 +137,10 @@ pub async fn syncing<
             "==== Shielded sync started using ledger client ====".bold()
         );
 
-        dispatch_client!(
-            LedgerMaspClient::new(client, max_concurrent_fetches,)
-        )?
+        dispatch_client!(LedgerMaspClient::new(
+            client,
+            args.max_concurrent_fetches,
+        ))?
     };
 
     Ok(shielded)
