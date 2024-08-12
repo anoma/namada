@@ -761,7 +761,6 @@ fn ibc_upgrade_client() -> Result<()> {
     // first height of the grace epoch. It is set 340 because the grace epoch in
     // this test will be Epoch 18 and the number of blocks per epoch is 20.
     const MIN_UPGRADE_HEIGHT: u64 = 340;
-    const MASP_EPOCH_MULTIPLIER: u64 = 2;
     const PIPELINE_LEN: u64 = 8;
 
     let update_genesis =
@@ -770,8 +769,6 @@ fn ibc_upgrade_client() -> Result<()> {
                 epochs_per_year_from_min_duration(20);
             // for the trusting period of IBC client
             genesis.parameters.pos_params.pipeline_len = PIPELINE_LEN;
-            genesis.parameters.parameters.masp_epoch_multiplier =
-                MASP_EPOCH_MULTIPLIER;
             genesis.parameters.gov_params.min_proposal_grace_epochs = 3;
             genesis.parameters.ibc_params.default_mint_limit =
                 Amount::max_signed();
