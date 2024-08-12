@@ -1022,7 +1022,8 @@ pub async fn to_ledger_vector(
 
             tv.name = "Become_Validator_0".to_string();
 
-            tv.output.extend(vec!["Type : Become Validator".to_string()]);
+            tv.output
+                .extend(vec!["Type : Become Validator".to_string()]);
             tv.output.extend(vec![
                 format!("Address : {}", init_validator.address),
                 format!("Consensus key : {}", init_validator.consensus_key),
@@ -1050,8 +1051,7 @@ pub async fn to_ledger_vector(
                     .push(format!("Discord handle : {}", discord_handle));
             }
             if let Some(avatar) = &init_validator.avatar {
-                tv.output
-                    .push(format!("Avatar : {}", avatar));
+                tv.output.push(format!("Avatar : {}", avatar));
             }
 
             tv.output_expert.extend(vec![
@@ -1082,8 +1082,7 @@ pub async fn to_ledger_vector(
                     .push(format!("Discord handle : {}", discord_handle));
             }
             if let Some(avatar) = &init_validator.avatar {
-                tv.output_expert
-                    .push(format!("Avatar : {}", avatar));
+                tv.output_expert.push(format!("Avatar : {}", avatar));
             }
         } else if code_sec.tag == Some(TX_INIT_PROPOSAL.to_string()) {
             let init_proposal_data = InitProposalData::try_from_slice(
@@ -1342,7 +1341,14 @@ pub async fn to_ledger_vector(
                         "Receiver : {}",
                         transfer.message.packet_data.receiver
                     ),
-                    format!("Memo : {}", transfer.message.packet_data.memo),
+                ]);
+                if !transfer.message.packet_data.memo.to_string().is_empty() {
+                    tv.output_expert.push(format!(
+                        "Memo : {}",
+                        transfer.message.packet_data.memo
+                    ));
+                }
+                tv.output_expert.extend(vec![
                     format!(
                         "Timeout height : {}",
                         transfer.message.timeout_height_on_b
@@ -1509,7 +1515,9 @@ pub async fn to_ledger_vector(
                     ),
                 ]);
                 if let Some(memo) = &transfer.message.packet_data.memo {
-                    tv.output_expert.push(format!("Memo: {}", memo));
+                    if !memo.to_string().is_empty() {
+                        tv.output_expert.push(format!("Memo: {}", memo));
+                    }
                 }
                 tv.output_expert.extend(vec![
                     format!(
