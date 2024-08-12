@@ -94,15 +94,6 @@ pub fn ensure_hot_key(key: &str) -> &str {
     }
 }
 
-/// Same as ensure_hot_key but for addressees
-pub fn ensure_hot_addr(key: &str) -> &str {
-    if is_use_device() {
-        constants::FRANK
-    } else {
-        key
-    }
-}
-
 /// Default functions for offsetting ports when
 /// adding multiple validators to a network
 pub fn default_port_offset(ix: u8) -> u16 {
@@ -1429,9 +1420,6 @@ where
 
 #[allow(dead_code)]
 pub mod constants {
-    // Paths to the WASMs used for tests
-    pub use namada_sdk::tx::TX_IBC_WASM;
-
     // User addresses aliases
     pub const ALBERT: &str = "Albert";
     pub const ALBERT_KEY: &str = "Albert-key";

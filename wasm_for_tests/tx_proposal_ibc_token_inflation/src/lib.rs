@@ -6,7 +6,7 @@ use namada_tx_prelude::*;
 // Denom of tokens over IBC is always zero
 const IBC_TOKEN_DENOM: u8 = 0;
 const CHANNEL_ID: &str = "channel-0";
-const BASE_TOKEN: &str = "tnam1qyvfwdkz8zgs9n3qn9xhp8scyf8crrxwuq26r6gy";
+const BASE_TOKEN: &str = "samoleans";
 
 #[transaction]
 fn apply_tx(ctx: &mut Ctx, _tx_data: BatchedTx) -> TxResult {

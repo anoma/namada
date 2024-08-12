@@ -16,8 +16,6 @@ use data_encoding::HEXLOWER;
 use escargot::CargoBuild;
 use eyre::eyre;
 use namada_apps_lib::cli::context::ENV_VAR_CHAIN_ID;
-use namada_apps_lib::config::genesis::chain::DeriveEstablishedAddress;
-use namada_apps_lib::config::genesis::templates;
 use namada_apps_lib::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps_lib::config::{Config, TendermintMode};
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
@@ -212,30 +210,6 @@ pub fn get_pregenesis_wallet<P: AsRef<Path>>(
     wallet.load().expect("Failed to load wallet");
 
     wallet
-}
-
-/// Get a pregenesis public key.
-pub fn get_pregenesis_pk<P: AsRef<Path>>(
-    alias: &str,
-    base_dir_path: P,
-) -> Option<common::PublicKey> {
-    let wallet = get_pregenesis_wallet(base_dir_path);
-    wallet.find_public_key(alias).ok()
-}
-
-/// Get a pregenesis public key.
-pub fn get_established_addr_from_pregenesis<P: AsRef<Path>>(
-    alias: &str,
-    base_dir_path: P,
-    genesis: &templates::All<templates::Unvalidated>,
-) -> Option<Address> {
-    let pk = get_pregenesis_pk(alias, base_dir_path)?;
-    let established_accounts =
-        genesis.transactions.established_account.as_ref()?;
-    let acct = established_accounts.iter().find(|&acct| {
-        acct.public_keys.len() == 1 && acct.public_keys[0].raw == pk
-    })?;
-    Some(acct.derive_address())
 }
 
 /// Find the address of an account by its alias from the wallet

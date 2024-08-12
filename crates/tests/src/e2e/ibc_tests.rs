@@ -11,7 +11,6 @@
 
 use core::str::FromStr;
 use core::time::Duration;
-use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use color_eyre::eyre::Result;
@@ -21,7 +20,6 @@ use namada_apps_lib::client::rpc::query_storage_value_bytes;
 use namada_apps_lib::config::genesis::{chain, templates};
 use namada_apps_lib::config::utils::set_port;
 use namada_apps_lib::config::{ethereum_bridge, TendermintMode};
-use namada_apps_lib::facade::tendermint::merkle::proof::ProofOps as TmProof;
 use namada_apps_lib::facade::tendermint_rpc::{Client, HttpClient, Url};
 use namada_core::string_encoding::StringEncoded;
 use namada_sdk::address::{Address, MASP};
@@ -29,10 +27,7 @@ use namada_sdk::governance::cli::onchain::PgfFunding;
 use namada_sdk::governance::pgf::ADDRESS as PGF_ADDRESS;
 use namada_sdk::governance::storage::proposal::{PGFIbcTarget, PGFTarget};
 use namada_sdk::ibc::clients::tendermint::client_state::ClientState as TmClientState;
-use namada_sdk::ibc::core::client::context::client_state::ClientStateCommon;
 use namada_sdk::ibc::core::client::types::Height;
-use namada_sdk::ibc::core::commitment_types::commitment::CommitmentProofBytes;
-use namada_sdk::ibc::core::commitment_types::merkle::MerkleProof;
 use namada_sdk::ibc::core::host::types::identifiers::{
     ChannelId, ClientId, PortId,
 };
@@ -41,7 +36,7 @@ use namada_sdk::ibc::storage::*;
 use namada_sdk::ibc::trace::ibc_token;
 use namada_sdk::masp::fs::FsShieldedUtils;
 use namada_sdk::masp::PaymentAddress;
-use namada_sdk::storage::{BlockHeight, Epoch, Key};
+use namada_sdk::storage::Epoch;
 use namada_sdk::token::Amount;
 use namada_test_utils::TestWasms;
 use prost::Message;
@@ -50,11 +45,10 @@ use sha2::{Digest, Sha256};
 
 use crate::e2e::helpers::{
     epochs_per_year_from_min_duration, find_address, find_gaia_address,
-    get_actor_rpc, get_epoch, get_established_addr_from_pregenesis,
-    get_validator_pk, wait_for_wasm_pre_compile,
+    get_actor_rpc, get_epoch, get_validator_pk, wait_for_wasm_pre_compile,
 };
 use crate::e2e::ledger_tests::{
-    prepare_proposal_data, start_namada_ledger_node_wait_wasm, write_json_file,
+    start_namada_ledger_node_wait_wasm, write_json_file,
 };
 use crate::e2e::setup::{
     self, apply_use_device, run_gaia_cmd, run_hermes_cmd,
@@ -144,7 +138,7 @@ fn ibc_transfers() -> Result<()> {
     let token_addr = find_address(&test, APFEL)?;
     let ibc_denom_on_gaia =
         format!("{port_id_gaia}/{channel_id_gaia}/{token_addr}");
-    check_gaia_balance(&test_gaia, GAIA_USER, &ibc_denom_on_gaia, 2000000)?;
+    check_gaia_balance(&test_gaia, GAIA_USER, &ibc_denom_on_gaia, 2_000_000)?;
 
     // Transfer 1 Apfel back from Gaia to Namada
     let namada_receiver = find_address(&test, ALBERT)?.to_string();
@@ -153,7 +147,7 @@ fn ibc_transfers() -> Result<()> {
         GAIA_USER,
         &namada_receiver,
         get_gaia_denom_hash(&ibc_denom_on_gaia),
-        1000000,
+        1_000_000,
         &port_id_gaia,
         &channel_id_gaia,
         None,
@@ -162,7 +156,7 @@ fn ibc_transfers() -> Result<()> {
     wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test)?;
 
     // Check the token on Namada
-    check_balance(&test, ALBERT, APFEL, 999999)?;
+    check_balance(&test, ALBERT, APFEL, 999_999)?;
 
     // Transfer 200 samoleans from Gaia to Namada
     transfer_from_gaia(
@@ -211,7 +205,7 @@ fn ibc_transfers() -> Result<()> {
     )?;
 
     // Shielding transfer 100 samoleans from Gaia to Namada
-    let memo_path = gen_ibc_shielding_data(
+    let shielding_data_path = gen_ibc_shielding_data(
         &test,
         AA_PAYMENT_ADDRESS,
         GAIA_COIN,
@@ -227,7 +221,7 @@ fn ibc_transfers() -> Result<()> {
         100,
         &port_id_gaia,
         &channel_id_gaia,
-        Some(memo_path),
+        Some(shielding_data_path),
         None,
     )?;
     wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test_gaia)?;
@@ -309,7 +303,7 @@ fn ibc_transfers() -> Result<()> {
     )?;
     wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
     // The balance should not be changed
-    check_balance(&test, ALBERT, APFEL, 999999)?;
+    check_balance(&test, ALBERT, APFEL, 999_999)?;
 
     // Stop Hermes for timeout test
     let mut hermes = bg_hermes.foreground();
@@ -365,45 +359,54 @@ fn ibc_transfers() -> Result<()> {
 }
 
 #[test]
-fn pgf_over_ibc_with_hermes() -> Result<()> {
-    let update_genesis = |mut genesis: templates::All<
-        templates::Unvalidated,
-    >,
-                          base_dir: &_| {
-        genesis.parameters.parameters.epochs_per_year =
-            epochs_per_year_from_min_duration(20);
-        // for the trusting period of IBC client
-        genesis.parameters.pos_params.pipeline_len = 5;
-        genesis.parameters.parameters.max_proposal_bytes = Default::default();
-        genesis.parameters.pgf_params.stewards =
-            BTreeSet::from_iter([get_established_addr_from_pregenesis(
-                ALBERT_KEY, base_dir, &genesis,
-            )
-            .unwrap()]);
-        genesis.parameters.ibc_params.default_mint_limit = Amount::max_signed();
-        genesis
-            .parameters
-            .ibc_params
-            .default_per_epoch_throughput_limit = Amount::max_signed();
-        setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
-    };
-    let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
-    let _bg_ledger_a = ledger_a.background();
-    let _bg_ledger_b = ledger_b.background();
+fn pgf_over_ibc() -> Result<()> {
+    const PIPELINE_LEN: u64 = 5;
+    let mut update_genesis =
+        |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
+            genesis.parameters.parameters.epochs_per_year =
+                epochs_per_year_from_min_duration(20);
+            // for the trusting period of IBC client
+            genesis.parameters.pos_params.pipeline_len = PIPELINE_LEN;
+            genesis.parameters.gov_params.min_proposal_grace_epochs = 3;
+            genesis
+                .parameters
+                .ibc_params
+                .default_per_epoch_throughput_limit = Amount::max_signed();
+            setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
+        };
+    let test = setup::network(&mut update_genesis, None)?;
 
-    setup_hermes(&test_a, &test_b)?;
-    let port_id_a = "transfer".parse().unwrap();
-    let port_id_b = "transfer".parse().unwrap();
-    let (channel_id_a, channel_id_b) =
-        create_channel_with_hermes(&test_a, &test_b)?;
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+
+    let _bg_ledger =
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
+            .background();
+
+    // gaia
+    let test_gaia = setup_gaia()?;
+    let gaia = run_gaia(&test_gaia)?;
+    sleep(5);
+    let _bg_gaia = gaia.background();
+
+    setup_hermes(&test, &test_gaia)?;
+    let port_id_namada = "transfer".parse().unwrap();
+    let port_id_gaia: PortId = "transfer".parse().unwrap();
+    let (channel_id_namada, channel_id_gaia) =
+        create_channel_with_hermes(&test, &test_gaia)?;
 
     // Start relaying
-    let hermes = run_hermes(&test_a)?;
+    let hermes = run_hermes(&test)?;
     let _bg_hermes = hermes.background();
 
     // Transfer to PGF account
     transfer_on_chain(
-        &test_a,
+        &test,
         "transparent-transfer",
         ALBERT,
         PGF_ADDRESS.to_string(),
@@ -412,44 +415,60 @@ fn pgf_over_ibc_with_hermes() -> Result<()> {
         ALBERT_KEY,
     )?;
 
-    // Proposal on Chain A
+    // Proposal on Namada
     // Delegate some token
-    delegate_token(&test_a)?;
-    let rpc_a = get_actor_rpc(&test_a, Who::Validator(0));
-    let mut epoch = get_epoch(&test_a, &rpc_a).unwrap();
-    let delegated = epoch + 5u64;
-    while epoch <= delegated {
+    delegate_token(&test)?;
+    let rpc = get_actor_rpc(&test, Who::Validator(0));
+    let mut epoch = get_epoch(&test, &rpc).unwrap();
+    let delegated = epoch + PIPELINE_LEN;
+    while epoch < delegated {
         sleep(5);
-        epoch = get_epoch(&test_a, &rpc_a).unwrap();
+        epoch = get_epoch(&test, &rpc).unwrap();
     }
     // funding proposal
-    let start_epoch =
-        propose_funding(&test_a, &test_b, &port_id_a, &channel_id_a)?;
-    let mut epoch = get_epoch(&test_a, &rpc_a).unwrap();
+    let continuous_receiver = find_gaia_address(&test_gaia, GAIA_RELAYER)?;
+    let retro_receiver = find_gaia_address(&test_gaia, GAIA_USER)?;
+    let start_epoch = propose_funding(
+        &test,
+        continuous_receiver,
+        retro_receiver,
+        &port_id_namada,
+        &channel_id_namada,
+    )?;
+    let mut epoch = get_epoch(&test, &rpc).unwrap();
     // Vote
-    while epoch <= start_epoch {
+    while epoch < start_epoch {
         sleep(5);
-        epoch = get_epoch(&test_a, &rpc_a).unwrap();
+        epoch = get_epoch(&test, &rpc).unwrap();
     }
-    submit_votes(&test_a)?;
+    submit_votes(&test)?;
 
     // wait for the grace
-    let activation_epoch = start_epoch + 12u64 + 6u64 + 1u64;
-    while epoch <= activation_epoch {
+    let grace_epoch = start_epoch + 6u64;
+    while epoch < grace_epoch {
         sleep(5);
-        epoch = get_epoch(&test_a, &rpc_a).unwrap();
+        epoch = get_epoch(&test, &rpc).unwrap();
     }
+    wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
 
     // Check balances after funding over IBC
-    check_funded_balances(&port_id_b, &channel_id_b, &test_b)?;
+    let token_addr = find_address(&test, NAM)?;
+    let ibc_denom = format!("{port_id_gaia}/{channel_id_gaia}/{token_addr}");
+    check_gaia_balance(&test_gaia, GAIA_RELAYER, &ibc_denom, 10_000_000)?;
+    check_gaia_balance(&test_gaia, GAIA_USER, &ibc_denom, 5_000_000)?;
 
     Ok(())
 }
 
+/// IBC token inflation test
+/// - Propose the inflation of an IBC token received from Gaia
+/// - Shielding transfer of the token from Gaia
+/// - Check the inflation
 #[test]
-fn proposal_ibc_token_inflation() -> Result<()> {
+fn ibc_token_inflation() -> Result<()> {
+    const PIPELINE_LEN: u64 = 2;
     const MASP_EPOCH_MULTIPLIER: u64 = 2;
-    let update_genesis =
+    let mut update_genesis =
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
             genesis.parameters.parameters.epochs_per_year =
                 epochs_per_year_from_min_duration(60);
@@ -464,78 +483,95 @@ fn proposal_ibc_token_inflation() -> Result<()> {
                 .default_per_epoch_throughput_limit = Amount::max_signed();
             setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
         };
-    let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
-    let _bg_ledger_a = ledger_a.background();
-    let _bg_ledger_b = ledger_b.background();
+    let test = setup::network(&mut update_genesis, None)?;
 
-    // Proposal on the destination (Chain B)
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+
+    let _bg_ledger =
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
+            .background();
+
+    // gaia
+    let test_gaia = setup_gaia()?;
+    let gaia = run_gaia(&test_gaia)?;
+    sleep(5);
+    let _bg_gaia = gaia.background();
+
+    // Proposal on Namada
     // Delegate some token
-    delegate_token(&test_b)?;
-    let rpc_b = get_actor_rpc(&test_b, Who::Validator(0));
-    let mut epoch = get_epoch(&test_b, &rpc_b).unwrap();
-    let delegated = epoch + 2u64;
-    while epoch <= delegated {
+    delegate_token(&test)?;
+    let rpc = get_actor_rpc(&test, Who::Validator(0));
+    let mut epoch = get_epoch(&test, &rpc).unwrap();
+    let delegated = epoch + PIPELINE_LEN;
+    while epoch < delegated {
         sleep(10);
-        epoch = get_epoch(&test_b, &rpc_b).unwrap_or_default();
+        epoch = get_epoch(&test, &rpc).unwrap_or_default();
     }
-    // inflation proposal on Chain B
-    let start_epoch = propose_inflation(&test_b)?;
-    let mut epoch = get_epoch(&test_b, &rpc_b).unwrap();
+    // inflation proposal on Namada
+    let start_epoch = propose_inflation(&test)?;
+    let mut epoch = get_epoch(&test, &rpc).unwrap();
     // Vote
-    while epoch <= start_epoch {
+    while epoch < start_epoch {
         sleep(10);
-        epoch = get_epoch(&test_b, &rpc_b).unwrap_or_default();
+        epoch = get_epoch(&test, &rpc).unwrap_or_default();
     }
-    submit_votes(&test_b)?;
+    submit_votes(&test)?;
 
-    // wait for the next epoch of the grace
-    wait_epochs(&test_b, 6 + 1)?;
-
-    setup_hermes(&test_a, &test_b)?;
-    let port_id_a = "transfer".parse().unwrap();
-    let port_id_b = "transfer".parse().unwrap();
-    let (channel_id_a, channel_id_b) =
-        create_channel_with_hermes(&test_a, &test_b)?;
-
+    // Create an IBC channel while waiting the grace epoch
+    setup_hermes(&test, &test_gaia)?;
+    let port_id_namada = "transfer".parse().unwrap();
+    let port_id_gaia = "transfer".parse().unwrap();
+    let (channel_id_namada, channel_id_gaia) =
+        create_channel_with_hermes(&test, &test_gaia)?;
     // Start relaying
-    let hermes = run_hermes(&test_a)?;
+    let hermes = run_hermes(&test)?;
     let _bg_hermes = hermes.background();
 
-    // wait the next epoch not to update the epoch during the IBC transfer
-    wait_epochs(&test_b, 1)?;
+    // wait for the grace
+    let grace_epoch = start_epoch + 6u64;
+    while epoch < grace_epoch {
+        sleep(5);
+        epoch = get_epoch(&test, &rpc).unwrap();
+    }
 
-    // Transfer 1 from Chain A to a z-address on Chain B
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
-    let token_addr = find_address(&test_a, APFEL)?.to_string();
+    // Shielding transfer 1 samoleans from Gaia to Namada
     let shielding_data_path = gen_ibc_shielding_data(
-        &test_b,
-        AB_PAYMENT_ADDRESS,
-        token_addr,
-        1_000_000,
-        &port_id_b,
-        &channel_id_b,
+        &test,
+        AA_PAYMENT_ADDRESS,
+        GAIA_COIN,
+        1,
+        &port_id_namada,
+        &channel_id_namada,
     )?;
-    transfer(
-        &test_a,
-        ALBERT,
-        AB_PAYMENT_ADDRESS,
-        APFEL,
-        1.0,
-        Some(ALBERT_KEY),
-        &port_id_a,
-        &channel_id_a,
-        None,
+    transfer_from_gaia(
+        &test_gaia,
+        GAIA_USER,
+        AA_PAYMENT_ADDRESS,
+        GAIA_COIN,
+        1,
+        &port_id_gaia,
+        &channel_id_gaia,
         Some(shielding_data_path),
         None,
-        false,
     )?;
-    wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
+    wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test)?;
 
     // wait the next masp epoch to dispense the reward
-    wait_epochs(&test_b, MASP_EPOCH_MULTIPLIER)?;
+    let mut epoch = get_epoch(&test, &rpc).unwrap();
+    let new_epoch = epoch + MASP_EPOCH_MULTIPLIER;
+    while epoch < new_epoch {
+        sleep(10);
+        epoch = get_epoch(&test, &rpc).unwrap_or_default();
+    }
 
     // Check balances
-    check_inflated_balance(&test_b)?;
+    check_inflated_balance(&test, AA_VIEWING_KEY)?;
 
     Ok(())
 }
@@ -573,7 +609,7 @@ fn ibc_upgrade_client() -> Result<()> {
     let rpc_b = get_actor_rpc(&test_b, Who::Validator(0));
     let mut epoch = get_epoch(&test_b, &rpc_b).unwrap();
     let delegated = epoch + PIPELINE_LEN;
-    while epoch <= delegated {
+    while epoch < delegated {
         sleep(10);
         epoch = get_epoch(&test_b, &rpc_b).unwrap_or_default();
     }
@@ -617,15 +653,10 @@ fn ibc_upgrade_client() -> Result<()> {
     let upgraded_height = get_upgraded_height(&test_b, MIN_UPGRADE_HEIGHT)?;
     // Upgrade the IBC client of Chain B on Chain A with Hermes
     upgrade_client(&test_a, test_a.net.chain_id.to_string(), upgraded_height)?;
-    sleep(1);
 
     // Check the upgraded client
-    let current_height = query_height(&test_a)?;
-    let (upgraded_client_state, _, _) = get_client_states(
-        &test_a,
-        &"07-tendermint-0".parse().unwrap(),
-        current_height,
-    )?;
+    let upgraded_client_state =
+        get_client_states(&test_a, &"07-tendermint-0".parse().unwrap())?;
     assert_eq!(
         upgraded_client_state.inner().chain_id.as_str(),
         "upgraded-chain"
@@ -772,7 +803,7 @@ fn ibc_rate_limit() -> Result<()> {
     transfer_from_gaia(
         &test_gaia,
         GAIA_USER,
-        &namada_receiver,
+        namada_receiver,
         GAIA_COIN,
         2,
         &port_id_gaia,
@@ -784,7 +815,7 @@ fn ibc_rate_limit() -> Result<()> {
 
     // Check if Namada hasn't receive it
     let ibc_denom = format!("{port_id_namada}/{channel_id_namada}/{GAIA_COIN}");
-    check_balance(&test, ALBERT, &ibc_denom, 0)?;
+    check_balance(&test, ALBERT, ibc_denom, 0)?;
 
     Ok(())
 }
@@ -1056,63 +1087,34 @@ fn upgrade_client(
     Ok(())
 }
 
-fn wait_epochs(test: &Test, duration_epochs: u64) -> Result<()> {
-    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
-    let rpc = get_actor_rpc(test, Who::Validator(0));
-    let mut epoch = None;
-    for _ in 0..10 {
-        match get_epoch(test, &rpc) {
-            Ok(e) => {
-                epoch = Some(e);
-                break;
-            }
-            Err(_) => sleep(10),
-        }
-    }
-    let (mut epoch, target_epoch) = match epoch {
-        Some(e) => (e, e + duration_epochs),
-        None => return Err(eyre!("Query epoch failed")),
-    };
-    while epoch < target_epoch {
-        sleep(10);
-        epoch = get_epoch(test, &rpc).unwrap_or_default();
-    }
-    Ok(())
-}
-
-// get the client state, the proof of the client state, and the proof of the
-// consensus state
+// get the client state
 fn get_client_states(
     test: &Test,
     client_id: &ClientId,
-    target_height: Height, // should have been already decremented
-) -> Result<(TmClientState, CommitmentProofBytes, CommitmentProofBytes)> {
-    // we need proofs at the height of the previous block
-    let query_height = target_height.decrement().unwrap();
+) -> Result<TmClientState> {
+    let rpc = get_actor_rpc(test, Who::Validator(0));
+    let tendermint_url = Url::from_str(&rpc).unwrap();
+    let client = HttpClient::new(tendermint_url).unwrap();
     let key = client_state_key(client_id);
-    let (value, tm_proof) =
-        query_value_with_proof(test, &key, Some(query_height))?;
-    let cs = match value {
-        Some(v) => Any::decode(&v[..])
+
+    let result = test
+        .async_runtime()
+        .block_on(query_storage_value_bytes(&client, &key, None, false));
+    let cs = match result {
+        (Some(v), _) => Any::decode(&v[..])
             .map_err(|e| eyre!("Decoding the client state failed: {}", e))?,
-        None => {
+        _ => {
             return Err(eyre!(
                 "The client state doesn't exist: client ID {}",
                 client_id
             ));
         }
     };
+
     let client_state = TmClientState::try_from(cs)
         .expect("the state should be a TmClientState");
-    let client_state_proof = convert_proof(tm_proof)?;
 
-    let height = client_state.latest_height();
-    let ibc_height = Height::new(0, height.revision_height()).unwrap();
-    let key = consensus_state_key(client_id, ibc_height);
-    let (_, tm_proof) = query_value_with_proof(test, &key, Some(query_height))?;
-    let consensus_proof = convert_proof(tm_proof)?;
-
-    Ok((client_state, client_state_proof, consensus_proof))
+    Ok(client_state)
 }
 
 fn try_invalid_transfers(
@@ -1310,58 +1312,27 @@ fn delegate_token(test: &Test) -> Result<()> {
 }
 
 fn propose_funding(
-    test_a: &Test,
-    test_b: &Test,
+    test: &Test,
+    continuous_receiver: impl AsRef<str>,
+    retro_receiver: impl AsRef<str>,
     src_port_id: &PortId,
     src_channel_id: &ChannelId,
 ) -> Result<Epoch> {
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
-    let bertha = find_address(test_b, BERTHA)?;
-    let christel = find_address(test_b, CHRISTEL)?;
-
     let pgf_funding = PgfFunding {
         continuous: vec![PGFTarget::Ibc(PGFIbcTarget {
             amount: Amount::native_whole(10),
-            target: bertha.to_string(),
+            target: continuous_receiver.as_ref().to_string(),
             port_id: src_port_id.clone(),
             channel_id: src_channel_id.clone(),
         })],
         retro: vec![PGFTarget::Ibc(PGFIbcTarget {
             amount: Amount::native_whole(5),
-            target: christel.to_string(),
+            target: retro_receiver.as_ref().to_string(),
             port_id: src_port_id.clone(),
             channel_id: src_channel_id.clone(),
         })],
     };
 
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
-    let albert = find_address(test_a, ALBERT)?;
-    let rpc_a = get_actor_rpc(test_a, Who::Validator(0));
-    let epoch = get_epoch(test_a, &rpc_a)?;
-    let start_epoch = (epoch.0 + 6) / 3 * 3;
-    let proposal_json_path = prepare_proposal_data(
-        test_a.test_dir.path(),
-        albert,
-        pgf_funding,
-        start_epoch,
-    );
-
-    let submit_proposal_args = apply_use_device(vec![
-        "init-proposal",
-        "--pgf-funding",
-        "--data-path",
-        proposal_json_path.to_str().unwrap(),
-        "--node",
-        &rpc_a,
-    ]);
-    let mut client = run!(test_a, Bin::Client, submit_proposal_args, Some(40))?;
-    client.exp_string(TX_APPLIED_SUCCESS)?;
-    client.assert_success();
-    Ok(start_epoch.into())
-}
-
-fn propose_inflation(test: &Test) -> Result<Epoch> {
-    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let albert = find_address(test, ALBERT)?;
     let rpc = get_actor_rpc(test, Who::Validator(0));
     let epoch = get_epoch(test, &rpc)?;
@@ -1369,14 +1340,56 @@ fn propose_inflation(test: &Test) -> Result<Epoch> {
     let proposal_json = serde_json::json!({
         "proposal": {
             "content": {
-                "title": "TheTitle",
+                "title": "PGF",
                 "authors": "test@test.com",
                 "discussions-to": "www.github.com/anoma/aip/1",
                 "created": "2022-03-10T08:54:37Z",
                 "license": "MIT",
-                "abstract": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices. Quisque viverra varius cursus. Praesent sed mauris gravida, pharetra turpis non, gravida eros. Nullam sed ex justo. Ut at placerat ipsum, sit amet rhoncus libero. Sed blandit non purus non suscipit. Phasellus sed quam nec augue bibendum bibendum ut vitae urna. Sed odio diam, ornare nec sapien eget, congue viverra enim.",
-                "motivation": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices.",
-                "details": "Ut convallis eleifend orci vel venenatis. Duis vulputate metus in lacus sollicitudin vestibulum. Suspendisse vel velit ac est consectetur feugiat nec ac urna. Ut faucibus ex nec dictum fermentum. Morbi aliquet purus at sollicitudin ultrices. Quisque viverra varius cursus. Praesent sed mauris gravida, pharetra turpis non, gravida eros.",
+                "abstract": "PGF proposal",
+                "motivation": "PGF proposal test",
+                "details": "PGF proposal",
+                "requires": "2"
+            },
+            "author": albert,
+            "voting_start_epoch": start_epoch,
+            "voting_end_epoch": start_epoch + 3_u64,
+            "activation_epoch": start_epoch + 6_u64,
+        },
+        "data": pgf_funding,
+    });
+    let proposal_json_path = test.test_dir.path().join("proposal.json");
+    write_json_file(proposal_json_path.as_path(), proposal_json);
+
+    let submit_proposal_args = apply_use_device(vec![
+        "init-proposal",
+        "--pgf-funding",
+        "--data-path",
+        proposal_json_path.to_str().unwrap(),
+        "--node",
+        &rpc,
+    ]);
+    let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
+    client.assert_success();
+    Ok(start_epoch.into())
+}
+
+fn propose_inflation(test: &Test) -> Result<Epoch> {
+    let albert = find_address(test, ALBERT)?;
+    let rpc = get_actor_rpc(test, Who::Validator(0));
+    let epoch = get_epoch(test, &rpc)?;
+    let start_epoch = (epoch.0 + 3) / 3 * 3;
+    let proposal_json = serde_json::json!({
+        "proposal": {
+            "content": {
+                "title": "IBC token inflation",
+                "authors": "test@test.com",
+                "discussions-to": "www.github.com/anoma/aip/1",
+                "created": "2022-03-10T08:54:37Z",
+                "license": "MIT",
+                "abstract": "IBC token inflation",
+                "motivation": "IBC token inflation",
+                "details": "IBC token inflation",
                 "requires": "2"
             },
             "author": albert,
@@ -1595,48 +1608,12 @@ fn query_height(test: &Test) -> Result<Height> {
     Ok(Height::new(0, status.sync_info.latest_block_height.into()).unwrap())
 }
 
-fn query_value_with_proof(
-    test: &Test,
-    key: &Key,
-    height: Option<Height>,
-) -> Result<(Option<Vec<u8>>, TmProof)> {
-    let rpc = get_actor_rpc(test, Who::Validator(0));
-    let tendermint_url = Url::from_str(&rpc).unwrap();
-    let client = HttpClient::new(tendermint_url).unwrap();
-    let result = test.async_runtime().block_on(query_storage_value_bytes(
-        &client,
-        key,
-        height.map(|h| BlockHeight(h.revision_height())),
-        true,
-    ));
-    match result {
-        (value, Some(proof)) => Ok((value, proof)),
-        _ => Err(eyre!("Query failed: key {}", key)),
-    }
-}
-
-fn convert_proof(tm_proof: TmProof) -> Result<CommitmentProofBytes> {
-    let mut proofs = Vec::new();
-    for op in &tm_proof.ops {
-        let mut parsed = ics23::CommitmentProof { proof: None };
-        prost::Message::merge(&mut parsed, op.data.as_slice())
-            .expect("merging CommitmentProof failed");
-        proofs.push(parsed);
-    }
-
-    let merkle_proof = MerkleProof { proofs };
-    CommitmentProofBytes::try_from(merkle_proof).map_err(|e| {
-        eyre!("Proof conversion to CommitmentProofBytes failed: {}", e)
-    })
-}
-
 fn check_balance(
     test: &Test,
     owner: impl AsRef<str>,
     token: impl AsRef<str>,
     expected_amount: u64,
 ) -> Result<()> {
-    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let rpc = get_actor_rpc(test, Who::Validator(0));
 
     if owner.as_ref().starts_with("zvk") {
@@ -1698,59 +1675,17 @@ fn check_gaia_balance(
     Ok(())
 }
 
-fn check_funded_balances(
-    dest_port_id: &PortId,
-    dest_channel_id: &ChannelId,
-    test_b: &Test,
+fn check_inflated_balance(
+    test: &Test,
+    viewing_key: impl AsRef<str>,
 ) -> Result<()> {
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
-    // Check the balances on Chain B
-    let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/nam");
-    let rpc_b = get_actor_rpc(test_b, Who::Validator(0));
-    let query_args = vec![
-        "balance", "--owner", BERTHA, "--token", &ibc_denom, "--node", &rpc_b,
-    ];
-    let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
-    let regex = format!("{ibc_denom}: .*");
-    let (_, matched) = client.exp_regex(&regex)?;
-    let regex = regex::Regex::new(r"[0-9]+").unwrap();
-    let iter = regex.find_iter(&matched);
-    let balance: u64 = iter.last().unwrap().as_str().parse().unwrap();
-    assert!(balance >= 10);
-    client.assert_success();
+    shielded_sync(test, viewing_key.as_ref())?;
 
-    let query_args = vec![
-        "balance", "--owner", CHRISTEL, "--token", &ibc_denom, "--node", &rpc_b,
-    ];
-    let mut client = run!(test_b, Bin::Client, query_args, Some(40))?;
-    let regex = format!("{ibc_denom}: .*");
-    let (_, matched) = client.exp_regex(&regex)?;
-    let regex = regex::Regex::new(r"[0-9]+").unwrap();
-    let iter = regex.find_iter(&matched);
-    let balance: u64 = iter.last().unwrap().as_str().parse().unwrap();
-    assert!(balance >= 5);
-    client.assert_success();
-
-    Ok(())
-}
-
-fn check_inflated_balance(test: &Test) -> Result<()> {
-    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let rpc = get_actor_rpc(test, Who::Validator(0));
-    let tx_args = vec![
-        "shielded-sync",
-        "--viewing-keys",
-        AB_VIEWING_KEY,
-        "--node",
-        &rpc,
-    ];
-    let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
-    client.assert_success();
-
     let query_args = vec![
         "balance",
         "--owner",
-        AB_VIEWING_KEY,
+        viewing_key.as_ref(),
         "--token",
         NAM,
         "--node",
@@ -1768,7 +1703,6 @@ fn check_inflated_balance(test: &Test) -> Result<()> {
 }
 
 fn shielded_sync(test: &Test, viewing_key: impl AsRef<str>) -> Result<()> {
-    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let rpc = get_actor_rpc(test, Who::Validator(0));
     let tx_args = vec![
         "shielded-sync",
