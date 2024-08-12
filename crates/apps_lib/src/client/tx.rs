@@ -1,19 +1,11 @@
 use std::fs::File;
 use std::io::Write;
-use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
-use std::ops::Deref;
-use std::str::FromStr;
 
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
-use ledger_lib::transport::TcpInfo;
-use ledger_lib::Transport;
 use ledger_namada_rs::{BIP44Path, NamadaApp};
-use ledger_transport::{APDUAnswer, APDUCommand};
-use ledger_transport_hid::hidapi::HidApi;
-use ledger_transport_hid::TransportNativeHID;
 use namada_sdk::address::{Address, ImplicitAddress};
-use namada_sdk::args::{DeviceTransport, TxBecomeValidator};
+use namada_sdk::args::TxBecomeValidator;
 use namada_sdk::collections::HashSet;
 use namada_sdk::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal,
@@ -38,7 +30,9 @@ use crate::client::tx::tx::ProcessTxResponse;
 use crate::config::TendermintMode;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::tendermint_node;
-use crate::wallet::{gen_validator_keys, read_and_confirm_encryption_password};
+use crate::wallet::{
+    gen_validator_keys, read_and_confirm_encryption_password, WalletTransport,
+};
 
 /// Wrapper around `signing::aux_signing_data` that stores the optional
 /// disposable address to the wallet
@@ -159,41 +153,6 @@ where
     Ok(tx)
 }
 
-#[derive(Default)]
-pub struct NamadaAppTcpTransport;
-
-#[ledger_transport::async_trait]
-impl ledger_transport::Exchange for NamadaAppTcpTransport {
-    type AnswerType = Vec<u8>;
-    type Error = ledger_lib::Error;
-
-    async fn exchange<I>(
-        &self,
-        command: &APDUCommand<I>,
-    ) -> Result<APDUAnswer<Self::AnswerType>, Self::Error>
-    where
-        I: Deref<Target = [u8]> + Send + Sync,
-    {
-        use ledger_lib::Exchange;
-        let mut transport = ledger_lib::transport::TcpTransport::default();
-        let ip = std::env::var("LEDGER_PROXY_ADDRESS")
-            .map(|s| Ipv4Addr::from_str(&s).unwrap())
-            .unwrap_or(Ipv4Addr::LOCALHOST);
-        let port = std::env::var("LEDGER_PROXY_PORT")
-            .map(|s| u16::from_str(&s).unwrap())
-            .unwrap_or(9999);
-        let mut device = transport
-            .connect(TcpInfo {
-                addr: SocketAddr::V4(SocketAddrV4::new(ip, port)),
-            })
-            .await?;
-        let res = device
-            .exchange(&command.serialize(), std::time::Duration::from_secs(60))
-            .await?;
-        Ok(APDUAnswer::from_answer(res).unwrap())
-    }
-}
-
 // Sign the given transaction using a hardware wallet as a backup
 pub async fn sign<N: Namada>(
     context: &N,
@@ -203,47 +162,19 @@ pub async fn sign<N: Namada>(
 ) -> Result<(), error::Error> {
     // Setup a reusable context for signing transactions using the Ledger
     if args.use_device {
-        macro_rules! sign {
-            ($app:expr) => {
-                let with_hw_data = (context.wallet_lock(), &$app);
-                // Finally, begin the signing with the Ledger as backup
-                context
-                    .sign(
-                        tx,
-                        args,
-                        signing_data,
-                        with_hardware_wallet::<N::WalletUtils, _>,
-                        with_hw_data,
-                    )
-                    .await?;
-            };
-        }
-        match args.device_transport {
-            DeviceTransport::Hid => {
-                tracing::info!("Signing over HID");
-                let hidapi = HidApi::new().map_err(|err| {
-                    error::Error::Other(format!(
-                        "Failed to create Hidapi: {}",
-                        err
-                    ))
-                })?;
-
-                let transport =
-                    TransportNativeHID::new(&hidapi).map_err(|err| {
-                        error::Error::Other(format!(
-                            "Unable to connect to Ledger: {}",
-                            err
-                        ))
-                    })?;
-                let app = NamadaApp::new(transport);
-                sign!(app);
-            }
-            DeviceTransport::Tcp => {
-                tracing::info!("Signing over TCP");
-                let app = NamadaApp::new(NamadaAppTcpTransport);
-                sign!(app);
-            }
-        }
+        let transport = WalletTransport::from_arg(args.device_transport);
+        let app = NamadaApp::new(transport);
+        let with_hw_data = (context.wallet_lock(), &app);
+        // Finally, begin the signing with the Ledger as backup
+        context
+            .sign(
+                tx,
+                args,
+                signing_data,
+                with_hardware_wallet::<N::WalletUtils, _>,
+                with_hw_data,
+            )
+            .await?;
     } else {
         // Otherwise sign without a backup procedure
         context

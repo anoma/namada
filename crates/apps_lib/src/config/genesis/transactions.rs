@@ -8,8 +8,6 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use itertools::{Either, Itertools};
 use ledger_namada_rs::NamadaApp;
-use ledger_transport_hid::hidapi::HidApi;
-use ledger_transport_hid::TransportNativeHID;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
@@ -40,13 +38,12 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
 use super::templates::{DenominatedBalances, Parameters, ValidityPredicates};
-use crate::client::tx::NamadaAppTcpTransport;
 use crate::config::genesis::chain::DeriveEstablishedAddress;
 use crate::config::genesis::templates::{
     TemplateValidation, Unvalidated, Validated,
 };
 use crate::config::genesis::{utils, GenesisAddress};
-use crate::wallet::CliWalletUtils;
+use crate::wallet::{CliWalletUtils, WalletTransport};
 
 /// Dummy chain id used to sign [`Tx`] objects at pre-genesis.
 const NAMADA_GENESIS_TX_CHAIN_ID: &str = "namada-genesis";
@@ -768,36 +765,19 @@ impl<T> Signed<T> {
 
         let mut tx = self.data.tx_to_sign();
 
-        macro_rules! sign_tx {
-            ($app:expr) => {
-                sign_tx(
-                    wallet_lock,
-                    &get_tx_args(use_device),
-                    &mut tx,
-                    signing_data,
-                    utils::with_hardware_wallet,
-                    (wallet_lock, &$app),
-                )
-                .await
-                .expect("Failed to sign pre-genesis transaction.")
-            };
-        }
-
         if use_device {
-            match device_transport {
-                DeviceTransport::Hid => {
-                    let hidapi =
-                        HidApi::new().expect("Failed to create Hidapi");
-                    let transport = TransportNativeHID::new(&hidapi)
-                        .expect("Failed to create hardware wallet connection");
-                    let app = NamadaApp::new(transport);
-                    sign_tx!(app);
-                }
-                DeviceTransport::Tcp => {
-                    let app = NamadaApp::new(NamadaAppTcpTransport);
-                    sign_tx!(app);
-                }
-            }
+            let transport = WalletTransport::from_arg(device_transport);
+            let app = NamadaApp::new(transport);
+            sign_tx(
+                wallet_lock,
+                &get_tx_args(use_device),
+                &mut tx,
+                signing_data,
+                utils::with_hardware_wallet,
+                (wallet_lock, &app),
+            )
+            .await
+            .expect("Failed to sign pre-genesis transaction.")
         } else {
             async fn software_wallet_sign(
                 tx: Tx,
