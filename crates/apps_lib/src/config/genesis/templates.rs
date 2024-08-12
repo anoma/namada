@@ -24,7 +24,7 @@ use super::transactions::{self, Transactions};
 use super::utils::{read_toml, write_toml};
 use crate::config::genesis::chain::DeriveEstablishedAddress;
 use crate::config::genesis::transactions::{BondTx, SignedBondTx};
-use crate::config::genesis::GenesisAddress;
+use crate::config::genesis::GenesisBalanceAddress;
 use crate::wallet::Alias;
 
 pub const BALANCES_FILE_NAME: &str = "balances.toml";
@@ -141,7 +141,7 @@ pub struct DenominatedBalances {
     Eq,
 )]
 pub struct RawTokenBalances(
-    pub BTreeMap<GenesisAddress, token::DenominatedAmount>,
+    pub BTreeMap<GenesisBalanceAddress, token::DenominatedAmount>,
 );
 
 /// Genesis balances for a given token
@@ -157,7 +157,7 @@ pub struct RawTokenBalances(
     Eq,
 )]
 pub struct TokenBalances(
-    pub BTreeMap<GenesisAddress, token::DenominatedAmount>,
+    pub BTreeMap<GenesisBalanceAddress, token::DenominatedAmount>,
 );
 
 /// Genesis validity predicates
@@ -522,7 +522,7 @@ pub struct IbcParams {
 }
 
 impl TokenBalances {
-    pub fn get(&self, addr: &GenesisAddress) -> Option<token::Amount> {
+    pub fn get(&self, addr: &GenesisBalanceAddress) -> Option<token::Amount> {
         self.0.get(addr).map(|amt| amt.amount())
     }
 }
@@ -1048,7 +1048,7 @@ mod tests {
         let sk = key::testing::keypair_1();
         let pk = sk.ref_to();
         let address =
-            GenesisAddress::PublicKey(StringEncoded { raw: pk.clone() });
+            GenesisBalanceAddress::PublicKey(StringEncoded { raw: pk.clone() });
         let balance = token::Amount::from(101_000_001);
         let token_alias = Alias::from("Some_token".to_string());
         let contents = format!(
