@@ -4,8 +4,6 @@ use std::io::Write;
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use ledger_namada_rs::{BIP44Path, NamadaApp};
-use ledger_transport_hid::hidapi::HidApi;
-use ledger_transport_hid::TransportNativeHID;
 use namada_sdk::address::{Address, ImplicitAddress};
 use namada_sdk::args::TxBecomeValidator;
 use namada_sdk::collections::HashSet;
@@ -32,7 +30,9 @@ use crate::client::tx::tx::ProcessTxResponse;
 use crate::config::TendermintMode;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::tendermint_node;
-use crate::wallet::{gen_validator_keys, read_and_confirm_encryption_password};
+use crate::wallet::{
+    gen_validator_keys, read_and_confirm_encryption_password, WalletTransport,
+};
 
 /// Wrapper around `signing::aux_signing_data` that stores the optional
 /// disposable address to the wallet
@@ -66,12 +66,17 @@ pub async fn aux_signing_data(
     Ok(signing_data)
 }
 
-pub async fn with_hardware_wallet<'a, U: WalletIo + Clone>(
+pub async fn with_hardware_wallet<'a, U, T>(
     mut tx: Tx,
     pubkey: common::PublicKey,
     parts: HashSet<signing::Signable>,
-    (wallet, app): (&RwLock<Wallet<U>>, &NamadaApp<TransportNativeHID>),
-) -> Result<Tx, error::Error> {
+    (wallet, app): (&RwLock<Wallet<U>>, &NamadaApp<T>),
+) -> Result<Tx, error::Error>
+where
+    U: WalletIo + Clone,
+    T: ledger_transport::Exchange + Send + Sync,
+    <T as ledger_transport::Exchange>::Error: std::error::Error,
+{
     // Obtain derivation path
     let path = wallet
         .read()
@@ -158,18 +163,8 @@ pub async fn sign<N: Namada>(
 ) -> Result<(), error::Error> {
     // Setup a reusable context for signing transactions using the Ledger
     if args.use_device {
-        // Setup a reusable context for signing transactions using the Ledger
-        let hidapi = HidApi::new().map_err(|err| {
-            error::Error::Other(format!("Failed to create Hidapi: {}", err))
-        })?;
-        let app = NamadaApp::new(TransportNativeHID::new(&hidapi).map_err(
-            |err| {
-                error::Error::Other(format!(
-                    "Unable to connect to Ledger: {}",
-                    err
-                ))
-            },
-        )?);
+        let transport = WalletTransport::from_arg(args.device_transport);
+        let app = NamadaApp::new(transport);
         let with_hw_data = (context.wallet_lock(), &app);
         // Finally, begin the signing with the Ledger as backup
         context
@@ -177,7 +172,7 @@ pub async fn sign<N: Namada>(
                 tx,
                 args,
                 signing_data,
-                with_hardware_wallet::<N::WalletUtils>,
+                with_hardware_wallet::<N::WalletUtils, _>,
                 with_hw_data,
             )
             .await?;
