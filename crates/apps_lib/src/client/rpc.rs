@@ -435,16 +435,15 @@ async fn query_shielded_balance(
     }
 }
 
-pub async fn query_proposal_result(
-    context: &impl Namada,
+pub async fn query_proposal_result<N: Namada>(
+    context: &N,
     args: args::QueryProposalResult,
 ) {
     let proposal_id = args.proposal_id;
 
     let current_epoch = query_epoch(context.client()).await.unwrap();
     let proposal_result =
-        namada_sdk::rpc::query_proposal_result(context.client(), proposal_id)
-            .await;
+        namada_sdk::rpc::query_proposal_result(context, proposal_id).await;
     let proposal_query =
         namada_sdk::rpc::query_proposal_by_id(context.client(), proposal_id)
             .await;

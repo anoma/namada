@@ -2091,7 +2091,8 @@ pub async fn build_vote_proposal(
     if !proposal.can_be_voted(current_epoch, is_validator) {
         edisplay_line!(
             context.io(),
-            "Proposal {} cannot be voted on anymore.",
+            "Proposal {} cannot be voted on, either the voting period ended \
+             or the proposal is still pending.",
             proposal_id
         );
         if is_validator {
