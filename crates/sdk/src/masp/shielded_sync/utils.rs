@@ -428,10 +428,13 @@ struct IndexerMaspClientShared {
     /// Limits open connections so as not to exhaust
     /// the connection limit at the OS level.
     semaphore: Semaphore,
+    /// URL to the `namada-masp-indexer` API prefix (including `/api/v1`).
     indexer_api: reqwest::Url,
     /// Bloom filter to help avoid fetching block heights
     /// with no MASP notes.
     block_index: init_once::InitOnce<Option<(BlockHeight, xorf::BinaryFuse16)>>,
+    /// Maximum number of concurrent fetches.
+    max_concurrent_fetches: usize,
 }
 
 /// MASP client implementation that queries data from the
@@ -470,6 +473,7 @@ impl IndexerMaspClient {
     ) -> Self {
         let shared = Arc::new(IndexerMaspClientShared {
             indexer_api,
+            max_concurrent_fetches,
             semaphore: Semaphore::new(max_concurrent_fetches),
             block_index: {
                 let mut index = init_once::InitOnce::new();
@@ -693,6 +697,7 @@ impl MaspClient for IndexerMaspClient {
     ) -> Result<Vec<IndexedNoteEntry>, Error> {
         use std::ops::ControlFlow;
 
+        use futures::stream::{self, StreamExt};
         use serde::Deserialize;
 
         #[derive(Deserialize)]
@@ -719,9 +724,6 @@ impl MaspClient for IndexerMaspClient {
             )));
         }
 
-        const MAX_RANGE_THRES: u64 = 30;
-        let mut txs = vec![];
-
         let maybe_block_index = self
             .shared
             .block_index
@@ -732,8 +734,11 @@ impl MaspClient for IndexerMaspClient {
             .await
             .and_then(Option::as_ref);
 
+        let mut fetches = vec![];
         loop {
             'do_while: {
+                const MAX_RANGE_THRES: u64 = 30;
+
                 let mut from_height = from;
                 let mut offset = (to - from).min(MAX_RANGE_THRES);
                 let mut to_height = from + offset;
@@ -772,76 +777,87 @@ impl MaspClient for IndexerMaspClient {
                     }
                 }
 
-                let _permit = self.shared.semaphore.acquire().await.unwrap();
+                fetches.push(async move {
+                    let _permit =
+                        self.shared.semaphore.acquire().await.unwrap();
 
-                let payload: TxResponse = {
-                    let response = self
-                        .client
-                        .get(self.endpoint("/tx"))
-                        .keep_alive()
-                        .query(&[
-                            ("height", from_height),
-                            ("height_offset", offset),
-                        ])
-                        .send()
-                        .await
-                        .map_err(|err| {
-                            Error::Other(format!(
-                                "Failed to fetch transactions in the height \
-                                 range {from_height}-{to_height}: {err}"
-                            ))
-                        })?;
-                    if !response.status().is_success() {
-                        let err = Self::get_server_error(response).await?;
-                        return Err(Error::Other(format!(
-                            "Failed to fetch transactions in the range \
-                             {from_height}-{to_height}: {err}"
-                        )));
-                    }
-                    response.json().await.map_err(|err| {
-                        Error::Other(format!(
-                            "Could not deserialize the transactions JSON \
-                             response in the height range \
-                             {from_height}-{to_height}: {err}"
-                        ))
-                    })?
-                };
-
-                for Transaction {
-                    batch,
-                    block_index,
-                    block_height,
-                } in payload.txs
-                {
-                    let mut extracted_masp_txs =
-                        Vec::with_capacity(batch.len());
-
-                    for TransactionSlot { bytes } in batch {
-                        type MaspTx = masp_primitives::transaction::Transaction;
-
-                        extracted_masp_txs.push(
-                            MaspTx::try_from_slice(&bytes).map_err(|err| {
+                    let payload: TxResponse = {
+                        let response = self
+                            .client
+                            .get(self.endpoint("/tx"))
+                            .keep_alive()
+                            .query(&[
+                                ("height", from_height),
+                                ("height_offset", offset),
+                            ])
+                            .send()
+                            .await
+                            .map_err(|err| {
                                 Error::Other(format!(
-                                    "Could not deserialize the masp txs borsh \
-                                     data at height {block_height} and index \
-                                     {block_index}: {err}"
+                                    "Failed to fetch transactions in the \
+                                     height range {from_height}-{to_height}: \
+                                     {err}"
                                 ))
-                            })?,
-                        );
-                    }
+                            })?;
+                        if !response.status().is_success() {
+                            let err = Self::get_server_error(response).await?;
+                            return Err(Error::Other(format!(
+                                "Failed to fetch transactions in the range \
+                                 {from_height}-{to_height}: {err}"
+                            )));
+                        }
+                        response.json().await.map_err(|err| {
+                            Error::Other(format!(
+                                "Could not deserialize the transactions JSON \
+                                 response in the height range \
+                                 {from_height}-{to_height}: {err}"
+                            ))
+                        })?
+                    };
 
-                    txs.push((
-                        IndexedTx {
-                            height: BlockHeight(block_height),
-                            index: TxIndex(block_index),
-                        },
-                        extracted_masp_txs,
-                    ));
-                }
+                    Ok(payload.txs)
+                });
             }
 
             if from >= to {
                 break;
+            }
+        }
+
+        let mut stream_of_fetches = stream::iter(fetches)
+            .buffer_unordered(self.shared.max_concurrent_fetches);
+        let mut txs = vec![];
+
+        while let Some(result) = stream_of_fetches.next().await {
+            for Transaction {
+                batch,
+                block_index,
+                block_height,
+            } in result?
+            {
+                let mut extracted_masp_txs = Vec::with_capacity(batch.len());
+
+                for TransactionSlot { bytes } in batch {
+                    type MaspTx = masp_primitives::transaction::Transaction;
+
+                    extracted_masp_txs.push(
+                        MaspTx::try_from_slice(&bytes).map_err(|err| {
+                            Error::Other(format!(
+                                "Could not deserialize the masp txs borsh \
+                                 data at height {block_height} and index \
+                                 {block_index}: {err}"
+                            ))
+                        })?,
+                    );
+                }
+
+                txs.push((
+                    IndexedTx {
+                        height: BlockHeight(block_height),
+                        index: TxIndex(block_index),
+                    },
+                    extracted_masp_txs,
+                ));
             }
         }
 
