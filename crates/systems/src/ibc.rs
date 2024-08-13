@@ -29,7 +29,7 @@ pub trait Read<S> {
 /// Balances changed by a transaction
 #[derive(Default, Debug, Clone)]
 pub struct ChangedBalances {
-    /// Map between MASP transparent address and namada types
+    /// Map between MASP transparent address and Namada types
     pub decoder: BTreeMap<TransparentAddress, TAddrData>,
     /// Balances before the tx
     pub pre: BTreeMap<TransparentAddress, ValueSum<Address, token::Amount>>,
