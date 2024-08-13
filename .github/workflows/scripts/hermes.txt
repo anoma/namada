@@ -1,1 +1,1 @@
-1.9.0-namada-beta14-rc
+1.10.0-namada-beta15-rc

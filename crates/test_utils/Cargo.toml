@@ -14,5 +14,7 @@ version.workspace = true
 
 [dependencies]
 namada_core = { path = "../core" }
+namada_state = { path = "../state" }
 borsh.workspace = true
+prost.workspace = true
 strum = {version = "0.24", features = ["derive"]}
