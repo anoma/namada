@@ -12,6 +12,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use namada_core::address::Address;
 use namada_core::borsh::BorshDeserialize;
 use namada_core::collections::HashSet;
+use namada_core::hash::Hash;
 use namada_core::storage::Epoch;
 use namada_core::token;
 use namada_state::{
@@ -169,7 +170,21 @@ where
     let proposal_type: Option<ProposalType> =
         storage.read(&proposal_type_key)?;
 
-    let proposal = proposal_type.map(|proposal_type| StorageProposal {
+    let proposal_type = if let Some(proposal_type) = proposal_type {
+        if let ProposalType::DefaultWithWasm(_) = proposal_type {
+            let proposal_code_key = governance_keys::get_proposal_code_key(id);
+            let proposal_code: Vec<u8> =
+                storage.read(&proposal_code_key)?.unwrap_or_default();
+            let proposal_code_hash = Hash::sha256(proposal_code);
+            ProposalType::DefaultWithWasm(proposal_code_hash)
+        } else {
+            proposal_type
+        }
+    } else {
+        return Ok(None);
+    };
+
+    Ok(Some(StorageProposal {
         id,
         content: content.unwrap(),
         author: author.unwrap(),
@@ -177,9 +192,7 @@ where
         voting_start_epoch: voting_start_epoch.unwrap(),
         voting_end_epoch: voting_end_epoch.unwrap(),
         activation_epoch: activation_epoch.unwrap(),
-    });
-
-    Ok(proposal)
+    }))
 }
 
 /// Query all the votes for a proposal_id
