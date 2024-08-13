@@ -10,7 +10,7 @@ use proptest::test_runner::{Reason, TestRunner};
 
 #[tokio::main]
 async fn main() -> Result<(), Reason> {
-    let mut runner = TestRunner::default();
+    let mut runner = TestRunner::deterministic();
     let wallet = FsWalletUtils::new(PathBuf::from("wallet.toml"));
     let mut debug_vectors = vec![];
     let mut test_vectors = vec![];
