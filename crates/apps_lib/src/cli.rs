@@ -6626,8 +6626,8 @@ pub mod args {
                      concurrently during the shielded sync."
                 )))
                 .arg(RETRIES.def().help(wrap!(
-                    "Maximum number of times to retry fetching. If `None`
-                     is provided, defaults to \"forever\"."
+                    "Maximum number of times to retry fetching. If no \
+                     argument is provided, defaults to retrying forever."
                 )))
         }
     }
