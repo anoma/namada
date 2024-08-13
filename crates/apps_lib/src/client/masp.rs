@@ -95,7 +95,7 @@ pub async fn syncing<
 
             let env = MaspLocalTaskEnv::new(500)?;
             let ctx = shielded
-                .fetch(env, config, args.last_query_height, &sks, &fvks)
+                .sync(env, config, args.last_query_height, &sks, &fvks)
                 .await
                 .map(|_| shielded);
 

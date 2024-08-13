@@ -29,7 +29,7 @@ use crate::masp::utils::{
     blocks_left_to_fetch, DecryptedData, Fetched, RetryStrategy, TrialDecrypted,
 };
 use crate::masp::{
-    to_viewing_key, ShieldedContext, ShieldedUtils, NoteIndex, WitnessMap,
+    to_viewing_key, NoteIndex, ShieldedContext, ShieldedUtils, WitnessMap,
 };
 use crate::task_env::TaskSpawner;
 use crate::{MaybeSend, MaybeSync};
@@ -1352,7 +1352,7 @@ mod dispatcher_tests {
                 let DispatcherCache {
                     commitment_tree,
                     witness_map,
-                    note_index: note_index,
+                    note_index,
                     fetched,
                     trial_decrypted,
                 } = utils.cache_load().await.expect("Test failed");

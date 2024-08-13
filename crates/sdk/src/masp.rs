@@ -497,9 +497,9 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         Ok(())
     }
 
-    /// Fetch the current state of the multi-asset shielded pool into a
-    /// ShieldedContext
-    pub async fn fetch<M, T, I>(
+    /// Sync the current state of the multi-asset shielded pool in a
+    /// ShieldedContext with the state on-chain.
+    pub async fn sync<M, T, I>(
         &mut self,
         env: impl TaskEnvironment,
         config: ShieldedSyncConfig<M, T, I>,
