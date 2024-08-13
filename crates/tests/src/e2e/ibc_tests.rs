@@ -551,6 +551,31 @@ fn ibc_namada_gaia() -> Result<()> {
     check_balance(&test, AB_VIEWING_KEY, &ibc_denom, 40)?;
     check_gaia_balance(&test_gaia, GAIA_USER, GAIA_COIN, 810)?;
 
+    // Shielding transfer back from Gaia to Namada
+    let ibc_denom = format!("{port_id_gaia}/{channel_id_gaia}/{token_addr}");
+    let memo_path = gen_ibc_shielding_data(
+        &test,
+        AA_PAYMENT_ADDRESS,
+        &ibc_denom,
+        100,
+        &port_id_namada,
+        &channel_id_namada,
+    )?;
+    transfer_from_gaia(
+        &test_gaia,
+        GAIA_USER,
+        AA_PAYMENT_ADDRESS,
+        get_gaia_denom_hash(&ibc_denom),
+        100000000,
+        &port_id_gaia,
+        &channel_id_gaia,
+        Some(memo_path),
+    )?;
+    wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test)?;
+
+    // Check the token on Namada
+    check_balance(&test, AA_VIEWING_KEY, APFEL, 100)?;
+
     Ok(())
 }
 
