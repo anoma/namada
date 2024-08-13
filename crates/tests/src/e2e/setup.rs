@@ -251,7 +251,7 @@ where
             .get_mut(&Alias::from_str("nam").expect("Infallible"))
             .expect("NAM balances should exist in pre-genesis wallet already");
         nam_balances.0.insert(
-            GenesisAddress::PublicKey(StringEncoded::new(sk.ref_to())),
+            GenesisAddress::PublicKey(StringEncoded::new(sk.ref_to())).into(),
             token::DenominatedAmount::new(
                 token::Amount::from_uint(1000000, NATIVE_MAX_DECIMAL_PLACES)
                     .unwrap(),
@@ -259,7 +259,8 @@ where
             ),
         );
         nam_balances.0.insert(
-            GenesisAddress::EstablishedAddress(validator_address.clone()),
+            GenesisAddress::EstablishedAddress(validator_address.clone())
+                .into(),
             token::DenominatedAmount::new(
                 token::Amount::from_uint(2000000, NATIVE_MAX_DECIMAL_PLACES)
                     .unwrap(),
