@@ -216,8 +216,8 @@ impl MaspClientCapabilities {
     }
 
     /// Check if the masp client is able to fetch a pre-built
-    /// notes map.
-    pub const fn may_fetch_pre_built_notes_map(&self) -> bool {
+    /// notes index.
+    pub const fn may_fetch_pre_built_notes_index(&self) -> bool {
         matches!(self, Self::AllData)
     }
 
@@ -918,14 +918,14 @@ impl MaspClient for IndexerMaspClient {
 
         #[derive(Deserialize)]
         struct Response {
-            notes_map: Vec<Note>,
+            notes_index: Vec<Note>,
         }
 
         let _permit = self.shared.semaphore.acquire().await.unwrap();
 
         let response = self
             .client
-            .get(self.endpoint("/notes-map"))
+            .get(self.endpoint("/notes-index"))
             .keep_alive()
             .query(&[("height", height)])
             .send()
@@ -949,7 +949,7 @@ impl MaspClient for IndexerMaspClient {
         })?;
 
         Ok(payload
-            .notes_map
+            .notes_index
             .into_iter()
             .map(
                 |Note {

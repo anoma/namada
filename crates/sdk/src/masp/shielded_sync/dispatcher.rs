@@ -579,7 +579,7 @@ where
     }
 
     fn spawn_initial_set_of_tasks(&mut self, initial_state: &InitialState) {
-        if self.client.capabilities().may_fetch_pre_built_notes_map() {
+        if self.client.capabilities().may_fetch_pre_built_notes_index() {
             self.spawn_update_note_index(initial_state.last_query_height);
         }
 
