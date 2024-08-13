@@ -392,7 +392,7 @@ where
                     .extend(Code(ResultCode::InvalidTx));
                 // Drop the batch write log which could contain invalid data.
                 // Important data that could be valid (e.g. a valid fee payment)
-                // must have already been moved to the bloc kwrite log by now
+                // must have already been moved to the block write log by now
                 self.state.write_log_mut().drop_batch();
             }
             Err(dispatch_error) => {

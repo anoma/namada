@@ -405,7 +405,11 @@ where
                     let actions =
                         state.read_actions().map_err(Error::StateError)?;
                     if let Some(masp_section_ref) =
-                        action::get_masp_section_ref(&actions)
+                        action::get_masp_section_ref(&actions).expect(
+                            "A valid MASP transaction cannot push more than \
+                             one MASP action: this should be prevented by the \
+                             MASP VP",
+                        )
                     {
                         extended_tx_result
                             .masp_tx_refs
@@ -754,7 +758,11 @@ where
                     && result.is_accepted()
                 {
                     if let Some(masp_tx_id) =
-                        action::get_masp_section_ref(&actions)
+                        action::get_masp_section_ref(&actions).expect(
+                            "A valid MASP transaction cannot push more than \
+                             one MASP action: this should be prevented by the \
+                             MASP VP",
+                        )
                     {
                         Some(MaspTxResult {
                             tx_result: result,

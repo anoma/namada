@@ -416,14 +416,14 @@ where
             tx
         } else {
             // Get the Transaction object from the actions
-            let masp_section_ref = namada_tx::action::get_masp_section_ref(
-                &actions,
-            )
-            .ok_or_else(|| {
-                native_vp::Error::new_const(
-                    "Missing MASP section reference in action",
-                )
-            })?;
+            let masp_section_ref =
+                namada_tx::action::get_masp_section_ref(&actions)
+                    .map_err(native_vp::Error::new_const)?
+                    .ok_or_else(|| {
+                        native_vp::Error::new_const(
+                            "Missing MASP section reference in action",
+                        )
+                    })?;
             batched_tx
                 .tx
                 .get_masp_section(&masp_section_ref)
