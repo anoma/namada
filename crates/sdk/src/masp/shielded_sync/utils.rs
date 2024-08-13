@@ -155,9 +155,8 @@ impl IntoIterator for Fetched {
     type IntoIter = <IndexedNoteData as IntoIterator>::IntoIter;
     type Item = IndexedNoteEntry;
 
-    fn into_iter(mut self) -> Self::IntoIter {
-        let txs = std::mem::take(&mut self.txs);
-        txs.into_iter()
+    fn into_iter(self) -> Self::IntoIter {
+        self.txs.into_iter()
     }
 }
 
