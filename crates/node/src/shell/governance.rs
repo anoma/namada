@@ -122,14 +122,6 @@ where
             TallyResult::Passed => {
                 let proposal_event = match proposal_type {
                     ProposalType::Default => {
-                        let proposal_code =
-                            gov_api::get_proposal_code(&shell.state, id)?
-                                .unwrap_or_default();
-                        let _result = execute_default_proposal(
-                            shell,
-                            id,
-                            proposal_code.clone(),
-                        )?;
                         tracing::info!(
                             "Governance proposal #{} (default) has passed.",
                             id,
@@ -176,7 +168,7 @@ where
                     }
                     ProposalType::PGFPayment(payments) => {
                         let native_token = &shell.state.get_native_token()?;
-                        let _result = execute_pgf_funding_proposal(
+                        execute_pgf_funding_proposal(
                             &mut shell.state,
                             events,
                             native_token,
