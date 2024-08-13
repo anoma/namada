@@ -490,7 +490,8 @@ where
                 && shutdown_signal.borrow_mut().received()
             {
                 return ControlFlow::Break(Err(Error::Other(
-                    "Interrupted while waiting for lats que".to_string(),
+                    "Interrupted while waiting for last query height"
+                        .to_string(),
                 )));
             }
 
