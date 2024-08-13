@@ -47,7 +47,7 @@ pub mod tests {
         /// Generate an arbitraary steward commission update
         pub fn arb_update_steward_commission()(
             steward in arb_non_internal_address(),
-            commission in collection::hash_map(arb_non_internal_address(), arb_dec(), 0..10),
+            commission in collection::btree_map(arb_non_internal_address(), arb_dec(), 0..10),
         ) -> UpdateStewardCommission {
             UpdateStewardCommission {
                 steward,
