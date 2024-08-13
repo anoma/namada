@@ -364,7 +364,7 @@ pub type TransferDelta = HashMap<Address, MaspChange>;
 pub type TransactionDelta = HashMap<ViewingKey, I128Sum>;
 
 /// Maps a shielded tx to the index of its first output note.
-pub type TxNoteMap = BTreeMap<IndexedTx, usize>;
+pub type NoteIndex = BTreeMap<IndexedTx, usize>;
 
 /// Maps the note index (in the commitment tree) to a witness
 pub type WitnessMap = HashMap<usize, IncrementalWitness<Node>>;
@@ -410,7 +410,7 @@ pub struct ShieldedContext<U: ShieldedUtils> {
     /// Maps note positions to their corresponding viewing keys
     pub vk_map: HashMap<usize, ViewingKey>,
     /// Maps a shielded tx to the index of its first output note.
-    pub tx_note_map: TxNoteMap,
+    pub note_index: NoteIndex,
     /// The sync state of the context
     pub sync_status: ContextSyncStatus,
 }
@@ -422,7 +422,7 @@ impl<U: ShieldedUtils + Default> Default for ShieldedContext<U> {
         ShieldedContext::<U> {
             utils: U::default(),
             vk_heights: BTreeMap::new(),
-            tx_note_map: BTreeMap::default(),
+            note_index: BTreeMap::default(),
             tree: CommitmentTree::empty(),
             pos_map: HashMap::default(),
             nf_map: HashMap::default(),
@@ -469,7 +469,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         shielded: &[Transaction],
     ) -> Result<(), Error> {
         let mut note_pos = self.tree.size();
-        self.tx_note_map.insert(indexed_tx, note_pos);
+        self.note_index.insert(indexed_tx, note_pos);
 
         for tx in shielded {
             for so in

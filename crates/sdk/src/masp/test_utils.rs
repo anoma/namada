@@ -384,7 +384,7 @@ impl MaspClient for TestingMaspClient {
         )
     }
 
-    async fn fetch_tx_notes_map(
+    async fn fetch_note_index(
         &self,
         _: BlockHeight,
     ) -> Result<BTreeMap<IndexedTx, usize>, Error> {

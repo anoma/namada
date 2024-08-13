@@ -258,7 +258,7 @@ pub trait MaspClient: Clone {
 
     /// Fetch the tx notes map of height `height`.
     #[allow(async_fn_in_trait)]
-    async fn fetch_tx_notes_map(
+    async fn fetch_note_index(
         &self,
         height: BlockHeight,
     ) -> Result<BTreeMap<IndexedTx, usize>, Error>;
@@ -402,7 +402,7 @@ impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
         ))
     }
 
-    async fn fetch_tx_notes_map(
+    async fn fetch_note_index(
         &self,
         _: BlockHeight,
     ) -> Result<BTreeMap<IndexedTx, usize>, Error> {
@@ -902,7 +902,7 @@ impl MaspClient for IndexerMaspClient {
         )
     }
 
-    async fn fetch_tx_notes_map(
+    async fn fetch_note_index(
         &self,
         BlockHeight(height): BlockHeight,
     ) -> Result<BTreeMap<IndexedTx, usize>, Error> {

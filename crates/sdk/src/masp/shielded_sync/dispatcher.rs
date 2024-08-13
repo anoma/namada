@@ -29,7 +29,7 @@ use crate::masp::utils::{
     blocks_left_to_fetch, DecryptedData, Fetched, RetryStrategy, TrialDecrypted,
 };
 use crate::masp::{
-    to_viewing_key, ShieldedContext, ShieldedUtils, TxNoteMap, WitnessMap,
+    to_viewing_key, ShieldedContext, ShieldedUtils, NoteIndex, WitnessMap,
 };
 use crate::task_env::TaskSpawner;
 use crate::{MaybeSend, MaybeSync};
@@ -208,7 +208,7 @@ impl<Spawner> DispatcherTasks<Spawner> {
 pub struct DispatcherCache {
     pub(crate) commitment_tree: Option<(BlockHeight, CommitmentTree<Node>)>,
     pub(crate) witness_map: Option<(BlockHeight, WitnessMap)>,
-    pub(crate) tx_note_map: Option<(BlockHeight, TxNoteMap)>,
+    pub(crate) note_index: Option<(BlockHeight, NoteIndex)>,
     pub(crate) fetched: Fetched,
     pub(crate) trial_decrypted: TrialDecrypted,
 }
@@ -399,8 +399,8 @@ where
         if let Some((_, wm)) = self.cache.witness_map.take() {
             self.ctx.witness_map = wm;
         }
-        if let Some((_, nm)) = self.cache.tx_note_map.take() {
-            self.ctx.tx_note_map = nm;
+        if let Some((_, nm)) = self.cache.note_index.take() {
+            self.ctx.note_index = nm;
         }
 
         for (indexed_tx, stx_batch) in self.cache.fetched.take() {
@@ -409,7 +409,7 @@ where
             {
                 self.ctx.update_witness_map(indexed_tx, &stx_batch)?;
             }
-            let first_note_pos = self.ctx.tx_note_map[&indexed_tx];
+            let first_note_pos = self.ctx.note_index[&indexed_tx];
             let mut vk_heights = BTreeMap::new();
             std::mem::swap(&mut vk_heights, &mut self.ctx.vk_heights);
             for (vk, _) in vk_heights
@@ -481,7 +481,7 @@ where
 
         // the latest block height which has been added to the witness Merkle
         // tree
-        let last_witnessed_tx = self.ctx.tx_note_map.keys().max().cloned();
+        let last_witnessed_tx = self.ctx.note_index.keys().max().cloned();
 
         let shutdown_signal = RefCell::new(&mut self.config.shutdown_signal);
 
@@ -580,7 +580,7 @@ where
 
     fn spawn_initial_set_of_tasks(&mut self, initial_state: &InitialState) {
         if self.client.capabilities().may_fetch_pre_built_notes_map() {
-            self.spawn_update_tx_notes_map(initial_state.last_query_height);
+            self.spawn_update_note_index(initial_state.last_query_height);
         }
 
         if self.client.capabilities().may_fetch_pre_built_tree() {
@@ -629,14 +629,14 @@ where
                 }
             }
             Message::UpdateNotesMap(Ok(nm)) => {
-                _ = self.cache.tx_note_map.insert((self.height_to_sync, nm));
+                _ = self.cache.note_index.insert((self.height_to_sync, nm));
             }
             Message::UpdateNotesMap(Err(TaskError {
                 error,
                 context: height,
             })) => {
                 if self.can_launch_new_fetch_retry(error) {
-                    self.spawn_update_tx_notes_map(height);
+                    self.spawn_update_note_index(height);
                 }
             }
             Message::UpdateWitnessMap(Ok(wm)) => {
@@ -735,14 +735,14 @@ where
         }));
     }
 
-    fn spawn_update_tx_notes_map(&mut self, height: BlockHeight) {
-        if pre_built_in_cache(self.cache.tx_note_map.as_ref(), height) {
+    fn spawn_update_note_index(&mut self, height: BlockHeight) {
+        if pre_built_in_cache(self.cache.note_index.as_ref(), height) {
             return;
         }
         let client = self.client.clone();
         self.spawn_async(Box::pin(async move {
             Message::UpdateNotesMap(
-                client.fetch_tx_notes_map(height).await.map_err(|error| {
+                client.fetch_note_index(height).await.map_err(|error| {
                     TaskError {
                         error,
                         context: height,
@@ -893,7 +893,7 @@ mod dispatcher_tests {
                         index: Default::default(),
                     };
                     dispatcher.cache.fetched.insert((itx, vec![]));
-                    dispatcher.ctx.tx_note_map.insert(itx, h as usize);
+                    dispatcher.ctx.note_index.insert(itx, h as usize);
                     dispatcher.cache.trial_decrypted.insert(
                         itx,
                         arbitrary_vk(),
@@ -1202,7 +1202,7 @@ mod dispatcher_tests {
                     .expect("Test failed")
                     .expect("Test failed");
                 let keys =
-                    ctx.tx_note_map.keys().cloned().collect::<BTreeSet<_>>();
+                    ctx.note_index.keys().cloned().collect::<BTreeSet<_>>();
                 let expected = BTreeSet::from([
                     IndexedTx {
                         height: 1.into(),
@@ -1352,13 +1352,13 @@ mod dispatcher_tests {
                 let DispatcherCache {
                     commitment_tree,
                     witness_map,
-                    tx_note_map,
+                    note_index: note_index,
                     fetched,
                     trial_decrypted,
                 } = utils.cache_load().await.expect("Test failed");
                 assert!(commitment_tree.is_none());
                 assert!(witness_map.is_none());
-                assert!(tx_note_map.is_none());
+                assert!(note_index.is_none());
                 assert!(fetched.is_empty());
                 assert!(trial_decrypted.is_empty());
             })
