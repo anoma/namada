@@ -2,9 +2,9 @@
 
 set -Eo pipefail
 
-HERMES_MAJORMINOR="1.9"
+HERMES_MAJORMINOR="1.10"
 HERMES_PATCH="0"
-HERMES_SUFFIX="-namada-beta14-rc"
+HERMES_SUFFIX="-namada-beta15-rc"
 
 HERMES_REPO="https://github.com/heliaxdev/hermes"
 
