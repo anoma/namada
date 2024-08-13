@@ -698,7 +698,6 @@ impl MaspClient for IndexerMaspClient {
 
         #[derive(Deserialize)]
         struct TransactionSlot {
-            // masp_tx_index: u64,
             bytes: Vec<u8>,
         }
 
