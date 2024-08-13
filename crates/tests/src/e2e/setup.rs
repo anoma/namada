@@ -157,12 +157,16 @@ pub fn set_ethereum_bridge_mode(
 /// the [`network`]'s first argument's closure, e.g. `set_validators(2, _)` will
 /// configure a network with 2 validators.
 ///
+/// Default self-bond amount for each validator is 100 000, which can be
+/// overridden via the `bonds` argument indexed by the validator number.
+///
 /// INVARIANT: Do not call this function more than once on the same config.
 pub fn set_validators<F>(
     num: u8,
     mut genesis: templates::All<templates::Unvalidated>,
     base_dir: &Path,
     port_offset: F,
+    bonds: Vec<token::Amount>,
 ) -> templates::All<templates::Unvalidated>
 where
     F: Fn(u8) -> u16,
@@ -271,6 +275,11 @@ where
         // account to a validator account
         let net_addr = format!("127.0.0.1:{}", 27656 + port_offset(val));
         let validator_address_str = validator_address.to_string();
+        let bond_amount = bonds
+            .get(usize::from(val))
+            .copied()
+            .unwrap_or(token::Amount::native_whole(100_000))
+            .to_string_native();
         let args = vec![
             "utils",
             "init-genesis-validator",
@@ -289,7 +298,7 @@ where
             "--email",
             "null@null.net",
             "--self-bond-amount",
-            "100000",
+            &bond_amount,
             "--unsafe-dont-encrypt",
         ];
         let mut init_genesis_validator = run_cmd(
@@ -317,7 +326,7 @@ where
         let mut sign_pre_genesis_txs = run_cmd(
             Bin::Client,
             args,
-            Some(15),
+            Some(30),
             &working_dir(),
             base_dir,
             format!("{}:{}", std::file!(), std::line!()),
@@ -351,7 +360,9 @@ where
 /// Setup a network with a single genesis validator node.
 pub fn single_node_net() -> Result<Test> {
     network(
-        |genesis, base_dir: &_| set_validators(1, genesis, base_dir, |_| 0u16),
+        |genesis, base_dir: &_| {
+            set_validators(1, genesis, base_dir, |_| 0u16, vec![])
+        },
         None,
     )
 }
@@ -459,7 +470,7 @@ pub fn network(
     let mut init_network = run_cmd(
         Bin::Client,
         args,
-        Some(15),
+        Some(30),
         &working_dir,
         &genesis_dir,
         format!("{}:{}", std::file!(), std::line!()),
