@@ -272,12 +272,7 @@ where
             ..Default::default()
         };
 
-        if ctx.load_confirmed().await.is_err() {
-            ctx = ShieldedContext {
-                utils: utils.clone(),
-                ..Default::default()
-            };
-        }
+        _ = ctx.load_confirmed().await;
 
         ctx
     };
