@@ -110,17 +110,17 @@ pub fn is_nft_trace(
 
 /// Returns true if the denomination originally came from the sender chain, and
 /// false otherwise.
-pub fn is_sender_chain_source_str(
+pub fn is_sender_chain_source(
     trace: impl AsRef<str>,
     src_port_id: &PortId,
     src_channel_id: &ChannelId,
 ) -> bool {
-    !is_receiver_chain_source_str(trace, src_port_id, src_channel_id)
+    !is_receiver_chain_source(trace, src_port_id, src_channel_id)
 }
 
 /// Returns true if the denomination originally came from the receiving chain,
 /// and false otherwise.
-pub fn is_receiver_chain_source_str(
+pub fn is_receiver_chain_source(
     trace: impl AsRef<str>,
     src_port_id: &PortId,
     src_channel_id: &ChannelId,

@@ -102,8 +102,9 @@ use primitives::Timestamp;
 use prost::Message;
 use thiserror::Error;
 use trace::{
-    convert_to_address, ibc_trace_for_nft, is_receiver_chain_source_str,
-    is_sender_chain_source_str,
+    convert_to_address, ibc_trace_for_nft,
+    is_receiver_chain_source as is_receiver_chain_source_str,
+    is_sender_chain_source,
 };
 
 use crate::storage::{
@@ -439,7 +440,7 @@ where
         let delta = ValueSum::from_pair(token, *amount);
         // If there is a transfer to the IBC account, then deduplicate the
         // balance increase since we already account for it below
-        if is_sender_chain_source_str(ibc_trace, src_port_id, src_channel_id) {
+        if is_sender_chain_source(ibc_trace, src_port_id, src_channel_id) {
             let ibc_taddr = addr_taddr(address::IBC);
             let post_entry = accum
                 .post
