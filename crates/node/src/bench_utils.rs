@@ -66,7 +66,7 @@ use namada_sdk::ibc::primitives::Timestamp as IbcTimestamp;
 use namada_sdk::ibc::storage::{
     channel_key, connection_key, mint_limit_key, port_key, throughput_limit_key,
 };
-use namada_sdk::ibc::MsgTransfer;
+use namada_sdk::ibc::{MsgTransfer, COMMITMENT_PREFIX};
 use namada_sdk::io::StdIo;
 use namada_sdk::key::common::SecretKey;
 use namada_sdk::masp::{
@@ -531,7 +531,7 @@ impl BenchShell {
             Counterparty::new(
                 client_id.clone(),
                 Some(ConnectionId::new(1)),
-                CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
+                CommitmentPrefix::from(COMMITMENT_PREFIX.as_bytes().to_vec()),
             ),
             Version::compatibles(),
             std::time::Duration::new(100, 0),
