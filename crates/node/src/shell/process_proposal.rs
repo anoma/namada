@@ -153,7 +153,7 @@ where
                 );
                 let error_code = ResultCode::from_u32(result.code).unwrap();
                 if let ResultCode::Ok = error_code {
-                    temp_state.write_log_mut().commit_batch();
+                    temp_state.write_log_mut().commit_batch_and_current_tx();
                 } else {
                     tracing::info!(
                         "Process proposal rejected an invalid tx. Error code: \

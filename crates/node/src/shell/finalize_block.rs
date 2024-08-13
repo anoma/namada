@@ -349,7 +349,7 @@ where
         match extended_dispatch_result {
             Ok(extended_tx_result) => match tx_data.tx.header.tx_type {
                 TxType::Wrapper(_) => {
-                    self.state.write_log_mut().commit_batch();
+                    self.state.write_log_mut().commit_batch_and_current_tx();
 
                     // Return withouth emitting any events
                     return Some(WrapperCache {
@@ -476,7 +476,7 @@ where
             self.state.write_log_mut().drop_batch();
             tx_logs.tx_event.extend(Code(ResultCode::WasmRuntimeError));
         } else {
-            self.state.write_log_mut().commit_batch();
+            self.state.write_log_mut().commit_batch_and_current_tx();
             self.state
                 .in_mem_mut()
                 .block
@@ -550,8 +550,12 @@ where
                 .results
                 .accept(tx_data.tx_index);
             temp_log.commit(tx_logs, response);
-            // Commit the successful inner transactions before the error
-            self.state.write_log_mut().commit_batch();
+            // Commit the successful inner transactions before the error. Drop
+            // the current tx write log which might be still populated with data
+            // to be discarded (this is the case when we propagate an error
+            // from the function that runs the actual batch)
+            self.state.write_log_mut().drop_tx();
+            self.state.write_log_mut().commit_batch_only();
         }
 
         if commit_batch_hash {
