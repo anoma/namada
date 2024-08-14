@@ -17,14 +17,13 @@ pub enum ProposalValidation {
     /// The proposal start epoch is invalid
     #[error(
         "Invalid proposal start epoch: {0} must be greater than current epoch \
-         {1} and a multiple of {2}"
+         {1}"
     )]
-    InvalidStartEpoch(Epoch, Epoch, u64),
+    InvalidStartEpoch(Epoch, Epoch),
     /// The proposal difference between start and end epoch is invalid
     #[error(
         "Invalid proposal end epoch: difference between proposal start and \
-         end epoch must be at least {0}, at max {1} and the end epoch must be \
-         a multiple of {0}"
+         end epoch must be at least {0}, at max {1}"
     )]
     InvalidStartEndDifference(u64, u64),
     /// The proposal difference between end and activation epoch is invalid
@@ -85,19 +84,15 @@ pub fn is_valid_author_balance(
 pub fn is_valid_start_epoch(
     proposal_start_epoch: Epoch,
     current_epoch: Epoch,
-    proposal_epoch_multiplier: u64,
 ) -> Result<(), ProposalValidation> {
     let start_epoch_greater_than_current = proposal_start_epoch > current_epoch;
-    let start_epoch_is_multipler =
-        checked!(proposal_start_epoch.0 % proposal_epoch_multiplier)? == 0;
 
-    if start_epoch_greater_than_current && start_epoch_is_multipler {
+    if start_epoch_greater_than_current {
         Ok(())
     } else {
         Err(ProposalValidation::InvalidStartEpoch(
             proposal_start_epoch,
             current_epoch,
-            proposal_epoch_multiplier,
         ))
     }
 }
@@ -106,21 +101,16 @@ pub fn is_valid_end_epoch(
     proposal_start_epoch: Epoch,
     proposal_end_epoch: Epoch,
     _current_epoch: Epoch,
-    proposal_epoch_multiplier: u64,
     min_proposal_voting_period: u64,
     max_proposal_period: u64,
 ) -> Result<(), ProposalValidation> {
     let voting_period =
         checked!(proposal_end_epoch.0 - proposal_start_epoch.0)?;
-    let end_epoch_is_multipler =
-        checked!(proposal_end_epoch % proposal_epoch_multiplier)
-            .map_err(ProposalValidation::Arith)?
-            == Epoch(0);
     let is_valid_voting_period = voting_period > 0
         && voting_period >= min_proposal_voting_period
         && min_proposal_voting_period <= max_proposal_period;
 
-    if end_epoch_is_multipler && is_valid_voting_period {
+    if is_valid_voting_period {
         Ok(())
     } else {
         Err(ProposalValidation::InvalidStartEndDifference(
