@@ -426,8 +426,7 @@ pub fn make_dev_genesis(
             .unwrap()
             .first()
             .unwrap();
-        let genesis_addr =
-            GenesisAddress::EstablishedAddress(tx.tx.data.address.raw.clone());
+        let genesis_addr = Address::Established(tx.tx.data.address.raw.clone());
 
         let balance = *nam_balances.0.get(&genesis_addr).unwrap();
         let bonded = {
@@ -543,11 +542,9 @@ pub fn make_dev_genesis(
                 .get_mut(&Alias::from_str("nam").unwrap())
                 .unwrap();
 
-            let validator_addr =
-                GenesisAddress::EstablishedAddress(validator_address.clone());
-            let account_pk = GenesisAddress::PublicKey(StringEncoded::new(
-                consensus_keypair.ref_to(),
-            ));
+            let validator_addr: Address =
+                Address::Established(validator_address.clone());
+            let account_pk: Address = (&consensus_keypair.ref_to()).into();
 
             nam_balances.0.insert(validator_addr, first_val_balance);
             nam_balances.0.insert(account_pk, first_val_balance);

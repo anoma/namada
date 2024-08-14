@@ -512,15 +512,6 @@ where
             };
 
             for (owner, balance) in balances {
-                if let genesis::GenesisAddress::PublicKey(pk) = owner {
-                    namada_sdk::account::init_account_storage(
-                        &mut self.state,
-                        &owner.address(),
-                        std::slice::from_ref(&pk.raw),
-                        1,
-                    )
-                    .unwrap();
-                }
                 tracing::info!(
                     "Crediting {} {} tokens to {}",
                     balance,
@@ -530,7 +521,7 @@ where
                 credit_tokens(
                     &mut self.state,
                     token_address,
-                    &owner.address(),
+                    owner,
                     balance.amount(),
                 )
                 .expect("Couldn't credit initial balance");

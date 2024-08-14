@@ -1197,9 +1197,10 @@ fn validate_bond(
 
     // Check and update token balance of the source
     let native_token = &parameters.parameters.native_token;
+    let source = source.address();
     match balances.get_mut(native_token) {
         Some(balances) => {
-            let balance = balances.amounts.get_mut(source);
+            let balance = balances.amounts.get_mut(&source);
             match balance {
                 Some(balance) => {
                     if *balance < *amount {
@@ -1213,7 +1214,7 @@ fn validate_bond(
                     } else {
                         // Deduct the amount from source
                         if amount == balance {
-                            balances.amounts.remove(source);
+                            balances.amounts.remove(&source);
                         } else if let Some(new_balance) =
                             balance.checked_sub(*amount)
                         {
@@ -1254,7 +1255,7 @@ fn validate_bond(
 #[derive(Clone, Debug)]
 pub struct TokenBalancesForValidation {
     /// Accumulator for tokens transferred to accounts
-    pub amounts: BTreeMap<GenesisAddress, DenominatedAmount>,
+    pub amounts: BTreeMap<Address, DenominatedAmount>,
 }
 
 pub fn validate_established_account(

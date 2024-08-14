@@ -24,7 +24,6 @@ use super::transactions::{self, Transactions};
 use super::utils::{read_toml, write_toml};
 use crate::config::genesis::chain::DeriveEstablishedAddress;
 use crate::config::genesis::transactions::{BondTx, SignedBondTx};
-use crate::config::genesis::GenesisAddress;
 use crate::wallet::Alias;
 
 pub const BALANCES_FILE_NAME: &str = "balances.toml";
@@ -140,9 +139,7 @@ pub struct DenominatedBalances {
     PartialEq,
     Eq,
 )]
-pub struct RawTokenBalances(
-    pub BTreeMap<GenesisAddress, token::DenominatedAmount>,
-);
+pub struct RawTokenBalances(pub BTreeMap<Address, token::DenominatedAmount>);
 
 /// Genesis balances for a given token
 #[derive(
@@ -156,9 +153,7 @@ pub struct RawTokenBalances(
     PartialEq,
     Eq,
 )]
-pub struct TokenBalances(
-    pub BTreeMap<GenesisAddress, token::DenominatedAmount>,
-);
+pub struct TokenBalances(pub BTreeMap<Address, token::DenominatedAmount>);
 
 /// Genesis validity predicates
 #[derive(
@@ -522,7 +517,7 @@ pub struct IbcParams {
 }
 
 impl TokenBalances {
-    pub fn get(&self, addr: &GenesisAddress) -> Option<token::Amount> {
+    pub fn get(&self, addr: &Address) -> Option<token::Amount> {
         self.0.get(addr).map(|amt| amt.amount())
     }
 }
@@ -991,7 +986,6 @@ mod tests {
 
     use namada_sdk::key;
     use namada_sdk::key::RefTo;
-    use namada_sdk::string_encoding::StringEncoded;
     use tempfile::tempdir;
 
     use super::*;
@@ -1047,14 +1041,13 @@ mod tests {
         let path = test_dir.path().join(BALANCES_FILE_NAME);
         let sk = key::testing::keypair_1();
         let pk = sk.ref_to();
-        let address =
-            GenesisAddress::PublicKey(StringEncoded { raw: pk.clone() });
+        let address: Address = (&pk).into();
         let balance = token::Amount::from(101_000_001);
         let token_alias = Alias::from("Some_token".to_string());
         let contents = format!(
             r#"
 		[token.{token_alias}]
-		{pk} = "{}"
+		{address} = "{}"
 	    "#,
             balance.to_string_native()
         );

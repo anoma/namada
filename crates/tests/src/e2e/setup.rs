@@ -23,9 +23,7 @@ use namada_apps_lib::client::utils::{
     self, validator_pre_genesis_dir, validator_pre_genesis_txs_file,
 };
 use namada_apps_lib::config::genesis::utils::read_toml;
-use namada_apps_lib::config::genesis::{
-    templates, transactions, GenesisAddress,
-};
+use namada_apps_lib::config::genesis::{templates, transactions};
 use namada_apps_lib::config::{ethereum_bridge, genesis, Config};
 use namada_apps_lib::wallet::defaults::{derive_template_dir, is_use_device};
 use namada_apps_lib::{config, wallet};
@@ -255,7 +253,7 @@ where
             .get_mut(&Alias::from_str("nam").expect("Infallible"))
             .expect("NAM balances should exist in pre-genesis wallet already");
         nam_balances.0.insert(
-            GenesisAddress::PublicKey(StringEncoded::new(sk.ref_to())),
+            (&sk.ref_to()).into(),
             token::DenominatedAmount::new(
                 token::Amount::from_uint(1000000, NATIVE_MAX_DECIMAL_PLACES)
                     .unwrap(),
@@ -263,7 +261,7 @@ where
             ),
         );
         nam_balances.0.insert(
-            GenesisAddress::EstablishedAddress(validator_address.clone()),
+            Address::Established(validator_address.clone()),
             token::DenominatedAmount::new(
                 token::Amount::from_uint(2000000, NATIVE_MAX_DECIMAL_PLACES)
                     .unwrap(),
