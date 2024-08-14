@@ -71,16 +71,11 @@ impl DefaultProposal {
         if force {
             return Ok(self);
         }
-        is_valid_start_epoch(
-            self.proposal.voting_start_epoch,
-            current_epoch,
-            governance_parameters.min_proposal_voting_period,
-        )?;
+        is_valid_start_epoch(self.proposal.voting_start_epoch, current_epoch)?;
         is_valid_end_epoch(
             self.proposal.voting_start_epoch,
             self.proposal.voting_end_epoch,
             current_epoch,
-            governance_parameters.min_proposal_voting_period,
             governance_parameters.min_proposal_voting_period,
             governance_parameters.max_proposal_period,
         )?;
@@ -149,16 +144,11 @@ impl PgfStewardProposal {
         if force {
             return Ok(self);
         }
-        is_valid_start_epoch(
-            self.proposal.voting_start_epoch,
-            current_epoch,
-            governance_parameters.min_proposal_voting_period,
-        )?;
+        is_valid_start_epoch(self.proposal.voting_start_epoch, current_epoch)?;
         is_valid_end_epoch(
             self.proposal.voting_start_epoch,
             self.proposal.voting_end_epoch,
             current_epoch,
-            governance_parameters.min_proposal_voting_period,
             governance_parameters.min_proposal_voting_period,
             governance_parameters.max_proposal_period,
         )?;
@@ -222,16 +212,11 @@ impl PgfFundingProposal {
         if force {
             return Ok(self);
         }
-        is_valid_start_epoch(
-            self.proposal.voting_start_epoch,
-            current_epoch,
-            governance_parameters.min_proposal_voting_period,
-        )?;
+        is_valid_start_epoch(self.proposal.voting_start_epoch, current_epoch)?;
         is_valid_end_epoch(
             self.proposal.voting_start_epoch,
             self.proposal.voting_end_epoch,
             current_epoch,
-            governance_parameters.min_proposal_voting_period,
             governance_parameters.min_proposal_voting_period,
             governance_parameters.max_proposal_period,
         )?;
