@@ -1101,14 +1101,10 @@ impl Tx {
         HEXUPPER.encode(&tx_bytes)
     }
 
-    /// Deserialize from hex encoding
+    /// Deserialize tx from json
     pub fn deserialize(data: &[u8]) -> Result<Self, DecodeError> {
-        if let Ok(hex) = serde_json::from_slice::<String>(data) {
-            match HEXUPPER.decode(hex.as_bytes()) {
-                Ok(bytes) => Tx::try_from_slice(&bytes)
-                    .map_err(DecodeError::InvalidEncoding),
-                Err(e) => Err(DecodeError::InvalidHex(e)),
-            }
+        if let Ok(tx) = serde_json::from_slice::<Tx>(data) {
+            Ok(tx)
         } else {
             Err(DecodeError::InvalidJsonString)
         }
