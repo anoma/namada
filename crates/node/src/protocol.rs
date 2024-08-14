@@ -11,7 +11,7 @@ use namada_sdk::events::extend::{
     ComposeEvent, Height as HeightAttr, TxHash as TxHashAttr, UserAccount,
 };
 use namada_sdk::events::EventLevel;
-use namada_sdk::gas::{Gas, GasMetering, TxGasMeter, VpGasMeter};
+use namada_sdk::gas::{self, Gas, GasMetering, TxGasMeter, VpGasMeter};
 use namada_sdk::hash::Hash;
 use namada_sdk::ibc::{IbcTxDataHash, IbcTxDataRefs};
 use namada_sdk::masp::{MaspTxRefs, TxId};
@@ -1092,7 +1092,7 @@ where
         .write_log()
         .verifiers_and_changed_keys(verifiers_from_tx);
 
-    let vps_result = execute_vps(
+    let (vps_result, vps_gas) = execute_vps(
         verifiers,
         keys_changed,
         tx,
@@ -1101,10 +1101,10 @@ where
         tx_gas_meter,
         vp_wasm_cache,
     )?;
-    tracing::debug!("Total VPs gas cost {:?}", vps_result.gas_used);
+    tracing::debug!("Total VPs gas cost {:?}", vps_gas);
 
     tx_gas_meter
-        .add_vps_gas(&vps_result.gas_used)
+        .consume(vps_gas.into())
         .map_err(|err| Error::GasError(err.to_string()))?;
 
     Ok(vps_result)
@@ -1120,62 +1120,72 @@ fn execute_vps<S, CA>(
     state: &S,
     tx_gas_meter: &TxGasMeter,
     vp_wasm_cache: &mut VpCache<CA>,
-) -> Result<VpsResult>
+) -> Result<(VpsResult, namada_sdk::gas::Gas)>
 where
     S: 'static + State + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    let vps_result = verifiers
-        .par_iter()
-        .try_fold(VpsResult::default, |mut result, addr| {
-            let gas_meter =
-                RefCell::new(VpGasMeter::new_from_tx_meter(tx_gas_meter));
-            let tx_accepted = match &addr {
-                Address::Implicit(_) | Address::Established(_) => {
-                    let (vp_hash, gas) = state
+    let vps_result =
+        verifiers
+            .par_iter()
+            .try_fold(
+                || (VpsResult::default(), Gas::from(0)),
+                |(mut result, mut vps_gas), addr| {
+                    let gas_meter = RefCell::new(
+                        VpGasMeter::new_from_tx_meter(tx_gas_meter),
+                    );
+                    let tx_accepted =
+                        match &addr {
+                            Address::Implicit(_) | Address::Established(_) => {
+                                let (vp_hash, gas) = state
                         .validity_predicate::<parameters::Store<()>>(addr)
                         .map_err(Error::StateError)?;
-                    gas_meter
-                        .borrow_mut()
-                        .consume(gas)
-                        .map_err(|err| Error::GasError(err.to_string()))?;
-                    let Some(vp_code_hash) = vp_hash else {
-                        return Err(Error::MissingAddress(addr.clone()));
-                    };
+                                gas_meter.borrow_mut().consume(gas).map_err(
+                                    |err| Error::GasError(err.to_string()),
+                                )?;
+                                let Some(vp_code_hash) = vp_hash else {
+                                    return Err(Error::MissingAddress(
+                                        addr.clone(),
+                                    ));
+                                };
 
-                    wasm::run::vp(
-                        vp_code_hash,
-                        batched_tx,
-                        tx_index,
-                        addr,
-                        state,
-                        &gas_meter,
-                        &keys_changed,
-                        &verifiers,
-                        vp_wasm_cache.clone(),
-                    )
-                    .map_err(|err| match err {
+                                wasm::run::vp(
+                                    vp_code_hash,
+                                    batched_tx,
+                                    tx_index,
+                                    addr,
+                                    state,
+                                    &gas_meter,
+                                    &keys_changed,
+                                    &verifiers,
+                                    vp_wasm_cache.clone(),
+                                )
+                                .map_err(
+                                    |err| {
+                                        match err {
                         wasm::run::Error::GasError(msg) => Error::GasError(msg),
                         wasm::run::Error::InvalidSectionSignature(msg) => {
                             Error::InvalidSectionSignature(msg)
                         }
                         _ => Error::VpRunnerError(err),
-                    })
-                }
-                Address::Internal(internal_addr) => {
-                    let ctx = NativeVpCtx::new(
-                        addr,
-                        state,
-                        batched_tx.tx,
-                        batched_tx.cmt,
-                        tx_index,
-                        &gas_meter,
-                        &keys_changed,
-                        &verifiers,
-                        vp_wasm_cache.clone(),
-                    );
+                    }
+                                    },
+                                )
+                            }
+                            Address::Internal(internal_addr) => {
+                                let ctx = NativeVpCtx::new(
+                                    addr,
+                                    state,
+                                    batched_tx.tx,
+                                    batched_tx.cmt,
+                                    tx_index,
+                                    &gas_meter,
+                                    &keys_changed,
+                                    &verifiers,
+                                    vp_wasm_cache.clone(),
+                                );
 
-                    match internal_addr {
+                                match internal_addr {
                         InternalAddress::PoS => {
                             let pos = PosVp::new(ctx);
                             pos.validate_tx(
@@ -1301,49 +1311,56 @@ where
                             Error::AccessForbidden((*internal_addr).clone()),
                         ),
                     }
-                }
-            };
+                            }
+                        };
 
-            tx_accepted.map_or_else(
-                |err| {
-                    result
-                        .status_flags
-                        .insert(err.invalid_section_signature_flag());
-                    result.rejected_vps.insert(addr.clone());
-                    result.errors.push((addr.clone(), err.to_string()));
+                    tx_accepted.map_or_else(
+                        |err| {
+                            result
+                                .status_flags
+                                .insert(err.invalid_section_signature_flag());
+                            result.rejected_vps.insert(addr.clone());
+                            result.errors.push((addr.clone(), err.to_string()));
+                        },
+                        |()| {
+                            result.accepted_vps.insert(addr.clone());
+                        },
+                    );
+
+                    // Execution of VPs can (and must) be short-circuited
+                    // only in case of a gas overflow to prevent the
+                    // transaction from consuming resources that have not
+                    // been acquired in the corresponding wrapper tx. For
+                    // all the other errors we keep evaluating the vps. This
+                    // allows to display a consistent VpsResult across all
+                    // nodes and find any invalid signatures
+                    vps_gas = vps_gas
+                        .checked_add(gas_meter.borrow().get_vp_consumed_gas())
+                        .ok_or(Error::GasError(
+                            gas::Error::GasOverflow.to_string(),
+                        ))?;
+                    gas_meter
+                        .borrow()
+                        .check_vps_limit(vps_gas)
+                        .map_err(|err| Error::GasError(err.to_string()))?;
+
+                    Ok((result, vps_gas))
                 },
-                |()| {
-                    result.accepted_vps.insert(addr.clone());
-                },
-            );
-
-            // Execution of VPs can (and must) be short-circuited
-            // only in case of a gas overflow to prevent the
-            // transaction from consuming resources that have not
-            // been acquired in the corresponding wrapper tx. For
-            // all the other errors we keep evaluating the vps. This
-            // allows to display a consistent VpsResult across all
-            // nodes and find any invalid signatures
-            result
-                .gas_used
-                .set(gas_meter.into_inner())
-                .map_err(|err| Error::GasError(err.to_string()))?;
-
-            Ok(result)
-        })
-        .try_reduce(VpsResult::default, |a, b| {
-            merge_vp_results(a, b, tx_gas_meter)
-        })?;
+            )
+            .try_reduce(
+                || (VpsResult::default(), Gas::from(0)),
+                |a, b| merge_vp_results(a, b, tx_gas_meter),
+            )?;
 
     Ok(vps_result)
 }
 
 /// Merge VP results from parallel runs
 fn merge_vp_results(
-    a: VpsResult,
-    mut b: VpsResult,
+    (a, a_gas): (VpsResult, Gas),
+    (mut b, b_gas): (VpsResult, Gas),
     tx_gas_meter: &TxGasMeter,
-) -> Result<VpsResult> {
+) -> Result<(VpsResult, Gas)> {
     let mut accepted_vps = a.accepted_vps;
     let mut rejected_vps = a.rejected_vps;
     accepted_vps.extend(b.accepted_vps);
@@ -1351,19 +1368,23 @@ fn merge_vp_results(
     let mut errors = a.errors;
     errors.append(&mut b.errors);
     let status_flags = a.status_flags | b.status_flags;
-    let mut gas_used = a.gas_used;
 
-    gas_used
-        .merge(b.gas_used, tx_gas_meter)
+    let vps_gas = a_gas
+        .checked_add(b_gas)
+        .ok_or(Error::GasError(gas::Error::GasOverflow.to_string()))?;
+    tx_gas_meter
+        .check_vps_limit(vps_gas)
         .map_err(|err| Error::GasError(err.to_string()))?;
 
-    Ok(VpsResult {
-        accepted_vps,
-        rejected_vps,
-        gas_used,
-        errors,
-        status_flags,
-    })
+    Ok((
+        VpsResult {
+            accepted_vps,
+            rejected_vps,
+            errors,
+            status_flags,
+        },
+        vps_gas,
+    ))
 }
 
 #[cfg(test)]

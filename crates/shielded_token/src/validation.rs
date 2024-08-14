@@ -236,7 +236,6 @@ where
         consume_verify_gas(namada_gas::MASP_FIXED_SPEND_GAS)?;
         consume_verify_gas(checked!(
             namada_gas::MASP_VARIABLE_SPEND_GAS * remaining_notes as u64
-                / namada_gas::MASP_PARALLEL_GAS_DIVIDER
         )?)?;
     }
 
@@ -246,7 +245,6 @@ where
         consume_verify_gas(namada_gas::MASP_FIXED_CONVERT_GAS)?;
         consume_verify_gas(checked!(
             namada_gas::MASP_VARIABLE_CONVERT_GAS * remaining_notes as u64
-                / namada_gas::MASP_PARALLEL_GAS_DIVIDER
         )?)?;
     }
 
@@ -256,7 +254,6 @@ where
         consume_verify_gas(namada_gas::MASP_FIXED_OUTPUT_GAS)?;
         consume_verify_gas(checked!(
             namada_gas::MASP_VARIABLE_OUTPUT_GAS * remaining_notes as u64
-                / namada_gas::MASP_PARALLEL_GAS_DIVIDER
         )?)?;
     }
 
