@@ -9,6 +9,7 @@ use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use itertools::Either;
+use namada_sdk::address::Address;
 use namada_sdk::args::DeviceTransport;
 use namada_sdk::chain::ChainId;
 use namada_sdk::dec::Dec;
@@ -29,6 +30,7 @@ use crate::config::genesis::chain::DeriveEstablishedAddress;
 use crate::config::genesis::transactions::{
     sign_delegation_bond_tx, sign_validator_account_tx, UnsignedTransactions,
 };
+use crate::config::genesis::{AddrOrPk, GenesisAddress};
 use crate::config::global::GlobalConfig;
 use crate::config::{self, genesis, get_default_namada_folder, TendermintMode};
 use crate::facade::tendermint::node::Id as TendermintNodeId;
@@ -602,13 +604,40 @@ pub fn init_genesis_established_account(
 }
 
 /// Bond to a validator at pre-genesis.
-pub fn genesis_bond(args: args::GenesisBond) {
+pub fn genesis_bond(global_args: args::Global, args: args::GenesisBond) {
     let args::GenesisBond {
         source,
         validator,
         bond_amount,
         output: toml_path,
     } = args;
+
+    let (wallet, _wallet_file) =
+        load_pre_genesis_wallet_or_exit(&global_args.base_dir);
+    let source = match source {
+        AddrOrPk::Address(addr) => match &addr {
+            Address::Established(established) => {
+                GenesisAddress::EstablishedAddress(established.clone())
+            }
+            Address::Implicit(internal) => {
+                match wallet.find_public_key_from_implicit_addr(internal) {
+                    Ok(pk) => GenesisAddress::PublicKey(StringEncoded::new(pk)),
+                    Err(err) => {
+                        eprintln!(
+                            "Couldn't find the PK associated with the given \
+                             implicit address {addr} in the wallet: {err}"
+                        );
+                        safe_exit(1)
+                    }
+                }
+            }
+            Address::Internal(_) => {
+                eprintln!("Unexpected internal address as bond source");
+                safe_exit(1);
+            }
+        },
+        AddrOrPk::PublicKey(pk) => GenesisAddress::PublicKey(pk),
+    };
     let txs = genesis::transactions::init_bond(source, validator, bond_amount);
 
     let toml_path_str = toml_path.to_string_lossy();
