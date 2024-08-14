@@ -66,11 +66,11 @@ use namada_sdk::ibc::core::connection::types::Counterparty as ConnCounterparty;
 use namada_sdk::ibc::core::host::types::identifiers::{
     ChainId, ChannelId, ClientId, ConnectionId, PortId,
 };
-use namada_sdk::ibc::event as ibc_events;
 use namada_sdk::ibc::event::IbcEventType;
 use namada_sdk::ibc::primitives::proto::Any;
 use namada_sdk::ibc::primitives::{Signer, ToProto};
 use namada_sdk::ibc::storage::*;
+use namada_sdk::ibc::{event as ibc_events, COMMITMENT_PREFIX};
 use namada_sdk::key::PublicKey;
 use namada_sdk::masp::fs::FsShieldedUtils;
 use namada_sdk::parameters::{storage as param_storage, EpochDuration};
@@ -756,6 +756,100 @@ fn proposal_ibc_token_inflation() -> Result<()> {
 }
 
 #[test]
+fn ibc_upgrade_client() -> Result<()> {
+    // To avoid the client expiration, stop updating the client near the
+    // first height of the grace epoch. It is set 340 because the grace epoch in
+    // this test will be Epoch 18 and the number of blocks per epoch is 20.
+    const MIN_UPGRADE_HEIGHT: u64 = 340;
+    const PIPELINE_LEN: u64 = 8;
+
+    let update_genesis =
+        |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
+            genesis.parameters.parameters.epochs_per_year =
+                epochs_per_year_from_min_duration(20);
+            // for the trusting period of IBC client
+            genesis.parameters.pos_params.pipeline_len = PIPELINE_LEN;
+            genesis.parameters.gov_params.min_proposal_grace_epochs = 3;
+            genesis.parameters.ibc_params.default_mint_limit =
+                Amount::max_signed();
+            genesis
+                .parameters
+                .ibc_params
+                .default_per_epoch_throughput_limit = Amount::max_signed();
+            setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
+        };
+    let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
+    let _bg_ledger_a = ledger_a.background();
+    let _bg_ledger_b = ledger_b.background();
+
+    // Proposal on Chain B
+    // Delegate some token
+    delegate_token(&test_b)?;
+    let rpc_b = get_actor_rpc(&test_b, Who::Validator(0));
+    let mut epoch = get_epoch(&test_b, &rpc_b).unwrap();
+    let delegated = epoch + PIPELINE_LEN;
+    while epoch <= delegated {
+        sleep(10);
+        epoch = get_epoch(&test_b, &rpc_b).unwrap_or_default();
+    }
+    // Upgrade proposal on Chain B
+    // The transaction will store the upgraded client state and consensus state
+    // as if Chain B will be upgraded
+    let start_epoch = propose_upgrade_client(&test_b)?;
+    let mut epoch = get_epoch(&test_b, &rpc_b).unwrap();
+    // Vote
+    while epoch < start_epoch {
+        sleep(10);
+        epoch = get_epoch(&test_b, &rpc_b).unwrap_or_default();
+    }
+    submit_votes(&test_b)?;
+
+    // creating IBC channel while waiting the grace epoch
+    setup_hermes(&test_a, &test_b)?;
+    create_channel_with_hermes(&test_a, &test_b)?;
+    // Start relaying to update clients
+    let hermes = run_hermes(&test_a)?;
+    let bg_hermes = hermes.background();
+
+    let mut height = query_height(&test_b)?;
+    while height.revision_height() < MIN_UPGRADE_HEIGHT {
+        sleep(10);
+        height = query_height(&test_b)?;
+    }
+    // Stop Hermes not to update a client after the upgrade height
+    let mut hermes = bg_hermes.foreground();
+    hermes.interrupt()?;
+
+    // wait for the grace epoch
+    let grace_epoch = start_epoch + 6u64;
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
+    while epoch < grace_epoch {
+        sleep(10);
+        epoch = get_epoch(&test_b, &rpc_b).unwrap_or_default();
+    }
+
+    // Check the upgraded height
+    let upgraded_height = get_upgraded_height(&test_b, MIN_UPGRADE_HEIGHT)?;
+    // Upgrade the IBC client of Chain B on Chain A with Hermes
+    upgrade_client(&test_a, test_a.net.chain_id.to_string(), upgraded_height)?;
+    sleep(1);
+
+    // Check the upgraded client
+    let current_height = query_height(&test_a)?;
+    let (upgraded_client_state, _, _) = get_client_states(
+        &test_a,
+        &"07-tendermint-0".parse().unwrap(),
+        current_height,
+    )?;
+    assert_eq!(
+        upgraded_client_state.inner().chain_id.as_str(),
+        "upgraded-chain"
+    );
+
+    Ok(())
+}
+
+#[test]
 fn ibc_rate_limit() -> Result<()> {
     // Mint limit 2 transfer/channel-0/nam, per-epoch throughput limit 1 NAM
     let update_genesis =
@@ -1114,6 +1208,55 @@ fn wait_for_packet_relay(
         }
     }
     Err(eyre!("Pending packet is still left"))
+}
+
+fn get_upgraded_height(test: &Test, min_upgrade_height: u64) -> Result<u64> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
+    // Search the storage for the upgraded client state
+    let rpc = get_actor_rpc(test, Who::Validator(0));
+    let max_height = min_upgrade_height + 100;
+    let mut height = min_upgrade_height;
+    while height < max_height {
+        height += 1;
+        let key = upgraded_client_state_key(Height::new(0, height).unwrap());
+        let query_args = [
+            "query-bytes",
+            "--storage-key",
+            &key.to_string(),
+            "--node",
+            &rpc,
+        ];
+        let mut client = run!(test, Bin::Client, query_args, Some(10))?;
+        if client.exp_string("No data found").is_ok() {
+            sleep(1);
+            continue;
+        } else {
+            return Ok(height);
+        }
+    }
+    panic!("No upgraded client state on the chain");
+}
+
+fn upgrade_client(
+    test: &Test,
+    host_chain_id: impl AsRef<str>,
+    upgrade_height: u64,
+) -> Result<()> {
+    let args = [
+        "upgrade",
+        "client",
+        "--host-chain",
+        host_chain_id.as_ref(),
+        "--client",
+        "07-tendermint-0",
+        "--upgrade-height",
+        &upgrade_height.to_string(),
+    ];
+    let mut hermes = run_hermes_cmd(test, args, Some(120))?;
+    hermes.exp_string("upgraded-chain")?;
+    hermes.assert_success();
+
+    Ok(())
 }
 
 fn wait_epochs(test: &Test, duration_epochs: u64) -> Result<()> {
@@ -1960,8 +2103,7 @@ fn get_receipt_absence_proof(
 }
 
 fn commitment_prefix() -> CommitmentPrefix {
-    CommitmentPrefix::try_from(b"ibc".to_vec())
-        .expect("the prefix should be parsable")
+    CommitmentPrefix::from(COMMITMENT_PREFIX.as_bytes().to_vec())
 }
 
 fn submit_ibc_tx(
@@ -2195,6 +2337,50 @@ fn propose_inflation(test: &Test) -> Result<Epoch> {
         &rpc,
     ]);
     let mut client = run!(test, Bin::Client, submit_proposal_args, Some(100))?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
+    client.assert_success();
+    Ok(start_epoch.into())
+}
+
+fn propose_upgrade_client(test: &Test) -> Result<Epoch> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
+    let albert = find_address(test, ALBERT)?;
+    let rpc = get_actor_rpc(test, Who::Validator(0));
+    let epoch = get_epoch(test, &rpc)?;
+    let start_epoch = (epoch.0 + 3) / 3 * 3;
+    let proposal_json = serde_json::json!({
+        "proposal": {
+            "content": {
+                "title": "TheTitle",
+                "authors": "test@test.com",
+                "discussions-to": "www.github.com/anoma/aip/1",
+                "created": "2022-03-10T08:54:37Z",
+                "license": "MIT",
+                "abstract": "upgrade chain",
+                "motivation": "upgrade chain",
+                "details": "upgrade chain",
+                "requires": "2"
+            },
+            "author": albert,
+            "voting_start_epoch": start_epoch,
+            "voting_end_epoch": start_epoch + 3_u64,
+            "activation_epoch": start_epoch + 6_u64,
+        },
+        "data": TestWasms::TxProposalIbcClientUpgrade.read_bytes()
+    });
+    let proposal_json_path = test.test_dir.path().join("proposal.json");
+    write_json_file(proposal_json_path.as_path(), proposal_json);
+
+    let submit_proposal_args = vec![
+        "init-proposal",
+        "--data-path",
+        proposal_json_path.to_str().unwrap(),
+        "--gas-limit",
+        "4000000",
+        "--node",
+        &rpc,
+    ];
+    let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
     Ok(start_epoch.into())
