@@ -559,6 +559,7 @@ where
 
                 let public_keys: Vec<_> =
                     public_keys.iter().map(|pk| pk.raw.clone()).collect();
+
                 namada_sdk::account::init_account_storage(
                     &mut self.state,
                     address,
@@ -566,6 +567,18 @@ where
                     *threshold,
                 )
                 .unwrap();
+
+                for pk in &public_keys {
+                    let implicit_addr = pk.into();
+
+                    namada_sdk::account::init_account_storage(
+                        &mut self.state,
+                        &implicit_addr,
+                        std::slice::from_ref(pk),
+                        1,
+                    )
+                    .unwrap();
+                }
             }
         }
         self.proceed_with(())
