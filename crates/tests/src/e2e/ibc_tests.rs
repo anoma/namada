@@ -2376,7 +2376,7 @@ fn propose_upgrade_client(test: &Test) -> Result<Epoch> {
         "--data-path",
         proposal_json_path.to_str().unwrap(),
         "--gas-limit",
-        "2000000",
+        "4000000",
         "--node",
         &rpc,
     ];
