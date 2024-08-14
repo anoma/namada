@@ -1,8 +1,8 @@
 use std::io::Read;
 
 use color_eyre::eyre::Result;
-use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada_sdk::io::Io;
+use namada_sdk::wallet::DatedKeypair;
 use namada_sdk::{display_line, Namada, NamadaImpl};
 
 use crate::cli;
@@ -350,10 +350,10 @@ impl CliApi {
                             .wallet
                             .get_viewing_keys()
                             .values()
-                            .copied()
-                            .map(|vk| ExtendedFullViewingKey::from(vk).fvk.vk)
+                            .cloned()
+                            .map(|vk| vk.map(|vk| vk.as_viewing_key()))
                             .chain(args.viewing_keys.into_iter().map(|vk| {
-                                ExtendedFullViewingKey::from(vk).fvk.vk
+                                DatedKeypair::from(vk.as_viewing_key())
                             }))
                             .collect::<Vec<_>>();
                         let sks = args

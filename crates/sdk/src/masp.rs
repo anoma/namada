@@ -78,6 +78,7 @@ use crate::masp::utils::{
 };
 use crate::queries::Client;
 use crate::rpc::{query_conversion, query_denom};
+use crate::wallet::DatedKeypair;
 use crate::{
     control_flow, display_line, edisplay_line, query_native_token, rpc,
     MaybeSend, MaybeSync, Namada,
@@ -603,7 +604,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         last_query_height: Option<BlockHeight>,
         retry: RetryStrategy,
         sks: &[MaspExtendedSpendingKey],
-        fvks: &[ViewingKey],
+        fvks: &[DatedKeypair<ViewingKey>],
     ) -> Result<(), Error>
     where
         IO: Io,
@@ -699,7 +700,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         last_query_height: Option<BlockHeight>,
         retry: RetryStrategy,
         sks: &[MaspExtendedSpendingKey],
-        fvks: &[ViewingKey],
+        fvks: &[DatedKeypair<ViewingKey>],
         mut shutdown_signal: ShutdownSignal,
     ) -> Result<(), Error>
     where
@@ -733,7 +734,15 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             self.vk_heights.entry(vk).or_default();
         }
         for vk in fvks {
-            self.vk_heights.entry(*vk).or_default();
+            if let Some(h) = self.vk_heights.entry(vk.key).or_default() {
+                let birthday = IndexedTx {
+                    height: vk.birthday,
+                    index: Default::default(),
+                };
+                if birthday > *h {
+                    *h = birthday;
+                }
+            }
         }
 
         // Save the context to persist newly added keys
@@ -2393,7 +2402,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             .await
             .get_viewing_keys()
             .values()
-            .map(|evk| ExtendedFullViewingKey::from(*evk).fvk.vk)
+            .map(|evk| ExtendedFullViewingKey::from(evk.key).fvk.vk)
             .collect();
         let last_witnessed_tx = self.tx_note_map.keys().max();
         // This data will be discarded at the next fetch so we don't need to
@@ -3707,7 +3716,7 @@ mod test_shielded_sync {
                 None,
                 RetryStrategy::Times(1),
                 &[],
-                &[vk],
+                &[vk.into()],
             )
             .await
             .unwrap_err();
@@ -3751,7 +3760,7 @@ mod test_shielded_sync {
                 None,
                 RetryStrategy::Times(2),
                 &[],
-                &[vk],
+                &[vk.into()],
             )
             .await
             .expect("Test failed");
@@ -3868,7 +3877,7 @@ mod test_shielded_sync {
                 None,
                 RetryStrategy::Times(1),
                 &[],
-                &[vk],
+                &[vk.into()],
             )
             .await
             .unwrap_err();
@@ -3893,7 +3902,7 @@ mod test_shielded_sync {
                 None,
                 RetryStrategy::Times(1),
                 &[],
-                &[vk],
+                &[vk.into()],
             )
             .await
             .unwrap_err();
@@ -3909,7 +3918,7 @@ mod test_shielded_sync {
                 None,
                 RetryStrategy::Times(1),
                 &[],
-                &[vk],
+                &[vk.into()],
             )
             .await
             .unwrap_err();
@@ -3927,7 +3936,7 @@ mod test_shielded_sync {
                 None,
                 RetryStrategy::Times(1),
                 &[],
-                &[vk],
+                &[vk.into()],
             )
             .await
             .unwrap_err();
@@ -3963,7 +3972,7 @@ mod test_shielded_sync {
                 None,
                 RetryStrategy::Times(1),
                 &[],
-                &[vk],
+                &[vk.into()],
             )
             .await
             .expect("Test failed");
@@ -4016,7 +4025,7 @@ mod test_shielded_sync {
                 None,
                 RetryStrategy::Times(2),
                 &[],
-                &[vk],
+                &[vk.into()],
             )
             .await
             .expect("Test failed");
@@ -4075,7 +4084,7 @@ mod test_shielded_sync {
                 None,
                 RetryStrategy::Forever,
                 &[],
-                &[vk],
+                &[vk.into()],
                 shutdown_signal,
             )
             .await

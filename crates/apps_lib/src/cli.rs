@@ -3211,6 +3211,7 @@ pub mod args {
             Err(_) => config::get_default_namada_folder(),
         }),
     );
+    pub const BIRTHDAY: ArgOpt<BlockHeight> = arg_opt("birthday");
     pub const BLOCK_HEIGHT: Arg<BlockHeight> = arg("block-height");
     pub const BLOCK_HEIGHT_OPT: ArgOpt<BlockHeight> = arg_opt("height");
     pub const BLOCK_HEIGHT_FROM_OPT: ArgOpt<BlockHeight> =
@@ -3255,6 +3256,7 @@ pub mod args {
         arg_opt("success-sleep");
     pub const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
     pub const DATA_PATH: Arg<PathBuf> = arg("data-path");
+    pub const DATED_VIEWING_KEY: Arg<WalletDatedViewingKey> = arg("key");
     pub const DB_KEY: Arg<String> = arg("db-key");
     pub const DB_COLUMN_FAMILY: ArgDefault<String> = arg_default(
         "db-column-family",
@@ -6982,6 +6984,8 @@ pub mod args {
         type BpConversionTable = PathBuf;
         type ConfigRpcTendermintAddress = ConfigRpcAddress;
         type Data = PathBuf;
+        type DatedSpendingKey = WalletDatedSpendingKey;
+        type DatedViewingKey = WalletDatedViewingKey;
         type EthereumAddress = String;
         type Keypair = WalletKeypair;
         type MaspIndexerAddress = String;
@@ -7352,7 +7356,7 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
-            let viewing_key = VIEWING_KEY.parse(matches);
+            let viewing_key = DATED_VIEWING_KEY.parse(matches);
             Self {
                 alias,
                 alias_force,
@@ -7367,7 +7371,7 @@ pub mod args {
             .arg(ALIAS_FORCE.def().help(wrap!(
                 "Override the alias without confirmation if it already exists."
             )))
-            .arg(VIEWING_KEY.def().help(wrap!("The viewing key.")))
+            .arg(DATED_VIEWING_KEY.def().help(wrap!("The viewing key.")))
         }
     }
 
@@ -7377,6 +7381,7 @@ pub mod args {
             let shielded = SHIELDED.parse(matches);
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
+            let birthday = BIRTHDAY.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let derivation_path = HD_DERIVATION_PATH.parse(matches);
             let allow_non_compliant =
@@ -7396,6 +7401,7 @@ pub mod args {
                 prompt_bip39_passphrase,
                 use_device,
                 device_transport,
+                birthday,
             }
         }
 
@@ -7417,6 +7423,11 @@ pub mod args {
                     "Force overwrite the alias if it already exists."
                 )),
             )
+            .arg(BIRTHDAY.def().help(wrap!(
+                "A block height after which this key is being created. Used \
+                 for optimizing MASP operations. If none is provided, \
+                 defaults to the first block height."
+            )))
             .arg(UNSAFE_DONT_ENCRYPT.def().help(wrap!(
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
                  used in a live network."
@@ -7465,6 +7476,7 @@ pub mod args {
             let raw = RAW_KEY_GEN.parse(matches);
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
+            let birthday = BIRTHDAY.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let derivation_path = HD_DERIVATION_PATH.parse(matches);
             let allow_non_compliant =
@@ -7477,6 +7489,7 @@ pub mod args {
                 raw,
                 alias,
                 alias_force,
+                birthday,
                 unsafe_dont_encrypt,
                 derivation_path,
                 allow_non_compliant,
@@ -7508,6 +7521,11 @@ pub mod args {
             .arg(ALIAS.def().help(wrap!("The key and address alias.")))
             .arg(ALIAS_FORCE.def().help(wrap!(
                 "Override the alias without confirmation if it already exists."
+            )))
+            .arg(BIRTHDAY.def().help(wrap!(
+                "A block height after which this key is being created. Used \
+                 for optimizing MASP operations. If none is provided, \
+                 defaults to the first block height."
             )))
             .arg(UNSAFE_DONT_ENCRYPT.def().help(wrap!(
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
@@ -7680,11 +7698,13 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
+            let birthday = BIRTHDAY.parse(matches);
             let value = VALUE.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
                 alias,
                 alias_force,
+                birthday,
                 value,
                 unsafe_dont_encrypt,
             }
@@ -7698,6 +7718,11 @@ pub mod args {
             )
             .arg(ALIAS_FORCE.def().help(wrap!(
                 "Override the alias without confirmation if it already exists."
+            )))
+            .arg(BIRTHDAY.def().help(wrap!(
+                "A block height after which this key is being created. Used \
+                 for optimizing MASP operations. If none is provided, \
+                 defaults to the first block height."
             )))
             .arg(VALUE.def().help(wrap!(
                 "Any value of the following:\n- transparent pool secret \

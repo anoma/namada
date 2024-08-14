@@ -28,6 +28,7 @@ use zeroize::Zeroizing;
 use crate::eth_bridge::bridge_pool;
 use crate::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use crate::signing::SigningTxData;
+use crate::wallet::store::{DatedSpendingKey, DatedViewingKey};
 use crate::{rpc, tx, Namada};
 
 /// [`Duration`](StdDuration) wrapper that provides a
@@ -64,8 +65,12 @@ pub trait NamadaTypes: Clone + std::fmt::Debug {
     type EthereumAddress: Clone + std::fmt::Debug;
     /// Represents a shielded viewing key
     type ViewingKey: Clone + std::fmt::Debug;
+    /// Represents a shielded viewing key along with a birthday
+    type DatedViewingKey: Clone + std::fmt::Debug;
     /// Represents a shielded spending key
     type SpendingKey: Clone + std::fmt::Debug;
+    /// Represents a shielded spending key along with a birthday
+    type DatedSpendingKey: Clone + std::fmt::Debug;
     /// Represents a shielded payment address
     type PaymentAddress: Clone + std::fmt::Debug;
     /// Represents the owner of a balance
@@ -106,6 +111,8 @@ impl NamadaTypes for SdkTypes {
     type BpConversionTable = HashMap<Address, BpConversionTableEntry>;
     type ConfigRpcTendermintAddress = tendermint_rpc::Url;
     type Data = Vec<u8>;
+    type DatedSpendingKey = DatedSpendingKey;
+    type DatedViewingKey = DatedViewingKey;
     type EthereumAddress = ();
     type Keypair = namada_core::key::common::SecretKey;
     type MaspIndexerAddress = ();
@@ -2474,6 +2481,9 @@ pub struct KeyGen {
     pub prompt_bip39_passphrase: bool,
     /// Allow non-compliant derivation path
     pub allow_non_compliant: bool,
+    /// Optional block height after which this key was created.
+    /// Only used for MASP keys.
+    pub birthday: Option<BlockHeight>,
 }
 
 /// Wallet restore key and implicit address arguments
@@ -2499,6 +2509,9 @@ pub struct KeyDerive {
     pub use_device: bool,
     /// Hardware Wallet transport - HID (USB) or TCP
     pub device_transport: DeviceTransport,
+    /// Optional blockheight after which this key was created.
+    /// Only used for MASP keys
+    pub birthday: Option<BlockHeight>,
 }
 
 /// Wallet list arguments
@@ -2576,6 +2589,9 @@ pub struct KeyAddressAdd {
     pub alias_force: bool,
     /// Any supported value
     pub value: String,
+    /// Optional block height after which this key was created.
+    /// Only used for MASP keys.
+    pub birthday: Option<BlockHeight>,
     /// Don't encrypt the key
     pub unsafe_dont_encrypt: bool,
 }
@@ -2597,7 +2613,7 @@ pub struct PayAddressGen<C: NamadaTypes = SdkTypes> {
     /// Whether to force overwrite the alias
     pub alias_force: bool,
     /// Viewing key
-    pub viewing_key: C::ViewingKey,
+    pub viewing_key: C::DatedViewingKey,
 }
 
 /// Bridge pool batch recommendation.
