@@ -1181,7 +1181,7 @@ impl BenchShieldedCtx {
                     viewing_keys: vec![],
                     with_indexer: None,
                     wait_for_last_query_height: false,
-                    max_concurrent_fetches: 0,
+                    max_concurrent_fetches: 100,
                     retry_strategy: RetryStrategy::Forever,
                 },
                 &StdIo,
