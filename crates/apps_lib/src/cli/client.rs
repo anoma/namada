@@ -335,14 +335,13 @@ impl CliApi {
                         tx::submit_validator_metadata_change(&namada, args)
                             .await?;
                     }
-                    Sub::ShieldedSync(ShieldedSync(mut args)) => {
-                        let indexer_addr = args.with_indexer.take();
+                    Sub::ShieldedSync(ShieldedSync(args)) => {
                         let mut args = args.to_sdk(&mut ctx)?;
                         let chain_ctx = ctx.take_chain_or_exit();
                         let client = client.unwrap_or_else(|| {
                             C::from_tendermint_address(&args.ledger_address)
                         });
-                        if indexer_addr.is_none() {
+                        if args.with_indexer.is_none() {
                             client.wait_until_node_is_synced(&io).await?;
                         }
                         args.viewing_keys.extend(
