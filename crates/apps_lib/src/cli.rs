@@ -3187,7 +3187,7 @@ pub mod args {
     use super::utils::*;
     use super::{ArgGroup, ArgMatches};
     use crate::client::utils::PRE_GENESIS_DIR;
-    use crate::config::genesis::GenesisAddress;
+    use crate::config::genesis::AddrOrPk;
     use crate::config::{self, Action, ActionAtHeight};
     use crate::facade::tendermint::Timeout;
     use crate::facade::tendermint_rpc::Url;
@@ -3308,7 +3308,7 @@ pub mod args {
             )
         }),
     );
-    pub const GENESIS_BOND_SOURCE: ArgOpt<GenesisAddress> = arg_opt("source");
+    pub const GENESIS_BOND_SOURCE: ArgOpt<AddrOrPk> = arg_opt("source");
     pub const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
     pub const GENESIS_TIME: Arg<DateTimeUtc> = arg("genesis-time");
     pub const GENESIS_VALIDATOR: ArgOpt<String> =
@@ -8003,7 +8003,7 @@ pub mod args {
 
     #[derive(Clone, Debug)]
     pub struct GenesisBond {
-        pub source: GenesisAddress,
+        pub source: AddrOrPk,
         pub validator: EstablishedAddress,
         pub bond_amount: token::DenominatedAmount,
         pub output: PathBuf,
@@ -8014,7 +8014,7 @@ pub mod args {
             let validator = GENESIS_VALIDATOR_ADDRESS.parse(matches);
             let source =
                 GENESIS_BOND_SOURCE.parse(matches).unwrap_or_else(|| {
-                    GenesisAddress::EstablishedAddress(validator.clone())
+                    AddrOrPk::Address(Address::Established(validator.clone()))
                 });
             let bond_amount = AMOUNT.parse(matches);
             let output = PATH.parse(matches);

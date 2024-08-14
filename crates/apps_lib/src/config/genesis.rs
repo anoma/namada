@@ -148,6 +148,107 @@ impl FromStr for GenesisAddress {
     }
 }
 
+#[derive(
+    Clone,
+    Debug,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    PartialEq,
+    Eq,
+    Ord,
+    PartialOrd,
+    Hash,
+)]
+#[allow(missing_docs)]
+pub enum AddrOrPk {
+    PublicKey(StringEncoded<common::PublicKey>),
+    Address(Address),
+}
+
+impl AddrOrPk {
+    /// Return an [`Address`] from this [`AddrOrPk`].
+    #[inline]
+    pub fn address(&self) -> Address {
+        match self {
+            Self::Address(addr) => addr.clone(),
+            Self::PublicKey(pk) => (&pk.raw).into(),
+        }
+    }
+}
+
+impl Serialize for AddrOrPk {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            AddrOrPk::Address(address) => {
+                Serialize::serialize(&address, serializer)
+            }
+            AddrOrPk::PublicKey(pk) => Serialize::serialize(pk, serializer),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for AddrOrPk {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct FieldVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for FieldVisitor {
+            type Value = AddrOrPk;
+
+            fn expecting(
+                &self,
+                formatter: &mut Formatter<'_>,
+            ) -> std::fmt::Result {
+                formatter
+                    .write_str("a bech32m encoded public key or an address")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                AddrOrPk::from_str(value).map_err(serde::de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(FieldVisitor)
+    }
+}
+
+impl Display for AddrOrPk {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AddrOrPk::Address(address) => write!(f, "{address}"),
+            AddrOrPk::PublicKey(pk) => write!(f, "{}", pk),
+        }
+    }
+}
+
+impl FromStr for AddrOrPk {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        // Try to deserialize a PK first
+        let maybe_pk = StringEncoded::<common::PublicKey>::from_str(value);
+        match maybe_pk {
+            Ok(pk) => Ok(AddrOrPk::PublicKey(pk)),
+            Err(_) => {
+                // If that doesn't work, attempt to retrieve
+                // an address
+                let address =
+                    Address::from_str(value).map_err(|err| err.to_string())?;
+                Ok(AddrOrPk::Address(address))
+            }
+        }
+    }
+}
+
 #[derive(Debug, BorshSerialize, BorshDeserialize, BorshDeserializer)]
 #[borsh(init=init)]
 pub struct Genesis {
