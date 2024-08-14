@@ -612,6 +612,9 @@ where
                     self.verifiers.clone(),
                 );
                 self.insert_verifiers()?;
+                if msg.transfer.is_some() {
+                    token_transfer_ctx.enable_shielded_transfer();
+                }
                 send_transfer_execute(
                     &mut self.ctx,
                     &mut token_transfer_ctx,
@@ -623,6 +626,9 @@ where
             IbcMessage::NftTransfer(msg) => {
                 let mut nft_transfer_ctx =
                     NftTransferContext::<_, Token>::new(self.ctx.inner.clone());
+                if msg.transfer.is_some() {
+                    nft_transfer_ctx.enable_shielded_transfer();
+                }
                 send_nft_transfer_execute(
                     &mut self.ctx,
                     &mut nft_transfer_ctx,

@@ -14,7 +14,7 @@ use ibc::apps::nft_transfer::types::{
 };
 use ibc::core::handler::types::error::ContextError;
 use ibc::core::host::types::identifiers::{ChannelId, PortId};
-use namada_core::address::Address;
+use namada_core::address::{Address, MASP};
 use namada_core::token::Amount;
 use namada_systems::trans_token;
 
@@ -28,6 +28,7 @@ where
     C: IbcCommonContext,
 {
     inner: Rc<RefCell<C>>,
+    is_shielded: bool,
     _marker: PhantomData<Token>,
 }
 
@@ -40,8 +41,14 @@ where
     pub fn new(inner: Rc<RefCell<C>>) -> Self {
         Self {
             inner,
+            is_shielded: false,
             _marker: PhantomData,
         }
+    }
+
+    /// Set to enable a shielded transfer
+    pub fn enable_shielded_transfer(&mut self) {
+        self.is_shielded = true;
     }
 
     /// Update the mint amount of the token
@@ -163,6 +170,12 @@ where
         // The metadata should exist
         self.get_nft(class_id, token_id)?;
 
+        let from_account = if self.is_shielded {
+            &MASP
+        } else {
+            from_account
+        };
+
         // Check the account owns the NFT
         if self.inner.borrow().is_nft_owned::<Token>(
             class_id,
@@ -227,6 +240,8 @@ where
     ) -> Result<(), NftTransferError> {
         // Metadata should exist
         self.get_nft(class_id, token_id)?;
+
+        let account = if self.is_shielded { &MASP } else { account };
 
         // Check the account owns the NFT
         if self
@@ -313,6 +328,12 @@ where
 
         self.add_withdraw(&ibc_token)?;
 
+        let from_account = if self.is_shielded {
+            &MASP
+        } else {
+            from_account
+        };
+
         self.inner
             .borrow_mut()
             .transfer_token(
@@ -391,6 +412,8 @@ where
 
         self.update_mint_amount(&ibc_token, false)?;
         self.add_withdraw(&ibc_token)?;
+
+        let account = if self.is_shielded { &MASP } else { account };
 
         self.inner
             .borrow_mut()
