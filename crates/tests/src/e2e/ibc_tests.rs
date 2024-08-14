@@ -28,7 +28,7 @@ use namada_apps_lib::facade::tendermint::block::Header as TmHeader;
 use namada_apps_lib::facade::tendermint::merkle::proof::ProofOps as TmProof;
 use namada_apps_lib::facade::tendermint_rpc::{Client, HttpClient, Url};
 use namada_core::string_encoding::StringEncoded;
-use namada_sdk::address::{Address, InternalAddress};
+use namada_sdk::address::{Address, InternalAddress, MASP};
 use namada_sdk::events::extend::ReadFromEventAttributes;
 use namada_sdk::governance::cli::onchain::PgfFunding;
 use namada_sdk::governance::pgf::ADDRESS as PGF_ADDRESS;
@@ -73,6 +73,7 @@ use namada_sdk::ibc::primitives::{Signer, ToProto};
 use namada_sdk::ibc::storage::*;
 use namada_sdk::key::PublicKey;
 use namada_sdk::masp::fs::FsShieldedUtils;
+use namada_sdk::masp::PaymentAddress;
 use namada_sdk::parameters::{storage as param_storage, EpochDuration};
 use namada_sdk::queries::RPC;
 use namada_sdk::state::ics23_specs::ibc_proof_specs;
@@ -2234,6 +2235,12 @@ fn transfer_from_gaia(
     let channel_id = channel_id.to_string();
     let amount = format!("{}{}", amount, token.as_ref());
     let rpc = format!("tcp://{GAIA_RPC}");
+    // If the receiver is a pyament address we want to mask it to the more
+    // general MASP internal address to improve on privacy
+    let receiver = match PaymentAddress::from_str(receiver.as_ref()) {
+        Ok(_) => MASP.to_string(),
+        Err(_) => receiver.as_ref().to_string(),
+    };
     let mut args = vec![
         "tx",
         "ibc-transfer",
