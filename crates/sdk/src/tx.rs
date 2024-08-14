@@ -191,14 +191,12 @@ impl ProcessTxResponse {
 
 /// Build and dump a transaction either to file or to screen
 pub fn dump_tx<IO: Io>(io: &IO, args: &args::Tx, tx: Tx) {
-    let tx_id = tx.header_hash();
-    let serialized_tx = tx.serialize();
-    match args.output_folder.to_owned() {
+    match args.output_folder.clone() {
         Some(path) => {
-            let tx_filename = format!("{}.tx", tx_id);
-            let tx_path = path.join(tx_filename);
-            let out = File::create(&tx_path).unwrap();
-            serde_json::to_writer_pretty(out, &serialized_tx)
+            let tx_path = path.join(format!("{}.tx", tx.header_hash()));
+            let out = File::create(&tx_path)
+                .expect("Should be able to create a file to dump tx");
+            serde_json::to_writer_pretty(out, &tx)
                 .expect("Should be able to write to file.");
             display_line!(
                 io,
@@ -207,6 +205,8 @@ pub fn dump_tx<IO: Io>(io: &IO, args: &args::Tx, tx: Tx) {
             );
         }
         None => {
+            let serialized_tx = serde_json::to_string_pretty(&tx)
+                .expect("Should be able to json encode the tx.");
             display_line!(io, "Below the serialized transaction: \n");
             display_line!(io, "{}", serialized_tx)
         }
