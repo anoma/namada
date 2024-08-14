@@ -128,12 +128,7 @@ impl<Transfer: BorshSchema> BorshSchema for MsgNftTransfer<Transfer> {
 
 /// Shielding data in IBC packet memo
 #[derive(Debug, Clone, BorshDeserialize, BorshSerialize)]
-pub struct IbcShieldingData {
-    /// MASP transaction for receiving the token
-    pub shielding: Option<MaspTransaction>,
-    /// MASP transaction for refunding the token
-    pub refund: Option<MaspTransaction>,
-}
+pub struct IbcShieldingData(pub MaspTransaction);
 
 impl From<IbcShieldingData> for String {
     fn from(data: IbcShieldingData) -> Self {
@@ -146,18 +141,9 @@ pub fn extract_masp_tx_from_envelope(
     envelope: &MsgEnvelope,
 ) -> Option<MaspTransaction> {
     match envelope {
-        MsgEnvelope::Packet(packet_msg) => match packet_msg {
-            PacketMsg::Recv(msg) => {
-                extract_masp_tx_from_packet(&msg.packet, false)
-            }
-            PacketMsg::Ack(msg) => {
-                extract_masp_tx_from_packet(&msg.packet, true)
-            }
-            PacketMsg::Timeout(msg) => {
-                extract_masp_tx_from_packet(&msg.packet, true)
-            }
-            _ => None,
-        },
+        MsgEnvelope::Packet(PacketMsg::Recv(msg)) => {
+            extract_masp_tx_from_packet(&msg.packet, false)
+        }
         _ => None,
     }
 }
@@ -181,12 +167,7 @@ pub fn extract_masp_tx_from_packet(
         &packet.port_id_on_b
     };
     let memo = extract_memo_from_packet(packet, port_id)?;
-    let shielding_data = decode_ibc_shielding_data(memo)?;
-    if is_sender {
-        shielding_data.refund
-    } else {
-        shielding_data.shielding
-    }
+    decode_ibc_shielding_data(memo).map(|data| data.0)
 }
 
 fn extract_memo_from_packet(
@@ -220,9 +201,5 @@ fn extract_memo_from_packet(
 
 /// Get IBC memo string from MASP transaction for receiving
 pub fn convert_masp_tx_to_ibc_memo(transaction: &MaspTransaction) -> String {
-    let shielding_data = IbcShieldingData {
-        shielding: Some(transaction.clone()),
-        refund: None,
-    };
-    shielding_data.into()
+    IbcShieldingData(transaction.clone()).into()
 }

@@ -61,9 +61,7 @@ use ibc::apps::transfer::handler::{
 use ibc::apps::transfer::types::error::TokenTransferError;
 use ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
 use ibc::apps::transfer::types::{is_receiver_chain_source, TracePrefix};
-use ibc::core::channel::types::acknowledgement::{
-    Acknowledgement, AcknowledgementStatus,
-};
+use ibc::core::channel::types::acknowledgement::AcknowledgementStatus;
 use ibc::core::channel::types::commitment::compute_ack_commitment;
 use ibc::core::channel::types::msgs::{
     MsgRecvPacket as IbcMsgRecvPacket, PacketMsg,
@@ -638,33 +636,11 @@ where
                     .map_err(|e| Error::Context(Box::new(e)))?;
                 // Extract MASP tx from the memo in the packet if needed
                 let masp_tx = match &*envelope {
-                    MsgEnvelope::Packet(packet_msg) => {
-                        match packet_msg {
-                            PacketMsg::Recv(msg) => {
-                                if self.is_receiving_success(msg)? {
-                                    extract_masp_tx_from_packet(
-                                        &msg.packet,
-                                        false,
-                                    )
-                                } else {
-                                    None
-                                }
-                            }
-                            PacketMsg::Ack(msg) => {
-                                if is_ack_successful(&msg.acknowledgement)? {
-                                    // No refund
-                                    None
-                                } else {
-                                    extract_masp_tx_from_packet(
-                                        &msg.packet,
-                                        true,
-                                    )
-                                }
-                            }
-                            PacketMsg::Timeout(msg) => {
-                                extract_masp_tx_from_packet(&msg.packet, true)
-                            }
-                            _ => None,
+                    MsgEnvelope::Packet(PacketMsg::Recv(msg)) => {
+                        if self.is_receiving_success(msg)? {
+                            extract_masp_tx_from_packet(&msg.packet, false)
+                        } else {
+                            None
                         }
                     }
                     _ => None,
@@ -744,18 +720,6 @@ where
         }
         Ok(())
     }
-}
-
-fn is_ack_successful(ack: &Acknowledgement) -> Result<bool, Error> {
-    let acknowledgement = serde_json::from_slice::<AcknowledgementStatus>(
-        ack.as_ref(),
-    )
-    .map_err(|e| {
-        Error::TokenTransfer(TokenTransferError::Other(format!(
-            "Decoding the acknowledgement failed: {e}"
-        )))
-    })?;
-    Ok(acknowledgement.is_successful())
 }
 
 /// Tries to decode transaction data to an `IbcMessage`
