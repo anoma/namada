@@ -4,7 +4,6 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use std::time::Duration;
 
 use borsh::BorshSerialize;
@@ -2522,13 +2521,7 @@ pub async fn build_ibc_transfer(
     // Check that the source address exists on chain
     let source =
         source_exists_or_err(source.clone(), args.tx.force, context).await?;
-    // If the receiver is a payment address, replace it with MASP internal
-    // address
-    let receiver = match PaymentAddress::from_str(&args.receiver) {
-        Ok(_) => MASP.to_string(),
-        Err(_) => args.receiver.clone(),
-    }
-    .into();
+    // We cannot check the receiver
 
     // validate the amount given
     let validated_amount =
@@ -2715,7 +2708,7 @@ pub async fn build_ibc_transfer(
         let packet_data = PacketData {
             token,
             sender,
-            receiver,
+            receiver: args.receiver.clone().into(),
             memo: memo.unwrap_or_default().into(),
         };
         let message = IbcMsgTransfer {
@@ -2746,7 +2739,7 @@ pub async fn build_ibc_transfer(
             token_uris: None,
             token_data: None,
             sender,
-            receiver,
+            receiver: args.receiver.clone().into(),
             memo: memo.map(|s| s.into()),
         };
         let message = IbcMsgNftTransfer {
