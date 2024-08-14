@@ -512,7 +512,7 @@ where
             };
 
             for (owner, balance) in balances {
-                if let genesis::GenesisBalanceAddress::PublicKey(pk) = owner {
+                if let genesis::GenesisAddress::PublicKey(pk) = owner {
                     namada_sdk::account::init_account_storage(
                         &mut self.state,
                         &owner.address(),

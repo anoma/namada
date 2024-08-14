@@ -42,127 +42,11 @@ use serde::{Deserialize, Serialize};
     PartialOrd,
     Hash,
 )]
-#[allow(missing_docs)]
-pub enum GenesisBalanceAddress {
-    PublicKey(StringEncoded<common::PublicKey>),
-    Address(Address),
-}
-
-impl GenesisBalanceAddress {
-    /// Return an [`Address`] from this [`GenesisBalanceAddress`].
-    #[inline]
-    pub fn address(&self) -> Address {
-        match self {
-            Self::Address(addr) => addr.clone(),
-            Self::PublicKey(pk) => (&pk.raw).into(),
-        }
-    }
-}
-
-impl Serialize for GenesisBalanceAddress {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        match self {
-            GenesisBalanceAddress::Address(address) => {
-                Serialize::serialize(&address, serializer)
-            }
-            GenesisBalanceAddress::PublicKey(pk) => {
-                Serialize::serialize(pk, serializer)
-            }
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for GenesisBalanceAddress {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        struct FieldVisitor;
-
-        impl<'de> serde::de::Visitor<'de> for FieldVisitor {
-            type Value = GenesisBalanceAddress;
-
-            fn expecting(
-                &self,
-                formatter: &mut Formatter<'_>,
-            ) -> std::fmt::Result {
-                formatter
-                    .write_str("a bech32m encoded public key or an address")
-            }
-
-            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
-            {
-                GenesisBalanceAddress::from_str(value)
-                    .map_err(serde::de::Error::custom)
-            }
-        }
-
-        deserializer.deserialize_str(FieldVisitor)
-    }
-}
-
-impl Display for GenesisBalanceAddress {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            GenesisBalanceAddress::Address(address) => write!(f, "{address}"),
-            GenesisBalanceAddress::PublicKey(pk) => write!(f, "{}", pk),
-        }
-    }
-}
-
-impl FromStr for GenesisBalanceAddress {
-    type Err = String;
-
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        // Try to deserialize a PK first
-        let maybe_pk = StringEncoded::<common::PublicKey>::from_str(value);
-        match maybe_pk {
-            Ok(pk) => Ok(GenesisBalanceAddress::PublicKey(pk)),
-            Err(_) => {
-                // If that doesn't work, attempt to retrieve
-                // an address
-                let address =
-                    Address::from_str(value).map_err(|err| err.to_string())?;
-                Ok(GenesisBalanceAddress::Address(address))
-            }
-        }
-    }
-}
-
-#[derive(
-    Clone,
-    Debug,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshDeserializer,
-    PartialEq,
-    Eq,
-    Ord,
-    PartialOrd,
-    Hash,
-)]
 pub enum GenesisAddress {
     /// Encoded as `public_key = "value"` in toml.
     PublicKey(StringEncoded<common::PublicKey>),
     /// Encoded as `established_address = "value"` in toml.
     EstablishedAddress(EstablishedAddress),
-}
-
-impl From<GenesisAddress> for GenesisBalanceAddress {
-    #[inline]
-    fn from(genesis_addr: GenesisAddress) -> Self {
-        match genesis_addr {
-            GenesisAddress::PublicKey(pk) => Self::PublicKey(pk),
-            GenesisAddress::EstablishedAddress(addr) => {
-                Self::Address(Address::Established(addr))
-            }
-        }
-    }
 }
 
 impl GenesisAddress {
@@ -543,8 +427,7 @@ pub fn make_dev_genesis(
             .first()
             .unwrap();
         let genesis_addr =
-            GenesisAddress::EstablishedAddress(tx.tx.data.address.raw.clone())
-                .into();
+            GenesisAddress::EstablishedAddress(tx.tx.data.address.raw.clone());
 
         let balance = *nam_balances.0.get(&genesis_addr).unwrap();
         let bonded = {
@@ -661,12 +544,10 @@ pub fn make_dev_genesis(
                 .unwrap();
 
             let validator_addr =
-                GenesisAddress::EstablishedAddress(validator_address.clone())
-                    .into();
+                GenesisAddress::EstablishedAddress(validator_address.clone());
             let account_pk = GenesisAddress::PublicKey(StringEncoded::new(
                 consensus_keypair.ref_to(),
-            ))
-            .into();
+            ));
 
             nam_balances.0.insert(validator_addr, first_val_balance);
             nam_balances.0.insert(account_pk, first_val_balance);
