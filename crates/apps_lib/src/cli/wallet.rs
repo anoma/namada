@@ -329,7 +329,7 @@ fn payment_address_gen(
 ) {
     let mut wallet = load_wallet(ctx);
     let alias = alias.to_lowercase();
-    let viewing_key = viewing_key.key.as_viewing_key();
+    let viewing_key = viewing_key.as_viewing_key();
     let (div, _g_d) = find_valid_diversifier(&mut OsRng);
     let masp_payment_addr = viewing_key
         .to_payment_address(div)

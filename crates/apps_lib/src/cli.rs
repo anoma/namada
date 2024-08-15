@@ -3256,7 +3256,6 @@ pub mod args {
         arg_opt("success-sleep");
     pub const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
     pub const DATA_PATH: Arg<PathBuf> = arg("data-path");
-    pub const DATED_VIEWING_KEY: Arg<WalletDatedViewingKey> = arg("key");
     pub const DB_KEY: Arg<String> = arg("db-key");
     pub const DB_COLUMN_FAMILY: ArgDefault<String> = arg_default(
         "db-column-family",
@@ -6984,8 +6983,6 @@ pub mod args {
         type BpConversionTable = PathBuf;
         type ConfigRpcTendermintAddress = ConfigRpcAddress;
         type Data = PathBuf;
-        type DatedSpendingKey = WalletDatedSpendingKey;
-        type DatedViewingKey = WalletDatedViewingKey;
         type EthereumAddress = String;
         type Keypair = WalletKeypair;
         type MaspIndexerAddress = String;
@@ -7342,7 +7339,8 @@ pub mod args {
                 find_viewing_key(&mut wallet)
             } else {
                 find_viewing_key(&mut ctx.borrow_mut_chain_or_exit().wallet)
-            };
+            }
+            .key;
 
             Ok(PayAddressGen::<SdkTypes> {
                 alias: self.alias,
@@ -7356,7 +7354,7 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
-            let viewing_key = DATED_VIEWING_KEY.parse(matches);
+            let viewing_key = VIEWING_KEY.parse(matches);
             Self {
                 alias,
                 alias_force,
@@ -7371,7 +7369,7 @@ pub mod args {
             .arg(ALIAS_FORCE.def().help(wrap!(
                 "Override the alias without confirmation if it already exists."
             )))
-            .arg(DATED_VIEWING_KEY.def().help(wrap!("The viewing key.")))
+            .arg(VIEWING_KEY.def().help(wrap!("The viewing key.")))
         }
     }
 

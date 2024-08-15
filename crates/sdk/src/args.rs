@@ -29,7 +29,6 @@ use crate::eth_bridge::bridge_pool;
 use crate::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use crate::signing::SigningTxData;
 use crate::{rpc, tx, Namada};
-use crate::wallet::{DatedSpendingKey, DatedViewingKey};
 
 /// [`Duration`](StdDuration) wrapper that provides a
 /// method to parse a value from a string.
@@ -65,12 +64,8 @@ pub trait NamadaTypes: Clone + std::fmt::Debug {
     type EthereumAddress: Clone + std::fmt::Debug;
     /// Represents a shielded viewing key
     type ViewingKey: Clone + std::fmt::Debug;
-    /// Represents a shielded viewing key along with a birthday
-    type DatedViewingKey: Clone + std::fmt::Debug;
     /// Represents a shielded spending key
     type SpendingKey: Clone + std::fmt::Debug;
-    /// Represents a shielded spending key along with a birthday
-    type DatedSpendingKey: Clone + std::fmt::Debug;
     /// Represents a shielded payment address
     type PaymentAddress: Clone + std::fmt::Debug;
     /// Represents the owner of a balance
@@ -111,8 +106,6 @@ impl NamadaTypes for SdkTypes {
     type BpConversionTable = HashMap<Address, BpConversionTableEntry>;
     type ConfigRpcTendermintAddress = tendermint_rpc::Url;
     type Data = Vec<u8>;
-    type DatedSpendingKey = DatedSpendingKey;
-    type DatedViewingKey = DatedViewingKey;
     type EthereumAddress = ();
     type Keypair = namada_core::key::common::SecretKey;
     type MaspIndexerAddress = ();
@@ -2613,7 +2606,7 @@ pub struct PayAddressGen<C: NamadaTypes = SdkTypes> {
     /// Whether to force overwrite the alias
     pub alias_force: bool,
     /// Viewing key
-    pub viewing_key: C::DatedViewingKey,
+    pub viewing_key: C::ViewingKey,
 }
 
 /// Bridge pool batch recommendation.
