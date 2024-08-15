@@ -20,9 +20,10 @@ use std::time::{Duration, Instant};
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
 use namada_apps_lib::cli::context::ENV_VAR_CHAIN_ID;
-use namada_apps_lib::config::ethereum_bridge;
 use namada_apps_lib::config::utils::convert_tm_addr_to_socket_addr;
+use namada_apps_lib::config::{self, ethereum_bridge};
 use namada_apps_lib::facade::tendermint_config::net::Address as TendermintAddress;
+use namada_apps_lib::wallet;
 use namada_core::chain::ChainId;
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_sdk::address::Address;
@@ -2554,5 +2555,33 @@ fn masp_txs_and_queries() -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+/// Test localnet genesis files with `namada node utils test-genesis` command.
+#[test]
+fn test_localnet_genesis() -> Result<()> {
+    let loc = format!("{}:{}", std::file!(), std::line!());
+    let dir = setup::TestDir::new();
+    let working_dir = working_dir();
+    let genesis_path = wallet::defaults::derive_template_dir(&working_dir);
+    let wasm_dir = working_dir.join(config::DEFAULT_WASM_DIR);
+    let mut test_genesis_result = setup::run_cmd(
+        Bin::Node,
+        [
+            "utils",
+            "test-genesis",
+            "--path",
+            &genesis_path.to_string_lossy(),
+            "--wasm-dir",
+            &wasm_dir.to_string_lossy(),
+        ],
+        Some(30),
+        &working_dir,
+        dir.path(),
+        loc,
+    )?;
+    test_genesis_result
+        .exp_string("Genesis files were dry-run successfully")?;
     Ok(())
 }
