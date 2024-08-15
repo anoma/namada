@@ -142,7 +142,7 @@ pub fn extract_masp_tx_from_envelope(
 ) -> Option<MaspTransaction> {
     match envelope {
         MsgEnvelope::Packet(PacketMsg::Recv(msg)) => {
-            extract_masp_tx_from_packet(&msg.packet, false)
+            extract_masp_tx_from_packet(&msg.packet)
         }
         _ => None,
     }
@@ -157,16 +157,8 @@ pub fn decode_ibc_shielding_data(
 }
 
 /// Extract MASP transaction from IBC packet memo
-pub fn extract_masp_tx_from_packet(
-    packet: &Packet,
-    is_sender: bool,
-) -> Option<MaspTransaction> {
-    let port_id = if is_sender {
-        &packet.port_id_on_a
-    } else {
-        &packet.port_id_on_b
-    };
-    let memo = extract_memo_from_packet(packet, port_id)?;
+pub fn extract_masp_tx_from_packet(packet: &Packet) -> Option<MaspTransaction> {
+    let memo = extract_memo_from_packet(packet, &packet.port_id_on_b)?;
     decode_ibc_shielding_data(memo).map(|data| data.0)
 }
 

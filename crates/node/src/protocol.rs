@@ -749,10 +749,8 @@ where
                     state.write_log_mut().drop_tx();
                     tracing::error!(
                         "The first transaction in the batch failed to pay \
-                         fees via the MASP, some VPs rejected it: {:#?}, \
-                         errors {:?}",
-                        result.vps_result.rejected_vps,
-                        result.vps_result.errors,
+                         fees via the MASP, some VPs rejected it: {:#?}",
+                        result.vps_result.rejected_vps
                     );
                 }
 

@@ -66,7 +66,7 @@ use namada_tx::data::{
 };
 pub use namada_tx::{Authorization, *};
 use num_traits::Zero;
-use rand_core::OsRng;
+use rand_core::{OsRng, RngCore};
 
 use crate::args::{
     SdkTypes, TxShieldedTransferData, TxShieldingTransferData,
@@ -146,7 +146,7 @@ pub const TX_REDELEGATE_WASM: &str = "tx_redelegate.wasm";
 /// and `/applied` ABCI query endpoints.
 const DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: u64 = 60;
 /// The alias prefix of a generated IBC refund target
-const IBC_REFUND_TARGET_ALIAS_PREFIX: &str = "ibc-refund-target-";
+const IBC_REFUND_TARGET_ALIAS_PREFIX: &str = "ibc-refund-target";
 
 /// Capture the result of running a transaction
 #[derive(Debug)]
@@ -3930,7 +3930,10 @@ async fn get_refund_target(
             let (alias, _) = wallet
                 .gen_store_secret_key(
                     SchemeType::Ed25519,
-                    Some(IBC_REFUND_TARGET_ALIAS_PREFIX.to_string()),
+                    Some(format!(
+                        "{IBC_REFUND_TARGET_ALIAS_PREFIX}-{}",
+                        rng.next_u64()
+                    )),
                     false,
                     None,
                     &mut rng,

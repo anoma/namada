@@ -644,7 +644,7 @@ where
                 let masp_tx = match &*envelope {
                     MsgEnvelope::Packet(PacketMsg::Recv(msg)) => {
                         if self.is_receiving_success(msg)? {
-                            extract_masp_tx_from_packet(&msg.packet, false)
+                            extract_masp_tx_from_packet(&msg.packet)
                         } else {
                             None
                         }
