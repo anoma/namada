@@ -66,7 +66,7 @@ use ibc::core::channel::types::commitment::compute_ack_commitment;
 use ibc::core::channel::types::msgs::{
     MsgRecvPacket as IbcMsgRecvPacket, PacketMsg,
 };
-use ibc::core::channel::types::timeout::TimeoutHeight;
+use ibc::core::channel::types::timeout::{TimeoutHeight, TimeoutTimestamp};
 use ibc::core::entrypoint::{execute, validate};
 use ibc::core::handler::types::error::ContextError;
 use ibc::core::handler::types::events::Error as RawIbcEventError;
@@ -96,7 +96,6 @@ use namada_state::{
 use namada_systems::ibc::ChangedBalances;
 use namada_systems::trans_token;
 pub use nft::*;
-use primitives::Timestamp;
 use prost::Message;
 use thiserror::Error;
 use trace::{
@@ -152,7 +151,7 @@ struct IbcTransferInfo {
     src_port_id: PortId,
     src_channel_id: ChannelId,
     timeout_height: TimeoutHeight,
-    timeout_timestamp: Timestamp,
+    timeout_timestamp: TimeoutTimestamp,
     packet_data: Vec<u8>,
     ibc_traces: Vec<String>,
     amount: Amount,
@@ -956,7 +955,7 @@ pub mod testing {
         Amount, BaseDenom, Memo, PrefixedCoin, PrefixedDenom, TracePath,
         TracePrefix,
     };
-    use ibc::core::channel::types::timeout::TimeoutHeight;
+    use ibc::core::channel::types::timeout::{TimeoutHeight, TimeoutTimestamp};
     use ibc::core::client::types::Height;
     use ibc::core::host::types::identifiers::{ChannelId, PortId};
     use ibc::core::primitives::Signer;
@@ -1000,8 +999,8 @@ pub mod testing {
 
     prop_compose! {
         /// Generate an arbitrary IBC timestamp
-        pub fn arb_ibc_timestamp()(nanoseconds: u64) -> Timestamp {
-            Timestamp::from_nanoseconds(nanoseconds).expect("generated invalid IBC timestamp")
+        pub fn arb_ibc_timestamp()(nanoseconds: u64) -> TimeoutTimestamp {
+            TimeoutTimestamp::At(Timestamp::from_nanoseconds(nanoseconds))
         }
     }
 

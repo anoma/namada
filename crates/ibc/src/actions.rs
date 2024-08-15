@@ -10,7 +10,7 @@ use borsh::BorshDeserialize;
 use ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
 use ibc::apps::transfer::types::packet::PacketData;
 use ibc::apps::transfer::types::PrefixedCoin;
-use ibc::core::channel::types::timeout::TimeoutHeight;
+use ibc::core::channel::types::timeout::{TimeoutHeight, TimeoutTimestamp};
 use namada_core::address::Address;
 use namada_core::borsh::{BorshSerialize, BorshSerializeExt};
 use namada_core::chain::ChainId;
@@ -231,12 +231,15 @@ where
         + min_duration;
     let timeout_timestamp =
         TmTime::try_from(timeout_timestamp).into_storage_result()?;
+    let timeout_timestamp = TimeoutTimestamp::At(
+        timeout_timestamp.try_into().into_storage_result()?,
+    );
     let message = IbcMsgTransfer {
         port_id_on_a: target.port_id.clone(),
         chan_id_on_a: target.channel_id.clone(),
         packet_data,
         timeout_height_on_b: TimeoutHeight::Never,
-        timeout_timestamp_on_b: timeout_timestamp.into(),
+        timeout_timestamp_on_b: timeout_timestamp,
     };
     let data = MsgTransfer::<Transfer> {
         message,
