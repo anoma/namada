@@ -31,7 +31,9 @@ use namada_core::ibc::apps::nft_transfer::types::PrefixedClassId;
 use namada_core::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
 use namada_core::ibc::apps::transfer::types::packet::PacketData;
 use namada_core::ibc::apps::transfer::types::PrefixedCoin;
-use namada_core::ibc::core::channel::types::timeout::TimeoutHeight;
+use namada_core::ibc::core::channel::types::timeout::{
+    TimeoutHeight, TimeoutTimestamp,
+};
 use namada_core::ibc::core::client::types::Height as IbcHeight;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::ibc::primitives::Timestamp as IbcTimestamp;
@@ -2635,16 +2637,20 @@ pub async fn build_ibc_transfer(
     }
     .try_into();
     let now = now.map_err(|e| Error::Other(e.to_string()))?;
-    let now: IbcTimestamp = now.into();
+    let now: IbcTimestamp = now.try_into().map_err(|e| {
+        Error::Other(format!("Timestamp conversion failed: {e}"))
+    })?;
     let timeout_timestamp = if let Some(offset) = args.timeout_sec_offset {
-        (now + Duration::new(offset, 0))
-            .map_err(|e| Error::Other(e.to_string()))?
+        let timestamp = (now + Duration::new(offset, 0))
+            .map_err(|e| Error::Other(e.to_string()))?;
+        TimeoutTimestamp::At(timestamp)
     } else if timeout_height == TimeoutHeight::Never {
         // we cannot set 0 to both the height and the timestamp
-        (now + Duration::new(3600, 0))
-            .map_err(|e| Error::Other(e.to_string()))?
+        let timestamp = (now + Duration::new(3600, 0))
+            .map_err(|e| Error::Other(e.to_string()))?;
+        TimeoutTimestamp::At(timestamp)
     } else {
-        IbcTimestamp::none()
+        TimeoutTimestamp::Never
     };
 
     let chain_id = args.tx.chain_id.clone().unwrap();

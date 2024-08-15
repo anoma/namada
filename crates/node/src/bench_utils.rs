@@ -44,7 +44,9 @@ use namada_sdk::ibc::clients::tendermint::types::{
 use namada_sdk::ibc::core::channel::types::channel::{
     ChannelEnd, Counterparty as ChannelCounterparty, Order, State,
 };
-use namada_sdk::ibc::core::channel::types::timeout::TimeoutHeight;
+use namada_sdk::ibc::core::channel::types::timeout::{
+    TimeoutHeight, TimeoutTimestamp,
+};
 use namada_sdk::ibc::core::channel::types::Version as ChannelVersion;
 use namada_sdk::ibc::core::client::types::Height as IbcHeight;
 use namada_sdk::ibc::core::commitment_types::commitment::{
@@ -232,7 +234,7 @@ impl BenchShellInner {
         #[allow(clippy::disallowed_methods)]
         let now: namada_sdk::tendermint::Time =
             DateTimeUtc::now().try_into().unwrap();
-        let now: IbcTimestamp = now.into();
+        let now: IbcTimestamp = now.try_into().unwrap();
         let timeout_timestamp =
             (now + std::time::Duration::new(3600, 0)).unwrap();
 
@@ -246,7 +248,7 @@ impl BenchShellInner {
                 memo: "".parse().unwrap(),
             },
             timeout_height_on_b: timeout_height,
-            timeout_timestamp_on_b: timeout_timestamp,
+            timeout_timestamp_on_b: TimeoutTimestamp::At(timeout_timestamp),
         };
 
         let msg = MsgTransfer::<token::Transfer> {
@@ -978,8 +980,7 @@ impl Client for BenchShell {
                     .collect(),
                 tendermint::evidence::List::default(),
                 None,
-            )
-            .unwrap(),
+            ),
         })
     }
 
@@ -1308,7 +1309,7 @@ impl BenchShieldedCtx {
         #[allow(clippy::disallowed_methods)]
         let now: namada_sdk::tendermint::Time =
             DateTimeUtc::now().try_into().unwrap();
-        let now: IbcTimestamp = now.into();
+        let now: IbcTimestamp = now.try_into().unwrap();
         let timeout_timestamp =
             (now + std::time::Duration::new(3600, 0)).unwrap();
         let msg = IbcMsgTransfer {
@@ -1321,7 +1322,7 @@ impl BenchShieldedCtx {
                 memo: "".parse().unwrap(),
             },
             timeout_height_on_b: timeout_height,
-            timeout_timestamp_on_b: timeout_timestamp,
+            timeout_timestamp_on_b: TimeoutTimestamp::At(timeout_timestamp),
         };
 
         let vectorized_transfer =
