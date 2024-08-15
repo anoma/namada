@@ -8335,9 +8335,9 @@ pub fn namada_node_cli() -> Result<NamadaNode> {
     }
 }
 
-#[allow(clippy::large_enum_variant)]
+/// Namada client commands with loaded [`Context`] where required
 pub enum NamadaClient {
-    WithoutContext(cmds::ClientUtils, args::Global),
+    WithoutContext(Box<(cmds::ClientUtils, args::Global)>),
     WithContext(Box<(cmds::NamadaClientWithContext, Context)>),
 }
 
@@ -8353,7 +8353,10 @@ pub fn namada_client_cli() -> Result<NamadaClient> {
                     Ok(NamadaClient::WithContext(Box::new((sub_cmd, context))))
                 }
                 cmds::NamadaClient::WithoutContext(sub_cmd) => {
-                    Ok(NamadaClient::WithoutContext(sub_cmd, global_args))
+                    Ok(NamadaClient::WithoutContext(Box::new((
+                        sub_cmd,
+                        global_args,
+                    ))))
                 }
             }
         }
