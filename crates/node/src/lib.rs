@@ -958,8 +958,6 @@ pub fn test_genesis_files(
     // broadcaster service
     let (broadcast_sender, _broadcaster_receiver) = mpsc::unbounded_channel();
 
-    // Start dummy broadcaster
-    let _broadcaster = spawn_dummy_task(());
     let chain_id = config.chain_id.to_string();
     // start an instance of the ledger
     let mut shell = Shell::<MockDB, Sha256Hasher>::new(
