@@ -237,6 +237,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "atomic-waker"
+version = "1.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
+
+[[package]]
 name = "auto_impl"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -256,18 +262,17 @@ checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
 name = "axum"
-version = "0.6.20"
+version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b829e4e32b91e643de6eafe82b1d90675f5874230191a4ffbc1b336dec4d6bf"
+checksum = "3a6c9af12842a67734c9a2e355436e5d03b22383ed60cf13cd0c18fbfe3dcbcf"
 dependencies = [
  "async-trait",
  "axum-core",
- "bitflags 1.3.2",
  "bytes",
  "futures-util",
- "http 0.2.11",
- "http-body",
- "hyper",
+ "http 1.1.0",
+ "http-body 1.0.1",
+ "http-body-util",
  "itoa",
  "matchit",
  "memchr",
@@ -276,7 +281,7 @@ dependencies = [
  "pin-project-lite",
  "rustversion",
  "serde",
- "sync_wrapper",
+ "sync_wrapper 1.0.1",
  "tower",
  "tower-layer",
  "tower-service",
@@ -284,17 +289,20 @@ dependencies = [
 
 [[package]]
 name = "axum-core"
-version = "0.3.4"
+version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "759fa577a247914fd3f7f76d62972792636412fbfd634cd452f6a385a74d2d2c"
+checksum = "a15c63fd72d41492dc4f497196f5da1fb04fb7529e631d73630d1b491e47a2e3"
 dependencies = [
  "async-trait",
  "bytes",
  "futures-util",
- "http 0.2.11",
- "http-body",
+ "http 1.1.0",
+ "http-body 1.0.1",
+ "http-body-util",
  "mime",
+ "pin-project-lite",
  "rustversion",
+ "sync_wrapper 0.1.2",
  "tower-layer",
  "tower-service",
 ]
@@ -352,17 +360,17 @@ checksum = "8a32fd6af2b5827bce66c29053ba0e7c42b9dcab01835835058558c10851a46b"
 
 [[package]]
 name = "basecoin-store"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ba52d2e35c5bdd0ec8cee00da32a0b89720e36e6363ac95965a5d8c61e59ac7"
+checksum = "dd18cd9983aad2c7dbe0552c597c1a2a8373c6e88ba327dce73860975554b3db"
 dependencies = [
  "displaydoc",
  "ics23",
- "prost",
+ "prost 0.13.1",
  "serde",
  "serde_json",
  "sha2 0.10.8",
- "tendermint 0.35.0",
+ "tendermint",
  "tracing",
 ]
 
@@ -457,6 +465,15 @@ dependencies = [
  "radium",
  "tap",
  "wyz",
+]
+
+[[package]]
+name = "blake2"
+version = "0.10.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "46502ad458c9a52b69d4d4d32775c788b7a1b85e8bc9d482d92250fc0e3f8efe"
+dependencies = [
+ "digest 0.10.7",
 ]
 
 [[package]]
@@ -2252,6 +2269,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "h2"
+version = "0.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fa82e28a107a8cc405f0839610bdc9b15f1e25ec7d696aa5cf173edbcb1486ab"
+dependencies = [
+ "atomic-waker",
+ "bytes",
+ "fnv",
+ "futures-core",
+ "futures-sink",
+ "http 1.1.0",
+ "indexmap 2.2.6",
+ "slab",
+ "tokio",
+ "tokio-util",
+ "tracing",
+]
+
+[[package]]
 name = "half"
 version = "1.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2289,9 +2325,9 @@ checksum = "95505c38b4572b2d910cecb0281560f54b440a19336cbbcb27bf6ce6adc6f5a8"
 
 [[package]]
 name = "hermit-abi"
-version = "0.3.3"
+version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d77f7ec81a6d05a3abb01ab6eb7590f6083d08449fe5a1c8b1e620283546ccb7"
+checksum = "d231dfb89cfffdbc30e7fc41579ed6066ad03abda9e567ccafae602b97ec5024"
 
 [[package]]
 name = "hex"
@@ -2367,6 +2403,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "http-body"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1efedce1fb8e6913f23e0c92de8e62cd5b772a67e7b3946df930a62566c93184"
+dependencies = [
+ "bytes",
+ "http 1.1.0",
+]
+
+[[package]]
+name = "http-body-util"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "793429d76616a256bcb62c2a2ec2bed781c8307e797e2598c50010f2bee2544f"
+dependencies = [
+ "bytes",
+ "futures-util",
+ "http 1.1.0",
+ "http-body 1.0.1",
+ "pin-project-lite",
+]
+
+[[package]]
 name = "httparse"
 version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2388,9 +2447,9 @@ dependencies = [
  "futures-channel",
  "futures-core",
  "futures-util",
- "h2",
+ "h2 0.3.26",
  "http 0.2.11",
- "http-body",
+ "http-body 0.4.5",
  "httparse",
  "httpdate",
  "itoa",
@@ -2403,15 +2462,37 @@ dependencies = [
 ]
 
 [[package]]
-name = "hyper-timeout"
-version = "0.4.1"
+name = "hyper"
+version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bbb958482e8c7be4bc3cf272a766a2b0bf1a6755e7a6ae777f017a31d11b13b1"
+checksum = "50dfd22e0e76d0f662d429a5f80fcaf3855009297eab6a0a9f8543834744ba05"
 dependencies = [
- "hyper",
+ "bytes",
+ "futures-channel",
+ "futures-util",
+ "h2 0.4.5",
+ "http 1.1.0",
+ "http-body 1.0.1",
+ "httparse",
+ "httpdate",
+ "itoa",
+ "pin-project-lite",
+ "smallvec",
+ "tokio",
+ "want",
+]
+
+[[package]]
+name = "hyper-timeout"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3203a961e5c83b6f5498933e78b6b263e208c197b63e9c6c53cc82ffd3f63793"
+dependencies = [
+ "hyper 1.4.1",
+ "hyper-util",
  "pin-project-lite",
  "tokio",
- "tokio-io-timeout",
+ "tower-service",
 ]
 
 [[package]]
@@ -2421,10 +2502,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6183ddfa99b85da61a140bea0efc93fdf56ceaa041b37d553518030827f9905"
 dependencies = [
  "bytes",
- "hyper",
+ "hyper 0.14.27",
  "native-tls",
  "tokio",
  "tokio-native-tls",
+]
+
+[[package]]
+name = "hyper-util"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cde7055719c54e36e95e8719f95883f22072a48ede39db7fc17a4e1d5281e9b9"
+dependencies = [
+ "bytes",
+ "futures-channel",
+ "futures-util",
+ "http 1.1.0",
+ "http-body 1.0.1",
+ "hyper 1.4.1",
+ "pin-project-lite",
+ "socket2 0.5.5",
+ "tokio",
+ "tower",
+ "tower-service",
+ "tracing",
 ]
 
 [[package]]
@@ -2452,8 +2553,8 @@ dependencies = [
 
 [[package]]
 name = "ibc"
-version = "0.53.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=0c3b3c0ab598e1e627089d06941efe0e39b61cd7#0c3b3c0ab598e1e627089d06941efe0e39b61cd7"
+version = "0.54.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38bd2a32f35117d4d9165a3c68c64ccd87ad56dd#38bd2a32f35117d4d9165a3c68c64ccd87ad56dd"
 dependencies = [
  "ibc-apps",
  "ibc-clients",
@@ -2465,8 +2566,8 @@ dependencies = [
 
 [[package]]
 name = "ibc-app-nft-transfer"
-version = "0.53.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=0c3b3c0ab598e1e627089d06941efe0e39b61cd7#0c3b3c0ab598e1e627089d06941efe0e39b61cd7"
+version = "0.54.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38bd2a32f35117d4d9165a3c68c64ccd87ad56dd#38bd2a32f35117d4d9165a3c68c64ccd87ad56dd"
 dependencies = [
  "ibc-app-nft-transfer-types",
  "ibc-core",
@@ -2475,8 +2576,8 @@ dependencies = [
 
 [[package]]
 name = "ibc-app-nft-transfer-types"
-version = "0.53.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=0c3b3c0ab598e1e627089d06941efe0e39b61cd7#0c3b3c0ab598e1e627089d06941efe0e39b61cd7"
+version = "0.54.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38bd2a32f35117d4d9165a3c68c64ccd87ad56dd#38bd2a32f35117d4d9165a3c68c64ccd87ad56dd"
 dependencies = [
  "base64 0.22.1",
  "borsh",
@@ -2496,8 +2597,8 @@ dependencies = [
 
 [[package]]
 name = "ibc-app-transfer"
-version = "0.53.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=0c3b3c0ab598e1e627089d06941efe0e39b61cd7#0c3b3c0ab598e1e627089d06941efe0e39b61cd7"
+version = "0.54.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38bd2a32f35117d4d9165a3c68c64ccd87ad56dd#38bd2a32f35117d4d9165a3c68c64ccd87ad56dd"
 dependencies = [
  "ibc-app-transfer-types",
  "ibc-core",
@@ -2506,8 +2607,8 @@ dependencies = [
 
 [[package]]
 name = "ibc-app-transfer-types"
-version = "0.53.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=0c3b3c0ab598e1e627089d06941efe0e39b61cd7#0c3b3c0ab598e1e627089d06941efe0e39b61cd7"
+version = "0.54.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38bd2a32f35117d4d9165a3c68c64ccd87ad56dd#38bd2a32f35117d4d9165a3c68c64ccd87ad56dd"
 dependencies = [
  "borsh",
  "derive_more",
@@ -2524,8 +2625,8 @@ dependencies = [
 
 [[package]]
 name = "ibc-apps"
-version = "0.53.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=0c3b3c0ab598e1e627089d06941efe0e39b61cd7#0c3b3c0ab598e1e627089d06941efe0e39b61cd7"
+version = "0.54.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38bd2a32f35117d4d9165a3c68c64ccd87ad56dd#38bd2a32f35117d4d9165a3c68c64ccd87ad56dd"
 dependencies = [
  "ibc-app-nft-transfer",
  "ibc-app-transfer",
@@ -2533,8 +2634,8 @@ dependencies = [
 
 [[package]]
 name = "ibc-client-tendermint"
-version = "0.53.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=0c3b3c0ab598e1e627089d06941efe0e39b61cd7#0c3b3c0ab598e1e627089d06941efe0e39b61cd7"
+version = "0.54.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38bd2a32f35117d4d9165a3c68c64ccd87ad56dd#38bd2a32f35117d4d9165a3c68c64ccd87ad56dd"
 dependencies = [
  "derive_more",
  "ibc-client-tendermint-types",
@@ -2544,14 +2645,14 @@ dependencies = [
  "ibc-core-host",
  "ibc-primitives",
  "serde",
- "tendermint 0.37.0",
+ "tendermint",
  "tendermint-light-client-verifier",
 ]
 
 [[package]]
 name = "ibc-client-tendermint-types"
-version = "0.53.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=0c3b3c0ab598e1e627089d06941efe0e39b61cd7#0c3b3c0ab598e1e627089d06941efe0e39b61cd7"
+version = "0.54.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38bd2a32f35117d4d9165a3c68c64ccd87ad56dd#38bd2a32f35117d4d9165a3c68c64ccd87ad56dd"
 dependencies = [
  "displaydoc",
  "ibc-core-client-types",
@@ -2560,15 +2661,15 @@ dependencies = [
  "ibc-primitives",
  "ibc-proto",
  "serde",
- "tendermint 0.37.0",
+ "tendermint",
  "tendermint-light-client-verifier",
- "tendermint-proto 0.37.0",
+ "tendermint-proto",
 ]
 
 [[package]]
 name = "ibc-client-wasm-types"
-version = "0.53.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=0c3b3c0ab598e1e627089d06941efe0e39b61cd7#0c3b3c0ab598e1e627089d06941efe0e39b61cd7"
+version = "0.54.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38bd2a32f35117d4d9165a3c68c64ccd87ad56dd#38bd2a32f35117d4d9165a3c68c64ccd87ad56dd"
 dependencies = [
  "base64 0.22.1",
  "displaydoc",
@@ -2581,8 +2682,8 @@ dependencies = [
 
 [[package]]
 name = "ibc-clients"
-version = "0.53.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=0c3b3c0ab598e1e627089d06941efe0e39b61cd7#0c3b3c0ab598e1e627089d06941efe0e39b61cd7"
+version = "0.54.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38bd2a32f35117d4d9165a3c68c64ccd87ad56dd#38bd2a32f35117d4d9165a3c68c64ccd87ad56dd"
 dependencies = [
  "ibc-client-tendermint",
  "ibc-client-wasm-types",
@@ -2590,8 +2691,8 @@ dependencies = [
 
 [[package]]
 name = "ibc-core"
-version = "0.53.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=0c3b3c0ab598e1e627089d06941efe0e39b61cd7#0c3b3c0ab598e1e627089d06941efe0e39b61cd7"
+version = "0.54.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38bd2a32f35117d4d9165a3c68c64ccd87ad56dd#38bd2a32f35117d4d9165a3c68c64ccd87ad56dd"
 dependencies = [
  "ibc-core-channel",
  "ibc-core-client",
@@ -2606,8 +2707,8 @@ dependencies = [
 
 [[package]]
 name = "ibc-core-channel"
-version = "0.53.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=0c3b3c0ab598e1e627089d06941efe0e39b61cd7#0c3b3c0ab598e1e627089d06941efe0e39b61cd7"
+version = "0.54.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38bd2a32f35117d4d9165a3c68c64ccd87ad56dd#38bd2a32f35117d4d9165a3c68c64ccd87ad56dd"
 dependencies = [
  "ibc-core-channel-types",
  "ibc-core-client",
@@ -2621,8 +2722,8 @@ dependencies = [
 
 [[package]]
 name = "ibc-core-channel-types"
-version = "0.53.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=0c3b3c0ab598e1e627089d06941efe0e39b61cd7#0c3b3c0ab598e1e627089d06941efe0e39b61cd7"
+version = "0.54.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38bd2a32f35117d4d9165a3c68c64ccd87ad56dd#38bd2a32f35117d4d9165a3c68c64ccd87ad56dd"
 dependencies = [
  "borsh",
  "derive_more",
@@ -2639,13 +2740,13 @@ dependencies = [
  "serde",
  "sha2 0.10.8",
  "subtle-encoding",
- "tendermint 0.37.0",
+ "tendermint",
 ]
 
 [[package]]
 name = "ibc-core-client"
-version = "0.53.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=0c3b3c0ab598e1e627089d06941efe0e39b61cd7#0c3b3c0ab598e1e627089d06941efe0e39b61cd7"
+version = "0.54.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38bd2a32f35117d4d9165a3c68c64ccd87ad56dd#38bd2a32f35117d4d9165a3c68c64ccd87ad56dd"
 dependencies = [
  "ibc-core-client-context",
  "ibc-core-client-types",
@@ -2657,8 +2758,8 @@ dependencies = [
 
 [[package]]
 name = "ibc-core-client-context"
-version = "0.53.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=0c3b3c0ab598e1e627089d06941efe0e39b61cd7#0c3b3c0ab598e1e627089d06941efe0e39b61cd7"
+version = "0.54.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38bd2a32f35117d4d9165a3c68c64ccd87ad56dd#38bd2a32f35117d4d9165a3c68c64ccd87ad56dd"
 dependencies = [
  "derive_more",
  "displaydoc",
@@ -2668,13 +2769,13 @@ dependencies = [
  "ibc-core-host-types",
  "ibc-primitives",
  "subtle-encoding",
- "tendermint 0.37.0",
+ "tendermint",
 ]
 
 [[package]]
 name = "ibc-core-client-types"
-version = "0.53.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=0c3b3c0ab598e1e627089d06941efe0e39b61cd7#0c3b3c0ab598e1e627089d06941efe0e39b61cd7"
+version = "0.54.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38bd2a32f35117d4d9165a3c68c64ccd87ad56dd#38bd2a32f35117d4d9165a3c68c64ccd87ad56dd"
 dependencies = [
  "borsh",
  "derive_more",
@@ -2688,13 +2789,13 @@ dependencies = [
  "schemars",
  "serde",
  "subtle-encoding",
- "tendermint 0.37.0",
+ "tendermint",
 ]
 
 [[package]]
 name = "ibc-core-commitment-types"
-version = "0.53.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=0c3b3c0ab598e1e627089d06941efe0e39b61cd7#0c3b3c0ab598e1e627089d06941efe0e39b61cd7"
+version = "0.54.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38bd2a32f35117d4d9165a3c68c64ccd87ad56dd#38bd2a32f35117d4d9165a3c68c64ccd87ad56dd"
 dependencies = [
  "borsh",
  "derive_more",
@@ -2712,8 +2813,8 @@ dependencies = [
 
 [[package]]
 name = "ibc-core-connection"
-version = "0.53.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=0c3b3c0ab598e1e627089d06941efe0e39b61cd7#0c3b3c0ab598e1e627089d06941efe0e39b61cd7"
+version = "0.54.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38bd2a32f35117d4d9165a3c68c64ccd87ad56dd#38bd2a32f35117d4d9165a3c68c64ccd87ad56dd"
 dependencies = [
  "ibc-client-wasm-types",
  "ibc-core-client",
@@ -2721,13 +2822,13 @@ dependencies = [
  "ibc-core-handler-types",
  "ibc-core-host",
  "ibc-primitives",
- "prost",
+ "prost 0.13.1",
 ]
 
 [[package]]
 name = "ibc-core-connection-types"
-version = "0.53.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=0c3b3c0ab598e1e627089d06941efe0e39b61cd7#0c3b3c0ab598e1e627089d06941efe0e39b61cd7"
+version = "0.54.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38bd2a32f35117d4d9165a3c68c64ccd87ad56dd#38bd2a32f35117d4d9165a3c68c64ccd87ad56dd"
 dependencies = [
  "borsh",
  "derive_more",
@@ -2742,13 +2843,13 @@ dependencies = [
  "schemars",
  "serde",
  "subtle-encoding",
- "tendermint 0.37.0",
+ "tendermint",
 ]
 
 [[package]]
 name = "ibc-core-handler"
-version = "0.53.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=0c3b3c0ab598e1e627089d06941efe0e39b61cd7#0c3b3c0ab598e1e627089d06941efe0e39b61cd7"
+version = "0.54.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38bd2a32f35117d4d9165a3c68c64ccd87ad56dd#38bd2a32f35117d4d9165a3c68c64ccd87ad56dd"
 dependencies = [
  "ibc-core-channel",
  "ibc-core-client",
@@ -2762,8 +2863,8 @@ dependencies = [
 
 [[package]]
 name = "ibc-core-handler-types"
-version = "0.53.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=0c3b3c0ab598e1e627089d06941efe0e39b61cd7#0c3b3c0ab598e1e627089d06941efe0e39b61cd7"
+version = "0.54.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38bd2a32f35117d4d9165a3c68c64ccd87ad56dd#38bd2a32f35117d4d9165a3c68c64ccd87ad56dd"
 dependencies = [
  "borsh",
  "derive_more",
@@ -2781,13 +2882,13 @@ dependencies = [
  "schemars",
  "serde",
  "subtle-encoding",
- "tendermint 0.37.0",
+ "tendermint",
 ]
 
 [[package]]
 name = "ibc-core-host"
-version = "0.53.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=0c3b3c0ab598e1e627089d06941efe0e39b61cd7#0c3b3c0ab598e1e627089d06941efe0e39b61cd7"
+version = "0.54.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38bd2a32f35117d4d9165a3c68c64ccd87ad56dd#38bd2a32f35117d4d9165a3c68c64ccd87ad56dd"
 dependencies = [
  "derive_more",
  "displaydoc",
@@ -2804,8 +2905,8 @@ dependencies = [
 
 [[package]]
 name = "ibc-core-host-cosmos"
-version = "0.53.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=0c3b3c0ab598e1e627089d06941efe0e39b61cd7#0c3b3c0ab598e1e627089d06941efe0e39b61cd7"
+version = "0.54.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38bd2a32f35117d4d9165a3c68c64ccd87ad56dd#38bd2a32f35117d4d9165a3c68c64ccd87ad56dd"
 dependencies = [
  "derive_more",
  "displaydoc",
@@ -2822,13 +2923,13 @@ dependencies = [
  "serde",
  "sha2 0.10.8",
  "subtle-encoding",
- "tendermint 0.37.0",
+ "tendermint",
 ]
 
 [[package]]
 name = "ibc-core-host-types"
-version = "0.53.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=0c3b3c0ab598e1e627089d06941efe0e39b61cd7#0c3b3c0ab598e1e627089d06941efe0e39b61cd7"
+version = "0.54.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38bd2a32f35117d4d9165a3c68c64ccd87ad56dd#38bd2a32f35117d4d9165a3c68c64ccd87ad56dd"
 dependencies = [
  "borsh",
  "derive_more",
@@ -2842,8 +2943,8 @@ dependencies = [
 
 [[package]]
 name = "ibc-core-router"
-version = "0.53.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=0c3b3c0ab598e1e627089d06941efe0e39b61cd7#0c3b3c0ab598e1e627089d06941efe0e39b61cd7"
+version = "0.54.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38bd2a32f35117d4d9165a3c68c64ccd87ad56dd#38bd2a32f35117d4d9165a3c68c64ccd87ad56dd"
 dependencies = [
  "derive_more",
  "displaydoc",
@@ -2856,8 +2957,8 @@ dependencies = [
 
 [[package]]
 name = "ibc-core-router-types"
-version = "0.53.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=0c3b3c0ab598e1e627089d06941efe0e39b61cd7#0c3b3c0ab598e1e627089d06941efe0e39b61cd7"
+version = "0.54.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38bd2a32f35117d4d9165a3c68c64ccd87ad56dd#38bd2a32f35117d4d9165a3c68c64ccd87ad56dd"
 dependencies = [
  "borsh",
  "derive_more",
@@ -2870,13 +2971,13 @@ dependencies = [
  "schemars",
  "serde",
  "subtle-encoding",
- "tendermint 0.37.0",
+ "tendermint",
 ]
 
 [[package]]
 name = "ibc-derive"
-version = "0.7.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=0c3b3c0ab598e1e627089d06941efe0e39b61cd7#0c3b3c0ab598e1e627089d06941efe0e39b61cd7"
+version = "0.8.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38bd2a32f35117d4d9165a3c68c64ccd87ad56dd#38bd2a32f35117d4d9165a3c68c64ccd87ad56dd"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2885,48 +2986,48 @@ dependencies = [
 
 [[package]]
 name = "ibc-primitives"
-version = "0.53.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=0c3b3c0ab598e1e627089d06941efe0e39b61cd7#0c3b3c0ab598e1e627089d06941efe0e39b61cd7"
+version = "0.54.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38bd2a32f35117d4d9165a3c68c64ccd87ad56dd#38bd2a32f35117d4d9165a3c68c64ccd87ad56dd"
 dependencies = [
  "borsh",
  "derive_more",
  "displaydoc",
  "ibc-proto",
  "parity-scale-codec",
- "prost",
+ "prost 0.13.1",
  "scale-info",
  "schemars",
  "serde",
- "tendermint 0.37.0",
+ "tendermint",
  "time",
 ]
 
 [[package]]
 name = "ibc-proto"
-version = "0.46.0"
+version = "0.47.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6cb09e0b52b8a16e98ce98845e7c15b018440f3c56defa12fa44782cd66bab65"
+checksum = "1678333cf68c9094ca66aaf9a271269f1f6bf5c26881161def8bd88cee831a23"
 dependencies = [
  "base64 0.22.1",
  "borsh",
  "bytes",
  "flex-error",
  "ics23",
- "informalsystems-pbjson 0.7.0",
+ "informalsystems-pbjson",
  "parity-scale-codec",
- "prost",
+ "prost 0.13.1",
  "scale-info",
  "schemars",
  "serde",
  "subtle-encoding",
- "tendermint-proto 0.37.0",
+ "tendermint-proto",
  "tonic",
 ]
 
 [[package]]
 name = "ibc-query"
-version = "0.53.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=0c3b3c0ab598e1e627089d06941efe0e39b61cd7#0c3b3c0ab598e1e627089d06941efe0e39b61cd7"
+version = "0.54.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38bd2a32f35117d4d9165a3c68c64ccd87ad56dd#38bd2a32f35117d4d9165a3c68c64ccd87ad56dd"
 dependencies = [
  "displaydoc",
  "ibc",
@@ -2936,8 +3037,8 @@ dependencies = [
 
 [[package]]
 name = "ibc-testkit"
-version = "0.53.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=0c3b3c0ab598e1e627089d06941efe0e39b61cd7#0c3b3c0ab598e1e627089d06941efe0e39b61cd7"
+version = "0.54.0"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38bd2a32f35117d4d9165a3c68c64ccd87ad56dd#38bd2a32f35117d4d9165a3c68c64ccd87ad56dd"
 dependencies = [
  "basecoin-store",
  "derive_more",
@@ -2947,22 +3048,24 @@ dependencies = [
  "ibc-query",
  "parking_lot",
  "subtle-encoding",
- "tendermint 0.37.0",
+ "tendermint",
  "tendermint-testgen",
  "typed-builder",
 ]
 
 [[package]]
 name = "ics23"
-version = "0.11.0"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "661e2d6f79952a65bc92b1c81f639ebd37228dae6ff412a5aba7d474bdc4b957"
+checksum = "73b17f1a5bd7d12ad30a21445cfa5f52fd7651cb3243ba866f9916b1ec112f12"
 dependencies = [
  "anyhow",
+ "blake2",
+ "blake3",
  "bytes",
  "hex",
- "informalsystems-pbjson 0.6.0",
- "prost",
+ "informalsystems-pbjson",
+ "prost 0.13.1",
  "ripemd",
  "serde",
  "sha2 0.10.8",
@@ -3088,16 +3191,6 @@ checksum = "168fb715dda47215e360912c096649d23d58bf392ac62f73919e831745e40f26"
 dependencies = [
  "equivalent",
  "hashbrown 0.14.3",
- "serde",
-]
-
-[[package]]
-name = "informalsystems-pbjson"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4eecd90f87bea412eac91c6ef94f6b1e390128290898cbe14f2b926787ae1fb"
-dependencies = [
- "base64 0.13.1",
  "serde",
 ]
 
@@ -3509,13 +3602,14 @@ dependencies = [
 
 [[package]]
 name = "mio"
-version = "0.8.11"
+version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4a650543ca06a924e8b371db273b2756685faae30f8487da1b56505a8f78b0c"
+checksum = "80e04d1dcff3aae0704555fe5fee3bcfaf3d1fdf8a7e521d5b9d2b42acb52cec"
 dependencies = [
+ "hermit-abi",
  "libc",
  "wasi 0.11.0+wasi-snapshot-preview1",
- "windows-sys 0.48.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -3580,7 +3674,7 @@ dependencies = [
  "num_enum",
  "primitive-types",
  "proptest",
- "prost-types",
+ "prost-types 0.13.1",
  "rand 0.8.5",
  "rand_core 0.6.4",
  "rayon",
@@ -3590,8 +3684,8 @@ dependencies = [
  "sha2 0.9.9",
  "smooth-operator",
  "sparse-merkle-tree",
- "tendermint 0.37.0",
- "tendermint-proto 0.37.0",
+ "tendermint",
+ "tendermint-proto",
  "thiserror",
  "tiny-keccak",
  "tokio",
@@ -3700,7 +3794,7 @@ dependencies = [
  "namada_vp",
  "primitive-types",
  "proptest",
- "prost",
+ "prost 0.13.1",
  "serde",
  "serde_json",
  "sha2 0.9.9",
@@ -3741,7 +3835,7 @@ dependencies = [
  "ics23",
  "namada_core",
  "namada_macros",
- "prost",
+ "prost 0.13.1",
  "sparse-merkle-tree",
  "thiserror",
 ]
@@ -3840,7 +3934,7 @@ dependencies = [
  "paste",
  "patricia_tree",
  "proptest",
- "prost",
+ "prost 0.13.1",
  "rand 0.8.5",
  "rand_core 0.6.4",
  "rayon",
@@ -3958,7 +4052,7 @@ dependencies = [
  "borsh",
  "namada_core",
  "namada_state",
- "prost",
+ "prost 0.13.1",
  "strum 0.24.1",
 ]
 
@@ -3968,7 +4062,7 @@ version = "0.43.0"
 dependencies = [
  "concat-idents",
  "derivative",
- "hyper",
+ "hyper 0.14.27",
  "ibc-testkit",
  "ics23",
  "itertools 0.12.1",
@@ -3981,7 +4075,7 @@ dependencies = [
  "namada_vp",
  "namada_vp_prelude",
  "proptest",
- "prost",
+ "prost 0.13.1",
  "regex",
  "serde",
  "serde_json",
@@ -4042,8 +4136,8 @@ dependencies = [
  "num-derive 0.4.2",
  "num-traits 0.2.17",
  "proptest",
- "prost",
- "prost-types",
+ "prost 0.13.1",
+ "prost-types 0.13.1",
  "rand_core 0.6.4",
  "serde",
  "serde_json",
@@ -4356,16 +4450,6 @@ dependencies = [
  "num-traits 0.2.17",
  "serde",
  "serde_derive",
-]
-
-[[package]]
-name = "num_cpus"
-version = "1.16.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4161fcb6d602d4d2081af7c3a45852d875a03dd337a6bfdd6e06407b61342a43"
-dependencies = [
- "hermit-abi",
- "libc",
 ]
 
 [[package]]
@@ -4881,7 +4965,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "146c289cda302b98a28d40c8b3b90498d6e526dd24ac2ecea73e4e491685b94a"
 dependencies = [
  "bytes",
- "prost-derive",
+ "prost-derive 0.12.3",
+]
+
+[[package]]
+name = "prost"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e13db3d3fde688c61e2446b4d843bc27a7e8af269a69440c0308021dc92333cc"
+dependencies = [
+ "bytes",
+ "prost-derive 0.13.1",
 ]
 
 [[package]]
@@ -4898,8 +4992,8 @@ dependencies = [
  "once_cell",
  "petgraph",
  "prettyplease",
- "prost",
- "prost-types",
+ "prost 0.12.3",
+ "prost-types 0.12.3",
  "regex",
  "syn 2.0.52",
  "tempfile",
@@ -4920,12 +5014,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "prost-derive"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "18bec9b0adc4eba778b33684b7ba3e7137789434769ee3ce3930463ef904cfca"
+dependencies = [
+ "anyhow",
+ "itertools 0.12.1",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.52",
+]
+
+[[package]]
 name = "prost-types"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "193898f59edcf43c26227dcd4c8427f00d99d61e95dcde58dabd49fa291d470e"
 dependencies = [
- "prost",
+ "prost 0.12.3",
+]
+
+[[package]]
+name = "prost-types"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cee5168b05f49d4b0ca581206eb14a7b22fafd963efe729ac48eb03266e25cc2"
+dependencies = [
+ "prost 0.13.1",
 ]
 
 [[package]]
@@ -5210,10 +5326,10 @@ dependencies = [
  "encoding_rs",
  "futures-core",
  "futures-util",
- "h2",
+ "h2 0.3.26",
  "http 0.2.11",
- "http-body",
- "hyper",
+ "http-body 0.4.5",
+ "hyper 0.14.27",
  "hyper-tls",
  "ipnet",
  "js-sys",
@@ -5904,9 +6020,9 @@ dependencies = [
 
 [[package]]
 name = "smallvec"
-version = "1.11.2"
+version = "1.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4dccd0940a2dcdf68d092b8cbab7dc0ad8fa938bf95787e1b916b0e3d0e8e970"
+checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
 
 [[package]]
 name = "smooth-operator"
@@ -5949,7 +6065,6 @@ dependencies = [
 [[package]]
 name = "sparse-merkle-tree"
 version = "0.3.1-pre"
-source = "git+https://github.com/heliaxdev/sparse-merkle-tree?rev=bab8cb96872db22cc9a139b2d3dfc4e00521d097#bab8cb96872db22cc9a139b2d3dfc4e00521d097"
 dependencies = [
  "borsh",
  "cfg-if",
@@ -6120,6 +6235,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2047c6ded9c721764247e62cd3b03c09ffc529b2ba5b10ec482ae507a4a70160"
 
 [[package]]
+name = "sync_wrapper"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a7065abeca94b6a8a577f9bd45aa0867a2238b74e8eb67cf10d492bc39351394"
+
+[[package]]
 name = "system-configuration"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6178,36 +6299,9 @@ dependencies = [
 
 [[package]]
 name = "tendermint"
-version = "0.35.0"
+version = "0.38.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43f8a10105d0a7c4af0a242e23ed5a12519afe5cc0e68419da441bb5981a6802"
-dependencies = [
- "bytes",
- "digest 0.10.7",
- "ed25519",
- "flex-error",
- "futures",
- "num-traits 0.2.17",
- "once_cell",
- "prost",
- "prost-types",
- "serde",
- "serde_bytes",
- "serde_json",
- "serde_repr",
- "signature",
- "subtle",
- "subtle-encoding",
- "tendermint-proto 0.35.0",
- "time",
- "zeroize",
-]
-
-[[package]]
-name = "tendermint"
-version = "0.37.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "954496fbc9716eb4446cdd6d00c071a3e2f22578d62aa03b40c7e5b4fda3ed42"
+checksum = "505d9d6ffeb83b1de47c307c6e0d2dff56c6256989299010ad03cd80a8491e97"
 dependencies = [
  "bytes",
  "digest 0.10.7",
@@ -6218,8 +6312,8 @@ dependencies = [
  "k256",
  "num-traits 0.2.17",
  "once_cell",
- "prost",
- "prost-types",
+ "prost 0.13.1",
+ "prost-types 0.13.1",
  "ripemd",
  "serde",
  "serde_bytes",
@@ -6229,66 +6323,48 @@ dependencies = [
  "signature",
  "subtle",
  "subtle-encoding",
- "tendermint-proto 0.37.0",
+ "tendermint-proto",
  "time",
  "zeroize",
 ]
 
 [[package]]
 name = "tendermint-config"
-version = "0.37.0"
+version = "0.38.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f84b11b57d20ee4492a1452faff85f5c520adc36ca9fe5e701066935255bb89f"
+checksum = "9de111ea653b2adaef627ac2452b463c77aa615c256eaaddf279ec5a1cf9775f"
 dependencies = [
  "flex-error",
  "serde",
  "serde_json",
- "tendermint 0.37.0",
+ "tendermint",
  "toml 0.8.2",
  "url",
 ]
 
 [[package]]
 name = "tendermint-light-client-verifier"
-version = "0.37.0"
+version = "0.38.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3848090df4502a09ee27cb1a00f1835e1111c8993b22c5e1e41ffb7f6f09d57e"
+checksum = "7a2674adbf0dc51aa0c8eaf8462c7d6692ec79502713e50ed5432a442002be90"
 dependencies = [
  "derive_more",
  "flex-error",
  "serde",
- "tendermint 0.37.0",
+ "tendermint",
  "time",
 ]
 
 [[package]]
 name = "tendermint-proto"
-version = "0.35.0"
+version = "0.38.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff525d5540a9fc535c38dc0d92a98da3ee36fcdfbda99cecb9f3cce5cd4d41d7"
+checksum = "8ed14abe3b0502a3afe21ca74ca5cdd6c7e8d326d982c26f98a394445eb31d6e"
 dependencies = [
  "bytes",
  "flex-error",
- "num-derive 0.4.2",
- "num-traits 0.2.17",
- "prost",
- "prost-types",
- "serde",
- "serde_bytes",
- "subtle-encoding",
- "time",
-]
-
-[[package]]
-name = "tendermint-proto"
-version = "0.37.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc87024548c7f3da479885201e3da20ef29e85a3b13d04606b380ac4c7120d87"
-dependencies = [
- "bytes",
- "flex-error",
- "prost",
- "prost-types",
+ "prost 0.13.1",
+ "prost-types 0.13.1",
  "serde",
  "serde_bytes",
  "subtle-encoding",
@@ -6297,9 +6373,9 @@ dependencies = [
 
 [[package]]
 name = "tendermint-rpc"
-version = "0.37.0"
+version = "0.38.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dfdc2281e271277fda184d96d874a6fe59f569b130b634289257baacfc95aa85"
+checksum = "02f96a2b8a0d3d0b59e4024b1a6bdc1589efc6af4709d08a480a20cc4ba90f63"
 dependencies = [
  "async-trait",
  "bytes",
@@ -6314,9 +6390,9 @@ dependencies = [
  "serde_json",
  "subtle",
  "subtle-encoding",
- "tendermint 0.37.0",
+ "tendermint",
  "tendermint-config",
- "tendermint-proto 0.37.0",
+ "tendermint-proto",
  "thiserror",
  "time",
  "url",
@@ -6326,9 +6402,9 @@ dependencies = [
 
 [[package]]
 name = "tendermint-testgen"
-version = "0.37.0"
+version = "0.38.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "318a0e38b3b7b36b4078d78446d4284088aa9b173d519fc804c3ee4683972934"
+checksum = "ae007e2918414ae96e4835426aace7538d23b8ddf96d71e23d241f58f386e877"
 dependencies = [
  "ed25519-consensus",
  "gumdrop",
@@ -6336,7 +6412,7 @@ dependencies = [
  "serde_json",
  "simple-error",
  "tempfile",
- "tendermint 0.37.0",
+ "tendermint",
  "time",
 ]
 
@@ -6486,38 +6562,27 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokio"
-version = "1.34.0"
+version = "1.39.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d0c014766411e834f7af5b8f4cf46257aab4036ca95e9d2c144a10f59ad6f5b9"
+checksum = "daa4fb1bc778bd6f04cbfc4bb2d06a7396a8f299dc33ea1900cedaa316f467b1"
 dependencies = [
  "backtrace",
  "bytes",
  "libc",
  "mio",
- "num_cpus",
  "parking_lot",
  "pin-project-lite",
  "signal-hook-registry",
  "socket2 0.5.5",
  "tokio-macros",
- "windows-sys 0.48.0",
-]
-
-[[package]]
-name = "tokio-io-timeout"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30b74022ada614a1b4834de765f9bb43877f910cc8ce4be40e89042c9223a8bf"
-dependencies = [
- "pin-project-lite",
- "tokio",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
 name = "tokio-macros"
-version = "2.2.0"
+version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b8a1e28f2deaa14e508979454cb3a223b10b938b45af148bc0986de36f1923b"
+checksum = "693d596312e88961bc67d7f1f97af8a70227d9f90c31bba5806eec004978d752"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -6640,23 +6705,26 @@ dependencies = [
 
 [[package]]
 name = "tonic"
-version = "0.11.0"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76c4eb7a4e9ef9d4763600161f12f5070b92a578e1b634db88a6887844c91a13"
+checksum = "38659f4a91aba8598d27821589f5db7dddd94601e7a01b1e485a50e5484c7401"
 dependencies = [
  "async-stream",
  "async-trait",
  "axum",
- "base64 0.21.7",
+ "base64 0.22.1",
  "bytes",
- "h2",
- "http 0.2.11",
- "http-body",
- "hyper",
+ "h2 0.4.5",
+ "http 1.1.0",
+ "http-body 1.0.1",
+ "http-body-util",
+ "hyper 1.4.1",
  "hyper-timeout",
+ "hyper-util",
  "percent-encoding",
  "pin-project",
- "prost",
+ "prost 0.13.1",
+ "socket2 0.5.5",
  "tokio",
  "tokio-stream",
  "tower",

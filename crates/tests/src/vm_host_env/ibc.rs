@@ -30,7 +30,9 @@ use namada_sdk::ibc::core::channel::types::msgs::{
     MsgChannelOpenTry, MsgRecvPacket, MsgTimeout, MsgTimeoutOnClose,
 };
 pub use namada_sdk::ibc::core::channel::types::packet::Packet;
-use namada_sdk::ibc::core::channel::types::timeout::TimeoutHeight;
+use namada_sdk::ibc::core::channel::types::timeout::{
+    TimeoutHeight, TimeoutTimestamp,
+};
 use namada_sdk::ibc::core::channel::types::Version as ChanVersion;
 use namada_sdk::ibc::core::client::types::msgs::{
     MsgCreateClient, MsgUpdateClient,
@@ -621,7 +623,7 @@ pub fn msg_transfer(
             memo: "memo".to_string().into(),
         },
         timeout_height_on_b: TimeoutHeight::Never,
-        timeout_timestamp_on_b: timestamp,
+        timeout_timestamp_on_b: TimeoutTimestamp::At(timestamp),
     };
     MsgTransfer {
         message,
@@ -682,7 +684,7 @@ pub fn received_packet(
         chan_id_on_b: channel_id,
         data: serde_json::to_vec(&data).unwrap(),
         timeout_height_on_b: TimeoutHeight::Never,
-        timeout_timestamp_on_b: timestamp,
+        timeout_timestamp_on_b: TimeoutTimestamp::At(timestamp),
     }
 }
 
