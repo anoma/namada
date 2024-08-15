@@ -32,12 +32,12 @@ use thiserror::Error;
 use zeroize::Zeroizing;
 
 pub use self::derivation_path::{DerivationPath, DerivationPathError};
-pub use self::keys::{DatedKeypair, DecryptionError, StoredKeypair};
-pub use self::store::{ConfirmationResponse, ValidatorData, ValidatorKeys};
-use crate::wallet::store::{
-    derive_hd_secret_key, derive_hd_spending_key, DatedSpendingKey,
-    DatedViewingKey,
+pub use self::keys::{
+    DatedKeypair, DatedSpendingKey, DatedViewingKey, DecryptionError,
+    StoredKeypair,
 };
+pub use self::store::{ConfirmationResponse, ValidatorData, ValidatorKeys};
+use crate::wallet::store::{derive_hd_secret_key, derive_hd_spending_key};
 
 const DISPOSABLE_KEY_LIFETIME_IN_SECONDS: i64 = 7 * 24 * 60 * 60; // 1 week
 

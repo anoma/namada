@@ -22,7 +22,7 @@ use zeroize::Zeroizing;
 use super::alias::{self, Alias};
 use super::derivation_path::DerivationPath;
 use super::pre_genesis;
-use crate::wallet::keys::DatedKeypair;
+use crate::wallet::keys::{DatedKeypair, DatedSpendingKey, DatedViewingKey};
 use crate::wallet::{StoredKeypair, WalletIo};
 
 /// Actions that can be taken when there is an alias conflict
@@ -59,11 +59,6 @@ pub struct ValidatorData {
     /// special keys for a validator
     pub keys: ValidatorKeys,
 }
-
-/// Type alias for a viewing key with a birthday.
-pub type DatedViewingKey = DatedKeypair<ExtendedViewingKey>;
-/// Type alias for a spending key with a birthday.
-pub type DatedSpendingKey = DatedKeypair<ExtendedSpendingKey>;
 
 /// A Storage area for keys and addresses
 #[derive(Serialize, Deserialize, Debug, Default)]

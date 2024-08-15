@@ -1,12 +1,13 @@
 //! Cryptographic keys for digital signatures support for the wallet.
 
-use core::fmt::Display;
+use std::fmt::Display;
 use std::marker::PhantomData;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXLOWER;
+use namada_core::masp::{ExtendedSpendingKey, ExtendedViewingKey};
 use namada_core::storage::BlockHeight;
 use orion::{aead, kdf};
 use serde::{Deserialize, Serialize};
@@ -17,6 +18,11 @@ use crate::wallet::WalletIo;
 
 const ENCRYPTED_KEY_PREFIX: &str = "encrypted:";
 const UNENCRYPTED_KEY_PREFIX: &str = "unencrypted:";
+
+/// Type alias for a viewing key with a birthday.
+pub type DatedViewingKey = DatedKeypair<ExtendedViewingKey>;
+/// Type alias for a spending key with a birthday.
+pub type DatedSpendingKey = DatedKeypair<ExtendedSpendingKey>;
 
 /// A keypair stored in a wallet
 #[derive(Debug)]

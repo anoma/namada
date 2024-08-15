@@ -350,7 +350,6 @@ impl CliApi {
                             .wallet
                             .get_viewing_keys()
                             .values()
-                            .cloned()
                             .map(|vk| vk.map(|vk| vk.as_viewing_key()))
                             .chain(args.viewing_keys.into_iter().map(|vk| {
                                 DatedKeypair::from(vk.as_viewing_key())

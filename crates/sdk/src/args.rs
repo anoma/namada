@@ -28,8 +28,8 @@ use zeroize::Zeroizing;
 use crate::eth_bridge::bridge_pool;
 use crate::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use crate::signing::SigningTxData;
-use crate::wallet::store::{DatedSpendingKey, DatedViewingKey};
 use crate::{rpc, tx, Namada};
+use crate::wallet::{DatedSpendingKey, DatedViewingKey};
 
 /// [`Duration`](StdDuration) wrapper that provides a
 /// method to parse a value from a string.

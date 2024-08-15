@@ -14,8 +14,7 @@ use namada_sdk::io::Io;
 use namada_sdk::key::*;
 use namada_sdk::masp::fs::FsShieldedUtils;
 use namada_sdk::masp::{ShieldedContext, *};
-use namada_sdk::wallet::store::{DatedSpendingKey, DatedViewingKey};
-use namada_sdk::wallet::Wallet;
+use namada_sdk::wallet::{DatedSpendingKey, DatedViewingKey, Wallet};
 use namada_sdk::{Namada, NamadaImpl};
 
 use super::args;
