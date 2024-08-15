@@ -3928,6 +3928,9 @@ async fn get_refund_target(
             // Generate a new transparent address if it doesn't exist
             let mut rng = OsRng;
             let mut wallet = context.wallet_mut().await;
+            if let Some(addr) = wallet.find_address(IBC_REFUND_TARGET_ALIAS) {
+                return Ok(Some(addr.into_owned()));
+            }
             wallet
                 .gen_store_secret_key(
                     SchemeType::Ed25519,
@@ -3949,7 +3952,7 @@ async fn get_refund_target(
                 .ok_or_else(|| {
                     Error::Other("Finding the reund address failed".to_string())
                 })?;
-            Ok(Some((*addr).clone()))
+            Ok(Some(addr.into_owned()))
         }
         (_, Some(_)) => Err(Error::Other(
             "Refund target can't be specified for non-shielded transfer"
