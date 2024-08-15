@@ -405,7 +405,13 @@ where
                     let actions =
                         state.read_actions().map_err(Error::StateError)?;
                     if let Some(masp_section_ref) =
-                        action::get_masp_section_ref(&actions)
+                        action::get_masp_section_ref(&actions).map_err(
+                            |msg| {
+                                Error::StateError(state::Error::Temporary {
+                                    error: msg.to_string(),
+                                })
+                            },
+                        )?
                     {
                         extended_tx_result
                             .masp_tx_refs
@@ -488,7 +494,10 @@ where
     // Commit tx to the block write log even in case of subsequent errors (if
     // the fee payment failed instead, than the previous two functions must
     // have propagated an error)
-    shell_params.state.write_log_mut().commit_batch();
+    shell_params
+        .state
+        .write_log_mut()
+        .commit_batch_and_current_tx();
 
     let (batch_results, masp_section_refs) = payment_result.map_or_else(
         || (TxResult::default(), None),
@@ -753,9 +762,14 @@ where
                 if is_masp_transfer(&result.changed_keys)
                     && result.is_accepted()
                 {
-                    if let Some(masp_tx_id) =
-                        action::get_masp_section_ref(&actions)
-                    {
+                    if let Some(masp_tx_id) = action::get_masp_section_ref(
+                        &actions,
+                    )
+                    .map_err(|msg| {
+                        Error::StateError(state::Error::Temporary {
+                            error: msg.to_string(),
+                        })
+                    })? {
                         Some(MaspTxResult {
                             tx_result: result,
                             masp_section_ref: Either::Left(masp_tx_id),

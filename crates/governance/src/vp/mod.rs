@@ -1366,7 +1366,7 @@ mod test {
             .write_log_mut()
             .write(&balance_key, amount.serialize_to_vec())
             .expect("write failed");
-        state.write_log_mut().commit_batch();
+        state.write_log_mut().commit_batch_and_current_tx();
     }
 
     #[cfg(test)]
@@ -1612,7 +1612,7 @@ mod test {
             Ok(_)
         );
 
-        state.write_log_mut().commit_batch();
+        state.write_log_mut().commit_batch_and_current_tx();
         state.commit_block().unwrap();
 
         let governance_balance_key = balance_key(&nam(), &ADDRESS);
@@ -2330,7 +2330,7 @@ mod test {
             Ok(_)
         );
 
-        state.write_log_mut().commit_batch();
+        state.write_log_mut().commit_batch_and_current_tx();
         state.commit_block().unwrap();
 
         let height = state.in_mem().get_block_height().0 + (7 * 2);
@@ -2459,7 +2459,7 @@ mod test {
             Ok(_)
         );
 
-        state.write_log_mut().commit_batch();
+        state.write_log_mut().commit_batch_and_current_tx();
         state.commit_block().unwrap();
 
         let height = state.in_mem().get_block_height().0 + (7 * 2);
@@ -2588,7 +2588,7 @@ mod test {
             Ok(_)
         );
 
-        state.write_log_mut().commit_batch();
+        state.write_log_mut().commit_batch_and_current_tx();
         state.commit_block().unwrap();
 
         let height = state.in_mem().get_block_height().0 + (7 * 2);
@@ -2717,7 +2717,7 @@ mod test {
             Ok(_)
         );
 
-        state.write_log_mut().commit_batch();
+        state.write_log_mut().commit_batch_and_current_tx();
         state.commit_block().unwrap();
 
         let height = state.in_mem().get_block_height().0 + (9 * 2);
@@ -2863,7 +2863,7 @@ mod test {
             Ok(_)
         );
 
-        state.write_log_mut().commit_batch();
+        state.write_log_mut().commit_batch_and_current_tx();
         state.commit_block().unwrap();
 
         let height = state.in_mem().get_block_height().0 + (10 * 2);
@@ -3009,7 +3009,7 @@ mod test {
             Ok(_)
         );
 
-        state.write_log_mut().commit_batch();
+        state.write_log_mut().commit_batch_and_current_tx();
         state.commit_block().unwrap();
 
         let height = state.in_mem().get_block_height().0 + (10 * 2);
