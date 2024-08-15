@@ -3256,6 +3256,10 @@ pub mod args {
         arg_opt("success-sleep");
     pub const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
     pub const DATA_PATH: Arg<PathBuf> = arg("data-path");
+    pub const DATED_SPENDING_KEYS: ArgMulti<WalletDatedSpendingKey, GlobStar> =
+        arg_multi("spending-keys");
+    pub const DATED_VIEWING_KEYS: ArgMulti<WalletDatedViewingKey, GlobStar> =
+        arg_multi("viewing-keys");
     pub const DB_KEY: Arg<String> = arg("db-key");
     pub const DB_COLUMN_FAMILY: ArgDefault<String> = arg_default(
         "db-column-family",
@@ -6599,8 +6603,8 @@ pub mod args {
             let ledger_address = CONFIG_RPC_LEDGER_ADDRESS.parse(matches);
             let start_query_height = BLOCK_HEIGHT_FROM_OPT.parse(matches);
             let last_query_height = BLOCK_HEIGHT_TO_OPT.parse(matches);
-            let spending_keys = SPENDING_KEYS.parse(matches);
-            let viewing_keys = VIEWING_KEYS.parse(matches);
+            let spending_keys = DATED_SPENDING_KEYS.parse(matches);
+            let viewing_keys = DATED_VIEWING_KEYS.parse(matches);
             let with_indexer = WITH_INDEXER.parse(matches);
             Self {
                 ledger_address,
@@ -6622,13 +6626,17 @@ pub mod args {
                         .def()
                         .help(wrap!("Option block height to sync from.")),
                 )
-                .arg(SPENDING_KEYS.def().help(wrap!(
+                .arg(DATED_SPENDING_KEYS.def().help(wrap!(
                     "List of new spending keys with which to check note \
-                     ownership. These will be added to the shielded context."
+                     ownership. These will be added to the shielded context. \
+                     Appending \"<<$BLOCKHEIGHT\" to the end of each key adds \
+                     a birthday."
                 )))
-                .arg(VIEWING_KEYS.def().help(wrap!(
+                .arg(DATED_VIEWING_KEYS.def().help(wrap!(
                     "List of new viewing keys with which to check note \
-                     ownership. These will be added to the shielded context."
+                     ownership. These will be added to the shielded context. \
+                     Appending \"<<$BLOCKHEIGHT\" to the end of each key adds \
+                     a birthday."
                 )))
                 .arg(WITH_INDEXER.def().help(wrap!(
                     "Address of a `namada-masp-indexer` live instance. If \
@@ -6983,6 +6991,8 @@ pub mod args {
         type BpConversionTable = PathBuf;
         type ConfigRpcTendermintAddress = ConfigRpcAddress;
         type Data = PathBuf;
+        type DatedSpendingKey = WalletDatedSpendingKey;
+        type DatedViewingKey = WalletDatedViewingKey;
         type EthereumAddress = String;
         type Keypair = WalletKeypair;
         type MaspIndexerAddress = String;

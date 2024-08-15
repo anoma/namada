@@ -2,7 +2,6 @@ use std::io::Read;
 
 use color_eyre::eyre::Result;
 use namada_sdk::io::Io;
-use namada_sdk::wallet::DatedKeypair;
 use namada_sdk::{display_line, Namada, NamadaImpl};
 
 use crate::cli;
@@ -350,15 +349,9 @@ impl CliApi {
                             .wallet
                             .get_viewing_keys()
                             .values()
+                            .copied()
+                            .chain(args.viewing_keys)
                             .map(|vk| vk.map(|vk| vk.as_viewing_key()))
-                            .chain(args.viewing_keys.into_iter().map(|vk| {
-                                DatedKeypair::from(vk.as_viewing_key())
-                            }))
-                            .collect::<Vec<_>>();
-                        let sks = args
-                            .spending_keys
-                            .into_iter()
-                            .map(|sk| sk.into())
                             .collect::<Vec<_>>();
                         crate::client::masp::syncing(
                             chain_ctx.shielded,
@@ -367,7 +360,7 @@ impl CliApi {
                             &io,
                             args.start_query_height,
                             args.last_query_height,
-                            &sks,
+                            &args.spending_keys,
                             &vks,
                         )
                         .await?;

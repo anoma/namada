@@ -28,6 +28,7 @@ use zeroize::Zeroizing;
 use crate::eth_bridge::bridge_pool;
 use crate::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use crate::signing::SigningTxData;
+use crate::wallet::{DatedSpendingKey, DatedViewingKey};
 use crate::{rpc, tx, Namada};
 
 /// [`Duration`](StdDuration) wrapper that provides a
@@ -66,6 +67,10 @@ pub trait NamadaTypes: Clone + std::fmt::Debug {
     type ViewingKey: Clone + std::fmt::Debug;
     /// Represents a shielded spending key
     type SpendingKey: Clone + std::fmt::Debug;
+    /// Represents a shielded viewing key
+    type DatedViewingKey: Clone + std::fmt::Debug;
+    /// Represents a shielded spending key
+    type DatedSpendingKey: Clone + std::fmt::Debug;
     /// Represents a shielded payment address
     type PaymentAddress: Clone + std::fmt::Debug;
     /// Represents the owner of a balance
@@ -106,6 +111,8 @@ impl NamadaTypes for SdkTypes {
     type BpConversionTable = HashMap<Address, BpConversionTableEntry>;
     type ConfigRpcTendermintAddress = tendermint_rpc::Url;
     type Data = Vec<u8>;
+    type DatedSpendingKey = DatedSpendingKey;
+    type DatedViewingKey = DatedViewingKey;
     type EthereumAddress = ();
     type Keypair = namada_core::key::common::SecretKey;
     type MaspIndexerAddress = ();
@@ -2125,9 +2132,9 @@ pub struct ShieldedSync<C: NamadaTypes = SdkTypes> {
     /// Height to sync up to. Defaults to most recent
     pub last_query_height: Option<BlockHeight>,
     /// Spending keys used to determine note ownership
-    pub spending_keys: Vec<C::SpendingKey>,
+    pub spending_keys: Vec<C::DatedSpendingKey>,
     /// Viewing keys used to determine note ownership
-    pub viewing_keys: Vec<C::ViewingKey>,
+    pub viewing_keys: Vec<C::DatedViewingKey>,
     /// Address of a `namada-masp-indexer` live instance
     ///
     /// If present, the shielded sync will be performed

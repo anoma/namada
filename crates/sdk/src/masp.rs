@@ -78,7 +78,7 @@ use crate::masp::utils::{
 };
 use crate::queries::Client;
 use crate::rpc::{query_conversion, query_denom};
-use crate::wallet::DatedKeypair;
+use crate::wallet::{DatedKeypair, DatedSpendingKey};
 use crate::{
     control_flow, display_line, edisplay_line, query_native_token, rpc,
     MaybeSend, MaybeSync, Namada,
@@ -603,7 +603,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         start_query_height: Option<BlockHeight>,
         last_query_height: Option<BlockHeight>,
         retry: RetryStrategy,
-        sks: &[MaspExtendedSpendingKey],
+        sks: &[DatedSpendingKey],
         fvks: &[DatedKeypair<ViewingKey>],
     ) -> Result<(), Error>
     where
@@ -699,7 +699,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         start_query_height: Option<BlockHeight>,
         last_query_height: Option<BlockHeight>,
         retry: RetryStrategy,
-        sks: &[MaspExtendedSpendingKey],
+        sks: &[DatedSpendingKey],
         fvks: &[DatedKeypair<ViewingKey>],
         mut shutdown_signal: ShutdownSignal,
     ) -> Result<(), Error>
@@ -729,11 +729,15 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 ..Default::default()
             };
         }
-        for esk in sks {
-            let vk = to_viewing_key(esk).vk;
-            self.vk_heights.entry(vk).or_default();
-        }
-        for vk in fvks {
+        for vk in sks
+            .iter()
+            .map(|esk| {
+                esk.map(|k| {
+                    to_viewing_key(&MaspExtendedSpendingKey::from(k)).vk
+                })
+            })
+            .chain(fvks.iter().copied())
+        {
             if let Some(h) = self.vk_heights.entry(vk.key).or_default() {
                 let birthday = IndexedTx {
                     height: vk.birthday,
