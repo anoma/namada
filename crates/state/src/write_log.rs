@@ -618,9 +618,15 @@ impl WriteLog {
     }
 
     /// Commit the current tx and the entire batch to the block log.
-    pub fn commit_batch(&mut self) {
+    pub fn commit_batch_and_current_tx(&mut self) {
         self.commit_tx_to_batch();
+        self.commit_batch_only();
+    }
 
+    /// Commit the entire batch to the block log. Doesn't handle the tx write
+    /// log which might still contain some data and needs to be handled
+    /// separately.
+    pub fn commit_batch_only(&mut self) {
         for log in std::mem::take(&mut self.batch_write_log) {
             self.block_write_log.extend(log.write_log);
             self.block_address_gen = log.address_gen;
@@ -922,7 +928,7 @@ mod tests {
         // initialize an account
         let vp1 = Hash::sha256("vp1".as_bytes());
         let (addr1, _) = state.write_log.init_account(&address_gen, vp1, &[]);
-        state.write_log.commit_batch();
+        state.write_log.commit_batch_and_current_tx();
 
         // write values
         let val1 = "val1".as_bytes().to_vec();
@@ -930,7 +936,7 @@ mod tests {
         state.write_log.write(&key2, val1.clone()).unwrap();
         state.write_log.write(&key3, val1.clone()).unwrap();
         state.write_log.write_temp(&key4, val1.clone()).unwrap();
-        state.write_log.commit_batch();
+        state.write_log.commit_batch_and_current_tx();
 
         // these values are not written due to drop_tx
         let val2 = "val2".as_bytes().to_vec();
@@ -943,7 +949,7 @@ mod tests {
         let val3 = "val3".as_bytes().to_vec();
         state.write_log.delete(&key2).unwrap();
         state.write_log.write(&key3, val3.clone()).unwrap();
-        state.write_log.commit_batch();
+        state.write_log.commit_batch_and_current_tx();
 
         // commit a block
         state.commit_block().expect("commit failed");
