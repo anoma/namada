@@ -81,6 +81,7 @@ use namada_sdk::storage::{BlockHeight, Epoch, Key};
 use namada_sdk::tendermint::abci::Event as AbciEvent;
 use namada_sdk::tendermint::block::Height as TmHeight;
 use namada_sdk::token::Amount;
+use namada_sdk::tx::IBC_REFUND_TARGET_ALIAS;
 use namada_test_utils::TestWasms;
 use prost::Message;
 use setup::constants::*;
@@ -346,7 +347,8 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
     wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
     // Check the balance of the source shielded account
     check_balance(&test_a, AA_VIEWING_KEY, BTC, 80)?;
-    // TODO: Check the refund
+    // Check the refund
+    check_balance(&test_a, IBC_REFUND_TARGET_ALIAS, BTC, 10)?;
 
     // Stop Hermes for timeout test
     let mut hermes = bg_hermes.foreground();
@@ -385,7 +387,8 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
     wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
     // Check the balance of the source shielded account
     check_balance(&test_a, AA_VIEWING_KEY, BTC, 70)?;
-    // TODO: Check the refund
+    // Check the refund
+    check_balance(&test_a, IBC_REFUND_TARGET_ALIAS, BTC, 20)?;
 
     Ok(())
 }

@@ -66,7 +66,7 @@ use namada_tx::data::{
 };
 pub use namada_tx::{Authorization, *};
 use num_traits::Zero;
-use rand_core::{OsRng, RngCore};
+use rand_core::OsRng;
 
 use crate::args::{
     SdkTypes, TxShieldedTransferData, TxShieldingTransferData,
@@ -142,11 +142,12 @@ pub const TX_UPDATE_STEWARD_COMMISSION: &str =
 /// Redelegate transaction WASM path
 pub const TX_REDELEGATE_WASM: &str = "tx_redelegate.wasm";
 
+/// Default refund target alias for IBC shielded transfers
+pub const IBC_REFUND_TARGET_ALIAS: &str = "ibc-refund-target";
+
 /// Default timeout in seconds for requests to the `/accepted`
 /// and `/applied` ABCI query endpoints.
 const DEFAULT_NAMADA_EVENTS_MAX_WAIT_TIME_SECONDS: u64 = 60;
-/// The alias prefix of a generated IBC refund target
-const IBC_REFUND_TARGET_ALIAS_PREFIX: &str = "ibc-refund-target";
 
 /// Capture the result of running a transaction
 #[derive(Debug)]
@@ -3924,16 +3925,13 @@ async fn get_refund_target(
             Some(TransferTarget::Address(addr)),
         ) => Ok(Some(addr.clone())),
         (TransferSource::ExtendedSpendingKey(_), None) => {
-            // Generate a new transparent address
+            // Generate a new transparent address if it doesn't exist
             let mut rng = OsRng;
             let mut wallet = context.wallet_mut().await;
-            let (alias, _) = wallet
+            wallet
                 .gen_store_secret_key(
                     SchemeType::Ed25519,
-                    Some(format!(
-                        "{IBC_REFUND_TARGET_ALIAS_PREFIX}-{}",
-                        rng.next_u64()
-                    )),
+                    Some(IBC_REFUND_TARGET_ALIAS.to_string()),
                     false,
                     None,
                     &mut rng,
@@ -3946,9 +3944,11 @@ async fn get_refund_target(
             wallet.save().map_err(|e| {
                 Error::Other(format!("Saving wallet error: {e}"))
             })?;
-            let addr = wallet.find_address(alias).ok_or_else(|| {
-                Error::Other("Finding the new reund address failed".to_string())
-            })?;
+            let addr = wallet
+                .find_address(IBC_REFUND_TARGET_ALIAS)
+                .ok_or_else(|| {
+                    Error::Other("Finding the reund address failed".to_string())
+                })?;
             Ok(Some((*addr).clone()))
         }
         (_, Some(_)) => Err(Error::Other(
