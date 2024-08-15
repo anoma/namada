@@ -8300,9 +8300,39 @@ pub fn namada_cli() -> (cmds::Namada, String) {
     safe_exit(2);
 }
 
-pub fn namada_node_cli() -> Result<(cmds::NamadaNode, Context)> {
+/// Namada node commands with loaded [`Context`] where required
+pub enum NamadaNode {
+    Ledger(cmds::Ledger, Context),
+    Config(cmds::Config, Context),
+    Utils(cmds::NodeUtils, args::Global),
+}
+
+pub fn namada_node_cli() -> Result<NamadaNode> {
     let app = namada_node_app();
-    cmds::NamadaNode::parse_or_print_help(app)
+    let matches = app.clone().get_matches();
+    match Cmd::parse(&matches) {
+        Some(cmd) => {
+            let global_args = args::Global::parse(&matches);
+            match cmd {
+                cmds::NamadaNode::Ledger(sub_cmd) => {
+                    let context = Context::new::<CliIo>(global_args)?;
+                    Ok(NamadaNode::Ledger(sub_cmd, context))
+                }
+                cmds::NamadaNode::Config(sub_cmd) => {
+                    let context = Context::new::<CliIo>(global_args)?;
+                    Ok(NamadaNode::Config(sub_cmd, context))
+                }
+                cmds::NamadaNode::Utils(sub_cmd) => {
+                    Ok(NamadaNode::Utils(sub_cmd, global_args))
+                }
+            }
+        }
+        None => {
+            let mut app = app;
+            app.print_help().unwrap();
+            safe_exit(2);
+        }
+    }
 }
 
 #[allow(clippy::large_enum_variant)]
