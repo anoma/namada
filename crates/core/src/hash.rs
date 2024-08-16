@@ -10,7 +10,7 @@ use data_encoding::HEXUPPER;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
-use serde::{Deserialize, Serialize};
+use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
@@ -51,11 +51,50 @@ pub type HashResult<T> = std::result::Result<T, Error>;
     BorshDeserialize,
     BorshDeserializer,
     BorshSchema,
-    Serialize,
-    Deserialize,
 )]
 /// A hash, typically a sha-2 hash of a tx
 pub struct Hash(pub [u8; HASH_LENGTH]);
+
+impl Serialize for Hash {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        // Convert the byte array to a hex string
+        let hex_string = HEXUPPER.encode(&self.0);
+        // Serialize the hex string
+        serializer.serialize_str(&hex_string)
+    }
+}
+
+impl<'de> Deserialize<'de> for Hash {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        // Deserialize a hex string
+        let hex_string =
+            <String as serde::Deserialize>::deserialize(deserializer)?;
+        // Convert the hex string back to a byte array
+        let bytes = HEXUPPER
+            .decode(hex_string.as_bytes())
+            .map_err(de::Error::custom)?;
+
+        // Ensure the byte array has the correct length
+        if bytes.len() != HASH_LENGTH {
+            return Err(de::Error::custom(format!(
+                "Invalid length: expected {} bytes, got {}",
+                HASH_LENGTH,
+                bytes.len()
+            )));
+        }
+
+        let mut array = [0u8; HASH_LENGTH];
+        array.copy_from_slice(&bytes);
+
+        Ok(Hash(array))
+    }
+}
 
 impl arse_merkle_tree::traits::Value for Hash {
     fn as_slice(&self) -> &[u8] {
