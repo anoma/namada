@@ -50,6 +50,7 @@ where
 }
 
 /// Wrapper for masp_primitive's TxId
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Serialize,
     Deserialize,
@@ -84,6 +85,7 @@ pub type TxId = MaspTxId;
 
 /// Wrapper type around `Epoch` for type safe operations involving the masp
 /// epoch
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     BorshSerialize,
     BorshDeserialize,
@@ -149,6 +151,7 @@ impl MaspEpoch {
 }
 
 /// The plain representation of a MASP aaset
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     BorshSerialize,
     BorshDeserialize,

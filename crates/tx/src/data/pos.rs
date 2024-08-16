@@ -11,6 +11,7 @@ use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 
 /// A tx data type to become a validator account.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Clone,
@@ -56,6 +57,7 @@ pub struct BecomeValidator {
 
 /// A bond is a validator's self-bond or a delegation from non-validator to a
 /// validator.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Clone,
@@ -83,6 +85,7 @@ pub struct Bond {
 pub type Unbond = Bond;
 
 /// A withdrawal of an unbond.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Clone,
@@ -105,6 +108,7 @@ pub struct Withdraw {
 }
 
 /// A claim of pending rewards.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Clone,
@@ -127,6 +131,7 @@ pub struct ClaimRewards {
 }
 
 /// A redelegation of bonded tokens from one validator to another.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Clone,
@@ -152,6 +157,7 @@ pub struct Redelegation {
 }
 
 /// A change to the validator commission rate.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Clone,
@@ -173,6 +179,7 @@ pub struct CommissionChange {
 }
 
 /// A change to the validator metadata.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Clone,
@@ -206,6 +213,7 @@ pub struct MetaDataChange {
 }
 
 /// A change to the validator's consensus key.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Clone,

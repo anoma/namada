@@ -8,6 +8,8 @@ PROPTEST_CASES ?= 100
 # Disable shrinking in `make test-pos-sm` for CI runs. If the test fail in CI,
 # we only want to get the seed.
 PROPTEST_MAX_SHRINK_ITERS ?= 0
+# How long running fuzzing tasks
+FUZZ_MAX_TOTAL_TIME ?= 3600
 
 cargo := $(env) cargo
 rustup := $(env) rustup
@@ -117,8 +119,8 @@ clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --a
 
 # Need a separate command for benchmarks to prevent the "testing" feature flag from being activated
 clippy:
-	$(cargo) +$(nightly) clippy $(jobs) --all-targets --workspace --exclude namada_benchmarks -- -D warnings && \
-	$(cargo) +$(nightly) clippy $(jobs) --all-targets --package namada_benchmarks -- -D warnings && \
+	$(cargo) +$(nightly) clippy $(jobs) --all-targets --workspace --exclude namada_benchmarks -- -D warnings --check-cfg 'cfg(fuzzing)' && \
+	$(cargo) +$(nightly) clippy $(jobs) --all-targets --package namada_benchmarks -- -D warnings --check-cfg 'cfg(fuzzing)' && \
 	make -C $(wasms) clippy && \
 	make -C $(wasms_for_tests) clippy
 
@@ -273,6 +275,23 @@ clean:
 bench:
 	$(cargo) bench --package namada_benchmarks
 
+# NOTE: running in `--dev` as release build takes over 64GB memory, but 
+# dev is still configured for opt-level=3
+fuzz-txs-mempool:
+	$(cargo) +$(nightly) fuzz run txs_mempool --dev -- -rss_limit_mb=4096 -max_total_time=$(FUZZ_MAX_TOTAL_TIME)
+
+fuzz-txs-prepare-proposal:
+	$(cargo) +$(nightly) fuzz run txs_prepare_proposal --dev -- -rss_limit_mb=4096 -max_total_time=$(FUZZ_MAX_TOTAL_TIME)
+
+fuzz-txs-process-proposal:
+	$(cargo) +$(nightly) fuzz run txs_process_proposal --dev -- -rss_limit_mb=4096 -max_total_time=$(FUZZ_MAX_TOTAL_TIME)
+
+fuzz-txs-finalize-block:
+	$(cargo) +$(nightly) fuzz run txs_finalize_block --dev -- -rss_limit_mb=4096 -max_total_time=$(FUZZ_MAX_TOTAL_TIME)
+
+fuzz-txs-wasm-run:
+	$(cargo) +$(nightly) fuzz run txs_wasm_run --dev -- -rss_limit_mb=4096 --sanitizer=none -max_total_time=$(FUZZ_MAX_TOTAL_TIME)
+
 build-doc:
 	$(cargo) doc --no-deps
 
@@ -351,7 +370,7 @@ dev-deps:
 	$(rustup) toolchain install $(nightly)
 	$(rustup) target add wasm32-unknown-unknown
 	$(rustup) component add rustfmt clippy miri --toolchain $(nightly)
-	$(cargo) install cargo-watch unclog wasm-opt
+	$(cargo) install cargo-watch unclog wasm-opt cargo-fuzz
 
 test-miri:
 	$(cargo) +$(nightly) miri setup

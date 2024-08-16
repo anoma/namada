@@ -1,0 +1,82 @@
+name: Fuzz 🪲
+
+on:
+  schedule:
+    - cron: "0 0 * * *"
+
+env:
+  RUSTC_WRAPPER: sccache
+  SCCACHE_S3_USE_SSL: false
+  GIT_LFS_SKIP_SMUDGE: 1
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: full
+  CACHE_BUCKET: github-runners-remote-cache-shared
+  SCCACHE_BUCKET: github-runners-remote-cache-shared
+  AWS_REGION: us-west-2
+  NIGHTLY: nightly-2024-05-15
+  NAMADA_MASP_PARAMS_DIR: /masp/.masp-params
+
+jobs:
+  fuzz:
+    container: 
+      image: ghcr.io/heliaxdev/namada-ci:namada-main
+    runs-on: [self-hosted, 16vcpu-32ram-ubuntu22-namada-x86]
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        fuzz:
+          - command: txs-mempool
+          - command: txs-prepare-proposal
+          - command: txs-process-proposal
+          - command: txs-finalize-block
+          - command: txs-wasm-run
+    
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Configure AWS 
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE }}
+      - name: Cache cargo
+        id: cache
+        uses: runs-on/cache@v4
+        env:
+          RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
+        with:
+          path: /usr/local/cargo
+          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+      - name: Start sccache server
+        id: sccache
+        run: sccache --start-server
+      - name: Run fuzzing target fuzz-${{ matrix.fuzz.command }}
+        run: make fuzz-${{ matrix.fuzz.command }}
+        env:
+          RUSTFLAGS: "-C linker=clang -C debug_assertions=true -C link-arg=-fuse-ld=/usr/local/bin/mold"
+      - name: Generate coverage report
+        run: |
+          cargo +$(cat rust-nightly-version) fuzz coverage ${{ github.fuzz.command }} --dev
+          RUST_TOOLCHAIN_SYSROOT=$(rustc +$(cat rust-nightly-version) --print sysroot)
+          $RUST_TOOLCHAIN_SYSROOT/lib/rustlib/x86_64-unknown-linux-gnu/bin/llvm-cov \
+            show \
+            target/x86_64-unknown-linux-gnu/coverage/x86_64-unknown-linux-gnu/debug/txs_mempool \
+            --format=html \
+            --ignore-filename-regex="(/rustc|\.cargo)" \
+            -Xdemangler=rustfilt \
+            -instr-profile=fuzz/coverage/txs_mempool/coverage.profdata \
+            > index.html
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-${{ github.event.pull_request.head.sha || github.sha }}
+          path: index.html
+      - name: Clean cargo cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: cargo cache --autoclean-expensive
+      - name: Stop sccache
+        if: always() && steps.sccache.conclusion == 'success'
+        run: sccache --stop-server || true

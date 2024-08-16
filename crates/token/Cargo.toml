@@ -17,6 +17,7 @@ default = []
 multicore = ["namada_shielded_token/multicore"]
 download-params = ["namada_shielded_token/download-params"]
 testing = ["namada_core/testing", "namada_shielded_token/testing", "proptest"]
+arbitrary = ["dep:arbitrary", "namada_core/arbitrary"]
 
 [dependencies]
 namada_core = { path = "../core" }
@@ -27,6 +28,7 @@ namada_storage = { path = "../storage" }
 namada_systems = { path = "../systems" }
 namada_trans_token = { path = "../trans_token" }
 
+arbitrary = { workspace = true, optional = true }
 borsh.workspace = true
 proptest = { workspace = true, optional = true }
 serde.workspace = true

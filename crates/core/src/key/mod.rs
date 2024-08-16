@@ -276,6 +276,7 @@ pub trait SigScheme: Eq + Ord + Debug + Serialize + Default {
 
 /// Public key hash derived from `common::Key` borsh encoded bytes (hex string
 /// of the first 40 chars of sha256 hash)
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Clone,

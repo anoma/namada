@@ -18,6 +18,7 @@ use crate::hash::Hash;
 use crate::token;
 
 /// IBC token hash derived from a denomination.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Clone,
@@ -75,6 +76,7 @@ impl FromStr for IbcTxDataRefs {
 }
 
 /// The target of a PGF payment
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Clone,
