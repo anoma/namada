@@ -162,10 +162,9 @@ impl Context {
                 let mut config =
                     Config::load(&global_args.base_dir, chain_id, None);
                 let chain_dir = global_args.base_dir.join(chain_id.as_str());
-                let genesis =
-                    genesis::chain::Finalized::read_toml_files(&chain_dir)
+                let native_token =
+                    genesis::chain::Finalized::read_native_token(&chain_dir)
                         .expect("Missing genesis files");
-                let native_token = genesis.get_native_token().clone();
                 let wallet = if wallet::exists(&chain_dir) {
                     wallet::load(&chain_dir).unwrap()
                 } else {
