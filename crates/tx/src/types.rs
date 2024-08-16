@@ -32,7 +32,7 @@ use thiserror::Error;
 
 use crate::data::protocol::ProtocolTx;
 use crate::data::{hash_tx, Fee, GasLimit, TxType, WrapperTx};
-use crate::proto;
+use crate::{hex_serde, proto, SALT_LENGTH};
 
 /// Represents an error in signature verification
 #[allow(missing_docs)]
@@ -230,7 +230,8 @@ pub fn verify_standalone_sig<T, S: Signable<T>>(
 )]
 pub struct Data {
     /// Salt with additional random data (usually a timestamp)
-    pub salt: [u8; 8],
+    #[serde(with = "hex_serde")]
+    pub salt: [u8; SALT_LENGTH],
     /// Data bytes
     pub data: Vec<u8>,
 }
@@ -248,7 +249,7 @@ impl Data {
 
         Self {
             salt: {
-                let mut buf = [0; 8];
+                let mut buf = [0; SALT_LENGTH];
                 OsRng.fill_bytes(&mut buf);
                 buf
             },
@@ -345,7 +346,8 @@ impl Commitment {
 )]
 pub struct Code {
     /// Additional random data
-    pub salt: [u8; 8],
+    #[serde(with = "hex_serde")]
+    pub salt: [u8; SALT_LENGTH],
     /// Actual transaction code
     pub code: Commitment,
     /// The tag for the transaction code
@@ -365,7 +367,7 @@ impl Code {
 
         Self {
             salt: {
-                let mut buf = [0; 8];
+                let mut buf = [0; SALT_LENGTH];
                 OsRng.fill_bytes(&mut buf);
                 buf
             },
@@ -383,7 +385,7 @@ impl Code {
 
         Self {
             salt: {
-                let mut buf = [0; 8];
+                let mut buf = [0; SALT_LENGTH];
                 OsRng.fill_bytes(&mut buf);
                 buf
             },

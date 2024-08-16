@@ -35,6 +35,55 @@ pub use types::{
     TxCommitments, TxError, VerifySigError,
 };
 
+const SALT_LENGTH: usize = 8;
+
+mod hex_serde {
+    use data_encoding::HEXUPPER;
+    use serde::{de, Deserializer, Serializer};
+
+    use super::*;
+
+    pub fn serialize<S>(
+        salt: &[u8; SALT_LENGTH],
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        // Convert the byte array to a hex string
+        let hex_string = HEXUPPER.encode(salt);
+        serializer.serialize_str(&hex_string)
+    }
+
+    pub fn deserialize<'de, D>(
+        deserializer: D,
+    ) -> Result<[u8; SALT_LENGTH], D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        // Deserialize a hex string
+        let hex_string =
+            <String as serde::Deserialize>::deserialize(deserializer)?;
+        // Convert the hex string back to a byte array
+        let bytes = HEXUPPER
+            .decode(hex_string.as_bytes())
+            .map_err(de::Error::custom)?;
+
+        if bytes.len() != SALT_LENGTH {
+            return Err(de::Error::custom(format!(
+                "Invalid length: expected {} bytes, got {}",
+                SALT_LENGTH,
+                bytes.len()
+            )));
+        }
+
+        let mut array = [0u8; SALT_LENGTH];
+        array.copy_from_slice(&bytes);
+
+        Ok(array)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use data_encoding::HEXLOWER;
