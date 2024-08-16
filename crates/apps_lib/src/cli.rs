@@ -3211,6 +3211,7 @@ pub mod args {
             Err(_) => config::get_default_namada_folder(),
         }),
     );
+    pub const BIRTHDAY: ArgOpt<BlockHeight> = arg_opt("birthday");
     pub const BLOCK_HEIGHT: Arg<BlockHeight> = arg("block-height");
     pub const BLOCK_HEIGHT_OPT: ArgOpt<BlockHeight> = arg_opt("height");
     pub const BLOCK_HEIGHT_FROM_OPT: ArgOpt<BlockHeight> =
@@ -3255,6 +3256,10 @@ pub mod args {
         arg_opt("success-sleep");
     pub const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
     pub const DATA_PATH: Arg<PathBuf> = arg("data-path");
+    pub const DATED_SPENDING_KEYS: ArgMulti<WalletDatedSpendingKey, GlobStar> =
+        arg_multi("spending-keys");
+    pub const DATED_VIEWING_KEYS: ArgMulti<WalletDatedViewingKey, GlobStar> =
+        arg_multi("viewing-keys");
     pub const DB_KEY: Arg<String> = arg("db-key");
     pub const DB_COLUMN_FAMILY: ArgDefault<String> = arg_default(
         "db-column-family",
@@ -6598,8 +6603,8 @@ pub mod args {
             let ledger_address = CONFIG_RPC_LEDGER_ADDRESS.parse(matches);
             let start_query_height = BLOCK_HEIGHT_FROM_OPT.parse(matches);
             let last_query_height = BLOCK_HEIGHT_TO_OPT.parse(matches);
-            let spending_keys = SPENDING_KEYS.parse(matches);
-            let viewing_keys = VIEWING_KEYS.parse(matches);
+            let spending_keys = DATED_SPENDING_KEYS.parse(matches);
+            let viewing_keys = DATED_VIEWING_KEYS.parse(matches);
             let with_indexer = WITH_INDEXER.parse(matches);
             Self {
                 ledger_address,
@@ -6621,13 +6626,17 @@ pub mod args {
                         .def()
                         .help(wrap!("Option block height to sync from.")),
                 )
-                .arg(SPENDING_KEYS.def().help(wrap!(
+                .arg(DATED_SPENDING_KEYS.def().help(wrap!(
                     "List of new spending keys with which to check note \
-                     ownership. These will be added to the shielded context."
+                     ownership. These will be added to the shielded context. \
+                     Appending \"<<$BLOCKHEIGHT\" to the end of each key adds \
+                     a birthday."
                 )))
-                .arg(VIEWING_KEYS.def().help(wrap!(
+                .arg(DATED_VIEWING_KEYS.def().help(wrap!(
                     "List of new viewing keys with which to check note \
-                     ownership. These will be added to the shielded context."
+                     ownership. These will be added to the shielded context. \
+                     Appending \"<<$BLOCKHEIGHT\" to the end of each key adds \
+                     a birthday."
                 )))
                 .arg(WITH_INDEXER.def().help(wrap!(
                     "Address of a `namada-masp-indexer` live instance. If \
@@ -6982,6 +6991,8 @@ pub mod args {
         type BpConversionTable = PathBuf;
         type ConfigRpcTendermintAddress = ConfigRpcAddress;
         type Data = PathBuf;
+        type DatedSpendingKey = WalletDatedSpendingKey;
+        type DatedViewingKey = WalletDatedViewingKey;
         type EthereumAddress = String;
         type Keypair = WalletKeypair;
         type MaspIndexerAddress = String;
@@ -7338,7 +7349,8 @@ pub mod args {
                 find_viewing_key(&mut wallet)
             } else {
                 find_viewing_key(&mut ctx.borrow_mut_chain_or_exit().wallet)
-            };
+            }
+            .key;
 
             Ok(PayAddressGen::<SdkTypes> {
                 alias: self.alias,
@@ -7377,6 +7389,7 @@ pub mod args {
             let shielded = SHIELDED.parse(matches);
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
+            let birthday = BIRTHDAY.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let derivation_path = HD_DERIVATION_PATH.parse(matches);
             let allow_non_compliant =
@@ -7396,6 +7409,7 @@ pub mod args {
                 prompt_bip39_passphrase,
                 use_device,
                 device_transport,
+                birthday,
             }
         }
 
@@ -7417,6 +7431,11 @@ pub mod args {
                     "Force overwrite the alias if it already exists."
                 )),
             )
+            .arg(BIRTHDAY.def().help(wrap!(
+                "A block height after which this key is being created. Used \
+                 for optimizing MASP operations. If none is provided, \
+                 defaults to the first block height."
+            )))
             .arg(UNSAFE_DONT_ENCRYPT.def().help(wrap!(
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
                  used in a live network."
@@ -7465,6 +7484,7 @@ pub mod args {
             let raw = RAW_KEY_GEN.parse(matches);
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
+            let birthday = BIRTHDAY.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let derivation_path = HD_DERIVATION_PATH.parse(matches);
             let allow_non_compliant =
@@ -7477,6 +7497,7 @@ pub mod args {
                 raw,
                 alias,
                 alias_force,
+                birthday,
                 unsafe_dont_encrypt,
                 derivation_path,
                 allow_non_compliant,
@@ -7508,6 +7529,11 @@ pub mod args {
             .arg(ALIAS.def().help(wrap!("The key and address alias.")))
             .arg(ALIAS_FORCE.def().help(wrap!(
                 "Override the alias without confirmation if it already exists."
+            )))
+            .arg(BIRTHDAY.def().help(wrap!(
+                "A block height after which this key is being created. Used \
+                 for optimizing MASP operations. If none is provided, \
+                 defaults to the first block height."
             )))
             .arg(UNSAFE_DONT_ENCRYPT.def().help(wrap!(
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
@@ -7680,11 +7706,13 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
+            let birthday = BIRTHDAY.parse(matches);
             let value = VALUE.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
                 alias,
                 alias_force,
+                birthday,
                 value,
                 unsafe_dont_encrypt,
             }
@@ -7698,6 +7726,11 @@ pub mod args {
             )
             .arg(ALIAS_FORCE.def().help(wrap!(
                 "Override the alias without confirmation if it already exists."
+            )))
+            .arg(BIRTHDAY.def().help(wrap!(
+                "A block height after which this key is being created. Used \
+                 for optimizing MASP operations. If none is provided, \
+                 defaults to the first block height."
             )))
             .arg(VALUE.def().help(wrap!(
                 "Any value of the following:\n- transparent pool secret \

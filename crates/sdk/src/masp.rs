@@ -78,6 +78,7 @@ use crate::masp::utils::{
 };
 use crate::queries::Client;
 use crate::rpc::{query_conversion, query_denom};
+use crate::wallet::{DatedKeypair, DatedSpendingKey};
 use crate::{
     control_flow, display_line, edisplay_line, query_native_token, rpc,
     MaybeSend, MaybeSync, Namada,
@@ -602,8 +603,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         start_query_height: Option<BlockHeight>,
         last_query_height: Option<BlockHeight>,
         retry: RetryStrategy,
-        sks: &[MaspExtendedSpendingKey],
-        fvks: &[ViewingKey],
+        sks: &[DatedSpendingKey],
+        fvks: &[DatedKeypair<ViewingKey>],
     ) -> Result<(), Error>
     where
         IO: Io,
@@ -698,8 +699,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         start_query_height: Option<BlockHeight>,
         last_query_height: Option<BlockHeight>,
         retry: RetryStrategy,
-        sks: &[MaspExtendedSpendingKey],
-        fvks: &[ViewingKey],
+        sks: &[DatedSpendingKey],
+        fvks: &[DatedKeypair<ViewingKey>],
         mut shutdown_signal: ShutdownSignal,
     ) -> Result<(), Error>
     where
@@ -728,12 +729,32 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 ..Default::default()
             };
         }
-        for esk in sks {
-            let vk = to_viewing_key(esk).vk;
-            self.vk_heights.entry(vk).or_default();
-        }
-        for vk in fvks {
-            self.vk_heights.entry(*vk).or_default();
+        for vk in sks
+            .iter()
+            .map(|esk| {
+                esk.map(|k| {
+                    to_viewing_key(&MaspExtendedSpendingKey::from(k)).vk
+                })
+            })
+            .chain(fvks.iter().copied())
+        {
+            if let Some(h) = self.vk_heights.entry(vk.key).or_default() {
+                let birthday = IndexedTx {
+                    height: vk.birthday,
+                    index: Default::default(),
+                };
+                if birthday > *h {
+                    *h = birthday;
+                }
+            } else {
+                self.vk_heights.insert(
+                    vk.key,
+                    Some(IndexedTx {
+                        height: vk.birthday,
+                        index: Default::default(),
+                    }),
+                );
+            }
         }
 
         // Save the context to persist newly added keys
@@ -2393,7 +2414,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             .await
             .get_viewing_keys()
             .values()
-            .map(|evk| ExtendedFullViewingKey::from(*evk).fvk.vk)
+            .map(|evk| ExtendedFullViewingKey::from(evk.key).fvk.vk)
             .collect();
         let last_witnessed_tx = self.tx_note_map.keys().max();
         // This data will be discarded at the next fetch so we don't need to
@@ -3567,6 +3588,7 @@ mod test_shielded_sync {
         test_client, TestUnscannedTracker, TestingMaspClient,
     };
     use crate::masp::utils::{DefaultTracker, ProgressTracker, RetryStrategy};
+    use crate::wallet::{DatedKeypair, DatedSpendingKey, StoredKeypair};
 
     // A viewing key derived from A_SPENDING_KEY
     pub const AA_VIEWING_KEY: &str = "zvknam1qqqqqqqqqqqqqq9v0sls5r5de7njx8ehu49pqgmqr9ygelg87l5x8y4s9r0pjlvu6x74w9gjpw856zcu826qesdre628y6tjc26uhgj6d9zqur9l5u3p99d9ggc74ald6s8y3sdtka74qmheyqvdrasqpwyv2fsmxlz57lj4grm2pthzj3sflxc0jx0edrakx3vdcngrfjmru8ywkguru8mxss2uuqxdlglaz6undx5h8w7g70t2es850g48xzdkqay5qs0yw06rtxcpjdve6";
@@ -3707,7 +3729,7 @@ mod test_shielded_sync {
                 None,
                 RetryStrategy::Times(1),
                 &[],
-                &[vk],
+                &[vk.into()],
             )
             .await
             .unwrap_err();
@@ -3751,7 +3773,7 @@ mod test_shielded_sync {
                 None,
                 RetryStrategy::Times(2),
                 &[],
-                &[vk],
+                &[vk.into()],
             )
             .await
             .expect("Test failed");
@@ -3782,6 +3804,116 @@ mod test_shielded_sync {
             }
         );
         assert_eq!(shielded_ctx.note_map.len(), 2);
+    }
+
+    /// Test the the birthdays of keys are properly reflected in the key
+    /// sync heights when starting shielded sync.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn test_key_birthdays() {
+        let temp_dir = tempdir().unwrap();
+        let mut shielded_ctx =
+            FsShieldedUtils::new(temp_dir.path().to_path_buf());
+        let (client, masp_tx_sender) = test_client(2.into());
+        let io = StdIo;
+        let progress = DefaultTracker::new(&io);
+        // First test the case where no keys have been seen yet
+        let mut vk = DatedKeypair::new(
+            ExtendedFullViewingKey::from(
+                ExtendedViewingKey::from_str(AA_VIEWING_KEY)
+                    .expect("Test failed"),
+            )
+            .fvk
+            .vk,
+            Some(10.into()),
+        );
+        let StoredKeypair::Raw(mut sk) = serde_json::from_str::<'_, StoredKeypair::<DatedSpendingKey>>(r#""unencrypted:zsknam1q02rgh4mqqqqpqqm68m2lmd0xe9k5vf4fscmdxuvewqhdhwl0h492fj40tzl5f6gwfk6kgnaxpgct7mx9cw2he4724858jdfhrzdh3e4hu3us463gphqyl6k5hvkjwkv9r7rx3jtcueurgflgj6dx9qn4rg0caf0t9zawfcdwt3ramxlrs4jyan4wyp4nh9hj8s806ru0smk3437ejy56ewtw9ljz8rc3vkyznxdf3l5c70skcw6aatpv5de9zhxuxs5k6l6jz6zktgg0udvl<<30""#).expect("Test failed") else {
+            panic!("Test failed")
+        };
+
+        masp_tx_sender.send(None).expect("Test failed");
+        let result = shielded_ctx
+            .fetch(
+                TestingMaspClient::new(&client),
+                &progress,
+                None,
+                None,
+                RetryStrategy::Times(1),
+                &[sk],
+                &[vk],
+            )
+            .await
+            .unwrap_err();
+        match result {
+            Error::Other(msg) => assert_eq!(
+                msg.as_str(),
+                "After retrying, could not fetch all MASP txs."
+            ),
+            other => panic!("{:?} does not match Error::Other(_)", other),
+        }
+        shielded_ctx.load_confirmed().await.expect("Test failed");
+        let birthdays = shielded_ctx
+            .vk_heights
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_eq!(
+            birthdays,
+            vec![
+                Some(IndexedTx {
+                    height: BlockHeight(30),
+                    index: Default::default()
+                }),
+                Some(IndexedTx {
+                    height: BlockHeight(10),
+                    index: Default::default()
+                })
+            ]
+        );
+
+        // Test two cases:
+        // * A birthday is less than the synced height of key
+        // * A birthday is greater than the synced height of key
+        vk.birthday = 5.into();
+        sk.birthday = 60.into();
+        masp_tx_sender.send(None).expect("Test failed");
+        let result = shielded_ctx
+            .fetch(
+                TestingMaspClient::new(&client),
+                &progress,
+                None,
+                None,
+                RetryStrategy::Times(1),
+                &[sk],
+                &[vk],
+            )
+            .await
+            .unwrap_err();
+        match result {
+            Error::Other(msg) => assert_eq!(
+                msg.as_str(),
+                "After retrying, could not fetch all MASP txs."
+            ),
+            other => panic!("{:?} does not match Error::Other(_)", other),
+        }
+        shielded_ctx.load_confirmed().await.expect("Test failed");
+        let birthdays = shielded_ctx
+            .vk_heights
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_eq!(
+            birthdays,
+            vec![
+                Some(IndexedTx {
+                    height: BlockHeight(60),
+                    index: Default::default()
+                }),
+                Some(IndexedTx {
+                    height: BlockHeight(10),
+                    index: Default::default()
+                })
+            ]
+        )
     }
 
     /// Test that upon each retry, we either resume from the
@@ -3868,7 +4000,7 @@ mod test_shielded_sync {
                 None,
                 RetryStrategy::Times(1),
                 &[],
-                &[vk],
+                &[vk.into()],
             )
             .await
             .unwrap_err();
@@ -3893,7 +4025,7 @@ mod test_shielded_sync {
                 None,
                 RetryStrategy::Times(1),
                 &[],
-                &[vk],
+                &[vk.into()],
             )
             .await
             .unwrap_err();
@@ -3909,7 +4041,7 @@ mod test_shielded_sync {
                 None,
                 RetryStrategy::Times(1),
                 &[],
-                &[vk],
+                &[vk.into()],
             )
             .await
             .unwrap_err();
@@ -3927,7 +4059,7 @@ mod test_shielded_sync {
                 None,
                 RetryStrategy::Times(1),
                 &[],
-                &[vk],
+                &[vk.into()],
             )
             .await
             .unwrap_err();
@@ -3963,7 +4095,7 @@ mod test_shielded_sync {
                 None,
                 RetryStrategy::Times(1),
                 &[],
-                &[vk],
+                &[vk.into()],
             )
             .await
             .expect("Test failed");
@@ -4016,7 +4148,7 @@ mod test_shielded_sync {
                 None,
                 RetryStrategy::Times(2),
                 &[],
-                &[vk],
+                &[vk.into()],
             )
             .await
             .expect("Test failed");
@@ -4075,7 +4207,7 @@ mod test_shielded_sync {
                 None,
                 RetryStrategy::Forever,
                 &[],
-                &[vk],
+                &[vk.into()],
                 shutdown_signal,
             )
             .await

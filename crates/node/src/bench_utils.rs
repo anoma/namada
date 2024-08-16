@@ -1017,11 +1017,13 @@ impl Default for BenchShieldedCtx {
         chain_ctx.wallet.gen_store_spending_key(
             ALBERT_SPENDING_KEY.to_string(),
             None,
+            None,
             true,
             &mut OsRng,
         );
         chain_ctx.wallet.gen_store_spending_key(
             BERTHA_SPENDING_KEY.to_string(),
+            None,
             None,
             true,
             &mut OsRng,
@@ -1040,6 +1042,7 @@ impl Default for BenchShieldedCtx {
                     .wallet
                     .find_viewing_key(viewing_alias)
                     .unwrap()
+                    .key
                     .to_string(),
             );
             let viewing_key = ExtendedFullViewingKey::from(
@@ -1091,7 +1094,7 @@ impl BenchShieldedCtx {
                 &StdIo,
                 None,
                 None,
-                &[spending_key.into()],
+                &[spending_key.key.into()],
                 &[],
             ))
             .unwrap();

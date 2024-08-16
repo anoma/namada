@@ -14,7 +14,7 @@ use namada_sdk::io::Io;
 use namada_sdk::key::*;
 use namada_sdk::masp::fs::FsShieldedUtils;
 use namada_sdk::masp::{ShieldedContext, *};
-use namada_sdk::wallet::Wallet;
+use namada_sdk::wallet::{DatedSpendingKey, DatedViewingKey, Wallet};
 use namada_sdk::{Namada, NamadaImpl};
 
 use super::args;
@@ -45,6 +45,10 @@ pub type WalletAddrOrNativeToken = FromContext<AddrOrNativeToken>;
 /// spending key in the wallet
 pub type WalletSpendingKey = FromContext<ExtendedSpendingKey>;
 
+/// A raw dated extended spending key (bech32m encoding) or an alias of an
+/// extended spending key in the wallet
+pub type WalletDatedSpendingKey = FromContext<DatedSpendingKey>;
+
 /// A raw payment address (bech32m encoding) or an alias of a payment address
 /// in the wallet
 pub type WalletPaymentAddr = FromContext<PaymentAddress>;
@@ -52,6 +56,10 @@ pub type WalletPaymentAddr = FromContext<PaymentAddress>;
 /// A raw full viewing key (bech32m encoding) or an alias of a full viewing key
 /// in the wallet
 pub type WalletViewingKey = FromContext<ExtendedViewingKey>;
+
+/// A raw full dated viewing key (bech32m encoding) or an alias of a full
+/// viewing key in the wallet
+pub type WalletDatedViewingKey = FromContext<DatedViewingKey>;
 
 /// A raw address or a raw extended spending key (bech32m encoding) or an alias
 /// of either in the wallet
@@ -571,12 +579,47 @@ impl ArgFromMutContext for ExtendedSpendingKey {
             // Or it is a stored alias of one
             ctx.wallet
                 .find_spending_key(raw, None)
+                .map(|k| k.key)
+                .map_err(|_find_err| format!("Unknown spending key {}", raw))
+        })
+    }
+}
+
+impl ArgFromMutContext for DatedSpendingKey {
+    fn arg_from_mut_ctx(
+        ctx: &mut ChainContext,
+        raw: impl AsRef<str>,
+    ) -> Result<Self, String> {
+        let raw = raw.as_ref();
+        // Either the string is a raw extended spending key
+        FromStr::from_str(raw).or_else(|_parse_err| {
+            // Or it is a stored alias of one
+            ctx.wallet
+                .find_spending_key(raw, None)
                 .map_err(|_find_err| format!("Unknown spending key {}", raw))
         })
     }
 }
 
 impl ArgFromMutContext for ExtendedViewingKey {
+    fn arg_from_mut_ctx(
+        ctx: &mut ChainContext,
+        raw: impl AsRef<str>,
+    ) -> Result<Self, String> {
+        let raw = raw.as_ref();
+        // Either the string is a raw full viewing key
+        FromStr::from_str(raw).or_else(|_parse_err| {
+            // Or it is a stored alias of one
+            ctx.wallet
+                .find_viewing_key(raw)
+                .copied()
+                .map(|k| k.key)
+                .map_err(|_find_err| format!("Unknown viewing key {}", raw))
+        })
+    }
+}
+
+impl ArgFromMutContext for DatedViewingKey {
     fn arg_from_mut_ctx(
         ctx: &mut ChainContext,
         raw: impl AsRef<str>,
