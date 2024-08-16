@@ -335,33 +335,28 @@ impl CliApi {
                         tx::submit_validator_metadata_change(&namada, args)
                             .await?;
                     }
-                    Sub::ShieldedSync(ShieldedSync(mut args)) => {
-                        let indexer_addr = args.with_indexer.take();
-                        let args = args.to_sdk(&mut ctx)?;
+                    Sub::ShieldedSync(ShieldedSync(args)) => {
+                        let mut args = args.to_sdk(&mut ctx)?;
                         let chain_ctx = ctx.take_chain_or_exit();
                         let client = client.unwrap_or_else(|| {
                             C::from_tendermint_address(&args.ledger_address)
                         });
-                        if indexer_addr.is_none() {
+                        if args.with_indexer.is_none() {
                             client.wait_until_node_is_synced(&io).await?;
                         }
-                        let vks = chain_ctx
-                            .wallet
-                            .get_viewing_keys()
-                            .values()
-                            .copied()
-                            .chain(args.viewing_keys)
-                            .map(|vk| vk.map(|vk| vk.as_viewing_key()))
-                            .collect::<Vec<_>>();
+                        args.viewing_keys.extend(
+                            chain_ctx
+                                .wallet
+                                .get_viewing_keys()
+                                .values()
+                                .copied(),
+                        );
+
                         crate::client::masp::syncing(
                             chain_ctx.shielded,
-                            &client,
-                            indexer_addr.as_ref().map(|s| s.as_ref()),
+                            client,
+                            args,
                             &io,
-                            args.start_query_height,
-                            args.last_query_height,
-                            &args.spending_keys,
-                            &vks,
                         )
                         .await?;
                     }

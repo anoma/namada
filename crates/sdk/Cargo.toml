@@ -92,8 +92,9 @@ ethbridge-bridge-contract.workspace = true
 ethers.workspace = true
 eyre.workspace = true
 fd-lock = { workspace = true, optional = true }
-flume = "0.11.0"
+flume.workspace = true
 futures.workspace = true
+init-once.workspace = true
 itertools.workspace = true
 jubjub = { workspace = true, optional = true }
 lazy_static.workspace = true
@@ -122,11 +123,16 @@ tiny-bip39.workspace = true
 tiny-hderive.workspace = true
 toml.workspace = true
 tracing.workspace = true
+typed-builder.workspace = true
 zeroize.workspace = true
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
+kdam.workspace = true
+rayon.workspace = true
 reqwest.workspace = true
+tempfile.workspace = true
 tokio = { workspace = true, features = ["full"] }
+xorf.workspace = true
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 tokio = { workspace = true, default-features = false, features = ["sync"] }

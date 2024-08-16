@@ -27,6 +27,7 @@ use zeroize::Zeroizing;
 
 use crate::eth_bridge::bridge_pool;
 use crate::ibc::core::host::types::identifiers::{ChannelId, PortId};
+use crate::masp::utils::RetryStrategy;
 use crate::signing::SigningTxData;
 use crate::wallet::{DatedSpendingKey, DatedViewingKey};
 use crate::{rpc, tx, Namada};
@@ -115,7 +116,7 @@ impl NamadaTypes for SdkTypes {
     type DatedViewingKey = DatedViewingKey;
     type EthereumAddress = ();
     type Keypair = namada_core::key::common::SecretKey;
-    type MaspIndexerAddress = ();
+    type MaspIndexerAddress = String;
     type PaymentAddress = namada_core::masp::PaymentAddress;
     type PublicKey = namada_core::key::common::PublicKey;
     type SpendingKey = namada_core::masp::ExtendedSpendingKey;
@@ -2127,8 +2128,6 @@ pub struct SignTx<C: NamadaTypes = SdkTypes> {
 pub struct ShieldedSync<C: NamadaTypes = SdkTypes> {
     /// The ledger address
     pub ledger_address: C::ConfigRpcTendermintAddress,
-    /// Height to start syncing from. Defaults to the correct one.
-    pub start_query_height: Option<BlockHeight>,
     /// Height to sync up to. Defaults to most recent
     pub last_query_height: Option<BlockHeight>,
     /// Spending keys used to determine note ownership
@@ -2140,6 +2139,14 @@ pub struct ShieldedSync<C: NamadaTypes = SdkTypes> {
     /// If present, the shielded sync will be performed
     /// using data retrieved from the given indexer
     pub with_indexer: Option<C::MaspIndexerAddress>,
+    /// Wait for the last query height.
+    pub wait_for_last_query_height: bool,
+    /// Maximum number of fetch jobs that will ever
+    /// execute concurrently during the shielded sync.
+    pub max_concurrent_fetches: usize,
+    /// Maximum number of times to retry fetching. If `None`
+    /// is provided, defaults to "forever".
+    pub retry_strategy: RetryStrategy,
 }
 
 /// Query PoS commission rate
@@ -2782,9 +2789,6 @@ pub struct RelayBridgePoolProof<C: NamadaTypes = SdkTypes> {
     /// Synchronize with the network, or exit immediately,
     /// if the Ethereum node has fallen behind.
     pub sync: bool,
-    /// Safe mode overrides keyboard interrupt signals, to ensure
-    /// Ethereum transfers aren't canceled midway through.
-    pub safe_mode: bool,
 }
 
 /// Bridge validator set arguments.
@@ -2846,9 +2850,6 @@ pub struct ValidatorSetUpdateRelay<C: NamadaTypes = SdkTypes> {
     /// The amount of time to sleep between successful
     /// daemon mode relays.
     pub success_dur: Option<StdDuration>,
-    /// Safe mode overrides keyboard interrupt signals, to ensure
-    /// Ethereum transfers aren't canceled midway through.
-    pub safe_mode: bool,
 }
 
 /// IBC shielding transfer generation arguments

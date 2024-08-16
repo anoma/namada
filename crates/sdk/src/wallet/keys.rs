@@ -130,7 +130,17 @@ pub enum DeserializeDatedKeypairError {
 }
 
 /// A keypair with a block height after which it was created
-#[derive(Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(
+    Debug,
+    Serialize,
+    Deserialize,
+    BorshSerialize,
+    BorshDeserialize,
+    Ord,
+    PartialOrd,
+    Eq,
+    PartialEq,
+)]
 pub struct DatedKeypair<T>
 where
     T: BorshSerialize + BorshDeserialize,
@@ -167,7 +177,7 @@ where
     pub fn new(key: T, birthday: Option<BlockHeight>) -> Self {
         Self {
             key,
-            birthday: birthday.unwrap_or_else(BlockHeight::first),
+            birthday: birthday.unwrap_or(BlockHeight(0)),
         }
     }
 
