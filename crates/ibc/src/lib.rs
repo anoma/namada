@@ -642,12 +642,16 @@ where
                     .map_err(|e| Error::Context(Box::new(e)))?;
                 // Extract MASP tx from the memo in the packet if needed
                 let masp_tx = match &*envelope {
-                    MsgEnvelope::Packet(PacketMsg::Recv(msg)) => {
-                        if self.is_receiving_success(msg)? {
-                            extract_masp_tx_from_packet(&msg.packet)
-                        } else {
-                            None
-                        }
+                    MsgEnvelope::Packet(PacketMsg::Recv(msg))
+                        if self.is_receiving_success(msg)? =>
+                    {
+                        extract_masp_tx_from_packet(&msg.packet)
+                    }
+                    MsgEnvelope::Packet(PacketMsg::Ack(msg)) => {
+                        // TODO: This is unneeded but wasm compilation error
+                        // happened if deleted on MacOS with Apple Silicon
+                        let _ = extract_masp_tx_from_packet(&msg.packet);
+                        None
                     }
                     _ => None,
                 };
