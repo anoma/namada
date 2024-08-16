@@ -36,6 +36,90 @@ pub use types::{
     Signer, Tx, TxCommitments, TxError, VerifySigError,
 };
 
+/// Length of the transaction sections salt
+pub const SALT_LENGTH: usize = 8;
+
+#[allow(missing_docs)]
+mod hex_salt_serde {
+    use data_encoding::HEXUPPER;
+    use serde::{de, Deserializer, Serializer};
+
+    use super::*;
+
+    pub fn serialize<S>(
+        salt: &[u8; SALT_LENGTH],
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        // Convert the byte array to a hex string
+        let hex_string = HEXUPPER.encode(salt);
+        serializer.serialize_str(&hex_string)
+    }
+
+    pub fn deserialize<'de, D>(
+        deserializer: D,
+    ) -> Result<[u8; SALT_LENGTH], D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        // Deserialize a hex string
+        let hex_string =
+            <String as serde::Deserialize>::deserialize(deserializer)?;
+        // Convert the hex string back to a byte array
+        let bytes = HEXUPPER
+            .decode(hex_string.as_bytes())
+            .map_err(de::Error::custom)?;
+
+        if bytes.len() != SALT_LENGTH {
+            return Err(de::Error::custom(format!(
+                "Invalid length: expected {} bytes, got {}",
+                SALT_LENGTH,
+                bytes.len()
+            )));
+        }
+
+        let mut output = [0u8; SALT_LENGTH];
+        HEXUPPER
+            .decode_mut(hex_string.as_bytes(), &mut output)
+            .expect("Hash decoding shouldn't fail");
+
+        Ok(output)
+    }
+}
+
+#[allow(missing_docs)]
+mod hex_data_serde {
+    use data_encoding::HEXUPPER;
+    use serde::{de, Deserializer, Serializer};
+
+    pub fn serialize<S>(
+        #[allow(clippy::ptr_arg)] data: &Vec<u8>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        // Convert the byte array to a hex string
+        let hex_string = HEXUPPER.encode(data);
+        serializer.serialize_str(&hex_string)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        // Deserialize a hex string
+        let hex_string =
+            <String as serde::Deserialize>::deserialize(deserializer)?;
+        // Convert the hex string back to a byte array
+        HEXUPPER
+            .decode(hex_string.as_bytes())
+            .map_err(de::Error::custom)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use data_encoding::HEXLOWER;
