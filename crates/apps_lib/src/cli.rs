@@ -3338,6 +3338,8 @@ pub mod args {
          scheme is not supplied, it is assumed to be TCP.",
         60
     );
+    pub const CHECK_CAN_SIGN: ArgMulti<AddrOrPk, GlobStar> =
+        arg_multi("check-can-sign");
     pub const CONFIG_RPC_LEDGER_ADDRESS: ArgDefaultFromCtx<ConfigRpcAddress> =
         arg_default_from_ctx("node", DefaultFn(|| "".to_string()));
 
@@ -8230,13 +8232,19 @@ pub mod args {
         /// Templates dir
         pub path: PathBuf,
         pub wasm_dir: PathBuf,
+        pub check_can_sign: Vec<AddrOrPk>,
     }
 
     impl Args for TestGenesis {
         fn parse(matches: &ArgMatches) -> Self {
             let path = PATH.parse(matches);
             let wasm_dir = WASM_DIR.parse(matches).unwrap_or_default();
-            Self { path, wasm_dir }
+            let check_can_sign = CHECK_CAN_SIGN.parse(matches);
+            Self {
+                path,
+                wasm_dir,
+                check_can_sign,
+            }
         }
 
         fn def(app: App) -> App {
@@ -8248,6 +8256,11 @@ pub mod args {
             .arg(WASM_DIR.def().help(wrap!(
                 "Optional wasm directory to provide as part of verifying \
                  genesis template files"
+            )))
+            .arg(CHECK_CAN_SIGN.def().help(wrap!(
+                "Check that the pre-genesis wallet is able to sign with the \
+                 given keys and/or keys associated with the given addresses. \
+                 A pre-genesis wallet must be present in the base directory."
             )))
         }
     }

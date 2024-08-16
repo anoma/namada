@@ -166,9 +166,9 @@ pub fn main() -> Result<()> {
                 std::fs::write(config_path, updated_config).unwrap();
             }
         },
-        cli::NamadaNode::Utils(sub, _global_args) => match sub {
+        cli::NamadaNode::Utils(sub, global_args) => match sub {
             cmds::NodeUtils::TestGenesis(TestGenesis(args)) => {
-                node::utils::test_genesis(args)
+                node::utils::test_genesis(args, global_args)
             }
         },
     }
