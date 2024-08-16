@@ -2,11 +2,8 @@
 
 use std::cmp::Ordering;
 
-use data_encoding::HEXUPPER;
 use namada_core::address::Address;
-use namada_core::borsh::{
-    BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
-};
+use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::key::common;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
@@ -63,25 +60,6 @@ impl SignatureIndex {
     /// Convert to a vector
     pub fn to_vec(&self) -> Vec<Self> {
         vec![self.clone()]
-    }
-
-    /// Serialize as a string.
-    pub fn serialize(&self) -> String {
-        let signature_bytes = self.serialize_to_vec();
-        HEXUPPER.encode(&signature_bytes)
-    }
-
-    /// Deserialize from a string slice
-    pub fn deserialize(data: &[u8]) -> Result<Self, SigIndexDecodeError> {
-        if let Ok(hex) = serde_json::from_slice::<String>(data) {
-            match HEXUPPER.decode(hex.as_bytes()) {
-                Ok(bytes) => Self::try_from_slice(&bytes)
-                    .map_err(SigIndexDecodeError::Encoding),
-                Err(e) => Err(SigIndexDecodeError::Hex(e)),
-            }
-        } else {
-            Err(SigIndexDecodeError::JsonString)
-        }
     }
 }
 

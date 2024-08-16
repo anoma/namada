@@ -192,7 +192,10 @@ impl ProcessTxResponse {
 pub fn dump_tx<IO: Io>(io: &IO, args: &args::Tx, tx: Tx) {
     match args.output_folder.clone() {
         Some(path) => {
-            let tx_path = path.join(format!("{}.tx", tx.header_hash()));
+            let tx_path = path.join(format!(
+                "{}.tx",
+                tx.header_hash().to_string().to_lowercase()
+            ));
             let out = File::create(&tx_path)
                 .expect("Should be able to create a file to dump tx");
             serde_json::to_writer_pretty(out, &tx)

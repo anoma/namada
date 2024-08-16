@@ -1071,8 +1071,11 @@ where
         transaction
     } else {
         edisplay_line!(namada.io(), "Couldn't decode the transaction.");
-        safe_exit(1)
+        return Err(error::Error::Other(format!(
+            "Couldn't decode the transaction."
+        )));
     };
+
     let default_signer = Some(owner.clone());
     let signing_data = aux_signing_data(
         namada,
@@ -1110,15 +1113,11 @@ where
                 Some(path) => path.join(filename),
                 None => filename.into(),
             };
-
             let signature_path = File::create(&output_path)
                 .expect("Should be able to create signature file.");
+            serde_json::to_writer_pretty(signature_path, &signature)
+                .expect("Signature should be deserializable.");
 
-            serde_json::to_writer_pretty(
-                signature_path,
-                &signature.serialize(),
-            )
-            .expect("Signature should be deserializable.");
             display_line!(
                 namada.io(),
                 "Signature for {} serialized at {}",
@@ -1127,6 +1126,7 @@ where
             );
         }
     }
+
     Ok(())
 }
 
