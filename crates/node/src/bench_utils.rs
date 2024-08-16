@@ -1042,6 +1042,7 @@ impl Default for BenchShieldedCtx {
                     .wallet
                     .find_viewing_key(viewing_alias)
                     .unwrap()
+                    .key
                     .to_string(),
             );
             let viewing_key = ExtendedFullViewingKey::from(
