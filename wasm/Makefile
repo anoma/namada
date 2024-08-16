@@ -16,7 +16,7 @@ check:
 	$(cargo) +$(nightly) check --workspace --target wasm32-unknown-unknown
 
 clippy:
-	$(cargo) +$(nightly) clippy --all-targets --workspace -- -D warnings
+	$(cargo) +$(nightly) clippy --all-targets --workspace -- -D warnings --check-cfg 'cfg(fuzzing)'
 
 clippy-fix:
 	$(cargo) +$(nightly) clippy --fix -Z unstable-options --workspace --allow-dirty --allow-staged
