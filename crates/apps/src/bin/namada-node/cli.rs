@@ -13,9 +13,9 @@ use namada_apps_lib::time::{DateTimeUtc, Utc};
 use namada_node as node;
 
 pub fn main() -> Result<()> {
-    let (cmd, mut ctx) = cli::namada_node_cli()?;
+    let cmd = cli::namada_node_cli()?;
     match cmd {
-        cmds::NamadaNode::Ledger(sub) => match sub {
+        cli::NamadaNode::Ledger(cmd, ctx) => match cmd {
             cmds::Ledger::Run(cmds::LedgerRun(args)) => {
                 let chain_ctx = ctx.take_chain_or_exit();
                 let wasm_dir = chain_ctx.wasm_dir();
@@ -110,7 +110,7 @@ pub fn main() -> Result<()> {
                 );
             }
         },
-        cmds::NamadaNode::Config(sub) => match sub {
+        cli::NamadaNode::Config(cmd, mut ctx) => match cmd {
             cmds::Config::Gen(cmds::ConfigGen) => {
                 // If the config doesn't exit, it gets generated in the context.
                 // In here, we just need to overwrite the default chain ID, in
@@ -166,7 +166,7 @@ pub fn main() -> Result<()> {
                 std::fs::write(config_path, updated_config).unwrap();
             }
         },
-        cmds::NamadaNode::Utils(sub) => match sub {
+        cli::NamadaNode::Utils(sub, _global_args) => match sub {
             cmds::NodeUtils::TestGenesis(TestGenesis(args)) => {
                 node::utils::test_genesis(args)
             }

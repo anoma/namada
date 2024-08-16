@@ -44,7 +44,7 @@ pub fn run(
                     NamadaClient::WithContext(Box::new((sub_cmd, ctx)))
                 }
                 cmds::NamadaClient::WithoutContext(sub_cmd) => {
-                    NamadaClient::WithoutContext(sub_cmd, global)
+                    NamadaClient::WithoutContext(Box::new((sub_cmd, global)))
                 }
             };
             rt.block_on(CliApi::handle_client_command(

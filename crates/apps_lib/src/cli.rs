@@ -8333,14 +8333,44 @@ pub fn namada_cli() -> (cmds::Namada, String) {
     safe_exit(2);
 }
 
-pub fn namada_node_cli() -> Result<(cmds::NamadaNode, Context)> {
-    let app = namada_node_app();
-    cmds::NamadaNode::parse_or_print_help(app)
+/// Namada node commands with loaded [`Context`] where required
+pub enum NamadaNode {
+    Ledger(cmds::Ledger, Context),
+    Config(cmds::Config, Context),
+    Utils(cmds::NodeUtils, args::Global),
 }
 
-#[allow(clippy::large_enum_variant)]
+pub fn namada_node_cli() -> Result<NamadaNode> {
+    let app = namada_node_app();
+    let matches = app.clone().get_matches();
+    match Cmd::parse(&matches) {
+        Some(cmd) => {
+            let global_args = args::Global::parse(&matches);
+            match cmd {
+                cmds::NamadaNode::Ledger(sub_cmd) => {
+                    let context = Context::new::<CliIo>(global_args)?;
+                    Ok(NamadaNode::Ledger(sub_cmd, context))
+                }
+                cmds::NamadaNode::Config(sub_cmd) => {
+                    let context = Context::new::<CliIo>(global_args)?;
+                    Ok(NamadaNode::Config(sub_cmd, context))
+                }
+                cmds::NamadaNode::Utils(sub_cmd) => {
+                    Ok(NamadaNode::Utils(sub_cmd, global_args))
+                }
+            }
+        }
+        None => {
+            let mut app = app;
+            app.print_help().unwrap();
+            safe_exit(2);
+        }
+    }
+}
+
+/// Namada client commands with loaded [`Context`] where required
 pub enum NamadaClient {
-    WithoutContext(cmds::ClientUtils, args::Global),
+    WithoutContext(Box<(cmds::ClientUtils, args::Global)>),
     WithContext(Box<(cmds::NamadaClientWithContext, Context)>),
 }
 
@@ -8356,7 +8386,10 @@ pub fn namada_client_cli() -> Result<NamadaClient> {
                     Ok(NamadaClient::WithContext(Box::new((sub_cmd, context))))
                 }
                 cmds::NamadaClient::WithoutContext(sub_cmd) => {
-                    Ok(NamadaClient::WithoutContext(sub_cmd, global_args))
+                    Ok(NamadaClient::WithoutContext(Box::new((
+                        sub_cmd,
+                        global_args,
+                    ))))
                 }
             }
         }
