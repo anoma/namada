@@ -1022,7 +1022,9 @@ where
         transaction
     } else {
         edisplay_line!(namada.io(), "Couldn't decode the transaction.");
-        safe_exit(1)
+        return Err(error::Error::Other(format!(
+            "Couldn't decode the transaction."
+        )));
     };
 
     let default_signer = Some(owner.clone());
