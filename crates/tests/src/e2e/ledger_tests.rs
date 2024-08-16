@@ -2603,6 +2603,8 @@ fn test_localnet_genesis() -> Result<()> {
     )?;
     test_genesis_result
         .exp_string("Genesis files were dry-run successfully")?;
-    test_genesis_result.assert_success();
+    test_genesis_result.exp_string("Able to sign with")?;
+    test_genesis_result.exp_string("Able to sign with")?;
+    test_genesis_result.exp_string("Able to sign with")?;
     Ok(())
 }
