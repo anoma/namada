@@ -79,6 +79,7 @@ pub use crate::masp::shielded_sync::{
 use crate::queries::Client;
 use crate::rpc::{query_conversion, query_denom};
 use crate::task_env::TaskEnvironment;
+use crate::wallet::{DatedKeypair, DatedSpendingKey};
 use crate::{
     control_flow, display_line, edisplay_line, query_native_token, rpc,
     MaybeSend, MaybeSync, Namada,
@@ -504,8 +505,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         env: impl TaskEnvironment,
         config: ShieldedSyncConfig<M, T, I>,
         last_query_height: Option<BlockHeight>,
-        sks: &[MaspExtendedSpendingKey],
-        fvks: &[ViewingKey],
+        sks: &[DatedSpendingKey],
+        fvks: &[DatedKeypair<ViewingKey>],
     ) -> Result<(), Error>
     where
         M: MaspClient + Send + Sync + Unpin + 'static,

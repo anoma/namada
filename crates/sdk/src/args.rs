@@ -29,6 +29,7 @@ use crate::eth_bridge::bridge_pool;
 use crate::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use crate::masp::utils::RetryStrategy;
 use crate::signing::SigningTxData;
+use crate::wallet::{DatedSpendingKey, DatedViewingKey};
 use crate::{rpc, tx, Namada};
 
 /// [`Duration`](StdDuration) wrapper that provides a
@@ -67,6 +68,10 @@ pub trait NamadaTypes: Clone + std::fmt::Debug {
     type ViewingKey: Clone + std::fmt::Debug;
     /// Represents a shielded spending key
     type SpendingKey: Clone + std::fmt::Debug;
+    /// Represents a shielded viewing key
+    type DatedViewingKey: Clone + std::fmt::Debug;
+    /// Represents a shielded spending key
+    type DatedSpendingKey: Clone + std::fmt::Debug;
     /// Represents a shielded payment address
     type PaymentAddress: Clone + std::fmt::Debug;
     /// Represents the owner of a balance
@@ -107,6 +112,8 @@ impl NamadaTypes for SdkTypes {
     type BpConversionTable = HashMap<Address, BpConversionTableEntry>;
     type ConfigRpcTendermintAddress = tendermint_rpc::Url;
     type Data = Vec<u8>;
+    type DatedSpendingKey = DatedSpendingKey;
+    type DatedViewingKey = DatedViewingKey;
     type EthereumAddress = ();
     type Keypair = namada_core::key::common::SecretKey;
     type MaspIndexerAddress = String;
@@ -2124,9 +2131,9 @@ pub struct ShieldedSync<C: NamadaTypes = SdkTypes> {
     /// Height to sync up to. Defaults to most recent
     pub last_query_height: Option<BlockHeight>,
     /// Spending keys used to determine note ownership
-    pub spending_keys: Vec<C::SpendingKey>,
+    pub spending_keys: Vec<C::DatedSpendingKey>,
     /// Viewing keys used to determine note ownership
-    pub viewing_keys: Vec<C::ViewingKey>,
+    pub viewing_keys: Vec<C::DatedViewingKey>,
     /// Address of a `namada-masp-indexer` live instance
     ///
     /// If present, the shielded sync will be performed
@@ -2289,6 +2296,33 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     pub memo: Option<Memo>,
     /// Use device to sign the transaction
     pub use_device: bool,
+    /// Hardware Wallet transport - HID (USB) or TCP
+    pub device_transport: DeviceTransport,
+}
+
+/// Hardware Wallet transport - HID (USB) or TCP
+#[derive(Debug, Clone, Copy, Default)]
+pub enum DeviceTransport {
+    /// HID transport (USB connected hardware wallet)
+    #[default]
+    Hid,
+    /// TCP transport
+    Tcp,
+}
+
+impl FromStr for DeviceTransport {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "hid" => Ok(Self::Hid),
+            "tcp" => Ok(Self::Tcp),
+            raw => Err(format!(
+                "Unexpected device transport \"{raw}\". Valid options are \
+                 \"hid\" or \"tcp\"."
+            )),
+        }
+    }
 }
 
 /// Builder functions for Tx
@@ -2454,6 +2488,9 @@ pub struct KeyGen {
     pub prompt_bip39_passphrase: bool,
     /// Allow non-compliant derivation path
     pub allow_non_compliant: bool,
+    /// Optional block height after which this key was created.
+    /// Only used for MASP keys.
+    pub birthday: Option<BlockHeight>,
 }
 
 /// Wallet restore key and implicit address arguments
@@ -2477,6 +2514,11 @@ pub struct KeyDerive {
     pub prompt_bip39_passphrase: bool,
     /// Use device to generate key and address
     pub use_device: bool,
+    /// Hardware Wallet transport - HID (USB) or TCP
+    pub device_transport: DeviceTransport,
+    /// Optional blockheight after which this key was created.
+    /// Only used for MASP keys
+    pub birthday: Option<BlockHeight>,
 }
 
 /// Wallet list arguments
@@ -2554,6 +2596,9 @@ pub struct KeyAddressAdd {
     pub alias_force: bool,
     /// Any supported value
     pub value: String,
+    /// Optional block height after which this key was created.
+    /// Only used for MASP keys.
+    pub birthday: Option<BlockHeight>,
     /// Don't encrypt the key
     pub unsafe_dont_encrypt: bool,
 }

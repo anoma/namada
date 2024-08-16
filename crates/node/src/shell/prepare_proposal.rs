@@ -142,7 +142,7 @@ where
                 );
                 match result {
                     Ok(gas) => {
-                        temp_state.write_log_mut().commit_batch();
+                        temp_state.write_log_mut().commit_batch_and_current_tx();
                         Some((tx_bytes.to_owned(), gas))
                     },
                     Err(()) => {

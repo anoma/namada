@@ -51,7 +51,6 @@ use once_cell::unsync::Lazy;
 use sysinfo::{RefreshKind, System, SystemExt};
 use tokio::sync::mpsc;
 use tokio::task;
-use tower::ServiceBuilder;
 
 use self::abortable::AbortableSpawner;
 use self::ethereum_oracle::last_processed_block;
@@ -523,8 +522,7 @@ async fn run_aux_setup(
     wasm_dir: &PathBuf,
     scheduled_migration: Option<ScheduledMigration>,
 ) -> RunAuxSetup {
-    // Prefetch needed wasm artifacts
-    wasm_loader::pre_fetch_wasm(wasm_dir).await;
+    wasm_loader::validate_wasm_artifacts(wasm_dir).await;
 
     // Find the system available memory
     let available_memory_bytes = Lazy::new(|| {
@@ -746,13 +744,7 @@ async fn run_abci(
         .consensus(consensus)
         .snapshot(snapshot)
         .mempool(mempool) // don't load_shed, it will make CometBFT crash
-        .info(
-            ServiceBuilder::new()
-                .load_shed()
-                .buffer(100)
-                .rate_limit(50, std::time::Duration::from_secs(1))
-                .service(info),
-        )
+        .info(info) // don't load_shed, it will make tower-abci crash
         .finish()
         .unwrap();
     tokio::select! {

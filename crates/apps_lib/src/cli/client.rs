@@ -773,7 +773,7 @@ impl CliApi {
                     utils::init_network(global_args, args);
                 }
                 ClientUtils::GenesisBond(GenesisBond(args)) => {
-                    utils::genesis_bond(args)
+                    utils::genesis_bond(global_args, args)
                 }
                 ClientUtils::DeriveGenesisAddresses(
                     DeriveGenesisAddresses(args),

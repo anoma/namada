@@ -435,16 +435,15 @@ async fn query_shielded_balance(
     }
 }
 
-pub async fn query_proposal_result(
-    context: &impl Namada,
+pub async fn query_proposal_result<N: Namada>(
+    context: &N,
     args: args::QueryProposalResult,
 ) {
     let proposal_id = args.proposal_id;
 
     let current_epoch = query_epoch(context.client()).await.unwrap();
     let proposal_result =
-        namada_sdk::rpc::query_proposal_result(context.client(), proposal_id)
-            .await;
+        namada_sdk::rpc::query_proposal_result(context, proposal_id).await;
     let proposal_query =
         namada_sdk::rpc::query_proposal_by_id(context.client(), proposal_id)
             .await;
@@ -669,7 +668,7 @@ pub async fn query_protocol_parameters(
         display_line!(context.io(), "{:8}{}: {:?}", "", token, gas_cost);
     }
 
-    display_line!(context.io(), "PoS parameters");
+    display_line!(context.io(), "\nPoS parameters");
     let pos_params = query_pos_parameters(context.client()).await;
     display_line!(
         context.io(),
@@ -697,9 +696,9 @@ pub async fn query_protocol_parameters(
     );
     display_line!(
         context.io(),
-        "{:4}Validator stake threshold: {}",
+        "{:4}Validator stake threshold: {} NAM",
         "",
-        pos_params.validator_stake_threshold
+        pos_params.validator_stake_threshold.to_string_native()
     );
     display_line!(
         context.io(),

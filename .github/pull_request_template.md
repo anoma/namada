@@ -1,7 +1,5 @@
 ## Describe your changes
 
-## Indicate on which release or other PRs this topic is based on
-
-## Checklist before merging to `draft`
-- [ ] I have added a changelog
-- [ ] Git history is in acceptable state
+## Checklist before merging 
+- [ ] If this PR has some consensus breaking changes, I added the corresponding `breaking::` labels
+    - This will require 2 reviewers to approve the changes

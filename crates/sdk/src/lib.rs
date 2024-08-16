@@ -51,7 +51,7 @@ pub use std::marker::Sync as MaybeSync;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use args::{InputAmount, SdkTypes};
+use args::{DeviceTransport, InputAmount, SdkTypes};
 use io::Io;
 use masp::{ShieldedContext, ShieldedUtils};
 use namada_core::address::Address;
@@ -82,7 +82,7 @@ use tx::{
 use wallet::{Wallet, WalletIo, WalletStorage};
 
 /// Default gas-limit
-pub const DEFAULT_GAS_LIMIT: u64 = 100_000;
+pub const DEFAULT_GAS_LIMIT: u64 = 150_000;
 
 #[allow(missing_docs)]
 #[cfg(not(feature = "async-send"))]
@@ -168,6 +168,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             password: None,
             memo: None,
             use_device: false,
+            device_transport: DeviceTransport::default(),
         }
     }
 
@@ -739,6 +740,7 @@ where
                 password: None,
                 memo: None,
                 use_device: false,
+                device_transport: DeviceTransport::default(),
             },
         }
     }

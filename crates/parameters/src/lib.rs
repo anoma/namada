@@ -297,7 +297,7 @@ where
         .into_storage_result()
 }
 
-/// Read the the epoch duration parameter from store
+/// Read the epoch duration parameter from store
 pub fn read_epoch_duration_parameter<S>(
     storage: &S,
 ) -> namada_storage::Result<EpochDuration>
@@ -312,7 +312,7 @@ where
         .into_storage_result()
 }
 
-/// Read the the masp epoch multiplier parameter from store
+/// Read the masp epoch multiplier parameter from store
 pub fn read_masp_epoch_multiplier_parameter<S>(
     storage: &S,
 ) -> namada_storage::Result<u64>
@@ -622,18 +622,9 @@ where
         last_block_height,
         num_blocks_to_read,
     )?;
-    let max_block_time_estimate =
-        estimate_max_block_time_from_parameters(storage)?;
 
-    Ok(maybe_max_block_time.map_or(
-        max_block_time_estimate,
-        |max_block_time_over_num_blocks_to_read| {
-            std::cmp::max(
-                max_block_time_over_num_blocks_to_read,
-                max_block_time_estimate,
-            )
-        },
-    ))
+    maybe_max_block_time
+        .map_or_else(|| estimate_max_block_time_from_parameters(storage), Ok)
 }
 
 #[cfg(test)]

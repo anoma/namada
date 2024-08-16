@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use color_eyre::owo_colors::OwoColorize;
-use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada_sdk::args::ShieldedSync;
 use namada_sdk::control_flow::install_shutdown_signal;
 use namada_sdk::error::Error;
@@ -71,16 +70,12 @@ pub async fn syncing<
         }
     };
 
-    let sks = args
-        .spending_keys
-        .into_iter()
-        .map(|sk| sk.into())
-        .collect::<Vec<_>>();
-    let fvks = args
+    let vks = args
         .viewing_keys
         .into_iter()
-        .map(|vk| ExtendedFullViewingKey::from(vk).fvk.vk)
+        .map(|vk| vk.map(|vk| vk.as_viewing_key()))
         .collect::<Vec<_>>();
+
     macro_rules! dispatch_client {
         ($client:expr) => {{
             let config = ShieldedSyncConfig::builder()
@@ -95,7 +90,13 @@ pub async fn syncing<
 
             let env = MaspLocalTaskEnv::new(500)?;
             let ctx = shielded
-                .sync(env, config, args.last_query_height, &sks, &fvks)
+                .sync(
+                    env,
+                    config,
+                    args.last_query_height,
+                    &args.spending_keys,
+                    &vks,
+                )
                 .await
                 .map(|_| shielded);
 

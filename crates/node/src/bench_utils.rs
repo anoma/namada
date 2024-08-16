@@ -67,7 +67,7 @@ use namada_sdk::ibc::primitives::Timestamp as IbcTimestamp;
 use namada_sdk::ibc::storage::{
     channel_key, connection_key, mint_limit_key, port_key, throughput_limit_key,
 };
-use namada_sdk::ibc::MsgTransfer;
+use namada_sdk::ibc::{MsgTransfer, COMMITMENT_PREFIX};
 use namada_sdk::io::StdIo;
 use namada_sdk::key::common::SecretKey;
 use namada_sdk::masp::utils::RetryStrategy;
@@ -387,7 +387,7 @@ impl BenchShellInner {
             Counterparty::new(
                 client_id.clone(),
                 Some(ConnectionId::new(1)),
-                CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
+                CommitmentPrefix::from(COMMITMENT_PREFIX.as_bytes().to_vec()),
             ),
             Version::compatibles(),
             std::time::Duration::new(100, 0),
@@ -1103,11 +1103,13 @@ impl Default for BenchShieldedCtx {
         chain_ctx.wallet.gen_store_spending_key(
             ALBERT_SPENDING_KEY.to_string(),
             None,
+            None,
             true,
             &mut OsRng,
         );
         chain_ctx.wallet.gen_store_spending_key(
             BERTHA_SPENDING_KEY.to_string(),
+            None,
             None,
             true,
             &mut OsRng,
@@ -1126,6 +1128,7 @@ impl Default for BenchShieldedCtx {
                     .wallet
                     .find_viewing_key(viewing_alias)
                     .unwrap()
+                    .key
                     .to_string(),
             );
             let viewing_key = ExtendedFullViewingKey::from(

@@ -9,6 +9,8 @@ use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use itertools::Either;
+use namada_sdk::address::Address;
+use namada_sdk::args::DeviceTransport;
 use namada_sdk::chain::ChainId;
 use namada_sdk::dec::Dec;
 use namada_sdk::key::*;
@@ -28,6 +30,7 @@ use crate::config::genesis::chain::DeriveEstablishedAddress;
 use crate::config::genesis::transactions::{
     sign_delegation_bond_tx, sign_validator_account_tx, UnsignedTransactions,
 };
+use crate::config::genesis::{AddrOrPk, GenesisAddress};
 use crate::config::global::GlobalConfig;
 use crate::config::{self, genesis, get_default_namada_folder, TendermintMode};
 use crate::facade::tendermint::node::Id as TendermintNodeId;
@@ -54,7 +57,6 @@ pub async fn join_network(
         chain_id,
         genesis_validator,
         pre_genesis_path,
-        dont_prefetch_wasm,
         allow_duplicate_ip,
         add_persistent_peers,
     }: args::JoinNetwork,
@@ -250,9 +252,8 @@ pub async fn join_network(
         config.wasm_dir = wasm_dir_full;
     }
 
-    if !dont_prefetch_wasm {
-        fetch_wasms_aux(&chain_id, &config.wasm_dir).await;
-    }
+    // Validate the wasm artifacts checksums
+    validate_wasm_artifacts_aux(&chain_id, &config.wasm_dir).await;
 
     // Save the config and the wallet
     config.write(&base_dir, &chain_id, true).unwrap();
@@ -261,9 +262,9 @@ pub async fn join_network(
     println!("Successfully configured for chain ID {chain_id}");
 }
 
-async fn fetch_wasms_aux(chain_id: &ChainId, wasm_dir: &Path) {
-    println!("Fetching missing wasms for chain ID {chain_id}...");
-    wasm_loader::pre_fetch_wasm(wasm_dir).await;
+async fn validate_wasm_artifacts_aux(chain_id: &ChainId, wasm_dir: &Path) {
+    println!("Validating wasms artifacts for chain ID {chain_id}...");
+    wasm_loader::validate_wasm_artifacts(wasm_dir).await;
 }
 
 pub fn validate_wasm(args::ValidateWasm { code_path }: args::ValidateWasm) {
@@ -603,13 +604,40 @@ pub fn init_genesis_established_account(
 }
 
 /// Bond to a validator at pre-genesis.
-pub fn genesis_bond(args: args::GenesisBond) {
+pub fn genesis_bond(global_args: args::Global, args: args::GenesisBond) {
     let args::GenesisBond {
         source,
         validator,
         bond_amount,
         output: toml_path,
     } = args;
+
+    let (wallet, _wallet_file) =
+        load_pre_genesis_wallet_or_exit(&global_args.base_dir);
+    let source = match source {
+        AddrOrPk::Address(addr) => match &addr {
+            Address::Established(established) => {
+                GenesisAddress::EstablishedAddress(established.clone())
+            }
+            Address::Implicit(internal) => {
+                match wallet.find_public_key_from_implicit_addr(internal) {
+                    Ok(pk) => GenesisAddress::PublicKey(StringEncoded::new(pk)),
+                    Err(err) => {
+                        eprintln!(
+                            "Couldn't find the PK associated with the given \
+                             implicit address {addr} in the wallet: {err}"
+                        );
+                        safe_exit(1)
+                    }
+                }
+            }
+            Address::Internal(_) => {
+                eprintln!("Unexpected internal address as bond source");
+                safe_exit(1);
+            }
+        },
+        AddrOrPk::PublicKey(pk) => GenesisAddress::PublicKey(pk),
+    };
     let txs = genesis::transactions::init_bond(source, validator, bond_amount);
 
     let toml_path_str = toml_path.to_string_lossy();
@@ -865,6 +893,7 @@ async fn append_signature_to_signed_toml(
     input_txs: &Path,
     wallet: &RwLock<Wallet<CliWalletUtils>>,
     use_device: bool,
+    device_transport: DeviceTransport,
 ) -> genesis::transactions::Transactions<genesis::templates::Unvalidated> {
     // Parse signed txs toml to append new signatures to
     let mut genesis_txs = genesis::templates::read_transactions(input_txs)
@@ -885,6 +914,7 @@ async fn append_signature_to_signed_toml(
                     wallet,
                     &genesis_txs.established_account,
                     use_device,
+                    device_transport,
                 )
                 .await,
             );
@@ -904,6 +934,7 @@ async fn append_signature_to_signed_toml(
                          validator account txs",
                     ),
                     use_device,
+                    device_transport,
                 )
                 .await,
             );
@@ -921,6 +952,7 @@ pub async fn sign_genesis_tx(
         output,
         validator_alias,
         use_device,
+        device_transport,
     }: args::SignGenesisTxs,
 ) {
     let (wallet, _wallet_file) =
@@ -947,6 +979,7 @@ pub async fn sign_genesis_tx(
             &wallet_lock,
             maybe_pre_genesis_wallet.as_ref(),
             use_device,
+            device_transport,
         )
         .await;
         if let Some(output_path) = output.as_ref() {
@@ -964,7 +997,13 @@ pub async fn sign_genesis_tx(
         // In case we fail to parse unsigned txs, we will attempt to
         // parse signed txs and append new signatures to the existing
         // toml file
-        append_signature_to_signed_toml(&path, &wallet_lock, use_device).await
+        append_signature_to_signed_toml(
+            &path,
+            &wallet_lock,
+            use_device,
+            device_transport,
+        )
+        .await
     };
     match output {
         Some(output_path) => {

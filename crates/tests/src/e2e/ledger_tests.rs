@@ -27,6 +27,7 @@ use namada_core::chain::ChainId;
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_sdk::address::Address;
 use namada_sdk::storage::Epoch;
+use namada_sdk::time::DateTimeUtc;
 use namada_sdk::token;
 use namada_test_utils::TestWasms;
 use serde::Serialize;
@@ -44,13 +45,14 @@ use crate::e2e::helpers::{
     is_debug_mode, parse_reached_epoch,
 };
 use crate::e2e::setup::{
-    self, allow_duplicate_ips, default_port_offset, sleep, Bin, Who,
+    self, allow_duplicate_ips, apply_use_device, default_port_offset, sleep,
+    Bin, Who,
 };
 use crate::strings::{
     LEDGER_SHUTDOWN, LEDGER_STARTED, NON_VALIDATOR_NODE, TX_APPLIED_SUCCESS,
     TX_REJECTED, VALIDATOR_NODE,
 };
-use crate::{run, run_as};
+use crate::{run, run_as, LastSignState};
 
 const ENV_VAR_NAMADA_SEED_NODES: &str = "NAMADA_SEED_NODES";
 
@@ -129,7 +131,13 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
     // Setup 2 genesis validator nodes
     let test = setup::network(
         |genesis, base_dir| {
-            setup::set_validators(2, genesis, base_dir, default_port_offset)
+            setup::set_validators(
+                2,
+                genesis,
+                base_dir,
+                default_port_offset,
+                vec![],
+            )
         },
         None,
     )?;
@@ -167,7 +175,7 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
     let _ = epoch_sleep(&test, &validator_one_rpc, 720)?;
 
     // 3. Submit a valid token transfer tx
-    let tx_args = [
+    let tx_args = apply_use_device(vec![
         "transparent-transfer",
         "--source",
         BERTHA,
@@ -183,7 +191,7 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
         BERTHA_KEY,
         "--node",
         &validator_one_rpc,
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
@@ -504,6 +512,7 @@ fn pos_bonds() -> Result<()> {
                 genesis,
                 base_dir,
                 default_port_offset,
+                vec![],
             );
             genesis.transactions.bond = Some({
                 let wallet = get_pregenesis_wallet(base_dir);
@@ -557,7 +566,7 @@ fn pos_bonds() -> Result<()> {
     client.assert_success();
 
     // 3. Submit a delegation to the first genesis validator
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "bond",
         "--validator",
         "validator-0",
@@ -569,13 +578,13 @@ fn pos_bonds() -> Result<()> {
         BERTHA_KEY,
         "--node",
         &validator_0_rpc,
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // 4. Submit a re-delegation from the first to the second genesis validator
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "redelegate",
         "--source-validator",
         "validator-0",
@@ -589,7 +598,7 @@ fn pos_bonds() -> Result<()> {
         BERTHA_KEY,
         "--node",
         &validator_0_rpc,
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
@@ -613,7 +622,7 @@ fn pos_bonds() -> Result<()> {
     client.assert_success();
 
     // 6. Submit an unbond of the delegation from the first validator
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "unbond",
         "--validator",
         "validator-0",
@@ -625,14 +634,14 @@ fn pos_bonds() -> Result<()> {
         BERTHA_KEY,
         "--node",
         &validator_0_rpc,
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     let expected = "Amount 1600.000000 withdrawable starting from epoch ";
     let _ = client.exp_regex(&format!("{expected}.*\n"))?;
     client.assert_success();
 
     // 7. Submit an unbond of the re-delegation from the second validator
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "unbond",
         "--validator",
         "validator-1",
@@ -644,7 +653,7 @@ fn pos_bonds() -> Result<()> {
         BERTHA_KEY,
         "--node",
         &validator_0_rpc,
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     let expected = "Amount 1600.000000 withdrawable starting from epoch ";
     let (_unread, matched) = client.exp_regex(&format!("{expected}.*\n"))?;
@@ -698,7 +707,7 @@ fn pos_bonds() -> Result<()> {
     client.assert_success();
 
     // 10. Submit a withdrawal of the delegation
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "withdraw",
         "--validator",
         "validator-0",
@@ -708,13 +717,13 @@ fn pos_bonds() -> Result<()> {
         BERTHA_KEY,
         "--node",
         &validator_0_rpc,
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // 11. Submit an withdrawal of the re-delegation
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "withdraw",
         "--validator",
         "validator-1",
@@ -724,7 +733,7 @@ fn pos_bonds() -> Result<()> {
         BERTHA_KEY,
         "--node",
         &validator_0_rpc,
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
@@ -756,6 +765,7 @@ fn pos_init_validator() -> Result<()> {
                 genesis,
                 base_dir,
                 default_port_offset,
+                vec![],
             );
             println!("{:?}", genesis.transactions.bond);
             let stake = genesis
@@ -799,7 +809,7 @@ fn pos_init_validator() -> Result<()> {
     // 2. Initialize a new validator account with the non-validator node
     let new_validator = "new-validator";
     let _new_validator_key = format!("{}-key", new_validator);
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "init-validator",
         "--alias",
         new_validator,
@@ -818,7 +828,7 @@ fn pos_init_validator() -> Result<()> {
         "--node",
         &non_validator_rpc,
         "--unsafe-dont-encrypt",
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
@@ -853,7 +863,7 @@ fn pos_init_validator() -> Result<()> {
 
     // 3. Submit a delegation to the new validator First, transfer some tokens
     //    to the validator's key for fees:
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "transparent-transfer",
         "--source",
         BERTHA,
@@ -867,14 +877,14 @@ fn pos_init_validator() -> Result<()> {
         BERTHA_KEY,
         "--node",
         &non_validator_rpc,
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
     //     Then self-bond the tokens:
     let delegation = 5_u64;
     let delegation_str = &delegation.to_string();
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "bond",
         "--validator",
         new_validator,
@@ -886,14 +896,14 @@ fn pos_init_validator() -> Result<()> {
         BERTHA_KEY,
         "--node",
         &non_validator_rpc,
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // 4. Transfer some NAM to the new validator
     let validator_stake_str = &validator_stake.to_string_native();
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "transparent-transfer",
         "--source",
         BERTHA,
@@ -907,13 +917,13 @@ fn pos_init_validator() -> Result<()> {
         BERTHA_KEY,
         "--node",
         &non_validator_rpc,
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
     // 5. Submit a self-bond for the new validator
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "bond",
         "--validator",
         new_validator,
@@ -921,7 +931,7 @@ fn pos_init_validator() -> Result<()> {
         validator_stake_str,
         "--node",
         &non_validator_rpc,
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
@@ -973,7 +983,7 @@ fn pos_init_validator() -> Result<()> {
 fn ledger_many_txs_in_a_block() -> Result<()> {
     let test = Arc::new(setup::network(
         |genesis, base_dir: &_| {
-            setup::set_validators(1, genesis, base_dir, |_| 0)
+            setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
         },
         // Set 10s consensus timeout to have more time to submit txs
         Some("10s"),
@@ -995,7 +1005,7 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
     let validator_one_rpc = Arc::new(get_actor_rpc(&test, Who::Validator(0)));
 
     // A token transfer tx args
-    let tx_args = Arc::new(vec![
+    let tx_args = Arc::new(apply_use_device(vec![
         "transparent-transfer",
         "--source",
         BERTHA,
@@ -1007,30 +1017,42 @@ fn ledger_many_txs_in_a_block() -> Result<()> {
         "1.01",
         "--signing-keys",
         BERTHA_KEY,
-        "--node",
-    ]);
+    ]));
 
-    // 2. Spawn threads each submitting token transfer tx
-    // We collect to run the threads in parallel.
-    #[allow(clippy::needless_collect)]
-    let tasks: Vec<std::thread::JoinHandle<_>> = (0..4)
-        .map(|_| {
-            let test = Arc::clone(&test);
-            let validator_one_rpc = Arc::clone(&validator_one_rpc);
-            let tx_args = Arc::clone(&tx_args);
-            std::thread::spawn(move || {
-                let mut args = (*tx_args).clone();
-                args.push(&*validator_one_rpc);
-                let mut client = run!(*test, Bin::Client, args, Some(80))?;
-                client.exp_string(TX_APPLIED_SUCCESS)?;
-                client.assert_success();
-                let res: Result<()> = Ok(());
-                res
+    if tx_args.contains(&"--use-device") {
+        // Sequentialize transaction signing when hardware wallet is involved
+        for _ in 0..4 {
+            let mut args = (*tx_args).clone();
+            args.push("--node");
+            args.push(&*validator_one_rpc);
+            let mut client = run!(*test, Bin::Client, args, Some(80))?;
+            client.exp_string(TX_APPLIED_SUCCESS)?;
+            client.assert_success();
+        }
+    } else {
+        // 2. Spawn threads each submitting token transfer tx
+        // We collect to run the threads in parallel.
+        #[allow(clippy::needless_collect)]
+        let tasks: Vec<std::thread::JoinHandle<_>> = (0..4)
+            .map(|_| {
+                let test = Arc::clone(&test);
+                let validator_one_rpc = Arc::clone(&validator_one_rpc);
+                let tx_args = Arc::clone(&tx_args);
+                std::thread::spawn(move || {
+                    let mut args = (*tx_args).clone();
+                    args.push("--node");
+                    args.push(&*validator_one_rpc);
+                    let mut client = run!(*test, Bin::Client, args, Some(80))?;
+                    client.exp_string(TX_APPLIED_SUCCESS)?;
+                    client.assert_success();
+                    let res: Result<()> = Ok(());
+                    res
+                })
             })
-        })
-        .collect();
-    for task in tasks.into_iter() {
-        task.join().unwrap()?;
+            .collect();
+        for task in tasks.into_iter() {
+            task.join().unwrap()?;
+        }
     }
     // Wait to commit a block
     let mut ledger = bg_ledger.foreground();
@@ -1056,13 +1078,13 @@ where
 /// In this test we intentionally make a validator node double sign blocks
 /// to test that slashing evidence is received and processed by the ledger
 /// correctly:
-/// 1. Run 2 genesis validator ledger nodes
-/// 2. Copy the first genesis validator base-dir
-/// 3. Increment its ports and generate new node ID to avoid conflict
-/// 4. Run it to get it to double vote and sign blocks
-/// 5. Submit a valid token transfer tx to validator 0
-/// 6. Wait for double signing evidence
-/// 7. Make sure the the first validator can proceed to the next epoch
+/// 1. Copy the first genesis validator base-dir
+/// 2. Increment its ports and generate new node ID to avoid conflict
+/// 3. Run 2 genesis validator ledger nodes
+/// 4. Run the copied validator to get it to double vote and sign blocks
+/// 5. Wait for double signing evidence
+/// 6. Wait for slash processing epoch
+/// 7. Make sure the first validator can proceed to the next epoch
 #[test]
 fn double_signing_gets_slashed() -> Result<()> {
     use std::net::SocketAddr;
@@ -1086,9 +1108,22 @@ fn double_signing_gets_slashed() -> Result<()> {
             );
             // Make faster epochs to be more likely to discover boundary issues
             genesis.parameters.parameters.min_num_of_blocks = 2;
-            setup::set_validators(4, genesis, base_dir, default_port_offset)
+            setup::set_validators(
+                2,
+                genesis,
+                base_dir,
+                default_port_offset,
+                vec![
+                    // The duplicate validator who will double sign and get
+                    // slashed has less stake so that the 2nd validator has
+                    // majority to continue producing blocks
+                    token::Amount::native_whole(30_000),
+                    token::Amount::native_whole(100_000),
+                ],
+            )
         },
-        None,
+        // Slow down the blocks to 5s
+        Some("5s"),
     )?;
 
     allow_duplicate_ips(&test, &test.net.chain_id, Who::Validator(0));
@@ -1110,27 +1145,7 @@ fn double_signing_gets_slashed() -> Result<()> {
     );
     println!("pipeline_len: {}", pipeline_len);
 
-    // 1. Run 2 genesis validator ledger nodes
-    let _bg_validator_0 =
-        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
-            .background();
-    let bg_validator_1 =
-        start_namada_ledger_node_wait_wasm(&test, Some(1), Some(40))?
-            .background();
-
-    let mut validator_2 =
-        run_as!(test, Who::Validator(2), Bin::Node, &["ledger"], Some(40))?;
-    validator_2.exp_string(LEDGER_STARTED)?;
-    validator_2.exp_string(VALIDATOR_NODE)?;
-    let _bg_validator_2 = validator_2.background();
-
-    let mut validator_3 =
-        run_as!(test, Who::Validator(3), Bin::Node, &["ledger"], Some(40))?;
-    validator_3.exp_string(LEDGER_STARTED)?;
-    validator_3.exp_string(VALIDATOR_NODE)?;
-    let _bg_validator_3 = validator_3.background();
-
-    // 2. Copy the first genesis validator base-dir
+    // 1. Copy the first genesis validator base-dir
     let validator_0_base_dir = test.get_base_dir(Who::Validator(0));
     let validator_0_base_dir_copy = test
         .test_dir
@@ -1149,7 +1164,7 @@ fn double_signing_gets_slashed() -> Result<()> {
     )
     .unwrap();
 
-    // 3. Increment its ports and generate new node ID to avoid conflict
+    // 2. Increment its ports and generate new node ID to avoid conflict
 
     // Same as in `genesis/e2e-tests-single-node.toml` for `validator-0`
     let net_address_0 = SocketAddr::from_str("127.0.0.1:27656").unwrap();
@@ -1206,8 +1221,17 @@ fn double_signing_gets_slashed() -> Result<()> {
     let _node_pk =
         client::utils::write_tendermint_node_key(&tm_home_dir, node_sk);
 
-    // 4. Run it to get it to double vote and sign block
+    // 3. Run 2 genesis validator ledger nodes
+    let _bg_validator_0 =
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
+            .background();
+    let bg_validator_1 =
+        start_namada_ledger_node_wait_wasm(&test, Some(1), Some(100))?
+            .background();
+
+    // 4. Run the copied validator to get it to double vote and sign blocks
     let loc = format!("{}:{}", std::file!(), std::line!());
+
     // This node will only connect to `validator_1`, so that nodes
     // `validator_0` and `validator_0_copy` should start double signing
     let mut validator_0_copy = setup::run_cmd(
@@ -1215,42 +1239,92 @@ fn double_signing_gets_slashed() -> Result<()> {
         ["ledger"],
         Some(40),
         &test.working_dir,
-        validator_0_base_dir_copy,
+        &validator_0_base_dir_copy,
         loc,
     )?;
     validator_0_copy.exp_string(LEDGER_STARTED)?;
     validator_0_copy.exp_string(VALIDATOR_NODE)?;
-    let _bg_validator_0_copy = validator_0_copy.background();
+    let mut bg_validator_0_copy = validator_0_copy.background();
 
-    // 5. Submit a valid token transfer tx to validator 0
-    let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
-    let tx_args = [
-        "transparent-transfer",
-        "--source",
-        BERTHA,
-        "--target",
-        ALBERT,
-        "--token",
-        NAM,
-        "--amount",
-        "10.1",
-        "--node",
-        &validator_one_rpc,
-    ];
-    let _client = run!(test, Bin::Client, tx_args, Some(100))?;
-    // We don't wait for tx result - sometimes the node may crash before while
-    // it's being applied, because the slashed validator will stop voting and
-    // rewards calculation then fails with `InsufficientVotes`.
-
-    // 6. Wait for double signing evidence
+    // 5. Wait for double signing evidence
     let mut validator_1 = bg_validator_1.foreground();
-    validator_1.exp_string("Processing evidence")?;
+    const RETRIES: usize = 5;
+    for i in 0..=RETRIES {
+        if let Err(e) = validator_1.exp_string("Processing evidence") {
+            #[allow(clippy::disallowed_methods)]
+            let now = DateTimeUtc::now().to_rfc3339();
+            println!("Failed to get evidence on {}. try at {now}", i + 1);
+
+            // Often, the `validator_0_copy` detects the duplicate votes and
+            // doesn't report them. It then stores the sig in
+            // `priv_validator_state.json` which prevents it from attempting to
+            // double sign again.
+            // To get around it, we try to stop the `validator_1` that owns the
+            // consensus so that it stops producing blocks while we're clearing
+            // out the signature and restarting the duplicate validator node.
+            validator_1.interrupt()?;
+            validator_1.exp_string(LEDGER_SHUTDOWN)?;
+            validator_1.assert_success();
+            drop(validator_1);
+            let mut validator_0_copy = bg_validator_0_copy.foreground();
+            validator_0_copy.interrupt()?;
+            validator_0_copy.exp_string(LEDGER_SHUTDOWN)?;
+            validator_0_copy.assert_success();
+            drop(validator_0_copy);
+
+            // Clear out last sig
+            let chain_dir =
+                validator_0_base_dir_copy.join(test.net.chain_id.to_string());
+            let validator_state_path =
+                chain_dir.join("cometbft/data/priv_validator_state.json");
+            if validator_state_path.exists() {
+                let bytes = std::fs::read(&validator_state_path).unwrap();
+                let mut state: LastSignState =
+                    serde_json::from_slice(&bytes).unwrap();
+                state.signature = None;
+                state.signbytes = None;
+                std::fs::write(
+                    &validator_state_path,
+                    serde_json::to_vec(&state).unwrap(),
+                )
+                .unwrap()
+            }
+
+            if i == RETRIES {
+                return Err(e);
+            }
+
+            // Restart the nodes
+            let loc = format!("{}:{}", std::file!(), std::line!());
+            bg_validator_0_copy = setup::run_cmd(
+                Bin::Node,
+                ["ledger"],
+                Some(40),
+                &test.working_dir,
+                &validator_0_base_dir_copy,
+                loc,
+            )?
+            .background();
+            validator_1 = start_namada_ledger_node(&test, Some(1), Some(100))?;
+        } else {
+            break;
+        }
+    }
+    #[allow(clippy::disallowed_methods)]
+    let now = DateTimeUtc::now().to_rfc3339();
+    println!("Got evidence at {now}");
 
     println!("\nPARSING SLASH MESSAGE\n");
     let (_, res) = validator_1
         .exp_regex(r"Slashing [a-z0-9]+ for Duplicate vote in epoch [0-9]+")
         .unwrap();
     println!("\n{res}\n");
+
+    // Stop the duplicate validator to avoid getting any more slashes
+    let mut validator_0_copy = bg_validator_0_copy.foreground();
+    validator_0_copy.interrupt()?;
+    validator_0_copy.assert_success();
+
     // Wait to commit a block
     validator_1.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
     let bg_validator_1 = validator_1.background();
@@ -1262,10 +1336,11 @@ fn double_signing_gets_slashed() -> Result<()> {
         + 1u64;
 
     // Query slashes
+    let validator_1_rpc = get_actor_rpc(&test, Who::Validator(1));
     let mut client = run!(
         test,
         Bin::Client,
-        &["slashes", "--node", &validator_one_rpc],
+        &["slashes", "--node", &validator_1_rpc],
         Some(40)
     )?;
     client.exp_string("No processed slashes found")?;
@@ -1280,9 +1355,9 @@ fn double_signing_gets_slashed() -> Result<()> {
 
     println!("\n{processing_epoch}\n");
 
-    // 6. Wait for processing epoch
+    // 6. Wait for slash processing epoch
     loop {
-        let epoch = epoch_sleep(&test, &validator_one_rpc, 240)?;
+        let epoch = epoch_sleep(&test, &validator_1_rpc, 240)?;
         println!("\nCurrent epoch: {}", epoch);
         if epoch > processing_epoch {
             break;
@@ -1297,7 +1372,7 @@ fn double_signing_gets_slashed() -> Result<()> {
             "--validator",
             "validator-0",
             "--node",
-            &validator_one_rpc
+            &validator_1_rpc
         ],
         Some(40)
     )?;
@@ -1306,7 +1381,7 @@ fn double_signing_gets_slashed() -> Result<()> {
     let mut client = run!(
         test,
         Bin::Client,
-        &["slashes", "--node", &validator_one_rpc],
+        &["slashes", "--node", &validator_1_rpc],
         Some(40)
     )?;
     client.exp_string("Processed slashes:")?;
@@ -1317,7 +1392,7 @@ fn double_signing_gets_slashed() -> Result<()> {
         "--validator",
         "validator-0-validator",
         "--node",
-        &validator_one_rpc,
+        &validator_1_rpc,
     ];
     let mut client =
         run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
@@ -1325,9 +1400,9 @@ fn double_signing_gets_slashed() -> Result<()> {
     client.assert_success();
 
     // Wait until pipeline epoch to see if the validator is back in consensus
-    let cur_epoch = epoch_sleep(&test, &validator_one_rpc, 240)?;
+    let cur_epoch = epoch_sleep(&test, &validator_1_rpc, 240)?;
     loop {
-        let epoch = epoch_sleep(&test, &validator_one_rpc, 240)?;
+        let epoch = epoch_sleep(&test, &validator_1_rpc, 240)?;
         println!("\nCurrent epoch: {}", epoch);
         if epoch > cur_epoch + pipeline_len + 1u64 {
             break;
@@ -1341,7 +1416,7 @@ fn double_signing_gets_slashed() -> Result<()> {
             "--validator",
             "validator-0",
             "--node",
-            &validator_one_rpc
+            &validator_1_rpc
         ],
         Some(40)
     )?;
@@ -1349,8 +1424,8 @@ fn double_signing_gets_slashed() -> Result<()> {
         .exp_regex(r"Validator [a-z0-9]+ is in the .* set")
         .unwrap();
 
-    // 7. Make sure the the first validator can proceed to the next epoch
-    epoch_sleep(&test, &validator_one_rpc, 120)?;
+    // 7. Make sure the first validator can proceed to the next epoch
+    epoch_sleep(&test, &validator_1_rpc, 120)?;
 
     // Make sure there are no errors
     let mut validator_1 = bg_validator_1.foreground();
@@ -1371,7 +1446,7 @@ fn test_epoch_sleep() -> Result<()> {
             genesis.parameters.parameters.epochs_per_year =
                 epochs_per_year_from_min_duration(30);
             genesis.parameters.parameters.min_num_of_blocks = 1;
-            setup::set_validators(1, genesis, base_dir, |_| 0)
+            setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
         },
         None,
     )?;
@@ -1454,6 +1529,7 @@ fn deactivate_and_reactivate_validator() -> Result<()> {
                 genesis,
                 base_dir,
                 default_port_offset,
+                vec![],
             );
             genesis.transactions.bond = Some({
                 let wallet = get_pregenesis_wallet(base_dir);
@@ -1627,6 +1703,7 @@ fn test_invalid_validator_txs() -> Result<()> {
                 genesis,
                 base_dir,
                 default_port_offset,
+                vec![],
             );
             genesis.transactions.bond = Some({
                 let wallet = get_pregenesis_wallet(base_dir);
@@ -1799,7 +1876,13 @@ fn change_consensus_key() -> Result<()> {
             genesis.parameters.parameters.epochs_per_year = 31_536_000;
             genesis.parameters.pos_params.pipeline_len = pipeline_len;
             genesis.parameters.pos_params.unbonding_len = 4;
-            setup::set_validators(2, genesis, base_dir, default_port_offset)
+            setup::set_validators(
+                2,
+                genesis,
+                base_dir,
+                default_port_offset,
+                vec![],
+            )
         },
         None,
     )?;
@@ -1908,7 +1991,7 @@ fn proposal_change_shielded_reward() -> Result<()> {
     let test = setup::network(
         |mut genesis, base_dir: &_| {
             genesis.parameters.gov_params.max_proposal_code_size = 600000;
-            setup::set_validators(1, genesis, base_dir, |_| 0u16)
+            setup::set_validators(1, genesis, base_dir, |_| 0u16, vec![])
         },
         None,
     )?;
@@ -1929,7 +2012,7 @@ fn proposal_change_shielded_reward() -> Result<()> {
     let validator_0_rpc = get_actor_rpc(&test, Who::Validator(0));
 
     // 1.1 Delegate some token
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "bond",
         "--validator",
         "validator-0",
@@ -1939,7 +2022,7 @@ fn proposal_change_shielded_reward() -> Result<()> {
         "900",
         "--node",
         &validator_0_rpc,
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
@@ -1954,15 +2037,15 @@ fn proposal_change_shielded_reward() -> Result<()> {
     );
     let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
 
-    let submit_proposal_args = vec![
+    let submit_proposal_args = apply_use_device(vec![
         "init-proposal",
         "--data-path",
         valid_proposal_json_path.to_str().unwrap(),
         "--gas-limit",
-        "2000000",
+        "4000000",
         "--node",
         &validator_one_rpc,
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
@@ -2014,7 +2097,7 @@ fn proposal_change_shielded_reward() -> Result<()> {
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
 
-    let submit_proposal_vote_delagator = vec![
+    let submit_proposal_vote_delagator = apply_use_device(vec![
         "vote-proposal",
         "--proposal-id",
         "0",
@@ -2024,7 +2107,7 @@ fn proposal_change_shielded_reward() -> Result<()> {
         BERTHA,
         "--node",
         &validator_one_rpc,
-    ];
+    ]);
 
     let mut client =
         run!(test, Bin::Client, submit_proposal_vote_delagator, Some(40))?;
@@ -2130,13 +2213,7 @@ fn test_sync_chain() -> Result<()> {
     // Setup the chain
     let mut join_network = setup::run_cmd(
         Bin::Client,
-        [
-            "utils",
-            "join-network",
-            "--chain-id",
-            chain_id_raw.as_str(),
-            "--dont-prefetch-wasm",
-        ],
+        ["utils", "join-network", "--chain-id", chain_id_raw.as_str()],
         Some(60),
         &test.working_dir,
         base_dir,
@@ -2233,7 +2310,13 @@ where
 fn rollback() -> Result<()> {
     let test = setup::network(
         |genesis, base_dir| {
-            setup::set_validators(1, genesis, base_dir, default_port_offset)
+            setup::set_validators(
+                1,
+                genesis,
+                base_dir,
+                default_port_offset,
+                vec![],
+            )
         },
         // slow block production rate
         Some("5s"),
@@ -2258,7 +2341,7 @@ fn rollback() -> Result<()> {
     let ledger = ledger.background();
 
     // send a few transactions
-    let txs_args = vec![vec![
+    let txs_args = vec![apply_use_device(vec![
         "transparent-transfer",
         "--source",
         BERTHA,
@@ -2272,7 +2355,7 @@ fn rollback() -> Result<()> {
         BERTHA_KEY,
         "--node",
         &validator_one_rpc,
-    ]];
+    ])];
 
     for tx_args in &txs_args {
         let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
@@ -2338,7 +2421,13 @@ fn masp_txs_and_queries() -> Result<()> {
             genesis.parameters.parameters.epochs_per_year =
                 epochs_per_year_from_min_duration(3600);
             genesis.parameters.parameters.min_num_of_blocks = 1;
-            setup::set_validators(1, genesis, base_dir, default_port_offset)
+            setup::set_validators(
+                1,
+                genesis,
+                base_dir,
+                default_port_offset,
+                vec![],
+            )
         },
         None,
     )?;
@@ -2358,7 +2447,7 @@ fn masp_txs_and_queries() -> Result<()> {
             .background();
 
     let rpc_address = get_actor_rpc(&test, who);
-    let _ep1 = epoch_sleep(&test, &rpc_address, 720)?;
+    wait_for_block_height(&test, &rpc_address, 1, 30)?;
 
     // add necessary viewing keys to shielded context
     let mut sync = run_as!(

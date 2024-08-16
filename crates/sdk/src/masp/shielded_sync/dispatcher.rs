@@ -13,11 +13,10 @@ use futures::task::AtomicWaker;
 use masp_primitives::merkle_tree::{CommitmentTree, IncrementalWitness};
 use masp_primitives::sapling::{Node, ViewingKey};
 use masp_primitives::transaction::Transaction;
-use masp_primitives::zip32::ExtendedSpendingKey;
 use namada_core::collections::HashMap;
 use namada_core::control_flow::time::{Duration, LinearBackoff, Sleep};
 use namada_core::hints;
-use namada_core::storage::{BlockHeight, TxIndex};
+use namada_core::storage::BlockHeight;
 use namada_tx::IndexedTx;
 
 use super::utils::{IndexedNoteEntry, MaspClient};
@@ -29,9 +28,11 @@ use crate::masp::utils::{
     blocks_left_to_fetch, DecryptedData, Fetched, RetryStrategy, TrialDecrypted,
 };
 use crate::masp::{
-    to_viewing_key, NoteIndex, ShieldedContext, ShieldedUtils, WitnessMap,
+    to_viewing_key, MaspExtendedSpendingKey, NoteIndex, ShieldedContext,
+    ShieldedUtils, WitnessMap,
 };
 use crate::task_env::TaskSpawner;
+use crate::wallet::{DatedKeypair, DatedSpendingKey};
 use crate::{MaybeSend, MaybeSync};
 
 struct AsyncCounterInner {
@@ -316,8 +317,8 @@ where
         mut self,
         start_query_height: Option<BlockHeight>,
         last_query_height: Option<BlockHeight>,
-        sks: &[ExtendedSpendingKey],
-        fvks: &[ViewingKey],
+        sks: &[DatedSpendingKey],
+        fvks: &[DatedKeypair<ViewingKey>],
     ) -> Result<Option<ShieldedContext<U>>, Error> {
         let initial_state = self
             .perform_initial_setup(
@@ -441,11 +442,8 @@ where
                 h.as_ref().map(|itx| &itx.height) < Some(last_query_height)
             })
         {
-            *h = Some(IndexedTx {
-                height: *last_query_height,
-                // NB: the entire block is synced
-                index: TxIndex(u32::MAX),
-            });
+            // NB: the entire block is synced
+            *h = Some(IndexedTx::entire_block(*last_query_height));
         }
 
         Ok(())
@@ -455,8 +453,8 @@ where
         &mut self,
         start_query_height: Option<BlockHeight>,
         last_query_height: Option<BlockHeight>,
-        sks: &[ExtendedSpendingKey],
-        fvks: &[ViewingKey],
+        sks: &[DatedSpendingKey],
+        fvks: &[DatedKeypair<ViewingKey>],
     ) -> Result<InitialState, Error> {
         if start_query_height > last_query_height {
             return Err(Error::Other(format!(
@@ -466,12 +464,25 @@ where
             )));
         }
 
-        for esk in sks {
-            let vk = to_viewing_key(esk).vk;
-            self.ctx.vk_heights.entry(vk).or_default();
-        }
-        for vk in fvks {
-            self.ctx.vk_heights.entry(*vk).or_default();
+        for vk in sks
+            .iter()
+            .map(|esk| {
+                esk.map(|k| {
+                    to_viewing_key(&MaspExtendedSpendingKey::from(k)).vk
+                })
+            })
+            .chain(fvks.iter().copied())
+        {
+            if let Some(h) = self.ctx.vk_heights.entry(vk.key).or_default() {
+                let birthday = IndexedTx::entire_block(vk.birthday);
+                if birthday > *h {
+                    *h = birthday;
+                }
+            } else if vk.birthday >= BlockHeight::first() {
+                self.ctx
+                    .vk_heights
+                    .insert(vk.key, Some(IndexedTx::entire_block(vk.birthday)));
+            }
         }
 
         // the latest block height which has been added to the witness Merkle
@@ -773,11 +784,14 @@ where
 
     fn spawn_trial_decryptions(&self, itx: IndexedTx, txs: &[Transaction]) {
         for tx in txs {
-            for vk in self.ctx.vk_heights.keys() {
-                let vk = *vk;
+            for (vk, vk_height) in self.ctx.vk_heights.iter() {
+                let key_is_outdated = vk_height.as_ref() < Some(&itx);
+                let cached = self.cache.trial_decrypted.get(&itx, vk).is_some();
 
-                if self.cache.trial_decrypted.get(&itx, &vk).is_none() {
+                if key_is_outdated && !cached {
                     let tx = tx.clone();
+                    let vk = *vk;
+
                     self.spawn_sync(move |interrupt| {
                         Message::TrialDecrypt(
                             itx,
@@ -846,7 +860,7 @@ mod dispatcher_tests {
     use std::hint::spin_loop;
 
     use futures::join;
-    use namada_core::storage::BlockHeight;
+    use namada_core::storage::{BlockHeight, TxIndex};
     use namada_tx::IndexedTx;
     use tempfile::tempdir;
 
@@ -856,10 +870,11 @@ mod dispatcher_tests {
     use crate::masp::fs::FsShieldedUtils;
     use crate::masp::test_utils::{
         arbitrary_masp_tx, arbitrary_masp_tx_with_fee_unshielding,
-        arbitrary_vk, TestingMaspClient,
+        arbitrary_vk, dated_arbitrary_vk, TestingMaspClient,
     };
     use crate::masp::{MaspLocalTaskEnv, ShieldedSyncConfig};
     use crate::task_env::TaskEnvironment;
+    use crate::wallet::StoredKeypair;
 
     #[tokio::test]
     async fn test_applying_cache_drains_decrypted_data() {
@@ -908,10 +923,7 @@ mod dispatcher_tests {
                 assert!(dispatcher.cache.trial_decrypted.is_empty());
                 let expected = BTreeMap::from([(
                     arbitrary_vk(),
-                    Some(IndexedTx {
-                        height: 9.into(),
-                        index: TxIndex(u32::MAX),
-                    }),
+                    Some(IndexedTx::entire_block(9.into())),
                 )]);
                 assert_eq!(expected, dispatcher.ctx.vk_heights);
             })
@@ -1141,7 +1153,7 @@ mod dispatcher_tests {
             .client(client)
             .retry_strategy(RetryStrategy::Times(0))
             .build();
-        let vk = arbitrary_vk();
+        let vk = dated_arbitrary_vk();
 
         // we first test that with no retries, a fetching failure
         // stops process
@@ -1212,11 +1224,8 @@ mod dispatcher_tests {
 
                 assert_eq!(keys, expected);
                 assert_eq!(
-                    *ctx.vk_heights[&vk].as_ref().unwrap(),
-                    IndexedTx {
-                        height: 2.into(),
-                        index: TxIndex(u32::MAX),
-                    }
+                    *ctx.vk_heights[&vk.key].as_ref().unwrap(),
+                    IndexedTx::entire_block(2.into(),)
                 );
                 assert_eq!(ctx.note_map.len(), 2);
             })
@@ -1243,7 +1252,7 @@ mod dispatcher_tests {
             .block_batch_size(1)
             .build();
 
-        let vk = arbitrary_vk();
+        let vk = dated_arbitrary_vk();
         MaspLocalTaskEnv::new(4)
             .expect("Test failed")
             .run(|s| async {
@@ -1340,7 +1349,7 @@ mod dispatcher_tests {
 
                 send.send_replace(true);
                 let res = dispatcher
-                    .run(None, None, &[], &[arbitrary_vk()])
+                    .run(None, None, &[], &[dated_arbitrary_vk()])
                     .await
                     .expect("Test failed");
                 assert!(res.is_none());
@@ -1359,5 +1368,97 @@ mod dispatcher_tests {
                 assert!(trial_decrypted.is_empty());
             })
             .await;
+    }
+    /// Test the the birthdays of keys are properly reflected in the key
+    /// sync heights when starting shielded sync.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn test_key_birthdays() {
+        let temp_dir = tempdir().unwrap();
+        let mut shielded_ctx =
+            FsShieldedUtils::new(temp_dir.path().to_path_buf());
+        let (client, masp_tx_sender) = TestingMaspClient::new(2.into());
+        // First test the case where no keys have been seen yet
+        let mut vk = DatedKeypair::new(arbitrary_vk(), Some(10.into()));
+        let StoredKeypair::Raw(mut sk) = serde_json::from_str::<'_, StoredKeypair::<DatedSpendingKey>>(r#""unencrypted:zsknam1q02rgh4mqqqqpqqm68m2lmd0xe9k5vf4fscmdxuvewqhdhwl0h492fj40tzl5f6gwfk6kgnaxpgct7mx9cw2he4724858jdfhrzdh3e4hu3us463gphqyl6k5hvkjwkv9r7rx3jtcueurgflgj6dx9qn4rg0caf0t9zawfcdwt3ramxlrs4jyan4wyp4nh9hj8s806ru0smk3437ejy56ewtw9ljz8rc3vkyznxdf3l5c70skcw6aatpv5de9zhxuxs5k6l6jz6zktgg0udvl<<30""#).expect("Test failed") else {
+            panic!("Test failed")
+        };
+        let masp_tx = arbitrary_masp_tx();
+        masp_tx_sender
+            .send(Some((
+                IndexedTx {
+                    height: 1.into(),
+                    index: TxIndex(1),
+                },
+                vec![masp_tx.clone()],
+            )))
+            .expect("Test failed");
+        let (_shutdown_send, shutdown_sig) = shutdown_signal();
+        let config = ShieldedSyncConfig::builder()
+            .client(client)
+            .fetched_tracker(DevNullProgressBar)
+            .scanned_tracker(DevNullProgressBar)
+            .applied_tracker(DevNullProgressBar)
+            .retry_strategy(RetryStrategy::Times(0))
+            .shutdown_signal(shutdown_sig)
+            .build();
+        shielded_ctx
+            .sync(
+                MaspLocalTaskEnv::new(4).unwrap(),
+                config.clone(),
+                None,
+                &[sk],
+                &[vk],
+            )
+            .await
+            .expect("Test failed");
+        let birthdays = shielded_ctx
+            .vk_heights
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_eq!(
+            birthdays,
+            vec![
+                Some(IndexedTx::entire_block(BlockHeight(30))),
+                Some(IndexedTx::entire_block(BlockHeight(10)))
+            ]
+        );
+
+        // Test two cases:
+        // * A birthday is less than the synced height of key
+        // * A birthday is greater than the synced height of key
+        vk.birthday = 5.into();
+        sk.birthday = 60.into();
+        masp_tx_sender
+            .send(Some((
+                IndexedTx {
+                    height: 1.into(),
+                    index: TxIndex(1),
+                },
+                vec![masp_tx.clone()],
+            )))
+            .expect("Test failed");
+        shielded_ctx
+            .sync(
+                MaspLocalTaskEnv::new(4).unwrap(),
+                config,
+                None,
+                &[sk],
+                &[vk],
+            )
+            .await
+            .expect("Test failed");
+        let birthdays = shielded_ctx
+            .vk_heights
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_eq!(
+            birthdays,
+            vec![
+                Some(IndexedTx::entire_block(BlockHeight(60))),
+                Some(IndexedTx::entire_block(BlockHeight(10)))
+            ]
+        )
     }
 }

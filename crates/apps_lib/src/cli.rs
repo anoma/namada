@@ -2281,7 +2281,7 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about(wrap!(
-                    "Submit a tx to reveal the public key an implicit \
+                    "Submit a tx to reveal the public key of an implicit \
                      account. Typically, you don't have to do this manually \
                      and the client will detect when a tx to reveal PK is \
                      needed and submit it automatically. This will write the \
@@ -3188,7 +3188,7 @@ pub mod args {
     use super::utils::*;
     use super::{ArgGroup, ArgMatches};
     use crate::client::utils::PRE_GENESIS_DIR;
-    use crate::config::genesis::GenesisAddress;
+    use crate::config::genesis::AddrOrPk;
     use crate::config::{self, Action, ActionAtHeight};
     use crate::facade::tendermint::Timeout;
     use crate::facade::tendermint_rpc::Url;
@@ -3212,6 +3212,7 @@ pub mod args {
             Err(_) => config::get_default_namada_folder(),
         }),
     );
+    pub const BIRTHDAY: ArgOpt<BlockHeight> = arg_opt("birthday");
     pub const BLOCK_HEIGHT: Arg<BlockHeight> = arg("block-height");
     pub const BLOCK_HEIGHT_OPT: ArgOpt<BlockHeight> = arg_opt("height");
     pub const BLOCK_HEIGHT_TO_OPT: ArgOpt<BlockHeight> = arg_opt("to-height");
@@ -3254,6 +3255,10 @@ pub mod args {
         arg_opt("success-sleep");
     pub const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
     pub const DATA_PATH: Arg<PathBuf> = arg("data-path");
+    pub const DATED_SPENDING_KEYS: ArgMulti<WalletDatedSpendingKey, GlobStar> =
+        arg_multi("spending-keys");
+    pub const DATED_VIEWING_KEYS: ArgMulti<WalletDatedViewingKey, GlobStar> =
+        arg_multi("viewing-keys");
     pub const DB_KEY: Arg<String> = arg("db-key");
     pub const DB_COLUMN_FAMILY: ArgDefault<String> = arg_default(
         "db-column-family",
@@ -3266,7 +3271,6 @@ pub mod args {
         arg("destination-validator");
     pub const DISCORD_OPT: ArgOpt<String> = arg_opt("discord-handle");
     pub const DO_IT: ArgFlag = flag("do-it");
-    pub const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
     pub const DRY_RUN_TX: ArgFlag = flag("dry-run");
     pub const DRY_RUN_WRAPPER_TX: ArgFlag = flag("dry-run-wrapper");
     pub const DUMP_TX: ArgFlag = flag("dump-tx");
@@ -3308,7 +3312,7 @@ pub mod args {
             )
         }),
     );
-    pub const GENESIS_BOND_SOURCE: ArgOpt<GenesisAddress> = arg_opt("source");
+    pub const GENESIS_BOND_SOURCE: ArgOpt<AddrOrPk> = arg_opt("source");
     pub const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
     pub const GENESIS_TIME: Arg<DateTimeUtc> = arg("genesis-time");
     pub const GENESIS_VALIDATOR: ArgOpt<String> =
@@ -3472,6 +3476,16 @@ pub mod args {
     pub const WITH_INDEXER: ArgOpt<String> = arg_opt("with-indexer");
     pub const TX_PATH: Arg<PathBuf> = arg("tx-path");
     pub const TX_PATH_OPT: ArgOpt<PathBuf> = TX_PATH.opt();
+    pub const DEVICE_TRANSPORT: ArgDefault<DeviceTransport> = arg_default(
+        "device-transport",
+        DefaultFn(|| {
+            if let Ok(val) = std::env::var(DEVICE_TRANSPORT_ENV_VAR) {
+                return DeviceTransport::from_str(&val).unwrap();
+            }
+            DeviceTransport::default()
+        }),
+    );
+    pub const DEVICE_TRANSPORT_ENV_VAR: &str = "NAMADA_DEVICE_TRANSPORT";
 
     /// Global command arguments
     #[derive(Clone, Debug)]
@@ -6577,8 +6591,8 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let ledger_address = CONFIG_RPC_LEDGER_ADDRESS.parse(matches);
             let last_query_height = BLOCK_HEIGHT_TO_OPT.parse(matches);
-            let spending_keys = SPENDING_KEYS.parse(matches);
-            let viewing_keys = VIEWING_KEYS.parse(matches);
+            let spending_keys = DATED_SPENDING_KEYS.parse(matches);
+            let viewing_keys = DATED_VIEWING_KEYS.parse(matches);
             let with_indexer = WITH_INDEXER.parse(matches);
             let wait_for_last_query_height =
                 WAIT_FOR_LAST_QUERY_HEIGHT.parse(matches);
@@ -6604,13 +6618,17 @@ pub mod args {
                 .arg(BLOCK_HEIGHT_TO_OPT.def().help(wrap!(
                     "Option block height to sync up to. Default is latest."
                 )))
-                .arg(SPENDING_KEYS.def().help(wrap!(
+                .arg(DATED_SPENDING_KEYS.def().help(wrap!(
                     "List of new spending keys with which to check note \
-                     ownership. These will be added to the shielded context."
+                     ownership. These will be added to the shielded context. \
+                     Appending \"<<$BLOCKHEIGHT\" to the end of each key adds \
+                     a birthday."
                 )))
-                .arg(VIEWING_KEYS.def().help(wrap!(
+                .arg(DATED_VIEWING_KEYS.def().help(wrap!(
                     "List of new viewing keys with which to check note \
-                     ownership. These will be added to the shielded context."
+                     ownership. These will be added to the shielded context. \
+                     Appending \"<<$BLOCKHEIGHT\" to the end of each key adds \
+                     a birthday."
                 )))
                 .arg(WITH_INDEXER.def().help(wrap!(
                     "Address of a `namada-masp-indexer` live instance. If \
@@ -6979,6 +6997,8 @@ pub mod args {
         type BpConversionTable = PathBuf;
         type ConfigRpcTendermintAddress = ConfigRpcAddress;
         type Data = PathBuf;
+        type DatedSpendingKey = WalletDatedSpendingKey;
+        type DatedViewingKey = WalletDatedViewingKey;
         type EthereumAddress = String;
         type Keypair = WalletKeypair;
         type MaspIndexerAddress = String;
@@ -7040,6 +7060,7 @@ pub mod args {
                 wrapper_fee_payer: self.wrapper_fee_payer.map(|x| ctx.get(&x)),
                 memo: self.memo,
                 use_device: self.use_device,
+                device_transport: self.device_transport,
             })
         }
     }
@@ -7050,7 +7071,8 @@ pub mod args {
                 DRY_RUN_TX
                     .def()
                     .help(wrap!("Simulate the transaction application."))
-                    .conflicts_with(DRY_RUN_WRAPPER_TX.name),
+                    .conflicts_with(DRY_RUN_WRAPPER_TX.name)
+                    .conflicts_with(USE_DEVICE.name),
             )
             .arg(
                 DRY_RUN_WRAPPER_TX
@@ -7160,10 +7182,24 @@ pub mod args {
                     ))
                     .conflicts_with(DISPOSABLE_SIGNING_KEY.name),
             )
-            .arg(USE_DEVICE.def().help(wrap!(
-                "Use an attached hardware wallet device to sign the \
-                 transaction."
-            )))
+            .arg(
+                USE_DEVICE
+                    .def()
+                    .help(wrap!(
+                        "Use an attached hardware wallet device to sign the \
+                         transaction."
+                    ))
+                    .conflicts_with(DRY_RUN_TX.name),
+            )
+            .arg(
+                DEVICE_TRANSPORT
+                    .def()
+                    .help(wrap!(
+                        "Select transport for hardware wallet from \"hid\" \
+                         (default) or \"tcp\"."
+                    ))
+                    .conflicts_with(DRY_RUN_TX.name),
+            )
             .arg(
                 MEMO_OPT
                     .def()
@@ -7205,6 +7241,7 @@ pub mod args {
                     None => TxExpiration::Default,
                 }
             };
+            let device_transport = DEVICE_TRANSPORT.parse(matches);
             Self {
                 dry_run,
                 dry_run_wrapper,
@@ -7228,6 +7265,7 @@ pub mod args {
                 output_folder,
                 memo,
                 use_device,
+                device_transport,
             }
         }
     }
@@ -7317,7 +7355,8 @@ pub mod args {
                 find_viewing_key(&mut wallet)
             } else {
                 find_viewing_key(&mut ctx.borrow_mut_chain_or_exit().wallet)
-            };
+            }
+            .key;
 
             Ok(PayAddressGen::<SdkTypes> {
                 alias: self.alias,
@@ -7356,23 +7395,27 @@ pub mod args {
             let shielded = SHIELDED.parse(matches);
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
+            let birthday = BIRTHDAY.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
-            let use_device = USE_DEVICE.parse(matches);
             let derivation_path = HD_DERIVATION_PATH.parse(matches);
             let allow_non_compliant =
                 HD_ALLOW_NON_COMPLIANT_DERIVATION_PATH.parse(matches);
             let prompt_bip39_passphrase =
                 HD_PROMPT_BIP39_PASSPHRASE.parse(matches);
+            let use_device = USE_DEVICE.parse(matches);
+            let device_transport = DEVICE_TRANSPORT.parse(matches);
             Self {
                 scheme,
                 shielded,
                 alias,
                 alias_force,
                 unsafe_dont_encrypt,
-                use_device,
                 derivation_path,
                 allow_non_compliant,
                 prompt_bip39_passphrase,
+                use_device,
+                device_transport,
+                birthday,
             }
         }
 
@@ -7394,6 +7437,11 @@ pub mod args {
                     "Force overwrite the alias if it already exists."
                 )),
             )
+            .arg(BIRTHDAY.def().help(wrap!(
+                "A block height after which this key is being created. Used \
+                 for optimizing MASP operations. If none is provided, \
+                 defaults to the first block height."
+            )))
             .arg(UNSAFE_DONT_ENCRYPT.def().help(wrap!(
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
                  used in a live network."
@@ -7401,6 +7449,10 @@ pub mod args {
             .arg(USE_DEVICE.def().help(wrap!(
                 "Derive an address and public key from the seed stored on the \
                  connected hardware wallet."
+            )))
+            .arg(DEVICE_TRANSPORT.def().help(wrap!(
+                "Select transport for hardware wallet from \"hid\" (default) \
+                 or \"tcp\"."
             )))
             .arg(HD_DERIVATION_PATH.def().help(wrap!(
                 "HD key derivation path. Use keyword `default` to refer to a \
@@ -7438,6 +7490,7 @@ pub mod args {
             let raw = RAW_KEY_GEN.parse(matches);
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
+            let birthday = BIRTHDAY.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let derivation_path = HD_DERIVATION_PATH.parse(matches);
             let allow_non_compliant =
@@ -7450,6 +7503,7 @@ pub mod args {
                 raw,
                 alias,
                 alias_force,
+                birthday,
                 unsafe_dont_encrypt,
                 derivation_path,
                 allow_non_compliant,
@@ -7481,6 +7535,11 @@ pub mod args {
             .arg(ALIAS.def().help(wrap!("The key and address alias.")))
             .arg(ALIAS_FORCE.def().help(wrap!(
                 "Override the alias without confirmation if it already exists."
+            )))
+            .arg(BIRTHDAY.def().help(wrap!(
+                "A block height after which this key is being created. Used \
+                 for optimizing MASP operations. If none is provided, \
+                 defaults to the first block height."
             )))
             .arg(UNSAFE_DONT_ENCRYPT.def().help(wrap!(
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
@@ -7653,11 +7712,13 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
+            let birthday = BIRTHDAY.parse(matches);
             let value = VALUE.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
                 alias,
                 alias_force,
+                birthday,
                 value,
                 unsafe_dont_encrypt,
             }
@@ -7671,6 +7732,11 @@ pub mod args {
             )
             .arg(ALIAS_FORCE.def().help(wrap!(
                 "Override the alias without confirmation if it already exists."
+            )))
+            .arg(BIRTHDAY.def().help(wrap!(
+                "A block height after which this key is being created. Used \
+                 for optimizing MASP operations. If none is provided, \
+                 defaults to the first block height."
             )))
             .arg(VALUE.def().help(wrap!(
                 "Any value of the following:\n- transparent pool secret \
@@ -7767,7 +7833,6 @@ pub mod args {
         pub chain_id: ChainId,
         pub genesis_validator: Option<String>,
         pub pre_genesis_path: Option<PathBuf>,
-        pub dont_prefetch_wasm: bool,
         pub allow_duplicate_ip: bool,
         pub add_persistent_peers: bool,
     }
@@ -7777,14 +7842,12 @@ pub mod args {
             let chain_id = CHAIN_ID.parse(matches);
             let genesis_validator = GENESIS_VALIDATOR.parse(matches);
             let pre_genesis_path = PRE_GENESIS_PATH.parse(matches);
-            let dont_prefetch_wasm = DONT_PREFETCH_WASM.parse(matches);
             let allow_duplicate_ip = ALLOW_DUPLICATE_IP.parse(matches);
             let add_persistent_peers = ADD_PERSISTENT_PEERS.parse(matches);
             Self {
                 chain_id,
                 genesis_validator,
                 pre_genesis_path,
-                dont_prefetch_wasm,
                 allow_duplicate_ip,
                 add_persistent_peers,
             }
@@ -7795,9 +7858,6 @@ pub mod args {
                                           https://github.com/heliaxdev/anoma-network-config")))
                 .arg(GENESIS_VALIDATOR.def().help(wrap!("The alias of the genesis validator that you want to set up as, if any.")))
                 .arg(PRE_GENESIS_PATH.def().help(wrap!("The path to the pre-genesis directory for genesis validator, if any. Defaults to \"{base-dir}/pre-genesis/{genesis-validator}\".")))
-            .arg(DONT_PREFETCH_WASM.def().help(wrap!(
-                "Do not pre-fetch WASM.")
-            ))
             .arg(ALLOW_DUPLICATE_IP.def().help(wrap!(
                 "Toggle to disable guard against peers connecting from the \
                  same IP. This option shouldn't be used in mainnet.")
@@ -7982,7 +8042,7 @@ pub mod args {
 
     #[derive(Clone, Debug)]
     pub struct GenesisBond {
-        pub source: GenesisAddress,
+        pub source: AddrOrPk,
         pub validator: EstablishedAddress,
         pub bond_amount: token::DenominatedAmount,
         pub output: PathBuf,
@@ -7993,7 +8053,7 @@ pub mod args {
             let validator = GENESIS_VALIDATOR_ADDRESS.parse(matches);
             let source =
                 GENESIS_BOND_SOURCE.parse(matches).unwrap_or_else(|| {
-                    GenesisAddress::EstablishedAddress(validator.clone())
+                    AddrOrPk::Address(Address::Established(validator.clone()))
                 });
             let bond_amount = AMOUNT.parse(matches);
             let output = PATH.parse(matches);
@@ -8198,6 +8258,7 @@ pub mod args {
         pub output: Option<PathBuf>,
         pub validator_alias: Option<String>,
         pub use_device: bool,
+        pub device_transport: DeviceTransport,
     }
 
     impl Args for SignGenesisTxs {
@@ -8206,11 +8267,13 @@ pub mod args {
             let output = OUTPUT.parse(matches);
             let validator_alias = ALIAS_OPT.parse(matches);
             let use_device = USE_DEVICE.parse(matches);
+            let device_transport = DEVICE_TRANSPORT.parse(matches);
             Self {
                 path,
                 output,
                 validator_alias,
                 use_device,
+                device_transport,
             }
         }
 
@@ -8232,6 +8295,10 @@ pub mod args {
             .arg(USE_DEVICE.def().help(wrap!(
                 "Derive an address and public key from the seed stored on the \
                  connected hardware wallet."
+            )))
+            .arg(DEVICE_TRANSPORT.def().help(wrap!(
+                "Select transport for hardware wallet from \"hid\" (default) \
+                 or \"tcp\"."
             )))
         }
     }

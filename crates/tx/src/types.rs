@@ -1770,6 +1770,17 @@ pub struct IndexedTx {
     pub index: TxIndex,
 }
 
+impl IndexedTx {
+    /// Create an [`IndexedTx`] that upper bounds the entire range of
+    /// txs in a block with some height `height`.
+    pub const fn entire_block(height: BlockHeight) -> Self {
+        Self {
+            height,
+            index: TxIndex(u32::MAX),
+        }
+    }
+}
+
 impl Default for IndexedTx {
     fn default() -> Self {
         Self {

@@ -1,5 +1,74 @@
 # CHANGELOG
 
+## v0.42.0
+
+Namada 0.42.0 is a minor release that includes refactor of crates dependency graph using dependency injection, improvements in client check and node's stability.
+
+### BUG FIXES
+
+- Workaround Windows problems to be able to build on it.
+  ([\#3553](https://github.com/anoma/namada/pull/3553))
+- Improve client side checks for update-account transaction.
+  ([\#3566](https://github.com/anoma/namada/pull/3566))
+- Do not load shed tower-abci info service.
+  ([\#3576](https://github.com/anoma/namada/pull/3576))
+- No-op instead of error in wasm for withdraw txs if no tokens are available
+  to withdraw. Automatically submit reveal pk tx for source for shielding
+  transfers. ([\#3594](https://github.com/anoma/namada/pull/3594))
+- Fix the behavior of the MASP VP when processing an IBC Receive message
+  involves unescrowing. ([\#3611](https://github.com/anoma/namada/pull/3611))
+
+### FEATURES
+
+- Added support for Ledger wallet TCP transport.
+  ([\#3593](https://github.com/anoma/namada/pull/3593))
+
+### IMPROVEMENTS
+
+- Added two new crates, namada_vm and namada_vp and removed namada crate that
+  contained various loosely related code. Moved the native VP implementations
+  to the relevant crates and replaced their cross-dependencies with dependency-
+  injection. ([\#3402](https://github.com/anoma/namada/pull/3402))
+- Replaced cross-system dependencies in namada_shielded_token crate with
+  dependency-injection. ([\#3466](https://github.com/anoma/namada/pull/3466))
+- Added a new namada_systems crate to contain abstract systems interfaces,
+  previously added to core crate. Also switched to use the concrete
+  storage error and result type instead of the generic associated
+  type which reduces the amount of typing needed one the caller side.
+  ([\#3472](https://github.com/anoma/namada/pull/3472))
+- Replaced cross-system dependencies in namada_governance crate with dependency-
+  injection. ([\#3482](https://github.com/anoma/namada/pull/3482))
+- Replaced cross-system dependencies in namada_proof_of_stake crate with
+  dependency-injection. ([\#3497](https://github.com/anoma/namada/pull/3497))
+- Decode asset types to addresses when generating test vectors if possible.
+  ([\#3507](https://github.com/anoma/namada/pull/3507))
+- Replaced cross-system dependencies in namada_ibc crate with dependency-
+  injection. ([\#3509](https://github.com/anoma/namada/pull/3509))
+- Improved tracing messages regarding MASP fee payment.
+  ([\#3547](https://github.com/anoma/namada/pull/3547))
+- Updated the gas costs based on benchmarks ran on v41.
+  ([\#3554](https://github.com/anoma/namada/pull/3554))
+- Removed unnecessary trait bound from declarations.
+  ([\#3577](https://github.com/anoma/namada/pull/3577))
+- Fxing comments and strings.
+  ([\#3589](https://github.com/anoma/namada/pull/3589))
+- Improved the `max_block_time` estimate.
+  ([\#3591](https://github.com/anoma/namada/pull/3591))
+- Refactor signature fetching data.
+  ([\#3592](https://github.com/anoma/namada/pull/3592))
+- Do not try to download wasms artifacts from an untrusted source.
+  ([\#3598](https://github.com/anoma/namada/pull/3598))
+- Support additional address kinds in `balances.toml` genesis file.
+  Previously, only established addresses and public keys were supported.
+  ([\#3614](https://github.com/anoma/namada/pull/3614))
+- Display the hash of the proposal wasm code when querying proposals with
+  associated wasm payload. ([\#3617](https://github.com/anoma/namada/pull/3617))
+
+### TESTING
+
+- Enable E2E tests to be run using hardware wallet.
+  ([\#3570](https://github.com/anoma/namada/pull/3570))
+
 ## v0.41.0
 
 Namada 0.41.0 is a minor release that primarily improves gas, fixes bugs related to signature verification and a memory leak from a dependency, and includes shielded sync upgrades.
@@ -582,6 +651,9 @@ Namada 0.33.0 is a minor release that contains various new features, improvement
 
 - move query_ibc_tokens and lookup_ibc_token_alias to sdk
   ([\#2729](https://github.com/anoma/namada/issues/2729))
+
+### SDK
+
 - Add a new method to the sdk to change a validator consensus key.
   ([\#3037](https://github.com/anoma/namada/pull/3037))
 - Improve the function to update an enstablished address via the sdk.

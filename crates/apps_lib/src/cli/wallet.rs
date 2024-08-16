@@ -9,9 +9,7 @@ use borsh_ext::BorshSerializeExt;
 use color_eyre::eyre::Result;
 use itertools::sorted;
 use ledger_namada_rs::{BIP44Path, NamadaApp};
-use ledger_transport_hid::hidapi::HidApi;
-use ledger_transport_hid::TransportNativeHID;
-use masp_primitives::zip32::ExtendedFullViewingKey;
+use namada_core::storage::BlockHeight;
 use namada_sdk::address::{Address, DecodeError};
 use namada_sdk::io::Io;
 use namada_sdk::key::*;
@@ -31,7 +29,7 @@ use crate::cli::{args, cmds, Context};
 use crate::client::utils::PRE_GENESIS_DIR;
 use crate::tendermint_node::validator_key_to_json;
 use crate::wallet::{
-    self, read_and_confirm_encryption_password, CliWalletUtils,
+    self, read_and_confirm_encryption_password, CliWalletUtils, WalletTransport,
 };
 
 impl CliApi {
@@ -195,6 +193,7 @@ fn shielded_key_derive(
         allow_non_compliant,
         prompt_bip39_passphrase,
         use_device,
+        birthday,
         ..
     }: args::KeyDerive,
 ) {
@@ -218,6 +217,7 @@ fn shielded_key_derive(
             .derive_store_spending_key_from_mnemonic_code(
                 alias,
                 alias_force,
+                birthday,
                 derivation_path,
                 None,
                 prompt_bip39_passphrase,
@@ -256,6 +256,7 @@ fn shielded_key_gen(
         derivation_path,
         allow_non_compliant,
         prompt_bip39_passphrase,
+        birthday,
         ..
     }: args::KeyGen,
 ) {
@@ -263,7 +264,13 @@ fn shielded_key_gen(
     let alias = alias.to_lowercase();
     let password = read_and_confirm_encryption_password(unsafe_dont_encrypt);
     let alias = if raw {
-        wallet.gen_store_spending_key(alias, password, alias_force, &mut OsRng)
+        wallet.gen_store_spending_key(
+            alias,
+            birthday,
+            password,
+            alias_force,
+            &mut OsRng,
+        )
     } else {
         let derivation_path = decode_shielded_derivation_path(derivation_path)
             .unwrap_or_else(|err| {
@@ -283,9 +290,10 @@ fn shielded_key_gen(
             &mut OsRng,
             prompt_bip39_passphrase,
         );
-        wallet.derive_store_hd_spendind_key(
+        wallet.derive_store_hd_spending_key(
             alias,
             alias_force,
+            birthday,
             seed,
             derivation_path,
             password,
@@ -321,7 +329,7 @@ fn payment_address_gen(
 ) {
     let mut wallet = load_wallet(ctx);
     let alias = alias.to_lowercase();
-    let viewing_key = ExtendedFullViewingKey::from(viewing_key).fvk.vk;
+    let viewing_key = viewing_key.as_viewing_key();
     let (div, _g_d) = find_valid_diversifier(&mut OsRng);
     let masp_payment_addr = viewing_key
         .to_payment_address(div)
@@ -348,6 +356,7 @@ fn shielded_key_address_add(
     io: &impl Io,
     alias: String,
     alias_force: bool,
+    birthday: Option<BlockHeight>,
     masp_value: MaspValue,
     unsafe_dont_encrypt: bool,
 ) {
@@ -356,7 +365,7 @@ fn shielded_key_address_add(
     let (alias, typ) = match masp_value {
         MaspValue::FullViewingKey(viewing_key) => {
             let alias = wallet
-                .insert_viewing_key(alias, viewing_key, alias_force)
+                .insert_viewing_key(alias, viewing_key, birthday, alias_force)
                 .unwrap_or_else(|| {
                     edisplay_line!(io, "Viewing key not added");
                     cli::safe_exit(1);
@@ -371,6 +380,7 @@ fn shielded_key_address_add(
                     alias,
                     alias_force,
                     spending_key,
+                    birthday,
                     password,
                     None,
                 )
@@ -446,6 +456,7 @@ async fn transparent_key_and_address_derive(
         allow_non_compliant,
         prompt_bip39_passphrase,
         use_device,
+        device_transport,
         ..
     }: args::KeyDerive,
 ) {
@@ -485,16 +496,8 @@ async fn transparent_key_and_address_derive(
             })
             .0
     } else {
-        let hidapi = HidApi::new().unwrap_or_else(|err| {
-            edisplay_line!(io, "Failed to create HidApi: {}", err);
-            cli::safe_exit(1)
-        });
-        let app = NamadaApp::new(
-            TransportNativeHID::new(&hidapi).unwrap_or_else(|err| {
-                edisplay_line!(io, "Unable to connect to Ledger: {}", err);
-                cli::safe_exit(1)
-            }),
-        );
+        let transport = WalletTransport::from_arg(device_transport);
+        let app = NamadaApp::new(transport);
         let response = app
             .get_address_and_pubkey(
                 &BIP44Path {
@@ -797,6 +800,7 @@ fn add_key_or_address(
     io: &impl Io,
     alias: String,
     alias_force: bool,
+    birthday: Option<BlockHeight>,
     value: KeyAddrAddValue,
     unsafe_dont_encrypt: bool,
 ) {
@@ -822,6 +826,7 @@ fn add_key_or_address(
             io,
             alias,
             alias_force,
+            birthday,
             masp_value,
             unsafe_dont_encrypt,
         ),
@@ -836,8 +841,8 @@ fn key_address_add(
         alias,
         alias_force,
         value,
+        birthday,
         unsafe_dont_encrypt,
-        ..
     }: args::KeyAddressAdd,
 ) {
     let value = KeyAddrAddValue::from_str(&value).unwrap_or_else(|err| {
@@ -845,7 +850,15 @@ fn key_address_add(
         display_line!(io, "No changes are persisted. Exiting.");
         cli::safe_exit(1)
     });
-    add_key_or_address(ctx, io, alias, alias_force, value, unsafe_dont_encrypt)
+    add_key_or_address(
+        ctx,
+        io,
+        alias,
+        alias_force,
+        birthday,
+        value,
+        unsafe_dont_encrypt,
+    )
 }
 
 /// Remove keys and addresses
@@ -1302,6 +1315,7 @@ fn key_import(
             io,
             alias,
             alias_force,
+            None,
             masp_value,
             unsafe_dont_encrypt,
         );
