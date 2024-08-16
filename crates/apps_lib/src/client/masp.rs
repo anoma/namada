@@ -4,7 +4,6 @@ use std::time::Duration;
 
 use color_eyre::owo_colors::OwoColorize;
 use masp_primitives::sapling::ViewingKey;
-use masp_primitives::zip32::ExtendedSpendingKey;
 use namada_sdk::error::Error;
 use namada_sdk::io::Io;
 use namada_sdk::masp::utils::{
@@ -14,6 +13,7 @@ use namada_sdk::masp::utils::{
 use namada_sdk::masp::{IndexedNoteEntry, ShieldedContext, ShieldedUtils};
 use namada_sdk::queries::Client;
 use namada_sdk::storage::BlockHeight;
+use namada_sdk::wallet::{DatedKeypair, DatedSpendingKey};
 use namada_sdk::{display, display_line, MaybeSend, MaybeSync};
 
 #[allow(clippy::too_many_arguments)]
@@ -28,8 +28,8 @@ pub async fn syncing<
     io: &IO,
     start_query_height: Option<BlockHeight>,
     last_query_height: Option<BlockHeight>,
-    sks: &[ExtendedSpendingKey],
-    fvks: &[ViewingKey],
+    sks: &[DatedSpendingKey],
+    fvks: &[DatedKeypair<ViewingKey>],
 ) -> Result<ShieldedContext<U>, Error> {
     if indexer_addr.is_some() {
         display_line!(

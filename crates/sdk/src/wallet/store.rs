@@ -15,12 +15,14 @@ use namada_core::key::*;
 use namada_core::masp::{
     ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
 };
+use namada_core::storage::BlockHeight;
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
 use super::alias::{self, Alias};
 use super::derivation_path::DerivationPath;
 use super::pre_genesis;
+use crate::wallet::keys::{DatedKeypair, DatedSpendingKey, DatedViewingKey};
 use crate::wallet::{StoredKeypair, WalletIo};
 
 /// Actions that can be taken when there is an alias conflict
@@ -62,9 +64,9 @@ pub struct ValidatorData {
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Store {
     /// Known viewing keys
-    view_keys: BTreeMap<Alias, ExtendedViewingKey>,
+    view_keys: BTreeMap<Alias, DatedViewingKey>,
     /// Known spending keys
-    spend_keys: BTreeMap<Alias, StoredKeypair<ExtendedSpendingKey>>,
+    spend_keys: BTreeMap<Alias, StoredKeypair<DatedSpendingKey>>,
     /// Payment address book
     payment_addrs: BiBTreeMap<Alias, PaymentAddress>,
     /// Cryptographic keypairs
@@ -133,7 +135,7 @@ impl Store {
     pub fn find_spending_key(
         &self,
         alias: impl AsRef<str>,
-    ) -> Option<&StoredKeypair<ExtendedSpendingKey>> {
+    ) -> Option<&StoredKeypair<DatedSpendingKey>> {
         self.spend_keys.get(&alias.into())
     }
 
@@ -141,7 +143,7 @@ impl Store {
     pub fn find_viewing_key(
         &self,
         alias: impl AsRef<str>,
-    ) -> Option<&ExtendedViewingKey> {
+    ) -> Option<&DatedViewingKey> {
         self.view_keys.get(&alias.into())
     }
 
@@ -252,14 +254,14 @@ impl Store {
     }
 
     /// Get all known viewing keys by their alias.
-    pub fn get_viewing_keys(&self) -> &BTreeMap<Alias, ExtendedViewingKey> {
+    pub fn get_viewing_keys(&self) -> &BTreeMap<Alias, DatedViewingKey> {
         &self.view_keys
     }
 
     /// Get all known spending keys by their alias.
     pub fn get_spending_keys(
         &self,
-    ) -> &BTreeMap<Alias, StoredKeypair<ExtendedSpendingKey>> {
+    ) -> &BTreeMap<Alias, StoredKeypair<DatedSpendingKey>> {
         &self.spend_keys
     }
 
@@ -368,6 +370,7 @@ impl Store {
         &mut self,
         alias: Alias,
         spendkey: ExtendedSpendingKey,
+        birthday: Option<BlockHeight>,
         password: Option<Zeroizing<String>>,
         path: Option<DerivationPath>,
         force: bool,
@@ -388,19 +391,22 @@ impl Store {
                 ConfirmationResponse::Replace => {}
                 ConfirmationResponse::Reselect(new_alias) => {
                     return self.insert_spending_key::<U>(
-                        new_alias, spendkey, password, path, false,
+                        new_alias, spendkey, birthday, password, path, false,
                     );
                 }
                 ConfirmationResponse::Skip => return None,
             }
         }
         self.remove_alias(&alias);
+
         let (spendkey_to_store, _raw_spendkey) =
-            StoredKeypair::new(spendkey, password);
+            StoredKeypair::new(DatedKeypair::new(spendkey, birthday), password);
         self.spend_keys.insert(alias.clone(), spendkey_to_store);
         // Simultaneously add the derived viewing key to ease balance viewing
-        let viewkey =
-            zip32::ExtendedFullViewingKey::from(&spendkey.into()).into();
+        let viewkey = DatedKeypair::new(
+            zip32::ExtendedFullViewingKey::from(&spendkey.into()).into(),
+            birthday,
+        );
         self.view_keys.insert(alias.clone(), viewkey);
         path.map(|p| self.derivation_paths.insert(alias.clone(), p));
         Some(alias)
@@ -411,6 +417,7 @@ impl Store {
         &mut self,
         alias: Alias,
         viewkey: ExtendedViewingKey,
+        birthday: Option<BlockHeight>,
         force: bool,
     ) -> Option<Alias> {
         // abort if the alias is reserved
@@ -427,14 +434,16 @@ impl Store {
             match U::show_overwrite_confirmation(&alias, "a viewing key") {
                 ConfirmationResponse::Replace => {}
                 ConfirmationResponse::Reselect(new_alias) => {
-                    return self
-                        .insert_viewing_key::<U>(new_alias, viewkey, false);
+                    return self.insert_viewing_key::<U>(
+                        new_alias, viewkey, birthday, false,
+                    );
                 }
                 ConfirmationResponse::Skip => return None,
             }
         }
         self.remove_alias(&alias);
-        self.view_keys.insert(alias.clone(), viewkey);
+        self.view_keys
+            .insert(alias.clone(), DatedKeypair::new(viewkey, birthday));
         Some(alias)
     }
 

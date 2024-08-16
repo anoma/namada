@@ -1,7 +1,6 @@
 use std::io::Read;
 
 use color_eyre::eyre::Result;
-use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada_sdk::io::Io;
 use namada_sdk::{display_line, Namada, NamadaImpl};
 
@@ -351,15 +350,8 @@ impl CliApi {
                             .get_viewing_keys()
                             .values()
                             .copied()
-                            .map(|vk| ExtendedFullViewingKey::from(vk).fvk.vk)
-                            .chain(args.viewing_keys.into_iter().map(|vk| {
-                                ExtendedFullViewingKey::from(vk).fvk.vk
-                            }))
-                            .collect::<Vec<_>>();
-                        let sks = args
-                            .spending_keys
-                            .into_iter()
-                            .map(|sk| sk.into())
+                            .chain(args.viewing_keys)
+                            .map(|vk| vk.map(|vk| vk.as_viewing_key()))
                             .collect::<Vec<_>>();
                         crate::client::masp::syncing(
                             chain_ctx.shielded,
@@ -368,7 +360,7 @@ impl CliApi {
                             &io,
                             args.start_query_height,
                             args.last_query_height,
-                            &sks,
+                            &args.spending_keys,
                             &vks,
                         )
                         .await?;
