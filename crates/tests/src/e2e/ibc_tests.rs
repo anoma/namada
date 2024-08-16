@@ -81,7 +81,6 @@ use namada_sdk::storage::{BlockHeight, Epoch, Key};
 use namada_sdk::tendermint::abci::Event as AbciEvent;
 use namada_sdk::tendermint::block::Height as TmHeight;
 use namada_sdk::token::Amount;
-use namada_sdk::tx::IBC_REFUND_TARGET_ALIAS;
 use namada_test_utils::TestWasms;
 use prost::Message;
 use setup::constants::*;
@@ -103,6 +102,8 @@ use crate::strings::{
     LEDGER_STARTED, TX_APPLIED_SUCCESS, TX_FAILED, VALIDATOR_NODE,
 };
 use crate::{run, run_as};
+
+const IBC_REFUND_TARGET_ALIAS: &str = "ibc-refund-target";
 
 #[test]
 fn run_ledger_ibc() -> Result<()> {
@@ -388,7 +389,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
     // Check the balance of the source shielded account
     check_balance(&test_a, AA_VIEWING_KEY, BTC, 70)?;
     // Check the refund
-    check_balance(&test_a, IBC_REFUND_TARGET_ALIAS, BTC, 20)?;
+    check_balance(&test_a, IBC_REFUND_TARGET_ALIAS, BTC, 10)?;
 
     Ok(())
 }
@@ -2221,6 +2222,24 @@ fn transfer(
     if shielding_data_path.is_some() {
         tx_args.push("--ibc-shielding-data");
         tx_args.push(&memo);
+    }
+
+    if sender.as_ref().starts_with("zsk") {
+        let mut cmd = run!(
+            test,
+            Bin::Wallet,
+            &[
+                "gen",
+                "--alias",
+                IBC_REFUND_TARGET_ALIAS,
+                "--alias-force",
+                "--unsafe-dont-encrypt"
+            ],
+            Some(20),
+        )?;
+        cmd.assert_success();
+        tx_args.push("--refund-target");
+        tx_args.push(IBC_REFUND_TARGET_ALIAS);
     }
 
     let mut client = run!(test, Bin::Client, tx_args, Some(300))?;
