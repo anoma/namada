@@ -1,6 +1,7 @@
 use std::fmt::{Debug, Formatter};
 use std::future::poll_fn;
 use std::mem::ManuallyDrop;
+use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::task::Poll;
@@ -246,14 +247,28 @@ pub enum NodeResults {
     Failed(ResultCode),
 }
 
+// TODO: wrap `MockNode` in a single `Arc`
+#[derive(Clone)]
 pub struct MockNode {
     pub shell: Arc<Mutex<Shell<storage::PersistentDB, Sha256Hasher>>>,
-    pub test_dir: ManuallyDrop<TestDir>,
-    pub keep_temp: bool,
+    pub test_dir: Arc<SalvageableTestDir>,
     pub results: Arc<Mutex<Vec<NodeResults>>>,
     pub blocks: Arc<Mutex<HashMap<BlockHeight, block::Response>>>,
     pub services: Arc<MockServices>,
     pub auto_drive_services: bool,
+}
+
+pub struct SalvageableTestDir {
+    pub test_dir: ManuallyDrop<TestDir>,
+    pub keep_temp: bool,
+}
+
+impl Deref for SalvageableTestDir {
+    type Target = TestDir;
+
+    fn deref(&self) -> &Self::Target {
+        &self.test_dir
+    }
 }
 
 impl Debug for MockNode {
@@ -264,7 +279,7 @@ impl Debug for MockNode {
     }
 }
 
-impl Drop for MockNode {
+impl Drop for SalvageableTestDir {
     fn drop(&mut self) {
         unsafe {
             if !self.keep_temp {
@@ -709,7 +724,7 @@ impl MockNode {
 }
 
 #[async_trait::async_trait(?Send)]
-impl<'a> Client for &'a MockNode {
+impl Client for MockNode {
     type Error = Report;
 
     async fn request(

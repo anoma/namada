@@ -309,9 +309,9 @@ dependencies = [
 
 [[package]]
 name = "async-trait"
-version = "0.1.81"
+version = "0.1.77"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e0c28dcc82d7c8ead5cb13beb15405b57b8546e93215673ff8ca0349a028107"
+checksum = "c980ee35e870bd1a4d2c8294d4c04d0499e67bca1e4b5cefcc693c2fa00caea9"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3862,6 +3862,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "init-once"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e0863329819ed5ecf33446da6cb9104d2f8943ff8530d2b6c51adbc6be4f0632"
+dependencies = [
+ "portable-atomic",
+]
+
+[[package]]
 name = "inout"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4014,6 +4023,16 @@ dependencies = [
  "serdect",
  "sha2 0.10.8",
  "signature",
+]
+
+[[package]]
+name = "kdam"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "526586ea01a9a132b5f8d3a60f6d6b41b411550236f5ee057795f20b37316957"
+dependencies = [
+ "terminal_size",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4593,6 +4612,7 @@ dependencies = [
  "futures",
  "git2",
  "itertools 0.12.1",
+ "kdam",
  "lazy_static",
  "ledger-lib",
  "ledger-namada-rs",
@@ -4687,6 +4707,7 @@ dependencies = [
  "index-set",
  "indexmap 2.2.4",
  "k256",
+ "lazy_static",
  "linkme",
  "masp_primitives",
  "namada_macros",
@@ -5099,8 +5120,10 @@ dependencies = [
  "fd-lock",
  "flume",
  "futures",
+ "init-once",
  "itertools 0.12.1",
  "jubjub",
+ "kdam",
  "lazy_static",
  "linkme",
  "masp_primitives",
@@ -5134,6 +5157,7 @@ dependencies = [
  "prost 0.12.3",
  "rand 0.8.5",
  "rand_core 0.6.4",
+ "rayon",
  "regex",
  "reqwest",
  "serde",
@@ -5149,6 +5173,8 @@ dependencies = [
  "tokio",
  "toml 0.5.11",
  "tracing",
+ "typed-builder",
+ "xorf",
  "zeroize",
 ]
 
@@ -6233,6 +6259,12 @@ dependencies = [
  "opaque-debug",
  "universal-hash",
 ]
+
+[[package]]
+name = "portable-atomic"
+version = "1.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da544ee218f0d287a911e9c99a39a8c9bc8fcad3cb8db5959940044ecfc67265"
 
 [[package]]
 name = "postcard"
@@ -8078,6 +8110,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "terminal_size"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "21bebf2b7c9e0a515f6e0f8c51dc0f8e4696391e6f1ff30379559f8365fb0df7"
+dependencies = [
+ "rustix",
+ "windows-sys 0.48.0",
+]
+
+[[package]]
 name = "termtree"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9722,6 +9764,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f4686009f71ff3e5c4dbcf1a282d0a44db3f021ba69350cd42086b3e5f1c6985"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "xorf"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf24c008fe464f5d8f58b8d16a1ab7e930bd73b2a6933ff8704c414b2bed7f92"
+dependencies = [
+ "libm",
+ "rand 0.8.5",
+ "serde",
 ]
 
 [[package]]

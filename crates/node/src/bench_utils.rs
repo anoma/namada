@@ -10,7 +10,7 @@ use std::io::{Read, Write};
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::sync::Once;
+use std::sync::{Arc, Once, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
@@ -22,6 +22,7 @@ use namada_apps_lib::cli::context::FromContext;
 use namada_apps_lib::cli::Context;
 use namada_apps_lib::wallet::{defaults, CliWalletUtils};
 use namada_sdk::address::{self, Address, InternalAddress, MASP};
+use namada_sdk::args::ShieldedSync;
 use namada_sdk::chain::ChainId;
 use namada_sdk::events::extend::{
     ComposeEvent, MaspTxBatchRefs, MaspTxBlockIndex,
@@ -69,10 +70,11 @@ use namada_sdk::ibc::storage::{
 use namada_sdk::ibc::{MsgTransfer, COMMITMENT_PREFIX};
 use namada_sdk::io::StdIo;
 use namada_sdk::key::common::SecretKey;
+use namada_sdk::masp::utils::RetryStrategy;
 use namada_sdk::masp::{
-    self, ContextSyncStatus, ExtendedViewingKey, MaspTransferData, MaspTxRefs,
-    PaymentAddress, ShieldedContext, ShieldedUtils, TransferSource,
-    TransferTarget,
+    self, ContextSyncStatus, DispatcherCache, ExtendedViewingKey,
+    MaspTransferData, MaspTxRefs, PaymentAddress, ShieldedContext,
+    ShieldedUtils, TransferSource, TransferTarget,
 };
 use namada_sdk::queries::{
     Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
@@ -127,12 +129,14 @@ const FILE_NAME: &str = "shielded.dat";
 const TMP_FILE_NAME: &str = "shielded.tmp";
 const SPECULATIVE_FILE_NAME: &str = "speculative_shielded.dat";
 const SPECULATIVE_TMP_FILE_NAME: &str = "speculative_shielded.tmp";
+const CACHE_FILE_NAME: &str = "shielded_sync.cache";
+const CACHE_FILE_TMP_PREFIX: &str = "shielded_sync.cache.tmp";
 
 /// For `tracing_subscriber`, which fails if called more than once in the same
 /// process
 static SHELL_INIT: Once = Once::new();
 
-pub struct BenchShell {
+pub struct BenchShellInner {
     pub inner: Shell,
     // Cache of the masp transactions and their changed keys in the last block
     // committed, the tx index coincides with the index in this collection
@@ -142,155 +146,7 @@ pub struct BenchShell {
     tempdir: TempDir,
 }
 
-impl Deref for BenchShell {
-    type Target = Shell;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl DerefMut for BenchShell {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
-}
-
-impl Default for BenchShell {
-    fn default() -> Self {
-        SHELL_INIT.call_once(|| {
-            tracing_subscriber::fmt()
-                .with_env_filter(
-                    tracing_subscriber::EnvFilter::from_default_env(),
-                )
-                .init();
-        });
-
-        let (sender, _) = tokio::sync::mpsc::unbounded_channel();
-        let tempdir = tempfile::tempdir().unwrap();
-        let path = tempdir.path().canonicalize().unwrap();
-
-        let shell = Shell::new(
-            config::Ledger::new(path, Default::default(), TendermintMode::Full),
-            WASM_DIR.into(),
-            sender,
-            None,
-            None,
-            None,
-            50 * 1024 * 1024, // 50 kiB
-            50 * 1024 * 1024, // 50 kiB
-        );
-        let mut bench_shell = BenchShell {
-            inner: shell,
-            last_block_masp_txs: vec![],
-            tempdir,
-        };
-
-        bench_shell
-            .init_chain(
-                InitChain {
-                    time: Timestamp {
-                        seconds: 0,
-                        nanos: 0,
-                    }
-                    .try_into()
-                    .unwrap(),
-                    chain_id: ChainId::default().to_string(),
-                    consensus_params: tendermint::consensus::params::Params {
-                        block: tendermint::block::Size {
-                            max_bytes: 0,
-                            max_gas: 0,
-                            time_iota_ms: 0,
-                        },
-                        evidence: tendermint::evidence::Params {
-                            max_age_num_blocks: 0,
-                            max_age_duration: tendermint::evidence::Duration(
-                                core::time::Duration::MAX,
-                            ),
-                            max_bytes: 0,
-                        },
-                        validator:
-                            tendermint::consensus::params::ValidatorParams {
-                                pub_key_types: vec![],
-                            },
-                        version: None,
-                        abci: tendermint::consensus::params::AbciParams {
-                            vote_extensions_enable_height: None,
-                        },
-                    },
-                    validators: vec![],
-                    app_state_bytes: vec![].into(),
-                    initial_height: 0_u32.into(),
-                },
-                2,
-            )
-            .unwrap();
-        // Commit tx hashes to storage
-        bench_shell.commit_block();
-
-        // Bond from Albert to validator
-        let bond = Bond {
-            validator: defaults::validator_address(),
-            amount: Amount::native_whole(1000),
-            source: Some(defaults::albert_address()),
-        };
-        let params = proof_of_stake::storage::read_pos_params::<
-            _,
-            governance::Store<_>,
-        >(&bench_shell.state)
-        .unwrap();
-        let signed_tx = bench_shell.generate_tx(
-            TX_BOND_WASM,
-            bond,
-            None,
-            None,
-            vec![&defaults::albert_keypair()],
-        );
-
-        bench_shell.execute_tx(&signed_tx.to_ref());
-        bench_shell.state.commit_tx_batch();
-
-        // Initialize governance proposal
-        let content_section = Section::ExtraData(Code::new(
-            vec![],
-            Some(TX_INIT_PROPOSAL_WASM.to_string()),
-        ));
-        let voting_start_epoch =
-            Epoch(2 + params.pipeline_len + params.unbonding_len);
-        let signed_tx = bench_shell.generate_tx(
-            TX_INIT_PROPOSAL_WASM,
-            InitProposalData {
-                content: content_section.get_hash(),
-                author: defaults::albert_address(),
-                r#type: ProposalType::Default,
-                voting_start_epoch,
-                voting_end_epoch: voting_start_epoch.unchecked_add(3_u64),
-                activation_epoch: voting_start_epoch.unchecked_add(9_u64),
-            },
-            None,
-            Some(vec![content_section]),
-            vec![&defaults::albert_keypair()],
-        );
-
-        bench_shell.execute_tx(&signed_tx.to_ref());
-        bench_shell.state.commit_tx_batch();
-        bench_shell.commit_block();
-
-        // Advance epoch for pos benches
-        for _ in 0..=(params.pipeline_len + params.unbonding_len) {
-            bench_shell.advance_epoch();
-        }
-        // Must start after current epoch
-        debug_assert_eq!(
-            bench_shell.state.get_block_epoch().unwrap().next(),
-            voting_start_epoch
-        );
-
-        bench_shell
-    }
-}
-
-impl BenchShell {
+impl BenchShellInner {
     pub fn generate_tx(
         &self,
         wasm_code_path: &str,
@@ -633,6 +489,171 @@ impl BenchShell {
     }
 }
 
+impl Deref for BenchShellInner {
+    type Target = Shell;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl DerefMut for BenchShellInner {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
+#[derive(Clone)]
+pub struct BenchShell {
+    inner: Arc<RwLock<BenchShellInner>>,
+}
+
+impl BenchShell {
+    pub fn read(&self) -> RwLockReadGuard<'_, BenchShellInner> {
+        self.inner.read().unwrap()
+    }
+
+    pub fn write(&self) -> RwLockWriteGuard<'_, BenchShellInner> {
+        self.inner.write().unwrap()
+    }
+}
+
+impl Default for BenchShell {
+    fn default() -> Self {
+        SHELL_INIT.call_once(|| {
+            tracing_subscriber::fmt()
+                .with_env_filter(
+                    tracing_subscriber::EnvFilter::from_default_env(),
+                )
+                .init();
+        });
+
+        let (sender, _) = tokio::sync::mpsc::unbounded_channel();
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().canonicalize().unwrap();
+
+        let shell = Shell::new(
+            config::Ledger::new(path, Default::default(), TendermintMode::Full),
+            WASM_DIR.into(),
+            sender,
+            None,
+            None,
+            None,
+            50 * 1024 * 1024, // 50 kiB
+            50 * 1024 * 1024, // 50 kiB
+        );
+        let mut bench_shell = BenchShellInner {
+            inner: shell,
+            last_block_masp_txs: vec![],
+            tempdir,
+        };
+
+        bench_shell
+            .init_chain(
+                InitChain {
+                    time: Timestamp {
+                        seconds: 0,
+                        nanos: 0,
+                    }
+                    .try_into()
+                    .unwrap(),
+                    chain_id: ChainId::default().to_string(),
+                    consensus_params: tendermint::consensus::params::Params {
+                        block: tendermint::block::Size {
+                            max_bytes: 0,
+                            max_gas: 0,
+                            time_iota_ms: 0,
+                        },
+                        evidence: tendermint::evidence::Params {
+                            max_age_num_blocks: 0,
+                            max_age_duration: tendermint::evidence::Duration(
+                                core::time::Duration::MAX,
+                            ),
+                            max_bytes: 0,
+                        },
+                        validator:
+                            tendermint::consensus::params::ValidatorParams {
+                                pub_key_types: vec![],
+                            },
+                        version: None,
+                        abci: tendermint::consensus::params::AbciParams {
+                            vote_extensions_enable_height: None,
+                        },
+                    },
+                    validators: vec![],
+                    app_state_bytes: vec![].into(),
+                    initial_height: 0_u32.into(),
+                },
+                2,
+            )
+            .unwrap();
+        // Commit tx hashes to storage
+        bench_shell.commit_block();
+
+        // Bond from Albert to validator
+        let bond = Bond {
+            validator: defaults::validator_address(),
+            amount: Amount::native_whole(1000),
+            source: Some(defaults::albert_address()),
+        };
+        let params = proof_of_stake::storage::read_pos_params::<
+            _,
+            governance::Store<_>,
+        >(&bench_shell.state)
+        .unwrap();
+        let signed_tx = bench_shell.generate_tx(
+            TX_BOND_WASM,
+            bond,
+            None,
+            None,
+            vec![&defaults::albert_keypair()],
+        );
+
+        bench_shell.execute_tx(&signed_tx.to_ref());
+        bench_shell.state.commit_tx_batch();
+
+        // Initialize governance proposal
+        let content_section = Section::ExtraData(Code::new(
+            vec![],
+            Some(TX_INIT_PROPOSAL_WASM.to_string()),
+        ));
+        let voting_start_epoch =
+            Epoch(2 + params.pipeline_len + params.unbonding_len);
+        let signed_tx = bench_shell.generate_tx(
+            TX_INIT_PROPOSAL_WASM,
+            InitProposalData {
+                content: content_section.get_hash(),
+                author: defaults::albert_address(),
+                r#type: ProposalType::Default,
+                voting_start_epoch,
+                voting_end_epoch: voting_start_epoch.unchecked_add(3_u64),
+                activation_epoch: voting_start_epoch.unchecked_add(9_u64),
+            },
+            None,
+            Some(vec![content_section]),
+            vec![&defaults::albert_keypair()],
+        );
+
+        bench_shell.execute_tx(&signed_tx.to_ref());
+        bench_shell.state.commit_tx_batch();
+        bench_shell.commit_block();
+
+        // Advance epoch for pos benches
+        for _ in 0..=(params.pipeline_len + params.unbonding_len) {
+            bench_shell.advance_epoch();
+        }
+        // Must start after current epoch
+        debug_assert_eq!(
+            bench_shell.state.get_block_epoch().unwrap().next(),
+            voting_start_epoch
+        );
+
+        BenchShell {
+            inner: Arc::new(RwLock::new(bench_shell)),
+        }
+    }
+}
+
 pub fn generate_foreign_key_tx(signer: &SecretKey) -> BatchedTx {
     let wasm_code =
         std::fs::read("../../wasm_for_tests/tx_write.wasm").unwrap();
@@ -683,6 +704,42 @@ impl Clone for WrapperTempDir {
 pub struct BenchShieldedUtils {
     #[borsh(skip)]
     context_dir: WrapperTempDir,
+}
+
+impl BenchShieldedUtils {
+    fn atomic_file_write(
+        &self,
+        tmp_file_name: impl AsRef<std::path::Path>,
+        file_name: impl AsRef<std::path::Path>,
+        data: impl BorshSerialize,
+    ) -> std::io::Result<()> {
+        let tmp_path = self.context_dir.0.path().join(&tmp_file_name);
+        {
+            // First serialize the shielded context into a temporary file.
+            // Inability to create this file implies a simultaneuous write
+            // is in progress. In this case, immediately
+            // fail. This is unproblematic because the data
+            // intended to be stored can always be re-fetched
+            // from the blockchain.
+            let mut ctx_file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(tmp_path.clone())?;
+            let mut bytes = Vec::new();
+            data.serialize(&mut bytes).unwrap_or_else(|e| {
+                panic!(
+                    "cannot serialize data to {} with error: {}",
+                    file_name.as_ref().to_string_lossy(),
+                    e,
+                )
+            });
+            ctx_file.write_all(&bytes[..])?;
+        }
+        // Atomically update the old shielded context file with new data.
+        // Atomicity is required to prevent other client instances from
+        // reading corrupt data.
+        std::fs::rename(tmp_path, self.context_dir.0.path().join(file_name))
+    }
 }
 
 #[async_trait::async_trait(?Send)]
@@ -778,6 +835,23 @@ impl ShieldedUtils for BenchShieldedUtils {
         }
         Ok(())
     }
+
+    async fn cache_save(&self, cache: &DispatcherCache) -> std::io::Result<()> {
+        let tmp_file_name = {
+            let t = tempfile::Builder::new()
+                .prefix(CACHE_FILE_TMP_PREFIX)
+                .tempfile()?;
+            t.path().file_name().unwrap().to_owned()
+        };
+
+        self.atomic_file_write(tmp_file_name, CACHE_FILE_NAME, cache)
+    }
+
+    async fn cache_load(&self) -> std::io::Result<DispatcherCache> {
+        let file_name = self.context_dir.0.path().join(CACHE_FILE_NAME);
+        let mut file = File::open(file_name)?;
+        DispatcherCache::try_from_reader(&mut file)
+    }
 }
 
 #[async_trait::async_trait(?Send)]
@@ -801,22 +875,24 @@ impl Client for BenchShell {
             prove,
         };
 
+        let shell = self.read();
+
         if request.path == RPC.shell().dry_run_tx_path() {
             dry_run_tx(
                 // This is safe because nothing else is using `self.state`
                 // concurrently and the `TempWlState` will be dropped right
                 // after dry-run.
-                unsafe { self.state.read_only().with_static_temp_write_log() },
-                self.vp_wasm_cache.read_only(),
-                self.tx_wasm_cache.read_only(),
+                unsafe { shell.state.read_only().with_static_temp_write_log() },
+                shell.vp_wasm_cache.read_only(),
+                shell.tx_wasm_cache.read_only(),
                 &request,
             )
         } else {
             let ctx = RequestCtx {
-                state: &self.state,
-                event_log: self.event_log(),
-                vp_wasm_cache: self.vp_wasm_cache.read_only(),
-                tx_wasm_cache: self.tx_wasm_cache.read_only(),
+                state: &shell.state,
+                event_log: shell.event_log(),
+                vp_wasm_cache: shell.vp_wasm_cache.read_only(),
+                tx_wasm_cache: shell.tx_wasm_cache.read_only(),
                 storage_read_past_height_limit: None,
             };
             RPC.handle(ctx, &request)
@@ -856,12 +932,14 @@ impl Client for BenchShell {
                 .into(),
         );
 
+        let shell = self.read();
+
         // Given the way we setup and run benchmarks, the masp transactions can
         // only present in the last block, we can mock the previous
         // responses with an empty set of transactions
         let last_block_txs =
-            if height == self.inner.state.in_mem().get_last_block_height() {
-                self.last_block_masp_txs.clone()
+            if height == shell.inner.state.in_mem().get_last_block_height() {
+                shell.last_block_masp_txs.clone()
             } else {
                 vec![]
             };
@@ -876,7 +954,7 @@ impl Client for BenchShell {
                         block: 0,
                         app: 0,
                     },
-                    chain_id: self
+                    chain_id: shell
                         .inner
                         .chain_id
                         .to_string()
@@ -924,13 +1002,16 @@ impl Client for BenchShell {
             )
         })?;
 
+        let shell = self.read();
+
         // We can expect all the masp tranfers to have happened only in the last
         // block
         let end_block_events = if height.value()
-            == self.inner.state.in_mem().get_last_block_height().0
+            == shell.inner.state.in_mem().get_last_block_height().0
         {
             Some(
-                self.last_block_masp_txs
+                shell
+                    .last_block_masp_txs
                     .iter()
                     .enumerate()
                     .map(|(idx, (tx, changed_keys))| {
@@ -992,26 +1073,31 @@ impl Client for BenchShell {
 impl Default for BenchShieldedCtx {
     fn default() -> Self {
         let shell = BenchShell::default();
-        let base_dir = shell.tempdir.as_ref().canonicalize().unwrap();
 
-        // Create a global config and an empty wallet in the chain dir - this is
-        // needed in `Context::new`
-        let config = GlobalConfig::new(shell.inner.chain_id.clone());
-        config.write(&base_dir).unwrap();
-        let wallet = namada_apps_lib::wallet::CliWalletUtils::new(
-            base_dir.join(shell.inner.chain_id.as_str()),
-        );
-        wallet.save().unwrap();
+        let mut chain_ctx = {
+            let shell_read = shell.read();
 
-        let ctx = Context::new::<StdIo>(cli::args::Global {
-            is_pre_genesis: false,
-            chain_id: Some(shell.inner.chain_id.clone()),
-            base_dir,
-            wasm_dir: Some(WASM_DIR.into()),
-        })
-        .unwrap();
+            let base_dir = shell_read.tempdir.as_ref().canonicalize().unwrap();
 
-        let mut chain_ctx = ctx.take_chain_or_exit();
+            // Create a global config and an empty wallet in the chain dir -
+            // this is needed in `Context::new`
+            let config = GlobalConfig::new(shell_read.inner.chain_id.clone());
+            config.write(&base_dir).unwrap();
+            let wallet = namada_apps_lib::wallet::CliWalletUtils::new(
+                base_dir.join(shell_read.inner.chain_id.as_str()),
+            );
+            wallet.save().unwrap();
+
+            let ctx = Context::new::<StdIo>(cli::args::Global {
+                is_pre_genesis: false,
+                chain_id: Some(shell_read.inner.chain_id.clone()),
+                base_dir,
+                wasm_dir: Some(WASM_DIR.into()),
+            })
+            .unwrap();
+
+            ctx.take_chain_or_exit()
+        };
 
         // Generate spending key for Albert and Bertha
         chain_ctx.wallet.gen_store_spending_key(
@@ -1089,16 +1175,23 @@ impl BenchShieldedCtx {
         self.shielded = async_runtime
             .block_on(namada_apps_lib::client::masp::syncing(
                 self.shielded,
-                &self.shell,
-                None,
+                self.shell.clone(),
+                ShieldedSync {
+                    ledger_address: FromStr::from_str("http://127.0.0.1:1337")
+                        .unwrap(),
+                    last_query_height: None,
+                    spending_keys: vec![spending_key],
+                    viewing_keys: vec![],
+                    with_indexer: None,
+                    wait_for_last_query_height: false,
+                    max_concurrent_fetches: 100,
+                    retry_strategy: RetryStrategy::Forever,
+                },
                 &StdIo,
-                None,
-                None,
-                &[spending_key.key.into()],
-                &[],
             ))
             .unwrap();
-        let native_token = self.shell.state.in_mem().native_token.clone();
+        let native_token =
+            self.shell.read().state.in_mem().native_token.clone();
         let namada = NamadaImpl::native_new(
             self.shell,
             self.wallet,
@@ -1136,7 +1229,7 @@ impl BenchShieldedCtx {
         let tx = if source.effective_address() == MASP
             && target.effective_address() == MASP
         {
-            namada.client().generate_tx(
+            namada.client().read().generate_tx(
                 TX_TRANSFER_WASM,
                 Transfer::masp(shielded_section_hash),
                 Some(shielded),
@@ -1144,7 +1237,7 @@ impl BenchShieldedCtx {
                 vec![&defaults::albert_keypair()],
             )
         } else if target.effective_address() == MASP {
-            namada.client().generate_tx(
+            namada.client().read().generate_tx(
                 TX_TRANSFER_WASM,
                 Transfer::masp(shielded_section_hash)
                     .transfer(
@@ -1159,7 +1252,7 @@ impl BenchShieldedCtx {
                 vec![&defaults::albert_keypair()],
             )
         } else {
-            namada.client().generate_tx(
+            namada.client().read().generate_tx(
                 TX_TRANSFER_WASM,
                 Transfer::masp(shielded_section_hash)
                     .transfer(
@@ -1262,6 +1355,7 @@ impl BenchShieldedCtx {
 
         let mut ibc_tx = ctx
             .shell
+            .read()
             .generate_ibc_tx(TX_IBC_WASM, msg.serialize_to_vec());
         ibc_tx.tx.add_masp_tx_section(masp_tx);
 

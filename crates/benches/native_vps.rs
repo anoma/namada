@@ -73,7 +73,8 @@ fn governance(c: &mut Criterion) {
         "minimal_proposal",
         "complete_proposal",
     ] {
-        let mut shell = BenchShell::default();
+        let bench_shell = BenchShell::default();
+        let mut shell = bench_shell.write();
 
         let signed_tx = match bench_name {
             "foreign_key_write" => {
@@ -320,11 +321,12 @@ fn governance(c: &mut Criterion) {
 fn prepare_ibc_tx_and_ctx(bench_name: &str) -> (BenchShieldedCtx, BatchedTx) {
     match bench_name {
         "open_connection" => {
-            let mut shielded_ctx = BenchShieldedCtx::default();
-            let _ =
-                shielded_ctx.shell.init_ibc_client_state(storage::Key::from(
+            let shielded_ctx = BenchShieldedCtx::default();
+            let _ = shielded_ctx.shell.write().init_ibc_client_state(
+                storage::Key::from(
                     Address::Internal(InternalAddress::Ibc).to_db_key(),
-                ));
+                ),
+            );
             let msg = MsgConnectionOpenInit {
                 client_id_on_a: ClientId::new("07-tendermint", 1).unwrap(),
                 counterparty: Counterparty::new(
@@ -341,13 +343,13 @@ fn prepare_ibc_tx_and_ctx(bench_name: &str) -> (BenchShieldedCtx, BatchedTx) {
             let mut data = vec![];
             prost::Message::encode(&msg.to_any(), &mut data).unwrap();
             let open_connection =
-                shielded_ctx.shell.generate_ibc_tx(TX_IBC_WASM, data);
+                shielded_ctx.shell.read().generate_ibc_tx(TX_IBC_WASM, data);
 
             (shielded_ctx, open_connection)
         }
         "open_channel" => {
-            let mut shielded_ctx = BenchShieldedCtx::default();
-            let _ = shielded_ctx.shell.init_ibc_connection();
+            let shielded_ctx = BenchShieldedCtx::default();
+            let _ = shielded_ctx.shell.write().init_ibc_connection();
             // Channel handshake
             let msg = MsgChannelOpenInit {
                 port_id_on_a: PortId::transfer(),
@@ -362,23 +364,23 @@ fn prepare_ibc_tx_and_ctx(bench_name: &str) -> (BenchShieldedCtx, BatchedTx) {
             let mut data = vec![];
             prost::Message::encode(&msg.to_any(), &mut data).unwrap();
             let open_channel =
-                shielded_ctx.shell.generate_ibc_tx(TX_IBC_WASM, data);
+                shielded_ctx.shell.read().generate_ibc_tx(TX_IBC_WASM, data);
 
             (shielded_ctx, open_channel)
         }
         "outgoing_transfer" => {
-            let mut shielded_ctx = BenchShieldedCtx::default();
-            shielded_ctx.shell.init_ibc_channel();
-            shielded_ctx.shell.enable_ibc_transfer();
+            let shielded_ctx = BenchShieldedCtx::default();
+            shielded_ctx.shell.write().init_ibc_channel();
+            shielded_ctx.shell.write().enable_ibc_transfer();
             let outgoing_transfer =
-                shielded_ctx.shell.generate_ibc_transfer_tx();
+                shielded_ctx.shell.read().generate_ibc_transfer_tx();
 
             (shielded_ctx, outgoing_transfer)
         }
         "outgoing_shielded_action" => {
             let mut shielded_ctx = BenchShieldedCtx::default();
-            shielded_ctx.shell.init_ibc_channel();
-            shielded_ctx.shell.enable_ibc_transfer();
+            shielded_ctx.shell.write().init_ibc_channel();
+            shielded_ctx.shell.write().enable_ibc_transfer();
 
             let albert_payment_addr = shielded_ctx
                 .wallet
@@ -391,14 +393,14 @@ fn prepare_ibc_tx_and_ctx(bench_name: &str) -> (BenchShieldedCtx, BatchedTx) {
                 .unwrap()
                 .to_owned();
             // Shield some tokens for Albert
-            let (mut shielded_ctx, shield_tx) = shielded_ctx.generate_masp_tx(
+            let (shielded_ctx, shield_tx) = shielded_ctx.generate_masp_tx(
                 Amount::native_whole(500),
                 TransferSource::Address(defaults::albert_address()),
                 TransferTarget::PaymentAddress(albert_payment_addr),
             );
-            shielded_ctx.shell.execute_tx(&shield_tx.to_ref());
-            shielded_ctx.shell.commit_masp_tx(shield_tx.tx);
-            shielded_ctx.shell.commit_block();
+            shielded_ctx.shell.write().execute_tx(&shield_tx.to_ref());
+            shielded_ctx.shell.write().commit_masp_tx(shield_tx.tx);
+            shielded_ctx.shell.write().commit_block();
             shielded_ctx.generate_shielded_action(
                 Amount::native_whole(10),
                 TransferSource::ExtendedSpendingKey(albert_spending_key.key),
@@ -422,12 +424,13 @@ fn ibc(c: &mut Criterion) {
         "outgoing_shielded_action",
     ] {
         // Initialize the state according to the target tx
-        let (mut shielded_ctx, signed_tx) = prepare_ibc_tx_and_ctx(bench_name);
+        let (shielded_ctx, signed_tx) = prepare_ibc_tx_and_ctx(bench_name);
 
         let verifiers_from_tx =
-            shielded_ctx.shell.execute_tx(&signed_tx.to_ref());
+            shielded_ctx.shell.write().execute_tx(&signed_tx.to_ref());
         let (verifiers, keys_changed) = shielded_ctx
             .shell
+            .read()
             .state
             .write_log()
             .verifiers_and_changed_keys(&verifiers_from_tx);
@@ -435,16 +438,17 @@ fn ibc(c: &mut Criterion) {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new(u64::MAX),
         ));
+        let shell_read = shielded_ctx.shell.read();
         let ibc = IbcVp::new(Ctx::new(
             &Address::Internal(InternalAddress::Ibc),
-            &shielded_ctx.shell.state,
+            &shell_read.state,
             &signed_tx.tx,
             &signed_tx.cmt,
             &TxIndex(0),
             &gas_meter,
             &keys_changed,
             &verifiers,
-            shielded_ctx.shell.vp_wasm_cache.clone(),
+            shell_read.vp_wasm_cache.clone(),
         ));
 
         group.bench_function(bench_name, |b| {
@@ -466,7 +470,8 @@ fn ibc(c: &mut Criterion) {
 
 fn vp_multitoken(c: &mut Criterion) {
     let mut group = c.benchmark_group("vp_multitoken");
-    let shell = BenchShell::default();
+    let bench_shell = BenchShell::default();
+    let shell = bench_shell.read();
 
     let foreign_key_write =
         generate_foreign_key_tx(&defaults::albert_keypair());
@@ -490,7 +495,8 @@ fn vp_multitoken(c: &mut Criterion) {
         .iter()
         .zip(["foreign_key_write", "transfer"])
     {
-        let mut shell = BenchShell::default();
+        let bench_shell = BenchShell::default();
+        let mut shell = bench_shell.write();
         let verifiers_from_tx = shell.execute_tx(&signed_tx.to_ref());
         let (verifiers, keys_changed) = shell
             .state
@@ -553,25 +559,35 @@ fn setup_storage_for_masp_verification(
         .to_owned();
 
     // Shield some tokens for Albert
-    let (mut shielded_ctx, shield_tx) = shielded_ctx.generate_masp_tx(
+    let (shielded_ctx, shield_tx) = shielded_ctx.generate_masp_tx(
         amount,
         TransferSource::Address(defaults::albert_address()),
         TransferTarget::PaymentAddress(albert_payment_addr),
     );
 
-    shielded_ctx.shell.execute_tx(&shield_tx.to_ref());
-    shielded_ctx.shell.commit_masp_tx(shield_tx.tx);
+    shielded_ctx.shell.write().execute_tx(&shield_tx.to_ref());
+    shielded_ctx.shell.write().commit_masp_tx(shield_tx.tx);
 
     // Update the anchor in storage
     let tree_key = token::storage_key::masp_commitment_tree_key();
-    let updated_tree: CommitmentTree<Node> =
-        shielded_ctx.shell.state.read(&tree_key).unwrap().unwrap();
+    let updated_tree: CommitmentTree<Node> = shielded_ctx
+        .shell
+        .read()
+        .state
+        .read(&tree_key)
+        .unwrap()
+        .unwrap();
     let anchor_key =
         token::storage_key::masp_commitment_anchor_key(updated_tree.root());
-    shielded_ctx.shell.state.write(&anchor_key, ()).unwrap();
-    shielded_ctx.shell.commit_block();
+    shielded_ctx
+        .shell
+        .write()
+        .state
+        .write(&anchor_key, ())
+        .unwrap();
+    shielded_ctx.shell.write().commit_block();
 
-    let (mut shielded_ctx, signed_tx) = match bench_name {
+    let (shielded_ctx, signed_tx) = match bench_name {
         "shielding" => shielded_ctx.generate_masp_tx(
             amount,
             TransferSource::Address(defaults::albert_address()),
@@ -589,7 +605,8 @@ fn setup_storage_for_masp_verification(
         ),
         _ => panic!("Unexpected bench test"),
     };
-    let verifiers_from_tx = shielded_ctx.shell.execute_tx(&signed_tx.to_ref());
+    let verifiers_from_tx =
+        shielded_ctx.shell.write().execute_tx(&signed_tx.to_ref());
 
     (shielded_ctx, verifiers_from_tx, signed_tx)
 }
@@ -601,8 +618,8 @@ fn masp(c: &mut Criterion) {
         group.bench_function(bench_name, |b| {
             let (shielded_ctx, verifiers_from_tx, signed_tx) =
                 setup_storage_for_masp_verification(bench_name);
-            let (verifiers, keys_changed) = shielded_ctx
-                .shell
+            let shell_read = shielded_ctx.shell.read();
+            let (verifiers, keys_changed) = shell_read
                 .state
                 .write_log()
                 .verifiers_and_changed_keys(&verifiers_from_tx);
@@ -612,14 +629,14 @@ fn masp(c: &mut Criterion) {
             ));
             let masp = MaspVp::new(Ctx::new(
                 &Address::Internal(InternalAddress::Masp),
-                &shielded_ctx.shell.state,
+                &shell_read.state,
                 &signed_tx.tx,
                 &signed_tx.cmt,
                 &TxIndex(0),
                 &gas_meter,
                 &keys_changed,
                 &verifiers,
-                shielded_ctx.shell.vp_wasm_cache.clone(),
+                shell_read.vp_wasm_cache.clone(),
             ));
 
             b.iter(|| {
@@ -1170,7 +1187,8 @@ fn pgf(c: &mut Criterion) {
         "remove_steward",
         "steward_inflation_rate",
     ] {
-        let mut shell = BenchShell::default();
+        let bench_shell = BenchShell::default();
+        let mut shell = bench_shell.write();
         namada_apps_lib::governance::pgf::storage::keys::stewards_handle()
             .insert(
                 &mut shell.state,
@@ -1255,7 +1273,8 @@ fn eth_bridge_nut(c: &mut Criterion) {
         return;
     }
 
-    let mut shell = BenchShell::default();
+    let bench_shell = BenchShell::default();
+    let mut shell = bench_shell.write();
     let native_erc20_addres = read_native_erc20_address(&shell.state).unwrap();
 
     let signed_tx = {
@@ -1326,7 +1345,8 @@ fn eth_bridge(c: &mut Criterion) {
         return;
     }
 
-    let mut shell = BenchShell::default();
+    let bench_shell = BenchShell::default();
+    let mut shell = bench_shell.write();
     let native_erc20_addres = read_native_erc20_address(&shell.state).unwrap();
 
     let signed_tx = {
@@ -1400,7 +1420,8 @@ fn eth_bridge_pool(c: &mut Criterion) {
     // NOTE: this vp is one of the most expensive but its cost comes from the
     // numerous accesses to storage that we already account for, so no need to
     // benchmark specific sections of it like for the ibc native vp
-    let mut shell = BenchShell::default();
+    let bench_shell = BenchShell::default();
+    let mut shell = bench_shell.write();
     let native_erc20_addres = read_native_erc20_address(&shell.state).unwrap();
 
     // Whitelist NAM token
@@ -1492,7 +1513,8 @@ fn parameters(c: &mut Criterion) {
     let mut group = c.benchmark_group("vp_parameters");
 
     for bench_name in ["foreign_key_write", "parameter_change"] {
-        let mut shell = BenchShell::default();
+        let bench_shell = BenchShell::default();
+        let mut shell = bench_shell.write();
 
         let (verifiers_from_tx, signed_tx) = match bench_name {
             "foreign_key_write" => {
@@ -1567,7 +1589,8 @@ fn pos(c: &mut Criterion) {
     let mut group = c.benchmark_group("vp_pos");
 
     for bench_name in ["foreign_key_write", "parameter_change"] {
-        let mut shell = BenchShell::default();
+        let bench_shell = BenchShell::default();
+        let mut shell = bench_shell.write();
 
         let (verifiers_from_tx, signed_tx) = match bench_name {
             "foreign_key_write" => {
@@ -1646,13 +1669,13 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
         "outgoing_transfer",
         "outgoing_shielded_action",
     ] {
-        let (mut shielded_ctx, signed_tx) = prepare_ibc_tx_and_ctx(bench_name);
+        let (shielded_ctx, signed_tx) = prepare_ibc_tx_and_ctx(bench_name);
 
         let verifiers_from_tx =
-            shielded_ctx.shell.execute_tx(&signed_tx.to_ref());
+            shielded_ctx.shell.write().execute_tx(&signed_tx.to_ref());
         let tx_data = signed_tx.tx.data(&signed_tx.cmt).unwrap();
-        let (verifiers, keys_changed) = shielded_ctx
-            .shell
+        let shell_read = shielded_ctx.shell.read();
+        let (verifiers, keys_changed) = shell_read
             .state
             .write_log()
             .verifiers_and_changed_keys(&verifiers_from_tx);
@@ -1662,14 +1685,14 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
         ));
         let ibc = IbcVp::new(Ctx::new(
             &Address::Internal(InternalAddress::Ibc),
-            &shielded_ctx.shell.state,
+            &shell_read.state,
             &signed_tx.tx,
             &signed_tx.cmt,
             &TxIndex(0),
             &gas_meter,
             &keys_changed,
             &verifiers,
-            shielded_ctx.shell.vp_wasm_cache.clone(),
+            shell_read.vp_wasm_cache.clone(),
         ));
         // Use an empty verifiers set placeholder for validation, this is only
         // needed in actual txs to addresses whose VPs should be triggered
@@ -1706,13 +1729,13 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
         "outgoing_transfer",
         "outgoing_shielded_action",
     ] {
-        let (mut shielded_ctx, signed_tx) = prepare_ibc_tx_and_ctx(bench_name);
+        let (shielded_ctx, signed_tx) = prepare_ibc_tx_and_ctx(bench_name);
 
         let verifiers_from_tx =
-            shielded_ctx.shell.execute_tx(&signed_tx.to_ref());
+            shielded_ctx.shell.write().execute_tx(&signed_tx.to_ref());
+        let shell_read = shielded_ctx.shell.read();
         let tx_data = signed_tx.tx.data(&signed_tx.cmt).unwrap();
-        let (verifiers, keys_changed) = shielded_ctx
-            .shell
+        let (verifiers, keys_changed) = shell_read
             .state
             .write_log()
             .verifiers_and_changed_keys(&verifiers_from_tx);
@@ -1722,14 +1745,14 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
         ));
         let ibc = IbcVp::new(Ctx::new(
             &Address::Internal(InternalAddress::Ibc),
-            &shielded_ctx.shell.state,
+            &shell_read.state,
             &signed_tx.tx,
             &signed_tx.cmt,
             &TxIndex(0),
             &gas_meter,
             &keys_changed,
             &verifiers,
-            shielded_ctx.shell.vp_wasm_cache.clone(),
+            shell_read.vp_wasm_cache.clone(),
         ));
         // Use an empty verifiers set placeholder for validation, this is only
         // needed in actual txs to addresses whose VPs should be triggered
