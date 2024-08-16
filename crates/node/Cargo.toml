@@ -23,6 +23,7 @@ testing = [
   "namada_test_utils",
   "clap",
   "lazy_static",
+  "rand",
 ]
 benches = [
   "namada_apps_lib/benches",
@@ -80,6 +81,7 @@ num-rational.workspace = true
 num-traits.workspace = true
 once_cell.workspace = true
 prost.workspace = true
+rand = { workspace = true, features = ["std"], optional = true }
 rand_core = { workspace = true, optional = true, features = ["std"] }
 rayon.workspace = true
 regex.workspace = true

@@ -440,13 +440,13 @@ where
 
         // For all tests except integration use hard-coded native token addr ...
         #[cfg(all(
-            any(test, feature = "testing", feature = "benches"),
+            any(test, fuzzing, feature = "testing", feature = "benches"),
             not(feature = "integration"),
         ))]
         let native_token = namada_sdk::address::testing::nam();
         // ... Otherwise, look it up from the genesis file
         #[cfg(not(all(
-            any(test, feature = "testing", feature = "benches"),
+            any(test, fuzzing, feature = "testing", feature = "benches"),
             not(feature = "integration"),
         )))]
         let native_token = {
@@ -473,7 +473,7 @@ where
         // load in keys and address from wallet if mode is set to `Validator`
         let mode = match mode {
             TendermintMode::Validator => {
-                #[cfg(not(test))]
+                #[cfg(not(any(test, fuzzing)))]
                 {
                     let wallet_path = &base_dir.join(chain_id.as_str());
                     tracing::debug!(
@@ -526,7 +526,7 @@ where
                              wallet",
                         )
                 }
-                #[cfg(test)]
+                #[cfg(any(test, fuzzing))]
                 {
                     let (protocol_keypair, eth_bridge_keypair) =
                         wallet::defaults::validator_keys();
@@ -1003,6 +1003,7 @@ where
         };
 
         // Tx chain id
+        #[cfg(not(fuzzing))]
         if tx.header.chain_id != self.chain_id {
             response.code = ResultCode::InvalidChainId.into();
             response.log = format!(
@@ -1447,8 +1448,8 @@ where
 
 /// for the shell
 #[allow(clippy::arithmetic_side_effects, clippy::cast_possible_wrap)]
-#[cfg(test)]
-mod test_utils {
+#[cfg(any(test, feature = "testing"))]
+pub mod test_utils {
     use std::ops::{Deref, DerefMut};
 
     use data_encoding::HEXUPPER;
@@ -1491,23 +1492,20 @@ mod test_utils {
             .expect("Current directory should exist")
             .canonicalize()
             .expect("Current directory should exist");
-        while current_path.file_name().unwrap() != "node" {
+        while !current_path.join("rust-toolchain.toml").exists() {
             current_path.pop();
         }
-        // Two-dirs up to root
-        current_path.pop();
-        current_path.pop();
         current_path
     }
 
     /// Generate a random public/private keypair
     #[inline]
-    pub(super) fn gen_keypair() -> common::SecretKey {
+    pub fn gen_keypair() -> common::SecretKey {
         gen_ed25519_keypair()
     }
 
     /// Generate a random ed25519 public/private keypair
-    pub(super) fn gen_ed25519_keypair() -> common::SecretKey {
+    pub fn gen_ed25519_keypair() -> common::SecretKey {
         use rand::prelude::ThreadRng;
         use rand::thread_rng;
 
@@ -1516,7 +1514,7 @@ mod test_utils {
     }
 
     /// Generate a random secp256k1 public/private keypair
-    pub(super) fn gen_secp256k1_keypair() -> common::SecretKey {
+    pub fn gen_secp256k1_keypair() -> common::SecretKey {
         use rand::prelude::ThreadRng;
         use rand::thread_rng;
 
@@ -1527,9 +1525,7 @@ mod test_utils {
     }
 
     /// Invalidate a valid signature `sig`.
-    pub(super) fn invalidate_signature(
-        sig: common::Signature,
-    ) -> common::Signature {
+    pub fn invalidate_signature(sig: common::Signature) -> common::Signature {
         match sig {
             common::Signature::Ed25519(ed25519::Signature(ref sig)) => {
                 let mut sig_bytes = sig.to_bytes();
@@ -1573,7 +1569,7 @@ mod test_utils {
     /// Drop so as to clean up the files that it
     /// generates. Also allows illegal state
     /// modifications for testing purposes
-    pub(super) struct TestShell {
+    pub struct TestShell {
         pub shell: Shell<MockDB, Sha256Hasher>,
     }
 
@@ -1815,7 +1811,7 @@ mod test_utils {
     /// Start a new test shell and initialize it. Returns the shell paired with
     /// a broadcast receiver, which will receives any protocol txs sent by the
     /// shell.
-    pub(super) fn setup_with_cfg<H: Into<BlockHeight>>(
+    pub fn setup_with_cfg<H: Into<BlockHeight>>(
         SetupCfg {
             last_height,
             num_validators,
@@ -1876,7 +1872,7 @@ mod test_utils {
     /// Same as [`setup_at_height`], but returns a shell at the given block
     /// height, with a single validator.
     #[inline]
-    pub(super) fn setup_at_height<H: Into<BlockHeight>>(
+    pub fn setup_at_height<H: Into<BlockHeight>>(
         last_height: H,
     ) -> (
         TestShell,
@@ -1894,7 +1890,7 @@ mod test_utils {
     /// Same as [`setup_with_cfg`], but returns a shell at block height 0,
     /// with a single validator.
     #[inline]
-    pub(super) fn setup() -> (
+    pub fn setup() -> (
         TestShell,
         UnboundedReceiver<Vec<u8>>,
         Sender<EthereumEvent>,
@@ -1935,7 +1931,7 @@ mod test_utils {
     }
 
     /// Set the Ethereum bridge to be inactive
-    pub(super) fn deactivate_bridge(shell: &mut TestShell) {
+    pub fn deactivate_bridge(shell: &mut TestShell) {
         use eth_bridge::storage::active_key;
         use eth_bridge::storage::eth_bridge_queries::EthBridgeStatus;
         shell
@@ -1944,7 +1940,7 @@ mod test_utils {
             .expect("Test failed");
     }
 
-    pub(super) fn get_pkh_from_address<S>(
+    pub fn get_pkh_from_address<S>(
         storage: &S,
         params: &PosParams,
         address: Address,
@@ -1962,7 +1958,7 @@ mod test_utils {
         TryFrom::try_from(decoded).unwrap()
     }
 
-    pub(super) fn next_block_for_inflation(
+    pub fn next_block_for_inflation(
         shell: &mut TestShell,
         proposer_address: Vec<u8>,
         votes: Vec<VoteInfo>,

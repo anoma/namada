@@ -16,6 +16,7 @@ pub enum PgfError {
 }
 
 /// A tx data type to hold proposal data
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Clone,

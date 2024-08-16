@@ -40,6 +40,14 @@ testing = [
   "proptest",
   "jubjub",
 ]
+arbitrary = [
+  "dep:arbitrary",
+  "namada_account/arbitrary",
+  "namada_core/arbitrary",
+  "namada_governance/arbitrary",
+  "namada_ibc/arbitrary",
+  "namada_token/arbitrary",
+]
 
 download-params = ["namada_token/download-params"]
 migrations = [
@@ -78,6 +86,7 @@ namada_vm = { path = "../vm", default-features = false }
 namada_vote_ext = { path = "../vote_ext" }
 namada_vp = { path = "../vp" }
 
+arbitrary = { workspace = true, optional = true }
 async-trait.workspace = true
 bimap.workspace = true
 borsh.workspace = true
