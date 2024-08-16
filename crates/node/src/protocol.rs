@@ -692,6 +692,9 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
+    const MASP_FEE_PAYMENT_ERROR: &str =
+        "The first transaction in the batch failed to pay fees via the MASP.";
+
     // The fee payment is subject to a gas limit imposed by a protocol
     // parameter. Here we instantiate a custom gas meter for this step and
     // initialize it with the already consumed gas. The gas limit should
@@ -735,28 +738,11 @@ where
                 // cause we might need to discard the effects of this valid
                 // unshield (e.g. if it unshield an amount which is not enough
                 // to pay the fees)
-                // FIXME: can join this with what we do after?
-                // FIXME: actually, I think this if is completely useless, I can
-                // bring all of its content in the else branch (None) of the
-                // next if-else
-                if !result.is_accepted() {
-                    // FIXME: review this drop, if anythign, we should do it
-                    // below before returning None
-                    state.write_log_mut().drop_tx();
-                    tracing::error!(
-                        "The first transaction in the batch failed to pay \
-                         fees via the MASP, some VPs rejected it: {:#?}",
-                        result.vps_result.rejected_vps
-                    );
-                }
+                let is_masp_transfer = is_masp_transfer(&result.changed_keys);
 
                 // Ensure that the transaction is actually a masp one, otherwise
                 // reject
-                // FIXME: also need a test for this, test that using a non masp
-                // tx to pay fees doesn't work
-                if is_masp_transfer(&result.changed_keys)
-                    && result.is_accepted()
-                {
+                if is_masp_transfer && result.is_accepted() {
                     get_optional_masp_ref(*state, first_tx.cmt)?.map(
                         |masp_section_ref| MaspTxResult {
                             tx_result: result,
@@ -764,14 +750,27 @@ where
                         },
                     )
                 } else {
+                    state.write_log_mut().drop_tx();
+
+                    let mut error_msg = MASP_FEE_PAYMENT_ERROR.to_string();
+                    if !is_masp_transfer {
+                        error_msg.push_str(" Not a MASP transaction.");
+                    }
+                    if !result.is_accepted() {
+                        error_msg = format!(
+                            "{error_msg} Some VPs rejected it: {:#?}",
+                            result.vps_result.rejected_vps
+                        );
+                    }
+                    tracing::error!(error_msg);
+
                     None
                 }
             }
             Err(e) => {
                 state.write_log_mut().drop_tx();
                 tracing::error!(
-                    "The first transaction in the batch failed to pay fees \
-                     via the MASP, wasm run failed: {}",
+                    "{MASP_FEE_PAYMENT_ERROR} Wasm run failed: {}",
                     e
                 );
                 if let Error::GasError(_) = e {
