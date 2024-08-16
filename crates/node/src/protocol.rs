@@ -401,30 +401,20 @@ where
                 );
                 if is_accepted {
                     // If the transaction was a masp one append the
-                    // transaction refs for the events
-                    let actions =
-                        state.read_actions().map_err(Error::StateError)?;
-                    if let Some(masp_section_ref) =
-                        action::get_masp_section_ref(&actions).map_err(
-                            |msg| {
-                                Error::StateError(state::Error::Temporary {
-                                    error: msg.to_string(),
-                                })
-                            },
-                        )?
-                    {
-                        extended_tx_result
-                            .masp_tx_refs
-                            .0
-                            .push(masp_section_ref);
-                    }
-                    if action::is_ibc_shielding_transfer(&*state)
-                        .map_err(Error::StateError)?
-                    {
-                        extended_tx_result
-                            .ibc_tx_data_refs
-                            .0
-                            .push(*cmt.data_sechash())
+                    // transaction refs for the events.
+                    if let Some(masp_ref) = get_optional_masp_ref(state, cmt)? {
+                        match masp_ref {
+                            Either::Left(masp_section_ref) => {
+                                extended_tx_result
+                                    .masp_tx_refs
+                                    .0
+                                    .push(masp_section_ref);
+                            }
+                            Either::Right(data_sechash) => extended_tx_result
+                                .ibc_tx_data_refs
+                                .0
+                                .push(data_sechash),
+                        }
                     }
                     state.write_log_mut().commit_tx_to_batch();
                 } else {
@@ -745,7 +735,13 @@ where
                 // cause we might need to discard the effects of this valid
                 // unshield (e.g. if it unshield an amount which is not enough
                 // to pay the fees)
+                // FIXME: can join this with what we do after?
+                // FIXME: actually, I think this if is completely useless, I can
+                // bring all of its content in the else branch (None) of the
+                // next if-else
                 if !result.is_accepted() {
+                    // FIXME: review this drop, if anythign, we should do it
+                    // below before returning None
                     state.write_log_mut().drop_tx();
                     tracing::error!(
                         "The first transaction in the batch failed to pay \
@@ -754,36 +750,19 @@ where
                     );
                 }
 
-                let actions =
-                    state.read_actions().map_err(Error::StateError)?;
-
                 // Ensure that the transaction is actually a masp one, otherwise
                 // reject
+                // FIXME: also need a test for this, test that using a non masp
+                // tx to pay fees doesn't work
                 if is_masp_transfer(&result.changed_keys)
                     && result.is_accepted()
                 {
-                    if let Some(masp_tx_id) = action::get_masp_section_ref(
-                        &actions,
-                    )
-                    .map_err(|msg| {
-                        Error::StateError(state::Error::Temporary {
-                            error: msg.to_string(),
-                        })
-                    })? {
-                        Some(MaspTxResult {
+                    get_optional_masp_ref(*state, first_tx.cmt)?.map(
+                        |masp_section_ref| MaspTxResult {
                             tx_result: result,
-                            masp_section_ref: Either::Left(masp_tx_id),
-                        })
-                    } else {
-                        action::is_ibc_shielding_transfer(*state)
-                            .map_err(Error::StateError)?
-                            .then_some(MaspTxResult {
-                                tx_result: result,
-                                masp_section_ref: Either::Right(
-                                    *first_tx.cmt.data_sechash(),
-                                ),
-                            })
-                    }
+                            masp_section_ref,
+                        },
+                    )
                 } else {
                     None
                 }
@@ -811,6 +790,39 @@ where
         .map_err(|e| Error::GasError(e.to_string()))?;
 
     Ok(valid_batched_tx_result)
+}
+
+// Extract the MASP tx reference (if any) in the same order that the MASP VP
+// follows (IBC first, Actions second). The order is important to prevent
+// malicious transactions from messing up with indexers/clients. Also a
+// transaction can only be of one of the two types, not both at the same time
+// (the MASP VP accepts a single Transaction)
+fn get_optional_masp_ref<S: Read<Err = state::Error>>(
+    state: &S,
+    cmt: &TxCommitments,
+) -> Result<Option<Either<namada_sdk::masp::MaspTxId, Hash>>> {
+    let masp_ref = if action::is_ibc_shielding_transfer(state)
+        .map_err(Error::StateError)?
+    {
+        Either::Right(cmt.data_sechash().to_owned())
+    } else {
+        let actions = state.read_actions().map_err(Error::StateError)?;
+        let masp_tx_id = action::get_masp_section_ref(&actions)
+            .map_err(|msg| {
+                Error::StateError(state::Error::Temporary {
+                    error: msg.to_string(),
+                })
+            })?
+            .ok_or_else(|| {
+                Error::MissingSection(
+                    "Missing MASP section in transaction".to_string(),
+                )
+            })?;
+
+        Either::Left(masp_tx_id)
+    };
+
+    Ok(Some(masp_ref))
 }
 
 // Manage the token transfer for the fee payment. If an error is detected the
