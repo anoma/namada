@@ -33,7 +33,7 @@ use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
 pub use namada_core::chain::{
     BlockHash, BlockHeader, BlockHeight, Epoch, Epochs,
 };
-pub use namada_core::hash::StorageHasher;
+pub use namada_core::hash::{Hash, StorageHasher};
 pub use namada_core::storage::*;
 
 /// Common storage read interface
