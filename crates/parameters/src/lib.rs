@@ -25,8 +25,8 @@ use std::marker::PhantomData;
 
 use namada_core::address::{Address, InternalAddress};
 use namada_core::arith::checked;
-use namada_core::chain::ProposalBytes;
 use namada_core::storage::BlockHeight;
+pub use namada_core::parameters::ProposalBytes;
 use namada_core::time::DurationSecs;
 use namada_core::{hints, token};
 use namada_storage::{ResultExt, StorageRead, StorageWrite};

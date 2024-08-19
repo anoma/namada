@@ -3100,9 +3100,8 @@ fn prune_old_delegations(
 #[cfg(any(test, feature = "testing"))]
 /// PoS related utility functions to help set up tests.
 pub mod test_utils {
-    use namada_core::chain::ProposalBytes;
     use namada_core::hash::Hash;
-    use namada_core::parameters::EpochDuration;
+    use namada_core::parameters::{EpochDuration, ProposalBytes};
     use namada_core::time::DurationSecs;
 
     use super::*;
