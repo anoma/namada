@@ -3,27 +3,26 @@
 use std::cmp::Ordering;
 
 use data_encoding::HEXUPPER;
+use namada_core::address::Address;
+use namada_core::borsh::{
+    BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
+};
+use namada_core::key::common;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use super::address::Address;
-use super::key::common;
-use crate::borsh::{
-    BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
-};
-
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum SigIndexDecodeError {
     #[error("Invalid signature index bytes: {0}")]
-    InvalidEncoding(std::io::Error),
+    Encoding(std::io::Error),
     #[error("Invalid signature index JSON string")]
-    InvalidJsonString,
+    JsonString,
     #[error("Invalid signature index: {0}")]
-    InvalidHex(data_encoding::DecodeError),
+    Hex(data_encoding::DecodeError),
 }
 
 #[derive(
@@ -77,11 +76,11 @@ impl SignatureIndex {
         if let Ok(hex) = serde_json::from_slice::<String>(data) {
             match HEXUPPER.decode(hex.as_bytes()) {
                 Ok(bytes) => Self::try_from_slice(&bytes)
-                    .map_err(SigIndexDecodeError::InvalidEncoding),
-                Err(e) => Err(SigIndexDecodeError::InvalidHex(e)),
+                    .map_err(SigIndexDecodeError::Encoding),
+                Err(e) => Err(SigIndexDecodeError::Hex(e)),
             }
         } else {
-            Err(SigIndexDecodeError::InvalidJsonString)
+            Err(SigIndexDecodeError::JsonString)
         }
     }
 }

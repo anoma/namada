@@ -20,7 +20,6 @@ use namada_core::chain::ChainId;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::*;
 use namada_core::masp::{AssetData, TxId};
-use namada_core::sign::SignatureIndex;
 use namada_core::storage::{BlockHeight, TxIndex};
 use namada_core::time::DateTimeUtc;
 use namada_macros::BorshDeserializer;
@@ -34,6 +33,7 @@ use thiserror::Error;
 use crate::data::protocol::ProtocolTx;
 use crate::data::{hash_tx, Fee, GasLimit, TxType, WrapperTx};
 use crate::proto;
+use crate::sign::SignatureIndex;
 
 /// Represents an error in signature verification
 #[allow(missing_docs)]

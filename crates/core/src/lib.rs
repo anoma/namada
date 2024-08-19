@@ -63,7 +63,6 @@ pub mod keccak;
 pub mod key;
 pub mod masp;
 pub mod parameters;
-pub mod sign;
 pub mod storage;
 pub mod string_encoding;
 pub mod time;

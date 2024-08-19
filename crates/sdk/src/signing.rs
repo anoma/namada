@@ -16,7 +16,6 @@ use namada_core::arith::checked;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::*;
 use namada_core::masp::{AssetData, ExtendedViewingKey, PaymentAddress, TxId};
-use namada_core::sign::SignatureIndex;
 use namada_core::token::{Amount, DenominatedAmount};
 use namada_governance::storage::proposal::{
     InitProposalData, ProposalType, VoteProposalData,
@@ -29,7 +28,7 @@ use namada_token::storage_key::balance_key;
 use namada_tx::data::pgf::UpdateStewardCommission;
 use namada_tx::data::pos::BecomeValidator;
 use namada_tx::data::{pos, Fee};
-use namada_tx::{MaspBuilder, Section, Tx};
+use namada_tx::{MaspBuilder, Section, SignatureIndex, Tx};
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
