@@ -1,4 +1,4 @@
-//! The core public types, storage_api, VpEnv and TxEnv.
+//! The core Namada types, helpers and re-exported dependencies.
 
 #![doc(html_favicon_url = "https://dev.namada.net/master/favicon.png")]
 #![doc(html_logo_url = "https://dev.namada.net/master/rustdoc-logo.png")]
