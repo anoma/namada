@@ -24,7 +24,7 @@ use core::slice;
 use std::marker::PhantomData;
 
 use masp_primitives::transaction::Transaction;
-use namada_core::account::AccountPublicKeysMap;
+use namada_account::AccountPublicKeysMap;
 pub use namada_core::address::Address;
 pub use namada_core::borsh::{
     BorshDeserialize, BorshSerialize, BorshSerializeExt,

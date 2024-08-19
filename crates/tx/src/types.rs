@@ -10,7 +10,7 @@ use masp_primitives::transaction::builder::Builder;
 use masp_primitives::transaction::components::sapling::builder::SaplingMetadata;
 use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::ExtendedFullViewingKey;
-use namada_core::account::AccountPublicKeysMap;
+use namada_account::AccountPublicKeysMap;
 use namada_core::address::Address;
 use namada_core::borsh::schema::{add_definition, Declaration, Definition};
 use namada_core::borsh::{

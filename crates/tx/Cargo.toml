@@ -14,15 +14,16 @@ version.workspace = true
 
 [features]
 default = ["salt"]
-testing = ["proptest", "namada_core/testing"]
+testing = ["proptest", "namada_account/testing", "namada_core/testing"]
 salt = ["rand_core"]
 migrations = [
     "namada_migrations",
     "linkme",
 ]
-arbitrary = ["dep:arbitrary", "namada_core/arbitrary"]
+arbitrary = ["dep:arbitrary", "namada_account/arbitrary", "namada_core/arbitrary"]
 
 [dependencies]
+namada_account = { path = "../account" }
 namada_core = { path = "../core" }
 namada_events = { path = "../events", default-features = false }
 namada_gas = { path = "../gas" }

@@ -6,6 +6,7 @@ use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::num::TryFromIntError;
 
+use namada_account::AccountPublicKeysMap;
 use namada_core::address::{self, Address, ESTABLISHED_ADDRESS_BYTES_LEN};
 use namada_core::arith::{self, checked};
 use namada_core::borsh::{BorshDeserialize, BorshSerializeExt};
@@ -1976,10 +1977,8 @@ where
         .map_err(|e| vp_host_fns::RuntimeError::MemoryError(Box::new(e)))?;
     vp_host_fns::add_gas(gas_meter, gas)?;
     let public_keys_map =
-        namada_core::account::AccountPublicKeysMap::try_from_slice(
-            &public_keys_map,
-        )
-        .map_err(vp_host_fns::RuntimeError::EncodingError)?;
+        AccountPublicKeysMap::try_from_slice(&public_keys_map)
+            .map_err(vp_host_fns::RuntimeError::EncodingError)?;
 
     let (signer, gas) = env
         .memory
@@ -2136,10 +2135,8 @@ where
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
     let public_keys_map =
-        namada_core::account::AccountPublicKeysMap::try_from_slice(
-            &public_keys_map,
-        )
-        .map_err(TxRuntimeError::EncodingError)?;
+        AccountPublicKeysMap::try_from_slice(&public_keys_map)
+            .map_err(TxRuntimeError::EncodingError)?;
 
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
 

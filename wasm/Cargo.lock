@@ -4015,6 +4015,7 @@ dependencies = [
  "either",
  "konst",
  "masp_primitives",
+ "namada_account",
  "namada_core",
  "namada_events",
  "namada_gas",
@@ -4069,6 +4070,7 @@ version = "0.43.0"
 dependencies = [
  "borsh",
  "clru",
+ "namada_account",
  "namada_core",
  "namada_events",
  "namada_gas",

@@ -47,7 +47,6 @@ pub mod collections {
     pub use hash_set::HashSet;
 }
 
-pub mod account;
 pub mod address;
 pub mod booleans;
 pub mod chain;
