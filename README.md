@@ -20,7 +20,9 @@ interaction with the protocol.
 
 ## 📓 Docs
 
-* dev docs: built from [dev mdBook](./documentation/dev/)
+* [User guides](https://docs.namada.net/)
+* [Specs](https://specs.namada.net/)
+* Rust docs can be built with `cargo doc --open` (add `--no-deps` to only build docs for local crates)
 
 ## Warning
 
