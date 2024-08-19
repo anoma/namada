@@ -19,12 +19,13 @@ use namada_core::masp::MaspEpoch;
 use namada_core::storage::{
     BlockHeight, BlockResults, Epoch, Key, PrefixValue,
 };
+use namada_core::time::DurationSecs;
 use namada_core::token::{
     Amount, DenominatedAmount, Denomination, MaspDigitPos,
 };
 use namada_core::{storage, token};
 use namada_gas::event::GasUsed as GasUsedAttr;
-use namada_gas::Gas;
+use namada_gas::WholeGas;
 use namada_governance::parameters::GovernanceParameters;
 use namada_governance::pgf::parameters::PgfParameters;
 use namada_governance::pgf::storage::steward::StewardDetail;
@@ -41,7 +42,7 @@ use namada_proof_of_stake::types::{
     BondsAndUnbondsDetails, CommissionPair, ValidatorMetaData,
 };
 use namada_state::LastBlock;
-use namada_tx::data::{BatchedTxResult, ResultCode, TxResult};
+use namada_tx::data::{BatchedTxResult, DryRunResult, ResultCode, TxResult};
 use namada_tx::event::{Batch as BatchAttr, Code as CodeAttr};
 use serde::Serialize;
 
@@ -60,6 +61,16 @@ use crate::tendermint::block::Height;
 use crate::tendermint::merkle::proof::ProofOps;
 use crate::tendermint_rpc::query::Query;
 use crate::{display_line, edisplay_line, error, Namada, Tx};
+
+/// Query an estimate of the maximum block time.
+pub async fn query_max_block_time_estimate(
+    context: &impl Namada,
+) -> Result<DurationSecs, Error> {
+    RPC.shell()
+        .max_block_time(context.client())
+        .await
+        .map_err(|err| Error::from(QueryError::NoResponse(err.to_string())))
+}
 
 /// Identical to [`query_tx_status`], but does not need a [`Namada`]
 /// context.
@@ -347,6 +358,13 @@ pub async fn query_conversions<C: crate::queries::Client + Sync>(
     convert_response::<C, _>(RPC.shell().read_conversions(client).await)
 }
 
+/// Query the total rewards minted by MASP
+pub async fn query_masp_total_rewards<C: crate::queries::Client + Sync>(
+    client: &C,
+) -> Result<token::Amount, error::Error> {
+    convert_response::<C, _>(RPC.vp().token().masp_total_rewards(client).await)
+}
+
 /// Query to read the tokens that earn masp rewards.
 pub async fn query_masp_reward_tokens<C: crate::queries::Client + Sync>(
     client: &C,
@@ -531,7 +549,7 @@ pub async fn query_tx_events<C: crate::queries::Client + Sync>(
 pub async fn dry_run_tx<N: Namada>(
     context: &N,
     tx_bytes: Vec<u8>,
-) -> Result<namada_tx::data::TxResult<String>, Error> {
+) -> Result<DryRunResult, Error> {
     let (data, height, prove) = (Some(tx_bytes), None, false);
     let result = convert_response::<N::Client, _>(
         RPC.shell()
@@ -539,20 +557,22 @@ pub async fn dry_run_tx<N: Namada>(
             .await,
     )?
     .data;
-    let result_str = format!("Transaction consumed {} gas", result.gas_used);
+    let result_str = format!("Transaction consumed {} gas", result.1);
+
     let mut cmt_result_str = String::new();
-    for (cmt_hash, cmt_result) in &result.batch_results.0 {
+    for (inner_hash, cmt_result) in result.0.iter() {
         match cmt_result {
             Ok(result) => {
                 if result.is_accepted() {
                     cmt_result_str.push_str(&format!(
-                        "Inner transaction {cmt_hash} was successfully applied",
+                        "Inner transaction {inner_hash} was successfully \
+                         applied",
                     ));
                 } else {
                     cmt_result_str.push_str(&format!(
                         "Inner transaction {} was rejected by VPs: \
                          {}\nErrors: {}\nChanged keys: {}",
-                        cmt_hash,
+                        inner_hash,
                         serde_json::to_string_pretty(
                             &result.vps_result.rejected_vps
                         )
@@ -565,7 +585,7 @@ pub async fn dry_run_tx<N: Namada>(
                 }
             }
             Err(msg) => cmt_result_str.push_str(&format!(
-                "Inner transaction {cmt_hash} failed with error: {msg}"
+                "Inner transaction {inner_hash} failed with error: {msg}"
             )),
         }
     }
@@ -611,7 +631,7 @@ pub struct TxResponse {
     /// Response code
     pub code: ResultCode,
     /// Gas used.
-    pub gas_used: Gas,
+    pub gas_used: WholeGas,
 }
 
 /// Determines a result of an inner tx from
@@ -672,9 +692,9 @@ impl TxResponse {
     /// Check the result of the batch. This should not be used with wrapper
     /// txs.
     pub fn batch_result(&self) -> HashMap<Hash, InnerTxResult<'_>> {
-        if let Some(tx) = self.batch.as_ref() {
+        if let Some(tx_result) = self.batch.as_ref() {
             let mut result = HashMap::default();
-            for (cmt_hash, cmt_result) in &tx.batch_results.0 {
+            for (inner_hash, cmt_result) in tx_result.iter() {
                 let value = match cmt_result {
                     Ok(res) => {
                         if res.is_accepted() {
@@ -685,7 +705,7 @@ impl TxResponse {
                     }
                     Err(_) => InnerTxResult::OtherFailure,
                 };
-                result.insert(cmt_hash.to_owned(), value);
+                result.insert(inner_hash.to_owned(), value);
             }
             result
         } else {
@@ -721,6 +741,19 @@ pub async fn get_total_staked_tokens<C: crate::queries::Client + Sync>(
 ) -> Result<token::Amount, error::Error> {
     convert_response::<C, _>(
         RPC.vp().pos().total_stake(client, &Some(epoch)).await,
+    )
+}
+
+/// Get the total active voting power in the given epoch
+pub async fn get_total_active_voting_power<C: crate::queries::Client + Sync>(
+    client: &C,
+    epoch: Epoch,
+) -> Result<token::Amount, error::Error> {
+    convert_response::<C, _>(
+        RPC.vp()
+            .pos()
+            .total_active_voting_power(client, &Some(epoch))
+            .await,
     )
 }
 
@@ -903,32 +936,49 @@ pub async fn get_public_key_at<C: crate::queries::Client + Sync>(
 }
 
 /// Query the proposal result
-pub async fn query_proposal_result<C: crate::queries::Client + Sync>(
-    client: &C,
+pub async fn query_proposal_result<N: Namada>(
+    context: &N,
     proposal_id: u64,
 ) -> Result<Option<ProposalResult>, Error> {
-    let proposal = query_proposal_by_id(client, proposal_id).await?;
+    let proposal = query_proposal_by_id(context.client(), proposal_id).await?;
     let proposal = if let Some(proposal) = proposal {
         proposal
     } else {
         return Ok(None);
     };
-    let stored_proposal_result = convert_response::<C, Option<ProposalResult>>(
-        RPC.vp().gov().proposal_result(client, &proposal_id).await,
-    )?;
+
+    let current_epoch = query_epoch(context.client()).await?;
+    if current_epoch < proposal.voting_start_epoch {
+        display_line!(
+            context.io(),
+            "Proposal {} is still pending, voting period will start in {} \
+             epochs.",
+            proposal_id,
+            proposal.voting_end_epoch.0 - current_epoch.0
+        );
+    }
+
+    let stored_proposal_result =
+        convert_response::<N::Client, Option<ProposalResult>>(
+            RPC.vp()
+                .gov()
+                .proposal_result(context.client(), &proposal_id)
+                .await,
+        )?;
+
     let proposal_result = match stored_proposal_result {
         Some(proposal_result) => proposal_result,
         None => {
             let tally_epoch = proposal.voting_end_epoch;
 
             let is_author_pgf_steward =
-                is_steward(client, &proposal.author).await;
-            let votes = query_proposal_votes(client, proposal_id)
+                is_steward(context.client(), &proposal.author).await;
+            let votes = query_proposal_votes(context.client(), proposal_id)
                 .await
                 .unwrap_or_default();
             let tally_type = proposal.get_tally_type(is_author_pgf_steward);
-            let total_staked_token =
-                get_total_staked_tokens(client, tally_epoch)
+            let total_active_voting_power =
+                get_total_active_voting_power(context.client(), tally_epoch)
                     .await
                     .unwrap_or_default();
 
@@ -938,7 +988,7 @@ pub async fn query_proposal_result<C: crate::queries::Client + Sync>(
                 match vote.is_validator() {
                     true => {
                         let voting_power = get_validator_stake(
-                            client,
+                            context.client(),
                             tally_epoch,
                             &vote.validator,
                         )
@@ -953,7 +1003,7 @@ pub async fn query_proposal_result<C: crate::queries::Client + Sync>(
                     }
                     false => {
                         let voting_power = get_bond_amount_at(
-                            client,
+                            context.client(),
                             &vote.delegator,
                             &vote.validator,
                             tally_epoch,
@@ -972,7 +1022,7 @@ pub async fn query_proposal_result<C: crate::queries::Client + Sync>(
             }
             compute_proposal_result(
                 proposal_votes,
-                total_staked_token,
+                total_active_voting_power,
                 tally_type,
             )?
         }
@@ -994,7 +1044,7 @@ pub async fn query_and_print_unbonds(
     let mut not_yet_withdrawable = HashMap::<Epoch, token::Amount>::new();
     for ((_start_epoch, withdraw_epoch), amount) in unbonds.into_iter() {
         if withdraw_epoch <= current_epoch {
-            total_withdrawable = checked!(total_withdrawable + amount)?;
+            checked!(total_withdrawable += amount)?;
         } else {
             let withdrawable_amount =
                 not_yet_withdrawable.entry(withdraw_epoch).or_default();

@@ -24,19 +24,20 @@ use ibc::core::host::types::path::{
 use ibc::core::host::ValidationContext;
 use ibc::cosmos_host::ValidateSelfClientContext;
 use ibc::primitives::{Signer, Timestamp};
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 use ibc_testkit::testapp::ibc::clients::mock::client_state::MockClientState;
+use namada_state::StorageRead;
+use namada_systems::parameters;
 
 use super::client::{AnyClientState, AnyConsensusState};
 use super::common::IbcCommonContext;
 use super::IbcContext;
 use crate::storage;
 
-const COMMITMENT_PREFIX: &[u8] = b"ibc";
-
-impl<C> ExtClientValidationContext for IbcContext<C>
+impl<C, Params> ExtClientValidationContext for IbcContext<C, Params>
 where
     C: IbcCommonContext,
+    Params: parameters::Read<C::Storage>,
 {
     fn host_timestamp(&self) -> Result<Timestamp, ContextError> {
         ValidationContext::host_timestamp(self)
@@ -70,12 +71,13 @@ where
     }
 }
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 use ibc_testkit::testapp::ibc::clients::mock::client_state::MockClientContext;
-#[cfg(feature = "testing")]
-impl<C> MockClientContext for IbcContext<C>
+#[cfg(any(test, feature = "testing"))]
+impl<C, Params> MockClientContext for IbcContext<C, Params>
 where
     C: IbcCommonContext,
+    Params: parameters::Read<<C as crate::IbcStorageContext>::Storage>,
 {
     fn host_timestamp(&self) -> Result<Timestamp, ContextError> {
         ValidationContext::host_timestamp(self)
@@ -86,9 +88,10 @@ where
     }
 }
 
-impl<C> ClientValidationContext for IbcContext<C>
+impl<C, Params> ClientValidationContext for IbcContext<C, Params>
 where
     C: IbcCommonContext,
+    Params: parameters::Read<C::Storage>,
 {
     type ClientStateRef = AnyClientState;
     type ConsensusStateRef = AnyConsensusState;
@@ -122,9 +125,10 @@ where
     }
 }
 
-impl<C> ValidationContext for IbcContext<C>
+impl<C, Params> ValidationContext for IbcContext<C, Params>
 where
     C: IbcCommonContext,
+    Params: parameters::Read<C::Storage>,
 {
     type HostClientState = AnyClientState;
     type HostConsensusState = AnyConsensusState;
@@ -135,7 +139,7 @@ where
     }
 
     fn host_height(&self) -> Result<Height, ContextError> {
-        let height = self.inner.borrow().get_block_height()?;
+        let height = self.inner.borrow().storage().get_block_height()?;
         // the revision number is always 0
         Height::new(0, height.0).map_err(ContextError::ClientError)
     }
@@ -167,7 +171,7 @@ where
         &self,
         client_state_of_host_on_counterparty: Self::HostClientState,
     ) -> Result<(), ContextError> {
-        #[cfg(feature = "testing")]
+        #[cfg(any(test, feature = "testing"))]
         {
             if MockClientState::try_from(
                 client_state_of_host_on_counterparty.clone(),
@@ -187,8 +191,7 @@ where
     }
 
     fn commitment_prefix(&self) -> CommitmentPrefix {
-        CommitmentPrefix::try_from(COMMITMENT_PREFIX.to_vec())
-            .expect("the prefix should be parsable")
+        CommitmentPrefix::from(crate::COMMITMENT_PREFIX.as_bytes().to_vec())
     }
 
     fn connection_counter(&self) -> Result<u64, ContextError> {
@@ -263,10 +266,28 @@ where
     }
 
     fn max_expected_time_per_block(&self) -> core::time::Duration {
-        self.inner
+        let height = self
+            .inner
             .borrow()
-            .max_expected_time_per_block()
-            .expect("Error cannot be returned")
+            .storage()
+            .get_block_height()
+            .expect("The height should exist");
+
+        let estimate = Params::estimate_max_block_time_from_blocks_and_params(
+            self.inner.borrow().storage(),
+            height,
+            // NB: estimate max height with up to 5 blocks in the past,
+            // which will not result in too many reads
+            5,
+        )
+        .expect("Failed to estimate max block time");
+
+        // NB: pick a lower max blocktime estimate during tests,
+        // to avoid flakes in CI
+        #[cfg(any(test, feature = "testing"))]
+        let estimate = estimate.min(namada_core::time::DurationSecs(5));
+
+        estimate.into()
     }
 
     fn validate_message_signer(
@@ -278,7 +299,7 @@ where
     }
 }
 
-impl<C> ValidateSelfClientContext for IbcContext<C>
+impl<C, Params> ValidateSelfClientContext for IbcContext<C, Params>
 where
     C: IbcCommonContext,
 {
@@ -290,6 +311,7 @@ where
         let height = self
             .inner
             .borrow()
+            .storage()
             .get_block_height()
             .expect("The height should exist");
         Height::new(0, height.0).expect("The conversion shouldn't fail")

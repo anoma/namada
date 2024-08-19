@@ -1,164 +1,148 @@
-use std::fmt::Debug;
+use std::time::Duration;
 
 use color_eyre::owo_colors::OwoColorize;
-use masp_primitives::sapling::ViewingKey;
-use masp_primitives::zip32::ExtendedSpendingKey;
+use namada_sdk::args::ShieldedSync;
+use namada_sdk::control_flow::install_shutdown_signal;
 use namada_sdk::error::Error;
+#[cfg(any(test, feature = "testing"))]
+use namada_sdk::io::DevNullProgressBar;
 use namada_sdk::io::Io;
+use namada_sdk::masp::utils::{IndexerMaspClient, LedgerMaspClient};
 use namada_sdk::masp::{
-    IndexedNoteEntry, ProgressLogger, ProgressType, ShieldedContext,
-    ShieldedUtils,
+    MaspLocalTaskEnv, ShieldedContext, ShieldedSyncConfig, ShieldedUtils,
 };
 use namada_sdk::queries::Client;
-use namada_sdk::storage::BlockHeight;
 use namada_sdk::{display, display_line, MaybeSend, MaybeSync};
 
 #[allow(clippy::too_many_arguments)]
 pub async fn syncing<
     U: ShieldedUtils + MaybeSend + MaybeSync,
-    C: Client + Sync,
-    IO: Io,
+    C: Client + Send + Sync + 'static,
+    IO: Io + Send + Sync,
 >(
     mut shielded: ShieldedContext<U>,
-    client: &C,
+    client: C,
+    args: ShieldedSync,
     io: &IO,
-    batch_size: u64,
-    start_query_height: Option<BlockHeight>,
-    last_query_height: Option<BlockHeight>,
-    sks: &[ExtendedSpendingKey],
-    fvks: &[ViewingKey],
 ) -> Result<ShieldedContext<U>, Error> {
-    let shutdown_signal = async {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        namada_sdk::control_flow::shutdown_send(tx).await;
-        rx.await
+    let (fetched_bar, scanned_bar, applied_bar) = {
+        #[cfg(any(test, feature = "testing"))]
+        {
+            (DevNullProgressBar, DevNullProgressBar, DevNullProgressBar)
+        }
+
+        #[cfg(not(any(test, feature = "testing")))]
+        {
+            let fetched = kdam::tqdm!(
+                total = 0,
+                desc = "fetched ",
+                animation = "fillup",
+                position = 0,
+                force_refresh = true,
+                dynamic_ncols = true,
+                miniters = 0,
+                mininterval = 0.05
+            );
+
+            let scanned = kdam::tqdm!(
+                total = 0,
+                desc = "scanned ",
+                animation = "fillup",
+                position = 1,
+                force_refresh = true,
+                dynamic_ncols = true,
+                miniters = 0,
+                mininterval = 0.05
+            );
+
+            let applied = kdam::tqdm!(
+                total = 0,
+                desc = "applied ",
+                animation = "fillup",
+                position = 2,
+                force_refresh = true,
+                dynamic_ncols = true,
+                miniters = 0,
+                mininterval = 0.05
+            );
+
+            (fetched, scanned, applied)
+        }
     };
 
-    display_line!(io, "{}", "==== Shielded sync started ====".on_white());
-    display_line!(io, "\n\n");
-    let logger = CliLogger::new(io);
-    let sync = async move {
-        shielded
-            .fetch(
-                client,
-                &logger,
-                start_query_height,
-                last_query_height,
-                batch_size,
-                sks,
-                fvks,
-            )
-            .await
-            .map(|_| shielded)
-    };
-    tokio::select! {
-        sync = sync => {
-            let shielded = sync?;
-            display!(io, "Syncing finished\n");
-            Ok(shielded)
-        },
-        sig = shutdown_signal => {
-            sig.map_err(|e| Error::Other(e.to_string()))?;
-            display!(io, "\n");
-            Ok(ShieldedContext::default())
-        },
+    let vks = args
+        .viewing_keys
+        .into_iter()
+        .map(|vk| vk.map(|vk| vk.as_viewing_key()))
+        .collect::<Vec<_>>();
+
+    macro_rules! dispatch_client {
+        ($client:expr) => {{
+            let config = ShieldedSyncConfig::builder()
+                .client($client)
+                .fetched_tracker(fetched_bar)
+                .scanned_tracker(scanned_bar)
+                .applied_tracker(applied_bar)
+                .shutdown_signal(install_shutdown_signal(false))
+                .wait_for_last_query_height(args.wait_for_last_query_height)
+                .retry_strategy(args.retry_strategy)
+                .build();
+
+            let env = MaspLocalTaskEnv::new(500)?;
+            let ctx = shielded
+                .sync(
+                    env,
+                    config,
+                    args.last_query_height,
+                    &args.spending_keys,
+                    &vks,
+                )
+                .await
+                .map(|_| shielded);
+
+            display!(io, "\nSyncing finished\n");
+
+            ctx
+        }};
     }
-}
 
-pub struct CliLogging<'io, T, IO: Io> {
-    items: Vec<T>,
-    index: usize,
-    length: usize,
-    io: &'io IO,
-    r#type: ProgressType,
-}
-
-impl<'io, T: Debug, IO: Io> CliLogging<'io, T, IO> {
-    fn new<I>(items: I, io: &'io IO, r#type: ProgressType) -> Self
-    where
-        I: IntoIterator<Item = T>,
-    {
-        let items: Vec<_> = items.into_iter().collect();
-        Self {
-            length: items.len(),
-            items,
-            index: 0,
+    let shielded = if let Some(endpoint) = args.with_indexer {
+        display_line!(
             io,
-            r#type,
-        }
-    }
-}
+            "{}\n",
+            "==== Shielded sync started using indexer client ====".bold()
+        );
 
-impl<'io, T: Debug, IO: Io> Iterator for CliLogging<'io, T, IO> {
-    type Item = T;
+        let client = reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(60))
+            .build()
+            .map_err(|err| {
+                Error::Other(format!("Failed to build http client: {err}"))
+            })?;
+        let url = endpoint.as_str().try_into().map_err(|err| {
+            Error::Other(format!(
+                "Failed to parse API endpoint {endpoint:?}: {err}"
+            ))
+        })?;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.index == 0 {
-            self.items = {
-                let mut new_items = vec![];
-                std::mem::swap(&mut new_items, &mut self.items);
-                new_items.into_iter().rev().collect()
-            };
-        }
-        if self.items.is_empty() {
-            return None;
-        }
-        self.index += 1;
-        let percent = (100 * self.index) / self.length;
-        let completed: String = vec!['#'; percent].iter().collect();
-        let incomplete: String = vec!['.'; 100 - percent].iter().collect();
-        display_line!(self.io, "\x1b[2A\x1b[J");
-        match self.r#type {
-            ProgressType::Fetch => display_line!(
-                self.io,
-                "Fetched block {:?} of {:?}",
-                self.items.last().unwrap(),
-                self.items[0]
-            ),
-            ProgressType::Scan => display_line!(
-                self.io,
-                "Scanning {} of {}",
-                self.index,
-                self.length
-            ),
-        }
-        display!(self.io, "[{}{}] ~~ {} %", completed, incomplete, percent);
-        self.io.flush();
-        self.items.pop()
-    }
-}
+        dispatch_client!(IndexerMaspClient::new(
+            client,
+            url,
+            true,
+            args.max_concurrent_fetches,
+        ))?
+    } else {
+        display_line!(
+            io,
+            "{}\n",
+            "==== Shielded sync started using ledger client ====".bold()
+        );
 
-/// A progress logger for the CLI
-#[derive(Debug, Clone)]
-pub struct CliLogger<'io, IO: Io> {
-    io: &'io IO,
-}
+        dispatch_client!(LedgerMaspClient::new(
+            client,
+            args.max_concurrent_fetches,
+        ))?
+    };
 
-impl<'io, IO: Io> CliLogger<'io, IO> {
-    pub fn new(io: &'io IO) -> Self {
-        Self { io }
-    }
-}
-
-impl<'io, IO: Io> ProgressLogger<IO> for CliLogger<'io, IO> {
-    type Fetch = CliLogging<'io, u64, IO>;
-    type Scan = CliLogging<'io, IndexedNoteEntry, IO>;
-
-    fn io(&self) -> &IO {
-        self.io
-    }
-
-    fn fetch<I>(&self, items: I) -> Self::Fetch
-    where
-        I: IntoIterator<Item = u64>,
-    {
-        CliLogging::new(items, self.io, ProgressType::Fetch)
-    }
-
-    fn scan<I>(&self, items: I) -> Self::Scan
-    where
-        I: IntoIterator<Item = IndexedNoteEntry>,
-    {
-        CliLogging::new(items, self.io, ProgressType::Scan)
-    }
+    Ok(shielded)
 }

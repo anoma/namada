@@ -15,13 +15,14 @@ use namada_core::address::{Address, ImplicitAddress, InternalAddress, MASP};
 use namada_core::arith::checked;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::*;
-use namada_core::masp::{AssetData, ExtendedViewingKey, PaymentAddress};
+use namada_core::masp::{AssetData, ExtendedViewingKey, PaymentAddress, TxId};
 use namada_core::sign::SignatureIndex;
 use namada_core::token::{Amount, DenominatedAmount};
 use namada_governance::storage::proposal::{
     InitProposalData, ProposalType, VoteProposalData,
 };
 use namada_governance::storage::vote::ProposalVote;
+use namada_ibc::{MsgNftTransfer, MsgTransfer};
 use namada_parameters::storage as parameter_storage;
 use namada_token as token;
 use namada_token::storage_key::balance_key;
@@ -29,7 +30,6 @@ use namada_tx::data::pgf::UpdateStewardCommission;
 use namada_tx::data::pos::BecomeValidator;
 use namada_tx::data::{pos, Fee};
 use namada_tx::{MaspBuilder, Section, Tx};
-use prost::Message;
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
@@ -38,21 +38,19 @@ use crate::args::SdkTypes;
 use crate::error::{EncodingError, Error, TxSubmitError};
 use crate::eth_bridge_pool::PendingTransfer;
 use crate::governance::storage::proposal::{AddRemove, PGFAction, PGFTarget};
-use crate::ibc::apps::transfer::types::msgs::transfer::MsgTransfer;
-use crate::ibc::primitives::proto::Any;
 use crate::io::*;
 use crate::rpc::validate_amount;
+use crate::token::Account;
 use crate::tx::{
     Commitment, TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
     TX_CHANGE_COMMISSION_WASM, TX_CHANGE_CONSENSUS_KEY_WASM,
     TX_CHANGE_METADATA_WASM, TX_CLAIM_REWARDS_WASM,
     TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM, TX_INIT_ACCOUNT_WASM,
     TX_INIT_PROPOSAL, TX_REACTIVATE_VALIDATOR_WASM, TX_REDELEGATE_WASM,
-    TX_RESIGN_STEWARD, TX_REVEAL_PK, TX_SHIELDED_TRANSFER_WASM,
-    TX_SHIELDING_TRANSFER_WASM, TX_TRANSPARENT_TRANSFER_WASM, TX_UNBOND_WASM,
-    TX_UNJAIL_VALIDATOR_WASM, TX_UNSHIELDING_TRANSFER_WASM,
-    TX_UPDATE_ACCOUNT_WASM, TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL,
-    TX_WITHDRAW_WASM, VP_USER_WASM,
+    TX_RESIGN_STEWARD, TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM,
+    TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
+    TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
+    VP_USER_WASM,
 };
 pub use crate::wallet::store::AddressVpType;
 use crate::wallet::{Wallet, WalletIo};
@@ -297,25 +295,24 @@ where
 }
 
 /// Return the necessary data regarding an account to be able to generate a
-/// multisignature section
+/// signature section
 pub async fn aux_signing_data(
     context: &impl Namada,
     args: &args::Tx<SdkTypes>,
     owner: Option<Address>,
     default_signer: Option<Address>,
+    extra_public_keys: Vec<common::PublicKey>,
 ) -> Result<SigningTxData, Error> {
-    let public_keys = if owner.is_some() || args.wrapper_fee_payer.is_none() {
-        tx_signers(context, args, default_signer.clone()).await?
-    } else {
-        vec![]
-    };
+    let mut public_keys =
+        tx_signers(context, args, default_signer.clone()).await?;
+    public_keys.extend(extra_public_keys.clone());
 
     let (account_public_keys_map, threshold) = match &owner {
         Some(owner @ Address::Established(_)) => {
             let account =
                 rpc::get_account_info(context.client(), owner).await?;
             if let Some(account) = account {
-                (Some(account.public_keys_map), account.threshold)
+                (Some(account.clone().public_keys_map), account.threshold)
             } else {
                 return Err(Error::from(TxSubmitError::InvalidAccount(
                     owner.encode(),
@@ -334,7 +331,10 @@ pub async fn aux_signing_data(
                 )));
             }
         },
-        None => (None, 0u8),
+        None => (
+            Some(AccountPublicKeysMap::from_iter(public_keys.clone())),
+            0u8,
+        ),
     };
 
     let fee_payer = if args.disposable_signing_key {
@@ -357,47 +357,6 @@ pub async fn aux_signing_data(
         owner,
         public_keys,
         threshold,
-        account_public_keys_map,
-        fee_payer,
-    })
-}
-
-/// Initialize validator signing data
-pub async fn init_validator_signing_data(
-    context: &impl Namada,
-    args: &args::Tx<SdkTypes>,
-    validator_keys: Vec<common::PublicKey>,
-) -> Result<SigningTxData, Error> {
-    let mut public_keys = if args.wrapper_fee_payer.is_none() {
-        tx_signers(context, args, None).await?
-    } else {
-        vec![]
-    };
-    public_keys.extend(validator_keys.clone());
-
-    let account_public_keys_map =
-        Some(AccountPublicKeysMap::from_iter(validator_keys));
-
-    let fee_payer = if args.disposable_signing_key {
-        context
-            .wallet_mut()
-            .await
-            .gen_disposable_signing_key(&mut OsRng)
-            .to_public()
-    } else {
-        match &args.wrapper_fee_payer {
-            Some(keypair) => keypair.clone(),
-            None => public_keys
-                .first()
-                .ok_or(TxSubmitError::InvalidFeePayer)?
-                .clone(),
-        }
-    };
-
-    Ok(SigningTxData {
-        owner: None,
-        public_keys,
-        threshold: 0,
         account_public_keys_map,
         fee_payer,
     })
@@ -627,7 +586,7 @@ async fn make_ledger_amount_asset(
             ));
         } else {
             output.extend(vec![
-                format!("{}Token : {}", prefix, token),
+                format!("{}Token : {}", prefix, decoded.token),
                 format!(
                     "{}Amount : {}",
                     prefix,
@@ -702,63 +661,40 @@ fn format_outputs(output: &mut Vec<String>) {
     }
 }
 
-enum TokenTransfer<'a> {
-    Transparent(&'a token::TransparentTransfer),
-    Shielded,
-    Shielding(&'a token::ShieldingTransfer),
-    Unshielding(&'a token::UnshieldingTransfer),
+/// Convert a map with key pairs into a nested structure
+fn nest_map<V>(
+    map: BTreeMap<Account, V>,
+) -> BTreeMap<Address, BTreeMap<Address, V>> {
+    let mut nested = BTreeMap::new();
+    for (account, v) in map {
+        let inner: &mut BTreeMap<_, _> =
+            nested.entry(account.owner).or_default();
+        inner.insert(account.token, v);
+    }
+    nested
 }
 
-impl TokenTransfer<'_> {
-    fn source(&self) -> Option<&Address> {
-        match self {
-            TokenTransfer::Transparent(transfer) => Some(&transfer.source),
-            TokenTransfer::Shielded => None,
-            TokenTransfer::Shielding(transfer) => Some(&transfer.source),
-            TokenTransfer::Unshielding(_) => None,
-        }
-    }
-
-    fn target(&self) -> Option<&Address> {
-        match self {
-            TokenTransfer::Transparent(transfer) => Some(&transfer.target),
-            TokenTransfer::Shielded => None,
-            TokenTransfer::Shielding(_) => None,
-            TokenTransfer::Unshielding(transfer) => Some(&transfer.target),
-        }
-    }
-
-    fn token_and_amount(&self) -> Option<(&Address, DenominatedAmount)> {
-        match self {
-            TokenTransfer::Transparent(transfer) => {
-                Some((&transfer.token, transfer.amount))
-            }
-            TokenTransfer::Shielded => None,
-            TokenTransfer::Shielding(transfer) => {
-                Some((&transfer.token, transfer.amount))
-            }
-            TokenTransfer::Unshielding(transfer) => {
-                Some((&transfer.token, transfer.amount))
-            }
-        }
-    }
-}
-
-/// Adds a Ledger output for the sender and destination for transparent and MASP
-/// transactions
+/// Adds a Ledger output for the senders and destinations for transparent and
+/// MASP transactions
 async fn make_ledger_token_transfer_endpoints(
     tokens: &HashMap<Address, String>,
     output: &mut Vec<String>,
-    transfer: TokenTransfer<'_>,
+    transfer: &token::Transfer,
     builder: Option<&MaspBuilder>,
     assets: &HashMap<AssetType, AssetData>,
-) {
-    if let Some(source) = transfer.source() {
-        output.push(format!("Sender : {}", source));
-        if let Some((token, amount)) = transfer.token_and_amount() {
-            make_ledger_amount_addr(tokens, output, amount, token, "Sending ");
+) -> Result<(), Error> {
+    for (owner, changes) in nest_map(transfer.sources.clone()) {
+        // MASP inputs will be printed below
+        if owner != MASP {
+            output.push(format!("Sender : {}", owner));
+            for (token, amount) in changes {
+                make_ledger_amount_addr(
+                    tokens, output, amount, &token, "Sending ",
+                );
+            }
         }
-    } else if let Some(builder) = builder {
+    }
+    if let Some(builder) = builder {
         for sapling_input in builder.builder.sapling_inputs() {
             let vk = ExtendedViewingKey::from(*sapling_input.key());
             output.push(format!("Sender : {}", vk));
@@ -773,18 +709,22 @@ async fn make_ledger_token_transfer_endpoints(
             .await;
         }
     }
-    if let Some(target) = transfer.target() {
-        output.push(format!("Destination : {}", target));
-        if let Some((token, amount)) = transfer.token_and_amount() {
-            make_ledger_amount_addr(
-                tokens,
-                output,
-                amount,
-                token,
-                "Receiving ",
-            );
+    for (owner, changes) in nest_map(transfer.targets.clone()) {
+        // MASP outputs will be printed below
+        if owner != MASP {
+            output.push(format!("Destination : {}", owner));
+            for (token, amount) in changes {
+                make_ledger_amount_addr(
+                    tokens,
+                    output,
+                    amount,
+                    &token,
+                    "Receiving ",
+                );
+            }
         }
-    } else if let Some(builder) = builder {
+    }
+    if let Some(builder) = builder {
         for sapling_output in builder.builder.sapling_outputs() {
             let pa = PaymentAddress::from(sapling_output.address());
             output.push(format!("Destination : {}", pa));
@@ -799,6 +739,8 @@ async fn make_ledger_token_transfer_endpoints(
             .await;
         }
     }
+
+    Ok(())
 }
 
 /// Convert decimal numbers into the format used by Ledger. Specifically remove
@@ -962,6 +904,30 @@ fn proposal_type_to_ledger_vector(
     }
 }
 
+// Find the MASP Builder that was used to construct the given Transaction.
+// Additionally record how to decode AssetTypes using information from the
+// builder.
+fn find_masp_builder<'a>(
+    tx: &'a Tx,
+    shielded_section_hash: Option<TxId>,
+    asset_types: &mut HashMap<AssetType, AssetData>,
+) -> Result<Option<&'a MaspBuilder>, std::io::Error> {
+    for section in &tx.sections {
+        match section {
+            Section::MaspBuilder(builder)
+                if Some(builder.target) == shielded_section_hash =>
+            {
+                for decoded in &builder.asset_types {
+                    asset_types.insert(decoded.encode()?, decoded.clone());
+                }
+                return Ok(Some(builder));
+            }
+            _ => {}
+        }
+    }
+    Ok(None)
+}
+
 /// Converts the given transaction to the form that is displayed on the Ledger
 /// device
 pub async fn to_ledger_vector(
@@ -1054,9 +1020,10 @@ pub async fn to_ledger_vector(
                 Error::from(EncodingError::Conversion(err.to_string()))
             })?;
 
-            tv.name = "Init_Validator_0".to_string();
+            tv.name = "Become_Validator_0".to_string();
 
-            tv.output.extend(vec!["Type : Init Validator".to_string()]);
+            tv.output
+                .extend(vec!["Type : Become Validator".to_string()]);
             tv.output.extend(vec![
                 format!("Address : {}", init_validator.address),
                 format!("Consensus key : {}", init_validator.consensus_key),
@@ -1070,6 +1037,9 @@ pub async fn to_ledger_vector(
                 ),
                 format!("Email : {}", init_validator.email),
             ]);
+            if let Some(name) = &init_validator.name {
+                tv.output.push(format!("Name : {}", name));
+            }
             if let Some(description) = &init_validator.description {
                 tv.output.push(format!("Description : {}", description));
             }
@@ -1079,6 +1049,9 @@ pub async fn to_ledger_vector(
             if let Some(discord_handle) = &init_validator.discord_handle {
                 tv.output
                     .push(format!("Discord handle : {}", discord_handle));
+            }
+            if let Some(avatar) = &init_validator.avatar {
+                tv.output.push(format!("Avatar : {}", avatar));
             }
 
             tv.output_expert.extend(vec![
@@ -1094,6 +1067,9 @@ pub async fn to_ledger_vector(
                 ),
                 format!("Email : {}", init_validator.email),
             ]);
+            if let Some(name) = &init_validator.name {
+                tv.output_expert.push(format!("Name : {}", name));
+            }
             if let Some(description) = &init_validator.description {
                 tv.output_expert
                     .push(format!("Description : {}", description));
@@ -1104,6 +1080,9 @@ pub async fn to_ledger_vector(
             if let Some(discord_handle) = &init_validator.discord_handle {
                 tv.output_expert
                     .push(format!("Discord handle : {}", discord_handle));
+            }
+            if let Some(avatar) = &init_validator.avatar {
+                tv.output_expert.push(format!("Avatar : {}", avatar));
             }
         } else if code_sec.tag == Some(TX_INIT_PROPOSAL.to_string()) {
             let init_proposal_data = InitProposalData::try_from_slice(
@@ -1274,243 +1253,315 @@ pub async fn to_ledger_vector(
                     HEXLOWER.encode(&extra_code_hash.0)
                 )]);
             }
-        } else if code_sec.tag == Some(TX_TRANSPARENT_TRANSFER_WASM.to_string())
-        {
-            let transfer = token::TransparentTransfer::try_from_slice(
+        } else if code_sec.tag == Some(TX_TRANSFER_WASM.to_string()) {
+            let transfer = token::Transfer::try_from_slice(
                 &tx.data(cmt)
                     .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
             )
             .map_err(|err| {
                 Error::from(EncodingError::Conversion(err.to_string()))
             })?;
-
             tv.name = "Transfer_0".to_string();
+            tv.output.push("Type : Transfer".to_string());
 
-            tv.output.push("Type : TransparentTransfer".to_string());
-            make_ledger_token_transfer_endpoints(
-                &tokens,
-                &mut tv.output,
-                TokenTransfer::Transparent(&transfer),
-                None,
-                &HashMap::default(),
-            )
-            .await;
-            make_ledger_token_transfer_endpoints(
-                &tokens,
-                &mut tv.output_expert,
-                TokenTransfer::Transparent(&transfer),
-                None,
-                &HashMap::default(),
-            )
-            .await;
-        } else if code_sec.tag == Some(TX_SHIELDED_TRANSFER_WASM.to_string()) {
-            let transfer = token::ShieldedTransfer::try_from_slice(
-                &tx.data(cmt)
-                    .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
-            )
-            .map_err(|err| {
-                Error::from(EncodingError::Conversion(err.to_string()))
-            })?;
             // To facilitate lookups of MASP AssetTypes
             let mut asset_types = HashMap::new();
-            let builder = tx.sections.iter().find_map(|x| match x {
-                Section::MaspBuilder(builder)
-                    if builder.target == transfer.section_hash =>
-                {
-                    for decoded in &builder.asset_types {
-                        match decoded.encode() {
-                            Err(_) => None,
-                            Ok(asset) => {
-                                asset_types.insert(asset, decoded.clone());
-                                Some(builder)
-                            }
-                        }?;
-                    }
-                    Some(builder)
-                }
-                _ => None,
-            });
-
-            tv.name = "ShieldedTransfer_0".to_string();
-
-            tv.output.push("Type : ShieldedTransfer".to_string());
+            let builder = find_masp_builder(
+                tx,
+                transfer.shielded_section_hash,
+                &mut asset_types,
+            )
+            .map_err(|_| Error::Other("Invalid Data".to_string()))?;
             make_ledger_token_transfer_endpoints(
                 &tokens,
                 &mut tv.output,
-                TokenTransfer::Shielded,
+                &transfer,
                 builder,
                 &asset_types,
             )
-            .await;
+            .await?;
             make_ledger_token_transfer_endpoints(
                 &tokens,
                 &mut tv.output_expert,
-                TokenTransfer::Shielded,
+                &transfer,
                 builder,
                 &asset_types,
             )
-            .await;
-        } else if code_sec.tag == Some(TX_SHIELDING_TRANSFER_WASM.to_string()) {
-            let transfer = token::ShieldingTransfer::try_from_slice(
-                &tx.data(cmt)
-                    .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
-            )
-            .map_err(|err| {
-                Error::from(EncodingError::Conversion(err.to_string()))
-            })?;
-            // To facilitate lookups of MASP AssetTypes
-            let mut asset_types = HashMap::new();
-            let builder = tx.sections.iter().find_map(|x| match x {
-                Section::MaspBuilder(builder)
-                    if builder.target == transfer.shielded_section_hash =>
-                {
-                    for decoded in &builder.asset_types {
-                        match decoded.encode() {
-                            Err(_) => None,
-                            Ok(asset) => {
-                                asset_types.insert(asset, decoded.clone());
-                                Some(builder)
-                            }
-                        }?;
-                    }
-                    Some(builder)
-                }
-                _ => None,
-            });
-
-            tv.name = "ShieldingTransfer_0".to_string();
-
-            tv.output.push("Type : ShieldingTransfer".to_string());
-            make_ledger_token_transfer_endpoints(
-                &tokens,
-                &mut tv.output,
-                TokenTransfer::Shielding(&transfer),
-                builder,
-                &asset_types,
-            )
-            .await;
-            make_ledger_token_transfer_endpoints(
-                &tokens,
-                &mut tv.output_expert,
-                TokenTransfer::Shielding(&transfer),
-                builder,
-                &asset_types,
-            )
-            .await;
-        } else if code_sec.tag == Some(TX_UNSHIELDING_TRANSFER_WASM.to_string())
-        {
-            let transfer = token::UnshieldingTransfer::try_from_slice(
-                &tx.data(cmt)
-                    .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
-            )
-            .map_err(|err| {
-                Error::from(EncodingError::Conversion(err.to_string()))
-            })?;
-            // To facilitate lookups of MASP AssetTypes
-            let mut asset_types = HashMap::new();
-            let builder = tx.sections.iter().find_map(|x| match x {
-                Section::MaspBuilder(builder)
-                    if builder.target == transfer.shielded_section_hash =>
-                {
-                    for decoded in &builder.asset_types {
-                        match decoded.encode() {
-                            Err(_) => None,
-                            Ok(asset) => {
-                                asset_types.insert(asset, decoded.clone());
-                                Some(builder)
-                            }
-                        }?;
-                    }
-                    Some(builder)
-                }
-                _ => None,
-            });
-
-            tv.name = "UnshieldingTransfer_0".to_string();
-
-            tv.output.push("Type : UnshieldingTransfer".to_string());
-            make_ledger_token_transfer_endpoints(
-                &tokens,
-                &mut tv.output,
-                TokenTransfer::Unshielding(&transfer),
-                builder,
-                &asset_types,
-            )
-            .await;
-            make_ledger_token_transfer_endpoints(
-                &tokens,
-                &mut tv.output_expert,
-                TokenTransfer::Unshielding(&transfer),
-                builder,
-                &asset_types,
-            )
-            .await;
+            .await?;
         } else if code_sec.tag == Some(TX_IBC_WASM.to_string()) {
-            let any_msg = Any::decode(
-                tx.data(cmt)
-                    .ok_or_else(|| Error::Other("Invalid Data".to_string()))?
-                    .as_ref(),
-            )
-            .map_err(|x| {
-                Error::from(EncodingError::Conversion(x.to_string()))
-            })?;
+            let data = tx
+                .data(cmt)
+                .ok_or_else(|| Error::Other("Invalid Data".to_string()))?;
 
-            tv.name = "IBC_0".to_string();
-            tv.output.push("Type : IBC".to_string());
-
-            match MsgTransfer::try_from(any_msg.clone()) {
-                Ok(transfer) => {
-                    let transfer_token = format!(
-                        "{} {}",
-                        transfer.packet_data.token.amount,
-                        transfer.packet_data.token.denom
-                    );
-                    tv.output.extend(vec![
-                        format!("Source port : {}", transfer.port_id_on_a),
-                        format!("Source channel : {}", transfer.chan_id_on_a),
-                        format!("Token : {}", transfer_token),
-                        format!("Sender : {}", transfer.packet_data.sender),
-                        format!("Receiver : {}", transfer.packet_data.receiver),
-                        format!(
-                            "Timeout height : {}",
-                            transfer.timeout_height_on_b
-                        ),
-                        format!(
-                            "Timeout timestamp : {}",
-                            transfer
-                                .timeout_timestamp_on_b
-                                .into_tm_time()
-                                .map_or("(none)".to_string(), |time| time
-                                    .to_rfc3339())
-                        ),
-                    ]);
-                    tv.output_expert.extend(vec![
-                        format!("Source port : {}", transfer.port_id_on_a),
-                        format!("Source channel : {}", transfer.chan_id_on_a),
-                        format!("Token : {}", transfer_token),
-                        format!("Sender : {}", transfer.packet_data.sender),
-                        format!("Receiver : {}", transfer.packet_data.receiver),
-                        format!(
-                            "Timeout height : {}",
-                            transfer.timeout_height_on_b
-                        ),
-                        format!(
-                            "Timeout timestamp : {}",
-                            transfer
-                                .timeout_timestamp_on_b
-                                .into_tm_time()
-                                .map_or("(none)".to_string(), |time| time
-                                    .to_rfc3339())
-                        ),
-                    ]);
+            if let Ok(transfer) =
+                MsgTransfer::<token::Transfer>::try_from_slice(data.as_ref())
+            {
+                tv.name = "IBC_Transfer_0".to_string();
+                tv.output.push("Type : IBC Transfer".to_string());
+                let transfer_token = format!(
+                    "{} {}",
+                    transfer.message.packet_data.token.amount,
+                    transfer.message.packet_data.token.denom
+                );
+                tv.output.extend(vec![
+                    format!("Source port : {}", transfer.message.port_id_on_a),
+                    format!(
+                        "Source channel : {}",
+                        transfer.message.chan_id_on_a
+                    ),
+                    format!("Token : {}", transfer_token),
+                    format!("Sender : {}", transfer.message.packet_data.sender),
+                    format!(
+                        "Receiver : {}",
+                        transfer.message.packet_data.receiver
+                    ),
+                    format!(
+                        "Timeout height : {}",
+                        transfer.message.timeout_height_on_b
+                    ),
+                    format!(
+                        "Timeout timestamp : {}",
+                        transfer
+                            .message
+                            .timeout_timestamp_on_b
+                            .into_tm_time()
+                            .map_or("no timestamp".to_string(), |time| time
+                                .to_rfc3339())
+                    ),
+                ]);
+                tv.output_expert.extend(vec![
+                    format!("Source port : {}", transfer.message.port_id_on_a),
+                    format!(
+                        "Source channel : {}",
+                        transfer.message.chan_id_on_a
+                    ),
+                    format!("Token : {}", transfer_token),
+                    format!("Sender : {}", transfer.message.packet_data.sender),
+                    format!(
+                        "Receiver : {}",
+                        transfer.message.packet_data.receiver
+                    ),
+                ]);
+                if !transfer.message.packet_data.memo.to_string().is_empty() {
+                    tv.output_expert.push(format!(
+                        "Memo : {}",
+                        transfer.message.packet_data.memo
+                    ));
                 }
-                _ => {
-                    for line in format!("{:#?}", any_msg).split('\n') {
-                        let stripped = line.trim_start();
-                        tv.output.push(format!("Part : {}", stripped));
-                        tv.output_expert.push(format!("Part : {}", stripped));
+                tv.output_expert.extend(vec![
+                    format!(
+                        "Timeout height : {}",
+                        transfer.message.timeout_height_on_b
+                    ),
+                    format!(
+                        "Timeout timestamp : {}",
+                        transfer
+                            .message
+                            .timeout_timestamp_on_b
+                            .into_tm_time()
+                            .map_or("no timestamp".to_string(), |time| time
+                                .to_rfc3339())
+                    ),
+                ]);
+                if let Some(transfer) = transfer.transfer {
+                    // To facilitate lookups of MASP AssetTypes
+                    let mut asset_types = HashMap::new();
+                    let builder = find_masp_builder(
+                        tx,
+                        transfer.shielded_section_hash,
+                        &mut asset_types,
+                    )
+                    .map_err(|_| Error::Other("Invalid Data".to_string()))?;
+                    make_ledger_token_transfer_endpoints(
+                        &tokens,
+                        &mut tv.output,
+                        &transfer,
+                        builder,
+                        &asset_types,
+                    )
+                    .await?;
+                    make_ledger_token_transfer_endpoints(
+                        &tokens,
+                        &mut tv.output_expert,
+                        &transfer,
+                        builder,
+                        &asset_types,
+                    )
+                    .await?;
+                }
+            } else if let Ok(transfer) =
+                MsgNftTransfer::<token::Transfer>::try_from_slice(data.as_ref())
+            {
+                tv.name = "IBC_NFT_Transfer_0".to_string();
+                tv.output.push("Type : IBC NFT Transfer".to_string());
+                tv.output.extend(vec![
+                    format!("Source port : {}", transfer.message.port_id_on_a),
+                    format!(
+                        "Source channel : {}",
+                        transfer.message.chan_id_on_a
+                    ),
+                    format!(
+                        "Class ID: {}",
+                        transfer.message.packet_data.class_id
+                    ),
+                ]);
+                if let Some(class_uri) = &transfer.message.packet_data.class_uri
+                {
+                    tv.output.push(format!("Class URI: {}", class_uri));
+                }
+                if let Some(class_data) =
+                    &transfer.message.packet_data.class_data
+                {
+                    tv.output.push(format!("Class data: {}", class_data));
+                }
+                for (idx, token_id) in
+                    transfer.message.packet_data.token_ids.0.iter().enumerate()
+                {
+                    tv.output.push(format!("Token ID: {}", token_id));
+                    if let Some(token_uris) =
+                        &transfer.message.packet_data.token_uris
+                    {
+                        tv.output.push(format!(
+                            "Token URI: {}",
+                            token_uris.get(idx).ok_or_else(|| Error::Other(
+                                "Invalid Data".to_string()
+                            ))?,
+                        ));
+                    }
+                    if let Some(token_data) =
+                        &transfer.message.packet_data.token_data
+                    {
+                        tv.output.push(format!(
+                            "Token data: {}",
+                            token_data.get(idx).ok_or_else(|| Error::Other(
+                                "Invalid Data".to_string()
+                            ))?,
+                        ));
                     }
                 }
+                tv.output.extend(vec![
+                    format!("Sender : {}", transfer.message.packet_data.sender),
+                    format!(
+                        "Receiver : {}",
+                        transfer.message.packet_data.receiver
+                    ),
+                ]);
+                tv.output.extend(vec![
+                    format!(
+                        "Timeout height : {}",
+                        transfer.message.timeout_height_on_b
+                    ),
+                    format!(
+                        "Timeout timestamp : {}",
+                        transfer
+                            .message
+                            .timeout_timestamp_on_b
+                            .into_tm_time()
+                            .map_or("no timestamp".to_string(), |time| time
+                                .to_rfc3339())
+                    ),
+                ]);
+                tv.output_expert.extend(vec![
+                    format!("Source port : {}", transfer.message.port_id_on_a),
+                    format!(
+                        "Source channel : {}",
+                        transfer.message.chan_id_on_a
+                    ),
+                    format!(
+                        "Class ID: {}",
+                        transfer.message.packet_data.class_id
+                    ),
+                ]);
+                if let Some(class_uri) = &transfer.message.packet_data.class_uri
+                {
+                    tv.output_expert.push(format!("Class URI: {}", class_uri));
+                }
+                if let Some(class_data) =
+                    &transfer.message.packet_data.class_data
+                {
+                    tv.output_expert
+                        .push(format!("Class data: {}", class_data));
+                }
+                for (idx, token_id) in
+                    transfer.message.packet_data.token_ids.0.iter().enumerate()
+                {
+                    tv.output_expert.push(format!("Token ID: {}", token_id));
+                    if let Some(token_uris) =
+                        &transfer.message.packet_data.token_uris
+                    {
+                        tv.output_expert.push(format!(
+                            "Token URI: {}",
+                            token_uris.get(idx).ok_or_else(|| Error::Other(
+                                "Invalid Data".to_string()
+                            ))?,
+                        ));
+                    }
+                    if let Some(token_data) =
+                        &transfer.message.packet_data.token_data
+                    {
+                        tv.output_expert.push(format!(
+                            "Token data: {}",
+                            token_data.get(idx).ok_or_else(|| Error::Other(
+                                "Invalid Data".to_string()
+                            ))?,
+                        ));
+                    }
+                }
+                tv.output_expert.extend(vec![
+                    format!("Sender : {}", transfer.message.packet_data.sender),
+                    format!(
+                        "Receiver : {}",
+                        transfer.message.packet_data.receiver
+                    ),
+                ]);
+                if let Some(memo) = &transfer.message.packet_data.memo {
+                    if !memo.to_string().is_empty() {
+                        tv.output_expert.push(format!("Memo: {}", memo));
+                    }
+                }
+                tv.output_expert.extend(vec![
+                    format!(
+                        "Timeout height : {}",
+                        transfer.message.timeout_height_on_b
+                    ),
+                    format!(
+                        "Timeout timestamp : {}",
+                        transfer
+                            .message
+                            .timeout_timestamp_on_b
+                            .into_tm_time()
+                            .map_or("no timestamp".to_string(), |time| time
+                                .to_rfc3339())
+                    ),
+                ]);
+                if let Some(transfer) = transfer.transfer {
+                    // To facilitate lookups of MASP AssetTypes
+                    let mut asset_types = HashMap::new();
+                    let builder = find_masp_builder(
+                        tx,
+                        transfer.shielded_section_hash,
+                        &mut asset_types,
+                    )
+                    .map_err(|_| Error::Other("Invalid Data".to_string()))?;
+                    make_ledger_token_transfer_endpoints(
+                        &tokens,
+                        &mut tv.output,
+                        &transfer,
+                        builder,
+                        &asset_types,
+                    )
+                    .await?;
+                    make_ledger_token_transfer_endpoints(
+                        &tokens,
+                        &mut tv.output_expert,
+                        &transfer,
+                        builder,
+                        &asset_types,
+                    )
+                    .await?;
+                }
+            } else {
+                return Result::Err(Error::Other("Invalid Data".to_string()));
             }
         } else if code_sec.tag == Some(TX_BOND_WASM.to_string()) {
             let bond = pos::Bond::try_from_slice(
@@ -1660,6 +1711,9 @@ pub async fn to_ledger_vector(
             let mut other_items = vec![];
             other_items
                 .push(format!("Validator : {}", metadata_change.validator));
+            if let Some(name) = metadata_change.name {
+                other_items.push(format!("Name : {}", name));
+            }
             if let Some(email) = metadata_change.email {
                 other_items.push(format!("Email : {}", email));
             }

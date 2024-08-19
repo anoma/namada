@@ -13,9 +13,7 @@ use namada_core::ethereum_events::EthAddress;
 use namada_core::keccak::KeccakHash;
 use namada_core::key::{self, RefTo};
 use namada_core::storage::{BlockHeight, Key};
-use namada_core::token;
 use namada_proof_of_stake::parameters::OwnedPosParams;
-use namada_proof_of_stake::pos_queries::PosQueries;
 use namada_proof_of_stake::types::GenesisValidator;
 use namada_proof_of_stake::{
     become_validator, bond_tokens, compute_and_store_total_consensus_stake,
@@ -23,6 +21,7 @@ use namada_proof_of_stake::{
 };
 use namada_state::testing::TestState;
 use namada_storage::{StorageRead, StorageWrite};
+use namada_trans_token as token;
 use namada_trans_token::credit_tokens;
 
 use crate::storage::bridge_pool::get_key_from_hash;
@@ -215,7 +214,12 @@ pub fn init_storage_with_validators(
         })
         .collect();
 
-    namada_proof_of_stake::test_utils::test_init_genesis(
+    namada_proof_of_stake::test_utils::test_init_genesis::<
+        _,
+        namada_parameters::Store<_>,
+        namada_governance::Store<_>,
+        namada_trans_token::Store<_>,
+    >(
         state,
         OwnedPosParams::default(),
         validators.into_iter(),
@@ -263,7 +267,11 @@ pub fn append_validators_to_storage(
     let current_epoch = state.in_mem().get_current_epoch().0;
 
     let mut all_keys = HashMap::new();
-    let params = state.pos_queries().get_pos_params();
+    let params = namada_proof_of_stake::storage::read_pos_params::<
+        _,
+        namada_governance::Store<_>,
+    >(state)
+    .expect("Should be able to read PosParams from storage");
 
     let staking_token = staking_token_address(state);
 
@@ -275,7 +283,7 @@ pub fn append_validators_to_storage(
         let eth_cold_key = &keys.eth_gov.ref_to();
         let eth_hot_key = &keys.eth_bridge.ref_to();
 
-        become_validator(
+        become_validator::<_, GovStore<_>>(
             state,
             BecomeValidator {
                 params: &params,
@@ -294,13 +302,20 @@ pub fn append_validators_to_storage(
         .expect("Test failed");
         credit_tokens(state, &staking_token, &validator, stake)
             .expect("Test failed");
-        bond_tokens(state, None, &validator, stake, current_epoch, None)
-            .expect("Test failed");
+        bond_tokens::<_, GovStore<_>, token::Store<_>>(
+            state,
+            None,
+            &validator,
+            stake,
+            current_epoch,
+            None,
+        )
+        .expect("Test failed");
 
         all_keys.insert(validator, keys);
     }
 
-    compute_and_store_total_consensus_stake(
+    compute_and_store_total_consensus_stake::<_, GovStore<_>>(
         state,
         current_epoch + params.pipeline_len,
     )
@@ -316,3 +331,6 @@ pub fn append_validators_to_storage(
 
     all_keys
 }
+
+/// Gov impl type
+pub type GovStore<S> = namada_governance::Store<S>;

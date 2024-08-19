@@ -1,6 +1,7 @@
 use std::fmt::{Debug, Formatter};
 use std::future::poll_fn;
 use std::mem::ManuallyDrop;
+use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::task::Poll;
@@ -9,38 +10,35 @@ use color_eyre::eyre::{Report, Result};
 use data_encoding::HEXUPPER;
 use itertools::Either;
 use lazy_static::lazy_static;
-use namada::address::Address;
-use namada::control_flow::time::Duration;
-use namada::core::collections::HashMap;
-use namada::core::ethereum_events::EthereumEvent;
-use namada::core::ethereum_structs;
-use namada::core::hash::Hash;
-use namada::core::key::tm_consensus_key_raw_hash;
-use namada::core::storage::{BlockHeight, Epoch, Header};
-use namada::core::time::DateTimeUtc;
-use namada::eth_bridge::oracle::config::Config as OracleConfig;
-use namada::ledger::dry_run_tx;
-use namada::ledger::events::log::dumb_queries;
-use namada::ledger::queries::{
-    EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
-};
-use namada::proof_of_stake::pos_queries::PosQueries;
-use namada::proof_of_stake::storage::{
-    read_consensus_validator_set_addresses_with_stake,
+use namada_sdk::address::Address;
+use namada_sdk::collections::HashMap;
+use namada_sdk::control_flow::time::Duration;
+use namada_sdk::eth_bridge::oracle::config::Config as OracleConfig;
+use namada_sdk::ethereum_events::EthereumEvent;
+use namada_sdk::events::extend::Height as HeightAttr;
+use namada_sdk::events::log::dumb_queries;
+use namada_sdk::events::Event;
+use namada_sdk::hash::Hash;
+use namada_sdk::key::tm_consensus_key_raw_hash;
+use namada_sdk::proof_of_stake::storage::{
+    read_consensus_validator_set_addresses_with_stake, read_pos_params,
     validator_consensus_key_handle,
 };
-use namada::proof_of_stake::types::WeightedValidator;
-use namada::sdk::events::extend::Height as HeightAttr;
-use namada::sdk::events::Event;
-use namada::state::{
+use namada_sdk::proof_of_stake::types::WeightedValidator;
+use namada_sdk::queries::{
+    Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
+};
+use namada_sdk::state::{
     LastBlock, Sha256Hasher, StorageRead, DB, EPOCH_SWITCH_BLOCKS_DELAY,
 };
-use namada::tendermint::abci::response::Info;
-use namada::tendermint::abci::types::VoteInfo;
-use namada::tx::event::Code as CodeAttr;
-use namada_sdk::queries::Client;
+use namada_sdk::storage::{BlockHeight, Epoch, Header};
+use namada_sdk::tendermint::abci::response::Info;
+use namada_sdk::tendermint::abci::types::VoteInfo;
 use namada_sdk::tendermint_proto::google::protobuf::Timestamp;
+use namada_sdk::time::DateTimeUtc;
 use namada_sdk::tx::data::ResultCode;
+use namada_sdk::tx::event::Code as CodeAttr;
+use namada_sdk::{ethereum_structs, governance};
 use regex::Regex;
 use tokio::sync::mpsc;
 
@@ -63,7 +61,7 @@ use crate::shims::abcipp_shim_types::shim::request::{
     FinalizeBlock, ProcessedTx,
 };
 use crate::shims::abcipp_shim_types::shim::response::TxResult;
-use crate::storage;
+use crate::{dry_run_tx, storage};
 
 /// Mock Ethereum oracle used for testing purposes.
 struct MockEthOracle {
@@ -249,14 +247,28 @@ pub enum NodeResults {
     Failed(ResultCode),
 }
 
+// TODO: wrap `MockNode` in a single `Arc`
+#[derive(Clone)]
 pub struct MockNode {
     pub shell: Arc<Mutex<Shell<storage::PersistentDB, Sha256Hasher>>>,
-    pub test_dir: ManuallyDrop<TestDir>,
-    pub keep_temp: bool,
+    pub test_dir: Arc<SalvageableTestDir>,
     pub results: Arc<Mutex<Vec<NodeResults>>>,
     pub blocks: Arc<Mutex<HashMap<BlockHeight, block::Response>>>,
     pub services: Arc<MockServices>,
     pub auto_drive_services: bool,
+}
+
+pub struct SalvageableTestDir {
+    pub test_dir: ManuallyDrop<TestDir>,
+    pub keep_temp: bool,
+}
+
+impl Deref for SalvageableTestDir {
+    type Target = TestDir;
+
+    fn deref(&self) -> &Self::Target {
+        &self.test_dir
+    }
 }
 
 impl Debug for MockNode {
@@ -267,7 +279,7 @@ impl Debug for MockNode {
     }
 }
 
-impl Drop for MockNode {
+impl Drop for SalvageableTestDir {
     fn drop(&mut self) {
         unsafe {
             if !self.keep_temp {
@@ -387,7 +399,7 @@ impl MockNode {
 
     pub fn next_masp_epoch(&mut self) -> Epoch {
         let masp_epoch_multiplier =
-            namada::parameters::read_masp_epoch_multiplier_parameter(
+            namada_sdk::parameters::read_masp_epoch_multiplier_parameter(
                 &self.shell.lock().unwrap().state,
             )
             .unwrap();
@@ -409,7 +421,9 @@ impl MockNode {
     fn prepare_request(&self) -> (Vec<u8>, Vec<VoteInfo>) {
         let (val1, ck) = {
             let locked = self.shell.lock().unwrap();
-            let params = locked.state.pos_queries().get_pos_params();
+            let params =
+                read_pos_params::<_, governance::Store<_>>(&locked.state)
+                    .unwrap();
             let current_epoch = locked.state.in_mem().get_current_epoch().0;
             let consensus_set: Vec<WeightedValidator> =
                 read_consensus_validator_set_addresses_with_stake(
@@ -480,10 +494,15 @@ impl MockNode {
                 time: DateTimeUtc::now(),
                 next_validators_hash: Hash([0; 32]),
             },
+            block_hash: Hash([0; 32]),
             byzantine_validators: vec![],
             txs: txs.clone(),
             proposer_address,
-            votes,
+            height: height.try_into().unwrap(),
+            decided_last_commit: tendermint::abci::types::CommitInfo {
+                round: 0u8.into(),
+                votes,
+            },
         };
 
         let resp = locked.finalize_block(req).expect("Test failed");
@@ -594,6 +613,7 @@ impl MockNode {
                 time: DateTimeUtc::now(),
                 next_validators_hash: Hash([0; 32]),
             },
+            block_hash: Hash([0; 32]),
             byzantine_validators: vec![],
             txs: txs
                 .clone()
@@ -605,7 +625,11 @@ impl MockNode {
                 })
                 .collect(),
             proposer_address,
-            votes,
+            height: height.try_into().unwrap(),
+            decided_last_commit: tendermint::abci::types::CommitInfo {
+                round: 0u8.into(),
+                votes,
+            },
         };
 
         // process the results
@@ -705,7 +729,7 @@ impl MockNode {
 }
 
 #[async_trait::async_trait(?Send)]
-impl<'a> Client for &'a MockNode {
+impl Client for MockNode {
     type Error = Report;
 
     async fn request(
@@ -739,16 +763,26 @@ impl<'a> Client for &'a MockNode {
             prove,
         };
         let borrowed = self.shell.lock().unwrap();
-        let ctx = RequestCtx {
-            state: &borrowed.state,
-            event_log: borrowed.event_log(),
-            vp_wasm_cache: borrowed.vp_wasm_cache.read_only(),
-            tx_wasm_cache: borrowed.tx_wasm_cache.read_only(),
-            storage_read_past_height_limit: None,
-        };
         if request.path == RPC.shell().dry_run_tx_path() {
-            dry_run_tx(ctx, &request)
+            dry_run_tx(
+                // This is safe because nothing else is using `self.state`
+                // concurrently and the `TempWlState` will be dropped right
+                // after dry-run.
+                unsafe {
+                    borrowed.state.read_only().with_static_temp_write_log()
+                },
+                borrowed.vp_wasm_cache.read_only(),
+                borrowed.tx_wasm_cache.read_only(),
+                &request,
+            )
         } else {
+            let ctx = RequestCtx {
+                state: &borrowed.state,
+                event_log: borrowed.event_log(),
+                vp_wasm_cache: borrowed.vp_wasm_cache.read_only(),
+                tx_wasm_cache: borrowed.tx_wasm_cache.read_only(),
+                storage_read_past_height_limit: None,
+            };
             rpc.handle(ctx, &request)
         }
         .map_err(Report::new)
@@ -816,10 +850,10 @@ impl<'a> Client for &'a MockNode {
     /// `/block_search`: search for blocks by BeginBlock and EndBlock events.
     async fn block_search(
         &self,
-        query: namada::tendermint_rpc::query::Query,
+        query: namada_sdk::tendermint_rpc::query::Query,
         _page: u32,
         _per_page: u8,
-        _order: namada::tendermint_rpc::Order,
+        _order: namada_sdk::tendermint_rpc::Order,
     ) -> Result<tendermint_rpc::endpoint::block_search::Response, RpcError>
     {
         self.drive_mock_services_bg().await;
@@ -839,10 +873,12 @@ impl<'a> Client for &'a MockNode {
             .map(block_search_response)
             .collect::<Vec<_>>();
 
-        Ok(namada::tendermint_rpc::endpoint::block_search::Response {
-            total_count: blocks.len() as u32,
-            blocks,
-        })
+        Ok(
+            namada_sdk::tendermint_rpc::endpoint::block_search::Response {
+                total_count: blocks.len() as u32,
+                blocks,
+            },
+        )
     }
 
     /// `/block_results`: get ABCI results for a block at a particular height.
@@ -851,10 +887,12 @@ impl<'a> Client for &'a MockNode {
         height: H,
     ) -> Result<tendermint_rpc::endpoint::block_results::Response, RpcError>
     where
-        H: Into<namada::tendermint::block::Height> + Send,
+        H: TryInto<namada_sdk::tendermint::block::Height> + Send,
     {
         self.drive_mock_services_bg().await;
-        let height = height.into();
+        let height = height.try_into().map_err(|_| {
+            RpcError::parse("Failed to cast block height".to_string())
+        })?;
         let locked = self.shell.lock().unwrap();
         let events: Vec<_> = locked
             .event_log()
@@ -875,7 +913,9 @@ impl<'a> Client for &'a MockNode {
                     None
                 }
             })
-            .map(|event| namada::tendermint::abci::Event::from(event.clone()))
+            .map(|event| {
+                namada_sdk::tendermint::abci::Event::from(event.clone())
+            })
             .collect();
         let has_events = !events.is_empty();
         Ok(tendermint_rpc::endpoint::block_results::Response {
@@ -886,7 +926,7 @@ impl<'a> Client for &'a MockNode {
             end_block_events: has_events.then_some(events),
             validator_updates: vec![],
             consensus_param_updates: None,
-            app_hash: namada::tendermint::hash::AppHash::default(),
+            app_hash: namada_sdk::tendermint::hash::AppHash::default(),
         })
     }
 
@@ -895,11 +935,18 @@ impl<'a> Client for &'a MockNode {
         height: H,
     ) -> Result<tendermint_rpc::endpoint::block::Response, RpcError>
     where
-        H: Into<tendermint::block::Height> + Send,
+        H: TryInto<tendermint::block::Height> + Send,
     {
         // NOTE: atm this is only needed to query blocks at a
         // specific height for masp transactions
-        let height = BlockHeight(height.into().into());
+        let height = BlockHeight(
+            height
+                .try_into()
+                .map_err(|_| {
+                    RpcError::parse("Failed to cast block height".to_string())
+                })?
+                .into(),
+        );
 
         self.blocks
             .lock()
@@ -916,11 +963,11 @@ impl<'a> Client for &'a MockNode {
     /// `/tx_search`: search for transactions with their results.
     async fn tx_search(
         &self,
-        _query: namada::tendermint_rpc::query::Query,
+        _query: namada_sdk::tendermint_rpc::query::Query,
         _prove: bool,
         _page: u32,
         _per_page: u8,
-        _order: namada::tendermint_rpc::Order,
+        _order: namada_sdk::tendermint_rpc::Order,
     ) -> Result<tendermint_rpc::endpoint::tx_search::Response, RpcError> {
         // In the past, some cli commands for masp called this. However, these
         // commands are not currently supported, so we do not need to fill
@@ -940,7 +987,7 @@ impl<'a> Client for &'a MockNode {
 
 /// Parse a Tendermint query.
 fn parse_tm_query(
-    query: namada::tendermint_rpc::query::Query,
+    query: namada_sdk::tendermint_rpc::query::Query,
 ) -> dumb_queries::QueryMatcher {
     const QUERY_PARSING_REGEX_STR: &str =
         r"^tm\.event='NewBlock' AND applied\.hash='([^']+)'$";
@@ -999,15 +1046,17 @@ where
 #[inline]
 fn block_search_response(
     encoded_event: EncodedEvent,
-) -> namada::tendermint_rpc::endpoint::block::Response {
-    namada::tendermint_rpc::endpoint::block::Response {
+) -> namada_sdk::tendermint_rpc::endpoint::block::Response {
+    namada_sdk::tendermint_rpc::endpoint::block::Response {
         block_id: Default::default(),
-        block: namada::tendermint_proto::types::Block {
-            header: Some(namada::tendermint_proto::types::Header {
-                version: Some(namada::tendermint_proto::version::Consensus {
-                    block: 0,
-                    app: 0,
-                }),
+        block: namada_sdk::tendermint_proto::types::Block {
+            header: Some(namada_sdk::tendermint_proto::types::Header {
+                version: Some(
+                    namada_sdk::tendermint_proto::version::Consensus {
+                        block: 0,
+                        app: 0,
+                    },
+                ),
                 chain_id: String::new(),
                 // NB: this is the only field that matters to us,
                 // everything else is junk
@@ -1026,13 +1075,13 @@ fn block_search_response(
             }),
             data: Default::default(),
             evidence: Default::default(),
-            last_commit: Some(namada::tendermint_proto::types::Commit {
+            last_commit: Some(namada_sdk::tendermint_proto::types::Commit {
                 height: encoded_event.0 as i64,
                 round: 0,
-                block_id: Some(namada::tendermint_proto::types::BlockId {
+                block_id: Some(namada_sdk::tendermint_proto::types::BlockId {
                     hash: vec![0u8; 32],
                     part_set_header: Some(
-                        namada::tendermint_proto::types::PartSetHeader {
+                        namada_sdk::tendermint_proto::types::PartSetHeader {
                             total: 1,
                             hash: vec![1; 32],
                         },

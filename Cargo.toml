@@ -21,24 +21,27 @@ members = [
   "crates/parameters",
   "crates/proof_of_stake",
   "crates/replay_protection",
-  "crates/namada",
   "crates/node",
   "crates/sdk",
   "crates/shielded_token",
   "crates/state",
   "crates/storage",
+  "crates/systems",
   "crates/test_utils",
   "crates/tests",
   "crates/token",
   "crates/trans_token",
+  "crates/tx",
   "crates/tx_env",
   "crates/tx_prelude",
-  "crates/tx",
+  "crates/vm",
   "crates/vm_env",
   "crates/vote_ext",
+  "crates/vp",
   "crates/vp_env",
   "crates/vp_prelude",
   "examples",
+  "fuzz",
 ]
 
 # wasm packages have to be built separately
@@ -57,9 +60,10 @@ keywords = ["blockchain", "privacy", "crypto", "protocol", "network"]
 license = "GPL-3.0"
 readme = "README.md"
 repository = "https://github.com/anoma/namada"
-version = "0.39.0"
+version = "0.42.0"
 
 [workspace.dependencies]
+arbitrary = {version = "1.3", features = ["derive"]}
 ark-bls12-381 = {version = "0.3"}
 ark-serialize = {version = "0.3"}
 ark-std = "0.3.0"
@@ -75,14 +79,15 @@ bimap = {version = "0.6.2", features = ["serde"]}
 bit-set = "0.5.2"
 bitflags = { version = "2.5.0", features = ["serde"] }
 blake2b-rs = "0.2.0"
-bls12_381 = "0.8"
 byte-unit = "4.0.13"
 byteorder = "1.4.2"
 borsh = {version = "1.2.0", features = ["unstable__schema", "derive"]}
 borsh-ext = { git = "https://github.com/heliaxdev/borsh-ext", tag = "v1.2.0" }
 chrono = {version = "0.4.22", default-features = false, features = ["clock", "std"]}
 circular-queue = "0.2.6"
-clap = "4.3.4"
+clap = "4.5"
+clap_complete = "4.5"
+clap_complete_nushell = "4.5"
 clru = {git = "https://github.com/marmeladema/clru-rs.git", rev = "71ca566"}
 color-eyre = "0.6.2"
 concat-idents = "1.1.2"
@@ -94,6 +99,7 @@ directories = "4.0.1"
 drain_filter_polyfill = "0.1.3"
 duration-str = "0.10.0"
 ed25519-consensus = "2.1.0"
+either = "1.12.0"
 escargot = "0.5.7"
 ethabi = "18.0.0"
 ethbridge-bridge-contract = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.24.0"}
@@ -105,28 +111,35 @@ expectrl = "0.7.0"
 eyre = "0.6.12"
 fd-lock = "3.0.12"
 flate2 = "1.0.22"
+flume = "0.11.0"
 fs_extra = "1.2.0"
 futures = "0.3"
 git2 = { version = "0.18.1", default-features = false }
-ibc = { version = "0.53.0", features = ["serde"] }
-ibc-derive = "0.7.0"
-ibc-testkit = { version = "0.53.0", default-features = false }
+ibc = { git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "0c3b3c0ab598e1e627089d06941efe0e39b61cd7", features = ["serde"] }
+ibc-derive = { git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "0c3b3c0ab598e1e627089d06941efe0e39b61cd7" }
+ibc-testkit = { git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "0c3b3c0ab598e1e627089d06941efe0e39b61cd7", default-features = false }
 ics23 = "0.11.0"
 index-set = { git = "https://github.com/heliaxdev/index-set", tag = "v0.8.1", features = ["serialize-borsh", "serialize-serde"] }
 indexmap = { git = "https://github.com/heliaxdev/indexmap", tag = "2.2.4-heliax-1", features = ["borsh-schema", "serde"] }
+init-once = "0.6.0"
 itertools = "0.12.1"
-jubjub = "0.10"
+# branch "tomas/arbitrary"
+jubjub = { git = "https://github.com/heliaxdev/jubjub.git", rev = "a373686962f4e9d0edb3b4716f86ff6bbd9aa86c" }
 k256 = { version = "0.13.0", default-features = false, features = ["ecdsa", "pkcs8", "precomputed-tables", "serde", "std"]}
+kdam = "0.5.2"
 konst = { version = "0.3.8", default-features = false }
 lazy_static = "1.4.0"
-ledger-namada-rs = { git = "https://github.com/Zondax/ledger-namada", tag = "v0.0.12" }
+# TODO: upstreamed in https://github.com/ledger-community/rust-ledger/pull/9
+ledger-lib = { git = "https://github.com/heliaxdev/rust-ledger", rev = "f96f4559b3237d09218f7583df01acf36034ea79", default-features = false, features = ["transport_tcp"] }
+ledger-namada-rs = { git = "https://github.com/Zondax/ledger-namada", tag = "v0.0.24" }
+ledger-transport = "0.10.0"
 ledger-transport-hid = "0.10.0"
 libc = "0.2.97"
 libloading = "0.7.2"
 linkme = "0.3.24"
-# branch = "main"
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "4ede1c42d76d6348af8224bc8bfac4404321fe82" }
-masp_proofs = { git = "https://github.com/anoma/masp", rev = "4ede1c42d76d6348af8224bc8bfac4404321fe82", default-features = false, features = ["local-prover"] }
+# branch = "tomas/arbitrary"
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "12ed8b060b295c06502a2ff8468e4a941cb7cca4" }
+masp_proofs = { git = "https://github.com/anoma/masp", rev = "12ed8b060b295c06502a2ff8468e4a941cb7cca4", default-features = false, features = ["local-prover"] }
 num256 = "0.3.5"
 num_cpus = "1.13.0"
 num-derive = "0.4"
@@ -145,7 +158,7 @@ prost = "0.12.0"
 prost-types = "0.12.0"
 rand = {version = "0.8", default-features = false}
 rand_core = {version = "0.6", default-features = false}
-rayon = "=1.5.3"
+rayon = "1.5.3"
 regex = "1.10.2"
 reqwest = "0.11.4"
 ripemd = "0.1"
@@ -166,11 +179,11 @@ smooth-operator = {git = "https://github.com/heliaxdev/smooth-operator", tag = "
 sysinfo = {version = "0.27.8", default-features = false}
 tar = "0.4.37"
 tempfile = {version = "3.2.0"}
-tendermint = {version = "0.36.0", features = ["secp256k1"]}
-tendermint-config = "0.36.0"
-tendermint-light-client = "0.36.0"
-tendermint-proto = "0.36.0"
-tendermint-rpc = {version = "0.36.0", default-features = false}
+tendermint = {version = "0.37.0", features = ["secp256k1"]}
+tendermint-config = "0.37.0"
+tendermint-light-client = "0.37.0"
+tendermint-proto = "0.37.0"
+tendermint-rpc = {version = "0.37.0", default-features = false}
 test-log = {version = "0.2.14", default-features = false, features = ["trace"]}
 tiny-bip39 = {git = "https://github.com/anoma/tiny-bip39.git", rev = "bf0f6d8713589b83af7a917366ec31f5275c0e57"}
 tiny-hderive = {git = "https://github.com/heliaxdev/tiny-hderive.git", rev = "173ae03abed0cd25d88a5a13efac00af96b75b87"}
@@ -182,18 +195,23 @@ toml = "0.5.8"
 tonic = "0.8.3"
 tonic-build = "0.11.0"
 tower = "0.4"
-tower-abci = "0.14.0"
+tower-abci = "0.15.0"
 tracing = "0.1.30"
 tracing-appender = "0.2.2"
 tracing-log = "0.2.0"
 tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
+typed-builder = "0.19.1"
 wasmparser = "0.107.0"
 wasm-instrument = {version = "0.4.0", features = ["sign_ext"]}
-wasmer = "4.3.1"
-wasmer-cache = "4.3.1"
-wasmer-compiler-singlepass = "4.3.1"
-wasmer-vm = "4.3.1"
+wasmer = "4.3.5"
+wasmer-cache = "4.3.5"
+wasmer-compiler = "4.3.5"
+wasmer-compiler-singlepass = "4.3.5"
+wasmer-types = "4.3.5"
+wasmer-vm = "4.3.5"
+wasmtimer = "0.2.0"
 winapi = "0.3.9"
+xorf = { version = "0.11.0", features = ["serde"] }
 yansi = "0.5.1"
 zeroize = { version = "1.5.5", features = ["zeroize_derive"] }
 
@@ -206,3 +224,6 @@ lto = true
 opt-level = 3
 panic = "unwind"
 overflow-checks = true
+
+[profile.dev.package.namada_fuzz]
+opt-level = 3

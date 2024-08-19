@@ -1,7 +1,11 @@
+use std::num::NonZeroUsize;
+
+use clru::CLruCache;
 use namada_core::address::{Address, EstablishedAddressGen, InternalAddress};
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::chain::{ChainId, CHAIN_ID_LENGTH};
 use namada_core::hash::Hash;
+use namada_core::parameters::{EpochDuration, Parameters};
 use namada_core::time::DateTimeUtc;
 use namada_core::{encode, ethereum_structs};
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
@@ -9,7 +13,6 @@ use namada_macros::BorshDeserializer;
 use namada_merkle_tree::{MerkleRoot, MerkleTree};
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
-use namada_parameters::{EpochDuration, Parameters};
 use namada_storage::conversion_state::ConversionState;
 use namada_storage::tx_queue::ExpiredTxsQueue;
 use namada_storage::types::CommitOnlyData;
@@ -73,6 +76,14 @@ where
     pub storage_read_past_height_limit: Option<u64>,
     /// Data that needs to be committed to the merkle tree
     pub commit_only_data: CommitOnlyData,
+    /// Cache of the results of process proposal for the next height to decide.
+    /// A LRU cache is used to prevent consuming too much memory at times where
+    /// a node cannot make progress and keeps evaluating new proposals. The
+    /// different proposed blocks are indexed by their hash. This is used
+    /// to avoid running process proposal more than once internally because of
+    /// the shim or the recheck option (comet only calls it at most once
+    /// for a given height/round)
+    pub block_proposals_cache: CLruCache<Hash, ProcessProposalCachedResult>,
 }
 
 /// Last committed block
@@ -82,6 +93,17 @@ pub struct LastBlock {
     pub height: BlockHeight,
     /// Block time
     pub time: DateTimeUtc,
+}
+
+/// The result of process proposal that can be cached for future lookup
+#[must_use]
+#[derive(Debug, Clone)]
+pub enum ProcessProposalCachedResult {
+    /// The proposed block was accepted by this node with the attached results
+    /// for every included tx
+    Accepted(Vec<(u32, String)>),
+    /// The proposed block was rejected by this node
+    Rejected,
 }
 
 /// The block storage data
@@ -143,6 +165,9 @@ where
             eth_events_queue: EthEventsQueue::default(),
             storage_read_past_height_limit,
             commit_only_data: CommitOnlyData::default(),
+            block_proposals_cache: CLruCache::new(
+                NonZeroUsize::new(10).unwrap(),
+            ),
         }
     }
 

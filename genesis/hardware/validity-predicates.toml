@@ -1,0 +1,10 @@
+# WASM Validity predicate that can be used for genesis accounts
+
+# Implicit VP
+[wasm.vp_implicit]
+filename = "vp_implicit.wasm"
+
+# Default user VP in established accounts
+[wasm.vp_user]
+filename = "vp_user.wasm"
+

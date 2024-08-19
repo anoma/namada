@@ -5,27 +5,25 @@ use std::marker::PhantomData;
 use std::path::Path;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use namada::core::address::Address;
-use namada::core::chain::ProposalBytes;
-use namada::core::dec::Dec;
-use namada::core::ethereum_structs;
-use namada::core::token::{
-    Amount, DenominatedAmount, Denomination, NATIVE_MAX_DECIMAL_PLACES,
-};
-use namada::eth_bridge::storage::parameters::{
-    Contracts, Erc20WhitelistEntry, MinimumConfirmations,
-};
-use namada::token;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
+use namada_sdk::address::Address;
+use namada_sdk::chain::ProposalBytes;
+use namada_sdk::dec::Dec;
+use namada_sdk::eth_bridge::storage::parameters::{
+    Contracts, Erc20WhitelistEntry, MinimumConfirmations,
+};
+use namada_sdk::token::{
+    Amount, DenominatedAmount, Denomination, NATIVE_MAX_DECIMAL_PLACES,
+};
+use namada_sdk::{ethereum_structs, token};
 use serde::{Deserialize, Serialize};
 
 use super::transactions::{self, Transactions};
 use super::utils::{read_toml, write_toml};
 use crate::config::genesis::chain::DeriveEstablishedAddress;
 use crate::config::genesis::transactions::{BondTx, SignedBondTx};
-use crate::config::genesis::GenesisAddress;
 use crate::wallet::Alias;
 
 pub const BALANCES_FILE_NAME: &str = "balances.toml";
@@ -141,9 +139,7 @@ pub struct DenominatedBalances {
     PartialEq,
     Eq,
 )]
-pub struct RawTokenBalances(
-    pub BTreeMap<GenesisAddress, token::DenominatedAmount>,
-);
+pub struct RawTokenBalances(pub BTreeMap<Address, token::DenominatedAmount>);
 
 /// Genesis balances for a given token
 #[derive(
@@ -157,9 +153,7 @@ pub struct RawTokenBalances(
     PartialEq,
     Eq,
 )]
-pub struct TokenBalances(
-    pub BTreeMap<GenesisAddress, token::DenominatedAmount>,
-);
+pub struct TokenBalances(pub BTreeMap<Address, token::DenominatedAmount>);
 
 /// Genesis validity predicates
 #[derive(
@@ -265,9 +259,6 @@ pub struct ChainParams<T: TemplateValidation> {
     /// Minimum number of blocks per epoch.
     // NB: u64 only works with values up to i64::MAX with toml-rs!
     pub min_num_of_blocks: u64,
-    /// Maximum duration per block (in seconds).
-    // NB: this is i64 because datetime wants it
-    pub max_expected_time_per_block: i64,
     /// Max payload size, in bytes, for a tx batch proposal.
     ///
     /// Block proposers may never return a `PrepareProposal`
@@ -295,12 +286,12 @@ pub struct ChainParams<T: TemplateValidation> {
     pub epochs_per_year: u64,
     /// How many epochs it takes to transition to the next masp epoch
     pub masp_epoch_multiplier: u64,
-    /// Maximum number of signature per transaction
-    pub max_signatures_per_transaction: u8,
     /// Max gas for block
     pub max_block_gas: u64,
-    /// Fee unshielding gas limit
-    pub fee_unshielding_gas_limit: u64,
+    /// Gas limit of a masp transaction paying fees
+    pub masp_fee_payment_gas_limit: u64,
+    /// Gas scale
+    pub gas_scale: u64,
     /// Map of the cost per gas unit for every token allowed for fee payment
     pub minimum_gas_price: T::GasMinimums,
 }
@@ -315,16 +306,15 @@ impl ChainParams<Unvalidated> {
             native_token,
             is_native_token_transferable,
             min_num_of_blocks,
-            max_expected_time_per_block,
             max_proposal_bytes,
             vp_allowlist,
             tx_allowlist,
             implicit_vp,
             epochs_per_year,
             masp_epoch_multiplier,
-            max_signatures_per_transaction,
             max_block_gas,
-            fee_unshielding_gas_limit,
+            masp_fee_payment_gas_limit,
+            gas_scale,
             minimum_gas_price,
         } = self;
         let mut min_gas_prices = BTreeMap::default();
@@ -361,16 +351,15 @@ impl ChainParams<Unvalidated> {
             native_token,
             is_native_token_transferable,
             min_num_of_blocks,
-            max_expected_time_per_block,
             max_proposal_bytes,
             vp_allowlist,
             tx_allowlist,
             implicit_vp,
             epochs_per_year,
             masp_epoch_multiplier,
-            max_signatures_per_transaction,
             max_block_gas,
-            fee_unshielding_gas_limit,
+            masp_fee_payment_gas_limit,
+            gas_scale,
             minimum_gas_price: min_gas_prices,
         })
     }
@@ -470,10 +459,12 @@ pub struct GovernanceParams {
 pub struct PgfParams<T: TemplateValidation> {
     /// The set of stewards
     pub stewards: BTreeSet<Address>,
-    /// The pgf funding inflation rate
+    /// The PGF funding inflation rate
     pub pgf_inflation_rate: Dec,
-    /// The pgf stewards inflation rate
+    /// The PGF stewards inflation rate
     pub stewards_inflation_rate: Dec,
+    /// The maximum allowed number of PGF stewards at any time
+    pub maximum_number_of_stewards: u64,
     #[serde(default)]
     #[serde(skip_serializing)]
     #[cfg(test)]
@@ -526,7 +517,7 @@ pub struct IbcParams {
 }
 
 impl TokenBalances {
-    pub fn get(&self, addr: &GenesisAddress) -> Option<token::Amount> {
+    pub fn get(&self, addr: &Address) -> Option<token::Amount> {
         self.0.get(addr).map(|amt| amt.amount())
     }
 }
@@ -913,6 +904,8 @@ pub fn validate_parameters(
                 stewards: pgf_params.stewards,
                 pgf_inflation_rate: pgf_params.pgf_inflation_rate,
                 stewards_inflation_rate: pgf_params.stewards_inflation_rate,
+                maximum_number_of_stewards: pgf_params
+                    .maximum_number_of_stewards,
                 valid: Default::default(),
             },
             eth_bridge_params,
@@ -991,9 +984,8 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
 
-    use namada::core::key;
-    use namada::core::key::RefTo;
-    use namada::core::string_encoding::StringEncoded;
+    use namada_sdk::key;
+    use namada_sdk::key::RefTo;
     use tempfile::tempdir;
 
     use super::*;
@@ -1028,20 +1020,34 @@ mod tests {
         );
     }
 
+    /// Validate the `genesis/hardware` genesis templates.
+    #[test]
+    fn test_validate_hardware_genesis_templates() {
+        let templates_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("genesis/hardware");
+        assert!(
+            load_and_validate(&templates_dir).is_some(),
+            "Hardware genesis templates must be valid"
+        );
+    }
+
     #[test]
     fn test_read_balances() {
         let test_dir = tempdir().unwrap();
         let path = test_dir.path().join(BALANCES_FILE_NAME);
         let sk = key::testing::keypair_1();
         let pk = sk.ref_to();
-        let address =
-            GenesisAddress::PublicKey(StringEncoded { raw: pk.clone() });
+        let address: Address = (&pk).into();
         let balance = token::Amount::from(101_000_001);
         let token_alias = Alias::from("Some_token".to_string());
         let contents = format!(
             r#"
 		[token.{token_alias}]
-		{pk} = "{}"
+		{address} = "{}"
 	    "#,
             balance.to_string_native()
         );

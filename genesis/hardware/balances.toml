@@ -1,0 +1,135 @@
+# Genesis balances.
+#
+# This files contains the genesis balances of any tokens present at genesis
+# associated with implicit addresses (in the form of public keys) or established
+# addresses.
+#
+# For example:
+# ```
+# [token.NAM]
+# some_pk_bech32m_encoding = 10 # genesis tokens, the amount can have up to 6 decimal places
+# ```
+#
+# The public keys present in here are taken from `pre-genesis/wallet.toml`.
+# As for the established addresses, these are derived from their respective
+# genesis tx toml files.
+
+[token.NAM]
+# albert
+tnam1qye83lg3ncsen8wjedgz27rxjktn0gcrc574p78e = "2000000"
+tnam1qq6qyugak0gd4up6lma8z8wr88w3pq9lgvfhw6yu = "2000000"
+# bertha
+tnam1qyvmxf6r5e9gjtq2pwsndgq77hmx4vw2rghnmt8v = "2000000"
+tnam1qp7z909dsdv4qw5jcasywzm9p7xa3qeqqghcjqxe = "2000000"
+# christel
+tnam1q8wemh6ws8vctdyg3dh9339qusttefzp0qw0qhvm = "2000000"
+tnam1qq8kszasdp30f2j2pkhz40zpfvztdakwqvkm0xy4 = "2000000"
+# daewon
+tnam1qqnxq04amahj5yuwux7pdsjp3dyu07at3u3f742p = "100000000"
+# ester
+tnam1qr2y927swt2ax66m9fgc9ejs40m7m77rry53cvkv = "1000000"
+# validator-0
+tnam1q9q3lph40w88cs5000k48thkw3f7s0m6mqrtfgss = "200000"
+tnam1qrdrgx6d3rzl2f5yn6nde6wg20sl6kmtug3ecg7z = "200000"
+# validator-0-account-key
+tnam1qr56gfuh4flztuqlpk50e5dknjx8vcnhz59t5u3w = "1000000"
+# frank
+tnam1q9sx4ekzqaq3xdxtruxkm764nhl00cvcsc7df5jf = "2000000"
+tnam1qz0nvec686e9pks8ynhm5ddq8ke7j2eey50uagtr = "2000000"
+
+[token.BTC]
+# albert
+tnam1qye83lg3ncsen8wjedgz27rxjktn0gcrc574p78e = "1000000"
+# bertha
+tnam1qyvmxf6r5e9gjtq2pwsndgq77hmx4vw2rghnmt8v = "1000000"
+# christel
+tnam1q8wemh6ws8vctdyg3dh9339qusttefzp0qw0qhvm = "1000000"
+# daewon-key
+tnam1qqnxq04amahj5yuwux7pdsjp3dyu07at3u3f742p = "1000000"
+# ester-key
+tnam1qr2y927swt2ax66m9fgc9ejs40m7m77rry53cvkv = "1000000"
+# validator-0
+tnam1q9q3lph40w88cs5000k48thkw3f7s0m6mqrtfgss = "1000000"
+# frank
+tnam1q9sx4ekzqaq3xdxtruxkm764nhl00cvcsc7df5jf = "1000000"
+
+[token.ETH]
+# albert
+tnam1qye83lg3ncsen8wjedgz27rxjktn0gcrc574p78e = "1000000"
+# bertha
+tnam1qyvmxf6r5e9gjtq2pwsndgq77hmx4vw2rghnmt8v = "1000000"
+# christel
+tnam1q8wemh6ws8vctdyg3dh9339qusttefzp0qw0qhvm = "1000000"
+# daewon-key
+tnam1qqnxq04amahj5yuwux7pdsjp3dyu07at3u3f742p = "1000000"
+# ester-key
+tnam1qr2y927swt2ax66m9fgc9ejs40m7m77rry53cvkv = "1000000"
+# validator-0
+tnam1q9q3lph40w88cs5000k48thkw3f7s0m6mqrtfgss = "1000000"
+# frank
+tnam1q9sx4ekzqaq3xdxtruxkm764nhl00cvcsc7df5jf = "1000000"
+
+
+[token.DOT]
+# albert
+tnam1qye83lg3ncsen8wjedgz27rxjktn0gcrc574p78e = "1000000"
+# bertha
+tnam1qyvmxf6r5e9gjtq2pwsndgq77hmx4vw2rghnmt8v = "1000000"
+# christel
+tnam1q8wemh6ws8vctdyg3dh9339qusttefzp0qw0qhvm = "1000000"
+# daewon-key
+tnam1qqnxq04amahj5yuwux7pdsjp3dyu07at3u3f742p = "1000000"
+# ester-key
+tnam1qr2y927swt2ax66m9fgc9ejs40m7m77rry53cvkv = "1000000"
+# validator-0
+tnam1q9q3lph40w88cs5000k48thkw3f7s0m6mqrtfgss = "1000000"
+# frank
+tnam1q9sx4ekzqaq3xdxtruxkm764nhl00cvcsc7df5jf = "1000000"
+
+[token.Schnitzel]
+# albert
+tnam1qye83lg3ncsen8wjedgz27rxjktn0gcrc574p78e = "1000000"
+# bertha
+tnam1qyvmxf6r5e9gjtq2pwsndgq77hmx4vw2rghnmt8v = "1000000"
+# christel
+tnam1q8wemh6ws8vctdyg3dh9339qusttefzp0qw0qhvm = "1000000"
+# daewon-key
+tnam1qqnxq04amahj5yuwux7pdsjp3dyu07at3u3f742p = "1000000"
+# ester-key
+tnam1qr2y927swt2ax66m9fgc9ejs40m7m77rry53cvkv = "1000000"
+# validator-0
+tnam1q9q3lph40w88cs5000k48thkw3f7s0m6mqrtfgss = "1000000"
+# frank
+tnam1q9sx4ekzqaq3xdxtruxkm764nhl00cvcsc7df5jf = "1000000"
+
+[token.Apfel]
+# albert
+tnam1qye83lg3ncsen8wjedgz27rxjktn0gcrc574p78e = "1000000"
+# bertha
+tnam1qyvmxf6r5e9gjtq2pwsndgq77hmx4vw2rghnmt8v = "1000000"
+# christel
+tnam1q8wemh6ws8vctdyg3dh9339qusttefzp0qw0qhvm = "1000000"
+# daewon-key
+tnam1qqnxq04amahj5yuwux7pdsjp3dyu07at3u3f742p = "1000000"
+# ester-key
+tnam1qr2y927swt2ax66m9fgc9ejs40m7m77rry53cvkv = "1000000"
+# validator-0
+tnam1q9q3lph40w88cs5000k48thkw3f7s0m6mqrtfgss = "1000000"
+# frank
+tnam1q9sx4ekzqaq3xdxtruxkm764nhl00cvcsc7df5jf = "1000000"
+
+[token.Kartoffel]
+# albert
+tnam1qye83lg3ncsen8wjedgz27rxjktn0gcrc574p78e = "1000000"
+# bertha
+tnam1qyvmxf6r5e9gjtq2pwsndgq77hmx4vw2rghnmt8v = "1000000"
+# christel
+tnam1q8wemh6ws8vctdyg3dh9339qusttefzp0qw0qhvm = "1000000"
+# daewon-key
+tnam1qqnxq04amahj5yuwux7pdsjp3dyu07at3u3f742p = "1000000"
+# ester-key
+tnam1qr2y927swt2ax66m9fgc9ejs40m7m77rry53cvkv = "1000000"
+# validator-0
+tnam1q9q3lph40w88cs5000k48thkw3f7s0m6mqrtfgss = "1000000"
+# frank
+tnam1q9sx4ekzqaq3xdxtruxkm764nhl00cvcsc7df5jf = "1000000"

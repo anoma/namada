@@ -8,6 +8,7 @@ use namada_core::dec::Dec;
 use namada_core::storage::Epoch;
 use namada_core::token;
 use namada_core::uint::Uint;
+#[cfg(test)]
 use namada_governance::parameters::GovernanceParameters;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
@@ -76,17 +77,6 @@ pub struct OwnedPosParams {
     pub rewards_gain_d: Dec,
 }
 
-impl Default for PosParams {
-    fn default() -> Self {
-        let owned = OwnedPosParams::default();
-        let gov = GovernanceParameters::default();
-        Self {
-            owned,
-            max_proposal_period: gov.max_proposal_period,
-        }
-    }
-}
-
 impl Default for OwnedPosParams {
     fn default() -> Self {
         Self {
@@ -113,6 +103,18 @@ impl Default for OwnedPosParams {
             liveness_threshold: Dec::new(9, 1).expect("Test failed"),
             rewards_gain_p: Dec::from_str("0.25").expect("Test failed"),
             rewards_gain_d: Dec::from_str("0.25").expect("Test failed"),
+        }
+    }
+}
+
+#[cfg(test)]
+impl Default for PosParams {
+    fn default() -> Self {
+        let owned = OwnedPosParams::default();
+        let gov = GovernanceParameters::default();
+        Self {
+            owned,
+            max_proposal_period: gov.max_proposal_period,
         }
     }
 }
@@ -269,7 +271,7 @@ impl OwnedPosParams {
     }
 
     /// A test helper to add the default gov params to PoS params.
-    #[cfg(any(test, feature = "testing"))]
+    #[cfg(test)]
     pub fn with_default_gov_params(self) -> PosParams {
         let gov = GovernanceParameters::default();
         PosParams {
@@ -279,7 +281,7 @@ impl OwnedPosParams {
     }
 
     /// A test helper to add the default gov params to PoS params.
-    #[cfg(any(test, feature = "testing"))]
+    #[cfg(test)]
     pub fn with_gov_params(self, gov: &GovernanceParameters) -> PosParams {
         PosParams {
             owned: self,

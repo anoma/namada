@@ -23,6 +23,7 @@ use crate::key::{SignableBytes, StorageHasher};
 use crate::{impl_display_and_from_str_via_format, string_encoding};
 
 /// Public key
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     Debug,
@@ -299,6 +300,7 @@ impl FromStr for SecretKey {
 }
 
 /// Signature
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     Debug,

@@ -29,11 +29,14 @@ pub enum Error {
     ConversionFailed(std::array::TryFromSliceError),
     #[error("Failed to convert string into a hash: {0}")]
     FromStringError(data_encoding::DecodeError),
+    #[error("Cannot convert an empty CometBFT hash")]
+    FromCometError,
 }
 
 /// Result for functions that may fail
 pub type HashResult<T> = std::result::Result<T, Error>;
 
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     Copy,
@@ -175,6 +178,17 @@ impl Hash {
 impl From<Hash> for crate::tendermint::Hash {
     fn from(hash: Hash) -> Self {
         Self::Sha256(hash.0)
+    }
+}
+
+impl TryFrom<crate::tendermint::Hash> for Hash {
+    type Error = self::Error;
+
+    fn try_from(value: crate::tendermint::Hash) -> Result<Self, Self::Error> {
+        match value {
+            crate::tendermint::Hash::Sha256(hash) => Ok(Self(hash)),
+            crate::tendermint::Hash::None => Err(Error::FromCometError),
+        }
     }
 }
 

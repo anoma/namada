@@ -8,10 +8,11 @@ use ibc::clients::tendermint::types::{
 use ibc::core::client::types::error::ClientError;
 use ibc::primitives::proto::Any;
 use ibc_derive::{IbcClientState, IbcConsensusState};
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 use ibc_testkit::testapp::ibc::clients::mock::client_state::MockClientState;
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 use ibc_testkit::testapp::ibc::clients::mock::consensus_state::MockConsensusState;
+use namada_systems::parameters;
 use prost::Message;
 
 use super::common::IbcCommonContext;
@@ -19,13 +20,13 @@ use super::IbcContext;
 
 /// ClientState for light clients
 #[derive(Clone, Debug, IbcClientState)]
-#[validation(IbcContext<C: IbcCommonContext>)]
-#[execution(IbcContext<C: IbcCommonContext>)]
+#[validation(IbcContext<C: IbcCommonContext, Params: parameters::Read<C::Storage>>)]
+#[execution(IbcContext<C: IbcCommonContext, Params: parameters::Read<C::Storage>>)]
 pub enum AnyClientState {
     /// Tendermint client state
     Tendermint(TmClientState),
 
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     /// Mock client state for testing
     Mock(MockClientState),
 }
@@ -48,7 +49,7 @@ impl TryFrom<AnyClientState> for TmClientState {
     fn try_from(any: AnyClientState) -> Result<Self, Self::Error> {
         match any {
             AnyClientState::Tendermint(cs) => Ok(cs),
-            #[cfg(feature = "testing")]
+            #[cfg(any(test, feature = "testing"))]
             AnyClientState::Mock(_) => {
                 Err(ClientError::UnknownConsensusStateType {
                     consensus_state_type: "mock".to_string(),
@@ -58,14 +59,14 @@ impl TryFrom<AnyClientState> for TmClientState {
     }
 }
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 impl From<MockClientState> for AnyClientState {
     fn from(cs: MockClientState) -> Self {
         Self::Mock(cs)
     }
 }
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 impl TryFrom<AnyClientState> for MockClientState {
     type Error = ClientError;
 
@@ -85,7 +86,7 @@ impl From<AnyClientState> for Any {
     fn from(client_state: AnyClientState) -> Self {
         match client_state {
             AnyClientState::Tendermint(cs) => cs.into(),
-            #[cfg(feature = "testing")]
+            #[cfg(any(test, feature = "testing"))]
             AnyClientState::Mock(cs) => cs.into(),
         }
     }
@@ -95,7 +96,7 @@ impl TryFrom<Any> for AnyClientState {
     type Error = ClientError;
 
     fn try_from(client_state: Any) -> Result<Self, Self::Error> {
-        #[cfg(feature = "testing")]
+        #[cfg(any(test, feature = "testing"))]
         if let Ok(cs) = MockClientState::try_from(client_state.clone()) {
             return Ok(cs.into());
         }
@@ -115,7 +116,7 @@ pub enum AnyConsensusState {
     /// Tendermint consensus state
     Tendermint(TmConsensusState),
 
-    #[cfg(feature = "testing")]
+    #[cfg(any(test, feature = "testing"))]
     /// Mock consensus state for testing
     Mock(MockConsensusState),
 }
@@ -138,7 +139,7 @@ impl TryFrom<AnyConsensusState> for TmConsensusStateType {
     fn try_from(any: AnyConsensusState) -> Result<Self, Self::Error> {
         match any {
             AnyConsensusState::Tendermint(c) => Ok(c.inner().clone()),
-            #[cfg(feature = "testing")]
+            #[cfg(any(test, feature = "testing"))]
             AnyConsensusState::Mock(_) => {
                 Err(ClientError::UnknownConsensusStateType {
                     consensus_state_type: "mock".to_string(),
@@ -148,7 +149,7 @@ impl TryFrom<AnyConsensusState> for TmConsensusStateType {
     }
 }
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 impl From<MockConsensusState> for AnyConsensusState {
     fn from(cs: MockConsensusState) -> Self {
         Self::Mock(cs)
@@ -161,7 +162,7 @@ impl TryFrom<AnyConsensusState> for TmConsensusState {
     fn try_from(any: AnyConsensusState) -> Result<Self, Self::Error> {
         match any {
             AnyConsensusState::Tendermint(cs) => Ok(cs),
-            #[cfg(feature = "testing")]
+            #[cfg(any(test, feature = "testing"))]
             _ => Err(ClientError::UnknownConsensusStateType {
                 consensus_state_type: "Only Tendermint client state type is \
                                        supported"
@@ -171,7 +172,7 @@ impl TryFrom<AnyConsensusState> for TmConsensusState {
     }
 }
 
-#[cfg(feature = "testing")]
+#[cfg(any(test, feature = "testing"))]
 impl TryFrom<AnyConsensusState> for MockConsensusState {
     type Error = ClientError;
 
@@ -190,7 +191,7 @@ impl From<AnyConsensusState> for Any {
     fn from(consensus_state: AnyConsensusState) -> Self {
         match consensus_state {
             AnyConsensusState::Tendermint(cs) => cs.into(),
-            #[cfg(feature = "testing")]
+            #[cfg(any(test, feature = "testing"))]
             AnyConsensusState::Mock(cs) => cs.into(),
         }
     }
@@ -200,7 +201,7 @@ impl TryFrom<Any> for AnyConsensusState {
     type Error = ClientError;
 
     fn try_from(consensus_state: Any) -> Result<Self, Self::Error> {
-        #[cfg(feature = "testing")]
+        #[cfg(any(test, feature = "testing"))]
         if let Ok(cs) = MockConsensusState::try_from(consensus_state.clone()) {
             return Ok(cs.into());
         }

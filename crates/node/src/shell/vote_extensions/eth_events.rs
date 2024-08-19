@@ -2,8 +2,8 @@
 
 use std::collections::BTreeMap;
 
-use namada::vote_ext::ethereum_events::MultiSignedEthEvent;
 use namada_sdk::collections::HashMap;
+use namada_vote_ext::ethereum_events::MultiSignedEthEvent;
 
 use super::*;
 
@@ -49,7 +49,7 @@ where
         >,
     > + 'iter {
         vote_extensions.into_iter().map(|vote_extension| {
-            validate_eth_events_vext(
+            validate_eth_events_vext::<_, _, governance::Store<_>>(
                 &self.state,
                 &vote_extension,
                 self.state.in_mem().get_last_block_height(),
@@ -137,26 +137,27 @@ where
 #[allow(clippy::cast_possible_truncation)]
 #[cfg(test)]
 mod test_vote_extensions {
-    use namada::core::address::testing::gen_established_address;
-    use namada::core::ethereum_events::{
+    use namada_sdk::address::testing::gen_established_address;
+    use namada_sdk::eth_bridge::storage::bridge_pool;
+    use namada_sdk::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
+    use namada_sdk::eth_bridge::test_utils::GovStore;
+    use namada_sdk::eth_bridge::EthBridgeQueries;
+    use namada_sdk::ethereum_events::{
         EthAddress, EthereumEvent, TransferToEthereum, Uint,
     };
-    use namada::core::hash::Hash;
-    use namada::core::key::*;
-    use namada::core::storage::{Epoch, InnerEthEventsQueue};
-    use namada::eth_bridge::storage::bridge_pool;
-    use namada::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
-    use namada::ledger::eth_bridge::EthBridgeQueries;
-    use namada::ledger::pos::PosQueries;
-    use namada::proof_of_stake::storage::{
+    use namada_sdk::governance;
+    use namada_sdk::hash::Hash;
+    use namada_sdk::key::*;
+    use namada_sdk::proof_of_stake::queries::get_consensus_validator_from_protocol_pk;
+    use namada_sdk::proof_of_stake::storage::{
         consensus_validator_set_handle,
-        read_consensus_validator_set_addresses_with_stake,
+        read_consensus_validator_set_addresses_with_stake, read_pos_params,
     };
-    use namada::proof_of_stake::types::WeightedValidator;
-    use namada::state::collections::lazy_map::{NestedSubKey, SubKey};
-    use namada::tendermint::abci::types::VoteInfo;
-    use namada::vote_ext::ethereum_events;
-    use namada_sdk::storage::StorageWrite;
+    use namada_sdk::proof_of_stake::types::WeightedValidator;
+    use namada_sdk::state::collections::lazy_map::{NestedSubKey, SubKey};
+    use namada_sdk::storage::{Epoch, InnerEthEventsQueue, StorageWrite};
+    use namada_sdk::tendermint::abci::types::VoteInfo;
+    use namada_vote_ext::ethereum_events;
 
     use super::validate_eth_events_vext;
     use crate::shell::test_utils::*;
@@ -376,7 +377,7 @@ mod test_vote_extensions {
         }
         .sign(&signing_key);
         assert!(
-            validate_eth_events_vext(
+            validate_eth_events_vext::<_, _, governance::Store<_>>(
                 &shell.state,
                 &ethereum_events,
                 shell.get_current_decision_height(),
@@ -454,7 +455,8 @@ mod test_vote_extensions {
             .into_iter()
             .collect();
 
-        let params = shell.state.pos_queries().get_pos_params();
+        let params =
+            read_pos_params::<_, governance::Store<_>>(&shell.state).unwrap();
         let val1 = consensus_set[0].clone();
         let pkh1 = get_pkh_from_address(
             &shell.state,
@@ -471,34 +473,42 @@ mod test_vote_extensions {
         }];
         let req = FinalizeBlock {
             proposer_address: pkh1.to_vec(),
-            votes,
+            decided_last_commit:
+                crate::facade::tendermint::abci::types::CommitInfo {
+                    round: 0u8.into(),
+                    votes,
+                },
             ..Default::default()
         };
         assert_eq!(shell.start_new_epoch(Some(req)).0, 1);
         assert!(
-            shell
-                .state
-                .pos_queries()
-                .get_validator_from_protocol_pk(&signing_key.ref_to(), None)
-                .is_err()
+            get_consensus_validator_from_protocol_pk::<_, GovStore<_>>(
+                &shell.state,
+                &signing_key.ref_to(),
+                None
+            )
+            .unwrap()
+            .is_none()
         );
         let prev_epoch =
             Epoch(shell.state.in_mem().get_current_epoch().0.0 - 1);
         assert!(
-            shell
-                .shell
-                .state
-                .pos_queries()
-                .get_validator_from_protocol_pk(
-                    &signing_key.ref_to(),
-                    Some(prev_epoch)
-                )
-                .is_ok()
+            get_consensus_validator_from_protocol_pk::<_, GovStore<_>>(
+                &shell.state,
+                &signing_key.ref_to(),
+                Some(prev_epoch)
+            )
+            .unwrap()
+            .is_some()
         );
 
         assert!(
-            validate_eth_events_vext(&shell.state, &vote_ext, signed_height)
-                .is_ok()
+            validate_eth_events_vext::<_, _, governance::Store<_>>(
+                &shell.state,
+                &vote_ext,
+                signed_height
+            )
+            .is_ok()
         );
     }
 
@@ -536,7 +546,7 @@ mod test_vote_extensions {
         let signed_vext = ethereum_events
             .sign(shell.mode.get_protocol_key().expect("Test failed"));
         assert!(
-            validate_eth_events_vext(
+            validate_eth_events_vext::<_, _, governance::Store<_>>(
                 &shell.state,
                 &signed_vext,
                 shell.state.in_mem().get_last_block_height()
@@ -574,7 +584,7 @@ mod test_vote_extensions {
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
 
         assert!(
-            validate_eth_events_vext(
+            validate_eth_events_vext::<_, _, governance::Store<_>>(
                 &shell.state,
                 &vote_ext,
                 shell.state.in_mem().get_last_block_height()

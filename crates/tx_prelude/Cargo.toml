@@ -20,6 +20,7 @@ testing = ["namada_core/testing", "namada_token/testing"]
 namada_account = { path = "../account" }
 namada_core = { path = "../core" }
 namada_events = { path = "../events", default-features = false }
+namada_gas = { path = "../gas" }
 namada_governance = { path = "../governance" }
 namada_ibc = { path = "../ibc" }
 namada_macros = { path = "../macros" }
@@ -27,7 +28,7 @@ namada_parameters = { path = "../parameters" }
 namada_proof_of_stake = { path = "../proof_of_stake" }
 namada_storage = { path = "../storage" }
 namada_token = { path = "../token" }
-namada_tx = { path = "../tx" }
+namada_tx = { path = "../tx", default-features = false }
 namada_tx_env = { path = "../tx_env" }
 namada_vm_env = { path = "../vm_env" }
 

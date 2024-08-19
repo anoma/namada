@@ -1,34 +1,33 @@
-use namada::core::collections::HashMap;
-use namada::core::encode;
-use namada::core::storage::Epoch;
-use namada::governance::event::GovernanceEvent;
-use namada::governance::pgf::storage::keys as pgf_storage;
-use namada::governance::pgf::storage::steward::StewardDetail;
-use namada::governance::pgf::{storage as pgf, ADDRESS};
-use namada::governance::storage::proposal::{
+use namada_sdk::collections::HashMap;
+use namada_sdk::events::extend::{ComposeEvent, Height, UserAccount};
+use namada_sdk::events::{EmitEvents, EventLevel};
+use namada_sdk::governance::event::GovernanceEvent;
+use namada_sdk::governance::pgf::storage::keys as pgf_storage;
+use namada_sdk::governance::pgf::storage::steward::StewardDetail;
+use namada_sdk::governance::pgf::{storage as pgf, ADDRESS};
+use namada_sdk::governance::storage::proposal::{
     AddRemove, PGFAction, PGFTarget, ProposalType, StoragePgfFunding,
 };
-use namada::governance::storage::{keys as gov_storage, load_proposals};
-use namada::governance::utils::{
+use namada_sdk::governance::storage::{keys as gov_storage, load_proposals};
+use namada_sdk::governance::utils::{
     compute_proposal_result, ProposalVotes, TallyResult, TallyType, VotePower,
 };
-use namada::governance::{
+pub use namada_sdk::governance::Store;
+use namada_sdk::governance::{
     storage as gov_api, ProposalVote, ADDRESS as gov_address,
 };
-use namada::ibc;
-use namada::ledger::events::extend::{ComposeEvent, Height};
-use namada::proof_of_stake::bond_amount;
-use namada::proof_of_stake::parameters::PosParams;
-use namada::proof_of_stake::storage::{
-    read_total_active_stake, validator_state_handle,
+use namada_sdk::proof_of_stake::bond_amount;
+use namada_sdk::proof_of_stake::parameters::PosParams;
+use namada_sdk::proof_of_stake::storage::{
+    read_total_active_stake, read_validator_stake, validator_state_handle,
 };
-use namada::proof_of_stake::types::{BondId, ValidatorState};
-use namada::sdk::events::{EmitEvents, EventLevel};
-use namada::state::StorageWrite;
-use namada::token::event::{TokenEvent, TokenOperation, UserAccount};
-use namada::token::read_balance;
-use namada::tx::{Code, Data};
-use namada_sdk::proof_of_stake::storage::read_validator_stake;
+use namada_sdk::proof_of_stake::types::{BondId, ValidatorState};
+use namada_sdk::state::StorageWrite;
+use namada_sdk::storage::Epoch;
+use namada_sdk::token::event::{TokenEvent, TokenOperation};
+use namada_sdk::token::read_balance;
+use namada_sdk::tx::{Code, Data};
+use namada_sdk::{encode, ibc, parameters};
 
 use super::utils::force_read;
 use super::*;
@@ -82,6 +81,7 @@ where
     H: StorageHasher + Sync + 'static,
 {
     let mut proposals_result = ProposalsResult::default();
+    let params = read_pos_params::<_, Store<_>>(&shell.state)?;
 
     for id in proposal_ids {
         let proposal_funds_key = gov_storage::get_funds_key(id);
@@ -100,7 +100,6 @@ where
 
         let is_steward = pgf::is_steward(&shell.state, &proposal_author)?;
 
-        let params = read_pos_params(&shell.state)?;
         let total_active_voting_power =
             read_total_active_stake(&shell.state, &params, proposal_end_epoch)?;
 
@@ -123,17 +122,8 @@ where
             TallyResult::Passed => {
                 let proposal_event = match proposal_type {
                     ProposalType::Default => {
-                        let proposal_code =
-                            gov_api::get_proposal_code(&shell.state, id)?
-                                .unwrap_or_default();
-                        let _result = execute_default_proposal(
-                            shell,
-                            id,
-                            proposal_code.clone(),
-                        )?;
                         tracing::info!(
-                            "Default Governance proposal {} has been executed \
-                             and passed.",
+                            "Governance proposal #{} (default) has passed.",
                             id,
                         );
 
@@ -149,8 +139,8 @@ where
                             proposal_code.clone(),
                         )?;
                         tracing::info!(
-                            "DefaultWithWasm Governance proposal {} has been \
-                             executed and passed, wasm executiong was {}.",
+                            "Governance proposal #{} (default with wasm) has \
+                             passed and been executed, wasm execution: {}.",
                             id,
                             if result { "successful" } else { "unsuccessful" }
                         );
@@ -158,21 +148,27 @@ where
                         GovernanceEvent::passed_proposal(id, true, result)
                     }
                     ProposalType::PGFSteward(stewards) => {
-                        let _result = execute_pgf_steward_proposal(
+                        let result = execute_pgf_steward_proposal(
                             &mut shell.state,
                             stewards,
                         )?;
                         tracing::info!(
-                            "Governance proposal (pgf stewards){} has been \
-                             executed and passed.",
-                            id
+                            "Governance proposal #{} for PGF stewards has \
+                             been executed. {}.",
+                            id,
+                            if result {
+                                "State changes have been applied successfully"
+                            } else {
+                                "FAILURE trying to apply the state changes - \
+                                 no state change occurred"
+                            }
                         );
 
                         GovernanceEvent::passed_proposal(id, false, false)
                     }
                     ProposalType::PGFPayment(payments) => {
                         let native_token = &shell.state.get_native_token()?;
-                        let _result = execute_pgf_funding_proposal(
+                        execute_pgf_funding_proposal(
                             &mut shell.state,
                             events,
                             native_token,
@@ -180,8 +176,8 @@ where
                             id,
                         )?;
                         tracing::info!(
-                            "Governance proposal (pgf funding) {} has been \
-                             executed and passed.",
+                            "Governance proposal #{} for PGF funding has \
+                             passed and been executed.",
                             id
                         );
 
@@ -261,14 +257,14 @@ where
             events.emit(TokenEvent {
                 descriptor: DESCRIPTOR.into(),
                 level: EventLevel::Block,
-                token: native_token.clone(),
-                operation: TokenOperation::Transfer {
-                    amount: funds.into(),
-                    source: UserAccount::Internal(gov_address),
-                    target: UserAccount::Internal(address),
-                    source_post_balance: final_gov_balance,
-                    target_post_balance: Some(final_target_balance),
-                },
+                operation: TokenOperation::transfer(
+                    UserAccount::Internal(gov_address),
+                    UserAccount::Internal(address),
+                    native_token.clone(),
+                    funds.into(),
+                    final_gov_balance,
+                    Some(final_target_balance),
+                ),
             });
         } else {
             token::burn_tokens(
@@ -286,8 +282,8 @@ where
             events.emit(TokenEvent {
                 descriptor: DESCRIPTOR.into(),
                 level: EventLevel::Block,
-                token: native_token.clone(),
                 operation: TokenOperation::Burn {
+                    token: native_token.clone(),
                     amount: funds.into(),
                     target_account: UserAccount::Internal(gov_address),
                     post_balance: final_gov_balance,
@@ -304,7 +300,7 @@ fn compute_proposal_votes<S>(
     params: &PosParams,
     proposal_id: u64,
     epoch: Epoch,
-) -> namada::state::StorageResult<ProposalVotes>
+) -> namada_sdk::state::StorageResult<ProposalVotes>
 where
     S: StorageRead,
 {
@@ -361,7 +357,8 @@ where
                 source: delegator.clone(),
                 validator: validator.clone(),
             };
-            let delegator_stake = bond_amount(storage, &bond_id, epoch);
+            let delegator_stake =
+                bond_amount::<_, Store<_>>(storage, &bond_id, epoch);
 
             if let Ok(stake) = delegator_stake {
                 delegators_vote.insert(delegator.clone(), vote_data);
@@ -387,7 +384,7 @@ fn execute_default_proposal<D, H>(
     shell: &mut Shell<D, H>,
     id: u64,
     proposal_code: Vec<u8>,
-) -> namada::state::StorageResult<bool>
+) -> namada_sdk::state::StorageResult<bool>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
@@ -405,13 +402,14 @@ where
     let dispatch_result = protocol::dispatch_tx(
         &tx,
         protocol::DispatchArgs::Raw {
+            wrapper_hash: None,
             tx_index: TxIndex::default(),
             wrapper_tx_result: None,
             vp_wasm_cache: &mut shell.vp_wasm_cache,
             tx_wasm_cache: &mut shell.tx_wasm_cache,
         },
         // No gas limit for governance proposal
-        &RefCell::new(TxGasMeter::new_from_sub_limit(u64::MAX.into())),
+        &RefCell::new(TxGasMeter::new(u64::MAX)),
         &mut shell.state,
     );
     shell
@@ -421,12 +419,10 @@ where
     match dispatch_result {
         Ok(extended_tx_result) => match extended_tx_result
             .tx_result
-            .batch_results
-            .0
-            .get(&cmt.get_hash())
+            .get_inner_tx_result(None, either::Right(&cmt))
         {
             Some(Ok(batched_result)) if batched_result.is_accepted() => {
-                shell.state.commit_tx();
+                shell.state.commit_tx_batch();
                 Ok(true)
             }
             Some(Err(e)) => {
@@ -434,12 +430,12 @@ where
                     "Error executing governance proposal {}",
                     e.to_string()
                 );
-                shell.state.drop_tx();
+                shell.state.drop_tx_batch();
                 Ok(false)
             }
             _ => {
                 tracing::warn!("not sure what happen");
-                shell.state.drop_tx();
+                shell.state.drop_tx_batch();
                 Ok(false)
             }
         },
@@ -448,7 +444,7 @@ where
                 "Error executing governance proposal {}",
                 e.error.to_string()
             );
-            shell.state.drop_tx();
+            shell.state.drop_tx_batch();
             Ok(false)
         }
     }
@@ -461,18 +457,41 @@ fn execute_pgf_steward_proposal<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    for action in stewards {
-        match action {
-            AddRemove::Add(address) => {
-                pgf_storage::stewards_handle().insert(
-                    storage,
-                    address.to_owned(),
-                    StewardDetail::base(address),
-                )?;
-            }
-            AddRemove::Remove(address) => {
-                pgf_storage::stewards_handle().remove(storage, &address)?;
-            }
+    let maximum_number_of_pgf_steward_key =
+        pgf_storage::get_maximum_number_of_pgf_steward_key();
+    let maximum_number_of_pgf_steward = storage
+        .read::<u64>(&maximum_number_of_pgf_steward_key)?
+        .expect(
+            "Pgf parameter maximum_number_of_pgf_steward must be in storage",
+        );
+
+    // First, remove the appropriate addresses
+    for address in stewards.iter().filter_map(|action| match action {
+        AddRemove::Add(_) => None,
+        AddRemove::Remove(address) => Some(address),
+    }) {
+        pgf_storage::stewards_handle().remove(storage, address)?;
+    }
+
+    // Then add new addresses
+    let mut steward_count = pgf_storage::stewards_handle().len(storage)?;
+    for address in stewards.iter().filter_map(|action| match action {
+        AddRemove::Add(address) => Some(address),
+        AddRemove::Remove(_) => None,
+    }) {
+        #[allow(clippy::arithmetic_side_effects)]
+        if steward_count + 1 > maximum_number_of_pgf_steward {
+            return Ok(false);
+        }
+        pgf_storage::stewards_handle().insert(
+            storage,
+            address.to_owned(),
+            StewardDetail::base(address.to_owned()),
+        )?;
+
+        #[allow(clippy::arithmetic_side_effects)]
+        {
+            steward_count += 1;
         }
     }
 
@@ -500,8 +519,8 @@ where
                         StoragePgfFunding::new(target.clone(), proposal_id),
                     )?;
                     tracing::info!(
-                        "Added/Updated ContinuousPgf from proposal id {}: set \
-                         {} to {}.",
+                        "Added/Updated Continuous PGF from proposal id {}: \
+                         set {} to {}.",
                         proposal_id,
                         target.amount().to_string_native(),
                         target.target()
@@ -511,8 +530,8 @@ where
                     pgf_storage::fundings_handle()
                         .remove(state, &target.target())?;
                     tracing::info!(
-                        "Removed ContinuousPgf from proposal id {}: set {} to \
-                         {}.",
+                        "Removed Continuous PGF from proposal id {}: set {} \
+                         to {}.",
                         proposal_id,
                         target.amount().to_string_native(),
                         target.target()
@@ -532,50 +551,47 @@ where
                         TokenEvent {
                             descriptor: "pgf-payments".into(),
                             level: EventLevel::Block,
-                            token: token.clone(),
-                            operation: TokenOperation::Transfer {
-                                amount: target.amount.into(),
-                                source: UserAccount::Internal(ADDRESS),
-                                target: UserAccount::Internal(
-                                    target.target.clone(),
-                                ),
-                                source_post_balance: read_balance(
-                                    state, token, &ADDRESS,
-                                )?
-                                .into(),
-                                target_post_balance: Some(
+                            operation: TokenOperation::transfer(
+                                UserAccount::Internal(ADDRESS),
+                                UserAccount::Internal(target.target.clone()),
+                                token.clone(),
+                                target.amount.into(),
+                                read_balance(state, token, &ADDRESS)?.into(),
+                                Some(
                                     read_balance(state, token, &target.target)?
                                         .into(),
                                 ),
-                            },
+                            ),
                         },
                     ),
                     PGFTarget::Ibc(target) => (
-                        ibc::transfer_over_ibc(state, token, &ADDRESS, target),
+                        ibc::transfer_over_ibc::<
+                            _,
+                            parameters::Store<_>,
+                            token::Store<_>,
+                            token::Transfer,
+                        >(
+                            state, token, &ADDRESS, target
+                        ),
                         TokenEvent {
                             descriptor: "pgf-payments-over-ibc".into(),
                             level: EventLevel::Block,
-                            token: token.clone(),
-                            operation: TokenOperation::Transfer {
-                                amount: target.amount.into(),
-                                source: UserAccount::Internal(ADDRESS),
-                                target: UserAccount::External(
-                                    target.target.clone(),
-                                ),
-                                source_post_balance: read_balance(
-                                    state, token, &ADDRESS,
-                                )?
-                                .into(),
-                                target_post_balance: None,
-                            },
+                            operation: TokenOperation::transfer(
+                                UserAccount::Internal(ADDRESS),
+                                UserAccount::External(target.target.clone()),
+                                token.clone(),
+                                target.amount.into(),
+                                read_balance(state, token, &ADDRESS)?.into(),
+                                None,
+                            ),
                         },
                     ),
                 };
                 match result {
                     Ok(()) => {
                         tracing::info!(
-                            "Execute RetroPgf from proposal id {}: sent {} to \
-                             {}.",
+                            "Execute Retroactive PGF from proposal id {}: \
+                             sent {} to {}.",
                             proposal_id,
                             target.amount().to_string_native(),
                             target.target()
@@ -583,8 +599,8 @@ where
                         events.emit(event);
                     }
                     Err(e) => tracing::warn!(
-                        "Error in RetroPgf transfer from proposal id {}, \
-                         amount {} to {}: {}",
+                        "Error in Retroactive PGF transfer from proposal id \
+                         {}, amount {} to {}: {}",
                         proposal_id,
                         target.amount().to_string_native(),
                         target.target(),

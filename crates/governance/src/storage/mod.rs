@@ -12,9 +12,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use namada_core::address::Address;
 use namada_core::borsh::BorshDeserialize;
 use namada_core::collections::HashSet;
+use namada_core::hash::Hash;
 use namada_core::storage::Epoch;
-use namada_storage::{iter_prefix, Error, Result, StorageRead, StorageWrite};
-use namada_trans_token as token;
+use namada_core::token;
+use namada_state::{
+    iter_prefix, StorageError, StorageRead, StorageResult, StorageWrite,
+};
+use namada_systems::trans_token;
 
 use crate::parameters::GovernanceParameters;
 use crate::storage::keys as governance_keys;
@@ -26,14 +30,15 @@ use crate::utils::{ProposalResult, Vote};
 use crate::ADDRESS as governance_address;
 
 /// A proposal creation transaction.
-pub fn init_proposal<S>(
+pub fn init_proposal<S, TransToken>(
     storage: &mut S,
     data: &InitProposalData,
     content: Vec<u8>,
     code: Option<Vec<u8>>,
-) -> Result<u64>
+) -> StorageResult<u64>
 where
     S: StorageRead + StorageWrite,
+    TransToken: trans_token::Write<S>,
 {
     let counter_key = governance_keys::get_counter_key();
     let proposal_id = storage.read(&counter_key)?.expect(
@@ -56,7 +61,7 @@ where
                 governance_keys::get_proposal_code_key(proposal_id);
 
             let proposal_code =
-                code.ok_or(Error::new_const("Missing proposal code"))?;
+                code.ok_or(StorageError::new_const("Missing proposal code"))?;
             storage.write(&proposal_code_key, proposal_code)?;
         }
         _ => storage.write(&proposal_type_key, data.r#type.clone())?,
@@ -96,7 +101,7 @@ where
         );
     storage.write(&committing_proposals_key, ())?;
 
-    token::transfer(
+    TransToken::transfer(
         storage,
         &storage.get_native_token()?,
         &data.author,
@@ -112,7 +117,7 @@ pub fn vote_proposal<S>(
     storage: &mut S,
     data: VoteProposalData,
     delegation_targets: HashSet<Address>,
-) -> Result<()>
+) -> StorageResult<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -132,7 +137,7 @@ pub fn write_proposal_result<S>(
     storage: &mut S,
     proposal_id: u64,
     proposal_result: ProposalResult,
-) -> Result<()>
+) -> StorageResult<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -145,7 +150,7 @@ where
 pub fn get_proposal_by_id<S>(
     storage: &S,
     id: u64,
-) -> Result<Option<StorageProposal>>
+) -> StorageResult<Option<StorageProposal>>
 where
     S: StorageRead,
 {
@@ -165,7 +170,21 @@ where
     let proposal_type: Option<ProposalType> =
         storage.read(&proposal_type_key)?;
 
-    let proposal = proposal_type.map(|proposal_type| StorageProposal {
+    let proposal_type = if let Some(proposal_type) = proposal_type {
+        if let ProposalType::DefaultWithWasm(_) = proposal_type {
+            let proposal_code_key = governance_keys::get_proposal_code_key(id);
+            let proposal_code: Vec<u8> =
+                storage.read(&proposal_code_key)?.unwrap_or_default();
+            let proposal_code_hash = Hash::sha256(proposal_code);
+            ProposalType::DefaultWithWasm(proposal_code_hash)
+        } else {
+            proposal_type
+        }
+    } else {
+        return Ok(None);
+    };
+
+    Ok(Some(StorageProposal {
         id,
         content: content.unwrap(),
         author: author.unwrap(),
@@ -173,13 +192,14 @@ where
         voting_start_epoch: voting_start_epoch.unwrap(),
         voting_end_epoch: voting_end_epoch.unwrap(),
         activation_epoch: activation_epoch.unwrap(),
-    });
-
-    Ok(proposal)
+    }))
 }
 
 /// Query all the votes for a proposal_id
-pub fn get_proposal_votes<S>(storage: &S, proposal_id: u64) -> Result<Vec<Vote>>
+pub fn get_proposal_votes<S>(
+    storage: &S,
+    proposal_id: u64,
+) -> StorageResult<Vec<Vote>>
 where
     S: StorageRead,
 {
@@ -214,7 +234,10 @@ where
 }
 
 /// Check if an accepted proposal is being executed
-pub fn is_proposal_accepted<S>(storage: &S, tx_data: &[u8]) -> Result<bool>
+pub fn is_proposal_accepted<S>(
+    storage: &S,
+    tx_data: &[u8],
+) -> StorageResult<bool>
 where
     S: StorageRead,
 {
@@ -232,7 +255,7 @@ where
 pub fn get_proposal_code<S>(
     storage: &S,
     proposal_id: u64,
-) -> Result<Option<Vec<u8>>>
+) -> StorageResult<Option<Vec<u8>>>
 where
     S: StorageRead,
 {
@@ -244,7 +267,7 @@ where
 pub fn get_proposal_author<S>(
     storage: &S,
     proposal_id: u64,
-) -> Result<Option<Address>>
+) -> StorageResult<Option<Address>>
 where
     S: StorageRead,
 {
@@ -253,7 +276,7 @@ where
 }
 
 /// Get governance parameters
-pub fn get_parameters<S>(storage: &S) -> Result<GovernanceParameters>
+pub fn get_parameters<S>(storage: &S) -> StorageResult<GovernanceParameters>
 where
     S: StorageRead,
 {
@@ -295,7 +318,7 @@ where
 }
 
 /// Get governance "max_proposal_period" parameter
-pub fn get_max_proposal_period<S>(storage: &S) -> Result<u64>
+pub fn get_max_proposal_period<S>(storage: &S) -> StorageResult<u64>
 where
     S: StorageRead,
 {
@@ -309,7 +332,7 @@ where
 pub fn get_proposal_result<S>(
     storage: &S,
     proposal_id: u64,
-) -> Result<Option<ProposalResult>>
+) -> StorageResult<Option<ProposalResult>>
 where
     S: StorageRead,
 {
@@ -322,14 +345,14 @@ where
 pub fn load_proposals<S>(
     storage: &S,
     current_epoch: Epoch,
-) -> Result<BTreeSet<u64>>
+) -> StorageResult<BTreeSet<u64>>
 where
     S: StorageRead,
 {
     let mut ids = BTreeSet::<u64>::new();
     let proposals_key =
         governance_keys::get_commiting_proposals_prefix(current_epoch.0);
-    for key_val in namada_storage::iter_prefix_bytes(storage, &proposals_key)? {
+    for key_val in namada_state::iter_prefix_bytes(storage, &proposals_key)? {
         let (key, _) = key_val?;
         let activation_epoch = governance_keys::get_commit_proposal_epoch(&key)
             .expect("this key segment should correspond to an epoch number");

@@ -30,8 +30,7 @@ endif
 audit-ignores += RUSTSEC-2021-0076
 
 # Workspace crates
-crates := namada
-crates += namada_account
+crates := namada_account
 crates += namada_apps
 crates += namada_apps_lib
 crates += namada_benchmarks
@@ -60,10 +59,16 @@ crates += namada_trans_token
 crates += namada_tx
 crates += namada_tx_env
 crates += namada_tx_prelude
+crates += namada_vm
 crates += namada_vm_env
 crates += namada_vote_ext
+crates += namada_vp
 crates += namada_vp_env
 crates += namada_vp_prelude
+
+# All crates format as `cargo check --package` arguments
+all-crates := $(foreach crate,$(crates), -p $(crate))
+
 
 build:
 	$(cargo) build $(jobs) --workspace --exclude namada_benchmarks
@@ -99,22 +104,21 @@ check:
 check-mainnet:
 	$(cargo) check --workspace --features "mainnet"
 
-# Check that every crate can be built with default features and that namada crate
-# can be built for wasm
+# Check that every crate can be built with default features and that SDK crate
+# can be built for wasm and with all features enabled
 check-crates:
-	rustup target add --toolchain $(nightly) wasm32-unknown-unknown
-	$(foreach p,$(crates), echo "Checking $(p)" && cargo +$(nightly) check -Z unstable-options --tests -p $(p) && ) \
+	cargo +$(nightly) check -Z unstable-options --tests $(all-crates) && \
 		make -C $(wasms) check && \
 		make -C $(wasms_for_tests) check && \
-		cargo check --package namada --target wasm32-unknown-unknown --no-default-features --features "namada-sdk" && \
+		cargo check --package namada_sdk --target wasm32-unknown-unknown --no-default-features && \
 		cargo check --package namada_sdk --all-features
 
 clippy-wasm = $(cargo) +$(nightly) clippy --manifest-path $(wasm)/Cargo.toml --all-targets -- -D warnings
 
 # Need a separate command for benchmarks to prevent the "testing" feature flag from being activated
 clippy:
-	$(cargo) +$(nightly) clippy $(jobs) --all-targets --workspace --exclude namada_benchmarks -- -D warnings && \
-	$(cargo) +$(nightly) clippy $(jobs) --all-targets --package namada_benchmarks -- -D warnings && \
+	$(cargo) +$(nightly) clippy $(jobs) --all-targets --workspace --exclude namada_benchmarks -- -D warnings --check-cfg 'cfg(fuzzing)' && \
+	$(cargo) +$(nightly) clippy $(jobs) --all-targets --package namada_benchmarks -- -D warnings --check-cfg 'cfg(fuzzing)' && \
 	make -C $(wasms) clippy && \
 	make -C $(wasms_for_tests) clippy
 
@@ -154,7 +158,6 @@ test-coverage:
 	# Run integration tests separately because they require `integration`
 	# feature (and without coverage)
 	$(cargo) +$(nightly) llvm-cov --output-path lcov.info \
-		--features namada/testing \
 		--lcov \
 		-- --skip e2e --skip pos_state_machine_test --skip integration \
 		-Z unstable-options --report-time && \
@@ -203,7 +206,6 @@ test-unit-with-eth-bridge:
 
 test-unit-with-coverage:
 	$(cargo) +$(nightly) llvm-cov --output-path lcov.info \
-		--features namada/testing \
 		--lcov \
 		-- --skip e2e --skip pos_state_machine_test --skip integration \
 		-Z unstable-options --report-time
@@ -242,7 +244,7 @@ test-debug:
 
 # Test that the benchmarks run successfully without performing measurement
 test-benches:
-	$(cargo) +$(nightly) test --package namada_benchmarks --benches
+	$(cargo) +$(nightly) test --release --package namada_benchmarks --benches
 
 # Run PoS state machine tests with shrinking disabled by default (can be 
 # overridden with `PROPTEST_MAX_SHRINK_ITERS`)
@@ -270,6 +272,23 @@ clean:
 
 bench:
 	$(cargo) bench --package namada_benchmarks
+
+# NOTE: running in `--dev` as release build takes over 64GB memory, but 
+# dev is still configured for opt-level=3
+fuzz-txs-mempool:
+	$(cargo) +$(nightly) fuzz run txs_mempool --dev -- -rss_limit_mb=4096
+
+fuzz-txs-prepare-proposal:
+	$(cargo) +$(nightly) fuzz run txs_prepare_proposal --dev -- -rss_limit_mb=4096
+
+fuzz-txs-process-proposal:
+	$(cargo) +$(nightly) fuzz run txs_process_proposal --dev -- -rss_limit_mb=4096
+
+fuzz-txs-finalize-block:
+	$(cargo) +$(nightly) fuzz run txs_finalize_block --dev -- -rss_limit_mb=4096
+
+fuzz-txs-wasm-run:
+	$(cargo) +$(nightly) fuzz run txs_wasm_run --dev -- -rss_limit_mb=4096 --sanitizer=none
 
 build-doc:
 	$(cargo) doc --no-deps
@@ -315,14 +334,32 @@ debug-wasm-tests-scripts:
 
 # need python
 checksum-wasm:
-	python3 wasm/checksums.py
+	python3 scripts/gen_checksums.py
 
 # this command needs wasm-opt installed
 opt-wasm:
-	@for file in $(shell ls wasm/*.wasm); do wasm-opt -Oz -o $${file} $${file}; done
+	@if command -v parallel >/dev/null 2>&1; then \
+		parallel -j 75% wasm-opt -Oz -o {} {} ::: wasm/*.wasm; \
+	else \
+		for file in wasm/*.wasm; do \
+			if [ -f "$$file" ]; then \
+				echo "Processing $$file..."; \
+				wasm-opt -Oz -o $${file} $${file}; \
+			fi; \
+		done; \
+	fi
 
 opt-wasm-tests:
-	@for file in $(shell ls wasm_for_tests/*.wasm); do wasm-opt -Oz -o $${file} $${file}; done
+	@if command -v parallel >/dev/null 2>&1; then \
+		parallel -j 75% wasm-opt -Oz -o {} {} ::: wasm_for_tests/*.wasm; \
+	else \
+		for file in wasm_for_tests/*.wasm; do \
+			if [ -f "$$file" ]; then \
+				echo "Processing $$file..."; \
+				wasm-opt -Oz -o $${file} $${file}; \
+			fi; \
+		done; \
+	fi
 
 clean-wasm-scripts:
 	make -C $(wasms) clean
@@ -331,7 +368,7 @@ dev-deps:
 	$(rustup) toolchain install $(nightly)
 	$(rustup) target add wasm32-unknown-unknown
 	$(rustup) component add rustfmt clippy miri --toolchain $(nightly)
-	$(cargo) install cargo-watch unclog wasm-opt
+	$(cargo) install cargo-watch unclog wasm-opt cargo-fuzz
 
 test-miri:
 	$(cargo) +$(nightly) miri setup

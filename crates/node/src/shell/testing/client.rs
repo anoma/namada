@@ -1,12 +1,12 @@
 use clap::Command as App;
 use eyre::Report;
-use namada::io::Io;
 use namada_apps_lib::cli::api::{CliApi, CliClient};
 use namada_apps_lib::cli::args::Global;
 use namada_apps_lib::cli::{
     args, cmds, Cmd, Context, NamadaClient, NamadaRelayer,
 };
 use namada_sdk::error::Error as SdkError;
+use namada_sdk::io::Io;
 
 use super::node::MockNode;
 use crate::shell::testing::utils::{Bin, TestingIo};
@@ -44,11 +44,11 @@ pub fn run(
                     NamadaClient::WithContext(Box::new((sub_cmd, ctx)))
                 }
                 cmds::NamadaClient::WithoutContext(sub_cmd) => {
-                    NamadaClient::WithoutContext(sub_cmd, global)
+                    NamadaClient::WithoutContext(Box::new((sub_cmd, global)))
                 }
             };
             rt.block_on(CliApi::handle_client_command(
-                Some(node),
+                Some(node.clone()),
                 cmd,
                 TestingIo,
             ))
@@ -84,7 +84,7 @@ pub fn run(
                 }
             };
             rt.block_on(CliApi::handle_relayer_command(
-                Some(node),
+                Some(node.clone()),
                 cmd,
                 TestingIo,
             ))
@@ -93,7 +93,7 @@ pub fn run(
 }
 
 #[async_trait::async_trait(?Send)]
-impl<'a> CliClient for &'a MockNode {
+impl CliClient for MockNode {
     fn from_tendermint_address(_: &crate::facade::tendermint_rpc::Url) -> Self {
         unreachable!("MockNode should always be instantiated at test start.")
     }

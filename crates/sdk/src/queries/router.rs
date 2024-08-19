@@ -398,7 +398,6 @@ macro_rules! pattern_and_handler_to_method {
 
             #[allow(dead_code)]
             #[allow(clippy::too_many_arguments)]
-            #[cfg(any(test, feature = "async-client"))]
             #[doc = "Request value with optional data (used for e.g. \
                 `dry_run_tx`), optionally specified height (supported for \
                 `storage_value`) and optional proof (supported for \
@@ -451,7 +450,6 @@ macro_rules! pattern_and_handler_to_method {
 
             #[allow(dead_code)]
             #[allow(clippy::too_many_arguments)]
-            #[cfg(any(test, feature = "async-client"))]
             #[doc = "Request value with optional data (used for e.g. \
                 `dry_run_tx`), optionally specified height (supported for \
                 `storage_value`) and optional proof (supported for \
@@ -507,7 +505,6 @@ macro_rules! pattern_and_handler_to_method {
 
             #[allow(dead_code)]
             #[allow(clippy::too_many_arguments)]
-            #[cfg(any(test, feature = "async-client"))]
             #[doc = "Request a simple borsh-encoded value from `" $handle "`, \
                 without any additional request data, specified block height or \
                 proof."]
@@ -729,7 +726,7 @@ macro_rules! router_type {
 
 /// Compile time tree patterns router with type-safe dynamic parameter parsing,
 /// automatic routing, type-safe path constructors and optional client query
-/// methods (enabled with `feature = "async-client"`).
+/// methods.
 ///
 /// The `router!` macro implements greedy matching algorithm.
 ///

@@ -44,7 +44,7 @@ pub fn balance_prefix(token_addr: &Address) -> storage::Key {
     .expect("Cannot obtain a storage key")
 }
 
-/// Obtain a storage key prefix for all users' balances.
+/// Obtain a storage key prefix for token parameters.
 pub fn parameter_prefix(token_addr: &Address) -> storage::Key {
     storage::Key::from(
         Address::Internal(InternalAddress::Multitoken).to_db_key(),
@@ -191,45 +191,4 @@ pub fn is_any_minted_balance_key(key: &storage::Key) -> Option<&Address> {
         }
         _ => None,
     }
-}
-
-/// The owner of a shielded action transfer, could be a proper address or the
-/// minted subkey
-pub enum ShieldedActionOwner<'key> {
-    /// A proper address
-    Owner(&'key Address),
-    /// The mint address
-    Minted,
-}
-
-impl ShieldedActionOwner<'_> {
-    /// Convert the shielded action owner to an address
-    pub fn to_address_ref(&self) -> &Address {
-        match self {
-            Self::Owner(addr) => addr,
-            Self::Minted => &Address::Internal(InternalAddress::Ibc),
-        }
-    }
-
-    /// Get the balance key corresponding to this shielded action owner
-    pub fn to_balance_key(&self, token: &Address) -> storage::Key {
-        match self {
-            ShieldedActionOwner::Owner(addr) => balance_key(token, addr),
-            ShieldedActionOwner::Minted => minted_balance_key(token),
-        }
-    }
-}
-
-/// Check if the given storage key is a balance key for a shielded action. If it
-/// is, returns the token and the owner addresses.
-pub fn is_any_shielded_action_balance_key(
-    key: &storage::Key,
-) -> Option<(&Address, ShieldedActionOwner<'_>)> {
-    is_any_token_balance_key(key).map_or_else(
-        || {
-            is_any_minted_balance_key(key)
-                .map(|token| (token, ShieldedActionOwner::Minted))
-        },
-        |[token, owner]| Some((token, ShieldedActionOwner::Owner(owner))),
-    )
 }

@@ -10,7 +10,10 @@ use namada_core::collections::{HashMap, HashSet};
 use namada_core::hash::Hash;
 use namada_core::{arith, storage};
 use namada_events::{Event, EventToEmit, EventType};
-use namada_gas::{MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_WRITE_GAS_PER_BYTE};
+use namada_gas::{
+    MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_DELETE_GAS_PER_BYTE,
+    STORAGE_WRITE_GAS_PER_BYTE,
+};
 use patricia_tree::map::StringPatriciaMap;
 use thiserror::Error;
 
@@ -75,15 +78,6 @@ pub(crate) struct TxWriteLog {
     // Temporary key-values for the current transaction that are dropped after
     // tx and its verifying VPs execution is done
     tx_temp_log: HashMap<storage::Key, Vec<u8>>,
-    // A precommit bucket for the `tx_write_log`. This is useful for
-    // validation when a clean `tx_write_log` is needed without committing any
-    // modification already in there. These modifications can be temporarily
-    // stored here and then discarded or committed to the `block_write_log`,
-    // together with the content of `tx_write_log`. No direct key
-    // write/update/delete should ever happen on this field, this log should
-    // only be populated through a dump of the `tx_write_log` and should be
-    // cleaned either when committing or dumping the `tx_write_log`
-    precommit_write_log: HashMap<storage::Key, StorageModification>,
     /// The events emitted by the current transaction
     events: WriteLogEvents,
 }
@@ -94,7 +88,6 @@ impl Default for TxWriteLog {
             address_gen: None,
             write_log: HashMap::with_capacity(100),
             tx_temp_log: HashMap::with_capacity(1),
-            precommit_write_log: HashMap::with_capacity(100),
             events: WriteLogEvents {
                 tree: StringPatriciaMap::new(),
             },
@@ -198,10 +191,6 @@ impl WriteLog {
             .write_log
             .get(key)
             .or_else(|| {
-                // If not found, then try to read from tx precommit write log
-                self.tx_write_log.precommit_write_log.get(key)
-            })
-            .or_else(|| {
                 // If not found, then try to read from batch write log,
                 // following the insertion order
                 self.batch_write_log
@@ -304,12 +293,7 @@ impl WriteLog {
         }
         let len_signed =
             i64::try_from(len).map_err(|_| Error::ValueLenOverflow)?;
-        let size_diff = match self
-            .tx_write_log
-            .write_log
-            .get(key)
-            .or_else(|| self.tx_write_log.precommit_write_log.get(key))
-        {
+        let size_diff = match self.tx_write_log.write_log.get(key) {
             Some(prev) => match prev {
                 StorageModification::Write { ref value } => {
                     let val_len = i64::try_from(value.len())
@@ -322,7 +306,8 @@ impl WriteLog {
                     // wasm environment without the need for cooperation from
                     // the wasm code (tx or vp), so there's no need to return
                     // gas in case of an error because execution will terminate
-                    // anyway and this cannot be exploited to run the vm forever
+                    // anyway and this cannot be exploited to keep the vm
+                    // running
                     return Err(Error::UpdateVpOfNewAccount);
                 }
             },
@@ -379,12 +364,7 @@ impl WriteLog {
         key: &storage::Key,
         value: Vec<u8>,
     ) -> Result<(u64, i64)> {
-        if let Some(prev) = self
-            .tx_write_log
-            .write_log
-            .get(key)
-            .or_else(|| self.tx_write_log.precommit_write_log.get(key))
-        {
+        if let Some(prev) = self.tx_write_log.write_log.get(key) {
             match prev {
                 StorageModification::Write { .. } => {
                     // Cannot overwrite a write request with a temporary one
@@ -429,12 +409,7 @@ impl WriteLog {
         if key.is_validity_predicate().is_some() {
             return Err(Error::DeleteVp);
         }
-        let size_diff = match self
-            .tx_write_log
-            .write_log
-            .get(key)
-            .or_else(|| self.tx_write_log.precommit_write_log.get(key))
-        {
+        let size_diff = match self.tx_write_log.write_log.get(key) {
             Some(prev) => match prev {
                 StorageModification::Write { ref value } => value.len(),
                 StorageModification::Delete => 0,
@@ -455,7 +430,7 @@ impl WriteLog {
             .ok()
             .and_then(i64::checked_neg)
             .ok_or(Error::SizeDiffOverflow)?;
-        Ok((checked!(gas * STORAGE_WRITE_GAS_PER_BYTE)?, size_diff))
+        Ok((checked!(gas * STORAGE_DELETE_GAS_PER_BYTE)?, size_diff))
     }
 
     /// Delete a key and its value.
@@ -532,25 +507,12 @@ impl WriteLog {
 
     /// Get the non-temporary storage keys changed and accounts keys initialized
     /// in the current transaction. The account keys point to the validity
-    /// predicates of the newly created accounts. The keys in the precommit are
-    /// not included in the result of this function.
+    /// predicates of the newly created accounts.
     pub fn get_keys(&self) -> BTreeSet<storage::Key> {
         self.tx_write_log
             .write_log
             .iter()
             .map(|(key, _modification)| key.clone())
-            .collect()
-    }
-
-    /// Get the storage keys changed and accounts keys initialized in the
-    /// current transaction and precommit. The account keys point to the
-    /// validity predicates of the newly created accounts.
-    pub fn get_keys_with_precommit(&self) -> BTreeSet<storage::Key> {
-        self.tx_write_log
-            .precommit_write_log
-            .keys()
-            .chain(self.tx_write_log.write_log.keys())
-            .cloned()
             .collect()
     }
 
@@ -635,72 +597,46 @@ impl WriteLog {
         self.tx_write_log.events.tree.values().flatten()
     }
 
-    /// Add the entire content of the tx write log to the precommit one. The tx
-    /// log gets reset in the process.
-    pub fn precommit_tx(&mut self) {
-        let tx_log = std::mem::replace(
-            &mut self.tx_write_log.write_log,
-            HashMap::with_capacity(100),
-        );
-
-        self.tx_write_log.precommit_write_log.extend(tx_log)
-    }
-
-    /// Commit the current transaction's write log and precommit log to the
-    /// batch when it's accepted by all the triggered validity predicates.
-    /// Starts a new transaction write log.
+    /// Commit the current transaction's write log to the batch when it's
+    /// accepted by all the triggered validity predicates. Starts a new
+    /// transaction write log.
     pub fn commit_tx_to_batch(&mut self) {
-        // First precommit everything
-        self.precommit_tx();
-
-        // Then commit to batch
         let tx_write_log = std::mem::take(&mut self.tx_write_log);
         let batched_log = BatchedTxWriteLog {
             address_gen: tx_write_log.address_gen,
-            write_log: tx_write_log.precommit_write_log,
+            write_log: tx_write_log.write_log,
         };
 
         self.batch_write_log.push(batched_log);
     }
 
-    /// Drop the current transaction's write log and IBC events and precommit
-    /// when it's declined by any of the triggered validity predicates.
-    /// Starts a new transaction write log a clears the temp write log.
+    /// Drop the current transaction's write log and IBC events when it's
+    /// declined by any of the triggered validity predicates. Starts a new
+    /// transaction write log and clears the temp write log.
     pub fn drop_tx(&mut self) {
         self.tx_write_log = Default::default();
     }
 
-    /// Drop the current transaction's write log and temporary log but keep the
-    /// precommit one. This is useful only when a part of a transaction
-    /// failed but it can still be valid and we want to keep the changes
-    /// applied before the failed section.
-    pub fn drop_tx_keep_precommit(&mut self) {
-        self.tx_write_log.write_log.clear();
-        self.tx_write_log.tx_temp_log.clear();
+    /// Commit the current tx and the entire batch to the block log.
+    pub fn commit_batch_and_current_tx(&mut self) {
+        self.commit_tx_to_batch();
+        self.commit_batch_only();
     }
 
-    /// Commit the entire batch to the block log.
-    pub fn commit_batch(&mut self) {
+    /// Commit the entire batch to the block log. Doesn't handle the tx write
+    /// log which might still contain some data and needs to be handled
+    /// separately.
+    pub fn commit_batch_only(&mut self) {
         for log in std::mem::take(&mut self.batch_write_log) {
             self.block_write_log.extend(log.write_log);
             self.block_address_gen = log.address_gen;
         }
     }
 
-    /// Drop the entire batch log.
+    /// Drop the current tx and the entire batch log.
     pub fn drop_batch(&mut self) {
+        self.drop_tx();
         self.batch_write_log = Default::default();
-    }
-
-    /// Commit the tx write log to the block write log.
-    pub fn commit_tx(&mut self) {
-        // First precommit everything
-        self.precommit_tx();
-
-        // Then commit to block
-        let tx_write_log = std::mem::take(&mut self.tx_write_log);
-        self.block_write_log
-            .extend(tx_write_log.precommit_write_log);
     }
 
     /// Get the verifiers set whose validity predicates should validate the
@@ -766,12 +702,7 @@ impl WriteLog {
                 .iter()
                 .rev()
                 .flat_map(|batch_log| batch_log.write_log.iter())
-                .chain(
-                    self.tx_write_log
-                        .precommit_write_log
-                        .iter()
-                        .chain(self.tx_write_log.write_log.iter()),
-                ),
+                .chain(self.tx_write_log.write_log.iter()),
         ) {
             if key.split_prefix(prefix).is_some() {
                 matches.insert(key.to_string(), modification.clone());
@@ -836,7 +767,7 @@ mod tests {
 
         // delete a non-existing key
         let (gas, diff) = write_log.delete(&key).unwrap();
-        assert_eq!(gas, key.len() as u64 * STORAGE_WRITE_GAS_PER_BYTE);
+        assert_eq!(gas, key.len() as u64 * STORAGE_DELETE_GAS_PER_BYTE);
         assert_eq!(diff, 0);
 
         // insert a value
@@ -874,13 +805,13 @@ mod tests {
         let (gas, diff) = write_log.delete(&key).unwrap();
         assert_eq!(
             gas,
-            (key.len() + updated.len()) as u64 * STORAGE_WRITE_GAS_PER_BYTE
+            (key.len() + updated.len()) as u64 * STORAGE_DELETE_GAS_PER_BYTE
         );
         assert_eq!(diff, -(updated.len() as i64));
 
         // delete the deleted key again
         let (gas, diff) = write_log.delete(&key).unwrap();
-        assert_eq!(gas, key.len() as u64 * STORAGE_WRITE_GAS_PER_BYTE);
+        assert_eq!(gas, key.len() as u64 * STORAGE_DELETE_GAS_PER_BYTE);
         assert_eq!(diff, 0);
 
         // read the deleted key
@@ -997,7 +928,7 @@ mod tests {
         // initialize an account
         let vp1 = Hash::sha256("vp1".as_bytes());
         let (addr1, _) = state.write_log.init_account(&address_gen, vp1, &[]);
-        state.write_log.commit_tx();
+        state.write_log.commit_batch_and_current_tx();
 
         // write values
         let val1 = "val1".as_bytes().to_vec();
@@ -1005,7 +936,7 @@ mod tests {
         state.write_log.write(&key2, val1.clone()).unwrap();
         state.write_log.write(&key3, val1.clone()).unwrap();
         state.write_log.write_temp(&key4, val1.clone()).unwrap();
-        state.write_log.commit_tx();
+        state.write_log.commit_batch_and_current_tx();
 
         // these values are not written due to drop_tx
         let val2 = "val2".as_bytes().to_vec();
@@ -1018,13 +949,14 @@ mod tests {
         let val3 = "val3".as_bytes().to_vec();
         state.write_log.delete(&key2).unwrap();
         state.write_log.write(&key3, val3.clone()).unwrap();
-        state.write_log.commit_tx();
+        state.write_log.commit_batch_and_current_tx();
 
         // commit a block
         state.commit_block().expect("commit failed");
 
-        let (vp_code_hash, _gas) =
-            state.validity_predicate(&addr1).expect("vp read failed");
+        let (vp_code_hash, _gas) = state
+            .validity_predicate::<namada_parameters::Store<()>>(&addr1)
+            .expect("vp read failed");
         assert_eq!(vp_code_hash, Some(vp1));
         let (value, _) = state.db_read(&key1).expect("read failed");
         assert_eq!(value.expect("no read value"), val1);
@@ -1137,14 +1069,6 @@ mod tests {
             state.write_log.write(&key1, val1.clone()),
             Err(Error::UpdateTemporaryValue)
         ));
-
-        // Test with a temporary write precommitted
-        state.write_log.write_temp(&key1, val1.clone()).unwrap();
-        state.write_log.precommit_tx();
-        assert!(matches!(
-            state.write_log.write(&key1, val1),
-            Err(Error::UpdateTemporaryValue)
-        ));
     }
 
     // Test that a temporary write on top of a write is not allowed
@@ -1161,14 +1085,6 @@ mod tests {
             state.write_log.write_temp(&key1, val1.clone()),
             Err(Error::WriteTempAfterWrite)
         ));
-
-        // Test with a temporary write precommitted
-        state.write_log.write(&key1, val1.clone()).unwrap();
-        state.write_log.precommit_tx();
-        assert!(matches!(
-            state.write_log.write_temp(&key1, val1),
-            Err(Error::WriteTempAfterWrite)
-        ));
     }
 
     // Test that a temporary write on top of a delete is not allowed
@@ -1183,14 +1099,6 @@ mod tests {
         state.write_log.delete(&key1).unwrap();
         assert!(matches!(
             state.write_log.write_temp(&key1, val1.clone()),
-            Err(Error::WriteTempAfterDelete)
-        ));
-
-        // Test with a temporary write precommitted
-        state.write_log.delete(&key1).unwrap();
-        state.write_log.precommit_tx();
-        assert!(matches!(
-            state.write_log.write_temp(&key1, val1),
             Err(Error::WriteTempAfterDelete)
         ));
     }

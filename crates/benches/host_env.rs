@@ -1,31 +1,32 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use namada::core::account::AccountPublicKeysMap;
-use namada::core::address;
-use namada::core::collections::{HashMap, HashSet};
-use namada::ledger::storage::DB;
-use namada::token::{Amount, TransparentTransfer};
-use namada::tx::Authorization;
-use namada::vm::wasm::TxCache;
+use namada_apps_lib::account::AccountPublicKeysMap;
+use namada_apps_lib::collections::{HashMap, HashSet};
+use namada_apps_lib::storage::DB;
+use namada_apps_lib::token::{Amount, Transfer};
+use namada_apps_lib::tx::Authorization;
 use namada_apps_lib::wallet::defaults;
-use namada_apps_lib::wasm_loader;
+use namada_apps_lib::{address, storage, wasm_loader};
 use namada_node::bench_utils::{
-    BenchShell, TX_INIT_PROPOSAL_WASM, TX_REVEAL_PK_WASM,
-    TX_TRANSPARENT_TRANSFER_WASM, TX_UPDATE_ACCOUNT_WASM, VP_USER_WASM,
-    WASM_DIR,
+    BenchShell, TX_INIT_PROPOSAL_WASM, TX_REVEAL_PK_WASM, TX_TRANSFER_WASM,
+    TX_UPDATE_ACCOUNT_WASM, VP_USER_WASM, WASM_DIR,
 };
+use namada_vm::wasm::TxCache;
 
 // Benchmarks the validation of a single signature on a single `Section` of a
 // transaction
 fn tx_section_signature_validation(c: &mut Criterion) {
-    let shell = BenchShell::default();
-    let transfer_data = TransparentTransfer {
-        source: defaults::albert_address(),
-        target: defaults::bertha_address(),
-        token: address::testing::nam(),
-        amount: Amount::native_whole(500).native_denominated(),
-    };
+    let bench_shell = BenchShell::default();
+    let shell = bench_shell.read();
+    let transfer_data = Transfer::default()
+        .transfer(
+            defaults::albert_address(),
+            defaults::bertha_address(),
+            address::testing::nam(),
+            Amount::native_whole(500).native_denominated(),
+        )
+        .unwrap();
     let tx = shell.generate_tx(
-        TX_TRANSPARENT_TRANSFER_WASM,
+        TX_TRANSFER_WASM,
         transfer_data,
         None,
         None,
@@ -62,7 +63,7 @@ fn compile_wasm(c: &mut Criterion) {
     let mut txs: HashMap<&str, Vec<u8>> = HashMap::default();
 
     for tx in [
-        TX_TRANSPARENT_TRANSFER_WASM,
+        TX_TRANSFER_WASM,
         TX_INIT_PROPOSAL_WASM,
         TX_REVEAL_PK_WASM,
         TX_UPDATE_ACCOUNT_WASM,
@@ -82,17 +83,21 @@ fn compile_wasm(c: &mut Criterion) {
         group.bench_function(format!("Wasm: {wasm}, size: {len}"), |b| {
             b.iter_batched_ref(
                 || {
-                    let mut shell = BenchShell::default();
+                    let bench_shell = BenchShell::default();
                     // Re-initialize the tx cache to make sure we are not
                     // reading the precompiled modules from there
                     let tempdir = tempfile::tempdir().unwrap();
-                    let path = tempdir.path().canonicalize().unwrap();
-                    shell.tx_wasm_cache = TxCache::new(path, 50 * 1024 * 1024);
-
-                    (shell, tempdir)
+                    {
+                        let mut shell = bench_shell.write();
+                        let path = tempdir.path().canonicalize().unwrap();
+                        shell.tx_wasm_cache =
+                            TxCache::new(path, 50 * 1024 * 1024);
+                    }
+                    (bench_shell, tempdir)
                 },
                 |(shell, _tempdir)| {
                     shell
+                        .write()
                         .tx_wasm_cache
                         .compile_or_fetch(&wasm_code)
                         .unwrap()
@@ -111,7 +116,7 @@ fn untrusted_wasm_validation(c: &mut Criterion) {
     let mut txs: HashMap<&str, Vec<u8>> = HashMap::default();
 
     for tx in [
-        TX_TRANSPARENT_TRANSFER_WASM,
+        TX_TRANSFER_WASM,
         TX_INIT_PROPOSAL_WASM,
         TX_REVEAL_PK_WASM,
         TX_UPDATE_ACCOUNT_WASM,
@@ -128,7 +133,7 @@ fn untrusted_wasm_validation(c: &mut Criterion) {
         let len = wasm_code.len() as u64;
         group.throughput(criterion::Throughput::Bytes(len));
         group.bench_function(format!("Tx: {tx}, size: {len}"), |b| {
-            b.iter(|| namada::vm::validate_untrusted_wasm(&wasm_code).unwrap())
+            b.iter(|| namada_vm::validate_untrusted_wasm(&wasm_code).unwrap())
         });
     }
     group.finish();
@@ -178,10 +183,11 @@ fn generate_random_keys_sized() -> Vec<(String, u64)> {
 
 fn write_log_read(c: &mut Criterion) {
     let mut group = c.benchmark_group("write_log_read");
-    let mut shell = BenchShell::default();
+    let bench_shell = BenchShell::default();
+    let mut shell = bench_shell.write();
 
     for (key, value_len) in generate_random_keys_sized() {
-        let key = namada::core::storage::Key::parse(key).unwrap();
+        let key = storage::Key::parse(key).unwrap();
         // Extract the throughput, together with the wall-time, so that we can
         // than invert it to calculate the desired metric (time/byte)
         // NOTE: criterion states that the throughput is measured on the
@@ -209,10 +215,11 @@ fn write_log_read(c: &mut Criterion) {
 
 fn storage_read(c: &mut Criterion) {
     let mut group = c.benchmark_group("storage_read");
-    let mut shell = BenchShell::default();
+    let bench_shell = BenchShell::default();
+    let mut shell = bench_shell.write();
 
     for (key, value_len) in generate_random_keys_sized() {
-        let key = namada::core::storage::Key::parse(key).unwrap();
+        let key = storage::Key::parse(key).unwrap();
         // Extract the throughput, together with the wall-time, so that we can
         // than invert it to calculate the desired metric (time/byte)
         // NOTE: criterion states that the throughput is measured on the
@@ -243,10 +250,11 @@ fn storage_read(c: &mut Criterion) {
 
 fn write_log_write(c: &mut Criterion) {
     let mut group = c.benchmark_group("write_log_write");
-    let mut shell = BenchShell::default();
+    let bench_shell = BenchShell::default();
+    let mut shell = bench_shell.write();
 
     for (key, value_len) in generate_random_keys_sized() {
-        let key = namada::core::storage::Key::parse(key).unwrap();
+        let key = storage::Key::parse(key).unwrap();
         // Extract the throughput, together with the wall-time, so that we can
         // than invert it to calculate the desired metric (time/byte)
         // NOTE: criterion states that the throughput is measured on the
@@ -278,10 +286,11 @@ fn write_log_write(c: &mut Criterion) {
 
 fn storage_write(c: &mut Criterion) {
     let mut group = c.benchmark_group("storage_write");
-    let mut shell = BenchShell::default();
+    let bench_shell = BenchShell::default();
+    let mut shell = bench_shell.write();
 
     for (key, value_len) in generate_random_keys_sized() {
-        let key = namada::core::storage::Key::parse(key).unwrap();
+        let key = storage::Key::parse(key).unwrap();
         // Extract the throughput, together with the wall-time, so that we can
         // than invert it to calculate the desired metric (time/byte)
         // NOTE: criterion states that the throughput is measured on the

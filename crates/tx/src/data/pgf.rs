@@ -1,5 +1,5 @@
 use namada_core::address::Address;
-use namada_core::borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::collections::HashMap;
 use namada_core::dec::Dec;
 use namada_macros::BorshDeserializer;
@@ -16,10 +16,12 @@ pub enum PgfError {
 }
 
 /// A tx data type to hold proposal data
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Clone,
     PartialEq,
+    BorshSchema,
     BorshSerialize,
     BorshDeserialize,
     BorshDeserializer,
@@ -46,7 +48,7 @@ pub mod tests {
         /// Generate an arbitraary steward commission update
         pub fn arb_update_steward_commission()(
             steward in arb_non_internal_address(),
-            commission in collection::hash_map(arb_non_internal_address(), arb_dec(), 0..10),
+            commission in collection::btree_map(arb_non_internal_address(), arb_dec(), 0..10),
         ) -> UpdateStewardCommission {
             UpdateStewardCommission {
                 steward,

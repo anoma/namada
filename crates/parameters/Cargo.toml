@@ -22,6 +22,14 @@ testing = [
 [dependencies]
 namada_core = { path = "../core" }
 namada_macros = { path = "../macros" }
+namada_state = { path = "../state" }
 namada_storage = { path = "../storage" }
+namada_systems = { path = "../systems" }
+namada_tx = { path = "../tx" }
+namada_vp = { path = "../vp" }
 
+smooth-operator.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+namada_storage = { path = "../storage", features = ["testing"] }

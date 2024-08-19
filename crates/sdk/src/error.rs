@@ -22,7 +22,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum Error {
     /// Key Retrieval Errors
     #[error("Key Error: {0}")]
-    KeyRetrival(#[from] storage::Error),
+    KeyRetrieval(#[from] storage::Error),
     /// Transaction Errors
     #[error("{0}")]
     Tx(#[from] TxSubmitError),
@@ -44,6 +44,9 @@ pub enum Error {
     /// Any Other errors that are uncategorized
     #[error("{0}")]
     Other(String),
+    /// An interrupt was called
+    #[error("Process {0} received an interrupt signal")]
+    Interrupt(String),
 }
 
 /// Errors that deal with querying some kind of data
@@ -264,7 +267,10 @@ pub enum TxSubmitError {
     #[error("Proposal end epoch is not in the storage.")]
     EpochNotInStorage,
     /// Couldn't understand who the fee payer is
-    #[error("Either --signing-keys or --gas-payer must be available.")]
+    #[error(
+        "Either --signing-keys, --gas-payer or --disposable-gas-payer must be \
+         available."
+    )]
     InvalidFeePayer,
     /// Account threshold is not set
     #[error("Account threshold must be set.")]

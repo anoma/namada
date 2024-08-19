@@ -3,6 +3,7 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
+use std::ops::{Bound, RangeBounds};
 
 use data_encoding::HEXUPPER;
 use masp_primitives::transaction::builder::Builder;
@@ -13,12 +14,12 @@ use namada_core::account::AccountPublicKeysMap;
 use namada_core::address::Address;
 use namada_core::borsh::schema::{add_definition, Declaration, Definition};
 use namada_core::borsh::{
-    BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
+    self, BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
 };
 use namada_core::chain::ChainId;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::*;
-use namada_core::masp::AssetData;
+use namada_core::masp::{AssetData, TxId};
 use namada_core::sign::SignatureIndex;
 use namada_core::storage::{BlockHeight, TxIndex};
 use namada_core::time::DateTimeUtc;
@@ -48,6 +49,8 @@ pub enum VerifySigError {
     InvalidSectionSignature(String),
     #[error("The number of PKs overflows u8::MAX")]
     PksOverflow,
+    #[error("An expected signature is missing.")]
+    MissingSignature,
 }
 
 #[allow(missing_docs)]
@@ -216,6 +219,7 @@ pub fn verify_standalone_sig<T, S: Signable<T>>(
 }
 
 /// A section representing transaction data
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     Debug,
@@ -242,14 +246,14 @@ impl PartialEq for Data {
 impl Data {
     /// Make a new data section with the given bytes
     pub fn new(data: Vec<u8>) -> Self {
+        use rand_core::{OsRng, RngCore};
+
         Self {
             salt: {
-                #[allow(clippy::disallowed_methods)]
-                DateTimeUtc::now()
-            }
-            .0
-            .timestamp_millis()
-            .to_le_bytes(),
+                let mut buf = [0; 8];
+                OsRng.fill_bytes(&mut buf);
+                buf
+            },
             data,
         }
     }
@@ -265,6 +269,7 @@ impl Data {
 pub struct CommitmentError;
 
 /// Represents either some code bytes or their SHA-256 hash
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     Debug,
@@ -331,6 +336,7 @@ impl Commitment {
 }
 
 /// A section representing transaction code
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     Debug,
@@ -359,14 +365,14 @@ impl PartialEq for Code {
 impl Code {
     /// Make a new code section with the given bytes
     pub fn new(code: Vec<u8>, tag: Option<String>) -> Self {
+        use rand_core::{OsRng, RngCore};
+
         Self {
             salt: {
-                #[allow(clippy::disallowed_methods)]
-                DateTimeUtc::now()
-            }
-            .0
-            .timestamp_millis()
-            .to_le_bytes(),
+                let mut buf = [0; 8];
+                OsRng.fill_bytes(&mut buf);
+                buf
+            },
             code: Commitment::Id(code),
             tag,
         }
@@ -377,14 +383,14 @@ impl Code {
         hash: namada_core::hash::Hash,
         tag: Option<String>,
     ) -> Self {
+        use rand_core::{OsRng, RngCore};
+
         Self {
             salt: {
-                #[allow(clippy::disallowed_methods)]
-                DateTimeUtc::now()
-            }
-            .0
-            .timestamp_millis()
-            .to_le_bytes(),
+                let mut buf = [0; 8];
+                OsRng.fill_bytes(&mut buf);
+                buf
+            },
             code: Commitment::Hash(hash),
             tag,
         }
@@ -403,6 +409,7 @@ impl Code {
 pub type Memo = Vec<u8>;
 
 /// Indicates the list of public keys against which signatures will be verified
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     Debug,
@@ -422,6 +429,7 @@ pub enum Signer {
 }
 
 /// A section representing a multisig over another section
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     Debug,
@@ -558,18 +566,25 @@ impl Authorization {
             // Verify the signatures against the subset of this section's public
             // keys that are also in the given map
             Signer::PubKeys(pks) => {
+                let hash = self.get_raw_hash();
                 for (idx, pk) in pks.iter().enumerate() {
-                    if let Some(map_idx) =
-                        public_keys_index_map.get_index_from_public_key(pk)
-                    {
+                    let map_idx =
+                        public_keys_index_map.get_index_from_public_key(pk);
+
+                    // Use the first signature when fuzzing as the map is
+                    // unlikely to contain matching PKs
+                    #[cfg(fuzzing)]
+                    let map_idx = map_idx.or(Some(0_u8));
+
+                    if let Some(map_idx) = map_idx {
                         let sig_idx = u8::try_from(idx)
                             .map_err(|_| VerifySigError::PksOverflow)?;
                         consume_verify_sig_gas()?;
-                        common::SigScheme::verify_signature(
-                            pk,
-                            &self.get_raw_hash(),
-                            &self.signatures[&sig_idx],
-                        )?;
+                        let sig = self
+                            .signatures
+                            .get(&sig_idx)
+                            .ok_or(VerifySigError::MissingSignature)?;
+                        common::SigScheme::verify_signature(pk, &hash, sig)?;
                         verified_pks.insert(map_idx);
                         // Cannot overflow
                         #[allow(clippy::arithmetic_side_effects)]
@@ -580,6 +595,14 @@ impl Authorization {
                 }
             }
         }
+
+        // There's usually not enough signatures when fuzzing, this makes it
+        // more likely to pass authorization.
+        #[cfg(fuzzing)]
+        {
+            verifications = 1;
+        }
+
         Ok(verifications)
     }
 }
@@ -719,7 +742,7 @@ impl From<SaplingMetadataSerde> for Vec<u8> {
 )]
 pub struct MaspBuilder {
     /// The MASP transaction that this section witnesses
-    pub target: namada_core::hash::Hash,
+    pub target: TxId,
     /// The decoded set of asset types used by the transaction. Useful for
     /// offline wallets trying to display AssetTypes.
     pub asset_types: HashSet<AssetData>,
@@ -752,8 +775,72 @@ impl MaspBuilder {
     }
 }
 
+#[cfg(feature = "arbitrary")]
+impl arbitrary::Arbitrary<'_> for MaspBuilder {
+    fn arbitrary(
+        u: &mut arbitrary::Unstructured<'_>,
+    ) -> arbitrary::Result<Self> {
+        use masp_primitives::transaction::builder::MapBuilder;
+        use masp_primitives::transaction::components::sapling::builder::MapBuilder as SapMapBuilder;
+        use masp_primitives::zip32::ExtendedSpendingKey;
+        struct WalletMap;
+
+        impl<P1>
+            SapMapBuilder<P1, ExtendedSpendingKey, (), ExtendedFullViewingKey>
+            for WalletMap
+        {
+            fn map_params(&self, _s: P1) {}
+
+            fn map_key(
+                &self,
+                s: ExtendedSpendingKey,
+            ) -> ExtendedFullViewingKey {
+                (&s).into()
+            }
+        }
+        impl<P1, N1>
+            MapBuilder<
+                P1,
+                ExtendedSpendingKey,
+                N1,
+                (),
+                ExtendedFullViewingKey,
+                (),
+            > for WalletMap
+        {
+            fn map_notifier(&self, _s: N1) {}
+        }
+
+        let target_height = masp_primitives::consensus::BlockHeight::from(
+            u.int_in_range(0_u32..=100_000_000)?,
+        );
+        Ok(MaspBuilder {
+            target: arbitrary::Arbitrary::arbitrary(u)?,
+            asset_types: arbitrary::Arbitrary::arbitrary(u)?,
+            metadata: arbitrary::Arbitrary::arbitrary(u)?,
+            builder: Builder::new(
+                masp_primitives::consensus::TestNetwork,
+                target_height,
+            )
+            .map_builder(WalletMap),
+        })
+    }
+
+    fn size_hint(depth: usize) -> (usize, Option<usize>) {
+        arbitrary::size_hint::and_all(
+                        &[
+                            <masp_primitives::consensus::BlockHeight as arbitrary::Arbitrary>::size_hint(depth),
+                            <TxId as arbitrary::Arbitrary>::size_hint(depth),
+                            <HashSet<AssetData> as arbitrary::Arbitrary>::size_hint(depth),
+                            <SaplingMetadata as arbitrary::Arbitrary>::size_hint(depth),
+                        ],
+                    )
+    }
+}
+
 /// A section of a transaction. Carries an independent piece of information
 /// necessary for the processing of a transaction.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     Debug,
@@ -802,7 +889,7 @@ impl Section {
             Self::Authorization(signature) => signature.hash(hasher),
             Self::MaspBuilder(mb) => mb.hash(hasher),
             Self::MaspTx(tx) => {
-                hasher.update(tx.txid().as_ref());
+                hasher.update(tx.serialize_to_vec());
                 hasher
             }
             Self::Header(header) => header.hash(hasher),
@@ -891,6 +978,7 @@ impl Section {
 
 /// An inner transaction of the batch, represented by its commitments to the
 /// [`Code`], [`Data`] and [`Memo`] sections
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     Debug,
@@ -951,6 +1039,7 @@ impl TxCommitments {
 
 /// A Namada transaction header indicating where transaction subcomponents can
 /// be found
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     Debug,
@@ -1030,7 +1119,8 @@ pub enum TxError {
 }
 
 /// A Namada transaction is represented as a header followed by a series of
-/// seections providing additional details.
+/// sections providing additional details.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     Debug,
@@ -1137,6 +1227,12 @@ impl Tx {
         self.header.clone()
     }
 
+    /// Get the transaction's wrapper hash
+    pub fn wrapper_hash(&self) -> Option<namada_core::hash::Hash> {
+        matches!(&self.header.tx_type, TxType::Wrapper(_))
+            .then(|| self.header_hash())
+    }
+
     /// Get the transaction header hash
     pub fn header_hash(&self) -> namada_core::hash::Hash {
         Section::Header(self.header.clone()).get_hash()
@@ -1180,6 +1276,18 @@ impl Tx {
         for section in &self.sections {
             if section.get_hash() == *hash {
                 return Some(Cow::Borrowed(section));
+            }
+        }
+        None
+    }
+
+    /// Get the transaction section with the given hash
+    pub fn get_masp_section(&self, hash: &TxId) -> Option<&Transaction> {
+        for section in &self.sections {
+            if let Section::MaspTx(masp) = section {
+                if TxId::from(masp.txid()) == *hash {
+                    return Some(masp);
+                }
             }
         }
         None
@@ -1280,7 +1388,15 @@ impl Tx {
     /// Get the data designated by the transaction data hash in the header at
     /// the specified commitment
     pub fn data(&self, cmt: &TxCommitments) -> Option<Vec<u8>> {
-        match self.get_section(&cmt.data_hash).as_ref().map(Cow::as_ref) {
+        self.get_data_section(&cmt.data_hash)
+    }
+
+    /// Get the data designated by the transaction data hash
+    pub fn get_data_section(
+        &self,
+        data_hash: &namada_core::hash::Hash,
+    ) -> Option<Vec<u8>> {
+        match self.get_section(data_hash).as_ref().map(Cow::as_ref) {
             Some(Section::Data(data)) => Some(data.data.clone()),
             _ => None,
         }
@@ -1299,6 +1415,20 @@ impl Tx {
         bytes
     }
 
+    /// Convert this transaction into protobufs bytes
+    pub fn try_to_bytes(&self) -> std::io::Result<Vec<u8>> {
+        use prost::Message;
+
+        let mut bytes = vec![];
+        let tx: proto::Tx = proto::Tx {
+            data: borsh::to_vec(self)?,
+        };
+        tx.encode(&mut bytes).map_err(|e| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, e)
+        })?;
+        Ok(bytes)
+    }
+
     /// Verify that the section with the given hash has been signed by the given
     /// public key
     pub fn verify_signatures<F>(
@@ -1307,13 +1437,11 @@ impl Tx {
         public_keys_index_map: AccountPublicKeysMap,
         signer: &Option<Address>,
         threshold: u8,
-        max_signatures: Option<u8>,
         mut consume_verify_sig_gas: F,
     ) -> std::result::Result<Vec<&Authorization>, VerifySigError>
     where
         F: FnMut() -> std::result::Result<(), namada_gas::Error>,
     {
-        let max_signatures = max_signatures.unwrap_or(u8::MAX);
         // Records the public key indices used in successful signatures
         let mut verified_pks = HashSet::new();
         // Records the sections instrumental in verifying signatures
@@ -1324,22 +1452,21 @@ impl Tx {
                 // Check that the hashes being checked are a subset of those in
                 // this section. Also ensure that all the sections the signature
                 // signs over are present.
-                if hashes.iter().all(|x| {
+                let matching_hashes = hashes.iter().all(|x| {
                     signatures.targets.contains(x) || section.get_hash() == *x
                 }) && signatures
                     .targets
                     .iter()
-                    .all(|x| self.get_section(x).is_some())
-                {
-                    if signatures
-                        .total_signatures()
-                        .map_or(false, |len| len > max_signatures)
-                    {
-                        return Err(VerifySigError::InvalidSectionSignature(
-                            "too many signatures.".to_string(),
-                        ));
-                    }
+                    .all(|x| self.get_section(x).is_some());
 
+                // Don't require matching hashes when fuzzing as it's unlikely
+                // to be true
+                #[cfg(fuzzing)]
+                let _ = matching_hashes;
+                #[cfg(fuzzing)]
+                let matching_hashes = true;
+
+                if matching_hashes {
                     // Finally verify that the signature itself is valid
                     let amt_verifieds = signatures
                         .verify_signature(
@@ -1386,7 +1513,6 @@ impl Tx {
             AccountPublicKeysMap::from_iter([public_key.clone()]),
             &None,
             1,
-            None,
             || Ok(()),
         )
         .map(|x| *x.first().unwrap())
@@ -1553,9 +1679,10 @@ impl Tx {
     pub fn add_masp_tx_section(
         &mut self,
         tx: Transaction,
-    ) -> (&mut Self, namada_core::hash::Hash) {
-        let sechash = self.add_section(Section::MaspTx(tx)).get_hash();
-        (self, sechash)
+    ) -> (&mut Self, TxId) {
+        let txid = tx.txid();
+        self.add_section(Section::MaspTx(tx));
+        (self, txid.into())
     }
 
     /// Add a masp builder section to the tx builder
@@ -1704,12 +1831,11 @@ impl Tx {
     }
 
     /// Creates a batched tx along with the reference to the first inner tx
-    #[cfg(any(test, feature = "testing"))]
-    pub fn batch_ref_first_tx(&self) -> BatchedTxRef<'_> {
-        BatchedTxRef {
+    pub fn batch_ref_first_tx(&self) -> Option<BatchedTxRef<'_>> {
+        Some(BatchedTxRef {
             tx: self,
-            cmt: self.first_commitments().unwrap(),
-        }
+            cmt: self.first_commitments()?,
+        })
     }
 
     /// Creates a batched tx along with a copy of the first inner tx
@@ -1734,6 +1860,7 @@ impl<'tx> Tx {
 /// index inside that block
 #[derive(
     Debug,
+    Copy,
     Clone,
     BorshSerialize,
     BorshDeserialize,
@@ -1751,12 +1878,84 @@ pub struct IndexedTx {
     pub index: TxIndex,
 }
 
+impl IndexedTx {
+    /// Create an [`IndexedTx`] that upper bounds the entire range of
+    /// txs in a block with some height `height`.
+    pub const fn entire_block(height: BlockHeight) -> Self {
+        Self {
+            height,
+            index: TxIndex(u32::MAX),
+        }
+    }
+}
+
 impl Default for IndexedTx {
     fn default() -> Self {
         Self {
             height: BlockHeight::first(),
             index: TxIndex(0),
         }
+    }
+}
+
+/// Inclusive range of [`IndexedTx`] entries.
+pub struct IndexedTxRange {
+    lo: IndexedTx,
+    hi: IndexedTx,
+}
+
+impl IndexedTxRange {
+    /// Create a new [`IndexedTxRange`].
+    pub const fn new(lo: IndexedTx, hi: IndexedTx) -> Self {
+        Self { lo, hi }
+    }
+
+    /// Create a new [`IndexedTxRange`] over a range of [block
+    /// heights](BlockHeight).
+    pub const fn between_heights(from: BlockHeight, to: BlockHeight) -> Self {
+        Self::new(
+            IndexedTx {
+                height: from,
+                index: TxIndex(0),
+            },
+            IndexedTx {
+                height: to,
+                index: TxIndex(u32::MAX),
+            },
+        )
+    }
+
+    /// Create a new [`IndexedTxRange`] over a given [`BlockHeight`].
+    pub const fn with_height(height: BlockHeight) -> Self {
+        Self::between_heights(height, height)
+    }
+
+    /// The start of the range.
+    pub const fn start(&self) -> IndexedTx {
+        self.lo
+    }
+
+    /// The end of the range.
+    pub const fn end(&self) -> IndexedTx {
+        self.hi
+    }
+}
+
+impl RangeBounds<IndexedTx> for IndexedTxRange {
+    fn start_bound(&self) -> Bound<&IndexedTx> {
+        Bound::Included(&self.lo)
+    }
+
+    fn end_bound(&self) -> Bound<&IndexedTx> {
+        Bound::Included(&self.hi)
+    }
+
+    fn contains<U>(&self, item: &U) -> bool
+    where
+        IndexedTx: PartialOrd<U>,
+        U: PartialOrd<IndexedTx> + ?Sized,
+    {
+        *item >= self.lo && *item <= self.hi
     }
 }
 
@@ -1797,8 +1996,8 @@ mod test {
     use std::collections::BTreeMap;
     use std::fs;
 
-    use borsh::schema::BorshSchema;
     use data_encoding::HEXLOWER;
+    use namada_core::borsh::schema::BorshSchema;
 
     use super::*;
 

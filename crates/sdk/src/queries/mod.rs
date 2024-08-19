@@ -24,6 +24,8 @@ mod shell;
 mod types;
 pub mod vp;
 
+const HEIGHT_CAST_ERR: &str = "Failed to cast block height";
+
 // Most commonly expected patterns should be declared first
 router! {RPC,
     // Shell provides storage read access, block metadata and can dry-run a tx
@@ -95,7 +97,7 @@ pub fn require_no_data(request: &RequestQuery) -> namada_storage::Result<()> {
 
 /// Queries testing helpers
 #[cfg(any(test, feature = "testing"))]
-mod testing {
+pub(crate) mod testing {
     use borsh_ext::BorshSerializeExt;
     use namada_state::testing::TestState;
     use tendermint_rpc::Response;
@@ -209,7 +211,6 @@ use crate::tendermint::block::Height;
 /// A client with async request dispatcher method, which can be used to invoke
 /// type-safe methods from a root [`Router`], generated
 /// via `router!` macro.
-#[cfg(any(test, feature = "async-client"))]
 #[cfg_attr(feature = "async-send", async_trait::async_trait)]
 #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
 pub trait Client {
@@ -263,9 +264,14 @@ pub trait Client {
     /// `/block`: get block at a given height.
     async fn block<H>(&self, height: H) -> Result<block::Response, RpcError>
     where
-        H: Into<Height> + Send,
+        H: TryInto<Height> + Send,
     {
-        self.perform(block::Request::new(height.into())).await
+        self.perform(block::Request::new(
+            height
+                .try_into()
+                .map_err(|_| RpcError::parse(HEIGHT_CAST_ERR.to_string()))?,
+        ))
+        .await
     }
 
     /// `/block_search`: search for blocks by BeginBlock and EndBlock events.
@@ -289,10 +295,12 @@ pub trait Client {
         height: H,
     ) -> Result<tendermint_rpc::endpoint::block_results::Response, RpcError>
     where
-        H: Into<Height> + Send,
+        H: TryInto<Height> + Send,
     {
         self.perform(tendermint_rpc::endpoint::block_results::Request::new(
-            height.into(),
+            height
+                .try_into()
+                .map_err(|_| RpcError::parse(HEIGHT_CAST_ERR.to_string()))?,
         ))
         .await
     }
@@ -349,18 +357,28 @@ pub trait Client {
         max: H,
     ) -> Result<blockchain::Response, RpcError>
     where
-        H: Into<Height> + Send,
+        H: TryInto<Height> + Send,
     {
-        self.perform(blockchain::Request::new(min.into(), max.into()))
-            .await
+        self.perform(blockchain::Request::new(
+            min.try_into()
+                .map_err(|_| RpcError::parse(HEIGHT_CAST_ERR.to_string()))?,
+            max.try_into()
+                .map_err(|_| RpcError::parse(HEIGHT_CAST_ERR.to_string()))?,
+        ))
+        .await
     }
 
     /// `/commit`: get block commit at a given height.
     async fn commit<H>(&self, height: H) -> Result<commit::Response, RpcError>
     where
-        H: Into<Height> + Send,
+        H: TryInto<Height> + Send,
     {
-        self.perform(commit::Request::new(height.into())).await
+        self.perform(commit::Request::new(
+            height
+                .try_into()
+                .map_err(|_| RpcError::parse(HEIGHT_CAST_ERR.to_string()))?,
+        ))
+        .await
     }
 
     /// `/consensus_params`: get current consensus parameters at the specified
@@ -370,10 +388,14 @@ pub trait Client {
         height: H,
     ) -> Result<consensus_params::Response, RpcError>
     where
-        H: Into<Height> + Send,
+        H: TryInto<Height> + Send,
     {
-        self.perform(consensus_params::Request::new(Some(height.into())))
-            .await
+        self.perform(consensus_params::Request::new(Some(
+            height
+                .try_into()
+                .map_err(|_| RpcError::parse(HEIGHT_CAST_ERR.to_string()))?,
+        )))
+        .await
     }
 
     /// `/consensus_state`: get current consensus state

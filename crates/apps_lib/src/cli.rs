@@ -15,7 +15,7 @@ pub mod wallet;
 
 use clap::{ArgGroup, ArgMatches, ColorChoice};
 use color_eyre::eyre::Result;
-use namada::io::StdIo;
+use namada_sdk::io::StdIo;
 use utils::*;
 pub use utils::{safe_exit, Cmd};
 
@@ -66,26 +66,30 @@ pub mod cmds {
         TxInitProposal(TxInitProposal),
         TxVoteProposal(TxVoteProposal),
         TxRevealPk(TxRevealPk),
+
+        // Generate CLI completions
+        Complete(Complete),
     }
 
     impl Cmd for Namada {
         fn add_sub(app: App) -> App {
-            app.subcommand(NamadaNode::def())
-                .subcommand(NamadaRelayer::def())
-                .subcommand(NamadaClient::def())
-                .subcommand(NamadaWallet::def())
-                .subcommand(EthBridgePool::def())
-                .subcommand(Ledger::def())
-                .subcommand(TxCustom::def())
-                .subcommand(TxTransparentTransfer::def())
-                .subcommand(TxShieldedTransfer::def())
-                .subcommand(TxShieldingTransfer::def())
-                .subcommand(TxUnshieldingTransfer::def())
-                .subcommand(TxIbcTransfer::def())
-                .subcommand(TxUpdateAccount::def())
-                .subcommand(TxInitProposal::def())
-                .subcommand(TxVoteProposal::def())
-                .subcommand(TxRevealPk::def())
+            app.subcommand(NamadaNode::def().display_order(1))
+                .subcommand(NamadaRelayer::def().display_order(1))
+                .subcommand(NamadaClient::def().display_order(1))
+                .subcommand(NamadaWallet::def().display_order(1))
+                .subcommand(EthBridgePool::def().display_order(2))
+                .subcommand(Ledger::def().display_order(2))
+                .subcommand(TxCustom::def().display_order(2))
+                .subcommand(TxTransparentTransfer::def().display_order(2))
+                .subcommand(TxShieldedTransfer::def().display_order(2))
+                .subcommand(TxShieldingTransfer::def().display_order(2))
+                .subcommand(TxUnshieldingTransfer::def().display_order(2))
+                .subcommand(TxIbcTransfer::def().display_order(2))
+                .subcommand(TxUpdateAccount::def().display_order(2))
+                .subcommand(TxInitProposal::def().display_order(2))
+                .subcommand(TxVoteProposal::def().display_order(2))
+                .subcommand(TxRevealPk::def().display_order(2))
+                .subcommand(Complete::def().display_order(3))
         }
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
@@ -114,6 +118,7 @@ pub mod cmds {
             let tx_vote_proposal =
                 SubCmd::parse(matches).map(Self::TxVoteProposal);
             let tx_reveal_pk = SubCmd::parse(matches).map(Self::TxRevealPk);
+            let complete = SubCmd::parse(matches).map(Self::Complete);
             node.or(client)
                 .or(relayer)
                 .or(eth_bridge_pool)
@@ -129,6 +134,7 @@ pub mod cmds {
                 .or(tx_init_proposal)
                 .or(tx_vote_proposal)
                 .or(tx_reveal_pk)
+                .or(complete)
         }
     }
 
@@ -292,6 +298,7 @@ pub mod cmds {
                 // Actions
                 .subcommand(SignTx::def().display_order(6))
                 .subcommand(ShieldedSync::def().display_order(6))
+                .subcommand(GenIbcShieldingTransfer::def().display_order(6))
                 // Utils
                 .subcommand(ClientUtils::def().display_order(7))
         }
@@ -380,6 +387,8 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, AddToEthBridgePool);
             let sign_tx = Self::parse_with_ctx(matches, SignTx);
             let shielded_sync = Self::parse_with_ctx(matches, ShieldedSync);
+            let gen_ibc_shielding =
+                Self::parse_with_ctx(matches, GenIbcShieldingTransfer);
             let utils = SubCmd::parse(matches).map(Self::WithoutContext);
             tx_custom
                 .or(tx_transparent_transfer)
@@ -434,6 +443,7 @@ pub mod cmds {
                 .or(query_account)
                 .or(sign_tx)
                 .or(shielded_sync)
+                .or(gen_ibc_shielding)
                 .or(utils)
         }
     }
@@ -524,6 +534,7 @@ pub mod cmds {
         QueryRewards(QueryRewards),
         SignTx(SignTx),
         ShieldedSync(ShieldedSync),
+        GenIbcShieldingTransfer(GenIbcShieldingTransfer),
     }
 
     #[allow(clippy::large_enum_variant)]
@@ -1065,6 +1076,7 @@ pub mod cmds {
     #[derive(Clone, Debug)]
     pub enum Config {
         Gen(ConfigGen),
+        UpdateValidatorLocalConfig(ValidatorLocalConfig),
         UpdateLocalConfig(LocalConfig),
     }
 
@@ -1074,9 +1086,11 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).and_then(|matches| {
                 let gen = SubCmd::parse(matches).map(Self::Gen);
-                let gas_tokens =
+                let validator_cfg = SubCmd::parse(matches)
+                    .map(Self::UpdateValidatorLocalConfig);
+                let local_cfg =
                     SubCmd::parse(matches).map(Self::UpdateLocalConfig);
-                gen.or(gas_tokens)
+                gen.or(validator_cfg).or(local_cfg)
             })
         }
 
@@ -1086,6 +1100,7 @@ pub mod cmds {
                 .arg_required_else_help(true)
                 .about(wrap!("Configuration sub-commands."))
                 .subcommand(ConfigGen::def())
+                .subcommand(ValidatorLocalConfig::def())
                 .subcommand(LocalConfig::def())
         }
     }
@@ -1107,6 +1122,25 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct ValidatorLocalConfig(pub args::UpdateValidatorLocalConfig);
+
+    impl SubCmd for ValidatorLocalConfig {
+        const CMD: &'static str = "update-validator-local-config";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                Self(args::UpdateValidatorLocalConfig::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(wrap!("Update the validator's local configuration."))
+                .add_args::<args::UpdateValidatorLocalConfig>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct LocalConfig(pub args::UpdateLocalConfig);
 
     impl SubCmd for LocalConfig {
@@ -1120,7 +1154,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about(wrap!("Update the validator's local configuration."))
+                .about(wrap!("Update the node's local configuration."))
                 .add_args::<args::UpdateLocalConfig>()
         }
     }
@@ -1256,7 +1290,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about(wrap!("Query pgf stewards and continuous funding."))
+                .about(wrap!("Query PGF stewards and continuous funding."))
                 .add_args::<args::QueryPgf<args::CliTypes>>()
         }
     }
@@ -2247,7 +2281,7 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about(wrap!(
-                    "Submit a tx to reveal the public key an implicit \
+                    "Submit a tx to reveal the public key of an implicit \
                      account. Typically, you don't have to do this manually \
                      and the client will detect when a tx to reveal PK is \
                      needed and submit it automatically. This will write the \
@@ -2256,6 +2290,51 @@ pub mod cmds {
                      this account."
                 ))
                 .add_args::<args::RevealPk<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct Complete(pub args::Complete);
+
+    impl SubCmd for Complete {
+        const CMD: &'static str = "complete";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Complete(args::Complete::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(wrap!("Generate shell completions"))
+                .add_args::<args::Complete>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct GenIbcShieldingTransfer(
+        pub args::GenIbcShieldingTransfer<args::CliTypes>,
+    );
+
+    impl SubCmd for GenIbcShieldingTransfer {
+        const CMD: &'static str = "ibc-gen-shielding";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                GenIbcShieldingTransfer(args::GenIbcShieldingTransfer::parse(
+                    matches,
+                ))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about("Generate shielding transfer for IBC.")
+                .add_args::<args::GenIbcShieldingTransfer<args::CliTypes>>()
         }
     }
 
@@ -3076,42 +3155,40 @@ pub mod args {
     use std::str::FromStr;
 
     use data_encoding::HEXUPPER;
-    use namada::core::address::{Address, EstablishedAddress};
-    use namada::core::chain::{ChainId, ChainIdPrefix};
-    use namada::core::collections::HashMap;
-    use namada::core::dec::Dec;
-    use namada::core::ethereum_events::EthAddress;
-    use namada::core::keccak::KeccakHash;
-    use namada::core::key::*;
-    use namada::core::masp::PaymentAddress;
-    use namada::core::storage::{self, BlockHeight, Epoch};
-    use namada::core::time::DateTimeUtc;
-    use namada::core::token;
-    use namada::core::token::NATIVE_MAX_DECIMAL_PLACES;
-    use namada::hash::Hash;
-    use namada::ibc::core::host::types::identifiers::{ChannelId, PortId};
-    use namada::masp::MaspEpoch;
-    use namada::tx::data::GasLimit;
+    use namada_sdk::address::{Address, EstablishedAddress};
     pub use namada_sdk::args::*;
+    use namada_sdk::chain::{ChainId, ChainIdPrefix};
+    use namada_sdk::collections::HashMap;
+    use namada_sdk::dec::Dec;
+    use namada_sdk::ethereum_events::EthAddress;
+    use namada_sdk::hash::Hash;
+    use namada_sdk::ibc::core::host::types::identifiers::{ChannelId, PortId};
+    use namada_sdk::keccak::KeccakHash;
+    use namada_sdk::key::*;
+    use namada_sdk::masp::utils::RetryStrategy;
+    use namada_sdk::masp::{MaspEpoch, PaymentAddress};
+    use namada_sdk::storage::{self, BlockHeight, Epoch};
+    use namada_sdk::time::DateTimeUtc;
+    use namada_sdk::token::NATIVE_MAX_DECIMAL_PLACES;
+    use namada_sdk::tx::data::GasLimit;
     pub use namada_sdk::tx::{
         TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
         TX_CHANGE_COMMISSION_WASM, TX_CHANGE_CONSENSUS_KEY_WASM,
         TX_CHANGE_METADATA_WASM, TX_CLAIM_REWARDS_WASM,
         TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM, TX_INIT_ACCOUNT_WASM,
         TX_INIT_PROPOSAL, TX_REACTIVATE_VALIDATOR_WASM, TX_REDELEGATE_WASM,
-        TX_RESIGN_STEWARD, TX_REVEAL_PK, TX_SHIELDED_TRANSFER_WASM,
-        TX_SHIELDING_TRANSFER_WASM, TX_TRANSPARENT_TRANSFER_WASM,
-        TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM, TX_UNSHIELDING_TRANSFER_WASM,
-        TX_UPDATE_ACCOUNT_WASM, TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL,
-        TX_WITHDRAW_WASM, VP_USER_WASM,
+        TX_RESIGN_STEWARD, TX_REVEAL_PK, TX_TRANSFER_WASM, TX_UNBOND_WASM,
+        TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
+        TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
+        VP_USER_WASM,
     };
-    use namada_sdk::DEFAULT_GAS_LIMIT;
+    use namada_sdk::{token, DEFAULT_GAS_LIMIT};
 
     use super::context::*;
     use super::utils::*;
     use super::{ArgGroup, ArgMatches};
     use crate::client::utils::PRE_GENESIS_DIR;
-    use crate::config::genesis::GenesisAddress;
+    use crate::config::genesis::AddrOrPk;
     use crate::config::{self, Action, ActionAtHeight};
     use crate::facade::tendermint::Timeout;
     use crate::facade::tendermint_rpc::Url;
@@ -3135,12 +3212,9 @@ pub mod args {
             Err(_) => config::get_default_namada_folder(),
         }),
     );
-    pub const BATCH_SIZE_OPT: ArgDefault<u64> =
-        arg_default("batch-size", DefaultFn(|| 1));
+    pub const BIRTHDAY: ArgOpt<BlockHeight> = arg_opt("birthday");
     pub const BLOCK_HEIGHT: Arg<BlockHeight> = arg("block-height");
     pub const BLOCK_HEIGHT_OPT: ArgOpt<BlockHeight> = arg_opt("height");
-    pub const BLOCK_HEIGHT_FROM_OPT: ArgOpt<BlockHeight> =
-        arg_opt("from-height");
     pub const BLOCK_HEIGHT_TO_OPT: ArgOpt<BlockHeight> = arg_opt("to-height");
     pub const BRIDGE_POOL_GAS_AMOUNT: ArgDefault<token::DenominatedAmount> =
         arg_default(
@@ -3181,6 +3255,10 @@ pub mod args {
         arg_opt("success-sleep");
     pub const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
     pub const DATA_PATH: Arg<PathBuf> = arg("data-path");
+    pub const DATED_SPENDING_KEYS: ArgMulti<WalletDatedSpendingKey, GlobStar> =
+        arg_multi("spending-keys");
+    pub const DATED_VIEWING_KEYS: ArgMulti<WalletDatedViewingKey, GlobStar> =
+        arg_multi("viewing-keys");
     pub const DB_KEY: Arg<String> = arg("db-key");
     pub const DB_COLUMN_FAMILY: ArgDefault<String> = arg_default(
         "db-column-family",
@@ -3193,7 +3271,6 @@ pub mod args {
         arg("destination-validator");
     pub const DISCORD_OPT: ArgOpt<String> = arg_opt("discord-handle");
     pub const DO_IT: ArgFlag = flag("do-it");
-    pub const DONT_PREFETCH_WASM: ArgFlag = flag("dont-prefetch-wasm");
     pub const DRY_RUN_TX: ArgFlag = flag("dry-run");
     pub const DRY_RUN_WRAPPER_TX: ArgFlag = flag("dry-run-wrapper");
     pub const DUMP_TX: ArgFlag = flag("dump-tx");
@@ -3221,6 +3298,8 @@ pub mod args {
         "gas-limit",
         DefaultFn(|| GasLimit::from(DEFAULT_GAS_LIMIT)),
     );
+    pub const GAS_SPENDING_KEY: ArgOpt<WalletSpendingKey> =
+        arg_opt("gas-spending-key");
     pub const FEE_TOKEN: ArgDefaultFromCtx<WalletAddrOrNativeToken> =
         arg_default_from_ctx("gas-token", DefaultFn(|| "".parse().unwrap()));
     pub const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
@@ -3233,7 +3312,7 @@ pub mod args {
             )
         }),
     );
-    pub const GENESIS_BOND_SOURCE: ArgOpt<GenesisAddress> = arg_opt("source");
+    pub const GENESIS_BOND_SOURCE: ArgOpt<AddrOrPk> = arg_opt("source");
     pub const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
     pub const GENESIS_TIME: Arg<DateTimeUtc> = arg("genesis-time");
     pub const GENESIS_VALIDATOR: ArgOpt<String> =
@@ -3250,13 +3329,17 @@ pub mod args {
         flag("allow-non-compliant");
     pub const HD_PROMPT_BIP39_PASSPHRASE: ArgFlag = flag("bip39-passphrase");
     pub const HISTORIC: ArgFlag = flag("historic");
-    pub const IBC_TRANSFER_MEMO_PATH: ArgOpt<PathBuf> = arg_opt("memo-path");
+    pub const IBC_SHIELDING_DATA_PATH: ArgOpt<PathBuf> =
+        arg_opt("ibc-shielding-data");
+    pub const IBC_MEMO: ArgOpt<String> = arg_opt("ibc-memo");
     pub const INPUT_OPT: ArgOpt<PathBuf> = arg_opt("input");
     pub const LEDGER_ADDRESS_ABOUT: &str = textwrap_macros::fill!(
         "Address of a ledger node as \"{scheme}://{host}:{port}\". If the \
          scheme is not supplied, it is assumed to be TCP.",
         60
     );
+    pub const CHECK_CAN_SIGN: ArgMulti<AddrOrPk, GlobStar> =
+        arg_multi("check-can-sign");
     pub const CONFIG_RPC_LEDGER_ADDRESS: ArgDefaultFromCtx<ConfigRpcAddress> =
         arg_default_from_ctx("node", DefaultFn(|| "".to_string()));
 
@@ -3271,6 +3354,8 @@ pub mod args {
     pub const MASP_EPOCH: ArgOpt<MaspEpoch> = arg_opt("masp-epoch");
     pub const MAX_COMMISSION_RATE_CHANGE: Arg<Dec> =
         arg("max-commission-rate-change");
+    pub const MAX_CONCURRENT_FETCHES: ArgDefault<usize> =
+        arg_default("max-concurrent-fetches", DefaultFn(|| 100));
     pub const MAX_ETH_GAS: ArgOpt<u64> = arg_opt("max_eth-gas");
     pub const MEMO_OPT: ArgOpt<String> = arg_opt("memo");
     pub const MIGRATION_PATH: ArgOpt<PathBuf> = arg_opt("migration-path");
@@ -3321,13 +3406,13 @@ pub mod args {
     pub const RAW_PUBLIC_KEY_HASH_OPT: ArgOpt<String> =
         RAW_PUBLIC_KEY_HASH.opt();
     pub const RECEIVER: Arg<String> = arg("receiver");
-    pub const REFUND: ArgFlag = flag("refund");
     pub const REFUND_TARGET: ArgOpt<WalletTransferTarget> =
         arg_opt("refund-target");
     pub const RELAYER: Arg<Address> = arg("relayer");
-    pub const SAFE_MODE: ArgFlag = flag("safe-mode");
+    pub const RETRIES: ArgOpt<u64> = arg_opt("retries");
     pub const SCHEME: ArgDefault<SchemeType> =
         arg_default("scheme", DefaultFn(|| SchemeType::Ed25519));
+    pub const SHELL: Arg<Shell> = arg("shell");
     pub const SELF_BOND_AMOUNT: Arg<token::DenominatedAmount> =
         arg("self-bond-amount");
     pub const SENDER: Arg<String> = arg("sender");
@@ -3384,12 +3469,25 @@ pub mod args {
     pub const VIEWING_KEYS: ArgMulti<WalletViewingKey, GlobStar> =
         arg_multi("viewing-keys");
     pub const VP: ArgOpt<String> = arg_opt("vp");
+    pub const WAIT_FOR_LAST_QUERY_HEIGHT: ArgFlag =
+        flag("wait-for-last-query-height");
     pub const WALLET_ALIAS_FORCE: ArgFlag = flag("wallet-alias-force");
     pub const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
     pub const WASM_DIR: ArgOpt<PathBuf> = arg_opt("wasm-dir");
     pub const WEBSITE_OPT: ArgOpt<String> = arg_opt("website");
+    pub const WITH_INDEXER: ArgOpt<String> = arg_opt("with-indexer");
     pub const TX_PATH: Arg<PathBuf> = arg("tx-path");
     pub const TX_PATH_OPT: ArgOpt<PathBuf> = TX_PATH.opt();
+    pub const DEVICE_TRANSPORT: ArgDefault<DeviceTransport> = arg_default(
+        "device-transport",
+        DefaultFn(|| {
+            if let Ok(val) = std::env::var(DEVICE_TRANSPORT_ENV_VAR) {
+                return DeviceTransport::from_str(&val).unwrap();
+            }
+            DeviceTransport::default()
+        }),
+    );
+    pub const DEVICE_TRANSPORT_ENV_VAR: &str = "NAMADA_DEVICE_TRANSPORT";
 
     /// Global command arguments
     #[derive(Clone, Debug)]
@@ -3475,12 +3573,10 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.arg(NAMADA_START_TIME.def().help(wrap!(
-                "The start time of the ledger. Accepts a relaxed form of \
-                 RFC3339. A space or a 'T' are accepted as the separator \
-                 between the date and time components. Additional spaces are \
-                 allowed between each component.\nAll of these examples are \
-                 equivalent:\n2023-01-20T12:12:12Z\n2023-01-20 \
-                 12:12:12Z\n2023-  01-20T12:  12:12Z"
+                "The start time of the ledger. Accepts a strict subset of \
+                 RFC3339. A 'T' is accepted as the separator between the date \
+                 and time components.\nHere is a valid timestamp: \
+                 2023-01-20T12:12:12Z"
             )))
             .arg(
                 PATH_OPT
@@ -3671,6 +3767,25 @@ pub mod args {
     }
 
     #[derive(Clone, Debug)]
+    pub struct UpdateValidatorLocalConfig {
+        pub config_path: PathBuf,
+    }
+
+    impl Args for UpdateValidatorLocalConfig {
+        fn parse(matches: &ArgMatches) -> Self {
+            let config_path = DATA_PATH.parse(matches);
+            Self { config_path }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(DATA_PATH.def().help(wrap!(
+                "The path to the toml file containing the updated validator's \
+                 local configuration."
+            )))
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct UpdateLocalConfig {
         pub config_path: PathBuf,
     }
@@ -3683,8 +3798,8 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.arg(DATA_PATH.def().help(wrap!(
-                "The path to the toml file containing the updated local \
-                 configuration."
+                "The path to the toml file containing the updated node's \
+                 local configuration."
             )))
         }
     }
@@ -3989,14 +4104,12 @@ pub mod args {
                 gas_price: self.gas_price,
                 eth_addr: self.eth_addr,
                 sync: self.sync,
-                safe_mode: self.safe_mode,
             }
         }
     }
 
     impl Args for RelayBridgePoolProof<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
-            let safe_mode = SAFE_MODE.parse(matches);
             let ledger_address = LEDGER_ADDRESS.parse(matches);
             let hashes = HASH_LIST.parse(matches);
             let relayer = RELAYER.parse(matches);
@@ -4027,16 +4140,11 @@ pub mod args {
                 eth_rpc_endpoint,
                 eth_addr,
                 confirmations,
-                safe_mode,
             }
         }
 
         fn def(app: App) -> App {
             app.arg(LEDGER_ADDRESS.def().help(LEDGER_ADDRESS_ABOUT))
-                .arg(SAFE_MODE.def().help(wrap!(
-                    "Safe mode overrides keyboard interrupt signals, to \
-                     ensure Ethereum transfers aren't canceled midway through."
-                )))
                 .arg(HASH_LIST.def().help(wrap!(
                     "Whitespace separated Keccak hash list of transfers in \
                      the Bridge pool."
@@ -4172,7 +4280,6 @@ pub mod args {
                 sync: self.sync,
                 retry_dur: self.retry_dur,
                 success_dur: self.success_dur,
-                safe_mode: self.safe_mode,
             }
         }
     }
@@ -4180,7 +4287,6 @@ pub mod args {
     impl Args for ValidatorSetUpdateRelay<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let ledger_address = LEDGER_ADDRESS.parse(matches);
-            let safe_mode = SAFE_MODE.parse(matches);
             let daemon = DAEMON_MODE.parse(matches);
             let epoch = EPOCH.parse(matches);
             let gas = ETH_GAS.parse(matches);
@@ -4205,16 +4311,11 @@ pub mod args {
                 eth_addr,
                 retry_dur,
                 success_dur,
-                safe_mode,
             }
         }
 
         fn def(app: App) -> App {
             app.arg(LEDGER_ADDRESS.def().help(LEDGER_ADDRESS_ABOUT))
-                .arg(SAFE_MODE.def().help(wrap!(
-                    "Safe mode overrides keyboard interrupt signals, to \
-                     ensure Ethereum transfers aren't canceled midway through."
-                )))
                 .arg(DAEMON_MODE.def().help(wrap!(
                     "Run in daemon mode, which will continuously perform \
                      validator set updates."
@@ -4338,14 +4439,21 @@ pub mod args {
             ctx: &mut Context,
         ) -> Result<TxTransparentTransfer<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx)?;
+            let mut data = vec![];
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
+
+            for transfer_data in self.data {
+                data.push(TxTransparentTransferData {
+                    source: chain_ctx.get(&transfer_data.source),
+                    target: chain_ctx.get(&transfer_data.target),
+                    token: chain_ctx.get(&transfer_data.token),
+                    amount: transfer_data.amount,
+                });
+            }
 
             Ok(TxTransparentTransfer::<SdkTypes> {
                 tx,
-                source: chain_ctx.get(&self.source),
-                target: chain_ctx.get(&self.target),
-                token: chain_ctx.get(&self.token),
-                amount: self.amount,
+                data,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -4358,13 +4466,17 @@ pub mod args {
             let target = TARGET.parse(matches);
             let token = TOKEN.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
-            let tx_code_path = PathBuf::from(TX_TRANSPARENT_TRANSFER_WASM);
-            Self {
-                tx,
+            let tx_code_path = PathBuf::from(TX_TRANSFER_WASM);
+            let data = vec![TxTransparentTransferData {
                 source,
                 target,
                 token,
                 amount,
+            }];
+
+            Self {
+                tx,
+                data,
                 tx_code_path,
             }
         }
@@ -4393,14 +4505,28 @@ pub mod args {
             ctx: &mut Context,
         ) -> Result<TxShieldedTransfer<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx)?;
+            let mut data = vec![];
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
+
+            for transfer_data in self.data {
+                data.push(TxShieldedTransferData {
+                    source: chain_ctx.get_cached(&transfer_data.source),
+                    target: chain_ctx.get(&transfer_data.target),
+                    token: chain_ctx.get(&transfer_data.token),
+                    amount: transfer_data.amount,
+                });
+            }
+
+            let gas_spending_keys = self
+                .gas_spending_keys
+                .iter()
+                .map(|key| chain_ctx.get_cached(key))
+                .collect();
 
             Ok(TxShieldedTransfer::<SdkTypes> {
                 tx,
-                source: chain_ctx.get_cached(&self.source),
-                target: chain_ctx.get(&self.target),
-                token: chain_ctx.get(&self.token),
-                amount: self.amount,
+                data,
+                gas_spending_keys,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -4413,13 +4539,22 @@ pub mod args {
             let target = PAYMENT_ADDRESS_TARGET.parse(matches);
             let token = TOKEN.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
-            let tx_code_path = PathBuf::from(TX_SHIELDED_TRANSFER_WASM);
-            Self {
-                tx,
+            let tx_code_path = PathBuf::from(TX_TRANSFER_WASM);
+            let data = vec![TxShieldedTransferData {
                 source,
                 target,
                 token,
                 amount,
+            }];
+            let mut gas_spending_keys = vec![];
+            if let Some(key) = GAS_SPENDING_KEY.parse(matches) {
+                gas_spending_keys.push(key);
+            }
+
+            Self {
+                tx,
+                data,
+                gas_spending_keys,
                 tx_code_path,
             }
         }
@@ -4442,6 +4577,10 @@ pub mod args {
                         .def()
                         .help(wrap!("The amount to transfer in decimal.")),
                 )
+                .arg(GAS_SPENDING_KEY.def().help(wrap!(
+                    "The optional spending key that will be used in addition \
+                     to the source for gas payment."
+                )))
         }
     }
 
@@ -4453,14 +4592,21 @@ pub mod args {
             ctx: &mut Context,
         ) -> Result<TxShieldingTransfer<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx)?;
+            let mut data = vec![];
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
+
+            for transfer_data in self.data {
+                data.push(TxShieldingTransferData {
+                    source: chain_ctx.get(&transfer_data.source),
+                    token: chain_ctx.get(&transfer_data.token),
+                    amount: transfer_data.amount,
+                });
+            }
 
             Ok(TxShieldingTransfer::<SdkTypes> {
                 tx,
-                source: chain_ctx.get(&self.source),
+                data,
                 target: chain_ctx.get(&self.target),
-                token: chain_ctx.get(&self.token),
-                amount: self.amount,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -4473,13 +4619,17 @@ pub mod args {
             let target = PAYMENT_ADDRESS_TARGET.parse(matches);
             let token = TOKEN.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
-            let tx_code_path = PathBuf::from(TX_SHIELDING_TRANSFER_WASM);
-            Self {
-                tx,
+            let tx_code_path = PathBuf::from(TX_TRANSFER_WASM);
+            let data = vec![TxShieldingTransferData {
                 source,
-                target,
                 token,
                 amount,
+            }];
+
+            Self {
+                tx,
+                data,
+                target,
                 tx_code_path,
             }
         }
@@ -4514,14 +4664,27 @@ pub mod args {
             ctx: &mut Context,
         ) -> Result<TxUnshieldingTransfer<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx)?;
+            let mut data = vec![];
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
+
+            for transfer_data in self.data {
+                data.push(TxUnshieldingTransferData {
+                    target: chain_ctx.get(&transfer_data.target),
+                    token: chain_ctx.get(&transfer_data.token),
+                    amount: transfer_data.amount,
+                });
+            }
+            let gas_spending_keys = self
+                .gas_spending_keys
+                .iter()
+                .map(|key| chain_ctx.get_cached(key))
+                .collect();
 
             Ok(TxUnshieldingTransfer::<SdkTypes> {
                 tx,
+                data,
+                gas_spending_keys,
                 source: chain_ctx.get_cached(&self.source),
-                target: chain_ctx.get(&self.target),
-                token: chain_ctx.get(&self.token),
-                amount: self.amount,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -4534,13 +4697,22 @@ pub mod args {
             let target = TARGET.parse(matches);
             let token = TOKEN.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
-            let tx_code_path = PathBuf::from(TX_UNSHIELDING_TRANSFER_WASM);
-            Self {
-                tx,
-                source,
+            let tx_code_path = PathBuf::from(TX_TRANSFER_WASM);
+            let data = vec![TxUnshieldingTransferData {
                 target,
                 token,
                 amount,
+            }];
+            let mut gas_spending_keys = vec![];
+            if let Some(key) = GAS_SPENDING_KEY.parse(matches) {
+                gas_spending_keys.push(key);
+            }
+
+            Self {
+                tx,
+                source,
+                data,
+                gas_spending_keys,
                 tx_code_path,
             }
         }
@@ -4563,6 +4735,10 @@ pub mod args {
                         .def()
                         .help(wrap!("The amount to transfer in decimal.")),
                 )
+                .arg(GAS_SPENDING_KEY.def().help(wrap!(
+                    "The optional spending key that will be used in addition \
+                     to the source for gas payment."
+                )))
         }
     }
 
@@ -4575,6 +4751,11 @@ pub mod args {
         ) -> Result<TxIbcTransfer<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx)?;
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
+            let gas_spending_keys = self
+                .gas_spending_keys
+                .iter()
+                .map(|key| chain_ctx.get_cached(key))
+                .collect();
 
             Ok(TxIbcTransfer::<SdkTypes> {
                 tx,
@@ -4587,7 +4768,9 @@ pub mod args {
                 timeout_height: self.timeout_height,
                 timeout_sec_offset: self.timeout_sec_offset,
                 refund_target: chain_ctx.get_opt(&self.refund_target),
-                memo: self.memo,
+                ibc_shielding_data: self.ibc_shielding_data,
+                ibc_memo: self.ibc_memo,
+                gas_spending_keys,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -4605,10 +4788,18 @@ pub mod args {
             let timeout_height = TIMEOUT_HEIGHT.parse(matches);
             let timeout_sec_offset = TIMEOUT_SEC_OFFSET.parse(matches);
             let refund_target = REFUND_TARGET.parse(matches);
-            let memo = IBC_TRANSFER_MEMO_PATH.parse(matches).map(|path| {
-                std::fs::read_to_string(path)
-                    .expect("Expected a file at given path")
-            });
+            let ibc_shielding_data =
+                IBC_SHIELDING_DATA_PATH.parse(matches).map(|path| {
+                    let data = std::fs::read_to_string(path)
+                        .expect("Failed to open IBC shielding data file");
+                    namada_sdk::ibc::decode_ibc_shielding_data(data)
+                        .expect("Failed to decode IBC shielding data")
+                });
+            let ibc_memo = IBC_MEMO.parse(matches);
+            let mut gas_spending_keys = vec![];
+            if let Some(key) = GAS_SPENDING_KEY.parse(matches) {
+                gas_spending_keys.push(key);
+            }
             let tx_code_path = PathBuf::from(TX_IBC_WASM);
             Self {
                 tx,
@@ -4621,7 +4812,9 @@ pub mod args {
                 timeout_height,
                 timeout_sec_offset,
                 refund_target,
-                memo,
+                ibc_shielding_data,
+                ibc_memo,
+                gas_spending_keys,
                 tx_code_path,
             }
         }
@@ -4655,8 +4848,20 @@ pub mod args {
                     "The refund target address when IBC shielded transfer \
                      failure."
                 )))
-                .arg(IBC_TRANSFER_MEMO_PATH.def().help(wrap!(
-                    "The path for the memo field of ICS20 transfer."
+                .arg(IBC_SHIELDING_DATA_PATH.def().help(wrap!(
+                    "The file path of the IBC shielding data for the \
+                     destination Namada. This can't be set with --ibc-memo at \
+                     the same time."
+                )))
+                .arg(
+                    IBC_MEMO
+                        .def()
+                        .help(wrap!("The memo for IBC transfer packet.")),
+                )
+                .arg(GAS_SPENDING_KEY.def().help(wrap!(
+                    "The optional spending key that will be used in addition \
+                     to the source for gas payment (if this is a shielded \
+                     action)."
                 )))
         }
     }
@@ -5430,7 +5635,7 @@ pub mod args {
                         .def()
                         .help(wrap!(
                             "Flag if the proposal is of type pgf-funding. \
-                             Used to control continuous/retro pgf fundings."
+                             Used to control continuous/retro PGF fundings."
                         ))
                         .conflicts_with_all([
                             PROPOSAL_ETH.name,
@@ -5520,6 +5725,29 @@ pub mod args {
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
                 .arg(PUBLIC_KEY.def().help(wrap!("A public key to reveal.")))
+        }
+    }
+
+    impl CliToSdk<Complete> for Complete {
+        type Error = std::io::Error;
+
+        fn to_sdk(self, _ctx: &mut Context) -> Result<Complete, Self::Error> {
+            Ok(Complete { shell: self.shell })
+        }
+    }
+
+    impl Args for Complete {
+        fn parse(matches: &ArgMatches) -> Self {
+            let shell = SHELL.parse(matches);
+            Self { shell }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                SHELL
+                    .def()
+                    .help(wrap!("The shell to generate the completions for.")),
+            )
         }
     }
 
@@ -6364,42 +6592,62 @@ pub mod args {
     impl Args for ShieldedSync<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let ledger_address = CONFIG_RPC_LEDGER_ADDRESS.parse(matches);
-            let batch_size = BATCH_SIZE_OPT.parse(matches);
-            let start_query_height = BLOCK_HEIGHT_FROM_OPT.parse(matches);
             let last_query_height = BLOCK_HEIGHT_TO_OPT.parse(matches);
-            let spending_keys = SPENDING_KEYS.parse(matches);
-            let viewing_keys = VIEWING_KEYS.parse(matches);
+            let spending_keys = DATED_SPENDING_KEYS.parse(matches);
+            let viewing_keys = DATED_VIEWING_KEYS.parse(matches);
+            let with_indexer = WITH_INDEXER.parse(matches);
+            let wait_for_last_query_height =
+                WAIT_FOR_LAST_QUERY_HEIGHT.parse(matches);
+            let max_concurrent_fetches = MAX_CONCURRENT_FETCHES.parse(matches);
+            let retry_strategy = match RETRIES.parse(matches) {
+                Some(times) => RetryStrategy::Times(times),
+                None => RetryStrategy::Forever,
+            };
             Self {
                 ledger_address,
-                batch_size,
-                start_query_height,
                 last_query_height,
                 spending_keys,
                 viewing_keys,
+                with_indexer,
+                wait_for_last_query_height,
+                max_concurrent_fetches,
+                retry_strategy,
             }
         }
 
         fn def(app: App) -> App {
             app.arg(CONFIG_RPC_LEDGER_ADDRESS.def().help(LEDGER_ADDRESS_ABOUT))
-                .arg(BATCH_SIZE_OPT.def().help(wrap!(
-                    "Optional batch size which determines how many txs to \
-                     fetch before caching locally. Default is 1."
-                )))
                 .arg(BLOCK_HEIGHT_TO_OPT.def().help(wrap!(
                     "Option block height to sync up to. Default is latest."
                 )))
-                .arg(
-                    BLOCK_HEIGHT_FROM_OPT
-                        .def()
-                        .help(wrap!("Option block height to sync from.")),
-                )
-                .arg(SPENDING_KEYS.def().help(wrap!(
+                .arg(DATED_SPENDING_KEYS.def().help(wrap!(
                     "List of new spending keys with which to check note \
-                     ownership. These will be added to the shielded context."
+                     ownership. These will be added to the shielded context. \
+                     Appending \"<<$BLOCKHEIGHT\" to the end of each key adds \
+                     a birthday."
                 )))
-                .arg(VIEWING_KEYS.def().help(wrap!(
+                .arg(DATED_VIEWING_KEYS.def().help(wrap!(
                     "List of new viewing keys with which to check note \
-                     ownership. These will be added to the shielded context."
+                     ownership. These will be added to the shielded context. \
+                     Appending \"<<$BLOCKHEIGHT\" to the end of each key adds \
+                     a birthday."
+                )))
+                .arg(WITH_INDEXER.def().help(wrap!(
+                    "Address of a `namada-masp-indexer` live instance. If \
+                     present, the shielded sync will be performed using data \
+                     retrieved from the given indexer."
+                )))
+                .arg(WAIT_FOR_LAST_QUERY_HEIGHT.def().help(wrap!(
+                    "Wait until the last height to sync is available instead \
+                     of returning early from the shielded sync."
+                )))
+                .arg(MAX_CONCURRENT_FETCHES.def().help(wrap!(
+                    "Maximum number of fetch jobs that will ever execute \
+                     concurrently during the shielded sync."
+                )))
+                .arg(RETRIES.def().help(wrap!(
+                    "Maximum number of times to retry fetching. If no \
+                     argument is provided, defaults to retrying forever."
                 )))
         }
     }
@@ -6414,9 +6662,9 @@ pub mod args {
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
 
             Ok(ShieldedSync {
+                max_concurrent_fetches: self.max_concurrent_fetches,
+                wait_for_last_query_height: self.wait_for_last_query_height,
                 ledger_address: chain_ctx.get(&self.ledger_address),
-                batch_size: self.batch_size,
-                start_query_height: self.start_query_height,
                 last_query_height: self.last_query_height,
                 spending_keys: self
                     .spending_keys
@@ -6428,23 +6676,25 @@ pub mod args {
                     .iter()
                     .map(|vk| chain_ctx.get_cached(vk))
                     .collect(),
+                with_indexer: self.with_indexer,
+                retry_strategy: self.retry_strategy,
             })
         }
     }
 
-    impl CliToSdk<GenIbcShieldedTransfer<SdkTypes>>
-        for GenIbcShieldedTransfer<CliTypes>
+    impl CliToSdk<GenIbcShieldingTransfer<SdkTypes>>
+        for GenIbcShieldingTransfer<CliTypes>
     {
         type Error = std::convert::Infallible;
 
         fn to_sdk(
             self,
             ctx: &mut Context,
-        ) -> Result<GenIbcShieldedTransfer<SdkTypes>, Self::Error> {
+        ) -> Result<GenIbcShieldingTransfer<SdkTypes>, Self::Error> {
             let query = self.query.to_sdk(ctx)?;
             let chain_ctx = ctx.borrow_chain_or_exit();
 
-            Ok(GenIbcShieldedTransfer::<SdkTypes> {
+            Ok(GenIbcShieldingTransfer::<SdkTypes> {
                 query,
                 output_folder: self.output_folder,
                 target: chain_ctx.get(&self.target),
@@ -6452,12 +6702,11 @@ pub mod args {
                 amount: self.amount,
                 port_id: self.port_id,
                 channel_id: self.channel_id,
-                refund: self.refund,
             })
         }
     }
 
-    impl Args for GenIbcShieldedTransfer<CliTypes> {
+    impl Args for GenIbcShieldingTransfer<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let output_folder = OUTPUT_FOLDER_PATH.parse(matches);
@@ -6466,7 +6715,6 @@ pub mod args {
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
             let port_id = PORT_ID.parse(matches);
             let channel_id = CHANNEL_ID.parse(matches);
-            let refund = REFUND.parse(matches);
             Self {
                 query,
                 output_folder,
@@ -6475,7 +6723,6 @@ pub mod args {
                 amount,
                 port_id,
                 channel_id,
-                refund,
             }
         }
 
@@ -6496,9 +6743,6 @@ pub mod args {
                 )))
                 .arg(CHANNEL_ID.def().help(wrap!(
                     "The channel ID via which the token is received."
-                )))
-                .arg(REFUND.def().help(wrap!(
-                    "Generate the shielded transfer for refunding."
                 )))
         }
     }
@@ -6755,8 +6999,11 @@ pub mod args {
         type BpConversionTable = PathBuf;
         type ConfigRpcTendermintAddress = ConfigRpcAddress;
         type Data = PathBuf;
+        type DatedSpendingKey = WalletDatedSpendingKey;
+        type DatedViewingKey = WalletDatedViewingKey;
         type EthereumAddress = String;
         type Keypair = WalletKeypair;
+        type MaspIndexerAddress = String;
         type PaymentAddress = WalletPaymentAddr;
         type PublicKey = WalletPublicKey;
         type SpendingKey = WalletSpendingKey;
@@ -6815,6 +7062,7 @@ pub mod args {
                 wrapper_fee_payer: self.wrapper_fee_payer.map(|x| ctx.get(&x)),
                 memo: self.memo,
                 use_device: self.use_device,
+                device_transport: self.device_transport,
             })
         }
     }
@@ -6825,7 +7073,8 @@ pub mod args {
                 DRY_RUN_TX
                     .def()
                     .help(wrap!("Simulate the transaction application."))
-                    .conflicts_with(DRY_RUN_WRAPPER_TX.name),
+                    .conflicts_with(DRY_RUN_WRAPPER_TX.name)
+                    .conflicts_with(USE_DEVICE.name),
             )
             .arg(
                 DRY_RUN_WRAPPER_TX
@@ -6935,10 +7184,24 @@ pub mod args {
                     ))
                     .conflicts_with(DISPOSABLE_SIGNING_KEY.name),
             )
-            .arg(USE_DEVICE.def().help(wrap!(
-                "Use an attached hardware wallet device to sign the \
-                 transaction."
-            )))
+            .arg(
+                USE_DEVICE
+                    .def()
+                    .help(wrap!(
+                        "Use an attached hardware wallet device to sign the \
+                         transaction."
+                    ))
+                    .conflicts_with(DRY_RUN_TX.name),
+            )
+            .arg(
+                DEVICE_TRANSPORT
+                    .def()
+                    .help(wrap!(
+                        "Select transport for hardware wallet from \"hid\" \
+                         (default) or \"tcp\"."
+                    ))
+                    .conflicts_with(DRY_RUN_TX.name),
+            )
             .arg(
                 MEMO_OPT
                     .def()
@@ -6980,6 +7243,7 @@ pub mod args {
                     None => TxExpiration::Default,
                 }
             };
+            let device_transport = DEVICE_TRANSPORT.parse(matches);
             Self {
                 dry_run,
                 dry_run_wrapper,
@@ -7003,6 +7267,7 @@ pub mod args {
                 output_folder,
                 memo,
                 use_device,
+                device_transport,
             }
         }
     }
@@ -7092,7 +7357,8 @@ pub mod args {
                 find_viewing_key(&mut wallet)
             } else {
                 find_viewing_key(&mut ctx.borrow_mut_chain_or_exit().wallet)
-            };
+            }
+            .key;
 
             Ok(PayAddressGen::<SdkTypes> {
                 alias: self.alias,
@@ -7131,23 +7397,27 @@ pub mod args {
             let shielded = SHIELDED.parse(matches);
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
+            let birthday = BIRTHDAY.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
-            let use_device = USE_DEVICE.parse(matches);
             let derivation_path = HD_DERIVATION_PATH.parse(matches);
             let allow_non_compliant =
                 HD_ALLOW_NON_COMPLIANT_DERIVATION_PATH.parse(matches);
             let prompt_bip39_passphrase =
                 HD_PROMPT_BIP39_PASSPHRASE.parse(matches);
+            let use_device = USE_DEVICE.parse(matches);
+            let device_transport = DEVICE_TRANSPORT.parse(matches);
             Self {
                 scheme,
                 shielded,
                 alias,
                 alias_force,
                 unsafe_dont_encrypt,
-                use_device,
                 derivation_path,
                 allow_non_compliant,
                 prompt_bip39_passphrase,
+                use_device,
+                device_transport,
+                birthday,
             }
         }
 
@@ -7169,6 +7439,11 @@ pub mod args {
                     "Force overwrite the alias if it already exists."
                 )),
             )
+            .arg(BIRTHDAY.def().help(wrap!(
+                "A block height after which this key is being created. Used \
+                 for optimizing MASP operations. If none is provided, \
+                 defaults to the first block height."
+            )))
             .arg(UNSAFE_DONT_ENCRYPT.def().help(wrap!(
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
                  used in a live network."
@@ -7176,6 +7451,10 @@ pub mod args {
             .arg(USE_DEVICE.def().help(wrap!(
                 "Derive an address and public key from the seed stored on the \
                  connected hardware wallet."
+            )))
+            .arg(DEVICE_TRANSPORT.def().help(wrap!(
+                "Select transport for hardware wallet from \"hid\" (default) \
+                 or \"tcp\"."
             )))
             .arg(HD_DERIVATION_PATH.def().help(wrap!(
                 "HD key derivation path. Use keyword `default` to refer to a \
@@ -7213,6 +7492,7 @@ pub mod args {
             let raw = RAW_KEY_GEN.parse(matches);
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
+            let birthday = BIRTHDAY.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let derivation_path = HD_DERIVATION_PATH.parse(matches);
             let allow_non_compliant =
@@ -7225,6 +7505,7 @@ pub mod args {
                 raw,
                 alias,
                 alias_force,
+                birthday,
                 unsafe_dont_encrypt,
                 derivation_path,
                 allow_non_compliant,
@@ -7256,6 +7537,11 @@ pub mod args {
             .arg(ALIAS.def().help(wrap!("The key and address alias.")))
             .arg(ALIAS_FORCE.def().help(wrap!(
                 "Override the alias without confirmation if it already exists."
+            )))
+            .arg(BIRTHDAY.def().help(wrap!(
+                "A block height after which this key is being created. Used \
+                 for optimizing MASP operations. If none is provided, \
+                 defaults to the first block height."
             )))
             .arg(UNSAFE_DONT_ENCRYPT.def().help(wrap!(
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
@@ -7428,11 +7714,13 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
+            let birthday = BIRTHDAY.parse(matches);
             let value = VALUE.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
                 alias,
                 alias_force,
+                birthday,
                 value,
                 unsafe_dont_encrypt,
             }
@@ -7446,6 +7734,11 @@ pub mod args {
             )
             .arg(ALIAS_FORCE.def().help(wrap!(
                 "Override the alias without confirmation if it already exists."
+            )))
+            .arg(BIRTHDAY.def().help(wrap!(
+                "A block height after which this key is being created. Used \
+                 for optimizing MASP operations. If none is provided, \
+                 defaults to the first block height."
             )))
             .arg(VALUE.def().help(wrap!(
                 "Any value of the following:\n- transparent pool secret \
@@ -7542,7 +7835,6 @@ pub mod args {
         pub chain_id: ChainId,
         pub genesis_validator: Option<String>,
         pub pre_genesis_path: Option<PathBuf>,
-        pub dont_prefetch_wasm: bool,
         pub allow_duplicate_ip: bool,
         pub add_persistent_peers: bool,
     }
@@ -7552,14 +7844,12 @@ pub mod args {
             let chain_id = CHAIN_ID.parse(matches);
             let genesis_validator = GENESIS_VALIDATOR.parse(matches);
             let pre_genesis_path = PRE_GENESIS_PATH.parse(matches);
-            let dont_prefetch_wasm = DONT_PREFETCH_WASM.parse(matches);
             let allow_duplicate_ip = ALLOW_DUPLICATE_IP.parse(matches);
             let add_persistent_peers = ADD_PERSISTENT_PEERS.parse(matches);
             Self {
                 chain_id,
                 genesis_validator,
                 pre_genesis_path,
-                dont_prefetch_wasm,
                 allow_duplicate_ip,
                 add_persistent_peers,
             }
@@ -7570,9 +7860,6 @@ pub mod args {
                                           https://github.com/heliaxdev/anoma-network-config")))
                 .arg(GENESIS_VALIDATOR.def().help(wrap!("The alias of the genesis validator that you want to set up as, if any.")))
                 .arg(PRE_GENESIS_PATH.def().help(wrap!("The path to the pre-genesis directory for genesis validator, if any. Defaults to \"{base-dir}/pre-genesis/{genesis-validator}\".")))
-            .arg(DONT_PREFETCH_WASM.def().help(wrap!(
-                "Do not pre-fetch WASM.")
-            ))
             .arg(ALLOW_DUPLICATE_IP.def().help(wrap!(
                 "Toggle to disable guard against peers connecting from the \
                  same IP. This option shouldn't be used in mainnet.")
@@ -7757,7 +8044,7 @@ pub mod args {
 
     #[derive(Clone, Debug)]
     pub struct GenesisBond {
-        pub source: GenesisAddress,
+        pub source: AddrOrPk,
         pub validator: EstablishedAddress,
         pub bond_amount: token::DenominatedAmount,
         pub output: PathBuf,
@@ -7768,7 +8055,7 @@ pub mod args {
             let validator = GENESIS_VALIDATOR_ADDRESS.parse(matches);
             let source =
                 GENESIS_BOND_SOURCE.parse(matches).unwrap_or_else(|| {
-                    GenesisAddress::EstablishedAddress(validator.clone())
+                    AddrOrPk::Address(Address::Established(validator.clone()))
                 });
             let bond_amount = AMOUNT.parse(matches);
             let output = PATH.parse(matches);
@@ -7945,13 +8232,19 @@ pub mod args {
         /// Templates dir
         pub path: PathBuf,
         pub wasm_dir: PathBuf,
+        pub check_can_sign: Vec<AddrOrPk>,
     }
 
     impl Args for TestGenesis {
         fn parse(matches: &ArgMatches) -> Self {
             let path = PATH.parse(matches);
             let wasm_dir = WASM_DIR.parse(matches).unwrap_or_default();
-            Self { path, wasm_dir }
+            let check_can_sign = CHECK_CAN_SIGN.parse(matches);
+            Self {
+                path,
+                wasm_dir,
+                check_can_sign,
+            }
         }
 
         fn def(app: App) -> App {
@@ -7964,6 +8257,11 @@ pub mod args {
                 "Optional wasm directory to provide as part of verifying \
                  genesis template files"
             )))
+            .arg(CHECK_CAN_SIGN.def().help(wrap!(
+                "Check that the pre-genesis wallet is able to sign with the \
+                 given keys and/or keys associated with the given addresses. \
+                 A pre-genesis wallet must be present in the base directory."
+            )))
         }
     }
 
@@ -7973,6 +8271,7 @@ pub mod args {
         pub output: Option<PathBuf>,
         pub validator_alias: Option<String>,
         pub use_device: bool,
+        pub device_transport: DeviceTransport,
     }
 
     impl Args for SignGenesisTxs {
@@ -7981,11 +8280,13 @@ pub mod args {
             let output = OUTPUT.parse(matches);
             let validator_alias = ALIAS_OPT.parse(matches);
             let use_device = USE_DEVICE.parse(matches);
+            let device_transport = DEVICE_TRANSPORT.parse(matches);
             Self {
                 path,
                 output,
                 validator_alias,
                 use_device,
+                device_transport,
             }
         }
 
@@ -8007,6 +8308,10 @@ pub mod args {
             .arg(USE_DEVICE.def().help(wrap!(
                 "Derive an address and public key from the seed stored on the \
                  connected hardware wallet."
+            )))
+            .arg(DEVICE_TRANSPORT.def().help(wrap!(
+                "Select transport for hardware wallet from \"hid\" (default) \
+                 or \"tcp\"."
             )))
         }
     }
@@ -8047,14 +8352,44 @@ pub fn namada_cli() -> (cmds::Namada, String) {
     safe_exit(2);
 }
 
-pub fn namada_node_cli() -> Result<(cmds::NamadaNode, Context)> {
-    let app = namada_node_app();
-    cmds::NamadaNode::parse_or_print_help(app)
+/// Namada node commands with loaded [`Context`] where required
+pub enum NamadaNode {
+    Ledger(cmds::Ledger, Context),
+    Config(cmds::Config, Context),
+    Utils(cmds::NodeUtils, args::Global),
 }
 
-#[allow(clippy::large_enum_variant)]
+pub fn namada_node_cli() -> Result<NamadaNode> {
+    let app = namada_node_app();
+    let matches = app.clone().get_matches();
+    match Cmd::parse(&matches) {
+        Some(cmd) => {
+            let global_args = args::Global::parse(&matches);
+            match cmd {
+                cmds::NamadaNode::Ledger(sub_cmd) => {
+                    let context = Context::new::<CliIo>(global_args)?;
+                    Ok(NamadaNode::Ledger(sub_cmd, context))
+                }
+                cmds::NamadaNode::Config(sub_cmd) => {
+                    let context = Context::new::<CliIo>(global_args)?;
+                    Ok(NamadaNode::Config(sub_cmd, context))
+                }
+                cmds::NamadaNode::Utils(sub_cmd) => {
+                    Ok(NamadaNode::Utils(sub_cmd, global_args))
+                }
+            }
+        }
+        None => {
+            let mut app = app;
+            app.print_help().unwrap();
+            safe_exit(2);
+        }
+    }
+}
+
+/// Namada client commands with loaded [`Context`] where required
 pub enum NamadaClient {
-    WithoutContext(cmds::ClientUtils, args::Global),
+    WithoutContext(Box<(cmds::ClientUtils, args::Global)>),
     WithContext(Box<(cmds::NamadaClientWithContext, Context)>),
 }
 
@@ -8070,7 +8405,10 @@ pub fn namada_client_cli() -> Result<NamadaClient> {
                     Ok(NamadaClient::WithContext(Box::new((sub_cmd, context))))
                 }
                 cmds::NamadaClient::WithoutContext(sub_cmd) => {
-                    Ok(NamadaClient::WithoutContext(sub_cmd, global_args))
+                    Ok(NamadaClient::WithoutContext(Box::new((
+                        sub_cmd,
+                        global_args,
+                    ))))
                 }
             }
         }
@@ -8122,7 +8460,7 @@ pub fn namada_relayer_cli() -> Result<NamadaRelayer> {
     }
 }
 
-fn namada_app() -> App {
+pub fn namada_app() -> App {
     let app = App::new(APP_NAME)
         .version(namada_version())
         .about("Namada command line interface.")
@@ -8132,7 +8470,7 @@ fn namada_app() -> App {
     cmds::Namada::add_sub(args::Global::def(app))
 }
 
-fn namada_node_app() -> App {
+pub fn namada_node_app() -> App {
     let app = App::new(APP_NAME)
         .version(namada_version())
         .about("Namada node command line interface.")
@@ -8142,7 +8480,7 @@ fn namada_node_app() -> App {
     cmds::NamadaNode::add_sub(args::Global::def(app))
 }
 
-fn namada_client_app() -> App {
+pub fn namada_client_app() -> App {
     let app = App::new(APP_NAME)
         .version(namada_version())
         .about("Namada client command line interface.")
@@ -8152,7 +8490,7 @@ fn namada_client_app() -> App {
     cmds::NamadaClient::add_sub(args::Global::def(app))
 }
 
-fn namada_wallet_app() -> App {
+pub fn namada_wallet_app() -> App {
     let app = App::new(APP_NAME)
         .version(namada_version())
         .about("Namada wallet command line interface.")
@@ -8162,7 +8500,7 @@ fn namada_wallet_app() -> App {
     cmds::NamadaWallet::add_sub(args::Global::def(app))
 }
 
-fn namada_relayer_app() -> App {
+pub fn namada_relayer_app() -> App {
     let app = App::new(APP_NAME)
         .version(namada_version())
         .about("Namada relayer command line interface.")

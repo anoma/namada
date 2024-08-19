@@ -5,10 +5,13 @@ use std::marker::PhantomData;
 use std::ops::ControlFlow;
 use std::str::FromStr;
 
+use namada_core::address::Address;
 use namada_core::collections::HashMap;
 use namada_core::hash::Hash;
+use namada_core::ibc::IbcTxDataRefs;
 use namada_core::masp::MaspTxRefs;
 use namada_core::storage::{BlockHeight, TxIndex};
+use serde::Deserializer;
 
 use super::*;
 
@@ -515,6 +518,20 @@ impl EventAttributeEntry<'static> for MaspTxBatchRefs {
     }
 }
 
+/// Extend an [`Event`] with data sections for IBC shielding transfer.
+pub struct IbcMaspTxBatchRefs(pub IbcTxDataRefs);
+
+impl EventAttributeEntry<'static> for IbcMaspTxBatchRefs {
+    type Value = IbcTxDataRefs;
+    type ValueOwned = Self::Value;
+
+    const KEY: &'static str = "ibc_masp_tx_batch_refs";
+
+    fn into_value(self) -> Self::Value {
+        self.0
+    }
+}
+
 /// Extend an [`Event`] with success data.
 pub struct Success(pub bool);
 
@@ -663,6 +680,90 @@ where
     fn extend_event(self, event: &mut Event) {
         let Self(closure) = self;
         closure(event);
+    }
+}
+
+/// Implement the Display and FromStr traits for any serde type
+#[derive(Default, Clone, Serialize, Deserialize)]
+pub struct EventValue<T>(pub T);
+
+impl<T: Serialize> Display for EventValue<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let ser =
+            serde_json::to_string(&self.0).map_err(|_| std::fmt::Error)?;
+        write!(f, "{}", ser)
+    }
+}
+
+impl<T: for<'de> Deserialize<'de>> FromStr for EventValue<T> {
+    type Err = serde_json::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_json::from_str(s).map(Self)
+    }
+}
+
+impl<T> From<T> for EventValue<T> {
+    fn from(t: T) -> Self {
+        Self(t)
+    }
+}
+
+/// A user account.
+#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
+pub enum UserAccount {
+    /// Internal chain address in Namada.
+    Internal(Address),
+    /// External chain address.
+    External(String),
+}
+
+impl fmt::Display for UserAccount {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Internal(addr) => write!(f, "internal-address/{addr}"),
+            Self::External(addr) => write!(f, "external-address/{addr}"),
+        }
+    }
+}
+
+impl FromStr for UserAccount {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.split_once('/') {
+            Some(("internal-address", addr)) => {
+                Ok(Self::Internal(Address::decode(addr).map_err(|err| {
+                    format!(
+                        "Unknown internal address balance change target \
+                         {s:?}: {err}"
+                    )
+                })?))
+            }
+            Some(("external-address", addr)) => {
+                Ok(Self::External(addr.to_owned()))
+            }
+            _ => Err(format!("Unknown balance change target {s:?}")),
+        }
+    }
+}
+
+impl serde::Serialize for UserAccount {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.collect_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for UserAccount {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = <String as Deserialize>::deserialize(deserializer)?;
+        FromStr::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
 

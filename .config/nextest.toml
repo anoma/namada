@@ -1,0 +1,6 @@
+[profile.default]
+retries = 0
+
+[[profile.default.overrides]]
+filter = 'test(e2e::)'
+retries = 2

@@ -1,5 +1,4 @@
 //! Namada SDK
-
 #![doc(html_favicon_url = "https://dev.namada.net/master/favicon.png")]
 #![doc(html_logo_url = "https://dev.namada.net/master/rustdoc-logo.png")]
 #![deny(rustdoc::broken_intra_doc_links)]
@@ -15,13 +14,12 @@
 extern crate alloc;
 
 pub use namada_core::*;
-#[cfg(feature = "tendermint-rpc")]
-pub use tendermint_rpc;
 pub use {
     bip39, masp_primitives, masp_proofs, namada_account as account,
-    namada_gas as gas, namada_governance as governance,
-    namada_proof_of_stake as proof_of_stake, namada_state as state,
-    namada_storage as storage, namada_token as token, zeroize,
+    namada_gas as gas, namada_governance as governance, namada_ibc as ibc,
+    namada_parameters as parameters, namada_proof_of_stake as proof_of_stake,
+    namada_state as state, namada_storage as storage, namada_token as token,
+    tendermint_rpc, zeroize,
 };
 
 pub mod eth_bridge;
@@ -33,14 +31,17 @@ pub mod masp;
 pub mod signing;
 #[allow(clippy::result_large_err)]
 pub mod tx;
+#[cfg(feature = "wasm-runtime")]
+pub mod validation;
 
-pub mod control_flow;
 pub mod error;
 pub mod events;
 pub(crate) mod internal_macros;
 pub mod io;
+#[cfg(feature = "migrations")]
 pub mod migrations;
 pub mod queries;
+pub mod task_env;
 pub mod wallet;
 
 #[cfg(feature = "async-send")]
@@ -50,11 +51,12 @@ pub use std::marker::Sync as MaybeSync;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use args::{InputAmount, SdkTypes};
+use args::{DeviceTransport, InputAmount, SdkTypes};
 use io::Io;
 use masp::{ShieldedContext, ShieldedUtils};
 use namada_core::address::Address;
 use namada_core::collections::HashSet;
+pub use namada_core::control_flow;
 use namada_core::dec::Dec;
 use namada_core::ethereum_events::EthAddress;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
@@ -72,17 +74,15 @@ use tx::{
     TX_CHANGE_CONSENSUS_KEY_WASM, TX_CHANGE_METADATA_WASM,
     TX_CLAIM_REWARDS_WASM, TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM,
     TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL, TX_REACTIVATE_VALIDATOR_WASM,
-    TX_REDELEGATE_WASM, TX_RESIGN_STEWARD, TX_REVEAL_PK,
-    TX_SHIELDED_TRANSFER_WASM, TX_SHIELDING_TRANSFER_WASM,
-    TX_TRANSPARENT_TRANSFER_WASM, TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM,
-    TX_UNSHIELDING_TRANSFER_WASM, TX_UPDATE_ACCOUNT_WASM,
+    TX_REDELEGATE_WASM, TX_RESIGN_STEWARD, TX_REVEAL_PK, TX_TRANSFER_WASM,
+    TX_UNBOND_WASM, TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
     TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
     VP_USER_WASM,
 };
 use wallet::{Wallet, WalletIo, WalletStorage};
 
 /// Default gas-limit
-pub const DEFAULT_GAS_LIMIT: u64 = 25_000;
+pub const DEFAULT_GAS_LIMIT: u64 = 150_000;
 
 #[allow(missing_docs)]
 #[cfg(not(feature = "async-send"))]
@@ -168,6 +168,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             password: None,
             memo: None,
             use_device: false,
+            device_transport: DeviceTransport::default(),
         }
     }
 
@@ -175,17 +176,11 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     /// arguments
     fn new_transparent_transfer(
         &self,
-        source: Address,
-        target: Address,
-        token: Address,
-        amount: InputAmount,
+        data: Vec<args::TxTransparentTransferData>,
     ) -> args::TxTransparentTransfer {
         args::TxTransparentTransfer {
-            source,
-            target,
-            token,
-            amount,
-            tx_code_path: PathBuf::from(TX_TRANSPARENT_TRANSFER_WASM),
+            data,
+            tx_code_path: PathBuf::from(TX_TRANSFER_WASM),
             tx: self.tx_builder(),
         }
     }
@@ -194,17 +189,13 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     /// arguments
     fn new_shielded_transfer(
         &self,
-        source: ExtendedSpendingKey,
-        target: PaymentAddress,
-        token: Address,
-        amount: InputAmount,
+        data: Vec<args::TxShieldedTransferData>,
+        gas_spending_keys: Vec<ExtendedSpendingKey>,
     ) -> args::TxShieldedTransfer {
         args::TxShieldedTransfer {
-            source,
-            target,
-            token,
-            amount,
-            tx_code_path: PathBuf::from(TX_SHIELDED_TRANSFER_WASM),
+            data,
+            gas_spending_keys,
+            tx_code_path: PathBuf::from(TX_TRANSFER_WASM),
             tx: self.tx_builder(),
         }
     }
@@ -213,17 +204,13 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     /// arguments
     fn new_shielding_transfer(
         &self,
-        source: Address,
         target: PaymentAddress,
-        token: Address,
-        amount: InputAmount,
+        data: Vec<args::TxShieldingTransferData>,
     ) -> args::TxShieldingTransfer {
         args::TxShieldingTransfer {
-            source,
+            data,
             target,
-            token,
-            amount,
-            tx_code_path: PathBuf::from(TX_SHIELDING_TRANSFER_WASM),
+            tx_code_path: PathBuf::from(TX_TRANSFER_WASM),
             tx: self.tx_builder(),
         }
     }
@@ -233,16 +220,14 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     fn new_unshielding_transfer(
         &self,
         source: ExtendedSpendingKey,
-        target: Address,
-        token: Address,
-        amount: InputAmount,
+        data: Vec<args::TxUnshieldingTransferData>,
+        gas_spending_keys: Vec<ExtendedSpendingKey>,
     ) -> args::TxUnshieldingTransfer {
         args::TxUnshieldingTransfer {
             source,
-            target,
-            token,
-            amount,
-            tx_code_path: PathBuf::from(TX_UNSHIELDING_TRANSFER_WASM),
+            data,
+            gas_spending_keys,
+            tx_code_path: PathBuf::from(TX_TRANSFER_WASM),
             tx: self.tx_builder(),
         }
     }
@@ -342,7 +327,9 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             timeout_height: None,
             timeout_sec_offset: None,
             refund_target: None,
-            memo: None,
+            ibc_shielding_data: None,
+            ibc_memo: None,
+            gas_spending_keys: Default::default(),
             tx: self.tx_builder(),
             tx_code_path: PathBuf::from(TX_IBC_WASM),
         }
@@ -753,6 +740,7 @@ where
                 password: None,
                 memo: None,
                 use_device: false,
+                device_transport: DeviceTransport::default(),
             },
         }
     }
@@ -772,6 +760,14 @@ where
             io,
             native_token,
         ))
+    }
+
+    /// Clone the rpc client.
+    pub fn clone_client(&self) -> C
+    where
+        C: Clone,
+    {
+        self.client.clone()
     }
 }
 
@@ -855,30 +851,27 @@ where
 /// Tests and strategies for transactions
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
+    use ::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
     use borsh_ext::BorshSerializeExt;
     use governance::ProposalType;
-    use ibc::primitives::proto::Any;
     use masp_primitives::transaction::components::sapling::builder::StoredBuildParams;
-    use masp_primitives::transaction::TransparentAddress;
     use namada_account::{InitAccount, UpdateAccount};
     use namada_core::address::testing::{
         arb_established_address, arb_non_internal_address,
     };
+    use namada_core::collections::HashMap;
     use namada_core::eth_bridge_pool::PendingTransfer;
     use namada_core::hash::testing::arb_hash;
     use namada_core::key::testing::arb_common_keypair;
+    use namada_core::masp::AssetData;
     use namada_governance::storage::proposal::testing::{
         arb_init_proposal, arb_vote_proposal,
     };
     use namada_governance::{InitProposalData, VoteProposalData};
-    use namada_ibc::testing::arb_ibc_any;
-    use namada_token::testing::{
-        arb_denominated_amount, arb_transparent_transfer,
-    };
-    use namada_token::{
-        ShieldedTransfer, ShieldingTransfer, TransparentTransfer,
-        UnshieldingTransfer,
-    };
+    use namada_ibc::testing::{arb_ibc_msg_nft_transfer, arb_ibc_msg_transfer};
+    use namada_ibc::{MsgNftTransfer, MsgTransfer};
+    use namada_token::testing::arb_denominated_amount;
+    use namada_token::Transfer;
     use namada_tx::data::pgf::UpdateStewardCommission;
     use namada_tx::data::pos::{
         BecomeValidator, Bond, CommissionChange, ConsensusKeyChange,
@@ -887,18 +880,15 @@ pub mod testing {
     use namada_tx::data::{Fee, TxType, WrapperTx};
     use proptest::prelude::{Just, Strategy};
     use proptest::{arbitrary, collection, option, prop_compose, prop_oneof};
-    use prost::Message;
-    use ripemd::Digest as RipemdDigest;
-    use sha2::Digest;
+    use token::testing::arb_transparent_transfer;
 
     use super::*;
     use crate::account::tests::{arb_init_account, arb_update_account};
     use crate::chain::ChainId;
     use crate::eth_bridge_pool::testing::arb_pending_transfer;
     use crate::key::testing::arb_common_pk;
-    use crate::masp::testing::{
-        arb_deshielding_transfer, arb_shielded_transfer, arb_shielding_transfer,
-    };
+    use crate::masp::testing::arb_shielded_transfer;
+    use crate::masp::ShieldedTransfer;
     use crate::time::{DateTime, DateTimeUtc, TimeZone, Utc};
     use crate::tx::data::pgf::tests::arb_update_steward_commission;
     use crate::tx::data::pos::tests::{
@@ -911,7 +901,8 @@ pub mod testing {
         TxCommitments,
     };
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, Clone, BorshDeserialize, BorshSchema, BorshSerialize)]
+    #[borsh(crate = "::borsh")]
     #[allow(clippy::large_enum_variant)]
     #[allow(missing_docs)]
     /// To facilitate propagating debugging information
@@ -931,16 +922,20 @@ pub mod testing {
         UpdateAccount(UpdateAccount),
         VoteProposal(VoteProposalData),
         Withdraw(Withdraw),
-        TransparentTransfer(TransparentTransfer),
-        ShieldedTransfer(ShieldedTransfer, (StoredBuildParams, String)),
-        ShieldingTransfer(ShieldingTransfer, (StoredBuildParams, String)),
-        UnshieldingTransfer(UnshieldingTransfer, (StoredBuildParams, String)),
+        Transfer(Transfer, Option<(StoredBuildParams, String)>),
         Bond(Bond),
         Redelegation(Redelegation),
         UpdateStewardCommission(UpdateStewardCommission),
         ResignSteward(Address),
         PendingTransfer(PendingTransfer),
-        IbcAny(Any),
+        IbcMsgTransfer(
+            MsgTransfer<token::Transfer>,
+            Option<(StoredBuildParams, String)>,
+        ),
+        IbcMsgNftTransfer(
+            MsgNftTransfer<token::Transfer>,
+            Option<(StoredBuildParams, String)>,
+        ),
         Custom,
     }
 
@@ -1088,106 +1083,52 @@ pub mod testing {
         }
     }
 
-    prop_compose! {
-        /// Generate an arbitrary transfer transaction
-        pub fn arb_transparent_transfer_tx()(
-            mut header in arb_header(),
-            wrapper in arb_wrapper_tx(),
-            transfer in arb_transparent_transfer(),
-            code_hash in arb_hash(),
-        ) -> (Tx, TxData) {
-            header.tx_type = TxType::Wrapper(Box::new(wrapper));
-            let mut tx = Tx { header, sections: vec![] };
-            tx.add_data(transfer.clone());
-            tx.add_code_from_hash(code_hash, Some(TX_TRANSPARENT_TRANSFER_WASM.to_owned()));
-            (tx, TxData::TransparentTransfer(transfer))
-        }
-    }
-
-    // Encode the given Address into TransparentAddress
-    fn encode_address(source: &Address) -> TransparentAddress {
-        let hash = ripemd::Ripemd160::digest(sha2::Sha256::digest(
-            source.serialize_to_vec().as_ref(),
-        ));
-        TransparentAddress(hash.into())
-    }
-
     // Maximum number of notes to include in a transaction
     const MAX_ASSETS: usize = 2;
 
-    // Type of MASP transaction
-    #[derive(Debug, Clone)]
-    enum MaspTxType {
-        // Shielded transaction
-        Shielded,
-        // Shielding transaction
-        Shielding,
-        // Unshielding transaction
-        Unshielding,
+    prop_compose! {
+        /// Generate an arbitrary transfer
+        pub fn arb_transfer()(
+            arb in prop_oneof![
+                arb_transparent_transfer(..5).prop_map(|xfer| (xfer, None)),
+                arb_shielded_transfer(0..MAX_ASSETS)
+                    .prop_map(|(w, x, y, z)| (w, Some((x, y, z))))
+            ],
+        ) -> (Transfer, Option<(ShieldedTransfer, HashMap<AssetData, u64>, StoredBuildParams)>) {
+            arb
+        }
     }
 
     prop_compose! {
-        /// Generate an arbitrary transfer transaction
-        pub fn arb_masp_transfer_tx()(transfer in arb_transparent_transfer())(
+        /// Generate an arbitrary masp transfer transaction
+        pub fn arb_transfer_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
             code_hash in arb_hash(),
-            (masp_tx_type, (shielded_transfer, asset_types, build_params)) in prop_oneof![
-                (Just(MaspTxType::Shielded), arb_shielded_transfer(0..MAX_ASSETS)),
-                (Just(MaspTxType::Shielding), arb_shielding_transfer(encode_address(&transfer.source), 1)),
-                (Just(MaspTxType::Unshielding), arb_deshielding_transfer(encode_address(&transfer.target), 1)),
-            ],
-            transfer in Just(transfer),
+            (transfer, aux) in arb_transfer(),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
-            let shielded_section_hash = tx.add_masp_tx_section(shielded_transfer.masp_tx).1;
-            let build_param_bytes =
-                data_encoding::HEXLOWER.encode(&build_params.serialize_to_vec());
-            let tx_data = match masp_tx_type {
-                MaspTxType::Shielded => {
-                    tx.add_code_from_hash(code_hash, Some(TX_SHIELDED_TRANSFER_WASM.to_owned()));
-                    let data = ShieldedTransfer { section_hash: shielded_section_hash };
-                    tx.add_data(data.clone());
-                    TxData::ShieldedTransfer(data, (build_params, build_param_bytes))
-                },
-                MaspTxType::Shielding => {
-                    // Set the transparent amount and token
-                    let (decoded, value) = asset_types.iter().next().unwrap();
-                    let token = decoded.token.clone();
-                    let amount = DenominatedAmount::new(
-                        token::Amount::from_masp_denominated(*value, decoded.position),
-                        decoded.denom,
-                    );
-                    tx.add_code_from_hash(code_hash, Some(TX_SHIELDING_TRANSFER_WASM.to_owned()));
-                    let data = ShieldingTransfer {source: transfer.source, token, amount, shielded_section_hash };
-                    tx.add_data(data.clone());
-                    TxData::ShieldingTransfer(data, (build_params, build_param_bytes))
-                },
-                MaspTxType::Unshielding => {
-                    // Set the transparent amount and token
-                    let (decoded, value) = asset_types.iter().next().unwrap();
-                    let token = decoded.token.clone();
-                    let amount = DenominatedAmount::new(
-                        token::Amount::from_masp_denominated(*value, decoded.position),
-                        decoded.denom,
-                    );
-                    tx.add_code_from_hash(code_hash, Some(TX_UNSHIELDING_TRANSFER_WASM.to_owned()));
-                    let data = UnshieldingTransfer {target: transfer.target, token, amount, shielded_section_hash };
-                    tx.add_data(data.clone());
-                    TxData::UnshieldingTransfer(data, (build_params, build_param_bytes))
-                },
-            };
-            tx.add_masp_builder(MaspBuilder {
-                asset_types: asset_types.into_keys().collect(),
-                // Store how the Info objects map to Descriptors/Outputs
-                metadata: shielded_transfer.metadata,
-                // Store the data that was used to construct the Transaction
-                builder: shielded_transfer.builder,
-                // Link the Builder to the Transaction by hash code
-                target: shielded_section_hash,
-            });
-            (tx, tx_data)
+            tx.add_code_from_hash(code_hash, Some(TX_TRANSFER_WASM.to_owned()));
+            tx.add_data(transfer.clone());
+            if let Some((shielded_transfer, asset_types, build_params)) = aux {
+                let shielded_section_hash =
+                    tx.add_masp_tx_section(shielded_transfer.masp_tx).1;
+                tx.add_masp_builder(MaspBuilder {
+                    asset_types: asset_types.into_keys().collect(),
+                    // Store how the Info objects map to Descriptors/Outputs
+                    metadata: shielded_transfer.metadata,
+                    // Store the data that was used to construct the Transaction
+                    builder: shielded_transfer.builder,
+                    // Link the Builder to the Transaction by hash code
+                    target: shielded_section_hash,
+                });
+                let build_param_bytes =
+                    data_encoding::HEXLOWER.encode(&build_params.serialize_to_vec());
+                (tx, TxData::Transfer(transfer, Some((build_params, build_param_bytes))))
+            } else {
+                (tx, TxData::Transfer(transfer, None))
+            }
         }
     }
 
@@ -1546,28 +1487,109 @@ pub mod testing {
     }
 
     prop_compose! {
+        /// Generate an arbitrary IBC transfer message
+        pub fn arb_msg_transfer()(
+            message in arb_ibc_msg_transfer(),
+            transfer_aux in option::of(arb_transfer()),
+        ) -> (
+            MsgTransfer<token::Transfer>,
+            Option<(ShieldedTransfer, HashMap<AssetData, u64>, StoredBuildParams)>,
+        ) {
+            if let Some((transfer, aux)) = transfer_aux {
+                (MsgTransfer { message, transfer: Some(transfer) }, aux)
+            } else {
+                (MsgTransfer { message, transfer: None }, None)
+            }
+        }
+    }
+
+    prop_compose! {
         /// Generate an arbitrary IBC any transaction
-        pub fn arb_ibc_any_tx()(
+        pub fn arb_ibc_msg_transfer_tx()(
             mut header in arb_header(),
             wrapper in arb_wrapper_tx(),
-            ibc_any in arb_ibc_any(),
+            (msg_transfer, aux) in arb_msg_transfer(),
             code_hash in arb_hash(),
         ) -> (Tx, TxData) {
             header.tx_type = TxType::Wrapper(Box::new(wrapper));
             let mut tx = Tx { header, sections: vec![] };
-            let mut tx_data = vec![];
-            ibc_any.encode(&mut tx_data).expect("unable to encode IBC data");
-            tx.add_serialized_data(tx_data);
+            tx.add_serialized_data(msg_transfer.serialize_to_vec());
             tx.add_code_from_hash(code_hash, Some(TX_IBC_WASM.to_owned()));
-            (tx, TxData::IbcAny(ibc_any))
+            if let Some((shielded_transfer, asset_types, build_params)) = aux {
+                let shielded_section_hash =
+                    tx.add_masp_tx_section(shielded_transfer.masp_tx).1;
+                tx.add_masp_builder(MaspBuilder {
+                    asset_types: asset_types.into_keys().collect(),
+                    // Store how the Info objects map to Descriptors/Outputs
+                    metadata: shielded_transfer.metadata,
+                    // Store the data that was used to construct the Transaction
+                    builder: shielded_transfer.builder,
+                    // Link the Builder to the Transaction by hash code
+                    target: shielded_section_hash,
+                });
+                let build_param_bytes =
+                    data_encoding::HEXLOWER.encode(&build_params.serialize_to_vec());
+                (tx, TxData::IbcMsgTransfer(msg_transfer, Some((build_params, build_param_bytes))))
+            } else {
+                (tx, TxData::IbcMsgTransfer(msg_transfer, None))
+            }
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary IBC NFT transfer message
+        pub fn arb_msg_nft_transfer()(
+            message in arb_ibc_msg_nft_transfer(),
+            transfer_aux in option::of(arb_transfer()),
+        ) -> (
+            MsgNftTransfer<token::Transfer>,
+            Option<(ShieldedTransfer, HashMap<AssetData, u64>, StoredBuildParams)>,
+        ) {
+            if let Some((transfer, aux)) = transfer_aux {
+                (MsgNftTransfer { message, transfer: Some(transfer) }, aux)
+            } else {
+                (MsgNftTransfer { message, transfer: None }, None)
+            }
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary IBC any transaction
+        pub fn arb_ibc_msg_nft_transfer_tx()(
+            mut header in arb_header(),
+            wrapper in arb_wrapper_tx(),
+            (msg_transfer, aux) in arb_msg_nft_transfer(),
+            code_hash in arb_hash(),
+        ) -> (Tx, TxData) {
+            header.tx_type = TxType::Wrapper(Box::new(wrapper));
+            let mut tx = Tx { header, sections: vec![] };
+            tx.add_serialized_data(msg_transfer.serialize_to_vec());
+            tx.add_code_from_hash(code_hash, Some(TX_IBC_WASM.to_owned()));
+            if let Some((shielded_transfer, asset_types, build_params)) = aux {
+                let shielded_section_hash =
+                    tx.add_masp_tx_section(shielded_transfer.masp_tx).1;
+                tx.add_masp_builder(MaspBuilder {
+                    asset_types: asset_types.into_keys().collect(),
+                    // Store how the Info objects map to Descriptors/Outputs
+                    metadata: shielded_transfer.metadata,
+                    // Store the data that was used to construct the Transaction
+                    builder: shielded_transfer.builder,
+                    // Link the Builder to the Transaction by hash code
+                    target: shielded_section_hash,
+                });
+                let build_param_bytes =
+                    data_encoding::HEXLOWER.encode(&build_params.serialize_to_vec());
+                (tx, TxData::IbcMsgNftTransfer(msg_transfer, Some((build_params, build_param_bytes))))
+            } else {
+                (tx, TxData::IbcMsgNftTransfer(msg_transfer, None))
+            }
         }
     }
 
     /// Generate an arbitrary tx
     pub fn arb_tx() -> impl Strategy<Value = (Tx, TxData)> {
         prop_oneof![
-            arb_transparent_transfer_tx(),
-            arb_masp_transfer_tx(),
+            arb_transfer_tx(),
             arb_bond_tx(),
             arb_unbond_tx(),
             arb_init_account_tx(),
@@ -1588,7 +1610,8 @@ pub mod testing {
             arb_update_steward_commission_tx(),
             arb_resign_steward_tx(),
             arb_pending_transfer_tx(),
-            arb_ibc_any_tx(),
+            arb_ibc_msg_transfer_tx(),
+            arb_ibc_msg_nft_transfer_tx(),
         ]
     }
 

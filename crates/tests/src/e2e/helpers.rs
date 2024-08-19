@@ -15,25 +15,25 @@ use color_eyre::owo_colors::OwoColorize;
 use data_encoding::HEXLOWER;
 use escargot::CargoBuild;
 use eyre::eyre;
-use namada::core::address::Address;
-use namada::core::key::*;
-use namada::core::storage::Epoch;
-use namada::ledger::queries::{Rpc, RPC};
-use namada::tendermint_rpc::HttpClient;
-use namada::token;
 use namada_apps_lib::cli::context::ENV_VAR_CHAIN_ID;
 use namada_apps_lib::config::genesis::chain::DeriveEstablishedAddress;
 use namada_apps_lib::config::genesis::templates;
 use namada_apps_lib::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps_lib::config::{Config, TendermintMode};
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
+use namada_sdk::address::Address;
+use namada_sdk::key::*;
+use namada_sdk::queries::{Rpc, RPC};
+use namada_sdk::storage::Epoch;
+use namada_sdk::tendermint_rpc::HttpClient;
+use namada_sdk::token;
 use namada_sdk::wallet::fs::FsWalletUtils;
 use namada_sdk::wallet::Wallet;
 use toml::Value;
 
 use super::setup::{
-    self, run_gaia_cmd, sleep, NamadaBgCmd, NamadaCmd, Test, ENV_VAR_DEBUG,
-    ENV_VAR_USE_PREBUILT_BINARIES,
+    self, ensure_hot_key, run_gaia_cmd, sleep, NamadaBgCmd, NamadaCmd, Test,
+    ENV_VAR_DEBUG, ENV_VAR_USE_PREBUILT_BINARIES,
 };
 use crate::e2e::setup::{constants, Bin, Who, APPS_PACKAGE};
 use crate::strings::{LEDGER_STARTED, TX_APPLIED_SUCCESS};
@@ -219,9 +219,8 @@ pub fn get_pregenesis_pk<P: AsRef<Path>>(
     alias: &str,
     base_dir_path: P,
 ) -> Option<common::PublicKey> {
-    let mut wallet = get_pregenesis_wallet(base_dir_path);
-    let sk = wallet.find_secret_key(alias, None).ok()?;
-    Some(sk.ref_to())
+    let wallet = get_pregenesis_wallet(base_dir_path);
+    wallet.find_public_key(alias).ok()
 }
 
 /// Get a pregenesis public key.
@@ -537,8 +536,8 @@ pub fn make_hermes_config(test_a: &Test, test_b: &Test) -> Result<()> {
 
     let mut packets = toml::map::Map::new();
     packets.insert("enabled".to_owned(), Value::Boolean(true));
-    packets.insert("clear_interval".to_owned(), Value::Integer(10));
-    packets.insert("clear_on_start".to_owned(), Value::Boolean(false));
+    packets.insert("clear_interval".to_owned(), Value::Integer(30));
+    packets.insert("clear_on_start".to_owned(), Value::Boolean(true));
     packets.insert("tx_confirmation".to_owned(), Value::Boolean(true));
     mode.insert("packets".to_owned(), Value::Table(packets));
 
@@ -610,15 +609,19 @@ fn make_hermes_chain_config(test: &Test) -> Value {
     chain.insert("account_prefix".to_owned(), Value::String("".to_owned()));
     chain.insert(
         "key_name".to_owned(),
-        Value::String(setup::constants::CHRISTEL_KEY.to_owned()),
+        Value::String(
+            ensure_hot_key(setup::constants::CHRISTEL_KEY).to_owned(),
+        ),
     );
     chain.insert("store_prefix".to_owned(), Value::String("ibc".to_owned()));
     let mut table = toml::map::Map::new();
-    table.insert("price".to_owned(), Value::Float(0.001));
+    table.insert("price".to_owned(), Value::Float(0.000001));
     std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let nam_addr = find_address(test, setup::constants::NAM).unwrap();
     table.insert("denom".to_owned(), Value::String(nam_addr.to_string()));
     chain.insert("gas_price".to_owned(), Value::Table(table));
+
+    chain.insert("max_block_time".to_owned(), Value::String("60s".to_owned()));
 
     Value::Table(chain)
 }

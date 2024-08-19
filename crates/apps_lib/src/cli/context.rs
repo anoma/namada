@@ -6,17 +6,15 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use color_eyre::eyre::Result;
-use namada::core::address::{Address, InternalAddress};
-use namada::core::chain::ChainId;
-use namada::core::ethereum_events::EthAddress;
-use namada::core::key::*;
-use namada::core::masp::*;
-use namada::ibc::{is_ibc_denom, is_nft_trace};
-use namada::io::Io;
-use namada::ledger::ibc::storage::ibc_token;
+use namada_sdk::address::{Address, InternalAddress};
+use namada_sdk::chain::ChainId;
+use namada_sdk::ethereum_events::EthAddress;
+use namada_sdk::ibc::trace::{ibc_token, is_ibc_denom, is_nft_trace};
+use namada_sdk::io::Io;
+use namada_sdk::key::*;
 use namada_sdk::masp::fs::FsShieldedUtils;
-use namada_sdk::masp::ShieldedContext;
-use namada_sdk::wallet::Wallet;
+use namada_sdk::masp::{ShieldedContext, *};
+use namada_sdk::wallet::{DatedSpendingKey, DatedViewingKey, Wallet};
 use namada_sdk::{Namada, NamadaImpl};
 
 use super::args;
@@ -47,6 +45,10 @@ pub type WalletAddrOrNativeToken = FromContext<AddrOrNativeToken>;
 /// spending key in the wallet
 pub type WalletSpendingKey = FromContext<ExtendedSpendingKey>;
 
+/// A raw dated extended spending key (bech32m encoding) or an alias of an
+/// extended spending key in the wallet
+pub type WalletDatedSpendingKey = FromContext<DatedSpendingKey>;
+
 /// A raw payment address (bech32m encoding) or an alias of a payment address
 /// in the wallet
 pub type WalletPaymentAddr = FromContext<PaymentAddress>;
@@ -54,6 +56,10 @@ pub type WalletPaymentAddr = FromContext<PaymentAddress>;
 /// A raw full viewing key (bech32m encoding) or an alias of a full viewing key
 /// in the wallet
 pub type WalletViewingKey = FromContext<ExtendedViewingKey>;
+
+/// A raw full dated viewing key (bech32m encoding) or an alias of a full
+/// viewing key in the wallet
+pub type WalletDatedViewingKey = FromContext<DatedViewingKey>;
 
 /// A raw address or a raw extended spending key (bech32m encoding) or an alias
 /// of either in the wallet
@@ -164,10 +170,9 @@ impl Context {
                 let mut config =
                     Config::load(&global_args.base_dir, chain_id, None);
                 let chain_dir = global_args.base_dir.join(chain_id.as_str());
-                let genesis =
-                    genesis::chain::Finalized::read_toml_files(&chain_dir)
+                let native_token =
+                    genesis::chain::Finalized::read_native_token(&chain_dir)
                         .expect("Missing genesis files");
-                let native_token = genesis.get_native_token().clone();
                 let wallet = if wallet::exists(&chain_dir) {
                     wallet::load(&chain_dir).unwrap()
                 } else {
@@ -226,7 +231,7 @@ impl Context {
     /// Make an implementation of Namada from this object and parameters.
     pub fn to_sdk<C, IO>(self, client: C, io: IO) -> impl Namada
     where
-        C: namada::ledger::queries::Client + Sync,
+        C: namada_sdk::queries::Client + Sync,
         IO: Io,
     {
         let chain_ctx = self.take_chain_or_exit();
@@ -573,12 +578,47 @@ impl ArgFromMutContext for ExtendedSpendingKey {
             // Or it is a stored alias of one
             ctx.wallet
                 .find_spending_key(raw, None)
+                .map(|k| k.key)
+                .map_err(|_find_err| format!("Unknown spending key {}", raw))
+        })
+    }
+}
+
+impl ArgFromMutContext for DatedSpendingKey {
+    fn arg_from_mut_ctx(
+        ctx: &mut ChainContext,
+        raw: impl AsRef<str>,
+    ) -> Result<Self, String> {
+        let raw = raw.as_ref();
+        // Either the string is a raw extended spending key
+        FromStr::from_str(raw).or_else(|_parse_err| {
+            // Or it is a stored alias of one
+            ctx.wallet
+                .find_spending_key(raw, None)
                 .map_err(|_find_err| format!("Unknown spending key {}", raw))
         })
     }
 }
 
 impl ArgFromMutContext for ExtendedViewingKey {
+    fn arg_from_mut_ctx(
+        ctx: &mut ChainContext,
+        raw: impl AsRef<str>,
+    ) -> Result<Self, String> {
+        let raw = raw.as_ref();
+        // Either the string is a raw full viewing key
+        FromStr::from_str(raw).or_else(|_parse_err| {
+            // Or it is a stored alias of one
+            ctx.wallet
+                .find_viewing_key(raw)
+                .copied()
+                .map(|k| k.key)
+                .map_err(|_find_err| format!("Unknown viewing key {}", raw))
+        })
+    }
+}
+
+impl ArgFromMutContext for DatedViewingKey {
     fn arg_from_mut_ctx(
         ctx: &mut ChainContext,
         raw: impl AsRef<str>,

@@ -10,10 +10,12 @@ mod finalize_block;
 mod governance;
 mod init_chain;
 pub use init_chain::InitChainValidation;
-use namada::vm::wasm::run::check_tx_allowed;
+use namada_apps_lib::config::NodeLocalConfig;
 use namada_sdk::state::StateRead;
+use namada_vm::wasm::run::check_tx_allowed;
 pub mod prepare_proposal;
-use namada::state::State;
+use namada_sdk::ibc;
+use namada_sdk::state::State;
 pub mod process_proposal;
 pub(super) mod queries;
 mod snapshots;
@@ -33,43 +35,41 @@ use std::rc::Rc;
 
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
-use namada::core::address::Address;
-use namada::core::chain::ChainId;
-use namada::core::ethereum_events::EthereumEvent;
-use namada::core::hints;
-use namada::core::key::*;
-use namada::core::storage::{BlockHeight, Key, TxIndex};
-use namada::core::time::DateTimeUtc;
-use namada::ethereum_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
-use namada::ethereum_bridge::protocol::validation::ethereum_events::validate_eth_events_vext;
-use namada::ethereum_bridge::protocol::validation::validator_set_update::validate_valset_upd_vext;
-use namada::hash::Hash;
-use namada::ledger::events::log::EventLog;
-use namada::ledger::gas::{Gas, TxGasMeter};
-use namada::ledger::pos::namada_proof_of_stake::types::{
+use namada_apps_lib::hash::Hash;
+use namada_apps_lib::wallet::{self, ValidatorData, ValidatorKeys};
+use namada_sdk::address::Address;
+use namada_sdk::chain::ChainId;
+use namada_sdk::eth_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
+use namada_sdk::eth_bridge::protocol::validation::ethereum_events::validate_eth_events_vext;
+use namada_sdk::eth_bridge::protocol::validation::validator_set_update::validate_valset_upd_vext;
+use namada_sdk::eth_bridge::{EthBridgeQueries, EthereumOracleConfig};
+use namada_sdk::ethereum_events::EthereumEvent;
+use namada_sdk::events::log::EventLog;
+use namada_sdk::gas::{Gas, TxGasMeter};
+use namada_sdk::key::*;
+use namada_sdk::migrations::ScheduledMigration;
+use namada_sdk::parameters::{get_gas_scale, validate_tx_bytes};
+use namada_sdk::proof_of_stake::storage::read_pos_params;
+use namada_sdk::proof_of_stake::types::{
     ConsensusValidator, ValidatorSetUpdate,
 };
-use namada::ledger::protocol::ShellParams;
-use namada::ledger::{parameters, protocol};
-use namada::parameters::validate_tx_bytes;
-use namada::proof_of_stake::storage::read_pos_params;
-use namada::state::tx_queue::ExpiredTx;
-use namada::state::{
+use namada_sdk::state::tx_queue::ExpiredTx;
+use namada_sdk::state::{
     DBIter, FullAccessState, Sha256Hasher, StorageHasher, StorageRead,
     TempWlState, WlState, DB, EPOCH_SWITCH_BLOCKS_DELAY,
 };
-use namada::token;
-pub use namada::tx::data::ResultCode;
-use namada::tx::data::{TxType, WrapperTx};
-use namada::tx::{Section, Tx};
-use namada::vm::wasm::{TxCache, VpCache};
-use namada::vm::{WasmCacheAccess, WasmCacheRwAccess};
-use namada::vote_ext::EthereumTxData;
-use namada_apps_lib::wallet::{self, ValidatorData, ValidatorKeys};
-use namada_sdk::eth_bridge::{EthBridgeQueries, EthereumOracleConfig};
-use namada_sdk::migrations;
-use namada_sdk::migrations::ScheduledMigration;
+use namada_sdk::storage::{BlockHeight, Key, TxIndex};
 use namada_sdk::tendermint::AppHash;
+use namada_sdk::time::DateTimeUtc;
+pub use namada_sdk::tx::data::ResultCode;
+use namada_sdk::tx::data::{TxType, WrapperTx};
+use namada_sdk::tx::{Section, Tx};
+use namada_sdk::{
+    eth_bridge, hints, migrations, parameters, proof_of_stake, token,
+};
+use namada_vm::wasm::{TxCache, VpCache};
+use namada_vm::{WasmCacheAccess, WasmCacheRwAccess};
+use namada_vote_ext::EthereumTxData;
 use thiserror::Error;
 use tokio::sync::mpsc::{Receiver, UnboundedSender};
 
@@ -78,10 +78,11 @@ use crate::config::{self, genesis, TendermintMode, ValidatorLocalConfig};
 use crate::facade::tendermint::v0_37::abci::{request, response};
 use crate::facade::tendermint::{self, validator};
 use crate::facade::tendermint_proto::v0_37::crypto::public_key;
+use crate::protocol::ShellParams;
 use crate::shims::abcipp_shim_types::shim;
 use crate::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::shims::abcipp_shim_types::shim::TakeSnapshot;
-use crate::{storage, tendermint_node};
+use crate::{protocol, storage, tendermint_node};
 
 fn key_to_tendermint(
     pk: &common::PublicKey,
@@ -103,7 +104,7 @@ pub enum Error {
     #[error("chain ID mismatch: {0}")]
     ChainId(String),
     #[error("Error decoding a transaction from bytes: {0}")]
-    TxDecoding(namada::tx::DecodeError),
+    TxDecoding(namada_sdk::tx::DecodeError),
     #[error("Error trying to apply a transaction: {0}")]
     TxApply(protocol::Error),
     #[error("{0}")]
@@ -121,11 +122,18 @@ pub enum Error {
     #[error("Error loading wasm: {0}")]
     LoadingWasm(String),
     #[error("Error reading from or writing to storage: {0}")]
-    Storage(#[from] namada::state::StorageError),
+    Storage(#[from] namada_sdk::state::StorageError),
     #[error("Transaction replay attempt: {0}")]
     ReplayAttempt(String),
     #[error("Error with snapshots: {0}")]
     Snapshot(std::io::Error),
+    #[error(
+        "Received a finalize request for a block that was rejected by process \
+         proposal"
+    )]
+    RejectedBlockProposal,
+    #[error("Received an invalid block proposal")]
+    InvalidBlockProposal,
 }
 
 impl From<Error> for TxResult {
@@ -164,7 +172,7 @@ pub fn rollback(config: config::Ledger) -> Result<()> {
     tracing::info!("Rollback Namada state");
 
     db.rollback(tendermint_block_height)
-        .map_err(|e| Error::Storage(namada::state::StorageError::new(e)))
+        .map_err(|e| Error::Storage(namada_sdk::state::StorageError::new(e)))
 }
 
 #[derive(Debug)]
@@ -174,9 +182,12 @@ pub(super) enum ShellMode {
         data: ValidatorData,
         broadcast_sender: UnboundedSender<Vec<u8>>,
         eth_oracle: Option<EthereumOracleChannels>,
-        local_config: Option<ValidatorLocalConfig>,
+        validator_local_config: Option<ValidatorLocalConfig>,
+        local_config: Option<NodeLocalConfig>,
     },
-    Full,
+    Full {
+        local_config: Option<NodeLocalConfig>,
+    },
     Seed,
 }
 
@@ -355,8 +366,7 @@ where
     /// Path to the WASM directory for files used in the genesis block.
     pub(super) wasm_dir: PathBuf,
     /// Information about the running shell instance
-    #[allow(dead_code)]
-    mode: ShellMode,
+    pub(crate) mode: ShellMode,
     /// VP WASM compilation cache
     pub vp_wasm_cache: VpCache<WasmCacheRwAccess>,
     /// Tx WASM compilation cache
@@ -385,8 +395,8 @@ pub fn is_key_diff_storable(key: &namada_sdk::storage::Key) -> bool {
         && *key != token::storage_key::masp_token_map_key()
         && *key != token::storage_key::masp_assets_hash_key()
         && !token::storage_key::is_masp_commitment_anchor_key(key)
-        || namada::ibc::storage::is_ibc_counter_key(key)
-        || namada::proof_of_stake::storage_key::is_delegation_targets_key(key))
+        || ibc::storage::is_ibc_counter_key(key)
+        || proof_of_stake::storage_key::is_delegation_targets_key(key))
 }
 
 /// Channels for communicating with an Ethereum oracle.
@@ -442,13 +452,13 @@ where
 
         // For all tests except integration use hard-coded native token addr ...
         #[cfg(all(
-            any(test, feature = "testing", feature = "benches"),
+            any(test, fuzzing, feature = "testing", feature = "benches"),
             not(feature = "integration"),
         ))]
-        let native_token = namada::address::testing::nam();
+        let native_token = namada_sdk::address::testing::nam();
         // ... Otherwise, look it up from the genesis file
         #[cfg(not(all(
-            any(test, feature = "testing", feature = "benches"),
+            any(test, fuzzing, feature = "testing", feature = "benches"),
             not(feature = "integration"),
         )))]
         let native_token = {
@@ -475,7 +485,7 @@ where
         // load in keys and address from wallet if mode is set to `Validator`
         let mode = match mode {
             TendermintMode::Validator => {
-                #[cfg(not(test))]
+                #[cfg(not(any(test, fuzzing)))]
                 {
                     let wallet_path = &base_dir.join(chain_id.as_str());
                     tracing::debug!(
@@ -486,6 +496,8 @@ where
                         .expect("Validator node must have a wallet");
                     let validator_local_config_path =
                         wallet_path.join("validator_local_config.toml");
+                    let local_config_path =
+                        wallet_path.join("local_config.toml");
 
                     let validator_local_config: Option<ValidatorLocalConfig> =
                         if Path::is_file(&validator_local_config_path) {
@@ -500,20 +512,33 @@ where
                             None
                         };
 
+                    let local_config: Option<NodeLocalConfig> =
+                        if Path::is_file(&local_config_path) {
+                            Some(
+                                toml::from_slice(
+                                    &std::fs::read(local_config_path).unwrap(),
+                                )
+                                .unwrap(),
+                            )
+                        } else {
+                            None
+                        };
+
                     wallet
                         .take_validator_data()
                         .map(|data| ShellMode::Validator {
                             data,
                             broadcast_sender,
                             eth_oracle,
-                            local_config: validator_local_config,
+                            validator_local_config,
+                            local_config,
                         })
                         .expect(
                             "Validator data should have been stored in the \
                              wallet",
                         )
                 }
-                #[cfg(test)]
+                #[cfg(any(test, fuzzing))]
                 {
                     let (protocol_keypair, eth_bridge_keypair) =
                         wallet::defaults::validator_keys();
@@ -527,11 +552,37 @@ where
                         },
                         broadcast_sender,
                         eth_oracle,
+                        validator_local_config: None,
                         local_config: None,
                     }
                 }
             }
-            TendermintMode::Full => ShellMode::Full,
+            TendermintMode::Full => {
+                #[cfg(not(test))]
+                {
+                    let local_config_path = &base_dir
+                        .join(chain_id.as_str())
+                        .join("local_config.toml");
+
+                    let local_config: Option<NodeLocalConfig> =
+                        if Path::is_file(local_config_path) {
+                            Some(
+                                toml::from_slice(
+                                    &std::fs::read(local_config_path).unwrap(),
+                                )
+                                .unwrap(),
+                            )
+                        } else {
+                            None
+                        };
+
+                    ShellMode::Full { local_config }
+                }
+                #[cfg(test)]
+                {
+                    ShellMode::Full { local_config: None }
+                }
+            }
             TendermintMode::Seed => ShellMode::Seed,
         };
 
@@ -813,7 +864,7 @@ where
                 .expect("Validators should have protocol keys");
 
             let signed_tx = EthereumTxData::EthEventsVext(
-                namada::vote_ext::ethereum_events::SignedVext(vote_extension),
+                namada_vote_ext::ethereum_events::SignedVext(vote_extension),
             )
             .sign(protocol_key, self.chain_id.clone())
             .to_bytes();
@@ -848,7 +899,7 @@ where
             // initialized yet.
             let has_key = self
                 .state
-                .has_key(&namada::eth_bridge::storage::active_key())
+                .has_key(&eth_bridge::storage::active_key())
                 .expect(
                     "We should always be able to check whether a key exists \
                      in storage or not",
@@ -868,9 +919,7 @@ where
                 return;
             };
             let active = if !self.state.ethbridge_queries().is_bridge_active() {
-                if !changed_keys
-                    .contains(&namada::eth_bridge::storage::active_key())
-                {
+                if !changed_keys.contains(&eth_bridge::storage::active_key()) {
                     tracing::debug!(
                         "Not starting oracle as the Ethereum bridge is \
                          disabled"
@@ -897,7 +946,7 @@ where
                 "Found Ethereum height from which the Ethereum oracle should \
                  be updated"
             );
-            let config = namada::eth_bridge::oracle::config::Config {
+            let config = eth_bridge::oracle::config::Config {
                 min_confirmations: config.min_confirmations.into(),
                 bridge_contract: config.contracts.bridge.address,
                 start_block,
@@ -936,8 +985,8 @@ where
         tx_bytes: &[u8],
         r#_type: MempoolTxType,
     ) -> response::CheckTx {
-        use namada::tx::data::protocol::ProtocolTxType;
-        use namada::vote_ext::ethereum_tx_data_variants;
+        use namada_sdk::tx::data::protocol::ProtocolTxType;
+        use namada_vote_ext::ethereum_tx_data_variants;
 
         let mut response = response::CheckTx::default();
 
@@ -967,6 +1016,7 @@ where
         };
 
         // Tx chain id
+        #[cfg(not(fuzzing))]
         if tx.header.chain_id != self.chain_id {
             response.code = ResultCode::InvalidChainId.into();
             response.log = format!(
@@ -1030,11 +1080,13 @@ where
                         response,
                         ethereum_tx_data_variants::EthEventsVext::try_from(&tx),
                     );
-                    if let Err(err) = validate_eth_events_vext(
-                        &self.state,
-                        &ext.0,
-                        self.state.in_mem().get_last_block_height(),
-                    ) {
+                    if let Err(err) =
+                        validate_eth_events_vext::<_, _, governance::Store<_>>(
+                            &self.state,
+                            &ext.0,
+                            self.state.in_mem().get_last_block_height(),
+                        )
+                    {
                         response.code = ResultCode::InvalidVoteExtension.into();
                         response.log = format!(
                             "{INVALID_MSG}: Invalid Ethereum events vote \
@@ -1052,11 +1104,13 @@ where
                             &tx
                         ),
                     );
-                    if let Err(err) = validate_bp_roots_vext(
-                        &self.state,
-                        &ext.0,
-                        self.state.in_mem().get_last_block_height(),
-                    ) {
+                    if let Err(err) =
+                        validate_bp_roots_vext::<_, _, governance::Store<_>>(
+                            &self.state,
+                            &ext.0,
+                            self.state.in_mem().get_last_block_height(),
+                        )
+                    {
                         response.code = ResultCode::InvalidVoteExtension.into();
                         response.log = format!(
                             "{INVALID_MSG}: Invalid Bridge pool roots vote \
@@ -1074,19 +1128,21 @@ where
                             &tx
                         ),
                     );
-                    if let Err(err) = validate_valset_upd_vext(
-                        &self.state,
-                        &ext,
-                        // n.b. only accept validator set updates
-                        // issued at the last committed epoch
-                        // (signing off on the validators of the
-                        // next epoch). at the second height
-                        // within an epoch, the new epoch is
-                        // committed to storage, so `last_epoch`
-                        // reflects the current value of the
-                        // epoch.
-                        self.state.in_mem().last_epoch,
-                    ) {
+                    if let Err(err) =
+                        validate_valset_upd_vext::<_, _, governance::Store<_>>(
+                            &self.state,
+                            &ext,
+                            // n.b. only accept validator set updates
+                            // issued at the last committed epoch
+                            // (signing off on the validators of the
+                            // next epoch). at the second height
+                            // within an epoch, the new epoch is
+                            // committed to storage, so `last_epoch`
+                            // reflects the current value of the
+                            // epoch.
+                            self.state.in_mem().last_epoch,
+                        )
+                    {
                         response.code = ResultCode::InvalidVoteExtension.into();
                         response.log = format!(
                             "{INVALID_MSG}: Invalid validator set update vote \
@@ -1108,9 +1164,22 @@ where
                 }
             },
             TxType::Wrapper(wrapper) => {
+                // Get the gas scale first
+                let gas_scale = match get_gas_scale(&self.state) {
+                    Ok(scale) => scale,
+                    Err(_) => {
+                        response.code = ResultCode::InvalidTx.into();
+                        response.log = "The gas scale could not be found in \
+                                        the parameters storage"
+                            .to_string();
+                        return response;
+                    }
+                };
+
                 // Validate wrapper first
                 // Tx gas limit
-                let gas_limit = match Gas::try_from(wrapper.gas_limit) {
+                let gas_limit = match wrapper.gas_limit.as_scaled_gas(gas_scale)
+                {
                     Ok(value) => value,
                     Err(_) => {
                         response.code = ResultCode::InvalidTx.into();
@@ -1131,7 +1200,8 @@ where
 
                 // Max block gas
                 let block_gas_limit: Gas = Gas::from_whole_units(
-                    namada::parameters::get_max_block_gas(&self.state).unwrap(),
+                    parameters::get_max_block_gas(&self.state).unwrap().into(),
+                    gas_scale,
                 )
                 .expect("Gas limit from parameter must not overflow");
                 if gas_meter.tx_gas_limit > block_gas_limit {
@@ -1170,22 +1240,6 @@ where
                     return response;
                 }
 
-                // TODO(namada#2597): validate masp fee payment if normal fee
-                // payment fails Validate wrapper fees
-                if let Err(e) = mempool_fee_check(
-                    &wrapper,
-                    &mut ShellParams::new(
-                        &RefCell::new(gas_meter),
-                        &mut self.state.with_temp_write_log(),
-                        &mut self.vp_wasm_cache.clone(),
-                        &mut self.tx_wasm_cache.clone(),
-                    ),
-                ) {
-                    response.code = ResultCode::FeeError.into();
-                    response.log = format!("{INVALID_MSG}: {e}");
-                    return response;
-                }
-
                 // Validate the inner txs after. Even if the batch is non-atomic
                 // we still reject it if just one of the inner txs is
                 // invalid
@@ -1202,6 +1256,29 @@ where
                         );
                         return response;
                     }
+                }
+
+                // This is safe as neither the inner `db` nor `in_mem` are
+                // actually mutable, only the `write_log` which is owned by
+                // the `TempWlState` struct. The `TempWlState` will be dropped
+                // before any other ABCI request is processed.
+                let mut temp_state =
+                    unsafe { self.state.with_static_temp_write_log() };
+
+                // Validate wrapper fees
+                if let Err(e) = mempool_fee_check(
+                    &mut ShellParams::new(
+                        &RefCell::new(gas_meter),
+                        &mut temp_state,
+                        &mut self.vp_wasm_cache.clone(),
+                        &mut self.tx_wasm_cache.clone(),
+                    ),
+                    &tx,
+                    &wrapper,
+                ) {
+                    response.code = ResultCode::FeeError.into();
+                    response.log = format!("{INVALID_MSG}: {e}");
+                    return response;
                 }
             }
             TxType::Raw => {
@@ -1226,21 +1303,19 @@ where
         // because we're using domain types in InitChain, but FinalizeBlock is
         // shimmed with a different old type. The joy...
         mut validator_conv: F,
-    ) -> namada::state::StorageResult<Vec<V>>
+    ) -> namada_sdk::state::StorageResult<Vec<V>>
     where
         F: FnMut(common::PublicKey, i64) -> V,
     {
-        use namada::ledger::pos::namada_proof_of_stake;
-
         let (current_epoch, _gas) = self.state.in_mem().get_current_epoch();
         let pos_params =
-            namada_proof_of_stake::storage::read_pos_params(&self.state)
+            read_pos_params::<_, governance::Store<_>>(&self.state)
                 .expect("Could not find the PoS parameters");
 
         let validator_set_update_fn = if is_genesis {
-            namada_proof_of_stake::genesis_validator_set_tendermint
+            proof_of_stake::genesis_validator_set_tendermint
         } else {
-            namada_proof_of_stake::validator_set_update::validator_set_update_comet
+            proof_of_stake::validator_set_update::validator_set_update_comet
         };
 
         validator_set_update_fn(
@@ -1322,26 +1397,27 @@ where
 
 // Perform the fee check in mempool
 fn mempool_fee_check<D, H, CA>(
+    shell_params: &mut ShellParams<'_, TempWlState<'static, D, H>, D, H, CA>,
+    tx: &Tx,
     wrapper: &WrapperTx,
-    shell_params: &mut ShellParams<'_, TempWlState<'_, D, H>, D, H, CA>,
 ) -> Result<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    let minimum_gas_price = namada::ledger::parameters::read_gas_cost(
-        shell_params.state,
-        &wrapper.fee.token,
-    )
-    .expect("Must be able to read gas cost parameter")
-    .ok_or(Error::TxApply(protocol::Error::FeeError(format!(
-        "The provided {} token is not allowed for fee payment",
-        wrapper.fee.token
-    ))))?;
+    let minimum_gas_price =
+        parameters::read_gas_cost(shell_params.state, &wrapper.fee.token)
+            .expect("Must be able to read gas cost parameter")
+            .ok_or(Error::TxApply(protocol::Error::FeeError(format!(
+                "The provided {} token is not allowed for fee payment",
+                wrapper.fee.token
+            ))))?;
 
     fee_data_check(wrapper, minimum_gas_price, shell_params)?;
-    protocol::check_fees(shell_params.state, wrapper).map_err(Error::TxApply)
+    protocol::check_fees(shell_params, tx, wrapper)
+        .map_err(Error::TxApply)
+        .map(|_| ())
 }
 
 /// Check the validity of the fee data
@@ -1385,22 +1461,22 @@ where
 
 /// for the shell
 #[allow(clippy::arithmetic_side_effects, clippy::cast_possible_wrap)]
-#[cfg(test)]
-mod test_utils {
+#[cfg(any(test, feature = "testing"))]
+pub mod test_utils {
     use std::ops::{Deref, DerefMut};
 
     use data_encoding::HEXUPPER;
-    use namada::core::ethereum_events::Uint;
-    use namada::core::hash::Hash;
-    use namada::core::keccak::KeccakHash;
-    use namada::core::key::*;
-    use namada::core::storage::{Epoch, Header};
-    use namada::ledger::events::Event;
-    use namada::proof_of_stake::parameters::PosParams;
-    use namada::proof_of_stake::storage::validator_consensus_key_handle;
-    use namada::state::mockdb::MockDB;
-    use namada::state::{LastBlock, StorageWrite};
-    use namada::tendermint::abci::types::VoteInfo;
+    use namada_sdk::ethereum_events::Uint;
+    use namada_sdk::events::Event;
+    use namada_sdk::hash::Hash;
+    use namada_sdk::keccak::KeccakHash;
+    use namada_sdk::key::*;
+    use namada_sdk::proof_of_stake::parameters::PosParams;
+    use namada_sdk::proof_of_stake::storage::validator_consensus_key_handle;
+    use namada_sdk::state::mockdb::MockDB;
+    use namada_sdk::state::{LastBlock, StorageWrite};
+    use namada_sdk::storage::{Epoch, Header};
+    use namada_sdk::tendermint::abci::types::VoteInfo;
     use tempfile::tempdir;
     use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 
@@ -1429,23 +1505,20 @@ mod test_utils {
             .expect("Current directory should exist")
             .canonicalize()
             .expect("Current directory should exist");
-        while current_path.file_name().unwrap() != "node" {
+        while !current_path.join("rust-toolchain.toml").exists() {
             current_path.pop();
         }
-        // Two-dirs up to root
-        current_path.pop();
-        current_path.pop();
         current_path
     }
 
     /// Generate a random public/private keypair
     #[inline]
-    pub(super) fn gen_keypair() -> common::SecretKey {
+    pub fn gen_keypair() -> common::SecretKey {
         gen_ed25519_keypair()
     }
 
     /// Generate a random ed25519 public/private keypair
-    pub(super) fn gen_ed25519_keypair() -> common::SecretKey {
+    pub fn gen_ed25519_keypair() -> common::SecretKey {
         use rand::prelude::ThreadRng;
         use rand::thread_rng;
 
@@ -1454,7 +1527,7 @@ mod test_utils {
     }
 
     /// Generate a random secp256k1 public/private keypair
-    pub(super) fn gen_secp256k1_keypair() -> common::SecretKey {
+    pub fn gen_secp256k1_keypair() -> common::SecretKey {
         use rand::prelude::ThreadRng;
         use rand::thread_rng;
 
@@ -1465,9 +1538,7 @@ mod test_utils {
     }
 
     /// Invalidate a valid signature `sig`.
-    pub(super) fn invalidate_signature(
-        sig: common::Signature,
-    ) -> common::Signature {
+    pub fn invalidate_signature(sig: common::Signature) -> common::Signature {
         match sig {
             common::Signature::Ed25519(ed25519::Signature(ref sig)) => {
                 let mut sig_bytes = sig.to_bytes();
@@ -1493,7 +1564,7 @@ mod test_utils {
 
     /// Get the default bridge pool vext bytes to be signed.
     pub fn get_bp_bytes_to_sign() -> KeccakHash {
-        use namada::core::keccak::{Hasher, Keccak};
+        use namada_sdk::keccak::{Hasher, Keccak};
 
         let root = [0; 32];
         let nonce = Uint::from(0).to_bytes();
@@ -1511,7 +1582,7 @@ mod test_utils {
     /// Drop so as to clean up the files that it
     /// generates. Also allows illegal state
     /// modifications for testing purposes
-    pub(super) struct TestShell {
+    pub struct TestShell {
         pub shell: Shell<MockDB, Sha256Hasher>,
     }
 
@@ -1753,7 +1824,7 @@ mod test_utils {
     /// Start a new test shell and initialize it. Returns the shell paired with
     /// a broadcast receiver, which will receives any protocol txs sent by the
     /// shell.
-    pub(super) fn setup_with_cfg<H: Into<BlockHeight>>(
+    pub fn setup_with_cfg<H: Into<BlockHeight>>(
         SetupCfg {
             last_height,
             num_validators,
@@ -1814,7 +1885,7 @@ mod test_utils {
     /// Same as [`setup_at_height`], but returns a shell at the given block
     /// height, with a single validator.
     #[inline]
-    pub(super) fn setup_at_height<H: Into<BlockHeight>>(
+    pub fn setup_at_height<H: Into<BlockHeight>>(
         last_height: H,
     ) -> (
         TestShell,
@@ -1832,7 +1903,7 @@ mod test_utils {
     /// Same as [`setup_with_cfg`], but returns a shell at block height 0,
     /// with a single validator.
     #[inline]
-    pub(super) fn setup() -> (
+    pub fn setup() -> (
         TestShell,
         UnboundedReceiver<Vec<u8>>,
         Sender<EthereumEvent>,
@@ -1852,6 +1923,7 @@ mod test_utils {
                     time: DateTimeUtc::now(),
                     next_validators_hash: Hash([0; 32]),
                 },
+                block_hash: Hash([0; 32]),
                 byzantine_validators: vec![],
                 txs: vec![],
                 proposer_address: HEXUPPER
@@ -1862,22 +1934,26 @@ mod test_utils {
                             .as_bytes(),
                     )
                     .unwrap(),
-                votes: vec![],
+                height: 0u8.into(),
+                decided_last_commit: tendermint::abci::types::CommitInfo {
+                    round: 0u8.into(),
+                    votes: vec![],
+                },
             }
         }
     }
 
     /// Set the Ethereum bridge to be inactive
-    pub(super) fn deactivate_bridge(shell: &mut TestShell) {
-        use namada::eth_bridge::storage::active_key;
-        use namada::eth_bridge::storage::eth_bridge_queries::EthBridgeStatus;
+    pub fn deactivate_bridge(shell: &mut TestShell) {
+        use eth_bridge::storage::active_key;
+        use eth_bridge::storage::eth_bridge_queries::EthBridgeStatus;
         shell
             .state
             .write(&active_key(), EthBridgeStatus::Disabled)
             .expect("Test failed");
     }
 
-    pub(super) fn get_pkh_from_address<S>(
+    pub fn get_pkh_from_address<S>(
         storage: &S,
         params: &PosParams,
         address: Address,
@@ -1895,7 +1971,7 @@ mod test_utils {
         TryFrom::try_from(decoded).unwrap()
     }
 
-    pub(super) fn next_block_for_inflation(
+    pub fn next_block_for_inflation(
         shell: &mut TestShell,
         proposer_address: Vec<u8>,
         votes: Vec<VoteInfo>,
@@ -1909,7 +1985,10 @@ mod test_utils {
         let mut req = FinalizeBlock {
             header,
             proposer_address,
-            votes,
+            decided_last_commit: tendermint::abci::types::CommitInfo {
+                round: 0u8.into(),
+                votes,
+            },
             ..Default::default()
         };
         if let Some(byz_vals) = byzantine_validators {
@@ -1922,17 +2001,17 @@ mod test_utils {
 
 #[cfg(test)]
 mod shell_tests {
-    use namada::core::storage::Epoch;
-    use namada::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
-    use namada::token::read_denom;
-    use namada::tx::data::protocol::{ProtocolTx, ProtocolTxType};
-    use namada::tx::data::Fee;
-    use namada::tx::{Authorization, Code, Data, Signed};
-    use namada::vote_ext::{
+    use eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
+    use namada_sdk::address;
+    use namada_sdk::storage::Epoch;
+    use namada_sdk::token::read_denom;
+    use namada_sdk::tx::data::protocol::{ProtocolTx, ProtocolTxType};
+    use namada_sdk::tx::data::Fee;
+    use namada_sdk::tx::{Authorization, Code, Data, Signed};
+    use namada_vote_ext::{
         bridge_pool_roots, ethereum_events, ethereum_tx_data_variants,
     };
-    use namada::{address, replay_protection};
-    use wallet;
+    use {namada_replay_protection as replay_protection, wallet};
 
     use super::*;
     use crate::shell::token::DenominatedAmount;
@@ -2037,7 +2116,7 @@ mod shell_tests {
     /// not validated by `CheckTx`.
     #[test]
     fn test_outdated_nonce_mempool_validate() {
-        use namada::core::storage::InnerEthEventsQueue;
+        use namada_sdk::storage::InnerEthEventsQueue;
 
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
 
@@ -2392,7 +2471,7 @@ mod shell_tests {
         )));
 
         // Write wrapper hash to storage
-        let mut batch = namada::state::testing::TestState::batch();
+        let mut batch = namada_sdk::state::testing::TestState::batch();
         let wrapper_hash = wrapper.header_hash();
         let wrapper_hash_key = replay_protection::current_key(&wrapper_hash);
         shell

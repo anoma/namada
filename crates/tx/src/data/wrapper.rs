@@ -9,7 +9,7 @@ use namada_core::borsh::{
 use namada_core::key::*;
 use namada_core::token::{Amount, DenominatedAmount};
 use namada_core::uint::Uint;
-use namada_gas::Gas;
+use namada_gas::{Gas, WholeGas};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
@@ -40,6 +40,7 @@ pub enum WrapperTxErr {
 }
 
 /// Amount of some specified token to pay for fees.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Clone,
@@ -60,6 +61,7 @@ pub struct Fee {
 }
 
 /// Gas limit of a transaction
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Clone,
@@ -111,13 +113,22 @@ impl From<GasLimit> for Amount {
     }
 }
 
-impl TryFrom<GasLimit> for Gas {
-    type Error = std::io::Error;
+impl From<GasLimit> for WholeGas {
+    fn from(value: GasLimit) -> Self {
+        value.0.into()
+    }
+}
 
-    /// Derive a Gas instance with a sub amount which is exactly a whole
-    /// amount since the limit represents gas in whole units
-    fn try_from(value: GasLimit) -> Result<Self, Self::Error> {
-        Self::from_whole_units(u64::from(value)).ok_or_else(|| {
+impl From<WholeGas> for GasLimit {
+    fn from(value: WholeGas) -> Self {
+        u64::from(value).into()
+    }
+}
+
+impl GasLimit {
+    /// Convert the gas limit into scaled gas
+    pub fn as_scaled_gas(self, scale: u64) -> Result<Gas, std::io::Error> {
+        Gas::from_whole_units(self.into(), scale).ok_or_else(|| {
             std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 "gas overflow",
@@ -129,6 +140,7 @@ impl TryFrom<GasLimit> for Gas {
 /// A transaction with an encrypted payload, an optional shielded pool
 /// unshielding tx for fee payment and some non-encrypted metadata for
 /// inclusion and / or verification purposes
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Clone,

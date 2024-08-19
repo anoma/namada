@@ -15,7 +15,9 @@ version.workspace = true
 [features]
 default = []
 multicore = ["namada_shielded_token/multicore"]
-testing = ["namada_core/testing", "proptest"]
+download-params = ["namada_shielded_token/download-params"]
+testing = ["namada_core/testing", "namada_shielded_token/testing", "proptest"]
+arbitrary = ["dep:arbitrary", "namada_core/arbitrary"]
 
 [dependencies]
 namada_core = { path = "../core" }
@@ -23,13 +25,16 @@ namada_events = { path = "../events", default-features = false }
 namada_macros = { path = "../macros" }
 namada_shielded_token = { path = "../shielded_token" }
 namada_storage = { path = "../storage" }
+namada_systems = { path = "../systems" }
 namada_trans_token = { path = "../trans_token" }
 
+arbitrary = { workspace = true, optional = true }
 borsh.workspace = true
 proptest = { workspace = true, optional = true }
 serde.workspace = true
 
 [dev-dependencies]
 namada_core = { path = "../core", features = ["testing"] }
+namada_shielded_token = { path = "../shielded_token", features = ["testing"] }
 
 proptest.workspace = true

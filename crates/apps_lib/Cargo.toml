@@ -15,29 +15,28 @@ version.workspace = true
 [features]
 default = ["migrations"]
 mainnet = [
-  "namada/mainnet",
+  "namada_sdk/mainnet",
 ]
 # for integration tests and test utilities
-testing = ["namada_test_utils", "lazy_static"]
-benches = ["namada_test_utils", "lazy_static"]
+testing = ["namada_test_utils", "lazy_static", "namada_sdk/testing"]
+benches = ["namada_test_utils", "lazy_static", "namada_sdk/benches"]
 integration = []
 migrations = [
   "namada_migrations",
   "namada_sdk/migrations",
-  "namada/migrations",
   "linkme"
 ]
 namada-eth-bridge = [
-  "namada/namada-eth-bridge",
   "namada_sdk/namada-eth-bridge",
 ]
 
 [dependencies]
-namada = {path = "../namada", features = ["multicore", "http-client", "tendermint-rpc", "std"]}
+namada_core = {path = "../core"}
 namada_macros = {path = "../macros"}
 namada_migrations = {path = "../migrations", optional = true}
-namada_sdk = {path = "../sdk", default-features = false, features = ["download-params", "std", "rand"]}
+namada_sdk = {path = "../sdk", features = ["download-params", "multicore"]}
 namada_test_utils = {path = "../test_utils", optional = true}
+namada_vm = {path = "../vm"}
 
 async-trait.workspace = true
 base64.workspace = true
@@ -49,14 +48,18 @@ config.workspace = true
 data-encoding.workspace = true
 derivative.workspace = true
 directories.workspace = true
+either.workspace = true
 eyre.workspace = true
 fd-lock.workspace = true
 flate2.workspace = true
 futures.workspace = true
 itertools.workspace = true
+kdam.workspace = true
 lazy_static = { workspace = true, optional = true }
 linkme = { workspace = true, optional = true }
+ledger-lib = { workspace = true }
 ledger-namada-rs.workspace = true
+ledger-transport.workspace = true
 ledger-transport-hid.workspace = true
 masp_primitives = { workspace = true, features = ["transparent-inputs"] }
 prost.workspace = true
@@ -70,7 +73,7 @@ sha2.workspace = true
 tar.workspace = true
 tempfile.workspace = true
 tendermint-config.workspace = true
-tendermint-rpc.workspace = true
+tendermint-rpc = { workspace = true, features = ["http-client"] }
 textwrap-macros = "0.3.0"
 thiserror.workspace = true
 tokio = {workspace = true, features = ["full"]}
@@ -82,7 +85,7 @@ tracing.workspace = true
 zeroize.workspace = true
 
 [dev-dependencies]
-namada = {path = "../namada", default-features = false, features = ["testing", "wasm-runtime"]}
+namada_sdk = {path = "../sdk", features = ["testing"]}
 namada_test_utils = {path = "../test_utils"}
 
 assert_matches.workspace = true

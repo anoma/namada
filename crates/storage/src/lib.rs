@@ -306,6 +306,7 @@ where
 pub mod testing {
     use namada_core::address;
     use namada_core::chain::ChainId;
+    use namada_core::collections::HashMap;
     pub use namada_core::storage::testing::*;
 
     use super::mockdb::MockDB;
@@ -322,6 +323,7 @@ pub mod testing {
         native_token: Address,
         conversion_state: ConversionState,
         merkle_tree_key_filter: fn(&Key) -> bool,
+        mock_block_headers: HashMap<BlockHeight, Header>,
     }
 
     fn merklize_all_keys(_key: &Key) -> bool {
@@ -340,7 +342,19 @@ pub mod testing {
                 native_token: address::testing::nam(),
                 conversion_state: ConversionState::default(),
                 merkle_tree_key_filter: merklize_all_keys,
+                mock_block_headers: Default::default(),
             }
+        }
+    }
+
+    impl TestStorage {
+        /// Set mock a block header in [`TestStorage`].
+        pub fn set_mock_block_header(
+            &mut self,
+            height: BlockHeight,
+            header: Header,
+        ) {
+            self.mock_block_headers.insert(height, header);
         }
     }
 
@@ -382,9 +396,9 @@ pub mod testing {
 
         fn get_block_header(
             &self,
-            _height: BlockHeight,
+            height: BlockHeight,
         ) -> Result<Option<Header>> {
-            Ok(None)
+            Ok(self.mock_block_headers.get(&height).cloned())
         }
 
         fn get_block_epoch(&self) -> Result<Epoch> {

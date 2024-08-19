@@ -2,11 +2,10 @@
 //! and [`RevertProposal`] ABCI++ methods for the Shell
 
 use data_encoding::HEXUPPER;
-use namada::hash::Hash;
-use namada::ledger::pos::PosQueries;
-use namada::proof_of_stake::storage::find_validator_by_raw_hash;
-use namada::tx::data::protocol::ProtocolTxType;
-use namada::vote_ext::ethereum_tx_data_variants;
+use namada_sdk::parameters;
+use namada_sdk::proof_of_stake::storage::find_validator_by_raw_hash;
+use namada_sdk::tx::data::protocol::ProtocolTxType;
+use namada_vote_ext::ethereum_tx_data_variants;
 
 use super::block_alloc::{BlockGas, BlockSpace};
 use super::*;
@@ -31,13 +30,12 @@ where
     H: 'static + StorageHasher,
 {
     fn from(state: &WlState<D, H>) -> Self {
-        let max_proposal_bytes =
-            state.pos_queries().get_max_proposal_bytes().get();
-        let max_block_gas =
-            namada::parameters::get_max_block_gas(state).unwrap();
+        let max_proposal_bytes = parameters::read_max_proposal_bytes(state)
+            .expect("Must be able to read ProposalBytes from storage");
+        let max_block_gas = parameters::get_max_block_gas(state).unwrap();
 
         let user_gas = TxBin::init(max_block_gas);
-        let txs_bin = TxBin::init(max_proposal_bytes);
+        let txs_bin = TxBin::init(max_proposal_bytes.get());
         Self { user_gas, txs_bin }
     }
 }
@@ -130,16 +128,22 @@ where
         block_time: DateTimeUtc,
         block_proposer: &Address,
     ) -> Vec<TxResult> {
-        let mut temp_state = self.state.with_temp_write_log();
+        // This is safe as neither the inner `db` nor `in_mem` are
+        // actually mutable, only the `write_log` which is owned by
+        // the `TempWlState` struct. The `TempWlState` will be dropped
+        // before any other ABCI request is processed.
+        let mut temp_state = unsafe { self.state.with_static_temp_write_log() };
         let mut metadata = ValidationMeta::from(self.state.read_only());
         let mut vp_wasm_cache = self.vp_wasm_cache.clone();
         let mut tx_wasm_cache = self.tx_wasm_cache.clone();
 
         let tx_results: Vec<_> = txs
             .iter()
-            .map(|tx_bytes| {
+            .enumerate()
+            .map(|(tx_index, tx_bytes)| {
                 let result = self.check_proposal_tx(
                     tx_bytes,
+                    &TxIndex::must_from_usize(tx_index),
                     &mut metadata,
                     &mut temp_state,
                     block_time,
@@ -149,7 +153,7 @@ where
                 );
                 let error_code = ResultCode::from_u32(result.code).unwrap();
                 if let ResultCode::Ok = error_code {
-                    temp_state.write_log_mut().commit_tx();
+                    temp_state.write_log_mut().commit_batch_and_current_tx();
                 } else {
                     tracing::info!(
                         "Process proposal rejected an invalid tx. Error code: \
@@ -157,7 +161,7 @@ where
                         error_code,
                         result.info
                     );
-                    temp_state.write_log_mut().drop_tx();
+                    temp_state.write_log_mut().drop_batch();
                 }
                 result
             })
@@ -174,25 +178,28 @@ where
     ///
     /// Error codes:
     ///   0: Ok
-    ///   1: Invalid tx
-    ///   2: Tx is invalidly signed
-    ///   3: Wasm runtime error
-    ///   4: Invalid order of decrypted txs
-    ///   5. More decrypted txs than expected
-    ///   6. A transaction could not be decrypted
-    ///   7. An error in the vote extensions included in the proposal
-    ///   8. Not enough block space was available for some tx
-    ///   9. Replay attack
+    ///   1: Wasm runtime error
+    ///   2: Invalid tx
+    ///   3: Tx is invalidly signed
+    ///   4: Block is full
+    ///   5: Replay attempt
+    ///   6. Tx targets a different chain id
+    ///   7. Tx is expired
+    ///   8. Tx exceeds the gas limit
+    ///   9. Tx failed to pay fees
+    ///   10. An error in the vote extensions included in the proposal
+    ///   11. Not enough block space was available for some tx
+    ///   12. Tx wasm code is not allowlisted
     ///
-    /// INVARIANT: Any changes applied in this method must be reverted if the
-    /// proposal is rejected (unless we can simply overwrite them in the
-    /// next block).
+    /// INVARIANT: This function should not, under any circumstances, modify the
+    /// state since the proposal could be rejected.
     #[allow(clippy::too_many_arguments)]
     pub fn check_proposal_tx<CA>(
         &self,
         tx_bytes: &[u8],
+        tx_index: &TxIndex,
         metadata: &mut ValidationMeta,
-        temp_state: &mut TempWlState<'_, D, H>,
+        temp_state: &mut TempWlState<'static, D, H>,
         block_time: DateTimeUtc,
         vp_wasm_cache: &mut VpCache<CA>,
         tx_wasm_cache: &mut TxCache<CA>,
@@ -247,15 +254,15 @@ where
             |tx| {
                 let tx_chain_id = tx.header.chain_id.clone();
                 let tx_expiration = tx.header.expiration;
-                if let Err(err) = tx.validate_tx() {
+                match tx.validate_tx() {
+                    Ok(_) => Ok((tx_chain_id, tx_expiration, tx)),
                     // This occurs if the wrapper / protocol tx signature is
                     // invalid
-                    return Err(TxResult {
+                    Err(err) => Err(TxResult {
                         code: ResultCode::InvalidSig.into(),
                         info: err.to_string(),
-                    });
+                    }),
                 }
-                Ok((tx_chain_id, tx_expiration, tx))
             },
         );
         let (tx_chain_id, tx_expiration, tx) = match maybe_tx {
@@ -263,12 +270,6 @@ where
             Err(tx_result) => return tx_result,
         };
 
-        if let Err(err) = tx.validate_tx() {
-            return TxResult {
-                code: ResultCode::InvalidSig.into(),
-                info: err.to_string(),
-            };
-        }
         match tx.header().tx_type {
             // If it is a raw transaction, we do no further validation
             TxType::Raw => TxResult {
@@ -308,7 +309,11 @@ where
                         ethereum_tx_data_variants::EthEventsVext::try_from(&tx)
                             .map_err(|err| err.to_string())
                             .and_then(|ext| {
-                                validate_eth_events_vext(
+                                validate_eth_events_vext::<
+                                    _,
+                                    _,
+                                    governance::Store<_>,
+                                >(
                                     &self.state,
                                     &ext.0,
                                     self.state.in_mem().get_last_block_height(),
@@ -334,7 +339,11 @@ where
                         ethereum_tx_data_variants::BridgePoolVext::try_from(&tx)
                             .map_err(|err| err.to_string())
                             .and_then(|ext| {
-                                validate_bp_roots_vext(
+                                validate_bp_roots_vext::<
+                                    _,
+                                    _,
+                                    governance::Store<_>,
+                                >(
                                     &self.state,
                                     &ext.0,
                                     self.state.in_mem().get_last_block_height(),
@@ -362,7 +371,7 @@ where
                         )
                         .map_err(|err| err.to_string())
                         .and_then(|ext| {
-                            validate_valset_upd_vext(
+                            validate_valset_upd_vext::<_, _, governance::Store<_>>(
                                 &self.state,
                                 &ext,
                                 // n.b. only accept validator set updates
@@ -410,7 +419,17 @@ where
                 let allocated_gas =
                     metadata.user_gas.try_dump(u64::from(wrapper.gas_limit));
 
-                let gas_limit = match Gas::try_from(wrapper.gas_limit) {
+                let gas_scale = match get_gas_scale(temp_state) {
+                    Ok(scale) => scale,
+                    Err(_) => {
+                        return TxResult {
+                            code: ResultCode::TxGasLimit.into(),
+                            info: "Failed to get gas scale".to_owned(),
+                        };
+                    }
+                };
+                let gas_limit = match wrapper.gas_limit.as_scaled_gas(gas_scale)
+                {
                     Ok(value) => value,
                     Err(_) => {
                         return TxResult {
@@ -466,24 +485,9 @@ where
                     };
                 }
 
-                // Check that the fee payer has sufficient balance.
-                if let Err(e) = process_proposal_fee_check(
-                    &wrapper,
-                    tx.header_hash(),
-                    block_proposer,
-                    &mut ShellParams::new(
-                        &RefCell::new(tx_gas_meter),
-                        temp_state,
-                        vp_wasm_cache,
-                        tx_wasm_cache,
-                    ),
-                ) {
-                    return TxResult {
-                        code: ResultCode::FeeError.into(),
-                        info: e.to_string(),
-                    };
-                }
-
+                // Validate the inner txs after. Even if the batch is non-atomic
+                // we still reject it if just one of the inner txs is
+                // invalid
                 for cmt in tx.commitments() {
                     // Tx allowlist
                     if let Err(err) =
@@ -497,6 +501,25 @@ where
                             ),
                         };
                     }
+                }
+
+                // Check that the fee payer has sufficient balance.
+                if let Err(e) = process_proposal_fee_check(
+                    &wrapper,
+                    &tx,
+                    tx_index,
+                    block_proposer,
+                    &mut ShellParams::new(
+                        &RefCell::new(tx_gas_meter),
+                        temp_state,
+                        vp_wasm_cache,
+                        tx_wasm_cache,
+                    ),
+                ) {
+                    return TxResult {
+                        code: ResultCode::FeeError.into(),
+                        info: e.to_string(),
+                    };
                 }
 
                 TxResult {
@@ -515,37 +538,30 @@ where
     }
 }
 
-// TODO(namada#2597): check masp fee payment if required
 fn process_proposal_fee_check<D, H, CA>(
     wrapper: &WrapperTx,
-    wrapper_tx_hash: Hash,
+    tx: &Tx,
+    tx_index: &TxIndex,
     proposer: &Address,
-    shell_params: &mut ShellParams<'_, TempWlState<'_, D, H>, D, H, CA>,
+    shell_params: &mut ShellParams<'_, TempWlState<'static, D, H>, D, H, CA>,
 ) -> Result<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    let minimum_gas_price = namada::ledger::parameters::read_gas_cost(
-        shell_params.state,
-        &wrapper.fee.token,
-    )
-    .expect("Must be able to read gas cost parameter")
-    .ok_or(Error::TxApply(protocol::Error::FeeError(format!(
-        "The provided {} token is not allowed for fee payment",
-        wrapper.fee.token
-    ))))?;
+    let minimum_gas_price =
+        parameters::read_gas_cost(shell_params.state, &wrapper.fee.token)
+            .expect("Must be able to read gas cost parameter")
+            .ok_or(Error::TxApply(protocol::Error::FeeError(format!(
+                "The provided {} token is not allowed for fee payment",
+                wrapper.fee.token
+            ))))?;
 
     fee_data_check(wrapper, minimum_gas_price, shell_params)?;
 
-    protocol::transfer_fee(
-        shell_params.state,
-        proposer,
-        wrapper,
-        wrapper_tx_hash,
-    )
-    .map_err(Error::TxApply)
+    protocol::transfer_fee(shell_params, proposer, tx, wrapper, tx_index)
+        .map_or_else(|e| Err(Error::TxApply(e)), |_| Ok(()))
 }
 
 /// We test the failure cases of [`process_proposal`]. The happy flows
@@ -554,19 +570,20 @@ where
 // process proposals
 #[cfg(test)]
 mod test_process_proposal {
-    use namada::core::key::*;
-    use namada::eth_bridge::storage::eth_bridge_queries::{
+    use namada_apps_lib::wallet;
+    use namada_replay_protection as replay_protection;
+    use namada_sdk::address;
+    use namada_sdk::eth_bridge::storage::eth_bridge_queries::{
         is_bridge_comptime_enabled, EthBridgeQueries,
     };
-    use namada::state::StorageWrite;
-    use namada::token::{read_denom, Amount, DenominatedAmount};
-    use namada::tx::data::Fee;
-    use namada::tx::{Authorization, Code, Data, Signed};
-    use namada::vote_ext::{
+    use namada_sdk::key::*;
+    use namada_sdk::state::StorageWrite;
+    use namada_sdk::token::{read_denom, Amount, DenominatedAmount};
+    use namada_sdk::tx::data::Fee;
+    use namada_sdk::tx::{Authorization, Code, Data, Signed};
+    use namada_vote_ext::{
         bridge_pool_roots, ethereum_events, validator_set_update,
     };
-    use namada::{address, replay_protection};
-    use namada_apps_lib::wallet;
 
     use super::*;
     use crate::shell::test_utils::{
@@ -596,8 +613,7 @@ mod test_process_proposal {
             let voting_powers = shell
                 .state
                 .ethbridge_queries()
-                .get_consensus_eth_addresses(Some(next_epoch))
-                .iter()
+                .get_consensus_eth_addresses::<governance::Store<_>>(next_epoch)
                 .map(|(eth_addr_book, _, voting_power)| {
                     (eth_addr_book, voting_power)
                 })
@@ -1024,9 +1040,7 @@ mod test_process_proposal {
             response.result.info,
             String::from(
                 "Error trying to apply a transaction: Error while processing \
-                 transaction's fees: Transparent balance of wrapper's signer \
-                 was insufficient to pay fee. All the available transparent \
-                 funds have been moved to the block proposer"
+                 transaction's fees: Insufficient funds for fee payment"
             )
         );
     }
@@ -1090,9 +1104,7 @@ mod test_process_proposal {
             response.result.info,
             String::from(
                 "Error trying to apply a transaction: Error while processing \
-                 transaction's fees: Transparent balance of wrapper's signer \
-                 was insufficient to pay fee. All the available transparent \
-                 funds have been moved to the block proposer"
+                 transaction's fees: Insufficient funds for fee payment"
             )
         );
     }
@@ -1164,7 +1176,7 @@ mod test_process_proposal {
         )));
 
         // Write wrapper hash to storage
-        let mut batch = namada::state::testing::TestState::batch();
+        let mut batch = namada_sdk::state::testing::TestState::batch();
         let wrapper_unsigned_hash = wrapper.header_hash();
         let hash_key = replay_protection::current_key(&wrapper_unsigned_hash);
         shell
@@ -1284,7 +1296,7 @@ mod test_process_proposal {
         )));
 
         // Write inner hash to storage
-        let mut batch = namada::state::testing::TestState::batch();
+        let mut batch = namada_sdk::state::testing::TestState::batch();
         let hash_key =
             replay_protection::current_key(&wrapper.raw_header_hash());
         shell
@@ -1477,7 +1489,7 @@ mod test_process_proposal {
         let (shell, _recv, _, _) = test_utils::setup();
 
         let block_gas_limit =
-            namada::parameters::get_max_block_gas(&shell.state).unwrap();
+            parameters::get_max_block_gas(&shell.state).unwrap();
         let keypair = super::test_utils::gen_keypair();
 
         let mut wrapper =
@@ -1731,7 +1743,7 @@ mod test_process_proposal {
     /// Test max tx bytes parameter in ProcessProposal
     #[test]
     fn test_max_tx_bytes_process_proposal() {
-        use namada::ledger::parameters::storage::get_max_tx_bytes_key;
+        use parameters::storage::get_max_tx_bytes_key;
         let (shell, _recv, _, _) = test_utils::setup_at_height(3u64);
 
         let max_tx_bytes: u32 = {
@@ -1798,7 +1810,7 @@ mod test_process_proposal {
     /// not validated by `ProcessProposal`.
     #[test]
     fn test_outdated_nonce_process_proposal() {
-        use namada::core::storage::InnerEthEventsQueue;
+        use namada_sdk::storage::InnerEthEventsQueue;
 
         const LAST_HEIGHT: BlockHeight = BlockHeight(3);
 

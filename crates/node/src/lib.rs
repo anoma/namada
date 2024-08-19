@@ -17,7 +17,9 @@ mod abortable;
 #[cfg(feature = "benches")]
 pub mod bench_utils;
 mod broadcaster;
+mod dry_run_tx;
 pub mod ethereum_oracle;
+pub mod protocol;
 pub mod shell;
 pub mod shims;
 pub mod storage;
@@ -31,25 +33,24 @@ use std::thread;
 
 use byte_unit::Byte;
 use data_encoding::HEXUPPER;
+pub use dry_run_tx::dry_run_tx;
 use futures::future::TryFutureExt;
-use namada::core::storage::BlockHeight;
-use namada::core::time::DateTimeUtc;
-use namada::eth_bridge::ethers::providers::{Http, Provider};
-use namada::state::DB;
-use namada::storage::DbColFam;
-use namada::tendermint::abci::request::CheckTxKind;
 use namada_apps_lib::cli::args;
 use namada_apps_lib::config::utils::{
     convert_tm_addr_to_socket_addr, num_of_threads,
 };
 use namada_apps_lib::{config, wasm_loader};
+use namada_sdk::eth_bridge::ethers::providers::{Http, Provider};
 use namada_sdk::migrations::ScheduledMigration;
-use namada_sdk::state::StateRead;
+use namada_sdk::state::{ProcessProposalCachedResult, StateRead, DB};
+use namada_sdk::storage::{BlockHeight, DbColFam};
+use namada_sdk::tendermint::abci::request::CheckTxKind;
+use namada_sdk::tendermint::abci::response::ProcessProposal;
+use namada_sdk::time::DateTimeUtc;
 use once_cell::unsync::Lazy;
 use sysinfo::{RefreshKind, System, SystemExt};
 use tokio::sync::mpsc;
 use tokio::task;
-use tower::ServiceBuilder;
 
 use self::abortable::AbortableSpawner;
 use self::ethereum_oracle::last_processed_block;
@@ -125,8 +126,33 @@ impl Shell {
             Request::ProcessProposal(block) => {
                 tracing::debug!("Request ProcessProposal");
                 // TODO: use TM domain type in the handler
-                let (response, _tx_results) =
+                // NOTE: make sure to put any checks inside process_proposal
+                // since that function is called in other places to rerun the
+                // checks if (when) needed. Every check living outside that
+                // function will not be correctly replicated in the other
+                // locations
+                let block_hash = block.hash.try_into();
+                let (response, tx_results) =
                     self.process_proposal(block.into());
+                // Cache the response in case of future calls from Namada. If
+                // hash conversion fails avoid caching
+                if let Ok(block_hash) = block_hash {
+                    let result = if let ProcessProposal::Accept = response {
+                        ProcessProposalCachedResult::Accepted(
+                            tx_results
+                                .into_iter()
+                                .map(|res| res.into())
+                                .collect(),
+                        )
+                    } else {
+                        ProcessProposalCachedResult::Rejected
+                    };
+
+                    self.state
+                        .in_mem_mut()
+                        .block_proposals_cache
+                        .put(block_hash, result);
+                }
                 Ok(Response::ProcessProposal(response))
             }
             Request::RevertProposal(_req) => {
@@ -134,6 +160,8 @@ impl Shell {
             }
             Request::FinalizeBlock(finalize) => {
                 tracing::debug!("Request FinalizeBlock");
+
+                self.try_recheck_process_proposal(&finalize)?;
                 self.finalize_block(finalize).map(Response::FinalizeBlock)
             }
             Request::Commit => {
@@ -165,6 +193,66 @@ impl Shell {
                 Ok(Response::ApplySnapshotChunk(self.apply_snapshot_chunk(req)))
             }
         }
+    }
+
+    // Checks if a run of process proposal is required before finalize block
+    // (recheck) and, in case, performs it. Clears the cache before returning
+    fn try_recheck_process_proposal(
+        &mut self,
+        finalize_req: &shims::abcipp_shim_types::shim::request::FinalizeBlock,
+    ) -> Result<(), Error> {
+        let recheck_process_proposal = match self.mode {
+            shell::ShellMode::Validator {
+                ref local_config, ..
+            } => local_config
+                .as_ref()
+                .map(|cfg| cfg.recheck_process_proposal)
+                .unwrap_or_default(),
+            shell::ShellMode::Full { ref local_config } => local_config
+                .as_ref()
+                .map(|cfg| cfg.recheck_process_proposal)
+                .unwrap_or_default(),
+            shell::ShellMode::Seed => false,
+        };
+
+        if recheck_process_proposal {
+            let process_proposal_result = match self
+                .state
+                .in_mem_mut()
+                .block_proposals_cache
+                .get(&finalize_req.block_hash)
+            {
+                // We already have the result of process proposal for this block
+                // cached in memory
+                Some(res) => res.to_owned(),
+                None => {
+                    let process_req = finalize_req
+                        .clone()
+                        .cast_to_process_proposal_req()
+                        .map_err(|_| Error::InvalidBlockProposal)?;
+                    // No need to cache the result since this is the last step
+                    // before finalizing the block
+                    if let ProcessProposal::Accept =
+                        self.process_proposal(process_req.into()).0
+                    {
+                        ProcessProposalCachedResult::Accepted(vec![])
+                    } else {
+                        ProcessProposalCachedResult::Rejected
+                    }
+                }
+            };
+
+            if let ProcessProposalCachedResult::Rejected =
+                process_proposal_result
+            {
+                return Err(Error::RejectedBlockProposal);
+            }
+        }
+
+        // Clear the cache of proposed blocks' results
+        self.state.in_mem_mut().block_proposals_cache.clear();
+
+        Ok(())
     }
 }
 
@@ -264,7 +352,7 @@ pub fn dump_db(
 #[cfg(feature = "migrations")]
 pub fn query_db(
     config: config::Ledger,
-    key: &namada::core::storage::Key,
+    key: &namada_sdk::storage::Key,
     type_hash: &[u8; 32],
     cf: &DbColFam,
 ) {
@@ -371,7 +459,7 @@ async fn run_aux(
         };
 
     tracing::info!("Loading MASP verifying keys.");
-    let _ = namada_sdk::masp::preload_verifying_keys();
+    let _ = namada_sdk::token::validation::preload_verifying_keys();
     tracing::info!("Done loading MASP verifying keys.");
 
     // Start ABCI server and broadcaster (the latter only if we are a validator
@@ -434,8 +522,7 @@ async fn run_aux_setup(
     wasm_dir: &PathBuf,
     scheduled_migration: Option<ScheduledMigration>,
 ) -> RunAuxSetup {
-    // Prefetch needed wasm artifacts
-    wasm_loader::pre_fetch_wasm(wasm_dir).await;
+    wasm_loader::validate_wasm_artifacts(wasm_dir).await;
 
     // Find the system available memory
     let available_memory_bytes = Lazy::new(|| {
@@ -657,13 +744,7 @@ async fn run_abci(
         .consensus(consensus)
         .snapshot(snapshot)
         .mempool(mempool) // don't load_shed, it will make CometBFT crash
-        .info(
-            ServiceBuilder::new()
-                .load_shed()
-                .buffer(100)
-                .rate_limit(50, std::time::Duration::from_secs(1))
-                .service(info),
-        )
+        .info(info) // don't load_shed, it will make tower-abci crash
         .finish()
         .unwrap();
     tokio::select! {
@@ -870,15 +951,13 @@ pub fn test_genesis_files(
     genesis: config::genesis::chain::Finalized,
     wasm_dir: PathBuf,
 ) {
-    use namada::core::hash::Sha256Hasher;
-    use namada::state::mockdb::MockDB;
+    use namada_sdk::hash::Sha256Hasher;
+    use namada_sdk::state::mockdb::MockDB;
 
     // Channels for validators to send protocol txs to be broadcast to the
     // broadcaster service
     let (broadcast_sender, _broadcaster_receiver) = mpsc::unbounded_channel();
 
-    // Start dummy broadcaster
-    let _broadcaster = spawn_dummy_task(());
     let chain_id = config.chain_id.to_string();
     // start an instance of the ledger
     let mut shell = Shell::<MockDB, Sha256Hasher>::new(

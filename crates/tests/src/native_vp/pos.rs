@@ -95,10 +95,10 @@
 //! - add slashes
 //! - add rewards
 
-use namada::core::storage::Epoch;
-use namada::proof_of_stake::parameters::{OwnedPosParams, PosParams};
-use namada::proof_of_stake::test_utils::test_init_genesis as init_genesis;
-use namada::proof_of_stake::types::GenesisValidator;
+use namada_sdk::proof_of_stake::parameters::{OwnedPosParams, PosParams};
+use namada_sdk::proof_of_stake::test_utils::test_init_genesis as init_genesis;
+use namada_sdk::proof_of_stake::types::GenesisValidator;
+use namada_sdk::storage::Epoch;
 
 use crate::tx::tx_host_env;
 
@@ -130,7 +130,12 @@ pub fn init_pos(
         //     .state
         //     .init_genesis(params, genesis_validators.iter(), start_epoch)
         //     .unwrap();
-        let params = init_genesis(
+        let params = init_genesis::<
+            _,
+            crate::parameters::Store<_>,
+            crate::governance::Store<_>,
+            crate::token::Store<_>,
+        >(
             &mut tx_env.state,
             params.clone(),
             genesis_validators.iter().cloned(),
@@ -149,11 +154,11 @@ mod tests {
 
     use std::cell::RefCell;
 
-    use namada::core::address;
-    use namada::core::key::common::PublicKey;
-    use namada::gas::VpGasMeter;
-    use namada::ledger::pos::PosVP;
-    use namada::token;
+    use namada_sdk::gas::VpGasMeter;
+    use namada_sdk::governance::parameters::GovernanceParameters;
+    use namada_sdk::key::common::PublicKey;
+    use namada_sdk::validation::PosVp;
+    use namada_sdk::{address, token};
     use namada_tx_prelude::proof_of_stake::parameters::testing::arb_pos_params;
     use namada_tx_prelude::Address;
     use proptest::prelude::*;
@@ -268,7 +273,7 @@ mod tests {
                     if !test_state.is_current_tx_valid {
                         // Clear out the changes
                         tx_host_env::with(|env| {
-                            env.state.drop_tx();
+                            env.state.drop_tx_batch();
                         });
                     }
 
@@ -282,7 +287,7 @@ mod tests {
                     tx_host_env::with(|env| {
                         // Clear out the changes
                         if !test_state.is_current_tx_valid {
-                            env.state.drop_tx();
+                            env.state.drop_tx_batch();
                         }
                         // Also commit the last transaction(s) changes, if any
                         env.commit_tx_and_block();
@@ -318,7 +323,7 @@ mod tests {
 
                     // Clear out the invalid changes
                     tx_host_env::with(|env| {
-                        env.state.drop_tx();
+                        env.state.drop_tx_batch();
                     })
                 }
             }
@@ -337,7 +342,11 @@ mod tests {
                     // We're starting from an empty state
                     let state = vec![];
                     let epoch = Epoch(epoch);
-                    let params = params.with_default_gov_params();
+                    let params = PosParams {
+                        owned: params,
+                        max_proposal_period: GovernanceParameters::default()
+                            .max_proposal_period,
+                    };
                     arb_valid_pos_action(&state).prop_map(move |valid_action| {
                         Self {
                             epoch,
@@ -440,7 +449,8 @@ mod tests {
                 &tx_env.gas_meter.borrow(),
             ));
             let vp_env = TestNativeVpEnv::from_tx_env(tx_env, address::POS);
-            let result = vp_env.validate_tx(&gas_meter, PosVP::new);
+            let vp = vp_env.init_vp(&gas_meter, PosVp::new);
+            let result = vp_env.validate_tx(&vp);
 
             // Put the tx_env back before checking the result
             tx_host_env::set(vp_env.tx_env);
@@ -580,22 +590,21 @@ pub mod testing {
 
     use derivative::Derivative;
     use itertools::Either;
-    use namada::core::dec::Dec;
-    use namada::core::key::common::PublicKey;
-    use namada::core::key::RefTo;
-    use namada::core::storage::Epoch;
-    use namada::core::{address, key};
-    use namada::ledger::gas::TxGasMeter;
-    use namada::proof_of_stake::epoched::DynEpochOffset;
-    use namada::proof_of_stake::parameters::testing::arb_rate;
-    use namada::proof_of_stake::parameters::PosParams;
-    use namada::proof_of_stake::storage::{
+    use namada_sdk::dec::Dec;
+    use namada_sdk::gas::TxGasMeter;
+    use namada_sdk::key::common::PublicKey;
+    use namada_sdk::key::RefTo;
+    use namada_sdk::proof_of_stake::epoched::DynEpochOffset;
+    use namada_sdk::proof_of_stake::parameters::testing::arb_rate;
+    use namada_sdk::proof_of_stake::parameters::PosParams;
+    use namada_sdk::proof_of_stake::storage::{
         get_num_consensus_validators, read_pos_params, unbond_handle,
     };
-    use namada::proof_of_stake::types::{BondId, ValidatorState};
-    use namada::proof_of_stake::ADDRESS as POS_ADDRESS;
-    use namada::token;
-    use namada::token::{Amount, Change};
+    use namada_sdk::proof_of_stake::types::{BondId, ValidatorState};
+    use namada_sdk::proof_of_stake::ADDRESS as POS_ADDRESS;
+    use namada_sdk::storage::Epoch;
+    use namada_sdk::token::{Amount, Change};
+    use namada_sdk::{address, governance, key, token};
     use namada_tx_prelude::{Address, StorageRead, StorageWrite};
     use proptest::prelude::*;
 
@@ -862,14 +871,14 @@ pub mod testing {
         /// the VP.
         pub fn apply(self, is_current_tx_valid: bool) {
             // Read the PoS parameters
-            let params = read_pos_params(tx::ctx()).unwrap();
+            let params =
+                read_pos_params::<_, governance::Store<_>>(tx::ctx()).unwrap();
 
             let current_epoch = tx_host_env::with(|env| {
                 // Reset the gas meter on each change, so that we never run
                 // out in this test
                 let gas_limit = env.gas_meter.borrow().tx_gas_limit;
-                env.gas_meter =
-                    RefCell::new(TxGasMeter::new_from_sub_limit(gas_limit));
+                env.gas_meter = RefCell::new(TxGasMeter::new(gas_limit));
                 env.state.in_mem().block.epoch
             });
             println!("Current epoch {}", current_epoch);
@@ -1577,7 +1586,8 @@ pub mod testing {
         /// Apply an invalid PoS storage action.
         pub fn apply(self) {
             // Read the PoS parameters
-            let params = read_pos_params(tx::ctx()).unwrap();
+            let params =
+                read_pos_params::<_, governance::Store<_>>(tx::ctx()).unwrap();
 
             for (epoch, changes) in self.changes {
                 for change in changes {

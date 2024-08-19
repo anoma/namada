@@ -20,12 +20,13 @@ use namada_proof_of_stake::storage::{
     bond_handle, read_all_validator_addresses,
     read_below_capacity_validator_set_addresses_with_stake,
     read_consensus_validator_set_addresses_with_stake, read_pos_params,
-    read_total_stake, read_validator_avatar, read_validator_description,
-    read_validator_discord_handle, read_validator_email,
-    read_validator_last_slash_epoch, read_validator_max_commission_rate_change,
-    read_validator_name, read_validator_stake, read_validator_website,
-    unbond_handle, validator_commission_rate_handle,
-    validator_incoming_redelegations_handle, validator_slashes_handle,
+    read_total_active_stake, read_total_stake, read_validator_avatar,
+    read_validator_description, read_validator_discord_handle,
+    read_validator_email, read_validator_last_slash_epoch,
+    read_validator_max_commission_rate_change, read_validator_name,
+    read_validator_stake, read_validator_website, unbond_handle,
+    validator_commission_rate_handle, validator_incoming_redelegations_handle,
+    validator_slashes_handle,
 };
 pub use namada_proof_of_stake::types::ValidatorStateInfo;
 use namada_proof_of_stake::types::{
@@ -37,6 +38,7 @@ use namada_state::{DBIter, KeySeg, StorageHasher, DB};
 use namada_storage::collections::lazy_map;
 use namada_storage::OptionExt;
 
+use crate::governance;
 use crate::queries::types::RequestCtx;
 
 // PoS validity predicate queries
@@ -83,6 +85,9 @@ router! {POS,
 
     ( "total_stake" / [epoch: opt Epoch] )
         -> token::Amount = total_stake,
+
+    ( "total_active_voting_power" / [epoch: opt Epoch] )
+        -> token::Amount = total_active_voting_power,
 
     ( "delegations" / [owner: Address] / [epoch: opt Epoch] )
         -> HashSet<Address> = delegation_validators,
@@ -185,7 +190,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    read_pos_params(ctx.state)
+    read_pos_params::<_, governance::Store<_>>(ctx.state)
 }
 
 /// Find if the given address belongs to a validator account.
@@ -210,7 +215,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let current_epoch = ctx.state.in_mem().last_epoch;
-    namada_proof_of_stake::storage::get_consensus_key(
+    namada_proof_of_stake::storage::get_consensus_key::<_, governance::Store<_>>(
         ctx.state,
         &addr,
         current_epoch,
@@ -255,7 +260,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
-    let params = read_pos_params(ctx.state)?;
+    let params = read_pos_params::<_, governance::Store<_>>(ctx.state)?;
     let commission_rate = validator_commission_rate_handle(&validator)
         .get(ctx.state, epoch, &params)?;
     let max_commission_change_per_epoch =
@@ -309,9 +314,10 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
-    let state = namada_proof_of_stake::storage::read_validator_state(
-        ctx.state, &validator, &epoch,
-    )?;
+    let state = namada_proof_of_stake::storage::read_validator_state::<
+        _,
+        governance::Store<_>,
+    >(ctx.state, &validator, &epoch)?;
     Ok((state, epoch))
 }
 
@@ -342,7 +348,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
-    let params = read_pos_params(ctx.state)?;
+    let params = read_pos_params::<_, governance::Store<_>>(ctx.state)?;
     if namada_proof_of_stake::is_validator(ctx.state, &validator)? {
         let stake =
             read_validator_stake(ctx.state, &params, &validator, epoch)?;
@@ -403,8 +409,23 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
-    let params = read_pos_params(ctx.state)?;
+    let params = read_pos_params::<_, governance::Store<_>>(ctx.state)?;
     read_total_stake(ctx.state, &params, epoch)
+}
+
+/// Get the total active voting power in PoS system at the given epoch or
+/// current when `None`.
+fn total_active_voting_power<D, H, V, T>(
+    ctx: RequestCtx<'_, D, H, V, T>,
+    epoch: Option<Epoch>,
+) -> namada_storage::Result<token::Amount>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
+    let params = read_pos_params::<_, governance::Store<_>>(ctx.state)?;
+    read_total_active_stake(ctx.state, &params, epoch)
 }
 
 fn bond_deltas<D, H, V, T>(
@@ -431,7 +452,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let params = read_pos_params(ctx.state)?;
+    let params = read_pos_params::<_, governance::Store<_>>(ctx.state)?;
     let epoch = epoch.unwrap_or(
         ctx.state
             .in_mem()
@@ -458,7 +479,7 @@ where
     let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
     let bond_id = BondId { source, validator };
 
-    bond_amount(ctx.state, &bond_id, epoch)
+    bond_amount::<_, governance::Store<_>>(ctx.state, &bond_id, epoch)
 }
 
 fn unbond<D, H, V, T>(
@@ -535,7 +556,7 @@ where
             amount,
         ) = result?;
         if epoch >= withdrawable {
-            total = checked!(total + amount)?;
+            checked!(total += amount)?;
         }
     }
     Ok(total)
@@ -551,7 +572,12 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let current_epoch = ctx.state.in_mem().last_epoch;
-    query_reward_tokens(ctx.state, source.as_ref(), &validator, current_epoch)
+    query_reward_tokens::<_, governance::Store<_>>(
+        ctx.state,
+        source.as_ref(),
+        &validator,
+        current_epoch,
+    )
 }
 
 fn bonds_and_unbonds<D, H, V, T>(
@@ -563,7 +589,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    namada_proof_of_stake::queries::bonds_and_unbonds(
+    namada_proof_of_stake::queries::bonds_and_unbonds::<_, governance::Store<_>>(
         ctx.state, source, validator,
     )
 }
@@ -595,7 +621,7 @@ where
     H: 'static + StorageHasher + Sync,
 {
     let epoch: Epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
-    find_delegations(ctx.state, &owner, &epoch)
+    find_delegations::<_, governance::Store<_>>(ctx.state, &owner, &epoch)
 }
 
 /// Validator slashes
@@ -675,11 +701,12 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    namada_proof_of_stake::queries::has_bonds(ctx.state, &source)
+    namada_proof_of_stake::queries::has_bonds::<_, governance::Store<_>>(
+        ctx.state, &source,
+    )
 }
 
 /// Client-only methods for the router type are composed from router functions.
-#[cfg(any(test, feature = "async-client"))]
 pub mod client_only_methods {
     use super::*;
     use crate::queries::{Client, RPC};
@@ -733,32 +760,27 @@ fn enrich_bonds_and_unbonds(
 
                 for bond in &detail.bonds {
                     let slashed_bond = bond.slashed_amount.unwrap_or_default();
-                    bond_total = checked!(bond_total + bond.amount)?;
-                    bond_total_slashed =
-                        checked!(bond_total_slashed + slashed_bond)?;
+                    checked!(bond_total += bond.amount)?;
+                    checked!(bond_total_slashed += slashed_bond)?;
                 }
                 for unbond in &detail.unbonds {
                     let slashed_unbond =
                         unbond.slashed_amount.unwrap_or_default();
-                    unbond_total = checked!(unbond_total + unbond.amount)?;
-                    unbond_total_slashed =
-                        checked!(unbond_total_slashed + slashed_unbond)?;
+                    checked!(unbond_total += unbond.amount)?;
+                    checked!(unbond_total_slashed += slashed_unbond)?;
 
                     if current_epoch >= unbond.withdraw {
-                        withdrawable = checked!(
-                            withdrawable + unbond.amount - slashed_unbond
+                        checked!(
+                            withdrawable += unbond.amount - slashed_unbond
                         )?;
                     }
                 }
 
-                bonds_total = checked!(bonds_total + bond_total)?;
-                bonds_total_slashed =
-                    checked!(bonds_total_slashed + bond_total_slashed)?;
-                unbonds_total = checked!(unbonds_total + unbond_total)?;
-                unbonds_total_slashed =
-                    checked!(unbonds_total_slashed + unbond_total_slashed)?;
-                total_withdrawable =
-                    checked!(total_withdrawable + withdrawable)?;
+                checked!(bonds_total += bond_total)?;
+                checked!(bonds_total_slashed += bond_total_slashed)?;
+                checked!(unbonds_total += unbond_total)?;
+                checked!(unbonds_total_slashed += unbond_total_slashed)?;
+                checked!(total_withdrawable += withdrawable)?;
 
                 let enriched_detail = EnrichedBondsAndUnbondsDetail {
                     data: detail,

@@ -1,13 +1,14 @@
 pub mod defaults;
 pub mod pre_genesis;
 mod store;
+mod transport;
 
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
-use namada::bip39::{Language, Mnemonic};
-use namada::core::key::*;
+use namada_sdk::bip39::{Language, Mnemonic};
+use namada_sdk::key::*;
 pub use namada_sdk::wallet::alias::Alias;
 use namada_sdk::wallet::fs::FsWalletStorage;
 use namada_sdk::wallet::store::Store;
@@ -17,6 +18,7 @@ use namada_sdk::wallet::{
 pub use namada_sdk::wallet::{ValidatorData, ValidatorKeys};
 use rand_core::OsRng;
 pub use store::wallet_file;
+pub use transport::{TransportTcp, WalletTransport};
 use zeroize::Zeroizing;
 
 use crate::cli;
@@ -286,7 +288,7 @@ pub fn read_and_confirm_encryption_password(
 
 #[cfg(test)]
 mod tests {
-    use namada::bip39::MnemonicType;
+    use namada_sdk::bip39::MnemonicType;
     use namada_sdk::wallet::WalletIo;
 
     use super::CliWalletUtils;

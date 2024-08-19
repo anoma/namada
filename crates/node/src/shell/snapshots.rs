@@ -1,8 +1,9 @@
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
-use namada::core::arith::checked;
-use namada::hash::{Hash, Sha256Hasher};
-use namada::state::{BlockHeight, StorageRead, DB};
+use namada_sdk::arith::checked;
+use namada_sdk::hash::{Hash, Sha256Hasher};
+use namada_sdk::state::{BlockHeight, StorageRead};
+use namada_sdk::storage::DB;
 
 use super::{Error, Result, SnapshotSync};
 use crate::facade::tendermint::abci::response::ApplySnapshotChunkResult;

@@ -50,7 +50,10 @@ pub use namada_tx::{action, data as transaction, BatchedTx, Section, Tx};
 pub use namada_tx_env::TxEnv;
 use namada_vm_env::tx::*;
 use namada_vm_env::{read_from_buffer, read_key_val_bytes_from_buffer};
-pub use {namada_governance as governance, namada_parameters as parameters};
+pub use {
+    namada_gas as gas, namada_governance as governance,
+    namada_parameters as parameters,
+};
 
 /// Log a string. The message will be printed at the `tracing::Level::Info`.
 pub fn log_string<T: AsRef<str>>(msg: T) {
@@ -433,19 +436,14 @@ impl namada_tx::action::Write for Ctx {
 
 /// Verify section signatures against the given list of keys
 pub fn verify_signatures_of_pks(
-    ctx: &Ctx,
     tx: &Tx,
     pks: Vec<common::PublicKey>,
 ) -> EnvResult<bool> {
-    let max_signatures_per_transaction =
-        parameters::max_signatures_per_transaction(ctx)?;
-
     // Require signatures from all the given keys
     let threshold = u8::try_from(pks.len()).into_storage_result()?;
     let public_keys_index_map = AccountPublicKeysMap::from_iter(pks);
 
     // Serialize parameters
-    let max_signatures = max_signatures_per_transaction.serialize_to_vec();
     let public_keys_map = public_keys_index_map.serialize_to_vec();
     let targets = [tx.raw_header_hash()].serialize_to_vec();
 
@@ -456,8 +454,6 @@ pub fn verify_signatures_of_pks(
             public_keys_map.as_ptr() as _,
             public_keys_map.len() as _,
             threshold,
-            max_signatures.as_ptr() as _,
-            max_signatures.len() as _,
         )
     };
 

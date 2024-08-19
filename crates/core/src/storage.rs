@@ -1163,6 +1163,7 @@ impl KeySeg for common::PublicKey {
 }
 
 /// Epoch identifier. Epochs are identified by consecutive numbers.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     Copy,
@@ -2098,5 +2099,19 @@ pub mod testing {
             5 => "[a-zA-Z0-9_]{1,20}".prop_map(DbKeySeg::StringSeg),
             1 => arb_address().prop_map(DbKeySeg::AddressSeg),
         ]
+    }
+
+    /// A dummy header used for testing
+    pub fn get_dummy_header() -> Header {
+        use crate::time::DurationSecs;
+        Header {
+            hash: Hash([0; 32]),
+            #[allow(
+                clippy::disallowed_methods,
+                clippy::arithmetic_side_effects
+            )]
+            time: DateTimeUtc::now() + DurationSecs(5),
+            next_validators_hash: Hash([0; 32]),
+        }
     }
 }

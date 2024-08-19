@@ -15,16 +15,16 @@ use namada_core::hash::Hash;
 use namada_core::hints;
 use namada_core::masp::{MaspEpoch, TokenMap};
 use namada_core::storage::{
-    self, BlockHeight, BlockResults, Epoch, KeySeg, PrefixValue,
+    self, BlockHeight, BlockResults, Epoch, Header, KeySeg, PrefixValue,
 };
+use namada_core::time::DurationSecs;
 use namada_core::token::{Denomination, MaspDigitPos};
 use namada_core::uint::Uint;
 use namada_ibc::event::IbcEventType;
 use namada_state::{DBIter, LastBlock, StateRead, StorageHasher, DB};
 use namada_storage::{ResultExt, StorageRead};
 use namada_token::storage_key::masp_token_map_key;
-#[cfg(any(test, feature = "async-client"))]
-use namada_tx::data::TxResult;
+use namada_tx::data::DryRunResult;
 
 use self::eth_bridge::{EthBridge, ETH_BRIDGE};
 use crate::events::log::dumb_queries;
@@ -83,7 +83,7 @@ router! {SHELL,
         -> Vec<u8> = (with_options storage_value),
 
     // Dry run a transaction
-    ( "dry_run_tx" ) -> TxResult<String> = (with_options dry_run_tx),
+    ( "dry_run_tx" ) -> DryRunResult = (with_options dry_run_tx),
 
     // Raw storage access - prefix iterator
     ( "prefix" / [storage_key: storage::Key] )
@@ -119,6 +119,12 @@ router! {SHELL,
 
     // IBC packet event
     ( "ibc_packet" / [event_type: IbcEventType] / [source_port: PortId] / [source_channel: ChannelId] / [destination_port: PortId] / [destination_channel: ChannelId] / [sequence: Sequence]) -> Option<Event> = ibc_packet,
+
+    // Get the block header associated with the requested height
+    ( "block_header" / [height: BlockHeight] ) -> Option<Header> = block_header,
+
+    // Return an estimate of the maximum time taken to decide a block
+    ( "max_block_time" ) -> DurationSecs = max_block_time,
 }
 
 // Handlers:
@@ -132,6 +138,36 @@ where
     H: 'static + StorageHasher + Sync,
 {
     unimplemented!("Dry running tx requires \"wasm-runtime\" feature.")
+}
+
+/// Return an estimate of the maximum time taken to decide a block
+fn max_block_time<D, H, V, T>(
+    ctx: RequestCtx<'_, D, H, V, T>,
+) -> namada_storage::Result<DurationSecs>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    // NB: get max time over this num of blocks
+    const NUM_BLOCKS_TO_READ: u64 = 5;
+
+    namada_parameters::estimate_max_block_time_from_blocks_and_params(
+        ctx.state,
+        ctx.state.in_mem().get_last_block_height(),
+        NUM_BLOCKS_TO_READ,
+    )
+}
+
+/// Get the block header associated with the requested height
+fn block_header<D, H, V, T>(
+    ctx: RequestCtx<'_, D, H, V, T>,
+    height: BlockHeight,
+) -> namada_storage::Result<Option<Header>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    StorageRead::get_block_header(ctx.state, height)
 }
 
 /// Query to read block results from storage

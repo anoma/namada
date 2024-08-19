@@ -35,5 +35,6 @@ ignore:
   - crates/test_utils
   - crates/benches
   - crates/apps/src/bin
-  - crates/apps/src/lib/cli
-  - crates/apps/src/lib/client
+  - crates/apps_lib/src/cli
+  - crates/apps_lib/src/client
+  - crates/apps_lib/src/wasm_loader

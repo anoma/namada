@@ -2,10 +2,9 @@ use std::path::Path;
 
 use eyre::Context;
 use ledger_namada_rs::NamadaApp;
-use ledger_transport_hid::TransportNativeHID;
-use namada::core::collections::HashSet;
-use namada::core::key::common;
-use namada::tx::Tx;
+use namada_sdk::collections::HashSet;
+use namada_sdk::key::common;
+use namada_sdk::tx::Tx;
 use namada_sdk::wallet::Wallet;
 use namada_sdk::{error, signing};
 use serde::de::DeserializeOwned;
@@ -50,15 +49,16 @@ pub fn write_toml<T: Serialize>(
     })
 }
 
-pub(super) async fn with_hardware_wallet<'a>(
+pub(super) async fn with_hardware_wallet<'a, T>(
     tx: Tx,
     pubkey: common::PublicKey,
     parts: HashSet<signing::Signable>,
-    (wallet, app): (
-        &RwLock<Wallet<CliWalletUtils>>,
-        &NamadaApp<TransportNativeHID>,
-    ),
-) -> Result<Tx, error::Error> {
+    (wallet, app): (&RwLock<Wallet<CliWalletUtils>>, &NamadaApp<T>),
+) -> Result<Tx, error::Error>
+where
+    T: ledger_transport::Exchange + Send + Sync,
+    <T as ledger_transport::Exchange>::Error: std::error::Error,
+{
     if parts.contains(&signing::Signable::FeeHeader) {
         Ok(tx)
     } else {

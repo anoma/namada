@@ -1,12 +1,11 @@
 //! A module for loading WASM files and downloading pre-built WASMs.
-use core::borrow::Borrow;
 use std::fs;
 use std::path::Path;
 
 use data_encoding::HEXLOWER;
 use eyre::{eyre, WrapErr};
 use futures::future::join_all;
-use namada::core::collections::HashMap;
+use namada_sdk::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -34,10 +33,6 @@ pub enum Error {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Checksums(pub HashMap<String, String>);
-
-/// Github URL prefix of released Namada network configs
-pub const ENV_VAR_WASM_SERVER: &str = "NAMADA_NETWORK_WASM_SERVER";
-const DEFAULT_WASM_SERVER: &str = "https://artifacts.heliax.click/namada-wasm";
 
 impl Checksums {
     /// Read WASM checksums from the given path
@@ -115,12 +110,6 @@ impl Checksums {
     }
 }
 
-fn wasm_url(wasm_name: &str) -> String {
-    let prefix_url = std::env::var(ENV_VAR_WASM_SERVER)
-        .unwrap_or_else(|_| DEFAULT_WASM_SERVER.to_string());
-    format!("{}/{}", prefix_url, wasm_name)
-}
-
 fn valid_wasm_checksum(
     wasm_payload: &[u8],
     name: &str,
@@ -141,9 +130,8 @@ fn valid_wasm_checksum(
     }
 }
 
-/// Download all the pre-built wasms, or if they're already downloaded, verify
-/// their checksums.
-pub async fn pre_fetch_wasm(wasm_directory: impl AsRef<Path>) {
+/// Validate wasm artifacts
+pub async fn validate_wasm_artifacts(wasm_directory: impl AsRef<Path>) {
     // load json with wasm hashes
     let checksums = Checksums::read_checksums_async(&wasm_directory).await;
 
@@ -154,69 +142,29 @@ pub async fn pre_fetch_wasm(wasm_directory: impl AsRef<Path>) {
         tokio::spawn(async move {
             let wasm_path = wasm_directory.join(&full_name);
             match tokio::fs::read(&wasm_path).await {
-                // if the file exist, first check the hash. If not matching
-                // download it again.
+                // if the file exist, check the hash
                 Ok(bytes) => {
                     if let Err(derived_name) =
                         valid_wasm_checksum(&bytes, &name, &full_name)
                     {
                         tracing::info!(
                             "WASM checksum mismatch: Got {}, expected {}. \
-                             Fetching new version...",
+                             Check your wasms artifacts.",
                             derived_name,
                             full_name
                         );
-                    } else {
-                        return;
-                    }
-
-                    match download_wasm(&name, &full_name).await {
-                        Ok(bytes) => {
-                            if let Err(e) =
-                                tokio::fs::write(wasm_path, &bytes).await
-                            {
-                                eprintln!(
-                                    "Error while creating file for {}: {}",
-                                    &name, e
-                                );
-                                safe_exit(1);
-                            }
-                        }
-                        Err(e) => {
-                            eprintln!("Error downloading wasm: {}", e);
-                            safe_exit(1);
-                        }
+                        safe_exit(1);
                     }
                 }
                 // if the doesn't file exist, download it.
-                Err(err) => match err.kind() {
-                    std::io::ErrorKind::NotFound => {
-                        match download_wasm(&name, &full_name).await {
-                            Ok(bytes) => {
-                                if let Err(e) =
-                                    tokio::fs::write(wasm_path, &bytes).await
-                                {
-                                    eprintln!(
-                                        "Error while creating file for {}: {}",
-                                        &name, e
-                                    );
-                                    safe_exit(1);
-                                }
-                            }
-                            Err(e) => {
-                                eprintln!("Error downloading wasm: {}", e);
-                                safe_exit(1);
-                            }
-                        }
-                    }
-                    _ => {
-                        eprintln!(
-                            "Can't read {}.",
-                            wasm_path.as_os_str().to_string_lossy()
-                        );
-                        safe_exit(1);
-                    }
-                },
+                Err(err) => {
+                    eprintln!(
+                        "Can't read {}: {}",
+                        wasm_path.as_os_str().to_string_lossy(),
+                        err
+                    );
+                    safe_exit(1);
+                }
             }
         })
     }))
@@ -268,35 +216,5 @@ pub fn read_wasm_or_exit(
             eprintln!("Error reading wasm: {}", err);
             safe_exit(1);
         }
-    }
-}
-
-async fn download_wasm(name: &str, full_name: &str) -> Result<Vec<u8>, Error> {
-    let url = wasm_url(full_name);
-
-    tracing::info!("Downloading WASM {url}...");
-
-    let response = reqwest::get(&url).await;
-
-    match response {
-        Ok(body) => {
-            let status = body.status();
-            if status.is_success() {
-                let bytes = body.bytes().await.unwrap();
-                let bytes: &[u8] = bytes.borrow();
-
-                valid_wasm_checksum(bytes, name, full_name)
-                    .map_err(Error::ChecksumMismatch)?;
-
-                let bytes: Vec<u8> = bytes.to_owned();
-
-                Ok(bytes)
-            } else if status.is_server_error() {
-                Err(Error::WasmNotFound(url))
-            } else {
-                Err(Error::ServerError(url, status.to_string()))
-            }
-        }
-        Err(e) => Err(Error::Download(url, e)),
     }
 }

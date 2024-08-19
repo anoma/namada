@@ -22,6 +22,7 @@ use crate::uint::{self, Uint, I256};
 
 /// Amount in micro units. For different granularity another representation
 /// might be more appropriate.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     Copy,
@@ -231,13 +232,16 @@ impl Amount {
         Self { raw: Uint(raw) }
     }
 
-    /// Given a u128 and [`MaspDigitPos`], construct the corresponding
+    /// Given a i128 and [`MaspDigitPos`], construct the corresponding
     /// amount.
-    pub fn from_masp_denominated_u128(
-        val: u128,
+    pub fn from_masp_denominated_i128(
+        val: i128,
         denom: MaspDigitPos,
     ) -> Option<Self> {
-        let lo = u64::try_from(val).ok()?;
+        #[allow(clippy::cast_sign_loss)]
+        #[allow(clippy::cast_possible_truncation)]
+        let lo = val as u64;
+        #[allow(clippy::cast_sign_loss)]
         let hi = (val >> 64) as u64;
         let lo_pos = denom as usize;
         let hi_pos = lo_pos.checked_add(1)?;
@@ -378,6 +382,7 @@ impl Display for Amount {
 /// Given a number represented as `M*B^D`, then
 /// `M` is the matissa, `B` is the base and `D`
 /// is the denomination, represented by this struct.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Copy,
@@ -410,6 +415,7 @@ impl From<Denomination> for u8 {
 }
 
 /// An amount with its denomination.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Copy,
@@ -872,6 +878,7 @@ impl From<Uint> for Amount {
 
 /// The four possible u64 words in a [`Uint`].
 /// Used for converting to MASP amounts.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Copy,
     Clone,
@@ -922,18 +929,6 @@ impl MaspDigitPos {
         let amount = amount.into();
         amount.raw.0[*self as usize]
     }
-
-    /// Get the corresponding u64 word from the input uint256.
-    pub fn denominate_i128(&self, amount: &Change) -> i128 {
-        let val = i128::from(amount.abs().0[*self as usize]);
-        if Change::is_negative(amount) {
-            // Cannot panic as the value is limited to `u64` range
-            #[allow(clippy::arithmetic_side_effects)]
-            -val
-        } else {
-            val
-        }
-    }
 }
 
 impl From<Amount> for IbcAmount {
@@ -942,9 +937,18 @@ impl From<Amount> for IbcAmount {
     }
 }
 
+impl TryFrom<IbcAmount> for Amount {
+    type Error = AmountParseError;
+
+    fn try_from(amount: IbcAmount) -> Result<Self, Self::Error> {
+        let uint = Uint(primitive_types::U256::from(amount).0);
+        Self::from_uint(uint, 0)
+    }
+}
+
 impl From<DenominatedAmount> for IbcAmount {
     fn from(amount: DenominatedAmount) -> Self {
-        amount.canonical().amount.into()
+        amount.amount.into()
     }
 }
 

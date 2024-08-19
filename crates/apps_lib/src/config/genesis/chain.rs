@@ -4,19 +4,21 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
-use namada::address::InternalAddress;
-use namada::core::address::{
-    Address, EstablishedAddress, EstablishedAddressGen,
-};
-use namada::core::chain::{ChainId, ChainIdPrefix};
-use namada::core::hash::Hash;
-use namada::core::key::{common, RefTo};
-use namada::core::time::{DateTimeUtc, DurationNanos, Rfc3339String};
-use namada::core::token::Amount;
-use namada::ledger::parameters::EpochDuration;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
+use namada_sdk::address::{
+    Address, EstablishedAddress, EstablishedAddressGen, InternalAddress,
+};
+use namada_sdk::chain::{ChainId, ChainIdPrefix};
+use namada_sdk::eth_bridge::EthereumBridgeParams;
+use namada_sdk::governance::pgf::parameters::PgfParameters;
+use namada_sdk::hash::Hash;
+use namada_sdk::ibc::parameters::IbcParameters;
+use namada_sdk::key::{common, RefTo};
+use namada_sdk::parameters::EpochDuration;
+use namada_sdk::time::{DateTimeUtc, DurationNanos, Rfc3339String};
+use namada_sdk::token::Amount;
 use namada_sdk::wallet::store::AddressVpType;
 use namada_sdk::wallet::{pre_genesis, Wallet};
 use serde::{Deserialize, Serialize};
@@ -82,6 +84,24 @@ impl Finalized {
         write_toml(&self.transactions, &transactions_file, "Transactions")?;
         write_toml(&self.metadata, &metadata_file, "Chain metadata")?;
         Ok(())
+    }
+
+    /// Attempt to read the address of the native token.
+    pub fn read_native_token(input_dir: &Path) -> eyre::Result<Address> {
+        let tokens_file = input_dir.join(templates::TOKENS_FILE_NAME);
+        let parameters_file = input_dir.join(templates::PARAMETERS_FILE_NAME);
+
+        let mut tokens: FinalizedTokens = read_toml(&tokens_file, "Tokens")?;
+        let parameters: FinalizedParameters =
+            read_toml(&parameters_file, "Parameters")?;
+
+        let alias = &parameters.parameters.native_token;
+
+        Ok(tokens
+            .token
+            .remove(alias)
+            .expect("The native token must exist")
+            .address)
     }
 
     /// Try to read all genesis and the chain metadata TOML files from the given
@@ -293,18 +313,17 @@ impl Finalized {
     pub fn get_chain_parameters(
         &self,
         wasm_dir: impl AsRef<Path>,
-    ) -> namada::ledger::parameters::Parameters {
+    ) -> namada_sdk::parameters::Parameters {
         let templates::ChainParams {
             min_num_of_blocks,
-            max_expected_time_per_block,
             max_proposal_bytes,
             vp_allowlist,
             tx_allowlist,
             implicit_vp,
             epochs_per_year,
             masp_epoch_multiplier,
-            max_signatures_per_transaction,
-            fee_unshielding_gas_limit,
+            masp_fee_payment_gas_limit,
+            gas_scale,
             max_block_gas,
             minimum_gas_price,
             max_tx_bytes,
@@ -330,27 +349,23 @@ impl Finalized {
         let min_duration: i64 = 60 * 60 * 24 * 365 / epy_i64;
         let epoch_duration = EpochDuration {
             min_num_of_blocks,
-            min_duration: namada::core::time::Duration::seconds(min_duration)
+            min_duration: namada_sdk::time::Duration::seconds(min_duration)
                 .into(),
         };
-        let max_expected_time_per_block =
-            namada::core::time::Duration::seconds(max_expected_time_per_block)
-                .into();
         let vp_allowlist = vp_allowlist.unwrap_or_default();
         let tx_allowlist = tx_allowlist.unwrap_or_default();
 
-        namada::ledger::parameters::Parameters {
+        namada_sdk::parameters::Parameters {
             max_tx_bytes,
             epoch_duration,
-            max_expected_time_per_block,
             vp_allowlist,
             tx_allowlist,
             implicit_vp_code_hash,
             epochs_per_year,
             masp_epoch_multiplier,
             max_proposal_bytes,
-            max_signatures_per_transaction,
-            fee_unshielding_gas_limit,
+            masp_fee_payment_gas_limit,
+            gas_scale,
             max_block_gas,
             minimum_gas_price: minimum_gas_price
                 .iter()
@@ -367,7 +382,7 @@ impl Finalized {
 
     pub fn get_pos_params(
         &self,
-    ) -> namada::proof_of_stake::parameters::PosParams {
+    ) -> namada_sdk::proof_of_stake::parameters::PosParams {
         let templates::PosParams {
             max_validator_slots,
             pipeline_len,
@@ -387,8 +402,8 @@ impl Finalized {
             rewards_gain_d,
         } = self.parameters.pos_params.clone();
 
-        namada::proof_of_stake::parameters::PosParams {
-            owned: namada::proof_of_stake::parameters::OwnedPosParams {
+        namada_sdk::proof_of_stake::parameters::PosParams {
+            owned: namada_sdk::proof_of_stake::parameters::OwnedPosParams {
                 max_validator_slots,
                 pipeline_len,
                 unbonding_len,
@@ -412,7 +427,7 @@ impl Finalized {
 
     pub fn get_gov_params(
         &self,
-    ) -> namada::governance::parameters::GovernanceParameters {
+    ) -> namada_sdk::governance::parameters::GovernanceParameters {
         let templates::GovernanceParams {
             min_proposal_fund,
             max_proposal_code_size,
@@ -422,7 +437,7 @@ impl Finalized {
             min_proposal_grace_epochs,
             max_proposal_latency,
         } = self.parameters.gov_params.clone();
-        namada::governance::parameters::GovernanceParameters {
+        namada_sdk::governance::parameters::GovernanceParameters {
             min_proposal_fund: Amount::native_whole(min_proposal_fund),
             max_proposal_code_size,
             max_proposal_period,
@@ -433,15 +448,11 @@ impl Finalized {
         }
     }
 
-    pub fn get_pgf_params(
-        &self,
-    ) -> namada::governance::pgf::parameters::PgfParameters {
+    pub fn get_pgf_params(&self) -> PgfParameters {
         self.parameters.pgf_params.clone()
     }
 
-    pub fn get_eth_bridge_params(
-        &self,
-    ) -> Option<namada::ledger::eth_bridge::EthereumBridgeParams> {
+    pub fn get_eth_bridge_params(&self) -> Option<EthereumBridgeParams> {
         if let Some(templates::EthBridgeParams {
             eth_start_height,
             min_confirmations,
@@ -449,7 +460,7 @@ impl Finalized {
             erc20_whitelist,
         }) = self.parameters.eth_bridge_params.clone()
         {
-            Some(namada::ledger::eth_bridge::EthereumBridgeParams {
+            Some(EthereumBridgeParams {
                 eth_start_height,
                 min_confirmations,
                 erc20_whitelist,
@@ -460,12 +471,12 @@ impl Finalized {
         }
     }
 
-    pub fn get_ibc_params(&self) -> namada::ibc::parameters::IbcParameters {
+    pub fn get_ibc_params(&self) -> IbcParameters {
         let templates::IbcParams {
             default_mint_limit,
             default_per_epoch_throughput_limit,
         } = self.parameters.ibc_params.clone();
-        namada::ibc::parameters::IbcParameters {
+        IbcParameters {
             default_mint_limit,
             default_per_epoch_throughput_limit,
         }
@@ -738,7 +749,7 @@ pub struct FinalizedParameters {
     pub parameters: templates::ChainParams<Validated>,
     pub pos_params: templates::PosParams,
     pub gov_params: templates::GovernanceParams,
-    pub pgf_params: namada::governance::pgf::parameters::PgfParameters,
+    pub pgf_params: PgfParameters,
     pub eth_bridge_params: Option<templates::EthBridgeParams>,
     pub ibc_params: templates::IbcParams,
 }
@@ -754,11 +765,11 @@ impl FinalizedParameters {
             ibc_params,
         }: templates::Parameters<Validated>,
     ) -> Self {
-        use namada::governance::pgf::parameters::PgfParameters;
         let finalized_pgf_params = PgfParameters {
             stewards: pgf_params.stewards,
             pgf_inflation_rate: pgf_params.pgf_inflation_rate,
             stewards_inflation_rate: pgf_params.stewards_inflation_rate,
+            maximum_number_of_stewards: pgf_params.maximum_number_of_stewards,
         };
         Self {
             parameters,
@@ -851,6 +862,7 @@ mod test {
     use std::path::PathBuf;
 
     use super::*;
+    use crate::time::test_utils::GENESIS_TIME;
 
     /// Test that the [`finalize`] returns deterministic output with the same
     /// chain ID for the same input.
@@ -868,8 +880,7 @@ mod test {
         let chain_id_prefix: ChainIdPrefix =
             FromStr::from_str("test-prefix").unwrap();
 
-        let genesis_time =
-            DateTimeUtc::from_str("2021-12-31T00:00:00Z").unwrap();
+        let genesis_time = DateTimeUtc::from_str(GENESIS_TIME).unwrap();
 
         let consensus_timeout_commit =
             crate::facade::tendermint::Timeout::from_str("1s").unwrap();

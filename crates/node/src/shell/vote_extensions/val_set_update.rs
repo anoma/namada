@@ -1,7 +1,7 @@
 //! Extend Tendermint votes with validator set updates, to be relayed to
 //! Namada's Ethereum bridge smart contracts.
 
-use namada::core::collections::HashMap;
+use namada_sdk::collections::HashMap;
 
 use super::*;
 
@@ -26,7 +26,7 @@ where
         >,
     > + '_ {
         vote_extensions.into_iter().map(|vote_extension| {
-            validate_valset_upd_vext(
+            validate_valset_upd_vext::<_, _, governance::Store<_>>(
                 &self.state,
                 &vote_extension,
                 self.state.in_mem().get_current_epoch().0,
@@ -110,20 +110,22 @@ where
 #[allow(clippy::cast_possible_truncation)]
 #[cfg(test)]
 mod test_vote_extensions {
-    use namada::core::key::RefTo;
-    use namada::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
-    use namada::ledger::pos::PosQueries;
-    use namada::proof_of_stake::storage::{
-        consensus_validator_set_handle,
-        read_consensus_validator_set_addresses_with_stake,
-    };
-    use namada::proof_of_stake::types::WeightedValidator;
-    use namada::proof_of_stake::Epoch;
-    use namada::state::collections::lazy_map::{NestedSubKey, SubKey};
-    use namada::tendermint::abci::types::VoteInfo;
-    use namada::vote_ext::validator_set_update;
     use namada_apps_lib::wallet;
+    use namada_sdk::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
+    use namada_sdk::eth_bridge::test_utils::GovStore;
     use namada_sdk::eth_bridge::EthBridgeQueries;
+    use namada_sdk::governance;
+    use namada_sdk::key::RefTo;
+    use namada_sdk::proof_of_stake::queries::get_consensus_validator_from_protocol_pk;
+    use namada_sdk::proof_of_stake::storage::{
+        consensus_validator_set_handle,
+        read_consensus_validator_set_addresses_with_stake, read_pos_params,
+    };
+    use namada_sdk::proof_of_stake::types::WeightedValidator;
+    use namada_sdk::proof_of_stake::Epoch;
+    use namada_sdk::state::collections::lazy_map::{NestedSubKey, SubKey};
+    use namada_sdk::tendermint::abci::types::VoteInfo;
+    use namada_vote_ext::validator_set_update;
 
     use super::validate_valset_upd_vext;
     use crate::shell::test_utils::{self, get_pkh_from_address};
@@ -152,8 +154,7 @@ mod test_vote_extensions {
             shell
                 .state
                 .ethbridge_queries()
-                .get_consensus_eth_addresses(Some(next_epoch))
-                .iter()
+                .get_consensus_eth_addresses::<governance::Store<_>>(next_epoch)
                 .map(|(eth_addr_book, _, voting_power)| {
                     (eth_addr_book, voting_power)
                 })
@@ -168,7 +169,7 @@ mod test_vote_extensions {
         }
         .sign(eth_bridge_key);
         assert!(
-            validate_valset_upd_vext(
+            validate_valset_upd_vext::<_, _, governance::Store<_>>(
                 &shell.state,
                 &validator_set_update,
                 signing_epoch,
@@ -198,8 +199,7 @@ mod test_vote_extensions {
             shell
                 .state
                 .ethbridge_queries()
-                .get_consensus_eth_addresses(Some(next_epoch))
-                .iter()
+                .get_consensus_eth_addresses::<governance::Store<_>>(next_epoch)
                 .map(|(eth_addr_book, _, voting_power)| {
                     (eth_addr_book, voting_power)
                 })
@@ -213,7 +213,7 @@ mod test_vote_extensions {
         }
         .sign(&eth_bridge_key);
         assert!(
-            validate_valset_upd_vext(
+            validate_valset_upd_vext::<_, _, governance::Store<_>>(
                 &shell.state,
                 &validator_set_update,
                 signing_epoch,
@@ -281,8 +281,7 @@ mod test_vote_extensions {
             shell
                 .state
                 .ethbridge_queries()
-                .get_consensus_eth_addresses(Some(next_epoch))
-                .iter()
+                .get_consensus_eth_addresses::<governance::Store<_>>(next_epoch)
                 .map(|(eth_addr_book, _, voting_power)| {
                     (eth_addr_book, voting_power)
                 })
@@ -297,7 +296,8 @@ mod test_vote_extensions {
         assert!(vote_ext.data.voting_powers.is_empty());
 
         // we advance forward to the next epoch
-        let params = shell.state.pos_queries().get_pos_params();
+        let params =
+            read_pos_params::<_, governance::Store<_>>(&shell.state).unwrap();
         let mut consensus_set: Vec<WeightedValidator> =
             read_consensus_validator_set_addresses_with_stake(
                 &shell.state,
@@ -323,34 +323,42 @@ mod test_vote_extensions {
         }];
         let req = FinalizeBlock {
             proposer_address: pkh1.to_vec(),
-            votes,
+            decided_last_commit:
+                crate::facade::tendermint::abci::types::CommitInfo {
+                    round: 0u8.into(),
+                    votes,
+                },
             ..Default::default()
         };
         assert_eq!(shell.start_new_epoch(Some(req)).0, 1);
         assert!(
-            shell
-                .state
-                .pos_queries()
-                .get_validator_from_protocol_pk(&protocol_key.ref_to(), None)
-                .is_err()
+            get_consensus_validator_from_protocol_pk::<_, GovStore<_>>(
+                &shell.state,
+                &protocol_key.ref_to(),
+                None
+            )
+            .unwrap()
+            .is_none()
         );
         let prev_epoch = shell.state.in_mem().get_current_epoch().0 - 1;
         assert!(
-            shell
-                .shell
-                .state
-                .pos_queries()
-                .get_validator_from_protocol_pk(
-                    &protocol_key.ref_to(),
-                    Some(prev_epoch)
-                )
-                .is_ok()
+            get_consensus_validator_from_protocol_pk::<_, GovStore<_>>(
+                &shell.state,
+                &protocol_key.ref_to(),
+                Some(prev_epoch)
+            )
+            .unwrap()
+            .is_some()
         );
 
         // check validation of the vext passes
         assert!(
-            validate_valset_upd_vext(&shell.state, &vote_ext, signing_epoch)
-                .is_ok()
+            validate_valset_upd_vext::<_, _, governance::Store<_>>(
+                &shell.state,
+                &vote_ext,
+                signing_epoch
+            )
+            .is_ok()
         );
     }
 
@@ -378,8 +386,9 @@ mod test_vote_extensions {
                 shell
                     .state
                     .ethbridge_queries()
-                    .get_consensus_eth_addresses(Some(next_epoch))
-                    .iter()
+                    .get_consensus_eth_addresses::<governance::Store<_>>(
+                        next_epoch,
+                    )
                     .map(|(eth_addr_book, _, voting_power)| {
                         (eth_addr_book, voting_power)
                     })
@@ -395,7 +404,7 @@ mod test_vote_extensions {
             Some(ext)
         };
         assert!(
-            validate_valset_upd_vext(
+            validate_valset_upd_vext::<_, _, governance::Store<_>>(
                 &shell.state,
                 &validator_set_update.unwrap(),
                 signing_epoch,

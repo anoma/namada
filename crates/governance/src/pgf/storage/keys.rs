@@ -1,7 +1,7 @@
 use namada_core::address::Address;
 use namada_core::storage::{DbKeySeg, Key, KeySeg};
 use namada_macros::StorageKeys;
-use namada_storage::collections::{lazy_map, LazyCollection, LazyMap};
+use namada_state::collections::{lazy_map, LazyCollection, LazyMap};
 
 use crate::pgf::storage::steward::StewardDetail;
 use crate::pgf::ADDRESS;
@@ -14,6 +14,7 @@ struct Keys {
     fundings: &'static str,
     pgf_inflation_rate: &'static str,
     steward_inflation_rate: &'static str,
+    maximum_number_of_stewards: &'static str,
 }
 
 /// Obtain a storage key for stewards key
@@ -91,6 +92,13 @@ pub fn is_steward_inflation_rate_key(key: &Key) -> bool {
 pub fn get_pgf_inflation_rate_key() -> Key {
     Key::from(ADDRESS.to_db_key())
         .push(&Keys::VALUES.pgf_inflation_rate.to_owned())
+        .expect("Cannot obtain a storage key")
+}
+
+/// Get key for maximum number of pgf stewards
+pub fn get_maximum_number_of_pgf_steward_key() -> Key {
+    Key::from(ADDRESS.to_db_key())
+        .push(&Keys::VALUES.maximum_number_of_stewards.to_owned())
         .expect("Cannot obtain a storage key")
 }
 

@@ -42,7 +42,7 @@ pub struct OnChainProposal {
     pub activation_epoch: Epoch,
 }
 
-/// Pgf default proposal
+/// PGF default proposal
 #[derive(
     Debug,
     Clone,
@@ -71,16 +71,11 @@ impl DefaultProposal {
         if force {
             return Ok(self);
         }
-        is_valid_start_epoch(
-            self.proposal.voting_start_epoch,
-            current_epoch,
-            governance_parameters.min_proposal_voting_period,
-        )?;
+        is_valid_start_epoch(self.proposal.voting_start_epoch, current_epoch)?;
         is_valid_end_epoch(
             self.proposal.voting_start_epoch,
             self.proposal.voting_end_epoch,
             current_epoch,
-            governance_parameters.min_proposal_voting_period,
             governance_parameters.min_proposal_voting_period,
             governance_parameters.max_proposal_period,
         )?;
@@ -119,16 +114,16 @@ impl TryFrom<&[u8]> for DefaultProposal {
     }
 }
 
-/// Pgf stewards proposal
+/// PGF stewards proposal
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PgfStewardProposal {
     /// The proposal data
     pub proposal: OnChainProposal,
-    /// The Pgf steward proposal extra data
+    /// The PGF steward proposal extra data
     pub data: StewardsUpdate,
 }
 
-/// Pgf steward proposal extra data
+/// PGF steward proposal extra data
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StewardsUpdate {
     /// The optional steward to add
@@ -138,7 +133,7 @@ pub struct StewardsUpdate {
 }
 
 impl PgfStewardProposal {
-    /// Validate a Pgf stewards proposal
+    /// Validate a PGF stewards proposal
     pub fn validate(
         self,
         governance_parameters: &GovernanceParameters,
@@ -149,16 +144,11 @@ impl PgfStewardProposal {
         if force {
             return Ok(self);
         }
-        is_valid_start_epoch(
-            self.proposal.voting_start_epoch,
-            current_epoch,
-            governance_parameters.min_proposal_voting_period,
-        )?;
+        is_valid_start_epoch(self.proposal.voting_start_epoch, current_epoch)?;
         is_valid_end_epoch(
             self.proposal.voting_start_epoch,
             self.proposal.voting_end_epoch,
             current_epoch,
-            governance_parameters.min_proposal_voting_period,
             governance_parameters.min_proposal_voting_period,
             governance_parameters.max_proposal_period,
         )?;
@@ -194,7 +184,7 @@ impl TryFrom<&[u8]> for PgfStewardProposal {
     }
 }
 
-/// Pgf funding proposal
+/// PGF funding proposal
 #[derive(
     Debug,
     Clone,
@@ -207,12 +197,12 @@ impl TryFrom<&[u8]> for PgfStewardProposal {
 pub struct PgfFundingProposal {
     /// The proposal data
     pub proposal: OnChainProposal,
-    /// The Pgf funding proposal extra data
+    /// The PGF funding proposal extra data
     pub data: PgfFunding,
 }
 
 impl PgfFundingProposal {
-    /// Validate a Pgf funding proposal
+    /// Validate a PGF funding proposal
     pub fn validate(
         self,
         governance_parameters: &GovernanceParameters,
@@ -222,16 +212,11 @@ impl PgfFundingProposal {
         if force {
             return Ok(self);
         }
-        is_valid_start_epoch(
-            self.proposal.voting_start_epoch,
-            current_epoch,
-            governance_parameters.min_proposal_voting_period,
-        )?;
+        is_valid_start_epoch(self.proposal.voting_start_epoch, current_epoch)?;
         is_valid_end_epoch(
             self.proposal.voting_start_epoch,
             self.proposal.voting_end_epoch,
             current_epoch,
-            governance_parameters.min_proposal_voting_period,
             governance_parameters.min_proposal_voting_period,
             governance_parameters.max_proposal_period,
         )?;
@@ -263,7 +248,7 @@ impl TryFrom<&[u8]> for PgfFundingProposal {
     }
 }
 
-/// Pgf stewards
+/// PGF stewards
 #[derive(
     Debug,
     Clone,
@@ -274,13 +259,13 @@ impl TryFrom<&[u8]> for PgfFundingProposal {
     Deserialize,
 )]
 pub struct PgfSteward {
-    /// Pgf action
+    /// PGF action
     pub action: PgfAction,
     /// steward address
     pub address: Address,
 }
 
-/// Pgf action
+/// PGF action
 #[derive(
     Debug,
     Clone,
@@ -298,13 +283,13 @@ pub enum PgfAction {
 }
 
 impl PgfAction {
-    /// Check if a pgf action is adding a steward
+    /// Check if a PGF action is adding a steward
     pub fn is_add(&self) -> bool {
         matches!(self, PgfAction::Add)
     }
 }
 
-/// Pgf funding
+/// PGF funding
 #[derive(
     Debug,
     Clone,
@@ -315,9 +300,9 @@ impl PgfAction {
     Deserialize,
 )]
 pub struct PgfFunding {
-    /// Pgf continuous funding
+    /// PGF continuous funding
     pub continuous: Vec<PGFTarget>,
-    /// pgf retro fundings
+    /// PGF retro fundings
     pub retro: Vec<PGFTarget>,
 }
 
@@ -339,7 +324,7 @@ impl Display for PgfFunding {
     }
 }
 
-/// Pgf continuous funding
+/// PGF continuous funding
 #[derive(
     Debug,
     Clone,
@@ -350,13 +335,13 @@ impl Display for PgfFunding {
     Deserialize,
 )]
 pub struct PgfContinuous {
-    /// Pgf target
+    /// PGF target
     pub target: PGFTarget,
-    /// Pgf action
+    /// PGF action
     pub action: PgfAction,
 }
 
-/// Pgf retro funding
+/// PGF retro funding
 #[derive(
     Debug,
     Clone,
@@ -367,6 +352,6 @@ pub struct PgfContinuous {
     Deserialize,
 )]
 pub struct PgfRetro {
-    /// Pgf retro target
+    /// PGF retro target
     pub target: PGFTarget,
 }

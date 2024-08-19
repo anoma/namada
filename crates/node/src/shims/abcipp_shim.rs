@@ -4,19 +4,20 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use futures::future::FutureExt;
-use namada::core::hash::Hash;
-use namada::core::key::tm_raw_hash_to_string;
-use namada::core::storage::BlockHeight;
-use namada::proof_of_stake::storage::find_validator_by_raw_hash;
-use namada::state::DB;
-use namada::time::{DateTimeUtc, Utc};
-use namada::tx::data::hash_tx;
+use namada_sdk::hash::Hash;
 use namada_sdk::migrations::ScheduledMigration;
+use namada_sdk::state::{ProcessProposalCachedResult, DB};
+use namada_sdk::storage::BlockHeight;
+use namada_sdk::tendermint::abci::response::ProcessProposal;
+use namada_sdk::time::{DateTimeUtc, Utc};
+use namada_sdk::tx::data::hash_tx;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc::UnboundedSender;
 use tower::Service;
 
-use super::abcipp_shim_types::shim::request::{FinalizeBlock, ProcessedTx};
+use super::abcipp_shim_types::shim::request::{
+    CheckProcessProposal, FinalizeBlock, ProcessedTx,
+};
 use super::abcipp_shim_types::shim::{
     Error, Request, Response, TakeSnapshot, TxBytes,
 };
@@ -120,43 +121,28 @@ impl AbcippShim {
                 Req::EndBlock(_) => {
                     let begin_block_request =
                         self.begin_block_request.take().unwrap();
-                    let block_time = begin_block_request
-                        .header
-                        .time
-                        .try_into()
-                        .expect("valid RFC3339 block time");
 
-                    let tm_raw_hash_string = tm_raw_hash_to_string(
-                        begin_block_request.header.proposer_address,
-                    );
-                    let block_proposer = find_validator_by_raw_hash(
-                        &self.service.state,
-                        tm_raw_hash_string,
-                    )
-                    .unwrap()
-                    .expect(
-                        "Unable to find native validator address of block \
-                         proposer from tendermint raw hash",
-                    );
-
-                    let processing_results = self.service.process_txs(
-                        &self.delivered_txs,
-                        block_time,
-                        &block_proposer,
-                    );
-                    let mut txs = Vec::with_capacity(self.delivered_txs.len());
-                    let mut delivered = vec![];
-                    std::mem::swap(&mut self.delivered_txs, &mut delivered);
-                    for (result, tx) in processing_results
-                        .into_iter()
-                        .zip(delivered.into_iter())
-                    {
-                        txs.push(ProcessedTx { tx, result });
-                    }
-                    let mut end_block_request: FinalizeBlock =
-                        begin_block_request.into();
-                    end_block_request.txs = txs;
-                    self.service
+                    match self.get_process_proposal_result(
+                        begin_block_request.clone(),
+                    ) {
+                        ProcessProposalCachedResult::Accepted(tx_results) => {
+                            let mut txs =
+                                Vec::with_capacity(self.delivered_txs.len());
+                            let delivered =
+                                std::mem::take(&mut self.delivered_txs);
+                            for (result, tx) in tx_results
+                                .into_iter()
+                                .zip(delivered.into_iter())
+                            {
+                                txs.push(ProcessedTx {
+                                    tx,
+                                    result: result.into(),
+                                });
+                            }
+                            let mut end_block_request: FinalizeBlock =
+                                begin_block_request.into();
+                            end_block_request.txs = txs;
+                            self.service
                         .call(Request::FinalizeBlock(end_block_request))
                         .map_err(Error::from)
                         .and_then(|res| match res {
@@ -165,6 +151,13 @@ impl AbcippShim {
                             }
                             _ => Err(Error::ConvertResp(res)),
                         })
+                        }
+                        ProcessProposalCachedResult::Rejected => {
+                            Err(Error::Shell(
+                                crate::shell::Error::RejectedBlockProposal,
+                            ))
+                        }
+                    }
                 }
                 Req::Commit => match self.service.call(Request::Commit) {
                     Ok(Response::Commit(res, take_snapshot)) => {
@@ -245,6 +238,78 @@ impl AbcippShim {
             // N.B. If a task is still running, it will continue
             // in the background but we will forget about it.
             self.snapshot_task.replace(snapshot_task);
+        }
+    }
+
+    // Retrieve the cached result of process proposal for the given block or
+    // compute it if missing
+    fn get_process_proposal_result(
+        &mut self,
+        begin_block_request: request::BeginBlock,
+    ) -> ProcessProposalCachedResult {
+        match namada_sdk::hash::Hash::try_from(begin_block_request.hash) {
+            Ok(block_hash) => {
+                match self
+                    .service
+                    .state
+                    .in_mem_mut()
+                    .block_proposals_cache
+                    .get(&block_hash)
+                {
+                    // We already have the result of process proposal for
+                    // this block cached in memory
+                    Some(res) => res.to_owned(),
+                    None => {
+                        // Need to run process proposal to extract the data we
+                        // need for finalize block (tx results)
+                        let process_req =
+                            CheckProcessProposal::from(begin_block_request)
+                                .cast_to_tendermint_req(
+                                    self.delivered_txs.clone(),
+                                );
+
+                        let (process_resp, res) =
+                            self.service.process_proposal(process_req.into());
+                        let result = if let ProcessProposal::Accept =
+                            process_resp
+                        {
+                            ProcessProposalCachedResult::Accepted(
+                                res.into_iter().map(|res| res.into()).collect(),
+                            )
+                        } else {
+                            ProcessProposalCachedResult::Rejected
+                        };
+
+                        // Cache the result
+                        self.service
+                            .state
+                            .in_mem_mut()
+                            .block_proposals_cache
+                            .put(block_hash.to_owned(), result.clone());
+
+                        result
+                    }
+                }
+            }
+            Err(_) => {
+                // Need to run process proposal to extract the data we need for
+                // finalize block (tx results)
+                let process_req =
+                    CheckProcessProposal::from(begin_block_request)
+                        .cast_to_tendermint_req(self.delivered_txs.clone());
+
+                // Do not cache the result in this case since we
+                // don't have the hash of the block
+                let (process_resp, res) =
+                    self.service.process_proposal(process_req.into());
+                if let ProcessProposal::Accept = process_resp {
+                    ProcessProposalCachedResult::Accepted(
+                        res.into_iter().map(|res| res.into()).collect(),
+                    )
+                } else {
+                    ProcessProposalCachedResult::Rejected
+                }
+            }
         }
     }
 }

@@ -7,10 +7,9 @@ use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use color_eyre::eyre::Result;
 use data_encoding::HEXLOWER;
-use namada::account::AccountPublicKeysMap;
-use namada::core::collections::HashMap;
-use namada::token::{self, Amount, DenominatedAmount};
-use namada_apps_lib::wallet::defaults::{self, albert_keypair};
+use namada_apps_lib::wallet::defaults::{
+    self, get_unencrypted_keypair, is_use_device,
+};
 use namada_core::dec::Dec;
 use namada_core::hash::Hash;
 use namada_core::storage::{DbColFam, Epoch, Key};
@@ -20,9 +19,12 @@ use namada_node::shell::testing::node::NodeResults;
 use namada_node::shell::testing::utils::{Bin, CapturedOutput};
 use namada_node::shell::SnapshotSync;
 use namada_node::storage::DbSnapshot;
+use namada_sdk::account::AccountPublicKeysMap;
+use namada_sdk::collections::HashMap;
 use namada_sdk::migrations;
 use namada_sdk::queries::RPC;
-use namada_sdk::tx::{TX_TRANSPARENT_TRANSFER_WASM, VP_USER_WASM};
+use namada_sdk::token::{self, DenominatedAmount};
+use namada_sdk::tx::{TX_TRANSFER_WASM, VP_USER_WASM};
 use namada_test_utils::TestWasms;
 use test_log::test;
 
@@ -31,6 +33,7 @@ use crate::e2e::setup::constants::{
     ALBERT, ALBERT_KEY, APFEL, BERTHA, BERTHA_KEY, BTC, CHRISTEL, CHRISTEL_KEY,
     DAEWON, DOT, ESTER, ETH, GOVERNANCE_ADDRESS, KARTOFFEL, NAM, SCHNITZEL,
 };
+use crate::e2e::setup::{apply_use_device, ensure_hot_key};
 use crate::integration::helpers::{
     find_address, prepare_steward_commission_update_data,
 };
@@ -63,16 +66,18 @@ fn ledger_txs_and_queries() -> Result<()> {
     let validator_one_rpc = "http://127.0.0.1:26567";
 
     let (node, _services) = setup::setup()?;
-    let transfer = token::TransparentTransfer {
-        source: defaults::bertha_address(),
-        target: defaults::albert_address(),
-        token: node.native_token(),
-        amount: token::DenominatedAmount::new(
-            token::Amount::native_whole(10),
-            token::NATIVE_MAX_DECIMAL_PLACES.into(),
-        ),
-    }
-    .serialize_to_vec();
+    let transfer = token::Transfer::default()
+        .transfer(
+            defaults::bertha_address(),
+            defaults::albert_address(),
+            node.native_token(),
+            token::DenominatedAmount::new(
+                token::Amount::native_whole(10),
+                token::NATIVE_MAX_DECIMAL_PLACES.into(),
+            ),
+        )
+        .unwrap()
+        .serialize_to_vec();
     let tx_data_path = node.test_dir.path().join("tx.data");
     std::fs::write(&tx_data_path, transfer).unwrap();
     let tx_data_path = tx_data_path.to_string_lossy();
@@ -82,7 +87,7 @@ fn ledger_txs_and_queries() -> Result<()> {
 
     let txs_args = vec![
         // 2. Submit a token transfer tx (from an established account)
-        vec![
+        apply_use_device(vec![
             "transparent-transfer",
             "--source",
             BERTHA,
@@ -96,9 +101,9 @@ fn ledger_txs_and_queries() -> Result<()> {
             BERTHA_KEY,
             "--node",
             &validator_one_rpc,
-        ],
+        ]),
         // Submit a token transfer tx (from an ed25519 implicit account)
-        vec![
+        apply_use_device(vec![
             "transparent-transfer",
             "--source",
             DAEWON,
@@ -112,9 +117,9 @@ fn ledger_txs_and_queries() -> Result<()> {
             DAEWON,
             "--node",
             &validator_one_rpc,
-        ],
+        ]),
         // Submit a token transfer tx (from a secp256k1 implicit account)
-        vec![
+        apply_use_device(vec![
             "transparent-transfer",
             "--source",
             ESTER,
@@ -126,10 +131,10 @@ fn ledger_txs_and_queries() -> Result<()> {
             "10.1",
             "--node",
             &validator_one_rpc,
-        ],
+        ]),
         // 3. Submit a transaction to update an account's validity
         // predicate
-        vec![
+        apply_use_device(vec![
             "update-account",
             "--address",
             BERTHA,
@@ -139,12 +144,12 @@ fn ledger_txs_and_queries() -> Result<()> {
             BERTHA_KEY,
             "--node",
             &validator_one_rpc,
-        ],
+        ]),
         // 4. Submit a custom tx
-        vec![
+        apply_use_device(vec![
             "tx",
             "--code-path",
-            TX_TRANSPARENT_TRANSFER_WASM,
+            TX_TRANSFER_WASM,
             "--data-path",
             &tx_data_path,
             "--owner",
@@ -153,12 +158,12 @@ fn ledger_txs_and_queries() -> Result<()> {
             BERTHA_KEY,
             "--node",
             &validator_one_rpc,
-        ],
+        ]),
         // 5. Submit a tx to initialize a new account
-        vec![
+        apply_use_device(vec![
             "init-account",
             "--public-keys",
-            // Value obtained from `namada::core::key::ed25519::tests::gen_keypair`
+            // Value obtained from `namada_sdk::key::ed25519::tests::gen_keypair`
             "tpknam1qpqfzxu3gt05jx2mvg82f4anf90psqerkwqhjey4zlqv0qfgwuvkzt5jhkp",
             "--threshold",
             "1",
@@ -170,9 +175,9 @@ fn ledger_txs_and_queries() -> Result<()> {
             BERTHA_KEY,
             "--node",
             &validator_one_rpc,
-        ],
+        ]),
         // 5. Submit a tx to initialize a new multisig account
-        vec![
+        apply_use_device(vec![
             "init-account",
             "--public-keys",
             &multisig_account,
@@ -186,12 +191,13 @@ fn ledger_txs_and_queries() -> Result<()> {
             BERTHA_KEY,
             "--node",
             &validator_one_rpc,
-        ],
+        ]),
     ];
 
     for tx_args in &txs_args {
         for &dry_run in &[true, false] {
-            let tx_args = if dry_run && tx_args[0] == "tx" {
+            let tx_args = if dry_run && (tx_args[0] == "tx" || is_use_device())
+            {
                 continue;
             } else if dry_run {
                 [tx_args.clone(), vec!["--dry-run"]].concat()
@@ -360,7 +366,7 @@ fn invalid_transactions() -> Result<()> {
 
     // 2. Submit an invalid transaction (trying to transfer tokens should fail
     // in the user's VP due to the wrong signer)
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "transparent-transfer",
         "--source",
         BERTHA,
@@ -375,7 +381,7 @@ fn invalid_transactions() -> Result<()> {
         "--node",
         &validator_one_rpc,
         "--force",
-    ];
+    ]);
 
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
     assert_matches!(captured.result, Ok(_));
@@ -389,7 +395,7 @@ fn invalid_transactions() -> Result<()> {
     }
 
     let daewon_lower = DAEWON.to_lowercase();
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "transparent-transfer",
         "--source",
         DAEWON,
@@ -406,7 +412,7 @@ fn invalid_transactions() -> Result<()> {
         "--force",
         "--node",
         &validator_one_rpc,
-    ];
+    ]);
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
     assert!(captured.contains(TX_INSUFFICIENT_BALANCE));
 
@@ -498,7 +504,7 @@ fn pos_rewards() -> Result<()> {
     .unwrap();
 
     // Claim rewards
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "claim-rewards",
         "--validator",
         "validator-0-validator",
@@ -506,7 +512,7 @@ fn pos_rewards() -> Result<()> {
         "validator-0-account-key",
         "--node",
         &validator_one_rpc,
-    ];
+    ]);
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
     println!("{:?}", captured.result);
     assert_matches!(captured.result, Ok(_));
@@ -555,7 +561,7 @@ fn test_bond_queries() -> Result<()> {
 
     let validator_alias = "validator-0-validator";
     // 2. Submit a delegation to the genesis validator
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "bond",
         "--validator",
         validator_alias,
@@ -563,13 +569,13 @@ fn test_bond_queries() -> Result<()> {
         "100",
         "--ledger-address",
         &validator_one_rpc,
-    ];
+    ]);
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
     assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(TX_APPLIED_SUCCESS));
 
     // 3. Submit a delegation to the genesis validator
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "bond",
         "--validator",
         "validator-0-validator",
@@ -581,7 +587,7 @@ fn test_bond_queries() -> Result<()> {
         BERTHA_KEY,
         "--ledger-address",
         &validator_one_rpc,
-    ];
+    ]);
 
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
     assert_matches!(captured.result, Ok(_));
@@ -593,7 +599,7 @@ fn test_bond_queries() -> Result<()> {
     }
 
     // 4. Submit another delegation to the genesis validator
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "bond",
         "--validator",
         validator_alias,
@@ -605,13 +611,13 @@ fn test_bond_queries() -> Result<()> {
         BERTHA_KEY,
         "--ledger-address",
         &validator_one_rpc,
-    ];
+    ]);
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
     assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(TX_APPLIED_SUCCESS));
 
     // 5. Submit an unbond of the delegation
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "unbond",
         "--validator",
         validator_alias,
@@ -623,7 +629,7 @@ fn test_bond_queries() -> Result<()> {
         BERTHA_KEY,
         "--ledger-address",
         &validator_one_rpc,
-    ];
+    ]);
 
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
     assert_matches!(captured.result, Ok(_));
@@ -687,7 +693,7 @@ fn proposal_submission() -> Result<()> {
     let (mut node, _services) = setup::setup()?;
 
     // 1.1 Delegate some token
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "bond",
         "--validator",
         "validator-0-validator",
@@ -697,7 +703,7 @@ fn proposal_submission() -> Result<()> {
         "900",
         "--node",
         &validator_one_rpc,
-    ];
+    ]);
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
     assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(TX_APPLIED_SUCCESS));
@@ -706,21 +712,20 @@ fn proposal_submission() -> Result<()> {
     let albert = defaults::albert_address();
     let valid_proposal_json_path = prepare_proposal_data(
         node.test_dir.path(),
-        0,
         albert.clone(),
         TestWasms::TxProposalCode.read_bytes(),
         12,
     );
 
-    let submit_proposal_args = vec![
+    let submit_proposal_args = apply_use_device(vec![
         "init-proposal",
         "--data-path",
         valid_proposal_json_path.to_str().unwrap(),
         "--gas-limit",
-        "2000000",
+        "5000000",
         "--node",
         &validator_one_rpc,
-    ];
+    ]);
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, submit_proposal_args));
     assert_matches!(captured.result, Ok(_));
@@ -770,67 +775,12 @@ fn proposal_submission() -> Result<()> {
     assert_matches!(captured.result, Ok(_));
     assert!(captured.contains("nam: 500"));
 
-    // 6. Submit an invalid proposal
-    // proposal is invalid due to voting_end_epoch - voting_start_epoch < 3
-    let invalid_proposal_json = prepare_proposal_data(
-        node.test_dir.path(),
-        1,
-        albert,
-        TestWasms::TxProposalCode.read_bytes(),
-        1,
-    );
-
-    let submit_proposal_args = vec![
-        "init-proposal",
-        "--data-path",
-        invalid_proposal_json.to_str().unwrap(),
-        "--node",
-        &validator_one_rpc,
-    ];
-
-    let captured =
-        CapturedOutput::of(|| run(&node, Bin::Client, submit_proposal_args));
-    assert!(captured.result.is_err());
-    println!("{:?}", captured.result);
-    assert!(captured.err_contains(
-        "Proposal data are invalid: Invalid proposal start epoch: 1 must be \
-         greater than current epoch .* and a multiple of 3"
-    ));
-
-    // 7. Check invalid proposal was not submitted
-    let proposal_query_args = vec![
-        "query-proposal",
-        "--proposal-id",
-        "1",
-        "--node",
-        &validator_one_rpc,
-    ];
-    let captured =
-        CapturedOutput::of(|| run(&node, Bin::Client, proposal_query_args));
-    assert_matches!(captured.result, Ok(_));
-    assert!(captured.contains("No proposal found with id: 1"));
-
-    // 8. Query token balance (funds shall not be submitted)
-    let query_balance_args = vec![
-        "balance",
-        "--owner",
-        ALBERT,
-        "--token",
-        NAM,
-        "--node",
-        &validator_one_rpc,
-    ];
-    let captured =
-        CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
-    assert_matches!(captured.result, Ok(_));
-    assert!(captured.contains("nam: 1979500"));
-
     // 9.1. Send a yay vote from a validator
     while node.current_epoch().0 <= 13 {
         node.next_epoch();
     }
 
-    let submit_proposal_vote = vec![
+    let submit_proposal_vote = apply_use_device(vec![
         "vote-proposal",
         "--proposal-id",
         "0",
@@ -840,7 +790,7 @@ fn proposal_submission() -> Result<()> {
         "validator-0-validator",
         "--node",
         &validator_one_rpc,
-    ];
+    ]);
 
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, submit_proposal_vote));
@@ -848,7 +798,7 @@ fn proposal_submission() -> Result<()> {
     assert!(captured.contains(TX_APPLIED_SUCCESS));
 
     // 9.2. Send a valid yay vote from a delegator with bonds
-    let submit_proposal_vote_delegator = vec![
+    let submit_proposal_vote_delegator = apply_use_device(vec![
         "vote-proposal",
         "--proposal-id",
         "0",
@@ -858,7 +808,7 @@ fn proposal_submission() -> Result<()> {
         BERTHA,
         "--node",
         &validator_one_rpc,
-    ];
+    ]);
 
     let captured = CapturedOutput::of(|| {
         run(&node, Bin::Client, submit_proposal_vote_delegator)
@@ -867,7 +817,7 @@ fn proposal_submission() -> Result<()> {
     assert!(captured.contains(TX_APPLIED_SUCCESS));
 
     // 10. Send a yay vote from a non-validator/non-delegator user
-    let submit_proposal_vote = vec![
+    let submit_proposal_vote = apply_use_device(vec![
         "vote-proposal",
         "--proposal-id",
         "0",
@@ -877,7 +827,7 @@ fn proposal_submission() -> Result<()> {
         CHRISTEL,
         "--node",
         &validator_one_rpc,
-    ];
+    ]);
 
     // Expect a client failure here
     let captured =
@@ -953,10 +903,11 @@ fn proposal_submission() -> Result<()> {
     assert!(captured.contains(".*Min. proposal grace epochs: 9.*"));
 
     // 15. Try to initialize a new account with the no more allowlisted vp
-    let init_account = vec![
+    let init_account = apply_use_device(vec![
         "init-account",
         "--public-keys",
-        // Value obtained from `namada::core::key::ed25519::tests::gen_keypair`
+        // Value obtained from
+        // `namada_sdk::key::ed25519::tests::gen_keypair`
         "tpknam1qpqfzxu3gt05jx2mvg82f4anf90psqerkwqhjey4zlqv0qfgwuvkzt5jhkp",
         "--threshold",
         "1",
@@ -968,7 +919,7 @@ fn proposal_submission() -> Result<()> {
         BERTHA_KEY,
         "--node",
         &validator_one_rpc,
-    ];
+    ]);
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, init_account));
     assert_matches!(captured.result, Ok(_));
     assert!(
@@ -978,7 +929,7 @@ fn proposal_submission() -> Result<()> {
     // 16. Submit a tx touching a previous account with the no more allowlisted
     //     vp and verify that the transaction succeeds, i.e. the non allowlisted
     //     vp can still run
-    let transfer = vec![
+    let transfer = apply_use_device(vec![
         "transparent-transfer",
         "--source",
         BERTHA,
@@ -992,7 +943,7 @@ fn proposal_submission() -> Result<()> {
         BERTHA_KEY,
         "--node",
         &validator_one_rpc,
-    ];
+    ]);
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, transfer));
     assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(TX_APPLIED_SUCCESS));
@@ -1021,7 +972,7 @@ fn pgf_governance_proposal() -> Result<()> {
     // 1. start the ledger node
     let (mut node, _services) = setup::setup()?;
 
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "bond",
         "--validator",
         "validator-0-validator",
@@ -1031,7 +982,7 @@ fn pgf_governance_proposal() -> Result<()> {
         "900",
         "--ledger-address",
         &validator_one_rpc,
-    ];
+    ]);
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
     assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(TX_APPLIED_SUCCESS));
@@ -1043,21 +994,16 @@ fn pgf_governance_proposal() -> Result<()> {
         remove: vec![],
     };
 
-    let valid_proposal_json_path = prepare_proposal_data(
-        node.test_dir.path(),
-        0,
-        albert,
-        pgf_stewards,
-        12,
-    );
-    let submit_proposal_args = vec![
+    let valid_proposal_json_path =
+        prepare_proposal_data(node.test_dir.path(), albert, pgf_stewards, 12);
+    let submit_proposal_args = apply_use_device(vec![
         "init-proposal",
         "--pgf-stewards",
         "--data-path",
         valid_proposal_json_path.to_str().unwrap(),
         "--ledger-address",
         &validator_one_rpc,
-    ];
+    ]);
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, submit_proposal_args));
     assert_matches!(captured.result, Ok(_));
@@ -1111,7 +1057,7 @@ fn pgf_governance_proposal() -> Result<()> {
         node.next_epoch();
     }
 
-    let submit_proposal_vote = vec![
+    let submit_proposal_vote = apply_use_device(vec![
         "vote-proposal",
         "--proposal-id",
         "0",
@@ -1121,14 +1067,14 @@ fn pgf_governance_proposal() -> Result<()> {
         "validator-0-validator",
         "--ledger-address",
         &validator_one_rpc,
-    ];
+    ]);
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, submit_proposal_vote));
     assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(TX_APPLIED_SUCCESS));
 
     // Send different yay vote from delegator to check majority on 1/3
-    let submit_proposal_vote_delegator = vec![
+    let submit_proposal_vote_delegator = apply_use_device(vec![
         "vote-proposal",
         "--proposal-id",
         "0",
@@ -1138,7 +1084,7 @@ fn pgf_governance_proposal() -> Result<()> {
         BERTHA,
         "--ledger-address",
         &validator_one_rpc,
-    ];
+    ]);
     let captured = CapturedOutput::of(|| {
         run(&node, Bin::Client, submit_proposal_vote_delegator)
     });
@@ -1224,16 +1170,16 @@ fn pgf_governance_proposal() -> Result<()> {
         })],
     };
     let valid_proposal_json_path =
-        prepare_proposal_data(node.test_dir.path(), 1, albert, pgf_funding, 36);
+        prepare_proposal_data(node.test_dir.path(), albert, pgf_funding, 36);
 
-    let submit_proposal_args = vec![
+    let submit_proposal_args = apply_use_device(vec![
         "init-proposal",
         "--pgf-funding",
         "--data-path",
         valid_proposal_json_path.to_str().unwrap(),
         "--ledger-address",
         &validator_one_rpc,
-    ];
+    ]);
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, submit_proposal_args));
     assert_matches!(captured.result, Ok(_));
@@ -1309,7 +1255,7 @@ fn pgf_steward_change_commission() -> Result<()> {
         commission,
     );
     // Update steward commissions
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "update-steward-rewards",
         "--steward",
         ALBERT,
@@ -1317,7 +1263,7 @@ fn pgf_steward_change_commission() -> Result<()> {
         commission_path.to_str().unwrap(),
         "--node",
         &validator_one_rpc,
-    ];
+    ]);
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
     assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(TX_APPLIED_SUCCESS));
@@ -1367,7 +1313,6 @@ fn implicit_account_reveal_pk() -> Result<()> {
             let author = find_address(&node, source).unwrap();
             let valid_proposal_json_path = prepare_proposal_data(
                 node.test_dir.path(),
-                0,
                 author,
                 TestWasms::TxProposalCode.read_bytes(),
                 12,
@@ -1446,7 +1391,7 @@ fn implicit_account_reveal_pk() -> Result<()> {
         // Apply the key_alias once the key is generated to obtain tx args
         let tx_args = tx_args(&key_alias);
         // 2b. Send some funds to the implicit account.
-        let credit_args = vec![
+        let credit_args = apply_use_device(vec![
             "transparent-transfer",
             "--source",
             BERTHA,
@@ -1460,7 +1405,7 @@ fn implicit_account_reveal_pk() -> Result<()> {
             BERTHA_KEY,
             "--node",
             &validator_one_rpc,
-        ];
+        ]);
         run(&node, Bin::Client, credit_args)?;
         node.assert_success();
 
@@ -1520,7 +1465,7 @@ fn change_validator_metadata() -> Result<()> {
     assert!(captured.contains("max change per epoch:"));
 
     // 3. Add some metadata to the validator
-    let metadata_change_args = vec![
+    let metadata_change_args = apply_use_device(vec![
         "change-metadata",
         "--validator",
         "validator-0-validator",
@@ -1534,7 +1479,7 @@ fn change_validator_metadata() -> Result<()> {
         "theokayestvalidator.com",
         "--node",
         &validator_one_rpc,
-    ];
+    ]);
 
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, metadata_change_args));
@@ -1557,7 +1502,7 @@ fn change_validator_metadata() -> Result<()> {
     assert!(captured.contains("max change per epoch:"));
 
     // 5. Remove the validator website
-    let metadata_change_args = vec![
+    let metadata_change_args = apply_use_device(vec![
         "change-metadata",
         "--validator",
         "validator-0-validator",
@@ -1565,7 +1510,7 @@ fn change_validator_metadata() -> Result<()> {
         "",
         "--node",
         &validator_one_rpc,
-    ];
+    ]);
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, metadata_change_args));
     assert_matches!(captured.result, Ok(_));
@@ -1608,7 +1553,7 @@ fn enforce_fee_payment() -> Result<()> {
             vec![
                 "balance",
                 "--owner",
-                ALBERT_KEY,
+                ensure_hot_key(ALBERT_KEY),
                 "--token",
                 NAM,
                 "--node",
@@ -1622,10 +1567,10 @@ fn enforce_fee_payment() -> Result<()> {
     run(
         &node,
         Bin::Client,
-        vec![
+        apply_use_device(vec![
             "transparent-transfer",
             "--source",
-            ALBERT_KEY,
+            ensure_hot_key(ALBERT_KEY),
             "--target",
             BERTHA,
             "--token",
@@ -1641,7 +1586,7 @@ fn enforce_fee_payment() -> Result<()> {
             "--dump-tx",
             "--ledger-address",
             validator_one_rpc,
-        ],
+        ]),
     )?;
     node.assert_success();
     let file_path = tempdir
@@ -1658,10 +1603,10 @@ fn enforce_fee_payment() -> Result<()> {
     run(
         &node,
         Bin::Client,
-        vec![
+        apply_use_device(vec![
             "transparent-transfer",
             "--source",
-            ALBERT_KEY,
+            ensure_hot_key(ALBERT_KEY),
             "--target",
             CHRISTEL,
             "--token",
@@ -1669,13 +1614,13 @@ fn enforce_fee_payment() -> Result<()> {
             "--amount",
             "50",
             "--gas-payer",
-            ALBERT_KEY,
+            ensure_hot_key(ALBERT_KEY),
             "--output-folder-path",
             tempdir.path().to_str().unwrap(),
             "--dump-tx",
             "--ledger-address",
             validator_one_rpc,
-        ],
+        ]),
     )?;
     node.assert_success();
     let file_path = tempdir
@@ -1689,7 +1634,9 @@ fn enforce_fee_payment() -> Result<()> {
     txs_bytes.push(std::fs::read(&file_path).unwrap());
     std::fs::remove_file(&file_path).unwrap();
 
-    let sk = albert_keypair();
+    let sk = get_unencrypted_keypair(
+        &ensure_hot_key("albert-key").to_ascii_lowercase(),
+    );
     let pk = sk.to_public();
 
     let native_token = node
@@ -1703,11 +1650,11 @@ fn enforce_fee_payment() -> Result<()> {
 
     let mut txs = vec![];
     for bytes in txs_bytes {
-        let mut tx = namada::tx::Tx::deserialize(&bytes).unwrap();
+        let mut tx = namada_sdk::tx::Tx::deserialize(&bytes).unwrap();
         tx.add_wrapper(
-            namada::tx::data::wrapper::Fee {
+            namada_sdk::tx::data::wrapper::Fee {
                 amount_per_gas_unit: DenominatedAmount::native(
-                    Amount::native_whole(1),
+                    token::Amount::native_whole(1),
                 ),
                 token: native_token.clone(),
             },
@@ -1749,7 +1696,7 @@ fn enforce_fee_payment() -> Result<()> {
             vec![
                 "balance",
                 "--owner",
-                ALBERT_KEY,
+                ensure_hot_key(ALBERT_KEY),
                 "--token",
                 NAM,
                 "--node",
@@ -2054,7 +2001,7 @@ fn scheduled_migration() -> Result<()> {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let bytes = rt
         .block_on(RPC.shell().storage_value(
-            &&node,
+            &node,
             None,
             None,
             false,
@@ -2069,7 +2016,7 @@ fn scheduled_migration() -> Result<()> {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let bytes = rt
         .block_on(RPC.shell().storage_value(
-            &&node,
+            &node,
             None,
             None,
             false,
@@ -2077,8 +2024,8 @@ fn scheduled_migration() -> Result<()> {
         ))
         .expect("Test failed")
         .data;
-    let amount = Amount::try_from_slice(&bytes).expect("Test failed");
-    assert_eq!(amount, Amount::native_whole(1337));
+    let amount = token::Amount::try_from_slice(&bytes).expect("Test failed");
+    assert_eq!(amount, token::Amount::native_whole(1337));
 
     // check that no migration is scheduled
     {
@@ -2093,7 +2040,7 @@ fn make_migration_json() -> (Hash, tempfile::NamedTempFile) {
     let updates = [migrations::DbUpdateType::Add {
         key: Key::parse("bing/fucking/bong").expect("Test failed"),
         cf: DbColFam::SUBSPACE,
-        value: Amount::native_whole(1337).into(),
+        value: token::Amount::native_whole(1337).into(),
         force: false,
     }];
     let changes = migrations::DbChanges {

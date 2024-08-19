@@ -101,7 +101,10 @@ fn validate_tx(
                 &tx,
                 &addr,
             )?,
-            Action::Masp(_) => (),
+            Action::Masp(MaspAction::MaspAuthorizer(source)) => gadget
+                .verify_signatures_when(|| source == addr, ctx, &tx, &addr)?,
+            Action::Masp(MaspAction::MaspSectionRef(_)) => (),
+            Action::IbcShielding => (),
         }
     }
 
@@ -245,18 +248,20 @@ impl<'a> From<&'a storage::Key> for KeyType<'a> {
 mod tests {
     use std::panic;
 
-    // Use this as `#[test]` annotation to enable logging
-    use namada::core::dec::Dec;
-    use namada::core::storage::Epoch;
-    use namada::ledger::pos::{GenesisValidator, PosParams};
-    use namada::tx::data::TxType;
-    use namada::tx::{Authorization, Code, Data};
     use namada_test_utils::TestWasms;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
-    use namada_tests::tx::{self, tx_host_env, TestTxEnv};
+    use namada_tests::tx::data::TxType;
+    use namada_tests::tx::{
+        self, tx_host_env, Authorization, Code, Data, TestTxEnv,
+    };
     use namada_tests::vp::vp_host_env::storage::Key;
     use namada_tests::vp::*;
+    // Use this as `#[test]` annotation to enable logging
+    use namada_tx_prelude::dec::Dec;
+    use namada_tx_prelude::proof_of_stake::parameters::OwnedPosParams;
+    use namada_tx_prelude::proof_of_stake::types::GenesisValidator;
+    use namada_tx_prelude::storage::Epoch;
     use namada_tx_prelude::{StorageWrite, TxEnv};
     use namada_vp_prelude::account::AccountPublicKeysMap;
     use namada_vp_prelude::key::RefTo;
@@ -300,7 +305,7 @@ mod tests {
 
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
-        tx_env.init_parameters(None, None, None, None);
+        tx_env.init_parameters(None, None, None);
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(addr.clone(), tx_env, |_address| {
@@ -482,7 +487,7 @@ mod tests {
     #[test]
     fn test_unsigned_pos_action_rejected() {
         // Init PoS genesis
-        let pos_params = PosParams::default();
+        let pos_params = OwnedPosParams::default();
         let validator = address::testing::established_address_3();
         let initial_stake = token::Amount::from_uint(10_098_123, 0).unwrap();
         let consensus_key = key::testing::keypair_2().ref_to();
@@ -509,7 +514,7 @@ mod tests {
         // Initialize a tx environment
         let mut tx_env = tx_host_env::take();
 
-        tx_env.init_parameters(None, Some(vec![]), Some(vec![]), None);
+        tx_env.init_parameters(None, Some(vec![]), Some(vec![]));
 
         let secret_key = key::testing::keypair_1();
         let public_key = secret_key.ref_to();
@@ -576,7 +581,7 @@ mod tests {
     #[test]
     fn test_signed_pos_action_accepted() {
         // Init PoS genesis
-        let pos_params = PosParams::default();
+        let pos_params = OwnedPosParams::default();
         let validator = address::testing::established_address_3();
         let initial_stake = token::Amount::from_uint(10_098_123, 0).unwrap();
         let consensus_key = key::testing::keypair_2().ref_to();
@@ -749,7 +754,7 @@ mod tests {
         let token = address::testing::nam();
         let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
 
-        tx_env.init_parameters(None, None, None, None);
+        tx_env.init_parameters(None, None, None);
 
         // Spawn the accounts to be able to modify their storage
         tx_env.spawn_accounts([&vp_owner, &target, &token]);

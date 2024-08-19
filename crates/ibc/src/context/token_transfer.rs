@@ -13,11 +13,11 @@ use ibc::core::channel::types::error::ChannelError;
 use ibc::core::handler::types::error::ContextError;
 use ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::address::{Address, InternalAddress};
+use namada_core::token::Amount;
 use namada_core::uint::Uint;
-use namada_token::{read_denom, Amount, Denomination};
 
 use super::common::IbcCommonContext;
-use crate::{storage, IBC_ESCROW_ADDRESS};
+use crate::{trace, IBC_ESCROW_ADDRESS};
 
 /// Token transfer context to handle tokens
 #[derive(Debug)]
@@ -54,15 +54,12 @@ where
     ) -> Result<(Address, Amount), TokenTransferError> {
         let token = match Address::decode(coin.denom.base_denom.as_str()) {
             Ok(token_addr) if coin.denom.trace_path.is_empty() => token_addr,
-            _ => storage::ibc_token(coin.denom.to_string()),
+            _ => trace::ibc_token(coin.denom.to_string()),
         };
 
         // Convert IBC amount to Namada amount for the token
-        let denom = read_denom(&*self.inner.borrow(), &token)
-            .map_err(ContextError::from)?
-            .unwrap_or(Denomination(0));
         let uint_amount = Uint(primitive_types::U256::from(coin.amount).0);
-        let amount = Amount::from_uint(uint_amount, denom).map_err(|e| {
+        let amount = Amount::from_uint(uint_amount, 0).map_err(|e| {
             TokenTransferError::ContextError(
                 ChannelError::Other {
                     description: format!(
@@ -149,7 +146,7 @@ where
             return Ok(());
         }
         let ibc_denom = coin.denom.to_string();
-        let trace_hash = storage::calc_hash(&ibc_denom);
+        let trace_hash = trace::calc_hash(&ibc_denom);
 
         self.inner
             .borrow_mut()
@@ -227,7 +224,7 @@ where
     }
 
     fn denom_hash_string(&self, denom: &PrefixedDenom) -> Option<String> {
-        Some(storage::calc_hash(denom.to_string()))
+        Some(trace::calc_hash(denom.to_string()))
     }
 }
 

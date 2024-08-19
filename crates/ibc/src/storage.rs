@@ -10,21 +10,20 @@ use ibc::core::host::types::identifiers::{
 use ibc::core::host::types::path::{
     AckPath, ChannelEndPath, ClientConnectionPath, ClientConsensusStatePath,
     ClientStatePath, CommitmentPath, ConnectionPath, Path, PortPath,
-    ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath,
+    ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath, UpgradeClientStatePath,
+    UpgradeConsensusStatePath,
 };
-use namada_core::address::{Address, InternalAddress, HASH_LEN, SHA_HASH_LEN};
-use namada_core::ibc::IbcTokenHash;
+use namada_core::address::{Address, InternalAddress};
 use namada_core::storage::{DbKeySeg, Key, KeySeg};
 use namada_core::token::Amount;
-use namada_events::{EmitEvents, EventLevel};
+use namada_events::EmitEvents;
 use namada_state::{StorageRead, StorageResult, StorageWrite};
-use namada_token as token;
-use namada_token::event::{TokenEvent, TokenOperation, UserAccount};
-use sha2::{Digest, Sha256};
+use namada_systems::trans_token;
 use thiserror::Error;
 
 use crate::event::TOKEN_EVENT_DESCRIPTOR;
 use crate::parameters::IbcParameters;
+use crate::trace::{ibc_token, ibc_token_for_nft};
 
 const CLIENTS_COUNTER_PREFIX: &str = "clients";
 const CONNECTIONS_COUNTER_PREFIX: &str = "connections";
@@ -47,67 +46,83 @@ pub enum Error {
     StorageKey(namada_core::storage::Error),
     #[error("Invalid Key: {0}")]
     InvalidKey(String),
-    #[error("Port capability error: {0}")]
-    InvalidPortCapability(String),
+    #[error("Invalid IBC trace: {0}")]
+    InvalidIbcTrace(String),
 }
 
 /// IBC storage functions result
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// Mint IBC tokens. This function doesn't emit event (see
+/// `mint_tokens_and_emit_event` below)
+pub fn mint_tokens<S, Token>(
+    storage: &mut S,
+    target: &Address,
+    token: &Address,
+    amount: Amount,
+) -> StorageResult<()>
+where
+    S: StorageRead + StorageWrite,
+    Token: trans_token::Keys + trans_token::Read<S> + trans_token::Write<S>,
+{
+    Token::credit_tokens(storage, token, target, amount)?;
+
+    let minter_key = Token::minter_key(token);
+    StorageWrite::write(
+        storage,
+        &minter_key,
+        Address::Internal(InternalAddress::Ibc),
+    )
+}
+
 /// Mint tokens, and emit an IBC token mint event.
-pub fn mint_tokens<S>(
-    state: &mut S,
+pub fn mint_tokens_and_emit_event<S, Token>(
+    storage: &mut S,
     target: &Address,
     token: &Address,
     amount: Amount,
 ) -> StorageResult<()>
 where
     S: StorageRead + StorageWrite + EmitEvents,
+    Token: trans_token::Keys
+        + trans_token::Read<S>
+        + trans_token::Write<S>
+        + trans_token::Events<S>,
 {
-    token::mint_tokens(
-        state,
-        &Address::Internal(InternalAddress::Ibc),
-        token,
-        target,
-        amount,
-    )?;
+    mint_tokens::<S, Token>(storage, target, token, amount)?;
 
-    state.emit(TokenEvent {
-        descriptor: TOKEN_EVENT_DESCRIPTOR.into(),
-        level: EventLevel::Tx,
-        token: token.clone(),
-        operation: TokenOperation::Mint {
-            amount: amount.into(),
-            post_balance: token::read_balance(state, token, target)?.into(),
-            target_account: UserAccount::Internal(target.clone()),
-        },
-    });
+    Token::emit_mint_event(
+        storage,
+        TOKEN_EVENT_DESCRIPTOR.into(),
+        token,
+        amount,
+        target,
+    )?;
 
     Ok(())
 }
 
 /// Burn tokens, and emit an IBC token burn event.
-pub fn burn_tokens<S>(
-    state: &mut S,
+pub fn burn_tokens<S, Token>(
+    storage: &mut S,
     target: &Address,
     token: &Address,
     amount: Amount,
 ) -> StorageResult<()>
 where
     S: StorageRead + StorageWrite + EmitEvents,
+    Token:
+        trans_token::Read<S> + trans_token::Write<S> + trans_token::Events<S>,
 {
-    token::burn_tokens(state, token, target, amount)?;
+    Token::burn_tokens(storage, token, target, amount)?;
 
-    state.emit(TokenEvent {
-        descriptor: TOKEN_EVENT_DESCRIPTOR.into(),
-        level: EventLevel::Tx,
-        token: token.clone(),
-        operation: TokenOperation::Burn {
-            amount: amount.into(),
-            post_balance: token::read_balance(state, token, target)?.into(),
-            target_account: UserAccount::Internal(target.clone()),
-        },
-    });
+    Token::emit_burn_event(
+        storage,
+        TOKEN_EVENT_DESCRIPTOR.into(),
+        token,
+        amount,
+        target,
+    )?;
 
     Ok(())
 }
@@ -170,6 +185,29 @@ pub fn consensus_state_prefix(client_id: &ClientId) -> Key {
     let prefix = path.strip_suffix(&suffix).expect("The suffix should exist");
     ibc_key(prefix)
         .expect("Creating a key prefix of the consensus state shouldn't fail")
+}
+
+/// Returns a key for the upgraded client state
+pub fn upgraded_client_state_key(upgraded_height: Height) -> Key {
+    let path = Path::UpgradeClientState(
+        UpgradeClientStatePath::new_with_default_path(
+            upgraded_height.revision_height(),
+        ),
+    );
+    ibc_key(path.to_string())
+        .expect("Creating a key for the upgraded client state shouldn't fail")
+}
+
+/// Returns a key for the upgraded consensus state
+pub fn upgraded_consensus_state_key(upgraded_height: Height) -> Key {
+    let path = Path::UpgradeConsensusState(
+        UpgradeConsensusStatePath::new_with_default_path(
+            upgraded_height.revision_height(),
+        ),
+    );
+    ibc_key(path.to_string()).expect(
+        "Creating a key for the upgraded consensus state shouldn't fail",
+    )
 }
 
 /// Returns a key for the connection end
@@ -480,45 +518,22 @@ pub fn ibc_trace_key(
         .expect("Cannot obtain a storage key")
 }
 
-/// Hash the denom
-#[inline]
-pub fn calc_hash(denom: impl AsRef<str>) -> String {
-    calc_ibc_token_hash(denom).to_string()
-}
-
-/// Hash the denom
-pub fn calc_ibc_token_hash(denom: impl AsRef<str>) -> IbcTokenHash {
-    let hash = {
-        let mut hasher = Sha256::new();
-        hasher.update(denom.as_ref());
-        hasher.finalize()
-    };
-
-    let input: &[u8; SHA_HASH_LEN] = hash.as_ref();
-    let mut output = [0; HASH_LEN];
-
-    output.copy_from_slice(&input[..HASH_LEN]);
-    IbcTokenHash(output)
-}
-
-/// Obtain the IbcToken with the hash from the given denom
-pub fn ibc_token(denom: impl AsRef<str>) -> Address {
-    let hash = calc_ibc_token_hash(&denom);
-    Address::Internal(InternalAddress::IbcToken(hash))
-}
-
-/// Obtain the IbcToken with the hash from the given NFT class ID and NFT ID
-pub fn ibc_token_for_nft(
-    class_id: &PrefixedClassId,
-    token_id: &TokenId,
-) -> Address {
-    ibc_token(format!("{class_id}/{token_id}"))
-}
-
 /// Returns true if the given key is for IBC
 pub fn is_ibc_key(key: &Key) -> bool {
     matches!(&key.segments[0],
              DbKeySeg::AddressSeg(addr) if *addr == Address::Internal(InternalAddress::Ibc))
+}
+
+/// Checks if the key is an IBC commitment key
+pub fn is_ibc_commitment_key(key: &Key) -> Option<CommitmentPath> {
+    let addr = Address::Internal(InternalAddress::Ibc);
+    let ibc_addr_key = Key::from(addr.to_db_key());
+    let suffix = key.split_prefix(&ibc_addr_key)??;
+    if let Ok(Path::Commitment(path)) = Path::from_str(&suffix.to_string()) {
+        Some(path)
+    } else {
+        None
+    }
 }
 
 /// Returns the owner and the token hash if the given key is the denom key

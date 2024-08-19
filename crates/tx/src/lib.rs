@@ -24,14 +24,15 @@ pub mod proto;
 mod types;
 
 use data::TxType;
+pub use either;
 pub use event::new_tx_event;
 pub use namada_core::key::SignableEthMessage;
 pub use namada_core::sign::SignatureIndex;
 pub use types::{
     standalone_signature, verify_standalone_sig, Authorization, BatchedTx,
     BatchedTxRef, Code, Commitment, CompressedAuthorization, Data, DecodeError,
-    Header, IndexedTx, MaspBuilder, Memo, Section, Signed, Signer, Tx,
-    TxCommitments, TxError, VerifySigError,
+    Header, IndexedTx, IndexedTxRange, MaspBuilder, Memo, Section, Signed,
+    Signer, Tx, TxCommitments, TxError, VerifySigError,
 };
 
 #[cfg(test)]

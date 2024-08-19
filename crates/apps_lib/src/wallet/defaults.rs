@@ -4,23 +4,27 @@
 pub use dev::{
     addresses, albert_address, albert_keypair, bertha_address, bertha_keypair,
     christel_address, christel_keypair, daewon_address, daewon_keypair,
-    ester_address, ester_keypair, keys, tokens, validator_account_keypair,
-    validator_address, validator_keypair, validator_keys,
+    derive_template_dir, ester_address, ester_keypair, get_unencrypted_keypair,
+    is_use_device, keys, tokens, validator_account_keypair, validator_address,
+    validator_keypair, validator_keys,
 };
 
 #[cfg(any(test, feature = "testing", feature = "benches"))]
 mod dev {
+    use std::path::{Path, PathBuf};
+
     use lazy_static::lazy_static;
-    use namada::core::address::testing::{
+    use namada_sdk::address::testing::{
         apfel, btc, dot, eth, kartoffel, nam, schnitzel,
     };
-    use namada::core::address::Address;
-    use namada::core::collections::HashMap;
-    use namada::core::key::*;
-    use namada::ledger::{governance, pgf, pos};
+    use namada_sdk::address::Address;
+    use namada_sdk::collections::HashMap;
+    use namada_sdk::governance::pgf;
+    use namada_sdk::key::*;
     use namada_sdk::wallet::alias::Alias;
     use namada_sdk::wallet::pre_genesis::ValidatorWallet;
     use namada_sdk::wallet::Wallet;
+    use namada_sdk::{governance, proof_of_stake};
 
     use crate::wallet::CliWalletUtils;
 
@@ -68,8 +72,8 @@ mod dev {
     /// The default addresses with their aliases.
     pub fn addresses() -> HashMap<Alias, Address> {
         let mut addresses: HashMap<Alias, Address> = vec![
-            ("pos".into(), pos::ADDRESS),
-            ("pos_slash_pool".into(), pos::SLASH_POOL_ADDRESS),
+            ("pos".into(), proof_of_stake::ADDRESS),
+            ("pos_slash_pool".into(), proof_of_stake::SLASH_POOL_ADDRESS),
             ("governance".into(), governance::ADDRESS),
             ("governance".into(), pgf::ADDRESS),
             ("validator".into(), validator_address()),
@@ -78,7 +82,7 @@ mod dev {
             ("christel".into(), christel_address()),
             ("daewon".into(), daewon_address()),
             ("ester".into(), ester_address()),
-            ("masp".into(), namada::core::address::MASP),
+            ("masp".into(), namada_sdk::address::MASP),
         ]
         .into_iter()
         .collect();
@@ -181,12 +185,36 @@ mod dev {
         get_unencrypted_keypair("validator-0-account-key")
     }
 
+    /// Env. var to enable the usage of hardware wallets in tests
+    pub const ENV_VAR_USE_DEVICE: &str = "NAMADA_E2E_USE_DEVICE";
+
+    /// Check whether the ENV_VAR_USE_DEVICE environment variable is set
+    pub fn is_use_device() -> bool {
+        match std::env::var(ENV_VAR_USE_DEVICE) {
+            Ok(val) => val.to_ascii_lowercase() != "false",
+            _ => false,
+        }
+    }
+
+    /// Derive the genesis path depending on whether the hardware wallet is in
+    /// use
+    pub fn derive_template_dir(working_dir: &Path) -> PathBuf {
+        // The E2E tests genesis config source.
+        // This file must contain a single validator with alias "validator-0".
+        // To add more validators, use the [`set_validators`] function in the
+        // call to setup the [`network`].
+        if is_use_device() {
+            working_dir.join("genesis").join("hardware")
+        } else {
+            working_dir.join("genesis").join("localnet")
+        }
+    }
+
     /// The name of a file that is unique to the project's root directory.
     const PROJECT_ROOT_UNIQUE_FILE: &str = "rust-toolchain.toml";
 
     /// The pre-genesis directory of `validator-0`.
-    const VALIDATOR_0_PREGENESIS_DIR: &str =
-        "genesis/localnet/src/pre-genesis/validator-0";
+    const VALIDATOR_0_PREGENESIS_DIR: &str = "src/pre-genesis/validator-0";
 
     lazy_static! {
         static ref PREGENESIS_WALLET: Wallet<CliWalletUtils> = {
@@ -198,7 +226,7 @@ mod dev {
             while !root_dir.join(PROJECT_ROOT_UNIQUE_FILE).exists() {
                 root_dir.pop();
             }
-            let path = root_dir.join("genesis/localnet/src/pre-genesis");
+            let path = derive_template_dir(&root_dir).join("src/pre-genesis");
             crate::wallet::load(&path).unwrap()
         };
 
@@ -212,7 +240,7 @@ mod dev {
                 root_dir.pop();
             }
             let path =
-                root_dir.join(VALIDATOR_0_PREGENESIS_DIR);
+                derive_template_dir(&root_dir).join(VALIDATOR_0_PREGENESIS_DIR);
             crate::wallet::pre_genesis::load(&path).unwrap()
         };
     }

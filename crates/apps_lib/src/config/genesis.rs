@@ -12,23 +12,22 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
-use namada::core::address::{Address, EstablishedAddress};
-use namada::core::chain::ProposalBytes;
-use namada::core::collections::HashMap;
-use namada::core::key::*;
-use namada::core::storage;
-use namada::core::string_encoding::StringEncoded;
-use namada::core::time::{DateTimeUtc, DurationSecs};
-use namada::core::token::Denomination;
-use namada::governance::parameters::GovernanceParameters;
-use namada::governance::pgf::parameters::PgfParameters;
-use namada::ledger::eth_bridge::EthereumBridgeParams;
-use namada::ledger::parameters::EpochDuration;
-use namada::ledger::pos::{Dec, GenesisValidator, OwnedPosParams};
-use namada::token;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
+use namada_sdk::address::{Address, EstablishedAddress};
+use namada_sdk::chain::ProposalBytes;
+use namada_sdk::collections::HashMap;
+use namada_sdk::eth_bridge::EthereumBridgeParams;
+use namada_sdk::governance::parameters::GovernanceParameters;
+use namada_sdk::governance::pgf::parameters::PgfParameters;
+use namada_sdk::key::*;
+use namada_sdk::parameters::EpochDuration;
+use namada_sdk::proof_of_stake::{Dec, GenesisValidator, OwnedPosParams};
+use namada_sdk::string_encoding::StringEncoded;
+use namada_sdk::time::DateTimeUtc;
+use namada_sdk::token::Denomination;
+use namada_sdk::{storage, token};
 use serde::{Deserialize, Serialize};
 
 #[derive(
@@ -144,6 +143,107 @@ impl FromStr for GenesisAddress {
                     Err("expected an established address or public key"
                         .to_string())
                 }
+            }
+        }
+    }
+}
+
+#[derive(
+    Clone,
+    Debug,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+    PartialEq,
+    Eq,
+    Ord,
+    PartialOrd,
+    Hash,
+)]
+#[allow(missing_docs)]
+pub enum AddrOrPk {
+    PublicKey(StringEncoded<common::PublicKey>),
+    Address(Address),
+}
+
+impl AddrOrPk {
+    /// Return an [`Address`] from this [`AddrOrPk`].
+    #[inline]
+    pub fn address(&self) -> Address {
+        match self {
+            Self::Address(addr) => addr.clone(),
+            Self::PublicKey(pk) => (&pk.raw).into(),
+        }
+    }
+}
+
+impl Serialize for AddrOrPk {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            AddrOrPk::Address(address) => {
+                Serialize::serialize(&address, serializer)
+            }
+            AddrOrPk::PublicKey(pk) => Serialize::serialize(pk, serializer),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for AddrOrPk {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct FieldVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for FieldVisitor {
+            type Value = AddrOrPk;
+
+            fn expecting(
+                &self,
+                formatter: &mut Formatter<'_>,
+            ) -> std::fmt::Result {
+                formatter
+                    .write_str("a bech32m encoded public key or an address")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                AddrOrPk::from_str(value).map_err(serde::de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(FieldVisitor)
+    }
+}
+
+impl Display for AddrOrPk {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AddrOrPk::Address(address) => write!(f, "{address}"),
+            AddrOrPk::PublicKey(pk) => write!(f, "{}", pk),
+        }
+    }
+}
+
+impl FromStr for AddrOrPk {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        // Try to deserialize a PK first
+        let maybe_pk = StringEncoded::<common::PublicKey>::from_str(value);
+        match maybe_pk {
+            Ok(pk) => Ok(AddrOrPk::PublicKey(pk)),
+            Err(_) => {
+                // If that doesn't work, attempt to retrieve
+                // an address
+                let address =
+                    Address::from_str(value).map_err(|err| err.to_string())?;
+                Ok(AddrOrPk::Address(address))
             }
         }
     }
@@ -297,8 +397,6 @@ pub struct Parameters {
     pub max_block_gas: u64,
     /// Epoch duration
     pub epoch_duration: EpochDuration,
-    /// Maximum expected time per block
-    pub max_expected_time_per_block: DurationSecs,
     /// Allowed validity predicate hashes
     pub vp_allowlist: Vec<String>,
     /// Allowed tx hashes
@@ -311,10 +409,10 @@ pub struct Parameters {
     pub epochs_per_year: u64,
     /// How many epochs it takes to transition to the next masp epoch
     pub masp_epoch_multiplier: u64,
-    /// Maximum amount of signatures per transaction
-    pub max_signatures_per_transaction: u8,
-    /// Fee unshielding gas limit
-    pub fee_unshielding_gas_limit: u64,
+    /// The gas limit for a masp transaction paying fees
+    pub masp_fee_payment_gas_limit: u64,
+    /// Gas scale
+    pub gas_scale: u64,
     /// Map of the cost per gas unit for every token allowed for fee payment
     pub minimum_gas_price: BTreeMap<Address, token::Amount>,
 }
@@ -336,13 +434,13 @@ pub fn make_dev_genesis(
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
     use std::time::Duration;
 
-    use namada::core::address::testing::wnam;
-    use namada::core::chain::ChainIdPrefix;
-    use namada::core::ethereum_events::EthAddress;
-    use namada::core::key::*;
-    use namada::ledger::eth_bridge::{Contracts, UpgradeableContract};
-    use namada::ledger::pos::types::ValidatorMetaData;
-    use namada::tx::standalone_signature;
+    use namada_sdk::address::testing::wnam;
+    use namada_sdk::chain::ChainIdPrefix;
+    use namada_sdk::eth_bridge::{Contracts, UpgradeableContract};
+    use namada_sdk::ethereum_events::EthAddress;
+    use namada_sdk::key::*;
+    use namada_sdk::proof_of_stake::types::ValidatorMetaData;
+    use namada_sdk::tx::standalone_signature;
     use namada_sdk::wallet::alias::Alias;
 
     use crate::config::genesis::chain::{
@@ -429,8 +527,7 @@ pub fn make_dev_genesis(
             .unwrap()
             .first()
             .unwrap();
-        let genesis_addr =
-            GenesisAddress::EstablishedAddress(tx.tx.data.address.raw.clone());
+        let genesis_addr = Address::Established(tx.tx.data.address.raw.clone());
 
         let balance = *nam_balances.0.get(&genesis_addr).unwrap();
         let bonded = {
@@ -546,11 +643,9 @@ pub fn make_dev_genesis(
                 .get_mut(&Alias::from_str("nam").unwrap())
                 .unwrap();
 
-            let validator_addr =
-                GenesisAddress::EstablishedAddress(validator_address.clone());
-            let account_pk = GenesisAddress::PublicKey(StringEncoded::new(
-                consensus_keypair.ref_to(),
-            ));
+            let validator_addr: Address =
+                Address::Established(validator_address.clone());
+            let account_pk: Address = (&consensus_keypair.ref_to()).into();
 
             nam_balances.0.insert(validator_addr, first_val_balance);
             nam_balances.0.insert(account_pk, first_val_balance);
@@ -581,8 +676,8 @@ pub fn make_dev_genesis(
 #[cfg(test)]
 pub mod tests {
     use borsh_ext::BorshSerializeExt;
-    use namada::core::address::testing::gen_established_address;
-    use namada::core::key::*;
+    use namada_sdk::address::testing::gen_established_address;
+    use namada_sdk::key::*;
     use rand::prelude::ThreadRng;
     use rand::thread_rng;
 

@@ -16,15 +16,17 @@ use std::marker::PhantomData;
 use std::str::FromStr;
 
 use bitflags::bitflags;
+use either::Either;
 use namada_core::address::Address;
 use namada_core::borsh::{
     BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
 };
 use namada_core::hash::Hash;
+use namada_core::ibc::IbcTxDataRefs;
 use namada_core::masp::MaspTxRefs;
 use namada_core::storage;
 use namada_events::Event;
-use namada_gas::{Gas, VpsGas};
+use namada_gas::WholeGas;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
@@ -36,6 +38,7 @@ use sha2::{Digest, Sha256};
 pub use wrapper::*;
 
 use crate::data::protocol::ProtocolTx;
+use crate::types::TxCommitments;
 
 /// The different result codes that the ledger may send back to a client
 /// indicating the status of their submitted tx.
@@ -164,20 +167,65 @@ pub fn hash_tx(tx_bytes: &[u8]) -> Hash {
     Hash(*digest.as_ref())
 }
 
-/// The set of inner tx results indexed by the inner tx hash
-// The generic is only used to return typed errors in protocol for error
-// management with regards to replay protection, whereas for logging we use
-// strings
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
-pub struct BatchResults<T>(pub BTreeMap<Hash, Result<BatchedTxResult, T>>);
+/// Compute the hash of the some inner tx in a batch.
+pub fn compute_inner_tx_hash(
+    wrapper_hash: Option<&Hash>,
+    commitments: Either<&Hash, &TxCommitments>,
+) -> Hash {
+    const ZERO_HASH: Hash = Hash([0; 32]);
 
-impl<T> Default for BatchResults<T> {
+    let mut state = Sha256::new();
+    state.update(wrapper_hash.unwrap_or(&ZERO_HASH));
+    state.update(
+        commitments
+            .map_either(|hash| *hash, |commitments| commitments.get_hash()),
+    );
+
+    Hash(state.finalize_reset().into())
+}
+
+/// The extended transaction result, containing the references to masp
+/// sections (if any)
+pub struct ExtendedTxResult<T> {
+    /// The transaction result
+    pub tx_result: TxResult<T>,
+    /// The optional references to masp sections
+    pub masp_tx_refs: MaspTxRefs,
+    /// The optional data section hashes of IBC transaction
+    pub ibc_tx_data_refs: IbcTxDataRefs,
+}
+
+impl<T> Default for ExtendedTxResult<T> {
     fn default() -> Self {
-        Self(BTreeMap::default())
+        Self {
+            tx_result: Default::default(),
+            masp_tx_refs: Default::default(),
+            ibc_tx_data_refs: Default::default(),
+        }
     }
 }
 
-impl<T: Serialize> Serialize for BatchResults<T> {
+#[derive(Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
+/// The result of a dry run, included the actual transaction result and the gas
+/// used
+pub struct DryRunResult(pub TxResult<String>, pub WholeGas);
+
+/// Transaction application result. More specifically the set of inner tx
+/// results indexed by the inner tx hash
+// The generic is only used to return typed errors in protocol for error
+// management with regards to replay protection, whereas for logging we use
+// strings
+// TODO derive BorshSchema after <https://github.com/near/borsh-rs/issues/82>
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+pub struct TxResult<T>(pub BTreeMap<Hash, Result<BatchedTxResult, T>>);
+
+impl<T> Default for TxResult<T> {
+    fn default() -> Self {
+        Self(Default::default())
+    }
+}
+
+impl<T: Serialize> Serialize for TxResult<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -191,11 +239,11 @@ impl<T: Serialize> Serialize for BatchResults<T> {
     }
 }
 
-struct BatchResultVisitor<T> {
+struct TxResultVisitor<T> {
     _phantom: PhantomData<T>,
 }
 
-impl<T> BatchResultVisitor<T> {
+impl<T> TxResultVisitor<T> {
     fn new() -> Self {
         Self {
             _phantom: PhantomData,
@@ -203,21 +251,21 @@ impl<T> BatchResultVisitor<T> {
     }
 }
 
-impl<'de, T> serde::de::Visitor<'de> for BatchResultVisitor<T>
+impl<'de, T> serde::de::Visitor<'de> for TxResultVisitor<T>
 where
     T: serde::Deserialize<'de>,
 {
-    type Value = BatchResults<T>;
+    type Value = TxResult<T>;
 
     fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("BatchResult")
+        formatter.write_str("a transaction's result")
     }
 
     fn visit_map<V>(self, mut map: V) -> Result<Self::Value, V::Error>
     where
         V: serde::de::MapAccess<'de>,
     {
-        let mut result = BatchResults::<T>::default();
+        let mut result = TxResult::<T>::default();
 
         while let Some((key, value)) = map.next_entry()? {
             result.0.insert(
@@ -230,52 +278,12 @@ where
     }
 }
 
-impl<'de, T: Deserialize<'de>> serde::Deserialize<'de> for BatchResults<T> {
+impl<'de, T: Deserialize<'de>> serde::Deserialize<'de> for TxResult<T> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
-        deserializer.deserialize_map(BatchResultVisitor::new())
-    }
-}
-
-/// The extended transaction result, containing the references to masp
-/// sections (if any)
-pub struct ExtendedTxResult<T> {
-    /// The transaction result
-    pub tx_result: TxResult<T>,
-    /// The optional references to masp sections
-    pub masp_tx_refs: MaspTxRefs,
-}
-
-impl<T> Default for ExtendedTxResult<T> {
-    fn default() -> Self {
-        Self {
-            tx_result: Default::default(),
-            masp_tx_refs: Default::default(),
-        }
-    }
-}
-
-/// Transaction application result
-// TODO derive BorshSchema after <https://github.com/near/borsh-rs/issues/82>
-#[derive(
-    Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
-)]
-pub struct TxResult<T> {
-    /// Total gas used by the transaction (includes the gas used by VPs)
-    pub gas_used: Gas,
-    /// The results of the batch, indexed by the hash of the specific
-    /// [`crate::types::TxCommitments`]
-    pub batch_results: BatchResults<T>,
-}
-
-impl<T> Default for TxResult<T> {
-    fn default() -> Self {
-        Self {
-            gas_used: Default::default(),
-            batch_results: Default::default(),
-        }
+        deserializer.deserialize_map(TxResultVisitor::new())
     }
 }
 
@@ -285,7 +293,7 @@ impl<T: Display> TxResult<T> {
         let mut batch_results: BTreeMap<Hash, Result<BatchedTxResult, String>> =
             BTreeMap::new();
 
-        for (hash, res) in self.batch_results.0 {
+        for (hash, res) in self.0 {
             let res = match res {
                 Ok(value) => Ok(value),
                 Err(e) => Err(e.to_string()),
@@ -293,21 +301,96 @@ impl<T: Display> TxResult<T> {
             batch_results.insert(hash, res);
         }
 
-        TxResult {
-            gas_used: self.gas_used,
-            batch_results: BatchResults(batch_results),
-        }
+        TxResult(batch_results)
     }
 
     /// Converts this result to [`ExtendedTxResult`]
     pub fn to_extended_result(
         self,
-        masp_tx_refs: Option<MaspTxRefs>,
+        masp_section_refs: Option<Either<MaspTxRefs, IbcTxDataRefs>>,
     ) -> ExtendedTxResult<T> {
+        let (masp_tx_refs, ibc_tx_data_refs) = match masp_section_refs {
+            Some(Either::Left(masp_tx_refs)) => {
+                (masp_tx_refs, Default::default())
+            }
+            Some(Either::Right(ibc_tx_data_refs)) => {
+                (Default::default(), ibc_tx_data_refs)
+            }
+            None => (Default::default(), Default::default()),
+        };
         ExtendedTxResult {
             tx_result: self,
-            masp_tx_refs: masp_tx_refs.unwrap_or_default(),
+            masp_tx_refs,
+            ibc_tx_data_refs,
         }
+    }
+}
+
+impl<T> TxResult<T> {
+    /// Return a new set of tx results.
+    pub const fn new() -> Self {
+        Self(BTreeMap::new())
+    }
+
+    /// Insert an inner tx result into this [`TxResult`].
+    #[inline]
+    pub fn insert_inner_tx_result(
+        &mut self,
+        wrapper_hash: Option<&Hash>,
+        commitments: Either<&Hash, &TxCommitments>,
+        result: Result<BatchedTxResult, T>,
+    ) {
+        self.0
+            .insert(compute_inner_tx_hash(wrapper_hash, commitments), result);
+    }
+
+    /// Retrieve an inner tx result, if it exists.
+    #[inline]
+    pub fn get_inner_tx_result(
+        &self,
+        wrapper_hash: Option<&Hash>,
+        commitments: Either<&Hash, &TxCommitments>,
+    ) -> Option<&Result<BatchedTxResult, T>> {
+        self.0
+            .get(&compute_inner_tx_hash(wrapper_hash, commitments))
+    }
+
+    /// Iterate over all the inner tx results.
+    #[inline]
+    pub fn iter(
+        &self,
+    ) -> impl Iterator<Item = (&Hash, &Result<BatchedTxResult, T>)> + '_ {
+        self.0.iter()
+    }
+
+    /// Return the length of the collecction of inner tx results.
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Check if the collecction of inner tx results is empty.
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Check if the collecction of inner tx results contains no errors.
+    #[inline]
+    pub fn are_results_ok(&self) -> bool {
+        self.iter().all(|(_, res)| res.is_ok())
+    }
+
+    /// Check if the collecction of inner tx results contains any ok results.
+    #[inline]
+    pub fn are_any_ok(&self) -> bool {
+        self.iter().any(|(_, res)| res.is_ok())
+    }
+
+    /// Check if the collecction of inner tx results contains any errors.
+    #[inline]
+    pub fn are_any_err(&self) -> bool {
+        self.iter().any(|(_, res)| res.is_err())
     }
 }
 
@@ -398,8 +481,6 @@ pub struct VpsResult {
     pub accepted_vps: BTreeSet<Address>,
     /// The addresses whose VPs rejected the transaction
     pub rejected_vps: BTreeSet<Address>,
-    /// The total gas used by all the VPs
-    pub gas_used: VpsGas,
     /// Errors occurred in any of the VPs, if any
     pub errors: Vec<(Address, String)>,
     /// Validity predicate status flags, containing info
@@ -411,7 +492,7 @@ pub struct VpsResult {
 impl<T: Serialize> fmt::Display for TxResult<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if f.alternate() {
-            write!(f, "Transaction is valid. Gas used: {}", self.gas_used,)
+            write!(f, "Transaction is valid.")
         } else {
             write!(f, "{}", serde_json::to_string(self).unwrap())
         }
@@ -492,6 +573,7 @@ fn iterable_to_string<T: fmt::Display>(
 
 /// Struct that classifies that kind of Tx
 /// based on the contents of its data.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Clone,
     Debug,

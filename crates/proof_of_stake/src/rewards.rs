@@ -6,12 +6,11 @@ use namada_core::arith::{self, checked};
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::dec::Dec;
 use namada_core::storage::{BlockHeight, Epoch};
-use namada_core::token::{self, Amount};
+use namada_core::token;
 use namada_core::uint::{Uint, I256};
-use namada_parameters::storage as params_storage;
 use namada_storage::collections::lazy_map::NestedSubKey;
 use namada_storage::{ResultExt, StorageRead, StorageWrite};
-use namada_trans_token::get_effective_total_native_supply;
+use namada_systems::{governance, parameters, trans_token};
 use thiserror::Error;
 
 use crate::storage::{
@@ -22,7 +21,6 @@ use crate::storage::{
     validator_state_handle, write_last_pos_inflation_amount,
     write_last_staked_ratio,
 };
-use crate::token::credit_tokens;
 use crate::types::{into_tm_voting_power, BondId, ValidatorState, VoteInfo};
 use crate::{
     bond_amounts_for_rewards, get_total_consensus_stake, staking_token_address,
@@ -109,9 +107,9 @@ pub struct PosRewardsCalculator {
     /// Rewards fraction that goes to the block signers
     pub signer_reward: Dec,
     /// Total stake of validators who signed the block
-    pub signing_stake: Amount,
+    pub signing_stake: token::Amount,
     /// Total stake of the whole consensus set
-    pub total_stake: Amount,
+    pub total_stake: token::Amount,
 }
 
 impl PosRewardsCalculator {
@@ -158,7 +156,7 @@ impl PosRewardsCalculator {
     }
 
     /// Implement as ceiling of (2/3) * validator set stake
-    fn get_min_required_votes(&self) -> Amount {
+    fn get_min_required_votes(&self) -> token::Amount {
         (self
             .total_stake
             .checked_mul(2_u64)
@@ -171,7 +169,7 @@ impl PosRewardsCalculator {
 }
 
 /// Process the proposer and votes in the block to assign their PoS rewards.
-pub(crate) fn log_block_rewards<S>(
+pub(crate) fn log_block_rewards<S, Gov>(
     storage: &mut S,
     votes: Vec<VoteInfo>,
     height: BlockHeight,
@@ -180,13 +178,14 @@ pub(crate) fn log_block_rewards<S>(
 ) -> namada_storage::Result<()>
 where
     S: StorageWrite + StorageRead,
+    Gov: governance::Read<S>,
 {
     // Read the block proposer of the previously committed block in storage
     // (n-1 if we are in the process of finalizing n right now).
     match storage::read_last_block_proposer_address(storage)? {
         Some(proposer_address) => {
             tracing::debug!("Found last block proposer: {proposer_address}");
-            log_block_rewards_aux(
+            log_block_rewards_aux::<S, Gov>(
                 storage,
                 if new_epoch {
                     current_epoch.prev().expect("New epoch must have prev")
@@ -213,7 +212,7 @@ where
 /// Tally a running sum of the fraction of rewards owed to each validator in
 /// the consensus set. This is used to keep track of the rewards due to each
 /// consensus validator over the lifetime of an epoch.
-pub(crate) fn log_block_rewards_aux<S>(
+pub(crate) fn log_block_rewards_aux<S, Gov>(
     storage: &mut S,
     epoch: impl Into<Epoch>,
     proposer_address: &Address,
@@ -221,12 +220,13 @@ pub(crate) fn log_block_rewards_aux<S>(
 ) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
+    Gov: governance::Read<S>,
 {
     // The votes correspond to the last committed block (n-1 if we are
     // finalizing block n)
 
     let epoch: Epoch = epoch.into();
-    let params = read_pos_params(storage)?;
+    let params = read_pos_params::<S, Gov>(storage)?;
     let consensus_validators = consensus_validator_set_handle().at(&epoch);
 
     // Get total stake of the consensus validator set
@@ -325,21 +325,19 @@ where
 
         // Proposer reward
         if address == *proposer_address {
-            rewards_frac = checked!(rewards_frac + coeffs.proposer_coeff)?;
+            checked!(rewards_frac += coeffs.proposer_coeff)?;
         }
 
         // Signer reward
         if signer_set.contains(&address) {
             let signing_frac =
                 checked!(stake_unscaled / signing_stake_unscaled)?;
-            rewards_frac =
-                checked!(rewards_frac + (coeffs.signer_coeff * signing_frac))?;
+            checked!(rewards_frac += (coeffs.signer_coeff * signing_frac))?;
         }
         // Consensus validator reward
-        rewards_frac = checked!(
-            rewards_frac
-                + (coeffs.active_val_coeff
-                    * (stake_unscaled / consensus_stake_unscaled))
+        checked!(
+            rewards_frac += (coeffs.active_val_coeff
+                * (stake_unscaled / consensus_stake_unscaled))
         )?;
 
         // To be added to the rewards accumulator
@@ -357,24 +355,25 @@ where
 }
 
 /// Apply inflation to the Proof of Stake system.
-pub fn apply_inflation<S>(
+pub fn apply_inflation<S, Gov, Parameters, Token>(
     storage: &mut S,
     last_epoch: Epoch,
     num_blocks_in_last_epoch: u64,
 ) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
+    Gov: governance::Read<S>,
+    Parameters: parameters::Read<S>,
+    Token: trans_token::Read<S> + trans_token::Write<S>,
 {
     // Read from Parameters storage
-    let epochs_per_year: u64 = storage
-        .read(&params_storage::get_epochs_per_year_key())?
-        .expect("Epochs per year should exist in parameters storage");
+    let epochs_per_year: u64 = Parameters::epochs_per_year(storage)?;
 
     let staking_token = staking_token_address(storage);
-    let total_tokens = get_effective_total_native_supply(storage)?;
+    let total_tokens = Token::get_effective_total_native_supply(storage)?;
 
     // Read from PoS storage
-    let params = read_pos_params(storage)?;
+    let params = read_pos_params::<S, Gov>(storage)?;
     let locked_amount = read_total_stake(storage, &params, last_epoch)?;
 
     let last_staked_ratio = read_last_staked_ratio(storage)?
@@ -402,7 +401,7 @@ where
 
     // Mint inflation and partition rewards among all accounts that earn a
     // portion of it
-    update_rewards_products_and_mint_inflation(
+    update_rewards_products_and_mint_inflation::<S, Token>(
         storage,
         &params,
         last_epoch,
@@ -434,7 +433,7 @@ struct Rewards {
 /// tokens into the PoS account.
 /// Any left-over inflation tokens from rounding error of the sum of the
 /// rewards is given to the governance address.
-pub fn update_rewards_products_and_mint_inflation<S>(
+pub fn update_rewards_products_and_mint_inflation<S, Token>(
     storage: &mut S,
     params: &PosParams,
     last_epoch: Epoch,
@@ -445,6 +444,7 @@ pub fn update_rewards_products_and_mint_inflation<S>(
 ) -> namada_storage::Result<()>
 where
     S: StorageRead + StorageWrite,
+    Token: trans_token::Write<S>,
 {
     // Read the rewards accumulator and calculate the new rewards products
     // for the previous epoch
@@ -521,7 +521,12 @@ where
         inflation.to_string_native(),
         total_native_tokens.to_string_native(),
     );
-    credit_tokens(storage, staking_token, &address::POS, pos_reward_tokens)?;
+    Token::credit_tokens(
+        storage,
+        staking_token,
+        &address::POS,
+        pos_reward_tokens,
+    )?;
 
     if reward_tokens_remaining > token::Amount::zero() {
         tracing::info!(
@@ -529,7 +534,7 @@ where
              Governance account. Amount: {}.",
             reward_tokens_remaining.to_string_native()
         );
-        credit_tokens(
+        Token::credit_tokens(
             storage,
             staking_token,
             &address::PGF,
@@ -549,7 +554,7 @@ where
 /// Compute the current available rewards amount due only to existing bonds.
 /// This does not include pending rewards held in the rewards counter due to
 /// unbonds and redelegations.
-pub fn compute_current_rewards_from_bonds<S>(
+pub fn compute_current_rewards_from_bonds<S, Gov>(
     storage: &S,
     source: &Address,
     validator: &Address,
@@ -557,6 +562,7 @@ pub fn compute_current_rewards_from_bonds<S>(
 ) -> namada_storage::Result<token::Amount>
 where
     S: StorageRead,
+    Gov: governance::Read<S>,
 {
     if current_epoch == Epoch::default() {
         // Nothing to claim in the first epoch
@@ -582,7 +588,7 @@ where
             .prev()
             .expect("Safe because of the check above"),
     );
-    let bond_amounts = bond_amounts_for_rewards(
+    let bond_amounts = bond_amounts_for_rewards::<S, Gov>(
         storage,
         &BondId {
             source: source.clone(),
@@ -598,7 +604,7 @@ where
         debug_assert!(ep <= claim_end);
         let rp = rewards_products.get(storage, &ep)?.unwrap_or_default();
         let reward = bond_amount.mul_floor(rp)?;
-        reward_tokens = checked!(reward_tokens + reward)?;
+        checked!(reward_tokens += reward)?;
     }
 
     Ok(reward_tokens)

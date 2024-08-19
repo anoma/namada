@@ -19,19 +19,23 @@ migrations = [
   "linkme",
 ]
 testing = ["namada_core/testing", "ibc-testkit", "proptest"]
+arbitrary = ["dep:arbitrary", "namada_core/arbitrary", "namada_token/arbitrary"]
 
 [dependencies]
 namada_core = { path = "../core" }
 namada_events = { path = "../events", default-features = false }
-namada_governance = { path = "../governance" }
+namada_gas = { path = "../gas" }
 namada_macros = {path = "../macros"}
 namada_migrations = {path = "../migrations", optional = true}
-namada_parameters = { path = "../parameters" }
 namada_state = { path = "../state" }
 namada_storage = { path = "../storage" }
-namada_token = { path = "../token" }
+namada_systems = { path = "../systems" }
+namada_tx = { path = "../tx" }
+namada_vp = { path = "../vp" }
 
+arbitrary = { workspace = true, optional = true }
 borsh.workspace = true
+data-encoding.workspace = true
 konst.workspace = true
 linkme = {workspace = true, optional = true}
 ibc.workspace = true
@@ -45,9 +49,20 @@ prost.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+smooth-operator.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
+namada_core = { path = "../core", features = ["testing"] }
+namada_governance = { path = "../governance" }
+namada_parameters = { path = "../parameters", features = ["testing"] }
+namada_proof_of_stake = { path = "../proof_of_stake", features = ["testing"] }
+namada_state = { path = "../state", features = ["testing"] }
+namada_token = { path = "../token" }
+namada_tx = { path = "../tx", features = ["testing"] }
+namada_vm = { path = "../vm", features = ["testing"] }
+
+assert_matches.workspace = true
 ibc-testkit.workspace = true
 proptest.workspace = true

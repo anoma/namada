@@ -10,91 +10,85 @@ use std::io::{Read, Write};
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::sync::Once;
+use std::sync::{Arc, Once, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use masp_proofs::prover::LocalTxProver;
-use namada::address::MASP;
-use namada::core::address::{self, Address, InternalAddress};
-use namada::core::chain::ChainId;
-use namada::core::key::common::SecretKey;
-use namada::core::masp::{
-    ExtendedViewingKey, PaymentAddress, TransferSource, TransferTarget,
-};
-use namada::core::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
-use namada::core::time::DateTimeUtc;
-use namada::events::extend::{ComposeEvent, MaspTxBatchRefs, MaspTxBlockIndex};
-use namada::events::Event;
-use namada::governance::storage::proposal::ProposalType;
-use namada::governance::InitProposalData;
-use namada::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
-use namada::ibc::apps::transfer::types::packet::PacketData;
-use namada::ibc::apps::transfer::types::PrefixedCoin;
-use namada::ibc::clients::tendermint::client_state::ClientState;
-use namada::ibc::clients::tendermint::consensus_state::ConsensusState;
-use namada::ibc::clients::tendermint::types::{
-    AllowUpdate, ClientState as ClientStateType,
-    ConsensusState as ConsensusStateType, TrustThreshold,
-};
-use namada::ibc::core::channel::types::channel::{
-    ChannelEnd, Counterparty as ChannelCounterparty, Order, State,
-};
-use namada::ibc::core::channel::types::timeout::TimeoutHeight;
-use namada::ibc::core::channel::types::Version as ChannelVersion;
-use namada::ibc::core::client::types::Height as IbcHeight;
-use namada::ibc::core::commitment_types::commitment::{
-    CommitmentPrefix, CommitmentRoot,
-};
-use namada::ibc::core::commitment_types::specs::ProofSpecs;
-use namada::ibc::core::connection::types::version::Version;
-use namada::ibc::core::connection::types::{
-    ConnectionEnd, Counterparty, State as ConnectionState,
-};
-use namada::ibc::core::host::types::identifiers::{
-    ChainId as IbcChainId, ChannelId as NamadaChannelId, ChannelId, ClientId,
-    ConnectionId, ConnectionId as NamadaConnectionId, PortId as NamadaPortId,
-    PortId,
-};
-use namada::ibc::core::host::types::path::{
-    ClientConsensusStatePath, ClientStatePath, Path as IbcPath,
-};
-use namada::ibc::primitives::proto::{Any, Protobuf};
-use namada::ibc::primitives::Timestamp as IbcTimestamp;
-use namada::ibc::storage::{mint_limit_key, port_key, throughput_limit_key};
-use namada::ibc::MsgTransfer;
-use namada::io::StdIo;
-use namada::ledger::dry_run_tx;
-use namada::ledger::gas::TxGasMeter;
-use namada::ledger::ibc::storage::{channel_key, connection_key};
-use namada::ledger::native_vp::ibc::get_dummy_header;
-use namada::ledger::queries::{
-    Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
-};
-use namada::masp::MaspTxRefs;
-use namada::state::StorageRead;
-use namada::token::{
-    Amount, DenominatedAmount, ShieldedTransfer, ShieldingTransfer,
-    UnshieldingTransfer,
-};
-use namada::tx::data::pos::Bond;
-use namada::tx::data::{
-    BatchResults, BatchedTxResult, Fee, TxResult, VpsResult,
-};
-use namada::tx::event::{new_tx_event, Batch};
-use namada::tx::{
-    Authorization, BatchedTx, BatchedTxRef, Code, Data, Section, Tx,
-};
-use namada::vm::wasm::run;
-use namada::{proof_of_stake, tendermint};
 use namada_apps_lib::cli;
 use namada_apps_lib::cli::context::FromContext;
 use namada_apps_lib::cli::Context;
 use namada_apps_lib::wallet::{defaults, CliWalletUtils};
+use namada_sdk::address::{self, Address, InternalAddress, MASP};
+use namada_sdk::args::ShieldedSync;
+use namada_sdk::chain::ChainId;
+use namada_sdk::events::extend::{
+    ComposeEvent, MaspTxBatchRefs, MaspTxBlockIndex,
+};
+use namada_sdk::events::Event;
+use namada_sdk::gas::TxGasMeter;
+use namada_sdk::governance::storage::proposal::ProposalType;
+use namada_sdk::governance::{self, InitProposalData};
+use namada_sdk::ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
+use namada_sdk::ibc::apps::transfer::types::packet::PacketData;
+use namada_sdk::ibc::apps::transfer::types::PrefixedCoin;
+use namada_sdk::ibc::clients::tendermint::client_state::ClientState;
+use namada_sdk::ibc::clients::tendermint::consensus_state::ConsensusState;
+use namada_sdk::ibc::clients::tendermint::types::{
+    AllowUpdate, ClientState as ClientStateType,
+    ConsensusState as ConsensusStateType, TrustThreshold,
+};
+use namada_sdk::ibc::core::channel::types::channel::{
+    ChannelEnd, Counterparty as ChannelCounterparty, Order, State,
+};
+use namada_sdk::ibc::core::channel::types::timeout::TimeoutHeight;
+use namada_sdk::ibc::core::channel::types::Version as ChannelVersion;
+use namada_sdk::ibc::core::client::types::Height as IbcHeight;
+use namada_sdk::ibc::core::commitment_types::commitment::{
+    CommitmentPrefix, CommitmentRoot,
+};
+use namada_sdk::ibc::core::commitment_types::specs::ProofSpecs;
+use namada_sdk::ibc::core::connection::types::version::Version;
+use namada_sdk::ibc::core::connection::types::{
+    ConnectionEnd, Counterparty, State as ConnectionState,
+};
+use namada_sdk::ibc::core::host::types::identifiers::{
+    ChainId as IbcChainId, ChannelId as NamadaChannelId, ChannelId, ClientId,
+    ConnectionId, ConnectionId as NamadaConnectionId, PortId as NamadaPortId,
+    PortId,
+};
+use namada_sdk::ibc::core::host::types::path::{
+    ClientConsensusStatePath, ClientStatePath, Path as IbcPath,
+};
+use namada_sdk::ibc::primitives::proto::{Any, Protobuf};
+use namada_sdk::ibc::primitives::Timestamp as IbcTimestamp;
+use namada_sdk::ibc::storage::{
+    channel_key, connection_key, mint_limit_key, port_key, throughput_limit_key,
+};
+use namada_sdk::ibc::{MsgTransfer, COMMITMENT_PREFIX};
+use namada_sdk::io::StdIo;
+use namada_sdk::key::common::SecretKey;
+use namada_sdk::masp::utils::RetryStrategy;
 use namada_sdk::masp::{
-    self, ContextSyncStatus, ShieldedContext, ShieldedUtils,
+    self, ContextSyncStatus, DispatcherCache, ExtendedViewingKey,
+    MaspTransferData, MaspTxRefs, PaymentAddress, ShieldedContext,
+    ShieldedUtils, TransferSource, TransferTarget,
+};
+use namada_sdk::queries::{
+    Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
+};
+use namada_sdk::state::StorageRead;
+use namada_sdk::storage::testing::get_dummy_header;
+use namada_sdk::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
+use namada_sdk::time::DateTimeUtc;
+use namada_sdk::token::{self, Amount, DenominatedAmount, Transfer};
+use namada_sdk::tx::data::pos::Bond;
+use namada_sdk::tx::data::{BatchedTxResult, Fee, TxResult, VpsResult};
+use namada_sdk::tx::event::{new_tx_event, Batch};
+use namada_sdk::tx::{
+    Authorization, BatchedTx, BatchedTxRef, Code, Data, Section, Tx,
 };
 pub use namada_sdk::tx::{
     TX_BECOME_VALIDATOR_WASM, TX_BOND_WASM, TX_BRIDGE_POOL_WASM,
@@ -104,26 +98,25 @@ pub use namada_sdk::tx::{
     TX_CLAIM_REWARDS_WASM, TX_DEACTIVATE_VALIDATOR_WASM, TX_IBC_WASM,
     TX_INIT_ACCOUNT_WASM, TX_INIT_PROPOSAL as TX_INIT_PROPOSAL_WASM,
     TX_REACTIVATE_VALIDATOR_WASM, TX_REDELEGATE_WASM, TX_RESIGN_STEWARD,
-    TX_REVEAL_PK as TX_REVEAL_PK_WASM, TX_SHIELDED_TRANSFER_WASM,
-    TX_SHIELDING_TRANSFER_WASM, TX_TRANSPARENT_TRANSFER_WASM, TX_UNBOND_WASM,
-    TX_UNJAIL_VALIDATOR_WASM, TX_UNSHIELDING_TRANSFER_WASM,
-    TX_UPDATE_ACCOUNT_WASM, TX_UPDATE_STEWARD_COMMISSION,
-    TX_VOTE_PROPOSAL as TX_VOTE_PROPOSAL_WASM, TX_WITHDRAW_WASM, VP_USER_WASM,
+    TX_REVEAL_PK as TX_REVEAL_PK_WASM, TX_TRANSFER_WASM, TX_UNBOND_WASM,
+    TX_UNJAIL_VALIDATOR_WASM, TX_UPDATE_ACCOUNT_WASM,
+    TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL as TX_VOTE_PROPOSAL_WASM,
+    TX_WITHDRAW_WASM, VP_USER_WASM,
 };
 use namada_sdk::wallet::Wallet;
-use namada_sdk::{Namada, NamadaImpl};
+use namada_sdk::{parameters, proof_of_stake, tendermint, Namada, NamadaImpl};
 use namada_test_utils::tx_data::TxWriteData;
+use namada_vm::wasm::run;
 use rand_core::OsRng;
-use sha2::{Digest, Sha256};
 use tempfile::TempDir;
 
-use crate::config;
 use crate::config::global::GlobalConfig;
 use crate::config::TendermintMode;
 use crate::facade::tendermint::v0_37::abci::request::InitChain;
 use crate::facade::tendermint_proto::google::protobuf::Timestamp;
 use crate::facade::tendermint_rpc;
 use crate::shell::Shell;
+use crate::{config, dry_run_tx};
 
 pub const WASM_DIR: &str = "../../wasm";
 
@@ -136,12 +129,14 @@ const FILE_NAME: &str = "shielded.dat";
 const TMP_FILE_NAME: &str = "shielded.tmp";
 const SPECULATIVE_FILE_NAME: &str = "speculative_shielded.dat";
 const SPECULATIVE_TMP_FILE_NAME: &str = "speculative_shielded.tmp";
+const CACHE_FILE_NAME: &str = "shielded_sync.cache";
+const CACHE_FILE_TMP_PREFIX: &str = "shielded_sync.cache.tmp";
 
 /// For `tracing_subscriber`, which fails if called more than once in the same
 /// process
 static SHELL_INIT: Once = Once::new();
 
-pub struct BenchShell {
+pub struct BenchShellInner {
     pub inner: Shell,
     // Cache of the masp transactions and their changed keys in the last block
     // committed, the tx index coincides with the index in this collection
@@ -151,153 +146,7 @@ pub struct BenchShell {
     tempdir: TempDir,
 }
 
-impl Deref for BenchShell {
-    type Target = Shell;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl DerefMut for BenchShell {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
-}
-
-impl Default for BenchShell {
-    fn default() -> Self {
-        SHELL_INIT.call_once(|| {
-            tracing_subscriber::fmt()
-                .with_env_filter(
-                    tracing_subscriber::EnvFilter::from_default_env(),
-                )
-                .init();
-        });
-
-        let (sender, _) = tokio::sync::mpsc::unbounded_channel();
-        let tempdir = tempfile::tempdir().unwrap();
-        let path = tempdir.path().canonicalize().unwrap();
-
-        let shell = Shell::new(
-            config::Ledger::new(path, Default::default(), TendermintMode::Full),
-            WASM_DIR.into(),
-            sender,
-            None,
-            None,
-            None,
-            50 * 1024 * 1024, // 50 kiB
-            50 * 1024 * 1024, // 50 kiB
-        );
-        let mut bench_shell = BenchShell {
-            inner: shell,
-            last_block_masp_txs: vec![],
-            tempdir,
-        };
-
-        bench_shell
-            .init_chain(
-                InitChain {
-                    time: Timestamp {
-                        seconds: 0,
-                        nanos: 0,
-                    }
-                    .try_into()
-                    .unwrap(),
-                    chain_id: ChainId::default().to_string(),
-                    consensus_params: tendermint::consensus::params::Params {
-                        block: tendermint::block::Size {
-                            max_bytes: 0,
-                            max_gas: 0,
-                            time_iota_ms: 0,
-                        },
-                        evidence: tendermint::evidence::Params {
-                            max_age_num_blocks: 0,
-                            max_age_duration: tendermint::evidence::Duration(
-                                core::time::Duration::MAX,
-                            ),
-                            max_bytes: 0,
-                        },
-                        validator:
-                            tendermint::consensus::params::ValidatorParams {
-                                pub_key_types: vec![],
-                            },
-                        version: None,
-                        abci: tendermint::consensus::params::AbciParams {
-                            vote_extensions_enable_height: None,
-                        },
-                    },
-                    validators: vec![],
-                    app_state_bytes: vec![].into(),
-                    initial_height: 0_u32.into(),
-                },
-                2,
-            )
-            .unwrap();
-        // Commit tx hashes to storage
-        bench_shell.commit_block();
-
-        // Bond from Albert to validator
-        let bond = Bond {
-            validator: defaults::validator_address(),
-            amount: Amount::native_whole(1000),
-            source: Some(defaults::albert_address()),
-        };
-        let params =
-            proof_of_stake::storage::read_pos_params(&bench_shell.state)
-                .unwrap();
-        let signed_tx = bench_shell.generate_tx(
-            TX_BOND_WASM,
-            bond,
-            None,
-            None,
-            vec![&defaults::albert_keypair()],
-        );
-
-        bench_shell.execute_tx(&signed_tx.to_ref());
-        bench_shell.state.commit_tx();
-
-        // Initialize governance proposal
-        let content_section = Section::ExtraData(Code::new(
-            vec![],
-            Some(TX_INIT_PROPOSAL_WASM.to_string()),
-        ));
-        let voting_start_epoch =
-            Epoch(2 + params.pipeline_len + params.unbonding_len);
-        let signed_tx = bench_shell.generate_tx(
-            TX_INIT_PROPOSAL_WASM,
-            InitProposalData {
-                content: content_section.get_hash(),
-                author: defaults::albert_address(),
-                r#type: ProposalType::Default,
-                voting_start_epoch,
-                voting_end_epoch: voting_start_epoch.unchecked_add(3_u64),
-                activation_epoch: voting_start_epoch.unchecked_add(9_u64),
-            },
-            None,
-            Some(vec![content_section]),
-            vec![&defaults::albert_keypair()],
-        );
-
-        bench_shell.execute_tx(&signed_tx.to_ref());
-        bench_shell.state.commit_tx();
-        bench_shell.commit_block();
-
-        // Advance epoch for pos benches
-        for _ in 0..=(params.pipeline_len + params.unbonding_len) {
-            bench_shell.advance_epoch();
-        }
-        // Must start after current epoch
-        debug_assert_eq!(
-            bench_shell.state.get_block_epoch().unwrap().next(),
-            voting_start_epoch
-        );
-
-        bench_shell
-    }
-}
-
-impl BenchShell {
+impl BenchShellInner {
     pub fn generate_tx(
         &self,
         wasm_code_path: &str,
@@ -306,7 +155,7 @@ impl BenchShell {
         extra_sections: Option<Vec<Section>>,
         signers: Vec<&SecretKey>,
     ) -> BatchedTx {
-        let mut tx = Tx::from_type(namada::tx::data::TxType::Raw);
+        let mut tx = Tx::from_type(namada_sdk::tx::data::TxType::Raw);
 
         // NOTE: here we use the code hash to avoid including the cost for the
         // wasm validation. The wasm codes (both txs and vps) are always
@@ -351,7 +200,7 @@ impl BenchShell {
         data: Vec<u8>,
     ) -> BatchedTx {
         // This function avoid serializaing the tx data with Borsh
-        let mut tx = Tx::from_type(namada::tx::data::TxType::Raw);
+        let mut tx = Tx::from_type(namada_sdk::tx::data::TxType::Raw);
         let code_hash = self
             .read_storage_key(&Key::wasm_hash(wasm_code_path))
             .unwrap();
@@ -382,7 +231,7 @@ impl BenchShell {
         let timeout_height = TimeoutHeight::At(IbcHeight::new(0, 100).unwrap());
 
         #[allow(clippy::disallowed_methods)]
-        let now: namada::tendermint::Time =
+        let now: namada_sdk::tendermint::Time =
             DateTimeUtc::now().try_into().unwrap();
         let now: IbcTimestamp = now.into();
         let timeout_timestamp =
@@ -401,7 +250,7 @@ impl BenchShell {
             timeout_timestamp_on_b: timeout_timestamp,
         };
 
-        let msg = MsgTransfer {
+        let msg = MsgTransfer::<token::Transfer> {
             message,
             transfer: None,
         };
@@ -414,8 +263,7 @@ impl BenchShell {
         &mut self,
         batched_tx: &BatchedTxRef<'_>,
     ) -> BTreeSet<Address> {
-        let gas_meter =
-            RefCell::new(TxGasMeter::new_from_sub_limit(u64::MAX.into()));
+        let gas_meter = RefCell::new(TxGasMeter::new(u64::MAX));
         run::tx(
             &mut self.inner.state,
             &gas_meter,
@@ -429,9 +277,11 @@ impl BenchShell {
     }
 
     pub fn advance_epoch(&mut self) {
-        let params =
-            proof_of_stake::storage::read_pos_params(&self.inner.state)
-                .unwrap();
+        let params = proof_of_stake::storage::read_pos_params::<
+            _,
+            governance::Store<_>,
+        >(&self.inner.state)
+        .unwrap();
 
         self.state.in_mem_mut().block.epoch =
             self.state.in_mem().block.epoch.next();
@@ -445,10 +295,19 @@ impl BenchShell {
         )
         .unwrap();
 
-        if self.state.is_masp_new_epoch(true).unwrap() {
-            namada::token::conversion::update_allowed_conversions(
-                &mut self.state,
-            )
+        let masp_epoch_multiplier =
+            parameters::read_masp_epoch_multiplier_parameter(&self.state)
+                .unwrap();
+        if self
+            .state
+            .is_masp_new_epoch(true, masp_epoch_multiplier)
+            .unwrap()
+        {
+            token::conversion::update_allowed_conversions::<
+                _,
+                parameters::Store<_>,
+                token::Store<_>,
+            >(&mut self.state)
             .unwrap();
         }
     }
@@ -489,7 +348,7 @@ impl BenchShell {
 
         // Set consensus state
         #[allow(clippy::disallowed_methods)]
-        let now: namada::tendermint::Time =
+        let now: namada_sdk::tendermint::Time =
             DateTimeUtc::now().try_into().unwrap();
         let consensus_key = addr_key.join(&Key::from(
             IbcPath::ClientConsensusState(ClientConsensusStatePath {
@@ -528,7 +387,7 @@ impl BenchShell {
             Counterparty::new(
                 client_id.clone(),
                 Some(ConnectionId::new(1)),
-                CommitmentPrefix::try_from(b"ibc".to_vec()).unwrap(),
+                CommitmentPrefix::from(COMMITMENT_PREFIX.as_bytes().to_vec()),
             ),
             Version::compatibles(),
             std::time::Duration::new(100, 0),
@@ -615,7 +474,7 @@ impl BenchShell {
     // Commit a masp transaction and cache the tx and the changed keys for
     // client queries
     pub fn commit_masp_tx(&mut self, mut masp_tx: Tx) {
-        use namada::core::key::RefTo;
+        use namada_sdk::key::RefTo;
         masp_tx.add_wrapper(
             Fee {
                 amount_per_gas_unit: DenominatedAmount::native(0.into()),
@@ -626,7 +485,172 @@ impl BenchShell {
         );
         self.last_block_masp_txs
             .push((masp_tx, self.state.write_log().get_keys()));
-        self.state.commit_tx();
+        self.state.commit_tx_batch();
+    }
+}
+
+impl Deref for BenchShellInner {
+    type Target = Shell;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl DerefMut for BenchShellInner {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
+#[derive(Clone)]
+pub struct BenchShell {
+    inner: Arc<RwLock<BenchShellInner>>,
+}
+
+impl BenchShell {
+    pub fn read(&self) -> RwLockReadGuard<'_, BenchShellInner> {
+        self.inner.read().unwrap()
+    }
+
+    pub fn write(&self) -> RwLockWriteGuard<'_, BenchShellInner> {
+        self.inner.write().unwrap()
+    }
+}
+
+impl Default for BenchShell {
+    fn default() -> Self {
+        SHELL_INIT.call_once(|| {
+            tracing_subscriber::fmt()
+                .with_env_filter(
+                    tracing_subscriber::EnvFilter::from_default_env(),
+                )
+                .init();
+        });
+
+        let (sender, _) = tokio::sync::mpsc::unbounded_channel();
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path().canonicalize().unwrap();
+
+        let shell = Shell::new(
+            config::Ledger::new(path, Default::default(), TendermintMode::Full),
+            WASM_DIR.into(),
+            sender,
+            None,
+            None,
+            None,
+            50 * 1024 * 1024, // 50 kiB
+            50 * 1024 * 1024, // 50 kiB
+        );
+        let mut bench_shell = BenchShellInner {
+            inner: shell,
+            last_block_masp_txs: vec![],
+            tempdir,
+        };
+
+        bench_shell
+            .init_chain(
+                InitChain {
+                    time: Timestamp {
+                        seconds: 0,
+                        nanos: 0,
+                    }
+                    .try_into()
+                    .unwrap(),
+                    chain_id: ChainId::default().to_string(),
+                    consensus_params: tendermint::consensus::params::Params {
+                        block: tendermint::block::Size {
+                            max_bytes: 0,
+                            max_gas: 0,
+                            time_iota_ms: 0,
+                        },
+                        evidence: tendermint::evidence::Params {
+                            max_age_num_blocks: 0,
+                            max_age_duration: tendermint::evidence::Duration(
+                                core::time::Duration::MAX,
+                            ),
+                            max_bytes: 0,
+                        },
+                        validator:
+                            tendermint::consensus::params::ValidatorParams {
+                                pub_key_types: vec![],
+                            },
+                        version: None,
+                        abci: tendermint::consensus::params::AbciParams {
+                            vote_extensions_enable_height: None,
+                        },
+                    },
+                    validators: vec![],
+                    app_state_bytes: vec![].into(),
+                    initial_height: 0_u32.into(),
+                },
+                2,
+            )
+            .unwrap();
+        // Commit tx hashes to storage
+        bench_shell.commit_block();
+
+        // Bond from Albert to validator
+        let bond = Bond {
+            validator: defaults::validator_address(),
+            amount: Amount::native_whole(1000),
+            source: Some(defaults::albert_address()),
+        };
+        let params = proof_of_stake::storage::read_pos_params::<
+            _,
+            governance::Store<_>,
+        >(&bench_shell.state)
+        .unwrap();
+        let signed_tx = bench_shell.generate_tx(
+            TX_BOND_WASM,
+            bond,
+            None,
+            None,
+            vec![&defaults::albert_keypair()],
+        );
+
+        bench_shell.execute_tx(&signed_tx.to_ref());
+        bench_shell.state.commit_tx_batch();
+
+        // Initialize governance proposal
+        let content_section = Section::ExtraData(Code::new(
+            vec![],
+            Some(TX_INIT_PROPOSAL_WASM.to_string()),
+        ));
+        let voting_start_epoch =
+            Epoch(2 + params.pipeline_len + params.unbonding_len);
+        let signed_tx = bench_shell.generate_tx(
+            TX_INIT_PROPOSAL_WASM,
+            InitProposalData {
+                content: content_section.get_hash(),
+                author: defaults::albert_address(),
+                r#type: ProposalType::Default,
+                voting_start_epoch,
+                voting_end_epoch: voting_start_epoch.unchecked_add(3_u64),
+                activation_epoch: voting_start_epoch.unchecked_add(9_u64),
+            },
+            None,
+            Some(vec![content_section]),
+            vec![&defaults::albert_keypair()],
+        );
+
+        bench_shell.execute_tx(&signed_tx.to_ref());
+        bench_shell.state.commit_tx_batch();
+        bench_shell.commit_block();
+
+        // Advance epoch for pos benches
+        for _ in 0..=(params.pipeline_len + params.unbonding_len) {
+            bench_shell.advance_epoch();
+        }
+        // Must start after current epoch
+        debug_assert_eq!(
+            bench_shell.state.get_block_epoch().unwrap().next(),
+            voting_start_epoch
+        );
+
+        BenchShell {
+            inner: Arc::new(RwLock::new(bench_shell)),
+        }
     }
 }
 
@@ -634,7 +658,7 @@ pub fn generate_foreign_key_tx(signer: &SecretKey) -> BatchedTx {
     let wasm_code =
         std::fs::read("../../wasm_for_tests/tx_write.wasm").unwrap();
 
-    let mut tx = Tx::from_type(namada::tx::data::TxType::Raw);
+    let mut tx = Tx::from_type(namada_sdk::tx::data::TxType::Raw);
     tx.set_code(Code::new(wasm_code, None));
     tx.set_data(Data::new(
         TxWriteData {
@@ -680,6 +704,42 @@ impl Clone for WrapperTempDir {
 pub struct BenchShieldedUtils {
     #[borsh(skip)]
     context_dir: WrapperTempDir,
+}
+
+impl BenchShieldedUtils {
+    fn atomic_file_write(
+        &self,
+        tmp_file_name: impl AsRef<std::path::Path>,
+        file_name: impl AsRef<std::path::Path>,
+        data: impl BorshSerialize,
+    ) -> std::io::Result<()> {
+        let tmp_path = self.context_dir.0.path().join(&tmp_file_name);
+        {
+            // First serialize the shielded context into a temporary file.
+            // Inability to create this file implies a simultaneuous write
+            // is in progress. In this case, immediately
+            // fail. This is unproblematic because the data
+            // intended to be stored can always be re-fetched
+            // from the blockchain.
+            let mut ctx_file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(tmp_path.clone())?;
+            let mut bytes = Vec::new();
+            data.serialize(&mut bytes).unwrap_or_else(|e| {
+                panic!(
+                    "cannot serialize data to {} with error: {}",
+                    file_name.as_ref().to_string_lossy(),
+                    e,
+                )
+            });
+            ctx_file.write_all(&bytes[..])?;
+        }
+        // Atomically update the old shielded context file with new data.
+        // Atomicity is required to prevent other client instances from
+        // reading corrupt data.
+        std::fs::rename(tmp_path, self.context_dir.0.path().join(file_name))
+    }
 }
 
 #[async_trait::async_trait(?Send)]
@@ -775,6 +835,23 @@ impl ShieldedUtils for BenchShieldedUtils {
         }
         Ok(())
     }
+
+    async fn cache_save(&self, cache: &DispatcherCache) -> std::io::Result<()> {
+        let tmp_file_name = {
+            let t = tempfile::Builder::new()
+                .prefix(CACHE_FILE_TMP_PREFIX)
+                .tempfile()?;
+            t.path().file_name().unwrap().to_owned()
+        };
+
+        self.atomic_file_write(tmp_file_name, CACHE_FILE_NAME, cache)
+    }
+
+    async fn cache_load(&self) -> std::io::Result<DispatcherCache> {
+        let file_name = self.context_dir.0.path().join(CACHE_FILE_NAME);
+        let mut file = File::open(file_name)?;
+        DispatcherCache::try_from_reader(&mut file)
+    }
 }
 
 #[async_trait::async_trait(?Send)]
@@ -798,17 +875,26 @@ impl Client for BenchShell {
             prove,
         };
 
-        let ctx = RequestCtx {
-            state: &self.state,
-            event_log: self.event_log(),
-            vp_wasm_cache: self.vp_wasm_cache.read_only(),
-            tx_wasm_cache: self.tx_wasm_cache.read_only(),
-            storage_read_past_height_limit: None,
-        };
+        let shell = self.read();
 
         if request.path == RPC.shell().dry_run_tx_path() {
-            dry_run_tx(ctx, &request)
+            dry_run_tx(
+                // This is safe because nothing else is using `self.state`
+                // concurrently and the `TempWlState` will be dropped right
+                // after dry-run.
+                unsafe { shell.state.read_only().with_static_temp_write_log() },
+                shell.vp_wasm_cache.read_only(),
+                shell.tx_wasm_cache.read_only(),
+                &request,
+            )
         } else {
+            let ctx = RequestCtx {
+                state: &shell.state,
+                event_log: shell.event_log(),
+                vp_wasm_cache: shell.vp_wasm_cache.read_only(),
+                tx_wasm_cache: shell.tx_wasm_cache.read_only(),
+                storage_read_past_height_limit: None,
+            };
             RPC.handle(ctx, &request)
         }
         .map_err(|_| std::io::Error::from(std::io::ErrorKind::NotFound))
@@ -831,18 +917,29 @@ impl Client for BenchShell {
         height: H,
     ) -> Result<tendermint_rpc::endpoint::block::Response, tendermint_rpc::Error>
     where
-        H: Into<tendermint::block::Height> + Send,
+        H: TryInto<tendermint::block::Height> + Send,
     {
         // NOTE: atm this is only needed to query blocks at a specific height
         // for masp transactions
-        let height = BlockHeight(height.into().into());
+        let height = BlockHeight(
+            height
+                .try_into()
+                .map_err(|_| {
+                    tendermint_rpc::Error::parse(
+                        "Failed to cast block height".to_string(),
+                    )
+                })?
+                .into(),
+        );
+
+        let shell = self.read();
 
         // Given the way we setup and run benchmarks, the masp transactions can
         // only present in the last block, we can mock the previous
         // responses with an empty set of transactions
         let last_block_txs =
-            if height == self.inner.state.in_mem().get_last_block_height() {
-                self.last_block_masp_txs.clone()
+            if height == shell.inner.state.in_mem().get_last_block_height() {
+                shell.last_block_masp_txs.clone()
             } else {
                 vec![]
             };
@@ -857,7 +954,7 @@ impl Client for BenchShell {
                         block: 0,
                         app: 0,
                     },
-                    chain_id: self
+                    chain_id: shell
                         .inner
                         .chain_id
                         .to_string()
@@ -895,37 +992,42 @@ impl Client for BenchShell {
         tendermint_rpc::Error,
     >
     where
-        H: Into<namada::tendermint::block::Height> + Send,
+        H: TryInto<namada_sdk::tendermint::block::Height> + Send,
     {
         // NOTE: atm this is only needed to query block results at a specific
         // height for masp transactions
-        let height = height.into();
+        let height = height.try_into().map_err(|_| {
+            tendermint_rpc::Error::parse(
+                "Failed to cast block height".to_string(),
+            )
+        })?;
+
+        let shell = self.read();
 
         // We can expect all the masp tranfers to have happened only in the last
         // block
         let end_block_events = if height.value()
-            == self.inner.state.in_mem().get_last_block_height().0
+            == shell.inner.state.in_mem().get_last_block_height().0
         {
             Some(
-                self.last_block_masp_txs
+                shell
+                    .last_block_masp_txs
                     .iter()
                     .enumerate()
                     .map(|(idx, (tx, changed_keys))| {
-                        let tx_result = TxResult::<String> {
-                            gas_used: 0.into(),
-                            batch_results: BatchResults(
-                                [(
-                                    tx.first_commitments().unwrap().get_hash(),
-                                    Ok(BatchedTxResult {
-                                        changed_keys: changed_keys.to_owned(),
-                                        vps_result: VpsResult::default(),
-                                        initialized_accounts: vec![],
-                                        events: BTreeSet::default(),
-                                    }),
-                                )]
-                                .into_iter()
-                                .collect(),
-                            ),
+                        let tx_result = {
+                            let mut batch_results = TxResult::new();
+                            batch_results.insert_inner_tx_result(
+                                tx.wrapper_hash().as_ref(),
+                                either::Right(tx.first_commitments().unwrap()),
+                                Ok(BatchedTxResult {
+                                    changed_keys: changed_keys.to_owned(),
+                                    vps_result: VpsResult::default(),
+                                    initialized_accounts: vec![],
+                                    events: BTreeSet::default(),
+                                }),
+                            );
+                            batch_results
                         };
                         let event: Event = new_tx_event(tx, height.value())
                             .with(Batch(&tx_result))
@@ -936,8 +1038,10 @@ impl Client for BenchShell {
                                 tx.sections
                                     .iter()
                                     .find_map(|section| {
-                                        if let Section::MaspTx(_) = section {
-                                            Some(section.get_hash())
+                                        if let Section::MaspTx(transaction) =
+                                            section
+                                        {
+                                            Some(transaction.txid().into())
                                         } else {
                                             None
                                         }
@@ -945,7 +1049,7 @@ impl Client for BenchShell {
                                     .unwrap(),
                             ])))
                             .into();
-                        namada::tendermint::abci::Event::from(event)
+                        namada_sdk::tendermint::abci::Event::from(event)
                     })
                     .collect(),
             )
@@ -961,7 +1065,7 @@ impl Client for BenchShell {
             end_block_events,
             validator_updates: vec![],
             consensus_param_updates: None,
-            app_hash: namada::tendermint::hash::AppHash::default(),
+            app_hash: namada_sdk::tendermint::hash::AppHash::default(),
         })
     }
 }
@@ -969,36 +1073,43 @@ impl Client for BenchShell {
 impl Default for BenchShieldedCtx {
     fn default() -> Self {
         let shell = BenchShell::default();
-        let base_dir = shell.tempdir.as_ref().canonicalize().unwrap();
 
-        // Create a global config and an empty wallet in the chain dir - this is
-        // needed in `Context::new`
-        let config = GlobalConfig::new(shell.inner.chain_id.clone());
-        config.write(&base_dir).unwrap();
-        let wallet = namada_apps_lib::wallet::CliWalletUtils::new(
-            base_dir.join(shell.inner.chain_id.as_str()),
-        );
-        wallet.save().unwrap();
+        let mut chain_ctx = {
+            let shell_read = shell.read();
 
-        let ctx = Context::new::<StdIo>(cli::args::Global {
-            is_pre_genesis: false,
-            chain_id: Some(shell.inner.chain_id.clone()),
-            base_dir,
-            wasm_dir: Some(WASM_DIR.into()),
-        })
-        .unwrap();
+            let base_dir = shell_read.tempdir.as_ref().canonicalize().unwrap();
 
-        let mut chain_ctx = ctx.take_chain_or_exit();
+            // Create a global config and an empty wallet in the chain dir -
+            // this is needed in `Context::new`
+            let config = GlobalConfig::new(shell_read.inner.chain_id.clone());
+            config.write(&base_dir).unwrap();
+            let wallet = namada_apps_lib::wallet::CliWalletUtils::new(
+                base_dir.join(shell_read.inner.chain_id.as_str()),
+            );
+            wallet.save().unwrap();
+
+            let ctx = Context::new::<StdIo>(cli::args::Global {
+                is_pre_genesis: false,
+                chain_id: Some(shell_read.inner.chain_id.clone()),
+                base_dir,
+                wasm_dir: Some(WASM_DIR.into()),
+            })
+            .unwrap();
+
+            ctx.take_chain_or_exit()
+        };
 
         // Generate spending key for Albert and Bertha
         chain_ctx.wallet.gen_store_spending_key(
             ALBERT_SPENDING_KEY.to_string(),
+            None,
             None,
             true,
             &mut OsRng,
         );
         chain_ctx.wallet.gen_store_spending_key(
             BERTHA_SPENDING_KEY.to_string(),
+            None,
             None,
             true,
             &mut OsRng,
@@ -1017,6 +1128,7 @@ impl Default for BenchShieldedCtx {
                     .wallet
                     .find_viewing_key(viewing_alias)
                     .unwrap()
+                    .key
                     .to_string(),
             );
             let viewing_key = ExtendedFullViewingKey::from(
@@ -1063,16 +1175,23 @@ impl BenchShieldedCtx {
         self.shielded = async_runtime
             .block_on(namada_apps_lib::client::masp::syncing(
                 self.shielded,
-                &self.shell,
+                self.shell.clone(),
+                ShieldedSync {
+                    ledger_address: FromStr::from_str("http://127.0.0.1:1337")
+                        .unwrap(),
+                    last_query_height: None,
+                    spending_keys: vec![spending_key],
+                    viewing_keys: vec![],
+                    with_indexer: None,
+                    wait_for_last_query_height: false,
+                    max_concurrent_fetches: 100,
+                    retry_strategy: RetryStrategy::Forever,
+                },
                 &StdIo,
-                1,
-                None,
-                None,
-                &[spending_key.into()],
-                &[],
             ))
             .unwrap();
-        let native_token = self.shell.state.in_mem().native_token.clone();
+        let native_token =
+            self.shell.read().state.in_mem().native_token.clone();
         let namada = NamadaImpl::native_new(
             self.shell,
             self.wallet,
@@ -1080,14 +1199,18 @@ impl BenchShieldedCtx {
             StdIo,
             native_token,
         );
+        let masp_transfer_data = MaspTransferData {
+            source: source.clone(),
+            target: target.clone(),
+            token: address::testing::nam(),
+            amount: denominated_amount,
+        };
         let shielded = async_runtime
             .block_on(
                 ShieldedContext::<BenchShieldedUtils>::gen_shielded_transfer(
                     &namada,
-                    &source,
-                    &target,
-                    &address::testing::nam(),
-                    denominated_amount,
+                    vec![masp_transfer_data],
+                    None,
                     true,
                 ),
             )
@@ -1102,47 +1225,43 @@ impl BenchShieldedCtx {
             )
             .expect("MASP must have shielded part");
 
-        let mut hasher = Sha256::new();
-        let shielded_section_hash = namada::core::hash::Hash(
-            Section::MaspTx(shielded.clone())
-                .hash(&mut hasher)
-                .finalize_reset()
-                .into(),
-        );
+        let shielded_section_hash = shielded.txid().into();
         let tx = if source.effective_address() == MASP
             && target.effective_address() == MASP
         {
-            namada.client().generate_tx(
-                TX_SHIELDED_TRANSFER_WASM,
-                ShieldedTransfer {
-                    section_hash: shielded_section_hash,
-                },
+            namada.client().read().generate_tx(
+                TX_TRANSFER_WASM,
+                Transfer::masp(shielded_section_hash),
                 Some(shielded),
                 None,
                 vec![&defaults::albert_keypair()],
             )
         } else if target.effective_address() == MASP {
-            namada.client().generate_tx(
-                TX_SHIELDING_TRANSFER_WASM,
-                ShieldingTransfer {
-                    source: source.effective_address(),
-                    token: address::testing::nam(),
-                    amount: DenominatedAmount::native(amount),
-                    shielded_section_hash,
-                },
+            namada.client().read().generate_tx(
+                TX_TRANSFER_WASM,
+                Transfer::masp(shielded_section_hash)
+                    .transfer(
+                        source.effective_address(),
+                        MASP,
+                        address::testing::nam(),
+                        DenominatedAmount::native(amount),
+                    )
+                    .unwrap(),
                 Some(shielded),
                 None,
                 vec![&defaults::albert_keypair()],
             )
         } else {
-            namada.client().generate_tx(
-                TX_UNSHIELDING_TRANSFER_WASM,
-                UnshieldingTransfer {
-                    target: target.effective_address(),
-                    token: address::testing::nam(),
-                    amount: DenominatedAmount::native(amount),
-                    shielded_section_hash,
-                },
+            namada.client().read().generate_tx(
+                TX_TRANSFER_WASM,
+                Transfer::masp(shielded_section_hash)
+                    .transfer(
+                        MASP,
+                        target.effective_address(),
+                        address::testing::nam(),
+                        DenominatedAmount::native(amount),
+                    )
+                    .unwrap(),
                 Some(shielded),
                 None,
                 vec![&defaults::albert_keypair()],
@@ -1166,12 +1285,12 @@ impl BenchShieldedCtx {
         self,
         amount: Amount,
         source: TransferSource,
-        target: TransferTarget,
+        target: String,
     ) -> (Self, BatchedTx) {
         let (ctx, tx) = self.generate_masp_tx(
             amount,
             source.clone(),
-            TransferTarget::Address(Address::Internal(InternalAddress::Ibc)),
+            TransferTarget::Ibc(target.clone()),
         );
 
         let token = PrefixedCoin {
@@ -1188,7 +1307,7 @@ impl BenchShieldedCtx {
         let timeout_height = TimeoutHeight::At(IbcHeight::new(0, 100).unwrap());
 
         #[allow(clippy::disallowed_methods)]
-        let now: namada::tendermint::Time =
+        let now: namada_sdk::tendermint::Time =
             DateTimeUtc::now().try_into().unwrap();
         let now: IbcTimestamp = now.into();
         let timeout_timestamp =
@@ -1199,30 +1318,44 @@ impl BenchShieldedCtx {
             packet_data: PacketData {
                 token,
                 sender: source.effective_address().to_string().into(),
-                receiver: target.effective_address().to_string().into(),
+                receiver: target.into(),
                 memo: "".parse().unwrap(),
             },
             timeout_height_on_b: timeout_height,
             timeout_timestamp_on_b: timeout_timestamp,
         };
 
-        let transfer = ShieldingTransfer::deserialize(
-            &mut tx.tx.data(&tx.cmt).unwrap().as_slice(),
-        )
-        .unwrap();
+        let vectorized_transfer =
+            Transfer::deserialize(&mut tx.tx.data(&tx.cmt).unwrap().as_slice())
+                .unwrap();
+        let sources =
+            vec![vectorized_transfer.sources.into_iter().next().unwrap()]
+                .into_iter()
+                .collect();
+        let targets =
+            vec![vectorized_transfer.targets.into_iter().next().unwrap()]
+                .into_iter()
+                .collect();
+        let transfer = Transfer {
+            sources,
+            targets,
+            shielded_section_hash: Some(
+                vectorized_transfer.shielded_section_hash.unwrap(),
+            ),
+        };
         let masp_tx = tx
             .tx
-            .get_section(&transfer.shielded_section_hash)
+            .get_masp_section(&transfer.shielded_section_hash.unwrap())
             .unwrap()
-            .masp_tx()
-            .unwrap();
-        let msg = MsgTransfer {
+            .clone();
+        let msg = MsgTransfer::<token::Transfer> {
             message: msg,
             transfer: Some(transfer),
         };
 
         let mut ibc_tx = ctx
             .shell
+            .read()
             .generate_ibc_tx(TX_IBC_WASM, msg.serialize_to_vec());
         ibc_tx.tx.add_masp_tx_section(masp_tx);
 

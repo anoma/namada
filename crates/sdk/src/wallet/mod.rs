@@ -21,8 +21,9 @@ use namada_core::key::*;
 use namada_core::masp::{
     ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
 };
+use namada_core::storage::BlockHeight;
 use namada_core::time::DateTimeUtc;
-use namada_ibc::is_ibc_denom;
+use namada_ibc::trace::is_ibc_denom;
 pub use pre_genesis::gen_key_to_store;
 use rand::CryptoRng;
 use rand_core::RngCore;
@@ -31,11 +32,14 @@ use thiserror::Error;
 use zeroize::Zeroizing;
 
 pub use self::derivation_path::{DerivationPath, DerivationPathError};
-pub use self::keys::{DecryptionError, StoredKeypair};
+pub use self::keys::{
+    DatedKeypair, DatedSpendingKey, DatedViewingKey, DecryptionError,
+    StoredKeypair,
+};
 pub use self::store::{ConfirmationResponse, ValidatorData, ValidatorKeys};
 use crate::wallet::store::{derive_hd_secret_key, derive_hd_spending_key};
 
-const DISPOSABLE_KEY_LIFETIME_IN_SECONDS: i64 = 5 * 60; // 5 minutes
+const DISPOSABLE_KEY_LIFETIME_IN_SECONDS: i64 = 7 * 24 * 60 * 60; // 1 week
 
 /// Captures the interactive parts of the wallet's functioning
 pub trait WalletIo: Sized + Clone {
@@ -257,7 +261,7 @@ pub struct Wallet<U> {
     utils: U,
     store: Store,
     decrypted_key_cache: HashMap<Alias, common::SecretKey>,
-    decrypted_spendkey_cache: HashMap<Alias, ExtendedSpendingKey>,
+    decrypted_spendkey_cache: HashMap<Alias, DatedSpendingKey>,
 }
 
 impl<U> From<Wallet<U>> for Store {
@@ -419,7 +423,7 @@ impl<U> Wallet<U> {
     pub fn find_viewing_key(
         &self,
         alias: impl AsRef<str>,
-    ) -> Result<&ExtendedViewingKey, FindKeyError> {
+    ) -> Result<&DatedViewingKey, FindKeyError> {
         self.store.find_viewing_key(alias.as_ref()).ok_or_else(|| {
             FindKeyError::KeyNotFound(alias.as_ref().to_string())
         })
@@ -484,7 +488,7 @@ impl<U> Wallet<U> {
     }
 
     /// Get all known viewing keys by their alias
-    pub fn get_viewing_keys(&self) -> HashMap<String, ExtendedViewingKey> {
+    pub fn get_viewing_keys(&self) -> HashMap<String, DatedViewingKey> {
         self.store
             .get_viewing_keys()
             .iter()
@@ -495,7 +499,7 @@ impl<U> Wallet<U> {
     /// Get all known viewing keys by their alias
     pub fn get_spending_keys(
         &self,
-    ) -> HashMap<String, &StoredKeypair<ExtendedSpendingKey>> {
+    ) -> HashMap<String, &StoredKeypair<DatedSpendingKey>> {
         self.store
             .get_spending_keys()
             .iter()
@@ -544,10 +548,12 @@ impl<U: WalletIo> Wallet<U> {
     /// provided, will prompt for password from stdin.
     /// Stores the key in decrypted key cache and returns the alias of the key
     /// and a reference-counting pointer to the key.
+    #[allow(clippy::too_many_arguments)]
     pub fn derive_store_spending_key_from_mnemonic_code(
         &mut self,
         alias: String,
         alias_force: bool,
+        birthday: Option<BlockHeight>,
         derivation_path: DerivationPath,
         mnemonic_passphrase: Option<(Mnemonic, Zeroizing<String>)>,
         prompt_bip39_passphrase: bool,
@@ -573,6 +579,7 @@ impl<U: WalletIo> Wallet<U> {
             alias,
             alias_force,
             spend_key,
+            birthday,
             password,
             Some(derivation_path),
         )
@@ -633,13 +640,21 @@ impl<U: WalletIo> Wallet<U> {
     pub fn gen_store_spending_key(
         &mut self,
         alias: String,
+        birthday: Option<BlockHeight>,
         password: Option<Zeroizing<String>>,
         force_alias: bool,
         csprng: &mut (impl CryptoRng + RngCore),
     ) -> Option<(String, ExtendedSpendingKey)> {
         let spend_key = gen_spending_key(csprng);
-        self.insert_spending_key(alias, force_alias, spend_key, password, None)
-            .map(|alias| (alias, spend_key))
+        self.insert_spending_key(
+            alias,
+            force_alias,
+            spend_key,
+            birthday,
+            password,
+            None,
+        )
+        .map(|alias| (alias, spend_key))
     }
 
     /// Generate a new keypair, derive an implicit address from its public key
@@ -736,14 +751,20 @@ impl<U: WalletIo> Wallet<U> {
     /// into the store with the provided alias, converted to lower case. If the
     /// alias already exists, optionally force overwrite the key for the
     /// alias.
+    ///
+    /// An optional birthday can be provided saying that this key was created
+    /// after this blockheight.
+    ///
     /// If no encryption password is provided, the key will be stored raw
     /// without encryption.
+    ///
     /// Stores the key in decrypted key cache and returns the alias of the key
     /// and the key itself.
-    pub fn derive_store_hd_spendind_key(
+    pub fn derive_store_hd_spending_key(
         &mut self,
         alias: String,
         force_alias: bool,
+        birthday: Option<BlockHeight>,
         seed: Seed,
         derivation_path: DerivationPath,
         password: Option<Zeroizing<String>>,
@@ -754,6 +775,7 @@ impl<U: WalletIo> Wallet<U> {
             alias,
             force_alias,
             spend_key,
+            birthday,
             password,
             Some(derivation_path),
         )
@@ -886,7 +908,7 @@ impl<U: WalletIo> Wallet<U> {
         &mut self,
         alias: impl AsRef<str>,
         password: Option<Zeroizing<String>>,
-    ) -> Result<ExtendedSpendingKey, FindKeyError> {
+    ) -> Result<DatedSpendingKey, FindKeyError> {
         // Try cache first
         if let Some(cached_key) = self
             .decrypted_spendkey_cache
@@ -1082,10 +1104,16 @@ impl<U: WalletIo> Wallet<U> {
         &mut self,
         alias: String,
         view_key: ExtendedViewingKey,
+        birthday: Option<BlockHeight>,
         force_alias: bool,
     ) -> Option<String> {
         self.store
-            .insert_viewing_key::<U>(alias.into(), view_key, force_alias)
+            .insert_viewing_key::<U>(
+                alias.into(),
+                view_key,
+                birthday,
+                force_alias,
+            )
             .map(Into::into)
     }
 
@@ -1095,6 +1123,7 @@ impl<U: WalletIo> Wallet<U> {
         alias: String,
         force_alias: bool,
         spend_key: ExtendedSpendingKey,
+        birthday: Option<BlockHeight>,
         password: Option<Zeroizing<String>>,
         path: Option<DerivationPath>,
     ) -> Option<String> {
@@ -1102,14 +1131,17 @@ impl<U: WalletIo> Wallet<U> {
             .insert_spending_key::<U>(
                 alias.into(),
                 spend_key,
+                birthday,
                 password,
                 path,
                 force_alias,
             )
             .map(|alias| {
                 // Cache the newly added key
-                self.decrypted_spendkey_cache
-                    .insert(alias.clone(), spend_key);
+                self.decrypted_spendkey_cache.insert(
+                    alias.clone(),
+                    DatedKeypair::new(spend_key, birthday),
+                );
                 alias
             })
             .map(Into::into)

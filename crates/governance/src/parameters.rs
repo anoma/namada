@@ -3,7 +3,7 @@ use namada_core::token;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
-use namada_storage::{Result, StorageRead, StorageWrite};
+use namada_state::{StorageRead, StorageResult, StorageWrite};
 
 use super::storage::keys as goverance_storage;
 
@@ -27,8 +27,8 @@ pub struct GovernanceParameters {
     pub max_proposal_code_size: u64,
     /// Minimum number of epochs between the proposal end epoch and start epoch
     pub min_proposal_voting_period: u64,
-    /// Maximum number of epochs between the proposal activation epoch and
-    /// start epoch
+    /// Maximum number of epochs between the proposal start epoch and
+    /// activation epoch
     pub max_proposal_period: u64,
     /// Maximum number of characters for proposal content
     pub max_proposal_content_size: u64,
@@ -54,7 +54,7 @@ impl Default for GovernanceParameters {
 
 impl GovernanceParameters {
     /// Initialize governance parameters into storage
-    pub fn init_storage<S>(&self, storage: &mut S) -> Result<()>
+    pub fn init_storage<S>(&self, storage: &mut S) -> StorageResult<()>
     where
         S: StorageRead + StorageWrite,
     {

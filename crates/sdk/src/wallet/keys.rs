@@ -7,6 +7,8 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXLOWER;
+use namada_core::masp::{ExtendedSpendingKey, ExtendedViewingKey};
+use namada_core::storage::BlockHeight;
 use orion::{aead, kdf};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -16,6 +18,11 @@ use crate::wallet::WalletIo;
 
 const ENCRYPTED_KEY_PREFIX: &str = "encrypted:";
 const UNENCRYPTED_KEY_PREFIX: &str = "unencrypted:";
+
+/// Type alias for a viewing key with a birthday.
+pub type DatedViewingKey = DatedKeypair<ExtendedViewingKey>;
+/// Type alias for a spending key with a birthday.
+pub type DatedSpendingKey = DatedKeypair<ExtendedSpendingKey>;
 
 /// A keypair stored in a wallet
 #[derive(Debug)]
@@ -111,6 +118,131 @@ pub enum DeserializeStoredKeypairError {
     InvalidStoredKeypairString(String),
     #[error("The stored keypair is missing a prefix")]
     MissingPrefix,
+}
+
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum DeserializeDatedKeypairError {
+    #[error("The stored keypair is not valid: {0}")]
+    InvalidKeypairString(String),
+    #[error("The stored keypair contains an invalid birthday: {0}")]
+    InvalidBirthday(String),
+}
+
+/// A keypair with a block height after which it was created
+#[derive(
+    Debug,
+    Serialize,
+    Deserialize,
+    BorshSerialize,
+    BorshDeserialize,
+    Ord,
+    PartialOrd,
+    Eq,
+    PartialEq,
+)]
+pub struct DatedKeypair<T>
+where
+    T: BorshSerialize + BorshDeserialize,
+{
+    /// The keypair itself
+    pub key: T,
+    /// A blockheight that precedes the creation of the keypair
+    pub birthday: BlockHeight,
+}
+
+impl<T> Copy for DatedKeypair<T> where
+    T: Copy + BorshSerialize + BorshDeserialize
+{
+}
+
+impl<T> Clone for DatedKeypair<T>
+where
+    T: Clone + BorshSerialize + BorshDeserialize,
+{
+    fn clone(&self) -> Self {
+        Self {
+            key: self.key.clone(),
+            birthday: self.birthday,
+        }
+    }
+}
+
+impl<T> DatedKeypair<T>
+where
+    T: BorshSerialize + BorshDeserialize,
+{
+    /// Create a new dated keypair. If no birthday is provided,
+    /// defaults to the first blockheight.
+    pub fn new(key: T, birthday: Option<BlockHeight>) -> Self {
+        Self {
+            key,
+            birthday: birthday.unwrap_or(BlockHeight(0)),
+        }
+    }
+
+    /// Map the inner key type while maintaining the birthday.
+    pub fn map<U, F>(self, func: F) -> DatedKeypair<U>
+    where
+        F: Fn(T) -> U,
+        U: BorshSerialize + BorshDeserialize,
+    {
+        DatedKeypair {
+            key: func(self.key),
+            birthday: self.birthday,
+        }
+    }
+}
+
+impl<T> From<T> for DatedKeypair<T>
+where
+    T: BorshSerialize + BorshDeserialize,
+{
+    fn from(key: T) -> Self {
+        Self::new(key, None)
+    }
+}
+
+impl<T> Display for DatedKeypair<T>
+where
+    T: BorshSerialize + BorshDeserialize + Display,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}<<{}", self.key, self.birthday,)
+    }
+}
+
+impl<T> FromStr for DatedKeypair<T>
+where
+    T: Serialize + BorshSerialize + BorshDeserialize + FromStr,
+    <T as FromStr>::Err: Display,
+{
+    type Err = DeserializeDatedKeypairError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut pieces = s.split("<<");
+        let key_ser = pieces.next().ok_or(
+            DeserializeDatedKeypairError::InvalidKeypairString(
+                "Provided string was empty".to_string(),
+            ),
+        )?;
+        let birthday = pieces
+            .next()
+            .map(|b| {
+                BlockHeight::from_str(b).map_err(|_| {
+                    DeserializeDatedKeypairError::InvalidBirthday(b.to_string())
+                })
+            })
+            .transpose()?;
+        Ok(Self::new(
+            T::from_str(key_ser).map_err(|e| {
+                DeserializeDatedKeypairError::InvalidKeypairString(
+                    e.to_string(),
+                )
+            })?,
+            birthday,
+        ))
+    }
 }
 
 /// An encrypted keypair stored in a wallet

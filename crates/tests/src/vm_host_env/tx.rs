@@ -1,24 +1,25 @@
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
+use std::rc::Rc;
 
-use namada::core::address::Address;
-use namada::core::hash::Hash;
-use namada::core::storage::{Key, TxIndex};
-use namada::core::time::DurationSecs;
-use namada::ledger::gas::TxGasMeter;
-use namada::ledger::parameters::{self, EpochDuration};
-use namada::ledger::storage::mockdb::MockDB;
-use namada::ledger::storage::testing::TestState;
-pub use namada::tx::data::TxType;
-use namada::tx::Tx;
-use namada::vm::prefix_iter::PrefixIterators;
-use namada::vm::wasm::run::Error;
-use namada::vm::wasm::{self, TxCache, VpCache};
-use namada::vm::{self, WasmCacheRwAccess};
-use namada::{account, token};
+use namada_sdk::address::Address;
+use namada_sdk::gas::TxGasMeter;
+use namada_sdk::hash::Hash;
+use namada_sdk::parameters::{self, EpochDuration};
+use namada_sdk::state::prefix_iter::PrefixIterators;
+use namada_sdk::state::testing::TestState;
+use namada_sdk::storage::mockdb::MockDB;
+use namada_sdk::storage::{Key, TxIndex};
+use namada_sdk::time::DurationSecs;
+pub use namada_sdk::tx::data::TxType;
+pub use namada_sdk::tx::*;
+use namada_sdk::{account, token};
 use namada_tx_prelude::transaction::TxSentinel;
-use namada_tx_prelude::{BatchedTx, BorshSerializeExt, Ctx};
+use namada_tx_prelude::{BorshSerializeExt, Ctx};
+use namada_vm::wasm::run::Error;
+use namada_vm::wasm::{self, TxCache, VpCache};
+use namada_vm::WasmCacheRwAccess;
 use namada_vp_prelude::key::common;
 use tempfile::TempDir;
 
@@ -59,6 +60,7 @@ pub struct TestTxEnv {
     pub tx_wasm_cache: TxCache<WasmCacheRwAccess>,
     pub tx_cache_dir: TempDir,
     pub batched_tx: BatchedTx,
+    pub wasmer_store: Rc<RefCell<wasmer::Store>>,
 }
 impl Default for TestTxEnv {
     fn default() -> Self {
@@ -71,12 +73,15 @@ impl Default for TestTxEnv {
         tx.header.chain_id = state.in_mem().chain_id.clone();
         tx.push_default_inner_tx();
         let batched_tx = tx.batch_first_tx();
+
+        let wasmer_store = Rc::new(RefCell::new(
+            wasm::compilation_cache::common::testing::store(),
+        ));
+
         Self {
             state,
             iterators: PrefixIterators::default(),
-            gas_meter: RefCell::new(TxGasMeter::new_from_sub_limit(
-                100_000_000_000.into(),
-            )),
+            gas_meter: RefCell::new(TxGasMeter::new(1_000_000_000_000)),
             sentinel: RefCell::new(TxSentinel::default()),
             tx_index: TxIndex::default(),
             verifiers: BTreeSet::default(),
@@ -87,6 +92,7 @@ impl Default for TestTxEnv {
             tx_wasm_cache,
             tx_cache_dir,
             batched_tx,
+            wasmer_store,
         }
     }
 }
@@ -108,7 +114,6 @@ impl TestTxEnv {
         epoch_duration: Option<EpochDuration>,
         vp_allowlist: Option<Vec<String>>,
         tx_allowlist: Option<Vec<String>>,
-        max_signatures_per_transaction: Option<u8>,
     ) {
         parameters::update_epoch_parameter(
             &mut self.state,
@@ -126,11 +131,6 @@ impl TestTxEnv {
         parameters::update_vp_allowlist_parameter(
             &mut self.state,
             vp_allowlist.unwrap_or_default(),
-        )
-        .unwrap();
-        parameters::update_max_signature_per_tx(
-            &mut self.state,
-            max_signatures_per_transaction.unwrap_or(15),
         )
         .unwrap();
     }
@@ -200,7 +200,7 @@ impl TestTxEnv {
     }
 
     pub fn commit_tx_and_block(&mut self) {
-        self.state.commit_tx();
+        self.state.commit_tx_batch();
         self.state
             .commit_block()
             .map_err(|err| println!("{:?}", err))
@@ -246,7 +246,7 @@ mod native_tx_host_env {
 
     // TODO replace with `std::concat_idents` once stabilized (https://github.com/rust-lang/rust/issues/29599)
     use concat_idents::concat_idents;
-    use namada::vm::host_env::*;
+    use namada_vm::host_env::*;
 
     use super::*;
 
@@ -352,9 +352,10 @@ mod native_tx_host_env {
                                 tx_wasm_cache,
                                 tx_cache_dir: _,
                                 batched_tx,
+                                wasmer_store: _,
                             }: &mut TestTxEnv| {
 
-                            let mut tx_env = vm::host_env::testing::tx_env(
+                            let mut tx_env = namada_vm::host_env::testing::tx_env(
                                 state,
                                 iterators,
                                 verifiers,
@@ -383,7 +384,7 @@ mod native_tx_host_env {
                     #[no_mangle]
                     extern "C" fn extern_fn_name( $($arg: $type),* ) -> $ret {
                         with(|TestTxEnv {
-                            tx_index,
+                                tx_index,
                                 state,
                                 iterators,
                                 verifiers,
@@ -395,10 +396,11 @@ mod native_tx_host_env {
                                 vp_cache_dir: _,
                                 tx_wasm_cache,
                                 tx_cache_dir: _,
-                                batched_tx
+                                batched_tx,
+                                wasmer_store: _,
                             }: &mut TestTxEnv| {
 
-                            let mut tx_env = vm::host_env::testing::tx_env(
+                            let mut tx_env = namada_vm::host_env::testing::tx_env(
                                 state,
                                 iterators,
                                 verifiers,
@@ -440,9 +442,10 @@ mod native_tx_host_env {
                                 tx_wasm_cache,
                                 tx_cache_dir: _,
                                 batched_tx,
+                                wasmer_store: _,
                             }: &mut TestTxEnv| {
 
-                            let mut tx_env = vm::host_env::testing::tx_env(
+                            let mut tx_env = namada_vm::host_env::testing::tx_env(
                                 state,
                                 iterators,
                                 verifiers,
@@ -522,8 +525,6 @@ mod native_tx_host_env {
         public_keys_map_ptr: u64,
         public_keys_map_len: u64,
         threshold: u8,
-        max_signatures_ptr: u64,
-        max_signatures_len: u64,
     ) -> i64);
     native_host_fn!(tx_yield_value(
         buf_ptr: u64,
@@ -533,11 +534,11 @@ mod native_tx_host_env {
 
 #[cfg(test)]
 mod tests {
-    use namada::core::storage;
-    use namada::vm::host_env::{self, TxVmEnv};
-    use namada::vm::memory::VmMemory;
     use namada_core::hash::Sha256Hasher;
+    use namada_sdk::storage;
     use namada_tx_prelude::StorageWrite;
+    use namada_vm::host_env::{self, TxVmEnv};
+    use namada_vm::memory::VmMemory;
     use proptest::prelude::*;
     use test_log::test;
 
@@ -757,9 +758,10 @@ mod tests {
             tx_wasm_cache,
             tx_cache_dir: _,
             batched_tx,
+            wasmer_store,
         } = test_env;
 
-        let mut tx_env = vm::host_env::testing::tx_env_with_wasm_memory(
+        let mut tx_env = host_env::testing::tx_env_with_wasm_memory(
             state,
             iterators,
             verifiers,
@@ -770,6 +772,7 @@ mod tests {
             tx_index,
             result_buffer,
             yielded_value,
+            wasmer_store.clone(),
             vp_wasm_cache,
             tx_wasm_cache,
         );
@@ -790,7 +793,7 @@ mod tests {
             any::<bool>(),
             any::<bool>(),
             any::<bool>(),
-            namada::core::storage::testing::arb_key(),
+            namada_sdk::storage::testing::arb_key(),
             arb_u64(),
             arb_u64(),
             any::<Vec<u8>>(),

@@ -13,12 +13,14 @@ repository.workspace = true
 version.workspace = true
 
 [features]
-default = []
+default = ["salt"]
 testing = ["proptest", "namada_core/testing"]
+salt = ["rand_core"]
 migrations = [
     "namada_migrations",
     "linkme",
 ]
+arbitrary = ["dep:arbitrary", "namada_core/arbitrary"]
 
 [dependencies]
 namada_core = { path = "../core" }
@@ -27,10 +29,12 @@ namada_gas = { path = "../gas" }
 namada_macros = { path = "../macros" }
 namada_migrations = {path = "../migrations", optional = true }
 
+arbitrary = { workspace = true, optional = true }
 ark-bls12-381.workspace = true
 bitflags.workspace = true
 borsh.workspace = true
 data-encoding.workspace = true
+either.workspace = true
 konst.workspace = true
 linkme = {workspace = true, optional = true}
 masp_primitives.workspace = true
@@ -39,8 +43,9 @@ num-traits.workspace = true
 proptest = { workspace = true, optional = true }
 prost-types.workspace = true
 prost.workspace = true
-serde_json.workspace = true
+rand_core = { workspace = true, optional = true, features = ["getrandom"] }
 serde.workspace = true
+serde_json.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
 

@@ -1,15 +1,18 @@
 use std::fmt::Display;
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 
+/// The vote for a proposal
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Clone,
     PartialEq,
+    BorshSchema,
     BorshSerialize,
     BorshDeserialize,
     BorshDeserializer,
@@ -17,7 +20,6 @@ use serde::{Deserialize, Serialize};
     Serialize,
     Deserialize,
 )]
-/// The vote for a proposal
 pub enum ProposalVote {
     /// Yes
     Yay,

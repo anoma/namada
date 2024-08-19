@@ -8,7 +8,7 @@ use std::fmt;
 
 use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::hash::Hash;
+use namada_core::masp::TxId;
 use namada_core::storage::KeySeg;
 use namada_core::{address, storage};
 
@@ -21,17 +21,18 @@ pub type Actions = Vec<Action>;
 
 /// An action applied from a tx.
 #[allow(missing_docs)]
-#[derive(Clone, Debug, BorshDeserialize, BorshSerialize)]
+#[derive(Clone, Debug, BorshDeserialize, BorshSerialize, PartialEq)]
 pub enum Action {
     Pos(PosAction),
     Gov(GovAction),
     Pgf(PgfAction),
     Masp(MaspAction),
+    IbcShielding,
 }
 
 /// PoS tx actions.
 #[allow(missing_docs)]
-#[derive(Clone, Debug, BorshDeserialize, BorshSerialize)]
+#[derive(Clone, Debug, BorshDeserialize, BorshSerialize, PartialEq)]
 pub enum PosAction {
     BecomeValidator(Address),
     DeactivateValidator(Address),
@@ -49,7 +50,7 @@ pub enum PosAction {
 
 /// Gov tx actions.
 #[allow(missing_docs)]
-#[derive(Clone, Debug, BorshDeserialize, BorshSerialize)]
+#[derive(Clone, Debug, BorshDeserialize, BorshSerialize, PartialEq)]
 pub enum GovAction {
     InitProposal { author: Address },
     VoteProposal { id: u64, voter: Address },
@@ -57,17 +58,19 @@ pub enum GovAction {
 
 /// PGF tx actions.
 #[allow(missing_docs)]
-#[derive(Clone, Debug, BorshDeserialize, BorshSerialize)]
+#[derive(Clone, Debug, BorshDeserialize, BorshSerialize, PartialEq)]
 pub enum PgfAction {
     ResignSteward(Address),
     UpdateStewardCommission(Address),
 }
 
-/// MASP tx action.
-#[derive(Clone, Debug, BorshDeserialize, BorshSerialize)]
-pub struct MaspAction {
+/// MASP tx actions.
+#[derive(Clone, Debug, BorshDeserialize, BorshSerialize, PartialEq)]
+pub enum MaspAction {
     /// The hash of the masp [`crate::types::Section`]
-    pub masp_section_ref: Hash,
+    MaspSectionRef(TxId),
+    /// A required authorizer for the transaction
+    MaspAuthorizer(Address),
 }
 
 /// Read actions from temporary storage
@@ -119,17 +122,36 @@ fn storage_key() -> storage::Key {
 }
 
 /// Helper function to get the optional masp section reference from the
-/// [`Actions`]. If more than one [`MaspAction`] has been found we return the
-/// first one
-pub fn get_masp_section_ref<T: Read>(
+/// [`Actions`]. If more than one [`MaspAction`] is found we return an error
+pub fn get_masp_section_ref(
+    actions: &Actions,
+) -> Result<Option<TxId>, &'static str> {
+    let masp_sections: Vec<_> = actions
+        .iter()
+        .filter_map(|action| {
+            if let Action::Masp(MaspAction::MaspSectionRef(masp_section_ref)) =
+                action
+            {
+                Some(masp_section_ref.to_owned())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    if masp_sections.len() > 1 {
+        Err("The transaction pushed multiple MASP Actions")
+    } else {
+        Ok(masp_sections.first().cloned())
+    }
+}
+
+/// Helper function to check if the action is IBC shielding transfer
+pub fn is_ibc_shielding_transfer<T: Read>(
     reader: &T,
-) -> Result<Option<Hash>, <T as Read>::Err> {
-    Ok(reader.read_actions()?.into_iter().find_map(|action| {
-        // In case of multiple masp actions we get the first one
-        if let Action::Masp(MaspAction { masp_section_ref }) = action {
-            Some(masp_section_ref)
-        } else {
-            None
-        }
-    }))
+) -> Result<bool, <T as Read>::Err> {
+    Ok(reader
+        .read_actions()?
+        .iter()
+        .any(|action| matches!(action, Action::IbcShielding)))
 }

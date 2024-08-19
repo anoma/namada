@@ -1,21 +1,22 @@
 use std::fs::File;
+use std::io::Write;
 
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use ledger_namada_rs::{BIP44Path, NamadaApp};
-use ledger_transport_hid::hidapi::HidApi;
-use ledger_transport_hid::TransportNativeHID;
-use namada::core::address::{Address, ImplicitAddress};
-use namada::core::collections::HashSet;
-use namada::core::key::*;
-use namada::governance::cli::onchain::{
+use namada_sdk::address::{Address, ImplicitAddress};
+use namada_sdk::args::TxBecomeValidator;
+use namada_sdk::collections::HashSet;
+use namada_sdk::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal,
 };
-use namada::io::Io;
-use namada::state::EPOCH_SWITCH_BLOCKS_DELAY;
-use namada::tx::{CompressedAuthorization, Section, Signer, Tx};
-use namada_sdk::args::TxBecomeValidator;
+use namada_sdk::ibc::convert_masp_tx_to_ibc_memo;
+use namada_sdk::io::Io;
+use namada_sdk::key::*;
 use namada_sdk::rpc::{InnerTxResult, TxBroadcastData, TxResponse};
+use namada_sdk::state::EPOCH_SWITCH_BLOCKS_DELAY;
+use namada_sdk::tx::data::compute_inner_tx_hash;
+use namada_sdk::tx::{CompressedAuthorization, Section, Signer, Tx};
 use namada_sdk::wallet::alias::{validator_address, validator_consensus_key};
 use namada_sdk::wallet::{Wallet, WalletIo};
 use namada_sdk::{display_line, edisplay_line, error, signing, tx, Namada};
@@ -29,7 +30,9 @@ use crate::client::tx::tx::ProcessTxResponse;
 use crate::config::TendermintMode;
 use crate::facade::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::tendermint_node;
-use crate::wallet::{gen_validator_keys, read_and_confirm_encryption_password};
+use crate::wallet::{
+    gen_validator_keys, read_and_confirm_encryption_password, WalletTransport,
+};
 
 /// Wrapper around `signing::aux_signing_data` that stores the optional
 /// disposable address to the wallet
@@ -40,7 +43,8 @@ pub async fn aux_signing_data(
     default_signer: Option<Address>,
 ) -> Result<signing::SigningTxData, error::Error> {
     let signing_data =
-        signing::aux_signing_data(context, args, owner, default_signer).await?;
+        signing::aux_signing_data(context, args, owner, default_signer, vec![])
+            .await?;
 
     if args.disposable_signing_key {
         if !(args.dry_run || args.dry_run_wrapper) {
@@ -62,12 +66,17 @@ pub async fn aux_signing_data(
     Ok(signing_data)
 }
 
-pub async fn with_hardware_wallet<'a, U: WalletIo + Clone>(
+pub async fn with_hardware_wallet<'a, U, T>(
     mut tx: Tx,
     pubkey: common::PublicKey,
     parts: HashSet<signing::Signable>,
-    (wallet, app): (&RwLock<Wallet<U>>, &NamadaApp<TransportNativeHID>),
-) -> Result<Tx, error::Error> {
+    (wallet, app): (&RwLock<Wallet<U>>, &NamadaApp<T>),
+) -> Result<Tx, error::Error>
+where
+    U: WalletIo + Clone,
+    T: ledger_transport::Exchange + Send + Sync,
+    <T as ledger_transport::Exchange>::Error: std::error::Error,
+{
     // Obtain derivation path
     let path = wallet
         .read()
@@ -154,18 +163,8 @@ pub async fn sign<N: Namada>(
 ) -> Result<(), error::Error> {
     // Setup a reusable context for signing transactions using the Ledger
     if args.use_device {
-        // Setup a reusable context for signing transactions using the Ledger
-        let hidapi = HidApi::new().map_err(|err| {
-            error::Error::Other(format!("Failed to create Hidapi: {}", err))
-        })?;
-        let app = NamadaApp::new(TransportNativeHID::new(&hidapi).map_err(
-            |err| {
-                error::Error::Other(format!(
-                    "Unable to connect to Ledger: {}",
-                    err
-                ))
-            },
-        )?);
+        let transport = WalletTransport::from_arg(args.device_transport);
+        let app = NamadaApp::new(transport);
         let with_hw_data = (context.wallet_lock(), &app);
         // Finally, begin the signing with the Ledger as backup
         context
@@ -173,7 +172,7 @@ pub async fn sign<N: Namada>(
                 tx,
                 args,
                 signing_data,
-                with_hardware_wallet::<N::WalletUtils>,
+                with_hardware_wallet::<N::WalletUtils, _>,
                 with_hw_data,
             )
             .await?;
@@ -246,7 +245,7 @@ pub async fn submit_custom<N: Namada>(
     args: args::TxCustom,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::queries::Client>::Error: std::fmt::Display,
 {
     submit_reveal_aux(namada, args.tx.clone(), &args.owner).await?;
 
@@ -268,7 +267,7 @@ pub async fn submit_update_account<N: Namada>(
     args: args::TxUpdateAccount,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::queries::Client>::Error: std::fmt::Display,
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 
@@ -288,7 +287,7 @@ pub async fn submit_init_account<N: Namada>(
     args: args::TxInitAccount,
 ) -> Result<Option<Address>, error::Error>
 where
-    <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::queries::Client>::Error: std::fmt::Display,
 {
     let (mut tx, signing_data) = tx::build_init_account(namada, &args).await?;
 
@@ -298,8 +297,11 @@ where
         sign(namada, &mut tx, &args.tx, signing_data).await?;
 
         let cmt = tx.first_commitments().unwrap().to_owned();
+        let wrapper_hash = tx.wrapper_hash();
         let response = namada.submit(tx, &args.tx).await?;
-        if let Some(result) = response.is_applied_and_valid(&cmt) {
+        if let Some(result) =
+            response.is_applied_and_valid(wrapper_hash.as_ref(), &cmt)
+        {
             return Ok(result.initialized_accounts.first().cloned());
         }
     }
@@ -364,7 +366,7 @@ pub async fn submit_change_consensus_key(
     // To avoid wallet deadlocks in following operations
     drop(wallet);
 
-    let args = namada::sdk::args::ConsensusKeyChange {
+    let args = args::ConsensusKeyChange {
         validator: validator.clone(),
         consensus_key: Some(new_key.clone()),
         ..args
@@ -377,10 +379,14 @@ pub async fn submit_change_consensus_key(
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
         let cmt = tx.first_commitments().unwrap().to_owned();
+        let wrapper_hash = tx.wrapper_hash();
         let resp = namada.submit(tx, &args.tx).await?;
 
         if !args.tx.dry_run {
-            if resp.is_applied_and_valid(&cmt).is_some() {
+            if resp
+                .is_applied_and_valid(wrapper_hash.as_ref(), &cmt)
+                .is_some()
+            {
                 namada.wallet_mut().await.save().unwrap_or_else(|err| {
                     edisplay_line!(namada.io(), "{}", err)
                 });
@@ -571,6 +577,7 @@ pub async fn submit_become_validator(
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
         let cmt = tx.first_commitments().unwrap().to_owned();
+        let wrapper_hash = tx.wrapper_hash();
         let resp = namada.submit(tx, &args.tx).await?;
 
         if args.tx.dry_run {
@@ -581,7 +588,10 @@ pub async fn submit_become_validator(
             safe_exit(0)
         }
 
-        if resp.is_applied_and_valid(&cmt).is_none() {
+        if resp
+            .is_applied_and_valid(wrapper_hash.as_ref(), &cmt)
+            .is_none()
+        {
             display_line!(
                 namada.io(),
                 "Transaction failed. No key or addresses have been saved."
@@ -743,7 +753,17 @@ pub async fn submit_transparent_transfer(
     namada: &impl Namada,
     args: args::TxTransparentTransfer,
 ) -> Result<(), error::Error> {
-    submit_reveal_aux(namada, args.tx.clone(), &args.source).await?;
+    if args.data.len() > 1 {
+        // TODO(namada#3379): Vectorized transfers are not yet supported in the
+        // CLI
+        return Err(error::Error::Other(
+            "Unexpected vectorized transparent transfer".to_string(),
+        ));
+    }
+
+    for datum in args.data.iter() {
+        submit_reveal_aux(namada, args.tx.clone(), &datum.source).await?;
+    }
 
     let (mut tx, signing_data) = args.clone().build(namada).await?;
 
@@ -776,6 +796,10 @@ pub async fn submit_shielding_transfer(
     namada: &impl Namada,
     args: args::TxShieldingTransfer,
 ) -> Result<(), error::Error> {
+    for datum in args.data.iter() {
+        submit_reveal_aux(namada, args.tx.clone(), &datum.source).await?;
+    }
+
     // Repeat once if the tx fails on a crossover of an epoch
     for _ in 0..2 {
         let (mut tx, signing_data, tx_epoch) =
@@ -787,11 +811,18 @@ pub async fn submit_shielding_transfer(
         } else {
             sign(namada, &mut tx, &args.tx, signing_data).await?;
             let cmt_hash = tx.first_commitments().unwrap().get_hash();
+            let wrapper_hash = tx.wrapper_hash();
             let result = namada.submit(tx, &args.tx).await?;
             match result {
                 ProcessTxResponse::Applied(resp) if
                     // If a transaction is rejected by a VP
-                    matches!(resp.batch_result().get(&cmt_hash), Some(InnerTxResult::VpsRejected(_))) =>
+                    matches!(
+                        resp.batch_result().get(&compute_inner_tx_hash(
+                            wrapper_hash.as_ref(),
+                            either::Left(&cmt_hash)
+                        )),
+                        Some(InnerTxResult::VpsRejected(_))
+                    ) =>
                 {
                     let submission_masp_epoch = rpc::query_and_print_masp_epoch(namada).await;
                     // And its submission epoch doesn't match construction epoch
@@ -833,7 +864,7 @@ pub async fn submit_ibc_transfer<N: Namada>(
     args: args::TxIbcTransfer,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::queries::Client>::Error: std::fmt::Display,
 {
     submit_reveal_aux(
         namada,
@@ -861,7 +892,7 @@ pub async fn submit_init_proposal<N: Namada>(
     args: args::InitProposal,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::queries::Client>::Error: std::fmt::Display,
 {
     let current_epoch = rpc::query_and_print_epoch(namada).await;
     let governance_parameters =
@@ -961,7 +992,7 @@ pub async fn submit_vote_proposal<N: Namada>(
     args: args::VoteProposal,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::queries::Client>::Error: std::fmt::Display,
 {
     let (mut tx_builder, signing_data) = args.build(namada).await?;
 
@@ -985,7 +1016,7 @@ pub async fn sign_tx<N: Namada>(
     }: args::SignTx,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::queries::Client>::Error: std::fmt::Display,
 {
     let tx = if let Ok(transaction) = Tx::deserialize(tx_data.as_ref()) {
         transaction
@@ -1062,7 +1093,7 @@ pub async fn submit_reveal_pk<N: Namada>(
     args: args::RevealPk,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::queries::Client>::Error: std::fmt::Display,
 {
     submit_reveal_aux(namada, args.tx, &(&args.public_key).into()).await?;
 
@@ -1074,7 +1105,7 @@ pub async fn submit_bond<N: Namada>(
     args: args::Bond,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::queries::Client>::Error: std::fmt::Display,
 {
     let default_address = args.source.clone().unwrap_or(args.validator.clone());
     submit_reveal_aux(namada, args.tx.clone(), &default_address).await?;
@@ -1097,7 +1128,7 @@ pub async fn submit_unbond<N: Namada>(
     args: args::Unbond,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::queries::Client>::Error: std::fmt::Display,
 {
     let (mut tx, signing_data, latest_withdrawal_pre) =
         args.build(namada).await?;
@@ -1107,9 +1138,14 @@ where
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
         let cmt = tx.first_commitments().unwrap().to_owned();
+        let wrapper_hash = tx.wrapper_hash();
         let resp = namada.submit(tx, &args.tx).await?;
 
-        if !args.tx.dry_run && resp.is_applied_and_valid(&cmt).is_some() {
+        if !args.tx.dry_run
+            && resp
+                .is_applied_and_valid(wrapper_hash.as_ref(), &cmt)
+                .is_some()
+        {
             tx::query_unbonds(namada, args.clone(), latest_withdrawal_pre)
                 .await?;
         }
@@ -1123,7 +1159,7 @@ pub async fn submit_withdraw<N: Namada>(
     args: args::Withdraw,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::queries::Client>::Error: std::fmt::Display,
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 
@@ -1143,7 +1179,7 @@ pub async fn submit_claim_rewards<N: Namada>(
     args: args::ClaimRewards,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::queries::Client>::Error: std::fmt::Display,
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 
@@ -1163,7 +1199,7 @@ pub async fn submit_redelegate<N: Namada>(
     args: args::Redelegate,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::queries::Client>::Error: std::fmt::Display,
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 
@@ -1183,7 +1219,7 @@ pub async fn submit_validator_commission_change<N: Namada>(
     args: args::CommissionRateChange,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::queries::Client>::Error: std::fmt::Display,
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 
@@ -1203,7 +1239,7 @@ pub async fn submit_validator_metadata_change<N: Namada>(
     args: args::MetaDataChange,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::queries::Client>::Error: std::fmt::Display,
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 
@@ -1223,7 +1259,7 @@ pub async fn submit_unjail_validator<N: Namada>(
     args: args::TxUnjailValidator,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::queries::Client>::Error: std::fmt::Display,
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 
@@ -1243,7 +1279,7 @@ pub async fn submit_deactivate_validator<N: Namada>(
     args: args::TxDeactivateValidator,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::queries::Client>::Error: std::fmt::Display,
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 
@@ -1263,7 +1299,7 @@ pub async fn submit_reactivate_validator<N: Namada>(
     args: args::TxReactivateValidator,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::queries::Client>::Error: std::fmt::Display,
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 
@@ -1283,7 +1319,7 @@ pub async fn submit_update_steward_commission<N: Namada>(
     args: args::UpdateStewardCommission,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::queries::Client>::Error: std::fmt::Display,
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 
@@ -1303,7 +1339,7 @@ pub async fn submit_resign_steward<N: Namada>(
     args: args::ResignSteward,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada::ledger::queries::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::queries::Client>::Error: std::fmt::Display,
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 
@@ -1351,4 +1387,33 @@ pub async fn submit_tx(
     to_broadcast: TxBroadcastData,
 ) -> Result<TxResponse, error::Error> {
     tx::submit_tx(namada, to_broadcast).await
+}
+
+/// Generate MASP transaction and output it
+pub async fn gen_ibc_shielding_transfer(
+    context: &impl Namada,
+    args: args::GenIbcShieldingTransfer,
+) -> Result<(), error::Error> {
+    if let Some(masp_tx) =
+        tx::gen_ibc_shielding_transfer(context, args.clone()).await?
+    {
+        let tx_id = masp_tx.txid().to_string();
+        let filename = format!("ibc_masp_tx_{}.memo", tx_id);
+        let output_path = match &args.output_folder {
+            Some(path) => path.join(filename),
+            None => filename.into(),
+        };
+        let mut out = File::create(&output_path)
+            .expect("Creating a new file for IBC MASP transaction failed.");
+        let bytes = convert_masp_tx_to_ibc_memo(&masp_tx);
+        out.write_all(bytes.as_bytes())
+            .expect("Writing IBC MASP transaction file failed.");
+        println!(
+            "Output IBC shielding transfer for {tx_id} to {}",
+            output_path.to_string_lossy()
+        );
+    } else {
+        eprintln!("No shielded transfer for this IBC transfer.")
+    }
+    Ok(())
 }

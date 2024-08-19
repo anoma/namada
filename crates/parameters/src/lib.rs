@@ -18,19 +18,78 @@
 )]
 
 pub mod storage;
+pub mod vp;
 mod wasm_allowlist;
 use std::collections::BTreeMap;
+use std::marker::PhantomData;
 
 use namada_core::address::{Address, InternalAddress};
+use namada_core::arith::checked;
 use namada_core::chain::ProposalBytes;
-pub use namada_core::parameters::*;
-use namada_core::storage::Key;
+use namada_core::storage::BlockHeight;
 use namada_core::time::DurationSecs;
-use namada_core::token;
+use namada_core::{hints, token};
 use namada_storage::{ResultExt, StorageRead, StorageWrite};
-pub use storage::get_max_block_gas;
+pub use namada_systems::parameters::*;
+pub use storage::{get_gas_scale, get_max_block_gas};
 use thiserror::Error;
 pub use wasm_allowlist::{is_tx_allowed, is_vp_allowed};
+
+/// Parameters storage `Keys/Read/Write` implementation
+#[derive(Debug)]
+pub struct Store<S>(PhantomData<S>);
+
+impl<S> Keys for Store<S> {
+    fn implicit_vp_key() -> namada_core::storage::Key {
+        storage::get_implicit_vp_key()
+    }
+}
+
+impl<S> Read<S> for Store<S>
+where
+    S: StorageRead,
+{
+    fn read(storage: &S) -> Result<Parameters> {
+        read(storage)
+    }
+
+    fn masp_epoch_multiplier(storage: &S) -> Result<u64> {
+        read_masp_epoch_multiplier_parameter(storage)
+    }
+
+    fn epoch_duration_parameter(storage: &S) -> Result<EpochDuration> {
+        read_epoch_duration_parameter(storage)
+    }
+
+    fn is_native_token_transferable(storage: &S) -> Result<bool> {
+        storage::is_native_token_transferable(storage)
+    }
+
+    fn epochs_per_year(storage: &S) -> Result<u64> {
+        read_epochs_per_year(storage)
+    }
+
+    fn estimate_max_block_time_from_blocks_and_params(
+        storage: &S,
+        last_block_height: BlockHeight,
+        num_blocks_to_read: u64,
+    ) -> Result<DurationSecs> {
+        estimate_max_block_time_from_blocks_and_params(
+            storage,
+            last_block_height,
+            num_blocks_to_read,
+        )
+    }
+}
+
+impl<S> Write<S> for Store<S>
+where
+    S: StorageRead + StorageWrite,
+{
+    fn write(storage: &mut S, parameters: &Parameters) -> Result<()> {
+        init_storage(parameters, storage)
+    }
+}
 
 /// The internal address for storage keys representing parameters than
 /// can be changed via governance.
@@ -67,7 +126,6 @@ where
     let Parameters {
         max_tx_bytes,
         epoch_duration,
-        max_expected_time_per_block,
         max_proposal_bytes,
         max_block_gas,
         vp_allowlist,
@@ -75,9 +133,9 @@ where
         implicit_vp_code_hash,
         epochs_per_year,
         masp_epoch_multiplier,
-        max_signatures_per_transaction,
         minimum_gas_price,
-        fee_unshielding_gas_limit,
+        masp_fee_payment_gas_limit,
+        gas_scale,
         is_native_token_transferable,
     } = parameters;
 
@@ -97,10 +155,15 @@ where
     let epoch_key = storage::get_epoch_duration_storage_key();
     storage.write(&epoch_key, epoch_duration)?;
 
-    // write fee unshielding gas limit
-    let fee_unshielding_gas_limit_key =
-        storage::get_fee_unshielding_gas_limit_key();
-    storage.write(&fee_unshielding_gas_limit_key, fee_unshielding_gas_limit)?;
+    // write masp fee payment gas limit
+    let masp_fee_payment_gas_limit_key =
+        storage::get_masp_fee_payment_gas_limit_key();
+    storage
+        .write(&masp_fee_payment_gas_limit_key, masp_fee_payment_gas_limit)?;
+
+    // write the gas scale
+    let gas_scale_key = storage::get_gas_scale_key();
+    storage.write(&gas_scale_key, gas_scale)?;
 
     // write vp allowlist parameter
     let vp_allowlist_key = storage::get_vp_allowlist_storage_key();
@@ -118,14 +181,6 @@ where
         .collect::<Vec<String>>();
     storage.write(&tx_allowlist_key, tx_allowlist)?;
 
-    // write max expected time per block
-    let max_expected_time_per_block_key =
-        storage::get_max_expected_time_per_block_key();
-    storage.write(
-        &max_expected_time_per_block_key,
-        max_expected_time_per_block,
-    )?;
-
     // write implicit vp parameter
     let implicit_vp_key = storage::get_implicit_vp_key();
     // Using `fn write_bytes` here, because implicit_vp code hash doesn't
@@ -139,13 +194,6 @@ where
     let masp_epoch_multiplier_key = storage::get_masp_epoch_multiplier_key();
     storage.write(&masp_epoch_multiplier_key, masp_epoch_multiplier)?;
 
-    let max_signatures_per_transaction_key =
-        storage::get_max_signatures_per_transaction_key();
-    storage.write(
-        &max_signatures_per_transaction_key,
-        max_signatures_per_transaction,
-    )?;
-
     let gas_cost_key = storage::get_gas_cost_key();
     storage.write(&gas_cost_key, minimum_gas_price)?;
 
@@ -155,30 +203,6 @@ where
         .write(&native_token_transferable_key, is_native_token_transferable)?;
 
     Ok(())
-}
-
-/// Get the max signatures per transactio parameter
-pub fn max_signatures_per_transaction<S>(
-    storage: &S,
-) -> namada_storage::Result<Option<u8>>
-where
-    S: StorageRead,
-{
-    let key = storage::get_max_signatures_per_transaction_key();
-    storage.read(&key)
-}
-
-/// Update the max_expected_time_per_block parameter in storage. Returns the
-/// parameters and gas cost.
-pub fn update_max_expected_time_per_block_parameter<S>(
-    storage: &mut S,
-    value: &DurationSecs,
-) -> namada_storage::Result<()>
-where
-    S: StorageRead + StorageWrite,
-{
-    let key = storage::get_max_expected_time_per_block_key();
-    storage.write(&key, value)
 }
 
 /// Update the vp allowlist parameter in storage. Returns the parameters and gas
@@ -259,19 +283,21 @@ where
     storage.write(&key, implicit_vp)
 }
 
-/// Update the max signatures per transaction storage parameter
-pub fn update_max_signature_per_tx<S>(
-    storage: &mut S,
-    value: u8,
-) -> namada_storage::Result<()>
+/// Read the epochs per year parameter from store
+pub fn read_epochs_per_year_parameter<S>(
+    storage: &S,
+) -> namada_storage::Result<u64>
 where
-    S: StorageRead + StorageWrite,
+    S: StorageRead,
 {
-    let key = storage::get_max_signatures_per_transaction_key();
-    storage.write(&key, value)
+    let key = storage::get_epochs_per_year_key();
+    let epochs_per_year = storage.read(&key)?;
+    epochs_per_year
+        .ok_or(ReadError::ParametersMissing)
+        .into_storage_result()
 }
 
-/// Read the the epoch duration parameter from store
+/// Read the epoch duration parameter from store
 pub fn read_epoch_duration_parameter<S>(
     storage: &S,
 ) -> namada_storage::Result<EpochDuration>
@@ -286,7 +312,7 @@ where
         .into_storage_result()
 }
 
-/// Read the the masp epoch multiplier parameter from store
+/// Read the masp epoch multiplier parameter from store
 pub fn read_masp_epoch_multiplier_parameter<S>(
     storage: &S,
 ) -> namada_storage::Result<u64>
@@ -314,6 +340,32 @@ where
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
     Ok(gas_cost_table.get(token).map(|amount| amount.to_owned()))
+}
+
+/// Read the number of epochs per year parameter
+pub fn read_epochs_per_year<S>(storage: &S) -> namada_storage::Result<u64>
+where
+    S: StorageRead,
+{
+    let key = storage::get_epochs_per_year_key();
+    let epochs_per_year = storage.read(&key)?;
+    epochs_per_year
+        .ok_or(ReadError::ParametersMissing)
+        .into_storage_result()
+}
+
+/// Retrieve the `max_proposal_bytes` consensus parameter from storage.
+pub fn read_max_proposal_bytes<S>(
+    storage: &S,
+) -> namada_storage::Result<ProposalBytes>
+where
+    S: StorageRead,
+{
+    let key = storage::get_max_proposal_bytes_key();
+    let result = storage.read(&key)?;
+    result
+        .ok_or(ReadError::ParametersMissing)
+        .into_storage_result()
 }
 
 /// Read all the parameters from storage. Returns the parameters and gas
@@ -357,25 +409,24 @@ where
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
 
-    // read max expected block time
-    let max_expected_time_per_block_key =
-        storage::get_max_expected_time_per_block_key();
-    let value = storage.read(&max_expected_time_per_block_key)?;
-    let max_expected_time_per_block: DurationSecs = value
-        .ok_or(ReadError::ParametersMissing)
-        .into_storage_result()?;
-
     let implicit_vp_key = storage::get_implicit_vp_key();
     let implicit_vp_code_hash = storage
         .read(&implicit_vp_key)?
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
 
-    // read fee unshielding gas limit
-    let fee_unshielding_gas_limit_key =
-        storage::get_fee_unshielding_gas_limit_key();
-    let value = storage.read(&fee_unshielding_gas_limit_key)?;
-    let fee_unshielding_gas_limit: u64 = value
+    // read masp fee payment gas limit
+    let masp_fee_payment_gas_limit_key =
+        storage::get_masp_fee_payment_gas_limit_key();
+    let value = storage.read(&masp_fee_payment_gas_limit_key)?;
+    let masp_fee_payment_gas_limit: u64 = value
+        .ok_or(ReadError::ParametersMissing)
+        .into_storage_result()?;
+
+    // read gas scale
+    let gas_scale_key = storage::get_gas_scale_key();
+    let value = storage.read(&gas_scale_key)?;
+    let gas_scale: u64 = value
         .ok_or(ReadError::ParametersMissing)
         .into_storage_result()?;
 
@@ -388,15 +439,6 @@ where
 
     // read masp epoch multiplier
     let masp_epoch_multiplier = read_masp_epoch_multiplier_parameter(storage)?;
-
-    // read the maximum signatures per transaction
-    let max_signatures_per_transaction_key =
-        storage::get_max_signatures_per_transaction_key();
-    let value: Option<u8> =
-        storage.read(&max_signatures_per_transaction_key)?;
-    let max_signatures_per_transaction: u8 = value
-        .ok_or(ReadError::ParametersMissing)
-        .into_storage_result()?;
 
     // read gas cost
     let gas_cost_key = storage::get_gas_cost_key();
@@ -422,7 +464,6 @@ where
     Ok(Parameters {
         max_tx_bytes,
         epoch_duration,
-        max_expected_time_per_block,
         max_proposal_bytes,
         max_block_gas,
         vp_allowlist,
@@ -430,9 +471,9 @@ where
         implicit_vp_code_hash: Some(implicit_vp_code_hash),
         epochs_per_year,
         masp_epoch_multiplier,
-        max_signatures_per_transaction,
         minimum_gas_price,
-        fee_unshielding_gas_limit,
+        masp_fee_payment_gas_limit,
+        gas_scale,
         is_native_token_transferable,
     })
 }
@@ -452,7 +493,7 @@ where
 }
 
 /// Storage key for the Ethereum address of wNam.
-pub fn native_erc20_key() -> Key {
+pub fn native_erc20_key() -> storage::Key {
     storage::get_native_erc20_key_at_addr(ADDRESS)
 }
 
@@ -468,7 +509,6 @@ where
             min_num_of_blocks: 1,
             min_duration: DurationSecs(3600),
         },
-        max_expected_time_per_block: DurationSecs(3600),
         max_proposal_bytes: Default::default(),
         max_block_gas: 100,
         vp_allowlist: vec![],
@@ -476,10 +516,324 @@ where
         implicit_vp_code_hash: Default::default(),
         epochs_per_year: 365,
         masp_epoch_multiplier: 2,
-        max_signatures_per_transaction: 10,
-        fee_unshielding_gas_limit: 0,
+        masp_fee_payment_gas_limit: 0,
+        gas_scale: 10_000_000,
         minimum_gas_price: Default::default(),
         is_native_token_transferable: true,
     };
     init_storage(&params, storage)
+}
+
+const BLOCK_TIME_ESTIMATE_UPPER_BOUND: DurationSecs = DurationSecs(60);
+
+/// Return an estimate of the maximum time taken to decide a block,
+/// by sourcing block headers from up to `num_blocks_to_read`.
+pub fn estimate_max_block_time_from_blocks<S>(
+    storage: &S,
+    last_block_height: BlockHeight,
+    num_blocks_to_read: u64,
+) -> namada_storage::Result<Option<DurationSecs>>
+where
+    S: StorageRead,
+{
+    let ending_height = last_block_height.0;
+    let beginning_height = ending_height.saturating_sub(
+        num_blocks_to_read
+            .min(last_block_height.0)
+            .saturating_sub(1),
+    );
+
+    let block_timestamps = {
+        let mut ts = Vec::with_capacity(
+            usize::try_from({
+                // NB: cap the allocation to 16
+                num_blocks_to_read.min(16)
+            })
+            .into_storage_result()?,
+        );
+
+        for height in beginning_height..=ending_height {
+            let Some(block_header) =
+                storage.get_block_header(BlockHeight(height))?
+            else {
+                break;
+            };
+            ts.push(block_header.time);
+        }
+
+        ts
+    };
+
+    Ok(block_timestamps
+        .windows(2)
+        // NB: compute block time
+        .map(|ts| {
+            #[allow(clippy::arithmetic_side_effects)]
+            {
+                ts[1] - ts[0]
+            }
+        })
+        .max()
+        .map(|block_time| {
+            block_time.clamp(DurationSecs(1), BLOCK_TIME_ESTIMATE_UPPER_BOUND)
+        }))
+}
+
+/// Return an estimate of the maximum time taken to decide a block,
+/// based on chain parameters.
+pub fn estimate_max_block_time_from_parameters<S>(
+    storage: &S,
+) -> namada_storage::Result<DurationSecs>
+where
+    S: StorageRead,
+{
+    let EpochDuration {
+        min_num_of_blocks,
+        min_duration: DurationSecs(min_duration),
+    } = read_epoch_duration_parameter(storage)?;
+
+    let block_time =
+        checked!(min_duration / min_num_of_blocks).into_storage_result()?;
+
+    // NB: fallback to one block per epoch
+    // if the time to decide a block is zero
+    let block_time = DurationSecs(if hints::unlikely(block_time == 0) {
+        min_duration
+    } else {
+        block_time
+    });
+
+    Ok(block_time.clamp(DurationSecs(1), BLOCK_TIME_ESTIMATE_UPPER_BOUND))
+}
+
+/// Return an estimate of the maximum time taken to decide a block,
+/// by sourcing block headers from up to `num_blocks_to_read`, and
+/// from chain parameters.
+pub fn estimate_max_block_time_from_blocks_and_params<S>(
+    storage: &S,
+    last_block_height: BlockHeight,
+    num_blocks_to_read: u64,
+) -> namada_storage::Result<DurationSecs>
+where
+    S: StorageRead,
+{
+    let maybe_max_block_time = estimate_max_block_time_from_blocks(
+        storage,
+        last_block_height,
+        num_blocks_to_read,
+    )?;
+
+    maybe_max_block_time
+        .map_or_else(|| estimate_max_block_time_from_parameters(storage), Ok)
+}
+
+#[cfg(test)]
+mod tests {
+    use namada_core::storage::Header;
+    use namada_core::time::DateTimeUtc;
+    use namada_storage::testing::TestStorage;
+
+    use super::*;
+
+    #[test]
+    fn test_estimate_max_block_time_from_parameters_lower_bound() {
+        let mut storage = TestStorage::default();
+
+        update_epoch_parameter(
+            &mut storage,
+            &EpochDuration {
+                min_duration: DurationSecs(0),
+                min_num_of_blocks: 5,
+            },
+        )
+        .unwrap();
+
+        let max_block_time =
+            estimate_max_block_time_from_parameters(&storage).unwrap();
+
+        assert_eq!(max_block_time, DurationSecs(1));
+    }
+
+    #[test]
+    fn test_estimate_max_block_time_from_parameters_upper_bound() {
+        let mut storage = TestStorage::default();
+
+        update_epoch_parameter(
+            &mut storage,
+            &EpochDuration {
+                min_duration: DurationSecs(1200),
+                min_num_of_blocks: 2,
+            },
+        )
+        .unwrap();
+
+        let max_block_time =
+            estimate_max_block_time_from_parameters(&storage).unwrap();
+
+        assert_eq!(max_block_time, BLOCK_TIME_ESTIMATE_UPPER_BOUND);
+    }
+
+    #[test]
+    fn test_estimate_max_block_time_from_parameters() {
+        let mut storage = TestStorage::default();
+
+        update_epoch_parameter(
+            &mut storage,
+            &EpochDuration {
+                min_duration: DurationSecs(10),
+                min_num_of_blocks: 5,
+            },
+        )
+        .unwrap();
+
+        let max_block_time =
+            estimate_max_block_time_from_parameters(&storage).unwrap();
+
+        assert_eq!(max_block_time, DurationSecs(2));
+    }
+
+    #[test]
+    fn test_estimate_max_block_time_from_parameters_short_epoch() {
+        let mut storage = TestStorage::default();
+
+        update_epoch_parameter(
+            &mut storage,
+            &EpochDuration {
+                min_duration: DurationSecs(4),
+                min_num_of_blocks: 5,
+            },
+        )
+        .unwrap();
+
+        let max_block_time =
+            estimate_max_block_time_from_parameters(&storage).unwrap();
+
+        assert_eq!(max_block_time, DurationSecs(4));
+    }
+
+    #[test]
+    fn test_estimate_max_block_time_from_blocks() {
+        let mut storage = TestStorage::default();
+
+        for i in 1i64..10 {
+            let height = BlockHeight(u64::try_from(i).unwrap());
+            let timestamp = checked!((10i64 + i) * i).unwrap();
+
+            storage.set_mock_block_header(
+                height,
+                Header {
+                    time: DateTimeUtc::from_unix_timestamp(timestamp).unwrap(),
+                    ..Default::default()
+                },
+            );
+        }
+
+        let max_block_time =
+            estimate_max_block_time_from_blocks(&storage, 9.into(), 5).unwrap();
+
+        assert_eq!(max_block_time, Some(DurationSecs(27)));
+    }
+
+    #[test]
+    fn test_estimate_max_block_time_from_blocks_read_past_limit() {
+        let mut storage = TestStorage::default();
+
+        for i in 1i64..10 {
+            let height = BlockHeight(u64::try_from(i).unwrap());
+            let timestamp = checked!((10i64 + i) * i).unwrap();
+
+            storage.set_mock_block_header(
+                height,
+                Header {
+                    time: DateTimeUtc::from_unix_timestamp(timestamp).unwrap(),
+                    ..Default::default()
+                },
+            );
+        }
+
+        let max_block_time =
+            estimate_max_block_time_from_blocks(&storage, 9.into(), u64::MAX)
+                .unwrap();
+
+        assert_eq!(max_block_time, Some(DurationSecs(27)));
+    }
+
+    #[test]
+    fn test_estimate_max_block_time_from_blocks_and_params() {
+        let mut storage = TestStorage::default();
+
+        update_epoch_parameter(
+            &mut storage,
+            &EpochDuration {
+                min_duration: DurationSecs(10),
+                min_num_of_blocks: 5,
+            },
+        )
+        .unwrap();
+
+        for i in 1i64..10 {
+            let height = BlockHeight(u64::try_from(i).unwrap());
+            let timestamp = checked!((10i64 + i) * i).unwrap();
+
+            storage.set_mock_block_header(
+                height,
+                Header {
+                    time: DateTimeUtc::from_unix_timestamp(timestamp).unwrap(),
+                    ..Default::default()
+                },
+            );
+        }
+
+        let max_block_time = estimate_max_block_time_from_blocks_and_params(
+            &storage,
+            9.into(),
+            5,
+        )
+        .unwrap();
+
+        assert_eq!(max_block_time, DurationSecs(27));
+    }
+
+    #[test]
+    fn test_estimate_max_block_time_from_blocks_lower_bound() {
+        let mut storage = TestStorage::default();
+
+        for height in 1u64..=2 {
+            storage.set_mock_block_header(
+                BlockHeight(height),
+                Header {
+                    time: DateTimeUtc::unix_epoch(),
+                    ..Default::default()
+                },
+            );
+        }
+
+        let max_block_time =
+            estimate_max_block_time_from_blocks(&storage, 2.into(), 2).unwrap();
+
+        assert_eq!(max_block_time, Some(DurationSecs(1)));
+    }
+
+    #[test]
+    fn test_estimate_max_block_time_from_blocks_upper_bound() {
+        let mut storage = TestStorage::default();
+
+        for i in 1i64..10 {
+            let height = BlockHeight(u64::try_from(i).unwrap());
+            let timestamp = checked!((400i64 + i) * i).unwrap();
+
+            storage.set_mock_block_header(
+                height,
+                Header {
+                    time: DateTimeUtc::from_unix_timestamp(timestamp).unwrap(),
+                    ..Default::default()
+                },
+            );
+        }
+
+        let max_block_time =
+            estimate_max_block_time_from_blocks(&storage, 9.into(), 5).unwrap();
+
+        assert_eq!(max_block_time, Some(BLOCK_TIME_ESTIMATE_UPPER_BOUND));
+    }
 }

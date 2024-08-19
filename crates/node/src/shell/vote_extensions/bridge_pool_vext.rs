@@ -25,7 +25,7 @@ where
         >,
     > + 'iter {
         vote_extensions.into_iter().map(|vote_extension| {
-            validate_bp_roots_vext(
+            validate_bp_roots_vext::<_, _, governance::Store<_>>(
                 &self.state,
                 &vote_extension,
                 self.state.in_mem().get_last_block_height(),
@@ -54,29 +54,31 @@ where
 #[allow(clippy::cast_possible_truncation)]
 #[cfg(test)]
 mod test_bp_vote_extensions {
-    use namada::core::ethereum_events::Uint;
-    use namada::core::keccak::{keccak_hash, KeccakHash};
-    use namada::core::key::*;
-    use namada::core::storage::BlockHeight;
-    use namada::core::token;
-    use namada::eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
-    use namada::ethereum_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
-    use namada::ethereum_bridge::storage::bridge_pool::get_key_from_hash;
-    use namada::ethereum_bridge::storage::eth_bridge_queries::EthBridgeQueries;
-    use namada::ledger::pos::PosQueries;
-    use namada::proof_of_stake::storage::{
-        consensus_validator_set_handle,
-        read_consensus_validator_set_addresses_with_stake,
+    use namada_apps_lib::wallet::defaults::{bertha_address, bertha_keypair};
+    use namada_sdk::eth_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
+    use namada_sdk::eth_bridge::storage::bridge_pool::get_key_from_hash;
+    use namada_sdk::eth_bridge::storage::eth_bridge_queries::{
+        is_bridge_comptime_enabled, EthBridgeQueries,
     };
-    use namada::proof_of_stake::types::{
+    use namada_sdk::ethereum_events::Uint;
+    use namada_sdk::keccak::{keccak_hash, KeccakHash};
+    use namada_sdk::key::*;
+    use namada_sdk::proof_of_stake::storage::{
+        consensus_validator_set_handle,
+        read_consensus_validator_set_addresses_with_stake, read_pos_params,
+    };
+    use namada_sdk::proof_of_stake::types::{
         Position as ValidatorPosition, WeightedValidator,
     };
-    use namada::proof_of_stake::{become_validator, BecomeValidator, Epoch};
-    use namada::state::StorageWrite;
-    use namada::tendermint::abci::types::VoteInfo;
-    use namada::tx::Signed;
-    use namada::vote_ext::bridge_pool_roots;
-    use namada_apps_lib::wallet::defaults::{bertha_address, bertha_keypair};
+    use namada_sdk::proof_of_stake::{
+        become_validator, BecomeValidator, Epoch,
+    };
+    use namada_sdk::state::StorageWrite;
+    use namada_sdk::storage::BlockHeight;
+    use namada_sdk::tendermint::abci::types::VoteInfo;
+    use namada_sdk::tx::Signed;
+    use namada_sdk::{governance, token};
+    use namada_vote_ext::bridge_pool_roots;
 
     use crate::shell::test_utils::*;
     use crate::shims::abcipp_shim_types::shim::request::FinalizeBlock;
@@ -93,7 +95,8 @@ mod test_bp_vote_extensions {
             .expect("Test failed");
 
         // change pipeline length to 1
-        let mut params = shell.state.pos_queries().get_pos_params();
+        let mut params =
+            read_pos_params::<_, governance::Store<_>>(&shell.state).unwrap();
         params.owned.pipeline_len = 1;
 
         let consensus_key = gen_keypair();
@@ -101,7 +104,7 @@ mod test_bp_vote_extensions {
         let hot_key = gen_secp256k1_keypair();
         let cold_key = gen_secp256k1_keypair();
 
-        become_validator(
+        become_validator::<_, governance::Store<_>>(
             &mut shell.state,
             BecomeValidator {
                 params: &params,
@@ -145,7 +148,11 @@ mod test_bp_vote_extensions {
         }];
         let req = FinalizeBlock {
             proposer_address: pkh1.to_vec(),
-            votes,
+            decided_last_commit:
+                crate::facade::tendermint::abci::types::CommitInfo {
+                    round: 0u8.into(),
+                    votes,
+                },
             ..Default::default()
         };
         assert_eq!(shell.start_new_epoch(Some(req)).0, 1);
@@ -163,7 +170,7 @@ mod test_bp_vote_extensions {
             shell.state.in_mem().get_last_block_height();
         shell.commit();
         assert!(
-            validate_bp_roots_vext(
+            validate_bp_roots_vext::<_, _, governance::Store<_>>(
                 &shell.state,
                 &vote_ext.0,
                 shell.state.in_mem().get_last_block_height()
@@ -209,7 +216,7 @@ mod test_bp_vote_extensions {
             shell.extend_vote_with_bp_roots().expect("Test failed")
         );
         assert!(
-            validate_bp_roots_vext(
+            validate_bp_roots_vext::<_, _, governance::Store<_>>(
                 &shell.state,
                 &vote_ext.0,
                 shell.state.in_mem().get_last_block_height(),
@@ -288,7 +295,7 @@ mod test_bp_vote_extensions {
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         assert!(
-            validate_bp_roots_vext(
+            validate_bp_roots_vext::<_, _, governance::Store<_>>(
                 &shell.state,
                 &bp_root.0,
                 shell.get_current_decision_height(),
@@ -327,7 +334,7 @@ mod test_bp_vote_extensions {
         }
         .sign(&bertha_keypair());
         assert!(
-            validate_bp_roots_vext(
+            validate_bp_roots_vext::<_, _, governance::Store<_>>(
                 &shell.state,
                 &bp_root.0,
                 shell.state.in_mem().get_last_block_height()
@@ -352,7 +359,7 @@ mod test_bp_vote_extensions {
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
 
         assert!(
-            validate_bp_roots_vext(
+            validate_bp_roots_vext::<_, _, governance::Store<_>>(
                 &shell.state,
                 &bp_root.0,
                 shell.state.in_mem().get_last_block_height()
@@ -414,7 +421,7 @@ mod test_bp_vote_extensions {
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         assert!(
-            validate_bp_roots_vext(
+            validate_bp_roots_vext::<_, _, governance::Store<_>>(
                 &shell.state,
                 &bp_root.0,
                 shell.state.in_mem().get_last_block_height()
@@ -447,7 +454,7 @@ mod test_bp_vote_extensions {
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         assert!(
-            validate_bp_roots_vext(
+            validate_bp_roots_vext::<_, _, governance::Store<_>>(
                 &shell.state,
                 &bp_root.0,
                 shell.state.in_mem().get_last_block_height()
@@ -507,7 +514,7 @@ mod test_bp_vote_extensions {
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         assert!(
-            validate_bp_roots_vext(
+            validate_bp_roots_vext::<_, _, governance::Store<_>>(
                 &shell.state,
                 &bp_root.0,
                 shell.get_current_decision_height()
@@ -527,7 +534,7 @@ mod test_bp_vote_extensions {
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         assert!(
-            validate_bp_roots_vext(
+            validate_bp_roots_vext::<_, _, governance::Store<_>>(
                 &shell.state,
                 &bp_root.0,
                 shell.get_current_decision_height()
@@ -587,7 +594,7 @@ mod test_bp_vote_extensions {
         }
         .sign(shell.mode.get_protocol_key().expect("Test failed"));
         assert!(
-            validate_bp_roots_vext(
+            validate_bp_roots_vext::<_, _, governance::Store<_>>(
                 &shell.state,
                 &bp_root.0,
                 shell.get_current_decision_height()

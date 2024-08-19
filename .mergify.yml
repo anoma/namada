@@ -1,0 +1,33 @@
+queue_rules:
+  - name: main-queue
+    speculative_checks: 3
+    batch_size: 3
+    queue_conditions:
+      - "#approved-reviews-by >= 1"
+      - base = main
+    merge_method: merge
+        
+
+pull_request_rules:
+  - name: main-automatic-merge
+    conditions:
+        - label = "merge"
+        - label != "do-not-merge"
+        - "#approved-reviews-by >= 1"
+        - base = main
+    actions:
+      queue:
+        autosquash: true   
+
+  - name: notify when a PR is removed from the queue
+    conditions:
+    - queue-dequeue-reason != none
+    - queue-dequeue-reason != pr-merged
+    actions:
+      comment:
+        message: >
+          Hey @{{author}}, your pull request has been dequeued due to the following
+          reason: {{queue_dequeue_reason}}.
+
+          Sorry about that, but you can requeue the PR by using `@mergifyio requeue`
+          if you think this was a mistake.

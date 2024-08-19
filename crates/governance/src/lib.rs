@@ -17,6 +17,8 @@
     clippy::print_stderr
 )]
 
+use std::marker::PhantomData;
+
 use namada_core::address::{self, Address};
 
 /// governance CLI structures
@@ -30,10 +32,41 @@ pub mod pgf;
 pub mod storage;
 /// Governance utility functions/structs
 pub mod utils;
+pub mod vp;
 
+use namada_state::{StorageRead, StorageWrite};
+pub use namada_systems::governance::*;
+use parameters::GovernanceParameters;
 pub use storage::proposal::{InitProposalData, ProposalType, VoteProposalData};
 pub use storage::vote::ProposalVote;
 pub use storage::{init_proposal, is_proposal_accepted, vote_proposal};
 
 /// The governance internal address
 pub const ADDRESS: Address = address::GOV;
+
+/// Governance storage `Keys/Read/Write` implementation
+#[derive(Debug)]
+pub struct Store<S>(PhantomData<S>);
+
+impl<S> Read<S> for Store<S>
+where
+    S: StorageRead,
+{
+    fn is_proposal_accepted(storage: &S, tx_data: &[u8]) -> Result<bool> {
+        storage::is_proposal_accepted(storage, tx_data)
+    }
+
+    fn max_proposal_period(storage: &S) -> Result<u64> {
+        storage::get_max_proposal_period(storage)
+    }
+}
+
+impl<S> Write<S> for Store<S>
+where
+    S: StorageRead + StorageWrite,
+{
+    fn init_default_params(storage: &mut S) -> Result<()> {
+        let params = GovernanceParameters::default();
+        params.init_storage(storage)
+    }
+}

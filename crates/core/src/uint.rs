@@ -294,6 +294,7 @@ impl Uint {
 construct_uint! {
     /// Namada native type to replace for unsigned 256 bit
     /// integers.
+    #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
     #[derive(
         BorshSerialize,
         BorshDeserialize,
@@ -472,7 +473,7 @@ impl Uint {
 }
 
 /// The maximum absolute value a [`I256`] may have.
-/// Note the the last digit is 2^63 - 1. We add this cap so
+/// Note the last digit is 2^63 - 1. We add this cap so
 /// we can use two's complement.
 pub const MAX_SIGNED_VALUE: Uint =
     Uint([u64::MAX, u64::MAX, u64::MAX, 9223372036854775807]);
@@ -480,6 +481,7 @@ pub const MAX_SIGNED_VALUE: Uint =
 const MINUS_ZERO: Uint = Uint([0u64, 0u64, 0u64, 9223372036854775808]);
 
 /// A signed 256 big integer.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Copy,
     Clone,
@@ -963,6 +965,12 @@ impl From<Uint> for I320 {
     }
 }
 
+impl From<u64> for I320 {
+    fn from(val: u64) -> Self {
+        Self::from(Uint::from(val))
+    }
+}
+
 impl From<token::Amount> for I320 {
     fn from(lo: token::Amount) -> Self {
         let mut arr = [0u64; Self::N_WORDS];
@@ -1154,6 +1162,22 @@ pub mod testing {
     }
 
     impl std::ops::Neg for I256 {
+        type Output = Self;
+
+        fn neg(self) -> Self::Output {
+            self.checked_neg().unwrap()
+        }
+    }
+
+    impl std::ops::Add for I320 {
+        type Output = Self;
+
+        fn add(self, rhs: Self) -> Self::Output {
+            self.checked_add(rhs).unwrap()
+        }
+    }
+
+    impl std::ops::Neg for I320 {
         type Output = Self;
 
         fn neg(self) -> Self::Output {

@@ -19,6 +19,7 @@
 
 mod host_env;
 mod in_memory;
+pub mod prefix_iter;
 mod wl_state;
 pub mod write_log;
 
@@ -26,7 +27,9 @@ use std::fmt::Debug;
 use std::iter::Peekable;
 
 pub use host_env::{TxHostEnvState, VpHostEnvState};
-pub use in_memory::{BlockStorage, InMemory, LastBlock};
+pub use in_memory::{
+    BlockStorage, InMemory, LastBlock, ProcessProposalCachedResult,
+};
 use namada_core::address::Address;
 use namada_core::arith::{self, checked};
 use namada_core::eth_bridge_pool::is_pending_transfer_key;
@@ -56,7 +59,9 @@ pub use namada_storage::{
     Result as StorageResult, ResultExt, StorageHasher, StorageRead,
     StorageWrite, DB,
 };
+use namada_systems::parameters;
 use thiserror::Error;
+use wl_state::TxWlState;
 pub use wl_state::{FullAccessState, TempWlState, WlState};
 use write_log::WriteLog;
 
@@ -137,12 +142,12 @@ pub trait StateRead: StorageRead + Debug {
 
     /// Get the hash of a validity predicate for the given account address and
     /// the gas cost for reading it.
-    fn validity_predicate(
+    fn validity_predicate<Params: parameters::Keys>(
         &self,
         addr: &Address,
     ) -> Result<(Option<Hash>, u64)> {
         let key = if let Address::Implicit(_) = addr {
-            namada_parameters::storage::get_implicit_vp_key()
+            Params::implicit_vp_key()
         } else {
             Key::validity_predicate(addr)
         };
@@ -203,6 +208,12 @@ pub trait State: StateRead + StorageWrite {
     fn write_tx_hash(&mut self, hash: Hash) -> write_log::Result<()> {
         self.write_log_mut().write_tx_hash(hash)
     }
+}
+
+/// Perform storage writes and deletions to write-log at tx level.
+pub trait TxWrites: StateRead {
+    /// Performs storage writes at the tx level of the write-log.
+    fn with_tx_writes(&mut self) -> TxWlState<'_, Self::D, Self::H>;
 }
 
 /// Implement [`trait StorageRead`] using its [`trait StateRead`]
@@ -411,9 +422,11 @@ macro_rules! impl_storage_write_by_protocol {
 impl_storage_read!(FullAccessState<D, H>);
 impl_storage_read!(WlState<D, H>);
 impl_storage_read!(TempWlState<'_, D, H>);
+impl_storage_read!(TxWlState<'_, D, H>);
 impl_storage_write_by_protocol!(FullAccessState<D, H>);
 impl_storage_write_by_protocol!(WlState<D, H>);
 impl_storage_write_by_protocol!(TempWlState<'_, D, H>);
+impl_storage_write!(TxWlState<'_, D, H>);
 
 impl_storage_read!(TxHostEnvState<'_, D, H>);
 impl_storage_read!(VpHostEnvState<'_, D, H>);
@@ -593,6 +606,9 @@ where
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
 
+    use std::num::NonZeroUsize;
+
+    use clru::CLruCache;
     use namada_core::address;
     use namada_core::address::EstablishedAddressGen;
     use namada_core::chain::ChainId;
@@ -656,6 +672,9 @@ pub mod testing {
                 eth_events_queue: EthEventsQueue::default(),
                 storage_read_past_height_limit: Some(1000),
                 commit_only_data: CommitOnlyData::default(),
+                block_proposals_cache: CLruCache::new(
+                    NonZeroUsize::new(10).unwrap(),
+                ),
             }
         }
     }
@@ -674,9 +693,10 @@ mod tests {
     use merkle_tree::NO_DIFF_KEY_PREFIX;
     use namada_core::address::InternalAddress;
     use namada_core::borsh::{BorshDeserialize, BorshSerializeExt};
+    use namada_core::keccak::KeccakHash;
+    use namada_core::parameters::{EpochDuration, Parameters};
     use namada_core::storage::DbKeySeg;
     use namada_core::time::{self, DateTimeUtc, Duration};
-    use namada_parameters::{EpochDuration, Parameters};
     use proptest::prelude::*;
     use proptest::test_runner::Config;
     // Use `RUST_LOG=info` (or another tracing level) and `--nocapture` to
@@ -697,12 +717,10 @@ mod tests {
             start_time in 0..10000_i64,
             min_num_of_blocks in 1..10_u64,
             min_duration in 1..100_i64,
-            max_expected_time_per_block in 1..100_i64,
         )
         (
             min_num_of_blocks in Just(min_num_of_blocks),
             min_duration in Just(min_duration),
-            max_expected_time_per_block in Just(max_expected_time_per_block),
             start_height in Just(start_height),
             start_time in Just(start_time),
             block_height in start_height + 1..(start_height + 2 * min_num_of_blocks),
@@ -711,18 +729,16 @@ mod tests {
             min_blocks_delta in -(min_num_of_blocks as i64 - 1)..5,
             // Delta will be applied on the `min_duration` parameter
             min_duration_delta in -(min_duration - 1)..50,
-            // Delta will be applied on the `max_expected_time_per_block` parameter
-            max_time_per_block_delta in -(max_expected_time_per_block - 1)..50,
-        ) -> (EpochDuration, i64, BlockHeight, DateTimeUtc, BlockHeight, DateTimeUtc,
-                i64, i64, i64) {
+        ) -> (EpochDuration, BlockHeight, DateTimeUtc, BlockHeight, DateTimeUtc,
+                i64, i64) {
             let epoch_duration = EpochDuration {
                 min_num_of_blocks,
                 min_duration: Duration::seconds(min_duration).into(),
             };
-            (epoch_duration, max_expected_time_per_block,
+            (epoch_duration,
                 BlockHeight(start_height), Utc.timestamp_opt(start_time, 0).single().expect("expected valid timestamp").into(),
                 BlockHeight(block_height), Utc.timestamp_opt(block_time, 0).single().expect("expected valid timestamp").into(),
-                min_blocks_delta, min_duration_delta, max_time_per_block_delta)
+                min_blocks_delta, min_duration_delta)
         }
     }
 
@@ -739,8 +755,8 @@ mod tests {
         ///    duration doesn't change, but the next one does.
         #[test]
         fn update_epoch_after_its_duration(
-            (epoch_duration, max_expected_time_per_block, start_height, start_time, block_height, block_time,
-            min_blocks_delta, min_duration_delta, max_time_per_block_delta)
+            (epoch_duration, start_height, start_time, block_height, block_time,
+            min_blocks_delta, min_duration_delta)
             in arb_and_epoch_duration_start_and_block())
         {
             let mut state =TestState::default();
@@ -753,18 +769,16 @@ mod tests {
                 max_proposal_bytes: Default::default(),
                 max_block_gas: 20_000_000,
                 epoch_duration: epoch_duration.clone(),
-                max_expected_time_per_block: Duration::seconds(max_expected_time_per_block).into(),
                 vp_allowlist: vec![],
                 tx_allowlist: vec![],
                 implicit_vp_code_hash: Some(Hash::zero()),
                 epochs_per_year: 100,
                 masp_epoch_multiplier: 2,
-                max_signatures_per_transaction: 15,
-                fee_unshielding_gas_limit: 20_000,
+                masp_fee_payment_gas_limit: 20_000,
+                gas_scale: 10_000_000,
                 minimum_gas_price: BTreeMap::default(),
                 is_native_token_transferable: true,
             };
-            namada_parameters::init_storage(&parameters, &mut state).unwrap();
             // Initialize pred_epochs to the current height
             let height = state.in_mem().block.height;
             state
@@ -777,7 +791,7 @@ mod tests {
             assert_eq!(epoch_before, state.in_mem().block.epoch);
 
             // Try to apply the epoch update
-            state.update_epoch(block_height, block_time).unwrap();
+            state.update_epoch(block_height, block_time, &parameters).unwrap();
 
             // Test for 1.
             if block_height.0 - start_height.0
@@ -794,13 +808,13 @@ mod tests {
 
                 let block_height = block_height + 1;
                 let block_time = block_time + Duration::seconds(1);
-                state.update_epoch(block_height, block_time).unwrap();
+                state.update_epoch(block_height, block_time, &parameters).unwrap();
                 assert_eq!(state.in_mem().block.epoch, epoch_before);
                 assert_eq!(state.in_mem().update_epoch_blocks_delay, Some(1));
 
                 let block_height = block_height + 1;
                 let block_time = block_time + Duration::seconds(1);
-                state.update_epoch(block_height, block_time).unwrap();
+                state.update_epoch(block_height, block_time, &parameters).unwrap();
                 assert_eq!(state.in_mem().block.epoch, epoch_before.next());
                 assert!(state.in_mem().update_epoch_blocks_delay.is_none());
 
@@ -833,10 +847,6 @@ mod tests {
             let min_duration: i64 = parameters.epoch_duration.min_duration.0 as _;
             parameters.epoch_duration.min_duration =
                 Duration::seconds(min_duration + min_duration_delta).into();
-            parameters.max_expected_time_per_block =
-                Duration::seconds(max_expected_time_per_block + max_time_per_block_delta).into();
-            namada_parameters::update_max_expected_time_per_block_parameter(&mut state, &parameters.max_expected_time_per_block).unwrap();
-            namada_parameters::update_epoch_parameter(&mut state, &parameters.epoch_duration).unwrap();
 
             // Test for 2.
             let epoch_before = state.in_mem().block.epoch;
@@ -848,31 +858,31 @@ mod tests {
 
             // No update should happen before both epoch duration conditions are
             // satisfied
-            state.update_epoch(height_before_update, time_before_update).unwrap();
+            state.update_epoch(height_before_update, time_before_update, &parameters).unwrap();
             assert_eq!(state.in_mem().block.epoch, epoch_before);
             assert!(state.in_mem().update_epoch_blocks_delay.is_none());
-            state.update_epoch(height_of_update, time_before_update).unwrap();
+            state.update_epoch(height_of_update, time_before_update, &parameters).unwrap();
             assert_eq!(state.in_mem().block.epoch, epoch_before);
             assert!(state.in_mem().update_epoch_blocks_delay.is_none());
-            state.update_epoch(height_before_update, time_of_update).unwrap();
+            state.update_epoch(height_before_update, time_of_update, &parameters).unwrap();
             assert_eq!(state.in_mem().block.epoch, epoch_before);
             assert!(state.in_mem().update_epoch_blocks_delay.is_none());
 
             // Update should be enqueued for 2 blocks in the future starting at or after this height and time
-            state.update_epoch(height_of_update, time_of_update).unwrap();
+            state.update_epoch(height_of_update, time_of_update, &parameters).unwrap();
             assert_eq!(state.in_mem().block.epoch, epoch_before);
             assert_eq!(state.in_mem().update_epoch_blocks_delay, Some(2));
 
             // Increment the block height and time to simulate new blocks now
             let height_of_update = height_of_update + 1;
             let time_of_update = time_of_update + Duration::seconds(1);
-            state.update_epoch(height_of_update, time_of_update).unwrap();
+            state.update_epoch(height_of_update, time_of_update, &parameters).unwrap();
             assert_eq!(state.in_mem().block.epoch, epoch_before);
             assert_eq!(state.in_mem().update_epoch_blocks_delay, Some(1));
 
             let height_of_update = height_of_update + 1;
             let time_of_update = time_of_update + Duration::seconds(1);
-            state.update_epoch(height_of_update, time_of_update).unwrap();
+            state.update_epoch(height_of_update, time_of_update, &parameters).unwrap();
             assert_eq!(state.in_mem().block.epoch, epoch_before.next());
             assert!(state.in_mem().update_epoch_blocks_delay.is_none());
             // The next epoch's minimum duration should change
@@ -884,7 +894,7 @@ mod tests {
             // Increment the block height and time once more to make sure things reset
             let height_of_update = height_of_update + 1;
             let time_of_update = time_of_update + Duration::seconds(1);
-            state.update_epoch(height_of_update, time_of_update).unwrap();
+            state.update_epoch(height_of_update, time_of_update, &parameters).unwrap();
             assert_eq!(state.in_mem().block.epoch, epoch_before.next());
         }
     }
@@ -1270,15 +1280,22 @@ mod tests {
         )
         .prop_map(|kvs| {
             kvs.into_iter()
-                .filter_map(|(key, val)| {
+                .map(|(mut key, val)| {
                     if let DbKeySeg::AddressSeg(Address::Internal(
                         InternalAddress::EthBridgePool,
                     )) = key.segments[0]
                     {
-                        None
-                    } else {
-                        Some((key, Level::Storage(val)))
+                        // This is needed to be able to write this key to DB -
+                        // the merkle tree's `BridgePoolTree::parse_key`
+                        // requires a `KeccakHash` on the 2nd segment
+                        key.segments.insert(
+                            1,
+                            DbKeySeg::StringSeg(
+                                KeccakHash::default().to_string(),
+                            ),
+                        );
                     }
+                    (key, Level::Storage(val))
                 })
                 .collect::<Vec<_>>()
         });

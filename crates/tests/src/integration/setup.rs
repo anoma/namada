@@ -5,8 +5,6 @@ use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
 use color_eyre::eyre::{eyre, Result};
-use namada::core::dec::Dec;
-use namada::token;
 use namada_apps_lib::cli::args;
 use namada_apps_lib::client::utils::PRE_GENESIS_DIR;
 use namada_apps_lib::config;
@@ -16,18 +14,21 @@ use namada_apps_lib::config::genesis::templates::load_and_validate;
 use namada_apps_lib::config::TendermintMode;
 use namada_apps_lib::facade::tendermint::Timeout;
 use namada_apps_lib::facade::tendermint_proto::google::protobuf::Timestamp;
+use namada_apps_lib::wallet::defaults::derive_template_dir;
 use namada_apps_lib::wallet::pre_genesis;
 use namada_core::chain::ChainIdPrefix;
 use namada_core::collections::HashMap;
 use namada_node::shell::testing::node::{
     mock_services, MockNode, MockServicesCfg, MockServicesController,
-    MockServicesPackage,
+    MockServicesPackage, SalvageableTestDir,
 };
 use namada_node::shell::testing::utils::TestDir;
 use namada_node::shell::Shell;
+use namada_sdk::dec::Dec;
+use namada_sdk::token;
 use namada_sdk::wallet::alias::Alias;
 
-use crate::e2e::setup::{copy_wasm_to_chain_dir, SINGLE_NODE_NET_GENESIS};
+use crate::e2e::setup::copy_wasm_to_chain_dir;
 
 /// Env. var for keeping temporary files created by the integration tests
 const ENV_VAR_KEEP_TEMP: &str = "NAMADA_INT_KEEP_TEMP";
@@ -49,7 +50,7 @@ pub fn initialize_genesis(
         _ => false,
     };
     let test_dir = TestDir::new();
-    let template_dir = working_dir.join(SINGLE_NODE_NET_GENESIS);
+    let template_dir = derive_template_dir(&working_dir);
 
     // Copy genesis files to test directory.
     let mut templates = templates::All::read_toml_files(&template_dir)
@@ -94,15 +95,17 @@ pub fn initialize_genesis(
     };
 
     // Create genesis chain release archive
-    let release_archive_path =
-        namada_apps_lib::client::utils::init_network(args::InitNetwork {
+    let release_archive_path = namada_apps_lib::client::utils::init_network(
+        global_args.clone(),
+        args::InitNetwork {
             templates_path: genesis_path,
             wasm_checksums_path,
             chain_id_prefix,
             consensus_timeout_commit: Timeout::from_str("30s").unwrap(),
             archive_dir: None,
             genesis_time,
-        });
+        },
+    );
 
     // Decode and unpack the release archive
     let mut archive = {
@@ -215,8 +218,10 @@ fn create_node(
             50 * 1024 * 1024, // 50 kiB
             50 * 1024 * 1024, // 50 kiB
         ))),
-        test_dir: ManuallyDrop::new(test_dir),
-        keep_temp,
+        test_dir: Arc::new(SalvageableTestDir {
+            keep_temp,
+            test_dir: ManuallyDrop::new(test_dir),
+        }),
         services: Arc::new(services),
         results: Arc::new(Mutex::new(vec![])),
         blocks: Arc::new(Mutex::new(HashMap::new())),

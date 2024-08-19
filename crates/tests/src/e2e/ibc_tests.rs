@@ -16,58 +16,6 @@ use std::path::{Path, PathBuf};
 
 use color_eyre::eyre::Result;
 use eyre::eyre;
-use namada::core::address::{Address, InternalAddress};
-use namada::core::key::PublicKey;
-use namada::core::storage::{BlockHeight, Epoch, Key};
-use namada::core::token::Amount;
-use namada::governance::cli::onchain::PgfFunding;
-use namada::governance::storage::proposal::{PGFIbcTarget, PGFTarget};
-use namada::ibc::apps::transfer::types::VERSION as ICS20_VERSION;
-use namada::ibc::clients::tendermint::client_state::ClientState as TmClientState;
-use namada::ibc::clients::tendermint::consensus_state::ConsensusState as TmConsensusState;
-use namada::ibc::clients::tendermint::types::{
-    AllowUpdate, ClientState as TmClientStateType, Header as IbcTmHeader,
-    TrustThreshold,
-};
-use namada::ibc::core::channel::types::channel::Order as ChanOrder;
-use namada::ibc::core::channel::types::msgs::{
-    MsgAcknowledgement, MsgChannelOpenAck, MsgChannelOpenConfirm,
-    MsgChannelOpenInit, MsgChannelOpenTry, MsgRecvPacket as IbcMsgRecvPacket,
-    MsgTimeout as IbcMsgTimeout,
-};
-use namada::ibc::core::channel::types::packet::Packet;
-use namada::ibc::core::channel::types::Version as ChanVersion;
-use namada::ibc::core::client::context::client_state::ClientStateCommon;
-use namada::ibc::core::client::types::msgs::{
-    MsgCreateClient, MsgUpdateClient,
-};
-use namada::ibc::core::client::types::Height;
-use namada::ibc::core::commitment_types::commitment::{
-    CommitmentPrefix, CommitmentProofBytes,
-};
-use namada::ibc::core::commitment_types::merkle::MerkleProof;
-use namada::ibc::core::connection::types::msgs::{
-    MsgConnectionOpenAck, MsgConnectionOpenConfirm, MsgConnectionOpenInit,
-    MsgConnectionOpenTry,
-};
-use namada::ibc::core::connection::types::version::Version as ConnVersion;
-use namada::ibc::core::connection::types::Counterparty as ConnCounterparty;
-use namada::ibc::core::host::types::identifiers::{
-    ChainId, ChannelId, ClientId, ConnectionId, PortId,
-};
-use namada::ibc::event as ibc_events;
-use namada::ibc::event::IbcEventType;
-use namada::ibc::primitives::proto::Any;
-use namada::ibc::primitives::{Signer, ToProto};
-use namada::ledger::ibc::storage::*;
-use namada::ledger::parameters::{storage as param_storage, EpochDuration};
-use namada::ledger::pgf::ADDRESS as PGF_ADDRESS;
-use namada::ledger::queries::RPC;
-use namada::ledger::storage::ics23_specs::ibc_proof_specs;
-use namada::sdk::events::extend::ReadFromEventAttributes;
-use namada::state::Sha256Hasher;
-use namada::tendermint::abci::Event as AbciEvent;
-use namada::tendermint::block::Height as TmHeight;
 use namada_apps_lib::cli::context::ENV_VAR_CHAIN_ID;
 use namada_apps_lib::client::rpc::{
     query_pos_parameters, query_storage_value, query_storage_value_bytes,
@@ -80,7 +28,59 @@ use namada_apps_lib::facade::tendermint::block::Header as TmHeader;
 use namada_apps_lib::facade::tendermint::merkle::proof::ProofOps as TmProof;
 use namada_apps_lib::facade::tendermint_rpc::{Client, HttpClient, Url};
 use namada_core::string_encoding::StringEncoded;
+use namada_sdk::address::{Address, InternalAddress};
+use namada_sdk::events::extend::ReadFromEventAttributes;
+use namada_sdk::governance::cli::onchain::PgfFunding;
+use namada_sdk::governance::pgf::ADDRESS as PGF_ADDRESS;
+use namada_sdk::governance::storage::proposal::{PGFIbcTarget, PGFTarget};
+use namada_sdk::ibc::apps::transfer::types::VERSION as ICS20_VERSION;
+use namada_sdk::ibc::clients::tendermint::client_state::ClientState as TmClientState;
+use namada_sdk::ibc::clients::tendermint::consensus_state::ConsensusState as TmConsensusState;
+use namada_sdk::ibc::clients::tendermint::types::{
+    AllowUpdate, ClientState as TmClientStateType, Header as IbcTmHeader,
+    TrustThreshold,
+};
+use namada_sdk::ibc::core::channel::types::channel::Order as ChanOrder;
+use namada_sdk::ibc::core::channel::types::msgs::{
+    MsgAcknowledgement, MsgChannelOpenAck, MsgChannelOpenConfirm,
+    MsgChannelOpenInit, MsgChannelOpenTry, MsgRecvPacket as IbcMsgRecvPacket,
+    MsgTimeout as IbcMsgTimeout,
+};
+use namada_sdk::ibc::core::channel::types::packet::Packet;
+use namada_sdk::ibc::core::channel::types::Version as ChanVersion;
+use namada_sdk::ibc::core::client::context::client_state::ClientStateCommon;
+use namada_sdk::ibc::core::client::types::msgs::{
+    MsgCreateClient, MsgUpdateClient,
+};
+use namada_sdk::ibc::core::client::types::Height;
+use namada_sdk::ibc::core::commitment_types::commitment::{
+    CommitmentPrefix, CommitmentProofBytes,
+};
+use namada_sdk::ibc::core::commitment_types::merkle::MerkleProof;
+use namada_sdk::ibc::core::connection::types::msgs::{
+    MsgConnectionOpenAck, MsgConnectionOpenConfirm, MsgConnectionOpenInit,
+    MsgConnectionOpenTry,
+};
+use namada_sdk::ibc::core::connection::types::version::Version as ConnVersion;
+use namada_sdk::ibc::core::connection::types::Counterparty as ConnCounterparty;
+use namada_sdk::ibc::core::host::types::identifiers::{
+    ChainId, ChannelId, ClientId, ConnectionId, PortId,
+};
+use namada_sdk::ibc::event::IbcEventType;
+use namada_sdk::ibc::primitives::proto::Any;
+use namada_sdk::ibc::primitives::{Signer, ToProto};
+use namada_sdk::ibc::storage::*;
+use namada_sdk::ibc::{event as ibc_events, COMMITMENT_PREFIX};
+use namada_sdk::key::PublicKey;
 use namada_sdk::masp::fs::FsShieldedUtils;
+use namada_sdk::parameters::{storage as param_storage, EpochDuration};
+use namada_sdk::queries::RPC;
+use namada_sdk::state::ics23_specs::ibc_proof_specs;
+use namada_sdk::state::Sha256Hasher;
+use namada_sdk::storage::{BlockHeight, Epoch, Key};
+use namada_sdk::tendermint::abci::Event as AbciEvent;
+use namada_sdk::tendermint::block::Height as TmHeight;
+use namada_sdk::token::Amount;
 use namada_test_utils::TestWasms;
 use prost::Message;
 use setup::constants::*;
@@ -94,8 +94,9 @@ use crate::e2e::helpers::{
 };
 use crate::e2e::ledger_tests::{prepare_proposal_data, write_json_file};
 use crate::e2e::setup::{
-    self, run_gaia_cmd, run_hermes_cmd, set_ethereum_bridge_mode, setup_gaia,
-    setup_hermes, sleep, Bin, NamadaCmd, Test, Who,
+    self, apply_use_device, ensure_hot_addr, ensure_hot_key, run_gaia_cmd,
+    run_hermes_cmd, set_ethereum_bridge_mode, setup_gaia, setup_hermes, sleep,
+    Bin, NamadaCmd, Test, Who,
 };
 use crate::strings::{
     LEDGER_STARTED, TX_APPLIED_SUCCESS, TX_FAILED, VALIDATOR_NODE,
@@ -114,7 +115,7 @@ fn run_ledger_ibc() -> Result<()> {
                 .parameters
                 .ibc_params
                 .default_per_epoch_throughput_limit = Amount::max_signed();
-            setup::set_validators(1, genesis, base_dir, |_| 0)
+            setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
         };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
     let _bg_ledger_a = ledger_a.background();
@@ -157,7 +158,7 @@ fn run_ledger_ibc() -> Result<()> {
         BERTHA,
         ALBERT,
         token,
-        50000,
+        50_000_000_000,
         BERTHA_KEY,
     )?;
     check_balances_after_non_ibc(&port_id_b, &channel_id_b, &test_b)?;
@@ -205,7 +206,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
                 .parameters
                 .ibc_params
                 .default_per_epoch_throughput_limit = Amount::max_signed();
-            setup::set_validators(1, genesis, base_dir, |_| 0)
+            setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
         };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
     let _bg_ledger_a = ledger_a.background();
@@ -230,9 +231,10 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         receiver.to_string(),
         NAM,
         100000.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &port_id_a,
         &channel_id_a,
+        None,
         None,
         None,
         false,
@@ -248,7 +250,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         BERTHA,
         ALBERT,
         token,
-        50000,
+        50_000_000_000,
         BERTHA_KEY,
     )?;
     check_balances_after_non_ibc(&port_id_b, &channel_id_b, &test_b)?;
@@ -265,10 +267,11 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         BERTHA,
         receiver.to_string(),
         ibc_denom,
-        50000.0,
-        BERTHA_KEY,
+        50_000_000_000.0,
+        Some(BERTHA_KEY),
         &port_id_b,
         &channel_id_b,
+        None,
         None,
         None,
         false,
@@ -286,18 +289,39 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         100,
         ALBERT_KEY,
     )?;
+    // Send some token for masp fee payment
+    transfer_on_chain(
+        &test_a,
+        "shield",
+        ALBERT,
+        AA_PAYMENT_ADDRESS,
+        NAM,
+        10_000,
+        ALBERT_KEY,
+    )?;
     shielded_sync(&test_a, AA_VIEWING_KEY)?;
     // Shieded transfer from Chain A to Chain B
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
+    let token_addr = find_address(&test_a, BTC)?.to_string();
+    let shielding_data_path = gen_ibc_shielding_data(
+        &test_b,
+        AB_PAYMENT_ADDRESS,
+        token_addr,
+        1_000_000_000,
+        &port_id_b,
+        &channel_id_b,
+    )?;
     transfer(
         &test_a,
         A_SPENDING_KEY,
         AB_PAYMENT_ADDRESS,
         BTC,
         10.0,
-        ALBERT_KEY,
+        None,
         &port_id_a,
         &channel_id_a,
         None,
+        Some(shielding_data_path),
         None,
         false,
     )?;
@@ -311,9 +335,10 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         "invalid_receiver",
         BTC,
         10.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &port_id_a,
         &channel_id_a,
+        None,
         None,
         None,
         false,
@@ -333,10 +358,11 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         AB_PAYMENT_ADDRESS,
         BTC,
         10.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &port_id_a,
         &channel_id_a,
         Some(Duration::new(10, 0)),
+        None,
         None,
         false,
     )?;
@@ -367,7 +393,7 @@ fn ibc_namada_gaia() -> Result<()> {
                 .parameters
                 .ibc_params
                 .default_per_epoch_throughput_limit = Amount::max_signed();
-            setup::set_validators(1, genesis, base_dir, |_| 0)
+            setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
         };
     let (ledger, mut ledger_b, test, _test_b) = run_two_nets(update_genesis)?;
     let _bg_ledger = ledger.background();
@@ -398,9 +424,10 @@ fn ibc_namada_gaia() -> Result<()> {
         receiver,
         APFEL,
         200.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &port_id_namada,
         &channel_id_namada,
+        None,
         None,
         None,
         false,
@@ -410,7 +437,7 @@ fn ibc_namada_gaia() -> Result<()> {
     // Check the received token on Gaia
     let token_addr = find_address(&test, APFEL)?;
     let ibc_denom = format!("{port_id_gaia}/{channel_id_gaia}/{token_addr}");
-    check_gaia_balance(&test_gaia, GAIA_USER, &ibc_denom, 200)?;
+    check_gaia_balance(&test_gaia, GAIA_USER, &ibc_denom, 200000000)?;
 
     // Transfer back from Gaia to Namada
     let receiver = find_address(&test, ALBERT)?.to_string();
@@ -419,9 +446,10 @@ fn ibc_namada_gaia() -> Result<()> {
         GAIA_USER,
         receiver,
         get_gaia_denom_hash(ibc_denom),
-        100,
+        100000000,
         &port_id_gaia,
         &channel_id_gaia,
+        None,
     )?;
     wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test)?;
 
@@ -438,6 +466,7 @@ fn ibc_namada_gaia() -> Result<()> {
         200,
         &port_id_gaia,
         &channel_id_gaia,
+        None,
     )?;
     wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test)?;
 
@@ -453,9 +482,10 @@ fn ibc_namada_gaia() -> Result<()> {
         &receiver,
         ibc_denom,
         100.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &port_id_namada,
         &channel_id_namada,
+        None,
         None,
         None,
         false,
@@ -465,6 +495,14 @@ fn ibc_namada_gaia() -> Result<()> {
     check_gaia_balance(&test_gaia, GAIA_USER, GAIA_COIN, 900)?;
 
     // Shielding transfer from Gaia to Namada
+    let memo_path = gen_ibc_shielding_data(
+        &test,
+        AA_PAYMENT_ADDRESS,
+        GAIA_COIN,
+        100,
+        &port_id_namada,
+        &channel_id_namada,
+    )?;
     transfer_from_gaia(
         &test_gaia,
         GAIA_USER,
@@ -473,6 +511,7 @@ fn ibc_namada_gaia() -> Result<()> {
         100,
         &port_id_gaia,
         &channel_id_gaia,
+        Some(memo_path),
     )?;
     wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test_gaia)?;
 
@@ -500,9 +539,10 @@ fn ibc_namada_gaia() -> Result<()> {
         &receiver,
         &ibc_denom,
         10.0,
-        BERTHA_KEY,
+        Some(BERTHA_KEY),
         &port_id_namada,
         &channel_id_namada,
+        None,
         None,
         None,
         false,
@@ -510,6 +550,31 @@ fn ibc_namada_gaia() -> Result<()> {
     wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
     check_balance(&test, AB_VIEWING_KEY, &ibc_denom, 40)?;
     check_gaia_balance(&test_gaia, GAIA_USER, GAIA_COIN, 810)?;
+
+    // Shielding transfer back from Gaia to Namada
+    let ibc_denom = format!("{port_id_gaia}/{channel_id_gaia}/{token_addr}");
+    let memo_path = gen_ibc_shielding_data(
+        &test,
+        AA_PAYMENT_ADDRESS,
+        &ibc_denom,
+        100,
+        &port_id_namada,
+        &channel_id_namada,
+    )?;
+    transfer_from_gaia(
+        &test_gaia,
+        GAIA_USER,
+        AA_PAYMENT_ADDRESS,
+        get_gaia_denom_hash(&ibc_denom),
+        100000000,
+        &port_id_gaia,
+        &channel_id_gaia,
+        Some(memo_path),
+    )?;
+    wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test)?;
+
+    // Check the token on Namada
+    check_balance(&test, AA_VIEWING_KEY, APFEL, 100)?;
 
     Ok(())
 }
@@ -535,7 +600,7 @@ fn pgf_over_ibc_with_hermes() -> Result<()> {
             .parameters
             .ibc_params
             .default_per_epoch_throughput_limit = Amount::max_signed();
-        setup::set_validators(1, genesis, base_dir, |_| 0)
+        setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
     };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
     let _bg_ledger_a = ledger_a.background();
@@ -612,7 +677,7 @@ fn proposal_ibc_token_inflation() -> Result<()> {
                 .parameters
                 .ibc_params
                 .default_per_epoch_throughput_limit = Amount::max_signed();
-            setup::set_validators(1, genesis, base_dir, |_| 0)
+            setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
         };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
     let _bg_ledger_a = ledger_a.background();
@@ -643,7 +708,8 @@ fn proposal_ibc_token_inflation() -> Result<()> {
 
     setup_hermes(&test_a, &test_b)?;
     let port_id_a = "transfer".parse().unwrap();
-    let (channel_id_a, _channel_id_b) =
+    let port_id_b = "transfer".parse().unwrap();
+    let (channel_id_a, channel_id_b) =
         create_channel_with_hermes(&test_a, &test_b)?;
 
     // Start relaying
@@ -654,16 +720,27 @@ fn proposal_ibc_token_inflation() -> Result<()> {
     wait_epochs(&test_b, 1)?;
 
     // Transfer 1 from Chain A to a z-address on Chain B
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
+    let token_addr = find_address(&test_a, APFEL)?.to_string();
+    let shielding_data_path = gen_ibc_shielding_data(
+        &test_b,
+        AB_PAYMENT_ADDRESS,
+        token_addr,
+        1_000_000,
+        &port_id_b,
+        &channel_id_b,
+    )?;
     transfer(
         &test_a,
         ALBERT,
         AB_PAYMENT_ADDRESS,
         APFEL,
         1.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &port_id_a,
         &channel_id_a,
         None,
+        Some(shielding_data_path),
         None,
         false,
     )?;
@@ -679,21 +756,115 @@ fn proposal_ibc_token_inflation() -> Result<()> {
 }
 
 #[test]
+fn ibc_upgrade_client() -> Result<()> {
+    // To avoid the client expiration, stop updating the client near the
+    // first height of the grace epoch. It is set 340 because the grace epoch in
+    // this test will be Epoch 18 and the number of blocks per epoch is 20.
+    const MIN_UPGRADE_HEIGHT: u64 = 340;
+    const PIPELINE_LEN: u64 = 8;
+
+    let update_genesis =
+        |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
+            genesis.parameters.parameters.epochs_per_year =
+                epochs_per_year_from_min_duration(20);
+            // for the trusting period of IBC client
+            genesis.parameters.pos_params.pipeline_len = PIPELINE_LEN;
+            genesis.parameters.gov_params.min_proposal_grace_epochs = 3;
+            genesis.parameters.ibc_params.default_mint_limit =
+                Amount::max_signed();
+            genesis
+                .parameters
+                .ibc_params
+                .default_per_epoch_throughput_limit = Amount::max_signed();
+            setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
+        };
+    let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
+    let _bg_ledger_a = ledger_a.background();
+    let _bg_ledger_b = ledger_b.background();
+
+    // Proposal on Chain B
+    // Delegate some token
+    delegate_token(&test_b)?;
+    let rpc_b = get_actor_rpc(&test_b, Who::Validator(0));
+    let mut epoch = get_epoch(&test_b, &rpc_b).unwrap();
+    let delegated = epoch + PIPELINE_LEN;
+    while epoch <= delegated {
+        sleep(10);
+        epoch = get_epoch(&test_b, &rpc_b).unwrap_or_default();
+    }
+    // Upgrade proposal on Chain B
+    // The transaction will store the upgraded client state and consensus state
+    // as if Chain B will be upgraded
+    let start_epoch = propose_upgrade_client(&test_b)?;
+    let mut epoch = get_epoch(&test_b, &rpc_b).unwrap();
+    // Vote
+    while epoch < start_epoch {
+        sleep(10);
+        epoch = get_epoch(&test_b, &rpc_b).unwrap_or_default();
+    }
+    submit_votes(&test_b)?;
+
+    // creating IBC channel while waiting the grace epoch
+    setup_hermes(&test_a, &test_b)?;
+    create_channel_with_hermes(&test_a, &test_b)?;
+    // Start relaying to update clients
+    let hermes = run_hermes(&test_a)?;
+    let bg_hermes = hermes.background();
+
+    let mut height = query_height(&test_b)?;
+    while height.revision_height() < MIN_UPGRADE_HEIGHT {
+        sleep(10);
+        height = query_height(&test_b)?;
+    }
+    // Stop Hermes not to update a client after the upgrade height
+    let mut hermes = bg_hermes.foreground();
+    hermes.interrupt()?;
+
+    // wait for the grace epoch
+    let grace_epoch = start_epoch + 6u64;
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
+    while epoch < grace_epoch {
+        sleep(10);
+        epoch = get_epoch(&test_b, &rpc_b).unwrap_or_default();
+    }
+
+    // Check the upgraded height
+    let upgraded_height = get_upgraded_height(&test_b, MIN_UPGRADE_HEIGHT)?;
+    // Upgrade the IBC client of Chain B on Chain A with Hermes
+    upgrade_client(&test_a, test_a.net.chain_id.to_string(), upgraded_height)?;
+    sleep(1);
+
+    // Check the upgraded client
+    let current_height = query_height(&test_a)?;
+    let (upgraded_client_state, _, _) = get_client_states(
+        &test_a,
+        &"07-tendermint-0".parse().unwrap(),
+        current_height,
+    )?;
+    assert_eq!(
+        upgraded_client_state.inner().chain_id.as_str(),
+        "upgraded-chain"
+    );
+
+    Ok(())
+}
+
+#[test]
 fn ibc_rate_limit() -> Result<()> {
     // Mint limit 2 transfer/channel-0/nam, per-epoch throughput limit 1 NAM
-    let update_genesis = |mut genesis: templates::All<
-        templates::Unvalidated,
-    >,
-                          base_dir: &_| {
-        genesis.parameters.parameters.epochs_per_year =
-            epochs_per_year_from_min_duration(50);
-        genesis.parameters.ibc_params.default_mint_limit = Amount::from_u64(2);
-        genesis
-            .parameters
-            .ibc_params
-            .default_per_epoch_throughput_limit = Amount::from_u64(1_000_000);
-        setup::set_validators(1, genesis, base_dir, |_| 0)
-    };
+    let update_genesis =
+        |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
+            genesis.parameters.parameters.epochs_per_year =
+                epochs_per_year_from_min_duration(50);
+            genesis.parameters.ibc_params.default_mint_limit =
+                Amount::from_u64(2_000_000);
+            genesis
+                .parameters
+                .ibc_params
+                .default_per_epoch_throughput_limit =
+                Amount::from_u64(1_000_000);
+            setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
+        };
     let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
     let _bg_ledger_a = ledger_a.background();
     let _bg_ledger_b = ledger_b.background();
@@ -727,9 +898,10 @@ fn ibc_rate_limit() -> Result<()> {
         receiver.to_string(),
         NAM,
         1.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &port_id_a,
         &channel_id_a,
+        None,
         None,
         None,
         false,
@@ -742,9 +914,10 @@ fn ibc_rate_limit() -> Result<()> {
         receiver.to_string(),
         NAM,
         1.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &port_id_a,
         &channel_id_a,
+        None,
         None,
         // expect an error of the throughput limit
         Some(
@@ -768,9 +941,10 @@ fn ibc_rate_limit() -> Result<()> {
         receiver.to_string(),
         NAM,
         1.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &port_id_a,
         &channel_id_a,
+        None,
         None,
         None,
         false,
@@ -792,10 +966,11 @@ fn ibc_rate_limit() -> Result<()> {
         receiver.to_string(),
         NAM,
         1.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &port_id_a,
         &channel_id_a,
         Some(Duration::new(20, 0)),
+        None,
         None,
         false,
     )?;
@@ -955,7 +1130,7 @@ fn create_channel_with_hermes(
         "--yes",
     ];
 
-    let mut hermes = run_hermes_cmd(test_a, args, Some(120))?;
+    let mut hermes = run_hermes_cmd(test_a, args, Some(240))?;
     let (channel_id_a, channel_id_b) =
         get_channel_ids_from_hermes_output(&mut hermes)?;
     hermes.assert_success();
@@ -1035,6 +1210,55 @@ fn wait_for_packet_relay(
     Err(eyre!("Pending packet is still left"))
 }
 
+fn get_upgraded_height(test: &Test, min_upgrade_height: u64) -> Result<u64> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
+    // Search the storage for the upgraded client state
+    let rpc = get_actor_rpc(test, Who::Validator(0));
+    let max_height = min_upgrade_height + 100;
+    let mut height = min_upgrade_height;
+    while height < max_height {
+        height += 1;
+        let key = upgraded_client_state_key(Height::new(0, height).unwrap());
+        let query_args = [
+            "query-bytes",
+            "--storage-key",
+            &key.to_string(),
+            "--node",
+            &rpc,
+        ];
+        let mut client = run!(test, Bin::Client, query_args, Some(10))?;
+        if client.exp_string("No data found").is_ok() {
+            sleep(1);
+            continue;
+        } else {
+            return Ok(height);
+        }
+    }
+    panic!("No upgraded client state on the chain");
+}
+
+fn upgrade_client(
+    test: &Test,
+    host_chain_id: impl AsRef<str>,
+    upgrade_height: u64,
+) -> Result<()> {
+    let args = [
+        "upgrade",
+        "client",
+        "--host-chain",
+        host_chain_id.as_ref(),
+        "--client",
+        "07-tendermint-0",
+        "--upgrade-height",
+        &upgrade_height.to_string(),
+    ];
+    let mut hermes = run_hermes_cmd(test, args, Some(120))?;
+    hermes.exp_string("upgraded-chain")?;
+    hermes.assert_success();
+
+    Ok(())
+}
+
 fn wait_epochs(test: &Test, duration_epochs: u64) -> Result<()> {
     std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let rpc = get_actor_rpc(test, Who::Validator(0));
@@ -1071,8 +1295,8 @@ fn create_client(test_a: &Test, test_b: &Test) -> Result<(ClientId, ClientId)> {
     let height_a = submit_ibc_tx(
         test_a,
         make_ibc_data(message.to_any()),
-        ALBERT,
-        ALBERT_KEY,
+        ensure_hot_addr(ALBERT),
+        ensure_hot_key(ALBERT_KEY),
         false,
     )?;
 
@@ -1087,8 +1311,8 @@ fn create_client(test_a: &Test, test_b: &Test) -> Result<(ClientId, ClientId)> {
     let height_b = submit_ibc_tx(
         test_b,
         make_ibc_data(message.to_any()),
-        ALBERT,
-        ALBERT_KEY,
+        ensure_hot_addr(ALBERT),
+        ensure_hot_key(ALBERT_KEY),
         false,
     )?;
 
@@ -1220,8 +1444,8 @@ fn update_client(
     submit_ibc_tx(
         target_test,
         make_ibc_data(message.to_any()),
-        ALBERT,
-        ALBERT_KEY,
+        ensure_hot_addr(ALBERT),
+        ensure_hot_key(ALBERT_KEY),
         false,
     )?;
 
@@ -1266,8 +1490,8 @@ fn connection_handshake(
     let height = submit_ibc_tx(
         test_a,
         make_ibc_data(msg.to_any()),
-        ALBERT,
-        ALBERT_KEY,
+        ensure_hot_addr(ALBERT),
+        ensure_hot_key(ALBERT_KEY),
         false,
     )?;
     let events = get_events(test_a, height)?;
@@ -1306,8 +1530,8 @@ fn connection_handshake(
     let height = submit_ibc_tx(
         test_b,
         make_ibc_data(msg.to_any()),
-        ALBERT,
-        ALBERT_KEY,
+        ensure_hot_addr(ALBERT),
+        ensure_hot_key(ALBERT_KEY),
         false,
     )?;
     let events = get_events(test_b, height)?;
@@ -1339,8 +1563,8 @@ fn connection_handshake(
     submit_ibc_tx(
         test_a,
         make_ibc_data(msg.to_any()),
-        ALBERT,
-        ALBERT_KEY,
+        ensure_hot_addr(ALBERT),
+        ensure_hot_key(ALBERT_KEY),
         false,
     )?;
 
@@ -1359,8 +1583,8 @@ fn connection_handshake(
     submit_ibc_tx(
         test_b,
         make_ibc_data(msg.to_any()),
-        ALBERT,
-        ALBERT_KEY,
+        ensure_hot_addr(ALBERT),
+        ensure_hot_key(ALBERT_KEY),
         false,
     )?;
 
@@ -1403,8 +1627,8 @@ fn channel_handshake(
     let height = submit_ibc_tx(
         test_a,
         make_ibc_data(msg.to_any()),
-        ALBERT,
-        ALBERT_KEY,
+        ensure_hot_addr(ALBERT),
+        ensure_hot_key(ALBERT_KEY),
         false,
     )?;
     let events = get_events(test_a, height)?;
@@ -1436,8 +1660,8 @@ fn channel_handshake(
     let height = submit_ibc_tx(
         test_b,
         make_ibc_data(msg.to_any()),
-        ALBERT,
-        ALBERT_KEY,
+        ensure_hot_addr(ALBERT),
+        ensure_hot_key(ALBERT_KEY),
         false,
     )?;
     let events = get_events(test_b, height)?;
@@ -1463,8 +1687,8 @@ fn channel_handshake(
     submit_ibc_tx(
         test_a,
         make_ibc_data(msg.to_any()),
-        ALBERT,
-        ALBERT_KEY,
+        ensure_hot_addr(ALBERT),
+        ensure_hot_key(ALBERT_KEY),
         false,
     )?;
 
@@ -1485,8 +1709,8 @@ fn channel_handshake(
     submit_ibc_tx(
         test_b,
         make_ibc_data(msg.to_any()),
-        ALBERT,
-        ALBERT_KEY,
+        ensure_hot_addr(ALBERT),
+        ensure_hot_key(ALBERT_KEY),
         false,
     )?;
 
@@ -1558,9 +1782,10 @@ fn transfer_token(
         receiver.to_string(),
         NAM,
         100000.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         port_id_a,
         channel_id_a,
+        None,
         None,
         None,
         false,
@@ -1584,8 +1809,8 @@ fn transfer_token(
     let height = submit_ibc_tx(
         test_b,
         make_ibc_data(msg.to_any()),
-        ALBERT,
-        ALBERT_KEY,
+        ensure_hot_addr(ALBERT),
+        ensure_hot_key(ALBERT_KEY),
         false,
     )?;
     let events = get_events(test_b, height)?;
@@ -1609,8 +1834,8 @@ fn transfer_token(
     submit_ibc_tx(
         test_a,
         make_ibc_data(msg.to_any()),
-        ALBERT,
-        ALBERT_KEY,
+        ensure_hot_addr(ALBERT),
+        ensure_hot_key(ALBERT_KEY),
         false,
     )?;
 
@@ -1626,22 +1851,8 @@ fn try_invalid_transfers(
     std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
     let receiver = find_address(test_b, BERTHA)?;
 
-    // invalid amount
-    transfer(
-        test_a,
-        ALBERT,
-        receiver.to_string(),
-        NAM,
-        10.1,
-        ALBERT_KEY,
-        port_id_a,
-        channel_id_a,
-        None,
-        Some("The amount for the IBC transfer should be an integer"),
-        false,
-    )?;
-
     // invalid port
+    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
     let nam_addr = find_address(test_a, NAM)?;
     transfer(
         test_a,
@@ -1649,9 +1860,10 @@ fn try_invalid_transfers(
         receiver.to_string(),
         NAM,
         10.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         &"port".parse().unwrap(),
         channel_id_a,
+        None,
         None,
         // the IBC denom can't be parsed when using an invalid port
         Some(&format!("Invalid IBC denom: {nam_addr}")),
@@ -1665,9 +1877,10 @@ fn try_invalid_transfers(
         receiver.to_string(),
         NAM,
         10.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         port_id_a,
         &"channel-42".parse().unwrap(),
+        None,
         None,
         Some("IBC token transfer error: context error: `ICS04 Channel error"),
         false,
@@ -1676,6 +1889,7 @@ fn try_invalid_transfers(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn transfer_on_chain(
     test: &Test,
     kind: impl AsRef<str>,
@@ -1687,7 +1901,8 @@ fn transfer_on_chain(
 ) -> Result<()> {
     std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let rpc = get_actor_rpc(test, Who::Validator(0));
-    let tx_args = [
+    let amount = amount.to_string();
+    let tx_args = apply_use_device(vec![
         kind.as_ref(),
         "--source",
         sender.as_ref(),
@@ -1696,12 +1911,12 @@ fn transfer_on_chain(
         "--token",
         token.as_ref(),
         "--amount",
-        &amount.to_string(),
+        &amount,
         "--signing-keys",
         signer.as_ref(),
         "--node",
         &rpc,
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
@@ -1729,10 +1944,11 @@ fn transfer_back(
         BERTHA,
         receiver.to_string(),
         ibc_denom,
-        50000.0,
-        BERTHA_KEY,
+        50_000_000_000.0,
+        Some(BERTHA_KEY),
         port_id_b,
         channel_id_b,
+        None,
         None,
         None,
         false,
@@ -1754,8 +1970,8 @@ fn transfer_back(
     let height = submit_ibc_tx(
         test_a,
         make_ibc_data(msg.to_any()),
-        ALBERT,
-        ALBERT_KEY,
+        ensure_hot_addr(ALBERT),
+        ensure_hot_key(ALBERT_KEY),
         false,
     )?;
     let events = get_events(test_a, height)?;
@@ -1778,8 +1994,8 @@ fn transfer_back(
     submit_ibc_tx(
         test_b,
         make_ibc_data(msg.to_any()),
-        ALBERT,
-        ALBERT_KEY,
+        ensure_hot_addr(ALBERT),
+        ensure_hot_key(ALBERT_KEY),
         false,
     )?;
 
@@ -1803,10 +2019,11 @@ fn transfer_timeout(
         receiver.to_string(),
         NAM,
         100000.0,
-        ALBERT_KEY,
+        Some(ALBERT_KEY),
         port_id_a,
         channel_id_a,
         Some(Duration::new(5, 0)),
+        None,
         None,
         false,
     )?;
@@ -1832,8 +2049,8 @@ fn transfer_timeout(
     submit_ibc_tx(
         test_a,
         make_ibc_data(msg.to_any()),
-        ALBERT,
-        ALBERT_KEY,
+        ensure_hot_addr(ALBERT),
+        ensure_hot_key(ALBERT_KEY),
         false,
     )?;
 
@@ -1886,8 +2103,7 @@ fn get_receipt_absence_proof(
 }
 
 fn commitment_prefix() -> CommitmentPrefix {
-    CommitmentPrefix::try_from(b"ibc".to_vec())
-        .expect("the prefix should be parsable")
+    CommitmentPrefix::from(COMMITMENT_PREFIX.as_bytes().to_vec())
 }
 
 fn submit_ibc_tx(
@@ -1906,7 +2122,7 @@ fn submit_ibc_tx(
     let mut client = run!(
         test,
         Bin::Client,
-        [
+        apply_use_device(vec![
             "tx",
             "--code-path",
             TX_IBC_WASM,
@@ -1918,9 +2134,11 @@ fn submit_ibc_tx(
             signer,
             "--gas-token",
             NAM,
+            "--gas-limit",
+            "200000",
             "--node",
             &rpc
-        ],
+        ]),
         Some(40)
     )?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
@@ -1937,10 +2155,11 @@ fn transfer(
     receiver: impl AsRef<str>,
     token: impl AsRef<str>,
     amount: f64,
-    signer: impl AsRef<str>,
+    signer: Option<&str>,
     port_id: &PortId,
     channel_id: &ChannelId,
     timeout_sec: Option<Duration>,
+    shielding_data_path: Option<PathBuf>,
     expected_err: Option<&str>,
     wait_reveal_pk: bool,
 ) -> Result<u32> {
@@ -1950,14 +2169,12 @@ fn transfer(
     let channel_id = channel_id.to_string();
     let port_id = port_id.to_string();
     let amount = amount.to_string();
-    let mut tx_args = vec![
+    let mut tx_args = apply_use_device(vec![
         "ibc-transfer",
         "--source",
         sender.as_ref(),
         "--receiver",
         receiver.as_ref(),
-        "--signing-keys",
-        signer.as_ref(),
         "--token",
         token.as_ref(),
         "--amount",
@@ -1966,14 +2183,31 @@ fn transfer(
         &channel_id,
         "--port-id",
         &port_id,
+        "--gas-limit",
+        "200000",
         "--node",
         &rpc,
-    ];
+    ]);
+
+    if let Some(signer) = signer {
+        tx_args.extend_from_slice(&["--signing-keys", signer]);
+    } else {
+        tx_args.push("--disposable-gas-payer");
+    }
 
     let timeout = timeout_sec.unwrap_or_default().as_secs().to_string();
     if timeout_sec.is_some() {
         tx_args.push("--timeout-sec-offset");
         tx_args.push(&timeout);
+    }
+
+    let memo = shielding_data_path
+        .as_ref()
+        .map(|path| path.to_string_lossy().to_string())
+        .unwrap_or_default();
+    if shielding_data_path.is_some() {
+        tx_args.push("--ibc-shielding-data");
+        tx_args.push(&memo);
     }
 
     let mut client = run!(test, Bin::Client, tx_args, Some(300))?;
@@ -1995,7 +2229,7 @@ fn transfer(
 fn delegate_token(test: &Test) -> Result<()> {
     std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let rpc = get_actor_rpc(test, Who::Validator(0));
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "bond",
         "--validator",
         "validator-0",
@@ -2005,7 +2239,7 @@ fn delegate_token(test: &Test) -> Result<()> {
         "900",
         "--node",
         &rpc,
-    ];
+    ]);
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
@@ -2044,20 +2278,19 @@ fn propose_funding(
     let start_epoch = (epoch.0 + 6) / 3 * 3;
     let proposal_json_path = prepare_proposal_data(
         test_a.test_dir.path(),
-        0,
         albert,
         pgf_funding,
         start_epoch,
     );
 
-    let submit_proposal_args = vec![
+    let submit_proposal_args = apply_use_device(vec![
         "init-proposal",
         "--pgf-funding",
         "--data-path",
         proposal_json_path.to_str().unwrap(),
         "--node",
         &rpc_a,
-    ];
+    ]);
     let mut client = run!(test_a, Bin::Client, submit_proposal_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
@@ -2072,7 +2305,6 @@ fn propose_inflation(test: &Test) -> Result<Epoch> {
     let start_epoch = (epoch.0 + 3) / 3 * 3;
     let proposal_json = serde_json::json!({
         "proposal": {
-            "id": 0,
             "content": {
                 "title": "TheTitle",
                 "authors": "test@test.com",
@@ -2095,16 +2327,60 @@ fn propose_inflation(test: &Test) -> Result<Epoch> {
     let proposal_json_path = test.test_dir.path().join("proposal.json");
     write_json_file(proposal_json_path.as_path(), proposal_json);
 
+    let submit_proposal_args = apply_use_device(vec![
+        "init-proposal",
+        "--data-path",
+        proposal_json_path.to_str().unwrap(),
+        "--gas-limit",
+        "4000000",
+        "--node",
+        &rpc,
+    ]);
+    let mut client = run!(test, Bin::Client, submit_proposal_args, Some(100))?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
+    client.assert_success();
+    Ok(start_epoch.into())
+}
+
+fn propose_upgrade_client(test: &Test) -> Result<Epoch> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
+    let albert = find_address(test, ALBERT)?;
+    let rpc = get_actor_rpc(test, Who::Validator(0));
+    let epoch = get_epoch(test, &rpc)?;
+    let start_epoch = (epoch.0 + 3) / 3 * 3;
+    let proposal_json = serde_json::json!({
+        "proposal": {
+            "content": {
+                "title": "TheTitle",
+                "authors": "test@test.com",
+                "discussions-to": "www.github.com/anoma/aip/1",
+                "created": "2022-03-10T08:54:37Z",
+                "license": "MIT",
+                "abstract": "upgrade chain",
+                "motivation": "upgrade chain",
+                "details": "upgrade chain",
+                "requires": "2"
+            },
+            "author": albert,
+            "voting_start_epoch": start_epoch,
+            "voting_end_epoch": start_epoch + 3_u64,
+            "activation_epoch": start_epoch + 6_u64,
+        },
+        "data": TestWasms::TxProposalIbcClientUpgrade.read_bytes()
+    });
+    let proposal_json_path = test.test_dir.path().join("proposal.json");
+    write_json_file(proposal_json_path.as_path(), proposal_json);
+
     let submit_proposal_args = vec![
         "init-proposal",
         "--data-path",
         proposal_json_path.to_str().unwrap(),
         "--gas-limit",
-        "2000000",
+        "4000000",
         "--node",
         &rpc,
     ];
-    let mut client = run!(test, Bin::Client, submit_proposal_args, Some(100))?;
+    let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
     Ok(start_epoch.into())
@@ -2136,7 +2412,7 @@ fn submit_votes(test: &Test) -> Result<()> {
     client.assert_success();
 
     // Send different yay vote from delegator to check majority on 1/3
-    let submit_proposal_vote_delagator = vec![
+    let submit_proposal_vote_delagator = apply_use_device(vec![
         "vote-proposal",
         "--proposal-id",
         "0",
@@ -2146,7 +2422,7 @@ fn submit_votes(test: &Test) -> Result<()> {
         BERTHA,
         "--node",
         &rpc,
-    ];
+    ]);
     let mut client =
         run!(test, Bin::Client, submit_proposal_vote_delagator, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
@@ -2163,12 +2439,13 @@ fn transfer_from_gaia(
     amount: u64,
     port_id: &PortId,
     channel_id: &ChannelId,
+    memo_path: Option<PathBuf>,
 ) -> Result<()> {
     let port_id = port_id.to_string();
     let channel_id = channel_id.to_string();
     let amount = format!("{}{}", amount, token.as_ref());
     let rpc = format!("tcp://{GAIA_RPC}");
-    let args = vec![
+    let mut args = vec![
         "tx",
         "ibc-transfer",
         "transfer",
@@ -2189,6 +2466,17 @@ fn transfer_from_gaia(
         "--yes",
     ];
 
+    let memo = memo_path
+        .as_ref()
+        .map(|path| {
+            std::fs::read_to_string(path).expect("Reading memo file failed")
+        })
+        .unwrap_or_default();
+    if memo_path.is_some() {
+        args.push("--memo");
+        args.push(&memo);
+    }
+
     let mut gaia = run_gaia_cmd(test, args, Some(40))?;
     gaia.assert_success();
     Ok(())
@@ -2196,13 +2484,13 @@ fn transfer_from_gaia(
 
 fn check_tx_height(test: &Test, client: &mut NamadaCmd) -> Result<u32> {
     let (_unread, matched) = client.exp_regex(r"height .*")?;
-    // Expecting e.g. "height 1337."
+    // Expecting e.g. "height 1337, consuming x gas units."
     let height_str = matched
         .trim()
         .split_once(' ')
         .unwrap()
         .1
-        .split_once('.')
+        .split_once(',')
         .unwrap()
         .0;
     let height: u32 = height_str.parse().unwrap();
@@ -2374,7 +2662,7 @@ fn check_balances(
 
     // Check the balance on Chain B
     let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/nam");
-    check_balance(test_b, BERTHA, ibc_denom, 100000)?;
+    check_balance(test_b, BERTHA, ibc_denom, 100_000_000_000)?;
 
     Ok(())
 }
@@ -2420,10 +2708,10 @@ fn check_balances_after_non_ibc(
 ) -> Result<()> {
     // Check the source on Chain B
     let ibc_denom = format!("{port_id}/{channel_id}/nam");
-    check_balance(test_b, BERTHA, &ibc_denom, 50000)?;
+    check_balance(test_b, BERTHA, &ibc_denom, 50_000_000_000)?;
 
     // Check the traget on Chain B
-    check_balance(test_b, ALBERT, &ibc_denom, 50000)?;
+    check_balance(test_b, ALBERT, &ibc_denom, 50_000_000_000)?;
 
     Ok(())
 }
@@ -2460,7 +2748,7 @@ fn check_shielded_balances(
 
     // Check the shielded balance on Chain B
     let ibc_denom = format!("{dest_port_id}/{dest_channel_id}/btc");
-    check_balance(test_b, AB_VIEWING_KEY, ibc_denom, 10)?;
+    check_balance(test_b, AB_VIEWING_KEY, ibc_denom, 1_000_000_000)?;
 
     Ok(())
 }
@@ -2612,4 +2900,46 @@ fn shielded_sync(test: &Test, viewing_key: impl AsRef<str>) -> Result<()> {
     let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
     client.assert_success();
     Ok(())
+}
+
+/// Get IBC shielding data for the following IBC transfer from the destination
+/// chain
+fn gen_ibc_shielding_data(
+    dst_test: &Test,
+    receiver: impl AsRef<str>,
+    token: impl AsRef<str>,
+    amount: u64,
+    port_id: &PortId,
+    channel_id: &ChannelId,
+) -> Result<PathBuf> {
+    std::env::set_var(ENV_VAR_CHAIN_ID, dst_test.net.chain_id.to_string());
+    let rpc = get_actor_rpc(dst_test, Who::Validator(0));
+    let output_folder = dst_test.test_dir.path().to_string_lossy();
+
+    let amount = amount.to_string();
+    let args = vec![
+        "ibc-gen-shielding",
+        "--output-folder-path",
+        &output_folder,
+        "--target",
+        receiver.as_ref(),
+        "--token",
+        token.as_ref(),
+        "--amount",
+        &amount,
+        "--port-id",
+        port_id.as_ref(),
+        "--channel-id",
+        channel_id.as_ref(),
+        "--node",
+        &rpc,
+    ];
+
+    let mut client = run!(dst_test, Bin::Client, args, Some(120))?;
+    let (_unread, matched) =
+        client.exp_regex("Output IBC shielding transfer .*")?;
+    let file_path = matched.trim().split(' ').last().expect("invalid output");
+    client.assert_success();
+
+    Ok(PathBuf::from_str(file_path).expect("invalid file path"))
 }
