@@ -36,7 +36,7 @@ jobs:
   changelog:
     runs-on: [ubuntu-latest]
     if: github.event_name == 'pull_request_target' && github.event.pull_request.draft == false
-    timeout-minutes: 15
+    timeout-minutes: 5
 
     steps:
       - name: Checkout repo
@@ -54,6 +54,27 @@ jobs:
         run: bash .github/workflows/scripts/check-changelog.sh
         env:
           SHA: ${{ github.event.pull_request.head.sha }}
+    
+  rust-docs:
+    runs-on: [ubuntu-latest]
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repo
+        if: ${{ github.event_name != 'pull_request_target' }}
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Checkout PR
+        if: ${{ github.event_name == 'pull_request_target' }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Install rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Build docs
+        run: make doc
 
   lints:
     container: 
