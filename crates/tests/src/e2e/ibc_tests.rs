@@ -67,9 +67,9 @@ const IBC_REFUND_TARGET_ALIAS: &str = "ibc-refund-target";
 /// 2. Invalid transfers
 /// 3. Shielding/Unshielding transfers
 ///   - Gaia -> Namada -> (shielded transfer) -> Namada -> Gaia
-/// 3. Shielding transfer the received token back to a shielded account on
+/// 4. Shielding transfer the received token back to a shielded account on
 ///    Namada
-/// 4. Refunding when transfer failure
+/// 5. Refunding when transfer failure
 ///   - Ack with an error (invalid receiver)
 ///   - Timeout
 ///   - when unshielding transfer failure
@@ -101,6 +101,8 @@ fn ibc_transfers() -> Result<()> {
     let hermes = run_hermes(&test)?;
     let bg_hermes = hermes.background();
 
+    // 1. Transparent transfers
+
     // Transfer 2 APFEL from Namada to Gaia
     let gaia_receiver = find_gaia_address(&test_gaia, GAIA_USER)?;
     transfer(
@@ -125,7 +127,7 @@ fn ibc_transfers() -> Result<()> {
         format!("{port_id_gaia}/{channel_id_gaia}/{token_addr}");
     check_gaia_balance(&test_gaia, GAIA_USER, &ibc_denom_on_gaia, 2_000_000)?;
 
-    // Transfer 1 Apfel back from Gaia to Namada
+    // Transfer 1 APFEL back from Gaia to Namada
     let namada_receiver = find_address(&test, ALBERT)?.to_string();
     transfer_from_gaia(
         &test_gaia,
@@ -185,13 +187,15 @@ fn ibc_transfers() -> Result<()> {
     check_balance(&test, ALBERT, &ibc_denom_on_namada, 100)?;
     check_gaia_balance(&test_gaia, GAIA_USER, GAIA_COIN, 900)?;
 
-    // Invalid transfers
+    // 2. Invalid transfers
     try_invalid_transfers(
         &test,
         &gaia_receiver,
         &port_id_namada,
         &channel_id_namada,
     )?;
+
+    // 3. Shielding/Unshielding transfers
 
     // Shielding transfer 100 samoleans from Gaia to Namada
     let shielding_data_path = gen_ibc_shielding_data(
@@ -250,12 +254,13 @@ fn ibc_transfers() -> Result<()> {
     check_balance(&test, AB_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
     check_gaia_balance(&test_gaia, GAIA_USER, GAIA_COIN, 810)?;
 
-    // Shielding transfer back from Gaia to Namada
+    // 4. Shielding transfer the received token back to a shielded account on
+    //    Namada
     let memo_path = gen_ibc_shielding_data(
         &test,
         AA_PAYMENT_ADDRESS,
         &ibc_denom_on_gaia,
-        100,
+        1,
         &port_id_namada,
         &channel_id_namada,
     )?;
@@ -264,16 +269,17 @@ fn ibc_transfers() -> Result<()> {
         GAIA_USER,
         AA_PAYMENT_ADDRESS,
         get_gaia_denom_hash(&ibc_denom_on_gaia),
-        100000000,
+        1_000_000,
         &port_id_gaia,
         &channel_id_gaia,
         Some(memo_path),
         None,
     )?;
     wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test)?;
-
     // Check the token on Namada
-    check_balance(&test, AA_VIEWING_KEY, APFEL, 100)?;
+    check_balance(&test, AA_VIEWING_KEY, APFEL, 1)?;
+
+    // 5. Refunding when transfer failure
 
     // Transfer to an invalid receiver address to check the refund for the
     // escrowed token
