@@ -5,6 +5,6 @@ fn main() {
 
     if host_arch == "aarch64-apple-darwin" {
         println!("cargo:rustc-cfg=is_apple_silicon");
-        println!("cargo::rustc-check-cfg=cfg(is_apple_silicon)");
     }
+    println!("cargo::rustc-check-cfg=cfg(is_apple_silicon)");
 }
