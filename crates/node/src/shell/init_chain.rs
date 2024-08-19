@@ -590,7 +590,7 @@ where
         genesis: &genesis::chain::Finalized,
         vp_cache: &mut HashMap<String, Vec<u8>>,
         params: &PosParams,
-        current_epoch: namada_sdk::storage::Epoch,
+        current_epoch: namada_sdk::chain::Epoch,
     ) -> ControlFlow<()> {
         if let Some(txs) = genesis.transactions.validator_account.as_ref() {
             for FinalizedValidatorAccountTx {

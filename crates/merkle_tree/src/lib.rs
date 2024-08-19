@@ -35,12 +35,13 @@ use ics23_specs::ibc_leaf_spec;
 use namada_core::address::{Address, InternalAddress};
 use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
 use namada_core::bytes::ByteBuf;
+use namada_core::chain::{BlockHeight, Epoch};
 use namada_core::eth_bridge_pool::{is_pending_transfer_key, PendingTransfer};
 use namada_core::hash::{Hash, StorageHasher};
 use namada_core::keccak::KeccakHash;
 use namada_core::storage::{
-    self, BlockHeight, DbKeySeg, Epoch, Error as StorageError, Key, KeySeg,
-    StringKey, TreeBytes, TreeKeyError, IBC_KEY_LIMIT,
+    self, DbKeySeg, Error as StorageError, Key, KeySeg, StringKey, TreeBytes,
+    TreeKeyError, IBC_KEY_LIMIT,
 };
 use namada_core::{decode, DecodeError};
 use namada_macros::BorshDeserializer;

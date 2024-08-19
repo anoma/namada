@@ -40,10 +40,11 @@ use namada_apps_lib::config::utils::{
     convert_tm_addr_to_socket_addr, num_of_threads,
 };
 use namada_apps_lib::{config, wasm_loader};
+use namada_sdk::chain::BlockHeight;
 use namada_sdk::eth_bridge::ethers::providers::{Http, Provider};
 use namada_sdk::migrations::ScheduledMigration;
 use namada_sdk::state::{ProcessProposalCachedResult, StateRead, DB};
-use namada_sdk::storage::{BlockHeight, DbColFam};
+use namada_sdk::storage::DbColFam;
 use namada_sdk::tendermint::abci::request::CheckTxKind;
 use namada_sdk::tendermint::abci::response::ProcessProposal;
 use namada_sdk::time::DateTimeUtc;

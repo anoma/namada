@@ -2,13 +2,14 @@
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::address::Address;
+use namada_core::chain::{BlockHeight, Epoch};
 use namada_core::eth_abi::Encode;
 use namada_core::eth_bridge_pool::PendingTransfer;
 use namada_core::ethereum_events::{
     EthAddress, EthereumEvent, GetEventNonce, TransferToEthereum, Uint,
 };
 use namada_core::keccak::KeccakHash;
-use namada_core::storage::{BlockHeight, Epoch, Key as StorageKey};
+use namada_core::storage::Key as StorageKey;
 use namada_core::voting_power::{EthBridgeVotingPower, FractionalVotingPower};
 use namada_core::{hints, token};
 use namada_macros::BorshDeserializer;

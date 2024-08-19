@@ -489,9 +489,10 @@ mod tests {
     };
     use namada_core::address::InternalAddress;
     use namada_core::borsh::{BorshDeserialize, BorshSerializeExt};
+    use namada_core::chain::testing::get_dummy_header;
+    use namada_core::chain::{BlockHeight, Epoch};
     use namada_core::key::testing::keypair_1;
-    use namada_core::storage::testing::get_dummy_header;
-    use namada_core::storage::{BlockHeight, Epoch, TxIndex};
+    use namada_core::storage::TxIndex;
     use namada_core::tendermint::time::Time as TmTime;
     use namada_core::time::DurationSecs;
     use namada_gas::{TxGasMeter, VpGasMeter};

@@ -10,13 +10,12 @@ use masp_primitives::sapling::Node;
 use namada_account::{Account, AccountPublicKeysMap};
 use namada_core::address::Address;
 use namada_core::arith::checked;
+use namada_core::chain::{BlockHeight, Epoch, Header};
 use namada_core::dec::Dec;
 use namada_core::hash::Hash;
 use namada_core::hints;
 use namada_core::masp::{MaspEpoch, TokenMap};
-use namada_core::storage::{
-    self, BlockHeight, BlockResults, Epoch, Header, KeySeg, PrefixValue,
-};
+use namada_core::storage::{self, BlockResults, KeySeg, PrefixValue};
 use namada_core::time::DurationSecs;
 use namada_core::token::{Denomination, MaspDigitPos};
 use namada_core::uint::Uint;

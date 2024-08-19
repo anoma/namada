@@ -6,11 +6,11 @@ use std::collections::BTreeMap;
 
 use assert_matches::assert_matches;
 use namada_core::address::Address;
+use namada_core::chain::{BlockHeight, Epoch};
 use namada_core::collections::HashSet;
 use namada_core::dec::Dec;
 use namada_core::key::testing::{common_sk_from_simple_seed, gen_keypair};
 use namada_core::key::RefTo;
-use namada_core::storage::{BlockHeight, Epoch};
 use namada_core::{address, key};
 use namada_state::testing::TestState;
 use namada_storage::collections::lazy_map::Collectable;

@@ -6,11 +6,12 @@ use std::ops::ControlFlow;
 use std::str::FromStr;
 
 use namada_core::address::Address;
+use namada_core::chain::BlockHeight;
 use namada_core::collections::HashMap;
 use namada_core::hash::Hash;
 use namada_core::ibc::IbcTxDataRefs;
 use namada_core::masp::MaspTxRefs;
-use namada_core::storage::{BlockHeight, TxIndex};
+use namada_core::storage::TxIndex;
 use serde::Deserializer;
 
 use super::*;

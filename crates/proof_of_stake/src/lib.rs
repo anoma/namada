@@ -42,11 +42,12 @@ use epoched::EpochOffset;
 pub use error::*;
 use namada_core::address::{Address, InternalAddress};
 use namada_core::arith::checked;
+use namada_core::chain::BlockHeight;
+pub use namada_core::chain::Epoch;
 use namada_core::collections::HashSet;
 pub use namada_core::dec::Dec;
 use namada_core::key::common;
-use namada_core::storage::BlockHeight;
-pub use namada_core::storage::{Epoch, Key, KeySeg};
+pub use namada_core::storage::{Key, KeySeg};
 use namada_core::tendermint::abci::types::Misbehavior;
 use namada_core::token;
 use namada_events::EmitEvents;
@@ -122,7 +123,7 @@ where
     fn is_delegator(
         storage: &S,
         address: &Address,
-        epoch: Option<namada_core::storage::Epoch>,
+        epoch: Option<namada_core::chain::Epoch>,
     ) -> Result<bool> {
         is_delegator(storage, address, epoch)
     }
@@ -214,7 +215,7 @@ where
 pub fn is_delegator<S>(
     storage: &S,
     address: &Address,
-    epoch: Option<namada_core::storage::Epoch>,
+    epoch: Option<namada_core::chain::Epoch>,
 ) -> Result<bool>
 where
     S: StorageRead,
@@ -3113,7 +3114,7 @@ pub mod test_utils {
         storage: &mut S,
         params: &PosParams,
         validators: impl Iterator<Item = GenesisValidator>,
-        current_epoch: namada_core::storage::Epoch,
+        current_epoch: namada_core::chain::Epoch,
     ) -> Result<()>
     where
         S: StorageRead + StorageWrite,
@@ -3181,7 +3182,7 @@ pub mod test_utils {
         storage: &mut S,
         owned: OwnedPosParams,
         validators: impl Iterator<Item = GenesisValidator> + Clone,
-        current_epoch: namada_core::storage::Epoch,
+        current_epoch: namada_core::chain::Epoch,
     ) -> Result<PosParams>
     where
         S: StorageRead + StorageWrite,

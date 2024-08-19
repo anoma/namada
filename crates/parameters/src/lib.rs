@@ -25,7 +25,7 @@ use std::marker::PhantomData;
 
 use namada_core::address::{Address, InternalAddress};
 use namada_core::arith::checked;
-use namada_core::storage::BlockHeight;
+use namada_core::chain::BlockHeight;
 pub use namada_core::parameters::ProposalBytes;
 use namada_core::time::DurationSecs;
 use namada_core::{hints, token};
@@ -629,7 +629,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use namada_core::storage::Header;
+    use namada_core::chain::Header;
     use namada_core::time::DateTimeUtc;
     use namada_storage::testing::TestStorage;
 

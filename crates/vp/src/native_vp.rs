@@ -9,8 +9,8 @@ use std::marker::PhantomData;
 
 use namada_core::address::Address;
 use namada_core::borsh::BorshDeserialize;
+use namada_core::chain::Epochs;
 use namada_core::hash::Hash;
-use namada_core::storage::Epochs;
 use namada_core::{borsh, storage};
 use namada_events::{Event, EventType};
 use namada_gas::{GasMetering, VpGasMeter};

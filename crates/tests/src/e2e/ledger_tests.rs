@@ -28,7 +28,7 @@ use namada_apps_lib::wallet;
 use namada_core::chain::ChainId;
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_sdk::address::Address;
-use namada_sdk::storage::Epoch;
+use namada_sdk::chain::Epoch;
 use namada_sdk::time::DateTimeUtc;
 use namada_sdk::token;
 use namada_test_utils::TestWasms;

@@ -16,11 +16,11 @@ use namada_core::borsh::schema::{add_definition, Declaration, Definition};
 use namada_core::borsh::{
     self, BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
 };
-use namada_core::chain::ChainId;
+use namada_core::chain::{BlockHeight, ChainId};
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::*;
 use namada_core::masp::{AssetData, TxId};
-use namada_core::storage::{BlockHeight, TxIndex};
+use namada_core::storage::TxIndex;
 use namada_core::time::DateTimeUtc;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]

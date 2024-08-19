@@ -229,12 +229,12 @@ mod tests {
     };
     use namada_tests::vp::vp_host_env::storage::Key;
     use namada_tests::vp::*;
+    use namada_tx_prelude::chain::Epoch;
     use namada_tx_prelude::dec::Dec;
     use namada_tx_prelude::proof_of_stake::parameters::{
         OwnedPosParams, PosParams,
     };
     use namada_tx_prelude::proof_of_stake::types::GenesisValidator;
-    use namada_tx_prelude::storage::Epoch;
     use namada_tx_prelude::{StorageWrite, TxEnv};
     use namada_vp_prelude::account::AccountPublicKeysMap;
     use namada_vp_prelude::key::RefTo;

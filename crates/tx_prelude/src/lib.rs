@@ -30,14 +30,14 @@ pub use namada_core::borsh::{
     BorshDeserialize, BorshSerialize, BorshSerializeExt,
 };
 use namada_core::chain::CHAIN_ID_LENGTH;
+pub use namada_core::chain::{
+    BlockHash, BlockHeight, Epoch, Header, BLOCK_HASH_LENGTH,
+};
 pub use namada_core::ethereum_events::EthAddress;
 use namada_core::internal::HostEnvResult;
 use namada_core::key::common;
 use namada_core::storage::TxIndex;
-pub use namada_core::storage::{
-    self, BlockHash, BlockHeight, Epoch, Header, BLOCK_HASH_LENGTH,
-};
-pub use namada_core::{address, encode, eth_bridge_pool, *};
+pub use namada_core::{address, encode, eth_bridge_pool, storage, *};
 use namada_events::{EmitEvents, Event, EventToEmit, EventType};
 pub use namada_governance::storage as gov_storage;
 pub use namada_macros::transaction;
@@ -193,11 +193,11 @@ impl StorageRead for Ctx {
         }
     }
 
-    fn get_block_epoch(&self) -> Result<namada_core::storage::Epoch, Error> {
+    fn get_block_epoch(&self) -> Result<namada_core::chain::Epoch, Error> {
         Ok(Epoch(unsafe { namada_tx_get_block_epoch() }))
     }
 
-    fn get_pred_epochs(&self) -> Result<namada_core::storage::Epochs, Error> {
+    fn get_pred_epochs(&self) -> Result<namada_core::chain::Epochs, Error> {
         let read_result = unsafe { namada_tx_get_pred_epochs() };
         let bytes = read_from_buffer(read_result, namada_tx_result_buffer)
             .ok_or(Error::SimpleMessage(

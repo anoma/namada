@@ -18,8 +18,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
 
 use crate::address::{Address, DecodeError, HASH_HEX_LEN, IBC, MASP};
+use crate::chain::Epoch;
 use crate::impl_display_and_from_str_via_format;
-use crate::storage::Epoch;
 use crate::string_encoding::{
     self, MASP_EXT_FULL_VIEWING_KEY_HRP, MASP_EXT_SPENDING_KEY_HRP,
     MASP_PAYMENT_ADDRESS_HRP,

@@ -5,10 +5,10 @@ use std::collections::BTreeMap;
 
 use borsh::BorshDeserialize;
 use namada_core::address::Address;
+use namada_core::chain::Epoch;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::dec::Dec;
 use namada_core::key::common;
-use namada_core::storage::Epoch;
 use namada_core::token;
 use namada_storage::collections::lazy_map::{NestedSubKey, SubKey};
 use namada_storage::StorageRead;

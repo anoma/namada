@@ -1450,6 +1450,7 @@ fn merge_vp_results(
 #[cfg(test)]
 mod tests {
     use eyre::Result;
+    use namada_sdk::chain::BlockHeight;
     use namada_sdk::collections::HashMap;
     use namada_sdk::eth_bridge::protocol::transactions::votes::{
         EpochedVotingPower, Votes,
@@ -1461,7 +1462,6 @@ mod tests {
     use namada_sdk::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
     use namada_sdk::ethereum_events::{EthereumEvent, TransferToNamada};
     use namada_sdk::keccak::keccak_hash;
-    use namada_sdk::storage::BlockHeight;
     use namada_sdk::tx::{SignableEthMessage, Signed};
     use namada_sdk::voting_power::FractionalVotingPower;
     use namada_sdk::{address, key};

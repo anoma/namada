@@ -6,10 +6,9 @@ use std::num::TryFromIntError;
 
 use namada_core::address::{Address, ESTABLISHED_ADDRESS_BYTES_LEN};
 use namada_core::arith::{self, checked};
+use namada_core::chain::{BlockHeight, Epoch, Epochs, Header};
 use namada_core::hash::{Hash, HASH_LENGTH};
-use namada_core::storage::{
-    BlockHeight, Epoch, Epochs, Header, Key, TxIndex, TX_INDEX_LENGTH,
-};
+use namada_core::storage::{Key, TxIndex, TX_INDEX_LENGTH};
 use namada_events::{Event, EventTypeBuilder};
 use namada_gas as gas;
 use namada_gas::{GasMetering, VpGasMeter, MEMORY_ACCESS_GAS_PER_BYTE};

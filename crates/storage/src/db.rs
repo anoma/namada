@@ -2,11 +2,9 @@ use std::fmt::Debug;
 use std::num::TryFromIntError;
 
 use namada_core::address::EstablishedAddressGen;
+use namada_core::chain::{BlockHeight, Epoch, Epochs, Header};
 use namada_core::hash::{Error as HashError, Hash};
-use namada_core::storage::{
-    BlockHeight, BlockResults, DbColFam, Epoch, Epochs, EthEventsQueue, Header,
-    Key,
-};
+use namada_core::storage::{BlockResults, DbColFam, EthEventsQueue, Key};
 use namada_core::time::DateTimeUtc;
 use namada_core::{arith, ethereum_events, ethereum_structs};
 use namada_merkle_tree::{

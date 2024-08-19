@@ -37,7 +37,7 @@ use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use namada_apps_lib::wallet::{self, ValidatorData, ValidatorKeys};
 use namada_sdk::address::Address;
-use namada_sdk::chain::ChainId;
+use namada_sdk::chain::{BlockHeight, ChainId};
 use namada_sdk::eth_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
 use namada_sdk::eth_bridge::protocol::validation::ethereum_events::validate_eth_events_vext;
 use namada_sdk::eth_bridge::protocol::validation::validator_set_update::validate_valset_upd_vext;
@@ -57,7 +57,7 @@ use namada_sdk::state::{
     DBIter, FullAccessState, Sha256Hasher, StorageHasher, StorageRead,
     TempWlState, WlState, DB, EPOCH_SWITCH_BLOCKS_DELAY,
 };
-use namada_sdk::storage::{BlockHeight, Key, TxIndex};
+use namada_sdk::storage::{Key, TxIndex};
 use namada_sdk::tendermint::AppHash;
 use namada_sdk::time::DateTimeUtc;
 pub use namada_sdk::tx::data::ResultCode;
@@ -698,8 +698,8 @@ where
     /// Get the next epoch for which we can request validator set changed
     pub fn get_validator_set_update_epoch(
         &self,
-        current_epoch: namada_sdk::storage::Epoch,
-    ) -> namada_sdk::storage::Epoch {
+        current_epoch: namada_sdk::chain::Epoch,
+    ) -> namada_sdk::chain::Epoch {
         if let Some(delay) = self.state.in_mem().update_epoch_blocks_delay {
             if delay == EPOCH_SWITCH_BLOCKS_DELAY {
                 // If we're about to update validator sets for the
@@ -1990,7 +1990,7 @@ pub mod test_utils {
 mod shell_tests {
     use eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
     use namada_sdk::address;
-    use namada_sdk::storage::Epoch;
+    use namada_sdk::chain::Epoch;
     use namada_sdk::token::read_denom;
     use namada_sdk::tx::data::protocol::{ProtocolTx, ProtocolTxType};
     use namada_sdk::tx::data::Fee;

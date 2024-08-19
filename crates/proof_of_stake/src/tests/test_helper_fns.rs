@@ -5,8 +5,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use namada_core::address::testing::{
     established_address_1, established_address_2, established_address_3,
 };
+use namada_core::chain::Epoch;
 use namada_core::dec::Dec;
-use namada_core::storage::{Epoch, Key};
+use namada_core::storage::Key;
 use namada_core::token;
 use namada_state::testing::TestState;
 use namada_storage::collections::lazy_map::NestedMap;

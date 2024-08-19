@@ -32,13 +32,15 @@ pub use in_memory::{
 };
 use namada_core::address::Address;
 use namada_core::arith::{self, checked};
+pub use namada_core::chain::{
+    BlockHash, BlockHeight, Epoch, Epochs, Header, BLOCK_HASH_LENGTH,
+    BLOCK_HEIGHT_LENGTH,
+};
 use namada_core::eth_bridge_pool::is_pending_transfer_key;
 pub use namada_core::hash::Sha256Hasher;
 use namada_core::hash::{Error as HashError, Hash};
 pub use namada_core::storage::{
-    BlockHash, BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue,
-    Header, Key, KeySeg, TxIndex, BLOCK_HASH_LENGTH, BLOCK_HEIGHT_LENGTH,
-    EPOCH_TYPE_LENGTH,
+    BlockResults, EthEventsQueue, Key, KeySeg, TxIndex, EPOCH_TYPE_LENGTH,
 };
 use namada_core::tendermint::merkle::proof::ProofOps;
 use namada_gas::{MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_ACCESS_GAS_PER_BYTE};
@@ -302,7 +304,7 @@ macro_rules! impl_storage_read {
 
             fn get_block_height(
                 &self,
-            ) -> std::result::Result<storage::BlockHeight, namada_storage::Error> {
+            ) -> std::result::Result<BlockHeight, namada_storage::Error> {
                 let (height, gas) = self.in_mem().get_block_height();
                 self.charge_gas(gas).into_storage_result()?;
                 Ok(height)
@@ -310,7 +312,7 @@ macro_rules! impl_storage_read {
 
             fn get_block_header(
                 &self,
-                height: storage::BlockHeight,
+                height: BlockHeight,
             ) -> std::result::Result<Option<storage::Header>, namada_storage::Error>
             {
                 let (header, gas) =
@@ -321,7 +323,7 @@ macro_rules! impl_storage_read {
 
             fn get_block_epoch(
                 &self,
-            ) -> std::result::Result<storage::Epoch, namada_storage::Error> {
+            ) -> std::result::Result<Epoch, namada_storage::Error> {
                 let (epoch, gas) = self.in_mem().get_current_epoch();
                 self.charge_gas(gas).into_storage_result()?;
                 Ok(epoch)

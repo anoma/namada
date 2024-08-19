@@ -3,9 +3,9 @@
 use namada_controller::PDController;
 use namada_core::address::{self, Address};
 use namada_core::arith::{self, checked};
+use namada_core::chain::{BlockHeight, Epoch};
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::dec::Dec;
-use namada_core::storage::{BlockHeight, Epoch};
 use namada_core::token;
 use namada_core::uint::{Uint, I256};
 use namada_storage::collections::lazy_map::NestedSubKey;

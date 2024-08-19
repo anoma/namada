@@ -2,9 +2,9 @@
 
 use namada_core::address::Address;
 use namada_core::arith::checked;
+use namada_core::chain::Epoch;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::PublicKeyTmRawHash;
-use namada_core::storage::Epoch;
 use namada_core::token;
 use namada_storage::collections::lazy_map::{NestedSubKey, SubKey};
 use namada_storage::{StorageRead, StorageWrite};

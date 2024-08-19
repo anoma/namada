@@ -10,9 +10,10 @@ use namada_account::AccountPublicKeysMap;
 use namada_core::address::{self, Address, ESTABLISHED_ADDRESS_BYTES_LEN};
 use namada_core::arith::{self, checked};
 use namada_core::borsh::{BorshDeserialize, BorshSerializeExt};
+use namada_core::chain::BlockHeight;
 use namada_core::hash::Hash;
 use namada_core::internal::{HostEnvResult, KeyVal};
-use namada_core::storage::{BlockHeight, Key, TxIndex, TX_INDEX_LENGTH};
+use namada_core::storage::{Key, TxIndex, TX_INDEX_LENGTH};
 use namada_events::{Event, EventTypeBuilder};
 use namada_gas::{
     self as gas, GasMetering, TxGasMeter, VpGasMeter,

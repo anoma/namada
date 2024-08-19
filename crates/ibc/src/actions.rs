@@ -18,8 +18,8 @@ use namada_core::tendermint::Time as TmTime;
 use namada_core::token::Amount;
 use namada_events::EmitEvents;
 use namada_state::{
-    Epochs, ResultExt, State, StorageError, StorageRead, StorageResult,
-    StorageWrite,
+    BlockHeight, Epoch, Epochs, ResultExt, State, StorageError, StorageRead,
+    StorageResult, StorageWrite,
 };
 use namada_systems::{parameters, trans_token};
 
@@ -72,18 +72,18 @@ where
         self.state.get_chain_id()
     }
 
-    fn get_block_height(&self) -> StorageResult<namada_storage::BlockHeight> {
+    fn get_block_height(&self) -> StorageResult<BlockHeight> {
         self.state.get_block_height()
     }
 
     fn get_block_header(
         &self,
-        height: namada_storage::BlockHeight,
+        height: BlockHeight,
     ) -> StorageResult<Option<namada_storage::Header>> {
         StorageRead::get_block_header(self.state, height)
     }
 
-    fn get_block_epoch(&self) -> StorageResult<namada_storage::Epoch> {
+    fn get_block_epoch(&self) -> StorageResult<Epoch> {
         self.state.get_block_epoch()
     }
 

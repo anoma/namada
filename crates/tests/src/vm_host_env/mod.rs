@@ -24,7 +24,7 @@ mod tests {
 
     use borsh_ext::BorshSerializeExt;
     use itertools::Itertools;
-    use namada_core::storage::testing::get_dummy_header;
+    use namada_core::chain::testing::get_dummy_header;
     use namada_sdk::account::pks_handle;
     use namada_sdk::hash::Hash;
     use namada_sdk::ibc::context::nft_transfer_mod::testing::DummyNftTransferModule;

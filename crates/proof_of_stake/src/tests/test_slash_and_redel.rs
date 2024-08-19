@@ -9,10 +9,10 @@ use namada_core::address::testing::{
     established_address_1, established_address_2,
 };
 use namada_core::address::{self, Address};
+use namada_core::chain::{BlockHeight, Epoch};
 use namada_core::dec::Dec;
 use namada_core::key::testing::{keypair_1, keypair_2, keypair_3};
 use namada_core::key::RefTo;
-use namada_core::storage::{BlockHeight, Epoch};
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_state::testing::TestState;
 use namada_storage::collections::lazy_map::Collectable;

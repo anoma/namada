@@ -28,11 +28,11 @@ pub use namada_core::address::Address;
 pub use namada_core::borsh::{
     BorshDeserialize, BorshSerialize, BorshSerializeExt,
 };
-use namada_core::chain::CHAIN_ID_LENGTH;
+use namada_core::chain::{BlockHeight, Epoch, Epochs, Header, CHAIN_ID_LENGTH};
 pub use namada_core::collections::HashSet;
 use namada_core::hash::{Hash, HASH_LENGTH};
 use namada_core::internal::HostEnvResult;
-use namada_core::storage::{BlockHeight, Epoch, Epochs, Header, TxIndex};
+use namada_core::storage::TxIndex;
 pub use namada_core::validity_predicate::{VpError, VpErrorExtResult};
 pub use namada_core::*;
 use namada_events::{Event, EventType};
@@ -318,7 +318,7 @@ impl<'view> VpEnv<'view> for Ctx {
         get_block_epoch()
     }
 
-    fn get_pred_epochs(&self) -> namada_storage::Result<storage::Epochs> {
+    fn get_pred_epochs(&self) -> namada_storage::Result<chain::Epochs> {
         // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
         get_pred_epochs()
     }
@@ -471,7 +471,7 @@ impl StorageRead for CtxPreStorageRead<'_> {
         get_block_epoch()
     }
 
-    fn get_pred_epochs(&self) -> namada_storage::Result<storage::Epochs> {
+    fn get_pred_epochs(&self) -> namada_storage::Result<chain::Epochs> {
         get_pred_epochs()
     }
 
@@ -544,7 +544,7 @@ impl StorageRead for CtxPostStorageRead<'_> {
         get_block_epoch()
     }
 
-    fn get_pred_epochs(&self) -> namada_storage::Result<storage::Epochs> {
+    fn get_pred_epochs(&self) -> namada_storage::Result<chain::Epochs> {
         get_pred_epochs()
     }
 

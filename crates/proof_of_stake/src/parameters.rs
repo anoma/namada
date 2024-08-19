@@ -4,8 +4,8 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::arith::checked;
+use namada_core::chain::Epoch;
 use namada_core::dec::Dec;
-use namada_core::storage::Epoch;
 use namada_core::token;
 use namada_core::uint::Uint;
 #[cfg(test)]

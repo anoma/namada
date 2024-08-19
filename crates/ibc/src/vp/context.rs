@@ -5,8 +5,9 @@ use std::marker::PhantomData;
 
 use namada_core::address::Address;
 use namada_core::arith::checked;
+use namada_core::chain::{BlockHeight, Epoch, Epochs, Header};
 use namada_core::collections::{HashMap, HashSet};
-use namada_core::storage::{BlockHeight, Epoch, Epochs, Header, Key, TxIndex};
+use namada_core::storage::{Key, TxIndex};
 use namada_events::Event;
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
 use namada_state::write_log::StorageModification;

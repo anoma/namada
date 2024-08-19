@@ -12,7 +12,6 @@ use namada_core::address::Address;
 use namada_core::collections::HashMap;
 use namada_core::dec::Dec;
 use namada_core::key::common;
-use namada_core::storage::{Epoch, KeySeg};
 use namada_core::token;
 use namada_core::token::Amount;
 use namada_macros::BorshDeserializer;
@@ -24,6 +23,7 @@ pub use rev_order::ReverseOrdTokenAmount;
 use serde::{Deserialize, Serialize};
 
 use crate::parameters::PosParams;
+use crate::{Epoch, KeySeg};
 
 /// Stored positions of validators in validator sets
 pub type ValidatorSetPositions = crate::epoched::NestedEpoched<

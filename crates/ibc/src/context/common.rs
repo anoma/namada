@@ -20,7 +20,8 @@ use ibc::core::host::types::identifiers::{
 use ibc::primitives::proto::{Any, Protobuf};
 use ibc::primitives::Timestamp;
 use namada_core::address::Address;
-use namada_core::storage::{BlockHeight, Key};
+use namada_core::chain::BlockHeight;
+use namada_core::storage::Key;
 use namada_core::tendermint::Time as TmTime;
 use namada_core::token::Amount;
 use namada_state::{StorageError, StorageRead, StorageWrite};

@@ -30,6 +30,7 @@ pub use db::{Error as DbError, Result as DbResult, *};
 pub use error::{CustomError, Error, OptionExt, Result, ResultExt};
 use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
+pub use namada_core::chain::{BlockHash, BlockHeight, Epoch, Epochs, Header};
 pub use namada_core::hash::StorageHasher;
 pub use namada_core::storage::*;
 

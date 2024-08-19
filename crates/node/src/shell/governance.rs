@@ -1,3 +1,4 @@
+use namada_sdk::chain::Epoch;
 use namada_sdk::collections::HashMap;
 use namada_sdk::events::extend::{ComposeEvent, Height, UserAccount};
 use namada_sdk::events::{EmitEvents, EventLevel};
@@ -23,7 +24,6 @@ use namada_sdk::proof_of_stake::storage::{
 };
 use namada_sdk::proof_of_stake::types::{BondId, ValidatorState};
 use namada_sdk::state::StorageWrite;
-use namada_sdk::storage::Epoch;
 use namada_sdk::token::event::{TokenEvent, TokenOperation};
 use namada_sdk::token::read_balance;
 use namada_sdk::tx::{Code, Data};

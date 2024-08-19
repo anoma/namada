@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use namada_core::address::Address;
 use namada_core::arith::{self, checked};
-use namada_core::storage::Epoch;
+use namada_core::chain::Epoch;
 use namada_core::token;
 use thiserror::Error;
 

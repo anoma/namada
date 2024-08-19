@@ -6,8 +6,8 @@ use ibc_testkit::testapp::ibc::clients::mock::client_state::{
 };
 use ibc_testkit::testapp::ibc::clients::mock::consensus_state::MockConsensusState;
 use ibc_testkit::testapp::ibc::clients::mock::header::MockHeader;
+use namada_core::chain::testing::get_dummy_header;
 use namada_core::collections::HashMap;
-use namada_core::storage::testing::get_dummy_header;
 use namada_sdk::address::{self, Address, InternalAddress};
 use namada_sdk::gas::{TxGasMeter, VpGasMeter};
 use namada_sdk::governance::parameters::GovernanceParameters;

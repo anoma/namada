@@ -1,8 +1,8 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use namada_apps_lib::address;
+use namada_apps_lib::chain::BlockHeight;
 use namada_apps_lib::key::RefTo;
 use namada_apps_lib::state::TxIndex;
-use namada_apps_lib::storage::BlockHeight;
 use namada_apps_lib::time::DateTimeUtc;
 use namada_apps_lib::token::{Amount, DenominatedAmount, Transfer};
 use namada_apps_lib::tx::data::{Fee, WrapperTx};

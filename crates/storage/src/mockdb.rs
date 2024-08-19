@@ -8,10 +8,9 @@ use std::path::Path;
 
 use itertools::Either;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::chain::{BlockHeight, Epoch, Header};
 use namada_core::hash::Hash;
-use namada_core::storage::{
-    BlockHeight, DbColFam, Epoch, Header, Key, KeySeg, KEY_SEGMENT_SEPARATOR,
-};
+use namada_core::storage::{DbColFam, Key, KeySeg, KEY_SEGMENT_SEPARATOR};
 use namada_core::{decode, encode, ethereum_events};
 use namada_merkle_tree::{
     tree_key_prefix_with_epoch, tree_key_prefix_with_height,

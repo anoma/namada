@@ -2,8 +2,8 @@
 use std::num::TryFromIntError;
 
 use namada_core::address::Address;
+use namada_core::chain::Epoch;
 use namada_core::dec::Dec;
-use namada_core::storage::Epoch;
 use thiserror::Error;
 
 use crate::rewards;

@@ -8,7 +8,7 @@ use std::marker::PhantomData;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::arith::{checked, CheckedAdd};
 use namada_core::collections::HashMap;
-use namada_core::storage::{self, Epoch};
+use namada_core::storage;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
@@ -18,7 +18,7 @@ use namada_storage::{StorageRead, StorageWrite};
 use namada_systems::governance;
 
 use crate::parameters::PosParams;
-use crate::read_pos_params;
+use crate::{read_pos_params, Epoch};
 
 /// Sub-key holding a lazy map in storage
 pub const LAZY_MAP_SUB_KEY: &str = "lazy_map";

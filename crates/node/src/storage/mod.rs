@@ -55,7 +55,7 @@ fn new_blake2b() -> Blake2b {
 mod tests {
     use borsh::BorshDeserialize;
     use itertools::Itertools;
-    use namada_sdk::chain::ChainId;
+    use namada_sdk::chain::{BlockHeight, ChainId};
     use namada_sdk::collections::HashMap;
     use namada_sdk::eth_bridge::storage::bridge_pool;
     use namada_sdk::eth_bridge::storage::proof::BridgePoolRootProof;
@@ -69,7 +69,7 @@ mod tests {
     use namada_sdk::state::{
         self, StateRead, StorageRead, StorageWrite, StoreType, DB,
     };
-    use namada_sdk::storage::{BlockHeight, Key, KeySeg};
+    use namada_sdk::storage::{Key, KeySeg};
     use namada_sdk::token::conversion::update_allowed_conversions;
     use namada_sdk::{
         address, decode, encode, parameters, storage, token, validation,

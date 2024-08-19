@@ -138,6 +138,7 @@ where
 mod test {
     use borsh::BorshDeserialize;
     use borsh_ext::BorshSerializeExt;
+    use namada_sdk::chain::BlockHeight;
     use namada_sdk::events::log::EventLog;
     use namada_sdk::hash::Hash;
     use namada_sdk::queries::{
@@ -145,7 +146,7 @@ mod test {
     };
     use namada_sdk::state::testing::TestState;
     use namada_sdk::state::StorageWrite;
-    use namada_sdk::storage::{BlockHeight, Key};
+    use namada_sdk::storage::Key;
     use namada_sdk::tendermint_rpc::{Error as RpcError, Response};
     use namada_sdk::tx::data::TxType;
     use namada_sdk::tx::{Code, Data, Tx};

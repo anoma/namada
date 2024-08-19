@@ -1,6 +1,6 @@
 //! Validator set update validation.
 
-use namada_core::storage::Epoch;
+use namada_core::chain::Epoch;
 use namada_proof_of_stake::queries::get_validator_eth_hot_key;
 use namada_state::{DBIter, StorageHasher, WlState, DB};
 use namada_systems::governance;

@@ -6,9 +6,9 @@ use masp_primitives::merkle_tree::{CommitmentTree, IncrementalWitness};
 use masp_primitives::sapling::{Node, ViewingKey};
 use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::ExtendedFullViewingKey;
+use namada_core::chain::BlockHeight;
 use namada_core::collections::HashMap;
 use namada_core::masp::ExtendedViewingKey;
-use namada_core::storage::BlockHeight;
 use namada_tx::IndexedTx;
 
 use crate::error::Error;

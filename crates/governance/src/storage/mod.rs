@@ -11,9 +11,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use namada_core::address::Address;
 use namada_core::borsh::BorshDeserialize;
+use namada_core::chain::Epoch;
 use namada_core::collections::HashSet;
 use namada_core::hash::Hash;
-use namada_core::storage::Epoch;
 use namada_core::token;
 use namada_state::{
     iter_prefix, StorageError, StorageRead, StorageResult, StorageWrite,
