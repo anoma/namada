@@ -1,5 +1,11 @@
-//! The common storage read trait is implemented in the storage, client RPC, tx
-//! and VPs (both native and WASM).
+//! This crate provides
+//!
+//! - [`StorageRead`] and [`StorageWrite`] (high-level) and [`DB`] (low-level)
+//!   traits
+//! - `MockDB` [`DB`] implementation for testing
+//! - [`collections`] with generic lazy collections for storage
+//! - [`conversion_state`] for shielded token rewards
+//! - helpers for storage iteration
 
 #![doc(html_favicon_url = "https://dev.namada.net/master/favicon.png")]
 #![doc(html_logo_url = "https://dev.namada.net/master/rustdoc-logo.png")]
@@ -37,19 +43,6 @@ pub use namada_core::hash::{Hash, StorageHasher};
 pub use namada_core::storage::*;
 
 /// Common storage read interface
-///
-/// If you're using this trait and having compiler complaining about needing an
-/// explicit lifetime parameter, simply use trait bounds with the following
-/// syntax:
-///
-/// ```rust,ignore
-/// where
-///     S: StorageRead
-/// ```
-///
-/// If you want to know why this is needed, see the to-do task below. The
-/// syntax for this relies on higher-rank lifetimes, see e.g.
-/// <https://doc.rust-lang.org/nomicon/hrtb.html>.
 pub trait StorageRead {
     /// Storage read prefix iterator
     type PrefixIter<'iter>
