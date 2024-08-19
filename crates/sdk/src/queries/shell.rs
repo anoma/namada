@@ -10,7 +10,7 @@ use masp_primitives::sapling::Node;
 use namada_account::{Account, AccountPublicKeysMap};
 use namada_core::address::Address;
 use namada_core::arith::checked;
-use namada_core::chain::{BlockHeight, Epoch, Header};
+use namada_core::chain::{BlockHeader, BlockHeight, Epoch};
 use namada_core::dec::Dec;
 use namada_core::hash::Hash;
 use namada_core::hints;
@@ -120,7 +120,7 @@ router! {SHELL,
     ( "ibc_packet" / [event_type: IbcEventType] / [source_port: PortId] / [source_channel: ChannelId] / [destination_port: PortId] / [destination_channel: ChannelId] / [sequence: Sequence]) -> Option<Event> = ibc_packet,
 
     // Get the block header associated with the requested height
-    ( "block_header" / [height: BlockHeight] ) -> Option<Header> = block_header,
+    ( "block_header" / [height: BlockHeight] ) -> Option<BlockHeader> = block_header,
 
     // Return an estimate of the maximum time taken to decide a block
     ( "max_block_time" ) -> DurationSecs = max_block_time,
@@ -161,7 +161,7 @@ where
 fn block_header<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     height: BlockHeight,
-) -> namada_storage::Result<Option<Header>>
+) -> namada_storage::Result<Option<BlockHeader>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,

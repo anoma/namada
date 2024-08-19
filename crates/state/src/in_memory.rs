@@ -17,7 +17,7 @@ use namada_storage::conversion_state::ConversionState;
 use namada_storage::tx_queue::ExpiredTxsQueue;
 use namada_storage::types::CommitOnlyData;
 use namada_storage::{
-    BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue, Header, Key,
+    BlockHeader, BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue, Key,
     KeySeg, StorageHasher, TxIndex, EPOCH_TYPE_LENGTH,
 };
 
@@ -39,7 +39,7 @@ where
     /// During `FinalizeBlock`, this is the header of the block that is
     /// going to be committed. After a block is committed, this is reset to
     /// `None` until the next `FinalizeBlock` phase is reached.
-    pub header: Option<Header>,
+    pub header: Option<BlockHeader>,
     /// The most recently committed block, if any.
     pub last_block: Option<LastBlock>,
     /// The epoch of the most recently committed block. If it is `Epoch(0)`,
@@ -189,7 +189,7 @@ where
     /// Set the block header.
     /// The header is not in the Merkle tree as it's tracked by Tendermint.
     /// Hence, we don't update the tree when this is set.
-    pub fn set_header(&mut self, header: Header) -> Result<()> {
+    pub fn set_header(&mut self, header: BlockHeader) -> Result<()> {
         self.header = Some(header);
         Ok(())
     }

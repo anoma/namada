@@ -8,7 +8,7 @@ use std::path::Path;
 
 use itertools::Either;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::chain::{BlockHeight, Epoch, Header};
+use namada_core::chain::{BlockHeader, BlockHeight, Epoch};
 use namada_core::hash::Hash;
 use namada_core::storage::{DbColFam, Key, KeySeg, KEY_SEGMENT_SEPARATOR};
 use namada_core::{decode, encode, ethereum_events};
@@ -281,7 +281,10 @@ impl DB for MockDB {
         Ok(())
     }
 
-    fn read_block_header(&self, height: BlockHeight) -> Result<Option<Header>> {
+    fn read_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<BlockHeader>> {
         let header_key = format!("{}/{BLOCK_HEADER_KEY_SEGMENT}", height.raw());
         self.read_value(header_key)
     }

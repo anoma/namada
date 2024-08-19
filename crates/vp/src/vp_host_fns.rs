@@ -6,7 +6,7 @@ use std::num::TryFromIntError;
 
 use namada_core::address::{Address, ESTABLISHED_ADDRESS_BYTES_LEN};
 use namada_core::arith::{self, checked};
-use namada_core::chain::{BlockHeight, Epoch, Epochs, Header};
+use namada_core::chain::{BlockHeader, BlockHeight, Epoch, Epochs};
 use namada_core::hash::{Hash, HASH_LENGTH};
 use namada_core::storage::{Key, TxIndex, TX_INDEX_LENGTH};
 use namada_events::{Event, EventTypeBuilder};
@@ -244,7 +244,7 @@ pub fn get_block_header<S>(
     gas_meter: &RefCell<VpGasMeter>,
     state: &S,
     height: BlockHeight,
-) -> EnvResult<Option<Header>>
+) -> EnvResult<Option<BlockHeader>>
 where
     S: StateRead + Debug,
 {

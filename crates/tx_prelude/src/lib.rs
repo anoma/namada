@@ -31,7 +31,7 @@ pub use namada_core::borsh::{
 };
 use namada_core::chain::CHAIN_ID_LENGTH;
 pub use namada_core::chain::{
-    BlockHash, BlockHeight, Epoch, Header, BLOCK_HASH_LENGTH,
+    BlockHash, BlockHeader, BlockHeight, Epoch, BLOCK_HASH_LENGTH,
 };
 pub use namada_core::ethereum_events::EthAddress;
 use namada_core::internal::HostEnvResult;
@@ -182,11 +182,11 @@ impl StorageRead for Ctx {
     fn get_block_header(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<Header>, Error> {
+    ) -> Result<Option<BlockHeader>, Error> {
         let read_result = unsafe { namada_tx_get_block_header(height.0) };
         match read_from_buffer(read_result, namada_tx_result_buffer) {
             Some(value) => Ok(Some(
-                Header::try_from_slice(&value[..])
+                BlockHeader::try_from_slice(&value[..])
                     .expect("The conversion shouldn't fail"),
             )),
             None => Ok(None),

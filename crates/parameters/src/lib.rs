@@ -629,7 +629,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use namada_core::chain::Header;
+    use namada_core::chain::BlockHeader;
     use namada_core::time::DateTimeUtc;
     use namada_storage::testing::TestStorage;
 
@@ -721,7 +721,7 @@ mod tests {
 
             storage.set_mock_block_header(
                 height,
-                Header {
+                BlockHeader {
                     time: DateTimeUtc::from_unix_timestamp(timestamp).unwrap(),
                     ..Default::default()
                 },
@@ -744,7 +744,7 @@ mod tests {
 
             storage.set_mock_block_header(
                 height,
-                Header {
+                BlockHeader {
                     time: DateTimeUtc::from_unix_timestamp(timestamp).unwrap(),
                     ..Default::default()
                 },
@@ -777,7 +777,7 @@ mod tests {
 
             storage.set_mock_block_header(
                 height,
-                Header {
+                BlockHeader {
                     time: DateTimeUtc::from_unix_timestamp(timestamp).unwrap(),
                     ..Default::default()
                 },
@@ -801,7 +801,7 @@ mod tests {
         for height in 1u64..=2 {
             storage.set_mock_block_header(
                 BlockHeight(height),
-                Header {
+                BlockHeader {
                     time: DateTimeUtc::unix_epoch(),
                     ..Default::default()
                 },
@@ -824,7 +824,7 @@ mod tests {
 
             storage.set_mock_block_header(
                 height,
-                Header {
+                BlockHeader {
                     time: DateTimeUtc::from_unix_timestamp(timestamp).unwrap(),
                     ..Default::default()
                 },

@@ -4,7 +4,7 @@ use std::ops::{Deref, DerefMut};
 use namada_core::address::Address;
 use namada_core::arith::checked;
 use namada_core::borsh::BorshSerializeExt;
-use namada_core::chain::{ChainId, Header};
+use namada_core::chain::ChainId;
 use namada_core::masp::MaspEpoch;
 use namada_core::parameters::{EpochDuration, Parameters};
 use namada_core::storage;
@@ -567,7 +567,7 @@ where
         #[cfg(any(test, feature = "testing", feature = "benches"))]
         {
             if self.in_mem.header.is_none() {
-                self.in_mem.header = Some(Header {
+                self.in_mem.header = Some(namada_core::chain::BlockHeader {
                     hash: Hash::default(),
                     #[allow(clippy::disallowed_methods)]
                     time: DateTimeUtc::now(),

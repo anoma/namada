@@ -28,7 +28,9 @@ pub use namada_core::address::Address;
 pub use namada_core::borsh::{
     BorshDeserialize, BorshSerialize, BorshSerializeExt,
 };
-use namada_core::chain::{BlockHeight, Epoch, Epochs, Header, CHAIN_ID_LENGTH};
+use namada_core::chain::{
+    BlockHeader, BlockHeight, Epoch, Epochs, CHAIN_ID_LENGTH,
+};
 pub use namada_core::collections::HashSet;
 use namada_core::hash::{Hash, HASH_LENGTH};
 use namada_core::internal::HostEnvResult;
@@ -308,7 +310,7 @@ impl<'view> VpEnv<'view> for Ctx {
     fn get_block_header(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<Header>, StorageError> {
+    ) -> Result<Option<BlockHeader>, StorageError> {
         // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
         get_block_header(height)
     }
@@ -463,7 +465,7 @@ impl StorageRead for CtxPreStorageRead<'_> {
     fn get_block_header(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<Header>, StorageError> {
+    ) -> Result<Option<BlockHeader>, StorageError> {
         get_block_header(height)
     }
 
@@ -536,7 +538,7 @@ impl StorageRead for CtxPostStorageRead<'_> {
     fn get_block_header(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<Header>, StorageError> {
+    ) -> Result<Option<BlockHeader>, StorageError> {
         get_block_header(height)
     }
 
@@ -596,11 +598,11 @@ fn get_block_height() -> Result<BlockHeight, StorageError> {
 
 fn get_block_header(
     height: BlockHeight,
-) -> Result<Option<Header>, StorageError> {
+) -> Result<Option<BlockHeader>, StorageError> {
     let read_result = unsafe { namada_vp_get_block_header(height.0) };
     match read_from_buffer(read_result, namada_vp_result_buffer) {
         Some(value) => Ok(Some(
-            Header::try_from_slice(&value[..])
+            BlockHeader::try_from_slice(&value[..])
                 .expect("The conversion shouldn't fail"),
         )),
         None => Ok(None),

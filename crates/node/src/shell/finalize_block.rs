@@ -20,7 +20,7 @@ use namada_sdk::state::write_log::StorageModification;
 use namada_sdk::state::{
     ResultExt, StorageResult, StorageWrite, EPOCH_SWITCH_BLOCKS_DELAY,
 };
-use namada_sdk::storage::{BlockResults, Epoch, Header};
+use namada_sdk::storage::{BlockHeader, BlockResults, Epoch};
 use namada_sdk::tx::data::protocol::ProtocolTxType;
 use namada_sdk::tx::data::VpStatusFlags;
 use namada_sdk::tx::event::{Batch, Code};
@@ -215,7 +215,7 @@ where
     /// validator changes, and evidence of byzantine behavior. Applies slashes
     /// if necessary. Returns a boolean indicating if a new epoch and the height
     /// of the new block.
-    fn update_state(&mut self, header: Header) -> (BlockHeight, bool) {
+    fn update_state(&mut self, header: BlockHeader) -> (BlockHeight, bool) {
         let height = self.state.in_mem().get_last_block_height().next_height();
 
         self.state

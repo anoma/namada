@@ -11,7 +11,7 @@ use data_encoding::HEXUPPER;
 use itertools::Either;
 use lazy_static::lazy_static;
 use namada_sdk::address::Address;
-use namada_sdk::chain::{BlockHeight, Epoch, Header};
+use namada_sdk::chain::{BlockHeader, BlockHeight, Epoch};
 use namada_sdk::collections::HashMap;
 use namada_sdk::control_flow::time::Duration;
 use namada_sdk::eth_bridge::oracle::config::Config as OracleConfig;
@@ -483,7 +483,7 @@ impl MockNode {
         };
         // build finalize block abci request
         let req = FinalizeBlock {
-            header: Header {
+            header: BlockHeader {
                 hash: Hash([0; 32]),
                 #[allow(clippy::disallowed_methods)]
                 time: DateTimeUtc::now(),
@@ -602,7 +602,7 @@ impl MockNode {
 
         // process proposal succeeded, now run finalize block
         let req = FinalizeBlock {
-            header: Header {
+            header: BlockHeader {
                 hash: Hash([0; 32]),
                 #[allow(clippy::disallowed_methods)]
                 time: DateTimeUtc::now(),

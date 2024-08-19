@@ -17,8 +17,8 @@ use namada_gas::{GasMetering, VpGasMeter};
 use namada_state as state;
 use namada_state::prefix_iter::PrefixIterators;
 use namada_state::{
-    BlockHeight, Epoch, Header, Key, ResultExt, StorageRead, StorageResult,
-    TxIndex,
+    BlockHeader, BlockHeight, Epoch, Key, ResultExt, StorageRead,
+    StorageResult, TxIndex,
 };
 use namada_tx::{BatchedTxRef, Tx, TxCommitments};
 pub use namada_vp_env::VpEnv;
@@ -228,7 +228,7 @@ where
     fn get_block_header(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<Header>, state::StorageError> {
+    ) -> Result<Option<BlockHeader>, state::StorageError> {
         self.ctx.get_block_header(height)
     }
 
@@ -306,7 +306,7 @@ where
     fn get_block_header(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<Header>, state::StorageError> {
+    ) -> Result<Option<BlockHeader>, state::StorageError> {
         self.ctx.get_block_header(height)
     }
 
@@ -375,7 +375,7 @@ where
     fn get_block_header(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<Header>, state::StorageError> {
+    ) -> Result<Option<BlockHeader>, state::StorageError> {
         vp_host_fns::get_block_header(self.gas_meter, self.state, height)
             .into_storage_result()
     }

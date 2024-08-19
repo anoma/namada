@@ -79,7 +79,7 @@ where
     fn get_block_header(
         &self,
         height: BlockHeight,
-    ) -> StorageResult<Option<namada_storage::Header>> {
+    ) -> StorageResult<Option<namada_storage::BlockHeader>> {
         StorageRead::get_block_header(self.state, height)
     }
 

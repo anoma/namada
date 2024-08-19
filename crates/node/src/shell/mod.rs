@@ -1462,7 +1462,7 @@ pub mod test_utils {
     use namada_sdk::proof_of_stake::storage::validator_consensus_key_handle;
     use namada_sdk::state::mockdb::MockDB;
     use namada_sdk::state::{LastBlock, StorageWrite};
-    use namada_sdk::storage::{Epoch, Header};
+    use namada_sdk::storage::{BlockHeader, Epoch};
     use namada_sdk::tendermint::abci::types::VoteInfo;
     use tempfile::tempdir;
     use tokio::sync::mpsc::{Sender, UnboundedReceiver};
@@ -1904,7 +1904,7 @@ pub mod test_utils {
     impl Default for FinalizeBlock {
         fn default() -> Self {
             FinalizeBlock {
-                header: Header {
+                header: BlockHeader {
                     hash: Hash([0; 32]),
                     #[allow(clippy::disallowed_methods)]
                     time: DateTimeUtc::now(),
@@ -1965,7 +1965,7 @@ pub mod test_utils {
         byzantine_validators: Option<Vec<Misbehavior>>,
     ) {
         // Let the header time be always ahead of the next epoch min start time
-        let header = Header {
+        let header = BlockHeader {
             time: shell.state.in_mem().next_epoch_min_start_time.next_second(),
             ..Default::default()
         };

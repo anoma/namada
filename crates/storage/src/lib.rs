@@ -30,7 +30,9 @@ pub use db::{Error as DbError, Result as DbResult, *};
 pub use error::{CustomError, Error, OptionExt, Result, ResultExt};
 use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
-pub use namada_core::chain::{BlockHash, BlockHeight, Epoch, Epochs, Header};
+pub use namada_core::chain::{
+    BlockHash, BlockHeader, BlockHeight, Epoch, Epochs,
+};
 pub use namada_core::hash::StorageHasher;
 pub use namada_core::storage::*;
 
@@ -97,7 +99,10 @@ pub trait StorageRead {
     fn get_block_height(&self) -> Result<BlockHeight>;
 
     /// Getting the block header.
-    fn get_block_header(&self, height: BlockHeight) -> Result<Option<Header>>;
+    fn get_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<BlockHeader>>;
 
     /// Getting the block epoch. The epoch is that of the block to which the
     /// current transaction is being applied.
@@ -324,7 +329,7 @@ pub mod testing {
         native_token: Address,
         conversion_state: ConversionState,
         merkle_tree_key_filter: fn(&Key) -> bool,
-        mock_block_headers: HashMap<BlockHeight, Header>,
+        mock_block_headers: HashMap<BlockHeight, BlockHeader>,
     }
 
     fn merklize_all_keys(_key: &Key) -> bool {
@@ -353,7 +358,7 @@ pub mod testing {
         pub fn set_mock_block_header(
             &mut self,
             height: BlockHeight,
-            header: Header,
+            header: BlockHeader,
         ) {
             self.mock_block_headers.insert(height, header);
         }
@@ -398,7 +403,7 @@ pub mod testing {
         fn get_block_header(
             &self,
             height: BlockHeight,
-        ) -> Result<Option<Header>> {
+        ) -> Result<Option<BlockHeader>> {
             Ok(self.mock_block_headers.get(&height).cloned())
         }
 

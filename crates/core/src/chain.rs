@@ -523,7 +523,7 @@ impl Epochs {
 #[derive(
     Clone, Debug, BorshSerialize, BorshDeserialize, BorshDeserializer, Default,
 )]
-pub struct Header {
+pub struct BlockHeader {
     /// Merkle root hash of block
     pub hash: Hash,
     /// Timestamp associated to block
@@ -532,7 +532,7 @@ pub struct Header {
     pub next_validators_hash: Hash,
 }
 
-impl Header {
+impl BlockHeader {
     /// The number of bytes when this header is encoded
     pub fn encoded_len(&self) -> usize {
         self.serialize_to_vec().len()
@@ -729,9 +729,9 @@ pub mod testing {
     }
 
     /// A dummy header used for testing
-    pub fn get_dummy_header() -> Header {
+    pub fn get_dummy_header() -> BlockHeader {
         use crate::time::DurationSecs;
-        Header {
+        BlockHeader {
             hash: Hash([0; 32]),
             #[allow(
                 clippy::disallowed_methods,

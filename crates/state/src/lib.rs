@@ -33,7 +33,7 @@ pub use in_memory::{
 use namada_core::address::Address;
 use namada_core::arith::{self, checked};
 pub use namada_core::chain::{
-    BlockHash, BlockHeight, Epoch, Epochs, Header, BLOCK_HASH_LENGTH,
+    BlockHash, BlockHeader, BlockHeight, Epoch, Epochs, BLOCK_HASH_LENGTH,
     BLOCK_HEIGHT_LENGTH,
 };
 use namada_core::eth_bridge_pool::is_pending_transfer_key;
@@ -167,7 +167,7 @@ pub trait StateRead: StorageRead + Debug {
     fn get_block_header(
         &self,
         height: Option<BlockHeight>,
-    ) -> Result<(Option<Header>, u64)> {
+    ) -> Result<(Option<BlockHeader>, u64)> {
         match height {
             Some(h) if h == self.in_mem().get_block_height().0 => {
                 let header = self.in_mem().header.clone();
@@ -313,7 +313,7 @@ macro_rules! impl_storage_read {
             fn get_block_header(
                 &self,
                 height: BlockHeight,
-            ) -> std::result::Result<Option<storage::Header>, namada_storage::Error>
+            ) -> std::result::Result<Option<BlockHeader>, namada_storage::Error>
             {
                 let (header, gas) =
                     StateRead::get_block_header(self, Some(height)).into_storage_result()?;

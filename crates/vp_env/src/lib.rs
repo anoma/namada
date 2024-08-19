@@ -22,7 +22,7 @@ pub mod collection_validation;
 
 use namada_core::address::Address;
 use namada_core::borsh::BorshDeserialize;
-use namada_core::chain::{BlockHeight, Epoch, Epochs, Header};
+use namada_core::chain::{BlockHeader, BlockHeight, Epoch, Epochs};
 use namada_core::hash::Hash;
 use namada_core::storage::{Key, TxIndex};
 use namada_events::{Event, EventType};
@@ -77,7 +77,7 @@ where
     fn get_block_header(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<Header>, namada_storage::Error>;
+    ) -> Result<Option<BlockHeader>, namada_storage::Error>;
 
     /// Getting the block epoch. The epoch is that of the block to which the
     /// current transaction is being applied.

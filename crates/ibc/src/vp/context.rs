@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 
 use namada_core::address::Address;
 use namada_core::arith::checked;
-use namada_core::chain::{BlockHeight, Epoch, Epochs, Header};
+use namada_core::chain::{BlockHeader, BlockHeight, Epoch, Epochs};
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::storage::{Key, TxIndex};
 use namada_events::Event;
@@ -152,7 +152,10 @@ Self: 'iter;
         self.ctx.get_block_height()
     }
 
-    fn get_block_header(&self, height: BlockHeight) -> Result<Option<Header>> {
+    fn get_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<BlockHeader>> {
         self.ctx.get_block_header(height)
     }
 
@@ -339,7 +342,10 @@ where
         self.ctx.get_block_height()
     }
 
-    fn get_block_header(&self, height: BlockHeight) -> Result<Option<Header>> {
+    fn get_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<BlockHeader>> {
         self.ctx.get_block_header(height)
     }
 
