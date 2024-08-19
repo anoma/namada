@@ -69,7 +69,7 @@ use thiserror::Error;
 
 use crate::error::{Error, QueryError};
 use crate::io::{Io, ProgressBar};
-pub use crate::masp::shielded_sync::dispatcher::DispatcherCache;
+pub use crate::masp::shielded_sync::dispatcher::{Dispatcher, DispatcherCache};
 use crate::masp::shielded_sync::utils::MaspClient;
 #[cfg(not(target_family = "wasm"))]
 pub use crate::masp::shielded_sync::MaspLocalTaskEnv;
