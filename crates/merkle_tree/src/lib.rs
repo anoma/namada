@@ -25,22 +25,25 @@ use std::str::FromStr;
 
 use arse_merkle_tree::default_store::DefaultStore;
 use arse_merkle_tree::error::Error as MtError;
+pub use arse_merkle_tree::H256;
 use arse_merkle_tree::{
-    Hash as SmtHash, Key as TreeKey, SparseMerkleTree as ArseMerkleTree, H256,
+    Hash as SmtHash, Key as TreeKey, SparseMerkleTree as ArseMerkleTree,
 };
 use eth_bridge_pool::{BridgePoolProof, BridgePoolTree};
 use ics23::commitment_proof::Proof as Ics23Proof;
-use ics23::{CommitmentProof, ExistenceProof, NonExistenceProof};
+pub use ics23::CommitmentProof;
+use ics23::{ExistenceProof, NonExistenceProof};
 use ics23_specs::ibc_leaf_spec;
 use namada_core::address::{Address, InternalAddress};
 use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
 use namada_core::bytes::ByteBuf;
-use namada_core::chain::{BlockHeight, Epoch};
+pub use namada_core::chain::{BlockHeight, Epoch};
 use namada_core::eth_bridge_pool::{is_pending_transfer_key, PendingTransfer};
-use namada_core::hash::{Hash, StorageHasher};
-use namada_core::keccak::KeccakHash;
+pub use namada_core::hash::{Hash, StorageHasher};
+pub use namada_core::keccak::KeccakHash;
+pub use namada_core::storage::Key;
 use namada_core::storage::{
-    self, DbKeySeg, Error as StorageError, Key, KeySeg, StringKey, TreeBytes,
+    self, DbKeySeg, Error as StorageError, KeySeg, StringKey, TreeBytes,
     TreeKeyError, IBC_KEY_LIMIT,
 };
 use namada_core::{decode, DecodeError};

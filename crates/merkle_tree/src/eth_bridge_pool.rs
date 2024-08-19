@@ -6,14 +6,16 @@ use eyre::eyre;
 use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::chain::BlockHeight;
 use namada_core::eth_abi::{Encode, Token};
-use namada_core::eth_bridge_pool::PendingTransfer;
+pub use namada_core::eth_bridge_pool::PendingTransfer;
 use namada_core::hash::Hash;
-use namada_core::keccak::{keccak_hash, KeccakHash};
+use namada_core::keccak::keccak_hash;
 use namada_core::storage;
 use namada_core::storage::DbKeySeg;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
+
+use crate::KeccakHash;
 
 #[derive(thiserror::Error, Debug)]
 #[error(transparent)]
