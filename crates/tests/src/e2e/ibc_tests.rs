@@ -72,7 +72,9 @@ const IBC_REFUND_TARGET_ALIAS: &str = "ibc-refund-target";
 /// 5. Refunding when transfer failure
 ///   - Ack with an error (invalid receiver)
 ///   - Timeout
-///   - when unshielding transfer failure
+///   - When unshielding transfer failure,
+///     - Mint the IBC token for the refund
+///     - Unescrow the token for the refund
 #[test]
 fn ibc_transfers() -> Result<()> {
     let update_genesis =
@@ -325,7 +327,7 @@ fn ibc_transfers() -> Result<()> {
 
     // Restart relaying
     let hermes = run_hermes(&test)?;
-    let _bg_hermes = hermes.background();
+    let bg_hermes = hermes.background();
 
     wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
     // The balance should not be changed
@@ -348,8 +350,41 @@ fn ibc_transfers() -> Result<()> {
         false,
     )?;
     wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
+    // Check the token has been refunded to the refund target
     check_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
     check_balance(&test, IBC_REFUND_TARGET_ALIAS, &ibc_denom_on_namada, 10)?;
+
+    // Stop Hermes for timeout test
+    let mut hermes = bg_hermes.foreground();
+    hermes.interrupt()?;
+
+    // Unshielding transfer will be timed out to check the refund for the
+    // escrowed IBC token
+    transfer(
+        &test,
+        A_SPENDING_KEY,
+        &gaia_receiver,
+        APFEL,
+        1,
+        Some(ALBERT_KEY),
+        &port_id_namada,
+        &channel_id_namada,
+        Some(Duration::new(10, 0)),
+        None,
+        None,
+        false,
+    )?;
+    // wait for the timeout
+    sleep(10);
+
+    // Restart relaying
+    let hermes = run_hermes(&test)?;
+    let _bg_hermes = hermes.background();
+
+    wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
+    // Check the token has been refunded to the refund target
+    check_balance(&test, AA_VIEWING_KEY, APFEL, 0)?;
+    check_balance(&test, IBC_REFUND_TARGET_ALIAS, APFEL, 1)?;
 
     Ok(())
 }
