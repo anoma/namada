@@ -402,41 +402,45 @@ where
                     res,
                 );
 
-                if batched_tx_result
-                    .as_ref()
-                    .is_some_and(|res| res.is_accepted())
-                {
-                    // If the transaction was a masp one append the
-                    // transaction refs for the events.
-                    if let Some(masp_ref) = get_optional_masp_ref(
-                        state,
-                        cmt,
-                        Either::Right(&batched_tx_result.unwrap()),
-                    )? {
-                        match masp_ref {
-                            Either::Left(masp_section_ref) => {
-                                extended_tx_result
-                                    .masp_tx_refs
-                                    .0
-                                    .push(masp_section_ref);
+                match batched_tx_result {
+                    Some(ref res) if res.is_accepted() => {
+                        // If the transaction was a masp one append the
+                        // transaction refs for the events.
+                        if let Some(masp_ref) = get_optional_masp_ref(
+                            state,
+                            cmt,
+                            Either::Right(res),
+                        )? {
+                            match masp_ref {
+                                Either::Left(masp_section_ref) => {
+                                    extended_tx_result
+                                        .masp_tx_refs
+                                        .0
+                                        .push(masp_section_ref);
+                                }
+                                Either::Right(data_sechash) => {
+                                    extended_tx_result
+                                        .ibc_tx_data_refs
+                                        .0
+                                        .push(data_sechash)
+                                }
                             }
-                            Either::Right(data_sechash) => extended_tx_result
-                                .ibc_tx_data_refs
-                                .0
-                                .push(data_sechash),
                         }
+                        state.write_log_mut().commit_tx_to_batch();
                     }
-                    state.write_log_mut().commit_tx_to_batch();
-                } else {
-                    state.write_log_mut().drop_tx();
+                    _ => {
+                        state.write_log_mut().drop_tx();
 
-                    if tx.header.atomic {
-                        // Stop the execution of an atomic batch at the
-                        // first failed transaction
-                        return Err(DispatchError {
-                            error: Error::FailingAtomicBatch(cmt.get_hash()),
-                            tx_result: Some(extended_tx_result),
-                        });
+                        if tx.header.atomic {
+                            // Stop the execution of an atomic batch at the
+                            // first failed transaction
+                            return Err(DispatchError {
+                                error: Error::FailingAtomicBatch(
+                                    cmt.get_hash(),
+                                ),
+                                tx_result: Some(extended_tx_result),
+                            });
+                        }
                     }
                 }
             }
