@@ -7116,8 +7116,7 @@ pub mod args {
             )))
             .arg(FEE_TOKEN.def().help(wrap!("The token for paying the gas")))
             .arg(GAS_LIMIT.def().help(wrap!(
-                "The multiplier of the gas limit resolution defining the \
-                 maximum amount of gas needed to run transaction."
+                "The maximum amount of gas the transaction can use."
             )))
             .arg(WALLET_ALIAS_FORCE.def().help(wrap!(
                 "Override the alias without confirmation if it already exists."

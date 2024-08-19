@@ -391,52 +391,56 @@ where
                 });
             }
             res => {
-                let is_accepted =
-                    matches!(&res, Ok(result) if result.is_accepted());
+                let batched_tx_result = match &res {
+                    Ok(batched_tx_result) => Some(batched_tx_result.to_owned()),
+                    Err(_) => None,
+                };
 
                 extended_tx_result.tx_result.insert_inner_tx_result(
                     wrapper_hash,
                     either::Right(cmt),
                     res,
                 );
-                if is_accepted {
-                    // If the transaction was a masp one append the
-                    // transaction refs for the events
-                    let actions =
-                        state.read_actions().map_err(Error::StateError)?;
-                    if let Some(masp_section_ref) =
-                        action::get_masp_section_ref(&actions).map_err(
-                            |msg| {
-                                Error::StateError(state::Error::Temporary {
-                                    error: msg.to_string(),
-                                })
-                            },
-                        )?
-                    {
-                        extended_tx_result
-                            .masp_tx_refs
-                            .0
-                            .push(masp_section_ref);
-                    }
-                    if action::is_ibc_shielding_transfer(&*state)
-                        .map_err(Error::StateError)?
-                    {
-                        extended_tx_result
-                            .ibc_tx_data_refs
-                            .0
-                            .push(*cmt.data_sechash())
-                    }
-                    state.write_log_mut().commit_tx_to_batch();
-                } else {
-                    state.write_log_mut().drop_tx();
 
-                    if tx.header.atomic {
-                        // Stop the execution of an atomic batch at the
-                        // first failed transaction
-                        return Err(DispatchError {
-                            error: Error::FailingAtomicBatch(cmt.get_hash()),
-                            tx_result: Some(extended_tx_result),
-                        });
+                match batched_tx_result {
+                    Some(ref res) if res.is_accepted() => {
+                        // If the transaction was a masp one append the
+                        // transaction refs for the events.
+                        if let Some(masp_ref) = get_optional_masp_ref(
+                            state,
+                            cmt,
+                            Either::Right(res),
+                        )? {
+                            match masp_ref {
+                                Either::Left(masp_section_ref) => {
+                                    extended_tx_result
+                                        .masp_tx_refs
+                                        .0
+                                        .push(masp_section_ref);
+                                }
+                                Either::Right(data_sechash) => {
+                                    extended_tx_result
+                                        .ibc_tx_data_refs
+                                        .0
+                                        .push(data_sechash)
+                                }
+                            }
+                        }
+                        state.write_log_mut().commit_tx_to_batch();
+                    }
+                    _ => {
+                        state.write_log_mut().drop_tx();
+
+                        if tx.header.atomic {
+                            // Stop the execution of an atomic batch at the
+                            // first failed transaction
+                            return Err(DispatchError {
+                                error: Error::FailingAtomicBatch(
+                                    cmt.get_hash(),
+                                ),
+                                tx_result: Some(extended_tx_result),
+                            });
+                        }
                     }
                 }
             }
@@ -711,6 +715,9 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
+    const MASP_FEE_PAYMENT_ERROR: &str =
+        "The first transaction in the batch failed to pay fees via the MASP.";
+
     // The fee payment is subject to a gas limit imposed by a protocol
     // parameter. Here we instantiate a custom gas meter for this step and
     // initialize it with the already consumed gas. The gas limit should
@@ -754,54 +761,44 @@ where
                 // cause we might need to discard the effects of this valid
                 // unshield (e.g. if it unshield an amount which is not enough
                 // to pay the fees)
-                if !result.is_accepted() {
-                    state.write_log_mut().drop_tx();
-                    tracing::error!(
-                        "The first transaction in the batch failed to pay \
-                         fees via the MASP, some VPs rejected it: {:#?}",
-                        result.vps_result.rejected_vps
-                    );
-                }
-
-                let actions =
-                    state.read_actions().map_err(Error::StateError)?;
+                let is_masp_transfer = is_masp_transfer(&result.changed_keys);
 
                 // Ensure that the transaction is actually a masp one, otherwise
                 // reject
-                if is_masp_transfer(&result.changed_keys)
-                    && result.is_accepted()
-                {
-                    if let Some(masp_tx_id) = action::get_masp_section_ref(
-                        &actions,
-                    )
-                    .map_err(|msg| {
-                        Error::StateError(state::Error::Temporary {
-                            error: msg.to_string(),
-                        })
-                    })? {
-                        Some(MaspTxResult {
+                if is_masp_transfer && result.is_accepted() {
+                    get_optional_masp_ref(
+                        *state,
+                        first_tx.cmt,
+                        Either::Left(true),
+                    )?
+                    .map(|masp_section_ref| {
+                        MaspTxResult {
                             tx_result: result,
-                            masp_section_ref: Either::Left(masp_tx_id),
-                        })
-                    } else {
-                        action::is_ibc_shielding_transfer(*state)
-                            .map_err(Error::StateError)?
-                            .then_some(MaspTxResult {
-                                tx_result: result,
-                                masp_section_ref: Either::Right(
-                                    *first_tx.cmt.data_sechash(),
-                                ),
-                            })
-                    }
+                            masp_section_ref,
+                        }
+                    })
                 } else {
+                    state.write_log_mut().drop_tx();
+
+                    let mut error_msg = MASP_FEE_PAYMENT_ERROR.to_string();
+                    if !is_masp_transfer {
+                        error_msg.push_str(" Not a MASP transaction.");
+                    }
+                    if !result.is_accepted() {
+                        error_msg = format!(
+                            "{error_msg} Some VPs rejected it: {:#?}",
+                            result.vps_result.rejected_vps
+                        );
+                    }
+                    tracing::error!(error_msg);
+
                     None
                 }
             }
             Err(e) => {
                 state.write_log_mut().drop_tx();
                 tracing::error!(
-                    "The first transaction in the batch failed to pay fees \
-                     via the MASP, wasm run failed: {}",
+                    "{MASP_FEE_PAYMENT_ERROR} Wasm run failed: {}",
                     e
                 );
                 if let Error::GasError(_) = e {
@@ -820,6 +817,46 @@ where
         .map_err(|e| Error::GasError(e.to_string()))?;
 
     Ok(valid_batched_tx_result)
+}
+
+// Check that the transaction was a MASP one and extract the MASP tx reference
+// (if any) in the same order that the MASP VP follows (IBC first, Actions
+// second). The order is important to prevent malicious transactions from
+// messing up with indexers/clients. Also a transaction can only be of one of
+// the two types, not both at the same time (the MASP VP accepts a single
+// Transaction)
+fn get_optional_masp_ref<S: Read<Err = state::Error>>(
+    state: &S,
+    cmt: &TxCommitments,
+    is_masp_tx: Either<bool, &BatchedTxResult>,
+) -> Result<Option<Either<namada_sdk::masp::MaspTxId, Hash>>> {
+    // Always check that the transaction was indeed a MASP one by looking at the
+    // changed keys. A malicious tx could push a MASP Action without touching
+    // any storage keys associated with the shielded pool
+    let is_masp_tx = match is_masp_tx {
+        Either::Left(res) => res,
+        Either::Right(tx_result) => is_masp_transfer(&tx_result.changed_keys),
+    };
+    if !is_masp_tx {
+        return Ok(None);
+    }
+
+    let masp_ref = if action::is_ibc_shielding_transfer(state)
+        .map_err(Error::StateError)?
+    {
+        Some(Either::Right(cmt.data_sechash().to_owned()))
+    } else {
+        let actions = state.read_actions().map_err(Error::StateError)?;
+        action::get_masp_section_ref(&actions)
+            .map_err(|msg| {
+                Error::StateError(state::Error::Temporary {
+                    error: msg.to_string(),
+                })
+            })?
+            .map(Either::Left)
+    };
+
+    Ok(masp_ref)
 }
 
 // Manage the token transfer for the fee payment. If an error is detected the
