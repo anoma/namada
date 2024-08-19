@@ -1,5 +1,55 @@
 # CHANGELOG
 
+## v0.43.0
+
+Namada 0.43.0 is a minor relasing improving shielded sync and addressing some pre-genesis flow issues.
+
+### BUG FIXES
+
+- Fix genesis bonds from implicit accounts. Now, only addresses
+  of the form `tnam1...` are supported in `balances.toml`.
+  ([\#3645](https://github.com/anoma/namada/pull/3645))
+
+### FEATURES
+
+ - Partially addresses Issue [\#2900](https://github.com/anoma/namada/issues/2900). Viewing and spending keys can now
+   be given birthdays in the form of block heights which are loaded into 
+   shielded sync. Shielded sync will not try to decrypt a block before a 
+   keys birthday with said key. ([\#3653](https://github.com/anoma/namada/pull/3653))
+- The command `namadan utils test-genesis` now accepts `--check-can-sign`
+  multi-arg that can be used with genesis addresses and/or public keys to
+  verify that a pre-genesis wallet in the base directory is able to sign
+  with the keys associated with the addresses or with the keys themselves.
+  ([\#3660](https://github.com/anoma/namada/pull/3660))
+
+### IMPROVEMENTS
+
+- Removed parallel gas accounting.
+  ([\#3615](https://github.com/anoma/namada/pull/3615))
+- Improve governance client side validation.
+  ([\#3629](https://github.com/anoma/namada/pull/3629))
+- Masp vp and protocol now ensure that a transaction can push at most one MASP
+  action. ([\#3632](https://github.com/anoma/namada/pull/3632))
+- Do not load context for `namadan utils test-genesis` command.
+  ([\#3652](https://github.com/anoma/namada/pull/3652))
+- Speeds up client commands on networks with massive balances.toml
+  files. Previously, to retrieve the native token of some network,
+  we had to parse these giant files. Now, we only parse the
+  necessary genesis toml files required to retrieve the native token.
+  ([\#3655](https://github.com/anoma/namada/pull/3655))
+
+### SDK
+
+- Parallelize the shielded sync implementation in Namada.
+  ([\#3578](https://github.com/anoma/namada/pull/3578))
+
+### TESTING
+
+- Added fuzz testing targets for txs in mempool, block proposals and finalize
+  block. ([\#3445](https://github.com/anoma/namada/pull/3445))
+- Add IBC client upgrade test
+  ([\#3535](https://github.com/anoma/namada/issues/3535))
+
 ## v0.42.0
 
 Namada 0.42.0 is a minor release that includes refactor of crates dependency graph using dependency injection, improvements in client check and node's stability.
@@ -651,9 +701,6 @@ Namada 0.33.0 is a minor release that contains various new features, improvement
 
 - move query_ibc_tokens and lookup_ibc_token_alias to sdk
   ([\#2729](https://github.com/anoma/namada/issues/2729))
-
-### SDK
-
 - Add a new method to the sdk to change a validator consensus key.
   ([\#3037](https://github.com/anoma/namada/pull/3037))
 - Improve the function to update an enstablished address via the sdk.
