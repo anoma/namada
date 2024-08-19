@@ -3564,7 +3564,6 @@ dependencies = [
  "ethabi",
  "ethbridge-structs",
  "eyre",
- "futures",
  "ibc",
  "ics23",
  "impl-num-traits",
