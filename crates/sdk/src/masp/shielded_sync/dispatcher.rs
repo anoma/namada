@@ -239,6 +239,7 @@ pub struct Config<T, I> {
     pub shutdown_signal: I,
 }
 
+/// Shielded sync message dispatcher.
 pub struct Dispatcher<S, M, U, T, I>
 where
     U: ShieldedUtils,
@@ -313,6 +314,7 @@ where
     T: ProgressBar,
     I: ShutdownSignal,
 {
+    /// Run the dispatcher
     pub async fn run(
         mut self,
         start_query_height: Option<BlockHeight>,

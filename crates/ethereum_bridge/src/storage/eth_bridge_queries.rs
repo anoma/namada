@@ -368,8 +368,7 @@ where
         })
     }
 
-    /// Extension of
-    /// [`read_consensus_validator_set_addresses_with_stake`](namada_proof_of_stake::pos_queries::storage::read_consensus_validator_set_addresses_with_stake),
+    /// Extension of [`read_consensus_validator_set_addresses_with_stake`],
     /// which additionally returns all Ethereum addresses of some validator.
     #[inline]
     pub fn get_consensus_eth_addresses<Gov>(
