@@ -647,9 +647,10 @@ where
                     {
                         extract_masp_tx_from_packet(&msg.packet)
                     }
+                    #[cfg(is_apple_silicon)]
                     MsgEnvelope::Packet(PacketMsg::Ack(msg)) => {
-                        // TODO: This is unneeded but wasm compilation error
-                        // happened if deleted on MacOS with Apple Silicon
+                        // NOTE: This is unneeded but wasm compilation error
+                        // happened if deleted on macOS with Apple Silicon
                         let _ = extract_masp_tx_from_packet(&msg.packet);
                         None
                     }
