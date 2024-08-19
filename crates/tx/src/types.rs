@@ -32,7 +32,7 @@ use thiserror::Error;
 
 use crate::data::protocol::ProtocolTx;
 use crate::data::{hash_tx, Fee, GasLimit, TxType, WrapperTx};
-use crate::{hex_serde, proto, SALT_LENGTH};
+use crate::{hex_data_serde, hex_salt_serde, proto, SALT_LENGTH};
 
 /// Represents an error in signature verification
 #[allow(missing_docs)]
@@ -230,9 +230,10 @@ pub fn verify_standalone_sig<T, S: Signable<T>>(
 )]
 pub struct Data {
     /// Salt with additional random data (usually a timestamp)
-    #[serde(with = "hex_serde")]
+    #[serde(with = "hex_salt_serde")]
     pub salt: [u8; SALT_LENGTH],
     /// Data bytes
+    #[serde(with = "hex_data_serde")]
     pub data: Vec<u8>,
 }
 
@@ -346,7 +347,7 @@ impl Commitment {
 )]
 pub struct Code {
     /// Additional random data
-    #[serde(with = "hex_serde")]
+    #[serde(with = "hex_salt_serde")]
     pub salt: [u8; SALT_LENGTH],
     /// Actual transaction code
     pub code: Commitment,

@@ -35,9 +35,11 @@ pub use types::{
     TxCommitments, TxError, VerifySigError,
 };
 
-const SALT_LENGTH: usize = 8;
+/// Length of the transaction sections salt
+pub const SALT_LENGTH: usize = 8;
 
-mod hex_serde {
+#[allow(missing_docs)]
+mod hex_salt_serde {
     use data_encoding::HEXUPPER;
     use serde::{de, Deserializer, Serializer};
 
@@ -81,6 +83,38 @@ mod hex_serde {
         array.copy_from_slice(&bytes);
 
         Ok(array)
+    }
+}
+
+#[allow(missing_docs)]
+mod hex_data_serde {
+    use data_encoding::HEXUPPER;
+    use serde::{de, Deserializer, Serializer};
+
+    pub fn serialize<S>(
+        #[allow(clippy::ptr_arg)]
+        data: &Vec<u8>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        // Convert the byte array to a hex string
+        let hex_string = HEXUPPER.encode(data);
+        serializer.serialize_str(&hex_string)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        // Deserialize a hex string
+        let hex_string =
+            <String as serde::Deserialize>::deserialize(deserializer)?;
+        // Convert the hex string back to a byte array
+        HEXUPPER
+            .decode(hex_string.as_bytes())
+            .map_err(de::Error::custom)
     }
 }
 
