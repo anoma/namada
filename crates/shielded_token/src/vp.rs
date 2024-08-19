@@ -410,12 +410,13 @@ where
             .data(batched_tx.cmt)
             .ok_or_err_msg("No transaction data")?;
         let actions = self.ctx.read_actions()?;
+        // Try to get the Transaction object from the tx first (IBC) and from
+        // the actions afterwards
         let shielded_tx = if let Some(tx) =
             Ibc::try_extract_masp_tx_from_envelope::<Transfer>(&tx_data)?
         {
             tx
         } else {
-            // Get the Transaction object from the actions
             let masp_section_ref =
                 namada_tx::action::get_masp_section_ref(&actions)
                     .map_err(native_vp::Error::new_const)?
@@ -424,6 +425,7 @@ where
                             "Missing MASP section reference in action",
                         )
                     })?;
+
             batched_tx
                 .tx
                 .get_masp_section(&masp_section_ref)

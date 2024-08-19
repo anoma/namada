@@ -2178,7 +2178,8 @@ fn dynamic_assets() -> Result<()> {
 // Test fee payment in masp:
 //
 // 1. Masp fee payment runs out of gas
-// 2. Valid fee payment (also check that the first tx in the batch is executed
+// 2. Attempt fee payment with a non-MASP transaction
+// 3. Valid fee payment (also check that the first tx in the batch is executed
 //    only once)
 #[test]
 fn masp_fee_payment() -> Result<()> {
@@ -2232,6 +2233,8 @@ fn masp_fee_payment() -> Result<()> {
             NAM,
             "--amount",
             "500000",
+            "--gas-payer",
+            CHRISTEL_KEY,
             "--ledger-address",
             validator_one_rpc,
         ],
@@ -2314,7 +2317,93 @@ fn masp_fee_payment() -> Result<()> {
     assert!(captured.result.is_ok());
     assert!(captured.contains("nam: 500000"));
 
-    // 2. Valid masp fee payment
+    // 2. Attempt fee payment with non-MASP transfer
+    // Drain balance of Albert implicit
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transparent-transfer",
+            "--source",
+            ALBERT_KEY,
+            "--target",
+            BERTHA_KEY,
+            "--token",
+            NAM,
+            "--amount",
+            "1500000",
+            "--gas-payer",
+            CHRISTEL_KEY,
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                ALBERT_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 0"));
+
+    // Gas payer is Albert implicit, whose balance is 0. Let's try to
+    // transparently send some tokens (enough to pay fees) to him and check that
+    // this is not allowed
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "transparent-transfer",
+                "--source",
+                BERTHA_KEY,
+                "--target",
+                ALBERT_KEY,
+                "--token",
+                NAM,
+                "--amount",
+                "200000",
+                "--gas-payer",
+                ALBERT_KEY,
+                "--ledger-address",
+                validator_one_rpc,
+                // Force to skip check in client
+                "--force",
+            ],
+        )
+    });
+    assert!(captured.result.is_err());
+
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                ALBERT_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 0"));
+
+    // 3. Valid masp fee payment
     run(
         &node,
         Bin::Client,
@@ -2496,7 +2585,7 @@ fn masp_fee_payment_gas_limit() -> Result<()> {
                 "--amount",
                 "1",
                 "--gas-limit",
-                "100000",
+                "300000",
                 "--gas-price",
                 "1",
                 "--disposable-gas-payer",
