@@ -2255,8 +2255,6 @@ dependencies = [
 name = "namada_vm_env"
 version = "0.43.0"
 dependencies = [
- "borsh",
- "masp_primitives",
  "namada_core",
 ]
 
