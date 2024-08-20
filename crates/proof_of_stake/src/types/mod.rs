@@ -17,13 +17,12 @@ use namada_core::token::Amount;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
-use namada_storage::collections::lazy_map::NestedMap;
-use namada_storage::collections::{LazyMap, LazySet, LazyVec};
 pub use rev_order::ReverseOrdTokenAmount;
 use serde::{Deserialize, Serialize};
 
+use crate::lazy_map::NestedMap;
 use crate::parameters::PosParams;
-use crate::{Epoch, KeySeg};
+use crate::{Epoch, KeySeg, LazyMap, LazySet, LazyVec};
 
 /// Stored positions of validators in validator sets
 pub type ValidatorSetPositions = crate::epoched::NestedEpoched<

@@ -17,10 +17,6 @@ use namada_core::key::common::PublicKey;
 use namada_core::token::Change;
 use namada_governance::parameters::GovernanceParameters;
 use namada_state::testing::TestState;
-use namada_storage::collections::lazy_map::{
-    Collectable, NestedSubKey, SubKey,
-};
-use namada_storage::StorageRead;
 use namada_trans_token::{self as token, read_balance};
 use proptest::prelude::*;
 use proptest::test_runner::Config;
@@ -31,6 +27,7 @@ use proptest_state_machine::{
 // `tracing` logs from tests
 use test_log::test;
 
+use crate::lazy_map::{Collectable, NestedSubKey, SubKey};
 use crate::parameters::testing::arb_rate;
 use crate::parameters::PosParams;
 use crate::storage::{
@@ -55,7 +52,7 @@ use crate::{
     is_validator_frozen, validator_deltas_handle, validator_slashes_handle,
     validator_state_handle, BondsForRemovalRes, EagerRedelegatedUnbonds,
     FoldRedelegatedBondsResult, ModifiedRedelegation, RedelegationError,
-    ResultSlashing,
+    ResultSlashing, StorageRead,
 };
 
 prop_state_machine! {

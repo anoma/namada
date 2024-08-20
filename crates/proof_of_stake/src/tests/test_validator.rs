@@ -12,7 +12,6 @@ use namada_core::key::testing::{
 use namada_core::key::{self, common, RefTo};
 use namada_core::token;
 use namada_state::testing::TestState;
-use namada_storage::collections::lazy_map;
 use namada_trans_token::credit_tokens;
 use proptest::prelude::*;
 use proptest::test_runner::Config;
@@ -47,7 +46,8 @@ use crate::validator_set_update::{
     insert_validator_into_validator_set, update_validator_set,
 };
 use crate::{
-    is_validator, staking_token_address, BecomeValidator, OwnedPosParams,
+    is_validator, lazy_map, staking_token_address, BecomeValidator,
+    OwnedPosParams,
 };
 
 proptest! {

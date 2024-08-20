@@ -2063,7 +2063,6 @@ dependencies = [
  "namada_events",
  "namada_macros",
  "namada_state",
- "namada_storage",
  "namada_systems",
  "namada_tx",
  "namada_vp",

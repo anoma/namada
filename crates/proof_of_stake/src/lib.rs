@@ -47,12 +47,19 @@ pub use namada_core::chain::Epoch;
 use namada_core::collections::HashSet;
 pub use namada_core::dec::Dec;
 use namada_core::key::common;
-pub use namada_core::storage::{Key, KeySeg};
 use namada_core::tendermint::abci::types::Misbehavior;
 use namada_core::token;
 use namada_events::EmitEvents;
-use namada_storage::collections::lazy_map::{self, Collectable, LazyMap};
-use namada_storage::{OptionExt, StorageRead, StorageWrite};
+pub use namada_state::collections::lazy_map::{
+    self, Collectable, LazyMap, NestedMap,
+};
+pub use namada_state::collections::lazy_set::{self, LazySet};
+pub use namada_state::collections::lazy_vec::{self, LazyVec};
+pub use namada_state::collections::LazyCollection;
+pub use namada_state::{
+    iter_prefix_bytes, Key, KeySeg, OptionExt, ResultExt, StorageError,
+    StorageRead, StorageResult, StorageWrite,
+};
 pub use namada_systems::proof_of_stake::*;
 use namada_systems::{governance, trans_token};
 pub use parameters::{OwnedPosParams, PosParams};
@@ -223,7 +230,7 @@ where
     let prefix = bonds_for_source_prefix(address);
     match epoch {
         Some(epoch) => {
-            let iter = namada_storage::iter_prefix_bytes(storage, &prefix)?;
+            let iter = iter_prefix_bytes(storage, &prefix)?;
             for res in iter {
                 let (key, _) = res?;
                 if let Some((bond_id, bond_epoch)) = is_bond_key(&key) {
@@ -237,7 +244,7 @@ where
             Ok(false)
         }
         None => {
-            let iter = namada_storage::iter_prefix_bytes(storage, &prefix)?;
+            let iter = iter_prefix_bytes(storage, &prefix)?;
             for res in iter {
                 let (key, _) = res?;
                 if let Some((bond_id, _epoch)) = is_bond_key(&key) {
@@ -1207,7 +1214,7 @@ where
                         .or_default()
                         .insert(epoch, amount);
                 }
-                Ok::<_, namada_storage::Error>((start, rbonds))
+                Ok::<_, StorageError>((start, rbonds))
             } else {
                 for src_validator in &modified.validators_to_remove {
                     if modified
@@ -1319,14 +1326,14 @@ where
     let offset = offset_opt.unwrap_or(params.pipeline_len);
 
     if !address.is_established() {
-        return Err(namada_storage::Error::new_const(
+        return Err(StorageError::new_const(
             "The given address {address} is not established. Only an \
              established address can become a validator.",
         ));
     }
 
     if is_validator(storage, address)? {
-        return Err(namada_storage::Error::new_const(
+        return Err(StorageError::new_const(
             "The given address is already a validator",
         ));
     }
@@ -1334,7 +1341,7 @@ where
     // The address may not have any bonds if it is going to be initialized as a
     // validator
     if has_bonds::<S, Gov>(storage, address)? {
-        return Err(namada_storage::Error::new_const(
+        return Err(StorageError::new_const(
             "The given address has delegations and therefore cannot become a \
              validator. Unbond first.",
         ));
@@ -2630,9 +2637,7 @@ where
     )?
     .to_uint()
     .ok_or_else(|| {
-        namada_storage::Error::SimpleMessage(
-            "Found negative liveness threshold",
-        )
+        StorageError::SimpleMessage("Found negative liveness threshold")
     })?
     .as_u64();
 

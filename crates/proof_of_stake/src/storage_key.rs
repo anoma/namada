@@ -2,11 +2,10 @@
 
 use namada_core::address::Address;
 use namada_core::storage::DbKeySeg;
-use namada_storage::collections::{lazy_map, lazy_vec};
 
 use super::ADDRESS;
 use crate::types::BondId;
-use crate::{epoched, Epoch, Key, KeySeg};
+use crate::{epoched, lazy_map, lazy_vec, Epoch, Key, KeySeg};
 
 const PARAMS_STORAGE_KEY: &str = "params";
 const VALIDATOR_ADDRESSES_KEY: &str = "validator_addresses";
