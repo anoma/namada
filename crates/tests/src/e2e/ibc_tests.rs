@@ -103,6 +103,8 @@ use crate::strings::{
 };
 use crate::{run, run_as};
 
+const IBC_REFUND_TARGET_ALIAS: &str = "ibc-refund-target";
+
 #[test]
 fn run_ledger_ibc() -> Result<()> {
     let update_genesis =
@@ -306,7 +308,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
     let shielding_data_path = gen_ibc_shielding_data(
         &test_b,
         AB_PAYMENT_ADDRESS,
-        token_addr,
+        &token_addr,
         1_000_000_000,
         &port_id_b,
         &channel_id_b,
@@ -344,14 +346,24 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         false,
     )?;
     wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
-    // The balance should not be changed
-    check_shielded_balances(&port_id_b, &channel_id_b, &test_a, &test_b)?;
+    // Check the balance of the source shielded account
+    check_balance(&test_a, AA_VIEWING_KEY, BTC, 80)?;
+    // Check the refund
+    check_balance(&test_a, IBC_REFUND_TARGET_ALIAS, BTC, 10)?;
 
     // Stop Hermes for timeout test
     let mut hermes = bg_hermes.foreground();
     hermes.interrupt()?;
 
     // Send transfer will be timed out (refund)
+    let shielding_data_path = gen_ibc_shielding_data(
+        &test_b,
+        AB_PAYMENT_ADDRESS,
+        token_addr,
+        1_000_000_000,
+        &port_id_b,
+        &channel_id_b,
+    )?;
     transfer(
         &test_a,
         A_SPENDING_KEY,
@@ -362,7 +374,7 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
         &port_id_a,
         &channel_id_a,
         Some(Duration::new(10, 0)),
-        None,
+        Some(shielding_data_path),
         None,
         false,
     )?;
@@ -374,8 +386,10 @@ fn run_ledger_ibc_with_hermes() -> Result<()> {
     let _bg_hermes = hermes.background();
 
     wait_for_packet_relay(&port_id_a, &channel_id_a, &test_a)?;
-    // The balance should not be changed
-    check_shielded_balances(&port_id_b, &channel_id_b, &test_a, &test_b)?;
+    // Check the balance of the source shielded account
+    check_balance(&test_a, AA_VIEWING_KEY, BTC, 70)?;
+    // Check the refund
+    check_balance(&test_a, IBC_REFUND_TARGET_ALIAS, BTC, 10)?;
 
     Ok(())
 }
@@ -2208,6 +2222,24 @@ fn transfer(
     if shielding_data_path.is_some() {
         tx_args.push("--ibc-shielding-data");
         tx_args.push(&memo);
+    }
+
+    if sender.as_ref().starts_with("zsk") {
+        let mut cmd = run!(
+            test,
+            Bin::Wallet,
+            &[
+                "gen",
+                "--alias",
+                IBC_REFUND_TARGET_ALIAS,
+                "--alias-force",
+                "--unsafe-dont-encrypt"
+            ],
+            Some(20),
+        )?;
+        cmd.assert_success();
+        tx_args.push("--refund-target");
+        tx_args.push(IBC_REFUND_TARGET_ALIAS);
     }
 
     let mut client = run!(test, Bin::Client, tx_args, Some(300))?;
