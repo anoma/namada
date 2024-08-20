@@ -19,7 +19,8 @@ default = []
 testing = [
     "proptest",
     "namada_core/testing",
-    "namada_merkle_tree/testing"
+    "namada_merkle_tree/testing",
+    "namada_storage/testing",
 ]
 migrations = [
     "namada_migrations",

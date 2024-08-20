@@ -51,7 +51,7 @@ pub use namada_merkle_tree::{
 };
 pub use namada_storage as storage;
 pub use namada_storage::conversion_state::{
-    ConversionState, WithConversionState,
+    ConversionLeaf, ConversionState, WithConversionState,
 };
 pub use namada_storage::types::{KVBytes, PatternIterator, PrefixIterator};
 pub use namada_storage::{
@@ -615,6 +615,7 @@ pub mod testing {
     use namada_core::address::EstablishedAddressGen;
     use namada_core::chain::ChainId;
     use namada_core::time::DateTimeUtc;
+    pub use namada_storage::testing::{PrefixIter, *};
     use namada_storage::tx_queue::ExpiredTxsQueue;
     use storage::types::CommitOnlyData;
 

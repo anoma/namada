@@ -10,7 +10,6 @@ use namada_core::dec::Dec;
 use namada_core::hash::Hash;
 use namada_core::token::{Amount, DenominatedAmount, Denomination};
 use namada_core::uint::Uint;
-use namada_storage::{StorageRead, StorageWrite};
 use namada_systems::{parameters, trans_token};
 
 #[cfg(any(feature = "multicore", test))]
@@ -20,7 +19,7 @@ use crate::storage_key::{
     masp_last_locked_amount_key, masp_locked_amount_target_key,
     masp_max_reward_rate_key,
 };
-use crate::WithConversionState;
+use crate::{StorageRead, StorageResult, StorageWrite, WithConversionState};
 
 /// Compute shielded token inflation amount
 #[allow(clippy::too_many_arguments)]
@@ -66,7 +65,7 @@ pub fn compute_inflation(
 pub fn calculate_masp_rewards_precision<S, TransToken>(
     storage: &mut S,
     addr: &Address,
-) -> namada_storage::Result<(u128, Denomination)>
+) -> StorageResult<(u128, Denomination)>
 where
     S: StorageWrite + StorageRead,
     TransToken: trans_token::Read<S>,
@@ -92,7 +91,7 @@ pub fn calculate_masp_rewards<S, TransToken>(
     storage: &mut S,
     token: &Address,
     masp_epochs_per_year: u64,
-) -> namada_storage::Result<((u128, u128), Denomination)>
+) -> StorageResult<((u128, u128), Denomination)>
 where
     S: StorageWrite + StorageRead,
     TransToken: trans_token::Keys + trans_token::Read<S>,
@@ -233,7 +232,7 @@ where
 /// Update the MASP's allowed conversions
 pub fn update_allowed_conversions<S, Params, TransToken>(
     _storage: &mut S,
-) -> namada_storage::Result<()>
+) -> StorageResult<()>
 where
     S: StorageWrite + StorageRead + WithConversionState,
     Params: parameters::Read<S>,
@@ -246,7 +245,7 @@ where
 /// Update the MASP's allowed conversions
 pub fn update_allowed_conversions<S, Params, TransToken>(
     storage: &mut S,
-) -> namada_storage::Result<()>
+) -> StorageResult<()>
 where
     S: StorageWrite + StorageRead + WithConversionState,
     Params: parameters::Read<S>,
@@ -265,14 +264,14 @@ where
     use namada_core::arith::CheckedAdd;
     use namada_core::masp::{encode_asset_type, MaspEpoch};
     use namada_core::token::{MaspDigitPos, NATIVE_MAX_DECIMAL_PLACES};
-    use namada_storage::conversion_state::ConversionLeaf;
-    use namada_storage::{Error, OptionExt, ResultExt};
     use rayon::iter::{
         IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
     };
     use rayon::prelude::ParallelSlice;
 
-    use crate::mint_rewards;
+    use crate::{
+        mint_rewards, ConversionLeaf, OptionExt, ResultExt, StorageError,
+    };
 
     // The derived conversions will be placed in MASP address space
     let masp_addr = MASP;
@@ -349,7 +348,7 @@ where
         storage.get_block_epoch()?,
         masp_epoch_multiplier,
     )
-    .map_err(namada_storage::Error::new_const)?;
+    .map_err(StorageError::new_const)?;
     let prev_masp_epoch = match masp_epoch.prev() {
         Some(epoch) => epoch,
         None => return Ok(()),
@@ -443,7 +442,9 @@ where
                             normed_inflation,
                         ))
                         .ok_or_else(|| {
-                            Error::new_const("Three digit reward overflow")
+                            StorageError::new_const(
+                                "Three digit reward overflow",
+                            )
                         })?;
                     total_reward = total_reward
                         .checked_add(
@@ -455,7 +456,7 @@ where
                                 .unwrap_or_default(),
                         )
                         .ok_or_else(|| {
-                            Error::new_const(
+                            StorageError::new_const(
                                 "Three digit total reward overflow",
                             )
                         })?;
@@ -514,14 +515,14 @@ where
                             addr_bal
                                 .u128_eucl_div_rem((reward, precision))
                                 .ok_or_else(|| {
-                                    Error::new_const(
+                                    StorageError::new_const(
                                         "Total reward calculation overflow",
                                     )
                                 })?
                                 .0,
                         )
                         .ok_or_else(|| {
-                            Error::new_const("Total reward overflow")
+                            StorageError::new_const("Total reward overflow")
                         })?;
                 }
             }
@@ -660,7 +661,7 @@ mod tests {
     use namada_core::collections::HashMap;
     use namada_core::dec::testing::arb_non_negative_dec;
     use namada_core::token::testing::arb_amount;
-    use namada_storage::testing::TestStorage;
+    use namada_state::testing::TestStorage;
     use namada_trans_token::storage_key::{balance_key, minted_balance_key};
     use namada_trans_token::write_denom;
     use proptest::prelude::*;

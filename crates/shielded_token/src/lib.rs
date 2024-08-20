@@ -28,9 +28,10 @@ use std::str::FromStr;
 
 pub use masp_primitives::transaction;
 use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use namada_core::dec::Dec;
-pub use namada_storage::conversion_state::{
-    ConversionLeaf, ConversionState, WithConversionState,
+pub use namada_core::dec::Dec;
+pub use namada_state::{
+    ConversionLeaf, ConversionState, Key, OptionExt, ResultExt, StorageError,
+    StorageRead, StorageResult, StorageWrite, WithConversionState,
 };
 use serde::{Deserialize, Serialize};
 pub use storage::*;

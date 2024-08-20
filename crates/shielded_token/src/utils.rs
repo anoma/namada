@@ -5,17 +5,17 @@ use std::collections::BTreeSet;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::Transaction;
-use namada_storage::{Error, Key, Result, StorageRead, StorageWrite};
 
 use crate::storage_key::{
     is_masp_transfer_key, masp_commitment_tree_key, masp_nullifier_key,
 };
+use crate::{Key, StorageError, StorageRead, StorageResult, StorageWrite};
 
 // Writes the nullifiers of the provided masp transaction to storage
 fn reveal_nullifiers(
     ctx: &mut impl StorageWrite,
     transaction: &Transaction,
-) -> Result<()> {
+) -> StorageResult<()> {
     for description in transaction
         .sapling_bundle()
         .map_or(&vec![], |description| &description.shielded_spends)
@@ -33,12 +33,12 @@ fn reveal_nullifiers(
 pub fn update_note_commitment_tree(
     ctx: &mut (impl StorageRead + StorageWrite),
     transaction: &Transaction,
-) -> Result<()> {
+) -> StorageResult<()> {
     if let Some(bundle) = transaction.sapling_bundle() {
         if !bundle.shielded_outputs.is_empty() {
             let tree_key = masp_commitment_tree_key();
             let mut commitment_tree: CommitmentTree<Node> =
-                ctx.read(&tree_key)?.ok_or(Error::SimpleMessage(
+                ctx.read(&tree_key)?.ok_or(StorageError::SimpleMessage(
                     "Missing note commitment tree in storage",
                 ))?;
 
@@ -47,7 +47,9 @@ pub fn update_note_commitment_tree(
                 commitment_tree
                     .append(Node::from_scalar(description.cmu))
                     .map_err(|_| {
-                        Error::SimpleMessage("Note commitment tree is full")
+                        StorageError::SimpleMessage(
+                            "Note commitment tree is full",
+                        )
                     })?;
             }
 
@@ -62,7 +64,7 @@ pub fn update_note_commitment_tree(
 pub fn handle_masp_tx(
     ctx: &mut (impl StorageRead + StorageWrite),
     shielded: &Transaction,
-) -> Result<()> {
+) -> StorageResult<()> {
     // TODO(masp#73): temporarily disabled because of the node aggregation issue
     // in WASM. Using the host env tx_update_masp_note_commitment_tree or
     // directly the update_note_commitment_tree function as a  workaround
