@@ -61,9 +61,7 @@ use ibc::apps::transfer::handler::{
 use ibc::apps::transfer::types::error::TokenTransferError;
 use ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
 use ibc::apps::transfer::types::{is_receiver_chain_source, TracePrefix};
-use ibc::core::channel::types::acknowledgement::{
-    Acknowledgement, AcknowledgementStatus,
-};
+use ibc::core::channel::types::acknowledgement::AcknowledgementStatus;
 use ibc::core::channel::types::commitment::compute_ack_commitment;
 use ibc::core::channel::types::msgs::{
     MsgRecvPacket as IbcMsgRecvPacket, PacketMsg,
@@ -614,6 +612,9 @@ where
                     self.verifiers.clone(),
                 );
                 self.insert_verifiers()?;
+                if msg.transfer.is_some() {
+                    token_transfer_ctx.enable_shielded_transfer();
+                }
                 send_transfer_execute(
                     &mut self.ctx,
                     &mut token_transfer_ctx,
@@ -625,6 +626,9 @@ where
             IbcMessage::NftTransfer(msg) => {
                 let mut nft_transfer_ctx =
                     NftTransferContext::<_, Token>::new(self.ctx.inner.clone());
+                if msg.transfer.is_some() {
+                    nft_transfer_ctx.enable_shielded_transfer();
+                }
                 send_nft_transfer_execute(
                     &mut self.ctx,
                     &mut nft_transfer_ctx,
@@ -638,34 +642,17 @@ where
                     .map_err(|e| Error::Context(Box::new(e)))?;
                 // Extract MASP tx from the memo in the packet if needed
                 let masp_tx = match &*envelope {
-                    MsgEnvelope::Packet(packet_msg) => {
-                        match packet_msg {
-                            PacketMsg::Recv(msg) => {
-                                if self.is_receiving_success(msg)? {
-                                    extract_masp_tx_from_packet(
-                                        &msg.packet,
-                                        false,
-                                    )
-                                } else {
-                                    None
-                                }
-                            }
-                            PacketMsg::Ack(msg) => {
-                                if is_ack_successful(&msg.acknowledgement)? {
-                                    // No refund
-                                    None
-                                } else {
-                                    extract_masp_tx_from_packet(
-                                        &msg.packet,
-                                        true,
-                                    )
-                                }
-                            }
-                            PacketMsg::Timeout(msg) => {
-                                extract_masp_tx_from_packet(&msg.packet, true)
-                            }
-                            _ => None,
-                        }
+                    MsgEnvelope::Packet(PacketMsg::Recv(msg))
+                        if self.is_receiving_success(msg)? =>
+                    {
+                        extract_masp_tx_from_packet(&msg.packet)
+                    }
+                    #[cfg(is_apple_silicon)]
+                    MsgEnvelope::Packet(PacketMsg::Ack(msg)) => {
+                        // NOTE: This is unneeded but wasm compilation error
+                        // happened if deleted on macOS with Apple Silicon
+                        let _ = extract_masp_tx_from_packet(&msg.packet);
+                        None
                     }
                     _ => None,
                 };
@@ -744,18 +731,6 @@ where
         }
         Ok(())
     }
-}
-
-fn is_ack_successful(ack: &Acknowledgement) -> Result<bool, Error> {
-    let acknowledgement = serde_json::from_slice::<AcknowledgementStatus>(
-        ack.as_ref(),
-    )
-    .map_err(|e| {
-        Error::TokenTransfer(TokenTransferError::Other(format!(
-            "Decoding the acknowledgement failed: {e}"
-        )))
-    })?;
-    Ok(acknowledgement.is_successful())
 }
 
 /// Tries to decode transaction data to an `IbcMessage`
