@@ -7,24 +7,19 @@ use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
-use namada_core::address::Address;
+use namada_core::borsh;
 use namada_core::borsh::BorshDeserialize;
 use namada_core::chain::Epochs;
-use namada_core::hash::Hash;
-use namada_core::{borsh, storage};
-use namada_events::{Event, EventType};
 use namada_gas::{GasMetering, VpGasMeter};
-use namada_state as state;
-use namada_state::prefix_iter::PrefixIterators;
-use namada_state::{
-    BlockHeader, BlockHeight, Epoch, Key, ResultExt, StorageRead,
+use namada_tx::{BatchedTxRef, Tx, TxCommitments};
+use state::prefix_iter::PrefixIterators;
+use state::{
+    BlockHeader, BlockHeight, Epoch, Key, ResultExt, StateRead, StorageRead,
     StorageResult, TxIndex,
 };
-use namada_tx::{BatchedTxRef, Tx, TxCommitments};
-pub use namada_vp_env::VpEnv;
-use state::StateRead;
 
 use super::vp_host_fns;
+use crate::{state, Address, Event, EventType, Hash, VpEnv};
 
 /// Possible error in a native VP host function call
 /// The `state::StorageError` may wrap the `vp_host_fns::RuntimeError`
@@ -182,20 +177,20 @@ where
 
     fn read_bytes(
         &self,
-        key: &storage::Key,
+        key: &Key,
     ) -> Result<Option<Vec<u8>>, state::StorageError> {
         vp_host_fns::read_pre(self.ctx.gas_meter, self.ctx.state, key)
             .into_storage_result()
     }
 
-    fn has_key(&self, key: &storage::Key) -> Result<bool, state::StorageError> {
+    fn has_key(&self, key: &Key) -> Result<bool, state::StorageError> {
         vp_host_fns::has_key_pre(self.ctx.gas_meter, self.ctx.state, key)
             .into_storage_result()
     }
 
     fn iter_prefix<'iter>(
         &'iter self,
-        prefix: &storage::Key,
+        prefix: &Key,
     ) -> Result<Self::PrefixIter<'iter>, state::StorageError> {
         vp_host_fns::iter_prefix_pre(
             self.ctx.gas_meter,
@@ -260,20 +255,20 @@ where
 
     fn read_bytes(
         &self,
-        key: &storage::Key,
+        key: &Key,
     ) -> Result<Option<Vec<u8>>, state::StorageError> {
         vp_host_fns::read_post(self.ctx.gas_meter, self.ctx.state, key)
             .into_storage_result()
     }
 
-    fn has_key(&self, key: &storage::Key) -> Result<bool, state::StorageError> {
+    fn has_key(&self, key: &Key) -> Result<bool, state::StorageError> {
         vp_host_fns::has_key_post(self.ctx.gas_meter, self.ctx.state, key)
             .into_storage_result()
     }
 
     fn iter_prefix<'iter>(
         &'iter self,
-        prefix: &storage::Key,
+        prefix: &Key,
     ) -> Result<Self::PrefixIter<'iter>, state::StorageError> {
         vp_host_fns::iter_prefix_post(
             self.ctx.gas_meter,
@@ -494,7 +489,7 @@ where
 
     fn read_temp<T: BorshDeserialize>(
         &self,
-        key: &storage::Key,
+        key: &Key,
     ) -> Result<Option<T>, Self::Err> {
         VpEnv::read_temp(self, key)
     }
