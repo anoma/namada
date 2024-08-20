@@ -17,9 +17,10 @@
     clippy::print_stderr
 )]
 
-use namada_core::arith::{self, checked};
-use namada_core::dec::Dec;
-use namada_core::uint::Uint;
+pub use namada_core::arith;
+use namada_core::arith::checked;
+pub use namada_core::dec::Dec;
+pub use namada_core::uint::Uint;
 use thiserror::Error;
 
 #[allow(missing_docs)]
