@@ -156,9 +156,10 @@ pub struct GenesisValidatorData {
     pub name: Option<String>,
 }
 
-/// Panics if given `txs.validator_accounts` is not empty, because validator
-/// transactions must be signed with a validator wallet (see
-/// `init-genesis-validator` command).
+/// Sign all genesis transactions.
+///
+/// Panics if the given `txs.validator_accounts` is non-empty and
+/// `validator_wallet` is `None`.
 pub async fn sign_txs(
     txs: UnsignedTransactions,
     wallet: &RwLock<Wallet<CliWalletUtils>>,
