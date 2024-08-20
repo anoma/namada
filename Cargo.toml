@@ -70,8 +70,7 @@ ark-bls12-381 = {version = "0.3"}
 ark-serialize = {version = "0.3"}
 ark-std = "0.3.0"
 # branch = "bat/feat/validate-root"
-#arse-merkle-tree = {package = "sparse-merkle-tree", git = "https://github.com/heliaxdev/sparse-merkle-tree", rev = "bab8cb96872db22cc9a139b2d3dfc4e00521d097", default-features = false, features = ["std", "borsh"]}
-arse-merkle-tree = {package = "sparse-merkle-tree",  path = "../../heliaxdev/sparse-merkle-tree", default-features = false, features = ["std", "borsh"]}
+arse-merkle-tree = {package = "sparse-merkle-tree", git = "https://github.com/heliaxdev/sparse-merkle-tree", rev = "a93c55ccd47840ee0967eee237e47d9245478594", default-features = false, features = ["std", "borsh"]}
 assert_cmd = "1.0.7"
 assert_matches = "1.5.0"
 async-trait = {version = "0.1.51"}
