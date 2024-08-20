@@ -486,7 +486,7 @@ where
 
     /// Load the full state at the last committed height, if any. Returns the
     /// Merkle root hash and the height of the committed block.
-    fn load_last_state(&mut self) {
+    pub fn load_last_state(&mut self) {
         if let Some(BlockStateRead {
             height,
             time,
