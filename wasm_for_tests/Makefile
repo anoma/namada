@@ -50,13 +50,10 @@ fmt:
 fmt-check:
 	$(cargo) +$(nightly) fmt --check
 
-test:
-	$(cargo) +$(nightly) test -- -Z unstable-options --report-time
-
 clean:
 	$(cargo) clean
 
 deps:
 	$(rustup) target add wasm32-unknown-unknown
 
-.PHONY: all debug check clippy clippy-fix fmt fmt-check test clean deps
+.PHONY: all debug check clippy clippy-fix fmt fmt-check clean deps
