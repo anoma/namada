@@ -26,8 +26,10 @@ mod types;
 
 pub use auth::AccountPublicKeysMap;
 use borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::address::Address;
-use namada_core::key::common;
+pub use namada_core::address::Address;
+pub use namada_core::hash::Hash;
+pub use namada_core::key::common;
+pub use namada_core::storage::Key;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
