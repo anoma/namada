@@ -634,6 +634,7 @@ fn make_hermes_chain_config_for_gaia(test: &Test) -> Value {
         Value::String(key_dir.to_string_lossy().to_string()),
     );
     chain.insert("store_prefix".to_owned(), Value::String("ibc".to_owned()));
+    chain.insert("gas_multiplier".to_owned(), Value::Float(1.3));
     let mut table = toml::map::Map::new();
     table.insert("price".to_owned(), Value::Float(0.001));
     table.insert("denom".to_owned(), Value::String("stake".to_string()));
@@ -680,6 +681,31 @@ pub fn update_gaia_config(test: &Test) -> Result<()> {
         .open(&app_path)?;
     file.write_all(values.to_string().as_bytes())
         .map_err(|e| eyre!(format!("Writing a Gaia app.toml failed: {}", e)))?;
+
+    let genesis_path = test.test_dir.as_ref().join("gaia/config/genesis.json");
+    let s = std::fs::read_to_string(&genesis_path)
+        .expect("Reading Gaia genesis.json failed");
+    let mut genesis: serde_json::Value =
+        serde_json::from_str(&s).expect("Decoding Gaia genesis.json failed");
+    if let Some(min_base_gas_price) =
+        genesis.pointer_mut("/app_state/feemarket/params/min_base_gas_price")
+    {
+        *min_base_gas_price =
+            serde_json::Value::String("0.000000000000000001".to_string());
+    }
+    if let Some(base_gas_price) =
+        genesis.pointer_mut("/app_state/feemarket/state/base_gas_price")
+    {
+        *base_gas_price =
+            serde_json::Value::String("0.000000000000000001".to_string());
+    }
+    let file = OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .open(&genesis_path)?;
+    let writer = std::io::BufWriter::new(file);
+    serde_json::to_writer_pretty(writer, &genesis)
+        .expect("Writing Gaia genesis.toml failed");
 
     Ok(())
 }
