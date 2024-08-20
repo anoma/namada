@@ -9,7 +9,6 @@ use namada_core::collections::HashMap;
 use namada_core::storage::{Key, KeySeg};
 use namada_core::token::Amount;
 use namada_state::StateRead;
-use namada_storage::StorageRead;
 use namada_systems::{governance, parameters};
 use namada_tx::action::{
     Action, Bond, ClaimRewards, GovAction, PosAction, Read, Withdraw,
@@ -25,6 +24,7 @@ use crate::storage_key::{
     is_any_minted_balance_key, is_any_minter_key, is_any_token_balance_key,
     is_any_token_parameter_key, minter_key,
 };
+use crate::StorageRead;
 
 /// The owner of some balance change.
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -430,8 +430,7 @@ mod tests {
     use namada_ibc::trace::ibc_token;
     use namada_parameters::storage::get_native_token_transferable_key;
     use namada_state::testing::TestState;
-    use namada_state::StorageWrite;
-    use namada_storage::TxIndex;
+    use namada_state::{StorageWrite, TxIndex};
     use namada_tx::action::Write;
     use namada_tx::data::TxType;
     use namada_tx::{Authorization, BatchedTx, Code, Data, Section, Tx};
