@@ -1,6 +1,5 @@
 use namada_core::hash::Hash;
-use namada_core::storage;
-use namada_storage::{Result, StorageRead};
+use namada_state::{Key, StorageRead, StorageResult};
 
 use crate::storage::{
     get_tx_allowlist_storage_key, get_vp_allowlist_storage_key,
@@ -8,7 +7,7 @@ use crate::storage::{
 
 /// Check if the given tx code `Hash` is in the allowlist. When the allowlist is
 /// empty it always returns true.
-pub fn is_tx_allowed<S>(storage: &S, tx_hash: &Hash) -> Result<bool>
+pub fn is_tx_allowed<S>(storage: &S, tx_hash: &Hash) -> StorageResult<bool>
 where
     S: StorageRead,
 {
@@ -18,7 +17,7 @@ where
 
 /// Check if the given VP code `Hash` is in the allowlist. When the allowlist is
 /// empty it always returns true.
-pub fn is_vp_allowed<S>(storage: &S, vp_hash: &Hash) -> Result<bool>
+pub fn is_vp_allowed<S>(storage: &S, vp_hash: &Hash) -> StorageResult<bool>
 where
     S: StorageRead,
 {
@@ -28,9 +27,9 @@ where
 
 fn is_allowed<S>(
     storage: &S,
-    allowlist_key: storage::Key,
+    allowlist_key: Key,
     hash: &Hash,
-) -> Result<bool>
+) -> StorageResult<bool>
 where
     S: StorageRead,
 {

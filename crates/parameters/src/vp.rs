@@ -5,8 +5,7 @@ use std::marker::PhantomData;
 
 use namada_core::address::Address;
 use namada_core::booleans::BoolResultUnitExt;
-use namada_core::storage::Key;
-use namada_state::StateRead;
+use namada_state::{Key, StateRead};
 use namada_systems::governance;
 use namada_tx::BatchedTxRef;
 use namada_vp::native_vp::{
