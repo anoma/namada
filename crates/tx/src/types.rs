@@ -19,7 +19,7 @@ use namada_core::borsh::{
 use namada_core::chain::{BlockHeight, ChainId};
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::*;
-use namada_core::masp::{AssetData, TxId};
+use namada_core::masp::{AssetData, MaspTxId};
 use namada_core::storage::TxIndex;
 use namada_core::time::DateTimeUtc;
 use namada_macros::BorshDeserializer;
@@ -742,7 +742,7 @@ impl From<SaplingMetadataSerde> for Vec<u8> {
 )]
 pub struct MaspBuilder {
     /// The MASP transaction that this section witnesses
-    pub target: TxId,
+    pub target: MaspTxId,
     /// The decoded set of asset types used by the transaction. Useful for
     /// offline wallets trying to display AssetTypes.
     pub asset_types: HashSet<AssetData>,
@@ -830,7 +830,7 @@ impl arbitrary::Arbitrary<'_> for MaspBuilder {
         arbitrary::size_hint::and_all(
                         &[
                             <masp_primitives::consensus::BlockHeight as arbitrary::Arbitrary>::size_hint(depth),
-                            <TxId as arbitrary::Arbitrary>::size_hint(depth),
+                            <MaspTxId as arbitrary::Arbitrary>::size_hint(depth),
                             <HashSet<AssetData> as arbitrary::Arbitrary>::size_hint(depth),
                             <SaplingMetadata as arbitrary::Arbitrary>::size_hint(depth),
                         ],
@@ -1282,10 +1282,10 @@ impl Tx {
     }
 
     /// Get the transaction section with the given hash
-    pub fn get_masp_section(&self, hash: &TxId) -> Option<&Transaction> {
+    pub fn get_masp_section(&self, hash: &MaspTxId) -> Option<&Transaction> {
         for section in &self.sections {
             if let Section::MaspTx(masp) = section {
-                if TxId::from(masp.txid()) == *hash {
+                if MaspTxId::from(masp.txid()) == *hash {
                     return Some(masp);
                 }
             }
@@ -1679,7 +1679,7 @@ impl Tx {
     pub fn add_masp_tx_section(
         &mut self,
         tx: Transaction,
-    ) -> (&mut Self, TxId) {
+    ) -> (&mut Self, MaspTxId) {
         let txid = tx.txid();
         self.add_section(Section::MaspTx(tx));
         (self, txid.into())

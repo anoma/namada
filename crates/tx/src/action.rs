@@ -8,7 +8,7 @@ use std::fmt;
 
 use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::masp::TxId;
+use namada_core::masp::MaspTxId;
 use namada_core::storage::KeySeg;
 use namada_core::{address, storage};
 
@@ -68,7 +68,7 @@ pub enum PgfAction {
 #[derive(Clone, Debug, BorshDeserialize, BorshSerialize, PartialEq)]
 pub enum MaspAction {
     /// The hash of the masp [`crate::types::Section`]
-    MaspSectionRef(TxId),
+    MaspSectionRef(MaspTxId),
     /// A required authorizer for the transaction
     MaspAuthorizer(Address),
 }
@@ -125,7 +125,7 @@ fn storage_key() -> storage::Key {
 /// [`Actions`]. If more than one [`MaspAction`] is found we return an error
 pub fn get_masp_section_ref(
     actions: &Actions,
-) -> Result<Option<TxId>, &'static str> {
+) -> Result<Option<MaspTxId>, &'static str> {
     let masp_sections: Vec<_> = actions
         .iter()
         .filter_map(|action| {

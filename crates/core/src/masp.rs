@@ -80,9 +80,6 @@ impl From<masp_primitives::transaction::TxId> for MaspTxId {
     }
 }
 
-/// Wrapper for masp_primitive's TxId
-pub type TxId = MaspTxId;
-
 /// Wrapper type around `Epoch` for type safe operations involving the masp
 /// epoch
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
@@ -763,7 +760,7 @@ impl FromStr for MaspValue {
 
 /// The masp transactions' references of a given batch
 #[derive(Default, Clone, Serialize, Deserialize)]
-pub struct MaspTxRefs(pub Vec<TxId>);
+pub struct MaspTxRefs(pub Vec<MaspTxId>);
 
 impl Display for MaspTxRefs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

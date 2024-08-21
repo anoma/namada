@@ -15,7 +15,9 @@ use namada_core::address::{Address, ImplicitAddress, InternalAddress, MASP};
 use namada_core::arith::checked;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::*;
-use namada_core::masp::{AssetData, ExtendedViewingKey, PaymentAddress, TxId};
+use namada_core::masp::{
+    AssetData, ExtendedViewingKey, MaspTxId, PaymentAddress,
+};
 use namada_core::token::{Amount, DenominatedAmount};
 use namada_governance::storage::proposal::{
     InitProposalData, ProposalType, VoteProposalData,
@@ -901,7 +903,7 @@ fn proposal_type_to_ledger_vector(
 // builder.
 fn find_masp_builder<'a>(
     tx: &'a Tx,
-    shielded_section_hash: Option<TxId>,
+    shielded_section_hash: Option<MaspTxId>,
     asset_types: &mut HashMap<AssetType, AssetData>,
 ) -> Result<Option<&'a MaspBuilder>, std::io::Error> {
     for section in &tx.sections {

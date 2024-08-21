@@ -14,7 +14,6 @@ use namada_sdk::events::EventLevel;
 use namada_sdk::gas::{self, Gas, GasMetering, TxGasMeter, VpGasMeter};
 use namada_sdk::hash::Hash;
 use namada_sdk::ibc::{IbcTxDataHash, IbcTxDataRefs};
-use namada_sdk::masp::{MaspTxRefs, TxId};
 use namada_sdk::parameters::get_gas_scale;
 use namada_sdk::state::{
     DBIter, State, StorageHasher, StorageRead, TxWrites, WlState, DB,
@@ -22,7 +21,7 @@ use namada_sdk::state::{
 use namada_sdk::storage::TxIndex;
 use namada_sdk::token::event::{TokenEvent, TokenOperation};
 use namada_sdk::token::utils::is_masp_transfer;
-use namada_sdk::token::Amount;
+use namada_sdk::token::{Amount, MaspTxId, MaspTxRefs};
 use namada_sdk::tx::action::{self, Read};
 use namada_sdk::tx::data::protocol::{ProtocolTx, ProtocolTxType};
 use namada_sdk::tx::data::{
@@ -453,7 +452,7 @@ where
 /// Transaction result for masp transfer
 pub struct MaspTxResult {
     tx_result: BatchedTxResult,
-    masp_section_ref: Either<TxId, IbcTxDataHash>,
+    masp_section_ref: Either<MaspTxId, IbcTxDataHash>,
 }
 
 /// Performs the required operation on a wrapper transaction:
