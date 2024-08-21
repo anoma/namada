@@ -3,6 +3,7 @@ pub mod pre_genesis;
 mod store;
 mod transport;
 
+use std::borrow::Cow;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::{env, fs};
@@ -43,8 +44,10 @@ impl FsWalletStorage for CliWalletUtils {
 impl WalletIo for CliWalletUtils {
     type Rng = OsRng;
 
-    //FIXME: this functio nmust be called twice somewhere
-    fn read_password(confirm: bool) -> Zeroizing<String> {
+    fn read_password(
+        confirm: bool,
+        target_key: Option<&str>,
+    ) -> Zeroizing<String> {
         let pwd = match env::var("NAMADA_WALLET_PASSWORD_FILE") {
             Ok(path) => Zeroizing::new(
                 fs::read_to_string(path)
@@ -65,10 +68,16 @@ impl WalletIo for CliWalletUtils {
                     )
                 }
                 Err(_) => {
-                    //FIXME: this is out branch
-                    eprintln!("IN OUR BRANCH"); //FIXME :remove
-                    let prompt = "Enter your decryption password: ";
-                    rpassword::read_password_from_tty(Some(prompt))
+                    let prompt = match target_key {
+                        Some(target) => Cow::Owned(format!(
+                            "Enter your decryption password for {}: ",
+                            target
+                        )),
+                        None => {
+                            Cow::Borrowed("Enter your decryption password: ")
+                        }
+                    };
+                    rpassword::read_password_from_tty(Some(&prompt))
                         .map(Zeroizing::new)
                         .expect("Failed reading password from tty.")
                 }
@@ -229,7 +238,6 @@ where
     F: Fn(&ValidatorData) -> common::SecretKey,
     U: WalletIo,
 {
-    eprintln!("IN FIND SECRET KEY WRAPPER"); //FIXME: remove
     maybe_pk
         .map(|pk| {
             let pkh = PublicKeyHash::from(&pk);
@@ -286,7 +294,7 @@ pub fn read_and_confirm_encryption_password(
         println!("Warning: The keypair will NOT be encrypted.");
         None
     } else {
-        Some(CliWalletUtils::read_password(true))
+        Some(CliWalletUtils::read_password(true, None))
     }
 }
 

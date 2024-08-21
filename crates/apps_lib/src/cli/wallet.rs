@@ -114,7 +114,11 @@ fn shielded_keys_list(
             // A subset of viewing keys will have corresponding spending keys.
             // Print those too if they are available and requested.
             if let Some(spending_key) = spending_key_opt {
-                match spending_key.get::<CliWalletUtils>(decrypt, None) {
+                match spending_key.get::<CliWalletUtils>(
+                    decrypt,
+                    None,
+                    Some(&alias),
+                ) {
                     // Here the spending key is unencrypted or successfully
                     // decrypted
                     Ok(spending_key) => {
@@ -885,7 +889,6 @@ fn transparent_key_find(
     public_key_hash: Option<String>,
     unsafe_show_secret: bool,
 ) {
-    eprintln!("IN TRANSPARENT KEY FIND"); //FIXME: remove
     let mut wallet = load_wallet(ctx);
     let found_keypair = match public_key {
         Some(pk) => wallet.find_key_by_pk(&pk, None),
@@ -1202,7 +1205,11 @@ fn transparent_keys_list(
             // A subset of public keys will have corresponding secret keys.
             // Print those too if they are available and requested.
             if let Some((stored_keypair, _pkh)) = stored_keypair {
-                match stored_keypair.get::<CliWalletUtils>(decrypt, None) {
+                match stored_keypair.get::<CliWalletUtils>(
+                    decrypt,
+                    None,
+                    Some(&alias),
+                ) {
                     Ok(keypair) => {
                         if unsafe_show_secret {
                             display_line!(io,

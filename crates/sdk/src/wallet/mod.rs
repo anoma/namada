@@ -62,7 +62,10 @@ pub trait WalletIo: Sized + Clone {
     }
 
     /// Read the password for decryption from the file/env/stdin.
-    fn read_password(_confirm: bool) -> Zeroizing<String> {
+    fn read_password(
+        _confirm: bool,
+        _target_key: Option<&str>,
+    ) -> Zeroizing<String> {
         panic!("attempted to prompt for password in non-interactive mode");
     }
 
@@ -847,8 +850,7 @@ impl<U: WalletIo> Wallet<U> {
         alias_pkh_or_pk: impl AsRef<str>,
         password: Option<Zeroizing<String>>,
     ) -> Result<common::SecretKey, FindKeyError> {
-        eprintln!("IN FIND SECRET KEY"); //FIXME: remove
-                                         // Try cache first
+        // Try cache first
         if let Some(cached_key) = self
             .decrypted_key_cache
             .get(&Alias::from(alias_pkh_or_pk.as_ref()))
@@ -941,9 +943,7 @@ impl<U: WalletIo> Wallet<U> {
         pk: &common::PublicKey,
         password: Option<Zeroizing<String>>,
     ) -> Result<common::SecretKey, FindKeyError> {
-        //FIXME: we enter here
-        eprintln!("IN SDK"); //FIXME: remove
-                             // Try to look-up alias for the given pk. Otherwise, use the PKH string.
+        // Try to look-up alias for the given pk. Otherwise, use the PKH string.
         let pkh: PublicKeyHash = pk.into();
         self.find_key_by_pkh(&pkh, password)
     }
@@ -981,9 +981,7 @@ impl<U: WalletIo> Wallet<U> {
         pkh: &PublicKeyHash,
         password: Option<Zeroizing<String>>,
     ) -> Result<common::SecretKey, FindKeyError> {
-        //FIXME: we enter here
-        eprintln!("IN FIND KEY BY PKH"); //FIXME: remove
-                                         // Try to look-up alias for the given pk. Otherwise, use the PKH string.
+        // Try to look-up alias for the given pk. Otherwise, use the PKH string.
         let alias = self
             .store
             .find_alias_by_pkh(pkh)
@@ -1022,9 +1020,9 @@ impl<U: WalletIo> Wallet<U> {
     {
         match stored_key {
             StoredKeypair::Encrypted(encrypted) => {
-                eprintln!("ABOUT TO ASK PASSWORD TO THE USER"); //FIXME :remove
-                let password =
-                    password.unwrap_or_else(|| U::read_password(false));
+                let password = password.unwrap_or_else(|| {
+                    U::read_password(false, Some(&alias.to_string()))
+                });
                 let key = encrypted
                     .decrypt(password)
                     .map_err(FindKeyError::KeyDecryptionError)?;
@@ -1278,18 +1276,22 @@ mod tests {
 
         // check that indeed the first keypair was not gc'd
         let keypair_1_pk = keypair_1().to_public();
-        assert!(wallet
-            .store
-            .get_public_keys()
-            .values()
-            .any(|pk| *pk == keypair_1_pk));
+        assert!(
+            wallet
+                .store
+                .get_public_keys()
+                .values()
+                .any(|pk| *pk == keypair_1_pk)
+        );
 
         // check that the only other present key is the newly generated sk
         let new_key_pk = new_key.to_public();
-        assert!(wallet
-            .store
-            .get_public_keys()
-            .values()
-            .any(|pk| *pk == new_key_pk));
+        assert!(
+            wallet
+                .store
+                .get_public_keys()
+                .values()
+                .any(|pk| *pk == new_key_pk)
+        );
     }
 }
