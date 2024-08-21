@@ -91,7 +91,7 @@ use namada_core::token::Amount;
 use namada_events::EmitEvents;
 use namada_state::{
     DBIter, Key, ResultExt, State, StorageError, StorageHasher, StorageRead,
-    StorageWrite, WlState, DB,
+    StorageResult, StorageWrite, WlState, DB,
 };
 use namada_systems::ibc::ChangedBalances;
 use namada_systems::trans_token;
@@ -139,7 +139,7 @@ pub enum Error {
     #[error("Invalid chain ID: {0}")]
     ChainId(IdentifierError),
     #[error("Verifier insertion error: {0}")]
-    Verifier(namada_storage::Error),
+    Verifier(StorageError),
 }
 
 struct IbcTransferInfo {
@@ -154,13 +154,13 @@ struct IbcTransferInfo {
 }
 
 impl TryFrom<IbcMsgTransfer> for IbcTransferInfo {
-    type Error = namada_storage::Error;
+    type Error = StorageError;
 
     fn try_from(
         message: IbcMsgTransfer,
     ) -> std::result::Result<Self, Self::Error> {
         let packet_data = serde_json::to_vec(&message.packet_data)
-            .map_err(namada_storage::Error::new)?;
+            .map_err(StorageError::new)?;
         let ibc_traces = vec![message.packet_data.token.denom.to_string()];
         let amount = message
             .packet_data
@@ -183,13 +183,13 @@ impl TryFrom<IbcMsgTransfer> for IbcTransferInfo {
 }
 
 impl TryFrom<IbcMsgNftTransfer> for IbcTransferInfo {
-    type Error = namada_storage::Error;
+    type Error = StorageError;
 
     fn try_from(
         message: IbcMsgNftTransfer,
     ) -> std::result::Result<Self, Self::Error> {
         let packet_data = serde_json::to_vec(&message.packet_data)
-            .map_err(namada_storage::Error::new)?;
+            .map_err(StorageError::new)?;
         let ibc_traces = message
             .packet_data
             .token_ids
@@ -223,14 +223,13 @@ where
 {
     fn try_extract_masp_tx_from_envelope<Transfer: BorshDeserialize>(
         tx_data: &[u8],
-    ) -> namada_storage::Result<Option<masp_primitives::transaction::Transaction>>
-    {
+    ) -> StorageResult<Option<masp_primitives::transaction::Transaction>> {
         let msg = decode_message::<Transfer>(tx_data)
             .into_storage_result()
             .ok();
         let tx = if let Some(IbcMessage::Envelope(ref envelope)) = msg {
             Some(extract_masp_tx_from_envelope(envelope).ok_or_else(|| {
-                namada_storage::Error::new_const(
+                StorageError::new_const(
                     "Missing MASP transaction in IBC message",
                 )
             })?)
@@ -245,7 +244,7 @@ where
         tx_data: &[u8],
         mut accum: ChangedBalances,
         keys_changed: &BTreeSet<namada_core::storage::Key>,
-    ) -> namada_storage::Result<ChangedBalances> {
+    ) -> StorageResult<ChangedBalances> {
         let msg = decode_message::<Transfer>(tx_data)
             .into_storage_result()
             .ok();
@@ -285,7 +284,7 @@ where
                         let packet_data = serde_json::from_slice::<PacketData>(
                             &msg.packet.data,
                         )
-                        .map_err(namada_storage::Error::new)?;
+                        .map_err(StorageError::new)?;
                         let receiver = packet_data.receiver.to_string();
                         let addr = TAddrData::Ibc(receiver.clone());
                         accum.decoder.insert(ibc_taddr(receiver), addr);
@@ -308,7 +307,7 @@ where
                             serde_json::from_slice::<NftPacketData>(
                                 &msg.packet.data,
                             )
-                            .map_err(namada_storage::Error::new)?;
+                            .map_err(StorageError::new)?;
                         let receiver = packet_data.receiver.to_string();
                         let addr = TAddrData::Ibc(receiver.clone());
                         accum.decoder.insert(ibc_taddr(receiver), addr);
@@ -343,7 +342,7 @@ fn check_ibc_transfer<S>(
     storage: &S,
     ibc_transfer: &IbcTransferInfo,
     keys_changed: &BTreeSet<Key>,
-) -> namada_storage::Result<()>
+) -> StorageResult<()>
 where
     S: StorageRead,
 {
@@ -361,7 +360,7 @@ where
         storage::commitment_key(src_port_id, src_channel_id, sequence);
 
     if !keys_changed.contains(&commitment_key) {
-        return Err(namada_storage::Error::new_alloc(format!(
+        return Err(StorageError::new_alloc(format!(
             "Expected IBC transfer didn't happen: Port ID {src_port_id}, \
              Channel ID {src_channel_id}, Sequence {sequence}"
         )));
@@ -371,7 +370,7 @@ where
     // IBC VP isn't triggered.
     let actual: PacketCommitment = storage
         .read_bytes(&commitment_key)?
-        .ok_or(namada_storage::Error::new_alloc(format!(
+        .ok_or(StorageError::new_alloc(format!(
             "Packet commitment doesn't exist: Port ID  {src_port_id}, Channel \
              ID {src_channel_id}, Sequence {sequence}"
         )))?
@@ -382,7 +381,7 @@ where
         timeout_timestamp,
     );
     if actual != expected {
-        return Err(namada_storage::Error::new_alloc(format!(
+        return Err(StorageError::new_alloc(format!(
             "Packet commitment mismatched: Port ID {src_port_id}, Channel ID \
              {src_channel_id}, Sequence {sequence}"
         )));
@@ -395,14 +394,14 @@ where
 fn check_packet_receiving(
     msg: &IbcMsgRecvPacket,
     keys_changed: &BTreeSet<Key>,
-) -> namada_storage::Result<()> {
+) -> StorageResult<()> {
     let receipt_key = storage::receipt_key(
         &msg.packet.port_id_on_b,
         &msg.packet.chan_id_on_b,
         msg.packet.seq_on_a,
     );
     if !keys_changed.contains(&receipt_key) {
-        return Err(namada_storage::Error::new_alloc(format!(
+        return Err(StorageError::new_alloc(format!(
             "The packet has not been received: Port ID {}, Channel ID {}, \
              Sequence {}",
             msg.packet.port_id_on_b,
@@ -419,7 +418,7 @@ fn apply_transfer_msg<S>(
     mut accum: ChangedBalances,
     ibc_transfer: &IbcTransferInfo,
     keys_changed: &BTreeSet<Key>,
-) -> namada_storage::Result<ChangedBalances>
+) -> StorageResult<ChangedBalances>
 where
     S: StorageRead,
 {
@@ -449,8 +448,7 @@ where
                 .unwrap_or(ValueSum::zero());
             accum.post.insert(
                 ibc_taddr,
-                checked!(post_entry - &delta)
-                    .map_err(namada_storage::Error::new)?,
+                checked!(post_entry - &delta).map_err(StorageError::new)?,
             );
         }
         // Record an increase to the balance of a specific IBC receiver
@@ -461,8 +459,7 @@ where
             .unwrap_or(ValueSum::zero());
         accum.post.insert(
             receiver,
-            checked!(post_entry + &delta)
-                .map_err(namada_storage::Error::new)?,
+            checked!(post_entry + &delta).map_err(StorageError::new)?,
         );
     }
 
@@ -475,7 +472,7 @@ fn is_receiving_success<S>(
     dst_port_id: &PortId,
     dst_channel_id: &ChannelId,
     sequence: Sequence,
-) -> namada_storage::Result<bool>
+) -> StorageResult<bool>
 where
     S: StorageRead,
 {
@@ -503,7 +500,7 @@ fn apply_recv_msg<S>(
     ibc_traces: Vec<String>,
     amount: Amount,
     keys_changed: &BTreeSet<Key>,
-) -> namada_storage::Result<ChangedBalances>
+) -> StorageResult<ChangedBalances>
 where
     S: StorageRead,
 {
@@ -549,8 +546,7 @@ where
                     .unwrap_or(ValueSum::zero());
                 accum.pre.insert(
                     ibc_taddr,
-                    checked!(pre_entry + &delta)
-                        .map_err(namada_storage::Error::new)?,
+                    checked!(pre_entry + &delta).map_err(StorageError::new)?,
                 );
             }
         }

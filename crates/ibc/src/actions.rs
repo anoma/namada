@@ -18,8 +18,8 @@ use namada_core::tendermint::Time as TmTime;
 use namada_core::token::Amount;
 use namada_events::EmitEvents;
 use namada_state::{
-    BlockHeight, Epoch, Epochs, ResultExt, State, StorageError, StorageRead,
-    StorageResult, StorageWrite,
+    BlockHeader, BlockHeight, Epoch, Epochs, Key, ResultExt, State,
+    StorageError, StorageRead, StorageResult, StorageWrite, TxIndex,
 };
 use namada_systems::{parameters, trans_token};
 
@@ -43,20 +43,17 @@ where
 {
     type PrefixIter<'iter> = <S as StorageRead>::PrefixIter<'iter> where Self: 'iter;
 
-    fn read_bytes(
-        &self,
-        key: &namada_storage::Key,
-    ) -> StorageResult<Option<Vec<u8>>> {
+    fn read_bytes(&self, key: &Key) -> StorageResult<Option<Vec<u8>>> {
         self.state.read_bytes(key)
     }
 
-    fn has_key(&self, key: &namada_storage::Key) -> StorageResult<bool> {
+    fn has_key(&self, key: &Key) -> StorageResult<bool> {
         self.state.has_key(key)
     }
 
     fn iter_prefix<'iter>(
         &'iter self,
-        prefix: &namada_storage::Key,
+        prefix: &Key,
     ) -> StorageResult<Self::PrefixIter<'iter>> {
         self.state.iter_prefix(prefix)
     }
@@ -79,7 +76,7 @@ where
     fn get_block_header(
         &self,
         height: BlockHeight,
-    ) -> StorageResult<Option<namada_storage::BlockHeader>> {
+    ) -> StorageResult<Option<BlockHeader>> {
         StorageRead::get_block_header(self.state, height)
     }
 
@@ -91,7 +88,7 @@ where
         self.state.get_pred_epochs()
     }
 
-    fn get_tx_index(&self) -> StorageResult<namada_storage::TxIndex> {
+    fn get_tx_index(&self) -> StorageResult<TxIndex> {
         self.state.get_tx_index()
     }
 
@@ -106,13 +103,13 @@ where
 {
     fn write_bytes(
         &mut self,
-        key: &namada_storage::Key,
+        key: &Key,
         val: impl AsRef<[u8]>,
     ) -> StorageResult<()> {
         self.state.write_bytes(key, val)
     }
 
-    fn delete(&mut self, key: &namada_storage::Key) -> StorageResult<()> {
+    fn delete(&mut self, key: &Key) -> StorageResult<()> {
         self.state.delete(key)
     }
 }

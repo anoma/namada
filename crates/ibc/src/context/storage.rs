@@ -3,7 +3,7 @@
 pub use ics23::ProofSpec;
 use namada_core::address::Address;
 use namada_core::token::Amount;
-use namada_storage::{Error, StorageRead, StorageWrite};
+use namada_state::{StorageRead, StorageResult, StorageWrite};
 
 use crate::event::IbcEvent;
 
@@ -19,7 +19,7 @@ pub trait IbcStorageContext {
     fn storage_mut(&mut self) -> &mut Self::Storage;
 
     /// Emit an IBC event
-    fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<(), Error>;
+    fn emit_ibc_event(&mut self, event: IbcEvent) -> StorageResult<()>;
 
     /// Transfer token
     fn transfer_token(
@@ -28,7 +28,7 @@ pub trait IbcStorageContext {
         dest: &Address,
         token: &Address,
         amount: Amount,
-    ) -> Result<(), Error>;
+    ) -> StorageResult<()>;
 
     /// Mint token
     fn mint_token(
@@ -36,7 +36,7 @@ pub trait IbcStorageContext {
         target: &Address,
         token: &Address,
         amount: Amount,
-    ) -> Result<(), Error>;
+    ) -> StorageResult<()>;
 
     /// Burn token
     fn burn_token(
@@ -44,10 +44,10 @@ pub trait IbcStorageContext {
         target: &Address,
         token: &Address,
         amount: Amount,
-    ) -> Result<(), Error>;
+    ) -> StorageResult<()>;
 
     /// Insert the verifier
-    fn insert_verifier(&mut self, verifier: &Address) -> Result<(), Error>;
+    fn insert_verifier(&mut self, verifier: &Address) -> StorageResult<()>;
 
     /// Logging
     fn log_string(&self, message: String);
