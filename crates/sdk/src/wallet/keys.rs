@@ -304,7 +304,6 @@ where
     /// from stdin.
     pub fn get<U: WalletIo>(
         &self,
-        // FIXME: review these args
         decrypt: bool,
         password: Option<Zeroizing<String>>,
         target_key: Option<&str>,

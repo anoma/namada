@@ -61,7 +61,6 @@ use crate::{args, display_line, rpc, MaybeSend, Namada};
 pub struct SigningTxData {
     /// The address owning the transaction
     pub owner: Option<Address>,
-    //FIXME: review this comment because this looks like the list of all the pubkeys associated to a multisig account but it doesn't look like so
     /// The public keys associated to an account
     pub public_keys: Vec<common::PublicKey>,
     /// The threshold associated to an account
@@ -227,14 +226,11 @@ where
     if let Some(account_public_keys_map) = signing_data.account_public_keys_map
     {
         let mut wallet = wallet.write().await;
-        //FIXME: Maybe try_fold
         let mut signing_tx_keypairs = vec![];
 
         for public_key in &signing_data.public_keys {
             if !used_pubkeys.contains(public_key) {
-                //FIXME: so we need to:
-                //    - log which alias we are trying to retrieve from the wallet
-                //    - crash the client if password is wrong (or let the user retry another time)
+                // FIXME: should allow for a retry?
                 let secret_key = find_key_by_pk(&mut wallet, args, public_key)?;
                 used_pubkeys.insert(public_key.clone());
                 signing_tx_keypairs.push(secret_key);
@@ -267,8 +263,8 @@ where
         }
     }
 
-    // Then try signing the wrapper header (fee payer) with the software wallet otherwise use
-    // the fallback
+    // Then try signing the wrapper header (fee payer) with the software wallet
+    // otherwise use the fallback
     let key = {
         // Lock the wallet just long enough to extract a key from it without
         // interfering with the sign closure call
@@ -280,9 +276,6 @@ where
             tx.sign_wrapper(fee_payer_keypair);
         }
         Err(_) => {
-            //FIXME: in this case we should sign the entire tx with the first signer right?
-            //FIXME: also in this case I'm not sure this is correct, if we failed to retrieve the fee payer that the user specified we should crash
-            //FIXME: unless this is needed for the hardware wallet but I don't think so
             *tx = sign(
                 tx.clone(),
                 signing_data.fee_payer.clone(),
@@ -338,7 +331,6 @@ pub async fn aux_signing_data(
         ),
     };
 
-    //FIXME: seems like here we already do all the checks for the fee payer, should we remove the redundant thing from the other side?
     let fee_payer = if args.disposable_signing_key {
         context
             .wallet_mut()
