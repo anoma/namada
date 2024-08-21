@@ -43,6 +43,7 @@ impl FsWalletStorage for CliWalletUtils {
 impl WalletIo for CliWalletUtils {
     type Rng = OsRng;
 
+    //FIXME: this functio nmust be called twice somewhere
     fn read_password(confirm: bool) -> Zeroizing<String> {
         let pwd = match env::var("NAMADA_WALLET_PASSWORD_FILE") {
             Ok(path) => Zeroizing::new(
@@ -64,6 +65,8 @@ impl WalletIo for CliWalletUtils {
                     )
                 }
                 Err(_) => {
+                    //FIXME: this is out branch
+                    eprintln!("IN OUR BRANCH"); //FIXME :remove
                     let prompt = "Enter your decryption password: ";
                     rpassword::read_password_from_tty(Some(prompt))
                         .map(Zeroizing::new)
@@ -226,6 +229,7 @@ where
     F: Fn(&ValidatorData) -> common::SecretKey,
     U: WalletIo,
 {
+    eprintln!("IN FIND SECRET KEY WRAPPER"); //FIXME: remove
     maybe_pk
         .map(|pk| {
             let pkh = PublicKeyHash::from(&pk);

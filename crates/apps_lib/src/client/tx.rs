@@ -1039,6 +1039,8 @@ where
             {
                 Some(secret_key)
             } else {
+                //FIXME: also here, we should crash if possible
+                //FIXME: ah wait it depends what we return from aux_signing_data
                 edisplay_line!(
                     namada.io(),
                     "Couldn't find the secret key for {}. Skipping signature \

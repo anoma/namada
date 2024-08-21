@@ -885,6 +885,7 @@ fn transparent_key_find(
     public_key_hash: Option<String>,
     unsafe_show_secret: bool,
 ) {
+    eprintln!("IN TRANSPARENT KEY FIND"); //FIXME: remove
     let mut wallet = load_wallet(ctx);
     let found_keypair = match public_key {
         Some(pk) => wallet.find_key_by_pk(&pk, None),
