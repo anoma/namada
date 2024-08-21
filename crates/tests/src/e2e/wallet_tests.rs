@@ -67,7 +67,7 @@ fn wallet_encrypted_key_cmds() -> Result<()> {
     ))?;
     cmd.exp_string("    Public key hash:")?;
     cmd.exp_string("    Public key:")?;
-    cmd.exp_string("Enter your decryption password:")?;
+    cmd.exp_string("Enter your decryption password")?;
     cmd.send_line(password)?;
 
     // 3. key list
