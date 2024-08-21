@@ -44,7 +44,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
     Ok(())
 }
 
-fn native_erc20_address(ctx: &mut Ctx) -> EnvResult<EthAddress> {
+fn native_erc20_address(ctx: &mut Ctx) -> Result<EthAddress> {
     debug_log!("Trying to get wnam key for Bridge pool transfer");
     let addr = ctx
         .read(&native_erc20_key())

@@ -8,7 +8,7 @@ use super::*;
 pub fn update_steward_commission(
     ctx: &mut Ctx,
     data: UpdateStewardCommission,
-) -> EnvResult<()> {
+) -> Result<()> {
     namada_governance::pgf::storage::update_commission(
         ctx,
         data.steward,
@@ -19,7 +19,7 @@ pub fn update_steward_commission(
 }
 
 /// Remove a steward
-pub fn remove_steward(ctx: &mut Ctx, data: &Address) -> EnvResult<()> {
+pub fn remove_steward(ctx: &mut Ctx, data: &Address) -> Result<()> {
     namada_governance::pgf::storage::remove_steward(ctx, data)?;
 
     Ok(())

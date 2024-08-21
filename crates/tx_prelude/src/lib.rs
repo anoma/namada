@@ -23,7 +23,6 @@ pub mod token;
 use core::slice;
 use std::marker::PhantomData;
 
-use masp_primitives::transaction::Transaction;
 use namada_account::AccountPublicKeysMap;
 pub use namada_core::address::Address;
 pub use namada_core::borsh::{
@@ -42,10 +41,11 @@ use namada_events::{EmitEvents, Event, EventToEmit, EventType};
 pub use namada_governance::storage as gov_storage;
 pub use namada_macros::transaction;
 pub use namada_parameters::storage as parameters_storage;
-pub use namada_storage::{
-    collections, iter_prefix, iter_prefix_bytes, Error, OptionExt, ResultExt,
-    StorageRead, StorageWrite,
+pub use namada_state::{
+    collections, iter_prefix, iter_prefix_bytes, OptionExt, ResultExt,
+    StorageError as Error, StorageRead, StorageResult as Result, StorageWrite,
 };
+use namada_token::MaspTransaction;
 pub use namada_tx::{action, data as transaction, BatchedTx, Section, Tx};
 pub use namada_tx_env::TxEnv;
 use namada_vm_env::tx::*;
@@ -123,10 +123,7 @@ impl Ctx {
     }
 
     /// Get the transaction data for the specified inner tx
-    pub fn get_tx_data(
-        &mut self,
-        batched_tx: &BatchedTx,
-    ) -> EnvResult<Vec<u8>> {
+    pub fn get_tx_data(&mut self, batched_tx: &BatchedTx) -> Result<Vec<u8>> {
         let BatchedTx { tx, ref cmt } = batched_tx;
 
         tx.data(cmt).ok_or_err_msg("Missing data").map_err(|err| {
@@ -136,12 +133,8 @@ impl Ctx {
     }
 }
 
-/// Result of `TxEnv`, `namada_storage::StorageRead` or
-/// `namada_storage::StorageWrite` method call
-pub type EnvResult<T> = Result<T, Error>;
-
 /// Transaction result
-pub type TxResult = EnvResult<()>;
+pub type TxResult = Result<()>;
 
 /// Storage key-val pair iterator
 #[derive(Debug)]
@@ -150,21 +143,21 @@ pub struct KeyValIterator<T>(pub u64, pub PhantomData<T>);
 impl StorageRead for Ctx {
     type PrefixIter<'iter> = KeyValIterator<(String, Vec<u8>)>;
 
-    fn read_bytes(&self, key: &storage::Key) -> Result<Option<Vec<u8>>, Error> {
+    fn read_bytes(&self, key: &storage::Key) -> Result<Option<Vec<u8>>> {
         let key = key.to_string();
         let read_result =
             unsafe { namada_tx_read(key.as_ptr() as _, key.len() as _) };
         Ok(read_from_buffer(read_result, namada_tx_result_buffer))
     }
 
-    fn has_key(&self, key: &storage::Key) -> Result<bool, Error> {
+    fn has_key(&self, key: &storage::Key) -> Result<bool> {
         let key = key.to_string();
         let found =
             unsafe { namada_tx_has_key(key.as_ptr() as _, key.len() as _) };
         Ok(HostEnvResult::is_success(found))
     }
 
-    fn get_chain_id(&self) -> Result<String, Error> {
+    fn get_chain_id(&self) -> Result<String> {
         let result = Vec::with_capacity(CHAIN_ID_LENGTH);
         unsafe {
             namada_tx_get_chain_id(result.as_ptr() as _);
@@ -175,14 +168,14 @@ impl StorageRead for Ctx {
             .expect("Cannot convert the ID string"))
     }
 
-    fn get_block_height(&self) -> Result<BlockHeight, Error> {
+    fn get_block_height(&self) -> Result<BlockHeight> {
         Ok(BlockHeight(unsafe { namada_tx_get_block_height() }))
     }
 
     fn get_block_header(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<BlockHeader>, Error> {
+    ) -> Result<Option<BlockHeader>> {
         let read_result = unsafe { namada_tx_get_block_header(height.0) };
         match read_from_buffer(read_result, namada_tx_result_buffer) {
             Some(value) => Ok(Some(
@@ -193,11 +186,11 @@ impl StorageRead for Ctx {
         }
     }
 
-    fn get_block_epoch(&self) -> Result<namada_core::chain::Epoch, Error> {
+    fn get_block_epoch(&self) -> Result<namada_core::chain::Epoch> {
         Ok(Epoch(unsafe { namada_tx_get_block_epoch() }))
     }
 
-    fn get_pred_epochs(&self) -> Result<namada_core::chain::Epochs, Error> {
+    fn get_pred_epochs(&self) -> Result<namada_core::chain::Epochs> {
         let read_result = unsafe { namada_tx_get_pred_epochs() };
         let bytes = read_from_buffer(read_result, namada_tx_result_buffer)
             .ok_or(Error::SimpleMessage(
@@ -207,7 +200,7 @@ impl StorageRead for Ctx {
     }
 
     /// Get the native token address
-    fn get_native_token(&self) -> Result<Address, Error> {
+    fn get_native_token(&self) -> Result<Address> {
         let result = Vec::with_capacity(address::ADDRESS_LEN);
         unsafe {
             namada_tx_get_native_token(result.as_ptr() as _);
@@ -223,7 +216,7 @@ impl StorageRead for Ctx {
     fn iter_prefix<'iter>(
         &'iter self,
         prefix: &storage::Key,
-    ) -> Result<Self::PrefixIter<'iter>, Error> {
+    ) -> Result<Self::PrefixIter<'iter>> {
         let prefix = prefix.to_string();
         let iter_id = unsafe {
             namada_tx_iter_prefix(prefix.as_ptr() as _, prefix.len() as _)
@@ -234,7 +227,7 @@ impl StorageRead for Ctx {
     fn iter_next<'iter>(
         &'iter self,
         iter: &mut Self::PrefixIter<'iter>,
-    ) -> Result<Option<(String, Vec<u8>)>, Error> {
+    ) -> Result<Option<(String, Vec<u8>)>> {
         let read_result = unsafe { namada_tx_iter_next(iter.0) };
         Ok(read_key_val_bytes_from_buffer(
             read_result,
@@ -242,7 +235,7 @@ impl StorageRead for Ctx {
         ))
     }
 
-    fn get_tx_index(&self) -> Result<TxIndex, namada_storage::Error> {
+    fn get_tx_index(&self) -> Result<TxIndex> {
         let tx_index = unsafe { namada_tx_get_tx_index() };
         Ok(TxIndex(tx_index))
     }
@@ -253,7 +246,7 @@ impl StorageWrite for Ctx {
         &mut self,
         key: &storage::Key,
         val: impl AsRef<[u8]>,
-    ) -> namada_storage::Result<()> {
+    ) -> Result<()> {
         let key = key.to_string();
         unsafe {
             namada_tx_write(
@@ -266,7 +259,7 @@ impl StorageWrite for Ctx {
         Ok(())
     }
 
-    fn delete(&mut self, key: &storage::Key) -> namada_storage::Result<()> {
+    fn delete(&mut self, key: &storage::Key) -> Result<()> {
         let key = key.to_string();
         unsafe { namada_tx_delete(key.as_ptr() as _, key.len() as _) };
         Ok(())
@@ -294,10 +287,7 @@ impl EmitEvents for Ctx {
 }
 
 impl TxEnv for Ctx {
-    fn read_bytes_temp(
-        &self,
-        key: &storage::Key,
-    ) -> Result<Option<Vec<u8>>, Error> {
+    fn read_bytes_temp(&self, key: &storage::Key) -> Result<Option<Vec<u8>>> {
         let key = key.to_string();
         let read_result =
             unsafe { namada_tx_read_temp(key.as_ptr() as _, key.len() as _) };
@@ -308,7 +298,7 @@ impl TxEnv for Ctx {
         &mut self,
         key: &storage::Key,
         val: impl AsRef<[u8]>,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         let key = key.to_string();
         unsafe {
             namada_tx_write_temp(
@@ -321,7 +311,7 @@ impl TxEnv for Ctx {
         Ok(())
     }
 
-    fn insert_verifier(&mut self, addr: &Address) -> Result<(), Error> {
+    fn insert_verifier(&mut self, addr: &Address) -> Result<()> {
         let addr = addr.encode();
         unsafe {
             namada_tx_insert_verifier(addr.as_ptr() as _, addr.len() as _)
@@ -334,7 +324,7 @@ impl TxEnv for Ctx {
         code_hash: impl AsRef<[u8]>,
         code_tag: &Option<String>,
         entropy_source: &[u8],
-    ) -> Result<Address, Error> {
+    ) -> Result<Address> {
         let code_hash = code_hash.as_ref();
         let code_tag = code_tag.serialize_to_vec();
         let result = Vec::with_capacity(address::ESTABLISHED_ADDRESS_BYTES_LEN);
@@ -364,7 +354,7 @@ impl TxEnv for Ctx {
         addr: &Address,
         code_hash: impl AsRef<[u8]>,
         code_tag: &Option<String>,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         let addr = addr.encode();
         let code_hash = code_hash.as_ref();
         let code_tag = code_tag.serialize_to_vec();
@@ -381,19 +371,19 @@ impl TxEnv for Ctx {
         Ok(())
     }
 
-    fn emit_event<E: EventToEmit>(&mut self, event: E) -> Result<(), Error> {
+    fn emit_event<E: EventToEmit>(&mut self, event: E) -> Result<()> {
         let event: Event = event.into();
         let event = borsh::to_vec(&event).unwrap();
         unsafe { namada_tx_emit_event(event.as_ptr() as _, event.len() as _) };
         Ok(())
     }
 
-    fn charge_gas(&mut self, used_gas: u64) -> Result<(), Error> {
+    fn charge_gas(&mut self, used_gas: u64) -> Result<()> {
         unsafe { namada_tx_charge_gas(used_gas) };
         Ok(())
     }
 
-    fn get_events(&self, event_type: &EventType) -> Result<Vec<Event>, Error> {
+    fn get_events(&self, event_type: &EventType) -> Result<Vec<Event>> {
         let event_type = event_type.to_string();
         let read_result = unsafe {
             namada_tx_get_events(
@@ -419,7 +409,7 @@ impl namada_tx::action::Read for Ctx {
     fn read_temp<T: namada_core::borsh::BorshDeserialize>(
         &self,
         key: &storage::Key,
-    ) -> Result<Option<T>, Self::Err> {
+    ) -> Result<Option<T>> {
         TxEnv::read_temp(self, key)
     }
 }
@@ -429,7 +419,7 @@ impl namada_tx::action::Write for Ctx {
         &mut self,
         key: &storage::Key,
         val: T,
-    ) -> Result<(), Self::Err> {
+    ) -> Result<()> {
         TxEnv::write_temp(self, key, val)
     }
 }
@@ -438,7 +428,7 @@ impl namada_tx::action::Write for Ctx {
 pub fn verify_signatures_of_pks(
     tx: &Tx,
     pks: Vec<common::PublicKey>,
-) -> EnvResult<bool> {
+) -> Result<bool> {
     // Require signatures from all the given keys
     let threshold = u8::try_from(pks.len()).into_storage_result()?;
     let public_keys_index_map = AccountPublicKeysMap::from_iter(pks);
@@ -462,8 +452,8 @@ pub fn verify_signatures_of_pks(
 
 /// Update the masp note commitment tree in storage with the new notes
 pub fn update_masp_note_commitment_tree(
-    transaction: &Transaction,
-) -> EnvResult<bool> {
+    transaction: &MaspTransaction,
+) -> Result<bool> {
     // Serialize transaction
     let transaction = transaction.serialize_to_vec();
 

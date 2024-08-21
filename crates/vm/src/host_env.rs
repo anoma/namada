@@ -30,7 +30,7 @@ use namada_token::storage_key::{
     is_any_minted_balance_key, is_any_minter_key, is_any_token_balance_key,
     is_any_token_parameter_key,
 };
-use namada_token::transaction::Transaction;
+use namada_token::MaspTransaction;
 use namada_tx::data::TxSentinel;
 use namada_tx::{BatchedTx, BatchedTxRef, Tx, TxCommitments};
 use namada_vp::vp_host_fns;
@@ -2185,7 +2185,7 @@ where
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
 
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
-    let transaction = Transaction::try_from_slice(&serialized_transaction)
+    let transaction = MaspTransaction::try_from_slice(&serialized_transaction)
         .map_err(TxRuntimeError::EncodingError)?;
 
     match namada_token::utils::update_note_commitment_tree(

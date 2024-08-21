@@ -5499,7 +5499,6 @@ name = "namada_tx_prelude"
 version = "0.43.0"
 dependencies = [
  "borsh",
- "masp_primitives",
  "namada_account",
  "namada_core",
  "namada_events",
@@ -5509,7 +5508,7 @@ dependencies = [
  "namada_macros",
  "namada_parameters",
  "namada_proof_of_stake",
- "namada_storage",
+ "namada_state",
  "namada_token",
  "namada_tx",
  "namada_tx_env",
