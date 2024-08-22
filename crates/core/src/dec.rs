@@ -1,7 +1,8 @@
-//! A non-negative fixed precision decimal type for computation primarily in the
-//! PoS module. For rounding, any computation that exceeds the specified
-//! precision is truncated down to the closest value with the specified
-//! precision.
+//! A non-negative fixed precision decimal type.
+//!
+//! This is used for computation primarily in the PoS module. For rounding, any
+//! computation that exceeds the specified precision is truncated down to the
+//! closest value with the specified precision.
 
 use std::fmt::{Debug, Display, Formatter};
 use std::str::FromStr;
@@ -67,11 +68,11 @@ impl Dec {
     /// The division is performed in the following way:
     ///
     /// 1. The absolute values of the numerator and denominator are used for the
-    /// division.
-    /// 2. The result is calculated to a fixed precision defined
-    /// by [`POS_DECIMAL_PRECISION`].
-    /// 3. If either the numerator or
-    /// denominator (but not both) is negative, the result is negated.
+    ///    division.
+    /// 2. The result is calculated to a fixed precision defined by
+    ///    [`POS_DECIMAL_PRECISION`].
+    /// 3. If either the numerator or denominator (but not both) is negative,
+    ///    the result is negated.
     /// 4. If the division is impossible (e.g., division by zero or overflow),
     ///    `None` is returned.
     ///

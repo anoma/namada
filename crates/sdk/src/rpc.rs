@@ -1,5 +1,7 @@
 //! SDK RPC queries
 
+#![allow(clippy::result_large_err)]
+
 use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::ControlFlow;

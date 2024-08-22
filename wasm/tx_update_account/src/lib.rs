@@ -21,15 +21,13 @@ fn apply_tx(ctx: &mut Ctx, batched_tx: BatchedTx) -> TxResult {
             .tx
             .get_section(&hash)
             .ok_or_err_msg("VP code section not found")
-            .map_err(|err| {
+            .inspect_err(|_| {
                 ctx.set_commitment_sentinel();
-                err
             })?
             .extra_data_sec()
             .ok_or_err_msg("VP code section must be tagged as extra")
-            .map_err(|err| {
+            .inspect_err(|_| {
                 ctx.set_commitment_sentinel();
-                err
             })?;
 
         ctx.update_validity_predicate(

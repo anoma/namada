@@ -47,11 +47,10 @@ pub fn gen_validator_keys(
     protocol_keypair_scheme: SchemeType,
 ) -> ValidatorKeys {
     let eth_bridge_keypair = eth_bridge_keypair
-        .map(|k| {
+        .inspect(|k| {
             if !matches!(&k, common::SecretKey::Secp256k1(_)) {
                 panic!("Ethereum bridge keys can only be of kind Secp256k1");
             }
-            k
         })
         .unwrap_or_else(|| gen_secret_key(SchemeType::Secp256k1, &mut OsRng));
     let protocol_keypair = protocol_keypair

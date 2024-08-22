@@ -759,7 +759,7 @@ where
     pub fn new(
         shell: &'shell mut Shell<D, H>,
         dry_run: bool,
-    ) -> InitChainValidation<'_, D, H> {
+    ) -> InitChainValidation<'shell, D, H> {
         Self {
             shell,
             errors: vec![],

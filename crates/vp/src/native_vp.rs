@@ -547,38 +547,3 @@ where
         self.state.conversion_state()
     }
 }
-
-#[cfg(any(test, feature = "testing"))]
-pub(super) mod testing {
-    use namada_core::collections::HashMap;
-
-    use super::*;
-
-    #[derive(Debug, Default)]
-    pub(in super::super) struct FakeStorageReader {
-        pre: HashMap<Key, Vec<u8>>,
-        post: HashMap<Key, Vec<u8>>,
-    }
-
-    impl StorageReader for FakeStorageReader {
-        fn read_pre_value<T: BorshDeserialize>(
-            &self,
-            key: &Key,
-        ) -> Result<Option<T>> {
-            self.pre
-                .get(key)
-                .map(|bytes| T::try_from_slice(bytes).into_storage_result())
-                .transpose()
-        }
-
-        fn read_post_value<T: BorshDeserialize>(
-            &self,
-            key: &Key,
-        ) -> Result<Option<T>> {
-            self.post
-                .get(key)
-                .map(|bytes| T::try_from_slice(bytes).into_storage_result())
-                .transpose()
-        }
-    }
-}

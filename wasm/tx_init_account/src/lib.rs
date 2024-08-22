@@ -19,15 +19,13 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
     let vp_code_sec = signed
         .get_section(&tx_data.vp_code_hash)
         .ok_or_err_msg("VP code section not found in tx")
-        .map_err(|err| {
+        .inspect_err(|_| {
             ctx.set_commitment_sentinel();
-            err
         })?
         .extra_data_sec()
         .ok_or_err_msg("VP code section must be tagged as extra")
-        .map_err(|err| {
+        .inspect_err(|_| {
             ctx.set_commitment_sentinel();
-            err
         })?;
 
     let entropy = {

@@ -235,7 +235,7 @@ where
             Bin::Client,
             args,
             Some(5),
-            &working_dir(),
+            working_dir(),
             base_dir,
             format!("{}:{}", std::file!(), std::line!()),
         )
@@ -297,7 +297,7 @@ where
             Bin::Client,
             args,
             Some(5),
-            &working_dir(),
+            working_dir(),
             base_dir,
             format!("{}:{}", std::file!(), std::line!()),
         )
@@ -319,7 +319,7 @@ where
             Bin::Client,
             args,
             Some(30),
-            &working_dir(),
+            working_dir(),
             base_dir,
             format!("{}:{}", std::file!(), std::line!()),
         )
@@ -696,9 +696,10 @@ impl Default for LazyAsyncRuntime {
 // Internally used macros only for attaching source locations to commands
 #[macro_use]
 mod macros {
-    /// Get an [`NamadaCmd`] to run an Namada binary. By default, these will run
-    /// in release mode. This can be disabled by setting environment
-    /// variable `NAMADA_E2E_DEBUG=true`.
+    /// Get an [`NamadaCmd`] to run an Namada binary.
+    ///
+    /// By default, these will run in release mode. This can be disabled by
+    /// setting environment variable `NAMADA_E2E_DEBUG=true`.
     /// On [`NamadaCmd`], you can then call e.g. `exp_string` or `exp_regex` to
     /// look for an expected output from the command.
     ///
@@ -721,9 +722,10 @@ mod macros {
         }};
     }
 
-    /// Get an [`NamadaCmd`] to run an Namada binary. By default, these will run
-    /// in release mode. This can be disabled by setting environment
-    /// variable `NAMADA_E2E_DEBUG=true`.
+    /// Get an [`NamadaCmd`] to run an Namada binary.
+    ///
+    /// By default, these will run in release mode. This can be disabled by
+    /// setting environment variable `NAMADA_E2E_DEBUG=true`.
     /// On [`NamadaCmd`], you can then call e.g. `exp_string` or `exp_regex` to
     /// look for an expected output from the command.
     ///

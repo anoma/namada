@@ -52,9 +52,8 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
                 .ok_or_err_msg(
                     "Unable to find required shielded section in tx data",
                 )
-                .map_err(|err| {
+                .inspect_err(|_| {
                     ctx.set_commitment_sentinel();
-                    err
                 })?,
         )
     } else {

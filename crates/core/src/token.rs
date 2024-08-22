@@ -585,11 +585,11 @@ impl Display for DenominatedAmount {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let string = self.to_string_precise();
         let string = if self.denom.0 > 0 {
-            string.trim_end_matches(&['0'])
+            string.trim_end_matches(['0'])
         } else {
             &string
         };
-        let string = string.trim_end_matches(&['.']);
+        let string = string.trim_end_matches(['.']);
         f.write_str(string)
     }
 }

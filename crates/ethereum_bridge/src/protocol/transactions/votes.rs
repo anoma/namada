@@ -23,11 +23,13 @@ pub(super) mod storage;
 pub(super) mod update;
 
 /// The addresses of validators that voted for something, and the block
-/// heights at which they voted. We use a [`BTreeMap`] to enforce that a
-/// validator (as uniquely identified by an [`Address`]) may vote at most once,
-/// and their vote must be associated with a specific [`BlockHeight`]. Their
-/// voting power at that block height is what is used when calculating whether
-/// something has enough voting power behind it or not.
+/// heights at which they voted.
+///
+/// We use a [`BTreeMap`] to enforce that a validator (as uniquely identified by
+/// an [`Address`]) may vote at most once, their vote must be associated with a
+/// specific [`BlockHeight`]. Their voting power at that block height is what is
+/// used when calculating whether something has enough voting power behind it or
+/// not.
 pub type Votes = BTreeMap<Address, BlockHeight>;
 
 /// The voting power behind a tally aggregated over multiple epochs.
@@ -202,8 +204,10 @@ where
 }
 
 /// Deterministically constructs a [`Votes`] map from a set of validator
-/// addresses and the block heights they signed something at. We arbitrarily
-/// take the earliest block height for each validator address encountered.
+/// addresses and the block heights they signed something at.
+///
+/// We arbitrarily take the earliest block height for each validator address
+/// encountered.
 pub fn dedupe(signers: BTreeSet<(Address, BlockHeight)>) -> Votes {
     signers.into_iter().rev().collect()
 }

@@ -196,9 +196,10 @@ pub enum DispatchArgs<'a, CA: 'static + WasmCacheAccess + Sync> {
     },
 }
 
-/// Dispatch a given transaction to be applied based on its type. Some storage
-/// updates may be derived and applied natively rather than via the wasm
-/// environment, in which case validity predicates will be bypassed.
+/// Dispatch a given transaction to be applied based on its type.
+///
+/// Some storage updates may be derived and applied natively rather than via the
+/// wasm environment, in which case validity predicates will be bypassed.
 pub fn dispatch_tx<'a, D, H, CA>(
     tx: &Tx,
     dispatch_args: DispatchArgs<'a, CA>,

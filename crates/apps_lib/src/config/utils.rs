@@ -10,9 +10,10 @@ use crate::cli;
 use crate::tendermint_config::net::Address as TendermintAddress;
 
 /// Find how many threads to use from an environment variable if it's set and
-/// valid (>= 1). If the environment variable is invalid, exits the process with
-/// an error. or return 1 if the default value is not >= 1. Otherwise returns
-/// the default.
+/// valid (>= 1).
+///
+/// If the environment variable is invalid, exits the process with an error. or
+/// return 1 if the default value is not >= 1. Otherwise returns the default.
 pub fn num_of_threads(env_var: impl AsRef<str>, default: usize) -> usize {
     match num_of_threads_aux(&env_var, default) {
         Either::Left(num) => num,

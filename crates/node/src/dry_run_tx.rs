@@ -272,7 +272,7 @@ mod test {
         let len_key = Key::wasm_code_len(&tx_hash);
         client
             .state
-            .db_write(&key, &tx_no_op.serialize_to_vec())
+            .db_write(&key, tx_no_op.serialize_to_vec())
             .unwrap();
         client
             .state

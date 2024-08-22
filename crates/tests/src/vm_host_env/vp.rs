@@ -25,10 +25,12 @@ pub fn ctx() -> &'static Ctx {
     &CTX
 }
 
+/// Host environment for VP and integration tests.
+///
 /// This module combines the native host function implementations from
 /// `native_vp_host_env` with the functions exposed to the vp wasm
 /// that will call to the native functions, instead of interfacing via a
-/// wasm runtime. It can be used for host environment integration tests.
+/// wasm runtime.
 pub mod vp_host_env {
     pub use namada_vp_prelude::*;
 
@@ -174,6 +176,7 @@ mod native_vp_host_env {
     }
 
     /// Initialize the VP host environment in [`ENV`] by running a transaction.
+    ///
     /// The transaction is expected to modify the storage sub-space of the given
     /// address `addr` or to add it to the set of verifiers using
     /// `ctx.insert_verifier`.

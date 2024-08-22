@@ -224,6 +224,7 @@ macro_rules! try_match_segments {
                 // println!("Parsed {}", parsed);
                 $arg = parsed
             },
+            #[allow(unreachable_patterns)] // sometimes the result is infallible
             Err(_) =>
             {
                 // println!("Cannot parse {} from {}", stringify!($arg_ty), &$request.path[$start..$end]);
@@ -286,6 +287,7 @@ macro_rules! try_match_segments {
             Ok(parsed) => {
                 $arg = parsed
             },
+            #[allow(unreachable_patterns)] // sometimes the result is infallible
             Err(_) =>
             {
                 // println!("Cannot parse {} from {}", stringify!($arg_ty), &$request.path[$start..$end]);

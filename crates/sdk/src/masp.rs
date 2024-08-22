@@ -62,6 +62,7 @@ fn extract_masp_tx(
 }
 
 /// Extract the relevant shield portions from the IBC messages in [`Tx`]
+#[allow(clippy::result_large_err)]
 fn extract_masp_tx_from_ibc_message(
     tx: &Tx,
 ) -> Result<Vec<Transaction>, Error> {

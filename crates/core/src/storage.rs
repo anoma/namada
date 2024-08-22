@@ -500,7 +500,7 @@ impl Key {
     /// Iterates over all addresses in the key segments
     pub fn iter_addresses<'k, 'this: 'k>(
         &'this self,
-    ) -> impl Iterator<Item = &'_ Address> + 'k {
+    ) -> impl Iterator<Item = &'this Address> + 'k {
         self.segments.iter().filter_map(|s| match s {
             DbKeySeg::AddressSeg(addr) => Some(addr),
             _ => None,

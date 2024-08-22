@@ -234,10 +234,10 @@ pub fn init_storage() -> (Address, Address) {
     let init_bal = token::Amount::from_uint(100, token_denom).unwrap();
     tx_host_env::with(|env| {
         env.state
-            .db_write(&denom_key, &token_denom.serialize_to_vec())
+            .db_write(&denom_key, token_denom.serialize_to_vec())
             .unwrap();
         env.state
-            .db_write(&key, &init_bal.serialize_to_vec())
+            .db_write(&key, init_bal.serialize_to_vec())
             .unwrap();
     });
 

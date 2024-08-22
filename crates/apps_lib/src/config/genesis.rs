@@ -373,10 +373,11 @@ pub struct ImplicitAccount {
     pub public_key: common::PublicKey,
 }
 
-/// Protocol parameters. This is almost the same as
-/// `ledger::parameters::Parameters`, but instead of having the `implicit_vp`
-/// WASM code bytes, it only has the name and sha as the actual code is loaded
-/// on `init_chain`
+/// Protocol parameters.
+///
+/// This is almost the same as [`crate::parameters::Parameters`], but instead of
+/// having the `implicit_vp` WASM code bytes, it only has the name and sha as
+/// the actual code is loaded on `init_chain`
 #[derive(
     Clone,
     Debug,

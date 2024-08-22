@@ -199,11 +199,12 @@ where
     Ok(())
 }
 
-/// Process enqueued slashes that were discovered earlier. This function is
-/// called upon a new epoch. The final slash rate considering according to the
-/// cubic slashing rate is computed. Then, each slash is recorded in storage
-/// along with its computed rate, and stake is deducted from the affected
-/// validators.
+/// Process enqueued slashes that were discovered earlier.
+///
+/// This function is called upon a new epoch. The final slash rate considering
+/// according to the cubic slashing rate is computed. Then, each slash is
+/// recorded in storage along with its computed rate, and stake is deducted from
+/// the affected validators.
 pub fn process_slashes<S, Gov>(
     storage: &mut S,
     events: &mut impl EmitEvents,
@@ -372,6 +373,8 @@ where
     Ok(())
 }
 
+/// Slash a redelegated bond on a destination validator.
+///
 /// In the context of a redelegation, the function computes how much a validator
 /// (the destination validator of the redelegation) should be slashed due to the
 /// misbehaving of a second validator (the source validator of the
@@ -448,6 +451,8 @@ where
     Ok(())
 }
 
+/// Slash a redelegated bond.
+///
 /// Computes how many tokens will be slashed from a redelegated bond,
 /// considering that the bond may have been completely or partially unbonded and
 /// that the source validator may have misbehaved within the redelegation
@@ -567,8 +572,10 @@ where
     Ok(())
 }
 
+/// Compute slash amounts for a validator.
+///
 /// Computes for a given validator and a slash how much should be slashed at all
-/// epochs between the currentå epoch (curEpoch) + 1 and the current epoch + 1 +
+/// epochs between the current epoch (curEpoch) + 1 and the current epoch + 1 +
 /// PIPELINE_OFFSET, accounting for any tokens already unbonded.
 ///
 /// - `validator` - the misbehaving validator.

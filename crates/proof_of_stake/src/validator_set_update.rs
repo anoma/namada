@@ -515,10 +515,11 @@ where
     Ok(())
 }
 
-/// Promote the next below-capacity validator to the consensus validator set,
-/// determined as the validator in the below-capacity set with the largest stake
-/// and the lowest `Position`. Assumes that there is adequate space within the
-/// consensus set already.
+/// Promote the next below-capacity validator to the consensus validator set.
+///
+/// This is determined as the validator in the below-capacity set with the
+/// largest stake and the lowest `Position`. Assumes that there is adequate
+/// space within the consensus set already.
 pub fn promote_next_below_capacity_validator_to_consensus<S, Gov>(
     storage: &mut S,
     current_epoch: Epoch,
@@ -561,9 +562,11 @@ where
     Ok(())
 }
 
-/// Communicate imminent validator set updates to Tendermint. This function is
-/// called two blocks before the start of a new epoch because Tendermint
-/// validator updates become active two blocks after the updates are submitted.
+/// Communicate imminent validator set updates to Tendermint.
+///
+/// This function is called two blocks before the start of a new epoch because
+/// Tendermint validator updates become active two blocks after the updates are
+/// submitted.
 pub fn validator_set_update_comet<S, T>(
     storage: &S,
     params: &PosParams,

@@ -1167,13 +1167,12 @@ impl<U: WalletIo> Wallet<U> {
                 path,
                 force_alias,
             )
-            .map(|alias| {
+            .inspect(|alias| {
                 // Cache the newly added key
                 self.decrypted_spendkey_cache.insert(
                     alias.clone(),
                     DatedKeypair::new(spend_key, birthday),
                 );
-                alias
             })
             .map(Into::into)
     }

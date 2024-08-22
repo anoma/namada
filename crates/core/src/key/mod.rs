@@ -212,11 +212,11 @@ pub trait SecretKey:
     }
 }
 
-/// Represents a digital signature scheme. More precisely this trait captures
-/// the concepts of public keys, private keys, and signatures as well as
-/// the algorithms over these concepts to generate keys, sign messages, and
-/// verify signatures.
-
+/// Represents a digital signature scheme.
+///
+/// More precisely this trait captures the concepts of public keys, private
+/// keys, and signatures as well as the algorithms over these concepts to
+/// generate keys, sign messages, and verify signatures.
 pub trait SigScheme: Eq + Ord + Debug + Serialize + Default {
     /// Represents the signature for this scheme
     type Signature: 'static + Signature;

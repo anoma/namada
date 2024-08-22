@@ -46,7 +46,7 @@ pub struct ResponseQuery<T> {
 pub type EncodedResponseQuery = ResponseQuery<Vec<u8>>;
 
 /// A client with async request dispatcher method, which can be used to invoke
-/// type-safe methods from a root [`Router`], generated
+/// type-safe methods from a root queries `Router`, generated
 /// via `router!` macro.
 #[cfg_attr(feature = "async-send", async_trait::async_trait)]
 #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]

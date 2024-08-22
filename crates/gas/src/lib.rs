@@ -212,10 +212,11 @@ pub const MASP_FINAL_CHECK_GAS: u64 =
 /// Gas module result for functions that may fail
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Representation of tracking gas in sub-units. This effectively decouples gas
-/// metering from fee payment, allowing higher resolution when accounting for
-/// gas while, at the same time, providing a contained gas value when paying
-/// fees.
+/// Representation of tracking gas in sub-units.
+///
+/// This effectively decouples gas metering from fee payment, allowing higher
+/// resolution when accounting for gas while, at the same time, providing a
+/// contained gas value when paying fees.
 // This type should not implement the Copy trait to prevent charging gas more
 // than once
 #[derive(

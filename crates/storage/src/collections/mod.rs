@@ -1,5 +1,7 @@
 //! Lazy data structures for storage access where elements are not all loaded
-//! into memory. This serves to minimize gas costs, avoid unbounded iteration
+//! into memory.
+//!
+//! This serves to minimize gas costs, avoid unbounded iteration
 //! in some cases, and ease the validation of storage changes in VPs.
 //!
 //! Rather than finding the diff of the state before and after (which requires
@@ -36,12 +38,13 @@ pub struct Simple;
 #[derive(Debug)]
 pub struct Nested;
 
-/// A lazy collection of storage values is a handler with some storage prefix
-/// that is given to its `fn new()`. The values are typically nested under this
-/// prefix and they can be changed individually (e.g. without reading in the
-/// whole collection) and their changes directly indicated to the validity
-/// predicates, which do not need to iterate the whole collection pre/post to
-/// find diffs.
+/// A lazy collection of storage values.
+///
+/// This is a handler with some storage prefix that is given to its `fn new()`.
+/// The values are typically nested under this prefix and they can be changed
+/// individually (e.g. without reading in the whole collection) and their
+/// changes directly indicated to the validity predicates, which do not need to
+/// iterate the whole collection pre/post to find diffs.
 ///
 /// An empty collection must be deleted from storage.
 pub trait LazyCollection {

@@ -29,10 +29,11 @@ pub fn leaf_spec<H: StorageHasher>() -> LeafOp {
     }
 }
 
-/// Get the leaf spec for the ibc subtree. Non-hashed values are used for
-/// the verification with this spec because a subtree stores the
-/// key-value pairs after hashing. However, keys are also not hashed in
-/// the backing store.
+/// Get the leaf spec for the ibc subtree.
+///
+/// Non-hashed values are used for the verification with this spec because a
+/// subtree stores the key-value pairs after hashing. However, keys are also not
+/// hashed in the backing store.
 pub fn ibc_leaf_spec<H: StorageHasher>() -> LeafOp {
     LeafOp {
         hash: H::hash_op().into(),

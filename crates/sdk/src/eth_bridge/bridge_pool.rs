@@ -1,5 +1,7 @@
 //! Bridge pool SDK functionality.
 
+#![allow(clippy::result_large_err)]
+
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::sync::Arc;

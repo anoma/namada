@@ -3911,9 +3911,11 @@ pub mod args {
             Self: Sized,
             Self::Error: Into<std::convert::Infallible>,
         {
+            // The `Err` pattern should be removed from 1.82 again: https://github.com/rust-lang/rust/issues/129352
+            #[allow(unreachable_patterns)]
             match self.to_sdk(ctx).map_err(Into::into) {
                 Ok(x) => x,
-                Err(e) => match e {},
+                Err(_) => unreachable!(),
             }
         }
     }

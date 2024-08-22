@@ -106,6 +106,7 @@ impl Erc20FlowControl {
     /// Check if the `transferred_amount` exceeds the token caps of some ERC20
     /// asset.
     #[inline]
+    #[allow(clippy::result_large_err)]
     pub fn exceeds_token_caps(
         &self,
         transferred_amount: Amount,

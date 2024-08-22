@@ -431,6 +431,7 @@ struct Rewards {
 
 /// Update validator and delegators rewards products and mint the inflation
 /// tokens into the PoS account.
+///
 /// Any left-over inflation tokens from rounding error of the sum of the
 /// rewards is given to the governance address.
 pub fn update_rewards_products_and_mint_inflation<S, Token>(
