@@ -373,7 +373,8 @@ where
 
         if !is_delegator {
             return Err(native_vp::Error::new_alloc(format!(
-                "Address {voter} is neither a validator nor a delegator."
+                "Address {voter} is neither a validator nor a delegator at \
+                 the beginning of epoch {pre_voting_start_epoch}."
             ))
             .into());
         }
