@@ -1,5 +1,4 @@
-//! This crate contains library code for transaction WASM. Most of the code is
-//! re-exported from the `namada_vm_env` crate.
+//! This crate contains library code for transaction WASM.
 
 #![doc(html_favicon_url = "https://dev.namada.net/master/favicon.png")]
 #![doc(html_logo_url = "https://dev.namada.net/master/rustdoc-logo.png")]
@@ -42,8 +41,8 @@ pub use namada_governance::storage as gov_storage;
 pub use namada_macros::transaction;
 pub use namada_parameters::storage as parameters_storage;
 pub use namada_state::{
-    collections, iter_prefix, iter_prefix_bytes, OptionExt, ResultExt,
-    Error as Error, StorageRead, Result as Result, StorageWrite,
+    collections, iter_prefix, iter_prefix_bytes, Error, OptionExt, Result,
+    ResultExt, StorageRead, StorageWrite,
 };
 use namada_token::MaspTransaction;
 pub use namada_tx::{action, data as transaction, BatchedTx, Section, Tx};
