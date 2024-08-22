@@ -936,49 +936,44 @@ pub async fn get_public_key_at<C: crate::queries::Client + Sync>(
 }
 
 /// Query the proposal result
-pub async fn query_proposal_result<N: Namada>(
-    context: &N,
+pub async fn query_proposal_result<C: crate::queries::Client + Sync>(
+    client: &C,
     proposal_id: u64,
 ) -> Result<Option<ProposalResult>, Error> {
-    let proposal = query_proposal_by_id(context.client(), proposal_id).await?;
+    let proposal = query_proposal_by_id(client, proposal_id).await?;
     let proposal = if let Some(proposal) = proposal {
         proposal
     } else {
         return Ok(None);
     };
 
-    let current_epoch = query_epoch(context.client()).await?;
+    let current_epoch = query_epoch(client).await?;
     if current_epoch < proposal.voting_start_epoch {
-        display_line!(
-            context.io(),
+        return Err(Error::Other(format!(
             "Proposal {} is still pending, voting period will start in {} \
              epochs.",
             proposal_id,
             proposal.voting_end_epoch.0 - current_epoch.0
-        );
+        )));
     }
 
-    let stored_proposal_result =
-        convert_response::<N::Client, Option<ProposalResult>>(
-            RPC.vp()
-                .gov()
-                .proposal_result(context.client(), &proposal_id)
-                .await,
-        )?;
+    let stored_proposal_result = convert_response::<C, Option<ProposalResult>>(
+        RPC.vp().gov().proposal_result(client, &proposal_id).await,
+    )?;
 
     let proposal_result = match stored_proposal_result {
         Some(proposal_result) => proposal_result,
         None => {
-            let tally_epoch = proposal.voting_end_epoch;
+            let tally_epoch = current_epoch;
 
             let is_author_pgf_steward =
-                is_steward(context.client(), &proposal.author).await;
-            let votes = query_proposal_votes(context.client(), proposal_id)
+                is_steward(client, &proposal.author).await;
+            let votes = query_proposal_votes(client, proposal_id)
                 .await
                 .unwrap_or_default();
             let tally_type = proposal.get_tally_type(is_author_pgf_steward);
             let total_active_voting_power =
-                get_total_active_voting_power(context.client(), tally_epoch)
+                get_total_active_voting_power(client, tally_epoch)
                     .await
                     .unwrap_or_default();
 
@@ -988,7 +983,7 @@ pub async fn query_proposal_result<N: Namada>(
                 match vote.is_validator() {
                     true => {
                         let voting_power = get_validator_stake(
-                            context.client(),
+                            client,
                             tally_epoch,
                             &vote.validator,
                         )
@@ -1003,7 +998,7 @@ pub async fn query_proposal_result<N: Namada>(
                     }
                     false => {
                         let voting_power = get_bond_amount_at(
-                            context.client(),
+                            client,
                             &vote.delegator,
                             &vote.validator,
                             tally_epoch,
