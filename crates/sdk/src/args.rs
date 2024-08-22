@@ -2220,6 +2220,22 @@ pub struct QueryDelegations<C: NamadaTypes = SdkTypes> {
     pub owner: C::Address,
 }
 
+/// Query token total supply
+#[derive(Clone, Debug)]
+pub struct QueryTotalSupply<C: NamadaTypes = SdkTypes> {
+    /// Common query args
+    pub query: Query<C>,
+    /// Token address
+    pub token: C::Address,
+}
+
+/// Query effective native supply
+#[derive(Clone, Debug)]
+pub struct QueryEffNativeSupply<C: NamadaTypes = SdkTypes> {
+    /// Common query args
+    pub query: Query<C>,
+}
+
 /// Query PoS to find a validator
 #[derive(Clone, Debug)]
 pub struct QueryFindValidator<C: NamadaTypes = SdkTypes> {
