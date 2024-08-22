@@ -53,12 +53,24 @@ def main_inner(args, working_directory):
                 f"Could not find {validator_alias} with addr {validator_addr} in {TRANSACTIONS_TEMPLATE}"
             )
 
-        join_network(
+        join_network_with_validator(
             working_directory=working_directory,
             binaries=binaries,
             base_dir_prefix=base_dir_prefix,
             chain_id=chain_id,
             genesis_validator=validator_alias,
+            pre_genesis_path=args.pre_genesis_path,
+            command_summary=command_summary,
+        )
+
+    for fullnode_alias, full_node_base_port in args.full_nodes.items():
+        join_network_with_fullnode(
+            working_directory=working_directory,
+            binaries=binaries,
+            base_dir_prefix=base_dir_prefix,
+            chain_id=chain_id,
+            fullnode_alias=fullnode_alias,
+            fullnode_base_port=full_node_base_port,
             pre_genesis_path=args.pre_genesis_path,
             command_summary=command_summary,
         )
@@ -116,7 +128,7 @@ def init_network(
     return chain_id, templates
 
 
-def join_network(
+def join_network_with_validator(
     working_directory,
     binaries,
     base_dir_prefix,
@@ -141,7 +153,7 @@ def join_network(
 
     base_dir = reset_base_dir(
         prefix=base_dir_prefix,
-        validator_alias=genesis_validator,
+        node_alias=genesis_validator,
         pre_genesis_wallet=pre_genesis_wallet_path,
     )
 
@@ -153,6 +165,7 @@ def join_network(
         base_dir,
         "utils",
         "join-network",
+        "--add-persistent-peers",
         "--allow-duplicate-ip",
         "--chain-id",
         chain_id,
@@ -167,6 +180,72 @@ def join_network(
     command_summary[genesis_validator] = (
         f"{binaries[NAMADA]} --base-dir='{base_dir}' ledger run"
     )
+
+
+def join_network_with_fullnode(
+    working_directory,
+    binaries,
+    base_dir_prefix,
+    chain_id,
+    fullnode_alias,
+    fullnode_base_port,
+    pre_genesis_path,
+    command_summary,
+):
+    info(f"Attempting to join {chain_id} with {fullnode_alias}")
+
+    pre_genesis_wallet_path = pre_genesis_path / "wallet.toml"
+
+    base_dir = reset_base_dir(
+        prefix=base_dir_prefix,
+        node_alias=fullnode_alias,
+        pre_genesis_wallet=pre_genesis_wallet_path,
+    )
+
+    system(
+        "env",
+        f"NAMADA_NETWORK_CONFIGS_DIR={working_directory}",
+        binaries[NAMADAC],
+        "--base-dir",
+        base_dir,
+        "utils",
+        "join-network",
+        "--add-persistent-peers",
+        "--allow-duplicate-ip",
+        "--chain-id",
+        chain_id,
+    )
+
+    update_fullnode_config(
+        full_node_base_port=fullnode_base_port,
+        fullnode_config_path=base_dir_prefix
+        / fullnode_alias
+        / chain_id
+        / "config.toml",
+    )
+
+    info(f"Full node {fullnode_alias} joined {chain_id}")
+
+    command_summary[fullnode_alias] = (
+        f"{binaries[NAMADA]} --base-dir='{base_dir}' ledger run"
+    )
+
+
+def update_fullnode_config(full_node_base_port, fullnode_config_path):
+    config = toml.load(fullnode_config_path)
+
+    config["ledger"]["cometbft"]["rpc"][
+        "laddr"
+    ] = f"tcp://127.0.0.1:{full_node_base_port}"
+    config["ledger"]["cometbft"][
+        "proxy_app"
+    ] = f"tcp://127.0.0.1:{full_node_base_port + 1}"
+    config["ledger"]["cometbft"]["p2p"][
+        "laddr"
+    ] = f"tcp://0.0.0.0:{full_node_base_port + 2}"
+
+    with open(fullnode_config_path, "w") as output_file:
+        toml.dump(config, output_file)
 
 
 def log(color, descriptor, line):
@@ -200,8 +279,8 @@ def parse_cli_args():
     )
 
     group = parser.add_argument_group(
-        title="Validator config",
-        description="Customize the validators the localnet will run with.",
+        title="Node config",
+        description="Customize the validators and full nodes the localnet will run with.",
     )
     group.add_argument(
         "--templates",
@@ -217,6 +296,12 @@ def parse_cli_args():
         "--pre-genesis-path",
         type=Path,
         help="Path to pre-genesis directory. Must be present with custom `--templates`.",
+    )
+    group.add_argument(
+        "--full-nodes",
+        default={},
+        type=full_nodes_object,
+        help="JSON object of full node aliases to port numbers these will listen on.",
     )
 
     group = parser.add_argument_group(
@@ -319,6 +404,21 @@ def params_json_object(s):
         die("Only JSON objects allowed for param updates")
 
     return params
+
+
+def full_nodes_object(s):
+    full_nodes = json.loads(s)
+
+    if type(full_nodes) != dict:
+        die("Only JSON objects allowed for full nodes")
+
+    for value in full_nodes.values():
+        if type(value) != int:
+            die(
+                "Only JSON objects with a mapping between full node aliases and base ports (range 0-65535) allowed"
+            )
+
+    return full_nodes
 
 
 def to_edit_from_args(args):
@@ -448,8 +548,8 @@ def reset_base_dir_prefix(args):
     return prefix
 
 
-def reset_base_dir(prefix, validator_alias, pre_genesis_wallet):
-    base_dir = prefix / validator_alias
+def reset_base_dir(prefix, node_alias, pre_genesis_wallet):
+    base_dir = prefix / node_alias
     pre_genesis_dir = base_dir / "pre-genesis"
     os.mkdir(base_dir)
     os.mkdir(pre_genesis_dir)
