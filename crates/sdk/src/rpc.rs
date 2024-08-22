@@ -964,7 +964,7 @@ pub async fn query_proposal_result<C: crate::queries::Client + Sync>(
     let proposal_result = match stored_proposal_result {
         Some(proposal_result) => proposal_result,
         None => {
-            let tally_epoch = proposal.voting_end_epoch;
+            let tally_epoch = current_epoch;
 
             let is_author_pgf_steward =
                 is_steward(client, &proposal.author).await;
