@@ -1176,6 +1176,32 @@ pub async fn query_rewards<C: namada_sdk::queries::Client + Sync>(
     )
 }
 
+/// Query token total supply.
+pub async fn query_total_supply<N: Namada>(
+    context: &N,
+    args: args::QueryTotalSupply,
+) {
+    let token = args.token;
+    let supply = unwrap_client_response::<N::Client, token::Amount>(
+        RPC.vp()
+            .token()
+            .total_supply(context.client(), &token)
+            .await,
+    );
+    display_line!(context.io(), "Total supply of {token}: {supply}");
+}
+
+/// Query the effective total supply of the native token
+pub async fn query_effective_native_supply<N: Namada>(context: &N) {
+    let native_supply = unwrap_client_response::<N::Client, token::Amount>(
+        RPC.vp()
+            .token()
+            .effective_native_supply(context.client())
+            .await,
+    );
+    display_line!(context.io(), "{native_supply} NAM");
+}
+
 /// Query a validator's state information
 pub async fn query_and_print_validator_state(
     context: &impl Namada,
