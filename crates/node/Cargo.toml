@@ -114,3 +114,6 @@ proptest.workspace = true
 rand = { workspace = true, features = ["std"] }
 test-log.workspace = true
 tokio-test.workspace = true
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }

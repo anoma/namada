@@ -43,3 +43,6 @@ namada_vm = { path = "../vm", features = ["testing"] }
 namada_vp = { path = "../vp" }
 
 assert_matches.workspace = true
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }
