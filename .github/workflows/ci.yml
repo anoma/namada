@@ -29,7 +29,7 @@ env:
   CACHE_BUCKET: github-runners-remote-cache-shared
   SCCACHE_BUCKET: github-runners-remote-cache-shared
   AWS_REGION: us-west-2
-  NIGHTLY: nightly-2024-05-15
+  NIGHTLY: nightly-2024-09-08
   NAMADA_MASP_PARAMS_DIR: /masp/.masp-params
 
 jobs:
