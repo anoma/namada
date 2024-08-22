@@ -21,7 +21,7 @@ use namada_storage::{
     KeySeg, StorageHasher, TxIndex, EPOCH_TYPE_LENGTH,
 };
 
-use crate::{Error, Result};
+use crate::Result;
 
 /// The ledger's state
 #[derive(Debug)]
@@ -281,23 +281,17 @@ where
         let key_prefix: Key =
             Address::Internal(InternalAddress::PoS).to_db_key().into();
 
-        let key = key_prefix
-            .push(&"epoch_start_height".to_string())
-            .map_err(Error::KeyError)?;
+        let key = key_prefix.push(&"epoch_start_height".to_string())?;
         self.block
             .tree
             .update(&key, encode(&self.next_epoch_min_start_height))?;
 
-        let key = key_prefix
-            .push(&"epoch_start_time".to_string())
-            .map_err(Error::KeyError)?;
+        let key = key_prefix.push(&"epoch_start_time".to_string())?;
         self.block
             .tree
             .update(&key, encode(&self.next_epoch_min_start_time))?;
 
-        let key = key_prefix
-            .push(&"current_epoch".to_string())
-            .map_err(Error::KeyError)?;
+        let key = key_prefix.push(&"current_epoch".to_string())?;
         self.block.tree.update(&key, encode(&self.block.epoch))?;
 
         Ok(())

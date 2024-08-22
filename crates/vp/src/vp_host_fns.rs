@@ -2,20 +2,22 @@
 
 use std::cell::RefCell;
 use std::fmt::Debug;
-use std::num::TryFromIntError;
 
 use namada_core::address::{Address, ESTABLISHED_ADDRESS_BYTES_LEN};
-use namada_core::arith::{self, checked};
+use namada_core::arith::checked;
 use namada_core::chain::{BlockHeader, BlockHeight, Epoch, Epochs};
 use namada_core::hash::{Hash, HASH_LENGTH};
 use namada_core::storage::{Key, TxIndex, TX_INDEX_LENGTH};
 use namada_events::{Event, EventTypeBuilder};
-use namada_gas as gas;
-use namada_gas::{GasMetering, VpGasMeter, MEMORY_ACCESS_GAS_PER_BYTE};
-use namada_state::write_log::WriteLog;
-use namada_state::{write_log, DBIter, ResultExt, StateRead, DB};
+use namada_gas::{
+    self as gas, GasMetering, VpGasMeter, MEMORY_ACCESS_GAS_PER_BYTE,
+};
 use namada_tx::{BatchedTxRef, Section};
 use thiserror::Error;
+
+use crate::state::write_log::WriteLog;
+use crate::state::{write_log, DBIter, PrefixIter, ResultExt, StateRead, DB};
+pub use crate::state::{Error, Result};
 
 /// These runtime errors will abort VP execution immediately
 #[allow(missing_docs)]
@@ -23,41 +25,28 @@ use thiserror::Error;
 pub enum RuntimeError {
     #[error("Out of gas: {0}")]
     OutOfGas(gas::Error),
-    #[error("State error: {0}")]
-    StateError(namada_state::Error),
-    #[error("Storage error: {0}")]
-    StorageError(#[from] namada_state::StorageError),
-    #[error("Storage data error: {0}")]
-    StorageDataError(namada_core::storage::Error),
-    #[error("Encoding error: {0}")]
-    EncodingError(std::io::Error),
-    #[error("Numeric conversion error: {0}")]
-    NumConversionError(#[from] TryFromIntError),
-    #[error("Memory error: {0}")]
-    MemoryError(Box<dyn std::error::Error + Sync + Send + 'static>),
     #[error("Invalid transaction code hash")]
     InvalidCodeHash,
     #[error("No value found in result buffer")]
     NoValueInResultBuffer,
     #[error("The section signature is invalid: {0}")]
     InvalidSectionSignature(String),
-    #[error("{0}")]
-    Erased(String), // type erased error
-    #[error("Arithmetic {0}")]
-    Arith(#[from] arith::Error),
+}
+
+impl From<RuntimeError> for Error {
+    fn from(value: RuntimeError) -> Self {
+        Error::new(value)
+    }
 }
 
 /// VP environment function result
 pub type EnvResult<T> = std::result::Result<T, RuntimeError>;
 
 /// Add a gas cost incured in a validity predicate
-pub fn add_gas(
-    gas_meter: &RefCell<VpGasMeter>,
-    used_gas: u64,
-) -> EnvResult<()> {
+pub fn add_gas(gas_meter: &RefCell<VpGasMeter>, used_gas: u64) -> Result<()> {
     gas_meter.borrow_mut().consume(used_gas).map_err(|err| {
         tracing::info!("Stopping VP execution because of gas error: {}", err);
-        RuntimeError::OutOfGas(err)
+        Error::new(RuntimeError::OutOfGas(err))
     })
 }
 
@@ -67,7 +56,7 @@ pub fn read_pre<S>(
     gas_meter: &RefCell<VpGasMeter>,
     state: &S,
     key: &Key,
-) -> EnvResult<Option<Vec<u8>>>
+) -> Result<Option<Vec<u8>>>
 where
     S: StateRead + Debug,
 {
@@ -90,8 +79,7 @@ where
         }
         None => {
             // When not found in write log, try to read from the storage
-            let (value, gas) =
-                state.db_read(key).map_err(RuntimeError::StateError)?;
+            let (value, gas) = state.db_read(key)?;
             add_gas(gas_meter, gas)?;
             Ok(value)
         }
@@ -104,7 +92,7 @@ pub fn read_post<S>(
     gas_meter: &RefCell<VpGasMeter>,
     state: &S,
     key: &Key,
-) -> EnvResult<Option<Vec<u8>>>
+) -> Result<Option<Vec<u8>>>
 where
     S: StateRead + Debug,
 {
@@ -126,8 +114,7 @@ where
         None => {
             // When not found in write log, try
             // to read from the storage
-            let (value, gas) =
-                state.db_read(key).map_err(RuntimeError::StateError)?;
+            let (value, gas) = state.db_read(key)?;
             add_gas(gas_meter, gas)?;
             Ok(value)
         }
@@ -140,7 +127,7 @@ pub fn read_temp<S>(
     gas_meter: &RefCell<VpGasMeter>,
     state: &S,
     key: &Key,
-) -> EnvResult<Option<Vec<u8>>>
+) -> Result<Option<Vec<u8>>>
 where
     S: StateRead + Debug,
 {
@@ -156,7 +143,7 @@ pub fn has_key_pre<S>(
     gas_meter: &RefCell<VpGasMeter>,
     state: &S,
     key: &Key,
-) -> EnvResult<bool>
+) -> Result<bool>
 where
     S: StateRead + Debug,
 {
@@ -173,8 +160,7 @@ where
         Some(&write_log::StorageModification::InitAccount { .. }) => Ok(true),
         None => {
             // When not found in write log, try to check the storage
-            let (present, gas) =
-                state.db_has_key(key).map_err(RuntimeError::StateError)?;
+            let (present, gas) = state.db_has_key(key)?;
             add_gas(gas_meter, gas)?;
             Ok(present)
         }
@@ -187,7 +173,7 @@ pub fn has_key_post<S>(
     gas_meter: &RefCell<VpGasMeter>,
     state: &S,
     key: &Key,
-) -> EnvResult<bool>
+) -> Result<bool>
 where
     S: StateRead + Debug,
 {
@@ -204,8 +190,7 @@ where
         None => {
             // When not found in write log, try
             // to check the storage
-            let (present, gas) =
-                state.db_has_key(key).map_err(RuntimeError::StateError)?;
+            let (present, gas) = state.db_has_key(key)?;
             add_gas(gas_meter, gas)?;
             Ok(present)
         }
@@ -216,7 +201,7 @@ where
 pub fn get_chain_id<S>(
     gas_meter: &RefCell<VpGasMeter>,
     state: &S,
-) -> EnvResult<String>
+) -> Result<String>
 where
     S: StateRead + Debug,
 {
@@ -230,7 +215,7 @@ where
 pub fn get_block_height<S>(
     gas_meter: &RefCell<VpGasMeter>,
     state: &S,
-) -> EnvResult<BlockHeight>
+) -> Result<BlockHeight>
 where
     S: StateRead + Debug,
 {
@@ -244,12 +229,11 @@ pub fn get_block_header<S>(
     gas_meter: &RefCell<VpGasMeter>,
     state: &S,
     height: BlockHeight,
-) -> EnvResult<Option<BlockHeader>>
+) -> Result<Option<BlockHeader>>
 where
     S: StateRead + Debug,
 {
-    let (header, gas) = StateRead::get_block_header(state, Some(height))
-        .map_err(RuntimeError::StateError)?;
+    let (header, gas) = StateRead::get_block_header(state, Some(height))?;
     add_gas(gas_meter, gas)?;
     Ok(header)
 }
@@ -259,7 +243,7 @@ where
 pub fn get_tx_code_hash(
     gas_meter: &RefCell<VpGasMeter>,
     batched_tx: &BatchedTxRef<'_>,
-) -> EnvResult<Option<Hash>> {
+) -> Result<Option<Hash>> {
     add_gas(
         gas_meter,
         (HASH_LENGTH as u64)
@@ -279,7 +263,7 @@ pub fn get_tx_code_hash(
 pub fn get_block_epoch<S>(
     gas_meter: &RefCell<VpGasMeter>,
     state: &S,
-) -> EnvResult<Epoch>
+) -> Result<Epoch>
 where
     S: StateRead + Debug,
 {
@@ -293,7 +277,7 @@ where
 pub fn get_tx_index(
     gas_meter: &RefCell<VpGasMeter>,
     tx_index: &TxIndex,
-) -> EnvResult<TxIndex> {
+) -> Result<TxIndex> {
     add_gas(
         gas_meter,
         (TX_INDEX_LENGTH as u64)
@@ -307,7 +291,7 @@ pub fn get_tx_index(
 pub fn get_native_token<S>(
     gas_meter: &RefCell<VpGasMeter>,
     state: &S,
-) -> EnvResult<Address>
+) -> Result<Address>
 where
     S: StateRead + Debug,
 {
@@ -324,7 +308,7 @@ where
 pub fn get_pred_epochs<S>(
     gas_meter: &RefCell<VpGasMeter>,
     state: &S,
-) -> EnvResult<Epochs>
+) -> Result<Epochs>
 where
     S: StateRead + Debug,
 {
@@ -338,7 +322,7 @@ pub fn get_events<S>(
     _gas_meter: &RefCell<VpGasMeter>,
     state: &S,
     event_type: String,
-) -> EnvResult<Vec<Event>>
+) -> Result<Vec<Event>>
 where
     S: StateRead + Debug,
 {
@@ -361,7 +345,7 @@ pub fn iter_prefix_pre<'a, D>(
     write_log: &'a WriteLog,
     db: &'a D,
     prefix: &Key,
-) -> EnvResult<namada_state::PrefixIter<'a, D>>
+) -> Result<PrefixIter<'a, D>>
 where
     D: DB + for<'iter> DBIter<'iter>,
 {
@@ -380,7 +364,7 @@ pub fn iter_prefix_post<'a, D>(
     write_log: &'a WriteLog,
     db: &'a D,
     prefix: &Key,
-) -> EnvResult<namada_state::PrefixIter<'a, D>>
+) -> Result<PrefixIter<'a, D>>
 where
     D: DB + for<'iter> DBIter<'iter>,
 {
@@ -392,8 +376,8 @@ where
 /// Get the next item in a storage prefix iterator (pre or post).
 pub fn iter_next<DB>(
     gas_meter: &RefCell<VpGasMeter>,
-    iter: &mut namada_state::PrefixIter<'_, DB>,
-) -> EnvResult<Option<(String, Vec<u8>)>>
+    iter: &mut PrefixIter<'_, DB>,
+) -> Result<Option<(String, Vec<u8>)>>
 where
     DB: namada_state::DB + for<'iter> namada_state::DBIter<'iter>,
 {

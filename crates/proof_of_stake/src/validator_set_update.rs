@@ -21,7 +21,7 @@ use crate::types::{
     ConsensusValidatorSet, Position, ReverseOrdTokenAmount,
     ValidatorPositionAddresses, ValidatorSetUpdate, ValidatorState,
 };
-use crate::{PosParams, StorageRead, StorageResult, StorageWrite};
+use crate::{PosParams, Result, StorageRead, StorageWrite};
 
 /// Update validator set at the pipeline epoch when a validator receives a new
 /// bond and when its bond is unbonded (self-bond or delegation).
@@ -32,7 +32,7 @@ pub fn update_validator_set<S, Gov>(
     token_change: token::Change,
     current_epoch: Epoch,
     offset: Option<u64>,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
     Gov: governance::Read<S>,
@@ -360,7 +360,7 @@ pub fn insert_validator_into_validator_set<S, Gov>(
     stake: token::Amount,
     current_epoch: Epoch,
     offset: u64,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
     Gov: governance::Read<S>,
@@ -463,7 +463,7 @@ pub fn remove_consensus_validator<S>(
     params: &PosParams,
     epoch: Epoch,
     validator: &Address,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -491,7 +491,7 @@ pub fn remove_below_capacity_validator<S>(
     params: &PosParams,
     epoch: Epoch,
     validator: &Address,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -523,7 +523,7 @@ pub fn promote_next_below_capacity_validator_to_consensus<S, Gov>(
     storage: &mut S,
     current_epoch: Epoch,
     offset: u64,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
     Gov: governance::Read<S>,
@@ -569,7 +569,7 @@ pub fn validator_set_update_comet<S, T>(
     params: &PosParams,
     current_epoch: Epoch,
     f: impl FnMut(ValidatorSetUpdate) -> T,
-) -> StorageResult<Vec<T>>
+) -> Result<Vec<T>>
 where
     S: StorageRead,
 {
@@ -771,7 +771,7 @@ pub fn copy_validator_sets_and_positions<S>(
     params: &PosParams,
     current_epoch: Epoch,
     target_epoch: Epoch,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -890,7 +890,7 @@ fn insert_into_consensus_and_demote_to_below_cap<S, Gov>(
     offset: u64,
     consensus_set: &ConsensusValidatorSet,
     below_capacity_set: &BelowCapacityValidatorSet,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
     Gov: governance::Read<S>,
@@ -941,7 +941,7 @@ where
 fn find_first_position<S>(
     handle: &ValidatorPositionAddresses,
     storage: &S,
-) -> StorageResult<Option<Position>>
+) -> Result<Option<Position>>
 where
     S: StorageRead,
 {
@@ -957,7 +957,7 @@ where
 fn find_last_position<S>(
     handle: &ValidatorPositionAddresses,
     storage: &S,
-) -> StorageResult<Option<Position>>
+) -> Result<Option<Position>>
 where
     S: StorageRead,
 {
@@ -973,7 +973,7 @@ where
 fn find_next_position<S>(
     handle: &ValidatorPositionAddresses,
     storage: &S,
-) -> StorageResult<Position>
+) -> Result<Position>
 where
     S: StorageRead,
 {
@@ -989,7 +989,7 @@ where
 fn get_min_consensus_validator_amount<S>(
     handle: &ConsensusValidatorSet,
     storage: &S,
-) -> StorageResult<token::Amount>
+) -> Result<token::Amount>
 where
     S: StorageRead,
 {
@@ -1010,7 +1010,7 @@ where
 fn get_max_below_capacity_validator_amount<S>(
     handle: &BelowCapacityValidatorSet,
     storage: &S,
-) -> StorageResult<Option<token::Amount>>
+) -> Result<Option<token::Amount>>
 where
     S: StorageRead,
 {
@@ -1034,7 +1034,7 @@ fn insert_validator_into_set<S>(
     storage: &mut S,
     epoch: &Epoch,
     address: &Address,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -1062,7 +1062,7 @@ fn read_validator_set_position<S>(
     validator: &Address,
     epoch: Epoch,
     _params: &PosParams,
-) -> StorageResult<Option<Position>>
+) -> Result<Option<Position>>
 where
     S: StorageRead,
 {

@@ -87,7 +87,7 @@ where
         init: request::InitChain,
         #[cfg(any(test, feature = "testing", feature = "benches"))]
         _num_validators: u64,
-    ) -> Result<response::InitChain> {
+    ) -> ShellResult<response::InitChain> {
         let mut response = response::InitChain::default();
         let chain_id = self.state.in_mem().chain_id.as_str();
         if chain_id != init.chain_id.as_str() {
@@ -911,7 +911,7 @@ where
     }
 
     /// This should only be called after checking that `is_ok` returned false.
-    fn error_out(mut self) -> Result<()> {
+    fn error_out(mut self) -> ShellResult<()> {
         if self.is_ok() {
             return Ok(());
         }

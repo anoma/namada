@@ -19,7 +19,7 @@ use crate::storage_key::{
     masp_last_locked_amount_key, masp_locked_amount_target_key,
     masp_max_reward_rate_key,
 };
-use crate::{StorageRead, StorageResult, StorageWrite, WithConversionState};
+use crate::{Result, StorageRead, StorageWrite, WithConversionState};
 
 /// Compute shielded token inflation amount
 #[allow(clippy::too_many_arguments)]
@@ -65,7 +65,7 @@ pub fn compute_inflation(
 pub fn calculate_masp_rewards_precision<S, TransToken>(
     storage: &mut S,
     addr: &Address,
-) -> StorageResult<(u128, Denomination)>
+) -> Result<(u128, Denomination)>
 where
     S: StorageWrite + StorageRead,
     TransToken: trans_token::Read<S>,
@@ -91,7 +91,7 @@ pub fn calculate_masp_rewards<S, TransToken>(
     storage: &mut S,
     token: &Address,
     masp_epochs_per_year: u64,
-) -> StorageResult<((u128, u128), Denomination)>
+) -> Result<((u128, u128), Denomination)>
 where
     S: StorageWrite + StorageRead,
     TransToken: trans_token::Keys + trans_token::Read<S>,
@@ -232,7 +232,7 @@ where
 /// Update the MASP's allowed conversions
 pub fn update_allowed_conversions<S, Params, TransToken>(
     _storage: &mut S,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageWrite + StorageRead + WithConversionState,
     Params: parameters::Read<S>,
@@ -245,7 +245,7 @@ where
 /// Update the MASP's allowed conversions
 pub fn update_allowed_conversions<S, Params, TransToken>(
     storage: &mut S,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageWrite + StorageRead + WithConversionState,
     Params: parameters::Read<S>,
@@ -269,9 +269,7 @@ where
     };
     use rayon::prelude::ParallelSlice;
 
-    use crate::{
-        mint_rewards, ConversionLeaf, OptionExt, ResultExt, StorageError,
-    };
+    use crate::{mint_rewards, ConversionLeaf, Error, OptionExt, ResultExt};
 
     // The derived conversions will be placed in MASP address space
     let masp_addr = MASP;
@@ -348,7 +346,7 @@ where
         storage.get_block_epoch()?,
         masp_epoch_multiplier,
     )
-    .map_err(StorageError::new_const)?;
+    .map_err(Error::new_const)?;
     let prev_masp_epoch = match masp_epoch.prev() {
         Some(epoch) => epoch,
         None => return Ok(()),
@@ -442,9 +440,7 @@ where
                             normed_inflation,
                         ))
                         .ok_or_else(|| {
-                            StorageError::new_const(
-                                "Three digit reward overflow",
-                            )
+                            Error::new_const("Three digit reward overflow")
                         })?;
                     total_reward = total_reward
                         .checked_add(
@@ -456,7 +452,7 @@ where
                                 .unwrap_or_default(),
                         )
                         .ok_or_else(|| {
-                            StorageError::new_const(
+                            Error::new_const(
                                 "Three digit total reward overflow",
                             )
                         })?;
@@ -515,14 +511,14 @@ where
                             addr_bal
                                 .u128_eucl_div_rem((reward, precision))
                                 .ok_or_else(|| {
-                                    StorageError::new_const(
+                                    Error::new_const(
                                         "Total reward calculation overflow",
                                     )
                                 })?
                                 .0,
                         )
                         .ok_or_else(|| {
-                            StorageError::new_const("Total reward overflow")
+                            Error::new_const("Total reward overflow")
                         })?;
                 }
             }

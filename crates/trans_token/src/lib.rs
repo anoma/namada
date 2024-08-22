@@ -31,7 +31,7 @@ use namada_core::uint::Uint;
 use namada_events::extend::UserAccount;
 use namada_events::{EmitEvents, EventLevel};
 pub use namada_state::{
-    Key, ResultExt, StorageError, StorageRead, StorageResult, StorageWrite,
+    Error, Key, Result, ResultExt, StorageRead, StorageWrite,
 };
 pub use namada_systems::trans_token::*;
 pub use storage::*;

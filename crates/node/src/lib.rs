@@ -621,7 +621,7 @@ fn start_abci_broadcaster_shell(
     setup_data: RunAuxSetup,
     config: config::Ledger,
 ) -> (
-    task::JoinHandle<shell::Result<()>>,
+    task::JoinHandle<shell::ShellResult<()>>,
     task::JoinHandle<()>,
     thread::JoinHandle<()>,
 ) {
@@ -735,7 +735,7 @@ async fn run_abci(
     service_handle: tokio::sync::broadcast::Sender<()>,
     proxy_app_address: SocketAddr,
     abort_recv: tokio::sync::oneshot::Receiver<()>,
-) -> shell::Result<()> {
+) -> shell::ShellResult<()> {
     // Split it into components.
     let (consensus, mempool, snapshot, info) = split::service(abci_service, 5);
 
@@ -774,7 +774,7 @@ async fn run_abci(
 fn start_tendermint(
     spawner: &mut AbortableSpawner,
     config: &config::Ledger,
-) -> task::JoinHandle<shell::Result<()>> {
+) -> task::JoinHandle<shell::ShellResult<()>> {
     let tendermint_dir = config.cometbft_dir();
     let chain_id = config.chain_id.clone();
     let proxy_app_address = config.cometbft.proxy_app.to_string();

@@ -18,8 +18,8 @@ use namada_core::tendermint::Time as TmTime;
 use namada_core::token::Amount;
 use namada_events::EmitEvents;
 use namada_state::{
-    BlockHeader, BlockHeight, Epoch, Epochs, Key, ResultExt, State,
-    StorageError, StorageRead, StorageResult, StorageWrite, TxIndex,
+    BlockHeader, BlockHeight, Epoch, Epochs, Key, Result, ResultExt, State,
+    StorageRead, StorageWrite, TxIndex,
 };
 use namada_systems::{parameters, trans_token};
 
@@ -43,56 +43,56 @@ where
 {
     type PrefixIter<'iter> = <S as StorageRead>::PrefixIter<'iter> where Self: 'iter;
 
-    fn read_bytes(&self, key: &Key) -> StorageResult<Option<Vec<u8>>> {
+    fn read_bytes(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         self.state.read_bytes(key)
     }
 
-    fn has_key(&self, key: &Key) -> StorageResult<bool> {
+    fn has_key(&self, key: &Key) -> Result<bool> {
         self.state.has_key(key)
     }
 
     fn iter_prefix<'iter>(
         &'iter self,
         prefix: &Key,
-    ) -> StorageResult<Self::PrefixIter<'iter>> {
+    ) -> Result<Self::PrefixIter<'iter>> {
         self.state.iter_prefix(prefix)
     }
 
     fn iter_next<'iter>(
         &'iter self,
         iter: &mut Self::PrefixIter<'iter>,
-    ) -> StorageResult<Option<(String, Vec<u8>)>> {
+    ) -> Result<Option<(String, Vec<u8>)>> {
         self.state.iter_next(iter)
     }
 
-    fn get_chain_id(&self) -> StorageResult<String> {
+    fn get_chain_id(&self) -> Result<String> {
         self.state.get_chain_id()
     }
 
-    fn get_block_height(&self) -> StorageResult<BlockHeight> {
+    fn get_block_height(&self) -> Result<BlockHeight> {
         self.state.get_block_height()
     }
 
     fn get_block_header(
         &self,
         height: BlockHeight,
-    ) -> StorageResult<Option<BlockHeader>> {
+    ) -> Result<Option<BlockHeader>> {
         StorageRead::get_block_header(self.state, height)
     }
 
-    fn get_block_epoch(&self) -> StorageResult<Epoch> {
+    fn get_block_epoch(&self) -> Result<Epoch> {
         self.state.get_block_epoch()
     }
 
-    fn get_pred_epochs(&self) -> StorageResult<Epochs> {
+    fn get_pred_epochs(&self) -> Result<Epochs> {
         self.state.get_pred_epochs()
     }
 
-    fn get_tx_index(&self) -> StorageResult<TxIndex> {
+    fn get_tx_index(&self) -> Result<TxIndex> {
         self.state.get_tx_index()
     }
 
-    fn get_native_token(&self) -> StorageResult<Address> {
+    fn get_native_token(&self) -> Result<Address> {
         self.state.get_native_token()
     }
 }
@@ -101,15 +101,11 @@ impl<S, Token> StorageWrite for IbcProtocolContext<'_, S, Token>
 where
     S: State,
 {
-    fn write_bytes(
-        &mut self,
-        key: &Key,
-        val: impl AsRef<[u8]>,
-    ) -> StorageResult<()> {
+    fn write_bytes(&mut self, key: &Key, val: impl AsRef<[u8]>) -> Result<()> {
         self.state.write_bytes(key, val)
     }
 
-    fn delete(&mut self, key: &Key) -> StorageResult<()> {
+    fn delete(&mut self, key: &Key) -> Result<()> {
         self.state.delete(key)
     }
 }
@@ -132,7 +128,7 @@ where
         self
     }
 
-    fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<(), StorageError> {
+    fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<()> {
         // There's no gas cost for protocol, we can ignore result
         self.state.write_log_mut().emit_event(event);
         Ok(())
@@ -145,7 +141,7 @@ where
         dest: &Address,
         token: &Address,
         amount: Amount,
-    ) -> Result<(), StorageError> {
+    ) -> Result<()> {
         Token::transfer(self.state, token, src, dest, amount)
     }
 
@@ -155,7 +151,7 @@ where
         target: &Address,
         token: &Address,
         amount: Amount,
-    ) -> Result<(), StorageError> {
+    ) -> Result<()> {
         ibc_storage::mint_tokens_and_emit_event::<_, Token>(
             self.state, target, token, amount,
         )
@@ -167,14 +163,11 @@ where
         target: &Address,
         token: &Address,
         amount: Amount,
-    ) -> Result<(), StorageError> {
+    ) -> Result<()> {
         ibc_storage::burn_tokens::<_, Token>(self.state, target, token, amount)
     }
 
-    fn insert_verifier(
-        &mut self,
-        _verifier: &Address,
-    ) -> Result<(), StorageError> {
+    fn insert_verifier(&mut self, _verifier: &Address) -> Result<()> {
         Ok(())
     }
 
@@ -199,7 +192,7 @@ pub fn transfer_over_ibc<'a, S, Params, Token, Transfer>(
     token: &Address,
     source: &Address,
     target: &PGFIbcTarget,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: 'a + State + EmitEvents,
     Params: parameters::Read<

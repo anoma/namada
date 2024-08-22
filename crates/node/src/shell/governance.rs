@@ -37,7 +37,7 @@ pub fn finalize_block<D, H>(
     events: &mut impl EmitEvents,
     current_epoch: Epoch,
     is_new_epoch: bool,
-) -> Result<()>
+) -> ShellResult<()>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -58,7 +58,7 @@ pub fn load_and_execute_governance_proposals<D, H>(
     shell: &mut Shell<D, H>,
     events: &mut impl EmitEvents,
     current_epoch: Epoch,
-) -> Result<ProposalsResult>
+) -> ShellResult<ProposalsResult>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
@@ -75,7 +75,7 @@ fn execute_governance_proposals<D, H>(
     shell: &mut Shell<D, H>,
     events: &mut impl EmitEvents,
     proposal_ids: BTreeSet<u64>,
-) -> Result<ProposalsResult>
+) -> ShellResult<ProposalsResult>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
@@ -300,7 +300,7 @@ fn compute_proposal_votes<S>(
     params: &PosParams,
     proposal_id: u64,
     epoch: Epoch,
-) -> namada_sdk::state::StorageResult<ProposalVotes>
+) -> namada_sdk::state::Result<ProposalVotes>
 where
     S: StorageRead,
 {
@@ -384,7 +384,7 @@ fn execute_default_proposal<D, H>(
     shell: &mut Shell<D, H>,
     id: u64,
     proposal_code: Vec<u8>,
-) -> namada_sdk::state::StorageResult<bool>
+) -> namada_sdk::state::Result<bool>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
@@ -453,7 +453,7 @@ where
 fn execute_pgf_steward_proposal<S>(
     storage: &mut S,
     stewards: BTreeSet<AddRemove<Address>>,
-) -> Result<bool>
+) -> ShellResult<bool>
 where
     S: StorageRead + StorageWrite,
 {
@@ -504,7 +504,7 @@ fn execute_pgf_funding_proposal<D, H>(
     token: &Address,
     fundings: BTreeSet<PGFAction>,
     proposal_id: u64,
-) -> Result<bool>
+) -> ShellResult<bool>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,

@@ -57,8 +57,8 @@ pub use namada_state::collections::lazy_set::{self, LazySet};
 pub use namada_state::collections::lazy_vec::{self, LazyVec};
 pub use namada_state::collections::LazyCollection;
 pub use namada_state::{
-    iter_prefix_bytes, Key, KeySeg, OptionExt, ResultExt, StorageError,
-    StorageRead, StorageResult, StorageWrite,
+    iter_prefix_bytes, Error, Key, KeySeg, OptionExt, Result, ResultExt,
+    StorageRead, StorageWrite,
 };
 pub use namada_systems::proof_of_stake::*;
 use namada_systems::{governance, trans_token};
@@ -1214,7 +1214,7 @@ where
                         .or_default()
                         .insert(epoch, amount);
                 }
-                Ok::<_, StorageError>((start, rbonds))
+                Ok::<_, Error>((start, rbonds))
             } else {
                 for src_validator in &modified.validators_to_remove {
                     if modified
@@ -1326,14 +1326,14 @@ where
     let offset = offset_opt.unwrap_or(params.pipeline_len);
 
     if !address.is_established() {
-        return Err(StorageError::new_const(
+        return Err(Error::new_const(
             "The given address {address} is not established. Only an \
              established address can become a validator.",
         ));
     }
 
     if is_validator(storage, address)? {
-        return Err(StorageError::new_const(
+        return Err(Error::new_const(
             "The given address is already a validator",
         ));
     }
@@ -1341,7 +1341,7 @@ where
     // The address may not have any bonds if it is going to be initialized as a
     // validator
     if has_bonds::<S, Gov>(storage, address)? {
-        return Err(StorageError::new_const(
+        return Err(Error::new_const(
             "The given address has delegations and therefore cannot become a \
              validator. Unbond first.",
         ));
@@ -2636,9 +2636,7 @@ where
         (Dec::one() - params.liveness_threshold) * params.liveness_window_check
     )?
     .to_uint()
-    .ok_or_else(|| {
-        StorageError::SimpleMessage("Found negative liveness threshold")
-    })?
+    .ok_or_else(|| Error::SimpleMessage("Found negative liveness threshold"))?
     .as_u64();
 
     // Jail inactive validators

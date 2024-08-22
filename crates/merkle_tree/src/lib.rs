@@ -43,8 +43,7 @@ pub use namada_core::hash::{Hash, StorageHasher};
 pub use namada_core::keccak::KeccakHash;
 pub use namada_core::storage::Key;
 use namada_core::storage::{
-    self, DbKeySeg, Error as StorageError, KeySeg, StringKey, TreeBytes,
-    TreeKeyError, IBC_KEY_LIMIT,
+    self, DbKeySeg, KeySeg, StringKey, TreeBytes, TreeKeyError, IBC_KEY_LIMIT,
 };
 use namada_core::{decode, DecodeError};
 use namada_macros::BorshDeserializer;
@@ -116,7 +115,7 @@ impl From<BridgePoolProof> for MembershipProof {
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Invalid key: {0}")]
-    InvalidKey(StorageError),
+    InvalidKey(#[from] namada_core::storage::Error),
     #[error("Invalid key for merkle tree: {0}")]
     InvalidMerkleKey(String),
     #[error("Storage tree key error: {0}")]
@@ -139,6 +138,12 @@ pub enum Error {
         "The merklized data did not produce that same hash as the stored root."
     )]
     RootValidationError,
+}
+
+impl From<MtError> for Error {
+    fn from(error: MtError) -> Self {
+        Error::MerkleTree(error.to_string())
+    }
 }
 
 /// Result for functions that may fail
@@ -947,18 +952,6 @@ impl<'a> MerkleTreeStoresWrite<'a> {
             StoreType::NoDiff => StoreRef::NoDiff(self.no_diff.1),
             StoreType::CommitData => StoreRef::CommitData,
         }
-    }
-}
-
-impl From<StorageError> for Error {
-    fn from(error: StorageError) -> Self {
-        Error::InvalidKey(error)
-    }
-}
-
-impl From<MtError> for Error {
-    fn from(error: MtError) -> Self {
-        Error::MerkleTree(error.to_string())
     }
 }
 

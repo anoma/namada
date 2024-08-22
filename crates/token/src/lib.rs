@@ -30,12 +30,11 @@ pub use namada_trans_token::*;
 
 /// Validity predicates
 pub mod vp {
-    pub use namada_shielded_token::vp::{
-        Error as MaspError, MaspVp, Result as MaspResult,
-    };
-    pub use namada_trans_token::vp::{
-        Error as MultitokenError, MultitokenVp, Result as MultitokenResult,
-    };
+    pub use namada_shielded_token::vp::MaspVp;
+    // The error and result type are the same as in `namada_trans_token` -
+    // a native VP
+    pub use namada_shielded_token::{Error, Result};
+    pub use namada_trans_token::vp::MultitokenVp;
 }
 use serde::{Deserialize, Serialize};
 

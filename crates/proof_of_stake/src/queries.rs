@@ -24,8 +24,8 @@ use crate::types::{
     DelegationEpochs, Slash, UnbondDetails,
 };
 use crate::{
-    iter_prefix_bytes, raw_bond_amount, storage_key, PosParams, StorageError,
-    StorageRead, StorageResult,
+    iter_prefix_bytes, raw_bond_amount, storage_key, Error, PosParams, Result,
+    StorageRead,
 };
 
 /// Find all validators to which a given bond `owner` (or source) has a
@@ -34,7 +34,7 @@ pub fn find_delegation_validators<S>(
     storage: &S,
     owner: &Address,
     epoch: &Epoch,
-) -> StorageResult<HashSet<Address>>
+) -> Result<HashSet<Address>>
 where
     S: StorageRead,
 {
@@ -87,7 +87,7 @@ pub fn find_delegations<S, Gov>(
     storage: &S,
     owner: &Address,
     epoch: &Epoch,
-) -> StorageResult<HashMap<Address, token::Amount>>
+) -> Result<HashMap<Address, token::Amount>>
 where
     S: StorageRead,
     Gov: governance::Read<S>,
@@ -145,7 +145,7 @@ where
 }
 
 /// Find if the given source address has any bonds.
-pub fn has_bonds<S, Gov>(storage: &S, source: &Address) -> StorageResult<bool>
+pub fn has_bonds<S, Gov>(storage: &S, source: &Address) -> Result<bool>
 where
     S: StorageRead,
     Gov: governance::Read<S>,
@@ -160,7 +160,7 @@ pub fn find_bonds<S>(
     storage: &S,
     source: &Address,
     validator: &Address,
-) -> StorageResult<BTreeMap<Epoch, token::Amount>>
+) -> Result<BTreeMap<Epoch, token::Amount>>
 where
     S: StorageRead,
 {
@@ -175,7 +175,7 @@ pub fn find_unbonds<S>(
     storage: &S,
     source: &Address,
     validator: &Address,
-) -> StorageResult<BTreeMap<(Epoch, Epoch), token::Amount>>
+) -> Result<BTreeMap<(Epoch, Epoch), token::Amount>>
 where
     S: StorageRead,
 {
@@ -201,7 +201,7 @@ pub fn bonds_and_unbonds<S, Gov>(
     storage: &S,
     source: Option<Address>,
     validator: Option<Address>,
-) -> StorageResult<BondsAndUnbondsDetails>
+) -> Result<BondsAndUnbondsDetails>
 where
     S: StorageRead,
     Gov: governance::Read<S>,
@@ -223,7 +223,7 @@ fn get_multiple_bonds_and_unbonds<S>(
     params: &PosParams,
     source: Option<Address>,
     validator: Option<Address>,
-) -> StorageResult<BondsAndUnbondsDetails>
+) -> Result<BondsAndUnbondsDetails>
 where
     S: StorageRead,
 {
@@ -331,7 +331,7 @@ where
             slashes,
             &mut applied_slashes,
         ));
-        Ok::<_, StorageError>(())
+        Ok::<_, Error>(())
     })?;
 
     raw_unbonds.try_for_each(|(bond_id, start, withdraw, amount)| {
@@ -352,7 +352,7 @@ where
             slashes,
             &mut applied_slashes,
         ));
-        Ok::<_, StorageError>(())
+        Ok::<_, Error>(())
     })?;
 
     Ok(bonds_and_unbonds
@@ -376,7 +376,7 @@ fn find_bonds_and_unbonds_details<S>(
     params: &PosParams,
     source: Address,
     validator: Address,
-) -> StorageResult<BondsAndUnbondsDetails>
+) -> Result<BondsAndUnbondsDetails>
 where
     S: StorageRead,
 {
@@ -554,7 +554,7 @@ pub fn get_validator_protocol_key<S, Gov>(
     storage: &S,
     addr: &Address,
     epoch: Epoch,
-) -> StorageResult<Option<common::PublicKey>>
+) -> Result<Option<common::PublicKey>>
 where
     S: StorageRead,
     Gov: governance::Read<S>,
@@ -570,7 +570,7 @@ pub fn get_validator_eth_hot_key<S, Gov>(
     storage: &S,
     validator: &Address,
     epoch: Epoch,
-) -> StorageResult<Option<common::PublicKey>>
+) -> Result<Option<common::PublicKey>>
 where
     S: StorageRead,
     Gov: governance::Read<S>,
@@ -587,7 +587,7 @@ pub fn read_validator_stake<S, Gov>(
     storage: &S,
     validator: &Address,
     epoch: Epoch,
-) -> StorageResult<token::Amount>
+) -> Result<token::Amount>
 where
     S: StorageRead,
     Gov: governance::Read<S>,
@@ -602,7 +602,7 @@ pub fn get_consensus_validator_from_protocol_pk<S, Gov>(
     storage: &S,
     pk: &common::PublicKey,
     epoch: Option<Epoch>,
-) -> StorageResult<Option<Address>>
+) -> Result<Option<Address>>
 where
     S: StorageRead,
     Gov: governance::Read<S>,

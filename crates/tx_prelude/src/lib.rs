@@ -43,7 +43,7 @@ pub use namada_macros::transaction;
 pub use namada_parameters::storage as parameters_storage;
 pub use namada_state::{
     collections, iter_prefix, iter_prefix_bytes, OptionExt, ResultExt,
-    StorageError as Error, StorageRead, StorageResult as Result, StorageWrite,
+    Error as Error, StorageRead, Result as Result, StorageWrite,
 };
 use namada_token::MaspTransaction;
 pub use namada_tx::{action, data as transaction, BatchedTx, Section, Tx};

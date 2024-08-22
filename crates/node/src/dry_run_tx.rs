@@ -7,7 +7,7 @@ use namada_sdk::gas::{GasMetering, TxGasMeter};
 use namada_sdk::parameters;
 use namada_sdk::queries::{EncodedResponseQuery, RequestQuery};
 use namada_sdk::state::{
-    DBIter, ResultExt, StorageHasher, StorageResult, TxIndex, DB,
+    DBIter, Result, ResultExt, StorageHasher, TxIndex, DB,
 };
 use namada_sdk::tx::data::{
     DryRunResult, ExtendedTxResult, GasLimit, TxResult, TxType,
@@ -25,7 +25,7 @@ pub fn dry_run_tx<D, H, CA>(
     mut vp_wasm_cache: VpCache<CA>,
     mut tx_wasm_cache: TxCache<CA>,
     request: &RequestQuery,
-) -> StorageResult<EncodedResponseQuery>
+) -> Result<EncodedResponseQuery>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -235,7 +235,7 @@ mod test {
             data: Option<Vec<u8>>,
             height: Option<BlockHeight>,
             prove: bool,
-        ) -> Result<EncodedResponseQuery, Self::Error> {
+        ) -> std::result::Result<EncodedResponseQuery, Self::Error> {
             let data = data.unwrap_or_default();
             let height = height.unwrap_or_default();
             // Handle a path by invoking the `RPC.handle` directly with the
@@ -276,7 +276,10 @@ mod test {
             })
         }
 
-        async fn perform<R>(&self, _request: R) -> Result<R::Output, RpcError>
+        async fn perform<R>(
+            &self,
+            _request: R,
+        ) -> std::result::Result<R::Output, RpcError>
         where
             R: namada_sdk::tendermint_rpc::SimpleRequest,
         {
@@ -285,7 +288,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_shell_queries_router_with_client() -> StorageResult<()> {
+    async fn test_shell_queries_router_with_client() -> Result<()> {
         // Initialize the `TestClient`
         let mut client = TestClient::new(RPC);
         // store the wasm code

@@ -2,7 +2,7 @@
 
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::token::Amount;
-use namada_state::{StorageResult, StorageWrite};
+use namada_state::{Result, StorageWrite};
 
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
 /// Governance parameter structure
@@ -24,7 +24,7 @@ impl Default for IbcParameters {
 
 impl IbcParameters {
     /// Initialize IBC parameters into storage
-    pub fn init_storage<S>(&self, storage: &mut S) -> StorageResult<()>
+    pub fn init_storage<S>(&self, storage: &mut S) -> Result<()>
     where
         S: StorageWrite,
     {

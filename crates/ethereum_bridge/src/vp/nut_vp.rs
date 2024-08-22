@@ -9,13 +9,8 @@ use namada_core::storage::Key;
 use namada_state::StateRead;
 use namada_systems::trans_token::{self as token, Amount};
 use namada_tx::BatchedTxRef;
-use namada_vp::native_vp::{self, Ctx, NativeVp, VpEvaluator};
+use namada_vp::native_vp::{self, Ctx, Error, NativeVp, Result, VpEvaluator};
 use namada_vp::VpEnv;
-
-/// Generic error that may be returned by the validity predicate
-#[derive(thiserror::Error, Debug)]
-#[error("Non-usable token VP error: {0}")]
-pub struct Error(#[from] native_vp::Error);
 
 /// Validity predicate for non-usable tokens.
 ///
@@ -39,14 +34,12 @@ where
     CA: 'static + Clone,
     TokenKeys: token::Keys,
 {
-    type Error = Error;
-
     fn validate_tx(
         &'view self,
         _: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<()> {
         tracing::debug!(
             keys_changed_len = keys_changed.len(),
             verifiers_len = verifiers.len(),
@@ -56,9 +49,8 @@ where
         verifiers
             .contains(&Address::Internal(InternalAddress::Multitoken))
             .ok_or_else(|| {
-                let error = Error(native_vp::Error::new_const(
-                    "Rejecting non-multitoken transfer tx",
-                ));
+                let error =
+                    Error::new_const("Rejecting non-multitoken transfer tx");
                 tracing::debug!("{error}");
                 error
             })?;
@@ -73,16 +65,10 @@ where
         });
 
         for (changed_key, token_owner) in nut_owners {
-            let pre: Amount = self
-                .ctx
-                .read_pre(changed_key)
-                .map_err(Error)?
-                .unwrap_or_default();
-            let post: Amount = self
-                .ctx
-                .read_post(changed_key)
-                .map_err(Error)?
-                .unwrap_or_default();
+            let pre: Amount =
+                self.ctx.read_pre(changed_key)?.unwrap_or_default();
+            let post: Amount =
+                self.ctx.read_post(changed_key)?.unwrap_or_default();
 
             match token_owner {
                 // the NUT balance of the bridge pool should increase
@@ -98,8 +84,7 @@ where
                             "Bridge pool balance should have increased. The \
                              previous balance was {pre:?}, the post balance \
                              is {post:?}.",
-                        ))
-                        .into());
+                        )));
                     }
                 }
                 // arbitrary addresses should have their balance decrease
@@ -115,8 +100,7 @@ where
                             "Balance should have decreased. The previous \
                              balance was {pre:?}, the post balance is \
                              {post:?}."
-                        ))
-                        .into());
+                        )));
                     }
                 }
             }

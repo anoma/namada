@@ -7,12 +7,10 @@ pub use namada_core::storage::Key;
 use namada_core::token::{self, Amount, AmountError, DenominatedAmount};
 
 use crate::storage_key::*;
-use crate::{
-    ResultExt, StorageError, StorageRead, StorageResult, StorageWrite,
-};
+use crate::{Error, Result, ResultExt, StorageRead, StorageWrite};
 
 /// Initialize parameters for the token in storage during the genesis block.
-pub fn write_params<S>(storage: &mut S, address: &Address) -> StorageResult<()>
+pub fn write_params<S>(storage: &mut S, address: &Address) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -25,7 +23,7 @@ pub fn read_balance<S>(
     storage: &S,
     token: &Address,
     owner: &Address,
-) -> StorageResult<token::Amount>
+) -> Result<token::Amount>
 where
     S: StorageRead,
 {
@@ -40,10 +38,10 @@ pub fn update_balance<S, F>(
     token: &Address,
     owner: &Address,
     f: F,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
-    F: FnOnce(token::Amount) -> StorageResult<token::Amount>,
+    F: FnOnce(token::Amount) -> Result<token::Amount>,
 {
     let key = balance_key(token, owner);
     let balance = storage.read::<token::Amount>(&key)?.unwrap_or_default();
@@ -57,7 +55,7 @@ pub fn increment_balance<S>(
     token: &Address,
     owner: &Address,
     amount: token::Amount,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -75,7 +73,7 @@ pub fn decrement_balance<S>(
     token: &Address,
     owner: &Address,
     amount: token::Amount,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -91,7 +89,7 @@ where
 pub fn read_total_supply<S>(
     storage: &S,
     token: &Address,
-) -> StorageResult<token::Amount>
+) -> Result<token::Amount>
 where
     S: StorageRead,
 {
@@ -105,10 +103,10 @@ pub fn update_total_supply<S, F>(
     storage: &mut S,
     token: &Address,
     f: F,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
-    F: FnOnce(token::Amount) -> StorageResult<token::Amount>,
+    F: FnOnce(token::Amount) -> Result<token::Amount>,
 {
     let key = minted_balance_key(token);
     let total_supply = storage.read::<token::Amount>(&key)?.unwrap_or_default();
@@ -121,7 +119,7 @@ pub fn increment_total_supply<S>(
     storage: &mut S,
     token: &Address,
     amount: token::Amount,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -138,7 +136,7 @@ pub fn decrement_total_supply<S>(
     storage: &mut S,
     token: &Address,
     amount: token::Amount,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -153,7 +151,7 @@ where
 /// Get the effective circulating total supply of native tokens.
 pub fn get_effective_total_native_supply<S>(
     storage: &S,
-) -> StorageResult<token::Amount>
+) -> Result<token::Amount>
 where
     S: StorageRead,
 {
@@ -175,7 +173,7 @@ where
 pub fn read_denom<S>(
     storage: &S,
     token: &Address,
-) -> StorageResult<Option<token::Denomination>>
+) -> Result<Option<token::Denomination>>
 where
     S: StorageRead,
 {
@@ -213,7 +211,7 @@ pub fn write_denom<S>(
     storage: &mut S,
     token: &Address,
     denom: token::Denomination,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -230,7 +228,7 @@ pub fn transfer<S>(
     src: &Address,
     dest: &Address,
     amount: token::Amount,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -249,14 +247,14 @@ where
                     storage.write(&src_key, new_src_balance)?;
                     storage.write(&dest_key, new_dest_balance)
                 }
-                None => Err(StorageError::new_alloc(format!(
+                None => Err(Error::new_alloc(format!(
                     "The transfer would overflow balance of {dest}"
                 ))),
             }
         }
-        None => Err(StorageError::new_alloc(format!(
-            "{src} has insufficient balance"
-        ))),
+        None => {
+            Err(Error::new_alloc(format!("{src} has insufficient balance")))
+        }
     }
 }
 
@@ -268,7 +266,7 @@ pub fn multi_transfer<S>(
     storage: &mut S,
     sources: &BTreeMap<(Address, Address), Amount>,
     dests: &BTreeMap<(Address, Address), Amount>,
-) -> StorageResult<HashSet<Address>>
+) -> Result<HashSet<Address>>
 where
     S: StorageRead + StorageWrite,
 {
@@ -279,20 +277,19 @@ where
     accounts.extend(dests.keys().cloned());
 
     let unexpected_err = || {
-        StorageError::new_const(
+        Error::new_const(
             "Computing difference between amounts should never overflow",
         )
     };
     // Apply the balance change for each account in turn
     for ref account @ (ref owner, ref token) in accounts {
         let overflow_err = || {
-            StorageError::new_alloc(format!(
+            Error::new_alloc(format!(
                 "The transfer would overflow balance of {owner}"
             ))
         };
-        let underflow_err = || {
-            StorageError::new_alloc(format!("{owner} has insufficient balance"))
-        };
+        let underflow_err =
+            || Error::new_alloc(format!("{owner} has insufficient balance"));
         // Load account balances and deltas
         let owner_key = balance_key(token, owner);
         let owner_balance = read_balance(storage, token, owner)?;
@@ -326,7 +323,7 @@ pub fn mint_tokens<S>(
     token: &Address,
     dest: &Address,
     amount: token::Amount,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -341,7 +338,7 @@ pub fn credit_tokens<S>(
     token: &Address,
     dest: &Address,
     amount: token::Amount,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -360,7 +357,7 @@ pub fn burn_tokens<S>(
     token: &Address,
     source: &Address,
     amount: token::Amount,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -385,9 +382,9 @@ pub fn denominated(
     amount: token::Amount,
     token: &Address,
     storage: &impl StorageRead,
-) -> StorageResult<DenominatedAmount> {
+) -> Result<DenominatedAmount> {
     let denom = read_denom(storage, token)?.ok_or_else(|| {
-        StorageError::SimpleMessage(
+        Error::SimpleMessage(
             "No denomination found in storage for the given token",
         )
     })?;
@@ -401,15 +398,15 @@ pub fn denom_to_amount(
     denom_amount: DenominatedAmount,
     token: &Address,
     storage: &impl StorageRead,
-) -> StorageResult<Amount> {
+) -> Result<Amount> {
     #[cfg(not(fuzzing))]
     {
         let denom = read_denom(storage, token)?.ok_or_else(|| {
-            StorageError::SimpleMessage(
+            Error::SimpleMessage(
                 "No denomination found in storage for the given token",
             )
         })?;
-        denom_amount.scale(denom).map_err(StorageError::new)
+        denom_amount.scale(denom).map_err(Error::new)
     }
 
     #[cfg(fuzzing)]

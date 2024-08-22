@@ -7,7 +7,7 @@ use namada_core::dec::Dec;
 use thiserror::Error;
 
 use crate::types::ValidatorState;
-use crate::{rewards, StorageError};
+use crate::{rewards, Error};
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -167,67 +167,67 @@ pub enum ConsensusKeyChangeError {
     MustBeEd25519,
 }
 
-impl From<BecomeValidatorError> for StorageError {
+impl From<BecomeValidatorError> for Error {
     fn from(err: BecomeValidatorError) -> Self {
         Self::new(err)
     }
 }
 
-impl From<BondError> for StorageError {
+impl From<BondError> for Error {
     fn from(err: BondError) -> Self {
         Self::new(err)
     }
 }
 
-impl From<UnbondError> for StorageError {
+impl From<UnbondError> for Error {
     fn from(err: UnbondError) -> Self {
         Self::new(err)
     }
 }
 
-impl From<CommissionRateChangeError> for StorageError {
+impl From<CommissionRateChangeError> for Error {
     fn from(err: CommissionRateChangeError) -> Self {
         Self::new(err)
     }
 }
 
-impl From<InflationError> for StorageError {
+impl From<InflationError> for Error {
     fn from(err: InflationError) -> Self {
         Self::new(err)
     }
 }
 
-impl From<UnjailValidatorError> for StorageError {
+impl From<UnjailValidatorError> for Error {
     fn from(err: UnjailValidatorError) -> Self {
         Self::new(err)
     }
 }
 
-impl From<RedelegationError> for StorageError {
+impl From<RedelegationError> for Error {
     fn from(err: RedelegationError) -> Self {
         Self::new(err)
     }
 }
 
-impl From<DeactivationError> for StorageError {
+impl From<DeactivationError> for Error {
     fn from(err: DeactivationError) -> Self {
         Self::new(err)
     }
 }
 
-impl From<ReactivationError> for StorageError {
+impl From<ReactivationError> for Error {
     fn from(err: ReactivationError) -> Self {
         Self::new(err)
     }
 }
 
-impl From<MetadataError> for StorageError {
+impl From<MetadataError> for Error {
     fn from(err: MetadataError) -> Self {
         Self::new(err)
     }
 }
 
-impl From<ConsensusKeyChangeError> for StorageError {
+impl From<ConsensusKeyChangeError> for Error {
     fn from(err: ConsensusKeyChangeError) -> Self {
         Self::new(err)
     }

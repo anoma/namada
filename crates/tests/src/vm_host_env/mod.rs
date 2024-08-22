@@ -30,7 +30,6 @@ mod tests {
     use namada_sdk::ibc::context::nft_transfer_mod::testing::DummyNftTransferModule;
     use namada_sdk::ibc::context::transfer_mod::testing::DummyTransferModule;
     use namada_sdk::ibc::primitives::ToProto;
-    use namada_sdk::ibc::vp::Error as IbcError;
     use namada_sdk::ibc::{
         storage as ibc_storage, trace as ibc_trace, Error as IbcActionError,
     };
@@ -1109,8 +1108,10 @@ mod tests {
         );
         // VP should fail because the transfer channel cannot be closed
         assert!(matches!(
-            result.expect_err("validation succeeded unexpectedly"),
-            IbcError::IbcAction(IbcActionError::Context(_)),
+            result
+                .expect_err("validation succeeded unexpectedly")
+                .downcast_ref::<IbcActionError>(),
+            Some(IbcActionError::Context(_)),
         ));
     }
 

@@ -69,7 +69,6 @@ use namada_sdk::state::StateRead;
 use namada_sdk::storage::{self, BlockHeight, Epoch, Key, TxIndex};
 use namada_sdk::tendermint::time::Time as TmTime;
 use namada_sdk::time::DurationSecs;
-use namada_sdk::token::vp::MultitokenError;
 use namada_sdk::tx::BatchedTxRef;
 use namada_sdk::validation::{IbcVp, MultitokenVp};
 use namada_sdk::{ibc, proof_of_stake, token};
@@ -77,6 +76,7 @@ use namada_test_utils::TestWasms;
 use namada_tx_env::TxEnv;
 use namada_tx_prelude::BorshSerializeExt;
 use namada_vm::{wasm, WasmCacheRwAccess};
+use namada_vp::native_vp;
 use namada_vp::native_vp::{Ctx, NativeVp};
 
 use crate::tx::*;
@@ -89,10 +89,7 @@ pub struct TestIbcVp<'a> {
 }
 
 impl<'a> TestIbcVp<'a> {
-    pub fn validate(
-        &self,
-        batched_tx: &BatchedTxRef,
-    ) -> std::result::Result<(), namada_sdk::ibc::vp::Error> {
+    pub fn validate(&self, batched_tx: &BatchedTxRef) -> native_vp::Result<()> {
         self.ibc.validate_tx(
             batched_tx,
             self.ibc.ctx.keys_changed,
@@ -106,10 +103,7 @@ pub struct TestMultitokenVp<'a> {
 }
 
 impl<'a> TestMultitokenVp<'a> {
-    pub fn validate(
-        &self,
-        batched_tx: &BatchedTxRef,
-    ) -> std::result::Result<(), MultitokenError> {
+    pub fn validate(&self, batched_tx: &BatchedTxRef) -> native_vp::Result<()> {
         self.multitoken_vp.validate_tx(
             batched_tx,
             self.multitoken_vp.ctx.keys_changed,
@@ -122,7 +116,7 @@ impl<'a> TestMultitokenVp<'a> {
 pub fn validate_ibc_vp_from_tx<'a>(
     tx_env: &'a TestTxEnv,
     batched_tx: &'a BatchedTxRef,
-) -> std::result::Result<(), namada_sdk::ibc::vp::Error> {
+) -> native_vp::Result<()> {
     let (verifiers, keys_changed) = tx_env
         .state
         .write_log()
@@ -161,7 +155,7 @@ pub fn validate_multitoken_vp_from_tx<'a>(
     tx_env: &'a TestTxEnv,
     batched_tx: &'a BatchedTxRef,
     target: &Key,
-) -> std::result::Result<(), MultitokenError> {
+) -> native_vp::Result<()> {
     let (verifiers, keys_changed) = tx_env
         .state
         .write_log()

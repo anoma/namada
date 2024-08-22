@@ -544,7 +544,7 @@ fn process_proposal_fee_check<D, H, CA>(
     tx_index: &TxIndex,
     proposer: &Address,
     shell_params: &mut ShellParams<'_, TempWlState<'static, D, H>, D, H, CA>,
-) -> Result<()>
+) -> ShellResult<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,

@@ -18,7 +18,7 @@ use namada_sdk::proof_of_stake::storage::{
 };
 use namada_sdk::state::write_log::StorageModification;
 use namada_sdk::state::{
-    ResultExt, StorageResult, StorageWrite, EPOCH_SWITCH_BLOCKS_DELAY,
+    Result, ResultExt, StorageWrite, EPOCH_SWITCH_BLOCKS_DELAY,
 };
 use namada_sdk::storage::{BlockHeader, BlockResults, Epoch};
 use namada_sdk::tx::data::protocol::ProtocolTxType;
@@ -49,7 +49,7 @@ where
     pub fn finalize_block(
         &mut self,
         req: shim::request::FinalizeBlock,
-    ) -> Result<shim::response::FinalizeBlock> {
+    ) -> ShellResult<shim::response::FinalizeBlock> {
         let mut response = shim::response::FinalizeBlock::default();
 
         // Begin the new block and check if a new epoch has begun
@@ -1141,7 +1141,7 @@ fn token_finalize_block<S>(
     storage: &mut S,
     events: &mut Vec<Event>,
     is_new_masp_epoch: bool,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageWrite + StorageRead + token::WithConversionState,
 {
@@ -1160,7 +1160,7 @@ fn pos_finalize_block<S>(
     validator_set_update_epoch: Epoch,
     votes: Vec<proof_of_stake::types::VoteInfo>,
     byzantine_validators: Vec<Misbehavior>,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageWrite + StorageRead,
 {
@@ -1175,7 +1175,7 @@ where
 }
 
 /// Dependency-injection indirection for PGF inflation
-fn pgf_apply_inflation<S>(storage: &mut S) -> StorageResult<()>
+fn pgf_apply_inflation<S>(storage: &mut S) -> Result<()>
 where
     S: 'static + State + EmitEvents,
 {
@@ -3953,7 +3953,7 @@ mod test_finalize_block {
     }
 
     #[test]
-    fn test_ledger_slashing() -> namada_sdk::state::StorageResult<()> {
+    fn test_ledger_slashing() -> namada_sdk::state::Result<()> {
         let num_validators = 7_u64;
         let (mut shell, _recv, _, _) = setup_with_cfg(SetupCfg {
             last_height: 0,
@@ -4327,7 +4327,7 @@ mod test_finalize_block {
     /// NOTE: must call `get_default_true_votes` before every call to
     /// `next_block_for_inflation`
     #[test]
-    fn test_multiple_misbehaviors() -> namada_sdk::state::StorageResult<()> {
+    fn test_multiple_misbehaviors() -> namada_sdk::state::Result<()> {
         for num_validators in &[4_u64, 6_u64, 9_u64] {
             tracing::debug!("\nNUM VALIDATORS = {}", num_validators);
             test_multiple_misbehaviors_by_num_vals(*num_validators)?;
@@ -4347,7 +4347,7 @@ mod test_finalize_block {
     /// 7) Discover misbehavior in epoch 4
     fn test_multiple_misbehaviors_by_num_vals(
         num_validators: u64,
-    ) -> namada_sdk::state::StorageResult<()> {
+    ) -> namada_sdk::state::Result<()> {
         // Setup the network with pipeline_len = 2, unbonding_len = 4
         // let num_validators = 8_u64;
         let (mut shell, _recv, _, _) = setup_with_cfg(SetupCfg {
@@ -5163,8 +5163,7 @@ mod test_finalize_block {
     }
 
     #[test]
-    fn test_jail_validator_for_inactivity()
-    -> namada_sdk::state::StorageResult<()> {
+    fn test_jail_validator_for_inactivity() -> namada_sdk::state::Result<()> {
         let num_validators = 5_u64;
         let (mut shell, _recv, _, _) = setup_with_cfg(SetupCfg {
             last_height: 0,

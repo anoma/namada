@@ -121,7 +121,7 @@ pub enum Error {
     #[error("Error loading wasm: {0}")]
     LoadingWasm(String),
     #[error("Error reading from or writing to storage: {0}")]
-    Storage(#[from] namada_sdk::state::StorageError),
+    Storage(#[from] namada_sdk::state::Error),
     #[error("Transaction replay attempt: {0}")]
     ReplayAttempt(String),
     #[error("Error with snapshots: {0}")]
@@ -144,9 +144,9 @@ impl From<Error> for TxResult {
     }
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub type ShellResult<T> = std::result::Result<T, Error>;
 
-pub fn reset(config: config::Ledger) -> Result<()> {
+pub fn reset(config: config::Ledger) -> ShellResult<()> {
     // simply nuke the DB files
     let db_path = &config.db_dir();
     match std::fs::remove_dir_all(db_path) {
@@ -158,7 +158,7 @@ pub fn reset(config: config::Ledger) -> Result<()> {
     Ok(())
 }
 
-pub fn rollback(config: config::Ledger) -> Result<()> {
+pub fn rollback(config: config::Ledger) -> ShellResult<()> {
     // Rollback Tendermint state
     tracing::info!("Rollback Tendermint state");
     let tendermint_block_height =
@@ -171,7 +171,7 @@ pub fn rollback(config: config::Ledger) -> Result<()> {
     tracing::info!("Rollback Namada state");
 
     db.rollback(tendermint_block_height)
-        .map_err(|e| Error::Storage(namada_sdk::state::StorageError::new(e)))
+        .map_err(|e| Error::Storage(namada_sdk::state::Error::new(e)))
 }
 
 #[derive(Debug)]
@@ -1290,7 +1290,7 @@ where
         // because we're using domain types in InitChain, but FinalizeBlock is
         // shimmed with a different old type. The joy...
         mut validator_conv: F,
-    ) -> namada_sdk::state::StorageResult<Vec<V>>
+    ) -> namada_sdk::state::Result<Vec<V>>
     where
         F: FnMut(common::PublicKey, i64) -> V,
     {
@@ -1347,7 +1347,7 @@ where
 pub fn replay_protection_checks<D, H>(
     wrapper: &Tx,
     temp_state: &mut TempWlState<'_, D, H>,
-) -> Result<()>
+) -> ShellResult<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
@@ -1387,7 +1387,7 @@ fn mempool_fee_check<D, H, CA>(
     shell_params: &mut ShellParams<'_, TempWlState<'static, D, H>, D, H, CA>,
     tx: &Tx,
     wrapper: &WrapperTx,
-) -> Result<()>
+) -> ShellResult<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
@@ -1412,7 +1412,7 @@ pub fn fee_data_check<D, H, CA>(
     wrapper: &WrapperTx,
     minimum_gas_price: token::Amount,
     shell_params: &mut ShellParams<'_, TempWlState<'_, D, H>, D, H, CA>,
-) -> Result<()>
+) -> ShellResult<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
@@ -1718,7 +1718,7 @@ pub mod test_utils {
         pub fn finalize_block(
             &mut self,
             req: FinalizeBlock,
-        ) -> Result<Vec<Event>> {
+        ) -> ShellResult<Vec<Event>> {
             match self.shell.finalize_block(req) {
                 Ok(resp) => Ok(resp.events),
                 Err(err) => Err(err),

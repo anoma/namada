@@ -34,9 +34,9 @@ use crate::validator_set_update::update_validator_set;
 use crate::{
     fold_and_slash_redelegated_bonds, get_total_consensus_stake,
     iter_prefix_bytes, jail_validator, storage, storage_key, types,
-    EagerRedelegatedUnbonds, FoldRedelegatedBondsResult, LazyMap, OptionExt,
-    OwnedPosParams, PosParams, ResultExt, StorageError, StorageRead,
-    StorageResult, StorageWrite,
+    EagerRedelegatedUnbonds, Error, FoldRedelegatedBondsResult, LazyMap,
+    OptionExt, OwnedPosParams, PosParams, Result, ResultExt, StorageRead,
+    StorageWrite,
 };
 
 /// Apply PoS slashes from the evidence
@@ -46,7 +46,7 @@ pub(crate) fn record_slashes_from_evidence<S, Gov>(
     pos_params: &PosParams,
     current_epoch: Epoch,
     validator_set_update_epoch: Epoch,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageWrite + StorageRead,
     Gov: governance::Read<S>,
@@ -148,7 +148,7 @@ pub fn slash<S, Gov>(
     slash_type: SlashType,
     validator: &Address,
     validator_set_update_epoch: Epoch,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
     Gov: governance::Read<S>,
@@ -208,7 +208,7 @@ pub fn process_slashes<S, Gov>(
     storage: &mut S,
     events: &mut impl EmitEvents,
     current_epoch: Epoch,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
     Gov: governance::Read<S>,
@@ -407,7 +407,7 @@ pub fn slash_validator_redelegation<S>(
     dest_total_redelegated_unbonded: &TotalRedelegatedUnbonded,
     slash_rate: Dec,
     dest_slashed_amounts: &mut BTreeMap<Epoch, token::Amount>,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageRead,
 {
@@ -465,7 +465,7 @@ pub fn slash_redelegation<S>(
     total_redelegated_unbonded: &TotalRedelegatedUnbonded,
     slash_rate: Dec,
     slashed_amounts: &mut BTreeMap<Epoch, token::Amount>,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageRead,
 {
@@ -494,9 +494,9 @@ where
                     .at(src_validator)
                     .get(storage, &bond_start)?
                     .unwrap_or_default();
-                Ok::<_, StorageError>(redelegated_unbonded)
+                Ok::<_, Error>(redelegated_unbonded)
             })
-            .collect::<StorageResult<_>>()?;
+            .collect::<Result<_>>()?;
     let mut init_tot_unbonded =
         token::Amount::sum(redelegated_unbonded.into_iter())
             .ok_or_err_msg("token amount overflow")?;
@@ -586,7 +586,7 @@ pub fn slash_validator<S>(
     slash_rate: Dec,
     current_epoch: Epoch,
     slashed_amounts_map: &BTreeMap<Epoch, token::Amount>,
-) -> StorageResult<BTreeMap<Epoch, token::Amount>>
+) -> Result<BTreeMap<Epoch, token::Amount>>
 where
     S: StorageRead,
 {
@@ -649,7 +649,7 @@ where
                     redelegated_bonds.get(bond_start),
                     slash_rate,
                 )?;
-                Ok::<token::Amount, StorageError>(checked!(acc + slashed)?)
+                Ok::<token::Amount, Error>(checked!(acc + slashed)?)
             },
         )?;
 
@@ -716,7 +716,7 @@ pub fn compute_bond_at_epoch<S>(
     start: Epoch,
     amount: token::Amount,
     redelegated_bonds: Option<&EagerRedelegatedBondsMap>,
-) -> StorageResult<token::Amount>
+) -> Result<token::Amount>
 where
     S: StorageRead,
 {
@@ -773,7 +773,7 @@ pub fn compute_slash_bond_at_epoch<S>(
     bond_amount: token::Amount,
     redelegated_bonds: Option<&EagerRedelegatedBondsMap>,
     slash_rate: Dec,
-) -> StorageResult<token::Amount>
+) -> Result<token::Amount>
 where
     S: StorageRead,
 {
@@ -807,7 +807,7 @@ pub fn find_slashes_in_range<S>(
     start: Epoch,
     end: Option<Epoch>,
     validator: &Address,
-) -> StorageResult<BTreeMap<Epoch, Dec>>
+) -> Result<BTreeMap<Epoch, Dec>>
 where
     S: StorageRead,
 {
@@ -835,7 +835,7 @@ pub fn apply_list_slashes(
     params: &OwnedPosParams,
     slashes: &[Slash],
     amount: token::Amount,
-) -> Result<token::Amount, arith::Error> {
+) -> std::result::Result<token::Amount, arith::Error> {
     let mut final_amount = amount;
     let mut computed_slashes = BTreeMap::<Epoch, token::Amount>::new();
     for slash in slashes {
@@ -856,7 +856,7 @@ pub fn compute_slashable_amount(
     slash: &Slash,
     amount: token::Amount,
     computed_slashes: &BTreeMap<Epoch, token::Amount>,
-) -> Result<token::Amount, arith::Error> {
+) -> std::result::Result<token::Amount, arith::Error> {
     let updated_amount = computed_slashes
         .iter()
         .filter(|(&epoch, _)| {
@@ -874,9 +874,7 @@ pub fn compute_slashable_amount(
 }
 
 /// Find all slashes and the associated validators in the PoS system
-pub fn find_all_slashes<S>(
-    storage: &S,
-) -> StorageResult<HashMap<Address, Vec<Slash>>>
+pub fn find_all_slashes<S>(storage: &S) -> Result<HashMap<Address, Vec<Slash>>>
 where
     S: StorageRead,
 {
@@ -915,7 +913,7 @@ where
 pub fn find_all_enqueued_slashes<S>(
     storage: &S,
     epoch: Epoch,
-) -> StorageResult<HashMap<Address, BTreeMap<Epoch, Vec<Slash>>>>
+) -> Result<HashMap<Address, BTreeMap<Epoch, Vec<Slash>>>>
 where
     S: StorageRead,
 {
@@ -950,7 +948,7 @@ where
 pub fn find_validator_slashes<S>(
     storage: &S,
     validator: &Address,
-) -> StorageResult<Vec<Slash>>
+) -> Result<Vec<Slash>>
 where
     S: StorageRead,
 {
@@ -964,7 +962,7 @@ pub fn get_slashed_amount(
     params: &PosParams,
     amount: token::Amount,
     slashes: &BTreeMap<Epoch, Dec>,
-) -> StorageResult<token::Amount> {
+) -> Result<token::Amount> {
     let mut updated_amount = amount;
     let mut computed_amounts = Vec::<SlashedAmount>::new();
 
@@ -1016,7 +1014,7 @@ pub fn compute_amount_after_slashing_unbond<S>(
     unbonds: &BTreeMap<Epoch, token::Amount>,
     redelegated_unbonds: &EagerRedelegatedUnbonds,
     slashes: Vec<Slash>,
-) -> StorageResult<ResultSlashing>
+) -> Result<ResultSlashing>
 where
     S: StorageRead,
 {
@@ -1074,7 +1072,7 @@ pub fn compute_amount_after_slashing_withdraw<S>(
         (token::Amount, EagerRedelegatedBondsMap),
     >,
     slashes: Vec<Slash>,
-) -> StorageResult<ResultSlashing>
+) -> Result<ResultSlashing>
 where
     S: StorageRead,
 {
@@ -1152,7 +1150,7 @@ fn process_validator_slash<S>(
     slash_rate: Dec,
     current_epoch: Epoch,
     slashed_amount_map: &mut EagerRedelegatedBondsMap,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -1191,7 +1189,7 @@ where
             ) = res?;
             Ok(dest_validator)
         })
-        .collect::<StorageResult<BTreeSet<_>>>()?;
+        .collect::<Result<BTreeSet<_>>>()?;
 
     for dest_validator in dest_validators {
         let to_modify = slashed_amount_map
@@ -1228,7 +1226,7 @@ fn compute_cubic_slash_rate<S>(
     storage: &S,
     params: &PosParams,
     infraction_epoch: Epoch,
-) -> StorageResult<Dec>
+) -> Result<Dec>
 where
     S: StorageRead,
 {
@@ -1269,7 +1267,7 @@ where
 
                 let stake =
                     Dec::try_from(validator_stake).into_storage_result()?;
-                Ok::<Dec, StorageError>(checked!(acc + stake)?)
+                Ok::<Dec, Error>(checked!(acc + stake)?)
             })?;
         sum_vp_fraction =
             checked!(sum_vp_fraction + (infracting_stake / consensus_stake))?;

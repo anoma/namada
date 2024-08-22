@@ -90,8 +90,8 @@ use namada_core::masp_primitives::transaction::components::ValueSum;
 use namada_core::token::Amount;
 use namada_events::EmitEvents;
 use namada_state::{
-    DBIter, Key, ResultExt, State, StorageError, StorageHasher, StorageRead,
-    StorageResult, StorageWrite, WlState, DB,
+    DBIter, Error as StorageError, Key, Result as StorageResult, ResultExt,
+    State, StorageHasher, StorageRead, StorageWrite, WlState, DB,
 };
 use namada_systems::ibc::ChangedBalances;
 use namada_systems::trans_token;
@@ -140,6 +140,12 @@ pub enum Error {
     ChainId(IdentifierError),
     #[error("Verifier insertion error: {0}")]
     Verifier(StorageError),
+}
+
+impl From<Error> for StorageError {
+    fn from(value: Error) -> Self {
+        StorageError::new(value)
+    }
 }
 
 struct IbcTransferInfo {
