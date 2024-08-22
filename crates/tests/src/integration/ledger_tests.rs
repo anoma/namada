@@ -1818,12 +1818,8 @@ fn apply_snapshot() -> Result<()> {
     let (node2, _services) = setup::setup()?;
     let (offer, resp) = {
         let shell = node.shell.lock().unwrap();
-        let offer = shell
-            .list_snapshots()
-            .expect("Test failed")
-            .snapshots
-            .pop()
-            .expect("Test failed");
+        let offer =
+            shell.list_snapshots().snapshots.pop().expect("Test failed");
         let mut shell = node2.shell.lock().unwrap();
         (
             offer.clone(),
@@ -1839,13 +1835,12 @@ fn apply_snapshot() -> Result<()> {
         let shell = node.shell.lock().unwrap();
         let mut shell2 = node2.shell.lock().unwrap();
         for c in 0..offer.chunks {
-            let chunk = shell
-                .load_snapshot_chunk(tm_request::LoadSnapshotChunk {
+            let chunk =
+                shell.load_snapshot_chunk(tm_request::LoadSnapshotChunk {
                     height: (last_height.0 as u32).into(),
                     format: 0,
                     chunk: c,
-                })
-                .expect("Test failed");
+                });
             let resp =
                 shell2.apply_snapshot_chunk(tm_request::ApplySnapshotChunk {
                     index: c,

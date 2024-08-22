@@ -4,7 +4,7 @@ use namada_sdk::arith::checked;
 use namada_sdk::hash::{Hash, Sha256Hasher};
 use namada_sdk::state::{BlockHeight, StorageRead, DB};
 
-use super::{Error, ShellResult, SnapshotSync};
+use super::SnapshotSync;
 use crate::facade::tendermint::abci::response::ApplySnapshotChunkResult;
 use crate::facade::tendermint::abci::types::Snapshot;
 use crate::facade::tendermint::v0_37::abci::{
@@ -21,13 +21,15 @@ impl Shell<storage::PersistentDB, Sha256Hasher> {
     /// of chunks, as hash of each chunk, and a hash of the chunk
     /// metadata are provided so that syncing nodes can verify can verify
     /// snapshots they receive.
-    pub fn list_snapshots(&self) -> ShellResult<tm_response::ListSnapshots> {
+    pub fn list_snapshots(&self) -> tm_response::ListSnapshots {
         if self.blocks_between_snapshots.is_none() {
-            Ok(Default::default())
+            Default::default()
         } else {
             tracing::info!("Request for snapshots received.");
-            let snapshots = DbSnapshot::files(&self.base_dir)
-                .map_err(Error::Snapshot)?
+            let Ok(snapshots) = DbSnapshot::files(&self.base_dir) else {
+                return Default::default();
+            };
+            let snapshots = snapshots
                 .into_iter()
                 .map(|SnapshotMetadata { height, chunks, .. }| {
                     let hashes =
@@ -44,7 +46,7 @@ impl Shell<storage::PersistentDB, Sha256Hasher> {
                 })
                 .collect();
 
-            Ok(tm_response::ListSnapshots { snapshots })
+            tm_response::ListSnapshots { snapshots }
         }
     }
 
@@ -53,21 +55,29 @@ impl Shell<storage::PersistentDB, Sha256Hasher> {
     pub fn load_snapshot_chunk(
         &self,
         req: tm_request::LoadSnapshotChunk,
-    ) -> ShellResult<tm_response::LoadSnapshotChunk> {
-        let chunk = DbSnapshot::load_chunk(
+    ) -> tm_response::LoadSnapshotChunk {
+        let Ok(chunk) = DbSnapshot::load_chunk(
             BlockHeight(req.height.into()),
             u64::from(req.chunk),
             &self.base_dir,
-        )
-        .map_err(Error::Snapshot)?;
+        ) else {
+            tracing::debug!(
+                "Received a request for a snapshot we do not possess"
+            );
+            // N.B. if the snapshot is no longer present,
+            // this will not match the hash in the metadata and will
+            // be rejected by syncing nodes. We don't return an error
+            // so as not to crash this node.
+            return Default::default();
+        };
         tracing::info!(
             "Loading snapshot at height {}, chunk number {}",
             req.height,
             req.chunk,
         );
-        Ok(tm_response::LoadSnapshotChunk {
+        tm_response::LoadSnapshotChunk {
             chunk: chunk.into_iter().collect(),
-        })
+        }
     }
 
     /// Decide if a snapshot should be accepted to sync the node forward in time
