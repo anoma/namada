@@ -306,12 +306,13 @@ where
         &self,
         decrypt: bool,
         password: Option<Zeroizing<String>>,
+        target_key: Option<&str>,
     ) -> Result<T, DecryptionError> {
         match self {
             StoredKeypair::Encrypted(encrypted_keypair) => {
                 if decrypt {
-                    let password =
-                        password.unwrap_or_else(|| U::read_password(false));
+                    let password = password
+                        .unwrap_or_else(|| U::read_password(false, target_key));
                     let key = encrypted_keypair.decrypt(password)?;
                     Ok(key)
                 } else {

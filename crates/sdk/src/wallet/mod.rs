@@ -62,7 +62,10 @@ pub trait WalletIo: Sized + Clone {
     }
 
     /// Read the password for decryption from the file/env/stdin.
-    fn read_password(_confirm: bool) -> Zeroizing<String> {
+    fn read_password(
+        _confirm: bool,
+        _target_key: Option<&str>,
+    ) -> Zeroizing<String> {
         panic!("attempted to prompt for password in non-interactive mode");
     }
 
@@ -1017,11 +1020,29 @@ impl<U: WalletIo> Wallet<U> {
     {
         match stored_key {
             StoredKeypair::Encrypted(encrypted) => {
-                let password =
-                    password.unwrap_or_else(|| U::read_password(false));
-                let key = encrypted
-                    .decrypt(password)
-                    .map_err(FindKeyError::KeyDecryptionError)?;
+                let key = match password {
+                    Some(pwd) => encrypted.decrypt(pwd),
+                    None => {
+                        // Two attempts to get the password right in interactive
+                        // mode
+                        let mut key_result =
+                            Err(keys::DecryptionError::EmptyPassword);
+                        for _ in 0..2 {
+                            let pwd = U::read_password(
+                                false,
+                                Some(&alias.to_string()),
+                            );
+                            key_result = encrypted.decrypt(pwd);
+                            if key_result.is_ok() {
+                                break;
+                            }
+                        }
+
+                        key_result
+                    }
+                }
+                .map_err(FindKeyError::KeyDecryptionError)?;
+
                 decrypted_key_cache.insert(alias.clone(), key);
                 decrypted_key_cache
                     .get(&alias)

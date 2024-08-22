@@ -1030,30 +1030,18 @@ where
             .await?;
 
     let mut wallet = namada.wallet_mut().await;
-    let secret_keys = &signing_data
-        .public_keys
-        .iter()
-        .filter_map(|public_key| {
-            if let Ok(secret_key) =
-                signing::find_key_by_pk(&mut wallet, &tx_args, public_key)
-            {
-                Some(secret_key)
-            } else {
-                edisplay_line!(
-                    namada.io(),
-                    "Couldn't find the secret key for {}. Skipping signature \
-                     generation.",
-                    public_key
-                );
-                None
-            }
-        })
-        .collect::<Vec<common::SecretKey>>();
+
+    let mut secret_keys = vec![];
+    for public_key in &signing_data.public_keys {
+        let secret_key =
+            signing::find_key_by_pk(&mut wallet, &tx_args, public_key)?;
+        secret_keys.push(secret_key);
+    }
 
     if let Some(account_public_keys_map) = signing_data.account_public_keys_map
     {
         let signatures = tx.compute_section_signature(
-            secret_keys,
+            &secret_keys,
             &account_public_keys_map,
             Some(owner),
         );

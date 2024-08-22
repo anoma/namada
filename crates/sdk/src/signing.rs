@@ -226,23 +226,16 @@ where
     if let Some(account_public_keys_map) = signing_data.account_public_keys_map
     {
         let mut wallet = wallet.write().await;
-        let signing_tx_keypairs = signing_data
-            .public_keys
-            .iter()
-            .filter_map(|public_key| {
-                if used_pubkeys.contains(public_key) {
-                    None
-                } else {
-                    match find_key_by_pk(&mut wallet, args, public_key) {
-                        Ok(secret_key) => {
-                            used_pubkeys.insert(public_key.clone());
-                            Some(secret_key)
-                        }
-                        Err(_) => None,
-                    }
-                }
-            })
-            .collect::<Vec<common::SecretKey>>();
+        let mut signing_tx_keypairs = vec![];
+
+        for public_key in &signing_data.public_keys {
+            if !used_pubkeys.contains(public_key) {
+                let secret_key = find_key_by_pk(&mut wallet, args, public_key)?;
+                used_pubkeys.insert(public_key.clone());
+                signing_tx_keypairs.push(secret_key);
+            }
+        }
+
         if !signing_tx_keypairs.is_empty() {
             tx.sign_raw(
                 signing_tx_keypairs,
@@ -269,8 +262,8 @@ where
         }
     }
 
-    // Then try signing the fee header with the software wallet otherwise use
-    // the fallback
+    // Then try signing the wrapper header (fee payer) with the software wallet
+    // otherwise use the fallback
     let key = {
         // Lock the wallet just long enough to extract a key from it without
         // interfering with the sign closure call
