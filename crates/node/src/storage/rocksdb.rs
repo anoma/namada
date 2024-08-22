@@ -821,9 +821,9 @@ pub struct SnapshotMetadata {
 pub struct DbSnapshot<'a>(pub rocksdb::Snapshot<'a>);
 
 impl<'a> DbSnapshot<'a> {
-    /// Write a snapshot of the database out to file. The last line
-    /// of the file contains metadata about how to break the file into
-    /// chunks.
+    /// Write a snapshot of the database out to file.  Also
+    /// creates a file containing metadata about how to break
+    /// the file into chunks.
     pub fn write_to_file(
         &self,
         cfs: [(&'static str, &'a ColumnFamily); 6],
@@ -858,16 +858,19 @@ impl<'a> DbSnapshot<'a> {
         Ok(())
     }
 
-    /// Remove snapshots older than the latest
+    /// Keep `number_to_keep` latest snapshots. All others
+    /// are deleted.
     pub fn cleanup(
         latest_height: BlockHeight,
         base_dir: &Path,
+        number_to_keep: u64,
     ) -> std::io::Result<()> {
         for SnapshotMetadata {
             height, path_stem, ..
         } in Self::files(base_dir)?
         {
-            if height < latest_height {
+            // this is correct... don't worry about it
+            if height + number_to_keep  < latest_height + 1 {
                 let path = PathBuf::from(path_stem);
                 _ = std::fs::remove_file(&path.with_extension("snap"));
                 _ = std::fs::remove_file(path.with_extension("meta"));
@@ -2983,7 +2986,7 @@ mod test {
         let mut path = base_dir.clone();
         path.push("snapshot_0.bak");
         _ = File::create(path).expect("Test failed");
-        DbSnapshot::cleanup(2.into(), &base_dir).expect("Test failed");
+        DbSnapshot::cleanup(2.into(), &base_dir, 1).expect("Test failed");
         let mut expected = HashSet::from([
             "snapshot_2.snap",
             "snapshot_2.meta",

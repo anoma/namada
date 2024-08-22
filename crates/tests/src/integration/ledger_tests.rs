@@ -1813,7 +1813,7 @@ fn apply_snapshot() -> Result<()> {
     snapshot
         .write_to_file(cfs, base_dir.to_path_buf(), last_height)
         .expect("Test failed");
-    DbSnapshot::cleanup(last_height, base_dir).expect("Test failed");
+    DbSnapshot::cleanup(last_height, base_dir, 1).expect("Test failed");
 
     let (node2, _services) = setup::setup()?;
     let (offer, resp) = {

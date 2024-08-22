@@ -19,7 +19,7 @@ pub const MAX_SENDER_STRIKES: u64 = 5;
 impl Shell<storage::PersistentDB, Sha256Hasher> {
     /// List the snapshot files held locally. Furthermore, the number
     /// of chunks, as hash of each chunk, and a hash of the chunk
-    /// metadata are provided so that syncing nodes can verify can verify
+    /// metadata are provided so that syncing nodes can verify
     /// snapshots they receive.
     pub fn list_snapshots(&self) -> tm_response::ListSnapshots {
         if self.blocks_between_snapshots.is_none() {

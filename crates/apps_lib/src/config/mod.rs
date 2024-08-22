@@ -127,6 +127,8 @@ pub struct Shell {
     /// When set, indicates after how many blocks a new snapshot
     /// will be taken (counting from the first block)
     pub blocks_between_snapshots: Option<NonZeroU64>,
+    /// Number of snapshots to keep
+    pub snapshots_to_keep: Option<NonZeroU64>,
 }
 
 impl Ledger {
@@ -156,6 +158,7 @@ impl Ledger {
                 action_at_height: None,
                 tendermint_mode: mode,
                 blocks_between_snapshots: None,
+                snapshots_to_keep: None,
             },
             cometbft: tendermint_config,
             ethereum_bridge: ethereum_bridge::ledger::Config::default(),

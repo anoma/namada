@@ -43,6 +43,7 @@ pub struct AbcippShim {
         tokio::sync::oneshot::Sender<Result<Resp, BoxError>>,
     )>,
     snapshot_task: Option<std::thread::JoinHandle<Result<(), std::io::Error>>>,
+    snapshots_to_keep: u64,
 }
 
 impl AbcippShim {
@@ -65,6 +66,7 @@ impl AbcippShim {
         let (shell_send, shell_recv) = std::sync::mpsc::channel();
         let (server_shutdown, _) = broadcast::channel::<()>(1);
         let action_at_height = config.shell.action_at_height.clone();
+        let snapshots_to_keep = config.shell.snapshots_to_keep.map(|n| n.get()).unwrap_or(1);
         (
             Self {
                 service: Shell::new(
@@ -81,6 +83,7 @@ impl AbcippShim {
                 delivered_txs: vec![],
                 shell_recv,
                 snapshot_task: None,
+                snapshots_to_keep,
             },
             AbciService {
                 shell_send,
@@ -186,25 +189,37 @@ impl AbcippShim {
     }
 
     fn update_snapshot_task(&mut self, take_snapshot: TakeSnapshot) {
-        let snapshot_taken = self
-            .snapshot_task
-            .as_ref()
-            .map(|t| t.is_finished())
-            .unwrap_or_default();
-        if snapshot_taken {
-            let task = self.snapshot_task.take().unwrap();
-            match task.join() {
-                Ok(Err(e)) => tracing::error!(
-                    "Failed to create snapshot with error: {:?}",
-                    e
-                ),
-                Err(e) => tracing::error!(
-                    "Failed to join thread creating snapshot: {:?}",
-                    e
-                ),
-                _ => {}
+        let snapshot_taken =
+            self.snapshot_task.as_ref().map(|t| t.is_finished());
+        match snapshot_taken {
+            Some(true) => {
+                let task = self.snapshot_task.take().unwrap();
+                match task.join() {
+                    Ok(Err(e)) => tracing::error!(
+                        "Failed to create snapshot with error: {:?}",
+                        e
+                    ),
+                    Err(e) => tracing::error!(
+                        "Failed to join thread creating snapshot: {:?}",
+                        e
+                    ),
+                    _ => {}
+                }
             }
+            Some(false) => {
+                // if a snapshot task is still running,
+                // we don't start a new one. This is not
+                // expected to happen if snapshots are spaced
+                // far enough apart.
+                tracing::warn!(
+                    "Previous snapshot task was still running when a new \
+                     snapshot was scheduled"
+                );
+                return;
+            }
+            _ => {}
         }
+
         let TakeSnapshot::Yes(db_path) = take_snapshot else {
             return;
         };
@@ -225,7 +240,7 @@ impl AbcippShim {
                 .height;
             let cfs = db.column_families();
             snapshot.write_to_file(cfs, base_dir.clone(), last_height)?;
-            DbSnapshot::cleanup(last_height, &base_dir)
+            DbSnapshot::cleanup(last_height, &base_dir, self.snapshots_to_keep)
         });
 
         // it's important that the thread is
@@ -235,8 +250,6 @@ impl AbcippShim {
         if snap_recv.blocking_recv().is_err() {
             tracing::error!("Failed to start snapshot task.")
         } else {
-            // N.B. If a task is still running, it will continue
-            // in the background but we will forget about it.
             self.snapshot_task.replace(snapshot_task);
         }
     }
