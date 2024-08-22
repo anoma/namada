@@ -66,7 +66,8 @@ impl AbcippShim {
         let (shell_send, shell_recv) = std::sync::mpsc::channel();
         let (server_shutdown, _) = broadcast::channel::<()>(1);
         let action_at_height = config.shell.action_at_height.clone();
-        let snapshots_to_keep = config.shell.snapshots_to_keep.map(|n| n.get()).unwrap_or(1);
+        let snapshots_to_keep =
+            config.shell.snapshots_to_keep.map(|n| n.get()).unwrap_or(1);
         (
             Self {
                 service: Shell::new(
@@ -226,6 +227,7 @@ impl AbcippShim {
         let base_dir = self.service.base_dir.clone();
 
         let (snap_send, snap_recv) = tokio::sync::oneshot::channel();
+        let snapshots_to_keep = self.snapshots_to_keep;
         let snapshot_task = std::thread::spawn(move || {
             let db = crate::storage::open(db_path, true, None)
                 .expect("Could not open DB");
@@ -240,7 +242,7 @@ impl AbcippShim {
                 .height;
             let cfs = db.column_families();
             snapshot.write_to_file(cfs, base_dir.clone(), last_height)?;
-            DbSnapshot::cleanup(last_height, &base_dir, self.snapshots_to_keep)
+            DbSnapshot::cleanup(last_height, &base_dir, snapshots_to_keep)
         });
 
         // it's important that the thread is

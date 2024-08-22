@@ -870,7 +870,7 @@ impl<'a> DbSnapshot<'a> {
         } in Self::files(base_dir)?
         {
             // this is correct... don't worry about it
-            if height + number_to_keep  < latest_height + 1 {
+            if checked!(height + number_to_keep <= latest_height).unwrap() {
                 let path = PathBuf::from(path_stem);
                 _ = std::fs::remove_file(&path.with_extension("snap"));
                 _ = std::fs::remove_file(path.with_extension("meta"));
