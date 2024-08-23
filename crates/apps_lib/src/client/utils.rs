@@ -253,7 +253,8 @@ pub async fn join_network(
     }
 
     // Validate the wasm artifacts checksums
-    validate_wasm_artifacts_aux(&chain_id, &config.wasm_dir).await;
+    validate_wasm_artifacts_aux(&chain_id, &chain_dir.join(&config.wasm_dir))
+        .await;
 
     // Save the config and the wallet
     config.write(&base_dir, &chain_id, true).unwrap();
