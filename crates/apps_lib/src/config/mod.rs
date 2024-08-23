@@ -18,9 +18,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::cli;
-use crate::facade::tendermint_config::{
-    TendermintConfig, TxIndexConfig, TxIndexer,
-};
+use crate::tendermint_config::{TendermintConfig, TxIndexConfig, TxIndexer};
 
 /// Base directory contains global config and chain directories.
 pub const DEFAULT_BASE_DIR: &str = ".namada";
@@ -854,7 +852,7 @@ namespace = "cometbft"
 #[cfg(test)]
 mod tests {
     use super::DEFAULT_COMETBFT_CONFIG;
-    use crate::facade::tendermint_config::TendermintConfig;
+    use crate::tendermint_config::TendermintConfig;
 
     #[test]
     fn test_default_cometbft_config() {

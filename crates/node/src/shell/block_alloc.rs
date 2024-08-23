@@ -44,9 +44,9 @@ use std::marker::PhantomData;
 use namada_sdk::parameters;
 use namada_sdk::state::{self, WlState};
 
-#[allow(unused_imports)]
-use crate::facade::tendermint_proto::abci::RequestPrepareProposal;
 use crate::shell::block_alloc::states::WithNormalTxs;
+#[allow(unused_imports)]
+use crate::tendermint_proto::abci::RequestPrepareProposal;
 
 /// Block allocation failure status responses.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]

@@ -3,13 +3,11 @@ use namada_sdk::hash::{Hash, Sha256Hasher};
 use namada_sdk::state::BlockHeight;
 
 use super::{Error, ShellResult};
-use crate::facade::tendermint::abci::types::Snapshot;
-use crate::facade::tendermint::v0_37::abci::{
-    request as tm_request, response as tm_response,
-};
 use crate::shell::Shell;
 use crate::storage;
 use crate::storage::{DbSnapshot, SnapshotMetadata};
+use crate::tendermint::abci::types::Snapshot;
+use crate::tendermint::abci::{request as tm_request, response as tm_response};
 
 impl Shell<storage::PersistentDB, Sha256Hasher> {
     /// List the snapshot files held locally. Furthermore, the number

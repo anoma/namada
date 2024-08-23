@@ -1,4 +1,4 @@
-use crate::facade::tendermint::v0_37::abci::{Request, Response};
+use crate::tendermint::abci::{Request, Response};
 
 pub mod shim {
     use std::fmt::Debug;
@@ -7,10 +7,10 @@ pub mod shim {
     use thiserror::Error;
 
     use super::{Request as Req, Response as Resp};
-    use crate::facade::tendermint::v0_37::abci::{
+    use crate::shell;
+    use crate::tendermint::abci::{
         request as tm_request, response as tm_response,
     };
-    use crate::shell;
 
     pub type TxBytes = prost::bytes::Bytes;
 
@@ -177,8 +177,8 @@ pub mod shim {
         use namada_sdk::tendermint::time::Time;
         use namada_sdk::time::DateTimeUtc;
 
-        use crate::facade::tendermint::abci::types::Misbehavior;
-        use crate::facade::tendermint::v0_37::abci::request as tm_request;
+        use crate::tendermint::abci::request as tm_request;
+        use crate::tendermint::abci::types::Misbehavior;
 
         pub struct VerifyHeader;
 
@@ -313,13 +313,13 @@ pub mod shim {
     pub mod response {
         use namada_sdk::events::Event;
 
-        pub use crate::facade::tendermint::v0_37::abci::response::{
+        pub use crate::tendermint::abci::response::{
             PrepareProposal, ProcessProposal,
         };
-        use crate::facade::tendermint_proto::v0_37::abci::{
+        use crate::tendermint_proto::abci::{
             Event as TmEvent, ValidatorUpdate,
         };
-        use crate::facade::tendermint_proto::v0_37::types::ConsensusParams;
+        use crate::tendermint_proto::types::ConsensusParams;
 
         #[derive(Debug, Default)]
         pub struct VerifyHeader;
@@ -340,9 +340,7 @@ pub mod shim {
             pub consensus_param_updates: Option<ConsensusParams>,
         }
 
-        impl From<FinalizeBlock>
-            for crate::facade::tendermint_proto::v0_37::abci::ResponseEndBlock
-        {
+        impl From<FinalizeBlock> for crate::tendermint_proto::abci::ResponseEndBlock {
             fn from(resp: FinalizeBlock) -> Self {
                 Self {
                     events: resp

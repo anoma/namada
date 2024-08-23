@@ -22,10 +22,6 @@ pub mod tendermint_node;
 pub mod wallet;
 pub mod wasm_loader;
 
+pub use namada_core::{tendermint, tendermint_proto};
 pub use namada_sdk::*;
-
-pub mod facade {
-    // TODO(namada#3248): only re-export v037 `tendermint-rs`
-    pub use namada_core::{tendermint, tendermint_proto};
-    pub use {tendermint_config, tendermint_rpc};
-}
+pub use {tendermint_config, tendermint_rpc};

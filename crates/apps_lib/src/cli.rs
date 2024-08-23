@@ -3190,8 +3190,8 @@ pub mod args {
     use crate::client::utils::PRE_GENESIS_DIR;
     use crate::config::genesis::AddrOrPk;
     use crate::config::{self, Action, ActionAtHeight};
-    use crate::facade::tendermint::Timeout;
-    use crate::facade::tendermint_rpc::Url;
+    use crate::tendermint::Timeout;
+    use crate::tendermint_rpc::Url;
     use crate::wrap;
 
     pub const ADDRESS: Arg<WalletAddress> = arg("address");

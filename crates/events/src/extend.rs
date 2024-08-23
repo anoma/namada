@@ -142,7 +142,7 @@ impl AttributesMap for Vec<namada_core::tendermint::abci::EventAttribute> {
 }
 
 impl AttributesMap
-    for Vec<namada_core::tendermint_proto::v0_37::abci::EventAttribute>
+    for Vec<namada_core::tendermint_proto::abci::EventAttribute>
 {
     #[inline]
     fn insert_attribute<K, V>(&mut self, key: K, value: V)
@@ -150,7 +150,7 @@ impl AttributesMap
         K: Into<String>,
         V: Into<String>,
     {
-        self.push(namada_core::tendermint_proto::v0_37::abci::EventAttribute {
+        self.push(namada_core::tendermint_proto::abci::EventAttribute {
             key: key.into(),
             value: value.into(),
             index: true,

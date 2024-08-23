@@ -16,10 +16,8 @@ use tokio::process::{Child, Command};
 use tokio::sync::oneshot::error::RecvError;
 use tokio::sync::oneshot::{Receiver, Sender};
 
-use crate::facade::tendermint::{block, Genesis, Moniker};
-use crate::facade::tendermint_config::{
-    Error as TendermintError, TendermintConfig,
-};
+use crate::tendermint::{block, Genesis, Moniker};
+use crate::tendermint_config::{Error as TendermintError, TendermintConfig};
 
 /// Env. var to output Tendermint log to stdout
 pub const ENV_VAR_TM_STDOUT: &str = "NAMADA_CMT_STDOUT";

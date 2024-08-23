@@ -48,20 +48,19 @@ use crate::ethereum_oracle::test_tools::mock_web3_client::{
 use crate::ethereum_oracle::{
     control, last_processed_block, try_process_eth_events,
 };
-use crate::facade::tendermint_proto::v0_37::abci::{
-    RequestPrepareProposal, RequestProcessProposal,
-};
-use crate::facade::tendermint_rpc::endpoint::block;
-use crate::facade::tendermint_rpc::error::Error as RpcError;
-use crate::facade::tendermint_rpc::SimpleRequest;
-use crate::facade::{tendermint, tendermint_rpc};
 use crate::shell::testing::utils::TestDir;
 use crate::shell::{EthereumOracleChannels, Shell};
 use crate::shims::abcipp_shim_types::shim::request::{
     FinalizeBlock, ProcessedTx,
 };
 use crate::shims::abcipp_shim_types::shim::response::TxResult;
-use crate::{dry_run_tx, storage};
+use crate::tendermint_proto::abci::{
+    RequestPrepareProposal, RequestProcessProposal,
+};
+use crate::tendermint_rpc::endpoint::block;
+use crate::tendermint_rpc::error::Error as RpcError;
+use crate::tendermint_rpc::SimpleRequest;
+use crate::{dry_run_tx, storage, tendermint, tendermint_rpc};
 
 /// Mock Ethereum oracle used for testing purposes.
 struct MockEthOracle {

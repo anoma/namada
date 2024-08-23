@@ -112,11 +112,10 @@ use tempfile::TempDir;
 
 use crate::config::global::GlobalConfig;
 use crate::config::TendermintMode;
-use crate::facade::tendermint::v0_37::abci::request::InitChain;
-use crate::facade::tendermint_proto::google::protobuf::Timestamp;
-use crate::facade::tendermint_rpc;
 use crate::shell::Shell;
-use crate::{config, dry_run_tx};
+use crate::tendermint::abci::request::InitChain;
+use crate::tendermint_proto::google::protobuf::Timestamp;
+use crate::{config, dry_run_tx, tendermint_rpc};
 
 pub const WASM_DIR: &str = "../../wasm";
 
