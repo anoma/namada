@@ -65,9 +65,7 @@ where
                 .data(batched_tx.cmt)
                 .unwrap_or_default()
                 .as_ref(),
-        )
-        .unwrap_or_default()
-        {
+        )? {
             return Ok(());
         }
 
