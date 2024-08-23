@@ -214,6 +214,7 @@ winapi = "0.3.9"
 xorf = { version = "0.11.0", features = ["serde"] }
 yansi = "0.5.1"
 zeroize = { version = "1.5.5", features = ["zeroize_derive"] }
+zstd = "0.13.2"
 
 [patch.crates-io]
 # Patch to the fork containing the correct personalization and basepoints for masp
