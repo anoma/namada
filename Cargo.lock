@@ -5394,7 +5394,6 @@ dependencies = [
  "namada_vp",
  "namada_vp_prelude",
  "once_cell",
- "pretty_assertions",
  "proptest",
  "proptest-state-machine",
  "prost 0.12.3",

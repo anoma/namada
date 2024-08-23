@@ -75,7 +75,6 @@ eyre.workspace = true
 flate2.workspace = true
 fs_extra.workspace = true
 once_cell.workspace = true
-pretty_assertions.workspace = true
 proptest-state-machine.workspace = true
 rand.workspace = true
 tar.workspace = true
