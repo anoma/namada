@@ -27,7 +27,6 @@ pub enum TestWasms {
     TxProposalCode,
     TxProposalMaspRewards,
     TxProposalIbcTokenInflation,
-    TxProposalIbcClientUpgrade,
     TxReadStorageKey,
     TxWriteStorageKey,
     VpAlwaysFalse,
@@ -54,9 +53,6 @@ impl TestWasms {
             TestWasms::TxProposalMaspRewards => "tx_proposal_masp_reward.wasm",
             TestWasms::TxProposalIbcTokenInflation => {
                 "tx_proposal_ibc_token_inflation.wasm"
-            }
-            TestWasms::TxProposalIbcClientUpgrade => {
-                "tx_proposal_ibc_client_upgrade.wasm"
             }
             TestWasms::TxReadStorageKey => "tx_read_storage_key.wasm",
             TestWasms::TxWriteStorageKey => "tx_write.wasm",
