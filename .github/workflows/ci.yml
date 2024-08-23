@@ -58,19 +58,18 @@ jobs:
   rust-docs:
     runs-on: [ubuntu-latest]
     timeout-minutes: 20
+    env:
+      RUSTC_WRAPPER: ""
 
     steps:
       - name: Checkout repo
         if: ${{ github.event_name != 'pull_request_target' }}
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - name: Checkout PR
         if: ${{ github.event_name == 'pull_request_target' }}
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
       - name: Install rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
       - name: Build docs
