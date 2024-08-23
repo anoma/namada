@@ -160,7 +160,6 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             fee_token: self.native_token(),
             gas_limit: GasLimit::from(DEFAULT_GAS_LIMIT),
             expiration: Default::default(),
-            disposable_signing_key: false,
             chain_id: None,
             signing_keys: vec![],
             signatures: vec![],
@@ -191,11 +190,13 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
         &self,
         data: Vec<args::TxShieldedTransferData>,
         gas_spending_keys: Vec<ExtendedSpendingKey>,
+        disposable_signing_key: bool,
     ) -> args::TxShieldedTransfer {
         args::TxShieldedTransfer {
             data,
             gas_spending_keys,
             tx_code_path: PathBuf::from(TX_TRANSFER_WASM),
+            disposable_signing_key,
             tx: self.tx_builder(),
         }
     }
@@ -222,11 +223,13 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
         source: ExtendedSpendingKey,
         data: Vec<args::TxUnshieldingTransferData>,
         gas_spending_keys: Vec<ExtendedSpendingKey>,
+        disposable_signing_key: bool,
     ) -> args::TxUnshieldingTransfer {
         args::TxUnshieldingTransfer {
             source,
             data,
             gas_spending_keys,
+            disposable_signing_key,
             tx_code_path: PathBuf::from(TX_TRANSFER_WASM),
             tx: self.tx_builder(),
         }
@@ -316,6 +319,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
         token: Address,
         amount: InputAmount,
         channel_id: ChannelId,
+        disposable_signing_key: bool,
     ) -> args::TxIbcTransfer {
         args::TxIbcTransfer {
             source,
@@ -323,6 +327,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             token,
             amount,
             channel_id,
+            disposable_signing_key,
             port_id: PortId::from_str("transfer").unwrap(),
             timeout_height: None,
             timeout_sec_offset: None,
@@ -610,6 +615,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
             code_path: None,
             data_path: None,
             serialized_tx: None,
+            disposable_signing_key: false,
         }
     }
 
@@ -732,7 +738,6 @@ where
                 fee_token: native_token,
                 gas_limit: GasLimit::from(DEFAULT_GAS_LIMIT),
                 expiration: Default::default(),
-                disposable_signing_key: false,
                 chain_id: None,
                 signing_keys: vec![],
                 signatures: vec![],

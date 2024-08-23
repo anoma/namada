@@ -4373,6 +4373,7 @@ pub mod args {
                     std::fs::read(path).expect("Expected a file at given path")
                 }),
                 owner: ctx.borrow_chain_or_exit().get(&self.owner),
+                disposable_signing_key: self.disposable_signing_key,
             })
         }
     }
@@ -4384,12 +4385,15 @@ pub mod args {
             let data_path = DATA_PATH_OPT.parse(matches);
             let serialized_tx = TX_PATH_OPT.parse(matches);
             let owner = OWNER.parse(matches);
+            let disposable_signing_key = DISPOSABLE_SIGNING_KEY.parse(matches);
             Self {
                 tx,
                 code_path,
                 data_path,
                 serialized_tx,
                 owner,
+                // FIXME: help
+                disposable_signing_key,
             }
         }
 
@@ -4526,6 +4530,7 @@ pub mod args {
                 tx,
                 data,
                 gas_spending_keys,
+                disposable_signing_key: self.disposable_signing_key,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -4549,11 +4554,13 @@ pub mod args {
             if let Some(key) = GAS_SPENDING_KEY.parse(matches) {
                 gas_spending_keys.push(key);
             }
+            let disposable_gas_payer = DISPOSABLE_SIGNING_KEY.parse(matches);
 
             Self {
                 tx,
                 data,
                 gas_spending_keys,
+                disposable_signing_key: disposable_gas_payer,
                 tx_code_path,
             }
         }
@@ -4683,6 +4690,7 @@ pub mod args {
                 tx,
                 data,
                 gas_spending_keys,
+                disposable_signing_key: self.disposable_signing_key,
                 source: chain_ctx.get_cached(&self.source),
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
@@ -4706,12 +4714,15 @@ pub mod args {
             if let Some(key) = GAS_SPENDING_KEY.parse(matches) {
                 gas_spending_keys.push(key);
             }
+            // FIXME: help, also for the other teo
+            let disposable_signing_key = DISPOSABLE_SIGNING_KEY.parse(matches);
 
             Self {
                 tx,
                 source,
                 data,
                 gas_spending_keys,
+                disposable_signing_key,
                 tx_code_path,
             }
         }
@@ -4770,6 +4781,7 @@ pub mod args {
                 ibc_shielding_data: self.ibc_shielding_data,
                 ibc_memo: self.ibc_memo,
                 gas_spending_keys,
+                disposable_signing_key: self.disposable_signing_key,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
         }
@@ -4799,6 +4811,7 @@ pub mod args {
             if let Some(key) = GAS_SPENDING_KEY.parse(matches) {
                 gas_spending_keys.push(key);
             }
+            let disposable_signing_key = DISPOSABLE_SIGNING_KEY.parse(matches);
             let tx_code_path = PathBuf::from(TX_IBC_WASM);
             Self {
                 tx,
@@ -4814,6 +4827,7 @@ pub mod args {
                 ibc_shielding_data,
                 ibc_memo,
                 gas_spending_keys,
+                disposable_signing_key,
                 tx_code_path,
             }
         }
@@ -6542,6 +6556,7 @@ pub mod args {
                 tx,
                 tx_data,
                 owner: ctx.borrow_chain_or_exit().get(&self.owner),
+                disposable_signing_key: self.disposable_signing_key,
             })
         }
     }
@@ -6551,10 +6566,13 @@ pub mod args {
             let tx = Tx::parse(matches);
             let tx_path = TX_PATH.parse(matches);
             let owner = OWNER.parse(matches);
+            // FIXME: hellp for this
+            let disposable_signing_key = DISPOSABLE_SIGNING_KEY.parse(matches);
             Self {
                 tx,
                 tx_data: tx_path,
                 owner,
+                disposable_signing_key,
             }
         }
 
@@ -7032,7 +7050,6 @@ pub mod args {
                         })
                     })
                     .collect::<Result<Vec<_>, _>>()?,
-                disposable_signing_key: self.disposable_signing_key,
                 tx_reveal_code_path: self.tx_reveal_code_path,
                 password: self.password,
                 expiration: self.expiration,
@@ -7123,6 +7140,7 @@ pub mod args {
                     ))
                     .conflicts_with_all([EXPIRATION_OPT.name]),
             )
+            // FIXME: move this to the other commands
             .arg(DISPOSABLE_SIGNING_KEY.def().help(wrap!(
                 "Generates an ephemeral, disposable keypair to sign the \
                  wrapper transaction. This keypair will be immediately \
@@ -7203,7 +7221,6 @@ pub mod args {
             let gas_limit = GAS_LIMIT.parse(matches);
             let wallet_alias_force = WALLET_ALIAS_FORCE.parse(matches);
             let expiration = EXPIRATION_OPT.parse(matches);
-            let disposable_signing_key = DISPOSABLE_SIGNING_KEY.parse(matches);
             let signing_keys = SIGNING_KEYS.parse(matches);
             let signatures = SIGNATURES.parse(matches);
             let tx_reveal_code_path = PathBuf::from(TX_REVEAL_PK);
@@ -7236,7 +7253,6 @@ pub mod args {
                 fee_token,
                 gas_limit,
                 expiration,
-                disposable_signing_key,
                 signing_keys,
                 signatures,
                 tx_reveal_code_path,

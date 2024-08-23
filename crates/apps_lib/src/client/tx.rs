@@ -41,12 +41,19 @@ pub async fn aux_signing_data(
     args: &args::Tx,
     owner: Option<Address>,
     default_signer: Option<Address>,
+    disposable_signing_key: bool,
 ) -> Result<signing::SigningTxData, error::Error> {
-    let signing_data =
-        signing::aux_signing_data(context, args, owner, default_signer, vec![])
-            .await?;
+    let signing_data = signing::aux_signing_data(
+        context,
+        args,
+        owner,
+        default_signer,
+        vec![],
+        disposable_signing_key,
+    )
+    .await?;
 
-    if args.disposable_signing_key {
+    if disposable_signing_key {
         if !(args.dry_run || args.dry_run_wrapper) {
             // Store the generated signing key to wallet in case of need
             context.wallet().await.save().map_err(|_| {
@@ -1013,6 +1020,7 @@ pub async fn sign_tx<N: Namada>(
         tx: tx_args,
         tx_data,
         owner,
+        disposable_signing_key,
     }: args::SignTx,
 ) -> Result<(), error::Error>
 where
@@ -1025,9 +1033,14 @@ where
         safe_exit(1)
     };
     let default_signer = Some(owner.clone());
-    let signing_data =
-        aux_signing_data(namada, &tx_args, Some(owner.clone()), default_signer)
-            .await?;
+    let signing_data = aux_signing_data(
+        namada,
+        &tx_args,
+        Some(owner.clone()),
+        default_signer,
+        disposable_signing_key,
+    )
+    .await?;
 
     let mut wallet = namada.wallet_mut().await;
 
