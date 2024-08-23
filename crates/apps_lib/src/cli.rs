@@ -7182,16 +7182,13 @@ pub mod args {
                 "The output folder path where the artifact will be stored."
             )))
             .arg(CHAIN_ID_OPT.def().help(wrap!("The chain ID.")))
-            .arg(
-                FEE_PAYER_OPT
-                    .def()
-                    .help(wrap!(
-                        "The implicit address of the gas payer. It defaults \
-                         to the address associated to the first key passed to \
-                         --signing-keys."
-                    ))
-                    .conflicts_with(DISPOSABLE_SIGNING_KEY.name),
-            )
+            .arg(FEE_PAYER_OPT.def().help(wrap!(
+                "The implicit address of the gas payer. It defaults to the \
+                 address associated to the first key passed to \
+                 --signing-keys. If the specific transaction supports \
+                 --disposable-signing-key, than this one will overwrite this \
+                 argument."
+            )))
             .arg(
                 USE_DEVICE
                     .def()
