@@ -4392,7 +4392,6 @@ pub mod args {
                 data_path,
                 serialized_tx,
                 owner,
-                // FIXME: help
                 disposable_signing_key,
             }
         }
@@ -4428,6 +4427,10 @@ pub mod args {
                 .arg(OWNER.def().help(wrap!(
                     "The address corresponding to the signatures or signing \
                      keys."
+                )))
+                .arg(DISPOSABLE_SIGNING_KEY.def().help(wrap!(
+                    "Generates an ephemeral, disposable keypair to sign the \
+                     wrapper transaction."
                 )))
         }
     }
@@ -4587,6 +4590,10 @@ pub mod args {
                     "The optional spending key that will be used in addition \
                      to the source for gas payment."
                 )))
+                .arg(DISPOSABLE_SIGNING_KEY.def().help(wrap!(
+                    "Generates an ephemeral, disposable keypair to sign the \
+                     wrapper transaction."
+                )))
         }
     }
 
@@ -4714,7 +4721,6 @@ pub mod args {
             if let Some(key) = GAS_SPENDING_KEY.parse(matches) {
                 gas_spending_keys.push(key);
             }
-            // FIXME: help, also for the other teo
             let disposable_signing_key = DISPOSABLE_SIGNING_KEY.parse(matches);
 
             Self {
@@ -4748,6 +4754,10 @@ pub mod args {
                 .arg(GAS_SPENDING_KEY.def().help(wrap!(
                     "The optional spending key that will be used in addition \
                      to the source for gas payment."
+                )))
+                .arg(DISPOSABLE_SIGNING_KEY.def().help(wrap!(
+                    "Generates an ephemeral, disposable keypair to sign the \
+                     wrapper transaction."
                 )))
         }
     }
@@ -4875,6 +4885,10 @@ pub mod args {
                     "The optional spending key that will be used in addition \
                      to the source for gas payment (if this is a shielded \
                      action)."
+                )))
+                .arg(DISPOSABLE_SIGNING_KEY.def().help(wrap!(
+                    "Generates an ephemeral, disposable keypair to sign the \
+                     wrapper transaction."
                 )))
         }
     }
@@ -6566,7 +6580,6 @@ pub mod args {
             let tx = Tx::parse(matches);
             let tx_path = TX_PATH.parse(matches);
             let owner = OWNER.parse(matches);
-            // FIXME: hellp for this
             let disposable_signing_key = DISPOSABLE_SIGNING_KEY.parse(matches);
             Self {
                 tx,
@@ -6584,6 +6597,10 @@ pub mod args {
                 .arg(
                     OWNER.def().help(wrap!("The address of the account owner")),
                 )
+                .arg(DISPOSABLE_SIGNING_KEY.def().help(wrap!(
+                    "Generates an ephemeral, disposable keypair to sign the \
+                     wrapper transaction."
+                )))
         }
     }
 
@@ -7140,12 +7157,6 @@ pub mod args {
                     ))
                     .conflicts_with_all([EXPIRATION_OPT.name]),
             )
-            // FIXME: move this to the other commands
-            .arg(DISPOSABLE_SIGNING_KEY.def().help(wrap!(
-                "Generates an ephemeral, disposable keypair to sign the \
-                 wrapper transaction. This keypair will be immediately \
-                 discarded after use."
-            )))
             .arg(
                 SIGNING_KEYS
                     .def()
