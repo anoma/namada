@@ -49,7 +49,7 @@ use namada_sdk::{
 };
 
 use crate::cli::{self, args};
-use crate::facade::tendermint::merkle::proof::ProofOps;
+use crate::tendermint::merkle::proof::ProofOps;
 
 /// Query the status of a given transaction.
 ///

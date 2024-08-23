@@ -465,19 +465,22 @@ mod test_vote_extensions {
             Epoch::default(),
         );
         let votes = vec![VoteInfo {
-            validator: crate::facade::tendermint::abci::types::Validator {
+            validator: crate::tendermint::abci::types::Validator {
                 address: pkh1,
-                power: (u128::try_from(val1.bonded_stake).expect("Test failed") as u64).try_into().unwrap(),
+                power: (u128::try_from(val1.bonded_stake).expect("Test failed")
+                    as u64)
+                    .try_into()
+                    .unwrap(),
             },
-            sig_info: crate::facade::tendermint::abci::types::BlockSignatureInfo::LegacySigned,
+            sig_info:
+                crate::tendermint::abci::types::BlockSignatureInfo::LegacySigned,
         }];
         let req = FinalizeBlock {
             proposer_address: pkh1.to_vec(),
-            decided_last_commit:
-                crate::facade::tendermint::abci::types::CommitInfo {
-                    round: 0u8.into(),
-                    votes,
-                },
+            decided_last_commit: crate::tendermint::abci::types::CommitInfo {
+                round: 0u8.into(),
+                votes,
+            },
             ..Default::default()
         };
         assert_eq!(shell.start_new_epoch(Some(req)).0, 1);

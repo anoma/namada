@@ -466,7 +466,7 @@ impl Event {
     }
 }
 
-impl From<Event> for namada_core::tendermint_proto::v0_37::abci::Event {
+impl From<Event> for namada_core::tendermint_proto::abci::Event {
     fn from(event: Event) -> Self {
         Self {
             r#type: {
@@ -485,14 +485,14 @@ impl From<Event> for namada_core::tendermint_proto::v0_37::abci::Event {
                 .attributes
                 .into_iter()
                 .map(|(key, value)| {
-                    namada_core::tendermint_proto::v0_37::abci::EventAttribute {
+                    namada_core::tendermint_proto::abci::EventAttribute {
                         key,
                         value,
                         index: true,
                     }
                 })
                 .chain(std::iter::once_with(|| {
-                    namada_core::tendermint_proto::v0_37::abci::EventAttribute {
+                    namada_core::tendermint_proto::abci::EventAttribute {
                         key: "event-level".to_string(),
                         value: event.level.to_string(),
                         index: true,

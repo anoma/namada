@@ -42,7 +42,7 @@ use crate::integration::setup;
 use crate::strings::{
     TX_APPLIED_SUCCESS, TX_INSUFFICIENT_BALANCE, TX_REJECTED,
 };
-use crate::tendermint::abci::response::ApplySnapshotChunkResult;
+use crate::tendermint::abci::ApplySnapshotChunkResult;
 use crate::tx::tx_host_env::gov_storage::proposal::{
     PGFInternalTarget, PGFTarget,
 };
@@ -1755,7 +1755,7 @@ fn enforce_fee_payment() -> Result<()> {
 /// from one node to another.
 #[test]
 fn apply_snapshot() -> Result<()> {
-    use namada_node::facade::tendermint::v0_37::abci::{
+    use namada_node::tendermint::abci::{
         request as tm_request, response as tm_response,
     };
     // This address doesn't matter for tests. But an argument is required.
@@ -1880,7 +1880,7 @@ fn apply_snapshot() -> Result<()> {
 /// Test the various failure conditions of state sync
 #[test]
 fn snapshot_unhappy_flows() -> Result<()> {
-    use namada_node::facade::tendermint::v0_37::abci::{
+    use namada_node::tendermint::abci::{
         request as tm_request, response as tm_response,
     };
     let (node, _services) = setup::setup()?;

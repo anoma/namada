@@ -33,7 +33,7 @@ use crate::config::genesis::transactions::{
 use crate::config::genesis::{AddrOrPk, GenesisAddress};
 use crate::config::global::GlobalConfig;
 use crate::config::{self, genesis, get_default_namada_folder, TendermintMode};
-use crate::facade::tendermint::node::Id as TendermintNodeId;
+use crate::tendermint::node::Id as TendermintNodeId;
 use crate::wallet::{pre_genesis, CliWalletUtils};
 use crate::{tendermint_node, wasm_loader};
 

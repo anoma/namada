@@ -23,7 +23,7 @@ use namada_apps_lib::cli::context::ENV_VAR_CHAIN_ID;
 use namada_apps_lib::client::utils::PRE_GENESIS_DIR;
 use namada_apps_lib::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps_lib::config::{self, ethereum_bridge};
-use namada_apps_lib::facade::tendermint_config::net::Address as TendermintAddress;
+use namada_apps_lib::tendermint_config::net::Address as TendermintAddress;
 use namada_apps_lib::wallet;
 use namada_core::chain::ChainId;
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;

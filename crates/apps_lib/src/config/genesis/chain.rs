@@ -29,8 +29,8 @@ use super::{templates, transactions};
 use crate::config::genesis::templates::Validated;
 use crate::config::utils::{set_ip, set_port};
 use crate::config::{Config, TendermintMode};
-use crate::facade::tendermint::node::Id as TendermintNodeId;
-use crate::facade::tendermint_config::net::Address as TendermintAddress;
+use crate::tendermint::node::Id as TendermintNodeId;
+use crate::tendermint_config::net::Address as TendermintAddress;
 use crate::tendermint_node::id_from_pk;
 use crate::wallet::{Alias, CliWalletUtils};
 use crate::wasm_loader;
@@ -497,7 +497,7 @@ pub fn finalize(
     templates: templates::All<Validated>,
     chain_id_prefix: ChainIdPrefix,
     genesis_time: DateTimeUtc,
-    consensus_timeout_commit: crate::facade::tendermint::Timeout,
+    consensus_timeout_commit: crate::tendermint::Timeout,
 ) -> Finalized {
     let genesis_time: Rfc3339String = genesis_time.into();
     let consensus_timeout_commit: DurationNanos =
@@ -883,7 +883,7 @@ mod test {
         let genesis_time = DateTimeUtc::from_str(GENESIS_TIME).unwrap();
 
         let consensus_timeout_commit =
-            crate::facade::tendermint::Timeout::from_str("1s").unwrap();
+            crate::tendermint::Timeout::from_str("1s").unwrap();
 
         let finalized_0 = finalize(
             templates.clone(),

@@ -75,13 +75,13 @@ use tokio::sync::mpsc::{Receiver, UnboundedSender};
 
 use super::ethereum_oracle::{self as oracle, last_processed_block};
 use crate::config::{self, genesis, TendermintMode, ValidatorLocalConfig};
-use crate::facade::tendermint::v0_37::abci::{request, response};
-use crate::facade::tendermint::{self, validator};
-use crate::facade::tendermint_proto::v0_37::crypto::public_key;
 use crate::protocol::ShellParams;
 use crate::shims::abcipp_shim_types::shim;
 use crate::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::shims::abcipp_shim_types::shim::TakeSnapshot;
+use crate::tendermint::abci::{request, response};
+use crate::tendermint::{self, validator};
+use crate::tendermint_proto::crypto::public_key;
 use crate::{protocol, storage, tendermint_node};
 
 fn key_to_tendermint(
@@ -1529,15 +1529,15 @@ pub mod test_utils {
 
     use super::*;
     use crate::config::ethereum_bridge::ledger::ORACLE_CHANNEL_BUFFER_SIZE;
-    use crate::facade::tendermint::abci::types::Misbehavior;
-    use crate::facade::tendermint_proto::google::protobuf::Timestamp;
-    use crate::facade::tendermint_proto::v0_37::abci::{
-        RequestPrepareProposal, RequestProcessProposal,
-    };
     use crate::shims::abcipp_shim_types;
     use crate::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,
     };
+    use crate::tendermint::abci::types::Misbehavior;
+    use crate::tendermint_proto::abci::{
+        RequestPrepareProposal, RequestProcessProposal,
+    };
+    use crate::tendermint_proto::google::protobuf::Timestamp;
 
     #[derive(Error, Debug)]
     pub enum TestError {

@@ -40,6 +40,9 @@ use namada_apps_lib::config::utils::{
     convert_tm_addr_to_socket_addr, num_of_threads,
 };
 use namada_apps_lib::{config, wasm_loader};
+pub use namada_apps_lib::{
+    tendermint, tendermint_config, tendermint_proto, tendermint_rpc,
+};
 use namada_sdk::chain::BlockHeight;
 use namada_sdk::eth_bridge::ethers::providers::{Http, Provider};
 use namada_sdk::migrations::ScheduledMigration;
@@ -60,18 +63,14 @@ use self::shims::abcipp_shim::AbciService;
 use crate::broadcaster::Broadcaster;
 use crate::config::{ethereum_bridge, TendermintMode};
 use crate::ethereum_oracle as oracle;
-use crate::facade::tendermint::v0_37::abci::response;
-use crate::facade::tower_abci::{split, Server};
 use crate::shell::{Error, MempoolTxType, Shell};
 use crate::shims::abcipp_shim::AbcippShim;
 use crate::shims::abcipp_shim_types::shim::{Request, Response};
-
-pub mod facade {
-    pub use namada_apps_lib::facade::*;
-    pub mod tower_abci {
-        pub use tower_abci::v037::*;
-        pub use tower_abci::BoxError;
-    }
+use crate::tendermint::abci::response;
+use crate::tower_abci::{split, Server};
+pub mod tower_abci {
+    pub use tower_abci::v037::*;
+    pub use tower_abci::BoxError;
 }
 
 /// Env. var to set a number of Tokio RT worker threads

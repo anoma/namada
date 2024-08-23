@@ -10,7 +10,7 @@ use namada_sdk::address::{Address, ImplicitAddress};
 use namada_sdk::key::common;
 use namada_sdk::wallet::FindKeyError;
 
-use crate::facade::tendermint::Timeout;
+use crate::tendermint::Timeout;
 
 pub fn test_genesis(args: TestGenesis, global_args: args::Global) {
     let TestGenesis {
