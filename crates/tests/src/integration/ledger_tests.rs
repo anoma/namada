@@ -32,7 +32,8 @@ use test_log::test;
 use crate::e2e::ledger_tests::prepare_proposal_data;
 use crate::e2e::setup::constants::{
     ALBERT, ALBERT_KEY, APFEL, BERTHA, BERTHA_KEY, BTC, CHRISTEL, CHRISTEL_KEY,
-    DAEWON, DOT, ESTER, ETH, GOVERNANCE_ADDRESS, KARTOFFEL, NAM, SCHNITZEL,
+    DAEWON, DOT, ESTER, ETH, GOVERNANCE_ADDRESS, KARTOFFEL, NAM, PGF_ADDRESS,
+    SCHNITZEL,
 };
 use crate::e2e::setup::{apply_use_device, ensure_hot_key};
 use crate::integration::helpers::{
@@ -1154,6 +1155,44 @@ fn pgf_governance_proposal() -> Result<()> {
         captured.contains(&format!("- 1 to {}", defaults::albert_address()))
     );
     assert!(captured.contains("Pgf fundings: no fundings are currently set."));
+
+    // 7.1 Query total NAM supply and PGF balance
+    let query_balance_args = vec![
+        "balance",
+        "--owner",
+        PGF_ADDRESS,
+        "--token",
+        NAM,
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let captured =
+        CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains("nam: 13.785266"));
+
+    let query_total_supply_args = vec![
+        "total-supply",
+        "--token",
+        NAM,
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let captured =
+        CapturedOutput::of(|| run(&node, Bin::Client, query_total_supply_args));
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains(
+        "token tnam1q9kn74xfzytqkqyycfrhycr8ajam8ny935cge0z5: 114400023904507 \
+         raw units"
+    ));
+
+    let query_native_supply_args =
+        vec!["native-supply", "--ledger-address", &validator_one_rpc];
+    let captured = CapturedOutput::of(|| {
+        run(&node, Bin::Client, query_native_supply_args)
+    });
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains("nam: 114400010.119241"));
 
     // 8. Submit proposal funding
     let albert = defaults::albert_address();
