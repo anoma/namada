@@ -67,13 +67,6 @@ tracing.workspace = true
 winapi.workspace = true
 
 [dev-dependencies]
-namada_test_utils = {path = "../test_utils"}
-
-assert_matches.workspace = true
-bit-set.workspace = true
-proptest.workspace = true
-test-log.workspace = true
-tokio-test.workspace = true
 
 [build-dependencies]
 git2.workspace = true

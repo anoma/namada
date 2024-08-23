@@ -4639,8 +4639,6 @@ dependencies = [
 name = "namada_apps"
 version = "0.43.0"
 dependencies = [
- "assert_matches",
- "bit-set",
  "clap_complete",
  "clap_complete_nushell",
  "color-eyre",
@@ -4648,11 +4646,7 @@ dependencies = [
  "git2",
  "namada_apps_lib",
  "namada_node",
- "namada_test_utils",
- "proptest",
- "test-log",
  "tokio",
- "tokio-test",
  "toml 0.5.11",
  "tracing",
  "tracing-subscriber",
