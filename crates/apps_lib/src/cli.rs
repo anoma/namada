@@ -3379,7 +3379,6 @@ pub mod args {
         DefaultFn(|| PortId::from_str("transfer").unwrap()),
     );
     pub const PRE_GENESIS: ArgFlag = flag("pre-genesis");
-    pub const PROPOSAL_ETH: ArgFlag = flag("eth");
     pub const PROPOSAL_PGF_STEWARD: ArgFlag = flag("pgf-stewards");
     pub const PROPOSAL_PGF_FUNDING: ArgFlag = flag("pgf-funding");
     pub const PROTOCOL_KEY: ArgOpt<WalletPublicKey> = arg_opt("protocol-key");
@@ -5610,25 +5609,13 @@ pub mod args {
                     "The data path file (json) that describes the proposal."
                 )))
                 .arg(
-                    PROPOSAL_ETH
-                        .def()
-                        .help(wrap!("Flag if the proposal is of type eth."))
-                        .conflicts_with_all([
-                            PROPOSAL_PGF_FUNDING.name,
-                            PROPOSAL_PGF_STEWARD.name,
-                        ]),
-                )
-                .arg(
                     PROPOSAL_PGF_STEWARD
                         .def()
                         .help(wrap!(
                             "Flag if the proposal is of type pgf-stewards. \
                              Used to elect/remove stewards."
                         ))
-                        .conflicts_with_all([
-                            PROPOSAL_ETH.name,
-                            PROPOSAL_PGF_FUNDING.name,
-                        ]),
+                        .conflicts_with(PROPOSAL_PGF_FUNDING.name),
                 )
                 .arg(
                     PROPOSAL_PGF_FUNDING
@@ -5637,10 +5624,7 @@ pub mod args {
                             "Flag if the proposal is of type pgf-funding. \
                              Used to control continuous/retro PGF fundings."
                         ))
-                        .conflicts_with_all([
-                            PROPOSAL_ETH.name,
-                            PROPOSAL_PGF_STEWARD.name,
-                        ]),
+                        .conflicts_with(PROPOSAL_PGF_STEWARD.name),
                 )
         }
     }
@@ -5685,11 +5669,7 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
-                .arg(
-                    PROPOSAL_ID_OPT
-                        .def()
-                        .help(wrap!("The proposal identifier.")),
-                )
+                .arg(PROPOSAL_ID.def().help(wrap!("The proposal identifier.")))
                 .arg(PROPOSAL_VOTE.def().help(wrap!(
                     "The vote for the proposal. Either yay, nay, or abstain."
                 )))
