@@ -2108,9 +2108,10 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about(wrap!(
-                    "Query the total supply in the network of the given \
-                     token. For the native token, this will query the raw \
-                     total supply and not the effective total supply."
+                    "Query the effective total circulating supply of the \
+                     native token NAM. This excludes illquid NAM tokens held \
+                     in places such as the PGF account. This is the token \
+                     amount used in inflation calculations."
                 ))
                 .add_args::<args::QueryEffNativeSupply<args::CliTypes>>()
         }
@@ -7055,7 +7056,7 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app
+            app.add_args::<Query<CliTypes>>()
         }
     }
 
