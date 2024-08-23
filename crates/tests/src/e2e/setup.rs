@@ -71,9 +71,6 @@ pub struct Network {
     pub chain_id: ChainId,
 }
 
-/// Offset the ports used in the network configuration to avoid shared resources
-pub const ANOTHER_CHAIN_PORT_OFFSET: u16 = 1000;
-
 /// Apply the --use-device flag depending on the environment variables
 pub fn apply_use_device(mut tx_args: Vec<&str>) -> Vec<&str> {
     if is_use_device() {
@@ -1316,7 +1313,7 @@ pub fn setup_gaia() -> Result<Test> {
         "genesis",
         "add-genesis-account",
         &account,
-        "10000stake,1000samoleans",
+        "100000000stake,1000samoleans",
     ];
     let mut gaia = run_gaia_cmd(&test, args, Some(10))?;
     gaia.assert_success();
@@ -1329,8 +1326,12 @@ pub fn setup_gaia() -> Result<Test> {
 
     // Add the stake token to the validator
     let validator = find_gaia_address(&test, constants::GAIA_VALIDATOR)?;
-    let stake = "100000000000stake";
-    let args = ["genesis", "add-genesis-account", &validator, stake];
+    let args = [
+        "genesis",
+        "add-genesis-account",
+        &validator,
+        "200000000000stake",
+    ];
     let mut gaia = run_gaia_cmd(&test, args, Some(10))?;
     gaia.assert_success();
 
@@ -1339,7 +1340,7 @@ pub fn setup_gaia() -> Result<Test> {
         "genesis",
         "gentx",
         constants::GAIA_VALIDATOR,
-        stake,
+        "100000000000stake",
         "--keyring-backend",
         "test",
         "--chain-id",

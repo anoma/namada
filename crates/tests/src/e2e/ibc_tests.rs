@@ -15,14 +15,11 @@ use std::path::{Path, PathBuf};
 
 use color_eyre::eyre::Result;
 use eyre::eyre;
-use namada_apps_lib::cli::context::ENV_VAR_CHAIN_ID;
 use namada_apps_lib::client::rpc::query_storage_value_bytes;
-use namada_apps_lib::config::genesis::{chain, templates};
-use namada_apps_lib::config::utils::set_port;
-use namada_apps_lib::config::{ethereum_bridge, TendermintMode};
+use namada_apps_lib::config::ethereum_bridge;
+use namada_apps_lib::config::genesis::templates;
 use namada_apps_lib::facade::tendermint_rpc::{Client, HttpClient, Url};
-use namada_core::string_encoding::StringEncoded;
-use namada_sdk::address::{Address, MASP};
+use namada_sdk::address::MASP;
 use namada_sdk::governance::cli::onchain::PgfFunding;
 use namada_sdk::governance::pgf::ADDRESS as PGF_ADDRESS;
 use namada_sdk::governance::storage::proposal::{PGFIbcTarget, PGFTarget};
@@ -34,7 +31,6 @@ use namada_sdk::ibc::core::host::types::identifiers::{
 use namada_sdk::ibc::primitives::proto::Any;
 use namada_sdk::ibc::storage::*;
 use namada_sdk::ibc::trace::ibc_token;
-use namada_sdk::masp::fs::FsShieldedUtils;
 use namada_sdk::masp::PaymentAddress;
 use namada_sdk::storage::Epoch;
 use namada_sdk::token::Amount;
@@ -45,7 +41,7 @@ use sha2::{Digest, Sha256};
 
 use crate::e2e::helpers::{
     epochs_per_year_from_min_duration, find_address, find_gaia_address,
-    get_actor_rpc, get_epoch, get_validator_pk, wait_for_wasm_pre_compile,
+    get_actor_rpc, get_epoch, get_gaia_gov_address,
 };
 use crate::e2e::ledger_tests::{
     start_namada_ledger_node_wait_wasm, write_json_file,
@@ -55,10 +51,12 @@ use crate::e2e::setup::{
     set_ethereum_bridge_mode, setup_gaia, setup_hermes, sleep, Bin, NamadaCmd,
     Test, Who,
 };
-use crate::strings::{LEDGER_STARTED, TX_APPLIED_SUCCESS, VALIDATOR_NODE};
+use crate::strings::TX_APPLIED_SUCCESS;
 use crate::{run, run_as};
 
 const IBC_REFUND_TARGET_ALIAS: &str = "ibc-refund-target";
+const IBC_CLINET_ID: &str = "07-tendermint-0";
+const UPGRADED_CHAIN_ID: &str = "upgraded-chain";
 
 /// IBC transfer tests:
 /// 1. Transparent transfers
@@ -577,88 +575,47 @@ fn ibc_token_inflation() -> Result<()> {
 
 #[test]
 fn ibc_upgrade_client() -> Result<()> {
-    // To avoid the client expiration, stop updating the client near the
-    // first height of the grace epoch. It is set 340 because the grace epoch in
-    // this test will be Epoch 18 and the number of blocks per epoch is 20.
-    const MIN_UPGRADE_HEIGHT: u64 = 340;
-    const PIPELINE_LEN: u64 = 8;
+    const UPGRADE_HEIGHT_OFFSET: u64 = 20;
 
     let update_genesis =
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
             genesis.parameters.parameters.epochs_per_year =
-                epochs_per_year_from_min_duration(20);
-            // for the trusting period of IBC client
-            genesis.parameters.pos_params.pipeline_len = PIPELINE_LEN;
-            genesis.parameters.gov_params.min_proposal_grace_epochs = 3;
-            genesis.parameters.ibc_params.default_mint_limit =
-                Amount::max_signed();
-            genesis
-                .parameters
-                .ibc_params
-                .default_per_epoch_throughput_limit = Amount::max_signed();
+                epochs_per_year_from_min_duration(1800);
             setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
         };
-    let (ledger_a, ledger_b, test_a, test_b) = run_two_nets(update_genesis)?;
-    let _bg_ledger_a = ledger_a.background();
-    let _bg_ledger_b = ledger_b.background();
+    let (ledger, gaia, test, test_gaia) = run_namada_gaia(update_genesis)?;
+    let _bg_ledger = ledger.background();
+    let _bg_gaia = gaia.background();
 
-    // Proposal on Chain B
-    // Delegate some token
-    delegate_token(&test_b)?;
-    let rpc_b = get_actor_rpc(&test_b, Who::Validator(0));
-    let mut epoch = get_epoch(&test_b, &rpc_b).unwrap();
-    let delegated = epoch + PIPELINE_LEN;
-    while epoch < delegated {
-        sleep(10);
-        epoch = get_epoch(&test_b, &rpc_b).unwrap_or_default();
-    }
-    // Upgrade proposal on Chain B
-    // The transaction will store the upgraded client state and consensus state
-    // as if Chain B will be upgraded
-    let start_epoch = propose_upgrade_client(&test_b)?;
-    let mut epoch = get_epoch(&test_b, &rpc_b).unwrap();
-    // Vote
-    while epoch < start_epoch {
-        sleep(10);
-        epoch = get_epoch(&test_b, &rpc_b).unwrap_or_default();
-    }
-    submit_votes(&test_b)?;
+    setup_hermes(&test, &test_gaia)?;
+    create_channel_with_hermes(&test, &test_gaia)?;
 
-    // creating IBC channel while waiting the grace epoch
-    setup_hermes(&test_a, &test_b)?;
-    create_channel_with_hermes(&test_a, &test_b)?;
-    // Start relaying to update clients
-    let hermes = run_hermes(&test_a)?;
-    let bg_hermes = hermes.background();
+    let height = query_height(&test_gaia)?;
+    let upgrade_height = height.revision_height() + UPGRADE_HEIGHT_OFFSET;
 
-    let mut height = query_height(&test_b)?;
-    while height.revision_height() < MIN_UPGRADE_HEIGHT {
-        sleep(10);
-        height = query_height(&test_b)?;
-    }
-    // Stop Hermes not to update a client after the upgrade height
-    let mut hermes = bg_hermes.foreground();
-    hermes.interrupt()?;
+    // upgrade proposal
+    propose_upgrade_client(&test, &test_gaia, upgrade_height)?;
 
-    // wait for the grace epoch
-    let grace_epoch = start_epoch + 6u64;
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
-    while epoch < grace_epoch {
-        sleep(10);
-        epoch = get_epoch(&test_b, &rpc_b).unwrap_or_default();
+    // vote
+    vote_on_gaia(&test_gaia)?;
+    wait_for_pass(&test_gaia)?;
+
+    // wait for the halt height
+    let mut height = query_height(&test_gaia)?;
+    while height.revision_height() < upgrade_height {
+        sleep(5);
+        height = query_height(&test_gaia)?;
     }
 
-    // Check the upgraded height
-    let upgraded_height = get_upgraded_height(&test_b, MIN_UPGRADE_HEIGHT)?;
-    // Upgrade the IBC client of Chain B on Chain A with Hermes
-    upgrade_client(&test_a, test_a.net.chain_id.to_string(), upgraded_height)?;
+    // Upgrade the IBC client of Gaia on Namada with Hermes
+    upgrade_client(&test, test.net.chain_id.to_string(), upgrade_height)?;
 
     // Check the upgraded client
     let upgraded_client_state =
-        get_client_states(&test_a, &"07-tendermint-0".parse().unwrap())?;
+        get_client_state(&test, &IBC_CLINET_ID.parse().unwrap())?;
     assert_eq!(
         upgraded_client_state.inner().chain_id.as_str(),
-        "upgraded-chain"
+        UPGRADED_CHAIN_ID
     );
 
     Ok(())
@@ -832,125 +789,6 @@ fn run_namada_gaia(
     Ok((ledger, gaia, test, test_gaia))
 }
 
-fn run_two_nets(
-    update_genesis: impl FnMut(
-        templates::All<templates::Unvalidated>,
-        &Path,
-    ) -> templates::All<templates::Unvalidated>,
-) -> Result<(NamadaCmd, NamadaCmd, Test, Test)> {
-    let (test_a, test_b) = setup_two_single_node_nets(update_genesis)?;
-    set_ethereum_bridge_mode(
-        &test_a,
-        &test_a.net.chain_id,
-        Who::Validator(0),
-        ethereum_bridge::ledger::Mode::Off,
-        None,
-    );
-    set_ethereum_bridge_mode(
-        &test_b,
-        &test_b.net.chain_id,
-        Who::Validator(0),
-        ethereum_bridge::ledger::Mode::Off,
-        None,
-    );
-
-    // Run Chain A
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_a.net.chain_id.to_string());
-    let mut ledger_a =
-        run_as!(test_a, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
-    ledger_a.exp_string(LEDGER_STARTED)?;
-    ledger_a.exp_string(VALIDATOR_NODE)?;
-    // Run Chain B
-    std::env::set_var(ENV_VAR_CHAIN_ID, test_b.net.chain_id.to_string());
-    let mut ledger_b =
-        run_as!(test_b, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
-    ledger_b.exp_string(LEDGER_STARTED)?;
-    ledger_b.exp_string(VALIDATOR_NODE)?;
-
-    wait_for_wasm_pre_compile(&mut ledger_a)?;
-    wait_for_wasm_pre_compile(&mut ledger_b)?;
-
-    sleep(5);
-
-    Ok((ledger_a, ledger_b, test_a, test_b))
-}
-
-fn setup_two_single_node_nets(
-    mut update_genesis: impl FnMut(
-        templates::All<templates::Unvalidated>,
-        &Path,
-    ) -> templates::All<templates::Unvalidated>,
-) -> Result<(Test, Test)> {
-    const ANOTHER_PROXY_APP: u16 = 27659u16;
-    const ANOTHER_RPC: u16 = 27660u16;
-    const ANOTHER_P2P: u16 = 26655u16;
-    // Download the shielded pool parameters before starting node
-    let _ = FsShieldedUtils::new(PathBuf::new());
-
-    let test_a = setup::network(&mut update_genesis, None)?;
-    let test_b = setup::network(update_genesis, None)?;
-    let genesis_b_dir = test_b
-        .test_dir
-        .path()
-        .join(namada_apps_lib::client::utils::NET_ACCOUNTS_DIR)
-        .join("validator-0");
-    let mut genesis_b = chain::Finalized::read_toml_files(
-        &genesis_b_dir.join(test_b.net.chain_id.as_str()),
-    )
-    .map_err(|_| eyre!("Could not read genesis files from test b"))?;
-    // chain b's validator needs to listen on a different port than chain a's
-    // validator
-    let validator_pk = get_validator_pk(&test_b, Who::Validator(0)).unwrap();
-    let validator_addr = genesis_b
-        .transactions
-        .established_account
-        .as_ref()
-        .unwrap()
-        .iter()
-        .find_map(|acct| {
-            acct.tx
-                .public_keys
-                .contains(&StringEncoded::new(validator_pk.clone()))
-                .then(|| acct.address.clone())
-        })
-        .unwrap();
-    let validator_tx = genesis_b
-        .transactions
-        .validator_account
-        .as_mut()
-        .unwrap()
-        .iter_mut()
-        .find(|val| {
-            Address::Established(val.tx.data.address.raw.clone())
-                == validator_addr
-        })
-        .unwrap();
-    let new_port = validator_tx.tx.data.net_address.port()
-        + setup::ANOTHER_CHAIN_PORT_OFFSET;
-    validator_tx.tx.data.net_address.set_port(new_port);
-    genesis_b
-        .write_toml_files(&genesis_b_dir.join(test_b.net.chain_id.as_str()))
-        .map_err(|_| eyre!("Could not write genesis toml files for test_b"))?;
-    // modify chain b to use different ports for cometbft
-    let mut config = namada_apps_lib::config::Config::load(
-        &genesis_b_dir,
-        &test_b.net.chain_id,
-        Some(TendermintMode::Validator),
-    );
-    let proxy_app = &mut config.ledger.cometbft.proxy_app;
-    set_port(proxy_app, ANOTHER_PROXY_APP);
-    let rpc_addr = &mut config.ledger.cometbft.rpc.laddr;
-    set_port(rpc_addr, ANOTHER_RPC);
-    let p2p_addr = &mut config.ledger.cometbft.p2p.laddr;
-    set_port(p2p_addr, ANOTHER_P2P);
-    config
-        .write(&genesis_b_dir, &test_b.net.chain_id, true)
-        .map_err(|e| {
-            eyre!("Unable to modify chain b's config file due to {}", e)
-        })?;
-    Ok((test_a, test_b))
-}
-
 fn create_channel_with_hermes(
     test_a: &Test,
     test_b: &Test,
@@ -1050,33 +888,6 @@ fn wait_for_packet_relay(
     Err(eyre!("Pending packet is still left"))
 }
 
-fn get_upgraded_height(test: &Test, min_upgrade_height: u64) -> Result<u64> {
-    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
-    // Search the storage for the upgraded client state
-    let rpc = get_actor_rpc(test, Who::Validator(0));
-    let max_height = min_upgrade_height + 100;
-    let mut height = min_upgrade_height;
-    while height < max_height {
-        height += 1;
-        let key = upgraded_client_state_key(Height::new(0, height).unwrap());
-        let query_args = [
-            "query-bytes",
-            "--storage-key",
-            &key.to_string(),
-            "--node",
-            &rpc,
-        ];
-        let mut client = run!(test, Bin::Client, query_args, Some(10))?;
-        if client.exp_string("No data found").is_ok() {
-            sleep(1);
-            continue;
-        } else {
-            return Ok(height);
-        }
-    }
-    panic!("No upgraded client state on the chain");
-}
-
 fn upgrade_client(
     test: &Test,
     host_chain_id: impl AsRef<str>,
@@ -1099,7 +910,7 @@ fn upgrade_client(
     Ok(())
 }
 
-fn get_client_states(
+fn get_client_state(
     test: &Test,
     client_id: &ClientId,
 ) -> Result<TmClientState> {
@@ -1181,7 +992,6 @@ fn transfer_on_chain(
     amount: u64,
     signer: impl AsRef<str>,
 ) -> Result<()> {
-    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let rpc = get_actor_rpc(test, Who::Validator(0));
     let amount = amount.to_string();
     let tx_args = apply_use_device(vec![
@@ -1221,7 +1031,6 @@ fn transfer(
     expected_err: Option<&str>,
     wait_reveal_pk: bool,
 ) -> Result<u32> {
-    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let rpc = get_actor_rpc(test, Who::Validator(0));
 
     let channel_id = channel_id.to_string();
@@ -1303,7 +1112,6 @@ fn transfer(
 }
 
 fn delegate_token(test: &Test) -> Result<()> {
-    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let rpc = get_actor_rpc(test, Who::Validator(0));
     let tx_args = apply_use_device(vec![
         "bond",
@@ -1429,52 +1237,114 @@ fn propose_inflation(test: &Test) -> Result<Epoch> {
     Ok(start_epoch.into())
 }
 
-fn propose_upgrade_client(test: &Test) -> Result<Epoch> {
-    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
-    let albert = find_address(test, ALBERT)?;
-    let rpc = get_actor_rpc(test, Who::Validator(0));
-    let epoch = get_epoch(test, &rpc)?;
-    let start_epoch = (epoch.0 + 3) / 3 * 3;
+fn propose_upgrade_client(
+    test_namada: &Test,
+    test_gaia: &Test,
+    upgrade_height: u64,
+) -> Result<()> {
+    let client_state =
+        get_client_state(test_namada, &IBC_CLINET_ID.parse().unwrap())?;
+    let mut client_state = client_state.inner().clone();
+    client_state.chain_id = UPGRADED_CHAIN_ID.parse().unwrap();
+    client_state.latest_height = Height::new(0, upgrade_height + 1).unwrap();
+    client_state.zero_custom_fields();
+    let any_client_state = Any::from(client_state.clone());
+
+    let proposer = get_gaia_gov_address(test_gaia)?;
+
     let proposal_json = serde_json::json!({
-        "proposal": {
-            "content": {
-                "title": "TheTitle",
-                "authors": "test@test.com",
-                "discussions-to": "www.github.com/anoma/aip/1",
-                "created": "2022-03-10T08:54:37Z",
-                "license": "MIT",
-                "abstract": "upgrade chain",
-                "motivation": "upgrade chain",
-                "details": "upgrade chain",
-                "requires": "2"
-            },
-            "author": albert,
-            "voting_start_epoch": start_epoch,
-            "voting_end_epoch": start_epoch + 3_u64,
-            "activation_epoch": start_epoch + 6_u64,
-        },
-        "data": TestWasms::TxProposalIbcClientUpgrade.read_bytes()
+          "messages": [
+            {
+              "@type": "/ibc.core.client.v1.MsgIBCSoftwareUpgrade",
+              "plan": {
+                "name": "Upgrade",
+                "height": upgrade_height,
+                "info": ""
+              },
+              "upgraded_client_state": {
+                  "@type": any_client_state.type_url,
+                  "chain_id": client_state.chain_id().to_string(),
+                  "unbonding_period": format!("{}s", client_state.unbonding_period.as_secs()),
+                  "latest_height": client_state.latest_height,
+                  "proof_specs": client_state.proof_specs,
+                  "upgrade_path": client_state.upgrade_path,
+              },
+              "signer": proposer
+            }
+          ],
+          "metadata": "ipfs://CID",
+          "deposit": "10000000stake",
+          "title": "Upgrade",
+          "summary": "Upgrade Gaia chain",
+          "expedited": false
     });
-    let proposal_json_path = test.test_dir.path().join("proposal.json");
+    let proposal_json_path = test_gaia.test_dir.path().join("proposal.json");
     write_json_file(proposal_json_path.as_path(), proposal_json);
 
+    let rpc = format!("tcp://{GAIA_RPC}");
     let submit_proposal_args = vec![
-        "init-proposal",
-        "--data-path",
+        "tx",
+        "gov",
+        "submit-proposal",
         proposal_json_path.to_str().unwrap(),
-        "--gas-limit",
-        "4000000",
+        "--from",
+        GAIA_USER,
+        "--gas",
+        "250000",
+        "--gas-prices",
+        "0.001stake",
         "--node",
         &rpc,
+        "--keyring-backend",
+        "test",
+        "--chain-id",
+        GAIA_CHAIN_ID,
+        "--yes",
     ];
-    let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
-    client.exp_string(TX_APPLIED_SUCCESS)?;
-    client.assert_success();
-    Ok(start_epoch.into())
+    let mut gaia = run_gaia_cmd(test_gaia, submit_proposal_args, Some(40))?;
+    gaia.assert_success();
+    Ok(())
+}
+
+fn wait_for_pass(test: &Test) -> Result<()> {
+    let args = ["query", "gov", "proposal", "1"];
+    for _ in 0..10 {
+        sleep(5);
+        let mut gaia = run_gaia_cmd(test, args, Some(40))?;
+        let (_, matched) = gaia.exp_regex("status: .*")?;
+        if matched.split(' ').last().unwrap() == "PROPOSAL_STATUS_PASSED" {
+            break;
+        }
+    }
+    Ok(())
+}
+
+fn vote_on_gaia(test: &Test) -> Result<()> {
+    let rpc = format!("tcp://{GAIA_RPC}");
+    let args = vec![
+        "tx",
+        "gov",
+        "vote",
+        "1",
+        "yes",
+        "--from",
+        GAIA_VALIDATOR,
+        "--gas-prices",
+        "0.001stake",
+        "--node",
+        &rpc,
+        "--keyring-backend",
+        "test",
+        "--chain-id",
+        GAIA_CHAIN_ID,
+        "--yes",
+    ];
+    let mut gaia = run_gaia_cmd(test, args, Some(40))?;
+    gaia.assert_success();
+    Ok(())
 }
 
 fn submit_votes(test: &Test) -> Result<()> {
-    std::env::set_var(ENV_VAR_CHAIN_ID, test.net.chain_id.to_string());
     let rpc = get_actor_rpc(test, Who::Validator(0));
 
     let submit_proposal_vote = vec![
@@ -1732,7 +1602,6 @@ fn gen_ibc_shielding_data(
     port_id: &PortId,
     channel_id: &ChannelId,
 ) -> Result<PathBuf> {
-    std::env::set_var(ENV_VAR_CHAIN_ID, dst_test.net.chain_id.to_string());
     let rpc = get_actor_rpc(dst_test, Who::Validator(0));
     let output_folder = dst_test.test_dir.path().to_string_lossy();
 

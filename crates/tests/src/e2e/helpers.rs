@@ -177,28 +177,6 @@ pub fn get_actor_rpc(test: &Test, who: Who) -> String {
     format!("http://{}:{}", socket_addr.ip(), socket_addr.port())
 }
 
-/// Get some nodes's wallet.
-pub fn get_node_wallet(test: &Test, who: Who) -> Wallet<FsWalletUtils> {
-    let wallet_store_dir =
-        test.get_base_dir(who).join(test.net.chain_id.as_str());
-    let mut wallet = FsWalletUtils::new(wallet_store_dir);
-    wallet.load().expect("Failed to load wallet");
-    wallet
-}
-
-/// Get the public key of the validator
-pub fn get_validator_pk(test: &Test, who: Who) -> Option<common::PublicKey> {
-    let index = match who {
-        Who::NonValidator => return None,
-        Who::Validator(i) => i,
-    };
-    let mut wallet = get_node_wallet(test, who);
-    let sk = wallet
-        .find_secret_key(format!("validator-{index}-balance-key"), None)
-        .ok()?;
-    Some(sk.ref_to())
-}
-
 /// Get a pregenesis wallet.
 pub fn get_pregenesis_wallet<P: AsRef<Path>>(
     base_dir_path: P,
@@ -687,6 +665,7 @@ pub fn update_gaia_config(test: &Test) -> Result<()> {
         .expect("Reading Gaia genesis.json failed");
     let mut genesis: serde_json::Value =
         serde_json::from_str(&s).expect("Decoding Gaia genesis.json failed");
+    // gas
     if let Some(min_base_gas_price) =
         genesis.pointer_mut("/app_state/feemarket/params/min_base_gas_price")
     {
@@ -699,6 +678,18 @@ pub fn update_gaia_config(test: &Test) -> Result<()> {
         *base_gas_price =
             serde_json::Value::String("0.000000000000000001".to_string());
     }
+    // gov
+    if let Some(max_deposit_period) =
+        genesis.pointer_mut("/app_state/gov/params/max_deposit_period")
+    {
+        *max_deposit_period = serde_json::Value::String("10s".to_string());
+    }
+    if let Some(voting_period) =
+        genesis.pointer_mut("/app_state/gov/params/voting_period")
+    {
+        *voting_period = serde_json::Value::String("10s".to_string());
+    }
+
     let file = OpenOptions::new()
         .write(true)
         .truncate(true)
@@ -724,6 +715,14 @@ pub fn find_gaia_address(
     ];
     let mut gaia = run_gaia_cmd(test, args, Some(40))?;
     let (_, matched) = gaia.exp_regex("cosmos.*")?;
+
+    Ok(matched.trim().to_string())
+}
+
+pub fn get_gaia_gov_address(test: &Test) -> Result<String> {
+    let args = ["query", "auth", "module-account", "gov"];
+    let mut gaia = run_gaia_cmd(test, args, Some(40))?;
+    let (_, matched) = gaia.exp_regex("cosmos[a-z0-9]+")?;
 
     Ok(matched.trim().to_string())
 }
