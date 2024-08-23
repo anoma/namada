@@ -4,6 +4,7 @@ pub mod shim {
     use std::fmt::Debug;
     use std::path::PathBuf;
 
+    use namada_sdk::state::BlockHeight;
     use thiserror::Error;
 
     use super::{Request as Req, Response as Resp};
@@ -36,14 +37,16 @@ pub mod shim {
     /// at a certain point in time
     pub enum TakeSnapshot {
         No,
-        Yes(PathBuf),
+        Yes(PathBuf, BlockHeight),
     }
 
-    impl<T: AsRef<std::path::Path>> From<Option<T>> for TakeSnapshot {
-        fn from(value: Option<T>) -> Self {
+    impl<T: AsRef<std::path::Path>> From<Option<(T, BlockHeight)>>
+        for TakeSnapshot
+    {
+        fn from(value: Option<(T, BlockHeight)>) -> Self {
             match value {
                 None => TakeSnapshot::No,
-                Some(p) => TakeSnapshot::Yes(p.as_ref().to_path_buf()),
+                Some(p) => TakeSnapshot::Yes(p.0.as_ref().to_path_buf(), p.1),
             }
         }
     }

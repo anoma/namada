@@ -348,6 +348,7 @@ pub struct SnapshotSync {
     pub height: BlockHeight,
     pub expected: Vec<Hash>,
     pub strikes: u64,
+    pub snapshot: std::fs::File,
 }
 
 #[derive(Debug)]
@@ -418,6 +419,48 @@ impl EthereumOracleChannels {
             control_sender,
             last_processed_block_receiver,
         }
+    }
+}
+
+impl Shell<crate::storage::PersistentDB, Sha256Hasher> {
+    /// Restore the database with data fetched from the State Sync protocol.
+    pub fn restore_database_from_state_sync(&mut self) {
+        let Some(syncing) = self.syncing.as_mut() else {
+            return;
+        };
+
+        let db_block_cache_size_bytes = {
+            let config = crate::config::Config::load(
+                &self.base_dir,
+                &self.chain_id,
+                None,
+            );
+
+            config.ledger.shell.block_cache_bytes.unwrap_or_else(|| {
+                use sysinfo::{RefreshKind, System, SystemExt};
+
+                let sys = System::new_with_specifics(
+                    RefreshKind::new().with_memory(),
+                );
+                let available_memory_bytes = sys.available_memory();
+
+                available_memory_bytes / 3
+            })
+        };
+
+        let db_cache = rocksdb::Cache::new_lru_cache(
+            usize::try_from(db_block_cache_size_bytes).expect(
+                "`db_block_cache_size_bytes` must not exceed `usize::MAX`",
+            ),
+        );
+
+        self.state
+            .db_mut()
+            .restore_from((&db_cache, &mut syncing.snapshot))
+            .expect("Failed to restore state from snapshot");
+
+        // rebuild the in-memory state
+        self.state.load_last_state();
     }
 }
 
@@ -774,7 +817,11 @@ where
             _ => false,
         };
         if take_snapshot {
-            self.state.db().path().into()
+            self.state
+                .db()
+                .path()
+                .map(|p| (p, self.state.in_mem().get_last_block_height()))
+                .into()
         } else {
             TakeSnapshot::No
         }
