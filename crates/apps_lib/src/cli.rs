@@ -4428,10 +4428,15 @@ pub mod args {
                     "The address corresponding to the signatures or signing \
                      keys."
                 )))
-                .arg(DISPOSABLE_SIGNING_KEY.def().help(wrap!(
-                    "Generates an ephemeral, disposable keypair to sign the \
-                     wrapper transaction."
-                )))
+                .arg(
+                    DISPOSABLE_SIGNING_KEY
+                        .def()
+                        .help(wrap!(
+                            "Generates an ephemeral, disposable keypair to \
+                             sign the wrapper transaction."
+                        ))
+                        .conflicts_with(FEE_PAYER_OPT.name),
+                )
         }
     }
 
@@ -4590,10 +4595,15 @@ pub mod args {
                     "The optional spending key that will be used in addition \
                      to the source for gas payment."
                 )))
-                .arg(DISPOSABLE_SIGNING_KEY.def().help(wrap!(
-                    "Generates an ephemeral, disposable keypair to sign the \
-                     wrapper transaction."
-                )))
+                .arg(
+                    DISPOSABLE_SIGNING_KEY
+                        .def()
+                        .help(wrap!(
+                            "Generates an ephemeral, disposable keypair to \
+                             sign the wrapper transaction."
+                        ))
+                        .conflicts_with(FEE_PAYER_OPT.name),
+                )
         }
     }
 
@@ -4755,10 +4765,15 @@ pub mod args {
                     "The optional spending key that will be used in addition \
                      to the source for gas payment."
                 )))
-                .arg(DISPOSABLE_SIGNING_KEY.def().help(wrap!(
-                    "Generates an ephemeral, disposable keypair to sign the \
-                     wrapper transaction."
-                )))
+                .arg(
+                    DISPOSABLE_SIGNING_KEY
+                        .def()
+                        .help(wrap!(
+                            "Generates an ephemeral, disposable keypair to \
+                             sign the wrapper transaction."
+                        ))
+                        .conflicts_with(FEE_PAYER_OPT.name),
+                )
         }
     }
 
@@ -4886,10 +4901,15 @@ pub mod args {
                      to the source for gas payment (if this is a shielded \
                      action)."
                 )))
-                .arg(DISPOSABLE_SIGNING_KEY.def().help(wrap!(
-                    "Generates an ephemeral, disposable keypair to sign the \
-                     wrapper transaction."
-                )))
+                .arg(
+                    DISPOSABLE_SIGNING_KEY
+                        .def()
+                        .help(wrap!(
+                            "Generates an ephemeral, disposable keypair to \
+                             sign the wrapper transaction."
+                        ))
+                        .conflicts_with(FEE_PAYER_OPT.name),
+                )
         }
     }
 
@@ -6597,10 +6617,15 @@ pub mod args {
                 .arg(
                     OWNER.def().help(wrap!("The address of the account owner")),
                 )
-                .arg(DISPOSABLE_SIGNING_KEY.def().help(wrap!(
-                    "Generates an ephemeral, disposable keypair to sign the \
-                     wrapper transaction."
-                )))
+                .arg(
+                    DISPOSABLE_SIGNING_KEY
+                        .def()
+                        .help(wrap!(
+                            "Generates an ephemeral, disposable keypair to \
+                             sign the wrapper transaction."
+                        ))
+                        .conflicts_with(FEE_PAYER_OPT.name),
+                )
         }
     }
 
