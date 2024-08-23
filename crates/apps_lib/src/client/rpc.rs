@@ -1188,7 +1188,10 @@ pub async fn query_total_supply<N: Namada>(
             .total_supply(context.client(), &token)
             .await,
     );
-    display_line!(context.io(), "Total supply of {token}: {supply}");
+    display_line!(
+        context.io(),
+        "Total supply of token {token}: {supply} raw units"
+    );
 }
 
 /// Query the effective total supply of the native token
@@ -1199,7 +1202,7 @@ pub async fn query_effective_native_supply<N: Namada>(context: &N) {
             .effective_native_supply(context.client())
             .await,
     );
-    display_line!(context.io(), "{native_supply} NAM");
+    display_line!(context.io(), "nam: {}", native_supply.to_string_native());
 }
 
 /// Query a validator's state information
