@@ -7211,7 +7211,7 @@ pub mod args {
                 "The implicit address of the gas payer. It defaults to the \
                  address associated to the first key passed to \
                  --signing-keys. If the specific transaction supports \
-                 --disposable-signing-key, than this one will overwrite this \
+                 --disposable-signing-key, then this one will overwrite this \
                  argument."
             )))
             .arg(

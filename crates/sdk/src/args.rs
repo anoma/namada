@@ -162,7 +162,7 @@ pub struct TxCustom<C: NamadaTypes = SdkTypes> {
     pub serialized_tx: Option<C::Data>,
     /// The address that correspond to the signatures/signing-keys
     pub owner: C::Address,
-    /// Generate an ephimeral signing key to be used only once to sign the
+    /// Generate an ephemeral signing key to be used only once to sign the
     /// wrapper tx
     pub disposable_signing_key: bool,
 }
@@ -209,7 +209,7 @@ impl<C: NamadaTypes> TxCustom<C> {
         Self { owner, ..self }
     }
 
-    /// The flag to request an ephimeral signing key to be used only once to
+    /// The flag to request an ephemeral signing key to be used only once to
     /// sign the wrapper tx
     pub fn disposable_signing_key(self, disposable_signing_key: bool) -> Self {
         Self {
@@ -355,7 +355,7 @@ pub struct TxShieldedTransfer<C: NamadaTypes = SdkTypes> {
     pub data: Vec<TxShieldedTransferData<C>>,
     /// Optional additional keys for gas payment
     pub gas_spending_keys: Vec<C::SpendingKey>,
-    /// Generate an ephimeral signing key to be used only once to sign the
+    /// Generate an ephemeral signing key to be used only once to sign the
     /// wrapper tx
     pub disposable_signing_key: bool,
     /// Path to the TX WASM code file
@@ -452,7 +452,7 @@ pub struct TxUnshieldingTransfer<C: NamadaTypes = SdkTypes> {
     pub data: Vec<TxUnshieldingTransferData<C>>,
     /// Optional additional keys for gas payment
     pub gas_spending_keys: Vec<C::SpendingKey>,
-    /// Generate an ephimeral signing key to be used only once to sign the
+    /// Generate an ephemeral signing key to be used only once to sign the
     /// wrapper tx
     pub disposable_signing_key: bool,
     /// Path to the TX WASM code file
@@ -498,7 +498,7 @@ pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
     pub ibc_memo: Option<String>,
     /// Optional additional keys for gas payment
     pub gas_spending_keys: Vec<C::SpendingKey>,
-    /// Generate an ephimeral signing key to be used only once to sign the
+    /// Generate an ephemeral signing key to be used only once to sign the
     /// wrapper tx
     pub disposable_signing_key: bool,
     /// Path to the TX WASM code file
