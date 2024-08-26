@@ -20,6 +20,7 @@ migrations = [
     "namada_migrations",
     "linkme",
 ]
+arbitrary = ["dep:arbitrary", "namada_core/arbitrary"]
 
 [dependencies]
 namada_core = { path = "../core" }
@@ -28,6 +29,7 @@ namada_gas = { path = "../gas" }
 namada_macros = { path = "../macros" }
 namada_migrations = {path = "../migrations", optional = true }
 
+arbitrary = { workspace = true, optional = true }
 ark-bls12-381.workspace = true
 bitflags.workspace = true
 borsh.workspace = true

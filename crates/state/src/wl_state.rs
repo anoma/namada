@@ -694,7 +694,7 @@ where
     /// Commit the current transaction's write log and the entire batch to the
     /// block. Starts a new transaction and batch write log.
     pub fn commit_tx_batch(&mut self) {
-        self.write_log.commit_batch()
+        self.write_log.commit_batch_and_current_tx()
     }
 
     /// Drop the current transaction's write log when it's declined by any of

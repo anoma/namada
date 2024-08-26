@@ -237,9 +237,10 @@ pub fn transfer<S>(
 where
     S: StorageRead + StorageWrite,
 {
-    if amount.is_zero() {
+    if amount.is_zero() || src == dest {
         return Ok(());
     }
+
     let src_key = balance_key(token, src);
     let src_balance = read_balance(storage, token, src)?;
     match src_balance.checked_sub(amount) {
@@ -279,6 +280,7 @@ where
     let mut accounts = BTreeSet::new();
     accounts.extend(sources.keys().cloned());
     accounts.extend(dests.keys().cloned());
+
     let unexpected_err = || {
         storage::Error::new_const(
             "Computing difference between amounts should never overflow",
@@ -405,20 +407,158 @@ pub fn denom_to_amount(
     token: &Address,
     storage: &impl StorageRead,
 ) -> storage::Result<Amount> {
-    let denom = read_denom(storage, token)?.ok_or_else(|| {
-        storage::Error::SimpleMessage(
-            "No denomination found in storage for the given token",
-        )
-    })?;
-    denom_amount.scale(denom).map_err(storage::Error::new)
+    #[cfg(not(fuzzing))]
+    {
+        let denom = read_denom(storage, token)?.ok_or_else(|| {
+            storage::Error::SimpleMessage(
+                "No denomination found in storage for the given token",
+            )
+        })?;
+        denom_amount.scale(denom).map_err(storage::Error::new)
+    }
+
+    #[cfg(fuzzing)]
+    {
+        let _ = (token, storage);
+        Ok(denom_amount.amount())
+    }
 }
 
 #[cfg(test)]
 mod testing {
+    use std::collections::BTreeMap;
+
     use namada_core::{address, token};
     use namada_storage::testing::TestStorage;
 
-    use super::{burn_tokens, credit_tokens, read_balance, read_total_supply};
+    use super::{
+        burn_tokens, credit_tokens, multi_transfer, read_balance,
+        read_total_supply, transfer,
+    };
+
+    #[test]
+    fn test_multi_transfer() {
+        let mut storage = TestStorage::default();
+        let native_token = address::testing::nam();
+
+        // Get one account
+        let addr = address::testing::gen_implicit_address();
+
+        // Credit the account some balance
+        let pre_balance = token::Amount::native_whole(1);
+        credit_tokens(&mut storage, &native_token, &addr, pre_balance).unwrap();
+
+        let pre_balance_check =
+            read_balance(&storage, &native_token, &addr).unwrap();
+
+        assert_eq!(pre_balance_check, pre_balance);
+
+        // sources
+        let sources = BTreeMap::from_iter([(
+            (addr.clone(), native_token.clone()),
+            pre_balance,
+        )]);
+
+        // targets
+        let targets = BTreeMap::from_iter([(
+            (addr.clone(), native_token.clone()),
+            pre_balance,
+        )]);
+
+        multi_transfer(&mut storage, &sources, &targets).unwrap();
+
+        let post_balance_check =
+            read_balance(&storage, &native_token, &addr).unwrap();
+
+        assert_eq!(post_balance_check, pre_balance);
+    }
+
+    #[test]
+    fn test_credit() {
+        let mut storage = TestStorage::default();
+        let native_token = address::testing::nam();
+
+        // Get one account
+        let addr = address::testing::gen_implicit_address();
+
+        // Credit the account some balance
+        let pre_balance = token::Amount::native_whole(1);
+        credit_tokens(&mut storage, &native_token, &addr, pre_balance).unwrap();
+
+        let total_supply_post =
+            read_total_supply(&storage, &native_token).unwrap();
+
+        assert_eq!(total_supply_post, pre_balance);
+
+        let post_balance =
+            read_balance(&storage, &native_token, &addr).unwrap();
+
+        assert_eq!(post_balance, pre_balance);
+    }
+
+    #[test]
+    fn test_transfer_to_self_is_no_op() {
+        let mut storage = TestStorage::default();
+        let native_token = address::testing::nam();
+
+        // Get one account
+        let addr = address::testing::gen_implicit_address();
+
+        // Credit the account some balance
+        let pre_balance = token::Amount::native_whole(1);
+        credit_tokens(&mut storage, &native_token, &addr, pre_balance).unwrap();
+
+        let total_supply_pre =
+            read_total_supply(&storage, &native_token).unwrap();
+
+        let transfer_result =
+            transfer(&mut storage, &native_token, &addr, &addr, pre_balance);
+        assert!(transfer_result.is_ok());
+
+        let total_supply_post =
+            read_total_supply(&storage, &native_token).unwrap();
+
+        assert_eq!(total_supply_post, total_supply_pre);
+
+        let post_balance =
+            read_balance(&storage, &native_token, &addr).unwrap();
+
+        assert_eq!(post_balance, pre_balance);
+    }
+
+    #[test]
+    fn test_transfer() {
+        let mut storage = TestStorage::default();
+        let native_token = address::testing::nam();
+
+        // Get one account
+        let source = address::testing::gen_implicit_address();
+        let target = address::testing::gen_implicit_address();
+
+        // Credit the account some balance
+        let pre_balance = token::Amount::native_whole(1);
+        credit_tokens(&mut storage, &native_token, &source, pre_balance)
+            .unwrap();
+
+        let total_supply_pre =
+            read_total_supply(&storage, &native_token).unwrap();
+
+        transfer(&mut storage, &native_token, &source, &target, pre_balance)
+            .unwrap();
+
+        let total_supply_post =
+            read_total_supply(&storage, &native_token).unwrap();
+
+        assert_eq!(total_supply_post, total_supply_pre);
+
+        let post_balance_target =
+            read_balance(&storage, &native_token, &target).unwrap();
+        let post_balance_source =
+            read_balance(&storage, &native_token, &source).unwrap();
+
+        assert_eq!(post_balance_target, pre_balance);
+        assert_eq!(post_balance_source, token::Amount::native_whole(0));
+    }
 
     #[test]
     fn test_burn_native_tokens() {

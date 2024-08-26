@@ -6,6 +6,8 @@ use namada_macros::BorshDeserializer;
 use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 
+/// The vote for a proposal
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Clone,
@@ -18,7 +20,6 @@ use serde::{Deserialize, Serialize};
     Serialize,
     Deserialize,
 )]
-/// The vote for a proposal
 pub enum ProposalVote {
     /// Yes
     Yay,

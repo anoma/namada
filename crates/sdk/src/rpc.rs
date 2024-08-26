@@ -946,13 +946,25 @@ pub async fn query_proposal_result<C: crate::queries::Client + Sync>(
     } else {
         return Ok(None);
     };
+
+    let current_epoch = query_epoch(client).await?;
+    if current_epoch < proposal.voting_start_epoch {
+        return Err(Error::Other(format!(
+            "Proposal {} is still pending, voting period will start in {} \
+             epochs.",
+            proposal_id,
+            proposal.voting_end_epoch.0 - current_epoch.0
+        )));
+    }
+
     let stored_proposal_result = convert_response::<C, Option<ProposalResult>>(
         RPC.vp().gov().proposal_result(client, &proposal_id).await,
     )?;
+
     let proposal_result = match stored_proposal_result {
         Some(proposal_result) => proposal_result,
         None => {
-            let tally_epoch = proposal.voting_end_epoch;
+            let tally_epoch = current_epoch;
 
             let is_author_pgf_steward =
                 is_steward(client, &proposal.author).await;

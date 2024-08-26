@@ -122,18 +122,28 @@ fn storage_key() -> storage::Key {
 }
 
 /// Helper function to get the optional masp section reference from the
-/// [`Actions`]. If more than one [`MaspAction`] has been found we return the
-/// first one
-pub fn get_masp_section_ref(actions: &Actions) -> Option<TxId> {
-    actions.iter().find_map(|action| {
-        if let Action::Masp(MaspAction::MaspSectionRef(masp_section_ref)) =
-            action
-        {
-            Some(masp_section_ref.to_owned())
-        } else {
-            None
-        }
-    })
+/// [`Actions`]. If more than one [`MaspAction`] is found we return an error
+pub fn get_masp_section_ref(
+    actions: &Actions,
+) -> Result<Option<TxId>, &'static str> {
+    let masp_sections: Vec<_> = actions
+        .iter()
+        .filter_map(|action| {
+            if let Action::Masp(MaspAction::MaspSectionRef(masp_section_ref)) =
+                action
+            {
+                Some(masp_section_ref.to_owned())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    if masp_sections.len() > 1 {
+        Err("The transaction pushed multiple MASP Actions")
+    } else {
+        Ok(masp_sections.first().cloned())
+    }
 }
 
 /// Helper function to check if the action is IBC shielding transfer

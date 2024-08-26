@@ -8,6 +8,7 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
+use masp_primitives::sapling::ViewingKey;
 use masp_primitives::transaction::TransparentAddress;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
@@ -49,6 +50,7 @@ where
 }
 
 /// Wrapper for masp_primitive's TxId
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Serialize,
     Deserialize,
@@ -83,6 +85,7 @@ pub type TxId = MaspTxId;
 
 /// Wrapper type around `Epoch` for type safe operations involving the masp
 /// epoch
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     BorshSerialize,
     BorshDeserialize,
@@ -148,6 +151,7 @@ impl MaspEpoch {
 }
 
 /// The plain representation of a MASP aaset
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     BorshSerialize,
     BorshDeserialize,
@@ -256,6 +260,11 @@ impl ExtendedViewingKey {
     pub fn decode_bytes(bytes: &[u8]) -> Result<Self, std::io::Error> {
         masp_primitives::zip32::ExtendedFullViewingKey::read(&mut &bytes[..])
             .map(Self)
+    }
+
+    /// Get the underlying viewing key
+    pub fn as_viewing_key(&self) -> ViewingKey {
+        self.0.fvk.vk
     }
 }
 

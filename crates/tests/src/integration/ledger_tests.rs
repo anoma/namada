@@ -771,60 +771,6 @@ fn proposal_submission() -> Result<()> {
     assert_matches!(captured.result, Ok(_));
     assert!(captured.contains("nam: 500"));
 
-    // 6. Submit an invalid proposal
-    // proposal is invalid due to voting_end_epoch - voting_start_epoch < 3
-    let invalid_proposal_json = prepare_proposal_data(
-        node.test_dir.path(),
-        albert,
-        TestWasms::TxProposalCode.read_bytes(),
-        1,
-    );
-
-    let submit_proposal_args = apply_use_device(vec![
-        "init-proposal",
-        "--data-path",
-        invalid_proposal_json.to_str().unwrap(),
-        "--node",
-        &validator_one_rpc,
-    ]);
-
-    let captured =
-        CapturedOutput::of(|| run(&node, Bin::Client, submit_proposal_args));
-    assert!(captured.result.is_err());
-    println!("{:?}", captured.result);
-    assert!(captured.err_contains(
-        "Proposal data are invalid: Invalid proposal start epoch: 1 must be \
-         greater than current epoch .* and a multiple of 3"
-    ));
-
-    // 7. Check invalid proposal was not submitted
-    let proposal_query_args = vec![
-        "query-proposal",
-        "--proposal-id",
-        "1",
-        "--node",
-        &validator_one_rpc,
-    ];
-    let captured =
-        CapturedOutput::of(|| run(&node, Bin::Client, proposal_query_args));
-    assert_matches!(captured.result, Ok(_));
-    assert!(captured.contains("No proposal found with id: 1"));
-
-    // 8. Query token balance (funds shall not be submitted)
-    let query_balance_args = vec![
-        "balance",
-        "--owner",
-        ALBERT,
-        "--token",
-        NAM,
-        "--node",
-        &validator_one_rpc,
-    ];
-    let captured =
-        CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
-    assert_matches!(captured.result, Ok(_));
-    assert!(captured.contains("nam: 1979500"));
-
     // 9.1. Send a yay vote from a validator
     while node.current_epoch().0 <= 13 {
         node.next_epoch();
@@ -1826,7 +1772,7 @@ fn scheduled_migration() -> Result<()> {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let bytes = rt
         .block_on(RPC.shell().storage_value(
-            &&node,
+            &node,
             None,
             None,
             false,
@@ -1841,7 +1787,7 @@ fn scheduled_migration() -> Result<()> {
     let rt = tokio::runtime::Runtime::new().unwrap();
     let bytes = rt
         .block_on(RPC.shell().storage_value(
-            &&node,
+            &node,
             None,
             None,
             false,

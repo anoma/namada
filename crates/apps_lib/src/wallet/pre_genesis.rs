@@ -73,21 +73,27 @@ pub fn load(store_dir: &Path) -> Result<ValidatorWallet, ReadError> {
     let store = ValidatorStore::decode(store).map_err(ReadError::Decode)?;
 
     let password = if store.consensus_key.is_encrypted() {
-        Some(CliWalletUtils::read_password(false))
+        Some(CliWalletUtils::read_password(false, Some("consensus key")))
     } else {
         None
     };
 
-    let consensus_key = store
-        .consensus_key
-        .get::<CliWalletUtils>(true, password.clone())?;
-    let eth_cold_key = store
-        .eth_cold_key
-        .get::<CliWalletUtils>(true, password.clone())?;
+    let consensus_key = store.consensus_key.get::<CliWalletUtils>(
+        true,
+        password.clone(),
+        Some("consensus key"),
+    )?;
+    let eth_cold_key = store.eth_cold_key.get::<CliWalletUtils>(
+        true,
+        password.clone(),
+        Some("eth cold key"),
+    )?;
     let eth_hot_key = store.validator_keys.eth_bridge_keypair.clone();
-    let tendermint_node_key = store
-        .tendermint_node_key
-        .get::<CliWalletUtils>(true, password)?;
+    let tendermint_node_key = store.tendermint_node_key.get::<CliWalletUtils>(
+        true,
+        password,
+        Some("tendermint node key"),
+    )?;
 
     Ok(ValidatorWallet {
         store,

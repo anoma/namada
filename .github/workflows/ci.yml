@@ -35,8 +35,8 @@ env:
 jobs:
   changelog:
     runs-on: [ubuntu-latest]
-    if: github.event_name == 'pull_request_target' && github.event.pull_request.draft == false
-    timeout-minutes: 15
+    if: github.event_name == 'pull_request_target' && github.event.pull_request.draft == false && !contains(github.ref, '-rc')
+    timeout-minutes: 5
 
     steps:
       - name: Checkout repo
@@ -54,6 +54,46 @@ jobs:
         run: bash .github/workflows/scripts/check-changelog.sh
         env:
           SHA: ${{ github.event.pull_request.head.sha }}
+    
+  rust-docs:
+    container: 
+      image: ghcr.io/heliaxdev/namada-ci:namada-main
+    runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        if: ${{ github.event_name != 'pull_request_target' }}
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        if: ${{ github.event_name == 'pull_request_target' }}
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Configure AWS 
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE }}
+      - name: Cache cargo
+        id: cache
+        uses: runs-on/cache@v4
+        env:
+          RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
+        with:
+          path: /usr/local/cargo
+          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+      - name: Start sccache server
+        id: sccache
+        run: sccache --start-server
+      - name: Build docs
+        run: make build-doc
+      - name: Clean cargo cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: cargo cache --autoclean-expensive
+      - name: Stop sccache
+        if: always() && steps.sccache.conclusion == 'success'
+        run: sccache --stop-server || true
 
   lints:
     container: 
@@ -309,7 +349,7 @@ jobs:
     runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
     container: 
       image: ghcr.io/heliaxdev/namada-ci:namada-main
-    timeout-minutes: 15
+    timeout-minutes: 20
     needs: [build-wasm]
 
     steps:

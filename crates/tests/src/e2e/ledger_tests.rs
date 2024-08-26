@@ -20,9 +20,11 @@ use std::time::{Duration, Instant};
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
 use namada_apps_lib::cli::context::ENV_VAR_CHAIN_ID;
-use namada_apps_lib::config::ethereum_bridge;
+use namada_apps_lib::client::utils::PRE_GENESIS_DIR;
 use namada_apps_lib::config::utils::convert_tm_addr_to_socket_addr;
+use namada_apps_lib::config::{self, ethereum_bridge};
 use namada_apps_lib::facade::tendermint_config::net::Address as TendermintAddress;
+use namada_apps_lib::wallet;
 use namada_core::chain::ChainId;
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_sdk::address::Address;
@@ -2554,5 +2556,55 @@ fn masp_txs_and_queries() -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+/// Test localnet genesis files with `namada node utils test-genesis` command.
+#[test]
+fn test_localnet_genesis() -> Result<()> {
+    let loc = format!("{}:{}", std::file!(), std::line!());
+    let base_dir = setup::TestDir::new();
+    let working_dir = working_dir();
+    let genesis_path = wallet::defaults::derive_template_dir(&working_dir);
+    let wasm_dir = working_dir.join(config::DEFAULT_WASM_DIR);
+
+    // Path to the localnet "pre-genesis" wallet
+    let pre_genesis_wallet = genesis_path
+        .join("src")
+        .join(PRE_GENESIS_DIR)
+        .join("wallet.toml");
+    // Copy the pre-genesis wallet into the base-dir
+    let base_pre_genesis = base_dir.path().join(PRE_GENESIS_DIR);
+    std::fs::create_dir(&base_pre_genesis).unwrap();
+    std::fs::copy(pre_genesis_wallet, base_pre_genesis.join("wallet.toml"))
+        .unwrap();
+
+    let mut test_genesis_result = setup::run_cmd(
+        Bin::Node,
+        [
+            "utils",
+            "test-genesis",
+            "--path",
+            &genesis_path.to_string_lossy(),
+            "--wasm-dir",
+            &wasm_dir.to_string_lossy(),
+            "--check-can-sign",
+            // Albert established addr (from `genesis/localnet/balances.toml`)
+            "tnam1qxfj3sf6a0meahdu9t6znp05g8zx4dkjtgyn9gfu",
+            // Daewon implicit addr (from `genesis/localnet/balances.toml`)
+            "tnam1qpca48f45pdtpcz06rue7k4kfdcjrvrux5cr3pwn",
+            // Validator account key (from `genesis/localnet/transactions.toml`)
+            "tpknam1qpg2tsrplvhu3fd7z7tq5ztc2ne3s7e2ahjl2a2cddufrzdyr752g666ytj",
+        ],
+        Some(30),
+        &working_dir,
+        &base_dir,
+        loc,
+    )?;
+    test_genesis_result
+        .exp_string("Genesis files were dry-run successfully")?;
+    test_genesis_result.exp_string("Able to sign with")?;
+    test_genesis_result.exp_string("Able to sign with")?;
+    test_genesis_result.exp_string("Able to sign with")?;
     Ok(())
 }

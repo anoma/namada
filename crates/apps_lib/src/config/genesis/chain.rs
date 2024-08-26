@@ -86,6 +86,24 @@ impl Finalized {
         Ok(())
     }
 
+    /// Attempt to read the address of the native token.
+    pub fn read_native_token(input_dir: &Path) -> eyre::Result<Address> {
+        let tokens_file = input_dir.join(templates::TOKENS_FILE_NAME);
+        let parameters_file = input_dir.join(templates::PARAMETERS_FILE_NAME);
+
+        let mut tokens: FinalizedTokens = read_toml(&tokens_file, "Tokens")?;
+        let parameters: FinalizedParameters =
+            read_toml(&parameters_file, "Parameters")?;
+
+        let alias = &parameters.parameters.native_token;
+
+        Ok(tokens
+            .token
+            .remove(alias)
+            .expect("The native token must exist")
+            .address)
+    }
+
     /// Try to read all genesis and the chain metadata TOML files from the given
     /// directory.
     pub fn read_toml_files(input_dir: &Path) -> eyre::Result<Self> {

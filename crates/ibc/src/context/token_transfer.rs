@@ -12,7 +12,7 @@ use ibc::apps::transfer::types::{Memo, PrefixedCoin, PrefixedDenom};
 use ibc::core::channel::types::error::ChannelError;
 use ibc::core::handler::types::error::ContextError;
 use ibc::core::host::types::identifiers::{ChannelId, PortId};
-use namada_core::address::{Address, InternalAddress};
+use namada_core::address::{Address, InternalAddress, MASP};
 use namada_core::token::Amount;
 use namada_core::uint::Uint;
 
@@ -27,6 +27,7 @@ where
 {
     inner: Rc<RefCell<C>>,
     verifiers: Rc<RefCell<BTreeSet<Address>>>,
+    is_shielded: bool,
 }
 
 impl<C> TokenTransferContext<C>
@@ -38,12 +39,21 @@ where
         inner: Rc<RefCell<C>>,
         verifiers: Rc<RefCell<BTreeSet<Address>>>,
     ) -> Self {
-        Self { inner, verifiers }
+        Self {
+            inner,
+            verifiers,
+            is_shielded: false,
+        }
     }
 
     /// Insert a verifier address whose VP will verify the tx.
     fn insert_verifier(&mut self, addr: &Address) {
         self.verifiers.borrow_mut().insert(addr.clone());
+    }
+
+    /// Set to enable a shielded transfer
+    pub fn enable_shielded_transfer(&mut self) {
+        self.is_shielded = true;
     }
 
     /// Get the token address and the amount from PrefixedCoin. If the base
@@ -251,6 +261,12 @@ where
             self.insert_verifier(&ibc_token);
         }
 
+        let from_account = if self.is_shielded {
+            &MASP
+        } else {
+            from_account
+        };
+
         self.inner
             .borrow_mut()
             .transfer_token(
@@ -324,6 +340,8 @@ where
         {
             self.insert_verifier(&ibc_token);
         }
+
+        let account = if self.is_shielded { &MASP } else { account };
 
         // The burn is "unminting" from the minted balance
         self.inner

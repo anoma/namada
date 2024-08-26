@@ -27,7 +27,9 @@ use zeroize::Zeroizing;
 
 use crate::eth_bridge::bridge_pool;
 use crate::ibc::core::host::types::identifiers::{ChannelId, PortId};
+use crate::masp::utils::RetryStrategy;
 use crate::signing::SigningTxData;
+use crate::wallet::{DatedSpendingKey, DatedViewingKey};
 use crate::{rpc, tx, Namada};
 
 /// [`Duration`](StdDuration) wrapper that provides a
@@ -66,6 +68,10 @@ pub trait NamadaTypes: Clone + std::fmt::Debug {
     type ViewingKey: Clone + std::fmt::Debug;
     /// Represents a shielded spending key
     type SpendingKey: Clone + std::fmt::Debug;
+    /// Represents a shielded viewing key
+    type DatedViewingKey: Clone + std::fmt::Debug;
+    /// Represents a shielded spending key
+    type DatedSpendingKey: Clone + std::fmt::Debug;
     /// Represents a shielded payment address
     type PaymentAddress: Clone + std::fmt::Debug;
     /// Represents the owner of a balance
@@ -106,9 +112,11 @@ impl NamadaTypes for SdkTypes {
     type BpConversionTable = HashMap<Address, BpConversionTableEntry>;
     type ConfigRpcTendermintAddress = tendermint_rpc::Url;
     type Data = Vec<u8>;
+    type DatedSpendingKey = DatedSpendingKey;
+    type DatedViewingKey = DatedViewingKey;
     type EthereumAddress = ();
     type Keypair = namada_core::key::common::SecretKey;
-    type MaspIndexerAddress = ();
+    type MaspIndexerAddress = String;
     type PaymentAddress = namada_core::masp::PaymentAddress;
     type PublicKey = namada_core::key::common::PublicKey;
     type SpendingKey = namada_core::masp::ExtendedSpendingKey;
@@ -2120,19 +2128,25 @@ pub struct SignTx<C: NamadaTypes = SdkTypes> {
 pub struct ShieldedSync<C: NamadaTypes = SdkTypes> {
     /// The ledger address
     pub ledger_address: C::ConfigRpcTendermintAddress,
-    /// Height to start syncing from. Defaults to the correct one.
-    pub start_query_height: Option<BlockHeight>,
     /// Height to sync up to. Defaults to most recent
     pub last_query_height: Option<BlockHeight>,
     /// Spending keys used to determine note ownership
-    pub spending_keys: Vec<C::SpendingKey>,
+    pub spending_keys: Vec<C::DatedSpendingKey>,
     /// Viewing keys used to determine note ownership
-    pub viewing_keys: Vec<C::ViewingKey>,
+    pub viewing_keys: Vec<C::DatedViewingKey>,
     /// Address of a `namada-masp-indexer` live instance
     ///
     /// If present, the shielded sync will be performed
     /// using data retrieved from the given indexer
     pub with_indexer: Option<C::MaspIndexerAddress>,
+    /// Wait for the last query height.
+    pub wait_for_last_query_height: bool,
+    /// Maximum number of fetch jobs that will ever
+    /// execute concurrently during the shielded sync.
+    pub max_concurrent_fetches: usize,
+    /// Maximum number of times to retry fetching. If `None`
+    /// is provided, defaults to "forever".
+    pub retry_strategy: RetryStrategy,
 }
 
 /// Query PoS commission rate
@@ -2474,6 +2488,9 @@ pub struct KeyGen {
     pub prompt_bip39_passphrase: bool,
     /// Allow non-compliant derivation path
     pub allow_non_compliant: bool,
+    /// Optional block height after which this key was created.
+    /// Only used for MASP keys.
+    pub birthday: Option<BlockHeight>,
 }
 
 /// Wallet restore key and implicit address arguments
@@ -2499,6 +2516,9 @@ pub struct KeyDerive {
     pub use_device: bool,
     /// Hardware Wallet transport - HID (USB) or TCP
     pub device_transport: DeviceTransport,
+    /// Optional blockheight after which this key was created.
+    /// Only used for MASP keys
+    pub birthday: Option<BlockHeight>,
 }
 
 /// Wallet list arguments
@@ -2576,6 +2596,9 @@ pub struct KeyAddressAdd {
     pub alias_force: bool,
     /// Any supported value
     pub value: String,
+    /// Optional block height after which this key was created.
+    /// Only used for MASP keys.
+    pub birthday: Option<BlockHeight>,
     /// Don't encrypt the key
     pub unsafe_dont_encrypt: bool,
 }
@@ -2766,9 +2789,6 @@ pub struct RelayBridgePoolProof<C: NamadaTypes = SdkTypes> {
     /// Synchronize with the network, or exit immediately,
     /// if the Ethereum node has fallen behind.
     pub sync: bool,
-    /// Safe mode overrides keyboard interrupt signals, to ensure
-    /// Ethereum transfers aren't canceled midway through.
-    pub safe_mode: bool,
 }
 
 /// Bridge validator set arguments.
@@ -2830,9 +2850,6 @@ pub struct ValidatorSetUpdateRelay<C: NamadaTypes = SdkTypes> {
     /// The amount of time to sleep between successful
     /// daemon mode relays.
     pub success_dur: Option<StdDuration>,
-    /// Safe mode overrides keyboard interrupt signals, to ensure
-    /// Ethereum transfers aren't canceled midway through.
-    pub safe_mode: bool,
 }
 
 /// IBC shielding transfer generation arguments

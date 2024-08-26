@@ -1,7 +1,6 @@
 use std::io::Read;
 
 use color_eyre::eyre::Result;
-use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada_sdk::io::Io;
 use namada_sdk::{display_line, Namada, NamadaImpl};
 
@@ -336,40 +335,28 @@ impl CliApi {
                         tx::submit_validator_metadata_change(&namada, args)
                             .await?;
                     }
-                    Sub::ShieldedSync(ShieldedSync(mut args)) => {
-                        let indexer_addr = args.with_indexer.take();
-                        let args = args.to_sdk(&mut ctx)?;
+                    Sub::ShieldedSync(ShieldedSync(args)) => {
+                        let mut args = args.to_sdk(&mut ctx)?;
                         let chain_ctx = ctx.take_chain_or_exit();
                         let client = client.unwrap_or_else(|| {
                             C::from_tendermint_address(&args.ledger_address)
                         });
-                        if indexer_addr.is_none() {
+                        if args.with_indexer.is_none() {
                             client.wait_until_node_is_synced(&io).await?;
                         }
-                        let vks = chain_ctx
-                            .wallet
-                            .get_viewing_keys()
-                            .values()
-                            .copied()
-                            .map(|vk| ExtendedFullViewingKey::from(vk).fvk.vk)
-                            .chain(args.viewing_keys.into_iter().map(|vk| {
-                                ExtendedFullViewingKey::from(vk).fvk.vk
-                            }))
-                            .collect::<Vec<_>>();
-                        let sks = args
-                            .spending_keys
-                            .into_iter()
-                            .map(|sk| sk.into())
-                            .collect::<Vec<_>>();
+                        args.viewing_keys.extend(
+                            chain_ctx
+                                .wallet
+                                .get_viewing_keys()
+                                .values()
+                                .copied(),
+                        );
+
                         crate::client::masp::syncing(
                             chain_ctx.shielded,
-                            &client,
-                            indexer_addr.as_ref().map(|s| s.as_ref()),
+                            client,
+                            args,
                             &io,
-                            args.start_query_height,
-                            args.last_query_height,
-                            &sks,
-                            &vks,
                         )
                         .await?;
                     }
@@ -774,83 +761,92 @@ impl CliApi {
                     }
                 }
             }
-            cli::NamadaClient::WithoutContext(cmd, global_args) => match cmd {
-                // Utils cmds
-                ClientUtils::JoinNetwork(JoinNetwork(args)) => {
-                    utils::join_network(global_args, args).await
-                }
-                ClientUtils::ValidateWasm(ValidateWasm(args)) => {
-                    utils::validate_wasm(args)
-                }
-                ClientUtils::InitNetwork(InitNetwork(args)) => {
-                    utils::init_network(global_args, args);
-                }
-                ClientUtils::GenesisBond(GenesisBond(args)) => {
-                    utils::genesis_bond(args)
-                }
-                ClientUtils::DeriveGenesisAddresses(
-                    DeriveGenesisAddresses(args),
-                ) => utils::derive_genesis_addresses(global_args, args),
-                ClientUtils::InitGenesisEstablishedAccount(
-                    InitGenesisEstablishedAccount(args),
-                ) => utils::init_genesis_established_account(global_args, args),
-                ClientUtils::InitGenesisValidator(InitGenesisValidator(
-                    args,
-                )) => utils::init_genesis_validator(global_args, args),
-                ClientUtils::PkToTmAddress(PkToTmAddress(args)) => {
-                    utils::pk_to_tm_address(global_args, args)
-                }
-                ClientUtils::DefaultBaseDir(DefaultBaseDir(args)) => {
-                    utils::default_base_dir(global_args, args)
-                }
-                ClientUtils::SignOffline(SignOffline(args)) => {
-                    utils::sign_offline(global_args, args).await
-                }
-                ClientUtils::EpochSleep(EpochSleep(args)) => {
-                    let mut ctx = cli::Context::new::<IO>(global_args)
-                        .expect("expected to construct a context");
-                    let chain_ctx = ctx.borrow_mut_chain_or_exit();
-                    let ledger_address = chain_ctx.get(&args.ledger_address);
-                    let client = C::from_tendermint_address(&ledger_address);
-                    client.wait_until_node_is_synced(&io).await?;
-                    let args = args.to_sdk(&mut ctx)?;
-                    let namada = ctx.to_sdk(client, io);
-                    rpc::epoch_sleep(&namada, args).await;
-                }
-                ClientUtils::ValidateGenesisTemplates(
-                    ValidateGenesisTemplates(args),
-                ) => utils::validate_genesis_templates(global_args, args),
-                ClientUtils::SignGenesisTxs(SignGenesisTxs(args)) => {
-                    utils::sign_genesis_tx(global_args, args).await
-                }
-                ClientUtils::ParseMigrationJson(MigrationJson(args)) => {
-                    #[cfg(feature = "migrations")]
-                    {
-                        let mut update_json = String::new();
-                        let mut file = std::fs::File::open(args.path).expect(
-                            "Could not fine updates file at the specified \
-                             path.",
-                        );
-                        file.read_to_string(&mut update_json)
-                            .expect("Unable to read the updates json file");
-                        let updates: namada_sdk::migrations::DbChanges =
-                            serde_json::from_str(&update_json).expect(
-                                "Could not parse the updates file as json",
-                            );
-                        for change in updates.changes {
-                            display_line!(io, "{}", change);
+            cli::NamadaClient::WithoutContext(cmd_box) => {
+                let (cmd, global_args) = *cmd_box;
+                match cmd {
+                    // Utils cmds
+                    ClientUtils::JoinNetwork(JoinNetwork(args)) => {
+                        utils::join_network(global_args, args).await
+                    }
+                    ClientUtils::ValidateWasm(ValidateWasm(args)) => {
+                        utils::validate_wasm(args)
+                    }
+                    ClientUtils::InitNetwork(InitNetwork(args)) => {
+                        utils::init_network(global_args, args);
+                    }
+                    ClientUtils::GenesisBond(GenesisBond(args)) => {
+                        utils::genesis_bond(global_args, args)
+                    }
+                    ClientUtils::DeriveGenesisAddresses(
+                        DeriveGenesisAddresses(args),
+                    ) => utils::derive_genesis_addresses(global_args, args),
+                    ClientUtils::InitGenesisEstablishedAccount(
+                        InitGenesisEstablishedAccount(args),
+                    ) => utils::init_genesis_established_account(
+                        global_args,
+                        args,
+                    ),
+                    ClientUtils::InitGenesisValidator(
+                        InitGenesisValidator(args),
+                    ) => utils::init_genesis_validator(global_args, args),
+                    ClientUtils::PkToTmAddress(PkToTmAddress(args)) => {
+                        utils::pk_to_tm_address(global_args, args)
+                    }
+                    ClientUtils::SignOffline(SignOffline(args)) => {
+                        utils::sign_offline(global_args, args).await
+                    }
+                    ClientUtils::DefaultBaseDir(DefaultBaseDir(args)) => {
+                        utils::default_base_dir(global_args, args)
+                    }
+                    ClientUtils::EpochSleep(EpochSleep(args)) => {
+                        let mut ctx = cli::Context::new::<IO>(global_args)
+                            .expect("expected to construct a context");
+                        let chain_ctx = ctx.borrow_mut_chain_or_exit();
+                        let ledger_address =
+                            chain_ctx.get(&args.ledger_address);
+                        let client =
+                            C::from_tendermint_address(&ledger_address);
+                        client.wait_until_node_is_synced(&io).await?;
+                        let args = args.to_sdk(&mut ctx)?;
+                        let namada = ctx.to_sdk(client, io);
+                        rpc::epoch_sleep(&namada, args).await;
+                    }
+                    ClientUtils::ValidateGenesisTemplates(
+                        ValidateGenesisTemplates(args),
+                    ) => utils::validate_genesis_templates(global_args, args),
+                    ClientUtils::SignGenesisTxs(SignGenesisTxs(args)) => {
+                        utils::sign_genesis_tx(global_args, args).await
+                    }
+                    ClientUtils::ParseMigrationJson(MigrationJson(args)) => {
+                        #[cfg(feature = "migrations")]
+                        {
+                            let mut update_json = String::new();
+                            let mut file = std::fs::File::open(args.path)
+                                .expect(
+                                    "Could not fine updates file at the \
+                                     specified path.",
+                                );
+                            file.read_to_string(&mut update_json)
+                                .expect("Unable to read the updates json file");
+                            let updates: namada_sdk::migrations::DbChanges =
+                                serde_json::from_str(&update_json).expect(
+                                    "Could not parse the updates file as json",
+                                );
+                            for change in updates.changes {
+                                display_line!(io, "{}", change);
+                            }
+                        }
+                        #[cfg(not(feature = "migrations"))]
+                        {
+                            display_line!(
+                                io,
+                                "Can only use this function if compiled with \
+                                 feature \"migrations\" enabled."
+                            )
                         }
                     }
-                    #[cfg(not(feature = "migrations"))]
-                    {
-                        display_line!(
-                            io,
-                            "Can only use this function if compiled with \
-                             feature \"migrations\" enabled."
-                        )
-                    }
                 }
-            },
+            }
         }
         Ok(())
     }

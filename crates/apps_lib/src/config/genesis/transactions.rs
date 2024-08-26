@@ -42,7 +42,7 @@ use crate::config::genesis::chain::DeriveEstablishedAddress;
 use crate::config::genesis::templates::{
     TemplateValidation, Unvalidated, Validated,
 };
-use crate::config::genesis::{utils, GenesisAddress, GenesisBalanceAddress};
+use crate::config::genesis::{utils, GenesisAddress};
 use crate::wallet::{CliWalletUtils, WalletTransport};
 
 /// Dummy chain id used to sign [`Tx`] objects at pre-genesis.
@@ -156,9 +156,10 @@ pub struct GenesisValidatorData {
     pub name: Option<String>,
 }
 
-/// Panics if given `txs.validator_accounts` is not empty, because validator
-/// transactions must be signed with a validator wallet (see
-/// `init-genesis-validator` command).
+/// Sign all genesis transactions.
+///
+/// Panics if the given `txs.validator_accounts` is non-empty and
+/// `validator_wallet` is `None`.
 pub async fn sign_txs(
     txs: UnsignedTransactions,
     wallet: &RwLock<Wallet<CliWalletUtils>>,
@@ -1197,7 +1198,7 @@ fn validate_bond(
 
     // Check and update token balance of the source
     let native_token = &parameters.parameters.native_token;
-    let source = GenesisBalanceAddress::from(source.clone());
+    let source = source.address();
     match balances.get_mut(native_token) {
         Some(balances) => {
             let balance = balances.amounts.get_mut(&source);
@@ -1255,7 +1256,7 @@ fn validate_bond(
 #[derive(Clone, Debug)]
 pub struct TokenBalancesForValidation {
     /// Accumulator for tokens transferred to accounts
-    pub amounts: BTreeMap<GenesisBalanceAddress, DenominatedAmount>,
+    pub amounts: BTreeMap<Address, DenominatedAmount>,
 }
 
 pub fn validate_established_account(

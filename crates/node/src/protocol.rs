@@ -11,7 +11,7 @@ use namada_sdk::events::extend::{
     ComposeEvent, Height as HeightAttr, TxHash as TxHashAttr, UserAccount,
 };
 use namada_sdk::events::EventLevel;
-use namada_sdk::gas::{Gas, GasMetering, TxGasMeter, VpGasMeter};
+use namada_sdk::gas::{self, Gas, GasMetering, TxGasMeter, VpGasMeter};
 use namada_sdk::hash::Hash;
 use namada_sdk::ibc::{IbcTxDataHash, IbcTxDataRefs};
 use namada_sdk::masp::{MaspTxRefs, TxId};
@@ -391,46 +391,56 @@ where
                 });
             }
             res => {
-                let is_accepted =
-                    matches!(&res, Ok(result) if result.is_accepted());
+                let batched_tx_result = match &res {
+                    Ok(batched_tx_result) => Some(batched_tx_result.to_owned()),
+                    Err(_) => None,
+                };
 
                 extended_tx_result.tx_result.insert_inner_tx_result(
                     wrapper_hash,
                     either::Right(cmt),
                     res,
                 );
-                if is_accepted {
-                    // If the transaction was a masp one append the
-                    // transaction refs for the events
-                    let actions =
-                        state.read_actions().map_err(Error::StateError)?;
-                    if let Some(masp_section_ref) =
-                        action::get_masp_section_ref(&actions)
-                    {
-                        extended_tx_result
-                            .masp_tx_refs
-                            .0
-                            .push(masp_section_ref);
-                    }
-                    if action::is_ibc_shielding_transfer(&*state)
-                        .map_err(Error::StateError)?
-                    {
-                        extended_tx_result
-                            .ibc_tx_data_refs
-                            .0
-                            .push(*cmt.data_sechash())
-                    }
-                    state.write_log_mut().commit_tx_to_batch();
-                } else {
-                    state.write_log_mut().drop_tx();
 
-                    if tx.header.atomic {
-                        // Stop the execution of an atomic batch at the
-                        // first failed transaction
-                        return Err(DispatchError {
-                            error: Error::FailingAtomicBatch(cmt.get_hash()),
-                            tx_result: Some(extended_tx_result),
-                        });
+                match batched_tx_result {
+                    Some(ref res) if res.is_accepted() => {
+                        // If the transaction was a masp one append the
+                        // transaction refs for the events.
+                        if let Some(masp_ref) = get_optional_masp_ref(
+                            state,
+                            cmt,
+                            Either::Right(res),
+                        )? {
+                            match masp_ref {
+                                Either::Left(masp_section_ref) => {
+                                    extended_tx_result
+                                        .masp_tx_refs
+                                        .0
+                                        .push(masp_section_ref);
+                                }
+                                Either::Right(data_sechash) => {
+                                    extended_tx_result
+                                        .ibc_tx_data_refs
+                                        .0
+                                        .push(data_sechash)
+                                }
+                            }
+                        }
+                        state.write_log_mut().commit_tx_to_batch();
+                    }
+                    _ => {
+                        state.write_log_mut().drop_tx();
+
+                        if tx.header.atomic {
+                            // Stop the execution of an atomic batch at the
+                            // first failed transaction
+                            return Err(DispatchError {
+                                error: Error::FailingAtomicBatch(
+                                    cmt.get_hash(),
+                                ),
+                                tx_result: Some(extended_tx_result),
+                            });
+                        }
                     }
                 }
             }
@@ -488,7 +498,10 @@ where
     // Commit tx to the block write log even in case of subsequent errors (if
     // the fee payment failed instead, than the previous two functions must
     // have propagated an error)
-    shell_params.state.write_log_mut().commit_batch();
+    shell_params
+        .state
+        .write_log_mut()
+        .commit_batch_and_current_tx();
 
     let (batch_results, masp_section_refs) = payment_result.map_or_else(
         || (TxResult::default(), None),
@@ -549,12 +562,18 @@ where
             )
             .map_err(Error::StorageError)?;
 
+            #[cfg(not(fuzzing))]
             let balance = token::read_balance(
                 shell_params.state,
                 &wrapper.fee.token,
                 &wrapper.fee_payer(),
             )
             .map_err(Error::StorageError)?;
+
+            // Use half of the max value to make the balance check pass
+            // sometimes with arbitrary fees
+            #[cfg(fuzzing)]
+            let balance = Amount::max().checked_div_u64(2).unwrap();
 
             let (post_bal, valid_batched_tx_result) = if let Some(post_bal) =
                 balance.checked_sub(fees)
@@ -574,12 +593,15 @@ where
                 if let Ok(Some(valid_batched_tx_result)) =
                     try_masp_fee_payment(shell_params, tx, tx_index)
                 {
+                    #[cfg(not(fuzzing))]
                     let balance = token::read_balance(
                         shell_params.state,
                         &wrapper.fee.token,
                         &wrapper.fee_payer(),
                     )
                     .expect("Could not read balance key from storage");
+                    #[cfg(fuzzing)]
+                    let balance = Amount::max().checked_div_u64(2).unwrap();
 
                     let post_bal = match balance.checked_sub(fees) {
                         Some(post_bal) => {
@@ -693,6 +715,9 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
+    const MASP_FEE_PAYMENT_ERROR: &str =
+        "The first transaction in the batch failed to pay fees via the MASP.";
+
     // The fee payment is subject to a gas limit imposed by a protocol
     // parameter. Here we instantiate a custom gas meter for this step and
     // initialize it with the already consumed gas. The gas limit should
@@ -736,49 +761,44 @@ where
                 // cause we might need to discard the effects of this valid
                 // unshield (e.g. if it unshield an amount which is not enough
                 // to pay the fees)
-                if !result.is_accepted() {
-                    state.write_log_mut().drop_tx();
-                    tracing::error!(
-                        "The first transaction in the batch failed to pay \
-                         fees via the MASP, some VPs rejected it: {:#?}",
-                        result.vps_result.rejected_vps
-                    );
-                }
-
-                let actions =
-                    state.read_actions().map_err(Error::StateError)?;
+                let is_masp_transfer = is_masp_transfer(&result.changed_keys);
 
                 // Ensure that the transaction is actually a masp one, otherwise
                 // reject
-                if is_masp_transfer(&result.changed_keys)
-                    && result.is_accepted()
-                {
-                    if let Some(masp_tx_id) =
-                        action::get_masp_section_ref(&actions)
-                    {
-                        Some(MaspTxResult {
+                if is_masp_transfer && result.is_accepted() {
+                    get_optional_masp_ref(
+                        *state,
+                        first_tx.cmt,
+                        Either::Left(true),
+                    )?
+                    .map(|masp_section_ref| {
+                        MaspTxResult {
                             tx_result: result,
-                            masp_section_ref: Either::Left(masp_tx_id),
-                        })
-                    } else {
-                        action::is_ibc_shielding_transfer(*state)
-                            .map_err(Error::StateError)?
-                            .then_some(MaspTxResult {
-                                tx_result: result,
-                                masp_section_ref: Either::Right(
-                                    *first_tx.cmt.data_sechash(),
-                                ),
-                            })
-                    }
+                            masp_section_ref,
+                        }
+                    })
                 } else {
+                    state.write_log_mut().drop_tx();
+
+                    let mut error_msg = MASP_FEE_PAYMENT_ERROR.to_string();
+                    if !is_masp_transfer {
+                        error_msg.push_str(" Not a MASP transaction.");
+                    }
+                    if !result.is_accepted() {
+                        error_msg = format!(
+                            "{error_msg} Some VPs rejected it: {:#?}",
+                            result.vps_result.rejected_vps
+                        );
+                    }
+                    tracing::error!(error_msg);
+
                     None
                 }
             }
             Err(e) => {
                 state.write_log_mut().drop_tx();
                 tracing::error!(
-                    "The first transaction in the batch failed to pay fees \
-                     via the MASP, wasm run failed: {}",
+                    "{MASP_FEE_PAYMENT_ERROR} Wasm run failed: {}",
                     e
                 );
                 if let Error::GasError(_) = e {
@@ -797,6 +817,46 @@ where
         .map_err(|e| Error::GasError(e.to_string()))?;
 
     Ok(valid_batched_tx_result)
+}
+
+// Check that the transaction was a MASP one and extract the MASP tx reference
+// (if any) in the same order that the MASP VP follows (IBC first, Actions
+// second). The order is important to prevent malicious transactions from
+// messing up with indexers/clients. Also a transaction can only be of one of
+// the two types, not both at the same time (the MASP VP accepts a single
+// Transaction)
+fn get_optional_masp_ref<S: Read<Err = state::Error>>(
+    state: &S,
+    cmt: &TxCommitments,
+    is_masp_tx: Either<bool, &BatchedTxResult>,
+) -> Result<Option<Either<namada_sdk::masp::MaspTxId, Hash>>> {
+    // Always check that the transaction was indeed a MASP one by looking at the
+    // changed keys. A malicious tx could push a MASP Action without touching
+    // any storage keys associated with the shielded pool
+    let is_masp_tx = match is_masp_tx {
+        Either::Left(res) => res,
+        Either::Right(tx_result) => is_masp_transfer(&tx_result.changed_keys),
+    };
+    if !is_masp_tx {
+        return Ok(None);
+    }
+
+    let masp_ref = if action::is_ibc_shielding_transfer(state)
+        .map_err(Error::StateError)?
+    {
+        Some(Either::Right(cmt.data_sechash().to_owned()))
+    } else {
+        let actions = state.read_actions().map_err(Error::StateError)?;
+        action::get_masp_section_ref(&actions)
+            .map_err(|msg| {
+                Error::StateError(state::Error::Temporary {
+                    error: msg.to_string(),
+                })
+            })?
+            .map(Either::Left)
+    };
+
+    Ok(masp_ref)
 }
 
 // Manage the token transfer for the fee payment. If an error is detected the
@@ -1092,7 +1152,7 @@ where
         .write_log()
         .verifiers_and_changed_keys(verifiers_from_tx);
 
-    let vps_result = execute_vps(
+    let (vps_result, vps_gas) = execute_vps(
         verifiers,
         keys_changed,
         tx,
@@ -1101,10 +1161,10 @@ where
         tx_gas_meter,
         vp_wasm_cache,
     )?;
-    tracing::debug!("Total VPs gas cost {:?}", vps_result.gas_used);
+    tracing::debug!("Total VPs gas cost {:?}", vps_gas);
 
     tx_gas_meter
-        .add_vps_gas(&vps_result.gas_used)
+        .consume(vps_gas.into())
         .map_err(|err| Error::GasError(err.to_string()))?;
 
     Ok(vps_result)
@@ -1120,62 +1180,72 @@ fn execute_vps<S, CA>(
     state: &S,
     tx_gas_meter: &TxGasMeter,
     vp_wasm_cache: &mut VpCache<CA>,
-) -> Result<VpsResult>
+) -> Result<(VpsResult, namada_sdk::gas::Gas)>
 where
     S: 'static + State + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    let vps_result = verifiers
-        .par_iter()
-        .try_fold(VpsResult::default, |mut result, addr| {
-            let gas_meter =
-                RefCell::new(VpGasMeter::new_from_tx_meter(tx_gas_meter));
-            let tx_accepted = match &addr {
-                Address::Implicit(_) | Address::Established(_) => {
-                    let (vp_hash, gas) = state
+    let vps_result =
+        verifiers
+            .par_iter()
+            .try_fold(
+                || (VpsResult::default(), Gas::from(0)),
+                |(mut result, mut vps_gas), addr| {
+                    let gas_meter = RefCell::new(
+                        VpGasMeter::new_from_tx_meter(tx_gas_meter),
+                    );
+                    let tx_accepted =
+                        match &addr {
+                            Address::Implicit(_) | Address::Established(_) => {
+                                let (vp_hash, gas) = state
                         .validity_predicate::<parameters::Store<()>>(addr)
                         .map_err(Error::StateError)?;
-                    gas_meter
-                        .borrow_mut()
-                        .consume(gas)
-                        .map_err(|err| Error::GasError(err.to_string()))?;
-                    let Some(vp_code_hash) = vp_hash else {
-                        return Err(Error::MissingAddress(addr.clone()));
-                    };
+                                gas_meter.borrow_mut().consume(gas).map_err(
+                                    |err| Error::GasError(err.to_string()),
+                                )?;
+                                let Some(vp_code_hash) = vp_hash else {
+                                    return Err(Error::MissingAddress(
+                                        addr.clone(),
+                                    ));
+                                };
 
-                    wasm::run::vp(
-                        vp_code_hash,
-                        batched_tx,
-                        tx_index,
-                        addr,
-                        state,
-                        &gas_meter,
-                        &keys_changed,
-                        &verifiers,
-                        vp_wasm_cache.clone(),
-                    )
-                    .map_err(|err| match err {
+                                wasm::run::vp(
+                                    vp_code_hash,
+                                    batched_tx,
+                                    tx_index,
+                                    addr,
+                                    state,
+                                    &gas_meter,
+                                    &keys_changed,
+                                    &verifiers,
+                                    vp_wasm_cache.clone(),
+                                )
+                                .map_err(
+                                    |err| {
+                                        match err {
                         wasm::run::Error::GasError(msg) => Error::GasError(msg),
                         wasm::run::Error::InvalidSectionSignature(msg) => {
                             Error::InvalidSectionSignature(msg)
                         }
                         _ => Error::VpRunnerError(err),
-                    })
-                }
-                Address::Internal(internal_addr) => {
-                    let ctx = NativeVpCtx::new(
-                        addr,
-                        state,
-                        batched_tx.tx,
-                        batched_tx.cmt,
-                        tx_index,
-                        &gas_meter,
-                        &keys_changed,
-                        &verifiers,
-                        vp_wasm_cache.clone(),
-                    );
+                    }
+                                    },
+                                )
+                            }
+                            Address::Internal(internal_addr) => {
+                                let ctx = NativeVpCtx::new(
+                                    addr,
+                                    state,
+                                    batched_tx.tx,
+                                    batched_tx.cmt,
+                                    tx_index,
+                                    &gas_meter,
+                                    &keys_changed,
+                                    &verifiers,
+                                    vp_wasm_cache.clone(),
+                                );
 
-                    match internal_addr {
+                                match internal_addr {
                         InternalAddress::PoS => {
                             let pos = PosVp::new(ctx);
                             pos.validate_tx(
@@ -1301,49 +1371,56 @@ where
                             Error::AccessForbidden((*internal_addr).clone()),
                         ),
                     }
-                }
-            };
+                            }
+                        };
 
-            tx_accepted.map_or_else(
-                |err| {
-                    result
-                        .status_flags
-                        .insert(err.invalid_section_signature_flag());
-                    result.rejected_vps.insert(addr.clone());
-                    result.errors.push((addr.clone(), err.to_string()));
+                    tx_accepted.map_or_else(
+                        |err| {
+                            result
+                                .status_flags
+                                .insert(err.invalid_section_signature_flag());
+                            result.rejected_vps.insert(addr.clone());
+                            result.errors.push((addr.clone(), err.to_string()));
+                        },
+                        |()| {
+                            result.accepted_vps.insert(addr.clone());
+                        },
+                    );
+
+                    // Execution of VPs can (and must) be short-circuited
+                    // only in case of a gas overflow to prevent the
+                    // transaction from consuming resources that have not
+                    // been acquired in the corresponding wrapper tx. For
+                    // all the other errors we keep evaluating the vps. This
+                    // allows to display a consistent VpsResult across all
+                    // nodes and find any invalid signatures
+                    vps_gas = vps_gas
+                        .checked_add(gas_meter.borrow().get_vp_consumed_gas())
+                        .ok_or(Error::GasError(
+                            gas::Error::GasOverflow.to_string(),
+                        ))?;
+                    gas_meter
+                        .borrow()
+                        .check_vps_limit(vps_gas)
+                        .map_err(|err| Error::GasError(err.to_string()))?;
+
+                    Ok((result, vps_gas))
                 },
-                |()| {
-                    result.accepted_vps.insert(addr.clone());
-                },
-            );
-
-            // Execution of VPs can (and must) be short-circuited
-            // only in case of a gas overflow to prevent the
-            // transaction from consuming resources that have not
-            // been acquired in the corresponding wrapper tx. For
-            // all the other errors we keep evaluating the vps. This
-            // allows to display a consistent VpsResult across all
-            // nodes and find any invalid signatures
-            result
-                .gas_used
-                .set(gas_meter.into_inner())
-                .map_err(|err| Error::GasError(err.to_string()))?;
-
-            Ok(result)
-        })
-        .try_reduce(VpsResult::default, |a, b| {
-            merge_vp_results(a, b, tx_gas_meter)
-        })?;
+            )
+            .try_reduce(
+                || (VpsResult::default(), Gas::from(0)),
+                |a, b| merge_vp_results(a, b, tx_gas_meter),
+            )?;
 
     Ok(vps_result)
 }
 
 /// Merge VP results from parallel runs
 fn merge_vp_results(
-    a: VpsResult,
-    mut b: VpsResult,
+    (a, a_gas): (VpsResult, Gas),
+    (mut b, b_gas): (VpsResult, Gas),
     tx_gas_meter: &TxGasMeter,
-) -> Result<VpsResult> {
+) -> Result<(VpsResult, Gas)> {
     let mut accepted_vps = a.accepted_vps;
     let mut rejected_vps = a.rejected_vps;
     accepted_vps.extend(b.accepted_vps);
@@ -1351,19 +1428,23 @@ fn merge_vp_results(
     let mut errors = a.errors;
     errors.append(&mut b.errors);
     let status_flags = a.status_flags | b.status_flags;
-    let mut gas_used = a.gas_used;
 
-    gas_used
-        .merge(b.gas_used, tx_gas_meter)
+    let vps_gas = a_gas
+        .checked_add(b_gas)
+        .ok_or(Error::GasError(gas::Error::GasOverflow.to_string()))?;
+    tx_gas_meter
+        .check_vps_limit(vps_gas)
         .map_err(|err| Error::GasError(err.to_string()))?;
 
-    Ok(VpsResult {
-        accepted_vps,
-        rejected_vps,
-        gas_used,
-        errors,
-        status_flags,
-    })
+    Ok((
+        VpsResult {
+            accepted_vps,
+            rejected_vps,
+            errors,
+            status_flags,
+        },
+        vps_gas,
+    ))
 }
 
 #[cfg(test)]

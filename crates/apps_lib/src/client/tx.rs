@@ -1033,71 +1033,44 @@ where
             .await?;
 
     let mut wallet = namada.wallet_mut().await;
-    let secret_keys = &signing_data
-        .public_keys
-        .iter()
-        .filter_map(|public_key| {
-            if let Ok(secret_key) =
-                signing::find_key_by_pk(&mut wallet, &tx_args, public_key)
-            {
-                Some(secret_key)
-            } else {
-                edisplay_line!(
-                    namada.io(),
-                    "Couldn't find the secret key for {}. Skipping signature \
-                     generation.",
-                    public_key
-                );
-                None
-            }
-        })
-        .collect::<Vec<common::SecretKey>>();
 
-    let account_public_keys_map = if let Some(account_public_keys_map) =
-        signing_data.account_public_keys_map
+    let mut secret_keys = vec![];
+    for public_key in &signing_data.public_keys {
+        let secret_key =
+            signing::find_key_by_pk(&mut wallet, &tx_args, public_key)?;
+        secret_keys.push(secret_key);
+    }
+
+    if let Some(account_public_keys_map) = signing_data.account_public_keys_map
     {
-        account_public_keys_map
-    } else {
-        display_line!(
-            namada.io(),
-            "Couldn't find address {}",
-            owner.to_string()
+        let signatures = tx.compute_section_signature(
+            &secret_keys,
+            &account_public_keys_map,
+            Some(owner),
         );
-        return Err(error::Error::Other(format!(
-            "Couldn't find address {}",
-            owner
-        )));
-    };
 
-    let signatures = tx.compute_section_signature(
-        secret_keys,
-        &account_public_keys_map,
-        Some(owner),
-    );
+        for signature in &signatures {
+            let filename = format!(
+                "offline_signature_{}_{}.tx",
+                tx.header_hash(),
+                signature.pubkey,
+            );
+            let output_path = match &tx_args.output_folder {
+                Some(path) => path.join(filename),
+                None => filename.into(),
+            };
+            let signature_path = File::create(&output_path)
+                .expect("Should be able to create signature file.");
+            serde_json::to_writer_pretty(signature_path, &signature)
+                .expect("Signature should be deserializable.");
 
-    for signature in &signatures {
-        let filename = format!(
-            "offline_signature_{}_{}.tx",
-            tx.header_hash().to_string().to_lowercase(),
-            signature.pubkey,
-        );
-        let output_path = match &tx_args.output_folder {
-            Some(path) => path.join(filename),
-            None => filename.into(),
-        };
-
-        let signature_path = File::create(&output_path)
-            .expect("Should be able to create signature file.");
-
-        serde_json::to_writer_pretty(signature_path, &signature)
-            .expect("Signature should be deserializable.");
-
-        display_line!(
-            namada.io(),
-            "Signature for {} serialized at {}",
-            signature.pubkey,
-            output_path.display()
-        );
+            display_line!(
+                namada.io(),
+                "Signature for {} serialized at {}",
+                signature.pubkey,
+                output_path.display()
+            );
+        }
     }
 
     Ok(())

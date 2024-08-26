@@ -30,6 +30,7 @@ use namada_vp::VpEnv;
 use thiserror::Error;
 
 use crate::core::host::types::identifiers::ChainId as IbcChainId;
+use crate::core::host::types::path::UPGRADED_IBC_STATE;
 use crate::event::IbcEvent;
 use crate::storage::{
     deposit_key, get_limits, is_ibc_key, is_ibc_trace_key, mint_amount_key,
@@ -38,7 +39,7 @@ use crate::storage::{
 use crate::trace::calc_hash;
 use crate::{
     Error as ActionError, IbcActions, NftTransferModule, TransferModule,
-    ValidationParams,
+    ValidationParams, COMMITMENT_PREFIX,
 };
 
 #[allow(missing_docs)]
@@ -340,7 +341,10 @@ where
                 .try_into()
                 .expect("Converting the proof specs shouldn't fail"),
             unbonding_period: Duration::from_secs(unbonding_period_secs),
-            upgrade_path: Vec::new(),
+            upgrade_path: vec![
+                COMMITMENT_PREFIX.to_string(),
+                UPGRADED_IBC_STATE.to_string(),
+            ],
         })
     }
 
@@ -625,7 +629,6 @@ mod tests {
     >;
 
     const ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
-    const COMMITMENT_PREFIX: &[u8] = b"ibc";
     const TX_GAS_LIMIT: u64 = 10_000_000_000;
 
     fn get_client_id() -> ClientId {
@@ -721,7 +724,7 @@ mod tests {
             .write_log_mut()
             .write(&client_update_height_key, host_height.encode_vec())
             .expect("write failed");
-        state.write_log_mut().commit_batch();
+        state.write_log_mut().commit_batch_and_current_tx();
     }
 
     fn get_connection_id() -> ConnectionId {
@@ -756,8 +759,7 @@ mod tests {
             ClientId::new(&client_type().to_string(), 22).unwrap();
         let counterpart_conn_id = ConnectionId::new(32);
         let commitment_prefix =
-            CommitmentPrefix::try_from(COMMITMENT_PREFIX.to_vec())
-                .expect("the prefix should be parsable");
+            CommitmentPrefix::from(COMMITMENT_PREFIX.as_bytes().to_vec());
         ConnCounterparty::new(
             counterpart_client_id,
             Some(counterpart_conn_id),
@@ -1146,7 +1148,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
         let mut state = init_storage();
         insert_init_client(&mut state);
-        state.write_log_mut().commit_batch();
+        state.write_log_mut().commit_batch_and_current_tx();
         state.commit_block().expect("commit failed");
 
         // for next block
@@ -1270,7 +1272,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
         let mut state = init_storage();
         insert_init_client(&mut state);
-        state.write_log_mut().commit_batch();
+        state.write_log_mut().commit_batch_and_current_tx();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -1473,7 +1475,7 @@ mod tests {
         let mut keys_changed = BTreeSet::new();
         let mut state = init_storage();
         insert_init_client(&mut state);
-        state.write_log_mut().commit_batch();
+        state.write_log_mut().commit_batch_and_current_tx();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -1602,7 +1604,7 @@ mod tests {
             .write_log_mut()
             .write(&conn_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_batch();
+        state.write_log_mut().commit_batch_and_current_tx();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -1711,7 +1713,7 @@ mod tests {
             .write_log_mut()
             .write(&conn_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_batch();
+        state.write_log_mut().commit_batch_and_current_tx();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -1807,7 +1809,7 @@ mod tests {
             .write_log_mut()
             .write(&conn_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_batch();
+        state.write_log_mut().commit_batch_and_current_tx();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -1929,7 +1931,7 @@ mod tests {
             .write_log_mut()
             .write(&conn_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_batch();
+        state.write_log_mut().commit_batch_and_current_tx();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -2059,7 +2061,7 @@ mod tests {
             .write_log_mut()
             .write(&channel_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_batch();
+        state.write_log_mut().commit_batch_and_current_tx();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -2166,7 +2168,7 @@ mod tests {
             .write_log_mut()
             .write(&channel_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_batch();
+        state.write_log_mut().commit_batch_and_current_tx();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -2279,7 +2281,7 @@ mod tests {
             .write_log_mut()
             .write(&balance_key, amount.serialize_to_vec())
             .expect("write failed");
-        state.write_log_mut().commit_batch();
+        state.write_log_mut().commit_batch_and_current_tx();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -2424,7 +2426,7 @@ mod tests {
             .write_log_mut()
             .write(&channel_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_batch();
+        state.write_log_mut().commit_batch_and_current_tx();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -2669,7 +2671,7 @@ mod tests {
             .write_log_mut()
             .write(&commitment_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_batch();
+        state.write_log_mut().commit_batch_and_current_tx();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -2832,7 +2834,7 @@ mod tests {
             .write_log_mut()
             .write(&commitment_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_batch();
+        state.write_log_mut().commit_batch_and_current_tx();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -2989,7 +2991,7 @@ mod tests {
             .write_log_mut()
             .write(&commitment_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_batch();
+        state.write_log_mut().commit_batch_and_current_tx();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -3131,7 +3133,7 @@ mod tests {
             .write(&metadata_key, metadata.serialize_to_vec())
             .expect("write failed");
 
-        state.write_log_mut().commit_batch();
+        state.write_log_mut().commit_batch_and_current_tx();
         state.commit_block().expect("commit failed");
         // for next block
         state
@@ -3283,7 +3285,7 @@ mod tests {
             .write_log_mut()
             .write(&channel_key, bytes)
             .expect("write failed");
-        state.write_log_mut().commit_batch();
+        state.write_log_mut().commit_batch_and_current_tx();
         state.commit_block().expect("commit failed");
         // for next block
         state

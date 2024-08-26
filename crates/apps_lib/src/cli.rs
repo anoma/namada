@@ -3189,6 +3189,7 @@ pub mod args {
     use namada_sdk::ibc::core::host::types::identifiers::{ChannelId, PortId};
     use namada_sdk::keccak::KeccakHash;
     use namada_sdk::key::*;
+    use namada_sdk::masp::utils::RetryStrategy;
     use namada_sdk::masp::{MaspEpoch, PaymentAddress};
     use namada_sdk::storage::{self, BlockHeight, Epoch};
     use namada_sdk::time::DateTimeUtc;
@@ -3211,7 +3212,7 @@ pub mod args {
     use super::utils::*;
     use super::{ArgGroup, ArgMatches};
     use crate::client::utils::PRE_GENESIS_DIR;
-    use crate::config::genesis::GenesisAddress;
+    use crate::config::genesis::AddrOrPk;
     use crate::config::{self, Action, ActionAtHeight};
     use crate::facade::tendermint::Timeout;
     use crate::facade::tendermint_rpc::Url;
@@ -3235,10 +3236,9 @@ pub mod args {
             Err(_) => config::get_default_namada_folder(),
         }),
     );
+    pub const BIRTHDAY: ArgOpt<BlockHeight> = arg_opt("birthday");
     pub const BLOCK_HEIGHT: Arg<BlockHeight> = arg("block-height");
     pub const BLOCK_HEIGHT_OPT: ArgOpt<BlockHeight> = arg_opt("height");
-    pub const BLOCK_HEIGHT_FROM_OPT: ArgOpt<BlockHeight> =
-        arg_opt("from-height");
     pub const BLOCK_HEIGHT_TO_OPT: ArgOpt<BlockHeight> = arg_opt("to-height");
     pub const BRIDGE_POOL_GAS_AMOUNT: ArgDefault<token::DenominatedAmount> =
         arg_default(
@@ -3279,6 +3279,10 @@ pub mod args {
         arg_opt("success-sleep");
     pub const DATA_PATH_OPT: ArgOpt<PathBuf> = arg_opt("data-path");
     pub const DATA_PATH: Arg<PathBuf> = arg("data-path");
+    pub const DATED_SPENDING_KEYS: ArgMulti<WalletDatedSpendingKey, GlobStar> =
+        arg_multi("spending-keys");
+    pub const DATED_VIEWING_KEYS: ArgMulti<WalletDatedViewingKey, GlobStar> =
+        arg_multi("viewing-keys");
     pub const DB_KEY: Arg<String> = arg("db-key");
     pub const DB_COLUMN_FAMILY: ArgDefault<String> = arg_default(
         "db-column-family",
@@ -3332,7 +3336,7 @@ pub mod args {
             )
         }),
     );
-    pub const GENESIS_BOND_SOURCE: ArgOpt<GenesisAddress> = arg_opt("source");
+    pub const GENESIS_BOND_SOURCE: ArgOpt<AddrOrPk> = arg_opt("source");
     pub const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
     pub const GENESIS_TIME: Arg<DateTimeUtc> = arg("genesis-time");
     pub const GENESIS_VALIDATOR: ArgOpt<String> =
@@ -3358,6 +3362,8 @@ pub mod args {
          scheme is not supplied, it is assumed to be TCP.",
         60
     );
+    pub const CHECK_CAN_SIGN: ArgMulti<AddrOrPk, GlobStar> =
+        arg_multi("check-can-sign");
     pub const CONFIG_RPC_LEDGER_ADDRESS: ArgDefaultFromCtx<ConfigRpcAddress> =
         arg_default_from_ctx("node", DefaultFn(|| "".to_string()));
 
@@ -3372,6 +3378,8 @@ pub mod args {
     pub const MASP_EPOCH: ArgOpt<MaspEpoch> = arg_opt("masp-epoch");
     pub const MAX_COMMISSION_RATE_CHANGE: Arg<Dec> =
         arg("max-commission-rate-change");
+    pub const MAX_CONCURRENT_FETCHES: ArgDefault<usize> =
+        arg_default("max-concurrent-fetches", DefaultFn(|| 100));
     pub const MAX_ETH_GAS: ArgOpt<u64> = arg_opt("max_eth-gas");
     pub const MEMO_OPT: ArgOpt<String> = arg_opt("memo");
     pub const MIGRATION_PATH: ArgOpt<PathBuf> = arg_opt("migration-path");
@@ -3397,7 +3405,6 @@ pub mod args {
     pub const PRE_GENESIS: ArgFlag = flag("pre-genesis");
     pub const PRIVATE_KEYS: ArgMulti<common::SecretKey, GlobStar> =
         arg_multi("private-keys");
-    pub const PROPOSAL_ETH: ArgFlag = flag("eth");
     pub const PROPOSAL_PGF_STEWARD: ArgFlag = flag("pgf-stewards");
     pub const PROPOSAL_PGF_FUNDING: ArgFlag = flag("pgf-funding");
     pub const PROTOCOL_KEY: ArgOpt<WalletPublicKey> = arg_opt("protocol-key");
@@ -3427,7 +3434,7 @@ pub mod args {
     pub const REFUND_TARGET: ArgOpt<WalletTransferTarget> =
         arg_opt("refund-target");
     pub const RELAYER: Arg<Address> = arg("relayer");
-    pub const SAFE_MODE: ArgFlag = flag("safe-mode");
+    pub const RETRIES: ArgOpt<u64> = arg_opt("retries");
     pub const SCHEME: ArgDefault<SchemeType> =
         arg_default("scheme", DefaultFn(|| SchemeType::Ed25519));
     pub const SHELL: Arg<Shell> = arg("shell");
@@ -3487,6 +3494,8 @@ pub mod args {
     pub const VIEWING_KEYS: ArgMulti<WalletViewingKey, GlobStar> =
         arg_multi("viewing-keys");
     pub const VP: ArgOpt<String> = arg_opt("vp");
+    pub const WAIT_FOR_LAST_QUERY_HEIGHT: ArgFlag =
+        flag("wait-for-last-query-height");
     pub const WALLET_ALIAS_FORCE: ArgFlag = flag("wallet-alias-force");
     pub const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
     pub const WASM_DIR: ArgOpt<PathBuf> = arg_opt("wasm-dir");
@@ -4120,14 +4129,12 @@ pub mod args {
                 gas_price: self.gas_price,
                 eth_addr: self.eth_addr,
                 sync: self.sync,
-                safe_mode: self.safe_mode,
             }
         }
     }
 
     impl Args for RelayBridgePoolProof<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
-            let safe_mode = SAFE_MODE.parse(matches);
             let ledger_address = LEDGER_ADDRESS.parse(matches);
             let hashes = HASH_LIST.parse(matches);
             let relayer = RELAYER.parse(matches);
@@ -4158,16 +4165,11 @@ pub mod args {
                 eth_rpc_endpoint,
                 eth_addr,
                 confirmations,
-                safe_mode,
             }
         }
 
         fn def(app: App) -> App {
             app.arg(LEDGER_ADDRESS.def().help(LEDGER_ADDRESS_ABOUT))
-                .arg(SAFE_MODE.def().help(wrap!(
-                    "Safe mode overrides keyboard interrupt signals, to \
-                     ensure Ethereum transfers aren't canceled midway through."
-                )))
                 .arg(HASH_LIST.def().help(wrap!(
                     "Whitespace separated Keccak hash list of transfers in \
                      the Bridge pool."
@@ -4303,7 +4305,6 @@ pub mod args {
                 sync: self.sync,
                 retry_dur: self.retry_dur,
                 success_dur: self.success_dur,
-                safe_mode: self.safe_mode,
             }
         }
     }
@@ -4311,7 +4312,6 @@ pub mod args {
     impl Args for ValidatorSetUpdateRelay<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let ledger_address = LEDGER_ADDRESS.parse(matches);
-            let safe_mode = SAFE_MODE.parse(matches);
             let daemon = DAEMON_MODE.parse(matches);
             let epoch = EPOCH.parse(matches);
             let gas = ETH_GAS.parse(matches);
@@ -4336,16 +4336,11 @@ pub mod args {
                 eth_addr,
                 retry_dur,
                 success_dur,
-                safe_mode,
             }
         }
 
         fn def(app: App) -> App {
             app.arg(LEDGER_ADDRESS.def().help(LEDGER_ADDRESS_ABOUT))
-                .arg(SAFE_MODE.def().help(wrap!(
-                    "Safe mode overrides keyboard interrupt signals, to \
-                     ensure Ethereum transfers aren't canceled midway through."
-                )))
                 .arg(DAEMON_MODE.def().help(wrap!(
                     "Run in daemon mode, which will continuously perform \
                      validator set updates."
@@ -5640,25 +5635,13 @@ pub mod args {
                     "The data path file (json) that describes the proposal."
                 )))
                 .arg(
-                    PROPOSAL_ETH
-                        .def()
-                        .help(wrap!("Flag if the proposal is of type eth."))
-                        .conflicts_with_all([
-                            PROPOSAL_PGF_FUNDING.name,
-                            PROPOSAL_PGF_STEWARD.name,
-                        ]),
-                )
-                .arg(
                     PROPOSAL_PGF_STEWARD
                         .def()
                         .help(wrap!(
                             "Flag if the proposal is of type pgf-stewards. \
                              Used to elect/remove stewards."
                         ))
-                        .conflicts_with_all([
-                            PROPOSAL_ETH.name,
-                            PROPOSAL_PGF_FUNDING.name,
-                        ]),
+                        .conflicts_with(PROPOSAL_PGF_FUNDING.name),
                 )
                 .arg(
                     PROPOSAL_PGF_FUNDING
@@ -5667,10 +5650,7 @@ pub mod args {
                             "Flag if the proposal is of type pgf-funding. \
                              Used to control continuous/retro PGF fundings."
                         ))
-                        .conflicts_with_all([
-                            PROPOSAL_ETH.name,
-                            PROPOSAL_PGF_STEWARD.name,
-                        ]),
+                        .conflicts_with(PROPOSAL_PGF_STEWARD.name),
                 )
         }
     }
@@ -5715,11 +5695,7 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Tx<CliTypes>>()
-                .arg(
-                    PROPOSAL_ID_OPT
-                        .def()
-                        .help(wrap!("The proposal identifier.")),
-                )
+                .arg(PROPOSAL_ID.def().help(wrap!("The proposal identifier.")))
                 .arg(PROPOSAL_VOTE.def().help(wrap!(
                     "The vote for the proposal. Either yay, nay, or abstain."
                 )))
@@ -6622,18 +6598,26 @@ pub mod args {
     impl Args for ShieldedSync<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let ledger_address = CONFIG_RPC_LEDGER_ADDRESS.parse(matches);
-            let start_query_height = BLOCK_HEIGHT_FROM_OPT.parse(matches);
             let last_query_height = BLOCK_HEIGHT_TO_OPT.parse(matches);
-            let spending_keys = SPENDING_KEYS.parse(matches);
-            let viewing_keys = VIEWING_KEYS.parse(matches);
+            let spending_keys = DATED_SPENDING_KEYS.parse(matches);
+            let viewing_keys = DATED_VIEWING_KEYS.parse(matches);
             let with_indexer = WITH_INDEXER.parse(matches);
+            let wait_for_last_query_height =
+                WAIT_FOR_LAST_QUERY_HEIGHT.parse(matches);
+            let max_concurrent_fetches = MAX_CONCURRENT_FETCHES.parse(matches);
+            let retry_strategy = match RETRIES.parse(matches) {
+                Some(times) => RetryStrategy::Times(times),
+                None => RetryStrategy::Forever,
+            };
             Self {
                 ledger_address,
-                start_query_height,
                 last_query_height,
                 spending_keys,
                 viewing_keys,
                 with_indexer,
+                wait_for_last_query_height,
+                max_concurrent_fetches,
+                retry_strategy,
             }
         }
 
@@ -6642,23 +6626,34 @@ pub mod args {
                 .arg(BLOCK_HEIGHT_TO_OPT.def().help(wrap!(
                     "Option block height to sync up to. Default is latest."
                 )))
-                .arg(
-                    BLOCK_HEIGHT_FROM_OPT
-                        .def()
-                        .help(wrap!("Option block height to sync from.")),
-                )
-                .arg(SPENDING_KEYS.def().help(wrap!(
+                .arg(DATED_SPENDING_KEYS.def().help(wrap!(
                     "List of new spending keys with which to check note \
-                     ownership. These will be added to the shielded context."
+                     ownership. These will be added to the shielded context. \
+                     Appending \"<<$BLOCKHEIGHT\" to the end of each key adds \
+                     a birthday."
                 )))
-                .arg(VIEWING_KEYS.def().help(wrap!(
+                .arg(DATED_VIEWING_KEYS.def().help(wrap!(
                     "List of new viewing keys with which to check note \
-                     ownership. These will be added to the shielded context."
+                     ownership. These will be added to the shielded context. \
+                     Appending \"<<$BLOCKHEIGHT\" to the end of each key adds \
+                     a birthday."
                 )))
                 .arg(WITH_INDEXER.def().help(wrap!(
                     "Address of a `namada-masp-indexer` live instance. If \
                      present, the shielded sync will be performed using data \
                      retrieved from the given indexer."
+                )))
+                .arg(WAIT_FOR_LAST_QUERY_HEIGHT.def().help(wrap!(
+                    "Wait until the last height to sync is available instead \
+                     of returning early from the shielded sync."
+                )))
+                .arg(MAX_CONCURRENT_FETCHES.def().help(wrap!(
+                    "Maximum number of fetch jobs that will ever execute \
+                     concurrently during the shielded sync."
+                )))
+                .arg(RETRIES.def().help(wrap!(
+                    "Maximum number of times to retry fetching. If no \
+                     argument is provided, defaults to retrying forever."
                 )))
         }
     }
@@ -6673,8 +6668,9 @@ pub mod args {
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
 
             Ok(ShieldedSync {
+                max_concurrent_fetches: self.max_concurrent_fetches,
+                wait_for_last_query_height: self.wait_for_last_query_height,
                 ledger_address: chain_ctx.get(&self.ledger_address),
-                start_query_height: self.start_query_height,
                 last_query_height: self.last_query_height,
                 spending_keys: self
                     .spending_keys
@@ -6686,7 +6682,8 @@ pub mod args {
                     .iter()
                     .map(|vk| chain_ctx.get_cached(vk))
                     .collect(),
-                with_indexer: self.with_indexer.map(|_| ()),
+                with_indexer: self.with_indexer,
+                retry_strategy: self.retry_strategy,
             })
         }
     }
@@ -7008,6 +7005,8 @@ pub mod args {
         type BpConversionTable = PathBuf;
         type ConfigRpcTendermintAddress = ConfigRpcAddress;
         type Data = PathBuf;
+        type DatedSpendingKey = WalletDatedSpendingKey;
+        type DatedViewingKey = WalletDatedViewingKey;
         type EthereumAddress = String;
         type Keypair = WalletKeypair;
         type MaspIndexerAddress = String;
@@ -7123,8 +7122,7 @@ pub mod args {
             )))
             .arg(FEE_TOKEN.def().help(wrap!("The token for paying the gas")))
             .arg(GAS_LIMIT.def().help(wrap!(
-                "The multiplier of the gas limit resolution defining the \
-                 maximum amount of gas needed to run transaction."
+                "The maximum amount of gas the transaction can use."
             )))
             .arg(WALLET_ALIAS_FORCE.def().help(wrap!(
                 "Override the alias without confirmation if it already exists."
@@ -7364,7 +7362,8 @@ pub mod args {
                 find_viewing_key(&mut wallet)
             } else {
                 find_viewing_key(&mut ctx.borrow_mut_chain_or_exit().wallet)
-            };
+            }
+            .key;
 
             Ok(PayAddressGen::<SdkTypes> {
                 alias: self.alias,
@@ -7403,6 +7402,7 @@ pub mod args {
             let shielded = SHIELDED.parse(matches);
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
+            let birthday = BIRTHDAY.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let derivation_path = HD_DERIVATION_PATH.parse(matches);
             let allow_non_compliant =
@@ -7422,6 +7422,7 @@ pub mod args {
                 prompt_bip39_passphrase,
                 use_device,
                 device_transport,
+                birthday,
             }
         }
 
@@ -7443,6 +7444,11 @@ pub mod args {
                     "Force overwrite the alias if it already exists."
                 )),
             )
+            .arg(BIRTHDAY.def().help(wrap!(
+                "A block height after which this key is being created. Used \
+                 for optimizing MASP operations. If none is provided, \
+                 defaults to the first block height."
+            )))
             .arg(UNSAFE_DONT_ENCRYPT.def().help(wrap!(
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
                  used in a live network."
@@ -7491,6 +7497,7 @@ pub mod args {
             let raw = RAW_KEY_GEN.parse(matches);
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
+            let birthday = BIRTHDAY.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             let derivation_path = HD_DERIVATION_PATH.parse(matches);
             let allow_non_compliant =
@@ -7503,6 +7510,7 @@ pub mod args {
                 raw,
                 alias,
                 alias_force,
+                birthday,
                 unsafe_dont_encrypt,
                 derivation_path,
                 allow_non_compliant,
@@ -7534,6 +7542,11 @@ pub mod args {
             .arg(ALIAS.def().help(wrap!("The key and address alias.")))
             .arg(ALIAS_FORCE.def().help(wrap!(
                 "Override the alias without confirmation if it already exists."
+            )))
+            .arg(BIRTHDAY.def().help(wrap!(
+                "A block height after which this key is being created. Used \
+                 for optimizing MASP operations. If none is provided, \
+                 defaults to the first block height."
             )))
             .arg(UNSAFE_DONT_ENCRYPT.def().help(wrap!(
                 "UNSAFE: Do not encrypt the keypair. Do not use this for keys \
@@ -7706,11 +7719,13 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let alias = ALIAS.parse(matches);
             let alias_force = ALIAS_FORCE.parse(matches);
+            let birthday = BIRTHDAY.parse(matches);
             let value = VALUE.parse(matches);
             let unsafe_dont_encrypt = UNSAFE_DONT_ENCRYPT.parse(matches);
             Self {
                 alias,
                 alias_force,
+                birthday,
                 value,
                 unsafe_dont_encrypt,
             }
@@ -7724,6 +7739,11 @@ pub mod args {
             )
             .arg(ALIAS_FORCE.def().help(wrap!(
                 "Override the alias without confirmation if it already exists."
+            )))
+            .arg(BIRTHDAY.def().help(wrap!(
+                "A block height after which this key is being created. Used \
+                 for optimizing MASP operations. If none is provided, \
+                 defaults to the first block height."
             )))
             .arg(VALUE.def().help(wrap!(
                 "Any value of the following:\n- transparent pool secret \
@@ -8063,7 +8083,7 @@ pub mod args {
 
     #[derive(Clone, Debug)]
     pub struct GenesisBond {
-        pub source: GenesisAddress,
+        pub source: AddrOrPk,
         pub validator: EstablishedAddress,
         pub bond_amount: token::DenominatedAmount,
         pub output: PathBuf,
@@ -8074,7 +8094,7 @@ pub mod args {
             let validator = GENESIS_VALIDATOR_ADDRESS.parse(matches);
             let source =
                 GENESIS_BOND_SOURCE.parse(matches).unwrap_or_else(|| {
-                    GenesisAddress::EstablishedAddress(validator.clone())
+                    AddrOrPk::Address(Address::Established(validator.clone()))
                 });
             let bond_amount = AMOUNT.parse(matches);
             let output = PATH.parse(matches);
@@ -8251,13 +8271,19 @@ pub mod args {
         /// Templates dir
         pub path: PathBuf,
         pub wasm_dir: PathBuf,
+        pub check_can_sign: Vec<AddrOrPk>,
     }
 
     impl Args for TestGenesis {
         fn parse(matches: &ArgMatches) -> Self {
             let path = PATH.parse(matches);
             let wasm_dir = WASM_DIR.parse(matches).unwrap_or_default();
-            Self { path, wasm_dir }
+            let check_can_sign = CHECK_CAN_SIGN.parse(matches);
+            Self {
+                path,
+                wasm_dir,
+                check_can_sign,
+            }
         }
 
         fn def(app: App) -> App {
@@ -8269,6 +8295,11 @@ pub mod args {
             .arg(WASM_DIR.def().help(wrap!(
                 "Optional wasm directory to provide as part of verifying \
                  genesis template files"
+            )))
+            .arg(CHECK_CAN_SIGN.def().help(wrap!(
+                "Check that the pre-genesis wallet is able to sign with the \
+                 given keys and/or keys associated with the given addresses. \
+                 A pre-genesis wallet must be present in the base directory."
             )))
         }
     }
@@ -8360,14 +8391,44 @@ pub fn namada_cli() -> (cmds::Namada, String) {
     safe_exit(2);
 }
 
-pub fn namada_node_cli() -> Result<(cmds::NamadaNode, Context)> {
-    let app = namada_node_app();
-    cmds::NamadaNode::parse_or_print_help(app)
+/// Namada node commands with loaded [`Context`] where required
+pub enum NamadaNode {
+    Ledger(cmds::Ledger, Context),
+    Config(cmds::Config, Context),
+    Utils(cmds::NodeUtils, args::Global),
 }
 
-#[allow(clippy::large_enum_variant)]
+pub fn namada_node_cli() -> Result<NamadaNode> {
+    let app = namada_node_app();
+    let matches = app.clone().get_matches();
+    match Cmd::parse(&matches) {
+        Some(cmd) => {
+            let global_args = args::Global::parse(&matches);
+            match cmd {
+                cmds::NamadaNode::Ledger(sub_cmd) => {
+                    let context = Context::new::<CliIo>(global_args)?;
+                    Ok(NamadaNode::Ledger(sub_cmd, context))
+                }
+                cmds::NamadaNode::Config(sub_cmd) => {
+                    let context = Context::new::<CliIo>(global_args)?;
+                    Ok(NamadaNode::Config(sub_cmd, context))
+                }
+                cmds::NamadaNode::Utils(sub_cmd) => {
+                    Ok(NamadaNode::Utils(sub_cmd, global_args))
+                }
+            }
+        }
+        None => {
+            let mut app = app;
+            app.print_help().unwrap();
+            safe_exit(2);
+        }
+    }
+}
+
+/// Namada client commands with loaded [`Context`] where required
 pub enum NamadaClient {
-    WithoutContext(cmds::ClientUtils, args::Global),
+    WithoutContext(Box<(cmds::ClientUtils, args::Global)>),
     WithContext(Box<(cmds::NamadaClientWithContext, Context)>),
 }
 
@@ -8383,7 +8444,10 @@ pub fn namada_client_cli() -> Result<NamadaClient> {
                     Ok(NamadaClient::WithContext(Box::new((sub_cmd, context))))
                 }
                 cmds::NamadaClient::WithoutContext(sub_cmd) => {
-                    Ok(NamadaClient::WithoutContext(sub_cmd, global_args))
+                    Ok(NamadaClient::WithoutContext(Box::new((
+                        sub_cmd,
+                        global_args,
+                    ))))
                 }
             }
         }

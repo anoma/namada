@@ -435,8 +435,8 @@ async fn query_shielded_balance(
     }
 }
 
-pub async fn query_proposal_result(
-    context: &impl Namada,
+pub async fn query_proposal_result<N: Namada>(
+    context: &N,
     args: args::QueryProposalResult,
 ) {
     let proposal_id = args.proposal_id;

@@ -12,6 +12,7 @@ wasms += tx_invalid_data
 wasms += tx_memory_limit
 wasms += tx_no_op
 wasms += tx_proposal_code
+wasms += tx_proposal_ibc_client_upgrade
 wasms += tx_proposal_ibc_token_inflation
 wasms += tx_proposal_masp_reward
 wasms += tx_read_storage_key
@@ -38,7 +39,7 @@ check:
 	$(cargo) +$(nightly) check --workspace --target wasm32-unknown-unknown
 
 clippy:
-	$(cargo) +$(nightly) clippy --all-targets --workspace -- -D warnings
+	$(cargo) +$(nightly) clippy --all-targets --workspace -- -D warnings --check-cfg 'cfg(fuzzing)'
 
 clippy-fix:
 	$(cargo) +$(nightly) clippy --fix -Z unstable-options --workspace --allow-dirty --allow-staged
@@ -49,13 +50,10 @@ fmt:
 fmt-check:
 	$(cargo) +$(nightly) fmt --check
 
-test:
-	$(cargo) +$(nightly) test -- -Z unstable-options --report-time
-
 clean:
 	$(cargo) clean
 
 deps:
 	$(rustup) target add wasm32-unknown-unknown
 
-.PHONY: all debug check clippy clippy-fix fmt fmt-check test clean deps
+.PHONY: all debug check clippy clippy-fix fmt fmt-check clean deps

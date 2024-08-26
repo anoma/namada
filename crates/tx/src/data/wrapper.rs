@@ -40,6 +40,7 @@ pub enum WrapperTxErr {
 }
 
 /// Amount of some specified token to pay for fees.
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Clone,
@@ -60,6 +61,7 @@ pub struct Fee {
 }
 
 /// Gas limit of a transaction
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Clone,
@@ -138,6 +140,7 @@ impl GasLimit {
 /// A transaction with an encrypted payload, an optional shielded pool
 /// unshielding tx for fee payment and some non-encrypted metadata for
 /// inclusion and / or verification purposes
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
     Clone,
