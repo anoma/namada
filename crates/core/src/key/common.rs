@@ -1,16 +1,17 @@
 //! Cryptographic keys
-use std::fmt::Display;
+use std::fmt::{self, Display};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
-use data_encoding::HEXLOWER;
+use data_encoding::{HEXLOWER, HEXUPPER};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
 #[cfg(any(test, feature = "rand"))]
 use rand::{CryptoRng, RngCore};
-use serde::{Deserialize, Serialize};
+use serde::de::{self, Visitor};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 
 use super::{
@@ -307,8 +308,6 @@ impl FromStr for SecretKey {
     PartialOrd,
     Ord,
     Hash,
-    Serialize,
-    Deserialize,
     BorshSerialize,
     BorshDeserialize,
     BorshDeserializer,
@@ -338,6 +337,52 @@ impl string_encoding::Format for Signature {
     ) -> Result<Self, string_encoding::DecodeError> {
         BorshDeserialize::try_from_slice(bytes)
             .map_err(DecodeError::InvalidBytes)
+    }
+}
+
+impl Serialize for CommonSignature {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let hex_str = HEXUPPER.encode(&self.serialize_to_vec());
+        serializer.serialize_str(&hex_str)
+    }
+}
+
+// Implement custom deserialization
+impl<'de> Deserialize<'de> for CommonSignature {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct SignatureVisitor;
+
+        impl<'de> Visitor<'de> for SignatureVisitor {
+            type Value = CommonSignature;
+
+            fn expecting(
+                &self,
+                formatter: &mut fmt::Formatter<'_>,
+            ) -> fmt::Result {
+                formatter.write_str(
+                    "a hex string representing either an Ed25519 or Secp256k1 \
+                     signature",
+                )
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                let bytes =
+                    HEXUPPER.decode(value.as_bytes()).map_err(E::custom)?;
+                CommonSignature::try_from_slice(&bytes)
+                    .map_err(|e| E::custom(e.to_string()))
+            }
+        }
+
+        deserializer.deserialize_str(SignatureVisitor)
     }
 }
 

@@ -2393,6 +2393,7 @@ pub mod cmds {
         InitGenesisEstablishedAccount(InitGenesisEstablishedAccount),
         InitGenesisValidator(InitGenesisValidator),
         PkToTmAddress(PkToTmAddress),
+        SignOffline(SignOffline),
         DefaultBaseDir(DefaultBaseDir),
         EpochSleep(EpochSleep),
         ValidateGenesisTemplates(ValidateGenesisTemplates),
@@ -2421,6 +2422,8 @@ pub mod cmds {
                     SubCmd::parse(matches).map(Self::InitGenesisValidator);
                 let pk_to_tm_address =
                     SubCmd::parse(matches).map(Self::PkToTmAddress);
+                let sign_offline =
+                    SubCmd::parse(matches).map(Self::SignOffline);
                 let default_base_dir =
                     SubCmd::parse(matches).map(Self::DefaultBaseDir);
                 let epoch_sleep = SubCmd::parse(matches).map(Self::EpochSleep);
@@ -2443,6 +2446,7 @@ pub mod cmds {
                     .or(validate_genesis_templates)
                     .or(genesis_tx)
                     .or(parse_migrations_json)
+                    .or(sign_offline)
             })
         }
 
@@ -2457,6 +2461,7 @@ pub mod cmds {
                 .subcommand(InitGenesisEstablishedAccount::def())
                 .subcommand(InitGenesisValidator::def())
                 .subcommand(PkToTmAddress::def())
+                .subcommand(SignOffline::def())
                 .subcommand(DefaultBaseDir::def())
                 .subcommand(EpochSleep::def())
                 .subcommand(ValidateGenesisTemplates::def())
@@ -3125,6 +3130,25 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
+    pub struct SignOffline(pub args::SignOffline);
+
+    impl SubCmd for SignOffline {
+        const CMD: &'static str = "sign-offline";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::SignOffline::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(wrap!("Offlne sign a transaction."))
+                .add_args::<args::SignOffline>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
     pub struct DefaultBaseDir(pub args::DefaultBaseDir);
 
     impl SubCmd for DefaultBaseDir {
@@ -3371,6 +3395,8 @@ pub mod args {
         DefaultFn(|| PortId::from_str("transfer").unwrap()),
     );
     pub const PRE_GENESIS: ArgFlag = flag("pre-genesis");
+    pub const PRIVATE_KEYS: ArgMulti<common::SecretKey, GlobStar> =
+        arg_multi("private-keys");
     pub const PROPOSAL_ETH: ArgFlag = flag("eth");
     pub const PROPOSAL_PGF_STEWARD: ArgFlag = flag("pgf-stewards");
     pub const PROPOSAL_PGF_FUNDING: ArgFlag = flag("pgf-funding");
@@ -7846,6 +7872,40 @@ pub mod args {
                 "The consensus public key to be converted to Tendermint \
                  address."
             )))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct SignOffline {
+        pub tx_path: PathBuf,
+        pub secret_keys: Vec<common::SecretKey>,
+        pub owner: Address,
+    }
+
+    impl Args for SignOffline {
+        fn parse(matches: &ArgMatches) -> Self {
+            let tx_path = DATA_PATH.parse(matches);
+            let secret_keys = PRIVATE_KEYS.parse(matches);
+            let owner = RAW_ADDRESS.parse(matches);
+
+            Self {
+                tx_path,
+                secret_keys,
+                owner,
+            }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(
+                DATA_PATH
+                    .def()
+                    .help(wrap!("The path to the serialized transaction.")),
+            )
+            .arg(PRIVATE_KEYS.def().help(wrap!(
+                "The set of private keys to use to sign the transaction. The \
+                 order matters."
+            )))
+            .arg(RAW_ADDRESS.def().help(wrap!("The owner's address.")))
         }
     }
 

@@ -803,6 +803,9 @@ impl CliApi {
                 ClientUtils::DefaultBaseDir(DefaultBaseDir(args)) => {
                     utils::default_base_dir(global_args, args)
                 }
+                ClientUtils::SignOffline(SignOffline(args)) => {
+                    utils::sign_offline(global_args, args).await
+                }
                 ClientUtils::EpochSleep(EpochSleep(args)) => {
                     let mut ctx = cli::Context::new::<IO>(global_args)
                         .expect("expected to construct a context");

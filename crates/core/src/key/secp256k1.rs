@@ -270,7 +270,7 @@ impl BorshSchema for SecretKey {
 
 impl Display for SecretKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", HEXLOWER.encode(&self.0.to_bytes()))
+        write!(f, "{}", HEXLOWER.encode(self.0.to_bytes().as_ref()))
     }
 }
 

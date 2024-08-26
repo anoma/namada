@@ -9,12 +9,14 @@ use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use itertools::Either;
+use namada_sdk::account::AccountPublicKeysMap;
 use namada_sdk::args::DeviceTransport;
 use namada_sdk::chain::ChainId;
 use namada_sdk::dec::Dec;
 use namada_sdk::key::*;
 use namada_sdk::string_encoding::StringEncoded;
 use namada_sdk::token;
+use namada_sdk::tx::Tx;
 use namada_sdk::uint::Uint;
 use namada_sdk::wallet::{alias, Wallet};
 use namada_vm::validate_untrusted_wasm;
@@ -995,6 +997,59 @@ pub async fn sign_genesis_tx(
             let transactions = toml::to_string(&signed).unwrap();
             println!("{transactions}");
         }
+    }
+}
+
+/// Offline sign a transactions.
+pub async fn sign_offline(
+    _global_args: args::Global,
+    args::SignOffline {
+        tx_path,
+        secret_keys,
+        owner,
+    }: args::SignOffline,
+) {
+    let tx_data = if let Ok(tx_data) = fs::read(&tx_path) {
+        tx_data
+    } else {
+        eprintln!("Couldn't open file at {}", tx_path.display());
+        safe_exit(1)
+    };
+
+    let tx = if let Ok(transaction) = Tx::deserialize(tx_data.as_ref()) {
+        transaction
+    } else {
+        eprintln!("Couldn't decode the transaction.");
+        safe_exit(1)
+    };
+
+    let account_public_keys_map = AccountPublicKeysMap::from_iter(
+        secret_keys.iter().map(|sk| sk.to_public()),
+    );
+
+    let signatures = tx.compute_section_signature(
+        &secret_keys,
+        &account_public_keys_map,
+        Some(owner),
+    );
+
+    for signature in &signatures {
+        let filename = format!(
+            "offline_signature_{}_{}.tx",
+            tx.header_hash().to_string().to_lowercase(),
+            signature.pubkey,
+        );
+
+        let signature_path = File::create(&filename)
+            .expect("Should be able to create signature file.");
+
+        serde_json::to_writer_pretty(signature_path, &signature)
+            .expect("Signature should be deserializable.");
+
+        println!(
+            "Signature for {} serialized at {}",
+            signature.pubkey, filename
+        );
     }
 }
 
