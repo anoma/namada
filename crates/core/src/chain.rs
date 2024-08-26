@@ -5,7 +5,7 @@ use std::num::ParseIntError;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use data_encoding::HEXUPPER;
+use data_encoding::{HEXLOWER, HEXUPPER};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
@@ -13,7 +13,6 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-use crate::bytes::ByteBuf;
 use crate::hash::Hash;
 use crate::time::DateTimeUtc;
 
@@ -287,7 +286,7 @@ pub enum ParseBlockHashError {
 
 impl core::fmt::Debug for BlockHash {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let hash = format!("{}", ByteBuf(&self.0));
+        let hash = HEXLOWER.encode(&self.0);
         f.debug_tuple("BlockHash").field(&hash).finish()
     }
 }

@@ -36,7 +36,7 @@ use ics23::{ExistenceProof, NonExistenceProof};
 use ics23_specs::ibc_leaf_spec;
 use namada_core::address::{Address, InternalAddress};
 use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
-use namada_core::bytes::ByteBuf;
+use namada_core::bytes::HEXLOWER;
 pub use namada_core::chain::{BlockHeight, Epoch};
 use namada_core::eth_bridge_pool::{is_pending_transfer_key, PendingTransfer};
 pub use namada_core::hash::{Hash, StorageHasher};
@@ -470,7 +470,7 @@ pub struct MerkleTree<H: StorageHasher + Default> {
 
 impl<H: StorageHasher + Default> core::fmt::Debug for MerkleTree<H> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let root_hash = format!("{}", ByteBuf(self.base.root().as_slice()));
+        let root_hash = HEXLOWER.encode(self.base.root().as_slice());
         f.debug_struct("MerkleTree")
             .field("root_hash", &root_hash)
             .finish()
@@ -846,7 +846,7 @@ impl From<MerkleRoot> for Hash {
 
 impl fmt::Display for MerkleRoot {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", ByteBuf(&self.0))
+        write!(f, "{}", HEXLOWER.encode(&self.0))
     }
 }
 
