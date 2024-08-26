@@ -1806,13 +1806,11 @@ fn apply_snapshot() -> Result<()> {
     let base_dir = node.test_dir.path();
     let db = namada_node::storage::open(node.db_path(), true, None)
         .expect("Could not open DB");
-    let snapshot = db.snapshot();
-
     let last_height = node.block_height();
-    let cfs = db.column_families();
-    snapshot
-        .write_to_file(cfs, base_dir.to_path_buf(), last_height)
+    let snapshot = db
+        .checkpoint(base_dir.to_path_buf(), last_height)
         .expect("Test failed");
+    snapshot.package().expect("Test failed");
     DbSnapshot::cleanup(last_height, base_dir, 1).expect("Test failed");
 
     let (node2, _services) = setup::setup()?;
@@ -1912,6 +1910,7 @@ fn snapshot_unhappy_flows() -> Result<()> {
             height: Default::default(),
             expected: vec![Default::default()],
             strikes: 0,
+            snapshot: tempfile::tempfile().unwrap(),
         });
     }
 

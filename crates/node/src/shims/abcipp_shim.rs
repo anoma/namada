@@ -29,6 +29,7 @@ use crate::facade::tendermint::v0_37::abci::{
 };
 use crate::facade::tower_abci::BoxError;
 use crate::shell::{EthereumOracleChannels, Shell};
+use crate::storage::DbSnapshot;
 
 /// The shim wraps the shell, which implements ABCI++.
 /// The shim makes a crude translation between the ABCI interface currently used
@@ -42,7 +43,7 @@ pub struct AbcippShim {
         Req,
         tokio::sync::oneshot::Sender<Result<Resp, BoxError>>,
     )>,
-    snapshot_task: Option<std::thread::JoinHandle<Result<(), std::io::Error>>>,
+    snapshot_task: Option<std::thread::JoinHandle<Result<(), DbError>>>,
     snapshots_to_keep: u64,
 }
 
@@ -227,15 +228,19 @@ impl AbcippShim {
         let base_dir = self.service.base_dir.clone();
 
         let (snap_send, snap_recv) = tokio::sync::oneshot::channel();
-        // let snapshots_to_keep = self.snapshots_to_keep;
+
+        let snapshots_to_keep = self.snapshots_to_keep;
         let snapshot_task = std::thread::spawn(move || {
             let db = crate::storage::open(db_path, true, None)
                 .expect("Could not open DB");
-            let snapshot = db.checkpoint(base_dir, height).unwrap();
+            let snapshot = db.checkpoint(base_dir.clone(), height)?;
             // signal to main thread that the snapshot has finished
             snap_send.send(()).unwrap();
-            snapshot.package().unwrap();
-            Ok(())
+            DbSnapshot::cleanup(height, &base_dir, snapshots_to_keep)
+                .map_err(|e| DbError::DBError(e.to_string()))?;
+            snapshot
+                .package()
+                .map_err(|e| DbError::DBError(e.to_string()))
         });
 
         // it's important that the thread is

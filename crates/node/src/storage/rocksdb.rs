@@ -44,9 +44,8 @@
 //!     - `current/{hash}`: a hash included in the current block
 //!     - `{hash}`: a hash included in previous blocks
 
-use std::ffi::OsStr;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, Write};
+use std::io::{BufWriter, Read, Seek, Write};
 use std::mem::ManuallyDrop;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -58,7 +57,7 @@ use data_encoding::HEXLOWER;
 use itertools::Either;
 use namada_replay_protection as replay_protection;
 use namada_sdk::arith::checked;
-use namada_sdk::collections::{HashMap, HashSet};
+use namada_sdk::collections::HashSet;
 use namada_sdk::eth_bridge::storage::bridge_pool;
 use namada_sdk::eth_bridge::storage::proof::BridgePoolRootProof;
 use namada_sdk::hash::Hash;
@@ -83,7 +82,6 @@ use rocksdb::{
     DBCompressionType, Direction, FlushOptions, IteratorMode, Options,
     ReadOptions, WriteBatch,
 };
-use sha2::{Digest, Sha256};
 
 use crate::config::utils::num_of_threads;
 use crate::storage;
@@ -1016,6 +1014,7 @@ impl DbSnapshot {
         number_to_keep: u64,
     ) -> std::io::Result<()> {
         let latest_height = latest_height.0;
+
         for height in Self::heights_of_stored_snapshots(base_dir)? {
             // this is correct... don't worry about it
             if checked!(height + number_to_keep <= latest_height).unwrap() {
