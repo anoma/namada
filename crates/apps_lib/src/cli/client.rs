@@ -816,6 +816,9 @@ impl CliApi {
                     ClientUtils::PkToTmAddress(PkToTmAddress(args)) => {
                         utils::pk_to_tm_address(global_args, args)
                     }
+                    ClientUtils::SignOffline(SignOffline(args)) => {
+                        utils::sign_offline(global_args, args).await
+                    }
                     ClientUtils::DefaultBaseDir(DefaultBaseDir(args)) => {
                         utils::default_base_dir(global_args, args)
                     }
