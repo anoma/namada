@@ -537,6 +537,8 @@ fn ibc_token_inflation() -> Result<()> {
         epoch = get_epoch(&test, &rpc).unwrap();
     }
 
+    // Check the target balance is zero before the inflation
+    check_balance(&test, AA_VIEWING_KEY, NAM, 0)?;
     // Shielding transfer 1 samoleans from Gaia to Namada
     let shielding_data_path = gen_ibc_shielding_data(
         &test,
