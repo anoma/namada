@@ -3,7 +3,7 @@
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use serde::{Serialize, Deserialize};
+use serde::Serialize;
 use namada_core::arith::checked;
 use namada_core::dec::Dec;
 use namada_core::storage::Epoch;
