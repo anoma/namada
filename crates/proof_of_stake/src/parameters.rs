@@ -18,7 +18,9 @@ use thiserror::Error;
 
 /// Proof-of-Stake system parameters. This includes parameters that are used in
 /// PoS but are read from other accounts storage (governance).
-#[derive(Debug, Clone, BorshDeserialize, BorshDeserializer, BorshSerialize, Serialize)]
+#[derive(
+    Debug, Clone, BorshDeserialize, BorshDeserializer, BorshSerialize, Serialize
+)]
 pub struct PosParams {
     /// PoS-owned params
     pub owned: OwnedPosParams,
@@ -29,7 +31,9 @@ pub struct PosParams {
 
 /// Proof-of-Stake system parameters owned by the PoS address, set at genesis
 /// and can only be changed via governance
-#[derive(Debug, Clone, BorshDeserialize, BorshDeserializer, BorshSerialize, Serialize)]
+#[derive(
+    Debug, Clone, BorshDeserialize, BorshDeserializer, BorshSerialize, Serialize
+)]
 pub struct OwnedPosParams {
     /// A maximum number of consensus validators
     pub max_validator_slots: u64,
