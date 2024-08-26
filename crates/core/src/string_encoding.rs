@@ -224,3 +224,18 @@ where
     let val_str: String = serde::Deserialize::deserialize(deserializer)?;
     FromStr::from_str(&val_str).map_err(serde::de::Error::custom)
 }
+
+/// Testing helpers
+#[cfg(any(test, feature = "testing"))]
+pub mod testing {
+    use core::fmt::Debug;
+
+    use super::Format;
+
+    /// String encoding roundtrip test
+    pub fn test_string_formatting<T: Format + Eq + Debug>(val: &T) {
+        let str = Format::encode(val);
+        let decoded: T = Format::decode(str).unwrap();
+        assert_eq!(val, &decoded)
+    }
+}
