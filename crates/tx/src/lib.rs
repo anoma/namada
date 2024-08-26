@@ -92,8 +92,7 @@ mod hex_data_serde {
     use serde::{de, Deserializer, Serializer};
 
     pub fn serialize<S>(
-        #[allow(clippy::ptr_arg)]
-        data: &Vec<u8>,
+        #[allow(clippy::ptr_arg)] data: &Vec<u8>,
         serializer: S,
     ) -> Result<S::Ok, S::Error>
     where
