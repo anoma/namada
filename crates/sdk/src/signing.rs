@@ -295,6 +295,7 @@ pub async fn aux_signing_data(
     owner: Option<Address>,
     default_signer: Option<Address>,
     extra_public_keys: Vec<common::PublicKey>,
+    disposable_signing_key: bool,
 ) -> Result<SigningTxData, Error> {
     let mut public_keys =
         tx_signers(context, args, default_signer.clone()).await?;
@@ -330,7 +331,7 @@ pub async fn aux_signing_data(
         ),
     };
 
-    let fee_payer = if args.disposable_signing_key {
+    let fee_payer = if disposable_signing_key {
         context
             .wallet_mut()
             .await

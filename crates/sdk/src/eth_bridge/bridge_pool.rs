@@ -84,7 +84,8 @@ pub async fn build_bridge_pool_tx(
             Some(sender_.clone()),
             // tx signer
             Some(sender_),
-            vec![]
+            vec![],
+            false,
         ),
     )?;
     let (fee_amount, _) =
