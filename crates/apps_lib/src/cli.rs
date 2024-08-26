@@ -3404,7 +3404,7 @@ pub mod args {
     );
     pub const PRE_GENESIS: ArgFlag = flag("pre-genesis");
     pub const PRIVATE_KEYS: ArgMulti<common::SecretKey, GlobStar> =
-        arg_multi("private-keys");
+        arg_multi("secret-keys");
     pub const PROPOSAL_PGF_STEWARD: ArgFlag = flag("pgf-stewards");
     pub const PROPOSAL_PGF_FUNDING: ArgFlag = flag("pgf-funding");
     pub const PROTOCOL_KEY: ArgOpt<WalletPublicKey> = arg_opt("protocol-key");
