@@ -1182,8 +1182,7 @@ fn pgf_governance_proposal() -> Result<()> {
         CapturedOutput::of(|| run(&node, Bin::Client, query_total_supply_args));
     assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(
-        "token tnam1q9kn74xfzytqkqyycfrhycr8ajam8ny935cge0z5: 114400023904507 \
-         raw units"
+        "token tnam1q9kn74xfzytqkqyycfrhycr8ajam8ny935cge0z5: 114400023.904507"
     ));
 
     let query_native_supply_args =

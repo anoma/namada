@@ -36,7 +36,8 @@ use namada_sdk::proof_of_stake::types::{
 use namada_sdk::proof_of_stake::PosParams;
 use namada_sdk::queries::{Client, RPC};
 use namada_sdk::rpc::{
-    self, enriched_bonds_and_unbonds, query_epoch, TxResponse,
+    self, enriched_bonds_and_unbonds, format_denominated_amount, query_epoch,
+    TxResponse,
 };
 use namada_sdk::storage::BlockResults;
 use namada_sdk::tendermint_rpc::endpoint::status;
@@ -1188,9 +1189,17 @@ pub async fn query_total_supply<N: Namada>(
             .total_supply(context.client(), &token)
             .await,
     );
+    let amount_str = format_denominated_amount(
+        context.client(),
+        context.io(),
+        &token,
+        supply,
+    )
+    .await;
     display_line!(
         context.io(),
-        "Total supply of token {token}: {supply} raw units"
+        "Total supply of token {token}: {}",
+        amount_str
     );
 }
 
