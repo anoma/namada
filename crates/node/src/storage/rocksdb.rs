@@ -738,32 +738,17 @@ impl RocksDB {
             .map_err(|e| Error::DBError(e.into_string()))
     }
 
-    /// Writes an entry directly to the db
+    /// Writes an entry directly to a db batch update
+    /// directly
     pub fn insert_entry(
         &self,
         batch: &mut RocksDBWriteBatch,
-        height: Option<BlockHeight>,
         cf: &DbColFam,
         key: &Key,
         new_value: impl AsRef<[u8]>,
     ) -> Result<()> {
-        let state_cf = self.get_column_family(STATE_CF)?;
-        let last_height: BlockHeight = self
-            .read_value(state_cf, BLOCK_HEIGHT_KEY)?
-            .ok_or_else(|| {
-                Error::DBError("No block height found".to_string())
-            })?;
-        let desired_height = height.unwrap_or(last_height);
-
-        if desired_height != last_height {
-            todo!(
-                "Overwriting values at heights different than the last \
-                 committed height hast yet to be implemented"
-            );
-        }
         // NB: the following code only updates values
         // written to at the last committed height
-
         let val = new_value.as_ref();
 
         // Write the new key-val in the Db column family
