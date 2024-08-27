@@ -63,10 +63,10 @@ mod tests {
     use std::collections::BTreeSet;
 
     use namada_core::address;
+    use namada_core::chain::BlockHeight;
     use namada_core::ethereum_events::testing::{
         arbitrary_nonce, arbitrary_single_transfer,
     };
-    use namada_core::storage::BlockHeight;
 
     use super::*;
 

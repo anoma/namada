@@ -5,12 +5,12 @@ use std::ops::Deref;
 
 use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_core::chain::Epoch;
 use namada_core::collections::HashMap;
 use namada_core::eth_abi::{AbiEncode, Encode, Token};
 use namada_core::ethereum_events::EthAddress;
 use namada_core::keccak::KeccakHash;
 use namada_core::key::common::{self, Signature};
-use namada_core::storage::Epoch;
 use namada_core::voting_power::{EthBridgeVotingPower, FractionalVotingPower};
 use namada_core::{ethereum_structs, token};
 use namada_macros::BorshDeserializer;

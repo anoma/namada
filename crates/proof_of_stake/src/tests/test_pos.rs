@@ -6,15 +6,13 @@ use std::collections::BTreeMap;
 
 use assert_matches::assert_matches;
 use namada_core::address::Address;
+use namada_core::chain::{BlockHeight, Epoch};
 use namada_core::collections::HashSet;
 use namada_core::dec::Dec;
 use namada_core::key::testing::{common_sk_from_simple_seed, gen_keypair};
 use namada_core::key::RefTo;
-use namada_core::storage::{BlockHeight, Epoch};
 use namada_core::{address, key};
 use namada_state::testing::TestState;
-use namada_storage::collections::lazy_map::Collectable;
-use namada_storage::StorageRead;
 use namada_trans_token::{
     self as token, credit_tokens, get_effective_total_native_supply,
     read_balance,
@@ -26,6 +24,7 @@ use proptest::test_runner::Config;
 use test_log::test;
 
 use crate::epoched::EpochOffset;
+use crate::lazy_map::Collectable;
 use crate::parameters::testing::arb_pos_params;
 use crate::parameters::OwnedPosParams;
 use crate::queries::find_delegation_validators;
@@ -61,7 +60,7 @@ use crate::{
     consensus_validator_set_handle, is_delegator, is_validator,
     jail_for_liveness, read_validator_stake, staking_token_address,
     unbond_handle, validator_consensus_key_handle,
-    validator_set_positions_handle, validator_state_handle,
+    validator_set_positions_handle, validator_state_handle, StorageRead,
 };
 
 proptest! {

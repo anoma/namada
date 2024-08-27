@@ -19,7 +19,8 @@
 
 use namada_core::address::{Address, InternalAddress};
 use namada_core::hash::Hash;
-use namada_core::storage::{DbKeySeg, Key};
+use namada_core::storage::DbKeySeg;
+pub use namada_core::storage::Key;
 
 const ERROR_MSG: &str = "Cannot obtain a valid db key";
 

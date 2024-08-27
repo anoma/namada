@@ -3,7 +3,7 @@ use std::fmt::Display;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::address::Address;
-use namada_core::storage::Epoch;
+use namada_core::chain::Epoch;
 use namada_core::token;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]

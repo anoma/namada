@@ -9,7 +9,7 @@ use borsh_ext::BorshSerializeExt;
 use color_eyre::eyre::Result;
 use itertools::sorted;
 use ledger_namada_rs::{BIP44Path, NamadaApp};
-use namada_core::storage::BlockHeight;
+use namada_core::chain::BlockHeight;
 use namada_sdk::address::{Address, DecodeError};
 use namada_sdk::io::Io;
 use namada_sdk::key::*;

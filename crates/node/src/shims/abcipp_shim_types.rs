@@ -170,7 +170,7 @@ pub mod shim {
 
         use bytes::Bytes;
         use namada_sdk::hash::Hash;
-        use namada_sdk::storage::Header;
+        use namada_sdk::storage::BlockHeader;
         use namada_sdk::tendermint::abci::types::CommitInfo;
         use namada_sdk::tendermint::account::Id;
         use namada_sdk::tendermint::block::Height;
@@ -193,7 +193,7 @@ pub mod shim {
 
         #[derive(Debug, Clone)]
         pub struct FinalizeBlock {
-            pub header: Header,
+            pub header: BlockHeader,
             pub block_hash: Hash,
             pub byzantine_validators: Vec<Misbehavior>,
             pub txs: Vec<ProcessedTx>,
@@ -217,7 +217,7 @@ pub mod shim {
             fn from(req: tm_request::BeginBlock) -> FinalizeBlock {
                 let header = req.header;
                 FinalizeBlock {
-                    header: Header {
+                    header: BlockHeader {
                         hash: Hash::try_from(header.app_hash.as_bytes())
                             .unwrap_or_default(),
                         time: DateTimeUtc::try_from(header.time).unwrap(),

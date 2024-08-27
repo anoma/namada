@@ -97,7 +97,7 @@ pub enum Error {
     #[error("Failed type conversion: {0}")]
     ConversionError(String),
     #[error("Storage error: {0}")]
-    StorageError(String),
+    Error(String),
     #[error("Tx is not allowed in allowlist parameter")]
     DisallowedTx,
     #[error("Invalid transaction section signature: {0}")]
@@ -123,7 +123,7 @@ where
             .and_then(|x| Section::code_sec(&x))
         {
             if namada_parameters::is_tx_allowed(storage, &code_sec.code.hash())
-                .map_err(|e| Error::StorageError(e.to_string()))?
+                .map_err(|e| Error::Error(e.to_string()))?
             {
                 return Ok(());
             }
@@ -465,8 +465,11 @@ where
         .map_err(|rt_error| {
             let downcasted_err = || {
                 let source_err = rt_error.source()?;
-                let downcasted_vp_rt_err: &vp_host_fns::RuntimeError =
-                    source_err.downcast_ref()?;
+                let downcasted_vp_err =
+                    source_err.downcast_ref::<vp_host_fns::Error>()?;
+                let downcasted_vp_rt_err = downcasted_vp_err
+                    .downcast_ref::<vp_host_fns::RuntimeError>(
+                )?;
 
                 match downcasted_vp_rt_err {
                     vp_host_fns::RuntimeError::OutOfGas(_) => {
@@ -534,7 +537,7 @@ where
         ctx: &namada_vp::native_vp::Ctx<'a, S, VpCache<CA>, Self>,
         vp_code_hash: Hash,
         input_data: BatchedTxRef<'_>,
-    ) -> namada_state::StorageResult<()> {
+    ) -> namada_state::Result<()> {
         use namada_state::ResultExt;
 
         let eval_runner =
@@ -1021,7 +1024,7 @@ mod tests {
 
     use super::memory::{TX_MEMORY_INIT_PAGES, VP_MEMORY_INIT_PAGES};
     use super::*;
-    use crate::host_env::TxRuntimeError;
+    use crate::host_env::{self, TxRuntimeError};
     use crate::wasm;
 
     const TX_GAS_LIMIT: u64 = 10_000_000_000_000;
@@ -1072,7 +1075,10 @@ mod tests {
         };
         let source_err =
             rt_error.source().expect("No runtime error source found");
-        let downcasted_tx_rt_err: &TxRuntimeError = source_err
+        let downcasted_tx_err: &host_env::Error = source_err
+            .downcast_ref()
+            .unwrap_or_else(|| panic!("{assert_msg}: {source_err}"));
+        let downcasted_tx_rt_err: &TxRuntimeError = downcasted_tx_err
             .downcast_ref()
             .unwrap_or_else(|| panic!("{assert_msg}: {source_err}"));
         let TxRuntimeError::MemoryError(tx_mem_err) = downcasted_tx_rt_err
@@ -1094,17 +1100,13 @@ mod tests {
         };
         let source_err =
             rt_error.source().expect("No runtime error source found");
-        let downcasted_tx_rt_err: &vp_host_fns::RuntimeError = source_err
+        let downcasted_vp_err: &host_env::Error = source_err
             .downcast_ref()
             .unwrap_or_else(|| panic!("{assert_msg}: {source_err}"));
-        let vp_host_fns::RuntimeError::MemoryError(vp_mem_err) =
-            downcasted_tx_rt_err
-        else {
-            panic!("{assert_msg}: {downcasted_tx_rt_err}");
-        };
-        vp_mem_err
+        let downcasted_err: &wasm::memory::Error = downcasted_vp_err
             .downcast_ref()
-            .unwrap_or_else(|| panic!("{assert_msg}: {vp_mem_err}"))
+            .unwrap_or_else(|| panic!("{assert_msg}: {downcasted_vp_err}"));
+        downcasted_err
     }
 
     /// Test that when a transaction wasm goes over the stack-height limit, the

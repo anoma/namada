@@ -60,7 +60,7 @@ impl Ctx {
         source: Option<&Address>,
         validator: &Address,
         amount: token::Amount,
-    ) -> EnvResult<ResultSlashing> {
+    ) -> Result<ResultSlashing> {
         // The tx must be authorized by the source address
         let verifier = source.as_ref().unwrap_or(&validator);
         self.insert_verifier(verifier)?;
@@ -89,7 +89,7 @@ impl Ctx {
         &mut self,
         source: Option<&Address>,
         validator: &Address,
-    ) -> EnvResult<token::Amount> {
+    ) -> Result<token::Amount> {
         // The tx must be authorized by the source address
         let verifier = source.as_ref().unwrap_or(&validator);
         self.insert_verifier(verifier)?;
@@ -201,7 +201,7 @@ impl Ctx {
         &mut self,
         source: Option<&Address>,
         validator: &Address,
-    ) -> EnvResult<token::Amount> {
+    ) -> Result<token::Amount> {
         // The tx must be authorized by the source address
         let verifier = source.as_ref().unwrap_or(&validator);
         self.insert_verifier(verifier)?;
@@ -239,7 +239,7 @@ impl Ctx {
             avatar,
             name,
         }: BecomeValidator,
-    ) -> EnvResult<Address> {
+    ) -> Result<Address> {
         let current_epoch = self.get_block_epoch()?;
         let eth_cold_key = key::common::PublicKey::Secp256k1(eth_cold_key);
         let eth_hot_key = key::common::PublicKey::Secp256k1(eth_hot_key);

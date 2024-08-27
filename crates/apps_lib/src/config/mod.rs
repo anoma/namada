@@ -11,9 +11,8 @@ use std::num::NonZeroU64;
 use std::path::{Path, PathBuf};
 
 use directories::ProjectDirs;
-use namada_sdk::chain::ChainId;
+use namada_sdk::chain::{BlockHeight, ChainId};
 use namada_sdk::collections::HashMap;
-use namada_sdk::storage::BlockHeight;
 use namada_sdk::time::Rfc3339String;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;

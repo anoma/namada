@@ -2,10 +2,10 @@
 
 use eyre::Result;
 use namada_core::address::Address;
+use namada_core::chain::BlockHeight;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::keccak::keccak_hash;
 use namada_core::key::{common, SignableEthMessage};
-use namada_core::storage::BlockHeight;
 use namada_core::token::Amount;
 use namada_state::{DBIter, StorageHasher, WlState, DB};
 use namada_storage::{StorageRead, StorageWrite};

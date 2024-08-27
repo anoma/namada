@@ -21,10 +21,6 @@ pub mod logging;
 pub mod tendermint_node;
 pub mod wallet;
 pub mod wasm_loader;
-// This is here only to include the std's docs in our docs.
-// Taken from <https://github.com/rust-lang/rfcs/issues/2324#issuecomment-502437904>.
-#[doc(inline)]
-pub use std;
 
 pub use namada_sdk::*;
 

@@ -3,16 +3,15 @@
 use namada_controller::PDController;
 use namada_core::address::{self, Address};
 use namada_core::arith::{self, checked};
+use namada_core::chain::{BlockHeight, Epoch};
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::dec::Dec;
-use namada_core::storage::{BlockHeight, Epoch};
 use namada_core::token;
 use namada_core::uint::{Uint, I256};
-use namada_storage::collections::lazy_map::NestedSubKey;
-use namada_storage::{ResultExt, StorageRead, StorageWrite};
 use namada_systems::{governance, parameters, trans_token};
 use thiserror::Error;
 
+use crate::lazy_map::NestedSubKey;
 use crate::storage::{
     consensus_validator_set_handle, get_last_reward_claim_epoch,
     read_last_pos_inflation_amount, read_last_staked_ratio, read_pos_params,
@@ -24,7 +23,8 @@ use crate::storage::{
 use crate::types::{into_tm_voting_power, BondId, ValidatorState, VoteInfo};
 use crate::{
     bond_amounts_for_rewards, get_total_consensus_stake, staking_token_address,
-    storage, storage_key, InflationError, PosParams,
+    storage, storage_key, InflationError, PosParams, Result, ResultExt,
+    StorageRead, StorageWrite,
 };
 
 /// This is equal to 0.01.
@@ -65,7 +65,7 @@ pub fn compute_inflation(
     epochs_per_year: u64,
     target_ratio: Dec,
     last_ratio: Dec,
-) -> namada_storage::Result<token::Amount> {
+) -> Result<token::Amount> {
     let controller = PDController::new(
         total_native_amount.into(),
         max_reward_rate,
@@ -116,7 +116,9 @@ impl PosRewardsCalculator {
     /// Calculate the rewards coefficients. These are used in combination with
     /// the validator's signing behavior and stake to determine the fraction of
     /// the block rewards earned.
-    pub fn get_reward_coeffs(&self) -> Result<PosRewards, RewardsError> {
+    pub fn get_reward_coeffs(
+        &self,
+    ) -> std::result::Result<PosRewards, RewardsError> {
         let votes_needed = self.get_min_required_votes();
 
         let Self {
@@ -175,7 +177,7 @@ pub(crate) fn log_block_rewards<S, Gov>(
     height: BlockHeight,
     current_epoch: Epoch,
     new_epoch: bool,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageWrite + StorageRead,
     Gov: governance::Read<S>,
@@ -217,7 +219,7 @@ pub(crate) fn log_block_rewards_aux<S, Gov>(
     epoch: impl Into<Epoch>,
     proposer_address: &Address,
     votes: Vec<VoteInfo>,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
     Gov: governance::Read<S>,
@@ -359,7 +361,7 @@ pub fn apply_inflation<S, Gov, Parameters, Token>(
     storage: &mut S,
     last_epoch: Epoch,
     num_blocks_in_last_epoch: u64,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
     Gov: governance::Read<S>,
@@ -441,7 +443,7 @@ pub fn update_rewards_products_and_mint_inflation<S, Token>(
     inflation: token::Amount,
     staking_token: &Address,
     total_native_tokens: token::Amount,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
     Token: trans_token::Write<S>,
@@ -559,7 +561,7 @@ pub fn compute_current_rewards_from_bonds<S, Gov>(
     source: &Address,
     validator: &Address,
     current_epoch: Epoch,
-) -> namada_storage::Result<token::Amount>
+) -> Result<token::Amount>
 where
     S: StorageRead,
     Gov: governance::Read<S>,
@@ -616,7 +618,7 @@ pub fn add_rewards_to_counter<S>(
     source: &Address,
     validator: &Address,
     new_rewards: token::Amount,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -631,7 +633,7 @@ pub fn take_rewards_from_counter<S>(
     storage: &mut S,
     source: &Address,
     validator: &Address,
-) -> namada_storage::Result<token::Amount>
+) -> Result<token::Amount>
 where
     S: StorageRead + StorageWrite,
 {
@@ -647,7 +649,7 @@ pub fn read_rewards_counter<S>(
     storage: &S,
     source: &Address,
     validator: &Address,
-) -> namada_storage::Result<token::Amount>
+) -> Result<token::Amount>
 where
     S: StorageRead,
 {

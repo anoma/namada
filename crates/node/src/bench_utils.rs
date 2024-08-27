@@ -23,7 +23,8 @@ use namada_apps_lib::cli::Context;
 use namada_apps_lib::wallet::{defaults, CliWalletUtils};
 use namada_sdk::address::{self, Address, InternalAddress, MASP};
 use namada_sdk::args::ShieldedSync;
-use namada_sdk::chain::ChainId;
+use namada_sdk::chain::testing::get_dummy_header;
+use namada_sdk::chain::{BlockHeight, ChainId, Epoch};
 use namada_sdk::events::extend::{
     ComposeEvent, MaspTxBatchRefs, MaspTxBlockIndex,
 };
@@ -80,8 +81,7 @@ use namada_sdk::queries::{
     Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
 };
 use namada_sdk::state::StorageRead;
-use namada_sdk::storage::testing::get_dummy_header;
-use namada_sdk::storage::{BlockHeight, Epoch, Key, KeySeg, TxIndex};
+use namada_sdk::storage::{Key, KeySeg, TxIndex};
 use namada_sdk::time::DateTimeUtc;
 use namada_sdk::token::{self, Amount, DenominatedAmount, Transfer};
 use namada_sdk::tx::data::pos::Bond;

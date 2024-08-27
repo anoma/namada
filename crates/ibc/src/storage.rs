@@ -17,9 +17,9 @@ use namada_core::address::{Address, InternalAddress};
 use namada_core::storage::{DbKeySeg, Key, KeySeg};
 use namada_core::token::Amount;
 use namada_events::EmitEvents;
-use namada_state::{StorageRead, StorageResult, StorageWrite};
+pub use namada_state::{Error, Result};
+use namada_state::{StorageRead, StorageWrite};
 use namada_systems::trans_token;
-use thiserror::Error;
 
 use crate::event::TOKEN_EVENT_DESCRIPTOR;
 use crate::parameters::IbcParameters;
@@ -39,20 +39,6 @@ const THROUGHPUT_LIMIT: &str = "throughput_limit";
 const DEPOSIT: &str = "deposit";
 const WITHDRAW: &str = "withdraw";
 
-#[allow(missing_docs)]
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("Storage key error: {0}")]
-    StorageKey(namada_core::storage::Error),
-    #[error("Invalid Key: {0}")]
-    InvalidKey(String),
-    #[error("Invalid IBC trace: {0}")]
-    InvalidIbcTrace(String),
-}
-
-/// IBC storage functions result
-pub type Result<T> = std::result::Result<T, Error>;
-
 /// Mint IBC tokens. This function doesn't emit event (see
 /// `mint_tokens_and_emit_event` below)
 pub fn mint_tokens<S, Token>(
@@ -60,7 +46,7 @@ pub fn mint_tokens<S, Token>(
     target: &Address,
     token: &Address,
     amount: Amount,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
     Token: trans_token::Keys + trans_token::Read<S> + trans_token::Write<S>,
@@ -81,7 +67,7 @@ pub fn mint_tokens_and_emit_event<S, Token>(
     target: &Address,
     token: &Address,
     amount: Amount,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite + EmitEvents,
     Token: trans_token::Keys
@@ -108,7 +94,7 @@ pub fn burn_tokens<S, Token>(
     target: &Address,
     token: &Address,
     amount: Amount,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite + EmitEvents,
     Token:
@@ -129,7 +115,7 @@ where
 
 /// Returns a key of the IBC-related data
 pub fn ibc_key(path: impl AsRef<str>) -> Result<Key> {
-    let path = Key::parse(path).map_err(Error::StorageKey)?;
+    let path = Key::parse(path)?;
     let addr = Address::Internal(InternalAddress::Ibc);
     let key = Key::from(addr.to_db_key());
     Ok(key.join(&path))
@@ -343,9 +329,9 @@ pub fn client_id(key: &Key) -> Result<ClientId> {
             && prefix == "clients" =>
         {
             ClientId::from_str(&client_id.raw())
-                .map_err(|e| Error::InvalidKey(e.to_string()))
+                .map_err(|e| Error::new_alloc(e.to_string()))
         }
-        _ => Err(Error::InvalidKey(format!(
+        _ => Err(Error::new_alloc(format!(
             "The key doesn't have a client ID: {}",
             key
         ))),
@@ -367,9 +353,9 @@ pub fn consensus_height(key: &Key) -> Result<Height> {
             && module == "consensusStates" =>
         {
             Height::from_str(height)
-                .map_err(|e| Error::InvalidKey(e.to_string()))
+                .map_err(|e| Error::new_alloc(e.to_string()))
         }
-        _ => Err(Error::InvalidKey(format!(
+        _ => Err(Error::new_alloc(format!(
             "The key doesn't have a consensus height: {}",
             key
         ))),
@@ -388,9 +374,9 @@ pub fn connection_id(key: &Key) -> Result<ConnectionId> {
             && prefix == "connections" =>
         {
             ConnectionId::from_str(&conn_id.raw())
-                .map_err(|e| Error::InvalidKey(e.to_string()))
+                .map_err(|e| Error::new_alloc(e.to_string()))
         }
-        _ => Err(Error::InvalidKey(format!(
+        _ => Err(Error::new_alloc(format!(
             "The key doesn't have a connection ID: {}",
             key
         ))),
@@ -417,12 +403,12 @@ pub fn port_channel_id(key: &Key) -> Result<(PortId, ChannelId)> {
             && module1 == "channels" =>
         {
             let port_id = PortId::from_str(&port.raw())
-                .map_err(|e| Error::InvalidKey(e.to_string()))?;
+                .map_err(|e| Error::new_alloc(e.to_string()))?;
             let channel_id = ChannelId::from_str(&channel.raw())
-                .map_err(|e| Error::InvalidKey(e.to_string()))?;
+                .map_err(|e| Error::new_alloc(e.to_string()))?;
             Ok((port_id, channel_id))
         }
-        _ => Err(Error::InvalidKey(format!(
+        _ => Err(Error::new_alloc(format!(
             "The key doesn't have port ID and channel ID: Key {}",
             key
         ))),
@@ -454,14 +440,14 @@ pub fn port_channel_sequence_id(
             && module2 == "sequences" =>
         {
             let port_id = PortId::from_str(&port_id.raw())
-                .map_err(|e| Error::InvalidKey(e.to_string()))?;
+                .map_err(|e| Error::new_alloc(e.to_string()))?;
             let channel_id = ChannelId::from_str(&channel_id.raw())
-                .map_err(|e| Error::InvalidKey(e.to_string()))?;
+                .map_err(|e| Error::new_alloc(e.to_string()))?;
             let seq = Sequence::from_str(&seq_index.raw())
-                .map_err(|e| Error::InvalidKey(e.to_string()))?;
+                .map_err(|e| Error::new_alloc(e.to_string()))?;
             Ok((port_id, channel_id, seq))
         }
-        _ => Err(Error::InvalidKey(format!(
+        _ => Err(Error::new_alloc(format!(
             "The key doesn't have port ID, channel ID and sequence number: \
              Key {}",
             key,
@@ -481,9 +467,9 @@ pub fn port_id(key: &Key) -> Result<PortId> {
             && prefix == "ports" =>
         {
             PortId::from_str(&port_id.raw())
-                .map_err(|e| Error::InvalidKey(e.to_string()))
+                .map_err(|e| Error::new_alloc(e.to_string()))
         }
-        _ => Err(Error::InvalidKey(format!(
+        _ => Err(Error::new_alloc(format!(
             "The key doesn't have a port ID: Key {}",
             key
         ))),
@@ -591,7 +577,7 @@ pub fn mint_limit_key(token: &Address) -> Key {
 pub fn get_limits<S: StorageRead>(
     storage: &S,
     token: &Address,
-) -> StorageResult<(Amount, Amount)> {
+) -> Result<(Amount, Amount)> {
     let mint_limit_key = mint_limit_key(token);
     let mint_limit: Option<Amount> = storage.read(&mint_limit_key)?;
     let throughput_limit_key = throughput_limit_key(token);

@@ -5,15 +5,14 @@ use std::marker::PhantomData;
 
 use namada_core::address::Address;
 use namada_core::arith::checked;
+use namada_core::chain::{BlockHeader, BlockHeight, Epoch, Epochs};
 use namada_core::collections::{HashMap, HashSet};
-use namada_core::storage::{BlockHeight, Epoch, Epochs, Header, Key, TxIndex};
+use namada_core::storage::{Key, TxIndex};
 use namada_events::Event;
 use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
 use namada_state::write_log::StorageModification;
-pub use namada_state::StorageResult as Result;
-use namada_state::{
-    PrefixIter, StateRead, StorageError, StorageRead, StorageWrite,
-};
+pub use namada_state::Result;
+use namada_state::{Error, PrefixIter, StateRead, StorageRead, StorageWrite};
 use namada_systems::trans_token::{self as token, Amount};
 use namada_vp::native_vp::{CtxPreStorageRead, VpEvaluator};
 use namada_vp::VpEnv;
@@ -110,9 +109,9 @@ Self: 'iter;
                     .charge_gas(checked!(len * MEMORY_ACCESS_GAS_PER_BYTE)?)?;
                 Ok(None)
             }
-            Some(StorageModification::InitAccount { .. }) => Err(
-                StorageError::new_const("InitAccount shouldn't be inserted"),
-            ),
+            Some(StorageModification::InitAccount { .. }) => {
+                Err(Error::new_const("InitAccount shouldn't be inserted"))
+            }
             None => {
                 let len = key.len() as u64;
                 self.ctx
@@ -151,7 +150,10 @@ Self: 'iter;
         self.ctx.get_block_height()
     }
 
-    fn get_block_header(&self, height: BlockHeight) -> Result<Option<Header>> {
+    fn get_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<BlockHeader>> {
         self.ctx.get_block_header(height)
     }
 
@@ -338,7 +340,10 @@ where
         self.ctx.get_block_height()
     }
 
-    fn get_block_header(&self, height: BlockHeight) -> Result<Option<Header>> {
+    fn get_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<BlockHeader>> {
         self.ctx.get_block_header(height)
     }
 

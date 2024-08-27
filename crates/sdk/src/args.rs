@@ -6,14 +6,13 @@ use std::str::FromStr;
 use std::time::Duration as StdDuration;
 
 use namada_core::address::Address;
-use namada_core::chain::ChainId;
+use namada_core::chain::{BlockHeight, ChainId, Epoch};
 use namada_core::collections::HashMap;
 use namada_core::dec::Dec;
 use namada_core::ethereum_events::EthAddress;
 use namada_core::keccak::KeccakHash;
 use namada_core::key::{common, SchemeType};
 use namada_core::masp::{MaspEpoch, PaymentAddress};
-use namada_core::storage::{BlockHeight, Epoch};
 use namada_core::time::DateTimeUtc;
 use namada_core::{storage, token};
 use namada_governance::cli::onchain::{

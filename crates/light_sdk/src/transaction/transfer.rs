@@ -1,9 +1,9 @@
 use namada_sdk::address::Address;
 use namada_sdk::hash::Hash;
 use namada_sdk::key::common;
-use namada_sdk::masp::TxId;
-use namada_sdk::token::transaction::Transaction;
-pub use namada_sdk::token::{DenominatedAmount, Transfer};
+pub use namada_sdk::token::{
+    DenominatedAmount, MaspTransaction, MaspTxId, Transfer,
+};
 use namada_sdk::tx::data::GasLimit;
 use namada_sdk::tx::{Authorization, Tx, TxError, TX_TRANSFER_WASM};
 
@@ -26,8 +26,8 @@ impl TransferBuilder {
 
     /// Build a shielded transfer transaction from the given parameters
     pub fn shielded(
-        shielded_section_hash: TxId,
-        transaction: Transaction,
+        shielded_section_hash: MaspTxId,
+        transaction: MaspTransaction,
         args: GlobalArgs,
     ) -> Self {
         let data = Transfer::masp(shielded_section_hash);

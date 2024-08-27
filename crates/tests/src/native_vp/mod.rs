@@ -12,7 +12,7 @@ use namada_sdk::storage;
 use namada_vm::wasm::run::VpEvalWasm;
 use namada_vm::wasm::VpCache;
 use namada_vm::WasmCacheRwAccess;
-use namada_vp::native_vp::{Ctx, NativeVp};
+use namada_vp::native_vp::{self, Ctx, NativeVp};
 
 use crate::tx::TestTxEnv;
 
@@ -79,7 +79,7 @@ impl TestNativeVpEnv {
     pub fn validate_tx<'view, 'ctx: 'view, T>(
         &'ctx self,
         vp: &'view T,
-    ) -> Result<(), <T as NativeVp<'view>>::Error>
+    ) -> native_vp::Result<()>
     where
         T: 'view + NativeVp<'view>,
     {

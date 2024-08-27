@@ -2,11 +2,9 @@ use std::fmt::Debug;
 use std::num::TryFromIntError;
 
 use namada_core::address::EstablishedAddressGen;
+use namada_core::chain::{BlockHeader, BlockHeight, Epoch, Epochs};
 use namada_core::hash::{Error as HashError, Hash};
-use namada_core::storage::{
-    BlockHeight, BlockResults, DbColFam, Epoch, Epochs, EthEventsQueue, Header,
-    Key,
-};
+use namada_core::storage::{BlockResults, DbColFam, EthEventsQueue, Key};
 use namada_core::time::DateTimeUtc;
 use namada_core::{arith, ethereum_events, ethereum_structs};
 use namada_merkle_tree::{
@@ -87,7 +85,7 @@ pub struct BlockStateWrite<'a> {
     /// Merkle tree stores
     pub merkle_tree_stores: MerkleTreeStoresWrite<'a>,
     /// Header of the block
-    pub header: Option<&'a Header>,
+    pub header: Option<&'a BlockHeader>,
     /// Height of the block
     pub height: BlockHeight,
     /// Time of the block
@@ -156,7 +154,10 @@ pub trait DB: Debug {
     ) -> Result<()>;
 
     /// Read the block header with the given height from the DB
-    fn read_block_header(&self, height: BlockHeight) -> Result<Option<Header>>;
+    fn read_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<BlockHeader>>;
 
     /// Read the merkle tree stores with the given epoch. If a store_type is
     /// given, it reads only the specified tree. Otherwise, it reads all

@@ -5,9 +5,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use namada_core::address::Address;
 use namada_core::arith::{self, checked};
+use namada_core::chain::Epoch;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::common;
-use namada_core::storage::Epoch;
 use namada_core::token;
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::queries::{
