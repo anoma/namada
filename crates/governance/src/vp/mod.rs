@@ -90,9 +90,7 @@ where
         if is_proposal_accepted(
             &self.ctx.pre(),
             tx_data.tx.data(tx_data.cmt).unwrap_or_default().as_ref(),
-        )
-        .unwrap_or_default()
-        {
+        )? {
             return Ok(());
         }
 
