@@ -184,9 +184,9 @@ impl Transfer {
     }
 
     /// Set the key to the given amount
-    fn set<K: Ord>(
-        map: &mut BTreeMap<K, DenominatedAmount>,
-        key: K,
+    fn set(
+        map: &mut BTreeMap<Account, DenominatedAmount>,
+        key: Account,
         val: DenominatedAmount,
     ) {
         if val.is_zero() {
