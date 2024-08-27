@@ -202,7 +202,7 @@ test-unit-with-eth-bridge:
 test-unit-with-coverage:
 	$(cargo) +$(nightly) llvm-cov --output-path lcov.info \
 		--lcov \
-		-- --skip e2e --skip pos_state_machine_test --skip integration \
+		-- --skip e2e --skip pos_state_machine_test \
 		-Z unstable-options --report-time
 
 test-unit-mainnet:
