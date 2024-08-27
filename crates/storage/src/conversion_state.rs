@@ -2,14 +2,14 @@
 
 use std::collections::BTreeMap;
 
-use namada_core::address::Address;
+pub use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::masp::MaspEpoch;
-use namada_core::masp_primitives::asset_type::AssetType;
-use namada_core::masp_primitives::convert::AllowedConversion;
-use namada_core::masp_primitives::merkle_tree::FrozenCommitmentTree;
-use namada_core::masp_primitives::sapling;
-use namada_core::token::{Denomination, MaspDigitPos};
+pub use namada_core::masp::MaspEpoch;
+pub use namada_core::masp_primitives::asset_type::AssetType;
+pub use namada_core::masp_primitives::convert::AllowedConversion;
+pub use namada_core::masp_primitives::merkle_tree::FrozenCommitmentTree;
+pub use namada_core::masp_primitives::sapling::Node as SaplingNode;
+pub use namada_core::token::{Denomination, MaspDigitPos};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
@@ -39,7 +39,7 @@ pub struct ConversionState {
     /// The last amount of the native token distributed
     pub normed_inflation: Option<u128>,
     /// The tree currently containing all the conversions
-    pub tree: FrozenCommitmentTree<sapling::Node>,
+    pub tree: FrozenCommitmentTree<SaplingNode>,
     /// Map assets to their latest conversion and position in Merkle tree
     pub assets: BTreeMap<AssetType, ConversionLeaf>,
 }

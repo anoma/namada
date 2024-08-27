@@ -25,11 +25,11 @@ use std::marker::PhantomData;
 
 use namada_core::address::{Address, InternalAddress};
 use namada_core::arith::checked;
-use namada_core::chain::ProposalBytes;
-use namada_core::storage::BlockHeight;
+use namada_core::chain::BlockHeight;
+pub use namada_core::parameters::ProposalBytes;
 use namada_core::time::DurationSecs;
 use namada_core::{hints, token};
-use namada_storage::{ResultExt, StorageRead, StorageWrite};
+use namada_state::{Error, Key, ResultExt, StorageRead, StorageWrite};
 pub use namada_systems::parameters::*;
 pub use storage::{get_gas_scale, get_max_block_gas};
 use thiserror::Error;
@@ -40,7 +40,7 @@ pub use wasm_allowlist::{is_tx_allowed, is_vp_allowed};
 pub struct Store<S>(PhantomData<S>);
 
 impl<S> Keys for Store<S> {
-    fn implicit_vp_key() -> namada_core::storage::Key {
+    fn implicit_vp_key() -> Key {
         storage::get_implicit_vp_key()
     }
 }
@@ -99,7 +99,7 @@ pub const ADDRESS: Address = Address::Internal(InternalAddress::Parameters);
 #[derive(Error, Debug)]
 pub enum ReadError {
     #[error("Storage error: {0}")]
-    StorageError(namada_storage::Error),
+    Error(Error),
     #[error("Storage type error: {0}")]
     StorageTypeError(namada_core::storage::Error),
     #[error("Protocol parameters are missing, they must be always set")]
@@ -110,16 +110,13 @@ pub enum ReadError {
 #[derive(Error, Debug)]
 pub enum WriteError {
     #[error("Storage error: {0}")]
-    StorageError(namada_storage::Error),
+    Error(Error),
     #[error("Serialize error: {0}")]
     SerializeError(String),
 }
 
 /// Initialize parameters in storage in the genesis block.
-pub fn init_storage<S>(
-    parameters: &Parameters,
-    storage: &mut S,
-) -> namada_storage::Result<()>
+pub fn init_storage<S>(parameters: &Parameters, storage: &mut S) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -210,7 +207,7 @@ where
 pub fn update_vp_allowlist_parameter<S>(
     storage: &mut S,
     value: Vec<String>,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -229,7 +226,7 @@ where
 pub fn update_tx_allowlist_parameter<S>(
     storage: &mut S,
     value: Vec<String>,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -248,7 +245,7 @@ where
 pub fn update_epoch_parameter<S>(
     storage: &mut S,
     value: &EpochDuration,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -261,7 +258,7 @@ where
 pub fn update_epochs_per_year_parameter<S>(
     storage: &mut S,
     value: &u64,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -270,10 +267,7 @@ where
 }
 
 /// Update the implicit VP parameter in storage. Return the gas cost.
-pub fn update_implicit_vp<S>(
-    storage: &mut S,
-    implicit_vp: &[u8],
-) -> namada_storage::Result<()>
+pub fn update_implicit_vp<S>(storage: &mut S, implicit_vp: &[u8]) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -284,9 +278,7 @@ where
 }
 
 /// Read the epochs per year parameter from store
-pub fn read_epochs_per_year_parameter<S>(
-    storage: &S,
-) -> namada_storage::Result<u64>
+pub fn read_epochs_per_year_parameter<S>(storage: &S) -> Result<u64>
 where
     S: StorageRead,
 {
@@ -298,9 +290,7 @@ where
 }
 
 /// Read the epoch duration parameter from store
-pub fn read_epoch_duration_parameter<S>(
-    storage: &S,
-) -> namada_storage::Result<EpochDuration>
+pub fn read_epoch_duration_parameter<S>(storage: &S) -> Result<EpochDuration>
 where
     S: StorageRead,
 {
@@ -313,9 +303,7 @@ where
 }
 
 /// Read the masp epoch multiplier parameter from store
-pub fn read_masp_epoch_multiplier_parameter<S>(
-    storage: &S,
-) -> namada_storage::Result<u64>
+pub fn read_masp_epoch_multiplier_parameter<S>(storage: &S) -> Result<u64>
 where
     S: StorageRead,
 {
@@ -331,7 +319,7 @@ where
 pub fn read_gas_cost<S>(
     storage: &S,
     token: &Address,
-) -> namada_storage::Result<Option<token::Amount>>
+) -> Result<Option<token::Amount>>
 where
     S: StorageRead,
 {
@@ -343,7 +331,7 @@ where
 }
 
 /// Read the number of epochs per year parameter
-pub fn read_epochs_per_year<S>(storage: &S) -> namada_storage::Result<u64>
+pub fn read_epochs_per_year<S>(storage: &S) -> Result<u64>
 where
     S: StorageRead,
 {
@@ -355,9 +343,7 @@ where
 }
 
 /// Retrieve the `max_proposal_bytes` consensus parameter from storage.
-pub fn read_max_proposal_bytes<S>(
-    storage: &S,
-) -> namada_storage::Result<ProposalBytes>
+pub fn read_max_proposal_bytes<S>(storage: &S) -> Result<ProposalBytes>
 where
     S: StorageRead,
 {
@@ -370,7 +356,7 @@ where
 
 /// Read all the parameters from storage. Returns the parameters and gas
 /// cost.
-pub fn read<S>(storage: &S) -> namada_storage::Result<Parameters>
+pub fn read<S>(storage: &S) -> Result<Parameters>
 where
     S: StorageRead,
 {
@@ -479,10 +465,7 @@ where
 }
 
 /// Validate the size of a tx.
-pub fn validate_tx_bytes<S>(
-    storage: &S,
-    tx_size: usize,
-) -> namada_storage::Result<bool>
+pub fn validate_tx_bytes<S>(storage: &S, tx_size: usize) -> Result<bool>
 where
     S: StorageRead,
 {
@@ -499,7 +482,7 @@ pub fn native_erc20_key() -> storage::Key {
 
 /// Initialize parameters to the storage for testing
 #[cfg(any(test, feature = "testing"))]
-pub fn init_test_storage<S>(storage: &mut S) -> namada_storage::Result<()>
+pub fn init_test_storage<S>(storage: &mut S) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -532,7 +515,7 @@ pub fn estimate_max_block_time_from_blocks<S>(
     storage: &S,
     last_block_height: BlockHeight,
     num_blocks_to_read: u64,
-) -> namada_storage::Result<Option<DurationSecs>>
+) -> Result<Option<DurationSecs>>
 where
     S: StorageRead,
 {
@@ -583,7 +566,7 @@ where
 /// based on chain parameters.
 pub fn estimate_max_block_time_from_parameters<S>(
     storage: &S,
-) -> namada_storage::Result<DurationSecs>
+) -> Result<DurationSecs>
 where
     S: StorageRead,
 {
@@ -613,7 +596,7 @@ pub fn estimate_max_block_time_from_blocks_and_params<S>(
     storage: &S,
     last_block_height: BlockHeight,
     num_blocks_to_read: u64,
-) -> namada_storage::Result<DurationSecs>
+) -> Result<DurationSecs>
 where
     S: StorageRead,
 {
@@ -629,9 +612,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use namada_core::storage::Header;
+    use namada_core::chain::BlockHeader;
     use namada_core::time::DateTimeUtc;
-    use namada_storage::testing::TestStorage;
+    use namada_state::testing::TestStorage;
 
     use super::*;
 
@@ -721,7 +704,7 @@ mod tests {
 
             storage.set_mock_block_header(
                 height,
-                Header {
+                BlockHeader {
                     time: DateTimeUtc::from_unix_timestamp(timestamp).unwrap(),
                     ..Default::default()
                 },
@@ -744,7 +727,7 @@ mod tests {
 
             storage.set_mock_block_header(
                 height,
-                Header {
+                BlockHeader {
                     time: DateTimeUtc::from_unix_timestamp(timestamp).unwrap(),
                     ..Default::default()
                 },
@@ -777,7 +760,7 @@ mod tests {
 
             storage.set_mock_block_header(
                 height,
-                Header {
+                BlockHeader {
                     time: DateTimeUtc::from_unix_timestamp(timestamp).unwrap(),
                     ..Default::default()
                 },
@@ -801,7 +784,7 @@ mod tests {
         for height in 1u64..=2 {
             storage.set_mock_block_header(
                 BlockHeight(height),
-                Header {
+                BlockHeader {
                     time: DateTimeUtc::unix_epoch(),
                     ..Default::default()
                 },
@@ -824,7 +807,7 @@ mod tests {
 
             storage.set_mock_block_header(
                 height,
-                Header {
+                BlockHeader {
                     time: DateTimeUtc::from_unix_timestamp(timestamp).unwrap(),
                     ..Default::default()
                 },

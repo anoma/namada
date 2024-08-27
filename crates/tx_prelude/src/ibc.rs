@@ -20,7 +20,7 @@ pub use namada_ibc::{
 use namada_tx_env::TxEnv;
 
 use crate::token::transfer;
-use crate::{Ctx, Error};
+use crate::{Ctx, Result};
 
 /// IBC actions to handle an IBC message. The `verifiers` inserted into the set
 /// must be inserted into the tx context with `Ctx::insert_verifier` after tx
@@ -54,10 +54,7 @@ impl IbcStorageContext for Ctx {
         super::log_string(message);
     }
 
-    fn emit_ibc_event(
-        &mut self,
-        event: IbcEvent,
-    ) -> std::result::Result<(), Error> {
+    fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<()> {
         <Ctx as TxEnv>::emit_event(self, event)
     }
 
@@ -67,7 +64,7 @@ impl IbcStorageContext for Ctx {
         dest: &Address,
         token: &Address,
         amount: Amount,
-    ) -> std::result::Result<(), Error> {
+    ) -> Result<()> {
         transfer(self, src, dest, token, amount)
     }
 
@@ -76,7 +73,7 @@ impl IbcStorageContext for Ctx {
         target: &Address,
         token: &Address,
         amount: Amount,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         mint_tokens::<_, crate::token::Store<_>>(self, target, token, amount)
     }
 
@@ -85,11 +82,11 @@ impl IbcStorageContext for Ctx {
         target: &Address,
         token: &Address,
         amount: Amount,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         burn_tokens::<_, crate::token::Store<_>>(self, target, token, amount)
     }
 
-    fn insert_verifier(&mut self, addr: &Address) -> Result<(), Error> {
+    fn insert_verifier(&mut self, addr: &Address) -> Result<()> {
         TxEnv::insert_verifier(self, addr)
     }
 }

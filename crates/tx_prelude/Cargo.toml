@@ -26,14 +26,13 @@ namada_ibc = { path = "../ibc" }
 namada_macros = { path = "../macros" }
 namada_parameters = { path = "../parameters" }
 namada_proof_of_stake = { path = "../proof_of_stake" }
-namada_storage = { path = "../storage" }
+namada_state = { path = "../state" }
 namada_token = { path = "../token" }
 namada_tx = { path = "../tx", default-features = false }
 namada_tx_env = { path = "../tx_env" }
 namada_vm_env = { path = "../vm_env" }
 
 borsh.workspace = true
-masp_primitives.workspace = true
 
 [dev-dependencies]
 namada_token = { path = "../token", features = ["testing"] }

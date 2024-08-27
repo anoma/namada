@@ -3,7 +3,7 @@ use std::num::NonZeroUsize;
 use clru::CLruCache;
 use namada_core::address::{Address, EstablishedAddressGen, InternalAddress};
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
-use namada_core::chain::{ChainId, CHAIN_ID_LENGTH};
+use namada_core::chain::{ChainId, BLOCK_HEIGHT_LENGTH, CHAIN_ID_LENGTH};
 use namada_core::hash::Hash;
 use namada_core::parameters::{EpochDuration, Parameters};
 use namada_core::time::DateTimeUtc;
@@ -17,11 +17,11 @@ use namada_storage::conversion_state::ConversionState;
 use namada_storage::tx_queue::ExpiredTxsQueue;
 use namada_storage::types::CommitOnlyData;
 use namada_storage::{
-    BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue, Header, Key,
-    KeySeg, StorageHasher, TxIndex, BLOCK_HEIGHT_LENGTH, EPOCH_TYPE_LENGTH,
+    BlockHeader, BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue, Key,
+    KeySeg, StorageHasher, TxIndex, EPOCH_TYPE_LENGTH,
 };
 
-use crate::{Error, Result};
+use crate::Result;
 
 /// The ledger's state
 #[derive(Debug)]
@@ -39,7 +39,7 @@ where
     /// During `FinalizeBlock`, this is the header of the block that is
     /// going to be committed. After a block is committed, this is reset to
     /// `None` until the next `FinalizeBlock` phase is reached.
-    pub header: Option<Header>,
+    pub header: Option<BlockHeader>,
     /// The most recently committed block, if any.
     pub last_block: Option<LastBlock>,
     /// The epoch of the most recently committed block. If it is `Epoch(0)`,
@@ -189,7 +189,7 @@ where
     /// Set the block header.
     /// The header is not in the Merkle tree as it's tracked by Tendermint.
     /// Hence, we don't update the tree when this is set.
-    pub fn set_header(&mut self, header: Header) -> Result<()> {
+    pub fn set_header(&mut self, header: BlockHeader) -> Result<()> {
         self.header = Some(header);
         Ok(())
     }
@@ -281,23 +281,17 @@ where
         let key_prefix: Key =
             Address::Internal(InternalAddress::PoS).to_db_key().into();
 
-        let key = key_prefix
-            .push(&"epoch_start_height".to_string())
-            .map_err(Error::KeyError)?;
+        let key = key_prefix.push(&"epoch_start_height".to_string())?;
         self.block
             .tree
             .update(&key, encode(&self.next_epoch_min_start_height))?;
 
-        let key = key_prefix
-            .push(&"epoch_start_time".to_string())
-            .map_err(Error::KeyError)?;
+        let key = key_prefix.push(&"epoch_start_time".to_string())?;
         self.block
             .tree
             .update(&key, encode(&self.next_epoch_min_start_time))?;
 
-        let key = key_prefix
-            .push(&"current_epoch".to_string())
-            .map_err(Error::KeyError)?;
+        let key = key_prefix.push(&"current_epoch".to_string())?;
         self.block.tree.update(&key, encode(&self.block.epoch))?;
 
         Ok(())

@@ -29,7 +29,7 @@ migrations = [
   "linkme",
 ]
 benches = ["proptest"]
-control_flow = ["futures", "lazy_static", "tokio", "wasmtimer"]
+control_flow = ["lazy_static", "tokio", "wasmtimer"]
 arbitrary = [
   "dep:arbitrary",
   "chrono/arbitrary",
@@ -53,7 +53,6 @@ ed25519-consensus.workspace = true
 ethabi.workspace = true
 ethbridge-structs.workspace = true
 eyre.workspace = true
-futures = { workspace = true, optional = true }
 ibc.workspace = true
 ics23.workspace = true
 impl-num-traits = "0.1.2"
@@ -95,13 +94,8 @@ tokio = { workspace = true, optional = true, default-features = false, features 
 
 [dev-dependencies]
 assert_matches.workspace = true
-futures.workspace = true
-pretty_assertions.workspace = true
 proptest.workspace = true
 rand.workspace = true
 rand_core.workspace = true
-test-log.workspace = true
 tokio = { workspace = true, features = ["full"] }
 toml.workspace = true
-tracing-subscriber.workspace = true
-wasmtimer.workspace = true

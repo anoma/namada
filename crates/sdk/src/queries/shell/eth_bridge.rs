@@ -7,6 +7,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use namada_core::address::Address;
 use namada_core::arith::checked;
+use namada_core::chain::{BlockHeight, Epoch};
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::eth_abi::{Encode, EncodeCell};
 use namada_core::eth_bridge_pool::{PendingTransfer, PendingTransferAppendix};
@@ -14,7 +15,7 @@ use namada_core::ethereum_events::{
     EthAddress, EthereumEvent, TransferToEthereum,
 };
 use namada_core::keccak::KeccakHash;
-use namada_core::storage::{BlockHeight, DbKeySeg, Epoch, Key};
+use namada_core::storage::{DbKeySeg, Key};
 use namada_core::token::Amount;
 use namada_core::voting_power::FractionalVotingPower;
 use namada_core::{ethereum_structs, hints};

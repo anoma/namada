@@ -4,15 +4,14 @@ use std::cmp::min;
 
 use namada_core::address::testing::arb_established_address;
 use namada_core::address::{self, Address, EstablishedAddressGen};
+use namada_core::chain::Epoch;
 use namada_core::dec::Dec;
 use namada_core::key::testing::{
     arb_common_keypair, common_sk_from_simple_seed,
 };
 use namada_core::key::{self, common, RefTo};
-use namada_core::storage::Epoch;
 use namada_core::token;
 use namada_state::testing::TestState;
-use namada_storage::collections::lazy_map;
 use namada_trans_token::credit_tokens;
 use proptest::prelude::*;
 use proptest::test_runner::Config;
@@ -47,7 +46,8 @@ use crate::validator_set_update::{
     insert_validator_into_validator_set, update_validator_set,
 };
 use crate::{
-    is_validator, staking_token_address, BecomeValidator, OwnedPosParams,
+    is_validator, lazy_map, staking_token_address, BecomeValidator,
+    OwnedPosParams,
 };
 
 proptest! {
@@ -967,8 +967,8 @@ fn test_validator_sets() {
     for e in Epoch::iter_bounds_inclusive(
         start_epoch,
         last_epoch
-            .sub_or_default(Epoch(DEFAULT_NUM_PAST_EPOCHS))
-            .sub_or_default(Epoch(1)),
+            .saturating_sub(Epoch(DEFAULT_NUM_PAST_EPOCHS))
+            .saturating_sub(Epoch(1)),
     ) {
         assert!(
             !consensus_validator_set_handle()

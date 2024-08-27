@@ -16,12 +16,12 @@ use bip39::{Language, Mnemonic, MnemonicType, Seed};
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::address::{Address, ImplicitAddress};
 use namada_core::arith::checked;
+use namada_core::chain::BlockHeight;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::*;
 use namada_core::masp::{
     ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
 };
-use namada_core::storage::BlockHeight;
 use namada_core::time::DateTimeUtc;
 use namada_ibc::trace::is_ibc_denom;
 pub use pre_genesis::gen_key_to_store;

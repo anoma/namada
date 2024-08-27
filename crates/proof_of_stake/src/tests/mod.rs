@@ -26,7 +26,7 @@ pub fn init_genesis_helper<S>(
     storage: &mut S,
     params: &PosParams,
     validators: impl Iterator<Item = GenesisValidator>,
-    current_epoch: namada_core::storage::Epoch,
+    current_epoch: namada_core::chain::Epoch,
 ) -> Result<()>
 where
     S: StorageRead + StorageWrite,
@@ -44,7 +44,7 @@ pub fn test_init_genesis<S>(
     storage: &mut S,
     owned: OwnedPosParams,
     validators: impl Iterator<Item = GenesisValidator> + Clone,
-    current_epoch: namada_core::storage::Epoch,
+    current_epoch: namada_core::chain::Epoch,
 ) -> Result<PosParams>
 where
     S: StorageRead + StorageWrite,
@@ -270,7 +270,7 @@ pub fn update_validator_deltas<S>(
     params: &OwnedPosParams,
     validator: &Address,
     delta: token::Change,
-    current_epoch: namada_core::storage::Epoch,
+    current_epoch: namada_core::chain::Epoch,
     offset_opt: Option<u64>,
 ) -> Result<()>
 where
@@ -289,7 +289,7 @@ where
 /// DI indirection
 pub fn read_below_threshold_validator_set_addresses<S>(
     storage: &S,
-    epoch: namada_core::storage::Epoch,
+    epoch: namada_core::chain::Epoch,
 ) -> Result<HashSet<Address>>
 where
     S: StorageRead,

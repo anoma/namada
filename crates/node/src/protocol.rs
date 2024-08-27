@@ -14,7 +14,6 @@ use namada_sdk::events::EventLevel;
 use namada_sdk::gas::{self, Gas, GasMetering, TxGasMeter, VpGasMeter};
 use namada_sdk::hash::Hash;
 use namada_sdk::ibc::{IbcTxDataHash, IbcTxDataRefs};
-use namada_sdk::masp::{MaspTxRefs, TxId};
 use namada_sdk::parameters::get_gas_scale;
 use namada_sdk::state::{
     DBIter, State, StorageHasher, StorageRead, TxWrites, WlState, DB,
@@ -22,7 +21,7 @@ use namada_sdk::state::{
 use namada_sdk::storage::TxIndex;
 use namada_sdk::token::event::{TokenEvent, TokenOperation};
 use namada_sdk::token::utils::is_masp_transfer;
-use namada_sdk::token::Amount;
+use namada_sdk::token::{Amount, MaspTxId, MaspTxRefs};
 use namada_sdk::tx::action::{self, Read};
 use namada_sdk::tx::data::protocol::{ProtocolTx, ProtocolTxType};
 use namada_sdk::tx::data::{
@@ -34,10 +33,7 @@ use namada_sdk::validation::{
     EthBridgeNutVp, EthBridgePoolVp, EthBridgeVp, GovernanceVp, IbcVp, MaspVp,
     MultitokenVp, NativeVpCtx, ParametersVp, PgfVp, PosVp,
 };
-use namada_sdk::{
-    eth_bridge, governance, ibc, parameters, proof_of_stake, state, storage,
-    token,
-};
+use namada_sdk::{governance, parameters, state, storage, token};
 use namada_vm::wasm::{TxCache, VpCache};
 use namada_vm::{self, wasm, WasmCacheAccess};
 use namada_vote_ext::EthereumTxData;
@@ -56,7 +52,7 @@ pub enum Error {
     #[error("State error: {0}")]
     StateError(state::Error),
     #[error("Storage error: {0}")]
-    StorageError(state::StorageError),
+    Error(state::Error),
     #[error("Wrapper tx runner error: {0}")]
     WrapperRunnerError(String),
     #[error("Transaction runner error: {0}")]
@@ -79,28 +75,8 @@ pub enum Error {
     VpRunnerError(wasm::run::Error),
     #[error("The address {0} doesn't exist")]
     MissingAddress(Address),
-    #[error("IBC native VP: {0}")]
-    IbcNativeVpError(ibc::vp::Error),
-    #[error("PoS native VP: {0}")]
-    PosNativeVpError(proof_of_stake::vp::Error),
-    #[error("PoS native VP panicked")]
-    PosNativeVpRuntime,
-    #[error("Parameters native VP: {0}")]
-    ParametersNativeVpError(parameters::vp::Error),
-    #[error("Multitoken native VP: {0}")]
-    MultitokenNativeVpError(token::vp::MultitokenError),
-    #[error("Governance native VP error: {0}")]
-    GovernanceNativeVpError(governance::vp::Error),
-    #[error("Pgf native VP error: {0}")]
-    PgfNativeVpError(governance::vp::pgf::Error),
-    #[error("Ethereum bridge native VP error: {0:?}")]
-    EthBridgeNativeVpError(eth_bridge::vp::EthBridgeError),
-    #[error("Ethereum bridge pool native VP error: {0:?}")]
-    BridgePoolNativeVpError(eth_bridge::vp::BridgePoolError),
-    #[error("Non usable tokens native VP error: {0:?}")]
-    NutNativeVpError(eth_bridge::vp::NutError),
-    #[error("MASP native VP error: {0}")]
-    MaspNativeVpError(token::vp::MaspError),
+    #[error("Native VP error: {0}")]
+    NativeVpError(state::Error),
     #[error("Access to an internal address {0:?} is forbidden")]
     AccessForbidden(InternalAddress),
 }
@@ -453,7 +429,7 @@ where
 /// Transaction result for masp transfer
 pub struct MaspTxResult {
     tx_result: BatchedTxResult,
-    masp_section_ref: Either<TxId, IbcTxDataHash>,
+    masp_section_ref: Either<MaspTxId, IbcTxDataHash>,
 }
 
 /// Performs the required operation on a wrapper transaction:
@@ -560,7 +536,7 @@ where
                 &wrapper.fee.token,
                 shell_params.state,
             )
-            .map_err(Error::StorageError)?;
+            .map_err(Error::Error)?;
 
             #[cfg(not(fuzzing))]
             let balance = token::read_balance(
@@ -568,7 +544,7 @@ where
                 &wrapper.fee.token,
                 &wrapper.fee_payer(),
             )
-            .map_err(Error::StorageError)?;
+            .map_err(Error::Error)?;
 
             // Use half of the max value to make the balance check pass
             // sometimes with arbitrary fees
@@ -653,7 +629,7 @@ where
                     &wrapper.fee.token,
                     block_proposer,
                 )
-                .map_err(Error::StorageError)?
+                .map_err(Error::Error)?
                 .into(),
             );
 
@@ -728,7 +704,7 @@ where
         .expect("Error reading the storage")
         .expect("Missing masp fee payment gas limit in storage")
         .min(tx_gas_meter.borrow().tx_gas_limit.into());
-    let gas_scale = get_gas_scale(&**state).map_err(Error::StorageError)?;
+    let gas_scale = get_gas_scale(&**state).map_err(Error::Error)?;
 
     let mut gas_meter = TxGasMeter::new(
         Gas::from_whole_units(max_gas_limit.into(), gas_scale).ok_or_else(
@@ -849,9 +825,7 @@ fn get_optional_masp_ref<S: Read<Err = state::Error>>(
         let actions = state.read_actions().map_err(Error::StateError)?;
         action::get_masp_section_ref(&actions)
             .map_err(|msg| {
-                Error::StateError(state::Error::Temporary {
-                    error: msg.to_string(),
-                })
+                Error::StateError(state::Error::new_alloc(msg.to_string()))
             })?
             .map(Either::Left)
     };
@@ -876,7 +850,7 @@ where
         .map_err(|err| {
             state.write_log_mut().drop_tx();
 
-            Error::StorageError(err)
+            Error::Error(err)
         })
 }
 
@@ -903,14 +877,14 @@ where
                 &wrapper.fee.token,
                 shell_params.state,
             )
-            .map_err(Error::StorageError)?;
+            .map_err(Error::Error)?;
 
             let balance = token::read_balance(
                 shell_params.state,
                 &wrapper.fee.token,
                 &wrapper.fee_payer(),
             )
-            .map_err(Error::StorageError)?;
+            .map_err(Error::Error)?;
 
             checked!(balance - fees).map_or_else(
                 |_| {
@@ -928,7 +902,7 @@ where
                             &wrapper.fee.token,
                             &wrapper.fee_payer(),
                         )
-                        .map_err(Error::StorageError)?;
+                        .map_err(Error::Error)?;
 
                         checked!(balance - fees).map_or_else(
                             |_| {
@@ -1185,232 +1159,232 @@ where
     S: 'static + State + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    let vps_result =
-        verifiers
-            .par_iter()
-            .try_fold(
-                || (VpsResult::default(), Gas::from(0)),
-                |(mut result, mut vps_gas), addr| {
-                    let gas_meter = RefCell::new(
-                        VpGasMeter::new_from_tx_meter(tx_gas_meter),
-                    );
-                    let tx_accepted =
-                        match &addr {
-                            Address::Implicit(_) | Address::Established(_) => {
-                                let (vp_hash, gas) = state
-                        .validity_predicate::<parameters::Store<()>>(addr)
-                        .map_err(Error::StateError)?;
-                                gas_meter.borrow_mut().consume(gas).map_err(
-                                    |err| Error::GasError(err.to_string()),
-                                )?;
-                                let Some(vp_code_hash) = vp_hash else {
-                                    return Err(Error::MissingAddress(
-                                        addr.clone(),
-                                    ));
-                                };
-
-                                wasm::run::vp(
-                                    vp_code_hash,
-                                    batched_tx,
-                                    tx_index,
-                                    addr,
-                                    state,
-                                    &gas_meter,
-                                    &keys_changed,
-                                    &verifiers,
-                                    vp_wasm_cache.clone(),
-                                )
-                                .map_err(
-                                    |err| {
-                                        match err {
-                        wasm::run::Error::GasError(msg) => Error::GasError(msg),
-                        wasm::run::Error::InvalidSectionSignature(msg) => {
-                            Error::InvalidSectionSignature(msg)
-                        }
-                        _ => Error::VpRunnerError(err),
-                    }
-                                    },
-                                )
-                            }
-                            Address::Internal(internal_addr) => {
-                                let ctx = NativeVpCtx::new(
-                                    addr,
-                                    state,
-                                    batched_tx.tx,
-                                    batched_tx.cmt,
-                                    tx_index,
-                                    &gas_meter,
-                                    &keys_changed,
-                                    &verifiers,
-                                    vp_wasm_cache.clone(),
-                                );
-
-                                match internal_addr {
-                        InternalAddress::PoS => {
-                            let pos = PosVp::new(ctx);
-                            pos.validate_tx(
-                                batched_tx,
-                                &keys_changed,
-                                &verifiers,
-                            )
-                            .map_err(Error::PosNativeVpError)
-                        }
-                        InternalAddress::Ibc => {
-                            let ibc = IbcVp::new(ctx);
-                            ibc.validate_tx(
-                                batched_tx,
-                                &keys_changed,
-                                &verifiers,
-                            )
-                            .map_err(Error::IbcNativeVpError)
-                        }
-                        InternalAddress::Parameters => {
-                            let parameters = ParametersVp::new(ctx);
-                            parameters
-                                .validate_tx(
-                                    batched_tx,
-                                    &keys_changed,
-                                    &verifiers,
-                                )
-                                .map_err(Error::ParametersNativeVpError)
-                        }
-                        InternalAddress::PosSlashPool => Err(
-                            Error::AccessForbidden((*internal_addr).clone()),
-                        ),
-                        InternalAddress::Governance => {
-                            let governance = GovernanceVp::new(ctx);
-                            governance
-                                .validate_tx(
-                                    batched_tx,
-                                    &keys_changed,
-                                    &verifiers,
-                                )
-                                .map_err(Error::GovernanceNativeVpError)
-                        }
-                        InternalAddress::Pgf => {
-                            let pgf_vp = PgfVp::new(ctx);
-                            pgf_vp
-                                .validate_tx(
-                                    batched_tx,
-                                    &keys_changed,
-                                    &verifiers,
-                                )
-                                .map_err(Error::PgfNativeVpError)
-                        }
-                        InternalAddress::Multitoken => {
-                            let multitoken = MultitokenVp::new(ctx);
-                            multitoken
-                                .validate_tx(
-                                    batched_tx,
-                                    &keys_changed,
-                                    &verifiers,
-                                )
-                                .map_err(Error::MultitokenNativeVpError)
-                        }
-                        InternalAddress::Masp => {
-                            let masp = MaspVp::new(ctx);
-                            masp.validate_tx(
-                                batched_tx,
-                                &keys_changed,
-                                &verifiers,
-                            )
-                            .map_err(Error::MaspNativeVpError)
-                        }
-                        InternalAddress::EthBridge => {
-                            let bridge = EthBridgeVp::new(ctx);
-                            bridge
-                                .validate_tx(
-                                    batched_tx,
-                                    &keys_changed,
-                                    &verifiers,
-                                )
-                                .map_err(Error::EthBridgeNativeVpError)
-                        }
-                        InternalAddress::EthBridgePool => {
-                            let bridge_pool = EthBridgePoolVp::new(ctx);
-                            bridge_pool
-                                .validate_tx(
-                                    batched_tx,
-                                    &keys_changed,
-                                    &verifiers,
-                                )
-                                .map_err(Error::BridgePoolNativeVpError)
-                        }
-                        InternalAddress::Nut(_) => {
-                            let non_usable_tokens = EthBridgeNutVp::new(ctx);
-                            non_usable_tokens
-                                .validate_tx(
-                                    batched_tx,
-                                    &keys_changed,
-                                    &verifiers,
-                                )
-                                .map_err(Error::NutNativeVpError)
-                        }
-                        internal_addr @ (InternalAddress::IbcToken(_)
-                        | InternalAddress::Erc20(_)) => {
-                            // The address should be a part of a multitoken
-                            // key
-                            verifiers
-                                .contains(&Address::Internal(
-                                    InternalAddress::Multitoken,
-                                ))
-                                .ok_or_else(|| {
-                                    Error::AccessForbidden(
-                                        internal_addr.clone(),
-                                    )
-                                })
-                        }
-                        InternalAddress::TempStorage => Err(
-                            // Temp storage changes must never be committed
-                            Error::AccessForbidden((*internal_addr).clone()),
-                        ),
-                        InternalAddress::ReplayProtection => Err(
-                            // Replay protection entries should never be
-                            // written to
-                            // via transactions
-                            Error::AccessForbidden((*internal_addr).clone()),
-                        ),
-                    }
-                            }
+    let vps_result = verifiers
+        .par_iter()
+        .try_fold(
+            || (VpsResult::default(), Gas::from(0)),
+            |(mut result, mut vps_gas), addr| {
+                let gas_meter =
+                    RefCell::new(VpGasMeter::new_from_tx_meter(tx_gas_meter));
+                let tx_accepted = match &addr {
+                    Address::Implicit(_) | Address::Established(_) => {
+                        let (vp_hash, gas) = state
+                            .validity_predicate::<parameters::Store<()>>(addr)
+                            .map_err(Error::StateError)?;
+                        gas_meter
+                            .borrow_mut()
+                            .consume(gas)
+                            .map_err(|err| Error::GasError(err.to_string()))?;
+                        let Some(vp_code_hash) = vp_hash else {
+                            return Err(Error::MissingAddress(addr.clone()));
                         };
 
-                    tx_accepted.map_or_else(
-                        |err| {
-                            result
-                                .status_flags
-                                .insert(err.invalid_section_signature_flag());
-                            result.rejected_vps.insert(addr.clone());
-                            result.errors.push((addr.clone(), err.to_string()));
-                        },
-                        |()| {
-                            result.accepted_vps.insert(addr.clone());
-                        },
-                    );
+                        wasm::run::vp(
+                            vp_code_hash,
+                            batched_tx,
+                            tx_index,
+                            addr,
+                            state,
+                            &gas_meter,
+                            &keys_changed,
+                            &verifiers,
+                            vp_wasm_cache.clone(),
+                        )
+                        .map_err(|err| match err {
+                            wasm::run::Error::GasError(msg) => {
+                                Error::GasError(msg)
+                            }
+                            wasm::run::Error::InvalidSectionSignature(msg) => {
+                                Error::InvalidSectionSignature(msg)
+                            }
+                            _ => Error::VpRunnerError(err),
+                        })
+                    }
+                    Address::Internal(internal_addr) => {
+                        let ctx = NativeVpCtx::new(
+                            addr,
+                            state,
+                            batched_tx.tx,
+                            batched_tx.cmt,
+                            tx_index,
+                            &gas_meter,
+                            &keys_changed,
+                            &verifiers,
+                            vp_wasm_cache.clone(),
+                        );
 
-                    // Execution of VPs can (and must) be short-circuited
-                    // only in case of a gas overflow to prevent the
-                    // transaction from consuming resources that have not
-                    // been acquired in the corresponding wrapper tx. For
-                    // all the other errors we keep evaluating the vps. This
-                    // allows to display a consistent VpsResult across all
-                    // nodes and find any invalid signatures
-                    vps_gas = vps_gas
-                        .checked_add(gas_meter.borrow().get_vp_consumed_gas())
-                        .ok_or(Error::GasError(
-                            gas::Error::GasOverflow.to_string(),
-                        ))?;
-                    gas_meter
-                        .borrow()
-                        .check_vps_limit(vps_gas)
-                        .map_err(|err| Error::GasError(err.to_string()))?;
+                        match internal_addr {
+                            InternalAddress::PoS => {
+                                let pos = PosVp::new(ctx);
+                                pos.validate_tx(
+                                    batched_tx,
+                                    &keys_changed,
+                                    &verifiers,
+                                )
+                                .map_err(Error::NativeVpError)
+                            }
+                            InternalAddress::Ibc => {
+                                let ibc = IbcVp::new(ctx);
+                                ibc.validate_tx(
+                                    batched_tx,
+                                    &keys_changed,
+                                    &verifiers,
+                                )
+                                .map_err(Error::NativeVpError)
+                            }
+                            InternalAddress::Parameters => {
+                                let parameters = ParametersVp::new(ctx);
+                                parameters
+                                    .validate_tx(
+                                        batched_tx,
+                                        &keys_changed,
+                                        &verifiers,
+                                    )
+                                    .map_err(Error::NativeVpError)
+                            }
+                            InternalAddress::PosSlashPool => {
+                                Err(Error::AccessForbidden(
+                                    (*internal_addr).clone(),
+                                ))
+                            }
+                            InternalAddress::Governance => {
+                                let governance = GovernanceVp::new(ctx);
+                                governance
+                                    .validate_tx(
+                                        batched_tx,
+                                        &keys_changed,
+                                        &verifiers,
+                                    )
+                                    .map_err(Error::NativeVpError)
+                            }
+                            InternalAddress::Pgf => {
+                                let pgf_vp = PgfVp::new(ctx);
+                                pgf_vp
+                                    .validate_tx(
+                                        batched_tx,
+                                        &keys_changed,
+                                        &verifiers,
+                                    )
+                                    .map_err(Error::NativeVpError)
+                            }
+                            InternalAddress::Multitoken => {
+                                let multitoken = MultitokenVp::new(ctx);
+                                multitoken
+                                    .validate_tx(
+                                        batched_tx,
+                                        &keys_changed,
+                                        &verifiers,
+                                    )
+                                    .map_err(Error::NativeVpError)
+                            }
+                            InternalAddress::Masp => {
+                                let masp = MaspVp::new(ctx);
+                                masp.validate_tx(
+                                    batched_tx,
+                                    &keys_changed,
+                                    &verifiers,
+                                )
+                                .map_err(Error::NativeVpError)
+                            }
+                            InternalAddress::EthBridge => {
+                                let bridge = EthBridgeVp::new(ctx);
+                                bridge
+                                    .validate_tx(
+                                        batched_tx,
+                                        &keys_changed,
+                                        &verifiers,
+                                    )
+                                    .map_err(Error::NativeVpError)
+                            }
+                            InternalAddress::EthBridgePool => {
+                                let bridge_pool = EthBridgePoolVp::new(ctx);
+                                bridge_pool
+                                    .validate_tx(
+                                        batched_tx,
+                                        &keys_changed,
+                                        &verifiers,
+                                    )
+                                    .map_err(Error::NativeVpError)
+                            }
+                            InternalAddress::Nut(_) => {
+                                let non_usable_tokens =
+                                    EthBridgeNutVp::new(ctx);
+                                non_usable_tokens
+                                    .validate_tx(
+                                        batched_tx,
+                                        &keys_changed,
+                                        &verifiers,
+                                    )
+                                    .map_err(Error::NativeVpError)
+                            }
+                            internal_addr @ (InternalAddress::IbcToken(_)
+                            | InternalAddress::Erc20(_)) => {
+                                // The address should be a part of a multitoken
+                                // key
+                                verifiers
+                                    .contains(&Address::Internal(
+                                        InternalAddress::Multitoken,
+                                    ))
+                                    .ok_or_else(|| {
+                                        Error::AccessForbidden(
+                                            internal_addr.clone(),
+                                        )
+                                    })
+                            }
+                            InternalAddress::TempStorage => Err(
+                                // Temp storage changes must never be committed
+                                Error::AccessForbidden(
+                                    (*internal_addr).clone(),
+                                ),
+                            ),
+                            InternalAddress::ReplayProtection => Err(
+                                // Replay protection entries should never be
+                                // written to via transactions
+                                Error::AccessForbidden(
+                                    (*internal_addr).clone(),
+                                ),
+                            ),
+                        }
+                    }
+                };
 
-                    Ok((result, vps_gas))
-                },
-            )
-            .try_reduce(
-                || (VpsResult::default(), Gas::from(0)),
-                |a, b| merge_vp_results(a, b, tx_gas_meter),
-            )?;
+                tx_accepted.map_or_else(
+                    |err| {
+                        result
+                            .status_flags
+                            .insert(err.invalid_section_signature_flag());
+                        result.rejected_vps.insert(addr.clone());
+                        result.errors.push((addr.clone(), err.to_string()));
+                    },
+                    |()| {
+                        result.accepted_vps.insert(addr.clone());
+                    },
+                );
+
+                // Execution of VPs can (and must) be short-circuited
+                // only in case of a gas overflow to prevent the
+                // transaction from consuming resources that have not
+                // been acquired in the corresponding wrapper tx. For
+                // all the other errors we keep evaluating the vps. This
+                // allows to display a consistent VpsResult across all
+                // nodes and find any invalid signatures
+                vps_gas = vps_gas
+                    .checked_add(gas_meter.borrow().get_vp_consumed_gas())
+                    .ok_or(Error::GasError(
+                        gas::Error::GasOverflow.to_string(),
+                    ))?;
+                gas_meter
+                    .borrow()
+                    .check_vps_limit(vps_gas)
+                    .map_err(|err| Error::GasError(err.to_string()))?;
+
+                Ok((result, vps_gas))
+            },
+        )
+        .try_reduce(
+            || (VpsResult::default(), Gas::from(0)),
+            |a, b| merge_vp_results(a, b, tx_gas_meter),
+        )?;
 
     Ok(vps_result)
 }
@@ -1450,6 +1424,7 @@ fn merge_vp_results(
 #[cfg(test)]
 mod tests {
     use eyre::Result;
+    use namada_sdk::chain::BlockHeight;
     use namada_sdk::collections::HashMap;
     use namada_sdk::eth_bridge::protocol::transactions::votes::{
         EpochedVotingPower, Votes,
@@ -1461,7 +1436,6 @@ mod tests {
     use namada_sdk::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
     use namada_sdk::ethereum_events::{EthereumEvent, TransferToNamada};
     use namada_sdk::keccak::keccak_hash;
-    use namada_sdk::storage::BlockHeight;
     use namada_sdk::tx::{SignableEthMessage, Signed};
     use namada_sdk::voting_power::FractionalVotingPower;
     use namada_sdk::{address, key};

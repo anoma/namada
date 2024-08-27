@@ -1,9 +1,9 @@
 //! Generic Error Type for all of the Shared Crate
 
 use namada_core::address::Address;
+use namada_core::chain::Epoch;
 use namada_core::dec::Dec;
 use namada_core::ethereum_events::EthAddress;
-use namada_core::storage::Epoch;
 use namada_core::{arith, storage};
 use namada_events::EventError;
 use namada_tx::Tx;

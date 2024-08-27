@@ -13,16 +13,16 @@ repository.workspace = true
 version.workspace = true
 
 [features]
-default = ["salt"]
-testing = ["proptest", "namada_core/testing"]
-salt = ["rand_core"]
+default = []
+testing = ["proptest", "namada_account/testing", "namada_core/testing"]
 migrations = [
     "namada_migrations",
     "linkme",
 ]
-arbitrary = ["dep:arbitrary", "namada_core/arbitrary"]
+arbitrary = ["dep:arbitrary", "namada_account/arbitrary", "namada_core/arbitrary"]
 
 [dependencies]
+namada_account = { path = "../account" }
 namada_core = { path = "../core" }
 namada_events = { path = "../events", default-features = false }
 namada_gas = { path = "../gas" }
@@ -43,7 +43,7 @@ num-traits.workspace = true
 proptest = { workspace = true, optional = true }
 prost-types.workspace = true
 prost.workspace = true
-rand_core = { workspace = true, optional = true, features = ["getrandom"] }
+rand_core = { workspace = true, features = ["getrandom"] }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

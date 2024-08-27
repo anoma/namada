@@ -1,9 +1,9 @@
 //! Silly simple event matcher.
 
+use namada_core::chain::BlockHeight;
 use namada_core::collections::HashMap;
 use namada_core::hash::Hash;
 use namada_core::keccak::KeccakHash;
-use namada_core::storage::BlockHeight;
 use namada_ethereum_bridge::event::types::{
     BRIDGE_POOL_EXPIRED, BRIDGE_POOL_RELAYED,
 };

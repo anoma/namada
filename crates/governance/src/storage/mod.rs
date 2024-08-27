@@ -11,13 +11,11 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use namada_core::address::Address;
 use namada_core::borsh::BorshDeserialize;
+use namada_core::chain::Epoch;
 use namada_core::collections::HashSet;
 use namada_core::hash::Hash;
-use namada_core::storage::Epoch;
 use namada_core::token;
-use namada_state::{
-    iter_prefix, StorageError, StorageRead, StorageResult, StorageWrite,
-};
+use namada_state::{iter_prefix, Error, Result, StorageRead, StorageWrite};
 use namada_systems::trans_token;
 
 use crate::parameters::GovernanceParameters;
@@ -35,7 +33,7 @@ pub fn init_proposal<S, TransToken>(
     data: &InitProposalData,
     content: Vec<u8>,
     code: Option<Vec<u8>>,
-) -> StorageResult<u64>
+) -> Result<u64>
 where
     S: StorageRead + StorageWrite,
     TransToken: trans_token::Write<S>,
@@ -61,7 +59,7 @@ where
                 governance_keys::get_proposal_code_key(proposal_id);
 
             let proposal_code =
-                code.ok_or(StorageError::new_const("Missing proposal code"))?;
+                code.ok_or(Error::new_const("Missing proposal code"))?;
             storage.write(&proposal_code_key, proposal_code)?;
         }
         _ => storage.write(&proposal_type_key, data.r#type.clone())?,
@@ -117,7 +115,7 @@ pub fn vote_proposal<S>(
     storage: &mut S,
     data: VoteProposalData,
     delegation_targets: HashSet<Address>,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -137,7 +135,7 @@ pub fn write_proposal_result<S>(
     storage: &mut S,
     proposal_id: u64,
     proposal_result: ProposalResult,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -150,7 +148,7 @@ where
 pub fn get_proposal_by_id<S>(
     storage: &S,
     id: u64,
-) -> StorageResult<Option<StorageProposal>>
+) -> Result<Option<StorageProposal>>
 where
     S: StorageRead,
 {
@@ -196,10 +194,7 @@ where
 }
 
 /// Query all the votes for a proposal_id
-pub fn get_proposal_votes<S>(
-    storage: &S,
-    proposal_id: u64,
-) -> StorageResult<Vec<Vote>>
+pub fn get_proposal_votes<S>(storage: &S, proposal_id: u64) -> Result<Vec<Vote>>
 where
     S: StorageRead,
 {
@@ -234,10 +229,7 @@ where
 }
 
 /// Check if an accepted proposal is being executed
-pub fn is_proposal_accepted<S>(
-    storage: &S,
-    tx_data: &[u8],
-) -> StorageResult<bool>
+pub fn is_proposal_accepted<S>(storage: &S, tx_data: &[u8]) -> Result<bool>
 where
     S: StorageRead,
 {
@@ -255,7 +247,7 @@ where
 pub fn get_proposal_code<S>(
     storage: &S,
     proposal_id: u64,
-) -> StorageResult<Option<Vec<u8>>>
+) -> Result<Option<Vec<u8>>>
 where
     S: StorageRead,
 {
@@ -267,7 +259,7 @@ where
 pub fn get_proposal_author<S>(
     storage: &S,
     proposal_id: u64,
-) -> StorageResult<Option<Address>>
+) -> Result<Option<Address>>
 where
     S: StorageRead,
 {
@@ -276,7 +268,7 @@ where
 }
 
 /// Get governance parameters
-pub fn get_parameters<S>(storage: &S) -> StorageResult<GovernanceParameters>
+pub fn get_parameters<S>(storage: &S) -> Result<GovernanceParameters>
 where
     S: StorageRead,
 {
@@ -318,7 +310,7 @@ where
 }
 
 /// Get governance "max_proposal_period" parameter
-pub fn get_max_proposal_period<S>(storage: &S) -> StorageResult<u64>
+pub fn get_max_proposal_period<S>(storage: &S) -> Result<u64>
 where
     S: StorageRead,
 {
@@ -332,7 +324,7 @@ where
 pub fn get_proposal_result<S>(
     storage: &S,
     proposal_id: u64,
-) -> StorageResult<Option<ProposalResult>>
+) -> Result<Option<ProposalResult>>
 where
     S: StorageRead,
 {
@@ -345,7 +337,7 @@ where
 pub fn load_proposals<S>(
     storage: &S,
     current_epoch: Epoch,
-) -> StorageResult<BTreeSet<u64>>
+) -> Result<BTreeSet<u64>>
 where
     S: StorageRead,
 {

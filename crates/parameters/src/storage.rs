@@ -4,7 +4,7 @@ use namada_core::address::Address;
 use namada_core::storage::DbKeySeg;
 pub use namada_core::storage::Key;
 use namada_macros::StorageKeys;
-use namada_storage::StorageRead;
+use namada_state::{Error, Result, StorageRead};
 
 use super::ADDRESS;
 
@@ -158,26 +158,22 @@ pub fn get_gas_cost_key() -> Key {
 
 /// Helper function to retrieve the `max_block_gas` protocol parameter from
 /// storage
-pub fn get_max_block_gas(
-    storage: &impl StorageRead,
-) -> std::result::Result<u64, namada_storage::Error> {
-    storage.read(&get_max_block_gas_key())?.ok_or(
-        namada_storage::Error::SimpleMessage(
+pub fn get_max_block_gas(storage: &impl StorageRead) -> Result<u64> {
+    storage
+        .read(&get_max_block_gas_key())?
+        .ok_or(Error::SimpleMessage(
             "Missing max_block_gas parameter from storage",
-        ),
-    )
+        ))
 }
 
 /// Helper function to retrieve the `gas_scale` protocol parameter from
 /// storage
-pub fn get_gas_scale(
-    storage: &impl StorageRead,
-) -> std::result::Result<u64, namada_storage::Error> {
-    storage.read(&get_gas_scale_key())?.ok_or(
-        namada_storage::Error::SimpleMessage(
+pub fn get_gas_scale(storage: &impl StorageRead) -> Result<u64> {
+    storage
+        .read(&get_gas_scale_key())?
+        .ok_or(Error::SimpleMessage(
             "Missing gas_scale parameter from storage",
-        ),
-    )
+        ))
 }
 
 /// Storage key used for the flag to enable the native token transfer
@@ -189,9 +185,9 @@ pub fn get_native_token_transferable_key() -> Key {
 /// parameter from storage
 pub fn is_native_token_transferable(
     storage: &impl StorageRead,
-) -> std::result::Result<bool, namada_storage::Error> {
+) -> Result<bool> {
     storage.read(&get_native_token_transferable_key())?.ok_or(
-        namada_storage::Error::SimpleMessage(
+        Error::SimpleMessage(
             "Missing is_native_token_transferable parameter from storage",
         ),
     )

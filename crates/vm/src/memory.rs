@@ -5,7 +5,7 @@ use std::error::Error;
 /// Abstract representation of virtual machine's memory.
 pub trait VmMemory: Clone + Send + Sync {
     /// Error type for the methods' results.
-    type Error: Error + Sync + Send + 'static;
+    type Error: Error + Sync + Send + 'static + Into<namada_state::Error>;
 
     /// Returns bytes read from memory together with the associated gas cost.
     fn read_bytes(

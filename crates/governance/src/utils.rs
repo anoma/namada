@@ -4,9 +4,9 @@ use std::str::FromStr;
 use namada_core::address::Address;
 use namada_core::arith::{self, checked};
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::chain::Epoch;
 use namada_core::collections::HashMap;
 use namada_core::dec::Dec;
-use namada_core::storage::Epoch;
 use namada_core::token;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]

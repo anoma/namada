@@ -21,4 +21,8 @@
 pub mod native_vp;
 pub mod vp_host_fns;
 
+pub use namada_core::address::Address;
+pub use namada_core::hash::Hash;
+pub use namada_events::{Event, EventType};
+pub use namada_state as state;
 pub use namada_vp_env::VpEnv;

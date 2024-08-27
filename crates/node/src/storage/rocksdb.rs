@@ -71,7 +71,7 @@ use namada_sdk::state::{
     StoreType, DB,
 };
 use namada_sdk::storage::{
-    BlockHeight, DbColFam, Epoch, Header, Key, KeySeg, BLOCK_CF, DIFFS_CF,
+    BlockHeader, BlockHeight, DbColFam, Epoch, Key, KeySeg, BLOCK_CF, DIFFS_CF,
     REPLAY_PROTECTION_CF, ROLLBACK_CF, STATE_CF, SUBSPACE_CF,
 };
 use namada_sdk::{decode, encode, ethereum_events};
@@ -1265,7 +1265,10 @@ impl DB for RocksDB {
         Ok(())
     }
 
-    fn read_block_header(&self, height: BlockHeight) -> Result<Option<Header>> {
+    fn read_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<BlockHeader>> {
         let block_cf = self.get_column_family(BLOCK_CF)?;
         let header_key = format!("{}/{BLOCK_HEADER_KEY_SEGMENT}", height.raw());
         self.read_value(block_cf, header_key)

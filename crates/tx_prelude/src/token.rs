@@ -14,7 +14,7 @@ pub use namada_token::{
 };
 use namada_tx_env::TxEnv;
 
-use crate::{Ctx, TxResult};
+use crate::{Ctx, Result, TxResult};
 
 /// A transparent token transfer that can be used in a transaction.
 pub fn transfer(
@@ -57,7 +57,7 @@ pub fn multi_transfer(
     ctx: &mut Ctx,
     sources: &BTreeMap<(Address, Address), Amount>,
     dests: &BTreeMap<(Address, Address), Amount>,
-) -> crate::EnvResult<HashSet<Address>> {
+) -> Result<HashSet<Address>> {
     let debited_accounts = namada_token::multi_transfer(ctx, sources, dests)?;
 
     let mut evt_sources = BTreeMap::new();

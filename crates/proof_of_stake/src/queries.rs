@@ -5,15 +5,14 @@ use std::collections::BTreeMap;
 
 use borsh::BorshDeserialize;
 use namada_core::address::Address;
+use namada_core::chain::Epoch;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::dec::Dec;
 use namada_core::key::common;
-use namada_core::storage::Epoch;
 use namada_core::token;
-use namada_storage::collections::lazy_map::{NestedSubKey, SubKey};
-use namada_storage::StorageRead;
 use namada_systems::governance;
 
+use crate::lazy_map::{NestedSubKey, SubKey};
 use crate::slashing::{find_validator_slashes, get_slashed_amount};
 use crate::storage::{
     bond_handle, delegation_targets_handle,
@@ -24,7 +23,10 @@ use crate::types::{
     BondDetails, BondId, BondsAndUnbondsDetail, BondsAndUnbondsDetails,
     DelegationEpochs, Slash, UnbondDetails,
 };
-use crate::{raw_bond_amount, storage_key, PosParams};
+use crate::{
+    iter_prefix_bytes, raw_bond_amount, storage_key, Error, PosParams, Result,
+    StorageRead,
+};
 
 /// Find all validators to which a given bond `owner` (or source) has a
 /// delegation
@@ -32,7 +34,7 @@ pub fn find_delegation_validators<S>(
     storage: &S,
     owner: &Address,
     epoch: &Epoch,
-) -> namada_storage::Result<HashSet<Address>>
+) -> Result<HashSet<Address>>
 where
     S: StorageRead,
 {
@@ -85,7 +87,7 @@ pub fn find_delegations<S, Gov>(
     storage: &S,
     owner: &Address,
     epoch: &Epoch,
-) -> namada_storage::Result<HashMap<Address, token::Amount>>
+) -> Result<HashMap<Address, token::Amount>>
 where
     S: StorageRead,
     Gov: governance::Read<S>,
@@ -143,10 +145,7 @@ where
 }
 
 /// Find if the given source address has any bonds.
-pub fn has_bonds<S, Gov>(
-    storage: &S,
-    source: &Address,
-) -> namada_storage::Result<bool>
+pub fn has_bonds<S, Gov>(storage: &S, source: &Address) -> Result<bool>
 where
     S: StorageRead,
     Gov: governance::Read<S>,
@@ -161,7 +160,7 @@ pub fn find_bonds<S>(
     storage: &S,
     source: &Address,
     validator: &Address,
-) -> namada_storage::Result<BTreeMap<Epoch, token::Amount>>
+) -> Result<BTreeMap<Epoch, token::Amount>>
 where
     S: StorageRead,
 {
@@ -176,7 +175,7 @@ pub fn find_unbonds<S>(
     storage: &S,
     source: &Address,
     validator: &Address,
-) -> namada_storage::Result<BTreeMap<(Epoch, Epoch), token::Amount>>
+) -> Result<BTreeMap<(Epoch, Epoch), token::Amount>>
 where
     S: StorageRead,
 {
@@ -202,7 +201,7 @@ pub fn bonds_and_unbonds<S, Gov>(
     storage: &S,
     source: Option<Address>,
     validator: Option<Address>,
-) -> namada_storage::Result<BondsAndUnbondsDetails>
+) -> Result<BondsAndUnbondsDetails>
 where
     S: StorageRead,
     Gov: governance::Read<S>,
@@ -224,7 +223,7 @@ fn get_multiple_bonds_and_unbonds<S>(
     params: &PosParams,
     source: Option<Address>,
     validator: Option<Address>,
-) -> namada_storage::Result<BondsAndUnbondsDetails>
+) -> Result<BondsAndUnbondsDetails>
 where
     S: StorageRead,
 {
@@ -245,8 +244,8 @@ where
     };
     // We have to iterate raw bytes, cause the epoched data `last_update` field
     // gets matched here too
-    let mut raw_bonds = namada_storage::iter_prefix_bytes(storage, &prefix)?
-        .filter_map(|result| {
+    let mut raw_bonds =
+        iter_prefix_bytes(storage, &prefix)?.filter_map(|result| {
             if let Ok((key, val_bytes)) = result {
                 if let Some((bond_id, start)) = storage_key::is_bond_key(&key) {
                     if source.is_some()
@@ -274,8 +273,8 @@ where
         Some(source) => storage_key::unbonds_for_source_prefix(source),
         None => storage_key::unbonds_prefix(),
     };
-    let mut raw_unbonds = namada_storage::iter_prefix_bytes(storage, &prefix)?
-        .filter_map(|result| {
+    let mut raw_unbonds =
+        iter_prefix_bytes(storage, &prefix)?.filter_map(|result| {
             if let Ok((key, val_bytes)) = result {
                 if let Some((bond_id, start, withdraw)) =
                     storage_key::is_unbond_key(&key)
@@ -332,7 +331,7 @@ where
             slashes,
             &mut applied_slashes,
         ));
-        Ok::<_, namada_storage::Error>(())
+        Ok::<_, Error>(())
     })?;
 
     raw_unbonds.try_for_each(|(bond_id, start, withdraw, amount)| {
@@ -353,7 +352,7 @@ where
             slashes,
             &mut applied_slashes,
         ));
-        Ok::<_, namada_storage::Error>(())
+        Ok::<_, Error>(())
     })?;
 
     Ok(bonds_and_unbonds
@@ -377,7 +376,7 @@ fn find_bonds_and_unbonds_details<S>(
     params: &PosParams,
     source: Address,
     validator: Address,
-) -> namada_storage::Result<BondsAndUnbondsDetails>
+) -> Result<BondsAndUnbondsDetails>
 where
     S: StorageRead,
 {
@@ -555,7 +554,7 @@ pub fn get_validator_protocol_key<S, Gov>(
     storage: &S,
     addr: &Address,
     epoch: Epoch,
-) -> namada_storage::Result<Option<common::PublicKey>>
+) -> Result<Option<common::PublicKey>>
 where
     S: StorageRead,
     Gov: governance::Read<S>,
@@ -571,7 +570,7 @@ pub fn get_validator_eth_hot_key<S, Gov>(
     storage: &S,
     validator: &Address,
     epoch: Epoch,
-) -> namada_storage::Result<Option<common::PublicKey>>
+) -> Result<Option<common::PublicKey>>
 where
     S: StorageRead,
     Gov: governance::Read<S>,
@@ -588,7 +587,7 @@ pub fn read_validator_stake<S, Gov>(
     storage: &S,
     validator: &Address,
     epoch: Epoch,
-) -> namada_storage::Result<token::Amount>
+) -> Result<token::Amount>
 where
     S: StorageRead,
     Gov: governance::Read<S>,
@@ -603,7 +602,7 @@ pub fn get_consensus_validator_from_protocol_pk<S, Gov>(
     storage: &S,
     pk: &common::PublicKey,
     epoch: Option<Epoch>,
-) -> namada_storage::Result<Option<Address>>
+) -> Result<Option<Address>>
 where
     S: StorageRead,
     Gov: governance::Read<S>,

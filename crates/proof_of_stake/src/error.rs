@@ -2,12 +2,12 @@
 use std::num::TryFromIntError;
 
 use namada_core::address::Address;
+use namada_core::chain::Epoch;
 use namada_core::dec::Dec;
-use namada_core::storage::Epoch;
 use thiserror::Error;
 
-use crate::rewards;
 use crate::types::ValidatorState;
+use crate::{rewards, Error};
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -167,67 +167,67 @@ pub enum ConsensusKeyChangeError {
     MustBeEd25519,
 }
 
-impl From<BecomeValidatorError> for namada_storage::Error {
+impl From<BecomeValidatorError> for Error {
     fn from(err: BecomeValidatorError) -> Self {
         Self::new(err)
     }
 }
 
-impl From<BondError> for namada_storage::Error {
+impl From<BondError> for Error {
     fn from(err: BondError) -> Self {
         Self::new(err)
     }
 }
 
-impl From<UnbondError> for namada_storage::Error {
+impl From<UnbondError> for Error {
     fn from(err: UnbondError) -> Self {
         Self::new(err)
     }
 }
 
-impl From<CommissionRateChangeError> for namada_storage::Error {
+impl From<CommissionRateChangeError> for Error {
     fn from(err: CommissionRateChangeError) -> Self {
         Self::new(err)
     }
 }
 
-impl From<InflationError> for namada_storage::Error {
+impl From<InflationError> for Error {
     fn from(err: InflationError) -> Self {
         Self::new(err)
     }
 }
 
-impl From<UnjailValidatorError> for namada_storage::Error {
+impl From<UnjailValidatorError> for Error {
     fn from(err: UnjailValidatorError) -> Self {
         Self::new(err)
     }
 }
 
-impl From<RedelegationError> for namada_storage::Error {
+impl From<RedelegationError> for Error {
     fn from(err: RedelegationError) -> Self {
         Self::new(err)
     }
 }
 
-impl From<DeactivationError> for namada_storage::Error {
+impl From<DeactivationError> for Error {
     fn from(err: DeactivationError) -> Self {
         Self::new(err)
     }
 }
 
-impl From<ReactivationError> for namada_storage::Error {
+impl From<ReactivationError> for Error {
     fn from(err: ReactivationError) -> Self {
         Self::new(err)
     }
 }
 
-impl From<MetadataError> for namada_storage::Error {
+impl From<MetadataError> for Error {
     fn from(err: MetadataError) -> Self {
         Self::new(err)
     }
 }
 
-impl From<ConsensusKeyChangeError> for namada_storage::Error {
+impl From<ConsensusKeyChangeError> for Error {
     fn from(err: ConsensusKeyChangeError) -> Self {
         Self::new(err)
     }

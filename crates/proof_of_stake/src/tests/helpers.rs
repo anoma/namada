@@ -4,12 +4,12 @@ use std::cmp::max;
 use std::ops::Range;
 
 use namada_core::address::testing::address_from_simple_seed;
+use namada_core::chain::Epoch;
 use namada_core::dec::Dec;
 use namada_core::key::testing::{
     common_sk_from_simple_seed, keypair_1, keypair_3,
 };
 use namada_core::key::{self, RefTo};
-use namada_core::storage::Epoch;
 use namada_core::token;
 use namada_core::token::testing::arb_amount_non_zero_ceiled;
 use namada_state::testing::TestState;

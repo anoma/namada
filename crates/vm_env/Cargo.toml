@@ -17,5 +17,3 @@ default = []
 
 [dependencies]
 namada_core = { path = "../core" }
-borsh.workspace = true
-masp_primitives.workspace = true

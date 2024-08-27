@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use namada_core::storage::BlockHeight;
+use namada_core::chain::BlockHeight;
 use namada_state::{DBIter, StorageHasher, WlState, DB};
 use thiserror::Error;
 

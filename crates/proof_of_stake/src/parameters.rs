@@ -4,8 +4,8 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::arith::checked;
+use namada_core::chain::Epoch;
 use namada_core::dec::Dec;
-use namada_core::storage::Epoch;
 use namada_core::token;
 use namada_core::uint::Uint;
 #[cfg(test)]
@@ -232,7 +232,7 @@ impl OwnedPosParams {
         infraction_epoch: Epoch,
     ) -> (Epoch, Epoch) {
         let start = infraction_epoch
-            .sub_or_default(Epoch(self.cubic_slashing_window_length));
+            .saturating_sub(Epoch(self.cubic_slashing_window_length));
         let end =
             infraction_epoch.unchecked_add(self.cubic_slashing_window_length);
         (start, end)

@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::borsh::BorshSerializeExt;
 use namada_core::hash::Hash;
-use regex::Regex;
+pub use regex::Regex;
 
 /// A key-value pair as raw bytes
 pub type KVBytes = (Box<[u8]>, Box<[u8]>);

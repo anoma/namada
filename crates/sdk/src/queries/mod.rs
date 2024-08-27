@@ -2,7 +2,7 @@
 //! defined via `router!` macro.
 
 // Re-export to show in rustdoc!
-use namada_core::storage::BlockHeight;
+use namada_core::chain::BlockHeight;
 use namada_state::{DBIter, StorageHasher, DB};
 pub use shell::Shell;
 use shell::SHELL;

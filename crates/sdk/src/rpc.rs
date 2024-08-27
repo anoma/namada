@@ -11,14 +11,13 @@ use masp_primitives::sapling::Node;
 use namada_account::Account;
 use namada_core::address::{Address, InternalAddress};
 use namada_core::arith::checked;
+use namada_core::chain::{BlockHeight, Epoch};
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::hash::Hash;
 use namada_core::ibc::IbcTokenHash;
 use namada_core::key::common;
 use namada_core::masp::MaspEpoch;
-use namada_core::storage::{
-    BlockHeight, BlockResults, Epoch, Key, PrefixValue,
-};
+use namada_core::storage::{BlockResults, Key, PrefixValue};
 use namada_core::time::DurationSecs;
 use namada_core::token::{
     Amount, DenominatedAmount, Denomination, MaspDigitPos,

@@ -18,11 +18,13 @@
     clippy::print_stderr
 )]
 
-use namada_core::address::Address;
-use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
-use namada_core::storage;
-use namada_events::{Event, EventToEmit, EventType};
-use namada_storage::{Result, ResultExt, StorageRead, StorageWrite};
+pub use namada_core::address::Address;
+pub use namada_core::borsh::{
+    BorshDeserialize, BorshSerialize, BorshSerializeExt,
+};
+pub use namada_core::storage;
+pub use namada_events::{Event, EventToEmit, EventType};
+pub use namada_storage::{Result, ResultExt, StorageRead, StorageWrite};
 
 /// Transaction host functions
 pub trait TxEnv: StorageRead + StorageWrite {

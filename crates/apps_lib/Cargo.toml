@@ -18,8 +18,8 @@ mainnet = [
   "namada_sdk/mainnet",
 ]
 # for integration tests and test utilities
-testing = ["namada_test_utils", "lazy_static", "namada_sdk/testing"]
-benches = ["namada_test_utils", "lazy_static", "namada_sdk/benches"]
+testing = ["lazy_static", "namada_sdk/testing"]
+benches = ["lazy_static", "namada_sdk/benches"]
 integration = []
 migrations = [
   "namada_migrations",
@@ -35,7 +35,6 @@ namada_core = {path = "../core"}
 namada_macros = {path = "../macros"}
 namada_migrations = {path = "../migrations", optional = true}
 namada_sdk = {path = "../sdk", features = ["download-params", "multicore"]}
-namada_test_utils = {path = "../test_utils", optional = true}
 namada_vm = {path = "../vm"}
 
 async-trait.workspace = true
@@ -86,13 +85,9 @@ zeroize.workspace = true
 
 [dev-dependencies]
 namada_sdk = {path = "../sdk", features = ["testing"]}
-namada_test_utils = {path = "../test_utils"}
 
-assert_matches.workspace = true
 bit-set.workspace = true
 proptest.workspace = true
-test-log.workspace = true
-tokio-test.workspace = true
 lazy_static.workspace= true
 pretty_assertions.workspace = true
 

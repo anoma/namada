@@ -2,7 +2,7 @@ use borsh_ext::BorshSerializeExt;
 use namada_sdk::hash::{Hash, Sha256Hasher};
 use namada_sdk::state::BlockHeight;
 
-use super::{Error, Result};
+use super::{Error, ShellResult};
 use crate::facade::tendermint::abci::types::Snapshot;
 use crate::facade::tendermint::v0_37::abci::{
     request as tm_request, response as tm_response,
@@ -16,7 +16,7 @@ impl Shell<storage::PersistentDB, Sha256Hasher> {
     /// of chunks, as hash of each chunk, and a hash of the chunk
     /// metadata are provided so that syncing nodes can verify can verify
     /// snapshots they receive.
-    pub fn list_snapshots(&self) -> Result<tm_response::ListSnapshots> {
+    pub fn list_snapshots(&self) -> ShellResult<tm_response::ListSnapshots> {
         if self.blocks_between_snapshots.is_none() {
             Ok(Default::default())
         } else {
@@ -45,7 +45,7 @@ impl Shell<storage::PersistentDB, Sha256Hasher> {
     pub fn load_snapshot_chunk(
         &self,
         req: tm_request::LoadSnapshotChunk,
-    ) -> Result<tm_response::LoadSnapshotChunk> {
+    ) -> ShellResult<tm_response::LoadSnapshotChunk> {
         let chunk = DbSnapshot::load_chunk(
             BlockHeight(req.height.into()),
             u64::from(req.chunk),

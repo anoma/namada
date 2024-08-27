@@ -10,15 +10,12 @@ use namada_core::storage::Key;
 use namada_state::StateRead;
 use namada_systems::trans_token::{self as token, Amount};
 use namada_tx::BatchedTxRef;
-use namada_vp::native_vp::{self, Ctx, NativeVp, StorageReader, VpEvaluator};
+use namada_vp::native_vp::{
+    self, Ctx, NativeVp, Result, StorageReader, VpEvaluator,
+};
 
 use crate::storage;
 use crate::storage::escrow_key;
-
-/// Generic error that may be returned by the validity predicate
-#[derive(thiserror::Error, Debug)]
-#[error("Ethereum Bridge VP error: {0}")]
-pub struct Error(#[from] native_vp::Error);
 
 /// Validity predicate for the Ethereum bridge
 pub struct EthBridge<'ctx, S, CA, EVAL, TokenKeys>
@@ -49,7 +46,7 @@ where
     /// If the Ethereum bridge's escrow key was written to, we check
     /// that the NAM balance increased and that the Bridge pool VP has
     /// been triggered.
-    fn check_escrow(&self, verifiers: &BTreeSet<Address>) -> Result<(), Error> {
+    fn check_escrow(&self, verifiers: &BTreeSet<Address>) -> Result<()> {
         let escrow_key = TokenKeys::balance_key(
             &self.ctx.state.in_mem().native_token,
             &crate::ADDRESS,
@@ -72,14 +69,12 @@ where
                     "Bridge pool VP was not marked as a verifier of the \
                      transaction",
                 )
-                .into()
             })
         } else {
             Err(native_vp::Error::new_const(
                 "User tx attempted to decrease the amount of native tokens \
                  escrowed in the Ethereum Bridge's account",
-            )
-            .into())
+            ))
         }
     }
 }
@@ -92,8 +87,6 @@ where
     EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
     TokenKeys: token::Keys,
 {
-    type Error = Error;
-
     /// Validate that a wasm transaction is permitted to change keys under this
     /// account.
     ///
@@ -109,7 +102,7 @@ where
         _: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<()> {
         tracing::debug!(
             keys_changed_len = keys_changed.len(),
             verifiers_len = verifiers.len(),
@@ -137,7 +130,7 @@ where
 fn validate_changed_keys<TokenKeys: token::Keys>(
     nam_addr: &Address,
     keys_changed: &BTreeSet<Key>,
-) -> Result<(), Error> {
+) -> Result<()> {
     // acquire all keys that either changed our account, or that touched
     // nam balances
     let keys_changed: HashSet<_> = keys_changed
@@ -153,8 +146,7 @@ fn validate_changed_keys<TokenKeys: token::Keys>(
         return Err(native_vp::Error::SimpleMessage(
             "No keys changed under our account so this validity predicate \
              shouldn't have been triggered",
-        )
-        .into());
+        ));
     }
     tracing::debug!(
         relevant_keys.len = keys_changed.len(),
@@ -164,8 +156,7 @@ fn validate_changed_keys<TokenKeys: token::Keys>(
     if !nam_escrow_addr_modified {
         let error = native_vp::Error::new_const(
             "The native token's escrow balance should have been modified",
-        )
-        .into();
+        );
         tracing::debug!("{error}");
         return Err(error);
     }
@@ -175,8 +166,7 @@ fn validate_changed_keys<TokenKeys: token::Keys>(
     if !all_keys_are_nam_balance {
         let error = native_vp::Error::new_const(
             "Some modified keys were not a native token's balance key",
-        )
-        .into();
+        );
         tracing::debug!("{error}");
         return Err(error);
     }

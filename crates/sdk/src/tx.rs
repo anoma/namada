@@ -21,6 +21,7 @@ use masp_primitives::transaction::{builder, Transaction as MaspTransaction};
 use namada_account::{InitAccount, UpdateAccount};
 use namada_core::address::{Address, IBC, MASP};
 use namada_core::arith::checked;
+use namada_core::chain::Epoch;
 use namada_core::collections::HashSet;
 use namada_core::dec::Dec;
 use namada_core::hash::Hash;
@@ -39,7 +40,6 @@ use namada_core::masp::{
     AssetData, ExtendedSpendingKey, MaspEpoch, TransferSource, TransferTarget,
 };
 use namada_core::storage;
-use namada_core::storage::Epoch;
 use namada_core::time::DateTimeUtc;
 use namada_governance::cli::onchain::{
     DefaultProposal, OnChainProposal, PgfFundingProposal, PgfStewardProposal,

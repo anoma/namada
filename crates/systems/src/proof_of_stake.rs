@@ -1,7 +1,7 @@
 //! Proof-of-Stake abstract interfaces
 
 use namada_core::address::Address;
-use namada_core::storage;
+use namada_core::chain::Epoch;
 pub use namada_storage::Result;
 
 /// Abstract PoS storage read interface
@@ -14,7 +14,7 @@ pub trait Read<S> {
     fn is_delegator(
         storage: &S,
         address: &Address,
-        epoch: Option<storage::Epoch>,
+        epoch: Option<Epoch>,
     ) -> Result<bool>;
 
     /// Read PoS pipeline length parameter

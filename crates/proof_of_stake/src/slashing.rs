@@ -6,21 +6,17 @@ use std::collections::{BTreeMap, BTreeSet};
 use borsh::BorshDeserialize;
 use namada_core::address::Address;
 use namada_core::arith::{self, checked};
+use namada_core::chain::{BlockHeight, Epoch};
 use namada_core::collections::HashMap;
 use namada_core::dec::Dec;
 use namada_core::key::tm_raw_hash_to_string;
-use namada_core::storage::{BlockHeight, Epoch};
 use namada_core::tendermint::abci::types::{Misbehavior, MisbehaviorKind};
 use namada_core::token;
 use namada_events::EmitEvents;
-use namada_storage::collections::lazy_map::{
-    Collectable, NestedMap, NestedSubKey, SubKey,
-};
-use namada_storage::collections::LazyMap;
-use namada_storage::{OptionExt, ResultExt, StorageRead, StorageWrite};
 use namada_systems::governance;
 
 use crate::event::PosEvent;
+use crate::lazy_map::{Collectable, NestedMap, NestedSubKey, SubKey};
 use crate::storage::{
     enqueued_slashes_handle, read_pos_params, read_validator_last_slash_epoch,
     read_validator_stake, total_bonded_handle, total_unbonded_handle,
@@ -37,8 +33,10 @@ use crate::types::{
 use crate::validator_set_update::update_validator_set;
 use crate::{
     fold_and_slash_redelegated_bonds, get_total_consensus_stake,
-    jail_validator, storage, storage_key, types, EagerRedelegatedUnbonds,
-    FoldRedelegatedBondsResult, OwnedPosParams, PosParams,
+    iter_prefix_bytes, jail_validator, storage, storage_key, types,
+    EagerRedelegatedUnbonds, Error, FoldRedelegatedBondsResult, LazyMap,
+    OptionExt, OwnedPosParams, PosParams, Result, ResultExt, StorageRead,
+    StorageWrite,
 };
 
 /// Apply PoS slashes from the evidence
@@ -48,7 +46,7 @@ pub(crate) fn record_slashes_from_evidence<S, Gov>(
     pos_params: &PosParams,
     current_epoch: Epoch,
     validator_set_update_epoch: Epoch,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageWrite + StorageRead,
     Gov: governance::Read<S>,
@@ -150,7 +148,7 @@ pub fn slash<S, Gov>(
     slash_type: SlashType,
     validator: &Address,
     validator_set_update_epoch: Epoch,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
     Gov: governance::Read<S>,
@@ -210,7 +208,7 @@ pub fn process_slashes<S, Gov>(
     storage: &mut S,
     events: &mut impl EmitEvents,
     current_epoch: Epoch,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
     Gov: governance::Read<S>,
@@ -409,7 +407,7 @@ pub fn slash_validator_redelegation<S>(
     dest_total_redelegated_unbonded: &TotalRedelegatedUnbonded,
     slash_rate: Dec,
     dest_slashed_amounts: &mut BTreeMap<Epoch, token::Amount>,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead,
 {
@@ -467,7 +465,7 @@ pub fn slash_redelegation<S>(
     total_redelegated_unbonded: &TotalRedelegatedUnbonded,
     slash_rate: Dec,
     slashed_amounts: &mut BTreeMap<Epoch, token::Amount>,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead,
 {
@@ -496,9 +494,9 @@ where
                     .at(src_validator)
                     .get(storage, &bond_start)?
                     .unwrap_or_default();
-                Ok::<_, namada_storage::Error>(redelegated_unbonded)
+                Ok::<_, Error>(redelegated_unbonded)
             })
-            .collect::<namada_storage::Result<_>>()?;
+            .collect::<Result<_>>()?;
     let mut init_tot_unbonded =
         token::Amount::sum(redelegated_unbonded.into_iter())
             .ok_or_err_msg("token amount overflow")?;
@@ -588,7 +586,7 @@ pub fn slash_validator<S>(
     slash_rate: Dec,
     current_epoch: Epoch,
     slashed_amounts_map: &BTreeMap<Epoch, token::Amount>,
-) -> namada_storage::Result<BTreeMap<Epoch, token::Amount>>
+) -> Result<BTreeMap<Epoch, token::Amount>>
 where
     S: StorageRead,
 {
@@ -651,9 +649,7 @@ where
                     redelegated_bonds.get(bond_start),
                     slash_rate,
                 )?;
-                Ok::<token::Amount, namada_storage::Error>(checked!(
-                    acc + slashed
-                )?)
+                Ok::<token::Amount, Error>(checked!(acc + slashed)?)
             },
         )?;
 
@@ -720,7 +716,7 @@ pub fn compute_bond_at_epoch<S>(
     start: Epoch,
     amount: token::Amount,
     redelegated_bonds: Option<&EagerRedelegatedBondsMap>,
-) -> namada_storage::Result<token::Amount>
+) -> Result<token::Amount>
 where
     S: StorageRead,
 {
@@ -777,7 +773,7 @@ pub fn compute_slash_bond_at_epoch<S>(
     bond_amount: token::Amount,
     redelegated_bonds: Option<&EagerRedelegatedBondsMap>,
     slash_rate: Dec,
-) -> namada_storage::Result<token::Amount>
+) -> Result<token::Amount>
 where
     S: StorageRead,
 {
@@ -811,7 +807,7 @@ pub fn find_slashes_in_range<S>(
     start: Epoch,
     end: Option<Epoch>,
     validator: &Address,
-) -> namada_storage::Result<BTreeMap<Epoch, Dec>>
+) -> Result<BTreeMap<Epoch, Dec>>
 where
     S: StorageRead,
 {
@@ -839,7 +835,7 @@ pub fn apply_list_slashes(
     params: &OwnedPosParams,
     slashes: &[Slash],
     amount: token::Amount,
-) -> Result<token::Amount, arith::Error> {
+) -> std::result::Result<token::Amount, arith::Error> {
     let mut final_amount = amount;
     let mut computed_slashes = BTreeMap::<Epoch, token::Amount>::new();
     for slash in slashes {
@@ -860,7 +856,7 @@ pub fn compute_slashable_amount(
     slash: &Slash,
     amount: token::Amount,
     computed_slashes: &BTreeMap<Epoch, token::Amount>,
-) -> Result<token::Amount, arith::Error> {
+) -> std::result::Result<token::Amount, arith::Error> {
     let updated_amount = computed_slashes
         .iter()
         .filter(|(&epoch, _)| {
@@ -878,14 +874,12 @@ pub fn compute_slashable_amount(
 }
 
 /// Find all slashes and the associated validators in the PoS system
-pub fn find_all_slashes<S>(
-    storage: &S,
-) -> namada_storage::Result<HashMap<Address, Vec<Slash>>>
+pub fn find_all_slashes<S>(storage: &S) -> Result<HashMap<Address, Vec<Slash>>>
 where
     S: StorageRead,
 {
     let mut slashes: HashMap<Address, Vec<Slash>> = HashMap::new();
-    let slashes_iter = namada_storage::iter_prefix_bytes(
+    let slashes_iter = iter_prefix_bytes(
         storage,
         &storage_key::slashes_prefix(),
     )?
@@ -919,7 +913,7 @@ where
 pub fn find_all_enqueued_slashes<S>(
     storage: &S,
     epoch: Epoch,
-) -> namada_storage::Result<HashMap<Address, BTreeMap<Epoch, Vec<Slash>>>>
+) -> Result<HashMap<Address, BTreeMap<Epoch, Vec<Slash>>>>
 where
     S: StorageRead,
 {
@@ -954,7 +948,7 @@ where
 pub fn find_validator_slashes<S>(
     storage: &S,
     validator: &Address,
-) -> namada_storage::Result<Vec<Slash>>
+) -> Result<Vec<Slash>>
 where
     S: StorageRead,
 {
@@ -968,7 +962,7 @@ pub fn get_slashed_amount(
     params: &PosParams,
     amount: token::Amount,
     slashes: &BTreeMap<Epoch, Dec>,
-) -> namada_storage::Result<token::Amount> {
+) -> Result<token::Amount> {
     let mut updated_amount = amount;
     let mut computed_amounts = Vec::<SlashedAmount>::new();
 
@@ -1020,7 +1014,7 @@ pub fn compute_amount_after_slashing_unbond<S>(
     unbonds: &BTreeMap<Epoch, token::Amount>,
     redelegated_unbonds: &EagerRedelegatedUnbonds,
     slashes: Vec<Slash>,
-) -> namada_storage::Result<ResultSlashing>
+) -> Result<ResultSlashing>
 where
     S: StorageRead,
 {
@@ -1078,7 +1072,7 @@ pub fn compute_amount_after_slashing_withdraw<S>(
         (token::Amount, EagerRedelegatedBondsMap),
     >,
     slashes: Vec<Slash>,
-) -> namada_storage::Result<ResultSlashing>
+) -> Result<ResultSlashing>
 where
     S: StorageRead,
 {
@@ -1156,7 +1150,7 @@ fn process_validator_slash<S>(
     slash_rate: Dec,
     current_epoch: Epoch,
     slashed_amount_map: &mut EagerRedelegatedBondsMap,
-) -> namada_storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -1195,7 +1189,7 @@ where
             ) = res?;
             Ok(dest_validator)
         })
-        .collect::<namada_storage::Result<BTreeSet<_>>>()?;
+        .collect::<Result<BTreeSet<_>>>()?;
 
     for dest_validator in dest_validators {
         let to_modify = slashed_amount_map
@@ -1232,7 +1226,7 @@ fn compute_cubic_slash_rate<S>(
     storage: &S,
     params: &PosParams,
     infraction_epoch: Epoch,
-) -> namada_storage::Result<Dec>
+) -> Result<Dec>
 where
     S: StorageRead,
 {
@@ -1273,7 +1267,7 @@ where
 
                 let stake =
                     Dec::try_from(validator_stake).into_storage_result()?;
-                Ok::<Dec, namada_storage::Error>(checked!(acc + stake)?)
+                Ok::<Dec, Error>(checked!(acc + stake)?)
             })?;
         sum_vp_fraction =
             checked!(sum_vp_fraction + (infracting_stake / consensus_stake))?;

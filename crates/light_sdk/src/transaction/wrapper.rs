@@ -1,6 +1,6 @@
 use namada_sdk::hash::Hash;
 use namada_sdk::key::common;
-use namada_sdk::storage::Epoch;
+use namada_sdk::chain::Epoch;
 use namada_sdk::tx::data::{Fee, GasLimit};
 use namada_sdk::tx::{Section, Signature, Signer, Tx, TxError};
 

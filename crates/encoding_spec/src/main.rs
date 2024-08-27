@@ -24,10 +24,11 @@ use itertools::Itertools;
 use lazy_static::lazy_static;
 use madato::types::TableRow;
 use namada_core::address::Address;
+use namada_core::chain::Epoch;
 use namada_core::collections::HashSet;
 use namada_core::key::ed25519::{PublicKey, Signature};
 use namada_core::parameters::Parameters;
-use namada_core::storage::{self, Epoch};
+use namada_core::storage;
 use namada_tx::data::{pos, TxType, WrapperTx};
 use {namada_account as account, namada_token as token};
 
