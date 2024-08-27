@@ -797,7 +797,7 @@ impl RocksDB {
 
 /// The path to a snapshot.
 #[derive(Clone, Debug)]
-pub struct SnapshotPath(PathBuf, BlockHeight);
+pub struct SnapshotPath(pub PathBuf, pub BlockHeight);
 
 impl SnapshotPath {
     /// Return the root path where snapshots are stored.
@@ -871,6 +871,7 @@ pub struct DbSnapshotMeta {
     pub root_hash: Hash,
 }
 
+#[derive(Clone)]
 pub struct DbSnapshot(pub SnapshotPath);
 
 impl DbSnapshot {
@@ -902,7 +903,7 @@ impl DbSnapshot {
         Ok(())
     }
 
-    fn build_tarball(&self) -> std::io::Result<()> {
+    pub(crate) fn build_tarball(&self) -> std::io::Result<()> {
         use zstd::stream::write::Encoder;
 
         let snapshot_temp_db_path = self.0.temp_rocksdb();

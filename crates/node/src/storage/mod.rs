@@ -10,6 +10,8 @@ use arse_merkle_tree::traits::Hasher;
 use arse_merkle_tree::H256;
 use blake2b_rs::{Blake2b, Blake2bBuilder};
 use namada_sdk::state::{FullAccessState, StorageHasher};
+#[cfg(test)]
+pub use rocksdb::SnapshotPath;
 pub use rocksdb::{open, DbSnapshot, DbSnapshotMeta, RocksDBUpdateVisitor};
 
 #[derive(Default)]

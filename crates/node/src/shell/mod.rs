@@ -2048,7 +2048,10 @@ pub mod test_utils {
 
 #[cfg(test)]
 mod shell_tests {
+    use std::fs::File;
+
     use eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
+    use namada_apps_lib::state::StorageWrite;
     use namada_sdk::address;
     use namada_sdk::chain::Epoch;
     use namada_sdk::token::read_denom;
@@ -2058,10 +2061,13 @@ mod shell_tests {
     use namada_vote_ext::{
         bridge_pool_roots, ethereum_events, ethereum_tx_data_variants,
     };
+    use tempfile::tempdir;
     use {namada_replay_protection as replay_protection, wallet};
 
     use super::*;
+    use crate::shell::test_utils::top_level_directory;
     use crate::shell::token::DenominatedAmount;
+    use crate::storage::{DbSnapshot, PersistentDB, SnapshotPath};
 
     const GAS_LIMIT_MULTIPLIER: u64 = 100_000;
 
@@ -2916,5 +2922,81 @@ mod shell_tests {
             MempoolTxType::NewTransaction,
         );
         assert_eq!(result.code, ResultCode::TooLarge.into());
+    }
+
+    /// Test the that the shell can restore it's state
+    /// from a snapshot if it is not syncing
+    #[test]
+    fn test_restore_database_from_snapshot() {
+        let (sender, _receiver) = tokio::sync::mpsc::unbounded_channel();
+
+        let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
+        let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
+        let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
+        let config = config::Ledger::new(
+            base_dir.clone(),
+            Default::default(),
+            TendermintMode::Validator,
+        );
+        let mut shell = Shell::<PersistentDB, Sha256Hasher>::new(
+            config.clone(),
+            top_level_directory().join("wasm"),
+            sender,
+            None,
+            None,
+            None,
+            vp_wasm_compilation_cache,
+            tx_wasm_compilation_cache,
+        );
+        shell.state.in_mem_mut().block.height = BlockHeight::first();
+
+        shell.state.commit_block().expect("Test failed");
+        shell.state.db_mut().flush(true).expect("Test failed");
+        let original_root = shell.state.in_mem().merkle_root();
+        let snapshot = make_snapshot(config.db_dir(), base_dir);
+        shell
+            .state
+            .write(
+                &Key::parse("bing/fucking/bong").expect("Test failed"),
+                [1u8; 64],
+            )
+            .expect("Test failed");
+        shell.state.commit_block().expect("Test failed");
+        let new_root = shell.state.in_mem().merkle_root();
+        assert_ne!(new_root, original_root);
+
+        shell.restore_database_from_state_sync();
+        assert_eq!(shell.state.in_mem().merkle_root(), new_root,);
+        shell.syncing = Some(SnapshotSync {
+            next_chunk: 0,
+            height: BlockHeight::first(),
+            expected: vec![],
+            strikes: 0,
+            snapshot,
+        });
+        shell.restore_database_from_state_sync();
+        assert_eq!(shell.state.in_mem().merkle_root(), original_root,);
+    }
+
+    /// Helper function for the `test_restore_database_from_snapshot` test
+    fn make_snapshot(db_dir: PathBuf, base_dir: PathBuf) -> File {
+        let snapshot =
+            DbSnapshot(SnapshotPath(base_dir.clone(), BlockHeight::first()));
+        std::fs::create_dir_all(base_dir.join("snapshots"))
+            .expect("Test failed");
+        std::fs::create_dir_all(snapshot.0.base()).expect("Test failed");
+        std::fs::create_dir_all(snapshot.0.temp_rocksdb())
+            .expect("Test failed");
+        for entry in std::fs::read_dir(db_dir).expect("Test failed") {
+            let entry = entry.expect("Test failed");
+            let dest_file = snapshot
+                .0
+                .base()
+                .join("db")
+                .join(entry.file_name().to_string_lossy().to_string());
+            std::fs::copy(entry.path(), dest_file).expect("Test failed");
+        }
+        snapshot.clone().build_tarball().expect("Test failed");
+        File::open(snapshot.0.temp_tarball("zst")).expect("Test failed")
     }
 }
