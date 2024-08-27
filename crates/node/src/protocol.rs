@@ -1339,8 +1339,7 @@ where
                             ),
                             InternalAddress::ReplayProtection => Err(
                                 // Replay protection entries should never be
-                                // written to
-                                // via transactions
+                                // written to via transactions
                                 Error::AccessForbidden(
                                     (*internal_addr).clone(),
                                 ),

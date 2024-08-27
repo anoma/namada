@@ -18,7 +18,7 @@ use crate::bytes::ByteBuf;
 use crate::hash::Hash;
 use crate::time::DateTimeUtc;
 
-/// The length of the block's hash string
+/// The length of the block hash
 pub const BLOCK_HASH_LENGTH: usize = 32;
 /// The length of the block height
 pub const BLOCK_HEIGHT_LENGTH: usize = 8;
@@ -218,6 +218,7 @@ impl TryFrom<i64> for BlockHeight {
             .map_err(|e| format!("Unexpected height value {}, {}", value, e))
     }
 }
+
 impl BlockHeight {
     /// The first block height 1.
     pub const fn first() -> Self {
@@ -422,7 +423,7 @@ impl Epoch {
     /// `Epoch(0)` if overflow occurred.
     #[must_use = "this returns the result of the operation, without modifying \
                   the original"]
-    pub fn sub_or_default(self, rhs: Epoch) -> Self {
+    pub fn saturating_sub(self, rhs: Epoch) -> Self {
         self.checked_sub(rhs).unwrap_or_default()
     }
 }
