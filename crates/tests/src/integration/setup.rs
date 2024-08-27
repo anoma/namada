@@ -163,15 +163,16 @@ fn finalize_wallet(
             )
         });
 
-    // Try to load pre-genesis wallet
-    let pre_genesis_wallet = namada_apps_lib::wallet::load(&pre_genesis_path);
+    // Load pre-genesis wallet
+    let pre_genesis_wallet =
+        namada_apps_lib::wallet::load(&pre_genesis_path).unwrap();
     let chain_dir = global_args
         .base_dir
         .join(global_args.chain_id.as_ref().unwrap().as_str());
     // Derive wallet from genesis
     let wallet = genesis.derive_wallet(
         &chain_dir,
-        pre_genesis_wallet,
+        Some(pre_genesis_wallet),
         validator_alias_and_pre_genesis_wallet,
     );
     namada_apps_lib::wallet::save(&wallet).unwrap();

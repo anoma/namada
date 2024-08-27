@@ -809,7 +809,7 @@ pub fn load_pre_genesis_wallet_or_exit(
     match try_load_pre_genesis_wallet(base_dir) {
         Ok(wallet) => wallet,
         Err(e) => {
-            eprintln!("Error loading the wallet:\n {}", e.to_string());
+            eprintln!("Error loading the wallet: {e}");
             safe_exit(1)
         }
     }
