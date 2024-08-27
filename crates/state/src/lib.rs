@@ -166,18 +166,17 @@ pub trait StateRead: StorageRead + Debug {
         match height {
             Some(h) if h == self.in_mem().get_block_height().0 => {
                 let header = self.in_mem().header.clone();
-                let gas = match header {
-                    Some(ref header) => {
-                        let len = header.encoded_len() as u64;
-                        checked!(len * MEMORY_ACCESS_GAS_PER_BYTE)?
-                    }
-                    None => MEMORY_ACCESS_GAS_PER_BYTE,
+                let gas = if header.is_some() {
+                    let len = BlockHeader::encoded_len() as u64;
+                    checked!(len * MEMORY_ACCESS_GAS_PER_BYTE)?
+                } else {
+                    MEMORY_ACCESS_GAS_PER_BYTE
                 };
                 Ok((header, gas))
             }
             Some(h) => match self.db().read_block_header(h)? {
                 Some(header) => {
-                    let len = header.encoded_len() as u64;
+                    let len = BlockHeader::encoded_len() as u64;
                     let gas = checked!(len * STORAGE_ACCESS_GAS_PER_BYTE)?;
                     Ok((Some(header), gas))
                 }

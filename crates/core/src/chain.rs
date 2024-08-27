@@ -13,7 +13,6 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-use crate::borsh::BorshSerializeExt;
 use crate::bytes::ByteBuf;
 use crate::hash::Hash;
 use crate::time::DateTimeUtc;
@@ -286,14 +285,6 @@ pub enum ParseBlockHashError {
     ParseBlockHash(String),
 }
 
-impl TryFrom<Vec<u8>> for BlockHash {
-    type Error = ParseBlockHashError;
-
-    fn try_from(value: Vec<u8>) -> Result<Self, ParseBlockHashError> {
-        value.as_slice().try_into()
-    }
-}
-
 impl core::fmt::Debug for BlockHash {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let hash = format!("{}", ByteBuf(&self.0));
@@ -535,8 +526,9 @@ pub struct BlockHeader {
 
 impl BlockHeader {
     /// The number of bytes when this header is encoded
-    pub fn encoded_len(&self) -> usize {
-        self.serialize_to_vec().len()
+    pub const fn encoded_len() -> usize {
+        // checked in `test_block_header_encoded_len`
+        103
     }
 }
 
@@ -749,6 +741,7 @@ mod tests {
     use proptest::prelude::*;
 
     use super::*;
+    use crate::borsh::BorshSerializeExt;
 
     proptest! {
         /// Test any chain ID that is generated via `from_genesis` function is valid.
@@ -932,5 +925,17 @@ mod tests {
                 "Epoch: {e}"
             );
         }
+    }
+
+    #[test]
+    fn test_block_header_encoded_len() {
+        #[allow(clippy::disallowed_methods)]
+        let header = BlockHeader {
+            hash: Hash::zero(),
+            time: DateTimeUtc::now(),
+            next_validators_hash: Hash::zero(),
+        };
+        let len = header.serialize_to_vec().len();
+        assert_eq!(len, BlockHeader::encoded_len())
     }
 }

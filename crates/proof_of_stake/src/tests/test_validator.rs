@@ -967,8 +967,8 @@ fn test_validator_sets() {
     for e in Epoch::iter_bounds_inclusive(
         start_epoch,
         last_epoch
-            .sub_or_default(Epoch(DEFAULT_NUM_PAST_EPOCHS))
-            .sub_or_default(Epoch(1)),
+            .saturating_sub(Epoch(DEFAULT_NUM_PAST_EPOCHS))
+            .saturating_sub(Epoch(1)),
     ) {
         assert!(
             !consensus_validator_set_handle()
