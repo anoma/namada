@@ -155,15 +155,10 @@ audit:
 test: test-unit test-e2e test-wasm test-benches
 
 test-coverage:
-	# Run integration tests separately because they require `integration`
-	# feature (and without coverage)
 	$(cargo) +$(nightly) llvm-cov --output-path lcov.info \
 		--lcov \
-		-- --skip e2e --skip pos_state_machine_test --skip integration \
-		-Z unstable-options --report-time && \
-	$(cargo) +$(nightly) test integration:: \
-		--features integration \
-		-- -Z unstable-options --report-time
+		-- --skip e2e --skip pos_state_machine_test \
+		-Z unstable-options --report-time
 
 # NOTE: `TEST_FILTER` is prepended with `e2e::`. Since filters in `cargo test`
 # work with a substring search, TEST_FILTER only works if it contains a string
@@ -183,7 +178,7 @@ test-e2e:
 # Run integration tests
 test-integration:
 	RUST_BACKTRACE=$(RUST_BACKTRACE) \
-	$(cargo) +$(nightly) test --lib $(jobs) integration::$(TEST_FILTER)  --features integration \
+	$(cargo) +$(nightly) test --lib $(jobs) integration::$(TEST_FILTER) \
 	-Z unstable-options \
 	-- \
 	--test-threads=1 \

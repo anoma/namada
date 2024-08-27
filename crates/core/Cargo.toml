@@ -19,7 +19,7 @@ rand = ["dep:rand", "rand_core"]
 ethers-derive = [
   "ethbridge-structs/ethers-derive"
 ]
-# for integration tests and test utilities
+# for tests and test utilities
 testing = [
   "rand",
   "proptest",

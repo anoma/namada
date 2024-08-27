@@ -438,23 +438,27 @@ where
                 .expect("Creating directory for Namada should not fail");
         }
 
-        // For all tests except integration use hard-coded native token addr ...
-        #[cfg(all(
-            any(test, fuzzing, feature = "testing", feature = "benches"),
-            not(feature = "integration"),
-        ))]
-        let native_token = namada_sdk::address::testing::nam();
-        // ... Otherwise, look it up from the genesis file
-        #[cfg(not(all(
-            any(test, fuzzing, feature = "testing", feature = "benches"),
-            not(feature = "integration"),
-        )))]
+        // For tests, fuzzing and benches use hard-coded native token addr ...
+        #[cfg(any(test, fuzzing, feature = "benches"))]
         let native_token = {
             let chain_dir = base_dir.join(chain_id.as_str());
-            let genesis =
-                genesis::chain::Finalized::read_toml_files(&chain_dir)
-                    .expect("Missing genesis files");
-            genesis.get_native_token().clone()
+            // Use genesis file only if it exists
+            if chain_dir
+                .join(genesis::templates::TOKENS_FILE_NAME)
+                .exists()
+            {
+                genesis::chain::Finalized::read_native_token(&chain_dir)
+                    .expect("Missing genesis files")
+            } else {
+                namada_sdk::address::testing::nam()
+            }
+        };
+        // ... Otherwise, look it up from the genesis file
+        #[cfg(not(any(test, fuzzing, feature = "benches")))]
+        let native_token = {
+            let chain_dir = base_dir.join(chain_id.as_str());
+            genesis::chain::Finalized::read_native_token(&chain_dir)
+                .expect("Missing genesis files")
         };
 
         // load last state from storage
