@@ -1,10 +1,10 @@
-use serde::Serialize;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::token;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
 use namada_state::{StorageRead, StorageResult, StorageWrite};
+use serde::Serialize;
 
 use super::storage::keys as goverance_storage;
 

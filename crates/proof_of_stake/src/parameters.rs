@@ -3,7 +3,6 @@
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use serde::Serialize;
 use namada_core::arith::checked;
 use namada_core::dec::Dec;
 use namada_core::storage::Epoch;
@@ -14,12 +13,13 @@ use namada_governance::parameters::GovernanceParameters;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
+use serde::Serialize;
 use thiserror::Error;
 
 /// Proof-of-Stake system parameters. This includes parameters that are used in
 /// PoS but are read from other accounts storage (governance).
 #[derive(
-    Debug, Clone, BorshDeserialize, BorshDeserializer, BorshSerialize, Serialize
+    Debug, Clone, BorshDeserialize, BorshDeserializer, BorshSerialize, Serialize,
 )]
 pub struct PosParams {
     /// PoS-owned params
@@ -32,7 +32,7 @@ pub struct PosParams {
 /// Proof-of-Stake system parameters owned by the PoS address, set at genesis
 /// and can only be changed via governance
 #[derive(
-    Debug, Clone, BorshDeserialize, BorshDeserializer, BorshSerialize, Serialize
+    Debug, Clone, BorshDeserialize, BorshDeserializer, BorshSerialize, Serialize,
 )]
 pub struct OwnedPosParams {
     /// A maximum number of consensus validators
