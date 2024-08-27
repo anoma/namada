@@ -270,7 +270,7 @@ pub fn find_keypair(
         .unwrap()
         .1;
     let key = format!("{}{}", sk, pk);
-    common::SecretKey::from_str(&sk).map_err(|e| {
+    common::SecretKey::from_str(sk).map_err(|e| {
         eyre!(format!(
             "Key: {} parsed from {}, Error: {}\n\nOutput: {}",
             key, matched, e, unread

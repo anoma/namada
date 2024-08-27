@@ -170,7 +170,7 @@ fn offline_sign() -> Result<()> {
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.assert_success();
 
-    let offline_tx = find_offline_file(&test.test_dir.path(), "tx")
+    let offline_tx = find_offline_file(test.test_dir.path(), "tx")
         .unwrap()
         .expect("Offline tx should be found.")
         .to_path_buf()
@@ -196,7 +196,7 @@ fn offline_sign() -> Result<()> {
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.assert_success();
 
-    let offline_sig = find_offline_file(&test.test_dir.path(), "sig")
+    let offline_sig = find_offline_file(test.test_dir.path(), "sig")
         .unwrap()
         .expect("Offline signature should be found.")
         .to_path_buf()
