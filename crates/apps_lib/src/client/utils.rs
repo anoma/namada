@@ -1037,6 +1037,7 @@ pub async fn sign_offline(
         tx_path,
         secret_keys,
         owner,
+        output_folder_path,
     }: args::SignOffline,
 ) {
     let tx_data = if let Ok(tx_data) = fs::read(&tx_path) {
@@ -1065,12 +1066,17 @@ pub async fn sign_offline(
 
     for signature in &signatures {
         let filename = format!(
-            "offline_signature_{}_{}.tx",
+            "offline_signature_{}_{}.sig",
             tx.header_hash().to_string().to_lowercase(),
             signature.pubkey,
         );
 
-        let signature_path = File::create(&filename)
+        let tx_path = match output_folder_path {
+            Some(ref path) => path.join(filename).to_string_lossy().to_string(),
+            None => filename,
+        };
+
+        let signature_path = File::create(&tx_path)
             .expect("Should be able to create signature file.");
 
         serde_json::to_writer_pretty(signature_path, &signature)
@@ -1078,7 +1084,7 @@ pub async fn sign_offline(
 
         println!(
             "Signature for {} serialized at {}",
-            signature.pubkey, filename
+            signature.pubkey, tx_path
         );
     }
 }

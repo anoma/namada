@@ -7900,6 +7900,7 @@ pub mod args {
         pub tx_path: PathBuf,
         pub secret_keys: Vec<common::SecretKey>,
         pub owner: Address,
+        pub output_folder_path: Option<PathBuf>,
     }
 
     impl Args for SignOffline {
@@ -7907,11 +7908,13 @@ pub mod args {
             let tx_path = DATA_PATH.parse(matches);
             let secret_keys = PRIVATE_KEYS.parse(matches);
             let owner = RAW_ADDRESS.parse(matches);
+            let output_folder_path = OUTPUT_FOLDER_PATH.parse(matches);
 
             Self {
                 tx_path,
                 secret_keys,
                 owner,
+                output_folder_path,
             }
         }
 
@@ -7926,6 +7929,11 @@ pub mod args {
                  order matters."
             )))
             .arg(RAW_ADDRESS.def().help(wrap!("The owner's address.")))
+            .arg(
+                OUTPUT_FOLDER_PATH
+                    .def()
+                    .help("Folder to where serialize the signatures"),
+            )
         }
     }
 
