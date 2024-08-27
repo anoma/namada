@@ -24,7 +24,7 @@ namada-eth-bridge = ["namada_ethereum_bridge/namada-eth-bridge"]
 benches = ["namada_core/benches", "namada_core/testing", "namada_state/benches"]
 wasm-runtime = ["namada_vm/wasm-runtime"]
 
-# for integration tests and test utilities
+# for tests and test utilities
 testing = [
   "masp_primitives/test-dependencies",
   "namada_account/testing",

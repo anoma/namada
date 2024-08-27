@@ -17,10 +17,9 @@ default = ["migrations"]
 mainnet = [
   "namada_sdk/mainnet",
 ]
-# for integration tests and test utilities
+# for tests and test utilities
 testing = ["lazy_static", "namada_sdk/testing"]
 benches = ["lazy_static", "namada_sdk/benches"]
-integration = []
 migrations = [
   "namada_migrations",
   "namada_sdk/migrations",
