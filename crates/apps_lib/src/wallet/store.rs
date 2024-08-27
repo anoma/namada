@@ -18,10 +18,15 @@ pub fn wallet_file(store_dir: impl AsRef<Path>) -> PathBuf {
 
 /// Load the store file or create a new one without any keys or addresses.
 pub fn load_or_new(store_dir: &Path) -> Result<Store, LoadStoreError> {
-    load(store_dir).or_else(|_| {
-        let wallet = CliWalletUtils::new(store_dir.to_path_buf());
-        wallet.save()?;
-        Ok(wallet.into())
+    load(store_dir).or_else(|err| {
+        // Only create a new file if not found, otherwise propagate the err
+        if let LoadStoreError::NotFound { .. } = &err {
+            let wallet = CliWalletUtils::new(store_dir.to_path_buf());
+            wallet.save()?;
+            Ok(wallet.into())
+        } else {
+            Err(err)
+        }
     })
 }
 

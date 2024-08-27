@@ -97,8 +97,12 @@ pub trait WalletIo: Sized + Clone {
 }
 
 /// Errors of wallet loading and storing
+#[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum LoadStoreError {
+    /// Wallet store file not found
+    #[error("No wallet store file found at \"{path}\"")]
+    NotFound { path: String },
     /// Wallet store decoding error
     #[error("Failed decoding the wallet store: {0}")]
     Decode(toml::de::Error),
@@ -169,6 +173,12 @@ pub mod fs {
             wallet: &mut Wallet<U>,
         ) -> Result<(), LoadStoreError> {
             let wallet_file = self.store_dir().join(FILE_NAME);
+            if !wallet_file.exists() {
+                return Err(LoadStoreError::NotFound {
+                    path: wallet_file.to_string_lossy().to_string(),
+                });
+            }
+
             let mut options = fs::OpenOptions::new();
             options.read(true).write(false);
             let lock =
