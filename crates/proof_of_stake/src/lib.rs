@@ -42,16 +42,24 @@ use epoched::EpochOffset;
 pub use error::*;
 use namada_core::address::{Address, InternalAddress};
 use namada_core::arith::checked;
+use namada_core::chain::BlockHeight;
+pub use namada_core::chain::Epoch;
 use namada_core::collections::HashSet;
 pub use namada_core::dec::Dec;
 use namada_core::key::common;
-use namada_core::storage::BlockHeight;
-pub use namada_core::storage::{Epoch, Key, KeySeg};
 use namada_core::tendermint::abci::types::Misbehavior;
 use namada_core::token;
 use namada_events::EmitEvents;
-use namada_storage::collections::lazy_map::{self, Collectable, LazyMap};
-use namada_storage::{OptionExt, StorageRead, StorageWrite};
+pub use namada_state::collections::lazy_map::{
+    self, Collectable, LazyMap, NestedMap,
+};
+pub use namada_state::collections::lazy_set::{self, LazySet};
+pub use namada_state::collections::lazy_vec::{self, LazyVec};
+pub use namada_state::collections::LazyCollection;
+pub use namada_state::{
+    iter_prefix_bytes, Error, Key, KeySeg, OptionExt, Result, ResultExt,
+    StorageRead, StorageWrite,
+};
 pub use namada_systems::proof_of_stake::*;
 use namada_systems::{governance, trans_token};
 pub use parameters::{OwnedPosParams, PosParams};
@@ -122,7 +130,7 @@ where
     fn is_delegator(
         storage: &S,
         address: &Address,
-        epoch: Option<namada_core::storage::Epoch>,
+        epoch: Option<namada_core::chain::Epoch>,
     ) -> Result<bool> {
         is_delegator(storage, address, epoch)
     }
@@ -214,7 +222,7 @@ where
 pub fn is_delegator<S>(
     storage: &S,
     address: &Address,
-    epoch: Option<namada_core::storage::Epoch>,
+    epoch: Option<namada_core::chain::Epoch>,
 ) -> Result<bool>
 where
     S: StorageRead,
@@ -222,7 +230,7 @@ where
     let prefix = bonds_for_source_prefix(address);
     match epoch {
         Some(epoch) => {
-            let iter = namada_storage::iter_prefix_bytes(storage, &prefix)?;
+            let iter = iter_prefix_bytes(storage, &prefix)?;
             for res in iter {
                 let (key, _) = res?;
                 if let Some((bond_id, bond_epoch)) = is_bond_key(&key) {
@@ -236,7 +244,7 @@ where
             Ok(false)
         }
         None => {
-            let iter = namada_storage::iter_prefix_bytes(storage, &prefix)?;
+            let iter = iter_prefix_bytes(storage, &prefix)?;
             for res in iter {
                 let (key, _) = res?;
                 if let Some((bond_id, _epoch)) = is_bond_key(&key) {
@@ -1206,7 +1214,7 @@ where
                         .or_default()
                         .insert(epoch, amount);
                 }
-                Ok::<_, namada_storage::Error>((start, rbonds))
+                Ok::<_, Error>((start, rbonds))
             } else {
                 for src_validator in &modified.validators_to_remove {
                     if modified
@@ -1318,14 +1326,14 @@ where
     let offset = offset_opt.unwrap_or(params.pipeline_len);
 
     if !address.is_established() {
-        return Err(namada_storage::Error::new_const(
+        return Err(Error::new_const(
             "The given address {address} is not established. Only an \
              established address can become a validator.",
         ));
     }
 
     if is_validator(storage, address)? {
-        return Err(namada_storage::Error::new_const(
+        return Err(Error::new_const(
             "The given address is already a validator",
         ));
     }
@@ -1333,7 +1341,7 @@ where
     // The address may not have any bonds if it is going to be initialized as a
     // validator
     if has_bonds::<S, Gov>(storage, address)? {
-        return Err(namada_storage::Error::new_const(
+        return Err(Error::new_const(
             "The given address has delegations and therefore cannot become a \
              validator. Unbond first.",
         ));
@@ -2628,11 +2636,7 @@ where
         (Dec::one() - params.liveness_threshold) * params.liveness_window_check
     )?
     .to_uint()
-    .ok_or_else(|| {
-        namada_storage::Error::SimpleMessage(
-            "Found negative liveness threshold",
-        )
-    })?
+    .ok_or_else(|| Error::SimpleMessage("Found negative liveness threshold"))?
     .as_u64();
 
     // Jail inactive validators
@@ -3100,9 +3104,8 @@ fn prune_old_delegations(
 #[cfg(any(test, feature = "testing"))]
 /// PoS related utility functions to help set up tests.
 pub mod test_utils {
-    use namada_core::chain::ProposalBytes;
     use namada_core::hash::Hash;
-    use namada_core::parameters::EpochDuration;
+    use namada_core::parameters::{EpochDuration, ProposalBytes};
     use namada_core::time::DurationSecs;
 
     use super::*;
@@ -3114,7 +3117,7 @@ pub mod test_utils {
         storage: &mut S,
         params: &PosParams,
         validators: impl Iterator<Item = GenesisValidator>,
-        current_epoch: namada_core::storage::Epoch,
+        current_epoch: namada_core::chain::Epoch,
     ) -> Result<()>
     where
         S: StorageRead + StorageWrite,
@@ -3182,7 +3185,7 @@ pub mod test_utils {
         storage: &mut S,
         owned: OwnedPosParams,
         validators: impl Iterator<Item = GenesisValidator> + Clone,
-        current_epoch: namada_core::storage::Epoch,
+        current_epoch: namada_core::chain::Epoch,
     ) -> Result<PosParams>
     where
         S: StorageRead + StorageWrite,

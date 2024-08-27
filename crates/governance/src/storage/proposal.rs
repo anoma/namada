@@ -4,9 +4,9 @@ use std::fmt::Display;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use itertools::Itertools;
 use namada_core::address::Address;
+use namada_core::chain::Epoch;
 use namada_core::hash::Hash;
 pub use namada_core::ibc::PGFIbcTarget;
-use namada_core::storage::Epoch;
 use namada_core::token;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
@@ -576,9 +576,9 @@ impl Display for StorageProposal {
 /// Testing helpers and and strategies for governance proposals
 pub mod testing {
     use namada_core::address::testing::arb_non_internal_address;
+    use namada_core::chain::testing::arb_epoch;
     use namada_core::hash::testing::arb_hash;
     use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
-    use namada_core::storage::testing::arb_epoch;
     use namada_core::token::testing::arb_amount;
     use proptest::prelude::*;
     use proptest::{collection, prop_compose};

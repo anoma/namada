@@ -37,7 +37,7 @@ use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use namada_apps_lib::wallet::{self, ValidatorData, ValidatorKeys};
 use namada_sdk::address::Address;
-use namada_sdk::chain::ChainId;
+use namada_sdk::chain::{BlockHeight, ChainId};
 use namada_sdk::eth_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
 use namada_sdk::eth_bridge::protocol::validation::ethereum_events::validate_eth_events_vext;
 use namada_sdk::eth_bridge::protocol::validation::validator_set_update::validate_valset_upd_vext;
@@ -57,7 +57,7 @@ use namada_sdk::state::{
     DBIter, FullAccessState, Sha256Hasher, StorageHasher, StorageRead,
     TempWlState, WlState, DB, EPOCH_SWITCH_BLOCKS_DELAY,
 };
-use namada_sdk::storage::{BlockHeight, Key, TxIndex};
+use namada_sdk::storage::{Key, TxIndex};
 use namada_sdk::tendermint::AppHash;
 use namada_sdk::time::DateTimeUtc;
 pub use namada_sdk::tx::data::ResultCode;
@@ -121,7 +121,7 @@ pub enum Error {
     #[error("Error loading wasm: {0}")]
     LoadingWasm(String),
     #[error("Error reading from or writing to storage: {0}")]
-    Storage(#[from] namada_sdk::state::StorageError),
+    Storage(#[from] namada_sdk::state::Error),
     #[error("Transaction replay attempt: {0}")]
     ReplayAttempt(String),
     #[error("Error with snapshots: {0}")]
@@ -144,9 +144,9 @@ impl From<Error> for TxResult {
     }
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub type ShellResult<T> = std::result::Result<T, Error>;
 
-pub fn reset(config: config::Ledger) -> Result<()> {
+pub fn reset(config: config::Ledger) -> ShellResult<()> {
     // simply nuke the DB files
     let db_path = &config.db_dir();
     match std::fs::remove_dir_all(db_path) {
@@ -158,7 +158,7 @@ pub fn reset(config: config::Ledger) -> Result<()> {
     Ok(())
 }
 
-pub fn rollback(config: config::Ledger) -> Result<()> {
+pub fn rollback(config: config::Ledger) -> ShellResult<()> {
     // Rollback Tendermint state
     tracing::info!("Rollback Tendermint state");
     let tendermint_block_height =
@@ -171,7 +171,7 @@ pub fn rollback(config: config::Ledger) -> Result<()> {
     tracing::info!("Rollback Namada state");
 
     db.rollback(tendermint_block_height)
-        .map_err(|e| Error::Storage(namada_sdk::state::StorageError::new(e)))
+        .map_err(|e| Error::Storage(namada_sdk::state::Error::new(e)))
 }
 
 #[derive(Debug)]
@@ -698,8 +698,8 @@ where
     /// Get the next epoch for which we can request validator set changed
     pub fn get_validator_set_update_epoch(
         &self,
-        current_epoch: namada_sdk::storage::Epoch,
-    ) -> namada_sdk::storage::Epoch {
+        current_epoch: namada_sdk::chain::Epoch,
+    ) -> namada_sdk::chain::Epoch {
         if let Some(delay) = self.state.in_mem().update_epoch_blocks_delay {
             if delay == EPOCH_SWITCH_BLOCKS_DELAY {
                 // If we're about to update validator sets for the
@@ -1290,7 +1290,7 @@ where
         // because we're using domain types in InitChain, but FinalizeBlock is
         // shimmed with a different old type. The joy...
         mut validator_conv: F,
-    ) -> namada_sdk::state::StorageResult<Vec<V>>
+    ) -> namada_sdk::state::Result<Vec<V>>
     where
         F: FnMut(common::PublicKey, i64) -> V,
     {
@@ -1347,7 +1347,7 @@ where
 pub fn replay_protection_checks<D, H>(
     wrapper: &Tx,
     temp_state: &mut TempWlState<'_, D, H>,
-) -> Result<()>
+) -> ShellResult<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
@@ -1387,7 +1387,7 @@ fn mempool_fee_check<D, H, CA>(
     shell_params: &mut ShellParams<'_, TempWlState<'static, D, H>, D, H, CA>,
     tx: &Tx,
     wrapper: &WrapperTx,
-) -> Result<()>
+) -> ShellResult<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
@@ -1412,7 +1412,7 @@ pub fn fee_data_check<D, H, CA>(
     wrapper: &WrapperTx,
     minimum_gas_price: token::Amount,
     shell_params: &mut ShellParams<'_, TempWlState<'_, D, H>, D, H, CA>,
-) -> Result<()>
+) -> ShellResult<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
@@ -1462,7 +1462,7 @@ pub mod test_utils {
     use namada_sdk::proof_of_stake::storage::validator_consensus_key_handle;
     use namada_sdk::state::mockdb::MockDB;
     use namada_sdk::state::{LastBlock, StorageWrite};
-    use namada_sdk::storage::{Epoch, Header};
+    use namada_sdk::storage::{BlockHeader, Epoch};
     use namada_sdk::tendermint::abci::types::VoteInfo;
     use tempfile::tempdir;
     use tokio::sync::mpsc::{Sender, UnboundedReceiver};
@@ -1718,7 +1718,7 @@ pub mod test_utils {
         pub fn finalize_block(
             &mut self,
             req: FinalizeBlock,
-        ) -> Result<Vec<Event>> {
+        ) -> ShellResult<Vec<Event>> {
             match self.shell.finalize_block(req) {
                 Ok(resp) => Ok(resp.events),
                 Err(err) => Err(err),
@@ -1904,7 +1904,7 @@ pub mod test_utils {
     impl Default for FinalizeBlock {
         fn default() -> Self {
             FinalizeBlock {
-                header: Header {
+                header: BlockHeader {
                     hash: Hash([0; 32]),
                     #[allow(clippy::disallowed_methods)]
                     time: DateTimeUtc::now(),
@@ -1965,7 +1965,7 @@ pub mod test_utils {
         byzantine_validators: Option<Vec<Misbehavior>>,
     ) {
         // Let the header time be always ahead of the next epoch min start time
-        let header = Header {
+        let header = BlockHeader {
             time: shell.state.in_mem().next_epoch_min_start_time.next_second(),
             ..Default::default()
         };
@@ -1990,7 +1990,7 @@ pub mod test_utils {
 mod shell_tests {
     use eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
     use namada_sdk::address;
-    use namada_sdk::storage::Epoch;
+    use namada_sdk::chain::Epoch;
     use namada_sdk::token::read_denom;
     use namada_sdk::tx::data::protocol::{ProtocolTx, ProtocolTxType};
     use namada_sdk::tx::data::Fee;

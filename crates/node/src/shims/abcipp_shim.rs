@@ -4,10 +4,10 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use futures::future::FutureExt;
+use namada_sdk::chain::BlockHeight;
 use namada_sdk::hash::Hash;
 use namada_sdk::migrations::ScheduledMigration;
 use namada_sdk::state::{ProcessProposalCachedResult, DB};
-use namada_sdk::storage::BlockHeight;
 use namada_sdk::tendermint::abci::response::ProcessProposal;
 use namada_sdk::time::{DateTimeUtc, Utc};
 use namada_sdk::tx::data::hash_tx;

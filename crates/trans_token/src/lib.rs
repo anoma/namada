@@ -30,7 +30,9 @@ use namada_core::token;
 use namada_core::uint::Uint;
 use namada_events::extend::UserAccount;
 use namada_events::{EmitEvents, EventLevel};
-use namada_storage::{StorageRead, StorageWrite};
+pub use namada_state::{
+    Error, Key, Result, ResultExt, StorageRead, StorageWrite,
+};
 pub use namada_systems::trans_token::*;
 pub use storage::*;
 

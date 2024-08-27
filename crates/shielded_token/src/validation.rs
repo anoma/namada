@@ -18,9 +18,10 @@ use masp_primitives::transaction::{
 };
 use masp_proofs::bellman::groth16::VerifyingKey;
 use masp_proofs::sapling::BatchValidator;
-use namada_storage::Error;
 use rand_core::OsRng;
 use smooth_operator::checked;
+
+use crate::{Error, Result};
 
 // TODO these could be exported from masp_proof crate
 /// Spend circuit name
@@ -118,16 +119,16 @@ fn load_pvks() -> &'static PVKs {
 pub fn verify_shielded_tx<F>(
     transaction: &Transaction,
     consume_verify_gas: F,
-) -> Result<(), Error>
+) -> Result<()>
 where
-    F: Fn(u64) -> std::result::Result<(), Error>,
+    F: Fn(u64) -> Result<()>,
 {
     tracing::debug!("entered verify_shielded_tx()");
 
     let sapling_bundle = if let Some(bundle) = transaction.sapling_bundle() {
         bundle
     } else {
-        return Err(Error::SimpleMessage("no sapling bundle"));
+        return Err(Error::new_const("no sapling bundle"));
     };
     let tx_data = transaction.deref();
 
@@ -135,9 +136,7 @@ where
     let unauth_tx_data = match partial_deauthorize(tx_data) {
         Some(tx_data) => tx_data,
         None => {
-            return Err(Error::SimpleMessage(
-                "Failed to partially de-authorize",
-            ));
+            return Err(Error::new_const("Failed to partially de-authorize"));
         }
     };
 
@@ -166,14 +165,14 @@ where
     if !ctx.check_bundle(sapling_bundle.to_owned(), sighash.as_ref().to_owned())
     {
         tracing::debug!("failed check bundle");
-        return Err(Error::SimpleMessage("Invalid sapling bundle"));
+        return Err(Error::new_const("Invalid sapling bundle"));
     }
     tracing::debug!("passed check bundle");
 
     // Charge gas before final validation
     charge_masp_validate_gas(sapling_bundle, consume_verify_gas)?;
     if !ctx.validate(spend_vk, convert_vk, output_vk, OsRng) {
-        return Err(Error::SimpleMessage("Invalid proofs or signatures"));
+        return Err(Error::new_const("Invalid proofs or signatures"));
     }
     Ok(())
 }
@@ -216,9 +215,9 @@ pub fn partial_deauthorize(
 fn charge_masp_validate_gas<F>(
     sapling_bundle: &SaplingBundle<SaplingAuthorized>,
     consume_verify_gas: F,
-) -> Result<(), Error>
+) -> Result<()>
 where
-    F: Fn(u64) -> std::result::Result<(), Error>,
+    F: Fn(u64) -> Result<()>,
 {
     // Signatures gas
     consume_verify_gas(checked!(
@@ -264,9 +263,9 @@ where
 fn charge_masp_check_bundle_gas<F>(
     sapling_bundle: &SaplingBundle<SaplingAuthorized>,
     consume_verify_gas: F,
-) -> Result<(), Error>
+) -> Result<()>
 where
-    F: Fn(u64) -> std::result::Result<(), Error>,
+    F: Fn(u64) -> Result<()>,
 {
     consume_verify_gas(checked!(
         (sapling_bundle.shielded_spends.len() as u64)

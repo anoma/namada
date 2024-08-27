@@ -21,13 +21,14 @@ pub mod action;
 pub mod data;
 pub mod event;
 pub mod proto;
+mod sign;
 mod types;
 
 use data::TxType;
 pub use either;
 pub use event::new_tx_event;
 pub use namada_core::key::SignableEthMessage;
-pub use namada_core::sign::SignatureIndex;
+pub use sign::{SigIndexDecodeError, SignatureIndex};
 pub use types::{
     standalone_signature, verify_standalone_sig, Authorization, BatchedTx,
     BatchedTxRef, Code, Commitment, CompressedAuthorization, Data, DecodeError,

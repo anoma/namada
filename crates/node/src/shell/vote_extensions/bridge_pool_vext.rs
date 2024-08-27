@@ -55,6 +55,7 @@ where
 #[cfg(test)]
 mod test_bp_vote_extensions {
     use namada_apps_lib::wallet::defaults::{bertha_address, bertha_keypair};
+    use namada_sdk::chain::BlockHeight;
     use namada_sdk::eth_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
     use namada_sdk::eth_bridge::storage::bridge_pool::get_key_from_hash;
     use namada_sdk::eth_bridge::storage::eth_bridge_queries::{
@@ -74,7 +75,6 @@ mod test_bp_vote_extensions {
         become_validator, BecomeValidator, Epoch,
     };
     use namada_sdk::state::StorageWrite;
-    use namada_sdk::storage::BlockHeight;
     use namada_sdk::tendermint::abci::types::VoteInfo;
     use namada_sdk::tx::Signed;
     use namada_sdk::{governance, token};

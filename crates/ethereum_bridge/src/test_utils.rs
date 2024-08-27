@@ -7,12 +7,13 @@ use std::num::NonZeroU64;
 use namada_account::protocol_pk_key;
 use namada_core::address::testing::wnam;
 use namada_core::address::{self, Address};
+use namada_core::chain::BlockHeight;
 use namada_core::collections::HashMap;
 use namada_core::dec::Dec;
 use namada_core::ethereum_events::EthAddress;
 use namada_core::keccak::KeccakHash;
 use namada_core::key::{self, RefTo};
-use namada_core::storage::{BlockHeight, Key};
+use namada_core::storage::Key;
 use namada_proof_of_stake::parameters::OwnedPosParams;
 use namada_proof_of_stake::types::GenesisValidator;
 use namada_proof_of_stake::{

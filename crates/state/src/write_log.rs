@@ -20,8 +20,6 @@ use thiserror::Error;
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("Storage error applying a write log: {0}")]
-    StorageError(crate::Error),
     #[error("Trying to update a temporary value")]
     UpdateTemporaryValue,
     #[error(
@@ -43,6 +41,12 @@ pub enum Error {
     SizeDiffOverflow,
     #[error("Value length overflowed")]
     ValueLenOverflow,
+}
+
+impl From<Error> for crate::Error {
+    fn from(value: Error) -> Self {
+        crate::Error::new(value)
+    }
 }
 
 /// Result for functions that may fail

@@ -9,11 +9,11 @@ use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
 use namada_sdk::address::Address;
-use namada_sdk::chain::ProposalBytes;
 use namada_sdk::dec::Dec;
 use namada_sdk::eth_bridge::storage::parameters::{
     Contracts, Erc20WhitelistEntry, MinimumConfirmations,
 };
+use namada_sdk::parameters::ProposalBytes;
 use namada_sdk::token::{
     Amount, DenominatedAmount, Denomination, NATIVE_MAX_DECIMAL_PLACES,
 };

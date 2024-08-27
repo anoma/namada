@@ -8,7 +8,7 @@ pub mod steward;
 use namada_core::address::Address;
 use namada_core::collections::HashMap;
 use namada_core::dec::Dec;
-use namada_state::{StorageRead, StorageResult, StorageWrite};
+use namada_state::{Result, StorageRead, StorageWrite};
 
 use crate::pgf::parameters::PgfParameters;
 use crate::pgf::storage::keys as pgf_keys;
@@ -16,7 +16,7 @@ use crate::pgf::storage::steward::StewardDetail;
 use crate::storage::proposal::StoragePgfFunding;
 
 /// Query the current pgf steward set
-pub fn get_stewards<S>(storage: &S) -> StorageResult<Vec<StewardDetail>>
+pub fn get_stewards<S>(storage: &S) -> Result<Vec<StewardDetail>>
 where
     S: StorageRead,
 {
@@ -35,7 +35,7 @@ where
 pub fn get_steward<S>(
     storage: &S,
     address: &Address,
-) -> StorageResult<Option<StewardDetail>>
+) -> Result<Option<StewardDetail>>
 where
     S: StorageRead,
 {
@@ -43,7 +43,7 @@ where
 }
 
 /// Check if an address is a steward
-pub fn is_steward<S>(storage: &S, address: &Address) -> StorageResult<bool>
+pub fn is_steward<S>(storage: &S, address: &Address) -> Result<bool>
 where
     S: StorageRead,
 {
@@ -51,10 +51,7 @@ where
 }
 
 /// Remove a steward
-pub fn remove_steward<S>(
-    storage: &mut S,
-    address: &Address,
-) -> StorageResult<()>
+pub fn remove_steward<S>(storage: &mut S, address: &Address) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {
@@ -66,7 +63,7 @@ where
 /// Query the current pgf continuous payments
 pub fn get_continuous_pgf_payments<S>(
     storage: &S,
-) -> StorageResult<Vec<StoragePgfFunding>>
+) -> Result<Vec<StoragePgfFunding>>
 where
     S: StorageRead,
 {
@@ -82,7 +79,7 @@ where
 }
 
 /// Query the pgf parameters
-pub fn get_parameters<S>(storage: &S) -> StorageResult<PgfParameters>
+pub fn get_parameters<S>(storage: &S) -> Result<PgfParameters>
 where
     S: StorageRead,
 {
@@ -109,7 +106,7 @@ pub fn update_commission<S>(
     storage: &mut S,
     address: Address,
     reward_distribution: HashMap<Address, Dec>,
-) -> StorageResult<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
 {

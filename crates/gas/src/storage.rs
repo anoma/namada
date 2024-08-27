@@ -1,6 +1,6 @@
 //! Gas storage keys
 
-use namada_core::storage::Key;
+pub use namada_core::storage::Key;
 
 const ERROR_MSG: &str = "Cannot obtain a valid db key";
 

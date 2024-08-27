@@ -9,22 +9,21 @@ use namada_core::collections::HashMap;
 use namada_core::storage::{Key, KeySeg};
 use namada_core::token::Amount;
 use namada_state::StateRead;
-use namada_storage::StorageRead;
 use namada_systems::{governance, parameters};
 use namada_tx::action::{
     Action, Bond, ClaimRewards, GovAction, PosAction, Read, Withdraw,
 };
 use namada_tx::BatchedTxRef;
 use namada_vp::native_vp::{
-    self, Ctx, CtxPreStorageRead, NativeVp, VpEvaluator,
+    Ctx, CtxPreStorageRead, Error, NativeVp, Result, VpEvaluator,
 };
 use namada_vp::VpEnv;
-use thiserror::Error;
 
 use crate::storage_key::{
     is_any_minted_balance_key, is_any_minter_key, is_any_token_balance_key,
     is_any_token_parameter_key, minter_key,
 };
+use crate::StorageRead;
 
 /// The owner of some balance change.
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -32,18 +31,6 @@ enum Owner<'a> {
     Account(&'a Address),
     Protocol,
 }
-
-#[allow(missing_docs)]
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("Multitoken VP error: governance proposal change is invalid")]
-    InvalidGovernanceChange,
-    #[error("Multitoken VP error: Native VP error: {0}")]
-    NativeVpError(#[from] native_vp::Error),
-}
-
-/// Multitoken functions result
-pub type Result<T> = std::result::Result<T, Error>;
 
 /// Multitoken VP
 pub struct MultitokenVp<'ctx, S, CA, EVAL, Params, Gov>
@@ -65,8 +52,6 @@ where
     Params: parameters::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
     Gov: governance::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
 {
-    type Error = Error;
-
     fn validate_tx(
         &'view self,
         tx_data: &BatchedTxRef<'_>,
@@ -132,21 +117,15 @@ where
                             tracing::debug!(
                                 "Native token deposit isn't allowed"
                             );
-                            return Err(Error::NativeVpError(
-                                native_vp::Error::SimpleMessage(
-                                    "Native token deposit isn't allowed",
-                                ),
+                            return Err(Error::new_const(
+                                "Native token deposit isn't allowed",
                             ));
                         }
                         let change =
                             inc_changes.entry(token.clone()).or_default();
                         *change =
                             change.checked_add(diff).ok_or_else(|| {
-                                Error::NativeVpError(
-                                    native_vp::Error::SimpleMessage(
-                                        "Overflowed in balance check",
-                                    ),
-                                )
+                                Error::new_const("Overflowed in balance check")
                             })?;
                     }
                     None => {
@@ -154,10 +133,8 @@ where
                             tracing::debug!(
                                 "Native token withdraw isn't allowed"
                             );
-                            return Err(Error::NativeVpError(
-                                native_vp::Error::SimpleMessage(
-                                    "Native token deposit isn't allowed",
-                                ),
+                            return Err(Error::new_const(
+                                "Native token deposit isn't allowed",
                             ));
                         }
                         let diff = pre
@@ -167,11 +144,7 @@ where
                             dec_changes.entry(token.clone()).or_default();
                         *change =
                             change.checked_add(diff).ok_or_else(|| {
-                                Error::NativeVpError(
-                                    native_vp::Error::SimpleMessage(
-                                        "Overflowed in balance check",
-                                    ),
-                                )
+                                Error::new_const("Overflowed in balance check")
                             })?;
                     }
                 }
@@ -180,10 +153,8 @@ where
                     tracing::debug!(
                         "Minting/Burning native token isn't allowed"
                     );
-                    return Err(Error::NativeVpError(
-                        native_vp::Error::SimpleMessage(
-                            "Minting/Burning native token isn't allowed",
-                        ),
+                    return Err(Error::new_const(
+                        "Minting/Burning native token isn't allowed",
                     ));
                 }
 
@@ -193,11 +164,7 @@ where
                     Some(diff) => {
                         let mint = inc_mints.entry(token.clone()).or_default();
                         *mint = mint.checked_add(diff).ok_or_else(|| {
-                            Error::NativeVpError(
-                                native_vp::Error::SimpleMessage(
-                                    "Overflowed in balance check",
-                                ),
-                            )
+                            Error::new_const("Overflowed in balance check")
                         })?;
                     }
                     None => {
@@ -206,11 +173,7 @@ where
                             .expect("Underflow shouldn't happen here");
                         let mint = dec_mints.entry(token.clone()).or_default();
                         *mint = mint.checked_add(diff).ok_or_else(|| {
-                            Error::NativeVpError(
-                                native_vp::Error::SimpleMessage(
-                                    "Overflowed in balance check",
-                                ),
-                            )
+                            Error::new_const("Overflowed in balance check")
                         })?;
                     }
                 }
@@ -227,10 +190,9 @@ where
             {
                 // Reject when trying to update an unexpected key under
                 // `#Multitoken/...`
-                return Err(native_vp::Error::new_alloc(format!(
+                return Err(Error::new_alloc(format!(
                     "Unexpected change to the multitoken account: {key}"
-                ))
-                .into());
+                )));
             }
         }
 
@@ -249,10 +211,9 @@ where
                 // VPs themselves, their validation is handled
                 // by the `Multitoken` internal address,
                 // but internal token Nut addresses have to verify the transfer
-                return Err(native_vp::Error::new_alloc(format!(
+                return Err(Error::new_alloc(format!(
                     "Token {token} must verify the tx"
-                ))
-                .into());
+                )));
             }
 
             let inc_change =
@@ -276,10 +237,9 @@ where
                 };
 
             token_changes_are_balanced.ok_or_else(|| {
-                native_vp::Error::new_const(
+                Error::new_const(
                     "The transaction's token changes are unbalanced",
                 )
-                .into()
             })
         })
     }
@@ -318,22 +278,17 @@ where
                             == Address::Internal(InternalAddress::Ibc) =>
                     {
                         verifiers.contains(&minter).ok_or_else(|| {
-                            native_vp::Error::new_const(
-                                "The IBC VP was not triggered",
-                            )
-                            .into()
+                            Error::new_const("The IBC VP was not triggered")
                         })
                     }
-                    _ => Err(native_vp::Error::new_const(
+                    _ => Err(Error::new_const(
                         "Only the IBC account is able to mint IBC tokens",
-                    )
-                    .into()),
+                    )),
                 }
             }
-            _ => Err(native_vp::Error::new_alloc(format!(
+            _ => Err(Error::new_alloc(format!(
                 "Attempted to mint non-IBC token {token}"
-            ))
-            .into()),
+            ))),
         }
     }
 
@@ -344,20 +299,17 @@ where
     ) -> Result<()> {
         batched_tx.tx.data(batched_tx.cmt).map_or_else(
             || {
-                Err(native_vp::Error::new_const(
+                Err(Error::new_const(
                     "Token parameter changes require tx data to be present",
-                )
-                .into())
+                ))
             },
             |data| {
-                Gov::is_proposal_accepted(&self.ctx.pre(), data.as_ref())
-                    .map_err(Error::NativeVpError)?
+                Gov::is_proposal_accepted(&self.ctx.pre(), data.as_ref())?
                     .ok_or_else(|| {
-                        native_vp::Error::new_const(
+                        Error::new_const(
                             "Token parameter changes can only be performed by \
                              a governance proposal that has been accepted",
                         )
-                        .into()
                     })
             },
         )
@@ -428,8 +380,7 @@ mod tests {
     use namada_ibc::trace::ibc_token;
     use namada_parameters::storage::get_native_token_transferable_key;
     use namada_state::testing::TestState;
-    use namada_state::StorageWrite;
-    use namada_storage::TxIndex;
+    use namada_state::{StorageWrite, TxIndex};
     use namada_tx::action::Write;
     use namada_tx::data::TxType;
     use namada_tx::{Authorization, BatchedTx, Code, Data, Section, Tx};

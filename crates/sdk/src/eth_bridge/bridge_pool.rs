@@ -742,8 +742,8 @@ mod recommendations {
     use std::collections::BTreeSet;
 
     use borsh::BorshDeserialize;
+    use namada_core::chain::BlockHeight;
     use namada_core::ethereum_events::Uint as EthUint;
-    use namada_core::storage::BlockHeight;
     use namada_core::uint::{self, Uint, I256};
     use namada_ethereum_bridge::storage::proof::BridgePoolRootProof;
     use namada_vote_ext::validator_set_update::{

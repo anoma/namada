@@ -13,7 +13,6 @@
 
 use std::borrow::Cow;
 use std::collections::BTreeSet;
-use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
@@ -30,7 +29,7 @@ use namada_core::uint::I320;
 use namada_state::{ResultExt, StateRead};
 use namada_systems::trans_token::{self as token, Amount};
 use namada_tx::BatchedTxRef;
-use namada_vp::native_vp::{self, Ctx, NativeVp, StorageReader, VpEvaluator};
+use namada_vp::native_vp::{Ctx, Error, NativeVp, StorageReader, VpEvaluator};
 
 use crate::storage::bridge_pool::{
     get_pending_key, is_bridge_pool_key, BRIDGE_POOL_ADDRESS,
@@ -39,11 +38,6 @@ use crate::storage::eth_bridge_queries::is_bridge_active_at;
 use crate::storage::parameters::read_native_erc20_address;
 use crate::storage::whitelist;
 use crate::ADDRESS as BRIDGE_ADDRESS;
-
-#[derive(thiserror::Error, Debug)]
-#[error("Bridge Pool VP error: {0}")]
-/// Generic error that may be returned by the validity predicate
-pub struct Error(#[from] native_vp::Error);
 
 /// An [`Amount`] that has been updated with some delta value.
 #[derive(Copy, Clone)]
@@ -58,8 +52,7 @@ impl AmountDelta {
     /// Resolve the updated amount by applying the delta value.
     #[inline]
     fn resolve(self) -> Result<I320, Error> {
-        checked!(self.delta + I320::from(self.base))
-            .map_err(|e| Error(e.into()))
+        checked!(self.delta + I320::from(self.base)).map_err(Into::into)
     }
 }
 
@@ -120,7 +113,7 @@ where
             delta: checked!(I320::from(after) - I320::from(before)).map_err(
                 |error| {
                     tracing::warn!(?error, %account_key, "reading pre value");
-                    Error(error.into())
+                    error
                 },
             )?,
         }))
@@ -184,11 +177,10 @@ where
             }
             // some other error occurred while calculating
             // balance deltas
-            _ => Err(native_vp::Error::AllocMessage(format!(
+            _ => Err(Error::AllocMessage(format!(
                 "Could not calculate the balance delta for {}",
                 payer_account
-            ))
-            .into()),
+            ))),
         }
     }
 
@@ -259,10 +251,7 @@ where
                 suffix: whitelist::KeyType::Whitelisted,
             }
             .into();
-            (&self.ctx)
-                .read_pre_value(&key)
-                .map_err(Error)?
-                .unwrap_or(false)
+            (&self.ctx).read_pre_value(&key)?.unwrap_or(false)
         };
         if !wnam_whitelisted {
             tracing::debug!(
@@ -287,10 +276,7 @@ where
                 suffix: whitelist::KeyType::Cap,
             }
             .into();
-            (&self.ctx)
-                .read_pre_value(&key)
-                .map_err(Error)?
-                .unwrap_or_default()
+            (&self.ctx).read_pre_value(&key)?.unwrap_or_default()
         };
         if escrowed_balance > I320::from(wnam_cap) {
             tracing::debug!(
@@ -516,9 +502,9 @@ fn sum_gas_and_token_amounts(
         .amount
         .checked_add(transfer.transfer.amount)
         .ok_or_else(|| {
-            Error(native_vp::Error::SimpleMessage(
+            Error::new_const(
                 "Addition overflowed adding gas fee + transfer amount.",
-            ))
+            )
         })
 }
 
@@ -530,8 +516,6 @@ where
     CA: 'static + Clone,
     TokenKeys: token::Keys,
 {
-    type Error = Error;
-
     fn validate_tx(
         &'view self,
         batched_tx: &BatchedTxRef<'_>,
@@ -546,85 +530,73 @@ where
         if !is_bridge_active_at(
             &self.ctx.pre(),
             self.ctx.state.in_mem().get_current_epoch().0,
-        )
-        .map_err(Error)?
-        {
+        )? {
             tracing::debug!(
                 "Rejecting transaction, since the Ethereum bridge is disabled."
             );
-            return Err(native_vp::Error::SimpleMessage(
+            return Err(Error::new_const(
                 "Rejecting transaction, since the Ethereum bridge is disabled.",
-            )
-            .into());
+            ));
         }
         let Some(tx_data) = batched_tx.tx.data(batched_tx.cmt) else {
-            return Err(native_vp::Error::SimpleMessage(
-                "No transaction data found",
-            )
-            .into());
+            return Err(Error::new_const("No transaction data found"));
         };
         let transfer: PendingTransfer =
             BorshDeserialize::try_from_slice(&tx_data[..])
-                .into_storage_result()
-                .map_err(Error)?;
+                .into_storage_result()?;
 
         let pending_key = get_pending_key(&transfer);
         // check that transfer is not already in the pool
         match (&self.ctx).read_pre_value::<PendingTransfer>(&pending_key) {
             Ok(Some(_)) => {
-                let error = native_vp::Error::new_const(
+                let error = Error::new_const(
                     "Rejecting transaction as the transfer is already in the \
                      Ethereum bridge pool.",
-                )
-                .into();
+                );
                 tracing::debug!("{error}");
                 return Err(error);
             }
             // NOTE: make sure we don't erase storage errors returned by the
             // ctx, as these may contain gas errors!
-            Err(e) => return Err(e.into()),
+            Err(e) => return Err(e),
             _ => {}
         }
         for key in keys_changed.iter().filter(|k| is_bridge_pool_key(k)) {
             if *key != pending_key {
-                let error = native_vp::Error::new_alloc(format!(
+                let error = Error::new_alloc(format!(
                     "Rejecting transaction as it is attempting to change an \
                      incorrect key in the Ethereum bridge pool: {key}.\n \
                      Expected key: {pending_key}",
-                ))
-                .into();
+                ));
                 tracing::debug!("{error}");
                 return Err(error);
             }
         }
         let pending: PendingTransfer =
             (&self.ctx).read_post_value(&pending_key)?.ok_or_else(|| {
-                Error(native_vp::Error::SimpleMessage(
+                Error::new_const(
                     "Rejecting transaction as the transfer wasn't added to \
                      the pool of pending transfers",
-                ))
+                )
             })?;
         if pending != transfer {
-            let error = native_vp::Error::new_alloc(format!(
+            let error = Error::new_alloc(format!(
                 "An incorrect transfer was added to the Ethereum bridge pool: \
                  {transfer:?}.\n Expected: {pending:?}",
-            ))
-            .into();
+            ));
             tracing::debug!("{error}");
             return Err(error);
         }
         // The deltas in the escrowed amounts we must check.
-        let wnam_address =
-            read_native_erc20_address(&self.ctx.pre()).map_err(Error)?;
+        let wnam_address = read_native_erc20_address(&self.ctx.pre())?;
         let escrow_checks =
             self.determine_escrow_checks(&wnam_address, &transfer)?;
         if !escrow_checks.validate::<TokenKeys>(keys_changed) {
-            let error = native_vp::Error::new_const(
+            let error = Error::new_const(
                 // TODO(namada#3247): specify which storage changes are missing
                 // or which ones are invalid
                 "Invalid storage modifications in the Bridge pool",
-            )
-            .into();
+            );
             tracing::debug!("{error}");
             return Err(error);
         }
@@ -634,10 +606,9 @@ where
             &transfer,
             escrow_checks.gas_check,
         )? {
-            return Err(native_vp::Error::new_const(
+            return Err(Error::new_const(
                 "Gas was not correctly escrowed into the Bridge pool storage",
-            )
-            .into());
+            ));
         }
         // check the escrowed assets
         if transfer.transfer.asset == wnam_address {
@@ -647,19 +618,17 @@ where
                 escrow_checks.token_check,
             )?
             .ok_or_else(|| {
-                native_vp::Error::new_const(
+                Error::new_const(
                     "The wrapped NAM tokens were not escrowed properly",
                 )
-                .into()
             })
         } else {
             self.check_escrowed_toks(escrow_checks.token_check)?
                 .ok_or_else(|| {
-                    native_vp::Error::new_alloc(format!(
+                    Error::new_alloc(format!(
                         "The {} tokens were not escrowed properly",
                         transfer.transfer.asset
                     ))
-                    .into()
                 })
         }
         .inspect(|_| {

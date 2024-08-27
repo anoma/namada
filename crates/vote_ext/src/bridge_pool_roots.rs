@@ -6,10 +6,10 @@ use std::ops::{Deref, DerefMut};
 
 use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_core::chain::BlockHeight;
 use namada_core::collections::HashSet;
 use namada_core::key::common;
 use namada_core::key::common::Signature;
-use namada_core::storage::BlockHeight;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;

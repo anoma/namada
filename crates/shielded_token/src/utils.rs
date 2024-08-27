@@ -5,11 +5,11 @@ use std::collections::BTreeSet;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::Transaction;
-use namada_storage::{Error, Key, Result, StorageRead, StorageWrite};
 
 use crate::storage_key::{
     is_masp_transfer_key, masp_commitment_tree_key, masp_nullifier_key,
 };
+use crate::{Error, Key, Result, StorageRead, StorageWrite};
 
 // Writes the nullifiers of the provided masp transaction to storage
 fn reveal_nullifiers(

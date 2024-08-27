@@ -1,4 +1,4 @@
-//! The core public types, storage_api, VpEnv and TxEnv.
+//! The core Namada types, helpers and re-exported dependencies.
 
 #![doc(html_favicon_url = "https://dev.namada.net/master/favicon.png")]
 #![doc(html_logo_url = "https://dev.namada.net/master/rustdoc-logo.png")]
@@ -47,7 +47,6 @@ pub mod collections {
     pub use hash_set::HashSet;
 }
 
-pub mod account;
 pub mod address;
 pub mod booleans;
 pub mod chain;
@@ -63,7 +62,6 @@ pub mod keccak;
 pub mod key;
 pub mod masp;
 pub mod parameters;
-pub mod sign;
 pub mod storage;
 pub mod string_encoding;
 pub mod time;
