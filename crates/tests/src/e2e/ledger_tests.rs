@@ -38,8 +38,9 @@ use setup::constants::*;
 use setup::Test;
 
 use super::helpers::{
-    epochs_per_year_from_min_duration, get_height, get_pregenesis_wallet,
-    wait_for_block_height, wait_for_wasm_pre_compile,
+    epochs_per_year_from_min_duration, find_keypair, find_offline_file,
+    get_height, get_pregenesis_wallet, wait_for_block_height,
+    wait_for_wasm_pre_compile,
 };
 use super::setup::{set_ethereum_bridge_mode, working_dir, NamadaCmd};
 use crate::e2e::helpers::{
@@ -119,6 +120,104 @@ fn run_ledger() -> Result<()> {
         ledger.exp_string(LEDGER_STARTED)?;
         ledger.exp_string(NON_VALIDATOR_NODE)?;
     }
+
+    Ok(())
+}
+
+#[test]
+fn offline_sign() -> Result<()> {
+    let test = setup::single_node_net()?;
+
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+
+    // 1. Run the ledger node
+    let mut ledger =
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?;
+    ledger.exp_string("Committed block hash")?;
+    let _bg_ledger = ledger.background();
+
+    let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
+
+    let output_folder = test.test_dir.path().to_string_lossy().to_string();
+
+    // 2. Dump a transfer tx
+    let tx_args = apply_use_device(vec![
+        "transparent-transfer",
+        "--source",
+        BERTHA,
+        "--target",
+        ALBERT,
+        "--token",
+        NAM,
+        "--amount",
+        "10.1",
+        "--gas-price",
+        "0.00090",
+        "--signing-keys",
+        BERTHA_KEY,
+        "--node",
+        &validator_one_rpc,
+        "--dump-tx",
+        "--output-folder-path",
+        &output_folder,
+    ]);
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.assert_success();
+
+    let offline_tx = find_offline_file(test.test_dir.path(), "tx")
+        .unwrap()
+        .expect("Offline tx should be found.")
+        .to_path_buf()
+        .display()
+        .to_string();
+
+    let bertha_address = find_address(&test, BERTHA).unwrap().to_string();
+    let bertha_sk = find_keypair(&test, BERTHA_KEY).unwrap().to_string();
+
+    // 3. Offline sign a transfer tx
+    let tx_args = apply_use_device(vec![
+        "utils",
+        "sign-offline",
+        "--data-path",
+        &offline_tx,
+        "--address",
+        &bertha_address,
+        "--secret-keys",
+        &bertha_sk,
+        "--output-folder-path",
+        &output_folder,
+    ]);
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.assert_success();
+
+    let offline_sig = find_offline_file(test.test_dir.path(), "sig")
+        .unwrap()
+        .expect("Offline signature should be found.")
+        .to_path_buf()
+        .display()
+        .to_string();
+
+    let tx_args = apply_use_device(vec![
+        "tx",
+        "--owner",
+        BERTHA_KEY,
+        "--tx-path",
+        &offline_tx,
+        "--signatures",
+        &offline_sig,
+        "--node",
+        &validator_one_rpc,
+        "--gas-payer",
+        BERTHA_KEY,
+    ]);
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.assert_success();
 
     Ok(())
 }

@@ -31,5 +31,6 @@
     "e2e::wallet_tests::wallet_encrypted_key_cmds": 1,
     "e2e::wallet_tests::wallet_encrypted_key_cmds_env_var": 1,
     "e2e::wallet_tests::wallet_unencrypted_key_cmds": 1,
-    "e2e::ledger_tests::masp_txs_and_queries": 82
+    "e2e::ledger_tests::masp_txs_and_queries": 82,
+    "e2e::ledger_tests::offline_sign": 20
 }
