@@ -149,6 +149,11 @@ impl Dec {
         Self::two().checked_div(3).expect("Cannot fail")
     }
 
+    /// The representation of 2 / 5
+    pub fn two_fifths() -> Self {
+        Dec::new(4, 1).expect("Cannot fail")
+    }
+
     /// Create a new [`Dec`] using a mantissa and a scale.
     pub fn new(mantissa: i128, scale: u8) -> Option<Self> {
         if scale > POS_DECIMAL_PRECISION {
