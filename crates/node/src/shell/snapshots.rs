@@ -227,7 +227,7 @@ impl Shell<storage::PersistentDB, Sha256Hasher> {
             if self
                 .state
                 .db()
-                .insert_entry(&mut batch, None, &cf, &key, value)
+                .insert_entry(&mut batch, &cf, &key, value)
                 .is_err()
             {
                 return tm_response::ApplySnapshotChunk {

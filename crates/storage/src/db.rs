@@ -285,7 +285,6 @@ pub trait DB: Debug {
     fn overwrite_entry(
         &self,
         batch: &mut Self::WriteBatch,
-        height: Option<BlockHeight>,
         cf: &DbColFam,
         key: &Key,
         new_value: impl AsRef<[u8]>,

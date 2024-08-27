@@ -1750,12 +1750,11 @@ impl DB for RocksDB {
     fn overwrite_entry(
         &self,
         batch: &mut Self::WriteBatch,
-        height: Option<BlockHeight>,
         cf: &DbColFam,
         key: &Key,
         new_value: impl AsRef<[u8]>,
     ) -> Result<()> {
-        self.insert_entry(batch, height, cf, key, new_value.as_ref())?;
+        self.insert_entry(batch, cf, key, new_value.as_ref())?;
         let state_cf = self.get_column_family(STATE_CF)?;
         let last_height: BlockHeight = self
             .read_value(state_cf, BLOCK_HEIGHT_KEY)?
@@ -1850,7 +1849,7 @@ impl<'db> DBUpdateVisitor for RocksDBUpdateVisitor<'db> {
 
     fn write(&mut self, key: &Key, cf: &DbColFam, value: impl AsRef<[u8]>) {
         self.db
-            .overwrite_entry(&mut self.batch, None, cf, key, value)
+            .overwrite_entry(&mut self.batch, cf, key, value)
             .expect("Failed to overwrite a key in storage")
     }
 
