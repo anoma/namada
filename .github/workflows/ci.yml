@@ -293,7 +293,7 @@ jobs:
       - name: Store coverage file artifact
         uses: actions/upload-artifact@v4
         with:
-          name: unit-cov-${{ github.event.pull_request.head.sha || github.sha }}.info
+          name: unit-cov-${{ github.event.pull_request.head.sha || github.sha }}
           path: lcov.info # output of `make test-unit-with-coverage` 
       - name: Clean cargo cache
         if: steps.cache.outputs.cache-hit != 'true'
@@ -394,7 +394,7 @@ jobs:
       - name: Store coverage file artifact
         uses: actions/upload-artifact@v4
         with:
-          name: integration-cov-${{ github.event.pull_request.head.sha || github.sha }}.info
+          name: integration-cov-${{ github.event.pull_request.head.sha || github.sha }}
           path: lcov.info # output of `make test-integration-with-coverage` 
       - name: Clean cargo cache
         if: steps.cache.outputs.cache-hit != 'true'
@@ -623,16 +623,16 @@ jobs:
       - name: Download unit coverage artifacts
         uses: actions/download-artifact@v4
         with:
-          name: unit-cov-${{ github.event.pull_request.head.sha || github.sha }}.info
-          path: unit-cov.info
+          name: unit-cov-${{ github.event.pull_request.head.sha || github.sha }}
+          path: unit-cov
       - name: Download integration coverage artifacts
         uses: actions/download-artifact@v4
         with:
-          name: integration-cov-${{ github.event.pull_request.head.sha || github.sha }}.info
-          path: integration-cov.info
+          name: integration-cov-${{ github.event.pull_request.head.sha || github.sha }}
+          path: integration-cov
       - name: Upload coverage to codecov
         uses: codecov/codecov-action@v4
         with:
-          files: integration-cov.info, unit-cov.info
+          files: integration-cov/lcov.info, unit-cov/lcov.info
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
