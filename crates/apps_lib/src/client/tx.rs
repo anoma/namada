@@ -210,11 +210,10 @@ pub async fn submit_reveal_aux(
             .map_err(|e| error::Error::Other(e.to_string()))?;
 
         if tx::is_reveal_pk_needed(context.client(), address).await? {
-            // FIXME: rework this message? yes slightly
             display_line!(
                 context.io(),
                 "Submitting a tx to reveal the public key for address \
-                 {address}..."
+                 {address}"
             );
             return Ok(Some(
                 tx::build_reveal_pk(context, args, &public_key).await?,
@@ -228,8 +227,7 @@ pub async fn submit_reveal_aux(
 async fn batch_opt_reveal_pk_and_submit<N: Namada>(
     namada: &N,
     args: &args::Tx,
-    // FIXME: references here
-    owners: &[Address],
+    owners: &[&Address],
     tx_data: (Tx, SigningTxData),
 ) -> Result<ProcessTxResponse, error::Error>
 where
@@ -237,7 +235,6 @@ where
 {
     let mut batched_tx_data = vec![];
 
-    // FIXME: can improve this for loop?
     for owner in owners {
         if let Some(reveal_pk_tx_data) =
             submit_reveal_aux(namada, args, owner).await?
@@ -268,7 +265,7 @@ pub async fn submit_bridge_pool_tx<N: Namada>(
         batch_opt_reveal_pk_and_submit(
             namada,
             &args.tx,
-            &[args.sender],
+            &[&args.sender],
             bridge_pool_tx_data,
         )
         .await?;
@@ -292,7 +289,7 @@ where
         batch_opt_reveal_pk_and_submit(
             namada,
             &args.tx,
-            &[args.owner],
+            &[&args.owner],
             custom_tx_data,
         )
         .await?;
@@ -806,7 +803,7 @@ pub async fn submit_transparent_transfer(
         tx::dump_tx(namada.io(), &args.tx, transfer_data.0);
     } else {
         let reveal_pks: Vec<_> =
-            args.data.into_iter().map(|datum| datum.source).collect();
+            args.data.iter().map(|datum| &datum.source).collect();
         batch_opt_reveal_pk_and_submit(
             namada,
             &args.tx,
@@ -850,12 +847,8 @@ pub async fn submit_shielding_transfer(
         let cmt_hash = tx.commitments().last().unwrap().get_hash();
         let wrapper_hash = tx.wrapper_hash();
 
-        let reveal_pks: Vec<_> = args
-            .data
-            .clone()
-            .into_iter()
-            .map(|datum| datum.source)
-            .collect();
+        let reveal_pks: Vec<_> =
+            args.data.iter().map(|datum| &datum.source).collect();
         let result = batch_opt_reveal_pk_and_submit(
             namada,
             &args.tx,
@@ -924,7 +917,7 @@ where
         batch_opt_reveal_pk_and_submit(
             namada,
             &args.tx,
-            &[args.source.effective_address()],
+            &[&args.source.effective_address()],
             (tx, signing_data),
         )
         .await?;
@@ -1033,7 +1026,7 @@ where
         batch_opt_reveal_pk_and_submit(
             namada,
             &args.tx,
-            &[proposal_author],
+            &[&proposal_author],
             proposal_tx_data,
         )
         .await?;
@@ -1167,8 +1160,7 @@ where
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, submit_bond_tx_data.0);
     } else {
-        let default_address =
-            args.source.clone().unwrap_or(args.validator.clone());
+        let default_address = args.source.as_ref().unwrap_or(&args.validator);
         batch_opt_reveal_pk_and_submit(
             namada,
             &args.tx,
