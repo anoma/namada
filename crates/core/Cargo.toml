@@ -19,7 +19,7 @@ rand = ["dep:rand", "rand_core"]
 ethers-derive = [
   "ethbridge-structs/ethers-derive"
 ]
-# for integration tests and test utilities
+# for tests and test utilities
 testing = [
   "rand",
   "proptest",
@@ -94,6 +94,7 @@ tokio = { workspace = true, optional = true, default-features = false, features 
 
 [dev-dependencies]
 assert_matches.workspace = true
+lazy_static.workspace = true
 proptest.workspace = true
 rand.workspace = true
 rand_core.workspace = true

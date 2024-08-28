@@ -86,7 +86,7 @@ where
         &mut self,
         init: request::InitChain,
         #[cfg(any(test, feature = "testing", feature = "benches"))]
-        _num_validators: u64,
+        num_validators: u64,
     ) -> ShellResult<response::InitChain> {
         let mut response = response::InitChain::default();
         let chain_id = self.state.in_mem().chain_id.as_str();
@@ -127,38 +127,29 @@ where
         }
 
         // Read the genesis files
-        #[cfg(any(
-            feature = "integration",
-            not(any(test, fuzzing, feature = "benches"))
-        ))]
+        #[cfg(not(any(test, fuzzing, feature = "benches")))]
         let genesis = {
             let chain_dir = self.base_dir.join(chain_id);
             genesis::chain::Finalized::read_toml_files(&chain_dir)
                 .expect("Missing genesis files")
         };
-        #[cfg(all(
-            any(test, fuzzing, feature = "benches"),
-            not(feature = "integration")
-        ))]
+        #[cfg(any(test, fuzzing, feature = "benches"))]
         let genesis = {
             let chain_dir = self.base_dir.join(chain_id);
-            genesis::make_dev_genesis(_num_validators, &chain_dir)
+            if chain_dir.join(genesis::chain::METADATA_FILE_NAME).exists() {
+                genesis::chain::Finalized::read_toml_files(&chain_dir)
+                    .expect("Missing genesis files")
+            } else {
+                genesis::make_dev_genesis(num_validators, &chain_dir)
+            }
         };
-        #[cfg(all(
-            any(test, fuzzing, feature = "benches"),
-            not(feature = "integration")
-        ))]
-        {
-            // update the native token from the genesis file
-            let native_token = genesis.get_native_token().clone();
-            self.state.in_mem_mut().native_token = native_token;
-        }
+
         let mut validation = InitChainValidation::new(self, false);
         validation.run(
             init,
             genesis,
             #[cfg(any(test, feature = "testing"))]
-            _num_validators,
+            num_validators,
         );
         // propagate errors or panic
         validation.error_out()?;
@@ -969,7 +960,7 @@ impl<T> Policy<T> {
     }
 }
 
-#[cfg(all(test, not(feature = "integration")))]
+#[cfg(test)]
 mod test {
     use std::str::FromStr;
 

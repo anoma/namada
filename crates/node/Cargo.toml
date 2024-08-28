@@ -17,7 +17,7 @@ default = ["migrations"]
 mainnet = [
   "namada_sdk/mainnet",
 ]
-# for integration tests and test utilities
+# for tests and test utilities
 testing = [
   "namada_apps_lib/testing",
   "namada_test_utils",
@@ -31,7 +31,6 @@ benches = [
   "tracing-subscriber",
   "rand_core"
 ]
-integration = ["namada_apps_lib/integration"]
 jemalloc = ["rocksdb/jemalloc"]
 migrations = [
   "namada_migrations",
