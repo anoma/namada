@@ -30,7 +30,7 @@ use namada_sdk::queries::{
     Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
 };
 use namada_sdk::state::{
-    LastBlock, Sha256Hasher, StorageRead, EPOCH_SWITCH_BLOCKS_DELAY,
+    LastBlock, Sha256Hasher, StorageRead, DB, EPOCH_SWITCH_BLOCKS_DELAY,
 };
 use namada_sdk::tendermint::abci::response::Info;
 use namada_sdk::tendermint::abci::types::VoteInfo;
@@ -343,6 +343,11 @@ impl MockNode {
 
     pub fn wallet_path(&self) -> PathBuf {
         self.genesis_dir().join("wallet.toml")
+    }
+
+    pub fn db_path(&self) -> PathBuf {
+        let locked = self.shell.lock().unwrap();
+        locked.state.db().path().unwrap().to_path_buf()
     }
 
     pub fn block_height(&self) -> BlockHeight {

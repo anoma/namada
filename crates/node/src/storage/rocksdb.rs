@@ -737,6 +737,57 @@ impl RocksDB {
             .get_cf(rollback_cf, key)
             .map_err(|e| Error::DBError(e.into_string()))
     }
+
+    /// Writes an entry directly to a db batch update
+    /// directly
+    pub fn insert_entry(
+        &self,
+        batch: &mut RocksDBWriteBatch,
+        cf: &DbColFam,
+        key: &Key,
+        new_value: impl AsRef<[u8]>,
+    ) -> Result<()> {
+        // NB: the following code only updates values
+        // written to at the last committed height
+        let val = new_value.as_ref();
+
+        // Write the new key-val in the Db column family
+        let cf_name = self.get_column_family(cf.to_str())?;
+        self.add_value_bytes_to_batch(
+            cf_name,
+            key.to_string(),
+            val.to_vec(),
+            batch,
+        );
+        Ok(())
+    }
+
+    /// Erase the entire db. Use with caution.
+    pub fn clear(&mut self, height: BlockHeight) -> Result<()> {
+        let state_cf = self.get_column_family(STATE_CF)?;
+        for (_, cf) in self.column_families() {
+            let read_opts = make_iter_read_opts(None);
+            let iter =
+                self.inner
+                    .iterator_cf_opt(cf, read_opts, IteratorMode::Start);
+
+            for (key, _, _) in PersistentPrefixIterator(
+                PrefixIterator::new(iter, String::default()),
+                // Empty string to prevent prefix stripping, the prefix is
+                // already in the enclosed iterator
+            ) {
+                self.inner
+                    .delete_cf(cf, key.as_bytes())
+                    .map_err(|e| Error::DBError(e.to_string()))?;
+            }
+        }
+        let height = height.serialize_to_vec();
+        self.inner
+            .put_cf(state_cf, BLOCK_HEIGHT_KEY, height)
+            .expect("Could not write to DB");
+
+        Ok(())
+    }
 }
 
 /// Information about a particular snapshot
@@ -755,9 +806,9 @@ pub struct SnapshotMetadata {
 pub struct DbSnapshot<'a>(pub rocksdb::Snapshot<'a>);
 
 impl<'a> DbSnapshot<'a> {
-    /// Write a snapshot of the database out to file. The last line
-    /// of the file contains metadata about how to break the file into
-    /// chunks.
+    /// Write a snapshot of the database out to file.  Also
+    /// creates a file containing metadata about how to break
+    /// the file into chunks.
     pub fn write_to_file(
         &self,
         cfs: [(&'static str, &'a ColumnFamily); 6],
@@ -792,16 +843,19 @@ impl<'a> DbSnapshot<'a> {
         Ok(())
     }
 
-    /// Remove snapshots older than the latest
+    /// Keep `number_to_keep` latest snapshots. All others
+    /// are deleted.
     pub fn cleanup(
         latest_height: BlockHeight,
         base_dir: &Path,
+        number_to_keep: u64,
     ) -> std::io::Result<()> {
         for SnapshotMetadata {
             height, path_stem, ..
         } in Self::files(base_dir)?
         {
-            if height < latest_height {
+            // this is correct... don't worry about it
+            if checked!(height + number_to_keep <= latest_height).unwrap() {
                 let path = PathBuf::from(path_stem);
                 _ = std::fs::remove_file(&path.with_extension("snap"));
                 _ = std::fs::remove_file(path.with_extension("meta"));
@@ -841,11 +895,12 @@ impl<'a> DbSnapshot<'a> {
                     // for a given block height
                     if entry_ext == Some(meta) {
                         let metadata = std::fs::read_to_string(entry_path)?;
-                        let metadata_bytes = HEXLOWER
-                            .decode(metadata.as_bytes())
-                            .map_err(|e| {
-                                std::io::Error::new(ErrorKind::InvalidData, e)
-                            })?;
+                        let metadata_bytes = base64::decode(
+                            metadata.as_bytes(),
+                        )
+                        .map_err(|e| {
+                            std::io::Error::new(ErrorKind::InvalidData, e)
+                        })?;
                         let chunks: Vec<Chunk> =
                             BorshDeserialize::try_from_slice(
                                 &metadata_bytes[..],
@@ -930,8 +985,39 @@ impl<'a> DbSnapshot<'a> {
             .take(checked!(chunk_end - chunk_start).unwrap())
         {
             bytes.extend(line?.as_bytes());
+            bytes.push(b'\n');
         }
         Ok(bytes)
+    }
+
+    pub fn parse_chunk(chunk: &[u8]) -> ChunkIterator<'_> {
+        let reader = std::io::BufReader::new(chunk);
+        ChunkIterator {
+            lines: reader.lines(),
+        }
+    }
+}
+
+pub struct ChunkIterator<'a> {
+    lines: std::io::Lines<BufReader<&'a [u8]>>,
+}
+
+impl<'a> Iterator for ChunkIterator<'a> {
+    type Item = (DbColFam, Key, Vec<u8>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let line = self.lines.next()?.ok()?;
+        let line = line.trim();
+        let mut iter = line.split(':');
+        let cf = iter.next()?;
+        let rest = iter.next()?;
+        let mut iter = rest.split('=');
+        let key = iter.next()?;
+        let value = iter.next()?;
+        let cf = DbColFam::from_str(cf).ok()?;
+        let key = Key::parse(key).ok()?;
+        let value = base64::decode(value.as_bytes()).ok()?;
+        Some((cf, key, value))
     }
 }
 
@@ -1664,38 +1750,17 @@ impl DB for RocksDB {
     fn overwrite_entry(
         &self,
         batch: &mut Self::WriteBatch,
-        height: Option<BlockHeight>,
         cf: &DbColFam,
         key: &Key,
         new_value: impl AsRef<[u8]>,
     ) -> Result<()> {
+        self.insert_entry(batch, cf, key, new_value.as_ref())?;
         let state_cf = self.get_column_family(STATE_CF)?;
         let last_height: BlockHeight = self
             .read_value(state_cf, BLOCK_HEIGHT_KEY)?
             .ok_or_else(|| {
                 Error::DBError("No block height found".to_string())
             })?;
-        let desired_height = height.unwrap_or(last_height);
-
-        if desired_height != last_height {
-            todo!(
-                "Overwriting values at heights different than the last \
-                 committed height hast yet to be implemented"
-            );
-        }
-        // NB: the following code only updates values
-        // written to at the last committed height
-
-        let val = new_value.as_ref();
-
-        // Write the new key-val in the Db column family
-        let cf_name = self.get_column_family(cf.to_str())?;
-        self.add_value_bytes_to_batch(
-            cf_name,
-            key.to_string(),
-            val.to_vec(),
-            batch,
-        );
 
         // If the CF is subspace, additionally update the diffs
         if cf == &DbColFam::SUBSPACE {
@@ -1708,7 +1773,7 @@ impl DB for RocksDB {
             self.add_value_bytes_to_batch(
                 diffs_cf,
                 diffs_key,
-                val.to_vec(),
+                new_value.as_ref().to_vec(),
                 batch,
             );
         }
@@ -1784,7 +1849,7 @@ impl<'db> DBUpdateVisitor for RocksDBUpdateVisitor<'db> {
 
     fn write(&mut self, key: &Key, cf: &DbColFam, value: impl AsRef<[u8]>) {
         self.db
-            .overwrite_entry(&mut self.batch, None, cf, key, value)
+            .overwrite_entry(&mut self.batch, cf, key, value)
             .expect("Failed to overwrite a key in storage")
     }
 
@@ -2692,6 +2757,109 @@ mod test {
         db.add_block_to_batch(block, batch, true)
     }
 
+    /// Test the clear function deletes all keys from the db
+    /// and that we can still write keys to it afterward.
+    #[test]
+    fn test_clear_db() {
+        let temp = tempfile::tempdir().expect("Test failed");
+        let mut db = open(&temp, false, None).expect("Test failed");
+        let state_cf = db.get_column_family(STATE_CF).expect("Test failed");
+        db.inner
+            .put_cf(
+                state_cf,
+                BLOCK_HEIGHT_KEY,
+                BlockHeight(1).serialize_to_vec(),
+            )
+            .expect("Test failed");
+        db.write_subspace_val(
+            1.into(),
+            &Key::parse("bing/fucking/bong").expect("Test failed"),
+            [1u8; 1],
+            false,
+        )
+        .expect("Test failed");
+        db.write_subspace_val(
+            1.into(),
+            &Key::parse("ding/fucking/dong").expect("Test failed"),
+            [1u8; 1],
+            false,
+        )
+        .expect("Test failed");
+        let mut db_entries = HashMap::new();
+        for (_, cf) in db.column_families() {
+            let read_opts = make_iter_read_opts(None);
+            let iter =
+                db.inner.iterator_cf_opt(cf, read_opts, IteratorMode::Start);
+
+            for (key, raw_val, _gas) in PersistentPrefixIterator(
+                PrefixIterator::new(iter, String::default()),
+                // Empty string to prevent prefix stripping, the prefix is
+                // already in the enclosed iterator
+            ) {
+                db_entries.insert(key, raw_val);
+            }
+        }
+        let mut expected = HashMap::from([
+            ("height".to_string(), vec![1, 0, 0, 0, 0, 0, 0, 0]),
+            ("bing/fucking/bong".to_string(), vec![1u8]),
+            ("ding/fucking/dong".to_string(), vec![1u8]),
+            ("0000000000002/new/bing/fucking/bong".to_string(), vec![1u8]),
+            ("0000000000002/new/ding/fucking/dong".to_string(), vec![1u8]),
+        ]);
+        assert_eq!(db_entries, expected);
+        db.clear(2.into()).expect("Test failed");
+        let mut db_entries = HashMap::new();
+        for (_, cf) in db.column_families() {
+            let read_opts = make_iter_read_opts(None);
+            let iter =
+                db.inner.iterator_cf_opt(cf, read_opts, IteratorMode::Start);
+
+            for (key, raw_val, _gas) in PersistentPrefixIterator(
+                PrefixIterator::new(iter, String::default()),
+                // Empty string to prevent prefix stripping, the prefix is
+                // already in the enclosed iterator
+            ) {
+                db_entries.insert(key, raw_val);
+            }
+        }
+        let empty = HashMap::from([(
+            "height".to_string(),
+            vec![2u8, 0, 0, 0, 0, 0, 0, 0],
+        )]);
+        assert_eq!(db_entries, empty,);
+        db.write_subspace_val(
+            1.into(),
+            &Key::parse("bing/fucking/bong").expect("Test failed"),
+            [1u8; 1],
+            false,
+        )
+        .expect("Test failed");
+        db.write_subspace_val(
+            1.into(),
+            &Key::parse("ding/fucking/dong").expect("Test failed"),
+            [1u8; 1],
+            false,
+        )
+        .expect("Test failed");
+        let mut db_entries = HashMap::new();
+        for (_, cf) in db.column_families() {
+            let read_opts = make_iter_read_opts(None);
+            let iter =
+                db.inner.iterator_cf_opt(cf, read_opts, IteratorMode::Start);
+
+            for (key, raw_val, _gas) in PersistentPrefixIterator(
+                PrefixIterator::new(iter, String::default()),
+                // Empty string to prevent prefix stripping, the prefix is
+                // already in the enclosed iterator
+            ) {
+                db_entries.insert(key, raw_val);
+            }
+        }
+        expected.insert("height".to_string(), vec![2, 0, 0, 0, 0, 0, 0, 0]);
+
+        assert_eq!(db_entries, expected);
+    }
+
     /// Test that we chunk a series of lines
     /// up correctly based on a max chunk size.
     #[test]
@@ -2784,7 +2952,7 @@ mod test {
         let temp = tempfile::tempdir().expect("Test failed");
         let base_dir = temp.path().to_path_buf();
         let chunks = vec![Chunk::default()];
-        let chunk_bytes = HEXLOWER.encode(&chunks.serialize_to_vec());
+        let chunk_bytes = base64::encode(chunks.serialize_to_vec());
         for i in 0..4 {
             let mut path = base_dir.clone();
             path.push(format!("snapshot_{}.snap", i));
@@ -2802,7 +2970,7 @@ mod test {
         let mut path = base_dir.clone();
         path.push("snapshot_0.bak");
         _ = File::create(path).expect("Test failed");
-        DbSnapshot::cleanup(2.into(), &base_dir).expect("Test failed");
+        DbSnapshot::cleanup(2.into(), &base_dir, 1).expect("Test failed");
         let mut expected = HashSet::from([
             "snapshot_2.snap",
             "snapshot_2.meta",
@@ -2990,10 +3158,10 @@ mod test {
             DbSnapshot::paths(1.into(), temp.path().to_path_buf());
         std::fs::write(
             &snap_file,
-            "fffffggggghh\naaaa\nbbbbb\ncc\ndddddddd".as_bytes(),
+            "fffffggggghh\naaaa\nbbbbb\ncc\ndddddddd\n".as_bytes(),
         )
         .expect("Test failed");
-        std::fs::write(meta_file, HEXLOWER.encode(&chunks.serialize_to_vec()))
+        std::fs::write(meta_file, base64::encode(chunks.serialize_to_vec()))
             .expect("Test failed");
         let chunks: Vec<_> = (0..3)
             .filter_map(|i| {
@@ -3001,9 +3169,9 @@ mod test {
             })
             .collect();
         let expected = vec![
-            "fffffggggghh".as_bytes().to_vec(),
-            "aaaabbbbb".as_bytes().to_vec(),
-            "ccdddddddd".as_bytes().to_vec(),
+            "fffffggggghh\n".as_bytes().to_vec(),
+            "aaaa\nbbbbb\n".as_bytes().to_vec(),
+            "cc\ndddddddd\n".as_bytes().to_vec(),
         ];
         assert_eq!(chunks, expected);
 
@@ -3011,5 +3179,39 @@ mod test {
         assert!(DbSnapshot::load_chunk(0.into(), 4, temp.path()).is_err());
         std::fs::remove_file(snap_file).unwrap();
         assert!(DbSnapshot::load_chunk(0.into(), 0, temp.path()).is_err());
+    }
+
+    #[test]
+    fn test_chunk_iterator() {
+        let chunk = "state:bing/fucking/bong=AQ==\nsubspace:I/AM/BATMAN=Ag==\n";
+        let iterator = DbSnapshot::parse_chunk(chunk.as_bytes());
+        let expected = vec![
+            (
+                DbColFam::STATE,
+                Key::parse("bing/fucking/bong").expect("Test failed"),
+                vec![1u8],
+            ),
+            (
+                DbColFam::SUBSPACE,
+                Key::parse("I/AM/BATMAN").expect("Test failed"),
+                vec![2u8],
+            ),
+        ];
+        let parsed: Vec<_> = iterator.collect();
+        assert_eq!(parsed, expected);
+        let bad_chunks = [
+            "bloop:bing/fucking/bong=AQ==\n",
+            "bing/fucking/bong=AQ==\n",
+            "state:bing/fucking/bong:AQ==\n",
+            "state=bing/fucking/bong=AQ==\n",
+            "state:bing/fucking/bong\n",
+            "state:#bing/fucking/bong=AQ==\n",
+            "state:bing/fucking/bong=0Z\n",
+        ];
+        for chunk in bad_chunks {
+            let iterator = DbSnapshot::parse_chunk(chunk.as_bytes());
+            let parsed: Vec<_> = iterator.collect();
+            assert!(parsed.is_empty());
+        }
     }
 }

@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::num::NonZeroU64;
 use std::str::FromStr;
 
 use assert_matches::assert_matches;
@@ -17,6 +18,8 @@ use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_node::shell::testing::client::run;
 use namada_node::shell::testing::node::NodeResults;
 use namada_node::shell::testing::utils::{Bin, CapturedOutput};
+use namada_node::shell::SnapshotSync;
+use namada_node::storage::DbSnapshot;
 use namada_sdk::account::AccountPublicKeysMap;
 use namada_sdk::collections::HashMap;
 use namada_sdk::migrations;
@@ -39,6 +42,7 @@ use crate::integration::setup;
 use crate::strings::{
     TX_APPLIED_SUCCESS, TX_INSUFFICIENT_BALANCE, TX_REJECTED,
 };
+use crate::tendermint::abci::response::ApplySnapshotChunkResult;
 use crate::tx::tx_host_env::gov_storage::proposal::{
     PGFInternalTarget, PGFTarget,
 };
@@ -1744,6 +1748,226 @@ fn enforce_fee_payment() -> Result<()> {
     });
     assert!(captured.result.is_ok());
     assert!(captured.contains("nam: 2000050"));
+    Ok(())
+}
+
+/// Test that we can successfully apply a snapshot
+/// from one node to another.
+#[test]
+fn apply_snapshot() -> Result<()> {
+    use namada_node::facade::tendermint::v0_37::abci::{
+        request as tm_request, response as tm_response,
+    };
+    // This address doesn't matter for tests. But an argument is required.
+    let validator_one_rpc = "http://127.0.0.1:26567";
+
+    let (mut node, _services) = setup::setup()?;
+    {
+        let mut locked = node.shell.lock().unwrap();
+        locked.blocks_between_snapshots =
+            Some(NonZeroU64::try_from(10_000u64).unwrap());
+    }
+    for _ in 0..3 {
+        node.next_epoch();
+    }
+    let tx_args = vec![
+        "transparent-transfer",
+        "--source",
+        BERTHA,
+        "--target",
+        ALBERT,
+        "--token",
+        NAM,
+        "--amount",
+        "1234",
+        "--signing-keys",
+        BERTHA_KEY,
+        "--node",
+        &validator_one_rpc,
+        "--force",
+    ];
+
+    let captured = CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    let args = vec![
+        "balance",
+        "--owner",
+        ALBERT,
+        "--token",
+        NAM,
+        "--node",
+        &validator_one_rpc,
+    ];
+    let captured = CapturedOutput::of(|| run(&node, Bin::Client, args));
+    assert!(captured.contains("1981234"));
+
+    let base_dir = node.test_dir.path();
+    let db = namada_node::storage::open(node.db_path(), true, None)
+        .expect("Could not open DB");
+    let snapshot = db.snapshot();
+
+    let last_height = node.block_height();
+    let cfs = db.column_families();
+    snapshot
+        .write_to_file(cfs, base_dir.to_path_buf(), last_height)
+        .expect("Test failed");
+    DbSnapshot::cleanup(last_height, base_dir, 1).expect("Test failed");
+
+    let (node2, _services) = setup::setup()?;
+    let (offer, resp) = {
+        let shell = node.shell.lock().unwrap();
+        let offer =
+            shell.list_snapshots().snapshots.pop().expect("Test failed");
+        let mut shell = node2.shell.lock().unwrap();
+        (
+            offer.clone(),
+            shell.offer_snapshot(tm_request::OfferSnapshot {
+                snapshot: offer,
+                app_hash: Default::default(),
+            }),
+        )
+    };
+
+    assert_eq!(tm_response::OfferSnapshot::Accept, resp);
+    {
+        let shell = node.shell.lock().unwrap();
+        let mut shell2 = node2.shell.lock().unwrap();
+        for c in 0..offer.chunks {
+            let chunk =
+                shell.load_snapshot_chunk(tm_request::LoadSnapshotChunk {
+                    height: (last_height.0 as u32).into(),
+                    format: 0,
+                    chunk: c,
+                });
+            let resp =
+                shell2.apply_snapshot_chunk(tm_request::ApplySnapshotChunk {
+                    index: c,
+                    chunk: chunk.chunk,
+                    sender: "".to_string(),
+                });
+            assert_eq!(
+                resp,
+                tm_response::ApplySnapshotChunk {
+                    result: ApplySnapshotChunkResult::Accept,
+                    refetch_chunks: vec![],
+                    reject_senders: vec![],
+                }
+            );
+        }
+    }
+    let (app_hash1, app_hash2) = {
+        (
+            node.shell.lock().unwrap().state.in_mem().merkle_root(),
+            node2.shell.lock().unwrap().state.in_mem().merkle_root(),
+        )
+    };
+    assert_eq!(app_hash1, app_hash2);
+    let args = vec![
+        "balance",
+        "--owner",
+        ALBERT,
+        "--token",
+        NAM,
+        "--node",
+        &validator_one_rpc,
+    ];
+    let captured = CapturedOutput::of(|| run(&node2, Bin::Client, args));
+    assert!(captured.contains("1981234"));
+
+    Ok(())
+}
+
+/// Test the various failure conditions of state sync
+#[test]
+fn snapshot_unhappy_flows() -> Result<()> {
+    use namada_node::facade::tendermint::v0_37::abci::{
+        request as tm_request, response as tm_response,
+    };
+    let (node, _services) = setup::setup()?;
+
+    // test we abort if not syncing
+    let resp = {
+        let mut shell = node.shell.lock().unwrap();
+        shell.apply_snapshot_chunk(tm_request::ApplySnapshotChunk {
+            index: 0,
+            chunk: Default::default(),
+            sender: "".to_string(),
+        })
+    };
+    assert_eq!(
+        resp,
+        tm_response::ApplySnapshotChunk {
+            result: ApplySnapshotChunkResult::Abort,
+            refetch_chunks: vec![],
+            reject_senders: vec![],
+        }
+    );
+
+    {
+        let mut locked = node.shell.lock().unwrap();
+        locked.syncing = Some(SnapshotSync {
+            next_chunk: 0,
+            height: Default::default(),
+            expected: vec![Default::default()],
+            strikes: 0,
+        });
+    }
+
+    // test we reject and re-fetch if the wrong chunk is given
+    let resp = {
+        let mut shell = node.shell.lock().unwrap();
+        shell.apply_snapshot_chunk(tm_request::ApplySnapshotChunk {
+            index: 1,
+            chunk: Default::default(),
+            sender: "".to_string(),
+        })
+    };
+    assert_eq!(
+        resp,
+        tm_response::ApplySnapshotChunk {
+            result: ApplySnapshotChunkResult::Unknown,
+            refetch_chunks: vec![0],
+            reject_senders: vec![],
+        }
+    );
+    // test we refetch a chunk if the hash is wrong up to five times.
+    for _ in 0..4 {
+        let resp = {
+            let mut shell = node.shell.lock().unwrap();
+            shell.apply_snapshot_chunk(tm_request::ApplySnapshotChunk {
+                index: 0,
+                chunk: Default::default(),
+                sender: "".to_string(),
+            })
+        };
+        assert_eq!(
+            resp,
+            tm_response::ApplySnapshotChunk {
+                result: ApplySnapshotChunkResult::Retry,
+                refetch_chunks: vec![0],
+                reject_senders: vec![],
+            }
+        );
+    }
+    let resp = {
+        let mut shell = node.shell.lock().unwrap();
+        shell.apply_snapshot_chunk(tm_request::ApplySnapshotChunk {
+            index: 0,
+            chunk: Default::default(),
+            sender: "satan".to_string(),
+        })
+    };
+    assert_eq!(
+        resp,
+        tm_response::ApplySnapshotChunk {
+            result: ApplySnapshotChunkResult::RejectSnapshot,
+            refetch_chunks: vec![],
+            reject_senders: vec!["satan".to_string()],
+        }
+    );
+
     Ok(())
 }
 

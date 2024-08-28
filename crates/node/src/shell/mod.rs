@@ -45,6 +45,7 @@ use namada_sdk::eth_bridge::{EthBridgeQueries, EthereumOracleConfig};
 use namada_sdk::ethereum_events::EthereumEvent;
 use namada_sdk::events::log::EventLog;
 use namada_sdk::gas::{Gas, TxGasMeter};
+use namada_sdk::hash::Hash;
 use namada_sdk::key::*;
 use namada_sdk::migrations::ScheduledMigration;
 use namada_sdk::parameters::{get_gas_scale, validate_tx_bytes};
@@ -342,6 +343,14 @@ pub enum MempoolTxType {
 }
 
 #[derive(Debug)]
+pub struct SnapshotSync {
+    pub next_chunk: u64,
+    pub height: BlockHeight,
+    pub expected: Vec<Hash>,
+    pub strikes: u64,
+}
+
+#[derive(Debug)]
 pub struct Shell<D = storage::PersistentDB, H = Sha256Hasher>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -373,6 +382,9 @@ where
     /// When set, indicates after how many blocks a new snapshot
     /// will be taken (counting from the first block)
     pub blocks_between_snapshots: Option<NonZeroU64>,
+    /// Data for a node downloading and apply snapshots as part of
+    /// the fast sync protocol.
+    pub syncing: Option<SnapshotSync>,
 }
 
 /// Storage key filter to store the diffs into the storage. Return `false` for
@@ -608,6 +620,7 @@ where
             event_log: EventLog::default(),
             scheduled_migration,
             blocks_between_snapshots: config.shell.blocks_between_snapshots,
+            syncing: None,
         };
         shell.update_eth_oracle(&Default::default());
         shell

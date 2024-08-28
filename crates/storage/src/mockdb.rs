@@ -619,7 +619,6 @@ impl DB for MockDB {
     fn overwrite_entry(
         &self,
         _batch: &mut Self::WriteBatch,
-        _height: Option<BlockHeight>,
         _cf: &DbColFam,
         _key: &Key,
         _new_value: impl AsRef<[u8]>,
