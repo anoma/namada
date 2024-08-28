@@ -1183,11 +1183,8 @@ pub async fn query_total_supply<N: Namada>(
     args: args::QueryTotalSupply,
 ) {
     let token = args.token;
-    let supply = unwrap_client_response::<N::Client, token::Amount>(
-        RPC.vp()
-            .token()
-            .total_supply(context.client(), &token)
-            .await,
+    let supply = unwrap_sdk_result(
+        rpc::get_token_total_supply(context.client(), &token).await,
     );
     let amount_str = format_denominated_amount(
         context.client(),
@@ -2040,6 +2037,14 @@ pub async fn query_governance_parameters<
 fn unwrap_client_response<C: namada_sdk::queries::Client, T>(
     response: Result<T, C::Error>,
 ) -> T {
+    response.unwrap_or_else(|err| {
+        eprintln!("Error in the query: {:?}", err);
+        cli::safe_exit(1)
+    })
+}
+
+/// A helper to unwrap an SDK query result. Will shut down process on error.
+fn unwrap_sdk_result<T>(response: Result<T, namada_sdk::error::Error>) -> T {
     response.unwrap_or_else(|err| {
         eprintln!("Error in the query: {:?}", err);
         cli::safe_exit(1)
