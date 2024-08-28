@@ -4,10 +4,11 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use futures::future::FutureExt;
+use namada_apps_lib::state::DbError;
 use namada_sdk::chain::BlockHeight;
 use namada_sdk::hash::Hash;
 use namada_sdk::migrations::ScheduledMigration;
-use namada_sdk::state::{ProcessProposalCachedResult, DB};
+use namada_sdk::state::ProcessProposalCachedResult;
 use namada_sdk::tendermint::abci::response::ProcessProposal;
 use namada_sdk::time::{DateTimeUtc, Utc};
 use namada_sdk::tx::data::hash_tx;
@@ -42,7 +43,7 @@ pub struct AbcippShim {
         Req,
         tokio::sync::oneshot::Sender<Result<Resp, BoxError>>,
     )>,
-    snapshot_task: Option<std::thread::JoinHandle<Result<(), std::io::Error>>>,
+    snapshot_task: Option<std::thread::JoinHandle<Result<(), DbError>>>,
     snapshots_to_keep: u64,
 }
 
@@ -221,28 +222,25 @@ impl AbcippShim {
             _ => {}
         }
 
-        let TakeSnapshot::Yes(db_path) = take_snapshot else {
+        let TakeSnapshot::Yes(db_path, height) = take_snapshot else {
             return;
         };
         let base_dir = self.service.base_dir.clone();
 
         let (snap_send, snap_recv) = tokio::sync::oneshot::channel();
+
         let snapshots_to_keep = self.snapshots_to_keep;
         let snapshot_task = std::thread::spawn(move || {
             let db = crate::storage::open(db_path, true, None)
                 .expect("Could not open DB");
-            let snapshot = db.snapshot();
+            let snapshot = db.checkpoint(base_dir.clone(), height)?;
             // signal to main thread that the snapshot has finished
             snap_send.send(()).unwrap();
-
-            let last_height = db
-                .read_last_block()
-                .expect("Could not read database")
-                .expect("Last block should exists")
-                .height;
-            let cfs = db.column_families();
-            snapshot.write_to_file(cfs, base_dir.clone(), last_height)?;
-            DbSnapshot::cleanup(last_height, &base_dir, snapshots_to_keep)
+            DbSnapshot::cleanup(height, &base_dir, snapshots_to_keep)
+                .map_err(|e| DbError::DBError(e.to_string()))?;
+            snapshot
+                .package()
+                .map_err(|e| DbError::DBError(e.to_string()))
         });
 
         // it's important that the thread is

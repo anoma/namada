@@ -87,14 +87,25 @@ impl MockDB {
     }
 }
 
+/// Source to restore a [`MockDB`] from.
+///
+/// Since this enum has no variants, you can't
+/// actually restore a [`MockDB`] instance.
+pub enum MockDBRestoreSource {}
+
 impl DB for MockDB {
     /// There is no cache for MockDB
     type Cache = ();
     type Migrator = ();
+    type RestoreSource<'a> = MockDBRestoreSource;
     type WriteBatch = MockDBWriteBatch;
 
     fn open(_db_path: impl AsRef<Path>, _cache: Option<&Self::Cache>) -> Self {
         Self::default()
+    }
+
+    fn restore_from(&mut self, source: MockDBRestoreSource) -> Result<()> {
+        match source {}
     }
 
     fn flush(&self, _wait: bool) -> Result<()> {

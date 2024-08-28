@@ -1,8 +1,10 @@
+use std::io::Write;
+
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use namada_sdk::arith::checked;
 use namada_sdk::hash::{Hash, Sha256Hasher};
-use namada_sdk::state::{BlockHeight, StorageRead, DB};
+use namada_sdk::state::{BlockHeight, StorageRead};
 
 use super::SnapshotSync;
 use crate::facade::tendermint::abci::response::ApplySnapshotChunkResult;
@@ -12,7 +14,7 @@ use crate::facade::tendermint::v0_37::abci::{
 };
 use crate::shell::Shell;
 use crate::storage;
-use crate::storage::{DbSnapshot, SnapshotMetadata};
+use crate::storage::{DbSnapshot, DbSnapshotMeta};
 
 pub const MAX_SENDER_STRIKES: u64 = 5;
 
@@ -26,25 +28,37 @@ impl Shell<storage::PersistentDB, Sha256Hasher> {
             Default::default()
         } else {
             tracing::info!("Request for snapshots received.");
-            let Ok(snapshots) = DbSnapshot::files(&self.base_dir) else {
+            let Ok(snapshot_heights) =
+                DbSnapshot::heights_of_stored_snapshots(&self.base_dir)
+            else {
+                tracing::debug!("Could not read heights of stored snapshots");
                 return Default::default();
             };
-            let snapshots = snapshots
-                .into_iter()
-                .map(|SnapshotMetadata { height, chunks, .. }| {
-                    let hashes =
-                        chunks.iter().map(|c| c.hash).collect::<Vec<_>>();
-                    let hash = Hash::sha256(hashes.serialize_to_vec()).0;
-                    Snapshot {
+            let snapshots = DbSnapshot::load_snapshot_metadata(
+                &self.base_dir,
+                snapshot_heights,
+            );
+            let Ok(snapshots) = snapshots
+                .map(|result| {
+                    let DbSnapshotMeta {
+                        height,
+                        chunk_hashes,
+                        root_hash,
+                    } = result?;
+                    std::io::Result::Ok(Snapshot {
                         height: u32::try_from(height.0).unwrap().into(),
-                        format: 0,
+                        format: DbSnapshot::FORMAT_MAGIC,
                         #[allow(clippy::cast_possible_truncation)]
-                        chunks: chunks.len() as u32,
-                        hash: hash.into_iter().collect(),
-                        metadata: hashes.serialize_to_vec().into(),
-                    }
+                        chunks: chunk_hashes.len() as u32,
+                        hash: root_hash.0.to_vec().into(),
+                        metadata: chunk_hashes.serialize_to_vec().into(),
+                    })
                 })
-                .collect();
+                .collect()
+            else {
+                tracing::debug!("Could not read stored snapshot meta");
+                return Default::default();
+            };
 
             tm_response::ListSnapshots { snapshots }
         }
@@ -56,19 +70,24 @@ impl Shell<storage::PersistentDB, Sha256Hasher> {
         &self,
         req: tm_request::LoadSnapshotChunk,
     ) -> tm_response::LoadSnapshotChunk {
-        let Ok(chunk) = DbSnapshot::load_chunk(
+        let chunk = match DbSnapshot::load_chunk(
             BlockHeight(req.height.into()),
             u64::from(req.chunk),
             &self.base_dir,
-        ) else {
-            tracing::debug!(
-                "Received a request for a snapshot we do not possess"
-            );
-            // N.B. if the snapshot is no longer present,
-            // this will not match the hash in the metadata and will
-            // be rejected by syncing nodes. We don't return an error
-            // so as not to crash this node.
-            return Default::default();
+        ) {
+            Ok(chunk) => chunk,
+            Err(err) => {
+                tracing::debug!(
+                    ?req,
+                    error = %err,
+                    "Received a request for a snapshot we do not possess"
+                );
+                // N.B. if the snapshot is no longer present,
+                // this will not match the hash in the metadata and will
+                // be rejected by syncing nodes. We don't return an error
+                // so as not to crash this node.
+                return Default::default();
+            }
         };
         tracing::info!(
             "Loading snapshot at height {}, chunk number {}",
@@ -76,7 +95,7 @@ impl Shell<storage::PersistentDB, Sha256Hasher> {
             req.chunk,
         );
         tm_response::LoadSnapshotChunk {
-            chunk: chunk.into_iter().collect(),
+            chunk: chunk.into(),
         }
     }
 
@@ -85,6 +104,13 @@ impl Shell<storage::PersistentDB, Sha256Hasher> {
         &mut self,
         req: tm_request::OfferSnapshot,
     ) -> tm_response::OfferSnapshot {
+        if req.snapshot.format != DbSnapshot::FORMAT_MAGIC {
+            tracing::debug!(
+                format = req.snapshot.format,
+                "Received snapshot with an incompatible format"
+            );
+            return tm_response::OfferSnapshot::Reject;
+        }
         match self.syncing.as_ref() {
             None => {
                 if self.state.get_block_height().unwrap_or_default().0
@@ -100,6 +126,8 @@ impl Shell<storage::PersistentDB, Sha256Hasher> {
                         height: u64::from(req.snapshot.height).into(),
                         expected: chunks,
                         strikes: 0,
+                        snapshot: tempfile::tempfile()
+                            .expect("Failed to create snapshot temp file"),
                     });
                     tracing::info!("Accepting snapshot offer");
                     tm_response::OfferSnapshot::Accept
@@ -121,6 +149,8 @@ impl Shell<storage::PersistentDB, Sha256Hasher> {
                         height: u64::from(req.snapshot.height).into(),
                         expected: chunks,
                         strikes: 0,
+                        snapshot: tempfile::tempfile()
+                            .expect("Failed to create snapshot temp file"),
                     });
                     tracing::info!("Accepting snapshot offer");
                     tm_response::OfferSnapshot::Accept
@@ -139,8 +169,8 @@ impl Shell<storage::PersistentDB, Sha256Hasher> {
     ) -> tm_response::ApplySnapshotChunk {
         let Some(snapshot_sync) = self.syncing.as_mut() else {
             tracing::warn!("Received a snapshot although none were requested");
-            // if we are not currently syncing, abort this sync protocol
-            // the syncing status is set by `OfferSnapshot`.
+            // if we are not currently syncing, abort this sync protocol the
+            // syncing status is set by `OfferSnapshot`.
             return tm_response::ApplySnapshotChunk {
                 result: ApplySnapshotChunkResult::Abort,
                 refetch_chunks: vec![],
@@ -215,45 +245,23 @@ impl Shell<storage::PersistentDB, Sha256Hasher> {
         } else {
             snapshot_sync.strikes = 0;
         };
-        // when we first start applying a snapshot,
-        // clear the existing db.
-        if req.index == 0 {
-            self.state.db_mut().clear(snapshot_sync.height).unwrap();
-        }
-        // apply snapshot changes to the database
-        // retry if an error occurs
-        let mut batch = Default::default();
-        for (cf, key, value) in DbSnapshot::parse_chunk(&req.chunk) {
-            if self
-                .state
-                .db()
-                .insert_entry(&mut batch, &cf, &key, value)
-                .is_err()
-            {
-                return tm_response::ApplySnapshotChunk {
-                    result: ApplySnapshotChunkResult::Retry,
-                    refetch_chunks: vec![],
-                    reject_senders: vec![],
-                };
-            }
-        }
-        if self.state.db().exec_batch(batch).is_err() {
-            return tm_response::ApplySnapshotChunk {
-                result: ApplySnapshotChunkResult::Retry,
-                refetch_chunks: vec![],
-                reject_senders: vec![],
-            };
-        }
+
+        // write snapshot chunk
+        snapshot_sync
+            .snapshot
+            .write_all(&req.chunk)
+            .expect("Failed to save snapshot chunk");
 
         // increment the chunk counter
         snapshot_sync.next_chunk =
             checked!(snapshot_sync.next_chunk + 1).unwrap();
-        // check if all chunks have been applied
+
+        // check if all chunks have been saved, and restore the
+        // database from the fetched tar archive
         if snapshot_sync.next_chunk == snapshot_sync.expected.len() as u64 {
-            tracing::info!("Snapshot completely applied");
+            self.restore_database_from_state_sync();
             self.syncing = None;
-            // rebuild the in-memory state
-            self.state.load_last_state();
+            tracing::info!("Snapshot completely applied");
         }
 
         tm_response::ApplySnapshotChunk {

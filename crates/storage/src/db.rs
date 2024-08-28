@@ -126,11 +126,18 @@ pub trait DB: Debug {
     /// change to DB.
     type Migrator: DbMigration + DeserializeOwned;
 
+    /// Source data to restore a database.
+    type RestoreSource<'a>;
+
     /// Open the database from provided path
     fn open(
         db_path: impl AsRef<std::path::Path>,
         cache: Option<&Self::Cache>,
     ) -> Self;
+
+    /// Overwrite the contents of the current database
+    /// with the data read from `source`.
+    fn restore_from(&mut self, source: Self::RestoreSource<'_>) -> Result<()>;
 
     /// Get the path to the db in the filesystem,
     /// if it exists (the DB may be in-memory only)
