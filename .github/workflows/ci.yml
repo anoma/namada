@@ -290,12 +290,11 @@ jobs:
         # run: cargo +${{ env.NIGHTLY }} llvm-cov nextest run -E 'not test(e2e)' -E 'not test(integration)' -E 'not test(pos_state_machine_test)' --features namada/testing --no-fail-fast --lcov --output-path lcov.info
         env:
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold -Z threads=8"
-      - name: Upload coverage
-        uses: codecov/codecov-action@v4
+      - name: Store coverage file artifact
+        uses: actions/upload-artifact@v4
         with:
-          files: lcov.info
-          fail_ci_if_error: true
-          token: ${{ secrets.CODECOV_TOKEN }}
+          name: unit-cov-${{ github.event.pull_request.head.sha || github.sha }}.info
+          path: lcov.info # output of `make test-unit-with-coverage` 
       - name: Clean cargo cache
         if: steps.cache.outputs.cache-hit != 'true'
         run: cargo cache --autoclean-expensive
@@ -387,10 +386,16 @@ jobs:
         with:
           name: wasm-for-tests-${{ github.event.pull_request.head.sha|| github.sha }}
           path: wasm_for_tests
-      - name: Run integration tests
-        run: cargo +${{ env.NIGHTLY }} nextest run -E 'test(integration)' --test-threads 1 --no-fail-fast
+      - name: Run integration tests with coverage
+        run: make test-integration-with-coverage
+        # run: cargo +${{ env.NIGHTLY }} nextest run -E 'test(integration)' --test-threads 1 --no-fail-fast
         env:
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold -Z threads=8"
+      - name: Store coverage file artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-cov-${{ github.event.pull_request.head.sha || github.sha }}.info
+          path: lcov.info # output of `make test-integration-with-coverage` 
       - name: Clean cargo cache
         if: steps.cache.outputs.cache-hit != 'true'
         run: cargo cache --autoclean-expensive
@@ -608,3 +613,26 @@ jobs:
       - name: Stop sccache
         if: always() && steps.sccache.conclusion == 'success'
         run: sccache --stop-server || true
+
+  upload-coverage:
+    runs-on: [ubuntu-latest]
+    timeout-minutes: 20
+    needs: [test-unit, test-integration]
+
+    steps:
+      - name: Download unit coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: unit-cov-${{ github.event.pull_request.head.sha || github.sha }}.info
+          path: unit-cov.info
+      - name: Download integration coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: integration-cov-${{ github.event.pull_request.head.sha || github.sha }}.info
+          path: integration-cov.info
+      - name: Upload coverage to codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: integration-cov.info, unit-cov.info
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}

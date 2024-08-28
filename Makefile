@@ -200,17 +200,15 @@ test-unit-with-eth-bridge:
 		-Z unstable-options --report-time
 
 test-unit-with-coverage:
-	$(cargo) +$(nightly) llvm-cov --output-path lcov.info \
+	$(cargo) +$(nightly) llvm-cov --lib --output-path lcov.info \
 		--lcov \
-		-- --lib \
-		--skip e2e --skip pos_state_machine_test --skip integration \
+		-- --skip e2e --skip pos_state_machine_test --skip integration \
 		-Z unstable-options --report-time
 
 test-integration-with-coverage:
-	$(cargo) +$(nightly) llvm-cov --output-path lcov.info \
+	$(cargo) +$(nightly) llvm-cov --lib --output-path lcov.info \
 		--lcov \
 		-- integration \
-		--lib \
 		--test-threads=1 \
 		-Z unstable-options --report-time
 
