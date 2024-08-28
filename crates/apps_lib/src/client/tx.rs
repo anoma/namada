@@ -228,25 +228,32 @@ pub async fn submit_reveal_aux(
 async fn batch_opt_reveal_pk_and_submit<N: Namada>(
     namada: &N,
     args: &args::Tx,
-    owner: &Address,
+    // FIXME: references here
+    owners: &[Address],
     tx_data: (Tx, SigningTxData),
-) -> Result<(), error::Error>
+) -> Result<ProcessTxResponse, error::Error>
 where
     <N::Client as namada_sdk::queries::Client>::Error: std::fmt::Display,
 {
-    let submit_pk_tx_data = submit_reveal_aux(namada, args, owner).await?;
-    let mut batched_tx_data =
-        submit_pk_tx_data.map_or_else(Default::default, |data| vec![data]);
+    let mut batched_tx_data = vec![];
+
+    // FIXME: can improve this for loop?
+    for owner in owners {
+        if let Some(reveal_pk_tx_data) =
+            submit_reveal_aux(namada, args, owner).await?
+        {
+            batched_tx_data.push(reveal_pk_tx_data);
+        }
+    }
     batched_tx_data.push(tx_data);
+
     let (mut batched_tx, batched_signing_data) =
         namada_sdk::tx::build_batch(batched_tx_data)?;
-
     for sig_data in batched_signing_data {
         sign(namada, &mut batched_tx, args, sig_data).await?;
     }
 
-    namada.submit(batched_tx, args).await?;
-    Ok(())
+    namada.submit(batched_tx, args).await
 }
 
 pub async fn submit_bridge_pool_tx<N: Namada>(
@@ -261,7 +268,7 @@ pub async fn submit_bridge_pool_tx<N: Namada>(
         batch_opt_reveal_pk_and_submit(
             namada,
             &args.tx,
-            &args.sender,
+            &[args.sender],
             bridge_pool_tx_data,
         )
         .await?;
@@ -285,7 +292,7 @@ where
         batch_opt_reveal_pk_and_submit(
             namada,
             &args.tx,
-            &args.owner,
+            &[args.owner],
             custom_tx_data,
         )
         .await?;
@@ -793,19 +800,20 @@ pub async fn submit_transparent_transfer(
         ));
     }
 
-    let (mut tx, signing_data) = args.clone().build(namada).await?;
+    let transfer_data = args.clone().build(namada).await?;
 
     if args.tx.dump_tx {
-        tx::dump_tx(namada.io(), &args.tx, tx);
+        tx::dump_tx(namada.io(), &args.tx, transfer_data.0);
     } else {
-        // FIXME: need to extend batch_opt_revel for this to support multiple
-        // reveal pkls
-        for datum in args.data.iter() {
-            submit_reveal_aux(namada, &args.tx, &datum.source).await?;
-        }
-
-        sign(namada, &mut tx, &args.tx, signing_data).await?;
-        namada.submit(tx, &args.tx).await?;
+        let reveal_pks: Vec<_> =
+            args.data.into_iter().map(|datum| datum.source).collect();
+        batch_opt_reveal_pk_and_submit(
+            namada,
+            &args.tx,
+            &reveal_pks,
+            transfer_data,
+        )
+        .await?;
     }
 
     Ok(())
@@ -830,25 +838,33 @@ pub async fn submit_shielding_transfer(
     namada: &impl Namada,
     args: args::TxShieldingTransfer,
 ) -> Result<(), error::Error> {
-    // FIXME: same here, extend
-    for datum in args.data.iter() {
-        submit_reveal_aux(namada, &args.tx, &datum.source).await?;
-    }
-
     // Repeat once if the tx fails on a crossover of an epoch
     for _ in 0..2 {
-        let (mut tx, signing_data, tx_epoch) =
-            args.clone().build(namada).await?;
+        let (tx, signing_data, tx_epoch) = args.clone().build(namada).await?;
 
         if args.tx.dump_tx {
             tx::dump_tx(namada.io(), &args.tx, tx);
             break;
-        } else {
-            sign(namada, &mut tx, &args.tx, signing_data).await?;
-            let cmt_hash = tx.first_commitments().unwrap().get_hash();
-            let wrapper_hash = tx.wrapper_hash();
-            let result = namada.submit(tx, &args.tx).await?;
-            match result {
+        }
+
+        let cmt_hash = tx.commitments().last().unwrap().get_hash();
+        let wrapper_hash = tx.wrapper_hash();
+
+        let reveal_pks: Vec<_> = args
+            .data
+            .clone()
+            .into_iter()
+            .map(|datum| datum.source)
+            .collect();
+        let result = batch_opt_reveal_pk_and_submit(
+            namada,
+            &args.tx,
+            &reveal_pks,
+            (tx, signing_data),
+        )
+        .await?;
+
+        match result {
                 ProcessTxResponse::Applied(resp) if
                     // If a transaction is rejected by a VP
                     matches!(
@@ -874,7 +890,6 @@ pub async fn submit_shielding_transfer(
                 // benefit from resubmission
                 _ => break,
             }
-        }
     }
     Ok(())
 }
@@ -909,7 +924,7 @@ where
         batch_opt_reveal_pk_and_submit(
             namada,
             &args.tx,
-            &args.source.effective_address(),
+            &[args.source.effective_address()],
             (tx, signing_data),
         )
         .await?;
@@ -1018,7 +1033,7 @@ where
         batch_opt_reveal_pk_and_submit(
             namada,
             &args.tx,
-            &proposal_author,
+            &[proposal_author],
             proposal_tx_data,
         )
         .await?;
@@ -1157,7 +1172,7 @@ where
         batch_opt_reveal_pk_and_submit(
             namada,
             &args.tx,
-            &default_address,
+            &[default_address],
             submit_bond_tx_data,
         )
         .await?;
