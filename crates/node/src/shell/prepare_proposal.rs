@@ -21,11 +21,11 @@ use super::block_alloc::states::{
 };
 use super::block_alloc::{AllocFailure, BlockAllocator, BlockResources};
 use crate::config::ValidatorLocalConfig;
-use crate::facade::tendermint_proto::google::protobuf::Timestamp;
-use crate::facade::tendermint_proto::v0_37::abci::RequestPrepareProposal;
 use crate::protocol::{self, ShellParams};
 use crate::shell::ShellMode;
 use crate::shims::abcipp_shim_types::shim::{response, TxBytes};
+use crate::tendermint_proto::abci::RequestPrepareProposal;
+use crate::tendermint_proto::google::protobuf::Timestamp;
 
 impl<D, H> Shell<D, H>
 where
@@ -696,23 +696,22 @@ mod test_prepare_proposal {
                     address: pkh1,
                     power: (u128::try_from(val1.bonded_stake).expect("Test failed") as u64).try_into().unwrap(),
                 },
-                sig_info: crate::facade::tendermint::abci::types::BlockSignatureInfo::LegacySigned,
+                sig_info: crate::tendermint::abci::types::BlockSignatureInfo::LegacySigned,
             },
             VoteInfo {
                 validator: Validator {
                     address: pkh2,
                     power: (u128::try_from(val2.bonded_stake).expect("Test failed") as u64).try_into().unwrap(),
                 },
-                sig_info: crate::facade::tendermint::abci::types::BlockSignatureInfo::LegacySigned,
+                sig_info: crate::tendermint::abci::types::BlockSignatureInfo::LegacySigned,
             },
         ];
         let req = FinalizeBlock {
             proposer_address: pkh1.to_vec(),
-            decided_last_commit:
-                crate::facade::tendermint::abci::types::CommitInfo {
-                    round: 0u8.into(),
-                    votes,
-                },
+            decided_last_commit: crate::tendermint::abci::types::CommitInfo {
+                round: 0u8.into(),
+                votes,
+            },
             ..Default::default()
         };
         shell.start_new_epoch(Some(req));

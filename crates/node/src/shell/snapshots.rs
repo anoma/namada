@@ -7,14 +7,13 @@ use namada_sdk::hash::{Hash, Sha256Hasher};
 use namada_sdk::state::{BlockHeight, StorageRead};
 
 use super::SnapshotSync;
-use crate::facade::tendermint::abci::response::ApplySnapshotChunkResult;
-use crate::facade::tendermint::abci::types::Snapshot;
-use crate::facade::tendermint::v0_37::abci::{
-    request as tm_request, response as tm_response,
-};
 use crate::shell::Shell;
 use crate::storage;
 use crate::storage::{DbSnapshot, DbSnapshotMeta};
+use crate::tendermint::abci::types::Snapshot;
+use crate::tendermint::abci::{
+    request as tm_request, response as tm_response, ApplySnapshotChunkResult,
+};
 
 pub const MAX_SENDER_STRIKES: u64 = 5;
 

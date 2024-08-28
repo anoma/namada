@@ -24,12 +24,10 @@ use super::abcipp_shim_types::shim::{
 };
 use crate::config;
 use crate::config::{Action, ActionAtHeight};
-use crate::facade::tendermint::v0_37::abci::{
-    request, Request as Req, Response as Resp,
-};
-use crate::facade::tower_abci::BoxError;
 use crate::shell::{EthereumOracleChannels, Shell};
 use crate::storage::DbSnapshot;
+use crate::tendermint::abci::{request, Request as Req, Response as Resp};
+use crate::tower_abci::BoxError;
 
 /// The shim wraps the shell, which implements ABCI++.
 /// The shim makes a crude translation between the ABCI interface currently used
@@ -152,7 +150,7 @@ impl AbcippShim {
                         .map_err(Error::from)
                         .and_then(|res| match res {
                             Response::FinalizeBlock(resp) => {
-                                Ok(Resp::EndBlock(crate::facade::tendermint_proto::v0_37::abci::ResponseEndBlock::from(resp).try_into().unwrap()))
+                                Ok(Resp::EndBlock(crate::tendermint_proto::abci::ResponseEndBlock::from(resp).try_into().unwrap()))
                             }
                             _ => Err(Error::ConvertResp(res)),
                         })

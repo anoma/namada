@@ -7,7 +7,7 @@ use std::{cmp, env};
 use itertools::Either;
 
 use crate::cli;
-use crate::facade::tendermint_config::net::Address as TendermintAddress;
+use crate::tendermint_config::net::Address as TendermintAddress;
 
 /// Find how many threads to use from an environment variable if it's set and
 /// valid (>= 1). If the environment variable is invalid, exits the process with

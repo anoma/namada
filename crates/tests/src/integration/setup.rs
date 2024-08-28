@@ -12,8 +12,8 @@ use namada_apps_lib::config::genesis::chain::Finalized;
 use namada_apps_lib::config::genesis::templates;
 use namada_apps_lib::config::genesis::templates::load_and_validate;
 use namada_apps_lib::config::TendermintMode;
-use namada_apps_lib::facade::tendermint::Timeout;
-use namada_apps_lib::facade::tendermint_proto::google::protobuf::Timestamp;
+use namada_apps_lib::tendermint::Timeout;
+use namada_apps_lib::tendermint_proto::google::protobuf::Timestamp;
 use namada_apps_lib::wallet::defaults::derive_template_dir;
 use namada_apps_lib::wallet::pre_genesis;
 use namada_core::chain::ChainIdPrefix;
@@ -229,7 +229,7 @@ fn create_node(
         auto_drive_services,
     };
     let init_req =
-        namada_apps_lib::facade::tendermint::v0_37::abci::request::InitChain {
+        namada_apps_lib::tendermint::abci::request::InitChain {
             time: Timestamp {
                 seconds: 0,
                 nanos: 0,
@@ -237,23 +237,23 @@ fn create_node(
             .try_into().unwrap(),
             chain_id: chain_id.to_string(),
             consensus_params:
-                namada_apps_lib::facade::tendermint::consensus::params::Params {
-                    block: namada_apps_lib::facade::tendermint::block::Size {
+                namada_apps_lib::tendermint::consensus::params::Params {
+                    block: namada_apps_lib::tendermint::block::Size {
                         max_bytes: 0,
                         max_gas: 0,
                         time_iota_ms: 0,
                     },
                     evidence:
-                     namada_apps_lib::facade::tendermint::evidence::Params {
+                     namada_apps_lib::tendermint::evidence::Params {
                         max_age_num_blocks:  0,
-                        max_age_duration: namada_apps_lib::facade::tendermint::evidence::Duration(core::time::Duration::MAX),
+                        max_age_duration: namada_apps_lib::tendermint::evidence::Duration(core::time::Duration::MAX),
                         max_bytes: 0,
                     },
-                    validator: namada_apps_lib::facade::tendermint::consensus::params::ValidatorParams {
+                    validator: namada_apps_lib::tendermint::consensus::params::ValidatorParams {
                         pub_key_types: vec![]
                     },
                     version: None,
-                    abci: namada_apps_lib::facade::tendermint::consensus::params::AbciParams {
+                    abci: namada_apps_lib::tendermint::consensus::params::AbciParams {
                         vote_extensions_enable_height: None,
                     },
                 },

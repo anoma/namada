@@ -431,7 +431,7 @@ pub fn packet_from_event_attributes<A: AttributesMap>(
 #[cfg(test)]
 mod tests {
     use namada_core::hash::Hash;
-    use namada_core::tendermint_proto::v0_37::abci::Event as AbciEventV037;
+    use namada_core::tendermint_proto::abci::Event as AbciEventV037;
     use namada_events::extend::{
         ComposeEvent as _, Domain, Height, Log,
         RawReadFromEventAttributes as _, TxHash,

@@ -23,8 +23,24 @@ pub mod bytes;
 pub mod control_flow;
 pub mod hints;
 
-// TODO(namada#3248): only re-export v037 `tendermint-rs`
-pub use {masp_primitives, tendermint, tendermint_proto};
+pub use masp_primitives;
+/// Re-export of tendermint v0.37
+pub mod tendermint {
+    /// Re-export of tendermint v0.37 ABCI
+    pub mod abci {
+        pub use tendermint::abci::response::ApplySnapshotChunkResult;
+        pub use tendermint::abci::{
+            types, Code, Event, EventAttribute, MethodKind,
+        };
+        pub use tendermint::v0_37::abci::*;
+    }
+    pub use tendermint::*;
+}
+/// Re-export of tendermint-proto v0.37
+pub mod tendermint_proto {
+    pub use tendermint_proto::google; // 💩
+    pub use tendermint_proto::v0_37::*;
+}
 /// Borsh binary encoding (re-exported) from official crate with custom ext.
 pub mod borsh {
     pub use borsh::*;

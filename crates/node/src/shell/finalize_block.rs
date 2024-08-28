@@ -31,10 +31,10 @@ use namada_vote_ext::ethereum_tx_data_variants;
 use tendermint::abci::types::Misbehavior;
 
 use super::*;
-use crate::facade::tendermint::abci::types::VoteInfo;
-use crate::facade::tendermint_proto;
 use crate::protocol::{DispatchArgs, DispatchError};
 use crate::shell::stats::InternalStats;
+use crate::tendermint::abci::types::VoteInfo;
+use crate::tendermint_proto;
 
 impl<D, H> Shell<D, H>
 where
@@ -248,14 +248,11 @@ where
         // Apply validator set update
         response.validator_updates = self
             .get_abci_validator_updates(false, |pk, power| {
-                let pub_key = tendermint_proto::v0_37::crypto::PublicKey {
+                let pub_key = tendermint_proto::crypto::PublicKey {
                     sum: Some(key_to_tendermint(&pk).unwrap()),
                 };
                 let pub_key = Some(pub_key);
-                tendermint_proto::v0_37::abci::ValidatorUpdate {
-                    pub_key,
-                    power,
-                }
+                tendermint_proto::abci::ValidatorUpdate { pub_key, power }
             })
             .expect("Must be able to update validator set");
     }
@@ -1093,7 +1090,7 @@ fn pos_votes_from_abci(
                  validator,
                  sig_info,
              }| {
-                let crate::facade::tendermint::abci::types::Validator {
+                let crate::tendermint::abci::types::Validator {
                     address,
                     power,
                 } = validator;
@@ -1265,12 +1262,12 @@ mod test_finalize_block {
     use test_log::test;
 
     use super::*;
-    use crate::facade::tendermint::abci::types::Validator;
     use crate::oracle::control::Command;
     use crate::shell::test_utils::*;
     use crate::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,
     };
+    use crate::tendermint::abci::types::Validator;
 
     const WRAPPER_GAS_LIMIT: u64 = 1_500_000;
     const STORAGE_VALUE: &str = "test_value";

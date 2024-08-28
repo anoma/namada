@@ -27,7 +27,7 @@ use crate::config::genesis::templates::{TokenBalances, TokenConfig};
 use crate::config::genesis::transactions::{
     BondTx, EstablishedAccountTx, Signed as SignedTx, ValidatorAccountTx,
 };
-use crate::facade::tendermint_proto::google::protobuf;
+use crate::tendermint_proto::google::protobuf;
 use crate::wasm_loader;
 
 /// Errors that represent panics in normal flow but get demoted to errors
@@ -100,13 +100,10 @@ where
             let rsp = response::InitChain {
                 validators: self
                     .get_abci_validator_updates(true, |pk, power| {
-                        let pub_key: crate::facade::tendermint::PublicKey =
-                            pk.into();
+                        let pub_key: crate::tendermint::PublicKey = pk.into();
                         let power =
-                            crate::facade::tendermint::vote::Power::try_from(
-                                power,
-                            )
-                            .unwrap();
+                            crate::tendermint::vote::Power::try_from(power)
+                                .unwrap();
                         validator::Update { pub_key, power }
                     })
                     .expect("Must be able to set genesis validator set"),
@@ -194,10 +191,9 @@ where
         // Set the initial validator set
         response.validators = self
             .get_abci_validator_updates(true, |pk, power| {
-                let pub_key: crate::facade::tendermint::PublicKey = pk.into();
+                let pub_key: crate::tendermint::PublicKey = pk.into();
                 let power =
-                    crate::facade::tendermint::vote::Power::try_from(power)
-                        .unwrap();
+                    crate::tendermint::vote::Power::try_from(power).unwrap();
                 validator::Update { pub_key, power }
             })
             .expect("Must be able to set genesis validator set");
@@ -781,13 +777,11 @@ where
         chain_id: String,
         genesis: config::genesis::chain::Finalized,
     ) {
-        use crate::facade::tendermint::block::Size;
-        use crate::facade::tendermint::consensus::params::ValidatorParams;
-        use crate::facade::tendermint::consensus::Params;
-        use crate::facade::tendermint::evidence::{
-            Duration, Params as Evidence,
-        };
-        use crate::facade::tendermint::time::Time;
+        use crate::tendermint::block::Size;
+        use crate::tendermint::consensus::params::ValidatorParams;
+        use crate::tendermint::consensus::Params;
+        use crate::tendermint::evidence::{Duration, Params as Evidence};
+        use crate::tendermint::time::Time;
 
         // craft a request to initialize the chain
         let init = request::InitChain {
