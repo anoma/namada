@@ -53,7 +53,7 @@ main() {
         --path "${_tmp}/unsigned.toml" \
         --output "${_tmp}/signed.toml" \
         --alias validator-1
-    cat "${_tmp}/signed.toml" >> "${_tmp}/localnet/transactions.toml"
+    cat "${_tmp}/signed.toml" >>"${_tmp}/localnet/transactions.toml"
 
     # generate localnet
     ./scripts/gen_localnet.py \
