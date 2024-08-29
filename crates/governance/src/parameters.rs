@@ -4,6 +4,7 @@ use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
 use namada_state::{Result, StorageRead, StorageWrite};
+use serde::Serialize;
 
 use super::storage::keys as goverance_storage;
 
@@ -18,6 +19,7 @@ use super::storage::keys as goverance_storage;
     BorshSerialize,
     BorshDeserialize,
     BorshDeserializer,
+    Serialize,
 )]
 /// Governance parameter structure
 pub struct GovernanceParameters {
