@@ -444,7 +444,7 @@ def to_edit_from_args(args):
     return args.edit
 
 
-def edit_templates(templates, to_edit):
+def edit_toml(data, to_edit):
     def invalid_dict(tab):
         return type(tab) != dict or len(tab) == 0
 
@@ -469,7 +469,7 @@ def edit_templates(templates, to_edit):
 
             table[key] = value
 
-    edit([], templates, to_edit)
+    edit([], data, to_edit)
 
 
 def write_templates(working_directory, templates):
@@ -483,7 +483,7 @@ def setup_templates(working_directory, args):
     to_edit = to_edit_from_args(args)
     info(f"Updating templates with provided args: {to_edit}")
     templates = load_base_templates(args.templates)
-    edit_templates(templates, to_edit)
+    edit_toml(templates, to_edit)
     write_templates(working_directory, templates)
     info("Templates have been updated")
     return templates
