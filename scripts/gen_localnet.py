@@ -512,6 +512,17 @@ def load_base_templates(base_templates):
     }
 
 
+def load_node_config(base_dir_prefix, chain_id, node_alias):
+    config_path = base_dir_prefix / node_alias / chain_id / "config.toml"
+    return toml.load(config_path)
+
+
+def write_node_config(config, base_dir_prefix, chain_id, node_alias):
+    config_path = base_dir_prefix / node_alias / chain_id / "config.toml"
+    with open(config_path, "w") as output_file:
+        toml.dump(config, output_file)
+
+
 def target_binary_paths(mode):
     bins = {}
 
