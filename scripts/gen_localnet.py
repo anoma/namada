@@ -617,6 +617,18 @@ def parse_duration(time_str):
     return dur
 
 
+def append_list(l, *values):
+    for x in values:
+        l.append(x)
+    return l
+
+
+def insert_dict(d, **kwargs):
+    for k, v in kwargs.items():
+        d[k] = v
+    return d
+
+
 # https://stackoverflow.com/questions/8924173/how-can-i-print-bold-text-in-python
 class Color:
     PURPLE = "\033[95m"
