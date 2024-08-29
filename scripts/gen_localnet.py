@@ -354,6 +354,11 @@ def parse_cli_args():
         type=params_json_object,
         help='JSON object of k:v pairs to update in the templates (eg: `{"parameters.toml":{"parameters":{"epochs_per_year":5}}}`).',
     )
+    group.add_argument(
+        "--eval",
+        action=argparse.BooleanOptionalAction,
+        help="Evaluate strings passed to `--edit` as Python code.",
+    )
 
     args = parser.parse_args()
     exclusive = [args.templates, args.validator_aliases, args.pre_genesis_path]
@@ -444,11 +449,11 @@ def to_edit_from_args(args):
     return args.edit
 
 
-def edit_toml(data, to_edit):
+def edit_toml(data, to_edit, evaluate=False):
     def invalid_dict(tab):
         return type(tab) != dict or len(tab) == 0
 
-    def edit(so_far, table, entries):
+    def edit(so_far, table, entries, evaluate):
         if invalid_dict(table) or invalid_dict(entries):
             return
 
@@ -463,13 +468,17 @@ def edit_toml(data, to_edit):
 
             if type(value) == dict:
                 so_far.append(key)
-                edit(so_far, table[key], value)
+                edit(so_far, table[key], value, evaluate)
                 so_far.pop()
                 return
 
-            table[key] = value
+            if evaluate:
+                it = table.get(key)
+                table[key] = eval(value)
+            else:
+                table[key] = value
 
-    edit([], data, to_edit)
+    edit([], data, to_edit, evaluate)
 
 
 def write_templates(working_directory, templates):
@@ -483,7 +492,7 @@ def setup_templates(working_directory, args):
     to_edit = to_edit_from_args(args)
     info(f"Updating templates with provided args: {to_edit}")
     templates = load_base_templates(args.templates)
-    edit_toml(templates, to_edit)
+    edit_toml(templates, to_edit, evaluate=args.eval)
     write_templates(working_directory, templates)
     info("Templates have been updated")
     return templates
