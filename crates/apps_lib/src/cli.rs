@@ -295,6 +295,8 @@ pub mod cmds {
                 .subcommand(QueryCommissionRate::def().display_order(5))
                 .subcommand(QueryRewards::def().display_order(5))
                 .subcommand(QueryMetaData::def().display_order(5))
+                .subcommand(QueryTotalSupply::def().display_order(5))
+                .subcommand(QueryEffNativeSupply::def().display_order(5))
                 // Actions
                 .subcommand(SignTx::def().display_order(6))
                 .subcommand(ShieldedSync::def().display_order(6))
@@ -366,6 +368,10 @@ pub mod cmds {
             let query_rewards = Self::parse_with_ctx(matches, QueryRewards);
             let query_delegations =
                 Self::parse_with_ctx(matches, QueryDelegations);
+            let query_total_supply =
+                Self::parse_with_ctx(matches, QueryTotalSupply);
+            let query_native_supply =
+                Self::parse_with_ctx(matches, QueryEffNativeSupply);
             let query_find_validator =
                 Self::parse_with_ctx(matches, QueryFindValidator);
             let query_result = Self::parse_with_ctx(matches, QueryResult);
@@ -440,6 +446,8 @@ pub mod cmds {
                 .or(query_validator_state)
                 .or(query_commission)
                 .or(query_metadata)
+                .or(query_total_supply)
+                .or(query_native_supply)
                 .or(query_account)
                 .or(sign_tx)
                 .or(shielded_sync)
@@ -523,6 +531,8 @@ pub mod cmds {
         QueryMetaData(QueryMetaData),
         QuerySlashes(QuerySlashes),
         QueryDelegations(QueryDelegations),
+        QueryTotalSupply(QueryTotalSupply),
+        QueryEffNativeSupply(QueryEffNativeSupply),
         QueryFindValidator(QueryFindValidator),
         QueryRawBytes(QueryRawBytes),
         QueryProposal(QueryProposal),
@@ -2049,6 +2059,61 @@ pub mod cmds {
                     "Find PoS delegations from the given owner address."
                 ))
                 .add_args::<args::QueryDelegations<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryTotalSupply(pub args::QueryTotalSupply<args::CliTypes>);
+
+    impl SubCmd for QueryTotalSupply {
+        const CMD: &'static str = "total-supply";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                QueryTotalSupply(args::QueryTotalSupply::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(wrap!(
+                    "Query the total supply in the network of the given \
+                     token. For the native token, this will query the raw \
+                     total supply and not the effective total supply."
+                ))
+                .add_args::<args::QueryTotalSupply<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryEffNativeSupply(
+        pub args::QueryEffNativeSupply<args::CliTypes>,
+    );
+
+    impl SubCmd for QueryEffNativeSupply {
+        const CMD: &'static str = "native-supply";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                QueryEffNativeSupply(args::QueryEffNativeSupply::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(wrap!(
+                    "Query the effective total circulating supply of the \
+                     native token NAM. This excludes illquid NAM tokens held \
+                     in places such as the PGF account. This is the token \
+                     amount used in inflation calculations."
+                ))
+                .add_args::<args::QueryEffNativeSupply<args::CliTypes>>()
         }
     }
 
@@ -6953,6 +7018,59 @@ pub mod args {
             Ok(QueryDelegations::<SdkTypes> {
                 query: self.query.to_sdk(ctx)?,
                 owner: ctx.borrow_chain_or_exit().get(&self.owner),
+            })
+        }
+    }
+
+    impl Args for QueryTotalSupply<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let token = TOKEN.parse(matches);
+            Self { query, token }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query<CliTypes>>()
+                .arg(TOKEN.def().help(wrap!("The token address.")))
+        }
+    }
+
+    impl CliToSdk<QueryTotalSupply<SdkTypes>> for QueryTotalSupply<CliTypes> {
+        type Error = std::convert::Infallible;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<QueryTotalSupply<SdkTypes>, Self::Error> {
+            Ok(QueryTotalSupply::<SdkTypes> {
+                query: self.query.to_sdk(ctx)?,
+                token: ctx.borrow_chain_or_exit().get(&self.token),
+            })
+        }
+    }
+
+    impl Args for QueryEffNativeSupply<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            Self { query }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query<CliTypes>>()
+        }
+    }
+
+    impl CliToSdk<QueryEffNativeSupply<SdkTypes>>
+        for QueryEffNativeSupply<CliTypes>
+    {
+        type Error = std::convert::Infallible;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<QueryEffNativeSupply<SdkTypes>, Self::Error> {
+            Ok(QueryEffNativeSupply::<SdkTypes> {
+                query: self.query.to_sdk(ctx)?,
             })
         }
     }
