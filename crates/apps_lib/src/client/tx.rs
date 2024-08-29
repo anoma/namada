@@ -195,11 +195,11 @@ pub async fn sign<N: Namada>(
 // Build a transaction to reveal the signer of the given transaction.
 pub async fn submit_reveal_aux(
     context: &impl Namada,
-    args: args::Tx,
+    args: &args::Tx,
     address: &Address,
-) -> Result<(), error::Error> {
+) -> Result<Option<(Tx, SigningTxData)>, error::Error> {
     if args.dump_tx {
-        return Ok(());
+        return Ok(None);
     }
 
     if let Address::Implicit(ImplicitAddress(pkh)) = address {
@@ -213,35 +213,62 @@ pub async fn submit_reveal_aux(
             display_line!(
                 context.io(),
                 "Submitting a tx to reveal the public key for address \
-                 {address}..."
+                 {address}"
             );
-            let (mut tx, signing_data) =
-                tx::build_reveal_pk(context, &args, &public_key).await?;
-
-            sign(context, &mut tx, &args, signing_data).await?;
-
-            context.submit(tx, &args).await?;
+            return Ok(Some(
+                tx::build_reveal_pk(context, args, &public_key).await?,
+            ));
         }
     }
 
-    Ok(())
+    Ok(None)
+}
+
+async fn batch_opt_reveal_pk_and_submit<N: Namada>(
+    namada: &N,
+    args: &args::Tx,
+    owners: &[&Address],
+    tx_data: (Tx, SigningTxData),
+) -> Result<ProcessTxResponse, error::Error>
+where
+    <N::Client as namada_sdk::queries::Client>::Error: std::fmt::Display,
+{
+    let mut batched_tx_data = vec![];
+
+    for owner in owners {
+        if let Some(reveal_pk_tx_data) =
+            submit_reveal_aux(namada, args, owner).await?
+        {
+            batched_tx_data.push(reveal_pk_tx_data);
+        }
+    }
+    batched_tx_data.push(tx_data);
+
+    let (mut batched_tx, batched_signing_data) =
+        namada_sdk::tx::build_batch(batched_tx_data)?;
+    for sig_data in batched_signing_data {
+        sign(namada, &mut batched_tx, args, sig_data).await?;
+    }
+
+    namada.submit(batched_tx, args).await
 }
 
 pub async fn submit_bridge_pool_tx<N: Namada>(
     namada: &N,
     args: args::EthereumBridgePool,
 ) -> Result<(), error::Error> {
-    let tx_args = args.tx.clone();
-    let (mut tx, signing_data) = args.clone().build(namada).await?;
+    let bridge_pool_tx_data = args.clone().build(namada).await?;
 
     if args.tx.dump_tx {
-        tx::dump_tx(namada.io(), &args.tx, tx);
+        tx::dump_tx(namada.io(), &args.tx, bridge_pool_tx_data.0);
     } else {
-        submit_reveal_aux(namada, tx_args.clone(), &args.sender).await?;
-
-        sign(namada, &mut tx, &tx_args, signing_data).await?;
-
-        namada.submit(tx, &tx_args).await?;
+        batch_opt_reveal_pk_and_submit(
+            namada,
+            &args.tx,
+            &[&args.sender],
+            bridge_pool_tx_data,
+        )
+        .await?;
     }
 
     Ok(())
@@ -254,16 +281,18 @@ pub async fn submit_custom<N: Namada>(
 where
     <N::Client as namada_sdk::queries::Client>::Error: std::fmt::Display,
 {
-    submit_reveal_aux(namada, args.tx.clone(), &args.owner).await?;
-
-    let (mut tx, signing_data) = args.build(namada).await?;
+    let custom_tx_data = args.build(namada).await?;
 
     if args.tx.dump_tx {
-        tx::dump_tx(namada.io(), &args.tx, tx);
+        tx::dump_tx(namada.io(), &args.tx, custom_tx_data.0);
     } else {
-        sign(namada, &mut tx, &args.tx, signing_data).await?;
-
-        namada.submit(tx, &args.tx).await?;
+        batch_opt_reveal_pk_and_submit(
+            namada,
+            &args.tx,
+            &[&args.owner],
+            custom_tx_data,
+        )
+        .await?;
     }
 
     Ok(())
@@ -768,17 +797,20 @@ pub async fn submit_transparent_transfer(
         ));
     }
 
-    for datum in args.data.iter() {
-        submit_reveal_aux(namada, args.tx.clone(), &datum.source).await?;
-    }
-
-    let (mut tx, signing_data) = args.clone().build(namada).await?;
+    let transfer_data = args.clone().build(namada).await?;
 
     if args.tx.dump_tx {
-        tx::dump_tx(namada.io(), &args.tx, tx);
+        tx::dump_tx(namada.io(), &args.tx, transfer_data.0);
     } else {
-        sign(namada, &mut tx, &args.tx, signing_data).await?;
-        namada.submit(tx, &args.tx).await?;
+        let reveal_pks: Vec<_> =
+            args.data.iter().map(|datum| &datum.source).collect();
+        batch_opt_reveal_pk_and_submit(
+            namada,
+            &args.tx,
+            &reveal_pks,
+            transfer_data,
+        )
+        .await?;
     }
 
     Ok(())
@@ -803,24 +835,29 @@ pub async fn submit_shielding_transfer(
     namada: &impl Namada,
     args: args::TxShieldingTransfer,
 ) -> Result<(), error::Error> {
-    for datum in args.data.iter() {
-        submit_reveal_aux(namada, args.tx.clone(), &datum.source).await?;
-    }
-
     // Repeat once if the tx fails on a crossover of an epoch
     for _ in 0..2 {
-        let (mut tx, signing_data, tx_epoch) =
-            args.clone().build(namada).await?;
+        let (tx, signing_data, tx_epoch) = args.clone().build(namada).await?;
 
         if args.tx.dump_tx {
             tx::dump_tx(namada.io(), &args.tx, tx);
             break;
-        } else {
-            sign(namada, &mut tx, &args.tx, signing_data).await?;
-            let cmt_hash = tx.first_commitments().unwrap().get_hash();
-            let wrapper_hash = tx.wrapper_hash();
-            let result = namada.submit(tx, &args.tx).await?;
-            match result {
+        }
+
+        let cmt_hash = tx.commitments().last().unwrap().get_hash();
+        let wrapper_hash = tx.wrapper_hash();
+
+        let reveal_pks: Vec<_> =
+            args.data.iter().map(|datum| &datum.source).collect();
+        let result = batch_opt_reveal_pk_and_submit(
+            namada,
+            &args.tx,
+            &reveal_pks,
+            (tx, signing_data),
+        )
+        .await?;
+
+        match result {
                 ProcessTxResponse::Applied(resp) if
                     // If a transaction is rejected by a VP
                     matches!(
@@ -846,7 +883,6 @@ pub async fn submit_shielding_transfer(
                 // benefit from resubmission
                 _ => break,
             }
-        }
     }
     Ok(())
 }
@@ -873,20 +909,18 @@ pub async fn submit_ibc_transfer<N: Namada>(
 where
     <N::Client as namada_sdk::queries::Client>::Error: std::fmt::Display,
 {
-    submit_reveal_aux(
-        namada,
-        args.tx.clone(),
-        &args.source.effective_address(),
-    )
-    .await?;
-    let (mut tx, signing_data, _) = args.build(namada).await?;
+    let (tx, signing_data, _) = args.build(namada).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
-        sign(namada, &mut tx, &args.tx, signing_data).await?;
-
-        namada.submit(tx, &args.tx).await?;
+        batch_opt_reveal_pk_and_submit(
+            namada,
+            &args.tx,
+            &[&args.source.effective_address()],
+            (tx, signing_data),
+        )
+        .await?;
     }
     // NOTE that the tx could fail when its submission epoch doesn't match
     // construction epoch
@@ -904,7 +938,7 @@ where
     let current_epoch = rpc::query_and_print_epoch(namada).await;
     let governance_parameters =
         rpc::query_governance_parameters(namada.client()).await;
-    let (mut tx_builder, signing_data) = if args.is_pgf_funding {
+    let (proposal_tx_data, proposal_author) = if args.is_pgf_funding {
         let proposal =
             PgfFundingProposal::try_from(args.proposal_data.as_ref())
                 .map_err(|e| {
@@ -916,11 +950,12 @@ where
                 .map_err(|e| {
                     error::TxSubmitError::InvalidProposal(e.to_string())
                 })?;
+        let proposal_author = proposal.proposal.author.clone();
 
-        submit_reveal_aux(namada, args.tx.clone(), &proposal.proposal.author)
-            .await?;
-
-        tx::build_pgf_funding_proposal(namada, &args, proposal).await?
+        (
+            tx::build_pgf_funding_proposal(namada, &args, proposal).await?,
+            proposal_author,
+        )
     } else if args.is_pgf_stewards {
         let proposal = PgfStewardProposal::try_from(
             args.proposal_data.as_ref(),
@@ -947,11 +982,12 @@ where
             .map_err(|e| {
                 error::TxSubmitError::InvalidProposal(e.to_string())
             })?;
+        let proposal_author = proposal.proposal.author.clone();
 
-        submit_reveal_aux(namada, args.tx.clone(), &proposal.proposal.author)
-            .await?;
-
-        tx::build_pgf_stewards_proposal(namada, &args, proposal).await?
+        (
+            tx::build_pgf_stewards_proposal(namada, &args, proposal).await?,
+            proposal_author,
+        )
     } else {
         let proposal = DefaultProposal::try_from(args.proposal_data.as_ref())
             .map_err(|e| {
@@ -976,19 +1012,24 @@ where
             .map_err(|e| {
                 error::TxSubmitError::InvalidProposal(e.to_string())
             })?;
+        let proposal_author = proposal.proposal.author.clone();
 
-        submit_reveal_aux(namada, args.tx.clone(), &proposal.proposal.author)
-            .await?;
-
-        tx::build_default_proposal(namada, &args, proposal).await?
+        (
+            tx::build_default_proposal(namada, &args, proposal).await?,
+            proposal_author,
+        )
     };
 
     if args.tx.dump_tx {
-        tx::dump_tx(namada.io(), &args.tx, tx_builder);
+        tx::dump_tx(namada.io(), &args.tx, proposal_tx_data.0);
     } else {
-        sign(namada, &mut tx_builder, &args.tx, signing_data).await?;
-
-        namada.submit(tx_builder, &args.tx).await?;
+        batch_opt_reveal_pk_and_submit(
+            namada,
+            &args.tx,
+            &[&proposal_author],
+            proposal_tx_data,
+        )
+        .await?;
     }
 
     Ok(())
@@ -1096,7 +1137,13 @@ pub async fn submit_reveal_pk<N: Namada>(
 where
     <N::Client as namada_sdk::queries::Client>::Error: std::fmt::Display,
 {
-    submit_reveal_aux(namada, args.tx, &(&args.public_key).into()).await?;
+    let tx_data =
+        submit_reveal_aux(namada, &args.tx, &(&args.public_key).into()).await?;
+
+    if let Some((mut tx, signing_data)) = tx_data {
+        sign(namada, &mut tx, &args.tx, signing_data).await?;
+        namada.submit(tx, &args.tx).await?;
+    }
 
     Ok(())
 }
@@ -1108,17 +1155,19 @@ pub async fn submit_bond<N: Namada>(
 where
     <N::Client as namada_sdk::queries::Client>::Error: std::fmt::Display,
 {
-    let default_address = args.source.clone().unwrap_or(args.validator.clone());
-    submit_reveal_aux(namada, args.tx.clone(), &default_address).await?;
-
-    let (mut tx, signing_data) = args.build(namada).await?;
+    let submit_bond_tx_data = args.build(namada).await?;
 
     if args.tx.dump_tx {
-        tx::dump_tx(namada.io(), &args.tx, tx);
+        tx::dump_tx(namada.io(), &args.tx, submit_bond_tx_data.0);
     } else {
-        sign(namada, &mut tx, &args.tx, signing_data).await?;
-
-        namada.submit(tx, &args.tx).await?;
+        let default_address = args.source.as_ref().unwrap_or(&args.validator);
+        batch_opt_reveal_pk_and_submit(
+            namada,
+            &args.tx,
+            &[default_address],
+            submit_bond_tx_data,
+        )
+        .await?;
     }
 
     Ok(())
