@@ -224,6 +224,15 @@ pub async fn get_token_total_supply<C: crate::queries::Client + Sync>(
     convert_response::<C, _>(RPC.vp().token().total_supply(client, token).await)
 }
 
+/// Query the effective total supply of the native token
+pub async fn get_effective_native_supply<C: crate::queries::Client + Sync>(
+    client: &C,
+) -> Result<token::Amount, error::Error> {
+    convert_response::<C, _>(
+        RPC.vp().token().effective_native_supply(client).await,
+    )
+}
+
 /// Check if the given address is a known validator.
 pub async fn is_validator<C: crate::queries::Client + Sync>(
     client: &C,
