@@ -61,7 +61,7 @@ main() {
         --templates "${_tmp}/localnet" \
         --validator-aliases '{"validator-0":"tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx","validator-1":"tnam1qyq850fy0tdk8wkp40hhwu8a9wp2wn8stq3ldqrg"}' \
         --pre-genesis-path "${_tmp}/localnet/src/pre-genesis" \
-        --edit '{"balances.toml":{"token":{"NAM":"insert_dict(it,tnam1qyq850fy0tdk8wkp40hhwu8a9wp2wn8stq3ldqrg=\"200000\",tnam1qr8l7l6rywucdarxg9q0zpggfe0jxddk6u09e8ez=\"1000000\")"}}}' \
+        --edit-temp '{"balances.toml":{"token":{"NAM":"insert_dict(it,tnam1qyq850fy0tdk8wkp40hhwu8a9wp2wn8stq3ldqrg=\"200000\",tnam1qr8l7l6rywucdarxg9q0zpggfe0jxddk6u09e8ez=\"1000000\")"}}}' \
         --eval \
         "$@"
 }

@@ -341,15 +341,15 @@ def parse_cli_args():
     group.add_argument(
         "--epoch-duration",
         type=parse_duration,
-        help="Epoch duration (eg: `1hr`, `30m`, `15s`). Defaults to `parameters.toml` value, and overrides value from `--edit`.",
+        help="Epoch duration (eg: `1hr`, `30m`, `15s`). Defaults to `parameters.toml` value, and overrides value from `--edit-templates`.",
     )
     group.add_argument(
         "--max-validator-slots",
         type=int,
-        help="Maximum number of validators. Defaults to `parameters.toml` value, and overrides value from `--edit`.",
+        help="Maximum number of validators. Defaults to `parameters.toml` value, and overrides value from `--edit-templates`.",
     )
     group.add_argument(
-        "--edit",
+        "--edit-templates",
         action="append",
         default=[],
         type=params_json_object,
@@ -358,7 +358,7 @@ def parse_cli_args():
     group.add_argument(
         "--eval",
         action=argparse.BooleanOptionalAction,
-        help="Evaluate strings passed to `--edit` as Python code.",
+        help="Evaluate strings passed to `--edit-templates` as Python code.",
     )
 
     args = parser.parse_args()
@@ -436,7 +436,7 @@ def load_json(s):
             return json.load(f)
 
 
-def to_edit_from_args(args):
+def to_edit_templates_from_args(args):
     if args.max_validator_slots:
         templates = {}
         value = args.max_validator_slots
@@ -444,7 +444,7 @@ def to_edit_from_args(args):
             value = repr(value)
         params = templates.setdefault(PARAMETERS_TEMPLATE, {})
         params.setdefault("pos_params", {})["max_validator_slots"] = value
-        args.edit.append(templates)
+        args.edit_templates.append(templates)
     if args.epoch_duration:
         templates = {}
         value = int(round(365 * 24 * 60 * 60 / args.epoch_duration.total_seconds()))
@@ -452,8 +452,8 @@ def to_edit_from_args(args):
             value = repr(value)
         params = templates.setdefault(PARAMETERS_TEMPLATE, {})
         params.setdefault("parameters", {})["epochs_per_year"] = value
-        args.edit.append(templates)
-    return args.edit
+        args.edit_templates.append(templates)
+    return args.edit_templates
 
 
 def edit_toml(data, to_edit_list, evaluate=False):
@@ -498,7 +498,7 @@ def write_templates(working_directory, templates):
 
 
 def setup_templates(working_directory, args):
-    to_edit = to_edit_from_args(args)
+    to_edit = to_edit_templates_from_args(args)
     info(f"Updating templates")
     templates = load_base_templates(args.templates)
     edit_toml(templates, to_edit, evaluate=args.eval)
