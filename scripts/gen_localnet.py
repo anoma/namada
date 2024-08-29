@@ -350,7 +350,8 @@ def parse_cli_args():
     )
     group.add_argument(
         "--edit",
-        default={},
+        action="append",
+        default=[],
         type=params_json_object,
         help='JSON object of k:v pairs to update in the templates (eg: `{"parameters.toml":{"parameters":{"epochs_per_year":5}}}`).',
     )
@@ -437,19 +438,23 @@ def load_json(s):
 
 def to_edit_from_args(args):
     if args.max_validator_slots:
-        params = args.edit.setdefault(PARAMETERS_TEMPLATE, {})
+        templates = {}
+        params = templates.setdefault(PARAMETERS_TEMPLATE, {})
         params.setdefault("pos_params", {})[
             "max_validator_slots"
         ] = args.max_validator_slots
+        args.edit.append(templates)
     if args.epoch_duration:
-        params = args.edit.setdefault(PARAMETERS_TEMPLATE, {})
+        templates = {}
+        params = templates.setdefault(PARAMETERS_TEMPLATE, {})
         params.setdefault("parameters", {})["epochs_per_year"] = int(
             round(365 * 24 * 60 * 60 / args.epoch_duration.total_seconds())
         )
+        args.edit.append(templates)
     return args.edit
 
 
-def edit_toml(data, to_edit, evaluate=False):
+def edit_toml(data, to_edit_list, evaluate=False):
     def invalid_dict(tab):
         return type(tab) != dict or len(tab) == 0
 
@@ -478,7 +483,9 @@ def edit_toml(data, to_edit, evaluate=False):
             else:
                 table[key] = value
 
-    edit([], data, to_edit, evaluate)
+    for to_edit in to_edit_list:
+        info(f"Applying provided args: {to_edit}")
+        edit([], data, to_edit, evaluate)
 
 
 def write_templates(working_directory, templates):
@@ -490,7 +497,7 @@ def write_templates(working_directory, templates):
 
 def setup_templates(working_directory, args):
     to_edit = to_edit_from_args(args)
-    info(f"Updating templates with provided args: {to_edit}")
+    info(f"Updating templates")
     templates = load_base_templates(args.templates)
     edit_toml(templates, to_edit, evaluate=args.eval)
     write_templates(working_directory, templates)
