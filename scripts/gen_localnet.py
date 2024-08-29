@@ -257,7 +257,7 @@ def info(msg):
 
 
 def warning(msg):
-    log(Color.YELLOW, "warning", msg)
+    log(Color.YELLOW, "warn", msg)
 
 
 def error(msg):
