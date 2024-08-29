@@ -10,38 +10,45 @@ use namada_token::{
 use crate::queries::RequestCtx;
 
 router! {TOKEN,
-    ( "denomination" / [addr: Address] ) -> Option<token::Denomination> = denomination,
-    ( "total_supply" / [addr: Address] ) -> token::Amount = total_supply,
+    ( "denomination" / [token: Address] ) -> Option<token::Denomination> = denomination,
+    ( "total_supply" / [token: Address] ) -> token::Amount = total_supply,
+    ( "effective_native_supply" ) -> token::Amount = effective_native_supply,
 }
 
 /// Get the number of decimal places (in base 10) for a
 /// token specified by `addr`.
 fn denomination<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
-    addr: Address,
+    token: Address,
 ) -> namada_storage::Result<Option<token::Denomination>>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    read_denom(ctx.state, &addr)
+    read_denom(ctx.state, &token)
 }
 
 /// Get the total supply for a token address
 fn total_supply<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
-    addr: Address,
+    token: Address,
 ) -> namada_storage::Result<token::Amount>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let native_token = ctx.state.in_mem().native_token.clone();
-    if addr == native_token {
-        get_effective_total_native_supply(ctx.state)
-    } else {
-        read_total_supply(ctx.state, &addr)
-    }
+    read_total_supply(ctx.state, &token)
+}
+
+/// Get the effective total supply of the native token
+fn effective_native_supply<D, H, V, T>(
+    ctx: RequestCtx<'_, D, H, V, T>,
+) -> namada_storage::Result<token::Amount>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    get_effective_total_native_supply(ctx.state)
 }
 
 pub mod client_only_methods {

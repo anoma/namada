@@ -1469,6 +1469,7 @@ pub mod constants {
     //  Native VP aliases
     pub const GOVERNANCE_ADDRESS: &str = "governance";
     pub const MASP: &str = "masp";
+    pub const PGF_ADDRESS: &str = "pgf";
 
     // Fungible token addresses
     pub const NAM: &str = "NAM";

@@ -36,7 +36,8 @@ use namada_sdk::proof_of_stake::types::{
 use namada_sdk::proof_of_stake::PosParams;
 use namada_sdk::queries::{Client, RPC};
 use namada_sdk::rpc::{
-    self, enriched_bonds_and_unbonds, query_epoch, TxResponse,
+    self, enriched_bonds_and_unbonds, format_denominated_amount, query_epoch,
+    TxResponse,
 };
 use namada_sdk::storage::BlockResults;
 use namada_sdk::tendermint_rpc::endpoint::status;
@@ -1176,6 +1177,40 @@ pub async fn query_rewards<C: namada_sdk::queries::Client + Sync>(
     )
 }
 
+/// Query token total supply.
+pub async fn query_total_supply<N: Namada>(
+    context: &N,
+    args: args::QueryTotalSupply,
+) {
+    let token = args.token;
+    let supply = unwrap_sdk_result(
+        rpc::get_token_total_supply(context.client(), &token).await,
+    );
+    let amount_str = format_denominated_amount(
+        context.client(),
+        context.io(),
+        &token,
+        supply,
+    )
+    .await;
+    display_line!(
+        context.io(),
+        "Total supply of token {token}: {}",
+        amount_str
+    );
+}
+
+/// Query the effective total supply of the native token
+pub async fn query_effective_native_supply<N: Namada>(context: &N) {
+    let native_supply = unwrap_client_response::<N::Client, token::Amount>(
+        RPC.vp()
+            .token()
+            .effective_native_supply(context.client())
+            .await,
+    );
+    display_line!(context.io(), "nam: {}", native_supply.to_string_native());
+}
+
 /// Query a validator's state information
 pub async fn query_and_print_validator_state(
     context: &impl Namada,
@@ -2002,6 +2037,14 @@ pub async fn query_governance_parameters<
 fn unwrap_client_response<C: namada_sdk::queries::Client, T>(
     response: Result<T, C::Error>,
 ) -> T {
+    response.unwrap_or_else(|err| {
+        eprintln!("Error in the query: {:?}", err);
+        cli::safe_exit(1)
+    })
+}
+
+/// A helper to unwrap an SDK query result. Will shut down process on error.
+fn unwrap_sdk_result<T>(response: Result<T, namada_sdk::error::Error>) -> T {
     response.unwrap_or_else(|err| {
         eprintln!("Error in the query: {:?}", err);
         cli::safe_exit(1)
