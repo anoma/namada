@@ -464,6 +464,7 @@ def edit_templates(templates, to_edit):
             if type(value) == dict:
                 so_far.append(key)
                 edit(so_far, table[key], value)
+                so_far.pop()
                 return
 
             table[key] = value
