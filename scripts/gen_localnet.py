@@ -216,12 +216,20 @@ def join_network_with_fullnode(
         chain_id,
     )
 
+    config = load_node_config(
+        base_dir_prefix=base_dir_prefix,
+        chain_id=chain_id,
+        node_alias=fullnode_alias,
+    )
     update_fullnode_config(
+        config=config,
         full_node_base_port=fullnode_base_port,
-        fullnode_config_path=base_dir_prefix
-        / fullnode_alias
-        / chain_id
-        / "config.toml",
+    )
+    write_node_config(
+        config=config,
+        base_dir_prefix=base_dir_prefix,
+        chain_id=chain_id,
+        node_alias=fullnode_alias,
     )
 
     info(f"Full node {fullnode_alias} joined {chain_id}")
@@ -231,9 +239,7 @@ def join_network_with_fullnode(
     )
 
 
-def update_fullnode_config(full_node_base_port, fullnode_config_path):
-    config = toml.load(fullnode_config_path)
-
+def update_fullnode_config(config, full_node_base_port):
     config["ledger"]["cometbft"]["rpc"][
         "laddr"
     ] = f"tcp://127.0.0.1:{full_node_base_port}"
@@ -243,9 +249,6 @@ def update_fullnode_config(full_node_base_port, fullnode_config_path):
     config["ledger"]["cometbft"]["p2p"][
         "laddr"
     ] = f"tcp://0.0.0.0:{full_node_base_port + 2}"
-
-    with open(fullnode_config_path, "w") as output_file:
-        toml.dump(config, output_file)
 
 
 def log(color, descriptor, line):
