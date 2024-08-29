@@ -13,10 +13,10 @@ use futures::task::AtomicWaker;
 use masp_primitives::merkle_tree::{CommitmentTree, IncrementalWitness};
 use masp_primitives::sapling::{Node, ViewingKey};
 use masp_primitives::transaction::Transaction;
+use namada_core::chain::BlockHeight;
 use namada_core::collections::HashMap;
 use namada_core::control_flow::time::{Duration, LinearBackoff, Sleep};
 use namada_core::hints;
-use namada_core::storage::BlockHeight;
 use namada_tx::IndexedTx;
 
 use super::utils::{IndexedNoteEntry, MaspClient};
@@ -862,7 +862,8 @@ mod dispatcher_tests {
     use std::hint::spin_loop;
 
     use futures::join;
-    use namada_core::storage::{BlockHeight, TxIndex};
+    use namada_core::chain::BlockHeight;
+    use namada_core::storage::TxIndex;
     use namada_tx::IndexedTx;
     use tempfile::tempdir;
 

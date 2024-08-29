@@ -6,7 +6,9 @@ use namada_tx::data::TxSentinel;
 
 use crate::in_memory::InMemory;
 use crate::write_log::WriteLog;
-use crate::{DBIter, Error, Result, State, StateRead, StorageHasher, DB};
+use crate::{
+    DBIter, Error, Result, State, StateError, StateRead, StorageHasher, DB,
+};
 
 /// State with mutable write log and gas metering for tx host env.
 #[derive(Debug)]
@@ -71,7 +73,7 @@ where
                 "Stopping transaction execution because of gas error: {}",
                 err
             );
-            Error::Gas(err)
+            Error::from(StateError::Gas(err))
         })
     }
 }
@@ -137,6 +139,10 @@ where
     }
 
     fn charge_gas(&self, gas: u64) -> Result<()> {
-        self.gas_meter.borrow_mut().consume(gas).map_err(Error::Gas)
+        Ok(self
+            .gas_meter
+            .borrow_mut()
+            .consume(gas)
+            .map_err(StateError::Gas)?)
     }
 }

@@ -55,6 +55,7 @@ where
 #[cfg(test)]
 mod test_bp_vote_extensions {
     use namada_apps_lib::wallet::defaults::{bertha_address, bertha_keypair};
+    use namada_sdk::chain::BlockHeight;
     use namada_sdk::eth_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
     use namada_sdk::eth_bridge::storage::bridge_pool::get_key_from_hash;
     use namada_sdk::eth_bridge::storage::eth_bridge_queries::{
@@ -74,7 +75,6 @@ mod test_bp_vote_extensions {
         become_validator, BecomeValidator, Epoch,
     };
     use namada_sdk::state::StorageWrite;
-    use namada_sdk::storage::BlockHeight;
     use namada_sdk::tendermint::abci::types::VoteInfo;
     use namada_sdk::tx::Signed;
     use namada_sdk::{governance, token};
@@ -140,19 +140,22 @@ mod test_bp_vote_extensions {
             Epoch::default(),
         );
         let votes = vec![VoteInfo {
-            validator: crate::facade::tendermint::abci::types::Validator {
+            validator: crate::tendermint::abci::types::Validator {
                 address: pkh1,
-                power: (u128::try_from(val1.bonded_stake).expect("Test failed") as u64).try_into().unwrap(),
+                power: (u128::try_from(val1.bonded_stake).expect("Test failed")
+                    as u64)
+                    .try_into()
+                    .unwrap(),
             },
-            sig_info: crate::facade::tendermint::abci::types::BlockSignatureInfo::LegacySigned,
+            sig_info:
+                crate::tendermint::abci::types::BlockSignatureInfo::LegacySigned,
         }];
         let req = FinalizeBlock {
             proposer_address: pkh1.to_vec(),
-            decided_last_commit:
-                crate::facade::tendermint::abci::types::CommitInfo {
-                    round: 0u8.into(),
-                    votes,
-                },
+            decided_last_commit: crate::tendermint::abci::types::CommitInfo {
+                round: 0u8.into(),
+                votes,
+            },
             ..Default::default()
         };
         assert_eq!(shell.start_new_epoch(Some(req)).0, 1);

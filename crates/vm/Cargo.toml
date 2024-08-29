@@ -24,11 +24,13 @@ wasm-runtime = [
   "wasmer",
 ]
 testing = [
+  "namada_account/testing",
   "namada_core/testing",
   "tempfile",
 ]
 
 [dependencies]
+namada_account = { path = "../account" }
 namada_core = { path = "../core", features = ["control_flow"] }
 namada_events = { path = "../events", default-features = false }
 namada_gas = { path = "../gas" }

@@ -11,6 +11,7 @@ use masp_primitives::sapling::Node;
 use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada_sdk::address::{Address, InternalAddress, MASP};
+use namada_sdk::chain::{BlockHeight, Epoch};
 use namada_sdk::collections::{HashMap, HashSet};
 use namada_sdk::control_flow::time::{Duration, Instant};
 use namada_sdk::events::Event;
@@ -37,7 +38,7 @@ use namada_sdk::queries::{Client, RPC};
 use namada_sdk::rpc::{
     self, enriched_bonds_and_unbonds, query_epoch, TxResponse,
 };
-use namada_sdk::storage::{BlockHeight, BlockResults, Epoch};
+use namada_sdk::storage::BlockResults;
 use namada_sdk::tendermint_rpc::endpoint::status;
 use namada_sdk::token::MaspDigitPos;
 use namada_sdk::tx::display_batch_resp;
@@ -48,7 +49,7 @@ use namada_sdk::{
 };
 
 use crate::cli::{self, args};
-use crate::facade::tendermint::merkle::proof::ProofOps;
+use crate::tendermint::merkle::proof::ProofOps;
 
 /// Query the status of a given transaction.
 ///

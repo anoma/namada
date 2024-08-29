@@ -37,7 +37,7 @@ use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use namada_apps_lib::wallet::{self, ValidatorData, ValidatorKeys};
 use namada_sdk::address::Address;
-use namada_sdk::chain::ChainId;
+use namada_sdk::chain::{BlockHeight, ChainId};
 use namada_sdk::eth_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
 use namada_sdk::eth_bridge::protocol::validation::ethereum_events::validate_eth_events_vext;
 use namada_sdk::eth_bridge::protocol::validation::validator_set_update::validate_valset_upd_vext;
@@ -45,6 +45,7 @@ use namada_sdk::eth_bridge::{EthBridgeQueries, EthereumOracleConfig};
 use namada_sdk::ethereum_events::EthereumEvent;
 use namada_sdk::events::log::EventLog;
 use namada_sdk::gas::{Gas, TxGasMeter};
+use namada_sdk::hash::Hash;
 use namada_sdk::key::*;
 use namada_sdk::migrations::ScheduledMigration;
 use namada_sdk::parameters::{get_gas_scale, validate_tx_bytes};
@@ -57,7 +58,7 @@ use namada_sdk::state::{
     DBIter, FullAccessState, Sha256Hasher, StorageHasher, StorageRead,
     TempWlState, WlState, DB, EPOCH_SWITCH_BLOCKS_DELAY,
 };
-use namada_sdk::storage::{BlockHeight, Key, TxIndex};
+use namada_sdk::storage::{Key, TxIndex};
 use namada_sdk::tendermint::AppHash;
 use namada_sdk::time::DateTimeUtc;
 pub use namada_sdk::tx::data::ResultCode;
@@ -74,13 +75,13 @@ use tokio::sync::mpsc::{Receiver, UnboundedSender};
 
 use super::ethereum_oracle::{self as oracle, last_processed_block};
 use crate::config::{self, genesis, TendermintMode, ValidatorLocalConfig};
-use crate::facade::tendermint::v0_37::abci::{request, response};
-use crate::facade::tendermint::{self, validator};
-use crate::facade::tendermint_proto::v0_37::crypto::public_key;
 use crate::protocol::ShellParams;
 use crate::shims::abcipp_shim_types::shim;
 use crate::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::shims::abcipp_shim_types::shim::TakeSnapshot;
+use crate::tendermint::abci::{request, response};
+use crate::tendermint::{self, validator};
+use crate::tendermint_proto::crypto::public_key;
 use crate::{protocol, storage, tendermint_node};
 
 fn key_to_tendermint(
@@ -121,7 +122,7 @@ pub enum Error {
     #[error("Error loading wasm: {0}")]
     LoadingWasm(String),
     #[error("Error reading from or writing to storage: {0}")]
-    Storage(#[from] namada_sdk::state::StorageError),
+    Storage(#[from] namada_sdk::state::Error),
     #[error("Transaction replay attempt: {0}")]
     ReplayAttempt(String),
     #[error("Error with snapshots: {0}")]
@@ -144,9 +145,9 @@ impl From<Error> for TxResult {
     }
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub type ShellResult<T> = std::result::Result<T, Error>;
 
-pub fn reset(config: config::Ledger) -> Result<()> {
+pub fn reset(config: config::Ledger) -> ShellResult<()> {
     // simply nuke the DB files
     let db_path = &config.db_dir();
     match std::fs::remove_dir_all(db_path) {
@@ -158,7 +159,7 @@ pub fn reset(config: config::Ledger) -> Result<()> {
     Ok(())
 }
 
-pub fn rollback(config: config::Ledger) -> Result<()> {
+pub fn rollback(config: config::Ledger) -> ShellResult<()> {
     // Rollback Tendermint state
     tracing::info!("Rollback Tendermint state");
     let tendermint_block_height =
@@ -171,7 +172,7 @@ pub fn rollback(config: config::Ledger) -> Result<()> {
     tracing::info!("Rollback Namada state");
 
     db.rollback(tendermint_block_height)
-        .map_err(|e| Error::Storage(namada_sdk::state::StorageError::new(e)))
+        .map_err(|e| Error::Storage(namada_sdk::state::Error::new(e)))
 }
 
 #[derive(Debug)]
@@ -342,6 +343,15 @@ pub enum MempoolTxType {
 }
 
 #[derive(Debug)]
+pub struct SnapshotSync {
+    pub next_chunk: u64,
+    pub height: BlockHeight,
+    pub expected: Vec<Hash>,
+    pub strikes: u64,
+    pub snapshot: std::fs::File,
+}
+
+#[derive(Debug)]
 pub struct Shell<D = storage::PersistentDB, H = Sha256Hasher>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -373,6 +383,9 @@ where
     /// When set, indicates after how many blocks a new snapshot
     /// will be taken (counting from the first block)
     pub blocks_between_snapshots: Option<NonZeroU64>,
+    /// Data for a node downloading and apply snapshots as part of
+    /// the fast sync protocol.
+    pub syncing: Option<SnapshotSync>,
 }
 
 /// Storage key filter to store the diffs into the storage. Return `false` for
@@ -409,6 +422,48 @@ impl EthereumOracleChannels {
     }
 }
 
+impl Shell<crate::storage::PersistentDB, Sha256Hasher> {
+    /// Restore the database with data fetched from the State Sync protocol.
+    pub fn restore_database_from_state_sync(&mut self) {
+        let Some(syncing) = self.syncing.as_mut() else {
+            return;
+        };
+
+        let db_block_cache_size_bytes = {
+            let config = crate::config::Config::load(
+                &self.base_dir,
+                &self.chain_id,
+                None,
+            );
+
+            config.ledger.shell.block_cache_bytes.unwrap_or_else(|| {
+                use sysinfo::{RefreshKind, System, SystemExt};
+
+                let sys = System::new_with_specifics(
+                    RefreshKind::new().with_memory(),
+                );
+                let available_memory_bytes = sys.available_memory();
+
+                available_memory_bytes / 3
+            })
+        };
+
+        let db_cache = rocksdb::Cache::new_lru_cache(
+            usize::try_from(db_block_cache_size_bytes).expect(
+                "`db_block_cache_size_bytes` must not exceed `usize::MAX`",
+            ),
+        );
+
+        self.state
+            .db_mut()
+            .restore_from((&db_cache, &mut syncing.snapshot))
+            .expect("Failed to restore state from snapshot");
+
+        // rebuild the in-memory state
+        self.state.load_last_state();
+    }
+}
+
 impl<D, H> Shell<D, H>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
@@ -438,23 +493,27 @@ where
                 .expect("Creating directory for Namada should not fail");
         }
 
-        // For all tests except integration use hard-coded native token addr ...
-        #[cfg(all(
-            any(test, fuzzing, feature = "testing", feature = "benches"),
-            not(feature = "integration"),
-        ))]
-        let native_token = namada_sdk::address::testing::nam();
-        // ... Otherwise, look it up from the genesis file
-        #[cfg(not(all(
-            any(test, fuzzing, feature = "testing", feature = "benches"),
-            not(feature = "integration"),
-        )))]
+        // For tests, fuzzing and benches use hard-coded native token addr ...
+        #[cfg(any(test, fuzzing, feature = "benches"))]
         let native_token = {
             let chain_dir = base_dir.join(chain_id.as_str());
-            let genesis =
-                genesis::chain::Finalized::read_toml_files(&chain_dir)
-                    .expect("Missing genesis files");
-            genesis.get_native_token().clone()
+            // Use genesis file only if it exists
+            if chain_dir
+                .join(genesis::templates::TOKENS_FILE_NAME)
+                .exists()
+            {
+                genesis::chain::Finalized::read_native_token(&chain_dir)
+                    .expect("Missing genesis files")
+            } else {
+                namada_sdk::address::testing::nam()
+            }
+        };
+        // ... Otherwise, look it up from the genesis file
+        #[cfg(not(any(test, fuzzing, feature = "benches")))]
+        let native_token = {
+            let chain_dir = base_dir.join(chain_id.as_str());
+            genesis::chain::Finalized::read_native_token(&chain_dir)
+                .expect("Missing genesis files")
         };
 
         // load last state from storage
@@ -608,6 +667,7 @@ where
             event_log: EventLog::default(),
             scheduled_migration,
             blocks_between_snapshots: config.shell.blocks_between_snapshots,
+            syncing: None,
         };
         shell.update_eth_oracle(&Default::default());
         shell
@@ -698,8 +758,8 @@ where
     /// Get the next epoch for which we can request validator set changed
     pub fn get_validator_set_update_epoch(
         &self,
-        current_epoch: namada_sdk::storage::Epoch,
-    ) -> namada_sdk::storage::Epoch {
+        current_epoch: namada_sdk::chain::Epoch,
+    ) -> namada_sdk::chain::Epoch {
         if let Some(delay) = self.state.in_mem().update_epoch_blocks_delay {
             if delay == EPOCH_SWITCH_BLOCKS_DELAY {
                 // If we're about to update validator sets for the
@@ -761,7 +821,11 @@ where
             _ => false,
         };
         if take_snapshot {
-            self.state.db().path().into()
+            self.state
+                .db()
+                .path()
+                .map(|p| (p, self.state.in_mem().get_last_block_height()))
+                .into()
         } else {
             TakeSnapshot::No
         }
@@ -1290,7 +1354,7 @@ where
         // because we're using domain types in InitChain, but FinalizeBlock is
         // shimmed with a different old type. The joy...
         mut validator_conv: F,
-    ) -> namada_sdk::state::StorageResult<Vec<V>>
+    ) -> namada_sdk::state::Result<Vec<V>>
     where
         F: FnMut(common::PublicKey, i64) -> V,
     {
@@ -1347,7 +1411,7 @@ where
 pub fn replay_protection_checks<D, H>(
     wrapper: &Tx,
     temp_state: &mut TempWlState<'_, D, H>,
-) -> Result<()>
+) -> ShellResult<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
@@ -1387,7 +1451,7 @@ fn mempool_fee_check<D, H, CA>(
     shell_params: &mut ShellParams<'_, TempWlState<'static, D, H>, D, H, CA>,
     tx: &Tx,
     wrapper: &WrapperTx,
-) -> Result<()>
+) -> ShellResult<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
@@ -1412,7 +1476,7 @@ pub fn fee_data_check<D, H, CA>(
     wrapper: &WrapperTx,
     minimum_gas_price: token::Amount,
     shell_params: &mut ShellParams<'_, TempWlState<'_, D, H>, D, H, CA>,
-) -> Result<()>
+) -> ShellResult<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,
@@ -1462,22 +1526,22 @@ pub mod test_utils {
     use namada_sdk::proof_of_stake::storage::validator_consensus_key_handle;
     use namada_sdk::state::mockdb::MockDB;
     use namada_sdk::state::{LastBlock, StorageWrite};
-    use namada_sdk::storage::{Epoch, Header};
+    use namada_sdk::storage::{BlockHeader, Epoch};
     use namada_sdk::tendermint::abci::types::VoteInfo;
     use tempfile::tempdir;
     use tokio::sync::mpsc::{Sender, UnboundedReceiver};
 
     use super::*;
     use crate::config::ethereum_bridge::ledger::ORACLE_CHANNEL_BUFFER_SIZE;
-    use crate::facade::tendermint::abci::types::Misbehavior;
-    use crate::facade::tendermint_proto::google::protobuf::Timestamp;
-    use crate::facade::tendermint_proto::v0_37::abci::{
-        RequestPrepareProposal, RequestProcessProposal,
-    };
     use crate::shims::abcipp_shim_types;
     use crate::shims::abcipp_shim_types::shim::request::{
         FinalizeBlock, ProcessedTx,
     };
+    use crate::tendermint::abci::types::Misbehavior;
+    use crate::tendermint_proto::abci::{
+        RequestPrepareProposal, RequestProcessProposal,
+    };
+    use crate::tendermint_proto::google::protobuf::Timestamp;
 
     #[derive(Error, Debug)]
     pub enum TestError {
@@ -1718,7 +1782,7 @@ pub mod test_utils {
         pub fn finalize_block(
             &mut self,
             req: FinalizeBlock,
-        ) -> Result<Vec<Event>> {
+        ) -> ShellResult<Vec<Event>> {
             match self.shell.finalize_block(req) {
                 Ok(resp) => Ok(resp.events),
                 Err(err) => Err(err),
@@ -1904,7 +1968,7 @@ pub mod test_utils {
     impl Default for FinalizeBlock {
         fn default() -> Self {
             FinalizeBlock {
-                header: Header {
+                header: BlockHeader {
                     hash: Hash([0; 32]),
                     #[allow(clippy::disallowed_methods)]
                     time: DateTimeUtc::now(),
@@ -1965,7 +2029,7 @@ pub mod test_utils {
         byzantine_validators: Option<Vec<Misbehavior>>,
     ) {
         // Let the header time be always ahead of the next epoch min start time
-        let header = Header {
+        let header = BlockHeader {
             time: shell.state.in_mem().next_epoch_min_start_time.next_second(),
             ..Default::default()
         };
@@ -1988,9 +2052,12 @@ pub mod test_utils {
 
 #[cfg(test)]
 mod shell_tests {
+    use std::fs::File;
+
     use eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
+    use namada_apps_lib::state::StorageWrite;
     use namada_sdk::address;
-    use namada_sdk::storage::Epoch;
+    use namada_sdk::chain::Epoch;
     use namada_sdk::token::read_denom;
     use namada_sdk::tx::data::protocol::{ProtocolTx, ProtocolTxType};
     use namada_sdk::tx::data::Fee;
@@ -1998,10 +2065,13 @@ mod shell_tests {
     use namada_vote_ext::{
         bridge_pool_roots, ethereum_events, ethereum_tx_data_variants,
     };
+    use tempfile::tempdir;
     use {namada_replay_protection as replay_protection, wallet};
 
     use super::*;
+    use crate::shell::test_utils::top_level_directory;
     use crate::shell::token::DenominatedAmount;
+    use crate::storage::{DbSnapshot, PersistentDB, SnapshotPath};
 
     const GAS_LIMIT_MULTIPLIER: u64 = 100_000;
 
@@ -2856,5 +2926,81 @@ mod shell_tests {
             MempoolTxType::NewTransaction,
         );
         assert_eq!(result.code, ResultCode::TooLarge.into());
+    }
+
+    /// Test the that the shell can restore it's state
+    /// from a snapshot if it is not syncing
+    #[test]
+    fn test_restore_database_from_snapshot() {
+        let (sender, _receiver) = tokio::sync::mpsc::unbounded_channel();
+
+        let base_dir = tempdir().unwrap().as_ref().canonicalize().unwrap();
+        let vp_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
+        let tx_wasm_compilation_cache = 50 * 1024 * 1024; // 50 kiB
+        let config = config::Ledger::new(
+            base_dir.clone(),
+            Default::default(),
+            TendermintMode::Validator,
+        );
+        let mut shell = Shell::<PersistentDB, Sha256Hasher>::new(
+            config.clone(),
+            top_level_directory().join("wasm"),
+            sender,
+            None,
+            None,
+            None,
+            vp_wasm_compilation_cache,
+            tx_wasm_compilation_cache,
+        );
+        shell.state.in_mem_mut().block.height = BlockHeight::first();
+
+        shell.state.commit_block().expect("Test failed");
+        shell.state.db_mut().flush(true).expect("Test failed");
+        let original_root = shell.state.in_mem().merkle_root();
+        let snapshot = make_snapshot(config.db_dir(), base_dir);
+        shell
+            .state
+            .write(
+                &Key::parse("bing/fucking/bong").expect("Test failed"),
+                [1u8; 64],
+            )
+            .expect("Test failed");
+        shell.state.commit_block().expect("Test failed");
+        let new_root = shell.state.in_mem().merkle_root();
+        assert_ne!(new_root, original_root);
+
+        shell.restore_database_from_state_sync();
+        assert_eq!(shell.state.in_mem().merkle_root(), new_root,);
+        shell.syncing = Some(SnapshotSync {
+            next_chunk: 0,
+            height: BlockHeight::first(),
+            expected: vec![],
+            strikes: 0,
+            snapshot,
+        });
+        shell.restore_database_from_state_sync();
+        assert_eq!(shell.state.in_mem().merkle_root(), original_root,);
+    }
+
+    /// Helper function for the `test_restore_database_from_snapshot` test
+    fn make_snapshot(db_dir: PathBuf, base_dir: PathBuf) -> File {
+        let snapshot =
+            DbSnapshot(SnapshotPath(base_dir.clone(), BlockHeight::first()));
+        std::fs::create_dir_all(base_dir.join("snapshots"))
+            .expect("Test failed");
+        std::fs::create_dir_all(snapshot.0.base()).expect("Test failed");
+        std::fs::create_dir_all(snapshot.0.temp_rocksdb())
+            .expect("Test failed");
+        for entry in std::fs::read_dir(db_dir).expect("Test failed") {
+            let entry = entry.expect("Test failed");
+            let dest_file = snapshot
+                .0
+                .base()
+                .join("db")
+                .join(entry.file_name().to_string_lossy().to_string());
+            std::fs::copy(entry.path(), dest_file).expect("Test failed");
+        }
+        snapshot.clone().build_tarball().expect("Test failed");
+        File::open(snapshot.0.temp_tarball("zst")).expect("Test failed")
     }
 }

@@ -13,7 +13,7 @@ use namada_tx::action::{
 };
 use namada_tx::BatchedTxRef;
 use namada_vp::native_vp::{
-    self, Ctx, CtxPreStorageRead, NativeVp, VpEvaluator,
+    Ctx, CtxPreStorageRead, Error, NativeVp, Result, VpEvaluator,
 };
 use thiserror::Error;
 
@@ -24,17 +24,18 @@ use crate::{storage_key, token};
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
-pub enum Error {
-    #[error("PoS VP error: Native VP error: {0}")]
-    NativeVpError(#[from] native_vp::Error),
+pub enum VpError {
     #[error(
         "Action {0} not authorized by {1} which is not part of verifier set"
     )]
     Unauthorized(&'static str, Address),
 }
 
-/// PoS functions result
-pub type Result<T> = std::result::Result<T, Error>;
+impl From<VpError> for Error {
+    fn from(value: VpError) -> Self {
+        Error::new(value)
+    }
+}
 
 /// Proof-of-Stake validity predicate
 pub struct PosVp<'ctx, S, CA, EVAL, Gov>
@@ -55,8 +56,6 @@ where
     EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
     Gov: governance::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
 {
-    type Error = Error;
-
     fn validate_tx(
         &'view self,
         batched_tx: &BatchedTxRef<'_>,
@@ -70,8 +69,7 @@ where
             .tx
             .data(batched_tx.cmt)
             .map(|tx_data| Gov::is_proposal_accepted(&self.ctx.pre(), &tx_data))
-            .transpose()
-            .map_err(Error::NativeVpError)?
+            .transpose()?
             .unwrap_or(false)
         {
             for key in keys_changed {
@@ -96,10 +94,9 @@ where
             tracing::info!(
                 "Rejecting tx without any action written to temp storage"
             );
-            return Err(native_vp::Error::new_const(
+            return Err(Error::new_const(
                 "Rejecting tx without any action written to temp storage",
-            )
-            .into());
+            ));
         }
 
         let mut became_validator: BTreeSet<Address> = Default::default();
@@ -126,10 +123,11 @@ where
                             tracing::info!(
                                 "Unauthorized PosAction::BecomeValidator"
                             );
-                            return Err(Error::Unauthorized(
+                            return Err(VpError::Unauthorized(
                                 "BecomeValidator",
                                 address,
-                            ));
+                            )
+                            .into());
                         }
                         became_validator.insert(address);
                     }
@@ -138,10 +136,11 @@ where
                             tracing::info!(
                                 "Unauthorized PosAction::DeactivateValidator"
                             );
-                            return Err(Error::Unauthorized(
+                            return Err(VpError::Unauthorized(
                                 "DeactivateValidator",
                                 validator,
-                            ));
+                            )
+                            .into());
                         }
                         deactivated.insert(validator);
                     }
@@ -150,19 +149,21 @@ where
                             tracing::info!(
                                 "Unauthorized PosAction::ReactivateValidator"
                             );
-                            return Err(Error::Unauthorized(
+                            return Err(VpError::Unauthorized(
                                 "ReactivateValidator",
                                 validator,
-                            ));
+                            )
+                            .into());
                         }
                         reactivated.insert(validator);
                     }
                     PosAction::Unjail(validator) => {
                         if !verifiers.contains(&validator) {
                             tracing::info!("Unauthorized PosAction::Unjail");
-                            return Err(Error::Unauthorized(
+                            return Err(VpError::Unauthorized(
                                 "Unjail", validator,
-                            ));
+                            )
+                            .into());
                         }
                         unjailed.insert(validator);
                     }
@@ -177,10 +178,11 @@ where
                         };
                         if !verifiers.contains(&bond_id.source) {
                             tracing::info!("Unauthorized PosAction::Bond");
-                            return Err(Error::Unauthorized(
+                            return Err(VpError::Unauthorized(
                                 "Bond",
                                 bond_id.source,
-                            ));
+                            )
+                            .into());
                         }
                         bonds.insert(bond_id, amount);
                     }
@@ -195,10 +197,11 @@ where
                         };
                         if !verifiers.contains(&bond_id.source) {
                             tracing::info!("Unauthorized PosAction::Unbond");
-                            return Err(Error::Unauthorized(
+                            return Err(VpError::Unauthorized(
                                 "Unbond",
                                 bond_id.source,
-                            ));
+                            )
+                            .into());
                         }
                         unbonds.insert(bond_id, amount);
                     }
@@ -209,10 +212,11 @@ where
                         };
                         if !verifiers.contains(&bond_id.source) {
                             tracing::info!("Unauthorized PosAction::Withdraw");
-                            return Err(Error::Unauthorized(
+                            return Err(VpError::Unauthorized(
                                 "Withdraw",
                                 bond_id.source,
-                            ));
+                            )
+                            .into());
                         }
                         withdrawals.insert(bond_id);
                     }
@@ -226,10 +230,11 @@ where
                             tracing::info!(
                                 "Unauthorized PosAction::Redelegation"
                             );
-                            return Err(Error::Unauthorized(
+                            return Err(VpError::Unauthorized(
                                 "Redelegation",
                                 owner,
-                            ));
+                            )
+                            .into());
                         }
                         let bond_id = BondId {
                             source: owner,
@@ -249,10 +254,11 @@ where
                             tracing::info!(
                                 "Unauthorized PosAction::ClaimRewards"
                             );
-                            return Err(Error::Unauthorized(
+                            return Err(VpError::Unauthorized(
                                 "ClaimRewards",
                                 bond_id.source,
-                            ));
+                            )
+                            .into());
                         }
                         claimed_rewards.insert(bond_id);
                     }
@@ -261,10 +267,11 @@ where
                             tracing::info!(
                                 "Unauthorized PosAction::CommissionChange"
                             );
-                            return Err(Error::Unauthorized(
+                            return Err(VpError::Unauthorized(
                                 "CommissionChange",
                                 validator,
-                            ));
+                            )
+                            .into());
                         }
                         changed_commission.insert(validator);
                     }
@@ -273,10 +280,11 @@ where
                             tracing::info!(
                                 "Unauthorized PosAction::MetadataChange"
                             );
-                            return Err(Error::Unauthorized(
+                            return Err(VpError::Unauthorized(
                                 "MetadataChange",
                                 validator,
-                            ));
+                            )
+                            .into());
                         }
                         changed_metadata.insert(validator);
                     }
@@ -285,10 +293,11 @@ where
                             tracing::info!(
                                 "Unauthorized PosAction::ConsensusKeyChange"
                             );
-                            return Err(Error::Unauthorized(
+                            return Err(VpError::Unauthorized(
                                 "ConsensusKeyChange",
                                 validator,
-                            ));
+                            )
+                            .into());
                         }
                         changed_consensus_key.insert(validator);
                     }
@@ -302,10 +311,10 @@ where
 
         for key in keys_changed {
             if is_params_key(key) {
-                return Err(Error::NativeVpError(native_vp::Error::new_const(
+                return Err(Error::new_const(
                     "PoS parameter changes can only be performed by a \
                      governance proposal that has been accepted",
-                )));
+                ));
             }
             // TODO: validate changes keys against the accumulated changes
         }
@@ -330,16 +339,13 @@ where
     /// Return `Ok` if the changed parameters are valid
     fn is_valid_parameter_change(&self) -> Result<()> {
         let validation_errors: Vec<crate::parameters::ValidationError> =
-            read_owned_pos_params(&self.ctx.post())
-                .map_err(Error::NativeVpError)?
-                .validate();
+            read_owned_pos_params(&self.ctx.post())?.validate();
         validation_errors.is_empty().ok_or_else(|| {
             let validation_errors_str =
                 itertools::join(validation_errors, ", ");
-            native_vp::Error::new_alloc(format!(
+            Error::new_alloc(format!(
                 "PoS parameter changes were invalid: {validation_errors_str}",
             ))
-            .into()
         })
     }
 }

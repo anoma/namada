@@ -3,8 +3,8 @@ use namada_sdk::io::Io;
 use namada_sdk::queries::Client;
 use namada_sdk::rpc::wait_until_node_is_synched;
 
-use crate::facade::tendermint_rpc::client::CompatMode;
-use crate::facade::tendermint_rpc::{HttpClient, Url as TendermintUrl};
+use crate::tendermint_rpc::client::CompatMode;
+use crate::tendermint_rpc::{HttpClient, Url as TendermintUrl};
 
 /// Trait for clients that can be used with the CLI.
 #[async_trait::async_trait(?Send)]

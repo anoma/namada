@@ -10,6 +10,7 @@ use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::sapling::ViewingKey;
 use masp_primitives::transaction::TransparentAddress;
+pub use masp_primitives::transaction::TxId as TxIdInner;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
@@ -18,8 +19,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
 
 use crate::address::{Address, DecodeError, HASH_HEX_LEN, IBC, MASP};
+use crate::chain::Epoch;
 use crate::impl_display_and_from_str_via_format;
-use crate::storage::Epoch;
 use crate::string_encoding::{
     self, MASP_EXT_FULL_VIEWING_KEY_HRP, MASP_EXT_SPENDING_KEY_HRP,
     MASP_PAYMENT_ADDRESS_HRP,
@@ -27,10 +28,7 @@ use crate::string_encoding::{
 use crate::token::{Denomination, MaspDigitPos};
 
 /// Serialize the given TxId
-pub fn serialize_txid<S>(
-    txid: &masp_primitives::transaction::TxId,
-    s: S,
-) -> Result<S::Ok, S::Error>
+pub fn serialize_txid<S>(txid: &TxIdInner, s: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
@@ -38,15 +36,13 @@ where
 }
 
 /// Deserialize the given TxId
-pub fn deserialize_txid<'de, D>(
-    deserializer: D,
-) -> Result<masp_primitives::transaction::TxId, D::Error>
+pub fn deserialize_txid<'de, D>(deserializer: D) -> Result<TxIdInner, D::Error>
 where
     D: Deserializer<'de>,
 {
-    Ok(masp_primitives::transaction::TxId::from_bytes(
-        Deserialize::deserialize(deserializer)?,
-    ))
+    Ok(TxIdInner::from_bytes(Deserialize::deserialize(
+        deserializer,
+    )?))
 }
 
 /// Wrapper for masp_primitive's TxId
@@ -71,17 +67,14 @@ pub struct MaspTxId(
         serialize_with = "serialize_txid",
         deserialize_with = "deserialize_txid"
     )]
-    masp_primitives::transaction::TxId,
+    TxIdInner,
 );
 
-impl From<masp_primitives::transaction::TxId> for MaspTxId {
-    fn from(txid: masp_primitives::transaction::TxId) -> Self {
+impl From<TxIdInner> for MaspTxId {
+    fn from(txid: TxIdInner) -> Self {
         Self(txid)
     }
 }
-
-/// Wrapper for masp_primitive's TxId
-pub type TxId = MaspTxId;
 
 /// Wrapper type around `Epoch` for type safe operations involving the masp
 /// epoch
@@ -114,8 +107,8 @@ impl FromStr for MaspEpoch {
     type Err = ParseIntError;
 
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        let raw: u64 = u64::from_str(s)?;
-        Ok(Self(Epoch(raw)))
+        let inner: Epoch = Epoch::from_str(s)?;
+        Ok(Self(inner))
     }
 }
 
@@ -470,6 +463,18 @@ impl string_encoding::Format for ExtendedSpendingKey {
 
 impl_display_and_from_str_via_format!(ExtendedSpendingKey);
 
+impl ExtendedSpendingKey {
+    /// Derive a viewing key
+    pub fn to_viewing_key(&self) -> ExtendedViewingKey {
+        ExtendedViewingKey::from(
+            #[allow(deprecated)]
+            {
+                self.0.to_extended_full_viewing_key()
+            },
+        )
+    }
+}
+
 impl From<ExtendedSpendingKey> for masp_primitives::zip32::ExtendedSpendingKey {
     fn from(key: ExtendedSpendingKey) -> Self {
         key.0
@@ -763,7 +768,7 @@ impl FromStr for MaspValue {
 
 /// The masp transactions' references of a given batch
 #[derive(Default, Clone, Serialize, Deserialize)]
-pub struct MaspTxRefs(pub Vec<TxId>);
+pub struct MaspTxRefs(pub Vec<MaspTxId>);
 
 impl Display for MaspTxRefs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -776,5 +781,70 @@ impl FromStr for MaspTxRefs {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         serde_json::from_str(s)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::address;
+
+    #[test]
+    fn test_masp_tx_id_basics() {
+        let tx_id = MaspTxId::from(TxIdInner::from_bytes([
+            0, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ]));
+        let tx_id_str = serde_json::to_string(&tx_id).unwrap();
+        let decoded: MaspTxId = serde_json::from_str(&tx_id_str).unwrap();
+        assert_eq!(tx_id, decoded);
+    }
+
+    #[test]
+    fn test_masp_epoch_basics() {
+        let epoch = MaspEpoch::new(123);
+        let epoch_str = epoch.to_string();
+        assert_eq!(&epoch_str, "123");
+        let decoded = MaspEpoch::from_str(&epoch_str).unwrap();
+        assert_eq!(epoch, decoded);
+    }
+
+    #[test]
+    fn test_masp_asset_data_basics() {
+        let mut data = AssetData {
+            token: address::testing::nam(),
+            denom: Denomination(6),
+            position: MaspDigitPos::One,
+            epoch: None,
+        };
+
+        data.undate();
+        assert!(data.epoch.is_none());
+
+        let epoch_0 = MaspEpoch::new(3);
+        let old = data.redate(epoch_0);
+        assert!(old.is_none());
+        assert!(data.epoch.is_none());
+        data.epoch = Some(epoch_0);
+
+        let epoch_1 = MaspEpoch::new(5);
+        let old = data.redate(epoch_1);
+        assert_eq!(old, Some(epoch_0));
+        assert_eq!(data.epoch, Some(epoch_1));
+    }
+
+    #[test]
+    fn test_masp_keys_basics() {
+        let sk = ExtendedSpendingKey::from(
+            masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]),
+        );
+        string_encoding::testing::test_string_formatting(&sk);
+
+        let vk = sk.to_viewing_key();
+        string_encoding::testing::test_string_formatting(&vk);
+
+        let (_diversifier, pa) = sk.0.default_address();
+        let pa = PaymentAddress::from(pa);
+        string_encoding::testing::test_string_formatting(&pa);
     }
 }

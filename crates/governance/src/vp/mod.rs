@@ -7,16 +7,18 @@ use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
-use namada_core::arith::{self, checked};
+use namada_core::arith::checked;
 use namada_core::booleans::{BoolResultUnitExt, ResultBoolExt};
+use namada_core::chain::Epoch;
 use namada_core::storage;
-use namada_core::storage::Epoch;
 use namada_state::{StateRead, StorageRead};
 use namada_systems::{proof_of_stake, trans_token as token};
 use namada_tx::action::{Action, GovAction, Read};
 use namada_tx::BatchedTxRef;
-use namada_vp::native_vp::{Ctx, CtxPreStorageRead, NativeVp, VpEvaluator};
-use namada_vp::{native_vp, VpEnv};
+use namada_vp::native_vp::{
+    Ctx, CtxPreStorageRead, Error, NativeVp, Result, VpEvaluator,
+};
+use namada_vp::VpEnv;
 use thiserror::Error;
 
 use self::utils::ReadType;
@@ -26,9 +28,6 @@ use crate::storage::{is_proposal_accepted, keys as gov_storage};
 use crate::utils::is_valid_validator_voting_period;
 use crate::ProposalVote;
 
-/// for handling Governance NativeVP errors
-pub type Result<T> = std::result::Result<T, Error>;
-
 /// The governance internal address
 pub const ADDRESS: Address = Address::Internal(InternalAddress::Governance);
 
@@ -37,15 +36,17 @@ pub const MAX_PGF_ACTIONS: usize = 20;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
-pub enum Error {
-    #[error("Governance VP error: {0}")]
-    NativeVpError(#[from] native_vp::Error),
+pub enum VpError {
     #[error(
         "Action {0} not authorized by {1} which is not part of verifier set"
     )]
     Unauthorized(&'static str, Address),
-    #[error("Arithmetic {0}")]
-    Arith(#[from] arith::Error),
+}
+
+impl From<VpError> for Error {
+    fn from(value: VpError) -> Self {
+        Error::new(value)
+    }
 }
 
 /// Governance VP
@@ -68,8 +69,6 @@ where
     PoS: proof_of_stake::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
     TokenKeys: token::Keys,
 {
-    type Error = Error;
-
     fn validate_tx(
         &'view self,
         tx_data: &BatchedTxRef<'_>,
@@ -80,19 +79,14 @@ where
             self.is_valid_init_proposal_key_set(keys_changed)?;
         if !is_valid_keys_set {
             tracing::info!("Invalid changed governance key set");
-            return Err(native_vp::Error::new_const(
-                "Invalid changed governance key set",
-            )
-            .into());
+            return Err(Error::new_const("Invalid changed governance key set"));
         };
 
         // Is VP triggered by a governance proposal?
         if is_proposal_accepted(
             &self.ctx.pre(),
             tx_data.tx.data(tx_data.cmt).unwrap_or_default().as_ref(),
-        )
-        .unwrap_or_default()
-        {
+        )? {
             return Ok(());
         }
 
@@ -108,10 +102,9 @@ where
             tracing::info!(
                 "Rejecting tx without any action written to temp storage"
             );
-            return Err(native_vp::Error::new_const(
+            return Err(Error::new_const(
                 "Rejecting tx without any action written to temp storage",
-            )
-            .into());
+            ));
         }
 
         // Check action authorization
@@ -123,10 +116,11 @@ where
                             tracing::info!(
                                 "Unauthorized GovAction::InitProposal"
                             );
-                            return Err(Error::Unauthorized(
+                            return Err(VpError::Unauthorized(
                                 "InitProposal",
                                 author,
-                            ));
+                            )
+                            .into());
                         }
                     }
                     GovAction::VoteProposal { id: _, voter } => {
@@ -134,10 +128,11 @@ where
                             tracing::info!(
                                 "Unauthorized GovAction::VoteProposal"
                             );
-                            return Err(Error::Unauthorized(
+                            return Err(VpError::Unauthorized(
                                 "VoteProposal",
                                 voter,
-                            ));
+                            )
+                            .into());
                         }
                     }
                 },
@@ -187,17 +182,13 @@ where
                 }
                 (KeyType::PARAMETER, _) => self.is_valid_parameter(tx_data),
                 (KeyType::BALANCE, _) => self.is_valid_balance(&native_token),
-                (KeyType::UNKNOWN_GOVERNANCE, _) => {
-                    Err(native_vp::Error::new_alloc(format!(
-                        "Unkown governance key change: {key}"
-                    ))
-                    .into())
-                }
+                (KeyType::UNKNOWN_GOVERNANCE, _) => Err(Error::new_alloc(
+                    format!("Unkown governance key change: {key}"),
+                )),
                 (KeyType::UNKNOWN, _) => Ok(()),
-                _ => Err(native_vp::Error::new_alloc(format!(
+                _ => Err(Error::new_alloc(format!(
                     "Unkown governance key change: {key}"
-                ))
-                .into()),
+                ))),
             };
 
             result.inspect_err(|err| {
@@ -284,24 +275,22 @@ where
         let pre_voting_end_epoch: Epoch =
             self.force_read(&voting_end_epoch_key, ReadType::Pre)?;
 
-        let voter = gov_storage::get_voter_address(key).ok_or(
-            native_vp::Error::new_alloc(format!(
-                "Failed to parse a voter from the vote key {key}",
-            )),
-        )?;
+        let voter =
+            gov_storage::get_voter_address(key).ok_or(Error::new_alloc(
+                format!("Failed to parse a voter from the vote key {key}",),
+            ))?;
         let validator = gov_storage::get_vote_delegation_address(key).ok_or(
-            native_vp::Error::new_alloc(format!(
+            Error::new_alloc(format!(
                 "Failed to parse a validator from the vote key {key}",
             )),
         )?;
 
         // Invalid proposal id
         if pre_counter <= proposal_id {
-            let error = native_vp::Error::new_alloc(format!(
+            let error = Error::new_alloc(format!(
                 "Invalid proposal ID. Expected {pre_counter} or lower, got \
                  {proposal_id}"
-            ))
-            .into();
+            ));
             tracing::info!("{error}");
             return Err(error);
         }
@@ -316,10 +305,9 @@ where
             .force_read::<ProposalVote>(&vote_key, ReadType::Post)
             .is_err()
         {
-            return Err(native_vp::Error::new_alloc(format!(
+            return Err(Error::new_alloc(format!(
                 "Vote key is not valid: {key}"
-            ))
-            .into());
+            )));
         }
 
         // No checks for the target validators, since ultimately whether the
@@ -335,11 +323,10 @@ where
             pre_voting_end_epoch,
             false,
         ) {
-            let error = native_vp::Error::new_alloc(format!(
+            let error = Error::new_alloc(format!(
                 "Voted outside voting window. Current epoch: {current_epoch}, \
                  start: {pre_voting_start_epoch}, end: {pre_voting_end_epoch}."
-            ))
-            .into();
+            ));
             tracing::info!("{error}");
             return Err(error);
         }
@@ -354,13 +341,12 @@ where
                 pre_voting_end_epoch,
             )
             .ok_or_else(|| {
-                native_vp::Error::new_alloc(format!(
+                Error::new_alloc(format!(
                     "Validator {voter} voted outside of the voting period. \
                      Current epoch: {current_epoch}, pre voting start epoch: \
                      {pre_voting_start_epoch}, pre voting end epoch: \
                      {pre_voting_end_epoch}."
                 ))
-                .into()
             });
         }
 
@@ -372,11 +358,10 @@ where
         )?;
 
         if !is_delegator {
-            return Err(native_vp::Error::new_alloc(format!(
+            return Err(Error::new_alloc(format!(
                 "Address {voter} is neither a validator nor a delegator at \
                  the beginning of epoch {pre_voting_start_epoch}."
-            ))
-            .into());
+            )));
         }
 
         Ok(())
@@ -391,11 +376,10 @@ where
 
         let has_pre_content: bool = self.ctx.has_key_pre(&content_key)?;
         if has_pre_content {
-            return Err(native_vp::Error::new_alloc(format!(
+            return Err(Error::new_alloc(format!(
                 "Proposal with id {proposal_id} already had content written \
                  to storage."
-            ))
-            .into());
+            )));
         }
 
         let max_content_length: usize =
@@ -406,11 +390,10 @@ where
 
         let is_valid = post_content_bytes.len() <= max_content_length;
         if !is_valid {
-            let error = native_vp::Error::new_alloc(format!(
+            let error = Error::new_alloc(format!(
                 "Max content length {max_content_length}, got {}.",
                 post_content_bytes.len()
-            ))
-            .into();
+            ));
             tracing::info!("{error}");
             return Err(error);
         }
@@ -445,10 +428,9 @@ where
 
                 // we allow only a single steward to be added
                 if total_stewards_added > 1 {
-                    Err(native_vp::Error::new_const(
+                    Err(Error::new_const(
                         "Only one steward is allowed to be added per proposal",
-                    )
-                    .into())
+                    ))
                 } else if total_stewards_added == 0 {
                     let is_valid_total_pgf_actions =
                         stewards.len() < MAX_PGF_ACTIONS;
@@ -456,12 +438,11 @@ where
                     return if is_valid_total_pgf_actions {
                         Ok(())
                     } else {
-                        return Err(native_vp::Error::new_alloc(format!(
+                        return Err(Error::new_alloc(format!(
                             "Maximum number of steward actions \
                              ({MAX_PGF_ACTIONS}) exceeded ({})",
                             stewards.len()
-                        ))
-                        .into());
+                        )));
                     };
                 } else if let Some(address) = stewards_added.first() {
                     let author_key = gov_storage::get_author_key(proposal_id);
@@ -470,41 +451,35 @@ where
                     let is_valid_author = address.eq(&author);
 
                     if !is_valid_author {
-                        return Err(native_vp::Error::new_alloc(format!(
+                        return Err(Error::new_alloc(format!(
                             "Author {author} does not match added steward \
                              address {address}",
-                        ))
-                        .into());
+                        )));
                     }
 
                     let stewards_addresses_are_unique =
                         stewards.len() == all_pgf_action_addresses;
 
                     if !stewards_addresses_are_unique {
-                        return Err(native_vp::Error::new_const(
+                        return Err(Error::new_const(
                             "Non-unique modified steward addresses",
-                        )
-                        .into());
+                        ));
                     }
 
                     let is_valid_total_pgf_actions =
                         all_pgf_action_addresses < MAX_PGF_ACTIONS;
 
                     if !is_valid_total_pgf_actions {
-                        return Err(native_vp::Error::new_alloc(format!(
+                        return Err(Error::new_alloc(format!(
                             "Maximum number of steward actions \
                              ({MAX_PGF_ACTIONS}) exceeded \
                              ({all_pgf_action_addresses})",
-                        ))
-                        .into());
+                        )));
                     }
 
                     return Ok(());
                 } else {
-                    return Err(native_vp::Error::new_const(
-                        "Invalid PGF proposal",
-                    )
-                    .into());
+                    return Err(Error::new_const("Invalid PGF proposal"));
                 }
             }
             ProposalType::PGFPayment(fundings) => {
@@ -540,12 +515,11 @@ where
                 let is_total_fundings_valid = fundings.len() < MAX_PGF_ACTIONS;
 
                 if !is_total_fundings_valid {
-                    return Err(native_vp::Error::new_alloc(format!(
+                    return Err(Error::new_alloc(format!(
                         "Maximum number of funding actions \
                          ({MAX_PGF_ACTIONS}) exceeded ({})",
                         fundings.len()
-                    ))
-                    .into());
+                    )));
                 }
 
                 // check that they are unique by checking that the set of add
@@ -558,10 +532,9 @@ where
                 )? == fundings.len();
 
                 if !are_continuous_fundings_unique {
-                    return Err(native_vp::Error::new_const(
+                    return Err(Error::new_const(
                         "Non-unique modified fundings",
-                    )
-                    .into());
+                    ));
                 }
 
                 // can't remove and add the same target in the same proposal
@@ -571,11 +544,10 @@ where
                     == 0;
 
                 are_targets_unique.ok_or_else(|| {
-                    native_vp::Error::new_const(
+                    Error::new_const(
                         "One or more payment targets were added and removed \
                          in the same proposal",
                     )
-                    .into()
                 })
             }
             // Default proposal condition are checked already for all other
@@ -592,11 +564,10 @@ where
             self.force_read(&proposal_type_key, ReadType::Post)?;
 
         if !proposal_type.is_default_with_wasm() {
-            return Err(native_vp::Error::new_alloc(format!(
+            return Err(Error::new_alloc(format!(
                 "Proposal with id {proposal_id} modified a proposal code key, \
                  but its type is not default.",
-            ))
-            .into());
+            )));
         }
 
         let code_key = gov_storage::get_proposal_code_key(proposal_id);
@@ -605,11 +576,10 @@ where
 
         let has_pre_code: bool = self.ctx.has_key_pre(&code_key)?;
         if has_pre_code {
-            return Err(native_vp::Error::new_alloc(format!(
+            return Err(Error::new_alloc(format!(
                 "Proposal with id {proposal_id} already had wasm code written \
                  to storage in its slot.",
-            ))
-            .into());
+            )));
         }
 
         let max_proposal_length: usize =
@@ -620,13 +590,12 @@ where
         let wasm_code_below_max_len = post_code.len() <= max_proposal_length;
 
         if !wasm_code_below_max_len {
-            return Err(native_vp::Error::new_alloc(format!(
+            return Err(Error::new_alloc(format!(
                 "Proposal with id {proposal_id} wrote wasm code with length \
                  {} to storage, but the max allowed length is \
                  {max_proposal_length}.",
                 post_code.len(),
-            ))
-            .into());
+            )));
         }
 
         Ok(())
@@ -646,11 +615,10 @@ where
         let has_pre_activation_epoch =
             self.ctx.has_key_pre(&activation_epoch_key)?;
         if has_pre_activation_epoch {
-            return Err(native_vp::Error::new_alloc(format!(
+            return Err(Error::new_alloc(format!(
                 "Proposal with id {proposal_id} already had a grace epoch \
                  written to storage in its slot.",
-            ))
-            .into());
+            )));
         }
 
         let start_epoch: Epoch =
@@ -671,26 +639,20 @@ where
         let has_post_committing_epoch =
             self.ctx.has_key_post(&committing_epoch_key)?;
         if !has_post_committing_epoch {
-            let error = native_vp::Error::new_const(
-                "Committing proposal key is missing present",
-            )
-            .into();
+            let error =
+                Error::new_const("Committing proposal key is missing present");
             tracing::info!("{error}");
             return Err(error);
         }
 
         let is_valid_activation_epoch = end_epoch < activation_epoch
-            && checked!(activation_epoch - end_epoch)
-                .map_err(|e| Error::NativeVpError(e.into()))?
-                .0
-                >= min_grace_epochs;
+            && checked!(activation_epoch - end_epoch)?.0 >= min_grace_epochs;
         if !is_valid_activation_epoch {
-            let error = native_vp::Error::new_alloc(format!(
+            let error = Error::new_alloc(format!(
                 "Expected min duration between the end and grace epoch \
                  {min_grace_epochs}, but got activation = {activation_epoch}, \
                  end = {end_epoch}",
-            ))
-            .into();
+            ));
             tracing::info!("{error}");
             return Err(error);
         }
@@ -698,12 +660,11 @@ where
             && checked!(activation_epoch.0 - start_epoch.0)?
                 <= max_proposal_period;
         if !is_valid_max_proposal_period {
-            let error = native_vp::Error::new_alloc(format!(
+            let error = Error::new_alloc(format!(
                 "Expected max duration between the start and grace epoch \
                  {max_proposal_period}, but got activation = \
                  {activation_epoch}, start = {start_epoch}",
-            ))
-            .into();
+            ));
             tracing::info!("{error}");
             return Err(error);
         }
@@ -725,24 +686,22 @@ where
 
         let has_pre_start_epoch = self.ctx.has_key_pre(&start_epoch_key)?;
         if has_pre_start_epoch {
-            let error = native_vp::Error::new_alloc(format!(
+            let error = Error::new_alloc(format!(
                 "Failed to validate start epoch. Proposal with id \
                  {proposal_id} already had a pre_start epoch written to \
                  storage in its slot.",
-            ))
-            .into();
+            ));
             tracing::info!("{error}");
             return Err(error);
         }
 
         let has_pre_end_epoch = self.ctx.has_key_pre(&end_epoch_key)?;
         if has_pre_end_epoch {
-            let error = native_vp::Error::new_alloc(format!(
+            let error = Error::new_alloc(format!(
                 "Failed to validate start epoch. Proposal with id \
                  {proposal_id} already had a pre_end epoch written to storage \
                  in its slot.",
-            ))
-            .into();
+            ));
             tracing::info!("{error}");
             return Err(error);
         }
@@ -755,45 +714,39 @@ where
             self.force_read(&min_period_parameter_key, ReadType::Pre)?;
 
         if end_epoch <= start_epoch {
-            return Err(native_vp::Error::new_alloc(format!(
+            return Err(Error::new_alloc(format!(
                 "Ending epoch {end_epoch} cannot be lower than or equal to \
                  the starting epoch {start_epoch} of the proposal with id \
                  {proposal_id}.",
-            ))
-            .into());
+            )));
         }
 
         if start_epoch <= current_epoch {
-            return Err(native_vp::Error::new_alloc(format!(
+            return Err(Error::new_alloc(format!(
                 "Starting epoch {start_epoch} cannot be lower than or equal \
                  to the current epoch {current_epoch} of the proposal with id \
                  {proposal_id}.",
-            ))
-            .into());
+            )));
         }
 
         let latency: u64 =
             self.force_read(&max_latency_paramater_key, ReadType::Pre)?;
         if checked!(start_epoch.0 - current_epoch.0)? > latency {
-            return Err(native_vp::Error::new_alloc(format!(
+            return Err(Error::new_alloc(format!(
                 "Starting epoch {start_epoch} of the proposal with id \
                  {proposal_id} is too far in the future (more than {latency} \
                  epochs away from the current epoch {current_epoch}).",
-            ))
-            .into());
+            )));
         }
 
-        let proposal_meets_min_period = checked!(end_epoch - start_epoch)
-            .map_err(|e| Error::NativeVpError(e.into()))?
-            .0
-            >= min_period;
+        let proposal_meets_min_period =
+            checked!(end_epoch - start_epoch)?.0 >= min_period;
         if !proposal_meets_min_period {
-            return Err(native_vp::Error::new_alloc(format!(
+            return Err(Error::new_alloc(format!(
                 "Proposal with id {proposal_id} does not meet the required \
                  minimum period of {min_period} epochs. Starting epoch is \
                  {start_epoch}, and ending epoch is {end_epoch}.",
-            ))
-            .into());
+            )));
         }
 
         Ok(())
@@ -813,22 +766,20 @@ where
 
         let has_pre_start_epoch = self.ctx.has_key_pre(&start_epoch_key)?;
         if has_pre_start_epoch {
-            let error = native_vp::Error::new_alloc(format!(
+            let error = Error::new_alloc(format!(
                 "Failed to validate end epoch. Proposal with id {proposal_id} \
                  already had a pre_start epoch written to storage in its slot.",
-            ))
-            .into();
+            ));
             tracing::info!("{error}");
             return Err(error);
         }
 
         let has_pre_end_epoch = self.ctx.has_key_pre(&end_epoch_key)?;
         if has_pre_end_epoch {
-            let error = native_vp::Error::new_alloc(format!(
+            let error = Error::new_alloc(format!(
                 "Failed to validate end epoch. Proposal with id {proposal_id} \
                  already had a pre_end epoch written to storage in its slot.",
-            ))
-            .into();
+            ));
             tracing::info!("{error}");
             return Err(error);
         }
@@ -843,28 +794,25 @@ where
             self.force_read(&max_period_parameter_key, ReadType::Pre)?;
 
         if end_epoch <= start_epoch || start_epoch <= current_epoch {
-            let error = native_vp::Error::new_alloc(format!(
+            let error = Error::new_alloc(format!(
                 "Proposal with id {proposal_id}'s end epoch ({end_epoch}) \
                  must be after the start epoch ({start_epoch}), and the start \
                  epoch must be after the current epoch ({current_epoch})."
-            ))
-            .into();
+            ));
             tracing::info!("{error}");
             return Err(error);
         }
 
-        let diff = checked!(end_epoch - start_epoch)
-            .map_err(|e| Error::NativeVpError(e.into()))?;
+        let diff = checked!(end_epoch - start_epoch)?;
         let valid_voting_period = diff.0 >= min_period && diff.0 <= max_period;
 
         valid_voting_period.ok_or_else(|| {
-            native_vp::Error::new_alloc(format!(
+            Error::new_alloc(format!(
                 "Proposal with id {proposal_id} must have a voting period \
                  with a minimum of {min_period} epochs, and a maximum of \
                  {max_period} epochs. The starting epoch is {start_epoch}, \
                  and the ending epoch is {end_epoch}.",
             ))
-            .into()
         })
     }
 
@@ -894,21 +842,20 @@ where
                 let is_post_funds_greater_than_minimum =
                     post_funds >= min_funds_parameter;
                 is_post_funds_greater_than_minimum.ok_or_else(|| {
-                    Error::NativeVpError(native_vp::Error::new_alloc(format!(
+                    Error::new_alloc(format!(
                         "Funds must be greater than the minimum funds of {}",
                         min_funds_parameter.native_denominated()
-                    )))
+                    ))
                 })?;
 
                 let post_balance_is_same = post_balance == post_funds;
                 post_balance_is_same.ok_or_else(|| {
-                    native_vp::Error::new_alloc(format!(
+                    Error::new_alloc(format!(
                         "Funds and the balance of the governance account have \
                          diverged: funds {} != balance {}",
                         post_funds.native_denominated(),
                         post_balance.native_denominated()
                     ))
-                    .into()
                 })
             },
             // there was some non-zero balance in the governance account
@@ -916,23 +863,20 @@ where
                 let is_post_funds_greater_than_minimum =
                     post_funds >= min_funds_parameter;
                 is_post_funds_greater_than_minimum.ok_or_else(|| {
-                    Error::NativeVpError(native_vp::Error::new_alloc(format!(
+                    Error::new_alloc(format!(
                         "Funds {} must be greater than the minimum funds of {}",
                         post_funds.native_denominated(),
                         min_funds_parameter.native_denominated()
-                    )))
+                    ))
                 })?;
 
                 let is_valid_funds = post_balance >= pre_balance
-                    && checked!(post_balance - pre_balance)
-                        .map_err(|e| Error::NativeVpError(e.into()))?
-                        == post_funds;
+                    && checked!(post_balance - pre_balance)? == post_funds;
                 is_valid_funds.ok_or_else(|| {
-                    native_vp::Error::new_alloc(format!(
+                    Error::new_alloc(format!(
                         "Invalid funds {} have been written to storage",
                         post_funds.native_denominated()
                     ))
-                    .into()
                 })
             },
         )
@@ -954,19 +898,16 @@ where
 
         let balance_is_valid = if let Some(pre_balance) = pre_balance {
             post_balance > pre_balance
-                && checked!(post_balance - pre_balance)
-                    .map_err(|e| Error::NativeVpError(e.into()))?
-                    >= min_funds_parameter
+                && checked!(post_balance - pre_balance)? >= min_funds_parameter
         } else {
             post_balance >= min_funds_parameter
         };
 
         balance_is_valid.ok_or_else(|| {
-            native_vp::Error::new_alloc(format!(
+            Error::new_alloc(format!(
                 "Invalid balance {} has been written to storage",
                 post_balance.native_denominated()
             ))
-            .into()
         })
     }
 
@@ -980,30 +921,27 @@ where
 
         let has_pre_author = self.ctx.has_key_pre(&author_key)?;
         if has_pre_author {
-            return Err(native_vp::Error::new_alloc(format!(
+            return Err(Error::new_alloc(format!(
                 "Proposal with id {proposal_id} already had an author written \
                  to storage"
-            ))
-            .into());
+            )));
         }
 
         let author = self.force_read(&author_key, ReadType::Post)?;
-        namada_account::exists(&self.ctx.pre(), &author)
-            .map_err(Error::NativeVpError)
-            .true_or_else(|| {
-                native_vp::Error::new_alloc(format!(
+        namada_account::exists(&self.ctx.pre(), &author).true_or_else(
+            || {
+                Error::new_alloc(format!(
                     "No author account {author} could be found for the \
                      proposal with id {proposal_id}"
                 ))
-                .into()
-            })?;
+            },
+        )?;
 
         verifiers.contains(&author).ok_or_else(|| {
-            native_vp::Error::new_alloc(format!(
+            Error::new_alloc(format!(
                 "The VP of the proposal with id {proposal_id}'s author \
                  {author} should have been triggered"
             ))
-            .into()
         })
     }
 
@@ -1018,11 +956,10 @@ where
         let valid_counter = expected_counter == post_counter;
 
         valid_counter.ok_or_else(|| {
-            native_vp::Error::new_alloc(format!(
+            Error::new_alloc(format!(
                 "Invalid proposal counter. Expected {expected_counter}, but \
                  got {post_counter} instead."
             ))
-            .into()
         })
     }
 
@@ -1039,11 +976,10 @@ where
         let pre_counter_is_lower = pre_counter < post_counter;
 
         pre_counter_is_lower.ok_or_else(|| {
-            native_vp::Error::new_alloc(format!(
+            Error::new_alloc(format!(
                 "The value of the previous counter {pre_counter} must be \
                  lower than the value of the new counter {post_counter}."
             ))
-            .into()
         })
     }
 
@@ -1055,22 +991,19 @@ where
         let BatchedTxRef { tx, cmt } = batched_tx;
         tx.data(cmt).map_or_else(
             || {
-                Err(native_vp::Error::new_const(
+                Err(Error::new_const(
                     "Governance parameter changes require tx data to be \
                      present",
-                )
-                .into())
+                ))
             },
             |data| {
-                is_proposal_accepted(&self.ctx.pre(), data.as_ref())
-                    .map_err(Error::NativeVpError)?
+                is_proposal_accepted(&self.ctx.pre(), data.as_ref())?
                     .ok_or_else(|| {
-                        native_vp::Error::new_const(
+                        Error::new_const(
                             "Governance parameter changes can only be \
                              performed by a governance proposal that has been \
                              accepted",
                         )
-                        .into()
                     })
             },
         )
@@ -1109,10 +1042,9 @@ where
         if let Some(data) = res {
             Ok(data)
         } else {
-            Err(native_vp::Error::new_alloc(format!(
+            Err(Error::new_alloc(format!(
                 "Proposal field should not be empty: {key}"
-            ))
-            .into())
+            )))
         }
     }
 
@@ -1234,10 +1166,10 @@ mod test {
     };
     use namada_core::address::Address;
     use namada_core::borsh::BorshSerializeExt;
+    use namada_core::chain::testing::get_dummy_header;
     use namada_core::key::testing::keypair_1;
     use namada_core::key::RefTo;
     use namada_core::parameters::Parameters;
-    use namada_core::storage::testing::get_dummy_header;
     use namada_core::time::DateTimeUtc;
     use namada_gas::{TxGasMeter, VpGasMeter};
     use namada_proof_of_stake::bond_tokens;

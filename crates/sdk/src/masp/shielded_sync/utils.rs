@@ -8,8 +8,9 @@ use masp_primitives::memo::MemoBytes;
 use masp_primitives::merkle_tree::{CommitmentTree, IncrementalWitness};
 use masp_primitives::sapling::{Node, Note, PaymentAddress, ViewingKey};
 use masp_primitives::transaction::Transaction;
+use namada_core::chain::BlockHeight;
 use namada_core::collections::HashMap;
-use namada_core::storage::{BlockHeight, TxIndex};
+use namada_core::storage::TxIndex;
 use namada_tx::{IndexedTx, IndexedTxRange, Tx};
 #[cfg(not(target_family = "wasm"))]
 use tokio::sync::Semaphore;

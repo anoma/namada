@@ -5,13 +5,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use namada_core::address::testing::{
     established_address_1, established_address_2, established_address_3,
 };
+use namada_core::chain::Epoch;
 use namada_core::dec::Dec;
-use namada_core::storage::{Epoch, Key};
+use namada_core::storage::Key;
 use namada_core::token;
 use namada_state::testing::TestState;
-use namada_storage::collections::lazy_map::NestedMap;
-use namada_storage::collections::LazyCollection;
 
+use crate::lazy_map::NestedMap;
 use crate::slashing::{
     apply_list_slashes, compute_amount_after_slashing_unbond,
     compute_amount_after_slashing_withdraw, compute_bond_at_epoch,
@@ -31,8 +31,8 @@ use crate::types::{
 use crate::{
     compute_modified_redelegation, compute_new_redelegated_unbonds,
     find_bonds_to_remove, fold_and_slash_redelegated_bonds,
-    EagerRedelegatedUnbonds, FoldRedelegatedBondsResult, ModifiedRedelegation,
-    OwnedPosParams,
+    EagerRedelegatedUnbonds, FoldRedelegatedBondsResult, LazyCollection,
+    ModifiedRedelegation, OwnedPosParams,
 };
 
 /// `iterateBondsUpToAmountTest`

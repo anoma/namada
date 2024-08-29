@@ -6,8 +6,8 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-use crate::facade::tendermint::node::Id as TendermintNodeId;
-use crate::facade::tendermint_config::Error as TendermintError;
+use crate::tendermint::node::Id as TendermintNodeId;
+use crate::tendermint_config::Error as TendermintError;
 
 /// Env. var to output Tendermint log to stdout
 pub const ENV_VAR_TM_STDOUT: &str = "NAMADA_CMT_STDOUT";

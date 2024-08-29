@@ -18,7 +18,12 @@ migrations = [
   "namada_migrations",
   "linkme",
 ]
-testing = ["namada_core/testing", "ibc-testkit", "proptest"]
+testing = [
+  "namada_core/testing",
+  "namada_state/testing",
+  "ibc-testkit",
+  "proptest",
+]
 arbitrary = ["dep:arbitrary", "namada_core/arbitrary", "namada_token/arbitrary"]
 
 [dependencies]
@@ -28,7 +33,6 @@ namada_gas = { path = "../gas" }
 namada_macros = {path = "../macros"}
 namada_migrations = {path = "../migrations", optional = true}
 namada_state = { path = "../state" }
-namada_storage = { path = "../storage" }
 namada_systems = { path = "../systems" }
 namada_tx = { path = "../tx" }
 namada_vp = { path = "../vp" }

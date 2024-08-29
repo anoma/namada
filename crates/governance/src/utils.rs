@@ -4,9 +4,9 @@ use std::str::FromStr;
 use namada_core::address::Address;
 use namada_core::arith::{self, checked};
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::chain::Epoch;
 use namada_core::collections::HashMap;
 use namada_core::dec::Dec;
-use namada_core::storage::Epoch;
 use namada_core::token;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
@@ -71,7 +71,7 @@ impl Vote {
 pub enum TallyType {
     /// The `yay` votes are at least 2/3 of the non-abstain votes, and 2/3 of
     /// the total voting power has voted
-    TwoThirds,
+    TwoFifths,
     /// There are more `yay` votes than `nay` votes, and at least 1/3 of the
     /// total voting power has voted
     OneHalfOverOneThird,
@@ -84,8 +84,8 @@ impl TallyType {
     /// The type of tally used for each proposal type
     pub fn from(proposal_type: ProposalType, is_steward: bool) -> Self {
         match (proposal_type, is_steward) {
-            (ProposalType::Default, _) => TallyType::TwoThirds,
-            (ProposalType::DefaultWithWasm(_), _) => TallyType::TwoThirds,
+            (ProposalType::Default, _) => TallyType::TwoFifths,
+            (ProposalType::DefaultWithWasm(_), _) => TallyType::TwoFifths,
             (ProposalType::PGFSteward(_), _) => TallyType::OneHalfOverOneThird,
             (ProposalType::PGFPayment(_), true) => {
                 TallyType::LessOneHalfOverOneThirdNay
@@ -142,19 +142,19 @@ impl TallyResult {
         total_voting_power: VotePower,
     ) -> Result<Self, arith::Error> {
         let passed = match tally_type {
-            TallyType::TwoThirds => {
-                let at_least_two_third_voted = Self::get_total_voted_power(
+            TallyType::TwoFifths => {
+                let at_least_two_fifths_voted = Self::get_total_voted_power(
                     yay_voting_power,
                     nay_voting_power,
                     abstain_voting_power,
                 )? >= total_voting_power
-                    .mul_ceil(Dec::two_thirds())?;
+                    .mul_ceil(Dec::two_fifths())?;
 
                 // yay >= 2/3 * (yay + nay) ---> yay >= 2 * nay
                 let at_least_two_third_voted_yay = yay_voting_power
                     >= checked!(nay_voting_power + nay_voting_power)?;
 
-                at_least_two_third_voted && at_least_two_third_voted_yay
+                at_least_two_fifths_voted && at_least_two_third_voted_yay
             }
             TallyType::OneHalfOverOneThird => {
                 let at_least_one_third_voted = Self::get_total_voted_power(
@@ -246,7 +246,7 @@ impl ProposalResult {
 impl Display for ProposalResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let threshold = match self.tally_type {
-            TallyType::TwoThirds => {
+            TallyType::TwoFifths => {
                 self.total_voting_power.mul_ceil(Dec::two_thirds())
             }
             TallyType::LessOneHalfOverOneThirdNay => Ok(token::Amount::zero()),
@@ -462,7 +462,7 @@ mod test {
         for tally_type in [
             TallyType::OneHalfOverOneThird,
             TallyType::LessOneHalfOverOneThirdNay,
-            TallyType::TwoThirds,
+            TallyType::TwoFifths,
         ] {
             let proposal_result = compute_proposal_result(
                 proposal_votes.clone(),
@@ -500,7 +500,7 @@ mod test {
         for tally_type in [
             TallyType::OneHalfOverOneThird,
             TallyType::LessOneHalfOverOneThirdNay,
-            TallyType::TwoThirds,
+            TallyType::TwoFifths,
         ] {
             let proposal_result = compute_proposal_result(
                 proposal_votes.clone(),
@@ -549,7 +549,7 @@ mod test {
         for tally_type in [
             TallyType::OneHalfOverOneThird,
             TallyType::LessOneHalfOverOneThirdNay,
-            TallyType::TwoThirds,
+            TallyType::TwoFifths,
         ] {
             let proposal_result = compute_proposal_result(
                 proposal_votes.clone(),
@@ -598,7 +598,7 @@ mod test {
         for tally_type in [
             TallyType::OneHalfOverOneThird,
             TallyType::LessOneHalfOverOneThirdNay,
-            TallyType::TwoThirds,
+            TallyType::TwoFifths,
         ] {
             let proposal_result = compute_proposal_result(
                 proposal_votes.clone(),
@@ -659,7 +659,7 @@ mod test {
         for tally_type in [
             TallyType::OneHalfOverOneThird,
             TallyType::LessOneHalfOverOneThirdNay,
-            TallyType::TwoThirds,
+            TallyType::TwoFifths,
         ] {
             let proposal_result = compute_proposal_result(
                 proposal_votes.clone(),
@@ -727,7 +727,7 @@ mod test {
         for tally_type in [
             TallyType::OneHalfOverOneThird,
             TallyType::LessOneHalfOverOneThirdNay,
-            TallyType::TwoThirds,
+            TallyType::TwoFifths,
         ] {
             let proposal_result = compute_proposal_result(
                 proposal_votes.clone(),
@@ -786,7 +786,7 @@ mod test {
         for tally_type in [
             TallyType::OneHalfOverOneThird,
             TallyType::LessOneHalfOverOneThirdNay,
-            TallyType::TwoThirds,
+            TallyType::TwoFifths,
         ] {
             let proposal_result = compute_proposal_result(
                 proposal_votes.clone(),
@@ -843,7 +843,7 @@ mod test {
         for tally_type in [
             TallyType::OneHalfOverOneThird,
             TallyType::LessOneHalfOverOneThirdNay,
-            TallyType::TwoThirds,
+            TallyType::TwoFifths,
         ] {
             let proposal_result = compute_proposal_result(
                 proposal_votes.clone(),
@@ -916,7 +916,7 @@ mod test {
         for tally_type in [
             TallyType::OneHalfOverOneThird,
             TallyType::LessOneHalfOverOneThirdNay,
-            TallyType::TwoThirds,
+            TallyType::TwoFifths,
         ] {
             let proposal_result = compute_proposal_result(
                 proposal_votes.clone(),
@@ -989,7 +989,7 @@ mod test {
         let proposal_result = compute_proposal_result(
             proposal_votes.clone(),
             validator_voting_power.add(validator_voting_power_two),
-            TallyType::TwoThirds,
+            TallyType::TwoFifths,
         )
         .unwrap();
 
@@ -1058,7 +1058,7 @@ mod test {
         let proposal_result = compute_proposal_result(
             proposal_votes.clone(),
             validator_voting_power.add(validator_voting_power_two),
-            TallyType::TwoThirds,
+            TallyType::TwoFifths,
         )
         .unwrap();
 
@@ -1114,7 +1114,7 @@ mod test {
         let proposal_result = compute_proposal_result(
             proposal_votes.clone(),
             delegator_voting_power_two.add(delegator_voting_power),
-            TallyType::TwoThirds,
+            TallyType::TwoFifths,
         )
         .unwrap();
 
@@ -1167,7 +1167,7 @@ mod test {
         let proposal_result = compute_proposal_result(
             proposal_votes.clone(),
             token::Amount::from(200),
-            TallyType::TwoThirds,
+            TallyType::TwoFifths,
         )
         .unwrap();
 

@@ -11,7 +11,7 @@ use namada_core::address::{Address, InternalAddress, HASH_LEN, SHA_HASH_LEN};
 use namada_core::ibc::IbcTokenHash;
 use sha2::{Digest, Sha256};
 
-use crate::storage::Error;
+use crate::storage::{Error, Result};
 
 /// Hash the denom
 #[inline]
@@ -57,23 +57,20 @@ pub fn ibc_trace_for_nft(
 }
 
 /// Convert the given IBC trace to [`Address`]
-pub fn convert_to_address(
-    ibc_trace: impl AsRef<str>,
-) -> Result<Address, Error> {
+pub fn convert_to_address(ibc_trace: impl AsRef<str>) -> Result<Address> {
     if ibc_trace.as_ref().contains('/') {
         // validation
         if is_ibc_denom(&ibc_trace).is_none()
             && is_nft_trace(&ibc_trace).is_none()
         {
-            return Err(Error::InvalidIbcTrace(format!(
+            return Err(Error::new_alloc(format!(
                 "This is not IBC denom and NFT trace: {}",
                 ibc_trace.as_ref()
             )));
         }
         Ok(ibc_token(ibc_trace.as_ref()))
     } else {
-        Address::decode(ibc_trace.as_ref())
-            .map_err(|e| Error::InvalidIbcTrace(e.to_string()))
+        Ok(Address::decode(ibc_trace.as_ref())?)
     }
 }
 

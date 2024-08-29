@@ -31,14 +31,16 @@ pub use in_memory::{
     BlockStorage, InMemory, LastBlock, ProcessProposalCachedResult,
 };
 use namada_core::address::Address;
-use namada_core::arith::{self, checked};
+use namada_core::arith::checked;
+pub use namada_core::chain::{
+    BlockHash, BlockHeader, BlockHeight, Epoch, Epochs, BLOCK_HASH_LENGTH,
+    BLOCK_HEIGHT_LENGTH,
+};
 use namada_core::eth_bridge_pool::is_pending_transfer_key;
+use namada_core::hash::Hash;
 pub use namada_core::hash::Sha256Hasher;
-use namada_core::hash::{Error as HashError, Hash};
 pub use namada_core::storage::{
-    BlockHash, BlockHeight, BlockResults, Epoch, Epochs, EthEventsQueue,
-    Header, Key, KeySeg, TxIndex, BLOCK_HASH_LENGTH, BLOCK_HEIGHT_LENGTH,
-    EPOCH_TYPE_LENGTH,
+    BlockResults, EthEventsQueue, Key, KeySeg, TxIndex, EPOCH_TYPE_LENGTH,
 };
 use namada_core::tendermint::merkle::proof::ProofOps;
 use namada_gas::{MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_ACCESS_GAS_PER_BYTE};
@@ -49,24 +51,20 @@ pub use namada_merkle_tree::{
 };
 pub use namada_storage as storage;
 pub use namada_storage::conversion_state::{
-    ConversionState, WithConversionState,
+    ConversionLeaf, ConversionState, WithConversionState,
 };
 pub use namada_storage::types::{KVBytes, PatternIterator, PrefixIterator};
 pub use namada_storage::{
     collections, iter_prefix, iter_prefix_bytes, iter_prefix_with_filter,
     mockdb, tx_queue, BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch,
-    DbError, DbResult, Error as StorageError, OptionExt,
-    Result as StorageResult, ResultExt, StorageHasher, StorageRead,
-    StorageWrite, DB,
+    DbError, DbResult, Error, OptionExt, Result, ResultExt, StorageHasher,
+    StorageRead, StorageWrite, DB,
 };
 use namada_systems::parameters;
 use thiserror::Error;
 use wl_state::TxWlState;
 pub use wl_state::{FullAccessState, TempWlState, WlState};
 use write_log::WriteLog;
-
-/// A result of a function that may fail
-pub type Result<T> = std::result::Result<T, Error>;
 
 /// We delay epoch change 2 blocks to keep it in sync with Tendermint, because
 /// it has 2 blocks delay on validator set update.
@@ -153,8 +151,7 @@ pub trait StateRead: StorageRead + Debug {
         };
         match self.db_read(&key)? {
             (Some(value), gas) => {
-                let vp_code_hash = Hash::try_from(&value[..])
-                    .map_err(Error::InvalidCodeHash)?;
+                let vp_code_hash = Hash::try_from(&value[..])?;
                 Ok((Some(vp_code_hash), gas))
             }
             (None, gas) => Ok((None, gas)),
@@ -165,22 +162,21 @@ pub trait StateRead: StorageRead + Debug {
     fn get_block_header(
         &self,
         height: Option<BlockHeight>,
-    ) -> Result<(Option<Header>, u64)> {
+    ) -> Result<(Option<BlockHeader>, u64)> {
         match height {
             Some(h) if h == self.in_mem().get_block_height().0 => {
                 let header = self.in_mem().header.clone();
-                let gas = match header {
-                    Some(ref header) => {
-                        let len = header.encoded_len() as u64;
-                        checked!(len * MEMORY_ACCESS_GAS_PER_BYTE)?
-                    }
-                    None => MEMORY_ACCESS_GAS_PER_BYTE,
+                let gas = if header.is_some() {
+                    let len = BlockHeader::encoded_len() as u64;
+                    checked!(len * MEMORY_ACCESS_GAS_PER_BYTE)?
+                } else {
+                    MEMORY_ACCESS_GAS_PER_BYTE
                 };
                 Ok((header, gas))
             }
             Some(h) => match self.db().read_block_header(h)? {
                 Some(header) => {
-                    let len = header.encoded_len() as u64;
+                    let len = BlockHeader::encoded_len() as u64;
                     let gas = checked!(len * STORAGE_ACCESS_GAS_PER_BYTE)?;
                     Ok((Some(header), gas))
                 }
@@ -302,7 +298,7 @@ macro_rules! impl_storage_read {
 
             fn get_block_height(
                 &self,
-            ) -> std::result::Result<storage::BlockHeight, namada_storage::Error> {
+            ) -> std::result::Result<BlockHeight, namada_storage::Error> {
                 let (height, gas) = self.in_mem().get_block_height();
                 self.charge_gas(gas).into_storage_result()?;
                 Ok(height)
@@ -310,8 +306,8 @@ macro_rules! impl_storage_read {
 
             fn get_block_header(
                 &self,
-                height: storage::BlockHeight,
-            ) -> std::result::Result<Option<storage::Header>, namada_storage::Error>
+                height: BlockHeight,
+            ) -> std::result::Result<Option<BlockHeader>, namada_storage::Error>
             {
                 let (header, gas) =
                     StateRead::get_block_header(self, Some(height)).into_storage_result()?;
@@ -321,7 +317,7 @@ macro_rules! impl_storage_read {
 
             fn get_block_epoch(
                 &self,
-            ) -> std::result::Result<storage::Epoch, namada_storage::Error> {
+            ) -> std::result::Result<Epoch, namada_storage::Error> {
                 let (epoch, gas) = self.in_mem().get_current_epoch();
                 self.charge_gas(gas).into_storage_result()?;
                 Ok(epoch)
@@ -434,36 +430,16 @@ impl_storage_write!(TxHostEnvState<'_, D, H>);
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
-pub enum Error {
-    #[error("TEMPORARY error: {error}")]
-    Temporary { error: String },
-    #[error("Storage key error {0}")]
-    KeyError(namada_core::storage::Error),
-    #[error("Coding error: {0}")]
-    CodingError(#[from] namada_core::DecodeError),
-    #[error("Merkle tree error: {0}")]
-    MerkleTreeError(MerkleTreeError),
-    #[error("DB error: {0}")]
-    DBError(String),
-    #[error("Borsh (de)-serialization error: {0}")]
-    BorshCodingError(std::io::Error),
+pub enum StateError {
     #[error("Merkle tree at the height {height} is not stored")]
     NoMerkleTree { height: BlockHeight },
-    #[error("Code hash error: {0}")]
-    InvalidCodeHash(HashError),
-    #[error("DB error: {0}")]
-    DbError(#[from] namada_storage::DbError),
     #[error("{0}")]
     Gas(namada_gas::Error),
-    #[error("{0}")]
-    StorageError(#[from] namada_storage::Error),
-    #[error("Arithmetic {0}")]
-    Arith(#[from] arith::Error),
 }
 
-impl From<MerkleTreeError> for Error {
-    fn from(error: MerkleTreeError) -> Self {
-        Self::MerkleTreeError(error)
+impl From<StateError> for Error {
+    fn from(value: StateError) -> Self {
+        Error::new(value)
     }
 }
 
@@ -613,6 +589,7 @@ pub mod testing {
     use namada_core::address::EstablishedAddressGen;
     use namada_core::chain::ChainId;
     use namada_core::time::DateTimeUtc;
+    pub use namada_storage::testing::{PrefixIter, *};
     use namada_storage::tx_queue::ExpiredTxsQueue;
     use storage::types::CommitOnlyData;
 

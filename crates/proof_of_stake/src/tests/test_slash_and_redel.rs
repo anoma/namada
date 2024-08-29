@@ -9,14 +9,12 @@ use namada_core::address::testing::{
     established_address_1, established_address_2,
 };
 use namada_core::address::{self, Address};
+use namada_core::chain::{BlockHeight, Epoch};
 use namada_core::dec::Dec;
 use namada_core::key::testing::{keypair_1, keypair_2, keypair_3};
 use namada_core::key::RefTo;
-use namada_core::storage::{BlockHeight, Epoch};
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_state::testing::TestState;
-use namada_storage::collections::lazy_map::Collectable;
-use namada_storage::StorageRead;
 use namada_trans_token::{self as token, credit_tokens, read_balance};
 use proptest::prelude::*;
 use proptest::test_runner::Config;
@@ -24,6 +22,7 @@ use proptest::test_runner::Config;
 // `tracing` logs from tests
 use test_log::test;
 
+use crate::lazy_map::Collectable;
 use crate::storage::{
     bond_handle, delegator_redelegated_bonds_handle,
     delegator_redelegated_unbonds_handle, enqueued_slashes_handle,
@@ -44,7 +43,9 @@ use crate::tests::{
     withdraw_tokens,
 };
 use crate::types::{BondId, GenesisValidator, Slash, SlashType};
-use crate::{staking_token_address, OwnedPosParams, RedelegationError};
+use crate::{
+    staking_token_address, OwnedPosParams, RedelegationError, StorageRead,
+};
 
 proptest! {
     // Generate arb valid input for `test_simple_redelegation_aux`

@@ -27,7 +27,7 @@ use crate::config::genesis::templates::{TokenBalances, TokenConfig};
 use crate::config::genesis::transactions::{
     BondTx, EstablishedAccountTx, Signed as SignedTx, ValidatorAccountTx,
 };
-use crate::facade::tendermint_proto::google::protobuf;
+use crate::tendermint_proto::google::protobuf;
 use crate::wasm_loader;
 
 /// Errors that represent panics in normal flow but get demoted to errors
@@ -86,8 +86,8 @@ where
         &mut self,
         init: request::InitChain,
         #[cfg(any(test, feature = "testing", feature = "benches"))]
-        _num_validators: u64,
-    ) -> Result<response::InitChain> {
+        num_validators: u64,
+    ) -> ShellResult<response::InitChain> {
         let mut response = response::InitChain::default();
         let chain_id = self.state.in_mem().chain_id.as_str();
         if chain_id != init.chain_id.as_str() {
@@ -100,13 +100,10 @@ where
             let rsp = response::InitChain {
                 validators: self
                     .get_abci_validator_updates(true, |pk, power| {
-                        let pub_key: crate::facade::tendermint::PublicKey =
-                            pk.into();
+                        let pub_key: crate::tendermint::PublicKey = pk.into();
                         let power =
-                            crate::facade::tendermint::vote::Power::try_from(
-                                power,
-                            )
-                            .unwrap();
+                            crate::tendermint::vote::Power::try_from(power)
+                                .unwrap();
                         validator::Update { pub_key, power }
                     })
                     .expect("Must be able to set genesis validator set"),
@@ -130,38 +127,29 @@ where
         }
 
         // Read the genesis files
-        #[cfg(any(
-            feature = "integration",
-            not(any(test, fuzzing, feature = "benches"))
-        ))]
+        #[cfg(not(any(test, fuzzing, feature = "benches")))]
         let genesis = {
             let chain_dir = self.base_dir.join(chain_id);
             genesis::chain::Finalized::read_toml_files(&chain_dir)
                 .expect("Missing genesis files")
         };
-        #[cfg(all(
-            any(test, fuzzing, feature = "benches"),
-            not(feature = "integration")
-        ))]
+        #[cfg(any(test, fuzzing, feature = "benches"))]
         let genesis = {
             let chain_dir = self.base_dir.join(chain_id);
-            genesis::make_dev_genesis(_num_validators, &chain_dir)
+            if chain_dir.join(genesis::chain::METADATA_FILE_NAME).exists() {
+                genesis::chain::Finalized::read_toml_files(&chain_dir)
+                    .expect("Missing genesis files")
+            } else {
+                genesis::make_dev_genesis(num_validators, &chain_dir)
+            }
         };
-        #[cfg(all(
-            any(test, fuzzing, feature = "benches"),
-            not(feature = "integration")
-        ))]
-        {
-            // update the native token from the genesis file
-            let native_token = genesis.get_native_token().clone();
-            self.state.in_mem_mut().native_token = native_token;
-        }
+
         let mut validation = InitChainValidation::new(self, false);
         validation.run(
             init,
             genesis,
             #[cfg(any(test, feature = "testing"))]
-            _num_validators,
+            num_validators,
         );
         // propagate errors or panic
         validation.error_out()?;
@@ -194,10 +182,9 @@ where
         // Set the initial validator set
         response.validators = self
             .get_abci_validator_updates(true, |pk, power| {
-                let pub_key: crate::facade::tendermint::PublicKey = pk.into();
+                let pub_key: crate::tendermint::PublicKey = pk.into();
                 let power =
-                    crate::facade::tendermint::vote::Power::try_from(power)
-                        .unwrap();
+                    crate::tendermint::vote::Power::try_from(power).unwrap();
                 validator::Update { pub_key, power }
             })
             .expect("Must be able to set genesis validator set");
@@ -590,7 +577,7 @@ where
         genesis: &genesis::chain::Finalized,
         vp_cache: &mut HashMap<String, Vec<u8>>,
         params: &PosParams,
-        current_epoch: namada_sdk::storage::Epoch,
+        current_epoch: namada_sdk::chain::Epoch,
     ) -> ControlFlow<()> {
         if let Some(txs) = genesis.transactions.validator_account.as_ref() {
             for FinalizedValidatorAccountTx {
@@ -781,13 +768,11 @@ where
         chain_id: String,
         genesis: config::genesis::chain::Finalized,
     ) {
-        use crate::facade::tendermint::block::Size;
-        use crate::facade::tendermint::consensus::params::ValidatorParams;
-        use crate::facade::tendermint::consensus::Params;
-        use crate::facade::tendermint::evidence::{
-            Duration, Params as Evidence,
-        };
-        use crate::facade::tendermint::time::Time;
+        use crate::tendermint::block::Size;
+        use crate::tendermint::consensus::params::ValidatorParams;
+        use crate::tendermint::consensus::Params;
+        use crate::tendermint::evidence::{Duration, Params as Evidence};
+        use crate::tendermint::time::Time;
 
         // craft a request to initialize the chain
         let init = request::InitChain {
@@ -911,7 +896,7 @@ where
     }
 
     /// This should only be called after checking that `is_ok` returned false.
-    fn error_out(mut self) -> Result<()> {
+    fn error_out(mut self) -> ShellResult<()> {
         if self.is_ok() {
             return Ok(());
         }
@@ -975,7 +960,7 @@ impl<T> Policy<T> {
     }
 }
 
-#[cfg(all(test, not(feature = "integration")))]
+#[cfg(test)]
 mod test {
     use std::str::FromStr;
 

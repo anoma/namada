@@ -10,16 +10,14 @@ use assert_matches::assert_matches;
 use derivative::Derivative;
 use itertools::Itertools;
 use namada_core::address::{self, Address};
+use namada_core::chain::Epoch;
 use namada_core::collections::HashSet;
 use namada_core::dec::Dec;
 use namada_core::key;
 use namada_core::key::common::PublicKey;
-use namada_core::storage::Epoch;
 use namada_core::token::Change;
 use namada_governance::parameters::GovernanceParameters;
 use namada_state::testing::TestState;
-use namada_storage::collections::lazy_map::{NestedSubKey, SubKey};
-use namada_storage::StorageRead;
 use namada_trans_token::{self as token, read_balance};
 use proptest::prelude::*;
 use proptest::test_runner::Config;
@@ -33,6 +31,7 @@ use yansi::Paint;
 
 use super::helpers::advance_epoch;
 use super::utils::DbgPrintDiff;
+use crate::lazy_map::{NestedSubKey, SubKey};
 use crate::parameters::testing::arb_rate;
 use crate::parameters::PosParams;
 use crate::slashing::find_slashes_in_range;
@@ -58,7 +57,7 @@ use crate::{
     below_capacity_validator_set_handle, bond_handle,
     consensus_validator_set_handle, delegator_redelegated_bonds_handle,
     validator_deltas_handle, validator_slashes_handle, validator_state_handle,
-    RedelegationError,
+    RedelegationError, StorageRead,
 };
 
 prop_state_machine! {

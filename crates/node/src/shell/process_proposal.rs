@@ -9,10 +9,10 @@ use namada_vote_ext::ethereum_tx_data_variants;
 
 use super::block_alloc::{BlockGas, BlockSpace};
 use super::*;
-use crate::facade::tendermint_proto::v0_37::abci::RequestProcessProposal;
 use crate::shell::block_alloc::{AllocFailure, TxBin};
 use crate::shims::abcipp_shim_types::shim::response::ProcessProposal;
 use crate::shims::abcipp_shim_types::shim::TxBytes;
+use crate::tendermint_proto::abci::RequestProcessProposal;
 
 /// Validation metadata, to keep track of used resources or
 /// transaction numbers, in a block proposal.
@@ -544,7 +544,7 @@ fn process_proposal_fee_check<D, H, CA>(
     tx_index: &TxIndex,
     proposer: &Address,
     shell_params: &mut ShellParams<'_, TempWlState<'static, D, H>, D, H, CA>,
-) -> Result<()>
+) -> ShellResult<()>
 where
     D: DB + for<'iter> DBIter<'iter> + Sync + 'static,
     H: StorageHasher + Sync + 'static,

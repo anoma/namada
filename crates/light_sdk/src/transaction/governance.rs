@@ -1,8 +1,8 @@
 use namada_sdk::address::Address;
+use namada_sdk::chain::Epoch;
 use namada_sdk::governance::{ProposalType, ProposalVote};
 use namada_sdk::hash::Hash;
 use namada_sdk::key::common;
-use namada_sdk::storage::Epoch;
 use namada_sdk::token::DenominatedAmount;
 use namada_sdk::tx::data::GasLimit;
 use namada_sdk::tx::{Authorization, Tx, TxError};

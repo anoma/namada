@@ -7,42 +7,30 @@ use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
-use namada_core::address::Address;
+use namada_core::borsh;
 use namada_core::borsh::BorshDeserialize;
-use namada_core::hash::Hash;
-use namada_core::storage::Epochs;
-use namada_core::{borsh, storage};
-use namada_events::{Event, EventType};
+use namada_core::chain::Epochs;
 use namada_gas::{GasMetering, VpGasMeter};
-use namada_state as state;
-use namada_state::prefix_iter::PrefixIterators;
-use namada_state::{
-    BlockHeight, Epoch, Header, Key, ResultExt, StorageRead, StorageResult,
-    TxIndex,
-};
 use namada_tx::{BatchedTxRef, Tx, TxCommitments};
-pub use namada_vp_env::VpEnv;
-use state::StateRead;
 
 use super::vp_host_fns;
-
-/// Possible error in a native VP host function call
-/// The `state::StorageError` may wrap the `vp_host_fns::RuntimeError`
-/// and can be extended with other custom errors when using `trait VpEnv`.
-pub type Error = state::StorageError;
+use crate::state::prefix_iter::PrefixIterators;
+use crate::state::{
+    BlockHeader, BlockHeight, Epoch, Key, PrefixIter, StateRead, StorageRead,
+    TxIndex,
+};
+pub use crate::state::{Error, Result, ResultExt};
+use crate::{Address, Event, EventType, Hash, VpEnv};
 
 /// A native VP module should implement its validation logic using this trait.
 pub trait NativeVp<'a> {
-    /// Error type for the methods' results.
-    type Error: std::error::Error;
-
     /// Run the validity predicate
     fn validate_tx(
         &'a self,
         batched_tx: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
-    ) -> std::result::Result<(), Self::Error>;
+    ) -> Result<()>;
 }
 
 /// A validity predicate's host context.
@@ -95,7 +83,7 @@ where
         ctx: &Ctx<'a, S, CA, EVAL>,
         vp_code_hash: Hash,
         input_data: BatchedTxRef<'_>,
-    ) -> StorageResult<()>;
+    ) -> Result<()>;
 }
 
 /// Read access to the prior storage (state before tx execution) via
@@ -178,25 +166,22 @@ where
     EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
     CA: 'static + Clone,
 {
-    type PrefixIter<'iter> = state::PrefixIter<'iter,<S as StateRead>:: D> where Self: 'iter;
+    type PrefixIter<'iter> = PrefixIter<'iter,<S as StateRead>:: D> where Self: 'iter;
 
-    fn read_bytes(
-        &self,
-        key: &storage::Key,
-    ) -> Result<Option<Vec<u8>>, state::StorageError> {
+    fn read_bytes(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         vp_host_fns::read_pre(self.ctx.gas_meter, self.ctx.state, key)
             .into_storage_result()
     }
 
-    fn has_key(&self, key: &storage::Key) -> Result<bool, state::StorageError> {
+    fn has_key(&self, key: &Key) -> Result<bool> {
         vp_host_fns::has_key_pre(self.ctx.gas_meter, self.ctx.state, key)
             .into_storage_result()
     }
 
     fn iter_prefix<'iter>(
         &'iter self,
-        prefix: &storage::Key,
-    ) -> Result<Self::PrefixIter<'iter>, state::StorageError> {
+        prefix: &Key,
+    ) -> Result<Self::PrefixIter<'iter>> {
         vp_host_fns::iter_prefix_pre(
             self.ctx.gas_meter,
             self.ctx.state.write_log(),
@@ -212,39 +197,39 @@ where
     fn iter_next<'iter>(
         &'iter self,
         iter: &mut Self::PrefixIter<'iter>,
-    ) -> Result<Option<(String, Vec<u8>)>, state::StorageError> {
+    ) -> Result<Option<(String, Vec<u8>)>> {
         vp_host_fns::iter_next::<<S as StateRead>::D>(self.ctx.gas_meter, iter)
             .into_storage_result()
     }
 
-    fn get_chain_id(&self) -> Result<String, state::StorageError> {
+    fn get_chain_id(&self) -> Result<String> {
         self.ctx.get_chain_id()
     }
 
-    fn get_block_height(&self) -> Result<BlockHeight, state::StorageError> {
+    fn get_block_height(&self) -> Result<BlockHeight> {
         self.ctx.get_block_height()
     }
 
     fn get_block_header(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<Header>, state::StorageError> {
+    ) -> Result<Option<BlockHeader>> {
         self.ctx.get_block_header(height)
     }
 
-    fn get_block_epoch(&self) -> Result<Epoch, state::StorageError> {
+    fn get_block_epoch(&self) -> Result<Epoch> {
         self.ctx.get_block_epoch()
     }
 
-    fn get_tx_index(&self) -> Result<TxIndex, state::StorageError> {
+    fn get_tx_index(&self) -> Result<TxIndex> {
         self.ctx.get_tx_index().into_storage_result()
     }
 
-    fn get_native_token(&self) -> Result<Address, state::StorageError> {
+    fn get_native_token(&self) -> Result<Address> {
         self.ctx.get_native_token()
     }
 
-    fn get_pred_epochs(&self) -> StorageResult<Epochs> {
+    fn get_pred_epochs(&self) -> Result<Epochs> {
         self.ctx.get_pred_epochs()
     }
 }
@@ -256,25 +241,22 @@ where
     EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
     CA: 'static + Clone,
 {
-    type PrefixIter<'iter> = state::PrefixIter<'iter, <S as StateRead>::D> where Self: 'iter;
+    type PrefixIter<'iter> = PrefixIter<'iter, <S as StateRead>::D> where Self: 'iter;
 
-    fn read_bytes(
-        &self,
-        key: &storage::Key,
-    ) -> Result<Option<Vec<u8>>, state::StorageError> {
+    fn read_bytes(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         vp_host_fns::read_post(self.ctx.gas_meter, self.ctx.state, key)
             .into_storage_result()
     }
 
-    fn has_key(&self, key: &storage::Key) -> Result<bool, state::StorageError> {
+    fn has_key(&self, key: &Key) -> Result<bool> {
         vp_host_fns::has_key_post(self.ctx.gas_meter, self.ctx.state, key)
             .into_storage_result()
     }
 
     fn iter_prefix<'iter>(
         &'iter self,
-        prefix: &storage::Key,
-    ) -> Result<Self::PrefixIter<'iter>, state::StorageError> {
+        prefix: &Key,
+    ) -> Result<Self::PrefixIter<'iter>> {
         vp_host_fns::iter_prefix_post(
             self.ctx.gas_meter,
             self.ctx.state.write_log(),
@@ -290,39 +272,39 @@ where
     fn iter_next<'iter>(
         &'iter self,
         iter: &mut Self::PrefixIter<'iter>,
-    ) -> Result<Option<(String, Vec<u8>)>, state::StorageError> {
+    ) -> Result<Option<(String, Vec<u8>)>> {
         vp_host_fns::iter_next::<<S as StateRead>::D>(self.ctx.gas_meter, iter)
             .into_storage_result()
     }
 
-    fn get_chain_id(&self) -> Result<String, state::StorageError> {
+    fn get_chain_id(&self) -> Result<String> {
         self.ctx.get_chain_id()
     }
 
-    fn get_block_height(&self) -> Result<BlockHeight, state::StorageError> {
+    fn get_block_height(&self) -> Result<BlockHeight> {
         self.ctx.get_block_height()
     }
 
     fn get_block_header(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<Header>, state::StorageError> {
+    ) -> Result<Option<BlockHeader>> {
         self.ctx.get_block_header(height)
     }
 
-    fn get_block_epoch(&self) -> Result<Epoch, state::StorageError> {
+    fn get_block_epoch(&self) -> Result<Epoch> {
         self.ctx.get_block_epoch()
     }
 
-    fn get_tx_index(&self) -> Result<TxIndex, state::StorageError> {
+    fn get_tx_index(&self) -> Result<TxIndex> {
         self.ctx.get_tx_index().into_storage_result()
     }
 
-    fn get_native_token(&self) -> Result<Address, state::StorageError> {
+    fn get_native_token(&self) -> Result<Address> {
         Ok(self.ctx.state.in_mem().native_token.clone())
     }
 
-    fn get_pred_epochs(&self) -> StorageResult<Epochs> {
+    fn get_pred_epochs(&self) -> Result<Epochs> {
         self.ctx.get_pred_epochs()
     }
 }
@@ -335,7 +317,7 @@ where
 {
     type Post = CtxPostStorageRead<'view, 'a, S, CA, EVAL>;
     type Pre = CtxPreStorageRead<'view, 'a, S, CA, EVAL>;
-    type PrefixIter<'iter> = state::PrefixIter<'iter, <S as StateRead>::D> where Self: 'iter;
+    type PrefixIter<'iter> = PrefixIter<'iter, <S as StateRead>::D> where Self: 'iter;
 
     fn pre(&'view self) -> Self::Pre {
         CtxPreStorageRead { ctx: self }
@@ -348,26 +330,23 @@ where
     fn read_temp<T: borsh::BorshDeserialize>(
         &self,
         key: &Key,
-    ) -> Result<Option<T>, state::StorageError> {
+    ) -> Result<Option<T>> {
         vp_host_fns::read_temp(self.gas_meter, self.state, key)
             .map(|data| data.and_then(|t| T::try_from_slice(&t[..]).ok()))
             .into_storage_result()
     }
 
-    fn read_bytes_temp(
-        &self,
-        key: &Key,
-    ) -> Result<Option<Vec<u8>>, state::StorageError> {
+    fn read_bytes_temp(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         vp_host_fns::read_temp(self.gas_meter, self.state, key)
             .into_storage_result()
     }
 
-    fn get_chain_id(&self) -> Result<String, state::StorageError> {
+    fn get_chain_id(&self) -> Result<String> {
         vp_host_fns::get_chain_id(self.gas_meter, self.state)
             .into_storage_result()
     }
 
-    fn get_block_height(&self) -> Result<BlockHeight, state::StorageError> {
+    fn get_block_height(&self) -> Result<BlockHeight> {
         vp_host_fns::get_block_height(self.gas_meter, self.state)
             .into_storage_result()
     }
@@ -375,35 +354,32 @@ where
     fn get_block_header(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<Header>, state::StorageError> {
+    ) -> Result<Option<BlockHeader>> {
         vp_host_fns::get_block_header(self.gas_meter, self.state, height)
             .into_storage_result()
     }
 
-    fn get_block_epoch(&self) -> Result<Epoch, state::StorageError> {
+    fn get_block_epoch(&self) -> Result<Epoch> {
         vp_host_fns::get_block_epoch(self.gas_meter, self.state)
             .into_storage_result()
     }
 
-    fn get_tx_index(&self) -> Result<TxIndex, state::StorageError> {
+    fn get_tx_index(&self) -> Result<TxIndex> {
         vp_host_fns::get_tx_index(self.gas_meter, self.tx_index)
             .into_storage_result()
     }
 
-    fn get_native_token(&self) -> Result<Address, state::StorageError> {
+    fn get_native_token(&self) -> Result<Address> {
         vp_host_fns::get_native_token(self.gas_meter, self.state)
             .into_storage_result()
     }
 
-    fn get_pred_epochs(&self) -> StorageResult<Epochs> {
+    fn get_pred_epochs(&self) -> Result<Epochs> {
         vp_host_fns::get_pred_epochs(self.gas_meter, self.state)
             .into_storage_result()
     }
 
-    fn get_events(
-        &self,
-        event_type: &EventType,
-    ) -> Result<Vec<Event>, state::StorageError> {
+    fn get_events(&self, event_type: &EventType) -> Result<Vec<Event>> {
         vp_host_fns::get_events(
             self.gas_meter,
             self.state,
@@ -415,7 +391,7 @@ where
     fn iter_prefix<'iter>(
         &'iter self,
         prefix: &Key,
-    ) -> Result<Self::PrefixIter<'iter>, state::StorageError> {
+    ) -> Result<Self::PrefixIter<'iter>> {
         vp_host_fns::iter_prefix_pre(
             self.gas_meter,
             self.state.write_log(),
@@ -429,17 +405,17 @@ where
         &self,
         vp_code_hash: Hash,
         input_data: BatchedTxRef<'_>,
-    ) -> StorageResult<()> {
+    ) -> Result<()> {
         EVAL::eval(self, vp_code_hash, input_data)
     }
 
-    fn charge_gas(&self, used_gas: u64) -> Result<(), state::StorageError> {
+    fn charge_gas(&self, used_gas: u64) -> Result<()> {
         self.gas_meter.borrow_mut().consume(used_gas).map_err(|_| {
             Error::SimpleMessage("Gas limit exceeded in native vp")
         })
     }
 
-    fn get_tx_code_hash(&self) -> Result<Option<Hash>, state::StorageError> {
+    fn get_tx_code_hash(&self) -> Result<Option<Hash>> {
         vp_host_fns::get_tx_code_hash(
             self.gas_meter,
             &self.tx.batch_ref_tx(self.cmt),
@@ -450,36 +426,30 @@ where
     fn read_pre<T: borsh::BorshDeserialize>(
         &self,
         key: &Key,
-    ) -> Result<Option<T>, state::StorageError> {
+    ) -> Result<Option<T>> {
         self.pre().read(key).map_err(Into::into)
     }
 
-    fn read_bytes_pre(
-        &self,
-        key: &Key,
-    ) -> Result<Option<Vec<u8>>, state::StorageError> {
+    fn read_bytes_pre(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         self.pre().read_bytes(key).map_err(Into::into)
     }
 
     fn read_post<T: borsh::BorshDeserialize>(
         &self,
         key: &Key,
-    ) -> Result<Option<T>, state::StorageError> {
+    ) -> Result<Option<T>> {
         self.post().read(key).map_err(Into::into)
     }
 
-    fn read_bytes_post(
-        &self,
-        key: &Key,
-    ) -> Result<Option<Vec<u8>>, state::StorageError> {
+    fn read_bytes_post(&self, key: &Key) -> Result<Option<Vec<u8>>> {
         self.post().read_bytes(key).map_err(Into::into)
     }
 
-    fn has_key_pre(&self, key: &Key) -> Result<bool, state::StorageError> {
+    fn has_key_pre(&self, key: &Key) -> Result<bool> {
         self.pre().has_key(key).map_err(Into::into)
     }
 
-    fn has_key_post(&self, key: &Key) -> Result<bool, state::StorageError> {
+    fn has_key_post(&self, key: &Key) -> Result<bool> {
         self.post().has_key(key).map_err(Into::into)
     }
 }
@@ -492,10 +462,7 @@ where
 {
     type Err = Error;
 
-    fn read_temp<T: BorshDeserialize>(
-        &self,
-        key: &storage::Key,
-    ) -> Result<Option<T>, Self::Err> {
+    fn read_temp<T: BorshDeserialize>(&self, key: &Key) -> Result<Option<T>> {
         VpEnv::read_temp(self, key)
     }
 }
@@ -508,7 +475,7 @@ pub trait StorageReader {
     fn read_pre_value<T: BorshDeserialize>(
         &self,
         key: &Key,
-    ) -> Result<Option<T>, state::StorageError>;
+    ) -> Result<Option<T>>;
 
     /// Storage read posterior state (after tx execution). It will try to read
     /// from the write log first and if no entry found then from the
@@ -516,15 +483,12 @@ pub trait StorageReader {
     fn read_post_value<T: BorshDeserialize>(
         &self,
         key: &Key,
-    ) -> Result<Option<T>, state::StorageError>;
+    ) -> Result<Option<T>>;
 
     /// Calls `read_pre_value`, and returns an error on `Ok(None)`.
-    fn must_read_pre_value<T: BorshDeserialize>(
-        &self,
-        key: &Key,
-    ) -> Result<T, state::StorageError> {
+    fn must_read_pre_value<T: BorshDeserialize>(&self, key: &Key) -> Result<T> {
         match self.read_pre_value(key) {
-            Ok(None) => Err(state::StorageError::AllocMessage(format!(
+            Ok(None) => Err(Error::AllocMessage(format!(
                 "Expected a value to be present in the key {key}"
             ))),
             Ok(Some(x)) => Ok(x),
@@ -536,9 +500,9 @@ pub trait StorageReader {
     fn must_read_post_value<T: BorshDeserialize>(
         &self,
         key: &Key,
-    ) -> Result<T, state::StorageError> {
+    ) -> Result<T> {
         match self.read_post_value(key) {
-            Ok(None) => Err(state::StorageError::AllocMessage(format!(
+            Ok(None) => Err(Error::AllocMessage(format!(
                 "Expected a value to be present in the key {key}"
             ))),
             Ok(Some(x)) => Ok(x),
@@ -555,10 +519,7 @@ where
 {
     /// Helper function. After reading posterior state,
     /// borsh deserialize to specified type
-    fn read_post_value<T>(
-        &self,
-        key: &Key,
-    ) -> Result<Option<T>, state::StorageError>
+    fn read_post_value<T>(&self, key: &Key) -> Result<Option<T>>
     where
         T: BorshDeserialize,
     {
@@ -567,10 +528,7 @@ where
 
     /// Helper function. After reading prior state,
     /// borsh deserialize to specified type
-    fn read_pre_value<T>(
-        &self,
-        key: &Key,
-    ) -> Result<Option<T>, state::StorageError>
+    fn read_pre_value<T>(&self, key: &Key) -> Result<Option<T>>
     where
         T: BorshDeserialize,
     {
@@ -594,7 +552,7 @@ pub(super) mod testing {
         fn read_pre_value<T: BorshDeserialize>(
             &self,
             key: &Key,
-        ) -> Result<Option<T>, state::StorageError> {
+        ) -> Result<Option<T>> {
             self.pre
                 .get(key)
                 .map(|bytes| T::try_from_slice(bytes).into_storage_result())
@@ -604,7 +562,7 @@ pub(super) mod testing {
         fn read_post_value<T: BorshDeserialize>(
             &self,
             key: &Key,
-        ) -> Result<Option<T>, state::StorageError> {
+        ) -> Result<Option<T>> {
             self.post
                 .get(key)
                 .map(|bytes| T::try_from_slice(bytes).into_storage_result())

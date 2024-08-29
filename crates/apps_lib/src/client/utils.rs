@@ -17,7 +17,7 @@ use namada_sdk::key::*;
 use namada_sdk::string_encoding::StringEncoded;
 use namada_sdk::token;
 use namada_sdk::uint::Uint;
-use namada_sdk::wallet::{alias, Wallet};
+use namada_sdk::wallet::{alias, LoadStoreError, Wallet};
 use namada_vm::validate_untrusted_wasm;
 use prost::bytes::Bytes;
 use serde_json::json;
@@ -33,7 +33,7 @@ use crate::config::genesis::transactions::{
 use crate::config::genesis::{AddrOrPk, GenesisAddress};
 use crate::config::global::GlobalConfig;
 use crate::config::{self, genesis, get_default_namada_folder, TendermintMode};
-use crate::facade::tendermint::node::Id as TendermintNodeId;
+use crate::tendermint::node::Id as TendermintNodeId;
 use crate::wallet::{pre_genesis, CliWalletUtils};
 use crate::{tendermint_node, wasm_loader};
 
@@ -197,12 +197,12 @@ pub async fn join_network(
     // Try to load pre-genesis wallet, if any
     let pre_genesis_wallet_path = base_dir.join(PRE_GENESIS_DIR);
     let pre_genesis_wallet =
-        if let Some(wallet) = crate::wallet::load(&pre_genesis_wallet_path) {
+        if let Ok(wallet) = crate::wallet::load(&pre_genesis_wallet_path) {
             Some(wallet)
         } else {
             validator_alias_and_dir
                 .as_ref()
-                .and_then(|(_, path)| crate::wallet::load(path))
+                .and_then(|(_, path)| crate::wallet::load(path).ok())
         };
 
     // Derive wallet from genesis
@@ -469,6 +469,7 @@ pub fn derive_genesis_addresses(
 ) {
     let maybe_pre_genesis_wallet =
         try_load_pre_genesis_wallet(&global_args.base_dir)
+            .ok()
             .map(|(wallet, _)| wallet);
     let contents =
         fs::read_to_string(&args.genesis_txs_path).unwrap_or_else(|err| {
@@ -792,7 +793,7 @@ pub fn init_genesis_validator(
 /// if it cannot be found.
 pub fn try_load_pre_genesis_wallet(
     base_dir: &Path,
-) -> Option<(Wallet<CliWalletUtils>, PathBuf)> {
+) -> Result<(Wallet<CliWalletUtils>, PathBuf), LoadStoreError> {
     let pre_genesis_dir = base_dir.join(PRE_GENESIS_DIR);
 
     crate::wallet::load(&pre_genesis_dir).map(|wallet| {
@@ -805,12 +806,14 @@ pub fn try_load_pre_genesis_wallet(
 pub fn load_pre_genesis_wallet_or_exit(
     base_dir: &Path,
 ) -> (Wallet<CliWalletUtils>, PathBuf) {
-    try_load_pre_genesis_wallet(base_dir).unwrap_or_else(|| {
-        eprintln!("No pre-genesis wallet found.",);
-        safe_exit(1)
-    })
+    match try_load_pre_genesis_wallet(base_dir) {
+        Ok(wallet) => wallet,
+        Err(e) => {
+            eprintln!("Error loading the wallet: {e}");
+            safe_exit(1)
+        }
+    }
 }
-
 async fn download_file(url: impl AsRef<str>) -> reqwest::Result<Bytes> {
     let url = url.as_ref();
     let response = reqwest::get(url).await?;

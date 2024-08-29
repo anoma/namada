@@ -4,10 +4,11 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use futures::future::FutureExt;
+use namada_apps_lib::state::DbError;
+use namada_sdk::chain::BlockHeight;
 use namada_sdk::hash::Hash;
 use namada_sdk::migrations::ScheduledMigration;
-use namada_sdk::state::{ProcessProposalCachedResult, DB};
-use namada_sdk::storage::BlockHeight;
+use namada_sdk::state::ProcessProposalCachedResult;
 use namada_sdk::tendermint::abci::response::ProcessProposal;
 use namada_sdk::time::{DateTimeUtc, Utc};
 use namada_sdk::tx::data::hash_tx;
@@ -23,12 +24,10 @@ use super::abcipp_shim_types::shim::{
 };
 use crate::config;
 use crate::config::{Action, ActionAtHeight};
-use crate::facade::tendermint::v0_37::abci::{
-    request, Request as Req, Response as Resp,
-};
-use crate::facade::tower_abci::BoxError;
 use crate::shell::{EthereumOracleChannels, Shell};
 use crate::storage::DbSnapshot;
+use crate::tendermint::abci::{request, Request as Req, Response as Resp};
+use crate::tower_abci::BoxError;
 
 /// The shim wraps the shell, which implements ABCI++.
 /// The shim makes a crude translation between the ABCI interface currently used
@@ -42,7 +41,8 @@ pub struct AbcippShim {
         Req,
         tokio::sync::oneshot::Sender<Result<Resp, BoxError>>,
     )>,
-    snapshot_task: Option<std::thread::JoinHandle<Result<(), std::io::Error>>>,
+    snapshot_task: Option<std::thread::JoinHandle<Result<(), DbError>>>,
+    snapshots_to_keep: u64,
 }
 
 impl AbcippShim {
@@ -65,6 +65,8 @@ impl AbcippShim {
         let (shell_send, shell_recv) = std::sync::mpsc::channel();
         let (server_shutdown, _) = broadcast::channel::<()>(1);
         let action_at_height = config.shell.action_at_height.clone();
+        let snapshots_to_keep =
+            config.shell.snapshots_to_keep.map(|n| n.get()).unwrap_or(1);
         (
             Self {
                 service: Shell::new(
@@ -81,6 +83,7 @@ impl AbcippShim {
                 delivered_txs: vec![],
                 shell_recv,
                 snapshot_task: None,
+                snapshots_to_keep,
             },
             AbciService {
                 shell_send,
@@ -147,7 +150,7 @@ impl AbcippShim {
                         .map_err(Error::from)
                         .and_then(|res| match res {
                             Response::FinalizeBlock(resp) => {
-                                Ok(Resp::EndBlock(crate::facade::tendermint_proto::v0_37::abci::ResponseEndBlock::from(resp).try_into().unwrap()))
+                                Ok(Resp::EndBlock(crate::tendermint_proto::abci::ResponseEndBlock::from(resp).try_into().unwrap()))
                             }
                             _ => Err(Error::ConvertResp(res)),
                         })
@@ -186,46 +189,56 @@ impl AbcippShim {
     }
 
     fn update_snapshot_task(&mut self, take_snapshot: TakeSnapshot) {
-        let snapshot_taken = self
-            .snapshot_task
-            .as_ref()
-            .map(|t| t.is_finished())
-            .unwrap_or_default();
-        if snapshot_taken {
-            let task = self.snapshot_task.take().unwrap();
-            match task.join() {
-                Ok(Err(e)) => tracing::error!(
-                    "Failed to create snapshot with error: {:?}",
-                    e
-                ),
-                Err(e) => tracing::error!(
-                    "Failed to join thread creating snapshot: {:?}",
-                    e
-                ),
-                _ => {}
+        let snapshot_taken =
+            self.snapshot_task.as_ref().map(|t| t.is_finished());
+        match snapshot_taken {
+            Some(true) => {
+                let task = self.snapshot_task.take().unwrap();
+                match task.join() {
+                    Ok(Err(e)) => tracing::error!(
+                        "Failed to create snapshot with error: {:?}",
+                        e
+                    ),
+                    Err(e) => tracing::error!(
+                        "Failed to join thread creating snapshot: {:?}",
+                        e
+                    ),
+                    _ => {}
+                }
             }
+            Some(false) => {
+                // if a snapshot task is still running,
+                // we don't start a new one. This is not
+                // expected to happen if snapshots are spaced
+                // far enough apart.
+                tracing::warn!(
+                    "Previous snapshot task was still running when a new \
+                     snapshot was scheduled"
+                );
+                return;
+            }
+            _ => {}
         }
-        let TakeSnapshot::Yes(db_path) = take_snapshot else {
+
+        let TakeSnapshot::Yes(db_path, height) = take_snapshot else {
             return;
         };
         let base_dir = self.service.base_dir.clone();
 
         let (snap_send, snap_recv) = tokio::sync::oneshot::channel();
+
+        let snapshots_to_keep = self.snapshots_to_keep;
         let snapshot_task = std::thread::spawn(move || {
             let db = crate::storage::open(db_path, true, None)
                 .expect("Could not open DB");
-            let snapshot = db.snapshot();
+            let snapshot = db.checkpoint(base_dir.clone(), height)?;
             // signal to main thread that the snapshot has finished
             snap_send.send(()).unwrap();
-
-            let last_height = db
-                .read_last_block()
-                .expect("Could not read database")
-                .expect("Last block should exists")
-                .height;
-            let cfs = db.column_families();
-            snapshot.write_to_file(cfs, base_dir.clone(), last_height)?;
-            DbSnapshot::cleanup(last_height, &base_dir)
+            DbSnapshot::cleanup(height, &base_dir, snapshots_to_keep)
+                .map_err(|e| DbError::DBError(e.to_string()))?;
+            snapshot
+                .package()
+                .map_err(|e| DbError::DBError(e.to_string()))
         });
 
         // it's important that the thread is
@@ -235,8 +248,6 @@ impl AbcippShim {
         if snap_recv.blocking_recv().is_err() {
             tracing::error!("Failed to start snapshot task.")
         } else {
-            // N.B. If a task is still running, it will continue
-            // in the background but we will forget about it.
             self.snapshot_task.replace(snapshot_task);
         }
     }

@@ -1,6 +1,6 @@
 //! Ethereum events validation.
 
-use namada_core::storage::BlockHeight;
+use namada_core::chain::BlockHeight;
 use namada_proof_of_stake::queries::get_validator_protocol_key;
 use namada_state::{DBIter, StorageHasher, StorageRead, WlState, DB};
 use namada_systems::governance;

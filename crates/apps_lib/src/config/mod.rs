@@ -11,17 +11,14 @@ use std::num::NonZeroU64;
 use std::path::{Path, PathBuf};
 
 use directories::ProjectDirs;
-use namada_sdk::chain::ChainId;
+use namada_sdk::chain::{BlockHeight, ChainId};
 use namada_sdk::collections::HashMap;
-use namada_sdk::storage::BlockHeight;
 use namada_sdk::time::Rfc3339String;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::cli;
-use crate::facade::tendermint_config::{
-    TendermintConfig, TxIndexConfig, TxIndexer,
-};
+use crate::tendermint_config::{TendermintConfig, TxIndexConfig, TxIndexer};
 
 /// Base directory contains global config and chain directories.
 pub const DEFAULT_BASE_DIR: &str = ".namada";
@@ -128,6 +125,8 @@ pub struct Shell {
     /// When set, indicates after how many blocks a new snapshot
     /// will be taken (counting from the first block)
     pub blocks_between_snapshots: Option<NonZeroU64>,
+    /// Number of snapshots to keep
+    pub snapshots_to_keep: Option<NonZeroU64>,
 }
 
 impl Ledger {
@@ -157,6 +156,7 @@ impl Ledger {
                 action_at_height: None,
                 tendermint_mode: mode,
                 blocks_between_snapshots: None,
+                snapshots_to_keep: None,
             },
             cometbft: tendermint_config,
             ethereum_bridge: ethereum_bridge::ledger::Config::default(),
@@ -855,7 +855,7 @@ namespace = "cometbft"
 #[cfg(test)]
 mod tests {
     use super::DEFAULT_COMETBFT_CONFIG;
-    use crate::facade::tendermint_config::TendermintConfig;
+    use crate::tendermint_config::TendermintConfig;
 
     #[test]
     fn test_default_cometbft_config() {

@@ -17,8 +17,8 @@
     clippy::print_stderr
 )]
 
-use borsh::BorshDeserialize;
-use namada_core::internal::{HostEnvResult, KeyVal};
+use namada_core::borsh::BorshDeserialize;
+pub use namada_core::internal::{HostEnvResult, KeyVal};
 
 /// Transaction environment imports
 pub mod tx {

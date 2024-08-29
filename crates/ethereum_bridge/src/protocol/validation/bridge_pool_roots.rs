@@ -1,7 +1,7 @@
 //! Bridge pool roots validation.
 
+use namada_core::chain::BlockHeight;
 use namada_core::keccak::keccak_hash;
-use namada_core::storage::BlockHeight;
 use namada_proof_of_stake::queries::{
     get_validator_eth_hot_key, get_validator_protocol_key,
 };
