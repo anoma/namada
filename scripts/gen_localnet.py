@@ -61,6 +61,12 @@ def main_inner(args, working_directory):
             genesis_validator=validator_alias,
             pre_genesis_path=args.pre_genesis_path,
             command_summary=command_summary,
+            edit_config=iter(
+                conf[validator_alias]
+                for conf in args.edit_config
+                if validator_alias in conf
+            ),
+            evaluate_config=args.eval,
         )
 
     for fullnode_alias, full_node_base_port in args.full_nodes.items():
@@ -73,6 +79,12 @@ def main_inner(args, working_directory):
             fullnode_base_port=full_node_base_port,
             pre_genesis_path=args.pre_genesis_path,
             command_summary=command_summary,
+            edit_config=iter(
+                conf[fullnode_alias]
+                for conf in args.edit_config
+                if fullnode_alias in conf
+            ),
+            evaluate_config=args.eval,
         )
 
     info("Run the ledger(s) using the command string(s) below")
@@ -136,6 +148,8 @@ def join_network_with_validator(
     genesis_validator,
     pre_genesis_path,
     command_summary,
+    edit_config,
+    evaluate_config,
 ):
     info(f"Attempting to join {chain_id} with {genesis_validator}")
 
@@ -175,6 +189,21 @@ def join_network_with_validator(
         genesis_validator_path,
     )
 
+    info(f"Updating node config on {genesis_validator}")
+    config = load_node_config(
+        base_dir_prefix=base_dir_prefix,
+        chain_id=chain_id,
+        node_alias=genesis_validator,
+    )
+    edit_toml(config, edit_config, evaluate_config)
+    write_node_config(
+        config=config,
+        base_dir_prefix=base_dir_prefix,
+        chain_id=chain_id,
+        node_alias=genesis_validator,
+    )
+    info(f"Node config on {genesis_validator} has been updated")
+
     info(f"Validator {genesis_validator} joined {chain_id}")
 
     command_summary[genesis_validator] = (
@@ -191,6 +220,8 @@ def join_network_with_fullnode(
     fullnode_base_port,
     pre_genesis_path,
     command_summary,
+    edit_config,
+    evaluate_config,
 ):
     info(f"Attempting to join {chain_id} with {fullnode_alias}")
 
@@ -216,6 +247,7 @@ def join_network_with_fullnode(
         chain_id,
     )
 
+    info(f"Updating node config on {fullnode_alias}")
     config = load_node_config(
         base_dir_prefix=base_dir_prefix,
         chain_id=chain_id,
@@ -225,12 +257,14 @@ def join_network_with_fullnode(
         config=config,
         full_node_base_port=fullnode_base_port,
     )
+    edit_toml(config, edit_config, evaluate_config)
     write_node_config(
         config=config,
         base_dir_prefix=base_dir_prefix,
         chain_id=chain_id,
         node_alias=fullnode_alias,
     )
+    info(f"Node config on {fullnode_alias} has been updated")
 
     info(f"Full node {fullnode_alias} joined {chain_id}")
 
@@ -306,6 +340,13 @@ def parse_cli_args():
         type=full_nodes_object,
         help="JSON object of full node aliases to port numbers these will listen on.",
     )
+    group.add_argument(
+        "--edit-config",
+        action="append",
+        default=[],
+        type=config_json_object,
+        help='JSON object of k:v pairs to update in config (eg: `{"validator-0":{"wasm_dir":"/tmp/wasm"}}`).',
+    )
 
     group = parser.add_argument_group(
         title="General config",
@@ -361,7 +402,7 @@ def parse_cli_args():
     group.add_argument(
         "--eval",
         action=argparse.BooleanOptionalAction,
-        help="Evaluate strings passed to `--edit-templates` as Python code.",
+        help="Evaluate strings passed to `--edit-*` as Python code.",
     )
 
     args = parser.parse_args()
@@ -404,6 +445,15 @@ def validator_aliases_json_object(s):
             die("Must map from validator alias to their validator address")
 
     return aliases
+
+
+def config_json_object(s):
+    params = load_json(s)
+
+    if type(params) != dict:
+        die("Only JSON objects allowed for config updates")
+
+    return params
 
 
 def params_json_object(s):
