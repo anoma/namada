@@ -439,17 +439,19 @@ def load_json(s):
 def to_edit_from_args(args):
     if args.max_validator_slots:
         templates = {}
+        value = args.max_validator_slots
+        if args.eval:
+            value = repr(value)
         params = templates.setdefault(PARAMETERS_TEMPLATE, {})
-        params.setdefault("pos_params", {})[
-            "max_validator_slots"
-        ] = args.max_validator_slots
+        params.setdefault("pos_params", {})["max_validator_slots"] = value
         args.edit.append(templates)
     if args.epoch_duration:
         templates = {}
+        value = int(round(365 * 24 * 60 * 60 / args.epoch_duration.total_seconds()))
+        if args.eval:
+            value = repr(value)
         params = templates.setdefault(PARAMETERS_TEMPLATE, {})
-        params.setdefault("parameters", {})["epochs_per_year"] = int(
-            round(365 * 24 * 60 * 60 / args.epoch_duration.total_seconds())
-        )
+        params.setdefault("parameters", {})["epochs_per_year"] = value
         args.edit.append(templates)
     return args.edit
 
