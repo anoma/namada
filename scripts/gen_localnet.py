@@ -384,7 +384,7 @@ def parse_cli_args():
 
 
 def validator_aliases_json_object(s):
-    aliases = json.loads(s)
+    aliases = load_json(s)
 
     if type(aliases) != dict:
         die("Only JSON objects allowed for validator")
@@ -398,7 +398,7 @@ def validator_aliases_json_object(s):
 
 
 def params_json_object(s):
-    params = json.loads(s)
+    params = load_json(s)
 
     if type(params) != dict:
         die("Only JSON objects allowed for param updates")
@@ -407,7 +407,7 @@ def params_json_object(s):
 
 
 def full_nodes_object(s):
-    full_nodes = json.loads(s)
+    full_nodes = load_json(s)
 
     if type(full_nodes) != dict:
         die("Only JSON objects allowed for full nodes")
@@ -419,6 +419,15 @@ def full_nodes_object(s):
             )
 
     return full_nodes
+
+
+def load_json(s):
+    try:
+        return json.loads(s)
+    except json.decode.JSONDecodeError:
+        # assume we're dealing with a file path
+        with open(s, "r") as f:
+            return json.load(f)
 
 
 def to_edit_from_args(args):
