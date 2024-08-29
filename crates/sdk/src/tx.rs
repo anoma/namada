@@ -21,6 +21,7 @@ use masp_primitives::transaction::{builder, Transaction as MaspTransaction};
 use namada_account::{InitAccount, UpdateAccount};
 use namada_core::address::{Address, IBC, MASP};
 use namada_core::arith::checked;
+use namada_core::chain::Epoch;
 use namada_core::collections::HashSet;
 use namada_core::dec::Dec;
 use namada_core::hash::Hash;
@@ -39,7 +40,6 @@ use namada_core::masp::{
     AssetData, ExtendedSpendingKey, MaspEpoch, TransferSource, TransferTarget,
 };
 use namada_core::storage;
-use namada_core::storage::Epoch;
 use namada_core::time::DateTimeUtc;
 use namada_governance::cli::onchain::{
     DefaultProposal, OnChainProposal, PgfFundingProposal, PgfStewardProposal,
@@ -314,6 +314,7 @@ pub async fn build_reveal_pk(
         None,
         Some(public_key.into()),
         vec![],
+        false,
     )
     .await?;
     let (fee_amount, _) =
@@ -570,6 +571,7 @@ pub async fn build_change_consensus_key(
         None,
         None,
         vec![consensus_key.clone()],
+        false,
     )
     .await?;
 
@@ -607,6 +609,7 @@ pub async fn build_validator_commission_change(
         Some(validator.clone()),
         default_signer,
         vec![],
+        false,
     )
     .await?;
     let (fee_amount, _) =
@@ -749,6 +752,7 @@ pub async fn build_validator_metadata_change(
         Some(validator.clone()),
         default_signer,
         vec![],
+        false,
     )
     .await?;
     let (fee_amount, _) =
@@ -962,6 +966,7 @@ pub async fn build_update_steward_commission(
         Some(steward.clone()),
         default_signer,
         vec![],
+        false,
     )
     .await?;
     let (fee_amount, _) =
@@ -1030,6 +1035,7 @@ pub async fn build_resign_steward(
         Some(steward.clone()),
         default_signer,
         vec![],
+        false,
     )
     .await?;
     let (fee_amount, _) =
@@ -1078,6 +1084,7 @@ pub async fn build_unjail_validator(
         Some(validator.clone()),
         default_signer,
         vec![],
+        false,
     )
     .await?;
     let (fee_amount, _) =
@@ -1182,6 +1189,7 @@ pub async fn build_deactivate_validator(
         Some(validator.clone()),
         default_signer,
         vec![],
+        false,
     )
     .await?;
     let (fee_amount, _) =
@@ -1257,6 +1265,7 @@ pub async fn build_reactivate_validator(
         Some(validator.clone()),
         default_signer,
         vec![],
+        false,
     )
     .await?;
     let (fee_amount, _) =
@@ -1478,6 +1487,7 @@ pub async fn build_redelegation(
         Some(default_address),
         default_signer,
         vec![],
+        false,
     )
     .await?;
     let (fee_amount, _) =
@@ -1522,6 +1532,7 @@ pub async fn build_withdraw(
         Some(default_address),
         default_signer,
         vec![],
+        false,
     )
     .await?;
     let (fee_amount, _) =
@@ -1609,6 +1620,7 @@ pub async fn build_claim_rewards(
         Some(default_address),
         default_signer,
         vec![],
+        false,
     )
     .await?;
     let (fee_amount, _) =
@@ -1713,6 +1725,7 @@ pub async fn build_unbond(
         Some(default_address),
         default_signer,
         vec![],
+        false,
     )
     .await?;
     let (fee_amount, _) =
@@ -1948,6 +1961,7 @@ pub async fn build_bond(
         Some(default_address.clone()),
         default_signer,
         vec![],
+        false,
     )
     .await?;
     let (fee_amount, updated_balance) =
@@ -2013,6 +2027,7 @@ pub async fn build_default_proposal(
         Some(proposal.proposal.author.clone()),
         default_signer,
         vec![],
+        false,
     )
     .await?;
     let (fee_amount, _updated_balance) =
@@ -2067,6 +2082,7 @@ pub async fn build_vote_proposal(
         default_signer.clone(),
         default_signer.clone(),
         vec![],
+        false,
     )
     .await?;
     let (fee_amount, _) =
@@ -2369,7 +2385,7 @@ pub async fn build_become_validator(
     all_pks.push(protocol_key.clone().unwrap().clone());
 
     let signing_data =
-        signing::aux_signing_data(context, tx_args, None, None, all_pks)
+        signing::aux_signing_data(context, tx_args, None, None, all_pks, false)
             .await?;
 
     let (fee_amount, _updated_balance) =
@@ -2408,6 +2424,7 @@ pub async fn build_pgf_funding_proposal(
         Some(proposal.proposal.author.clone()),
         default_signer,
         vec![],
+        false,
     )
     .await?;
     let (fee_amount, _updated_balance) =
@@ -2454,6 +2471,7 @@ pub async fn build_pgf_stewards_proposal(
         Some(proposal.proposal.author.clone()),
         default_signer,
         vec![],
+        false,
     )
     .await?;
     let (fee_amount, _updated_balance) =
@@ -2505,6 +2523,7 @@ pub async fn build_ibc_transfer(
         Some(source.clone()),
         Some(source.clone()),
         vec![],
+        args.disposable_signing_key,
     )
     .await?;
     let (fee_per_gas_unit, updated_balance) =
@@ -2906,6 +2925,7 @@ pub async fn build_transparent_transfer<N: Namada>(
             source.clone(),
             source,
             vec![],
+            false,
         )
         .await?;
 
@@ -2996,6 +3016,7 @@ pub async fn build_shielded_transfer<N: Namada>(
         Some(MASP),
         Some(MASP),
         vec![],
+        args.disposable_signing_key,
     )
     .await?;
 
@@ -3148,6 +3169,7 @@ pub async fn build_shielding_transfer<N: Namada>(
         source.clone(),
         source,
         vec![],
+        false,
     )
     .await?;
 
@@ -3273,6 +3295,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
         Some(MASP),
         Some(MASP),
         vec![],
+        args.disposable_signing_key,
     )
     .await?;
 
@@ -3460,7 +3483,8 @@ pub async fn build_init_account(
     }: &args::TxInitAccount,
 ) -> Result<(Tx, SigningTxData)> {
     let signing_data =
-        signing::aux_signing_data(context, tx_args, None, None, vec![]).await?;
+        signing::aux_signing_data(context, tx_args, None, None, vec![], false)
+            .await?;
     let (fee_amount, _) =
         validate_transparent_fee(context, tx_args, &signing_data.fee_payer)
             .await?;
@@ -3547,6 +3571,7 @@ pub async fn build_update_account(
         Some(addr.clone()),
         default_signer,
         vec![],
+        false,
     )
     .await?;
     let (fee_amount, _) =
@@ -3663,6 +3688,7 @@ pub async fn build_custom(
         data_path,
         serialized_tx,
         owner,
+        disposable_signing_key,
     }: &args::TxCustom,
 ) -> Result<(Tx, SigningTxData)> {
     let default_signer = Some(owner.clone());
@@ -3672,6 +3698,7 @@ pub async fn build_custom(
         Some(owner.clone()),
         default_signer,
         vec![],
+        *disposable_signing_key,
     )
     .await?;
     let fee_amount = validate_fee(context, tx_args).await?;

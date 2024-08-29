@@ -6,14 +6,13 @@ use std::str::FromStr;
 use std::time::Duration as StdDuration;
 
 use namada_core::address::Address;
-use namada_core::chain::ChainId;
+use namada_core::chain::{BlockHeight, ChainId, Epoch};
 use namada_core::collections::HashMap;
 use namada_core::dec::Dec;
 use namada_core::ethereum_events::EthAddress;
 use namada_core::keccak::KeccakHash;
 use namada_core::key::{common, SchemeType};
 use namada_core::masp::{MaspEpoch, PaymentAddress};
-use namada_core::storage::{BlockHeight, Epoch};
 use namada_core::time::DateTimeUtc;
 use namada_core::{storage, token};
 use namada_governance::cli::onchain::{
@@ -162,6 +161,9 @@ pub struct TxCustom<C: NamadaTypes = SdkTypes> {
     pub serialized_tx: Option<C::Data>,
     /// The address that correspond to the signatures/signing-keys
     pub owner: C::Address,
+    /// Generate an ephemeral signing key to be used only once to sign the
+    /// wrapper tx
+    pub disposable_signing_key: bool,
 }
 
 impl<C: NamadaTypes> TxBuilder<C> for TxCustom<C> {
@@ -204,6 +206,15 @@ impl<C: NamadaTypes> TxCustom<C> {
     /// The address that correspond to the signatures/signing-keys
     pub fn owner(self, owner: C::Address) -> Self {
         Self { owner, ..self }
+    }
+
+    /// The flag to request an ephemeral signing key to be used only once to
+    /// sign the wrapper tx
+    pub fn disposable_signing_key(self, disposable_signing_key: bool) -> Self {
+        Self {
+            disposable_signing_key,
+            ..self
+        }
     }
 }
 
@@ -343,6 +354,9 @@ pub struct TxShieldedTransfer<C: NamadaTypes = SdkTypes> {
     pub data: Vec<TxShieldedTransferData<C>>,
     /// Optional additional keys for gas payment
     pub gas_spending_keys: Vec<C::SpendingKey>,
+    /// Generate an ephemeral signing key to be used only once to sign the
+    /// wrapper tx
+    pub disposable_signing_key: bool,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -437,6 +451,9 @@ pub struct TxUnshieldingTransfer<C: NamadaTypes = SdkTypes> {
     pub data: Vec<TxUnshieldingTransferData<C>>,
     /// Optional additional keys for gas payment
     pub gas_spending_keys: Vec<C::SpendingKey>,
+    /// Generate an ephemeral signing key to be used only once to sign the
+    /// wrapper tx
+    pub disposable_signing_key: bool,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -480,6 +497,9 @@ pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
     pub ibc_memo: Option<String>,
     /// Optional additional keys for gas payment
     pub gas_spending_keys: Vec<C::SpendingKey>,
+    /// Generate an ephemeral signing key to be used only once to sign the
+    /// wrapper tx
+    pub disposable_signing_key: bool,
     /// Path to the TX WASM code file
     pub tx_code_path: PathBuf,
 }
@@ -2119,6 +2139,8 @@ pub struct SignTx<C: NamadaTypes = SdkTypes> {
     pub tx_data: C::Data,
     /// The account address
     pub owner: C::Address,
+    /// Flag to request a disposable signer of the wrapper transaction
+    pub disposable_signing_key: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -2279,9 +2301,6 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     pub gas_limit: GasLimit,
     /// The optional expiration of the transaction
     pub expiration: TxExpiration,
-    /// Generate an ephimeral signing key to be used only once to sign a
-    /// wrapper tx
-    pub disposable_signing_key: bool,
     /// The chain id for which the transaction is intended
     pub chain_id: Option<ChainId>,
     /// Sign the tx with the key for the given alias from your wallet
@@ -2418,14 +2437,6 @@ pub trait TxBuilder<C: NamadaTypes>: Sized {
     /// The optional expiration of the transaction
     fn expiration(self, expiration: TxExpiration) -> Self {
         self.tx(|x| Tx { expiration, ..x })
-    }
-    /// Generate an ephimeral signing key to be used only once to sign a
-    /// wrapper tx
-    fn disposable_signing_key(self, disposable_signing_key: bool) -> Self {
-        self.tx(|x| Tx {
-            disposable_signing_key,
-            ..x
-        })
     }
     /// The chain id for which the transaction is intended
     fn chain_id(self, chain_id: ChainId) -> Self {

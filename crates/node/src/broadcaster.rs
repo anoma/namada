@@ -5,8 +5,8 @@ use namada_sdk::control_flow::time;
 use namada_sdk::time::{DateTimeUtc, Utc};
 use tokio::sync::mpsc::UnboundedReceiver;
 
-use crate::facade::tendermint_rpc::client::CompatMode;
-use crate::facade::tendermint_rpc::{Client, HttpClient};
+use crate::tendermint_rpc::client::CompatMode;
+use crate::tendermint_rpc::{Client, HttpClient};
 
 const DEFAULT_BROADCAST_TIMEOUT: u64 = 180;
 const BROADCASTER_TIMEOUT_ENV_VAR: &str = "NAMADA_BROADCASTER_TIMEOUT_SECS";

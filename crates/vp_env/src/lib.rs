@@ -22,10 +22,11 @@ pub mod collection_validation;
 
 use namada_core::address::Address;
 use namada_core::borsh::BorshDeserialize;
+pub use namada_core::chain::{BlockHeader, BlockHeight, Epoch, Epochs};
 use namada_core::hash::Hash;
-use namada_core::storage::{BlockHeight, Epoch, Epochs, Header, Key, TxIndex};
+pub use namada_core::storage::{Key, TxIndex};
 use namada_events::{Event, EventType};
-use namada_storage::StorageRead;
+pub use namada_storage::StorageRead;
 use namada_tx::BatchedTxRef;
 
 /// Validity predicate's environment is available for native VPs and WASM VPs
@@ -76,7 +77,7 @@ where
     fn get_block_header(
         &self,
         height: BlockHeight,
-    ) -> Result<Option<Header>, namada_storage::Error>;
+    ) -> Result<Option<BlockHeader>, namada_storage::Error>;
 
     /// Getting the block epoch. The epoch is that of the block to which the
     /// current transaction is being applied.

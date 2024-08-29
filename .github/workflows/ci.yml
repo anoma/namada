@@ -35,8 +35,8 @@ env:
 jobs:
   changelog:
     runs-on: [ubuntu-latest]
-    if: github.event_name == 'pull_request_target' && github.event.pull_request.draft == false
-    timeout-minutes: 15
+    if: github.event_name == 'pull_request_target' && github.event.pull_request.draft == false && !contains(github.ref, '-rc')
+    timeout-minutes: 5
 
     steps:
       - name: Checkout repo
@@ -54,6 +54,46 @@ jobs:
         run: bash .github/workflows/scripts/check-changelog.sh
         env:
           SHA: ${{ github.event.pull_request.head.sha }}
+    
+  rust-docs:
+    container: 
+      image: ghcr.io/heliaxdev/namada-ci:namada-main
+    runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        if: ${{ github.event_name != 'pull_request_target' }}
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        if: ${{ github.event_name == 'pull_request_target' }}
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Configure AWS 
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE }}
+      - name: Cache cargo
+        id: cache
+        uses: runs-on/cache@v4
+        env:
+          RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
+        with:
+          path: /usr/local/cargo
+          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+      - name: Start sccache server
+        id: sccache
+        run: sccache --start-server
+      - name: Build docs
+        run: make build-doc
+      - name: Clean cargo cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: cargo cache --autoclean-expensive
+      - name: Stop sccache
+        if: always() && steps.sccache.conclusion == 'success'
+        run: sccache --stop-server || true
 
   lints:
     container: 
@@ -250,12 +290,11 @@ jobs:
         # run: cargo +${{ env.NIGHTLY }} llvm-cov nextest run -E 'not test(e2e)' -E 'not test(integration)' -E 'not test(pos_state_machine_test)' --features namada/testing --no-fail-fast --lcov --output-path lcov.info
         env:
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold -Z threads=8"
-      - name: Upload coverage
-        uses: codecov/codecov-action@v4
+      - name: Store coverage file artifact
+        uses: actions/upload-artifact@v4
         with:
-          files: lcov.info
-          fail_ci_if_error: true
-          token: ${{ secrets.CODECOV_TOKEN }}
+          name: unit-cov-${{ github.event.pull_request.head.sha || github.sha }}
+          path: lcov.info # output of `make test-unit-with-coverage` 
       - name: Clean cargo cache
         if: steps.cache.outputs.cache-hit != 'true'
         run: cargo cache --autoclean-expensive
@@ -309,7 +348,7 @@ jobs:
     runs-on: [self-hosted, 8vcpu-16ram-ubuntu22-namada-x86]
     container: 
       image: ghcr.io/heliaxdev/namada-ci:namada-main
-    timeout-minutes: 15
+    timeout-minutes: 20
     needs: [build-wasm]
 
     steps:
@@ -347,10 +386,16 @@ jobs:
         with:
           name: wasm-for-tests-${{ github.event.pull_request.head.sha|| github.sha }}
           path: wasm_for_tests
-      - name: Run integration tests
-        run: cargo +${{ env.NIGHTLY }} nextest run -E 'test(integration)' --test-threads 1 --no-fail-fast --features integration
+      - name: Run integration tests with coverage
+        run: make test-integration-with-coverage
+        # run: cargo +${{ env.NIGHTLY }} nextest run -E 'test(integration)' --test-threads 1 --no-fail-fast
         env:
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold -Z threads=8"
+      - name: Store coverage file artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-cov-${{ github.event.pull_request.head.sha || github.sha }}
+          path: lcov.info # output of `make test-integration-with-coverage` 
       - name: Clean cargo cache
         if: steps.cache.outputs.cache-hit != 'true'
         run: cargo cache --autoclean-expensive
@@ -568,3 +613,26 @@ jobs:
       - name: Stop sccache
         if: always() && steps.sccache.conclusion == 'success'
         run: sccache --stop-server || true
+
+  upload-coverage:
+    runs-on: [ubuntu-latest]
+    timeout-minutes: 20
+    needs: [test-unit, test-integration]
+
+    steps:
+      - name: Download unit coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: unit-cov-${{ github.event.pull_request.head.sha || github.sha }}
+          path: unit-cov
+      - name: Download integration coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: integration-cov-${{ github.event.pull_request.head.sha || github.sha }}
+          path: integration-cov
+      - name: Upload coverage to codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: integration-cov/lcov.info, unit-cov/lcov.info
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}

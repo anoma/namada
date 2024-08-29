@@ -1,4 +1,4 @@
-//! The core public types, storage_api, VpEnv and TxEnv.
+//! The core Namada types, helpers and re-exported dependencies.
 
 #![doc(html_favicon_url = "https://dev.namada.net/master/favicon.png")]
 #![doc(html_logo_url = "https://dev.namada.net/master/rustdoc-logo.png")]
@@ -23,8 +23,24 @@ pub mod bytes;
 pub mod control_flow;
 pub mod hints;
 
-// TODO(namada#3248): only re-export v037 `tendermint-rs`
-pub use {masp_primitives, tendermint, tendermint_proto};
+pub use masp_primitives;
+/// Re-export of tendermint v0.37
+pub mod tendermint {
+    /// Re-export of tendermint v0.37 ABCI
+    pub mod abci {
+        pub use tendermint::abci::response::ApplySnapshotChunkResult;
+        pub use tendermint::abci::{
+            types, Code, Event, EventAttribute, MethodKind,
+        };
+        pub use tendermint::v0_37::abci::*;
+    }
+    pub use tendermint::*;
+}
+/// Re-export of tendermint-proto v0.37
+pub mod tendermint_proto {
+    pub use tendermint_proto::google; // 💩
+    pub use tendermint_proto::v0_37::*;
+}
 /// Borsh binary encoding (re-exported) from official crate with custom ext.
 pub mod borsh {
     pub use borsh::*;
@@ -47,7 +63,6 @@ pub mod collections {
     pub use hash_set::HashSet;
 }
 
-pub mod account;
 pub mod address;
 pub mod booleans;
 pub mod chain;
@@ -63,7 +78,6 @@ pub mod keccak;
 pub mod key;
 pub mod masp;
 pub mod parameters;
-pub mod sign;
 pub mod storage;
 pub mod string_encoding;
 pub mod time;

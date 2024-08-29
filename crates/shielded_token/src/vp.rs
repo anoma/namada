@@ -27,10 +27,10 @@ use namada_systems::{governance, ibc, parameters, trans_token};
 use namada_tx::action::Read;
 use namada_tx::BatchedTxRef;
 use namada_vp::native_vp::{
-    Ctx, CtxPostStorageRead, CtxPreStorageRead, NativeVp, VpEvaluator,
+    Ctx, CtxPostStorageRead, CtxPreStorageRead, Error, NativeVp, Result,
+    VpEvaluator,
 };
-use namada_vp::{native_vp, VpEnv};
-use thiserror::Error;
+use namada_vp::VpEnv;
 
 use crate::storage_key::{
     is_masp_key, is_masp_nullifier_key, is_masp_token_map_key,
@@ -38,16 +38,6 @@ use crate::storage_key::{
     masp_convert_anchor_key, masp_nullifier_key,
 };
 use crate::validation::verify_shielded_tx;
-
-#[allow(missing_docs)]
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("MASP VP error: Native VP error: {0}")]
-    NativeVpError(#[from] native_vp::Error),
-}
-
-/// MASP VP result
-pub type Result<T> = std::result::Result<T, Error>;
 
 /// MASP VP
 pub struct MaspVp<'ctx, S, CA, EVAL, Params, Gov, Ibc, TransToken, Transfer>
@@ -101,20 +91,17 @@ where
     ) -> Result<()> {
         tx.tx.data(tx.cmt).map_or_else(
             || {
-                Err(native_vp::Error::new_const(
+                Err(Error::new_const(
                     "MASP parameter changes require tx data to be present",
-                )
-                .into())
+                ))
             },
             |data| {
-                Gov::is_proposal_accepted(&self.ctx.pre(), data.as_ref())
-                    .map_err(Error::NativeVpError)?
+                Gov::is_proposal_accepted(&self.ctx.pre(), data.as_ref())?
                     .ok_or_else(|| {
-                        native_vp::Error::new_const(
+                        Error::new_const(
                             "MASP parameter changes can only be performed by \
                              a governance proposal that has been accepted",
                         )
-                        .into()
                     })
             },
         )
@@ -138,12 +125,11 @@ where
             if self.ctx.has_key_pre(&nullifier_key)?
                 || revealed_nullifiers.contains(&nullifier_key)
             {
-                let error = native_vp::Error::new_alloc(format!(
+                let error = Error::new_alloc(format!(
                     "MASP double spending attempt, the nullifier {:?} has \
                      already been revealed previously",
                     description.nullifier.0,
-                ))
-                .into();
+                ));
                 tracing::debug!("{error}");
                 return Err(error);
             }
@@ -156,10 +142,10 @@ where
                 .read_bytes_post(&nullifier_key)?
                 .is_some_and(|value| value.is_empty())
                 .ok_or_else(|| {
-                    Error::NativeVpError(native_vp::Error::new_const(
+                    Error::new_const(
                         "The nullifier should have been committed with no \
                          associated data",
-                    ))
+                    )
                 })?;
 
             revealed_nullifiers.insert(nullifier_key);
@@ -170,11 +156,10 @@ where
             keys_changed.iter().filter(|key| is_masp_nullifier_key(key))
         {
             if !revealed_nullifiers.contains(nullifier_key) {
-                let error = native_vp::Error::new_alloc(format!(
+                let error = Error::new_alloc(format!(
                     "An unexpected MASP nullifier key {nullifier_key} has \
                      been revealed by the transaction"
-                ))
-                .into();
+                ));
                 tracing::debug!("{error}");
                 return Err(error);
             }
@@ -192,14 +177,14 @@ where
         // Check that the merkle tree in storage has been correctly updated with
         // the output descriptions cmu
         let tree_key = masp_commitment_tree_key();
-        let mut previous_tree: CommitmentTree<Node> =
-            self.ctx.read_pre(&tree_key)?.ok_or(Error::NativeVpError(
-                native_vp::Error::SimpleMessage("Cannot read storage"),
-            ))?;
-        let post_tree: CommitmentTree<Node> =
-            self.ctx.read_post(&tree_key)?.ok_or(Error::NativeVpError(
-                native_vp::Error::SimpleMessage("Cannot read storage"),
-            ))?;
+        let mut previous_tree: CommitmentTree<Node> = self
+            .ctx
+            .read_pre(&tree_key)?
+            .ok_or(Error::new_const("Cannot read storage"))?;
+        let post_tree: CommitmentTree<Node> = self
+            .ctx
+            .read_post(&tree_key)?
+            .ok_or(Error::new_const("Cannot read storage"))?;
 
         // Based on the output descriptions of the transaction, update the
         // previous tree in storage
@@ -210,18 +195,16 @@ where
             previous_tree
                 .append(Node::from_scalar(description.cmu))
                 .map_err(|()| {
-                    Error::NativeVpError(native_vp::Error::SimpleMessage(
-                        "Failed to update the commitment tree",
-                    ))
+                    Error::new_const("Failed to update the commitment tree")
                 })?;
         }
         // Check that the updated previous tree matches the actual post tree.
         // This verifies that all and only the necessary notes have been
         // appended to the tree
         if previous_tree != post_tree {
-            let error = Error::NativeVpError(native_vp::Error::SimpleMessage(
+            let error = Error::new_const(
                 "The note commitment tree was incorrectly updated",
-            ));
+            );
             tracing::debug!("{error}");
             return Err(error);
         }
@@ -242,10 +225,9 @@ where
 
             // Check if the provided anchor was published before
             if !self.ctx.has_key_pre(&anchor_key)? {
-                let error =
-                    Error::NativeVpError(native_vp::Error::SimpleMessage(
-                        "Spend description refers to an invalid anchor",
-                    ));
+                let error = Error::new_const(
+                    "Spend description refers to an invalid anchor",
+                );
                 tracing::debug!("{error}");
                 return Err(error);
             }
@@ -265,9 +247,7 @@ where
                 let expected_anchor = self
                     .ctx
                     .read_pre::<namada_core::hash::Hash>(&anchor_key)?
-                    .ok_or(Error::NativeVpError(
-                        native_vp::Error::SimpleMessage("Cannot read storage"),
-                    ))?;
+                    .ok_or(Error::new_const("Cannot read storage"))?;
 
                 for description in &bundle.shielded_converts {
                     // Check if the provided anchor matches the current
@@ -275,11 +255,8 @@ where
                     if namada_core::hash::Hash(description.anchor.to_bytes())
                         != expected_anchor
                     {
-                        let error = Error::NativeVpError(
-                            native_vp::Error::SimpleMessage(
-                                "Convert description refers to an invalid \
-                                 anchor",
-                            ),
+                        let error = Error::new_const(
+                            "Convert description refers to an invalid anchor",
                         );
                         tracing::debug!("{error}");
                         return Err(error);
@@ -328,7 +305,7 @@ where
             checked!(
                 pre_entry + &ValueSum::from_pair((*token).clone(), pre_balance)
             )
-            .map_err(native_vp::Error::new)?,
+            .map_err(Error::new)?,
         );
         // And then record the final state
         let post_entry = result.post.get(&addr_hash).cloned().unwrap_or(zero);
@@ -338,7 +315,7 @@ where
                 post_entry
                     + &ValueSum::from_pair((*token).clone(), post_balance)
             )
-            .map_err(native_vp::Error::new)?,
+            .map_err(Error::new)?,
         );
         Result::<_>::Ok(result)
     }
@@ -401,9 +378,7 @@ where
             self.ctx.get_block_epoch()?,
             masp_epoch_multiplier,
         )
-        .map_err(|msg| {
-            Error::NativeVpError(native_vp::Error::new_const(msg))
-        })?;
+        .map_err(Error::new_const)?;
         let conversion_state = self.ctx.state.in_mem().get_conversion_state();
         let tx_data = batched_tx
             .tx
@@ -419,9 +394,9 @@ where
         } else {
             let masp_section_ref =
                 namada_tx::action::get_masp_section_ref(&actions)
-                    .map_err(native_vp::Error::new_const)?
+                    .map_err(Error::new_const)?
                     .ok_or_else(|| {
-                        native_vp::Error::new_const(
+                        Error::new_const(
                             "Missing MASP section reference in action",
                         )
                     })?;
@@ -431,18 +406,14 @@ where
                 .get_masp_section(&masp_section_ref)
                 .cloned()
                 .ok_or_else(|| {
-                    native_vp::Error::new_const(
-                        "Missing MASP section in transaction",
-                    )
+                    Error::new_const("Missing MASP section in transaction")
                 })?
         };
 
         if u64::from(self.ctx.get_block_height()?)
             > u64::from(shielded_tx.expiry_height())
         {
-            let error =
-                native_vp::Error::new_const("MASP transaction is expired")
-                    .into();
+            let error = Error::new_const("MASP transaction is expired");
             tracing::debug!("{error}");
             return Err(error);
         }
@@ -554,11 +525,10 @@ where
                         if let Some(TAddrData::Ibc(_)) =
                             changed_bals_minus_txn.decoder.get(&vout.address)
                         {
-                            let error = native_vp::Error::new_const(
+                            let error = Error::new_const(
                                 "Simultaneous credit and debit of IBC account \
                                  in a MASP transaction not allowed",
-                            )
-                            .into();
+                            );
                             tracing::debug!("{error}");
                             return Err(error);
                         }
@@ -570,10 +540,9 @@ where
                 // Otherwise the owner's vp must have been triggered and the
                 // relative action must have been written
                 if !verifiers.contains(signer) {
-                    let error = native_vp::Error::new_alloc(format!(
+                    let error = Error::new_alloc(format!(
                         "The required vp of address {signer} was not triggered"
-                    ))
-                    .into();
+                    ));
                     tracing::debug!("{error}");
                     return Err(error);
                 }
@@ -584,20 +553,18 @@ where
                 // because of a masp transaction, which might require a
                 // different validation than a normal balance change
                 if !actions_authorizers.swap_remove(signer) {
-                    let error = native_vp::Error::new_alloc(format!(
+                    let error = Error::new_alloc(format!(
                         "The required masp authorizer action for address \
                          {signer} is missing"
-                    ))
-                    .into();
+                    ));
                     tracing::debug!("{error}");
                     return Err(error);
                 }
             } else {
                 // We are not able to decode the authorizer, so just fail
-                let error = native_vp::Error::new_const(
+                let error = Error::new_const(
                     "Unable to decode a transaction authorizer",
-                )
-                .into();
+                );
                 tracing::debug!("{error}");
                 return Err(error);
             }
@@ -605,17 +572,15 @@ where
         // The transaction shall not push masp authorizer actions that are not
         // needed cause this might lead vps to run a wrong validation logic
         if !actions_authorizers.is_empty() {
-            let error = native_vp::Error::new_const(
+            let error = Error::new_const(
                 "Found masp authorizer actions that are not required",
-            )
-            .into();
+            );
             tracing::debug!("{error}");
             return Err(error);
         }
 
         // Verify the proofs
         verify_shielded_tx(&shielded_tx, |gas| self.ctx.charge_gas(gas))
-            .map_err(Error::NativeVpError)
     }
 }
 
@@ -674,9 +639,7 @@ fn validate_transparent_input<A: Authorization>(
             *bal_ref = bal_ref
                 .checked_sub(&ValueSum::from_pair(asset.token.clone(), amount))
                 .ok_or_else(|| {
-                    Error::NativeVpError(native_vp::Error::SimpleMessage(
-                        "Underflow in bundle balance",
-                    ))
+                    Error::new_const("Underflow in bundle balance")
                 })?;
         }
         // Maybe the asset type has no attached epoch
@@ -692,9 +655,7 @@ fn validate_transparent_input<A: Authorization>(
                 // conversion tree, then we must reject the unepoched
                 // variant
                 let error =
-                    Error::NativeVpError(native_vp::Error::SimpleMessage(
-                        "epoch is missing from asset type",
-                    ));
+                    Error::new_const("epoch is missing from asset type");
                 tracing::debug!("{error}");
                 return Err(error);
             } else {
@@ -704,17 +665,13 @@ fn validate_transparent_input<A: Authorization>(
                 *bal_ref = bal_ref
                     .checked_sub(&ValueSum::from_pair(token.clone(), amount))
                     .ok_or_else(|| {
-                        Error::NativeVpError(native_vp::Error::SimpleMessage(
-                            "Underflow in bundle balance",
-                        ))
+                        Error::new_const("Underflow in bundle balance")
                     })?;
             }
         }
         // unrecognized asset
         _ => {
-            let error = Error::NativeVpError(native_vp::Error::SimpleMessage(
-                "Unable to decode asset type",
-            ));
+            let error = Error::new_const("Unable to decode asset type");
             tracing::debug!("{error}");
             return Err(error);
         }
@@ -752,9 +709,7 @@ fn validate_transparent_output(
             *bal_ref = bal_ref
                 .checked_sub(&ValueSum::from_pair(asset.token.clone(), amount))
                 .ok_or_else(|| {
-                    Error::NativeVpError(native_vp::Error::SimpleMessage(
-                        "Underflow in bundle balance",
-                    ))
+                    Error::new_const("Underflow in bundle balance")
                 })?;
         }
         // Maybe the asset type has no attached epoch
@@ -767,16 +722,12 @@ fn validate_transparent_output(
             *bal_ref = bal_ref
                 .checked_sub(&ValueSum::from_pair(token.clone(), amount))
                 .ok_or_else(|| {
-                    Error::NativeVpError(native_vp::Error::SimpleMessage(
-                        "Underflow in bundle balance",
-                    ))
+                    Error::new_const("Underflow in bundle balance")
                 })?;
         }
         // unrecognized asset
         _ => {
-            let error = Error::NativeVpError(native_vp::Error::SimpleMessage(
-                "Unable to decode asset type",
-            ));
+            let error = Error::new_const("Unable to decode asset type");
             tracing::debug!("{error}");
             return Err(error);
         }
@@ -824,22 +775,20 @@ fn validate_transparent_bundle(
     // Ensure that the shielded transaction exactly balances
     match transparent_tx_pool.partial_cmp(&I128Sum::zero()) {
         None | Some(Ordering::Less) => {
-            let error = native_vp::Error::new_const(
+            let error = Error::new_const(
                 "Transparent transaction value pool must be nonnegative. \
                  Violation may be caused by transaction being constructed in \
                  previous epoch. Maybe try again.",
-            )
-            .into();
+            );
             tracing::debug!("{error}");
             // The remaining value in the transparent transaction value pool
             // MUST be nonnegative.
             Err(error)
         }
         Some(Ordering::Greater) => {
-            let error = native_vp::Error::new_const(
+            let error = Error::new_const(
                 "Transaction fees cannot be left on the MASP balance.",
-            )
-            .into();
+            );
             tracing::debug!("{error}");
             Err(error)
         }
@@ -855,20 +804,13 @@ fn apply_balance_component(
     address: Address,
 ) -> Result<ValueSum<Address, I320>> {
     // Put val into the correct digit position
-    let decoded_change =
-        I320::from_masp_denominated(val, digit).map_err(|_| {
-            Error::NativeVpError(native_vp::Error::SimpleMessage(
-                "Overflow in MASP value balance",
-            ))
-        })?;
+    let decoded_change = I320::from_masp_denominated(val, digit)
+        .map_err(|_| Error::new_const("Overflow in MASP value balance"))?;
     // Tag the numerical change with the token type
     let decoded_change = ValueSum::from_pair(address, decoded_change);
     // Apply the change to the accumulator
-    acc.checked_add(&decoded_change).ok_or_else(|| {
-        Error::NativeVpError(native_vp::Error::SimpleMessage(
-            "Overflow in MASP value balance",
-        ))
-    })
+    acc.checked_add(&decoded_change)
+        .ok_or_else(|| Error::new_const("Overflow in MASP value balance"))
 }
 
 // Verify that the pre balance - the Sapling value balance = the post balance
@@ -899,10 +841,7 @@ fn verify_sapling_balancing_value(
                     apply_balance_component(&acc, *val, *digit, token.clone())?;
             }
             _ => {
-                let error =
-                    Error::NativeVpError(native_vp::Error::SimpleMessage(
-                        "Unable to decode asset type",
-                    ));
+                let error = Error::new_const("Unable to decode asset type");
                 tracing::debug!("{error}");
                 return Err(error);
             }
@@ -911,9 +850,9 @@ fn verify_sapling_balancing_value(
     if acc == ValueSum::from_sum(pre.clone()) {
         Ok(())
     } else {
-        let error = Error::NativeVpError(native_vp::Error::SimpleMessage(
+        let error = Error::new_const(
             "MASP balance change not equal to Sapling value balance",
-        ));
+        );
         tracing::debug!("{error}");
         Err(error)
     }
@@ -933,8 +872,6 @@ where
         + trans_token::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
     Transfer: BorshDeserialize,
 {
-    type Error = Error;
-
     fn validate_tx(
         &'view self,
         tx_data: &BatchedTxRef<'_>,
@@ -949,9 +886,9 @@ where
 
         // Check that the transaction didn't write unallowed masp keys
         if non_allowed_changes {
-            return Err(Error::NativeVpError(native_vp::Error::SimpleMessage(
+            return Err(Error::new_const(
                 "Found modifications to non-allowed masp keys",
-            )));
+            ));
         }
         let masp_token_map_changed = masp_keys_changed
             .iter()
@@ -960,10 +897,10 @@ where
             .iter()
             .any(|key| is_masp_transfer_key(key));
         if masp_token_map_changed && masp_transfer_changes {
-            Err(Error::NativeVpError(native_vp::Error::SimpleMessage(
+            Err(Error::new_const(
                 "Cannot simultaneously do governance proposal and MASP \
                  transfer",
-            )))
+            ))
         } else if masp_token_map_changed {
             // The token map can only be changed by a successful governance
             // proposal

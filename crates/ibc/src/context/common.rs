@@ -20,10 +20,11 @@ use ibc::core::host::types::identifiers::{
 use ibc::primitives::proto::{Any, Protobuf};
 use ibc::primitives::Timestamp;
 use namada_core::address::Address;
-use namada_core::storage::{BlockHeight, Key};
+use namada_core::chain::BlockHeight;
+use namada_core::storage::Key;
 use namada_core::tendermint::Time as TmTime;
 use namada_core::token::Amount;
-use namada_state::{StorageError, StorageRead, StorageWrite};
+use namada_state::{Error, StorageRead, StorageWrite};
 use namada_systems::trans_token;
 use prost::Message;
 
@@ -759,11 +760,11 @@ pub trait IbcCommonContext: IbcStorageContext {
 pub fn read_sequence<S: StorageRead + ?Sized>(
     storage: &S,
     key: &Key,
-) -> std::result::Result<Sequence, StorageError> {
+) -> std::result::Result<Sequence, Error> {
     match storage.read_bytes(key)? {
         Some(value) => {
             let value: [u8; 8] = value.try_into().map_err(|_| {
-                StorageError::new_alloc(format!(
+                Error::new_alloc(format!(
                     "The sequence value wasn't u64: Key {key}",
                 ))
             })?;

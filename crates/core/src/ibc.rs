@@ -164,3 +164,41 @@ impl borsh::BorshSchema for PGFIbcTarget {
         std::any::type_name::<Self>().into()
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::{decode, encode};
+
+    #[test]
+    fn test_ibc_token_hash() {
+        let hash = IbcTokenHash([
+            0_u8, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ]);
+
+        let hash_str = hash.to_string();
+        assert_eq!("00ff000000000000000000000000000000000000", &hash_str);
+
+        let decoded = IbcTokenHash::from_str(&hash_str).unwrap();
+        assert_eq!(decoded, hash);
+
+        // Hex decoding is case-insensitive
+        let decoded =
+            IbcTokenHash::from_str("00FF000000000000000000000000000000000000")
+                .unwrap();
+        assert_eq!(decoded, hash);
+    }
+
+    #[test]
+    fn test_ibc_pgf_target() {
+        let target = PGFIbcTarget {
+            target: "123".to_string(),
+            amount: token::Amount::from_u64(123456789),
+            port_id: PortId::new("10".to_string()).unwrap(),
+            channel_id: ChannelId::new(5),
+        };
+        let bytes = encode(&target);
+        let decoded: PGFIbcTarget = decode(bytes).unwrap();
+        assert_eq!(target, decoded);
+    }
+}

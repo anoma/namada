@@ -94,7 +94,7 @@ pub fn run(
 
 #[async_trait::async_trait(?Send)]
 impl CliClient for MockNode {
-    fn from_tendermint_address(_: &crate::facade::tendermint_rpc::Url) -> Self {
+    fn from_tendermint_address(_: &crate::tendermint_rpc::Url) -> Self {
         unreachable!("MockNode should always be instantiated at test start.")
     }
 

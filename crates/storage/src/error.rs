@@ -1,8 +1,13 @@
 //! Storage API error type, extensible with custom user errors and static string
 //! messages.
 
+use std::convert::Infallible;
+use std::num::TryFromIntError;
+
 use namada_core::arith;
 use thiserror::Error;
+
+use crate::db;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -15,12 +20,6 @@ pub enum Error {
     Custom(CustomError),
     #[error("{0}: {1}")]
     CustomWithMessage(&'static str, CustomError),
-}
-
-impl From<arith::Error> for Error {
-    fn from(value: arith::Error) -> Self {
-        Error::new(value)
-    }
 }
 
 /// Result of a storage API call.
@@ -105,6 +104,23 @@ impl Error {
             _ => Err(self),
         }
     }
+
+    /// Returns some reference to the inner value if it is of type `E`, or
+    /// `None` if it isn't.
+    pub fn downcast_ref<E>(&self) -> Option<&E>
+    where
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        match self {
+            Self::Custom(CustomError(b))
+            | Self::CustomWithMessage(_, CustomError(b))
+                if b.is::<E>() =>
+            {
+                b.downcast_ref::<E>()
+            }
+            _ => None,
+        }
+    }
 }
 
 /// A custom error
@@ -143,5 +159,58 @@ impl From<Error>
             description: format!("Storage error: {error}"),
         }
         .into()
+    }
+}
+
+impl From<arith::Error> for Error {
+    fn from(value: arith::Error) -> Self {
+        Error::new(value)
+    }
+}
+
+impl From<db::Error> for Error {
+    fn from(value: db::Error) -> Self {
+        Error::new(value)
+    }
+}
+
+impl From<namada_core::storage::Error> for Error {
+    fn from(value: namada_core::storage::Error) -> Self {
+        Error::new(value)
+    }
+}
+
+impl From<namada_core::DecodeError> for Error {
+    fn from(value: namada_core::DecodeError) -> Self {
+        Error::new(value)
+    }
+}
+impl From<namada_core::string_encoding::DecodeError> for Error {
+    fn from(value: namada_core::string_encoding::DecodeError) -> Self {
+        Error::new(value)
+    }
+}
+
+impl From<namada_core::hash::Error> for Error {
+    fn from(value: namada_core::hash::Error) -> Self {
+        Error::new(value)
+    }
+}
+
+impl From<namada_merkle_tree::Error> for Error {
+    fn from(value: namada_merkle_tree::Error) -> Self {
+        Error::new(value)
+    }
+}
+
+impl From<Infallible> for Error {
+    fn from(_value: Infallible) -> Self {
+        panic!("Infallible error can never be constructed")
+    }
+}
+
+impl From<TryFromIntError> for Error {
+    fn from(value: TryFromIntError) -> Self {
+        Error::new(value)
     }
 }

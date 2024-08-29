@@ -8,10 +8,9 @@ use std::path::Path;
 
 use itertools::Either;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::chain::{BlockHeader, BlockHeight, Epoch};
 use namada_core::hash::Hash;
-use namada_core::storage::{
-    BlockHeight, DbColFam, Epoch, Header, Key, KeySeg, KEY_SEGMENT_SEPARATOR,
-};
+use namada_core::storage::{DbColFam, Key, KeySeg, KEY_SEGMENT_SEPARATOR};
 use namada_core::{decode, encode, ethereum_events};
 use namada_merkle_tree::{
     tree_key_prefix_with_epoch, tree_key_prefix_with_height,
@@ -88,14 +87,25 @@ impl MockDB {
     }
 }
 
+/// Source to restore a [`MockDB`] from.
+///
+/// Since this enum has no variants, you can't
+/// actually restore a [`MockDB`] instance.
+pub enum MockDBRestoreSource {}
+
 impl DB for MockDB {
     /// There is no cache for MockDB
     type Cache = ();
     type Migrator = ();
+    type RestoreSource<'a> = MockDBRestoreSource;
     type WriteBatch = MockDBWriteBatch;
 
     fn open(_db_path: impl AsRef<Path>, _cache: Option<&Self::Cache>) -> Self {
         Self::default()
+    }
+
+    fn restore_from(&mut self, source: MockDBRestoreSource) -> Result<()> {
+        match source {}
     }
 
     fn flush(&self, _wait: bool) -> Result<()> {
@@ -282,7 +292,10 @@ impl DB for MockDB {
         Ok(())
     }
 
-    fn read_block_header(&self, height: BlockHeight) -> Result<Option<Header>> {
+    fn read_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<BlockHeader>> {
         let header_key = format!("{}/{BLOCK_HEADER_KEY_SEGMENT}", height.raw());
         self.read_value(header_key)
     }
@@ -617,7 +630,6 @@ impl DB for MockDB {
     fn overwrite_entry(
         &self,
         _batch: &mut Self::WriteBatch,
-        _height: Option<BlockHeight>,
         _cf: &DbColFam,
         _key: &Key,
         _new_value: impl AsRef<[u8]>,

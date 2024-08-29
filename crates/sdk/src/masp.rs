@@ -40,11 +40,12 @@ use masp_primitives::zip32::{
 use masp_proofs::prover::LocalTxProver;
 use namada_core::address::Address;
 use namada_core::arith::CheckedAdd;
+use namada_core::chain::BlockHeight;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::dec::Dec;
 use namada_core::ibc::IbcTxDataRefs;
 pub use namada_core::masp::*;
-use namada_core::storage::{BlockHeight, TxIndex};
+use namada_core::storage::TxIndex;
 use namada_core::time::DateTimeUtc;
 use namada_core::uint::Uint;
 use namada_events::extend::{

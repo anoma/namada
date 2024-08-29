@@ -6,8 +6,8 @@ use std::str::FromStr;
 use namada_apps_lib::cli::namada_version;
 use namada_apps_lib::config;
 pub use namada_apps_lib::tendermint_node::*;
-use namada_sdk::chain::{ChainId, ProposalBytes};
-use namada_sdk::storage::BlockHeight;
+use namada_sdk::chain::{BlockHeight, ChainId};
+use namada_sdk::parameters::ProposalBytes;
 use namada_sdk::time::DateTimeUtc;
 use thiserror::Error;
 use tokio::fs::{File, OpenOptions};
@@ -16,10 +16,9 @@ use tokio::process::{Child, Command};
 use tokio::sync::oneshot::error::RecvError;
 use tokio::sync::oneshot::{Receiver, Sender};
 
-use crate::facade::tendermint::{block, Genesis, Moniker};
-use crate::facade::tendermint_config::{
-    Error as TendermintError, TendermintConfig,
-};
+use crate::tendermint::validator::Info;
+use crate::tendermint::{block, Genesis, Moniker, PublicKey};
+use crate::tendermint_config::{Error as TendermintError, TendermintConfig};
 
 /// Env. var to output Tendermint log to stdout
 pub const ENV_VAR_TM_STDOUT: &str = "NAMADA_CMT_STDOUT";
@@ -362,6 +361,20 @@ async fn write_tm_genesis(
             .try_into()
             .expect("Failed to convert initial genesis height");
     }
+
+    // N.B. Because we give cometbft our genesis validators only after init
+    // chain, at this stage, cometbft believes this node is the only
+    // validator unless we insert a dummy. If cometbft thinks a node is the
+    // only validator, it won't start state sync. These validators are
+    // overwritten after init chain is called.
+    const DUMMY_VALIDATOR: [u8; 32] = [
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+        20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
+    ];
+    genesis.validators.push(Info::new(
+        PublicKey::from_raw_ed25519(&DUMMY_VALIDATOR).unwrap(),
+        10u32.into(),
+    ));
     const EVIDENCE_AND_PROTOBUF_OVERHEAD: u64 = 10 * 1024 * 1024;
     let size = block::Size {
         // maximum size of a serialized Tendermint block.

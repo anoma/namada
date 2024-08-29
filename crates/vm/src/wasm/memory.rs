@@ -51,6 +51,12 @@ pub enum Error {
 /// Result of a function that may fail
 pub type Result<T> = std::result::Result<T, Error>;
 
+impl From<Error> for namada_state::Error {
+    fn from(value: Error) -> Self {
+        namada_state::Error::new(value)
+    }
+}
+
 // The bounds are set in number of pages, the actual size is multiplied by
 // `wasmer::WASM_PAGE_SIZE = 64kiB`.
 //

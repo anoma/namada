@@ -3,13 +3,10 @@ use namada_core::arith::checked;
 use namada_core::token;
 use namada_core::token::Amount;
 use namada_core::uint::Uint;
-use namada_storage as storage;
-use namada_storage::{StorageRead, StorageWrite};
 use namada_systems::trans_token;
-use storage::ResultExt;
 
 use crate::storage_key::*;
-use crate::ShieldedParams;
+use crate::{Result, ResultExt, ShieldedParams, StorageRead, StorageWrite};
 
 /// Initialize parameters for the token in storage during the genesis block.
 pub fn write_params<S, TransToken>(
@@ -17,7 +14,7 @@ pub fn write_params<S, TransToken>(
     storage: &mut S,
     token: &Address,
     denom: &token::Denomination,
-) -> storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
     TransToken: trans_token::Keys,
@@ -56,7 +53,7 @@ where
 pub fn mint_rewards<S, TransToken>(
     storage: &mut S,
     amount: token::Amount,
-) -> storage::Result<()>
+) -> Result<()>
 where
     S: StorageRead + StorageWrite,
     TransToken: trans_token::Write<S>,
@@ -71,7 +68,7 @@ where
 }
 
 /// Read the total rewards minted by MASP.
-pub fn read_total_rewards<S>(storage: &S) -> storage::Result<token::Amount>
+pub fn read_total_rewards<S>(storage: &S) -> Result<token::Amount>
 where
     S: StorageRead,
 {

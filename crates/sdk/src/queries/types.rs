@@ -1,12 +1,12 @@
 use std::fmt::Debug;
 
-use namada_core::storage::BlockHeight;
+use namada_core::chain::BlockHeight;
 use namada_state::{DBIter, StorageHasher, WlState, DB};
 use thiserror::Error;
 
 use crate::events::log::EventLog;
+pub use crate::tendermint::abci::request::Query as RequestQuery;
 use crate::tendermint::merkle::proof::ProofOps;
-pub use crate::tendermint::v0_37::abci::request::Query as RequestQuery;
 /// A request context provides read-only access to storage and WASM compilation
 /// caches to request handlers.
 #[derive(Debug, Clone)]

@@ -9,10 +9,10 @@ use data_encoding::HEXLOWER;
 use ethbridge_bridge_contract::Bridge;
 use ethers::providers::Middleware;
 use futures::future::FutureExt;
+use namada_core::chain::Epoch;
 use namada_core::eth_abi::EncodeCell;
 use namada_core::ethereum_events::EthAddress;
 use namada_core::hints;
-use namada_core::storage::Epoch;
 use namada_ethereum_bridge::storage::proof::EthereumProof;
 use namada_vote_ext::validator_set_update::{
     ValidatorSetArgs, VotingPowersMap,

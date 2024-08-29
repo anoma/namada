@@ -6,6 +6,7 @@ use std::str::FromStr;
 use borsh::BorshDeserialize;
 use eyre::{Result, WrapErr};
 use namada_core::address::Address;
+use namada_core::chain::BlockHeight;
 use namada_core::collections::HashSet;
 use namada_core::eth_abi::Encode;
 use namada_core::eth_bridge_pool::{
@@ -17,7 +18,7 @@ use namada_core::ethereum_events::{
     TransfersToNamada,
 };
 use namada_core::hints;
-use namada_core::storage::{BlockHeight, Key, KeySeg};
+use namada_core::storage::{Key, KeySeg};
 use namada_core::uint::Uint;
 use namada_parameters::read_epoch_duration_parameter;
 use namada_state::{DBIter, StorageHasher, WlState, DB};

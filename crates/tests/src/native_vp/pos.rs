@@ -95,10 +95,10 @@
 //! - add slashes
 //! - add rewards
 
+use namada_sdk::chain::Epoch;
 use namada_sdk::proof_of_stake::parameters::{OwnedPosParams, PosParams};
 use namada_sdk::proof_of_stake::test_utils::test_init_genesis as init_genesis;
 use namada_sdk::proof_of_stake::types::GenesisValidator;
-use namada_sdk::storage::Epoch;
 
 use crate::tx::tx_host_env;
 
@@ -590,6 +590,7 @@ pub mod testing {
 
     use derivative::Derivative;
     use itertools::Either;
+    use namada_sdk::chain::Epoch;
     use namada_sdk::dec::Dec;
     use namada_sdk::gas::TxGasMeter;
     use namada_sdk::key::common::PublicKey;
@@ -602,7 +603,6 @@ pub mod testing {
     };
     use namada_sdk::proof_of_stake::types::{BondId, ValidatorState};
     use namada_sdk::proof_of_stake::ADDRESS as POS_ADDRESS;
-    use namada_sdk::storage::Epoch;
     use namada_sdk::token::{Amount, Change};
     use namada_sdk::{address, governance, key, token};
     use namada_tx_prelude::{Address, StorageRead, StorageWrite};

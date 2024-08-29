@@ -16,13 +16,12 @@ use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
 use namada_sdk::address::{Address, EstablishedAddress};
-use namada_sdk::chain::ProposalBytes;
 use namada_sdk::collections::HashMap;
 use namada_sdk::eth_bridge::EthereumBridgeParams;
 use namada_sdk::governance::parameters::GovernanceParameters;
 use namada_sdk::governance::pgf::parameters::PgfParameters;
 use namada_sdk::key::*;
-use namada_sdk::parameters::EpochDuration;
+use namada_sdk::parameters::{EpochDuration, ProposalBytes};
 use namada_sdk::proof_of_stake::{Dec, GenesisValidator, OwnedPosParams};
 use namada_sdk::string_encoding::StringEncoded;
 use namada_sdk::time::DateTimeUtc;
@@ -423,10 +422,7 @@ pub struct Parameters {
 /// This includes adding the Ethereum bridge parameters and
 /// adding a specified number of validators.
 #[allow(clippy::arithmetic_side_effects)]
-#[cfg(all(
-    any(test, feature = "benches", feature = "testing"),
-    not(feature = "integration")
-))]
+#[cfg(any(test, feature = "benches", feature = "testing"))]
 pub fn make_dev_genesis(
     num_validators: u64,
     target_chain_dir: &std::path::Path,

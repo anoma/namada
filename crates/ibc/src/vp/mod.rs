@@ -14,18 +14,16 @@ use context::{
     PseudoExecutionContext, PseudoExecutionStorage, VpValidationContext,
 };
 use namada_core::address::Address;
-use namada_core::arith::{self, checked};
+use namada_core::arith::checked;
 use namada_core::collections::HashSet;
 use namada_core::storage::Key;
 use namada_gas::{IBC_ACTION_EXECUTE_GAS, IBC_ACTION_VALIDATE_GAS};
 use namada_state::write_log::StorageModification;
-use namada_state::StateRead;
+use namada_state::{Error, Result, StateRead};
 use namada_systems::trans_token::{self as token, Amount};
 use namada_systems::{governance, parameters, proof_of_stake};
 use namada_tx::BatchedTxRef;
-use namada_vp::native_vp::{
-    self, Ctx, CtxPreStorageRead, NativeVp, VpEvaluator,
-};
+use namada_vp::native_vp::{Ctx, CtxPreStorageRead, NativeVp, VpEvaluator};
 use namada_vp::VpEnv;
 use thiserror::Error;
 
@@ -44,29 +42,29 @@ use crate::{
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
-pub enum Error {
-    #[error("IBC VP error: Native VP error: {0}")]
-    NativeVpError(#[from] native_vp::Error),
+pub enum VpError {
     #[error("IBC VP error: Decoding error: {0}")]
     Decoding(#[from] std::io::Error),
     #[error("IBC VP error: governance proposal change is invalid")]
     InvalidGovernanceChange,
     #[error("IBC VP error: IBC message is required as transaction data")]
     NoTxData,
-    #[error("IBC VP error: IBC action error: {0}")]
-    IbcAction(#[from] ActionError),
     #[error("IBC VP error: State change error: {0}")]
     StateChange(String),
     #[error("IBC VP error: IBC event error: {0}")]
     IbcEvent(String),
     #[error("IBC rate limit: {0}")]
     RateLimit(String),
-    #[error("Arithmetic {0}")]
-    Arith(#[from] arith::Error),
 }
 
 /// IBC functions result
-pub type VpResult<T> = std::result::Result<T, Error>;
+pub type VpResult<T> = std::result::Result<T, VpError>;
+
+impl From<VpError> for Error {
+    fn from(value: VpError) -> Self {
+        Error::new(value)
+    }
+}
 
 /// IBC VP
 pub struct Ibc<
@@ -141,14 +139,12 @@ where
     PoS: proof_of_stake::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
     Transfer: BorshDeserialize,
 {
-    type Error = Error;
-
     fn validate_tx(
         &'view self,
         batched_tx: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
-    ) -> VpResult<()> {
+    ) -> Result<()> {
         // Is VP triggered by a governance proposal?
         if Gov::is_proposal_accepted(
             &self.ctx.pre(),
@@ -157,14 +153,14 @@ where
                 .data(batched_tx.cmt)
                 .unwrap_or_default()
                 .as_ref(),
-        )
-        .unwrap_or_default()
-        {
+        )? {
             return Ok(());
         }
 
-        let tx_data =
-            batched_tx.tx.data(batched_tx.cmt).ok_or(Error::NoTxData)?;
+        let tx_data = batched_tx
+            .tx
+            .data(batched_tx.cmt)
+            .ok_or(VpError::NoTxData)?;
 
         // Pseudo execution and compare them
         self.validate_state(&tx_data, keys_changed)?;
@@ -236,7 +232,7 @@ where
         &'view self,
         tx_data: &[u8],
         keys_changed: &BTreeSet<Key>,
-    ) -> VpResult<()> {
+    ) -> Result<()> {
         let exec_ctx =
             PseudoExecutionContext::<'_, '_, S, CA, EVAL, Token>::new(
                 self.ctx.pre(),
@@ -255,26 +251,22 @@ where
         let module = NftTransferModule::<_, Token>::new(ctx.clone());
         actions.add_transfer_module(module);
         // Charge gas for the expensive execution
-        self.ctx
-            .charge_gas(IBC_ACTION_EXECUTE_GAS)
-            .map_err(Error::NativeVpError)?;
+        self.ctx.charge_gas(IBC_ACTION_EXECUTE_GAS)?;
         actions.execute::<Transfer>(tx_data)?;
 
         let changed_ibc_keys: HashSet<&Key> =
             keys_changed.iter().filter(|k| is_ibc_key(k)).collect();
         if changed_ibc_keys.len() != ctx.borrow().get_changed_keys().len() {
-            return Err(Error::StateChange(format!(
+            return Err(VpError::StateChange(format!(
                 "The changed keys mismatched: Actual {:?}, Expected {:?}",
                 changed_ibc_keys,
                 ctx.borrow().get_changed_keys(),
-            )));
+            ))
+            .into());
         }
 
         for key in changed_ibc_keys {
-            let actual = self
-                .ctx
-                .read_bytes_post(key)
-                .map_err(Error::NativeVpError)?;
+            let actual = self.ctx.read_bytes_post(key)?;
             match_value(key, actual, ctx.borrow().get_changed_value(key))?;
         }
 
@@ -288,16 +280,17 @@ where
         let ctx_borrow = ctx.borrow();
         let expected: BTreeSet<_> = ctx_borrow.storage.event.iter().collect();
         if actual != expected {
-            return Err(Error::IbcEvent(format!(
+            return Err(VpError::IbcEvent(format!(
                 "The IBC event is invalid: Actual {actual:?}, Expected \
                  {expected:?}",
-            )));
+            ))
+            .into());
         }
 
         Ok(())
     }
 
-    fn validate_with_msg(&'view self, tx_data: &[u8]) -> VpResult<()> {
+    fn validate_with_msg(&'view self, tx_data: &[u8]) -> Result<()> {
         let validation_ctx = VpValidationContext::new(self.ctx.pre());
         let ctx = Rc::new(RefCell::new(validation_ctx));
         // Use an empty verifiers set placeholder for validation, this is only
@@ -313,25 +306,19 @@ where
         let module = NftTransferModule::<_, Token>::new(ctx);
         actions.add_transfer_module(module);
         // Charge gas for the expensive validation
-        self.ctx
-            .charge_gas(IBC_ACTION_VALIDATE_GAS)
-            .map_err(Error::NativeVpError)?;
-        actions
-            .validate::<Transfer>(tx_data)
-            .map_err(Error::IbcAction)
+        self.ctx.charge_gas(IBC_ACTION_VALIDATE_GAS)?;
+        Ok(actions.validate::<Transfer>(tx_data)?)
     }
 
     /// Retrieve the validation params
-    pub fn validation_params(&'view self) -> VpResult<ValidationParams> {
+    pub fn validation_params(&'view self) -> Result<ValidationParams> {
         use std::str::FromStr;
-        let chain_id = self.ctx.get_chain_id().map_err(Error::NativeVpError)?;
+        let chain_id = self.ctx.get_chain_id()?;
         let proof_specs =
             namada_state::ics23_specs::ibc_proof_specs::<<S as StateRead>::H>();
-        let pipeline_len =
-            PoS::pipeline_len(&self.ctx.pre()).map_err(Error::NativeVpError)?;
+        let pipeline_len = PoS::pipeline_len(&self.ctx.pre())?;
         let epoch_duration =
-            ParamsPre::epoch_duration_parameter(&self.ctx.pre())
-                .map_err(Error::NativeVpError)?;
+            ParamsPre::epoch_duration_parameter(&self.ctx.pre())?;
         let unbonding_period_secs =
             checked!(pipeline_len * epoch_duration.min_duration.0)?;
         Ok(ValidationParams {
@@ -348,7 +335,7 @@ where
         })
     }
 
-    fn validate_trace(&self, keys_changed: &BTreeSet<Key>) -> VpResult<()> {
+    fn validate_trace(&self, keys_changed: &BTreeSet<Key>) -> Result<()> {
         for key in keys_changed {
             if let Some((_, hash)) = is_ibc_trace_key(key) {
                 match self.ctx.read_post::<String>(key).map_err(|e| {
@@ -379,7 +366,7 @@ where
         Ok(())
     }
 
-    fn check_limits(&self, keys_changed: &BTreeSet<Key>) -> VpResult<bool> {
+    fn check_limits(&self, keys_changed: &BTreeSet<Key>) -> Result<bool> {
         let tokens: BTreeSet<&Address> = keys_changed
             .iter()
             .filter_map(|k| {
@@ -388,49 +375,41 @@ where
             .collect();
         for token in tokens {
             let (mint_limit, throughput_limit) =
-                get_limits(&self.ctx.pre(), token)
-                    .map_err(Error::NativeVpError)?;
+                get_limits(&self.ctx.pre(), token)?;
 
             // Check the supply
             let mint_amount_key = mint_amount_key(token);
-            let minted: Amount = self
-                .ctx
-                .read_post(&mint_amount_key)
-                .map_err(Error::NativeVpError)?
-                .unwrap_or_default();
+            let minted: Amount =
+                self.ctx.read_post(&mint_amount_key)?.unwrap_or_default();
             if mint_limit < minted {
-                return Err(Error::RateLimit(format!(
+                return Err(VpError::RateLimit(format!(
                     "Transfer exceeding the mint limit is not allowed: Mint \
                      limit {mint_limit}, minted amount {minted}"
-                )));
+                ))
+                .into());
             }
 
             // Check the rate limit
             let throughput = self.calc_throughput(token)?;
             if throughput_limit < throughput {
-                return Err(Error::RateLimit(format!(
+                return Err(VpError::RateLimit(format!(
                     "Transfer exceeding the per-epoch throughput limit is not \
                      allowed: Per-epoch throughput limit {throughput_limit}, \
                      actual throughput {throughput}"
-                )));
+                ))
+                .into());
             }
         }
         Ok(true)
     }
 
-    fn calc_throughput(&self, token: &Address) -> VpResult<Amount> {
+    fn calc_throughput(&self, token: &Address) -> Result<Amount> {
         let deposit_key = deposit_key(token);
-        let deposit: Amount = self
-            .ctx
-            .read_post(&deposit_key)
-            .map_err(Error::NativeVpError)?
-            .unwrap_or_default();
+        let deposit: Amount =
+            self.ctx.read_post(&deposit_key)?.unwrap_or_default();
         let withdraw_key = withdraw_key(token);
-        let withdraw: Amount = self
-            .ctx
-            .read_post(&withdraw_key)
-            .map_err(Error::NativeVpError)?
-            .unwrap_or_default();
+        let withdraw: Amount =
+            self.ctx.read_post(&withdraw_key)?.unwrap_or_default();
         let throughput = if deposit < withdraw {
             withdraw
                 .checked_sub(deposit)
@@ -454,18 +433,18 @@ fn match_value(
             if v == *value {
                 Ok(())
             } else {
-                Err(Error::StateChange(format!(
+                Err(VpError::StateChange(format!(
                     "The value mismatched: Key {} actual {:?}, expected {:?}",
                     key, v, value
                 )))
             }
         }
-        (Some(_), _) => Err(Error::StateChange(format!(
+        (Some(_), _) => Err(VpError::StateChange(format!(
             "The value was invalid: Key {}",
             key
         ))),
         (None, Some(StorageModification::Delete)) => Ok(()),
-        (None, _) => Err(Error::StateChange(format!(
+        (None, _) => Err(VpError::StateChange(format!(
             "The key was deleted unexpectedly: Key {}",
             key
         ))),
@@ -489,9 +468,10 @@ mod tests {
     };
     use namada_core::address::InternalAddress;
     use namada_core::borsh::{BorshDeserialize, BorshSerializeExt};
+    use namada_core::chain::testing::get_dummy_header;
+    use namada_core::chain::{BlockHeight, Epoch};
     use namada_core::key::testing::keypair_1;
-    use namada_core::storage::testing::get_dummy_header;
-    use namada_core::storage::{BlockHeight, Epoch, TxIndex};
+    use namada_core::storage::TxIndex;
     use namada_core::tendermint::time::Time as TmTime;
     use namada_core::time::DurationSecs;
     use namada_gas::{TxGasMeter, VpGasMeter};
@@ -1140,7 +1120,8 @@ mod tests {
         let result = ibc
             .validate_tx(&batched_tx, &keys_changed, &verifiers)
             .unwrap_err();
-        assert_matches!(result, Error::StateChange(_));
+        let error = result.downcast_ref::<VpError>().unwrap();
+        assert_matches!(error, VpError::StateChange(_));
     }
 
     #[test]
@@ -1467,7 +1448,8 @@ mod tests {
         let result = ibc
             .validate_tx(&batched_tx, &keys_changed, &verifiers)
             .unwrap_err();
-        assert_matches!(result, Error::IbcEvent(_));
+        let error = result.downcast_ref::<VpError>().unwrap();
+        assert_matches!(error, VpError::IbcEvent(_));
     }
 
     #[test]

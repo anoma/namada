@@ -1,8 +1,8 @@
 //! Parameters abstract interfaces
 
+use namada_core::chain::BlockHeight;
 pub use namada_core::parameters::*;
 use namada_core::storage;
-use namada_core::storage::BlockHeight;
 use namada_core::time::DurationSecs;
 pub use namada_storage::Result;
 

@@ -25,22 +25,25 @@ use std::str::FromStr;
 
 use arse_merkle_tree::default_store::DefaultStore;
 use arse_merkle_tree::error::Error as MtError;
+pub use arse_merkle_tree::H256;
 use arse_merkle_tree::{
-    Hash as SmtHash, Key as TreeKey, SparseMerkleTree as ArseMerkleTree, H256,
+    Hash as SmtHash, Key as TreeKey, SparseMerkleTree as ArseMerkleTree,
 };
 use eth_bridge_pool::{BridgePoolProof, BridgePoolTree};
 use ics23::commitment_proof::Proof as Ics23Proof;
-use ics23::{CommitmentProof, ExistenceProof, NonExistenceProof};
+pub use ics23::CommitmentProof;
+use ics23::{ExistenceProof, NonExistenceProof};
 use ics23_specs::ibc_leaf_spec;
 use namada_core::address::{Address, InternalAddress};
 use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
-use namada_core::bytes::ByteBuf;
+use namada_core::bytes::HEXLOWER;
+pub use namada_core::chain::{BlockHeight, Epoch};
 use namada_core::eth_bridge_pool::{is_pending_transfer_key, PendingTransfer};
-use namada_core::hash::{Hash, StorageHasher};
-use namada_core::keccak::KeccakHash;
+pub use namada_core::hash::{Hash, StorageHasher};
+pub use namada_core::keccak::KeccakHash;
+pub use namada_core::storage::Key;
 use namada_core::storage::{
-    self, BlockHeight, DbKeySeg, Epoch, Error as StorageError, Key, KeySeg,
-    StringKey, TreeBytes, TreeKeyError, IBC_KEY_LIMIT,
+    self, DbKeySeg, KeySeg, StringKey, TreeBytes, TreeKeyError, IBC_KEY_LIMIT,
 };
 use namada_core::{decode, DecodeError};
 use namada_macros::BorshDeserializer;
@@ -112,7 +115,7 @@ impl From<BridgePoolProof> for MembershipProof {
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Invalid key: {0}")]
-    InvalidKey(StorageError),
+    InvalidKey(#[from] namada_core::storage::Error),
     #[error("Invalid key for merkle tree: {0}")]
     InvalidMerkleKey(String),
     #[error("Storage tree key error: {0}")]
@@ -135,6 +138,12 @@ pub enum Error {
         "The merklized data did not produce that same hash as the stored root."
     )]
     RootValidationError,
+}
+
+impl From<MtError> for Error {
+    fn from(error: MtError) -> Self {
+        Error::MerkleTree(error.to_string())
+    }
 }
 
 /// Result for functions that may fail
@@ -461,7 +470,7 @@ pub struct MerkleTree<H: StorageHasher + Default> {
 
 impl<H: StorageHasher + Default> core::fmt::Debug for MerkleTree<H> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let root_hash = format!("{}", ByteBuf(self.base.root().as_slice()));
+        let root_hash = HEXLOWER.encode(self.base.root().as_slice());
         f.debug_struct("MerkleTree")
             .field("root_hash", &root_hash)
             .finish()
@@ -795,7 +804,7 @@ impl<H: StorageHasher + Default> MerkleTree<H> {
 }
 
 /// The root hash of the merkle tree as bytes
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct MerkleRoot(pub [u8; 32]);
 
 impl From<H256> for MerkleRoot {
@@ -837,7 +846,7 @@ impl From<MerkleRoot> for Hash {
 
 impl fmt::Display for MerkleRoot {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", ByteBuf(&self.0))
+        write!(f, "{}", HEXLOWER.encode(&self.0))
     }
 }
 
@@ -943,18 +952,6 @@ impl<'a> MerkleTreeStoresWrite<'a> {
             StoreType::NoDiff => StoreRef::NoDiff(self.no_diff.1),
             StoreType::CommitData => StoreRef::CommitData,
         }
-    }
-}
-
-impl From<StorageError> for Error {
-    fn from(error: StorageError) -> Self {
-        Error::InvalidKey(error)
-    }
-}
-
-impl From<MtError> for Error {
-    fn from(error: MtError) -> Self {
-        Error::MerkleTree(error.to_string())
     }
 }
 

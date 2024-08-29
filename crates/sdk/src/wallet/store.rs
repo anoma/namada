@@ -10,12 +10,12 @@ use bimap::BiBTreeMap;
 use itertools::Itertools;
 use masp_primitives::zip32;
 use namada_core::address::{Address, ImplicitAddress};
+use namada_core::chain::BlockHeight;
 use namada_core::collections::HashSet;
 use namada_core::key::*;
 use namada_core::masp::{
     ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
 };
-use namada_core::storage::BlockHeight;
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 

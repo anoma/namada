@@ -7,8 +7,8 @@ use namada_core::borsh::BorshSerializeExt;
 use namada_core::chain::ChainId;
 use namada_core::masp::MaspEpoch;
 use namada_core::parameters::{EpochDuration, Parameters};
-use namada_core::storage;
 use namada_core::time::DateTimeUtc;
+use namada_core::{decode, storage};
 use namada_events::{EmitEvents, EventToEmit};
 use namada_merkle_tree::NO_DIFF_KEY_PREFIX;
 use namada_replay_protection as replay_protection;
@@ -22,7 +22,7 @@ use crate::write_log::{StorageModification, WriteLog};
 use crate::{
     is_pending_transfer_key, DBIter, Epoch, Error, Hash, Key, KeySeg,
     LastBlock, MembershipProof, MerkleTree, MerkleTreeError, ProofOps, Result,
-    State, StateRead, StorageHasher, StorageResult, StoreType, TxWrites, DB,
+    State, StateError, StateRead, StorageHasher, StoreType, TxWrites, DB,
     EPOCH_SWITCH_BLOCKS_DELAY, STORAGE_ACCESS_GAS_PER_BYTE,
 };
 
@@ -154,7 +154,7 @@ where
         height: BlockHeight,
         time: DateTimeUtc,
         parameters: &Parameters,
-    ) -> StorageResult<bool> {
+    ) -> Result<bool> {
         match self.in_mem.update_epoch_blocks_delay.as_mut() {
             None => {
                 // Check if the new epoch minimum start height and start time
@@ -209,7 +209,7 @@ where
         &self,
         is_new_epoch: bool,
         masp_epoch_multiplier: u64,
-    ) -> StorageResult<bool> {
+    ) -> Result<bool> {
         let masp_new_epoch = is_new_epoch
             && matches!(
                 self.in_mem.block.epoch.checked_rem(masp_epoch_multiplier),
@@ -230,7 +230,7 @@ where
 
     /// Commit the current block's write log to the storage and commit the block
     /// to DB. Starts a new block write log.
-    pub fn commit_block(&mut self) -> StorageResult<()> {
+    pub fn commit_block(&mut self) -> Result<()> {
         if self.in_mem.last_epoch != self.in_mem.block.epoch {
             self.in_mem_mut()
                 .update_epoch_in_merkle_tree()
@@ -486,7 +486,7 @@ where
 
     /// Load the full state at the last committed height, if any. Returns the
     /// Merkle root hash and the height of the committed block.
-    fn load_last_state(&mut self) {
+    pub fn load_last_state(&mut self) {
         if let Some(BlockStateRead {
             height,
             time,
@@ -528,7 +528,7 @@ where
                 .rebuild_full_merkle_tree(height)
                 .expect("Merkle tree should be restored");
 
-            tree.validate().map_err(Error::MerkleTreeError).unwrap();
+            tree.validate().unwrap();
 
             let in_mem = &mut self.0.in_mem;
             in_mem.block.tree = tree;
@@ -548,7 +548,7 @@ where
             .block
             .tree
             .update_commit_data(data)
-            .map_err(Error::MerkleTreeError)
+            .map_err(Into::into)
     }
 
     /// Persist the block's state from batch writes to the database.
@@ -567,7 +567,7 @@ where
         #[cfg(any(test, feature = "testing", feature = "benches"))]
         {
             if self.in_mem.header.is_none() {
-                self.in_mem.header = Some(storage::Header {
+                self.in_mem.header = Some(namada_core::chain::BlockHeader {
                     hash: Hash::default(),
                     #[allow(clippy::disallowed_methods)]
                     time: DateTimeUtc::now(),
@@ -871,34 +871,35 @@ where
         };
 
         if height > self.in_mem.get_last_block_height() {
-            if let MembershipProof::ICS23(proof) = self
-                .in_mem
-                .block
-                .tree
-                .get_sub_tree_existence_proof(array::from_ref(key), vec![value])
-                .map_err(Error::MerkleTreeError)?
+            if let MembershipProof::ICS23(proof) =
+                self.in_mem.block.tree.get_sub_tree_existence_proof(
+                    array::from_ref(key),
+                    vec![value],
+                )?
             {
                 self.in_mem
                     .block
                     .tree
                     .get_sub_tree_proof(key, proof)
                     .map(Into::into)
-                    .map_err(Error::MerkleTreeError)
+                    .map_err(Into::into)
             } else {
-                Err(Error::MerkleTreeError(MerkleTreeError::TendermintProof))
+                Err(Error::from(MerkleTreeError::TendermintProof))
             }
         } else {
             let (store_type, _) = StoreType::sub_key(key)?;
             let tree = self.get_merkle_tree(height, Some(store_type))?;
             if let MembershipProof::ICS23(proof) = tree
-                .get_sub_tree_existence_proof(array::from_ref(key), vec![value])
-                .map_err(Error::MerkleTreeError)?
+                .get_sub_tree_existence_proof(
+                    array::from_ref(key),
+                    vec![value],
+                )?
             {
                 tree.get_sub_tree_proof(key, proof)
                     .map(Into::into)
-                    .map_err(Error::MerkleTreeError)
+                    .map_err(Into::into)
             } else {
-                Err(Error::MerkleTreeError(MerkleTreeError::TendermintProof))
+                Err(Error::from(MerkleTreeError::TendermintProof))
             }
         }
     }
@@ -917,18 +918,16 @@ where
         };
 
         if height > self.in_mem.get_last_block_height() {
-            Err(Error::Temporary {
-                error: format!(
-                    "The block at the height {} hasn't committed yet",
-                    height,
-                ),
-            })
+            Err(Error::new_alloc(format!(
+                "The block at the height {} hasn't committed yet",
+                height,
+            )))
         } else {
             let (store_type, _) = StoreType::sub_key(key)?;
             self.get_merkle_tree(height, Some(store_type))?
                 .get_non_existence_proof(key)
                 .map(Into::into)
-                .map_err(Error::MerkleTreeError)
+                .map_err(Into::into)
         }
     }
 
@@ -971,7 +970,7 @@ where
         let stores = self
             .db
             .read_merkle_tree_stores(epoch, start_height, store_type)?
-            .ok_or(Error::NoMerkleTree { height })?;
+            .ok_or(StateError::NoMerkleTree { height })?;
         let prefix = store_type.and_then(|st| st.provable_prefix());
         let mut tree = match store_type {
             Some(_) => MerkleTree::<H>::new_partial(stores),
@@ -1070,7 +1069,7 @@ where
                         height,
                         Some(StoreType::Base),
                     )?
-                    .ok_or(Error::NoMerkleTree { height })?;
+                    .ok_or(StateError::NoMerkleTree { height })?;
                 let restored_stores = tree.stores();
                 stores.set_root(&st, *restored_stores.root(&st));
                 stores.set_store(restored_stores.store(&st).to_owned());
@@ -1081,7 +1080,7 @@ where
                 let mut stores = self
                     .db
                     .read_merkle_tree_stores(epoch, height, None)?
-                    .ok_or(Error::NoMerkleTree { height })?;
+                    .ok_or(StateError::NoMerkleTree { height })?;
                 let restored_stores = tree.stores();
                 // Set all rebuilt subtrees except for the subtrees stored in
                 // every block
@@ -1143,7 +1142,7 @@ where
 
         self.db()
             .has_replay_protection_entry(hash)
-            .map_err(Error::DbError)
+            .map_err(Into::into)
     }
 
     /// Check if the given tx hash has already been committed to storage
@@ -1153,7 +1152,7 @@ where
     ) -> Result<bool> {
         self.db()
             .has_replay_protection_entry(hash)
-            .map_err(Error::DbError)
+            .map_err(Into::into)
     }
 }
 
@@ -1448,9 +1447,7 @@ where
         let (log_val, _) = self.write_log().read_temp(key).unwrap();
         match log_val {
             Some(value) => {
-                let value =
-                    namada_core::borsh::BorshDeserialize::try_from_slice(value)
-                        .map_err(Error::BorshCodingError)?;
+                let value = decode(value)?;
                 Ok(Some(value))
             }
             None => Ok(None),
@@ -1471,10 +1468,7 @@ where
     ) -> Result<()> {
         let _ = self
             .write_log_mut()
-            .write_temp(key, val.serialize_to_vec())
-            .map_err(|err| Error::Temporary {
-                error: err.to_string(),
-            })?;
+            .write_temp(key, val.serialize_to_vec())?;
         Ok(())
     }
 }
@@ -1493,9 +1487,7 @@ where
         let (log_val, _) = self.write_log().read_temp(key).unwrap();
         match log_val {
             Some(value) => {
-                let value =
-                    namada_core::borsh::BorshDeserialize::try_from_slice(value)
-                        .map_err(Error::BorshCodingError)?;
+                let value = decode(value)?;
                 Ok(Some(value))
             }
             None => Ok(None),
@@ -1517,9 +1509,7 @@ where
         let (log_val, _) = self.write_log().read_temp(key).unwrap();
         match log_val {
             Some(value) => {
-                let value =
-                    namada_core::borsh::BorshDeserialize::try_from_slice(value)
-                        .map_err(Error::BorshCodingError)?;
+                let value = decode(value)?;
                 Ok(Some(value))
             }
             None => Ok(None),

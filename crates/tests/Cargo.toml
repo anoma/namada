@@ -17,7 +17,6 @@ default = []
 mainnet = [
   "namada_sdk/mainnet",
 ]
-integration = ["namada_node/integration", "namada_apps_lib/integration"]
 migrations = [
   "namada_sdk/migrations",
   "namada_core/migrations",
@@ -75,7 +74,6 @@ eyre.workspace = true
 flate2.workspace = true
 fs_extra.workspace = true
 once_cell.workspace = true
-pretty_assertions.workspace = true
 proptest-state-machine.workspace = true
 rand.workspace = true
 tar.workspace = true

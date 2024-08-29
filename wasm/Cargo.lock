@@ -3564,7 +3564,6 @@ dependencies = [
  "ethabi",
  "ethbridge-structs",
  "eyre",
- "futures",
  "ibc",
  "ics23",
  "impl-num-traits",
@@ -3695,7 +3694,6 @@ dependencies = [
  "namada_gas",
  "namada_macros",
  "namada_state",
- "namada_storage",
  "namada_systems",
  "namada_tx",
  "namada_vp",
@@ -3742,7 +3740,6 @@ dependencies = [
  "namada_core",
  "namada_macros",
  "namada_state",
- "namada_storage",
  "namada_systems",
  "namada_tx",
  "namada_vp",
@@ -3763,7 +3760,6 @@ dependencies = [
  "namada_events",
  "namada_macros",
  "namada_state",
- "namada_storage",
  "namada_systems",
  "namada_tx",
  "namada_vp",
@@ -3870,7 +3866,6 @@ dependencies = [
  "namada_core",
  "namada_gas",
  "namada_state",
- "namada_storage",
  "namada_systems",
  "namada_tx",
  "namada_vp",
@@ -3982,7 +3977,6 @@ dependencies = [
  "namada_events",
  "namada_macros",
  "namada_shielded_token",
- "namada_storage",
  "namada_systems",
  "namada_trans_token",
  "proptest",
@@ -3997,7 +3991,6 @@ dependencies = [
  "namada_core",
  "namada_events",
  "namada_state",
- "namada_storage",
  "namada_systems",
  "namada_tx",
  "namada_vp",
@@ -4016,6 +4009,7 @@ dependencies = [
  "either",
  "konst",
  "masp_primitives",
+ "namada_account",
  "namada_core",
  "namada_events",
  "namada_gas",
@@ -4047,7 +4041,6 @@ name = "namada_tx_prelude"
 version = "0.43.0"
 dependencies = [
  "borsh",
- "masp_primitives",
  "namada_account",
  "namada_core",
  "namada_events",
@@ -4057,7 +4050,7 @@ dependencies = [
  "namada_macros",
  "namada_parameters",
  "namada_proof_of_stake",
- "namada_storage",
+ "namada_state",
  "namada_token",
  "namada_tx",
  "namada_tx_env",
@@ -4070,6 +4063,7 @@ version = "0.43.0"
 dependencies = [
  "borsh",
  "clru",
+ "namada_account",
  "namada_core",
  "namada_events",
  "namada_gas",
@@ -4096,8 +4090,6 @@ dependencies = [
 name = "namada_vm_env"
 version = "0.43.0"
 dependencies = [
- "borsh",
- "masp_primitives",
  "namada_core",
 ]
 

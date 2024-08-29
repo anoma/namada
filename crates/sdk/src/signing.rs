@@ -15,8 +15,9 @@ use namada_core::address::{Address, ImplicitAddress, InternalAddress, MASP};
 use namada_core::arith::checked;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::key::*;
-use namada_core::masp::{AssetData, ExtendedViewingKey, PaymentAddress, TxId};
-use namada_core::sign::SignatureIndex;
+use namada_core::masp::{
+    AssetData, ExtendedViewingKey, MaspTxId, PaymentAddress,
+};
 use namada_core::token::{Amount, DenominatedAmount};
 use namada_governance::storage::proposal::{
     InitProposalData, ProposalType, VoteProposalData,
@@ -29,7 +30,7 @@ use namada_token::storage_key::balance_key;
 use namada_tx::data::pgf::UpdateStewardCommission;
 use namada_tx::data::pos::BecomeValidator;
 use namada_tx::data::{pos, Fee};
-use namada_tx::{MaspBuilder, Section, Tx};
+use namada_tx::{MaspBuilder, Section, SignatureIndex, Tx};
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
@@ -295,6 +296,7 @@ pub async fn aux_signing_data(
     owner: Option<Address>,
     default_signer: Option<Address>,
     extra_public_keys: Vec<common::PublicKey>,
+    disposable_signing_key: bool,
 ) -> Result<SigningTxData, Error> {
     let mut public_keys =
         tx_signers(context, args, default_signer.clone()).await?;
@@ -330,7 +332,7 @@ pub async fn aux_signing_data(
         ),
     };
 
-    let fee_payer = if args.disposable_signing_key {
+    let fee_payer = if disposable_signing_key {
         context
             .wallet_mut()
             .await
@@ -902,7 +904,7 @@ fn proposal_type_to_ledger_vector(
 // builder.
 fn find_masp_builder<'a>(
     tx: &'a Tx,
-    shielded_section_hash: Option<TxId>,
+    shielded_section_hash: Option<MaspTxId>,
     asset_types: &mut HashMap<AssetType, AssetData>,
 ) -> Result<Option<&'a MaspBuilder>, std::io::Error> {
     for section in &tx.sections {

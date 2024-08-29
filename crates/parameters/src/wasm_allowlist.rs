@@ -1,6 +1,5 @@
 use namada_core::hash::Hash;
-use namada_core::storage;
-use namada_storage::{Result, StorageRead};
+use namada_state::{Key, Result, StorageRead};
 
 use crate::storage::{
     get_tx_allowlist_storage_key, get_vp_allowlist_storage_key,
@@ -26,11 +25,7 @@ where
     is_allowed(storage, key, vp_hash)
 }
 
-fn is_allowed<S>(
-    storage: &S,
-    allowlist_key: storage::Key,
-    hash: &Hash,
-) -> Result<bool>
+fn is_allowed<S>(storage: &S, allowlist_key: Key, hash: &Hash) -> Result<bool>
 where
     S: StorageRead,
 {

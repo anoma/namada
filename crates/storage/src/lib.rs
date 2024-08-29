@@ -1,5 +1,11 @@
-//! The common storage read trait is implemented in the storage, client RPC, tx
-//! and VPs (both native and WASM).
+//! This crate provides
+//!
+//! - [`StorageRead`] and [`StorageWrite`] (high-level) and [`DB`] (low-level)
+//!   traits
+//! - `MockDB` [`DB`] implementation for testing
+//! - [`collections`] with generic lazy collections for storage
+//! - [`conversion_state`] for shielded token rewards
+//! - helpers for storage iteration
 
 #![doc(html_favicon_url = "https://dev.namada.net/master/favicon.png")]
 #![doc(html_logo_url = "https://dev.namada.net/master/rustdoc-logo.png")]
@@ -30,23 +36,13 @@ pub use db::{Error as DbError, Result as DbResult, *};
 pub use error::{CustomError, Error, OptionExt, Result, ResultExt};
 use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
-pub use namada_core::hash::StorageHasher;
+pub use namada_core::chain::{
+    BlockHash, BlockHeader, BlockHeight, Epoch, Epochs,
+};
+pub use namada_core::hash::{Hash, StorageHasher};
 pub use namada_core::storage::*;
 
 /// Common storage read interface
-///
-/// If you're using this trait and having compiler complaining about needing an
-/// explicit lifetime parameter, simply use trait bounds with the following
-/// syntax:
-///
-/// ```rust,ignore
-/// where
-///     S: StorageRead
-/// ```
-///
-/// If you want to know why this is needed, see the to-do task below. The
-/// syntax for this relies on higher-rank lifetimes, see e.g.
-/// <https://doc.rust-lang.org/nomicon/hrtb.html>.
 pub trait StorageRead {
     /// Storage read prefix iterator
     type PrefixIter<'iter>
@@ -96,7 +92,10 @@ pub trait StorageRead {
     fn get_block_height(&self) -> Result<BlockHeight>;
 
     /// Getting the block header.
-    fn get_block_header(&self, height: BlockHeight) -> Result<Option<Header>>;
+    fn get_block_header(
+        &self,
+        height: BlockHeight,
+    ) -> Result<Option<BlockHeader>>;
 
     /// Getting the block epoch. The epoch is that of the block to which the
     /// current transaction is being applied.
@@ -323,7 +322,7 @@ pub mod testing {
         native_token: Address,
         conversion_state: ConversionState,
         merkle_tree_key_filter: fn(&Key) -> bool,
-        mock_block_headers: HashMap<BlockHeight, Header>,
+        mock_block_headers: HashMap<BlockHeight, BlockHeader>,
     }
 
     fn merklize_all_keys(_key: &Key) -> bool {
@@ -352,7 +351,7 @@ pub mod testing {
         pub fn set_mock_block_header(
             &mut self,
             height: BlockHeight,
-            header: Header,
+            header: BlockHeader,
         ) {
             self.mock_block_headers.insert(height, header);
         }
@@ -397,7 +396,7 @@ pub mod testing {
         fn get_block_header(
             &self,
             height: BlockHeight,
-        ) -> Result<Option<Header>> {
+        ) -> Result<Option<BlockHeader>> {
             Ok(self.mock_block_headers.get(&height).cloned())
         }
 

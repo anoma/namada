@@ -11,6 +11,7 @@ use data_encoding::HEXUPPER;
 use itertools::Either;
 use lazy_static::lazy_static;
 use namada_sdk::address::Address;
+use namada_sdk::chain::{BlockHeader, BlockHeight, Epoch};
 use namada_sdk::collections::HashMap;
 use namada_sdk::control_flow::time::Duration;
 use namada_sdk::eth_bridge::oracle::config::Config as OracleConfig;
@@ -29,9 +30,8 @@ use namada_sdk::queries::{
     Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
 };
 use namada_sdk::state::{
-    LastBlock, Sha256Hasher, StorageRead, EPOCH_SWITCH_BLOCKS_DELAY,
+    LastBlock, Sha256Hasher, StorageRead, DB, EPOCH_SWITCH_BLOCKS_DELAY,
 };
-use namada_sdk::storage::{BlockHeight, Epoch, Header};
 use namada_sdk::tendermint::abci::response::Info;
 use namada_sdk::tendermint::abci::types::VoteInfo;
 use namada_sdk::tendermint_proto::google::protobuf::Timestamp;
@@ -48,20 +48,19 @@ use crate::ethereum_oracle::test_tools::mock_web3_client::{
 use crate::ethereum_oracle::{
     control, last_processed_block, try_process_eth_events,
 };
-use crate::facade::tendermint_proto::v0_37::abci::{
-    RequestPrepareProposal, RequestProcessProposal,
-};
-use crate::facade::tendermint_rpc::endpoint::block;
-use crate::facade::tendermint_rpc::error::Error as RpcError;
-use crate::facade::tendermint_rpc::SimpleRequest;
-use crate::facade::{tendermint, tendermint_rpc};
 use crate::shell::testing::utils::TestDir;
 use crate::shell::{EthereumOracleChannels, Shell};
 use crate::shims::abcipp_shim_types::shim::request::{
     FinalizeBlock, ProcessedTx,
 };
 use crate::shims::abcipp_shim_types::shim::response::TxResult;
-use crate::{dry_run_tx, storage};
+use crate::tendermint_proto::abci::{
+    RequestPrepareProposal, RequestProcessProposal,
+};
+use crate::tendermint_rpc::endpoint::block;
+use crate::tendermint_rpc::error::Error as RpcError;
+use crate::tendermint_rpc::SimpleRequest;
+use crate::{dry_run_tx, storage, tendermint, tendermint_rpc};
 
 /// Mock Ethereum oracle used for testing purposes.
 struct MockEthOracle {
@@ -345,6 +344,11 @@ impl MockNode {
         self.genesis_dir().join("wallet.toml")
     }
 
+    pub fn db_path(&self) -> PathBuf {
+        let locked = self.shell.lock().unwrap();
+        locked.state.db().path().unwrap().to_path_buf()
+    }
+
     pub fn block_height(&self) -> BlockHeight {
         self.shell
             .lock()
@@ -483,7 +487,7 @@ impl MockNode {
         };
         // build finalize block abci request
         let req = FinalizeBlock {
-            header: Header {
+            header: BlockHeader {
                 hash: Hash([0; 32]),
                 #[allow(clippy::disallowed_methods)]
                 time: DateTimeUtc::now(),
@@ -602,7 +606,7 @@ impl MockNode {
 
         // process proposal succeeded, now run finalize block
         let req = FinalizeBlock {
-            header: Header {
+            header: BlockHeader {
                 hash: Hash([0; 32]),
                 #[allow(clippy::disallowed_methods)]
                 time: DateTimeUtc::now(),

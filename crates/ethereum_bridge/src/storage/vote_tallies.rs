@@ -5,10 +5,11 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use namada_core::address::Address;
+use namada_core::chain::{BlockHeight, Epoch};
 use namada_core::ethereum_events::{EthereumEvent, Uint};
 use namada_core::hash::Hash;
 use namada_core::keccak::{keccak_hash, KeccakHash};
-use namada_core::storage::{BlockHeight, DbKeySeg, Epoch, Key};
+use namada_core::storage::{DbKeySeg, Key};
 use namada_macros::{BorshDeserializer, StorageKeys};
 #[cfg(feature = "migrations")]
 use namada_migrations::*;

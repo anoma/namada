@@ -1,16 +1,15 @@
-//! Account types
+//! Public keys associated with an account for n-signature authorization.
 
 use std::collections::BTreeMap;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use namada_core::collections::HashMap;
+use namada_core::hints;
+use namada_core::key::common;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
 use serde::{Deserialize, Serialize};
-
-use super::key::{common, RefTo};
-use crate::collections::HashMap;
-use crate::hints;
 
 #[derive(
     Debug,
@@ -86,7 +85,7 @@ impl AccountPublicKeysMap {
         secret_keys
             .into_iter()
             .filter_map(|secret_key: common::SecretKey| {
-                self.get_index_from_public_key(&secret_key.ref_to())
+                self.get_index_from_public_key(&secret_key.to_public())
                     .map(|index| (index, secret_key))
             })
             .collect()

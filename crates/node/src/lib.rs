@@ -40,10 +40,14 @@ use namada_apps_lib::config::utils::{
     convert_tm_addr_to_socket_addr, num_of_threads,
 };
 use namada_apps_lib::{config, wasm_loader};
+pub use namada_apps_lib::{
+    tendermint, tendermint_config, tendermint_proto, tendermint_rpc,
+};
+use namada_sdk::chain::BlockHeight;
 use namada_sdk::eth_bridge::ethers::providers::{Http, Provider};
 use namada_sdk::migrations::ScheduledMigration;
 use namada_sdk::state::{ProcessProposalCachedResult, StateRead, DB};
-use namada_sdk::storage::{BlockHeight, DbColFam};
+use namada_sdk::storage::DbColFam;
 use namada_sdk::tendermint::abci::request::CheckTxKind;
 use namada_sdk::tendermint::abci::response::ProcessProposal;
 use namada_sdk::time::DateTimeUtc;
@@ -59,18 +63,14 @@ use self::shims::abcipp_shim::AbciService;
 use crate::broadcaster::Broadcaster;
 use crate::config::{ethereum_bridge, TendermintMode};
 use crate::ethereum_oracle as oracle;
-use crate::facade::tendermint::v0_37::abci::response;
-use crate::facade::tower_abci::{split, Server};
 use crate::shell::{Error, MempoolTxType, Shell};
 use crate::shims::abcipp_shim::AbcippShim;
 use crate::shims::abcipp_shim_types::shim::{Request, Response};
-
-pub mod facade {
-    pub use namada_apps_lib::facade::*;
-    pub mod tower_abci {
-        pub use tower_abci::v037::*;
-        pub use tower_abci::BoxError;
-    }
+use crate::tendermint::abci::response;
+use crate::tower_abci::{split, Server};
+pub mod tower_abci {
+    pub use tower_abci::v037::*;
+    pub use tower_abci::BoxError;
 }
 
 /// Env. var to set a number of Tokio RT worker threads
@@ -181,16 +181,16 @@ impl Shell {
                 Ok(Response::CheckTx(self.mempool_validate(&tx.tx, r#type)))
             }
             Request::ListSnapshots => {
-                self.list_snapshots().map(Response::ListSnapshots)
+                Ok(Response::ListSnapshots(self.list_snapshots()))
             }
-            Request::OfferSnapshot(_) => {
-                Ok(Response::OfferSnapshot(Default::default()))
+            Request::OfferSnapshot(req) => {
+                Ok(Response::OfferSnapshot(self.offer_snapshot(req)))
             }
-            Request::LoadSnapshotChunk(req) => self
-                .load_snapshot_chunk(req)
-                .map(Response::LoadSnapshotChunk),
-            Request::ApplySnapshotChunk(_) => {
-                Ok(Response::ApplySnapshotChunk(Default::default()))
+            Request::LoadSnapshotChunk(req) => {
+                Ok(Response::LoadSnapshotChunk(self.load_snapshot_chunk(req)))
+            }
+            Request::ApplySnapshotChunk(req) => {
+                Ok(Response::ApplySnapshotChunk(self.apply_snapshot_chunk(req)))
             }
         }
     }
@@ -620,7 +620,7 @@ fn start_abci_broadcaster_shell(
     setup_data: RunAuxSetup,
     config: config::Ledger,
 ) -> (
-    task::JoinHandle<shell::Result<()>>,
+    task::JoinHandle<shell::ShellResult<()>>,
     task::JoinHandle<()>,
     thread::JoinHandle<()>,
 ) {
@@ -734,7 +734,7 @@ async fn run_abci(
     service_handle: tokio::sync::broadcast::Sender<()>,
     proxy_app_address: SocketAddr,
     abort_recv: tokio::sync::oneshot::Receiver<()>,
-) -> shell::Result<()> {
+) -> shell::ShellResult<()> {
     // Split it into components.
     let (consensus, mempool, snapshot, info) = split::service(abci_service, 5);
 
@@ -773,7 +773,7 @@ async fn run_abci(
 fn start_tendermint(
     spawner: &mut AbortableSpawner,
     config: &config::Ledger,
-) -> task::JoinHandle<shell::Result<()>> {
+) -> task::JoinHandle<shell::ShellResult<()>> {
     let tendermint_dir = config.cometbft_dir();
     let chain_id = config.chain_id.clone();
     let proxy_app_address = config.cometbft.proxy_app.to_string();

@@ -17,7 +17,7 @@ default = ["migrations"]
 mainnet = [
   "namada_sdk/mainnet",
 ]
-# for integration tests and test utilities
+# for tests and test utilities
 testing = [
   "namada_apps_lib/testing",
   "namada_test_utils",
@@ -31,7 +31,6 @@ benches = [
   "tracing-subscriber",
   "rand_core"
 ]
-integration = ["namada_apps_lib/integration"]
 jemalloc = ["rocksdb/jemalloc"]
 migrations = [
   "namada_migrations",
@@ -91,6 +90,7 @@ serde_json = {workspace = true, features = ["raw_value"]}
 sha2.workspace = true
 smooth-operator.workspace = true
 sysinfo.workspace = true
+tar.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true
 tokio = {workspace = true, features = ["full"]}
@@ -100,6 +100,7 @@ tower.workspace = true
 tracing-subscriber = { workspace = true, optional = true, features = ["std", "json", "ansi", "tracing-log"]}
 tracing.workspace = true
 warp = "0.3.2"
+zstd.workspace = true
 
 [dev-dependencies]
 namada_apps_lib = {path = "../apps_lib", features = ["testing"]}

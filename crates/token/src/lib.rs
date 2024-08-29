@@ -18,7 +18,11 @@
     clippy::print_stderr
 )]
 
+use std::collections::BTreeMap;
+
+use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
+use namada_events::EmitEvents;
 use namada_macros::BorshDeserializer;
 pub use namada_shielded_token::*;
 use namada_systems::parameters;
@@ -26,12 +30,11 @@ pub use namada_trans_token::*;
 
 /// Validity predicates
 pub mod vp {
-    pub use namada_shielded_token::vp::{
-        Error as MaspError, MaspVp, Result as MaspResult,
-    };
-    pub use namada_trans_token::vp::{
-        Error as MultitokenError, MultitokenVp, Result as MultitokenResult,
-    };
+    pub use namada_shielded_token::vp::MaspVp;
+    // The error and result type are the same as in `namada_trans_token` -
+    // a native VP
+    pub use namada_shielded_token::{Error, Result};
+    pub use namada_trans_token::vp::MultitokenVp;
 }
 use serde::{Deserialize, Serialize};
 
@@ -81,13 +84,6 @@ pub mod storage_key {
         shielded::masp_last_inflation_key::<TransToken>(token_addr)
     }
 }
-
-use std::collections::BTreeMap;
-
-use namada_core::address::Address;
-use namada_core::masp::TxId;
-use namada_events::EmitEvents;
-use namada_storage::{StorageRead, StorageWrite};
 
 /// Initialize parameters for the token in storage during the genesis block.
 pub fn write_params<S>(
@@ -171,12 +167,12 @@ pub struct Transfer {
     /// Targets of this transfer
     pub targets: BTreeMap<Account, DenominatedAmount>,
     /// Hash of tx section that contains the MASP transaction
-    pub shielded_section_hash: Option<TxId>,
+    pub shielded_section_hash: Option<MaspTxId>,
 }
 
 impl Transfer {
     /// Create a MASP transaction
-    pub fn masp(hash: TxId) -> Self {
+    pub fn masp(hash: MaspTxId) -> Self {
         Self {
             shielded_section_hash: Some(hash),
             ..Self::default()
@@ -184,9 +180,9 @@ impl Transfer {
     }
 
     /// Set the key to the given amount
-    fn set<K: Ord>(
-        map: &mut BTreeMap<K, DenominatedAmount>,
-        key: K,
+    fn set(
+        map: &mut BTreeMap<Account, DenominatedAmount>,
+        key: Account,
         val: DenominatedAmount,
     ) {
         if val.is_zero() {
@@ -315,5 +311,135 @@ pub mod testing {
                 },
             )
         })
+    }
+}
+
+#[cfg(test)]
+mod test_token_transfer_actions {
+    use namada_core::address::testing::{established_address_1, nam};
+
+    use super::*;
+
+    #[test]
+    fn test_set_to_zero() {
+        let account = Account {
+            owner: established_address_1(),
+            token: nam(),
+        };
+
+        let mut transfer = Transfer::default();
+
+        let zero = Amount::zero().native_denominated();
+        Transfer::set(&mut transfer.sources, account.clone(), zero);
+        assert_eq!(transfer, Transfer::default());
+
+        let one = Amount::from(1).native_denominated();
+        Transfer::set(&mut transfer.sources, account.clone(), one);
+        assert_eq!(
+            transfer,
+            Transfer {
+                sources: BTreeMap::from([(account, one)]),
+                ..Transfer::default()
+            }
+        );
+    }
+
+    #[test]
+    fn test_debit_credit() {
+        // test debit
+        test_debit_credit_aux(
+            Transfer::debit,
+            Transfer::credit,
+            |sources| Transfer {
+                sources,
+                ..Transfer::default()
+            },
+            |targets| Transfer {
+                targets,
+                ..Transfer::default()
+            },
+        );
+
+        // test credit
+        test_debit_credit_aux(
+            Transfer::credit,
+            Transfer::debit,
+            |targets| Transfer {
+                targets,
+                ..Transfer::default()
+            },
+            |sources| Transfer {
+                sources,
+                ..Transfer::default()
+            },
+        );
+    }
+
+    fn test_debit_credit_aux(
+        op1: fn(
+            Transfer,
+            Address,
+            Address,
+            DenominatedAmount,
+        ) -> Option<Transfer>,
+        op2: fn(
+            Transfer,
+            Address,
+            Address,
+            DenominatedAmount,
+        ) -> Option<Transfer>,
+        transfer1: fn(BTreeMap<Account, DenominatedAmount>) -> Transfer,
+        transfer2: fn(BTreeMap<Account, DenominatedAmount>) -> Transfer,
+    ) {
+        let account = Account {
+            owner: established_address_1(),
+            token: nam(),
+        };
+
+        let amount_100 = Amount::native_whole(100).native_denominated();
+        let amount_90 = Amount::native_whole(90).native_denominated();
+        let amount_80 = Amount::native_whole(80).native_denominated();
+        let amount_10 = Amount::native_whole(10).native_denominated();
+
+        let transfer = Transfer::default();
+
+        let transfer = op1(
+            transfer,
+            account.owner.clone(),
+            account.token.clone(),
+            amount_10,
+        )
+        .unwrap();
+
+        assert_eq!(
+            transfer,
+            transfer1(BTreeMap::from([(account.clone(), amount_10)])),
+        );
+
+        let transfer = op2(
+            transfer,
+            account.owner.clone(),
+            account.token.clone(),
+            amount_100,
+        )
+        .unwrap();
+
+        assert_eq!(
+            transfer,
+            transfer2(BTreeMap::from([(account.clone(), amount_90)])),
+        );
+
+        let transfer = op1(
+            transfer,
+            account.owner.clone(),
+            account.token.clone(),
+            amount_10,
+        )
+        .unwrap();
+
+        assert_eq!(
+            transfer,
+            transfer2(BTreeMap::from([(account.clone(), amount_80)])),
+        );
     }
 }
