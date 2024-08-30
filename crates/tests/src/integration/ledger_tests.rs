@@ -1731,7 +1731,7 @@ fn offline_sign() -> Result<()> {
                 "sign-offline",
                 "--data-path",
                 &offline_tx,
-                "--address",
+                "--owner",
                 &bertha_address,
                 "--secret-keys",
                 &bertha_sk,

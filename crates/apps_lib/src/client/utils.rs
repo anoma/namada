@@ -1035,7 +1035,6 @@ pub async fn sign_genesis_tx(
 
 /// Offline sign a transactions.
 pub async fn sign_offline(
-    _global_args: args::Global,
     args::SignOffline {
         tx_path,
         secret_keys,

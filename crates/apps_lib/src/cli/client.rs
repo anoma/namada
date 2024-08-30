@@ -817,7 +817,10 @@ impl CliApi {
                         utils::pk_to_tm_address(global_args, args)
                     }
                     ClientUtils::SignOffline(SignOffline(args)) => {
-                        utils::sign_offline(global_args, args).await
+                        let mut ctx = cli::Context::new::<IO>(global_args)
+                            .expect("expected to construct a context");
+                        let args = args.to_sdk(&mut ctx)?;
+                        utils::sign_offline(args).await
                     }
                     ClientUtils::DefaultBaseDir(DefaultBaseDir(args)) => {
                         utils::default_base_dir(global_args, args)

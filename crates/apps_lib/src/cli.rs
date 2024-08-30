@@ -33,6 +33,7 @@ const WALLET_CMD: &str = "wallet";
 const RELAYER_CMD: &str = "relayer";
 
 pub mod cmds {
+    use super::args::CliTypes;
     use super::utils::*;
     use super::{
         args, ArgMatches, CLIENT_CMD, NODE_CMD, RELAYER_CMD, WALLET_CMD,
@@ -3195,21 +3196,21 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct SignOffline(pub args::SignOffline);
+    pub struct SignOffline(pub args::SignOffline<CliTypes>);
 
     impl SubCmd for SignOffline {
         const CMD: &'static str = "sign-offline";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| Self(args::SignOffline::parse(matches)))
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                Self(args::SignOffline::<CliTypes>::parse(matches))
+            })
         }
 
         fn def() -> App {
             App::new(Self::CMD)
                 .about(wrap!("Offlne sign a transaction."))
-                .add_args::<args::SignOffline>()
+                .add_args::<args::SignOffline<CliTypes>>()
         }
     }
 
@@ -3468,7 +3469,7 @@ pub mod args {
         DefaultFn(|| PortId::from_str("transfer").unwrap()),
     );
     pub const PRE_GENESIS: ArgFlag = flag("pre-genesis");
-    pub const PRIVATE_KEYS: ArgMulti<common::SecretKey, GlobStar> =
+    pub const PRIVATE_KEYS: ArgMulti<WalletKeypair, GlobStar> =
         arg_multi("secret-keys");
     pub const PROPOSAL_PGF_STEWARD: ArgFlag = flag("pgf-stewards");
     pub const PROPOSAL_PGF_FUNDING: ArgFlag = flag("pgf-funding");
@@ -8063,18 +8064,18 @@ pub mod args {
     }
 
     #[derive(Clone, Debug)]
-    pub struct SignOffline {
+    pub struct SignOffline<C: NamadaTypes = SdkTypes> {
         pub tx_path: PathBuf,
-        pub secret_keys: Vec<common::SecretKey>,
-        pub owner: Address,
+        pub secret_keys: Vec<C::Keypair>,
+        pub owner: C::Address,
         pub output_folder_path: Option<PathBuf>,
     }
 
-    impl Args for SignOffline {
+    impl Args for SignOffline<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let tx_path = DATA_PATH.parse(matches);
             let secret_keys = PRIVATE_KEYS.parse(matches);
-            let owner = RAW_ADDRESS.parse(matches);
+            let owner = OWNER.parse(matches);
             let output_folder_path = OUTPUT_FOLDER_PATH.parse(matches);
 
             Self {
@@ -8095,12 +8096,34 @@ pub mod args {
                 "The set of private keys to use to sign the transaction. The \
                  order matters."
             )))
-            .arg(RAW_ADDRESS.def().help(wrap!("The owner's address.")))
+            .arg(OWNER.def().help(wrap!("The owner's address.")))
             .arg(
                 OUTPUT_FOLDER_PATH
                     .def()
                     .help("Folder to where serialize the signatures"),
             )
+        }
+    }
+
+    impl CliToSdk<SignOffline<SdkTypes>> for SignOffline<CliTypes> {
+        type Error = std::io::Error;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<SignOffline<SdkTypes>, Self::Error> {
+            let chain_ctx = ctx.borrow_mut_chain_or_exit();
+
+            Ok(SignOffline::<SdkTypes> {
+                tx_path: self.tx_path,
+                secret_keys: self
+                    .secret_keys
+                    .iter()
+                    .map(|key| chain_ctx.get_cached(key))
+                    .collect(),
+                owner: chain_ctx.get(&self.owner),
+                output_folder_path: self.output_folder_path,
+            })
         }
     }
 
