@@ -29,7 +29,6 @@ pub mod utils;
 use std::convert::TryInto;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::thread;
 
 use byte_unit::Byte;
 use data_encoding::HEXUPPER;
@@ -464,7 +463,7 @@ async fn run_aux(
 
     // Start ABCI server and broadcaster (the latter only if we are a validator
     // node)
-    let (abci, broadcaster, shell_handler) = start_abci_broadcaster_shell(
+    let [abci, broadcaster, shell_handler] = start_abci_broadcaster_shell(
         &mut spawner,
         eth_oracle_channels,
         wasm_dir,
@@ -500,10 +499,12 @@ async fn run_aux(
 
     tracing::info!("Namada ledger node has shut down.");
 
-    let res = task::block_in_place(move || shell_handler.join());
-
-    if let Err(err) = res {
-        std::panic::resume_unwind(err)
+    match shell_handler.await {
+        Err(err) if err.is_panic() => {
+            std::panic::resume_unwind(err.into_panic())
+        }
+        Err(err) => tracing::error!("Shell error: {err}"),
+        _ => {}
     }
 }
 
@@ -619,11 +620,7 @@ fn start_abci_broadcaster_shell(
     wasm_dir: PathBuf,
     setup_data: RunAuxSetup,
     config: config::Ledger,
-) -> (
-    task::JoinHandle<shell::ShellResult<()>>,
-    task::JoinHandle<shell::ShellResult<()>>,
-    thread::JoinHandle<()>,
-) {
+) -> [task::JoinHandle<shell::ShellResult<()>>; 3] {
     let rpc_address =
         convert_tm_addr_to_socket_addr(&config.cometbft.rpc.laddr);
     let RunAuxSetup {
@@ -712,9 +709,8 @@ fn start_abci_broadcaster_shell(
         .spawn();
 
     // Start the shell in a new OS thread
-    let thread_builder = thread::Builder::new().name("ledger-shell".into());
-    let shell_handler = thread_builder
-        .spawn(move || {
+    let shell_handler = spawner
+        .abortable("Shell", move |_aborter| {
             tracing::info!("Namada ledger node started.");
             match tendermint_mode {
                 TendermintMode::Validator { .. } => {
@@ -724,11 +720,12 @@ fn start_abci_broadcaster_shell(
                     tracing::info!("This node is not a validator");
                 }
             }
-            shell.run()
+            shell.run();
+            Ok(())
         })
-        .expect("Must be able to start a thread for the shell");
+        .spawn_blocking();
 
-    (abci, broadcaster, shell_handler)
+    [abci, broadcaster, shell_handler]
 }
 
 /// Runs the an asynchronous ABCI server with four sub-components for consensus,
