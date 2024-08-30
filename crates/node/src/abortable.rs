@@ -7,6 +7,8 @@ use namada_sdk::control_flow::{
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
 
+use crate::shell::ShellResult;
+
 /// Serves to identify an aborting async task, which is spawned
 /// with an [`AbortableSpawner`].
 pub type AbortingTask = &'static str;
@@ -107,15 +109,14 @@ impl AbortableSpawner {
         status
     }
 
-    fn spawn_abortable_task<A, F, R>(
+    fn spawn_abortable_task<A, F>(
         &self,
         who: AbortingTask,
         abortable: A,
-    ) -> JoinHandle<R>
+    ) -> JoinHandle<ShellResult<()>>
     where
         A: FnOnce(Aborter) -> F,
-        F: Future<Output = R> + Send + 'static,
-        R: Send + 'static,
+        F: Future<Output = ShellResult<()>> + Send + 'static,
     {
         let abort = Aborter {
             who,
@@ -124,14 +125,13 @@ impl AbortableSpawner {
         tokio::spawn(abortable(abort))
     }
 
-    fn spawn_abortable_task_blocking<A, R>(
+    fn spawn_abortable_task_blocking<A>(
         &self,
         who: AbortingTask,
         abortable: A,
-    ) -> JoinHandle<R>
+    ) -> JoinHandle<ShellResult<()>>
     where
-        A: FnOnce(Aborter) -> R + Send + 'static,
-        R: Send + 'static,
+        A: FnOnce(Aborter) -> ShellResult<()> + Send + 'static,
     {
         let abort = Aborter {
             who,
@@ -144,11 +144,10 @@ impl AbortableSpawner {
 impl<'a, A> AbortableTaskBuilder<'a, A> {
     /// Spawn the built abortable task into the runtime.
     #[inline]
-    pub fn spawn<F, R>(self) -> JoinHandle<R>
+    pub fn spawn<F>(self) -> JoinHandle<ShellResult<()>>
     where
         A: FnOnce(Aborter) -> F,
-        F: Future<Output = R> + Send + 'static,
-        R: Send + 'static,
+        F: Future<Output = ShellResult<()>> + Send + 'static,
     {
         if let Some(cleanup) = self.cleanup {
             self.spawner.cleanup_jobs.push(cleanup);
@@ -158,10 +157,9 @@ impl<'a, A> AbortableTaskBuilder<'a, A> {
 
     /// Spawn the built abortable (blocking) task into the runtime.
     #[inline]
-    pub fn spawn_blocking<R>(self) -> JoinHandle<R>
+    pub fn spawn_blocking(self) -> JoinHandle<ShellResult<()>>
     where
-        A: FnOnce(Aborter) -> R + Send + 'static,
-        R: Send + 'static,
+        A: FnOnce(Aborter) -> ShellResult<()> + Send + 'static,
     {
         if let Some(cleanup) = self.cleanup {
             self.spawner.cleanup_jobs.push(cleanup);

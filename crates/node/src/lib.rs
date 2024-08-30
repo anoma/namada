@@ -621,7 +621,7 @@ fn start_abci_broadcaster_shell(
     config: config::Ledger,
 ) -> (
     task::JoinHandle<shell::ShellResult<()>>,
-    task::JoinHandle<()>,
+    task::JoinHandle<shell::ShellResult<()>>,
     thread::JoinHandle<()>,
 ) {
     let rpc_address =
@@ -656,13 +656,15 @@ fn start_abci_broadcaster_shell(
                 tracing::info!("Broadcaster is no longer running.");
 
                 drop(aborter);
+
+                Ok(())
             })
             .with_cleanup(async move {
                 let _ = bc_abort_send.send(());
             })
             .spawn()
     } else {
-        spawn_dummy_task(())
+        spawn_dummy_task()
     };
 
     // Setup DB cache, it must outlive the DB instance that's in the shell
@@ -840,10 +842,10 @@ enum EthereumOracleTask {
         // TODO(namada#459): we have to return a dummy handle for the moment,
         // until `run_aux` is refactored - at which point, we no longer need an
         // enum to represent the Ethereum oracle being on/off.
-        handle: task::JoinHandle<()>,
+        handle: task::JoinHandle<Result<(), Error>>,
     },
     Enabled {
-        handle: task::JoinHandle<()>,
+        handle: task::JoinHandle<Result<(), Error>>,
         channels: EthereumOracleChannels,
     },
 }
@@ -858,7 +860,7 @@ async fn maybe_start_ethereum_oracle(
         TendermintMode::Validator { .. }
     ) {
         return EthereumOracleTask::NotEnabled {
-            handle: spawn_dummy_task(()),
+            handle: spawn_dummy_task(),
         };
     }
 
@@ -910,6 +912,8 @@ async fn maybe_start_ethereum_oracle(
                         );
 
                         drop(aborter);
+
+                        Ok(())
                     },
                 )
                 .with_cleanup(async move {
@@ -942,7 +946,7 @@ async fn maybe_start_ethereum_oracle(
             }
         }
         ethereum_bridge::ledger::Mode::Off => EthereumOracleTask::NotEnabled {
-            handle: spawn_dummy_task(()),
+            handle: spawn_dummy_task(),
         },
     }
 }
@@ -981,6 +985,6 @@ pub fn test_genesis_files(
 
 /// Spawn a dummy asynchronous task into the runtime,
 /// which will resolve instantly.
-fn spawn_dummy_task<T: Send + 'static>(ready: T) -> task::JoinHandle<T> {
-    tokio::spawn(async { std::future::ready(ready).await })
+fn spawn_dummy_task() -> task::JoinHandle<Result<(), Error>> {
+    tokio::spawn(async { std::future::ready(Ok(())).await })
 }
