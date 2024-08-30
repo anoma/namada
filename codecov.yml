@@ -6,6 +6,9 @@ coverage:
 github_checks:
   annotations: false
 
+fixes:
+  - "__w/namada/namada::"
+
 ignore:
   - audits
   - docker
