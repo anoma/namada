@@ -22,14 +22,14 @@ mod storage;
 pub mod storage_key;
 pub mod vp;
 
+use std::collections::BTreeMap;
 use std::marker::PhantomData;
 
 use event::{TokenEvent, TokenOperation};
 use namada_core::address::Address;
 use namada_core::token;
 use namada_core::uint::Uint;
-use namada_events::extend::UserAccount;
-use namada_events::{EmitEvents, EventLevel};
+use namada_events::EmitEvents;
 pub use namada_state::{
     Error, Key, Result, ResultExt, StorageRead, StorageWrite,
 };
@@ -177,6 +177,56 @@ where
                 amount: amount.into(),
                 post_balance,
                 target_account: UserAccount::Internal(target.clone()),
+            },
+        });
+        Ok(())
+    }
+
+    fn emit_transfer_event(
+        storage: &mut S,
+        descriptor: std::borrow::Cow<'static, str>,
+        level: EventLevel,
+        token: &Address,
+        amount: token::Amount,
+        source: UserAccount,
+        target: UserAccount,
+    ) -> Result<()> {
+        let post_source_balance: Option<Uint> = match &source {
+            UserAccount::Internal(addr) => {
+                Some(Self::read_balance(storage, token, addr)?.into())
+            }
+            UserAccount::External(_) => None,
+        };
+        let post_target_balance: Option<Uint> = match &target {
+            UserAccount::Internal(addr) => {
+                Some(Self::read_balance(storage, token, addr)?.into())
+            }
+            UserAccount::External(_) => None,
+        };
+
+        let sources = BTreeMap::from_iter([(
+            (source.clone(), token.clone()),
+            amount.into(),
+        )]);
+        let targets = BTreeMap::from_iter([(
+            (target.clone(), token.clone()),
+            amount.into(),
+        )]);
+
+        let mut post_balances = BTreeMap::new();
+        if let Some(balance) = post_source_balance {
+            post_balances.insert((source, token.clone()), balance);
+        }
+        if let Some(balance) = post_target_balance {
+            post_balances.insert((target, token.clone()), balance);
+        }
+        storage.emit(TokenEvent {
+            descriptor,
+            level,
+            operation: TokenOperation::Transfer {
+                sources,
+                targets,
+                post_balances,
             },
         });
         Ok(())
