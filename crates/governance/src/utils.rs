@@ -447,6 +447,24 @@ pub fn is_valid_validator_voting_period(
     }
 }
 
+/// Returns the latest epoch in which a validator can vote, given the voting
+/// start and end epochs. If the pair of start and end epoch is invalid, then
+/// return `None`.
+pub fn last_validator_voting_epoch(
+    voting_start_epoch: Epoch,
+    voting_end_epoch: Epoch,
+) -> Result<Option<Epoch>, arith::Error> {
+    if voting_start_epoch >= voting_end_epoch {
+        Ok(None)
+    } else {
+        let latest = checked!(
+            voting_start_epoch.0
+                + 2u64 * (voting_end_epoch.0 - voting_start_epoch.0) / 3u64
+        )?;
+        Ok(Some(Epoch(latest)))
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::ops::{Add, Sub};
@@ -1440,6 +1458,12 @@ mod test {
             2.into(),
             4.into()
         ));
+        assert_eq!(
+            last_validator_voting_epoch(2.into(), 4.into())
+                .unwrap()
+                .unwrap(),
+            3.into()
+        );
 
         assert!(is_valid_validator_voting_period(
             3.into(),
@@ -1456,5 +1480,27 @@ mod test {
             2.into(),
             5.into()
         ));
+        assert_eq!(
+            last_validator_voting_epoch(2.into(), 5.into())
+                .unwrap()
+                .unwrap(),
+            4.into()
+        );
+
+        for end_epoch in 1u64..=20 {
+            let last = last_validator_voting_epoch(0.into(), end_epoch.into())
+                .unwrap()
+                .unwrap();
+            assert!(is_valid_validator_voting_period(
+                last,
+                0.into(),
+                end_epoch.into()
+            ));
+            assert!(!is_valid_validator_voting_period(
+                last.next(),
+                0.into(),
+                end_epoch.into()
+            ));
+        }
     }
 }

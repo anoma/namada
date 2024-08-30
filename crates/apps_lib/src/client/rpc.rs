@@ -455,14 +455,57 @@ pub async fn query_proposal_result<N: Namada>(
     {
         display_line!(context.io(), "Proposal Id: {} ", proposal_id);
         if current_epoch >= proposal_query.voting_end_epoch {
+            display_line!(context.io(), "{:4}The voting period has ended.", "");
             display_line!(context.io(), "{:4}{}", "", proposal_result);
+        } else if current_epoch < proposal_query.voting_start_epoch {
+            display_line!(
+                context.io(),
+                "{:4}The voting period has not begun yet.",
+                ""
+            );
+            display_line!(
+                context.io(),
+                "{:4}Start epoch: {}. End epoch: {}",
+                "",
+                proposal_query.voting_start_epoch,
+                proposal_query.voting_end_epoch
+            );
+            if let Ok(Some(last_epoch)) =
+                namada_sdk::governance::utils::last_validator_voting_epoch(
+                    proposal_query.voting_start_epoch,
+                    proposal_query.voting_end_epoch,
+                )
+            {
+                display_line!(
+                    context.io(),
+                    "{:4}NOTE: Validators will be able to vote only until the \
+                     end of epoch {}.",
+                    "",
+                    last_epoch
+                )
+            }
         } else {
             display_line!(
                 context.io(),
-                "{:4}Still voting until epoch {} begins.",
+                "{:4}The voting period is underway and will continue until \
+                 epoch {} begins.",
                 "",
-                proposal_query.voting_end_epoch
+                proposal_query.voting_end_epoch,
             );
+            if let Ok(Some(last_epoch)) =
+                namada_sdk::governance::utils::last_validator_voting_epoch(
+                    proposal_query.voting_start_epoch,
+                    proposal_query.voting_end_epoch,
+                )
+            {
+                display_line!(
+                    context.io(),
+                    "{:4}NOTE: Validators can vote only until the end of \
+                     epoch {}.",
+                    "",
+                    last_epoch
+                )
+            }
             let res = format!("{}", proposal_result);
             if let Some(idx) = res.find(' ') {
                 let slice = &res[idx..];
