@@ -107,8 +107,6 @@ impl AbortableSpawner {
         status
     }
 
-    /// This method is responsible for actually spawning the async task into the
-    /// runtime.
     fn spawn_abortable_task<A, F, R>(
         &self,
         who: AbortingTask,
@@ -125,10 +123,26 @@ impl AbortableSpawner {
         };
         tokio::spawn(abortable(abort))
     }
+
+    fn spawn_abortable_task_blocking<A, R>(
+        &self,
+        who: AbortingTask,
+        abortable: A,
+    ) -> JoinHandle<R>
+    where
+        A: FnOnce(Aborter) -> R + Send + 'static,
+        R: Send + 'static,
+    {
+        let abort = Aborter {
+            who,
+            sender: self.abort_send.clone(),
+        };
+        tokio::task::spawn_blocking(move || abortable(abort))
+    }
 }
 
 impl<'a, A> AbortableTaskBuilder<'a, A> {
-    /// Spawn the underlying abortable task into the runtime.
+    /// Spawn the built abortable task into the runtime.
     #[inline]
     pub fn spawn<F, R>(self) -> JoinHandle<R>
     where
@@ -140,6 +154,20 @@ impl<'a, A> AbortableTaskBuilder<'a, A> {
             self.spawner.cleanup_jobs.push(cleanup);
         }
         self.spawner.spawn_abortable_task(self.who, self.abortable)
+    }
+
+    /// Spawn the built abortable (blocking) task into the runtime.
+    #[inline]
+    pub fn spawn_blocking<R>(self) -> JoinHandle<R>
+    where
+        A: FnOnce(Aborter) -> R + Send + 'static,
+        R: Send + 'static,
+    {
+        if let Some(cleanup) = self.cleanup {
+            self.spawner.cleanup_jobs.push(cleanup);
+        }
+        self.spawner
+            .spawn_abortable_task_blocking(self.who, self.abortable)
     }
 
     /// A cleanup routine `cleanup` will be executed for the associated task.
