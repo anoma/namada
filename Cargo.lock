@@ -4733,8 +4733,6 @@ dependencies = [
 name = "namada_apps"
 version = "0.43.0"
 dependencies = [
- "assert_matches",
- "bit-set",
  "clap_complete",
  "clap_complete_nushell",
  "color-eyre",
@@ -4742,11 +4740,7 @@ dependencies = [
  "git2",
  "namada_apps_lib",
  "namada_node",
- "namada_test_utils",
- "proptest",
- "test-log",
  "tokio",
- "tokio-test",
  "toml 0.5.11",
  "tracing",
  "tracing-subscriber",
@@ -4757,7 +4751,6 @@ dependencies = [
 name = "namada_apps_lib"
 version = "0.43.0"
 dependencies = [
- "assert_matches",
  "async-trait",
  "base64 0.13.1",
  "bit-set",
@@ -4788,7 +4781,6 @@ dependencies = [
  "namada_macros",
  "namada_migrations",
  "namada_sdk",
- "namada_test_utils",
  "namada_vm",
  "pretty_assertions",
  "proptest",
@@ -4804,11 +4796,9 @@ dependencies = [
  "tempfile",
  "tendermint-config",
  "tendermint-rpc",
- "test-log",
  "textwrap-macros",
  "thiserror",
  "tokio",
- "tokio-test",
  "toml 0.5.11",
  "tracing",
  "tracing-appender",
@@ -4865,7 +4855,6 @@ dependencies = [
  "ethabi",
  "ethbridge-structs",
  "eyre",
- "futures",
  "ibc",
  "ics23",
  "impl-num-traits",
@@ -4882,7 +4871,6 @@ dependencies = [
  "num-traits 0.2.17",
  "num256",
  "num_enum 0.7.1",
- "pretty_assertions",
  "primitive-types",
  "proptest",
  "prost-types 0.13.1",
@@ -4896,13 +4884,11 @@ dependencies = [
  "sparse-merkle-tree",
  "tendermint",
  "tendermint-proto",
- "test-log",
  "thiserror",
  "tiny-keccak",
  "tokio",
  "toml 0.5.11",
  "tracing",
- "tracing-subscriber",
  "uint",
  "wasmtimer",
  "zeroize",
@@ -5086,7 +5072,6 @@ dependencies = [
  "namada_parameters",
  "namada_proof_of_stake",
  "namada_state",
- "namada_storage",
  "namada_systems",
  "namada_token",
  "namada_tx",
@@ -5210,6 +5195,7 @@ dependencies = [
  "smooth-operator",
  "sparse-merkle-tree",
  "sysinfo",
+ "tar",
  "tempfile",
  "test-log",
  "thiserror",
@@ -5221,6 +5207,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "warp",
+ "zstd",
 ]
 
 [[package]]
@@ -5230,7 +5217,6 @@ dependencies = [
  "namada_core",
  "namada_macros",
  "namada_state",
- "namada_storage",
  "namada_systems",
  "namada_tx",
  "namada_vp",
@@ -5257,7 +5243,6 @@ dependencies = [
  "namada_migrations",
  "namada_parameters",
  "namada_state",
- "namada_storage",
  "namada_systems",
  "namada_trans_token",
  "namada_tx",
@@ -5326,7 +5311,6 @@ dependencies = [
  "namada_proof_of_stake",
  "namada_state",
  "namada_storage",
- "namada_test_utils",
  "namada_token",
  "namada_tx",
  "namada_vm",
@@ -5377,7 +5361,6 @@ dependencies = [
  "namada_gas",
  "namada_parameters",
  "namada_state",
- "namada_storage",
  "namada_systems",
  "namada_trans_token",
  "namada_tx",
@@ -5497,7 +5480,6 @@ dependencies = [
  "namada_vp",
  "namada_vp_prelude",
  "once_cell",
- "pretty_assertions",
  "proptest",
  "proptest-state-machine",
  "prost 0.13.1",
@@ -5525,7 +5507,6 @@ dependencies = [
  "namada_events",
  "namada_macros",
  "namada_shielded_token",
- "namada_storage",
  "namada_systems",
  "namada_trans_token",
  "proptest",
@@ -5546,7 +5527,6 @@ dependencies = [
  "namada_ibc",
  "namada_parameters",
  "namada_state",
- "namada_storage",
  "namada_systems",
  "namada_tx",
  "namada_vm",
@@ -5569,6 +5549,7 @@ dependencies = [
  "konst",
  "linkme",
  "masp_primitives",
+ "namada_account",
  "namada_core",
  "namada_events",
  "namada_gas",
@@ -5602,7 +5583,6 @@ name = "namada_tx_prelude"
 version = "0.43.0"
 dependencies = [
  "borsh",
- "masp_primitives",
  "namada_account",
  "namada_core",
  "namada_events",
@@ -5612,7 +5592,7 @@ dependencies = [
  "namada_macros",
  "namada_parameters",
  "namada_proof_of_stake",
- "namada_storage",
+ "namada_state",
  "namada_token",
  "namada_tx",
  "namada_tx_env",
@@ -5628,6 +5608,7 @@ dependencies = [
  "byte-unit",
  "clru",
  "itertools 0.12.1",
+ "namada_account",
  "namada_core",
  "namada_events",
  "namada_gas",
@@ -5658,8 +5639,6 @@ dependencies = [
 name = "namada_vm_env"
 version = "0.43.0"
 dependencies = [
- "borsh",
- "masp_primitives",
  "namada_core",
 ]
 
@@ -10030,10 +10009,28 @@ dependencies = [
 ]
 
 [[package]]
-name = "zstd-sys"
-version = "2.0.9+zstd.1.5.5"
+name = "zstd"
+version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e16efa8a874a0481a574084d34cc26fdb3b99627480f785888deb6386506656"
+checksum = "fcf2b778a664581e31e389454a7072dab1647606d44f7feea22cd5abb9c9f3f9"
+dependencies = [
+ "zstd-safe",
+]
+
+[[package]]
+name = "zstd-safe"
+version = "7.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "54a3ab4db68cea366acc5c897c7b4d4d1b8994a9cd6e6f841f8964566a419059"
+dependencies = [
+ "zstd-sys",
+]
+
+[[package]]
+name = "zstd-sys"
+version = "2.0.13+zstd.1.5.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "38ff0f21cfee8f97d94cef41359e0c89aa6113028ab0291aa8ca0038995a95aa"
 dependencies = [
  "cc",
  "pkg-config",
