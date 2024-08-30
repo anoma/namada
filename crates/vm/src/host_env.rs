@@ -1563,7 +1563,7 @@ where
     tx_charge_gas::<MEM, D, H, CA>(env, gas)?;
     let gas = env
         .memory
-        .write_string(result_ptr, chain_id)
+        .write_string(result_ptr, chain_id.to_string())
         .map_err(|e| TxRuntimeError::MemoryError(Box::new(e)))?;
     tx_charge_gas::<MEM, D, H, CA>(env, gas)
 }
@@ -1748,7 +1748,7 @@ where
     let chain_id = vp_host_fns::get_chain_id(gas_meter, &state)?;
     let gas = env
         .memory
-        .write_string(result_ptr, chain_id)
+        .write_string(result_ptr, chain_id.to_string())
         .map_err(Into::into)?;
     vp_host_fns::add_gas(gas_meter, gas)
 }

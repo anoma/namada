@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 
 use namada_core::address::Address;
 use namada_core::arith::checked;
-use namada_core::chain::{BlockHeader, BlockHeight, Epoch, Epochs};
+use namada_core::chain::{BlockHeader, BlockHeight, ChainId, Epoch, Epochs};
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::storage::{Key, TxIndex};
 use namada_events::Event;
@@ -142,7 +142,7 @@ Self: 'iter;
         self.ctx.iter_next(iter)
     }
 
-    fn get_chain_id(&self) -> Result<String> {
+    fn get_chain_id(&self) -> Result<ChainId> {
         self.ctx.get_chain_id()
     }
 
@@ -332,7 +332,7 @@ where
         self.ctx.iter_next(iter)
     }
 
-    fn get_chain_id(&self) -> Result<String> {
+    fn get_chain_id(&self) -> Result<ChainId> {
         self.ctx.get_chain_id()
     }
 

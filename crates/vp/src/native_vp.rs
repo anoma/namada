@@ -9,7 +9,7 @@ use std::marker::PhantomData;
 
 use namada_core::borsh;
 use namada_core::borsh::BorshDeserialize;
-use namada_core::chain::Epochs;
+use namada_core::chain::{ChainId, Epochs};
 use namada_gas::{GasMetering, VpGasMeter};
 use namada_tx::{BatchedTxRef, Tx, TxCommitments};
 
@@ -202,7 +202,7 @@ where
             .into_storage_result()
     }
 
-    fn get_chain_id(&self) -> Result<String> {
+    fn get_chain_id(&self) -> Result<ChainId> {
         self.ctx.get_chain_id()
     }
 
@@ -277,7 +277,7 @@ where
             .into_storage_result()
     }
 
-    fn get_chain_id(&self) -> Result<String> {
+    fn get_chain_id(&self) -> Result<ChainId> {
         self.ctx.get_chain_id()
     }
 
@@ -341,7 +341,7 @@ where
             .into_storage_result()
     }
 
-    fn get_chain_id(&self) -> Result<String> {
+    fn get_chain_id(&self) -> Result<ChainId> {
         vp_host_fns::get_chain_id(self.gas_meter, self.state)
             .into_storage_result()
     }

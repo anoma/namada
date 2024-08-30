@@ -32,6 +32,7 @@ pub use in_memory::{
 };
 use namada_core::address::Address;
 use namada_core::arith::checked;
+use namada_core::chain::ChainId;
 pub use namada_core::chain::{
     BlockHash, BlockHeader, BlockHeight, Epoch, Epochs, BLOCK_HASH_LENGTH,
     BLOCK_HEIGHT_LENGTH,
@@ -290,7 +291,7 @@ macro_rules! impl_storage_read {
 
             fn get_chain_id(
                 &self,
-            ) -> std::result::Result<String, namada_storage::Error> {
+            ) -> std::result::Result<ChainId, namada_storage::Error> {
                 let (chain_id, gas) = self.in_mem().get_chain_id();
                 self.charge_gas(gas).into_storage_result()?;
                 Ok(chain_id)
@@ -587,7 +588,6 @@ pub mod testing {
     use clru::CLruCache;
     use namada_core::address;
     use namada_core::address::EstablishedAddressGen;
-    use namada_core::chain::ChainId;
     use namada_core::time::DateTimeUtc;
     pub use namada_storage::testing::{PrefixIter, *};
     use namada_storage::tx_queue::ExpiredTxsQueue;

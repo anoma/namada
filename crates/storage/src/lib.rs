@@ -36,6 +36,7 @@ pub use db::{Error as DbError, Result as DbResult, *};
 pub use error::{CustomError, Error, OptionExt, Result, ResultExt};
 use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
+use namada_core::chain::ChainId;
 pub use namada_core::chain::{
     BlockHash, BlockHeader, BlockHeight, Epoch, Epochs,
 };
@@ -85,7 +86,7 @@ pub trait StorageRead {
     ) -> Result<Option<(String, Vec<u8>)>>;
 
     /// Getting the chain ID.
-    fn get_chain_id(&self) -> Result<String>;
+    fn get_chain_id(&self) -> Result<ChainId>;
 
     /// Getting the block height. The height is that of the block to which the
     /// current transaction is being applied.
@@ -385,8 +386,8 @@ pub mod testing {
             Ok(iter.next())
         }
 
-        fn get_chain_id(&self) -> Result<String> {
-            Ok(self.chain_id.to_string())
+        fn get_chain_id(&self) -> Result<ChainId> {
+            Ok(self.chain_id.clone())
         }
 
         fn get_block_height(&self) -> Result<BlockHeight> {
