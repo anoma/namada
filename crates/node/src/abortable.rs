@@ -21,7 +21,7 @@ pub struct AbortableSpawner {
 }
 
 /// Contains the state of an on-going [`AbortableSpawner`] task spawn.
-pub struct WithCleanup<'a, A> {
+pub struct AbortableTaskBuilder<'a, A> {
     who: AbortingTask,
     abortable: A,
     spawner: &'a mut AbortableSpawner,
@@ -62,14 +62,15 @@ impl AbortableSpawner {
     ///     .with_no_cleanup();
     /// ```
     ///
-    /// The return type of this method is [`WithCleanup`], such that a cleanup
-    /// routine, after the abort is received, can be configured to execute.
+    /// The return type of this method is [`AbortableTaskBuilder`], such that a
+    /// cleanup routine, after the abort is received, can be configured to
+    /// execute.
     pub fn spawn_abortable<A>(
         &mut self,
         who: AbortingTask,
         abortable: A,
-    ) -> WithCleanup<'_, A> {
-        WithCleanup {
+    ) -> AbortableTaskBuilder<'_, A> {
+        AbortableTaskBuilder {
             who,
             abortable,
             spawner: self,
@@ -123,7 +124,7 @@ impl AbortableSpawner {
     }
 }
 
-impl<'a, A> WithCleanup<'a, A> {
+impl<'a, A> AbortableTaskBuilder<'a, A> {
     /// No cleanup routine will be executed for the associated task.
     #[inline]
     pub fn with_no_cleanup<F, R>(self) -> JoinHandle<R>
