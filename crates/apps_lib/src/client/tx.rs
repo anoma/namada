@@ -995,7 +995,7 @@ where
                 e.to_string(),
             )
         })?;
-        let author_balane = namada_sdk::rpc::get_token_balance(
+        let author_balance = namada_sdk::rpc::get_token_balance(
             namada.client(),
             &namada.native_token(),
             &proposal.proposal.author,
@@ -1006,7 +1006,7 @@ where
             .validate(
                 &governance_parameters,
                 current_epoch,
-                author_balane,
+                author_balance,
                 args.tx.force,
             )
             .map_err(|e| {
