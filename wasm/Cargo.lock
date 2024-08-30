@@ -3924,6 +3924,7 @@ name = "namada_systems"
 version = "0.43.0"
 dependencies = [
  "namada_core",
+ "namada_events",
  "namada_storage",
 ]
 

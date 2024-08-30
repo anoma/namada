@@ -7,7 +7,6 @@
 //! More info in <https://github.com/anoma/namada/issues/362>.
 pub mod block_alloc;
 mod finalize_block;
-mod governance;
 mod init_chain;
 pub use init_chain::InitChainValidation;
 use namada_apps_lib::config::NodeLocalConfig;
@@ -23,7 +22,6 @@ mod stats;
 #[cfg(any(test, feature = "testing"))]
 #[allow(dead_code)]
 pub mod testing;
-pub mod utils;
 mod vote_extensions;
 
 use std::cell::RefCell;
@@ -65,7 +63,8 @@ pub use namada_sdk::tx::data::ResultCode;
 use namada_sdk::tx::data::{TxType, WrapperTx};
 use namada_sdk::tx::{Section, Tx};
 use namada_sdk::{
-    eth_bridge, hints, migrations, parameters, proof_of_stake, token,
+    eth_bridge, governance, hints, migrations, parameters, proof_of_stake,
+    token,
 };
 use namada_vm::wasm::{TxCache, VpCache};
 use namada_vm::{WasmCacheAccess, WasmCacheRwAccess};

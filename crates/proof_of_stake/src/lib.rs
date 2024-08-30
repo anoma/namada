@@ -139,6 +139,63 @@ where
         let params = storage::read_owned_pos_params(storage)?;
         Ok(params.pipeline_len)
     }
+
+    fn total_active_stake<Gov>(
+        storage: &S,
+        epoch: Epoch,
+    ) -> Result<token::Amount>
+    where
+        Gov: governance::Read<S>,
+    {
+        let params = storage::read_pos_params::<S, Gov>(storage)?;
+        storage::read_total_active_stake(storage, &params, epoch)
+    }
+
+    fn is_active_validator<Gov>(
+        storage: &S,
+        validator: &Address,
+        epoch: Epoch,
+    ) -> Result<bool>
+    where
+        Gov: governance::Read<S>,
+    {
+        let validator_state =
+            storage::read_validator_state::<S, Gov>(storage, validator, epoch)?;
+
+        Ok(!matches!(
+            validator_state,
+            None | Some(ValidatorState::Jailed)
+                | Some(ValidatorState::Inactive)
+        ))
+    }
+
+    fn read_validator_stake<Gov>(
+        storage: &S,
+        validator: &Address,
+        epoch: Epoch,
+    ) -> Result<token::Amount>
+    where
+        Gov: governance::Read<S>,
+    {
+        let params = storage::read_pos_params::<S, Gov>(storage)?;
+        read_validator_stake(storage, &params, validator, epoch)
+    }
+
+    fn bond_amount<Gov>(
+        storage: &S,
+        validator: &Address,
+        delegator: &Address,
+        epoch: Epoch,
+    ) -> Result<token::Amount>
+    where
+        Gov: governance::Read<S>,
+    {
+        let bond_id = BondId {
+            source: delegator.clone(),
+            validator: validator.clone(),
+        };
+        bond_amount::<S, Gov>(storage, &bond_id, epoch)
+    }
 }
 
 /// Address of the PoS account implemented as a native VP
