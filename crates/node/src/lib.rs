@@ -647,7 +647,7 @@ fn start_abci_broadcaster_shell(
             tokio::sync::oneshot::channel::<()>();
 
         spawner
-            .spawn_abortable("Broadcaster", move |aborter| async move {
+            .abortable("Broadcaster", move |aborter| async move {
                 // Construct a service for broadcasting protocol txs from
                 // the ledger
                 let mut broadcaster =
@@ -660,6 +660,7 @@ fn start_abci_broadcaster_shell(
             .with_cleanup(async move {
                 let _ = bc_abort_send.send(());
             })
+            .spawn()
     } else {
         spawn_dummy_task(())
     };
@@ -691,7 +692,7 @@ fn start_abci_broadcaster_shell(
 
     // Start the ABCI server
     let abci = spawner
-        .spawn_abortable("ABCI", move |aborter| async move {
+        .abortable("ABCI", move |aborter| async move {
             let res = run_abci(
                 abci_service,
                 service_handle,
@@ -705,7 +706,8 @@ fn start_abci_broadcaster_shell(
         })
         .with_cleanup(async move {
             let _ = abci_abort_send.send(());
-        });
+        })
+        .spawn();
 
     // Start the shell in a new OS thread
     let thread_builder = thread::Builder::new().name("ledger-shell".into());
@@ -789,7 +791,7 @@ fn start_tendermint(
         tokio::sync::oneshot::channel::<tokio::sync::oneshot::Sender<()>>();
 
     spawner
-        .spawn_abortable("Tendermint", move |aborter| async move {
+        .abortable("Tendermint", move |aborter| async move {
             let res = tendermint_node::run(
                 tendermint_dir,
                 chain_id,
@@ -828,6 +830,7 @@ fn start_tendermint(
                 }
             }
         })
+        .spawn()
 }
 
 /// Represents a [`tokio::task`] in which an Ethereum oracle may be running, and
@@ -892,7 +895,7 @@ async fn maybe_start_ethereum_oracle(
                 tokio::sync::oneshot::channel::<tokio::sync::oneshot::Sender<()>>(
                 );
             let handle = spawner
-                .spawn_abortable(
+                .abortable(
                     "Ethereum Events Endpoint",
                     move |aborter| async move {
                         oracle::test_tools::events_endpoint::serve(
@@ -927,7 +930,8 @@ async fn maybe_start_ethereum_oracle(
                             }
                         }
                     }
-                });
+                })
+                .spawn();
             EthereumOracleTask::Enabled {
                 handle,
                 channels: EthereumOracleChannels::new(

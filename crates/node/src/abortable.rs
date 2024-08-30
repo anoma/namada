@@ -25,6 +25,7 @@ pub struct AbortableTaskBuilder<'a, A> {
     who: AbortingTask,
     abortable: A,
     spawner: &'a mut AbortableSpawner,
+    cleanup: Option<Pin<Box<dyn Future<Output = ()>>>>,
 }
 
 impl Default for AbortableSpawner {
@@ -55,17 +56,18 @@ impl AbortableSpawner {
     /// ```ignore
     /// let mut spawner = AbortableSpawner::new();
     /// spawner
-    ///     .spawn_abortable("ExampleTask", |aborter| async {
+    ///     .abortable("ExampleTask", |aborter| async {
     ///         drop(aborter);
     ///         println!("I have signaled a control task that I am no longer running!");
     ///     })
-    ///     .with_no_cleanup();
+    ///     .spawn();
     /// ```
     ///
     /// The return type of this method is [`AbortableTaskBuilder`], such that a
     /// cleanup routine, after the abort is received, can be configured to
     /// execute.
-    pub fn spawn_abortable<A>(
+    #[inline]
+    pub fn abortable<A>(
         &mut self,
         who: AbortingTask,
         abortable: A,
@@ -74,6 +76,7 @@ impl AbortableSpawner {
             who,
             abortable,
             spawner: self,
+            cleanup: None,
         }
     }
 
@@ -125,28 +128,29 @@ impl AbortableSpawner {
 }
 
 impl<'a, A> AbortableTaskBuilder<'a, A> {
-    /// No cleanup routine will be executed for the associated task.
+    /// Spawn the underlying abortable task into the runtime.
     #[inline]
-    pub fn with_no_cleanup<F, R>(self) -> JoinHandle<R>
+    pub fn spawn<F, R>(self) -> JoinHandle<R>
     where
         A: FnOnce(Aborter) -> F,
         F: Future<Output = R> + Send + 'static,
         R: Send + 'static,
     {
+        if let Some(cleanup) = self.cleanup {
+            self.spawner.cleanup_jobs.push(cleanup);
+        }
         self.spawner.spawn_abortable_task(self.who, self.abortable)
     }
 
     /// A cleanup routine `cleanup` will be executed for the associated task.
+    /// This method replaces the previous cleanup routine, if any.
     #[inline]
-    pub fn with_cleanup<F, R, C>(self, cleanup: C) -> JoinHandle<R>
+    pub fn with_cleanup<C>(mut self, cleanup: C) -> Self
     where
-        A: FnOnce(Aborter) -> F,
-        F: Future<Output = R> + Send + 'static,
-        R: Send + 'static,
         C: Future<Output = ()> + Send + 'static,
     {
-        self.spawner.cleanup_jobs.push(Box::pin(cleanup));
-        self.with_no_cleanup()
+        self.cleanup = Some(Box::pin(cleanup));
+        self
     }
 }
 

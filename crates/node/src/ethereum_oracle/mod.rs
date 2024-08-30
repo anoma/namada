@@ -311,11 +311,11 @@ pub fn run_oracle<C: RpcClient>(
         });
     });
     spawner
-        .spawn_abortable("Ethereum Oracle", move |aborter| async move {
+        .abortable("Ethereum Oracle", move |aborter| async move {
             blocking_handle.await.unwrap();
             drop(aborter);
         })
-        .with_no_cleanup()
+        .spawn()
 }
 
 /// Determine what action to take after attempting to
