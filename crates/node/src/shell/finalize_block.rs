@@ -1172,22 +1172,25 @@ where
                 Ok(extended_tx_result) => match extended_tx_result
                     .tx_result
                     .get_inner_tx_result(None, either::Right(&cmt))
+                    .expect("Proposal tx must have a result")
                 {
-                    Some(Ok(batched_result))
-                        if batched_result.is_accepted() =>
-                    {
-                        state.write_log_mut().commit_batch_and_current_tx();
-                        Ok(true)
+                    Ok(batched_result) => {
+                        if batched_result.is_accepted() {
+                            state.write_log_mut().commit_batch_and_current_tx();
+                            Ok(true)
+                        } else {
+                            tracing::warn!(
+                                "Governance proposal rejected by VP(s): {}",
+                                batched_result.vps_result
+                            );
+                            state.write_log_mut().drop_batch();
+                            Ok(false)
+                        }
                     }
-                    Some(Err(e)) => {
+                    Err(e) => {
                         tracing::warn!(
                             "Error executing governance proposal {e}",
                         );
-                        state.write_log_mut().drop_batch();
-                        Ok(false)
-                    }
-                    _ => {
-                        tracing::warn!("not sure what happen");
                         state.write_log_mut().drop_batch();
                         Ok(false)
                     }
