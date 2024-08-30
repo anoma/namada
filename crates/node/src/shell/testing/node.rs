@@ -758,8 +758,9 @@ impl MockNode {
         if !self.success() {
             panic!(
                 "Assert failed: The node did not execute \
-                 successfully:\nErrors:\n    {:?}",
-                self.tx_result_codes.lock().unwrap()
+                 successfully:\nErrors:\n    {:?},\nTxs results:\n    {:?}",
+                self.tx_result_codes.lock().unwrap(),
+                self.tx_results.lock().unwrap()
             );
         }
         self.clear_results();

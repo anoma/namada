@@ -1517,28 +1517,9 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
 
     node.clear_results();
     node.submit_txs(txs);
-    {
-        let results = node.tx_result_codes.lock().unwrap();
-        // If empty than failed in process proposal
-        assert!(!results.is_empty());
-
-        // FIXME: can use is_success
-        for result in results.iter() {
-            assert!(matches!(result, NodeResults::Ok));
-        }
-    }
-    // FIXME: is this correct???
-    // FIXME: maybe should assert the length of the result? Or maybe this is not
-    // needed naymore Finalize the next block to actually execute the
-    // decrypted txs
-    node.clear_results();
-    node.finalize_and_commit(None);
-    {
-        let results = node.tx_result_codes.lock().unwrap();
-        for result in results.iter() {
-            assert!(matches!(result, NodeResults::Ok));
-        }
-    }
+    // If empty than failed in process proposal
+    assert!(!node.tx_result_codes.lock().unwrap().is_empty());
+    node.assert_success();
 
     Ok(())
 }
@@ -1671,7 +1652,7 @@ fn expired_masp_tx() -> Result<()> {
     // Skip at least 20 blocks to ensure expiration (this is because of the
     // default masp expiration)
     for _ in 0..=20 {
-        node.finalize_and_commit();
+        node.finalize_and_commit(None);
     }
     node.clear_results();
     node.submit_txs(vec![tx.to_bytes()]);

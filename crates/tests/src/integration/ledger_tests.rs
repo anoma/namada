@@ -16,7 +16,6 @@ use namada_core::hash::Hash;
 use namada_core::storage::{DbColFam, Key};
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_node::shell::testing::client::run;
-use namada_node::shell::testing::node::NodeResults;
 use namada_node::shell::testing::utils::{Bin, CapturedOutput};
 use namada_node::shell::SnapshotSync;
 use namada_node::storage::DbSnapshot;
@@ -1807,24 +1806,9 @@ fn enforce_fee_payment() -> Result<()> {
 
     node.clear_results();
     node.submit_txs(txs);
-    {
-        let results = node.results.lock().unwrap();
-        // If empty than failed in process proposal
-        assert!(!results.is_empty());
-
-        for result in results.iter() {
-            assert!(matches!(result, NodeResults::Ok));
-        }
-    }
-    // Finalize the next block to execute the txs
-    node.clear_results();
-    node.finalize_and_commit(None);
-    {
-        let results = node.results.lock().unwrap();
-        for result in results.iter() {
-            assert!(matches!(result, NodeResults::Ok));
-        }
-    }
+    // If empty than failed in process proposal
+    assert!(!node.tx_result_codes.lock().unwrap().is_empty());
+    node.assert_success();
 
     // Assert balances
     let captured = CapturedOutput::of(|| {
