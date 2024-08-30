@@ -455,14 +455,14 @@ where
 pub fn read_validator_state<S, Gov>(
     storage: &S,
     validator: &Address,
-    epoch: &Epoch,
+    epoch: Epoch,
 ) -> Result<Option<ValidatorState>>
 where
     S: StorageRead,
     Gov: governance::Read<S>,
 {
     let params = read_pos_params::<S, Gov>(storage)?;
-    validator_state_handle(validator).get(storage, *epoch, &params)
+    validator_state_handle(validator).get(storage, epoch, &params)
 }
 
 /// Read PoS validator's delta value.
