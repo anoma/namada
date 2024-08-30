@@ -11,6 +11,7 @@ use namada_node::shell::testing::node::NodeResults;
 use namada_node::shell::testing::utils::{Bin, CapturedOutput};
 use namada_sdk::masp::fs::FsShieldedUtils;
 use namada_sdk::state::{StorageRead, StorageWrite};
+use namada_sdk::time::DateTimeUtc;
 use namada_sdk::token::storage_key::masp_token_map_key;
 use namada_sdk::token::{self, DenominatedAmount};
 use namada_sdk::DEFAULT_GAS_LIMIT;
@@ -1517,21 +1518,199 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
     node.clear_results();
     node.submit_txs(txs);
     {
-        let results = node.results.lock().unwrap();
+        let results = node.tx_result_codes.lock().unwrap();
         // If empty than failed in process proposal
         assert!(!results.is_empty());
 
+        // FIXME: can use is_success
         for result in results.iter() {
             assert!(matches!(result, NodeResults::Ok));
         }
     }
-    // Finalize the next block to actually execute the decrypted txs
+    // FIXME: is this correct???
+    // FIXME: maybe should assert the length of the result? Or maybe this is not
+    // needed naymore Finalize the next block to actually execute the
+    // decrypted txs
     node.clear_results();
     node.finalize_and_commit(None);
     {
-        let results = node.results.lock().unwrap();
+        let results = node.tx_result_codes.lock().unwrap();
         for result in results.iter() {
             assert!(matches!(result, NodeResults::Ok));
+        }
+    }
+
+    Ok(())
+}
+
+/// Tests that an expired masp tx is rejected by the vp
+#[test]
+fn expired_masp_tx() -> Result<()> {
+    // This address doesn't matter for tests. But an argument is required.
+    let validator_one_rpc = "http://127.0.0.1:26567";
+    // Download the shielded pool parameters before starting node
+    let _ = FsShieldedUtils::new(PathBuf::new());
+    let (mut node, _services) = setup::setup()?;
+    _ = node.next_epoch();
+
+    // Add the relevant viewing keys to the wallet otherwise the shielded
+    // context won't precache the masp data
+    run(
+        &node,
+        Bin::Wallet,
+        vec![
+            "add",
+            "--alias",
+            "alias_a",
+            "--value",
+            AA_VIEWING_KEY,
+            "--unsafe-dont-encrypt",
+        ],
+    )?;
+    node.assert_success();
+
+    // 1. Shield tokens
+    _ = node.next_epoch();
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shield",
+            "--source",
+            ALBERT_KEY,
+            "--target",
+            AA_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "100",
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+    // sync shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+
+    // 2. Shielded operation to avoid the need of a signature on the inner tx.
+    //    Dump the tx to than reload and submit
+    let tempdir = tempfile::tempdir().unwrap();
+
+    _ = node.next_epoch();
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transfer",
+            "--source",
+            A_SPENDING_KEY,
+            "--target",
+            AC_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "50",
+            "--gas-payer",
+            CHRISTEL_KEY,
+            // This is used to set the correct expiration in the masp object,
+            // we don't care about the expiration at the tx level
+            "--expiration",
+            #[allow(clippy::disallowed_methods)]
+            &DateTimeUtc::now().to_string(),
+            "--output-folder-path",
+            tempdir.path().to_str().unwrap(),
+            "--dump-tx",
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+
+    let file_path = tempdir
+        .path()
+        .read_dir()
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let tx_bytes = std::fs::read(&file_path).unwrap();
+    std::fs::remove_file(&file_path).unwrap();
+
+    let sk = christel_keypair();
+    let pk = sk.to_public();
+
+    let native_token = node
+        .shell
+        .lock()
+        .unwrap()
+        .state
+        .in_mem()
+        .native_token
+        .clone();
+    let mut tx = namada_sdk::tx::Tx::deserialize(&tx_bytes).unwrap();
+    // Remove the expiration field to avoid a failure because of it, we only
+    // want to check the expiration in the masp vp
+    tx.header.expiration = None;
+    tx.add_wrapper(
+        namada_sdk::tx::data::wrapper::Fee {
+            amount_per_gas_unit: DenominatedAmount::native(1.into()),
+            token: native_token.clone(),
+        },
+        pk.clone(),
+        DEFAULT_GAS_LIMIT.into(),
+    );
+    tx.sign_wrapper(sk.clone());
+    let wrapper_hash = tx.wrapper_hash();
+    let inner_cmt = tx.first_commitments().unwrap();
+
+    // Skip at least 20 blocks to ensure expiration (this is because of the
+    // default masp expiration)
+    for _ in 0..=20 {
+        node.finalize_and_commit();
+    }
+    node.clear_results();
+    node.submit_txs(vec![tx.to_bytes()]);
+    {
+        let codes = node.tx_result_codes.lock().unwrap();
+        // If empty than failed in process proposal
+        assert!(!codes.is_empty());
+
+        for code in codes.iter() {
+            assert!(matches!(code, NodeResults::Ok));
+        }
+
+        let results = node.tx_results.lock().unwrap();
+        // We submitted a single batch
+        assert_eq!(results.len(), 1);
+
+        for result in results.iter() {
+            // The batch should contain a single inner tx
+            assert_eq!(result.0.len(), 1);
+
+            let inner_tx_result = result
+                .get_inner_tx_result(
+                    wrapper_hash.as_ref(),
+                    itertools::Either::Right(inner_cmt),
+                )
+                .expect("Missing expected tx result")
+                .as_ref()
+                .expect("Result is supposed to be Ok");
+
+            assert!(
+                inner_tx_result
+                    .vps_result
+                    .rejected_vps
+                    .contains(&namada_sdk::address::MASP)
+            );
+            assert!(inner_tx_result.vps_result.errors.contains(&(
+                namada_sdk::address::MASP,
+                "Native VP error: MASP transaction is expired".to_string()
+            )));
         }
     }
 

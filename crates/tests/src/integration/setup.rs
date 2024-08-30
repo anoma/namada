@@ -224,7 +224,8 @@ fn create_node(
             test_dir: ManuallyDrop::new(test_dir),
         }),
         services: Arc::new(services),
-        results: Arc::new(Mutex::new(vec![])),
+        tx_result_codes: Arc::new(Mutex::new(vec![])),
+        tx_results: Arc::new(Mutex::new(vec![])),
         blocks: Arc::new(Mutex::new(HashMap::new())),
         auto_drive_services,
     };
