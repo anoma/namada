@@ -16,8 +16,6 @@ use data_encoding::HEXLOWER;
 use escargot::CargoBuild;
 use eyre::eyre;
 use namada_apps_lib::cli::context::ENV_VAR_CHAIN_ID;
-use namada_apps_lib::config::genesis::chain::DeriveEstablishedAddress;
-use namada_apps_lib::config::genesis::templates;
 use namada_apps_lib::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps_lib::config::{Config, TendermintMode};
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
@@ -179,28 +177,6 @@ pub fn get_actor_rpc(test: &Test, who: Who) -> String {
     format!("http://{}:{}", socket_addr.ip(), socket_addr.port())
 }
 
-/// Get some nodes's wallet.
-pub fn get_node_wallet(test: &Test, who: Who) -> Wallet<FsWalletUtils> {
-    let wallet_store_dir =
-        test.get_base_dir(who).join(test.net.chain_id.as_str());
-    let mut wallet = FsWalletUtils::new(wallet_store_dir);
-    wallet.load().expect("Failed to load wallet");
-    wallet
-}
-
-/// Get the public key of the validator
-pub fn get_validator_pk(test: &Test, who: Who) -> Option<common::PublicKey> {
-    let index = match who {
-        Who::NonValidator => return None,
-        Who::Validator(i) => i,
-    };
-    let mut wallet = get_node_wallet(test, who);
-    let sk = wallet
-        .find_secret_key(format!("validator-{index}-balance-key"), None)
-        .ok()?;
-    Some(sk.ref_to())
-}
-
 /// Get a pregenesis wallet.
 pub fn get_pregenesis_wallet<P: AsRef<Path>>(
     base_dir_path: P,
@@ -212,30 +188,6 @@ pub fn get_pregenesis_wallet<P: AsRef<Path>>(
     wallet.load().expect("Failed to load wallet");
 
     wallet
-}
-
-/// Get a pregenesis public key.
-pub fn get_pregenesis_pk<P: AsRef<Path>>(
-    alias: &str,
-    base_dir_path: P,
-) -> Option<common::PublicKey> {
-    let wallet = get_pregenesis_wallet(base_dir_path);
-    wallet.find_public_key(alias).ok()
-}
-
-/// Get a pregenesis public key.
-pub fn get_established_addr_from_pregenesis<P: AsRef<Path>>(
-    alias: &str,
-    base_dir_path: P,
-    genesis: &templates::All<templates::Unvalidated>,
-) -> Option<Address> {
-    let pk = get_pregenesis_pk(alias, base_dir_path)?;
-    let established_accounts =
-        genesis.transactions.established_account.as_ref()?;
-    let acct = established_accounts.iter().find(|&acct| {
-        acct.public_keys.len() == 1 && acct.public_keys[0].raw == pk
-    })?;
-    Some(acct.derive_address())
 }
 
 /// Find the address of an account by its alias from the wallet
@@ -660,6 +612,7 @@ fn make_hermes_chain_config_for_gaia(test: &Test) -> Value {
         Value::String(key_dir.to_string_lossy().to_string()),
     );
     chain.insert("store_prefix".to_owned(), Value::String("ibc".to_owned()));
+    chain.insert("gas_multiplier".to_owned(), Value::Float(1.3));
     let mut table = toml::map::Map::new();
     table.insert("price".to_owned(), Value::Float(0.001));
     table.insert("denom".to_owned(), Value::String("stake".to_string()));
@@ -707,6 +660,44 @@ pub fn update_gaia_config(test: &Test) -> Result<()> {
     file.write_all(values.to_string().as_bytes())
         .map_err(|e| eyre!(format!("Writing a Gaia app.toml failed: {}", e)))?;
 
+    let genesis_path = test.test_dir.as_ref().join("gaia/config/genesis.json");
+    let s = std::fs::read_to_string(&genesis_path)
+        .expect("Reading Gaia genesis.json failed");
+    let mut genesis: serde_json::Value =
+        serde_json::from_str(&s).expect("Decoding Gaia genesis.json failed");
+    // gas
+    if let Some(min_base_gas_price) =
+        genesis.pointer_mut("/app_state/feemarket/params/min_base_gas_price")
+    {
+        *min_base_gas_price =
+            serde_json::Value::String("0.000000000000000001".to_string());
+    }
+    if let Some(base_gas_price) =
+        genesis.pointer_mut("/app_state/feemarket/state/base_gas_price")
+    {
+        *base_gas_price =
+            serde_json::Value::String("0.000000000000000001".to_string());
+    }
+    // gov
+    if let Some(max_deposit_period) =
+        genesis.pointer_mut("/app_state/gov/params/max_deposit_period")
+    {
+        *max_deposit_period = serde_json::Value::String("10s".to_string());
+    }
+    if let Some(voting_period) =
+        genesis.pointer_mut("/app_state/gov/params/voting_period")
+    {
+        *voting_period = serde_json::Value::String("10s".to_string());
+    }
+
+    let file = OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .open(&genesis_path)?;
+    let writer = std::io::BufWriter::new(file);
+    serde_json::to_writer_pretty(writer, &genesis)
+        .expect("Writing Gaia genesis.toml failed");
+
     Ok(())
 }
 
@@ -724,6 +715,14 @@ pub fn find_gaia_address(
     ];
     let mut gaia = run_gaia_cmd(test, args, Some(40))?;
     let (_, matched) = gaia.exp_regex("cosmos.*")?;
+
+    Ok(matched.trim().to_string())
+}
+
+pub fn get_gaia_gov_address(test: &Test) -> Result<String> {
+    let args = ["query", "auth", "module-account", "gov"];
+    let mut gaia = run_gaia_cmd(test, args, Some(40))?;
+    let (_, matched) = gaia.exp_regex("cosmos[a-z0-9]+")?;
 
     Ok(matched.trim().to_string())
 }
