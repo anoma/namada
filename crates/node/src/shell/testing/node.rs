@@ -533,7 +533,7 @@ impl MockNode {
         let mut tx_results = resp
             .events
             .into_iter()
-            .map(|e| e.read_attribute::<BatchAttr<'_>>().unwrap())
+            .filter_map(|e| e.read_attribute_opt::<BatchAttr<'_>>().unwrap())
             .collect::<Vec<_>>();
         self.tx_result_codes
             .lock()
