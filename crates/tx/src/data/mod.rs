@@ -383,13 +383,6 @@ impl<T> TxResult<T> {
         )
     }
 
-    // FIXME: check usage of this and maybe remove it
-    /// Check if the collection of inner tx results contains no errors.
-    #[inline]
-    pub fn are_results_ok(&self) -> bool {
-        self.iter().all(|(_, res)| res.is_ok())
-    }
-
     /// Check if the collection of inner tx results contains any ok results.
     #[inline]
     pub fn are_any_ok(&self) -> bool {
