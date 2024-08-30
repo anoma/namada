@@ -1,9 +1,9 @@
 //! E2E test helpers
 
-use std::fs::{self, File, OpenOptions};
+use std::fs::{File, OpenOptions};
 use std::future::Future;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
@@ -725,25 +725,4 @@ pub fn get_gaia_gov_address(test: &Test) -> Result<String> {
     let (_, matched) = gaia.exp_regex("cosmos[a-z0-9]+")?;
 
     Ok(matched.trim().to_string())
-}
-
-pub fn find_offline_file(
-    dir: &Path,
-    extension: &str,
-) -> Result<Option<PathBuf>> {
-    // Read the directory entries
-    for entry in fs::read_dir(dir)? {
-        let entry = entry?;
-        let path = entry.path();
-
-        if path.is_file() {
-            if let Some(file_extension) = path.extension() {
-                if file_extension == extension {
-                    return Ok(Some(path));
-                }
-            }
-        }
-    }
-
-    Ok(None)
 }

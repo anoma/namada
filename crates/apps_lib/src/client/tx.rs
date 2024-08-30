@@ -1116,7 +1116,7 @@ where
             let signature_path = File::create(&output_path)
                 .expect("Should be able to create signature file.");
             serde_json::to_writer_pretty(signature_path, &signature)
-                .expect("Signature should be deserializable.");
+                .expect("Signature should be serializable.");
 
             display_line!(
                 namada.io(),
