@@ -3786,8 +3786,7 @@ pub async fn gen_ibc_shielding_transfer<N: Namada>(
                 vec![masp_transfer_data],
                 // Fees are paid from the transparent balance of the relayer
                 None,
-                // Expiration can be set directly on the ibc transaction
-                None,
+                args.expiration.to_datetime(),
                 true,
             )
             .await

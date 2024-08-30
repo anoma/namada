@@ -6805,6 +6805,7 @@ pub mod args {
                 target: chain_ctx.get(&self.target),
                 token: self.token,
                 amount: self.amount,
+                expiration: self.expiration,
                 port_id: self.port_id,
                 channel_id: self.channel_id,
             })
@@ -6818,14 +6819,26 @@ pub mod args {
             let target = TRANSFER_TARGET.parse(matches);
             let token = TOKEN_STR.parse(matches);
             let amount = InputAmount::Unvalidated(AMOUNT.parse(matches));
+            let expiration = EXPIRATION_OPT.parse(matches);
             let port_id = PORT_ID.parse(matches);
             let channel_id = CHANNEL_ID.parse(matches);
+            let no_expiration = NO_EXPIRATION.parse(matches);
+            let expiration = if no_expiration {
+                TxExpiration::NoExpiration
+            } else {
+                match expiration {
+                    Some(exp) => TxExpiration::Custom(exp),
+                    None => TxExpiration::Default,
+                }
+            };
+
             Self {
                 query,
                 output_folder,
                 target,
                 token,
                 amount,
+                expiration,
                 port_id,
                 channel_id,
             }
@@ -6842,6 +6855,28 @@ pub mod args {
                     AMOUNT
                         .def()
                         .help(wrap!("The amount to transfer in decimal.")),
+                )
+                .arg(
+                    EXPIRATION_OPT
+                        .def()
+                        .help(wrap!(
+                            "The expiration datetime of the masp transaction, \
+                             after which the tx won't be accepted anymore. If \
+                             not provided, a default will be set. All of \
+                             these examples are \
+                             equivalent:\n2012-12-12T12:12:12Z\n2012-12-12 \
+                             12:12:12Z\n2012-  12-12T12:  12:12Z"
+                        ))
+                        .conflicts_with_all([NO_EXPIRATION.name]),
+                )
+                .arg(
+                    NO_EXPIRATION
+                        .def()
+                        .help(wrap!(
+                            "Force the construction of the transaction \
+                             without an expiration (highly discouraged)."
+                        ))
+                        .conflicts_with_all([EXPIRATION_OPT.name]),
                 )
                 .arg(PORT_ID.def().help(wrap!(
                     "The port ID via which the token is received."
