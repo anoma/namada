@@ -247,17 +247,25 @@ pub enum NodeResults {
     Failed(ResultCode),
 }
 
-// TODO: wrap `MockNode` in a single `Arc`
-// FIXME: look at this todo, not sure it's correct though
-#[derive(Clone)]
-pub struct MockNode {
-    pub shell: Arc<Mutex<Shell<storage::PersistentDB, Sha256Hasher>>>,
-    pub test_dir: Arc<SalvageableTestDir>,
-    pub tx_result_codes: Arc<Mutex<Vec<NodeResults>>>,
-    pub tx_results: Arc<Mutex<Vec<namada_sdk::tx::data::TxResult<String>>>>,
-    pub blocks: Arc<Mutex<HashMap<BlockHeight, block::Response>>>,
-    pub services: Arc<MockServices>,
+pub struct InnerMockNode {
+    pub shell: Mutex<Shell<storage::PersistentDB, Sha256Hasher>>,
+    pub test_dir: SalvageableTestDir,
+    pub tx_result_codes: Mutex<Vec<NodeResults>>,
+    pub tx_results: Mutex<Vec<namada_sdk::tx::data::TxResult<String>>>,
+    pub blocks: Mutex<HashMap<BlockHeight, block::Response>>,
+    pub services: MockServices,
     pub auto_drive_services: bool,
+}
+
+#[derive(Clone)]
+pub struct MockNode(pub Arc<InnerMockNode>);
+
+impl Deref for MockNode {
+    type Target = Arc<InnerMockNode>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 pub struct SalvageableTestDir {
