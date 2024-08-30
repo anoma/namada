@@ -285,39 +285,39 @@ pub fn run_oracle<C: RpcClient>(
     spawner: &mut AbortableSpawner,
 ) -> tokio::task::JoinHandle<Result<(), crate::shell::Error>> {
     let url = url.as_ref().to_owned();
-    let blocking_handle = tokio::task::spawn_blocking(move || {
-        let rt = tokio::runtime::Handle::current();
-        rt.block_on(async move {
-            LocalSet::new()
-                .run_until(async move {
-                    tracing::info!(?url, "Ethereum event oracle is starting");
-
-                    let oracle = Oracle::<C>::new(
-                        Either::Right(&url),
-                        sender,
-                        last_processed_block,
-                        DEFAULT_BACKOFF,
-                        DEFAULT_CEILING,
-                        control,
-                    );
-                    run_oracle_aux(oracle).await;
-
-                    tracing::info!(
-                        ?url,
-                        "Ethereum event oracle is no longer running"
-                    );
-                })
-                .await
-        });
-    });
     spawner
-        .abortable("Ethereum Oracle", move |aborter| async move {
-            blocking_handle.await.unwrap();
-            drop(aborter);
+        .abortable("Ethereum Oracle", move |aborter| {
+            let rt = tokio::runtime::Handle::current();
+            rt.block_on(async move {
+                LocalSet::new()
+                    .run_until(async move {
+                        tracing::info!(
+                            ?url,
+                            "Ethereum event oracle is starting"
+                        );
 
+                        let oracle = Oracle::<C>::new(
+                            Either::Right(&url),
+                            sender,
+                            last_processed_block,
+                            DEFAULT_BACKOFF,
+                            DEFAULT_CEILING,
+                            control,
+                        );
+                        run_oracle_aux(oracle).await;
+
+                        tracing::info!(
+                            ?url,
+                            "Ethereum event oracle is no longer running"
+                        );
+                    })
+                    .await
+            });
+
+            drop(aborter);
             Ok(())
         })
-        .spawn()
+        .spawn_blocking()
 }
 
 /// Determine what action to take after attempting to
