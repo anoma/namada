@@ -61,6 +61,12 @@ def main_inner(args, working_directory):
             genesis_validator=validator_alias,
             pre_genesis_path=args.pre_genesis_path,
             command_summary=command_summary,
+            edit_config=iter(
+                conf[validator_alias]
+                for conf in args.edit_config
+                if validator_alias in conf
+            ),
+            evaluate_config=args.eval,
         )
 
     for fullnode_alias, full_node_base_port in args.full_nodes.items():
@@ -73,6 +79,12 @@ def main_inner(args, working_directory):
             fullnode_base_port=full_node_base_port,
             pre_genesis_path=args.pre_genesis_path,
             command_summary=command_summary,
+            edit_config=iter(
+                conf[fullnode_alias]
+                for conf in args.edit_config
+                if fullnode_alias in conf
+            ),
+            evaluate_config=args.eval,
         )
 
     info("Run the ledger(s) using the command string(s) below")
@@ -136,6 +148,8 @@ def join_network_with_validator(
     genesis_validator,
     pre_genesis_path,
     command_summary,
+    edit_config,
+    evaluate_config,
 ):
     info(f"Attempting to join {chain_id} with {genesis_validator}")
 
@@ -175,6 +189,21 @@ def join_network_with_validator(
         genesis_validator_path,
     )
 
+    info(f"Updating node config on {genesis_validator}")
+    config = load_node_config(
+        base_dir_prefix=base_dir_prefix,
+        chain_id=chain_id,
+        node_alias=genesis_validator,
+    )
+    edit_toml(config, edit_config, evaluate_config)
+    write_node_config(
+        config=config,
+        base_dir_prefix=base_dir_prefix,
+        chain_id=chain_id,
+        node_alias=genesis_validator,
+    )
+    info(f"Node config on {genesis_validator} has been updated")
+
     info(f"Validator {genesis_validator} joined {chain_id}")
 
     command_summary[genesis_validator] = (
@@ -191,6 +220,8 @@ def join_network_with_fullnode(
     fullnode_base_port,
     pre_genesis_path,
     command_summary,
+    edit_config,
+    evaluate_config,
 ):
     info(f"Attempting to join {chain_id} with {fullnode_alias}")
 
@@ -216,13 +247,24 @@ def join_network_with_fullnode(
         chain_id,
     )
 
-    update_fullnode_config(
-        full_node_base_port=fullnode_base_port,
-        fullnode_config_path=base_dir_prefix
-        / fullnode_alias
-        / chain_id
-        / "config.toml",
+    info(f"Updating node config on {fullnode_alias}")
+    config = load_node_config(
+        base_dir_prefix=base_dir_prefix,
+        chain_id=chain_id,
+        node_alias=fullnode_alias,
     )
+    update_fullnode_config(
+        config=config,
+        full_node_base_port=fullnode_base_port,
+    )
+    edit_toml(config, edit_config, evaluate_config)
+    write_node_config(
+        config=config,
+        base_dir_prefix=base_dir_prefix,
+        chain_id=chain_id,
+        node_alias=fullnode_alias,
+    )
+    info(f"Node config on {fullnode_alias} has been updated")
 
     info(f"Full node {fullnode_alias} joined {chain_id}")
 
@@ -231,9 +273,7 @@ def join_network_with_fullnode(
     )
 
 
-def update_fullnode_config(full_node_base_port, fullnode_config_path):
-    config = toml.load(fullnode_config_path)
-
+def update_fullnode_config(config, full_node_base_port):
     config["ledger"]["cometbft"]["rpc"][
         "laddr"
     ] = f"tcp://127.0.0.1:{full_node_base_port}"
@@ -243,9 +283,6 @@ def update_fullnode_config(full_node_base_port, fullnode_config_path):
     config["ledger"]["cometbft"]["p2p"][
         "laddr"
     ] = f"tcp://0.0.0.0:{full_node_base_port + 2}"
-
-    with open(fullnode_config_path, "w") as output_file:
-        toml.dump(config, output_file)
 
 
 def log(color, descriptor, line):
@@ -257,7 +294,7 @@ def info(msg):
 
 
 def warning(msg):
-    log(Color.YELLOW, "warning", msg)
+    log(Color.YELLOW, "warn", msg)
 
 
 def error(msg):
@@ -303,6 +340,13 @@ def parse_cli_args():
         type=full_nodes_object,
         help="JSON object of full node aliases to port numbers these will listen on.",
     )
+    group.add_argument(
+        "--edit-config",
+        action="append",
+        default=[],
+        type=config_json_object,
+        help='JSON object of k:v pairs to update in config (eg: `{"validator-0":{"wasm_dir":"/tmp/wasm"}}`).',
+    )
 
     group = parser.add_argument_group(
         title="General config",
@@ -341,18 +385,24 @@ def parse_cli_args():
     group.add_argument(
         "--epoch-duration",
         type=parse_duration,
-        help="Epoch duration (eg: `1hr`, `30m`, `15s`). Defaults to `parameters.toml` value, and overrides value from `--edit`.",
+        help="Epoch duration (eg: `1hr`, `30m`, `15s`). Defaults to `parameters.toml` value, and overrides value from `--edit-templates`.",
     )
     group.add_argument(
         "--max-validator-slots",
         type=int,
-        help="Maximum number of validators. Defaults to `parameters.toml` value, and overrides value from `--edit`.",
+        help="Maximum number of validators. Defaults to `parameters.toml` value, and overrides value from `--edit-templates`.",
     )
     group.add_argument(
-        "--edit",
-        default={},
+        "--edit-templates",
+        action="append",
+        default=[],
         type=params_json_object,
         help='JSON object of k:v pairs to update in the templates (eg: `{"parameters.toml":{"parameters":{"epochs_per_year":5}}}`).',
+    )
+    group.add_argument(
+        "--eval",
+        action=argparse.BooleanOptionalAction,
+        help="Evaluate strings passed to `--edit-*` as Python code.",
     )
 
     args = parser.parse_args()
@@ -384,7 +434,7 @@ def parse_cli_args():
 
 
 def validator_aliases_json_object(s):
-    aliases = json.loads(s)
+    aliases = load_json(s)
 
     if type(aliases) != dict:
         die("Only JSON objects allowed for validator")
@@ -397,8 +447,17 @@ def validator_aliases_json_object(s):
     return aliases
 
 
+def config_json_object(s):
+    params = load_json(s)
+
+    if type(params) != dict:
+        die("Only JSON objects allowed for config updates")
+
+    return params
+
+
 def params_json_object(s):
-    params = json.loads(s)
+    params = load_json(s)
 
     if type(params) != dict:
         die("Only JSON objects allowed for param updates")
@@ -407,7 +466,7 @@ def params_json_object(s):
 
 
 def full_nodes_object(s):
-    full_nodes = json.loads(s)
+    full_nodes = load_json(s)
 
     if type(full_nodes) != dict:
         die("Only JSON objects allowed for full nodes")
@@ -421,25 +480,40 @@ def full_nodes_object(s):
     return full_nodes
 
 
-def to_edit_from_args(args):
+def load_json(s):
+    try:
+        return json.loads(s)
+    except json.decode.JSONDecodeError:
+        # assume we're dealing with a file path
+        with open(s, "r") as f:
+            return json.load(f)
+
+
+def to_edit_templates_from_args(args):
     if args.max_validator_slots:
-        params = args.edit.setdefault(PARAMETERS_TEMPLATE, {})
-        params.setdefault("pos_params", {})[
-            "max_validator_slots"
-        ] = args.max_validator_slots
+        templates = {}
+        value = args.max_validator_slots
+        if args.eval:
+            value = repr(value)
+        params = templates.setdefault(PARAMETERS_TEMPLATE, {})
+        params.setdefault("pos_params", {})["max_validator_slots"] = value
+        args.edit_templates.append(templates)
     if args.epoch_duration:
-        params = args.edit.setdefault(PARAMETERS_TEMPLATE, {})
-        params.setdefault("parameters", {})["epochs_per_year"] = int(
-            round(365 * 24 * 60 * 60 / args.epoch_duration.total_seconds())
-        )
-    return args.edit
+        templates = {}
+        value = int(round(365 * 24 * 60 * 60 / args.epoch_duration.total_seconds()))
+        if args.eval:
+            value = repr(value)
+        params = templates.setdefault(PARAMETERS_TEMPLATE, {})
+        params.setdefault("parameters", {})["epochs_per_year"] = value
+        args.edit_templates.append(templates)
+    return args.edit_templates
 
 
-def edit_templates(templates, to_edit):
+def edit_toml(data, to_edit_list, evaluate=False):
     def invalid_dict(tab):
         return type(tab) != dict or len(tab) == 0
 
-    def edit(so_far, table, entries):
+    def edit(so_far, table, entries, evaluate):
         if invalid_dict(table) or invalid_dict(entries):
             return
 
@@ -454,12 +528,19 @@ def edit_templates(templates, to_edit):
 
             if type(value) == dict:
                 so_far.append(key)
-                edit(so_far, table[key], value)
+                edit(so_far, table[key], value, evaluate)
+                so_far.pop()
                 return
 
-            table[key] = value
+            if evaluate:
+                it = table.get(key)
+                table[key] = eval(value)
+            else:
+                table[key] = value
 
-    edit([], templates, to_edit)
+    for to_edit in to_edit_list:
+        info(f"Applying provided args: {to_edit}")
+        edit([], data, to_edit, evaluate)
 
 
 def write_templates(working_directory, templates):
@@ -470,10 +551,10 @@ def write_templates(working_directory, templates):
 
 
 def setup_templates(working_directory, args):
-    to_edit = to_edit_from_args(args)
-    info(f"Updating templates with provided args: {to_edit}")
+    to_edit = to_edit_templates_from_args(args)
+    info(f"Updating templates")
     templates = load_base_templates(args.templates)
-    edit_templates(templates, to_edit)
+    edit_toml(templates, to_edit, evaluate=args.eval)
     write_templates(working_directory, templates)
     info("Templates have been updated")
     return templates
@@ -500,6 +581,17 @@ def load_base_templates(base_templates):
         template_name: toml.load(base_templates / template_name)
         for template_name in ALL_GENESIS_TEMPLATES
     }
+
+
+def load_node_config(base_dir_prefix, chain_id, node_alias):
+    config_path = base_dir_prefix / node_alias / chain_id / "config.toml"
+    return toml.load(config_path)
+
+
+def write_node_config(config, base_dir_prefix, chain_id, node_alias):
+    config_path = base_dir_prefix / node_alias / chain_id / "config.toml"
+    with open(config_path, "w") as output_file:
+        toml.dump(config, output_file)
 
 
 def target_binary_paths(mode):
@@ -585,6 +677,18 @@ def parse_duration(time_str):
             f"Duration {time_str} was parsed as zero, try using `hr`, `m` or `s` unit suffixes"
         )
     return dur
+
+
+def append_list(l, *values):
+    for x in values:
+        l.append(x)
+    return l
+
+
+def insert_dict(d, **kwargs):
+    for k, v in kwargs.items():
+        d[k] = v
+    return d
 
 
 # https://stackoverflow.com/questions/8924173/how-can-i-print-bold-text-in-python
