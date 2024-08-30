@@ -3,8 +3,6 @@
 //! tx_data. This tx uses an IBC message wrapped inside
 //! `key::ed25519::SignedTxData` as its input as declared in `ibc` crate.
 
-use std::collections::BTreeMap;
-
 use namada_tx_prelude::action::{Action, MaspAction, Write};
 use namada_tx_prelude::*;
 
@@ -16,27 +14,11 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
         .into_storage_result()?;
 
     let masp_section_ref = if let Some(transfers) = transfer {
-        // Prepare the sources of the multi-transfer
-        let sources = transfers
-            .sources
-            .into_iter()
-            .map(|(account, amount)| {
-                ((account.owner, account.token), amount.amount())
-            })
-            .collect::<BTreeMap<_, _>>();
-
-        // Prepare the target of the multi-transfer
-        let targets = transfers
-            .targets
-            .into_iter()
-            .map(|(account, amount)| {
-                ((account.owner, account.token), amount.amount())
-            })
-            .collect::<BTreeMap<_, _>>();
-
-        // Effect the multi transfer
-        token::multi_transfer(ctx, &sources, &targets)
-            .wrap_err("Token transfer failed")?;
+        if let Some(transparent) = transfers.transparent_part() {
+            let _debited_accounts =
+                token::apply_transparent_transfers(ctx, transparent)
+                    .wrap_err("Transparent token transfer failed")?;
+        }
 
         transfers.shielded_section_hash
     } else {
