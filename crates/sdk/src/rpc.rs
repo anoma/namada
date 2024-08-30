@@ -40,6 +40,7 @@ use namada_parameters::{storage as params_storage, EpochDuration};
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{
     BondsAndUnbondsDetails, CommissionPair, ValidatorMetaData,
+    WeightedValidator,
 };
 use namada_state::LastBlock;
 use namada_token::masp::MaspTokenRewardData;
@@ -736,6 +737,19 @@ pub async fn get_all_validators<C: namada_io::Client + Sync>(
         RPC.vp()
             .pos()
             .validator_addresses(client, &Some(epoch))
+            .await,
+    )
+}
+
+/// Get all consensus validators in the given epoch
+pub async fn get_all_consensus_validators<C: crate::queries::Client + Sync>(
+    client: &C,
+    epoch: Epoch,
+) -> Result<BTreeSet<WeightedValidator>, error::Error> {
+    convert_response::<C, _>(
+        RPC.vp()
+            .pos()
+            .consensus_validator_set(client, &Some(epoch))
             .await,
     )
 }
