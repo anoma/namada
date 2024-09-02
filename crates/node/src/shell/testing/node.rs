@@ -561,8 +561,7 @@ impl MockNode {
                     txs.into_iter().map(|tx| tx.tx.to_vec()).collect(),
                     tendermint::evidence::List::default(),
                     None,
-                )
-                .unwrap(),
+                ),
             },
         );
     }
@@ -686,8 +685,7 @@ impl MockNode {
                     txs,
                     tendermint::evidence::List::default(),
                     None,
-                )
-                .unwrap(),
+                ),
             },
         );
         locked.commit();

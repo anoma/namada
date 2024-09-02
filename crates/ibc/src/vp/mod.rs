@@ -458,6 +458,7 @@ mod tests {
     use std::str::FromStr;
 
     use assert_matches::assert_matches;
+    use ibc::core::channel::types::timeout::TimeoutTimestamp;
     use ibc_testkit::testapp::ibc::clients::mock::client_state::{
         client_type, MockClientState, MOCK_CLIENT_TYPE,
     };
@@ -1147,7 +1148,7 @@ mod tests {
         let time = (TmTime::now() - std::time::Duration::new(100, 0)).unwrap();
         let header = MockHeader {
             height,
-            timestamp: time.into(),
+            timestamp: time.try_into().unwrap(),
         };
         let msg = MsgUpdateClient {
             client_id: client_id.clone(),
@@ -2286,7 +2287,7 @@ mod tests {
                 memo: "memo".to_string().into(),
             },
             timeout_height_on_b: TimeoutHeight::At(Height::new(0, 10).unwrap()),
-            timeout_timestamp_on_b: Timestamp::none(),
+            timeout_timestamp_on_b: TimeoutTimestamp::Never,
         };
 
         // the sequence send
@@ -2433,7 +2434,7 @@ mod tests {
                 memo: "memo".to_string().into(),
             },
             timeout_height_on_b: TimeoutHeight::At(Height::new(0, 10).unwrap()),
-            timeout_timestamp_on_b: Timestamp::none(),
+            timeout_timestamp_on_b: TimeoutTimestamp::Never,
         };
         let counterparty = get_channel_counterparty();
         let packet =
@@ -2634,7 +2635,7 @@ mod tests {
                 memo: "memo".to_string().into(),
             },
             timeout_height_on_b: TimeoutHeight::At(Height::new(0, 10).unwrap()),
-            timeout_timestamp_on_b: Timestamp::none(),
+            timeout_timestamp_on_b: TimeoutTimestamp::Never,
         };
         let sequence = 1.into();
         let packet = packet_from_message(
@@ -2796,8 +2797,9 @@ mod tests {
                 memo: "memo".to_string().into(),
             },
             timeout_height_on_b: TimeoutHeight::Never,
-            timeout_timestamp_on_b: (Timestamp::now() - Duration::new(10, 0))
-                .unwrap(),
+            timeout_timestamp_on_b: TimeoutTimestamp::At(
+                (Timestamp::now() - Duration::new(10, 0)).unwrap(),
+            ),
         };
         let sequence = 1.into();
         let packet = packet_from_message(
@@ -2954,7 +2956,7 @@ mod tests {
                 memo: "memo".to_string().into(),
             },
             timeout_height_on_b: TimeoutHeight::At(Height::new(0, 10).unwrap()),
-            timeout_timestamp_on_b: Timestamp::none(),
+            timeout_timestamp_on_b: TimeoutTimestamp::Never,
         };
         let sequence = 1.into();
         let packet = packet_from_message(
@@ -3140,7 +3142,7 @@ mod tests {
                 memo: Some("memo".to_string().into()),
             },
             timeout_height_on_b: TimeoutHeight::At(Height::new(0, 10).unwrap()),
-            timeout_timestamp_on_b: Timestamp::none(),
+            timeout_timestamp_on_b: TimeoutTimestamp::Never,
         };
 
         // the sequence send
@@ -3296,7 +3298,7 @@ mod tests {
                 memo: Some("memo".to_string().into()),
             },
             timeout_height_on_b: TimeoutHeight::At(Height::new(0, 10).unwrap()),
-            timeout_timestamp_on_b: Timestamp::none(),
+            timeout_timestamp_on_b: TimeoutTimestamp::Never,
         };
         let counterparty = get_channel_counterparty_for_nft();
         let packet =
