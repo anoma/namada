@@ -29,7 +29,6 @@ pub mod utils;
 use std::convert::TryInto;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::thread;
 
 use byte_unit::Byte;
 use data_encoding::HEXUPPER;
@@ -54,7 +53,6 @@ use namada_sdk::time::DateTimeUtc;
 use once_cell::unsync::Lazy;
 use sysinfo::{RefreshKind, System, SystemExt};
 use tokio::sync::mpsc;
-use tokio::task;
 
 use self::abortable::AbortableSpawner;
 use self::ethereum_oracle::last_processed_block;
@@ -447,15 +445,13 @@ async fn run_aux(
     let mut spawner = AbortableSpawner::new();
 
     // Start Tendermint node
-    let tendermint_node = start_tendermint(&mut spawner, &config);
+    start_tendermint(&mut spawner, &config);
 
     // Start oracle if necessary
-    let (eth_oracle_channels, eth_oracle) =
+    let eth_oracle_channels =
         match maybe_start_ethereum_oracle(&mut spawner, &config).await {
-            EthereumOracleTask::NotEnabled { handle } => (None, handle),
-            EthereumOracleTask::Enabled { handle, channels } => {
-                (Some(channels), handle)
-            }
+            EthereumOracleTask::NotEnabled => None,
+            EthereumOracleTask::Enabled { channels } => Some(channels),
         };
 
     tracing::info!("Loading MASP verifying keys.");
@@ -464,7 +460,7 @@ async fn run_aux(
 
     // Start ABCI server and broadcaster (the latter only if we are a validator
     // node)
-    let (abci, broadcaster, shell_handler) = start_abci_broadcaster_shell(
+    start_abci_broadcaster_shell(
         &mut spawner,
         eth_oracle_channels,
         wasm_dir,
@@ -472,39 +468,7 @@ async fn run_aux(
         config,
     );
 
-    // Wait for interrupt signal or abort message
-    let aborted = spawner.wait_for_abort().await.child_terminated();
-
-    // Wait for all managed tasks to finish.
-    let res = tokio::try_join!(tendermint_node, abci, eth_oracle, broadcaster);
-
-    match res {
-        Ok((tendermint_res, abci_res, _, _)) => {
-            // we ignore errors on user-initiated shutdown
-            if aborted {
-                if let Err(err) = tendermint_res {
-                    tracing::error!("Tendermint error: {}", err);
-                }
-                if let Err(err) = abci_res {
-                    tracing::error!("ABCI error: {}", err);
-                }
-            }
-        }
-        Err(err) => {
-            // Ignore cancellation errors
-            if !err.is_cancelled() {
-                tracing::error!("Ledger error: {}", err);
-            }
-        }
-    }
-
-    tracing::info!("Namada ledger node has shut down.");
-
-    let res = task::block_in_place(move || shell_handler.join());
-
-    if let Err(err) = res {
-        std::panic::resume_unwind(err)
-    }
+    spawner.run_to_completion().await;
 }
 
 /// A [`RunAuxSetup`] stores some variables used to start child
@@ -619,10 +583,6 @@ fn start_abci_broadcaster_shell(
     wasm_dir: PathBuf,
     setup_data: RunAuxSetup,
     config: config::Ledger,
-) -> (
-    task::JoinHandle<shell::ShellResult<()>>,
-    task::JoinHandle<()>,
-    thread::JoinHandle<()>,
 ) {
     let rpc_address =
         convert_tm_addr_to_socket_addr(&config.cometbft.rpc.laddr);
@@ -639,7 +599,7 @@ fn start_abci_broadcaster_shell(
     let genesis_time = DateTimeUtc::try_from(config.genesis_time.clone())
         .expect("Should be able to parse genesis time");
     // Start broadcaster
-    let broadcaster = if matches!(
+    if matches!(
         config.shell.tendermint_mode,
         TendermintMode::Validator { .. }
     ) {
@@ -647,7 +607,7 @@ fn start_abci_broadcaster_shell(
             tokio::sync::oneshot::channel::<()>();
 
         spawner
-            .spawn_abortable("Broadcaster", move |aborter| async move {
+            .abortable("Broadcaster", move |aborter| async move {
                 // Construct a service for broadcasting protocol txs from
                 // the ledger
                 let mut broadcaster =
@@ -656,13 +616,14 @@ fn start_abci_broadcaster_shell(
                 tracing::info!("Broadcaster is no longer running.");
 
                 drop(aborter);
+
+                Ok(())
             })
             .with_cleanup(async move {
                 let _ = bc_abort_send.send(());
             })
-    } else {
-        spawn_dummy_task(())
-    };
+            .spawn();
+    }
 
     // Setup DB cache, it must outlive the DB instance that's in the shell
     let db_cache = rocksdb::Cache::new_lru_cache(
@@ -690,8 +651,8 @@ fn start_abci_broadcaster_shell(
     let (abci_abort_send, abci_abort_recv) = tokio::sync::oneshot::channel();
 
     // Start the ABCI server
-    let abci = spawner
-        .spawn_abortable("ABCI", move |aborter| async move {
+    spawner
+        .abortable("ABCI", move |aborter| async move {
             let res = run_abci(
                 abci_service,
                 service_handle,
@@ -705,12 +666,12 @@ fn start_abci_broadcaster_shell(
         })
         .with_cleanup(async move {
             let _ = abci_abort_send.send(());
-        });
+        })
+        .spawn();
 
     // Start the shell in a new OS thread
-    let thread_builder = thread::Builder::new().name("ledger-shell".into());
-    let shell_handler = thread_builder
-        .spawn(move || {
+    spawner
+        .abortable("Shell", move |_aborter| {
             tracing::info!("Namada ledger node started.");
             match tendermint_mode {
                 TendermintMode::Validator { .. } => {
@@ -720,11 +681,16 @@ fn start_abci_broadcaster_shell(
                     tracing::info!("This node is not a validator");
                 }
             }
-            shell.run()
+            shell.run();
+            Ok(())
         })
-        .expect("Must be able to start a thread for the shell");
-
-    (abci, broadcaster, shell_handler)
+        .with_cleanup(async {
+            tracing::info!("Namada ledger node has shut down.");
+        })
+        // NB: pin the shell's task to allow
+        // resuming unwinding on panic
+        .pin()
+        .spawn_blocking();
 }
 
 /// Runs the an asynchronous ABCI server with four sub-components for consensus,
@@ -770,10 +736,7 @@ async fn run_abci(
 
 /// Launches a new task managing a Tendermint process into the asynchronous
 /// runtime, and returns its [`task::JoinHandle`].
-fn start_tendermint(
-    spawner: &mut AbortableSpawner,
-    config: &config::Ledger,
-) -> task::JoinHandle<shell::ShellResult<()>> {
+fn start_tendermint(spawner: &mut AbortableSpawner, config: &config::Ledger) {
     let tendermint_dir = config.cometbft_dir();
     let chain_id = config.chain_id.clone();
     let proxy_app_address = config.cometbft.proxy_app.to_string();
@@ -789,7 +752,7 @@ fn start_tendermint(
         tokio::sync::oneshot::channel::<tokio::sync::oneshot::Sender<()>>();
 
     spawner
-        .spawn_abortable("Tendermint", move |aborter| async move {
+        .abortable("Tendermint", move |aborter| async move {
             let res = tendermint_node::run(
                 tendermint_dir,
                 chain_id,
@@ -828,21 +791,14 @@ fn start_tendermint(
                 }
             }
         })
+        .spawn();
 }
 
 /// Represents a [`tokio::task`] in which an Ethereum oracle may be running, and
 /// if so, channels for communicating with it.
 enum EthereumOracleTask {
-    NotEnabled {
-        // TODO(namada#459): we have to return a dummy handle for the moment,
-        // until `run_aux` is refactored - at which point, we no longer need an
-        // enum to represent the Ethereum oracle being on/off.
-        handle: task::JoinHandle<()>,
-    },
-    Enabled {
-        handle: task::JoinHandle<()>,
-        channels: EthereumOracleChannels,
-    },
+    NotEnabled,
+    Enabled { channels: EthereumOracleChannels },
 }
 
 /// Potentially starts an Ethereum event oracle.
@@ -854,9 +810,7 @@ async fn maybe_start_ethereum_oracle(
         config.shell.tendermint_mode,
         TendermintMode::Validator { .. }
     ) {
-        return EthereumOracleTask::NotEnabled {
-            handle: spawn_dummy_task(()),
-        };
+        return EthereumOracleTask::NotEnabled;
     }
 
     let ethereum_url = config.ethereum_bridge.oracle_rpc_endpoint.clone();
@@ -870,7 +824,7 @@ async fn maybe_start_ethereum_oracle(
 
     match config.ethereum_bridge.mode {
         ethereum_bridge::ledger::Mode::RemoteEndpoint => {
-            let handle = oracle::run_oracle::<Provider<Http>>(
+            oracle::run_oracle::<Provider<Http>>(
                 ethereum_url,
                 eth_sender,
                 control_receiver,
@@ -879,7 +833,6 @@ async fn maybe_start_ethereum_oracle(
             );
 
             EthereumOracleTask::Enabled {
-                handle,
                 channels: EthereumOracleChannels::new(
                     eth_receiver,
                     control_sender,
@@ -891,8 +844,8 @@ async fn maybe_start_ethereum_oracle(
             let (oracle_abort_send, oracle_abort_recv) =
                 tokio::sync::oneshot::channel::<tokio::sync::oneshot::Sender<()>>(
                 );
-            let handle = spawner
-                .spawn_abortable(
+            spawner
+                .abortable(
                     "Ethereum Events Endpoint",
                     move |aborter| async move {
                         oracle::test_tools::events_endpoint::serve(
@@ -907,6 +860,8 @@ async fn maybe_start_ethereum_oracle(
                         );
 
                         drop(aborter);
+
+                        Ok(())
                     },
                 )
                 .with_cleanup(async move {
@@ -927,9 +882,9 @@ async fn maybe_start_ethereum_oracle(
                             }
                         }
                     }
-                });
+                })
+                .spawn();
             EthereumOracleTask::Enabled {
-                handle,
                 channels: EthereumOracleChannels::new(
                     eth_receiver,
                     control_sender,
@@ -937,9 +892,7 @@ async fn maybe_start_ethereum_oracle(
                 ),
             }
         }
-        ethereum_bridge::ledger::Mode::Off => EthereumOracleTask::NotEnabled {
-            handle: spawn_dummy_task(()),
-        },
+        ethereum_bridge::ledger::Mode::Off => EthereumOracleTask::NotEnabled,
     }
 }
 
@@ -973,10 +926,4 @@ pub fn test_genesis_files(
     let mut initializer = shell::InitChainValidation::new(&mut shell, true);
     initializer.run_validation(chain_id, genesis);
     initializer.report();
-}
-
-/// Spawn a dummy asynchronous task into the runtime,
-/// which will resolve instantly.
-fn spawn_dummy_task<T: Send + 'static>(ready: T) -> task::JoinHandle<T> {
-    tokio::spawn(async { std::future::ready(ready).await })
 }
