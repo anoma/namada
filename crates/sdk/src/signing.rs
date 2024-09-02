@@ -254,8 +254,8 @@ where
     }
 
     // Then try to sign the raw header using the hardware wallet
-    for pubkey in signing_data.public_keys {
-        if !used_pubkeys.contains(&pubkey) && pubkey != signing_data.fee_payer {
+    for pubkey in &signing_data.public_keys {
+        if !used_pubkeys.contains(pubkey) && *pubkey != signing_data.fee_payer {
             if let Ok(ntx) = sign(
                 tx.clone(),
                 pubkey.clone(),
@@ -282,7 +282,10 @@ where
         Ok(fee_payer_keypair) => {
             tx.sign_wrapper(fee_payer_keypair);
         }
-        Err(_) => {
+        // The case where tge fee payer also signs the inner transaction
+        Err(_)
+            if signing_data.public_keys.contains(&signing_data.fee_payer) =>
+        {
             *tx = sign(
                 tx.clone(),
                 signing_data.fee_payer.clone(),
@@ -290,9 +293,32 @@ where
                 user_data,
             )
             .await?;
+            used_pubkeys.insert(signing_data.fee_payer.clone());
+        }
+        // The case where the fee payer does not sign the inner transaction
+        Err(_) => {
+            *tx = sign(
+                tx.clone(),
+                signing_data.fee_payer.clone(),
+                HashSet::from([Signable::FeeHeader]),
+                user_data,
+            )
+            .await?;
         }
     }
-    Ok(())
+    // Then make sure that the number of public keys used exceeds the threshold
+    let used_pubkeys_len = used_pubkeys
+        .len()
+        .try_into()
+        .expect("Public keys associated with account exceed 127");
+    if used_pubkeys_len < signing_data.threshold {
+        Err(Error::from(TxSubmitError::MissingSigningKeys(
+            signing_data.threshold,
+            used_pubkeys_len,
+        )))
+    } else {
+        Ok(())
+    }
 }
 
 /// Return the necessary data regarding an account to be able to generate a
