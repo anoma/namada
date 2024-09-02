@@ -236,9 +236,15 @@ jobs:
           name: wasm-for-tests-${{ github.event.pull_request.head.sha|| github.sha }}
           path: wasm_for_tests
       - name: Test Wasm
-        run: cargo +${{ env.NIGHTLY }} nextest run --manifest-path wasm/Cargo.toml
+        # run: cargo +${{ env.NIGHTLY }} nextest run --manifest-path wasm/Cargo.toml
+        run: make test-wasm-with-coverage
         env:
           RUSTFLAGS: "-C linker=clang -C link-arg=-fuse-ld=/usr/local/bin/mold"
+      - name: Store coverage file artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-cov-${{ github.event.pull_request.head.sha || github.sha }}
+          path: wasm/lcov.info # output of `make test-wasm-with-coverage` 
       - name: Clean cargo cache
         if: steps.cache.outputs.cache-hit != 'true'
         run: cargo cache --autoclean-expensive
@@ -630,9 +636,14 @@ jobs:
         with:
           name: integration-cov-${{ github.event.pull_request.head.sha || github.sha }}
           path: integration-cov
+      - name: Download wasm coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-cov-${{ github.event.pull_request.head.sha || github.sha }}
+          path: wasm-cov
       - name: Upload coverage to codecov
         uses: codecov/codecov-action@v4
         with:
-          files: integration-cov/lcov.info, unit-cov/lcov.info
+          files: integration-cov/lcov.info, unit-cov/lcov.info, wasm-cov/lcov.info
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
