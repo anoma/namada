@@ -98,12 +98,7 @@ where
         // Sub-system updates:
         // - Governance - applied first in case a proposal changes any of the
         //   other syb-systems
-        governance::finalize_block(
-            self,
-            emit_events,
-            current_epoch,
-            new_epoch,
-        )?;
+        gov_finalize_block(self, emit_events, current_epoch, new_epoch)?;
         // - Token
         token_finalize_block(&mut self.state, emit_events, is_masp_new_epoch)?;
         // - PoS
@@ -1131,6 +1126,94 @@ fn pos_votes_from_abci(
             },
         )
         .collect()
+}
+
+/// Dependency-injection indirection for governance system
+fn gov_finalize_block<D, H>(
+    shell: &mut Shell<D, H>,
+    emit_events: &mut Vec<Event>,
+    current_epoch: Epoch,
+    is_new_epoch: bool,
+) -> Result<()>
+where
+    D: DB + for<'iter> DBIter<'iter> + Sync,
+    H: StorageHasher + Sync,
+{
+    let vp_wasm_cache = &mut shell.vp_wasm_cache;
+    let tx_wasm_cache = &mut shell.tx_wasm_cache;
+    governance::finalize_block::<
+        _,
+        token::Store<_>,
+        proof_of_stake::Store<_>,
+        _,
+        _,
+    >(
+        &mut shell.state,
+        emit_events,
+        current_epoch,
+        is_new_epoch,
+        |tx, state| {
+            let dispatch_result = protocol::dispatch_tx(
+                tx,
+                protocol::DispatchArgs::Raw {
+                    wrapper_hash: None,
+                    tx_index: TxIndex::default(),
+                    wrapper_tx_result: None,
+                    vp_wasm_cache,
+                    tx_wasm_cache,
+                },
+                // No gas limit for governance proposal
+                &RefCell::new(TxGasMeter::new(u64::MAX)),
+                state,
+            );
+            // Governance must construct the tx with data and code commitments
+            let cmt = tx.first_commitments().unwrap().to_owned();
+            match dispatch_result {
+                Ok(extended_tx_result) => match extended_tx_result
+                    .tx_result
+                    .get_inner_tx_result(None, either::Right(&cmt))
+                    .expect("Proposal tx must have a result")
+                {
+                    Ok(batched_result) => {
+                        if batched_result.is_accepted() {
+                            state.write_log_mut().commit_batch_and_current_tx();
+                            Ok(true)
+                        } else {
+                            tracing::warn!(
+                                "Governance proposal rejected by VP(s): {}",
+                                batched_result.vps_result
+                            );
+                            state.write_log_mut().drop_batch();
+                            Ok(false)
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            "Error executing governance proposal {e}",
+                        );
+                        state.write_log_mut().drop_batch();
+                        Ok(false)
+                    }
+                },
+                Err(e) => {
+                    tracing::warn!(
+                        "Error executing governance proposal {}",
+                        e.error
+                    );
+                    state.write_log_mut().drop_batch();
+                    Ok(false)
+                }
+            }
+        },
+        |state, token, source, target| {
+            ibc::transfer_over_ibc::<
+                _,
+                parameters::Store<_>,
+                token::Store<_>,
+                token::Transfer,
+            >(state, token, source, target)
+        },
+    )
 }
 
 /// Dependency-injection indirection for token system

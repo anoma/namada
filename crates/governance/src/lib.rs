@@ -24,6 +24,7 @@ use namada_core::address::{self, Address};
 /// governance CLI structures
 pub mod cli;
 pub mod event;
+mod finalize_block;
 /// governance parameters
 pub mod parameters;
 /// governance public good fundings
@@ -34,6 +35,7 @@ pub mod storage;
 pub mod utils;
 pub mod vp;
 
+pub use finalize_block::finalize_block;
 use namada_state::{StorageRead, StorageWrite};
 pub use namada_systems::governance::*;
 use parameters::GovernanceParameters;
