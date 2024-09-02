@@ -219,11 +219,15 @@ where
     storage.write(&key, denom)
 }
 
-/// Transfer `token` from `src` to `dest`.
+/// Apply transfer of a `token` from `src` to `dest` in storage.
 ///
 /// Returns an `Err` if `src` has insufficient balance or if the transfer the
 /// `dest` would overflow (This can only happen if the total supply doesn't fit
 /// in `token::Amount`).
+///
+/// For a regular token transfer in a transaction, use
+/// [tx::transfer](crate::tx::transfer) instead that inserts a verifier expected
+/// by the token VP and emits a transfer events.
 pub fn transfer<S>(
     storage: &mut S,
     token: &Address,

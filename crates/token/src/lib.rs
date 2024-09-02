@@ -30,6 +30,8 @@ pub use namada_shielded_token::*;
 use namada_systems::parameters;
 pub use namada_trans_token::*;
 
+pub mod tx;
+
 /// Validity predicates
 pub mod vp {
     pub use namada_shielded_token::vp::MaspVp;
@@ -38,6 +40,7 @@ pub mod vp {
     pub use namada_shielded_token::{Error, Result};
     pub use namada_trans_token::vp::MultitokenVp;
 }
+
 use serde::{Deserialize, Serialize};
 
 /// Token storage keys
