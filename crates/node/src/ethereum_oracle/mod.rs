@@ -283,7 +283,7 @@ pub fn run_oracle<C: RpcClient>(
     control: control::Receiver,
     last_processed_block: last_processed_block::Sender,
     spawner: &mut AbortableSpawner,
-) -> tokio::task::JoinHandle<Result<(), crate::shell::Error>> {
+) {
     let url = url.as_ref().to_owned();
     spawner
         .abortable("Ethereum Oracle", move |aborter| {
@@ -317,7 +317,7 @@ pub fn run_oracle<C: RpcClient>(
             drop(aborter);
             Ok(())
         })
-        .spawn_blocking()
+        .spawn_blocking();
 }
 
 /// Determine what action to take after attempting to
