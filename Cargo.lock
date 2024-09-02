@@ -5545,8 +5545,11 @@ dependencies = [
  "namada_macros",
  "namada_migrations",
  "namada_shielded_token",
+ "namada_storage",
  "namada_systems",
  "namada_trans_token",
+ "namada_tx",
+ "namada_tx_env",
  "proptest",
  "serde",
 ]

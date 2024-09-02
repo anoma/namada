@@ -22,6 +22,7 @@ pub use namada_core::address::Address;
 pub use namada_core::borsh::{
     BorshDeserialize, BorshSerialize, BorshSerializeExt,
 };
+pub use namada_core::masp::MaspTransaction;
 pub use namada_core::storage;
 pub use namada_events::{Event, EventToEmit, EventType};
 pub use namada_storage::{Result, ResultExt, StorageRead, StorageWrite};
@@ -103,4 +104,9 @@ pub trait TxEnv: StorageRead + StorageWrite {
 
     /// Set the sentinel for an invalid section commitment
     fn set_commitment_sentinel(&mut self);
+
+    /// Update the masp note commitment tree in storage with the new notes
+    fn update_masp_note_commitment_tree(
+        transaction: &MaspTransaction,
+    ) -> Result<bool>;
 }

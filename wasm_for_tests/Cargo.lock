@@ -2262,8 +2262,11 @@ dependencies = [
  "namada_events",
  "namada_macros",
  "namada_shielded_token",
+ "namada_storage",
  "namada_systems",
  "namada_trans_token",
+ "namada_tx",
+ "namada_tx_env",
  "serde",
 ]
 

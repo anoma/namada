@@ -29,10 +29,9 @@ pub mod vp;
 
 use std::str::FromStr;
 
-pub use masp_primitives::transaction::Transaction as MaspTransaction;
 use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 pub use namada_core::dec::Dec;
-pub use namada_core::masp::{MaspEpoch, MaspTxId, MaspValue};
+pub use namada_core::masp::{MaspEpoch, MaspTransaction, MaspTxId, MaspValue};
 pub use namada_state::{
     ConversionLeaf, ConversionState, Error, Key, OptionExt, Result, ResultExt,
     StorageRead, StorageWrite, WithConversionState,

@@ -63,7 +63,7 @@ impl IbcStorageContext for Ctx {
         token: &Address,
         amount: Amount,
     ) -> Result<()> {
-        token::tx::transparent_transfer(self, src, dest, token, amount)
+        token::transfer(self, src, dest, token, amount)
     }
 
     fn mint_token(
