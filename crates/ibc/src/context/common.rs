@@ -225,7 +225,7 @@ pub trait IbcCommonContext: IbcStorageContext {
             .try_into()
             .map_err(|_| ClientError::Other {
                 description: format!(
-                    "Convertsion of the client update time failed: ID \
+                    "Conversion of the client update time failed: ID \
                      {client_id}",
                 ),
             })?;
