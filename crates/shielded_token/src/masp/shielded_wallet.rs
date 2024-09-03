@@ -1,7 +1,4 @@
 //! The shielded wallet implementation
-#![allow(clippy::arithmetic_side_effects)]
-#![allow(clippy::cast_possible_truncation)]
-#![allow(clippy::cast_sign_loss)]
 use std::cmp::Ordering;
 use std::collections::{btree_map, BTreeMap, BTreeSet};
 
@@ -272,7 +269,6 @@ impl<U: ShieldedUtils> ShieldedWallet<U> {
     /// Compute the total unspent notes associated with the viewing key in the
     /// context. If the key is not in the context, then we do not know the
     /// balance and hence we return None.
-    #[allow(clippy::arithmetic_side_effects)]
     pub async fn compute_shielded_balance(
         &mut self,
         vk: &ViewingKey,
@@ -313,7 +309,6 @@ impl<U: ShieldedUtils> ShieldedWallet<U> {
     /// the trace amount that could not be converted is moved from input to
     /// output.
     #[allow(clippy::too_many_arguments)]
-    #[allow(clippy::arithmetic_side_effects)]
     async fn apply_conversion(
         &mut self,
         io: &impl Io,
@@ -531,7 +526,6 @@ pub trait ShieldedApi<U: ShieldedUtils>: ShieldedQueries<U> {
     /// note of the conversions that were used. Note that this function does
     /// not assume that allowed conversions from the ledger are expressed in
     /// terms of the latest asset types.
-    #[allow(clippy::arithmetic_side_effects)]
     #[allow(async_fn_in_trait)]
     async fn compute_exchanged_amount(
         &mut self,

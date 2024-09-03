@@ -1,5 +1,6 @@
 //! MASP verification wrappers.
 #![allow(clippy::arithmetic_side_effects)]
+#![allow(clippy::cast_possible_truncation)]
 #![allow(clippy::cast_sign_loss)]
 mod shielded_sync;
 pub mod shielded_wallet;

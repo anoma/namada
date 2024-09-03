@@ -1,5 +1,3 @@
-#![allow(clippy::arithmetic_side_effects)]
-#![allow(clippy::cast_possible_truncation)]
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::future::Future;

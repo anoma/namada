@@ -1,6 +1,4 @@
 //! Helper functions and types
-#![allow(clippy::arithmetic_side_effects)]
-#![allow(clippy::cast_possible_truncation)]
 use std::collections::BTreeMap;
 
 use borsh::{BorshDeserialize, BorshSerialize};
