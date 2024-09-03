@@ -64,7 +64,7 @@ const WRAPPER_TX_VALIDATION_GAS_RAW: u64 = 1_526_700;
 // space as a resource. This way, the storage occupation cost is not completely
 // free-floating but it's tied to the other costs
 const STORAGE_OCCUPATION_GAS_PER_BYTE_RAW: u64 =
-    PHYSICAL_STORAGE_LATENCY_PER_BYTE_RAW * (1 + 10);
+    PHYSICAL_STORAGE_LATENCY_PER_BYTE_RAW * (1 + 1_000);
 // NOTE: this accounts for the latency of a physical drive access. For read
 // accesses we have no way to tell if data was in cache or in storage. Moreover,
 // the latency shouldn't really be accounted per single byte but rather per
