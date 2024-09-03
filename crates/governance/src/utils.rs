@@ -247,7 +247,7 @@ impl Display for ProposalResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let threshold = match self.tally_type {
             TallyType::TwoFifths => {
-                self.total_voting_power.mul_ceil(Dec::two_thirds())
+                self.total_voting_power.mul_ceil(Dec::two_fifths())
             }
             TallyType::LessOneHalfOverOneThirdNay => Ok(token::Amount::zero()),
             _ => self.total_voting_power.mul_ceil(Dec::one_third()),
