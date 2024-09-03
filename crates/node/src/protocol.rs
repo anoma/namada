@@ -695,26 +695,24 @@ where
         "The first transaction in the batch failed to pay fees via the MASP.";
 
     // The fee payment is subject to a gas limit imposed by a protocol
-    // parameter. Here we instantiate a custom gas meter for this step and
-    // initialize it with the already consumed gas. The gas limit should
-    // actually be the lowest between the protocol parameter and the actual gas
-    // limit of the transaction
+    // parameter. Here we instantiate a custom gas meter for this step where the
+    // gas limit is actually the lowest between the protocol parameter and the
+    // actual remaining gas of the transaction. The latter is because we only
+    // care about the masp execution, not any gas used before this step, which
+    // could prevent some transactions (e.g. batches consuming a lot of gas for
+    // their size) from being accepted
     let max_gas_limit = state
         .read::<u64>(&parameters::storage::get_masp_fee_payment_gas_limit_key())
         .expect("Error reading the storage")
         .expect("Missing masp fee payment gas limit in storage")
-        .min(tx_gas_meter.borrow().tx_gas_limit.into());
+        .min(tx_gas_meter.borrow().get_available_gas().into());
     let gas_scale = get_gas_scale(&**state).map_err(Error::Error)?;
 
-    let mut gas_meter = TxGasMeter::new(
+    let masp_gas_meter = RefCell::new(TxGasMeter::new(
         Gas::from_whole_units(max_gas_limit.into(), gas_scale).ok_or_else(
             || Error::GasError("Overflow in gas expansion".to_string()),
         )?,
-    );
-    gas_meter
-        .copy_consumed_gas_from(&tx_gas_meter.borrow())
-        .map_err(|e| Error::GasError(e.to_string()))?;
-    let ref_unshield_gas_meter = RefCell::new(gas_meter);
+    ));
 
     let valid_batched_tx_result = {
         let first_tx = tx
@@ -724,7 +722,7 @@ where
             &first_tx,
             tx_index,
             ShellParams {
-                tx_gas_meter: &ref_unshield_gas_meter,
+                tx_gas_meter: &masp_gas_meter,
                 state: *state,
                 vp_wasm_cache,
                 tx_wasm_cache,
@@ -789,7 +787,7 @@ where
 
     tx_gas_meter
         .borrow_mut()
-        .copy_consumed_gas_from(&ref_unshield_gas_meter.borrow())
+        .consume(masp_gas_meter.borrow().get_tx_consumed_gas().into())
         .map_err(|e| Error::GasError(e.to_string()))?;
 
     Ok(valid_batched_tx_result)
