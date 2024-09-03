@@ -19,9 +19,9 @@ epochs_per_year = 31_536_000
 # The multiplier for masp epochs
 masp_epoch_multiplier = 2
 # Max gas for block
-max_block_gas = 15_000_000
+max_block_gas = 20_000_000
 # Masp fee payment gas limit
-masp_fee_payment_gas_limit = 300_000
+masp_fee_payment_gas_limit = 200_000
 # Gas scale
 gas_scale = 10_000
 

@@ -685,9 +685,8 @@ fn masp_incentives() -> Result<()> {
             CHRISTEL,
             "--token",
             NAM,
-            // FIXME: lower if possible
             "--gas-limit",
-            "300000",
+            "250000",
             "--amount",
             "1.451732",
             "--signing-keys",
@@ -2903,7 +2902,7 @@ fn masp_fee_payment_with_custom_spending_key() -> Result<()> {
             "--token",
             NAM,
             "--amount",
-            "300000",
+            "250000",
             "--ledger-address",
             validator_one_rpc,
         ],
@@ -2953,7 +2952,7 @@ fn masp_fee_payment_with_custom_spending_key() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 300000"));
+    assert!(captured.contains("nam: 250000"));
 
     // Masp fee payment with custom gas payer
     let captured = CapturedOutput::of(|| {
@@ -2970,9 +2969,8 @@ fn masp_fee_payment_with_custom_spending_key() -> Result<()> {
                 NAM,
                 "--amount",
                 "9000",
-                // FIXME: lower
                 "--gas-limit",
-                "300000",
+                "250000",
                 "--gas-price",
                 "1",
                 "--gas-spending-key",
@@ -3151,7 +3149,7 @@ fn masp_fee_payment_with_different_token() -> Result<()> {
             "--token",
             BTC,
             "--amount",
-            "300000",
+            "250000",
             "--gas-payer",
             ALBERT_KEY,
             "--ledger-address",
@@ -3220,7 +3218,7 @@ fn masp_fee_payment_with_different_token() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("btc: 300000"));
+    assert!(captured.contains("btc: 250000"));
 
     // Masp fee payment with custom token and gas payer
     let captured = CapturedOutput::of(|| {
@@ -3239,9 +3237,8 @@ fn masp_fee_payment_with_different_token() -> Result<()> {
                 "1",
                 "--gas-token",
                 BTC,
-                // FIXME: reduce this
                 "--gas-limit",
-                "300000",
+                "250000",
                 "--gas-price",
                 "1",
                 "--gas-spending-key",
