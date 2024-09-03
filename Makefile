@@ -212,6 +212,9 @@ test-integration-with-coverage:
 		--test-threads=1 \
 		-Z unstable-options --report-time
 
+test-wasm-with-coverage:
+	make -C $(wasms) test-with-coverage
+
 test-unit-mainnet:
 	$(cargo) +$(nightly) test --lib \
 		--features "mainnet" \

@@ -28,12 +28,18 @@ fmt-check:
 	$(cargo) +$(nightly) fmt --check
 
 test:
-	$(cargo) +$(nightly) test -- -Z unstable-options --report-time
+	$(cargo) +$(nightly) test --lib -- -Z unstable-options --report-time
 
 clean:
 	$(cargo) clean
 
 deps:
 	$(rustup) target add wasm32-unknown-unknown
+
+test-with-coverage:
+	$(cargo) +$(nightly) llvm-cov --lib --output-path lcov.info \
+		--lcov \
+		-- -Z unstable-options --report-time
+
 
 .PHONY: all debug check clippy clippy-fix fmt fmt-check test clean deps
