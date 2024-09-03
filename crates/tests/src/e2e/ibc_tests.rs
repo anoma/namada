@@ -32,10 +32,8 @@ use namada_sdk::ibc::core::host::types::identifiers::{
 use namada_sdk::ibc::primitives::proto::Any;
 use namada_sdk::ibc::storage::*;
 use namada_sdk::ibc::trace::ibc_token;
-use namada_::masp::PaymentAddress;
 use namada_sdk::token::Amount;
 use namada_test_utils::TestWasms;
-use namada_token::masp::fs::FsShieldedUtils;
 use namada_token::masp::PaymentAddress;
 use prost::Message;
 use setup::constants::*;

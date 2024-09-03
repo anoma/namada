@@ -5,7 +5,6 @@ use namada_state::{DBIter, StorageHasher, WlState, DB};
 
 use crate::events::log::EventLog;
 pub use crate::tendermint::abci::request::Query as RequestQuery;
-use crate::tendermint::merkle::proof::ProofOps;
 /// A request context provides read-only access to storage and WASM compilation
 /// caches to request handlers.
 #[derive(Debug, Clone)]

@@ -225,7 +225,7 @@ pub async fn get_token_total_supply<C: namada_io::Client + Sync>(
 }
 
 /// Query the effective total supply of the native token
-pub async fn get_effective_native_supply<C: crate::queries::Client + Sync>(
+pub async fn get_effective_native_supply<C: Client + Sync>(
     client: &C,
 ) -> Result<token::Amount, error::Error> {
     convert_response::<C, _>(

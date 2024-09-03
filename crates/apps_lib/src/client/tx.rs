@@ -231,7 +231,7 @@ async fn batch_opt_reveal_pk_and_submit<N: Namada>(
     tx_data: (Tx, SigningTxData),
 ) -> Result<ProcessTxResponse, error::Error>
 where
-    <N::Client as namada_sdk::queries::Client>::Error: std::fmt::Display,
+    <N::Client as namada_io::Client>::Error: std::fmt::Display,
 {
     let mut batched_tx_data = vec![];
 
