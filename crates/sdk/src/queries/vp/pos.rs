@@ -708,8 +708,10 @@ where
 
 /// Client-only methods for the router type are composed from router functions.
 pub mod client_only_methods {
+    use namada_io::Client;
+
     use super::*;
-    use crate::queries::{Client, RPC};
+    use crate::queries::RPC;
 
     impl Pos {
         /// Get bonds and unbonds with all details (slashes and rewards, if any)

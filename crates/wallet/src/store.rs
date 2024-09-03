@@ -22,8 +22,8 @@ use zeroize::Zeroizing;
 use super::alias::{self, Alias};
 use super::derivation_path::DerivationPath;
 use super::pre_genesis;
-use crate::wallet::keys::{DatedKeypair, DatedSpendingKey, DatedViewingKey};
-use crate::wallet::{StoredKeypair, WalletIo};
+use crate::keys::{DatedKeypair, DatedSpendingKey, DatedViewingKey};
+use crate::{StoredKeypair, WalletIo};
 
 /// Actions that can be taken when there is an alias conflict
 pub enum ConfirmationResponse {

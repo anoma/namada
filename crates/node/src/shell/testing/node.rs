@@ -10,6 +10,7 @@ use color_eyre::eyre::{Report, Result};
 use data_encoding::HEXUPPER;
 use itertools::Either;
 use lazy_static::lazy_static;
+use namada_io::Client;
 use namada_sdk::address::Address;
 use namada_sdk::chain::{BlockHeader, BlockHeight, Epoch};
 use namada_sdk::collections::HashMap;
@@ -27,7 +28,7 @@ use namada_sdk::proof_of_stake::storage::{
 };
 use namada_sdk::proof_of_stake::types::WeightedValidator;
 use namada_sdk::queries::{
-    Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
+    EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
 };
 use namada_sdk::state::{
     LastBlock, Sha256Hasher, StorageRead, DB, EPOCH_SWITCH_BLOCKS_DELAY,
@@ -737,7 +738,7 @@ impl Client for MockNode {
         data: Option<Vec<u8>>,
         height: Option<BlockHeight>,
         prove: bool,
-    ) -> std::result::Result<EncodedResponseQuery, Self::Error> {
+    ) -> std::result::Result<EncodedResponseQuery, Report> {
         self.drive_mock_services_bg().await;
         let rpc = RPC;
         let data = data.unwrap_or_default();

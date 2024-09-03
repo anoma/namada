@@ -318,9 +318,9 @@ dependencies = [
 
 [[package]]
 name = "async-trait"
-version = "0.1.77"
+version = "0.1.81"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c980ee35e870bd1a4d2c8294d4c04d0499e67bca1e4b5cefcc693c2fa00caea9"
+checksum = "6e0c28dcc82d7c8ead5cb13beb15405b57b8546e93215673ff8ca0349a028107"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3045,9 +3045,9 @@ checksum = "95505c38b4572b2d910cecb0281560f54b440a19336cbbcb27bf6ce6adc6f5a8"
 
 [[package]]
 name = "hermit-abi"
-version = "0.3.3"
+version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d77f7ec81a6d05a3abb01ab6eb7590f6083d08449fe5a1c8b1e620283546ccb7"
+checksum = "d231dfb89cfffdbc30e7fc41579ed6066ad03abda9e567ccafae602b97ec5024"
 
 [[package]]
 name = "hex"
@@ -4581,13 +4581,14 @@ dependencies = [
 
 [[package]]
 name = "mio"
-version = "0.8.11"
+version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4a650543ca06a924e8b371db273b2756685faae30f8487da1b56505a8f78b0c"
+checksum = "80e04d1dcff3aae0704555fe5fee3bcfaf3d1fdf8a7e521d5b9d2b42acb52cec"
 dependencies = [
+ "hermit-abi",
  "libc",
  "wasi 0.11.0+wasi-snapshot-preview1",
- "windows-sys 0.48.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -4684,10 +4685,13 @@ dependencies = [
  "linkme",
  "masp_primitives",
  "namada_core",
+ "namada_io",
  "namada_macros",
  "namada_migrations",
  "namada_sdk",
+ "namada_token",
  "namada_vm",
+ "namada_wallet",
  "pretty_assertions",
  "proptest",
  "prost 0.12.3",
@@ -4725,6 +4729,7 @@ dependencies = [
  "masp_proofs",
  "namada_apps_lib",
  "namada_node",
+ "namada_token",
  "namada_vm",
  "namada_vp",
  "prost 0.12.3",
@@ -4782,6 +4787,7 @@ dependencies = [
  "prost-types 0.12.3",
  "rand 0.8.5",
  "rand_core 0.6.4",
+ "rayon",
  "ripemd",
  "serde",
  "serde_json",
@@ -4995,11 +5001,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "namada_io"
+version = "0.43.0"
+dependencies = [
+ "async-trait",
+ "kdam",
+ "namada_core",
+ "tendermint-rpc",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "namada_light_sdk"
 version = "0.43.0"
 dependencies = [
  "borsh",
  "borsh-ext",
+ "namada_io",
  "namada_sdk",
  "prost 0.12.3",
  "serde_json",
@@ -5076,10 +5095,12 @@ dependencies = [
  "masp_primitives",
  "masp_proofs",
  "namada_apps_lib",
+ "namada_io",
  "namada_migrations",
  "namada_replay_protection",
  "namada_sdk",
  "namada_test_utils",
+ "namada_token",
  "namada_vm",
  "namada_vote_ext",
  "namada_vp",
@@ -5180,21 +5201,18 @@ dependencies = [
  "arbitrary",
  "assert_matches",
  "async-trait",
- "base58",
  "bimap",
  "borsh",
  "borsh-ext",
  "circular-queue",
  "clap",
  "data-encoding",
- "derivation-path",
  "duration-str",
  "either",
  "ethbridge-bridge-contract",
  "ethers",
  "eyre",
  "fd-lock",
- "flume",
  "futures",
  "init-once",
  "itertools 0.12.1",
@@ -5211,6 +5229,7 @@ dependencies = [
  "namada_gas",
  "namada_governance",
  "namada_ibc",
+ "namada_io",
  "namada_macros",
  "namada_migrations",
  "namada_parameters",
@@ -5222,9 +5241,9 @@ dependencies = [
  "namada_vm",
  "namada_vote_ext",
  "namada_vp",
+ "namada_wallet",
  "num-traits 0.2.17",
  "num256",
- "orion",
  "owo-colors",
  "paste",
  "patricia_tree",
@@ -5238,17 +5257,14 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.9.9",
- "slip10_ed25519",
  "smooth-operator",
  "tempfile",
  "tendermint-rpc",
  "thiserror",
  "tiny-bip39",
- "tiny-hderive",
  "tokio",
  "toml 0.5.11",
  "tracing",
- "typed-builder",
  "xorf",
  "zeroize",
 ]
@@ -5257,30 +5273,48 @@ dependencies = [
 name = "namada_shielded_token"
 version = "0.43.0"
 dependencies = [
+ "async-trait",
  "borsh",
+ "eyre",
+ "flume",
+ "futures",
+ "itertools 0.12.1",
  "lazy_static",
+ "linkme",
  "masp_primitives",
  "masp_proofs",
  "namada_account",
  "namada_controller",
  "namada_core",
+ "namada_events",
  "namada_gas",
+ "namada_ibc",
+ "namada_io",
+ "namada_macros",
+ "namada_migrations",
  "namada_parameters",
  "namada_state",
  "namada_systems",
  "namada_trans_token",
  "namada_tx",
  "namada_vp",
+ "namada_wallet",
  "proptest",
+ "rand 0.8.5",
  "rand_core 0.6.4",
  "rayon",
  "ripemd",
  "serde",
+ "serde_json",
  "sha2 0.9.9",
  "smooth-operator",
+ "tempfile",
  "test-log",
  "thiserror",
+ "tokio",
  "tracing",
+ "typed-builder",
+ "xorf",
 ]
 
 [[package]]
@@ -5379,6 +5413,7 @@ dependencies = [
  "namada_node",
  "namada_sdk",
  "namada_test_utils",
+ "namada_token",
  "namada_tx_env",
  "namada_tx_prelude",
  "namada_vm",
@@ -5409,9 +5444,12 @@ version = "0.43.0"
 dependencies = [
  "arbitrary",
  "borsh",
+ "linkme",
+ "masp_primitives",
  "namada_core",
  "namada_events",
  "namada_macros",
+ "namada_migrations",
  "namada_shielded_token",
  "namada_systems",
  "namada_trans_token",
@@ -5609,6 +5647,36 @@ dependencies = [
  "namada_vm_env",
  "namada_vp_env",
  "sha2 0.9.9",
+]
+
+[[package]]
+name = "namada_wallet"
+version = "0.43.0"
+dependencies = [
+ "base58",
+ "bimap",
+ "borsh",
+ "borsh-ext",
+ "data-encoding",
+ "derivation-path",
+ "fd-lock",
+ "itertools 0.12.1",
+ "masp_primitives",
+ "namada_core",
+ "namada_ibc",
+ "namada_macros",
+ "namada_migrations",
+ "orion",
+ "rand 0.8.5",
+ "rand_core 0.6.4",
+ "serde",
+ "slip10_ed25519",
+ "smooth-operator",
+ "thiserror",
+ "tiny-bip39",
+ "tiny-hderive",
+ "toml 0.5.11",
+ "zeroize",
 ]
 
 [[package]]
@@ -8394,21 +8462,20 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokio"
-version = "1.34.0"
+version = "1.39.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d0c014766411e834f7af5b8f4cf46257aab4036ca95e9d2c144a10f59ad6f5b9"
+checksum = "9babc99b9923bfa4804bd74722ff02c0381021eafa4db9949217e3be8e84fff5"
 dependencies = [
  "backtrace",
  "bytes",
  "libc",
  "mio",
- "num_cpus",
  "parking_lot",
  "pin-project-lite",
  "signal-hook-registry",
  "socket2 0.5.5",
  "tokio-macros",
- "windows-sys 0.48.0",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -8423,9 +8490,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-macros"
-version = "2.2.0"
+version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b8a1e28f2deaa14e508979454cb3a223b10b938b45af148bc0986de36f1923b"
+checksum = "693d596312e88961bc67d7f1f97af8a70227d9f90c31bba5806eec004978d752"
 dependencies = [
  "proc-macro2",
  "quote",

@@ -16,10 +16,10 @@ version.workspace = true
 
 [features]
 default = ["std"]
-mainnet = ["namada_core/mainnet", "namada_events/mainnet"]
+mainnet = ["namada_core/mainnet", "namada_events/mainnet", "namada_token/mainnet"]
 multicore = ["masp_proofs/multicore", "namada_token/multicore"]
 std = ["fd-lock", "download-params"]
-async-send = []
+async-send = ["namada_io/async-send"]
 namada-eth-bridge = ["namada_ethereum_bridge/namada-eth-bridge"]
 benches = ["namada_core/benches", "namada_core/testing", "namada_state/benches"]
 wasm-runtime = ["namada_vm/wasm-runtime"]
@@ -60,6 +60,7 @@ migrations = [
   "namada_proof_of_stake/migrations",
   "namada_state/migrations",
   "namada_storage/migrations",
+  "namada_token/migrations",
   "namada_tx/migrations",
   "namada_vote_ext/migrations",
   "namada_gas/migrations",
@@ -74,6 +75,7 @@ namada_events = { path = "../events" }
 namada_gas = { path = "../gas" }
 namada_governance = { path = "../governance" }
 namada_ibc = { path = "../ibc" }
+namada_io = { path = "../io" }
 namada_macros = { path = "../macros" }
 namada_migrations = { path = "../migrations", optional = true }
 namada_parameters = { path = "../parameters" }
@@ -85,6 +87,7 @@ namada_tx = { path = "../tx" }
 namada_vm = { path = "../vm", default-features = false }
 namada_vote_ext = { path = "../vote_ext" }
 namada_vp = { path = "../vp" }
+namada_wallet = {path = "../wallet" }
 
 arbitrary = { workspace = true, optional = true }
 async-trait.workspace = true
@@ -94,14 +97,12 @@ borsh-ext.workspace = true
 circular-queue.workspace = true
 clap = { version = "4.3", default-features = false, features = ["std"] }
 data-encoding.workspace = true
-derivation-path.workspace = true
 duration-str.workspace = true
 either.workspace = true
 ethbridge-bridge-contract.workspace = true
 ethers.workspace = true
 eyre.workspace = true
 fd-lock = { workspace = true, optional = true }
-flume.workspace = true
 futures.workspace = true
 init-once.workspace = true
 itertools.workspace = true
@@ -112,7 +113,6 @@ masp_primitives.workspace = true
 masp_proofs.workspace = true
 num256.workspace = true
 num-traits.workspace = true
-orion.workspace = true
 owo-colors.workspace = true
 paste.workspace = true
 patricia_tree.workspace = true
@@ -124,15 +124,14 @@ regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
-slip10_ed25519.workspace = true
 smooth-operator.workspace = true
 tendermint-rpc.workspace = true
 thiserror.workspace = true
 tiny-bip39.workspace = true
-tiny-hderive.workspace = true
+
+
 toml.workspace = true
 tracing.workspace = true
-typed-builder.workspace = true
 zeroize.workspace = true
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
@@ -170,7 +169,7 @@ namada_vote_ext = { path = "../vote_ext" }
 namada_vp = { path = "../vp" }
 
 assert_matches.workspace = true
-base58.workspace = true
+
 jubjub.workspace = true
 masp_primitives = { workspace = true, features = ["test-dependencies"] }
 proptest.workspace = true

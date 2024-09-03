@@ -5,8 +5,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use zeroize::Zeroizing;
 
-use crate::wallet;
-use crate::wallet::StoredKeypair;
+use crate::StoredKeypair;
 
 /// Ways in which wallet store operations can fail
 #[derive(Error, Debug)]
@@ -22,7 +21,7 @@ pub enum ReadError {
     StoreNewWallet(String),
     /// Failed to decode a key
     #[error("Failed to decode a key: {0}")]
-    Decryption(wallet::keys::DecryptionError),
+    Decryption(crate::keys::DecryptionError),
 }
 
 /// Validator pre-genesis wallet includes all the required keys for genesis
@@ -45,13 +44,13 @@ pub struct ValidatorWallet {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ValidatorStore {
     /// Cryptographic keypair for consensus key
-    pub consensus_key: wallet::StoredKeypair<common::SecretKey>,
+    pub consensus_key: StoredKeypair<common::SecretKey>,
     /// Cryptographic keypair for eth cold key
-    pub eth_cold_key: wallet::StoredKeypair<common::SecretKey>,
+    pub eth_cold_key: StoredKeypair<common::SecretKey>,
     /// Cryptographic keypair for Tendermint node key
-    pub tendermint_node_key: wallet::StoredKeypair<common::SecretKey>,
+    pub tendermint_node_key: StoredKeypair<common::SecretKey>,
     /// Special validator keys. Contains the ETH hot key.
-    pub validator_keys: wallet::ValidatorKeys,
+    pub validator_keys: crate::ValidatorKeys,
 }
 
 impl ValidatorStore {
@@ -74,12 +73,12 @@ pub fn gen_key_to_store(
     password: Option<Zeroizing<String>>,
     rng: &mut (impl CryptoRng + Rng),
 ) -> (StoredKeypair<common::SecretKey>, common::SecretKey) {
-    let sk = wallet::gen_secret_key(scheme, rng);
+    let sk = crate::gen_secret_key(scheme, rng);
     StoredKeypair::new(sk, password)
 }
 
-impl From<wallet::keys::DecryptionError> for ReadError {
-    fn from(err: wallet::keys::DecryptionError) -> Self {
+impl From<crate::keys::DecryptionError> for ReadError {
+    fn from(err: crate::keys::DecryptionError) -> Self {
         ReadError::Decryption(err)
     }
 }

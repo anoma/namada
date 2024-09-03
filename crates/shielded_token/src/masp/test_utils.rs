@@ -10,12 +10,12 @@ use namada_core::chain::BlockHeight;
 use namada_core::collections::HashMap;
 use namada_core::masp::ExtendedViewingKey;
 use namada_tx::IndexedTx;
+use namada_wallet::DatedKeypair;
+use thiserror::Error;
 
-use crate::error::Error;
 use crate::masp::utils::{
     IndexedNoteEntry, MaspClient, MaspClientCapabilities,
 };
-use crate::wallet::DatedKeypair;
 
 /// A viewing key derived from A_SPENDING_KEY
 pub const AA_VIEWING_KEY: &str = "zvknam1qqqqqqqqqqqqqq9v0sls5r5de7njx8ehu49pqgmqr9ygelg87l5x8y4s9r0pjlvu6x74w9gjpw856zcu826qesdre628y6tjc26uhgj6d9zqur9l5u3p99d9ggc74ald6s8y3sdtka74qmheyqvdrasqpwyv2fsmxlz57lj4grm2pthzj3sflxc0jx0edrakx3vdcngrfjmru8ywkguru8mxss2uuqxdlglaz6undx5h8w7g70t2es850g48xzdkqay5qs0yw06rtxcpjdve6";
@@ -350,8 +350,19 @@ impl TestingMaspClient {
     }
 }
 
+#[derive(Error, Debug)]
+pub enum TestError {
+    /// Key Retrieval Errors
+    #[error("After retrying, could not fetch all MASP txs.")]
+    FetchFailure,
+}
+
 impl MaspClient for TestingMaspClient {
-    async fn last_block_height(&self) -> Result<Option<BlockHeight>, Error> {
+    type Error = TestError;
+
+    async fn last_block_height(
+        &self,
+    ) -> Result<Option<BlockHeight>, Self::Error> {
         Ok(Some(self.last_height))
     }
 
@@ -359,16 +370,14 @@ impl MaspClient for TestingMaspClient {
         &self,
         from: BlockHeight,
         to: BlockHeight,
-    ) -> Result<Vec<IndexedNoteEntry>, Error> {
+    ) -> Result<Vec<IndexedNoteEntry>, Self::Error> {
         let mut txs = vec![];
 
         for _height in from.0..=to.0 {
             if let Some(tx) = self.tx_recv.recv_async().await.unwrap() {
                 txs.push(tx);
             } else {
-                return Err(Error::Other(
-                    "After retrying, could not fetch all MASP txs.".into(),
-                ));
+                return Err(TestError::FetchFailure);
             }
         }
 
@@ -383,7 +392,7 @@ impl MaspClient for TestingMaspClient {
     async fn fetch_commitment_tree(
         &self,
         _: BlockHeight,
-    ) -> Result<CommitmentTree<Node>, Error> {
+    ) -> Result<CommitmentTree<Node>, Self::Error> {
         unimplemented!(
             "Commitment tree fetching is not implemented by this client"
         )
@@ -392,7 +401,7 @@ impl MaspClient for TestingMaspClient {
     async fn fetch_note_index(
         &self,
         _: BlockHeight,
-    ) -> Result<BTreeMap<IndexedTx, usize>, Error> {
+    ) -> Result<BTreeMap<IndexedTx, usize>, Self::Error> {
         unimplemented!(
             "Transaction notes map fetching is not implemented by this client"
         )
@@ -401,7 +410,7 @@ impl MaspClient for TestingMaspClient {
     async fn fetch_witness_map(
         &self,
         _: BlockHeight,
-    ) -> Result<HashMap<usize, IncrementalWitness<Node>>, Error> {
+    ) -> Result<HashMap<usize, IncrementalWitness<Node>>, Self::Error> {
         unimplemented!("Witness map fetching is not implemented by this client")
     }
 }

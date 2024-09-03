@@ -37,10 +37,6 @@ use namada_apps_lib::ibc::primitives::ToProto;
 use namada_apps_lib::ibc::{
     IbcActions, NftTransferModule, TransferModule, COMMITMENT_PREFIX,
 };
-use namada_apps_lib::masp::{
-    partial_deauthorize, preload_verifying_keys, PVKs, TransferSource,
-    TransferTarget,
-};
 use namada_apps_lib::masp_primitives::merkle_tree::CommitmentTree;
 use namada_apps_lib::masp_primitives::transaction::Transaction;
 use namada_apps_lib::masp_proofs::sapling::SaplingVerificationContextInner;
@@ -59,6 +55,10 @@ use namada_node::bench_utils::{
     ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
     TX_BRIDGE_POOL_WASM, TX_IBC_WASM, TX_INIT_PROPOSAL_WASM, TX_RESIGN_STEWARD,
     TX_TRANSFER_WASM, TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL_WASM,
+};
+use namada_token::masp::{
+    partial_deauthorize, preload_verifying_keys, PVKs, TransferSource,
+    TransferTarget,
 };
 use namada_vp::native_vp::{Ctx, NativeVp};
 use rand_core::OsRng;

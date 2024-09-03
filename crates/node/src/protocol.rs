@@ -805,7 +805,7 @@ fn get_optional_masp_ref<S: Read<Err = state::Error>>(
     state: &S,
     cmt: &TxCommitments,
     is_masp_tx: Either<bool, &BatchedTxResult>,
-) -> Result<Option<Either<namada_sdk::masp::MaspTxId, Hash>>> {
+) -> Result<Option<Either<namada_token::masp::MaspTxId, Hash>>> {
     // Always check that the transaction was indeed a MASP one by looking at the
     // changed keys. A malicious tx could push a MASP Action without touching
     // any storage keys associated with the shielded pool

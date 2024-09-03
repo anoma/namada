@@ -21,6 +21,7 @@ use namada_apps_lib::cli;
 use namada_apps_lib::cli::context::FromContext;
 use namada_apps_lib::cli::Context;
 use namada_apps_lib::wallet::{defaults, CliWalletUtils};
+use namada_io::{Client, NamadaIo, StdIo};
 use namada_sdk::address::{self, Address, InternalAddress, MASP};
 use namada_sdk::args::ShieldedSync;
 use namada_sdk::chain::testing::get_dummy_header;
@@ -69,16 +70,10 @@ use namada_sdk::ibc::storage::{
     channel_key, connection_key, mint_limit_key, port_key, throughput_limit_key,
 };
 use namada_sdk::ibc::{MsgTransfer, COMMITMENT_PREFIX};
-use namada_sdk::io::StdIo;
 use namada_sdk::key::common::SecretKey;
-use namada_sdk::masp::utils::RetryStrategy;
-use namada_sdk::masp::{
-    self, ContextSyncStatus, DispatcherCache, ExtendedViewingKey,
-    MaspTransferData, MaspTxRefs, PaymentAddress, ShieldedContext,
-    ShieldedUtils, TransferSource, TransferTarget,
-};
+use namada_sdk::masp::ShieldedContext;
 use namada_sdk::queries::{
-    Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
+    EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
 };
 use namada_sdk::state::StorageRead;
 use namada_sdk::storage::{Key, KeySeg, TxIndex};
@@ -106,6 +101,13 @@ pub use namada_sdk::tx::{
 use namada_sdk::wallet::Wallet;
 use namada_sdk::{parameters, proof_of_stake, tendermint, Namada, NamadaImpl};
 use namada_test_utils::tx_data::TxWriteData;
+use namada_token::masp::shielded_wallet::ShieldedApi;
+use namada_token::masp::utils::RetryStrategy;
+use namada_token::masp::{
+    self, ContextSyncStatus, DispatcherCache, ExtendedViewingKey,
+    MaspTransferData, MaspTxRefs, PaymentAddress, ShieldedUtils,
+    ShieldedWallet, TransferSource, TransferTarget,
+};
 use namada_vm::wasm::run;
 use rand_core::OsRng;
 use tempfile::TempDir;
@@ -760,7 +762,7 @@ impl ShieldedUtils for BenchShieldedUtils {
     /// directory. If this fails, then leave the current context unchanged.
     async fn load<U: ShieldedUtils>(
         &self,
-        ctx: &mut ShieldedContext<U>,
+        ctx: &mut ShieldedWallet<U>,
         force_confirmed: bool,
     ) -> std::io::Result<()> {
         // Try to load shielded context from file
@@ -778,9 +780,9 @@ impl ShieldedUtils for BenchShieldedUtils {
         let mut bytes = Vec::new();
         ctx_file.read_to_end(&mut bytes)?;
         // Fill the supplied context with the deserialized object
-        *ctx = ShieldedContext {
+        *ctx = ShieldedWallet {
             utils: ctx.utils.clone(),
-            ..ShieldedContext::deserialize(&mut &bytes[..])?
+            ..ShieldedWallet::deserialize(&mut &bytes[..])?
         };
         Ok(())
     }
@@ -788,7 +790,7 @@ impl ShieldedUtils for BenchShieldedUtils {
     /// Save this shielded context into its associated context directory
     async fn save<U: ShieldedUtils>(
         &self,
-        ctx: &ShieldedContext<U>,
+        ctx: &ShieldedWallet<U>,
     ) -> std::io::Result<()> {
         let (tmp_file_name, file_name) = match ctx.sync_status {
             ContextSyncStatus::Confirmed => (TMP_FILE_NAME, FILE_NAME),
@@ -1136,7 +1138,7 @@ impl Default for BenchShieldedCtx {
             .fvk
             .vk;
             let (div, _g_d) =
-                namada_sdk::masp::find_valid_diversifier(&mut OsRng);
+                namada_token::masp::find_valid_diversifier(&mut OsRng);
             let payment_addr = viewing_key.to_payment_address(div).unwrap();
             let _ = chain_ctx
                 .wallet
@@ -1194,7 +1196,7 @@ impl BenchShieldedCtx {
         let namada = NamadaImpl::native_new(
             self.shell,
             self.wallet,
-            self.shielded,
+            self.shielded.into(),
             StdIo,
             native_token,
         );
@@ -1205,14 +1207,20 @@ impl BenchShieldedCtx {
             amount: denominated_amount,
         };
         let shielded = async_runtime
-            .block_on(
-                ShieldedContext::<BenchShieldedUtils>::gen_shielded_transfer(
-                    &namada,
-                    vec![masp_transfer_data],
-                    None,
-                    true,
-                ),
-            )
+            .block_on(async {
+                let expiration =
+                    Namada::tx_builder(&namada).expiration.to_datetime();
+                let mut shielded_ctx = namada.shielded_mut().await;
+                shielded_ctx
+                    .gen_shielded_transfer(
+                        &namada,
+                        vec![masp_transfer_data],
+                        None,
+                        expiration,
+                        true,
+                    )
+                    .await
+            })
             .unwrap()
             .map(
                 |masp::ShieldedTransfer {

@@ -3583,6 +3583,7 @@ dependencies = [
  "prost-types",
  "rand 0.8.5",
  "rand_core 0.6.4",
+ "rayon",
  "ripemd",
  "serde",
  "serde_json",
@@ -3709,6 +3710,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "namada_io"
+version = "0.43.0"
+dependencies = [
+ "async-trait",
+ "kdam",
+ "namada_core",
+ "tendermint-rpc",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "namada_macros"
 version = "0.43.0"
 dependencies = [
@@ -3789,14 +3802,12 @@ dependencies = [
  "circular-queue",
  "clap",
  "data-encoding",
- "derivation-path",
  "duration-str",
  "either",
  "ethbridge-bridge-contract",
  "ethers",
  "eyre",
  "fd-lock",
- "flume",
  "futures",
  "init-once",
  "itertools 0.12.1",
@@ -3812,6 +3823,7 @@ dependencies = [
  "namada_gas",
  "namada_governance",
  "namada_ibc",
+ "namada_io",
  "namada_macros",
  "namada_parameters",
  "namada_proof_of_stake",
@@ -3822,9 +3834,9 @@ dependencies = [
  "namada_vm",
  "namada_vote_ext",
  "namada_vp",
+ "namada_wallet",
  "num-traits 0.2.17",
  "num256",
- "orion",
  "owo-colors",
  "paste",
  "patricia_tree",
@@ -3838,17 +3850,14 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.9.9",
- "slip10_ed25519",
  "smooth-operator",
  "tempfile",
  "tendermint-rpc",
  "thiserror",
  "tiny-bip39",
- "tiny-hderive",
  "tokio",
  "toml 0.5.11",
  "tracing",
- "typed-builder",
  "xorf",
  "zeroize",
 ]
@@ -3857,26 +3866,42 @@ dependencies = [
 name = "namada_shielded_token"
 version = "0.43.0"
 dependencies = [
+ "async-trait",
  "borsh",
+ "eyre",
+ "flume",
+ "futures",
+ "itertools 0.12.1",
  "lazy_static",
  "masp_primitives",
  "masp_proofs",
  "namada_account",
  "namada_controller",
  "namada_core",
+ "namada_events",
  "namada_gas",
+ "namada_ibc",
+ "namada_io",
+ "namada_macros",
  "namada_state",
  "namada_systems",
  "namada_tx",
  "namada_vp",
+ "namada_wallet",
+ "proptest",
+ "rand 0.8.5",
  "rand_core 0.6.4",
  "rayon",
  "ripemd",
  "serde",
+ "serde_json",
  "sha2 0.9.9",
  "smooth-operator",
+ "tempfile",
  "thiserror",
  "tracing",
+ "typed-builder",
+ "xorf",
 ]
 
 [[package]]
@@ -3951,6 +3976,7 @@ dependencies = [
  "namada_core",
  "namada_sdk",
  "namada_test_utils",
+ "namada_token",
  "namada_tx_env",
  "namada_tx_prelude",
  "namada_vm",
@@ -3973,6 +3999,7 @@ name = "namada_token"
 version = "0.43.0"
 dependencies = [
  "borsh",
+ "masp_primitives",
  "namada_core",
  "namada_events",
  "namada_macros",
@@ -4151,6 +4178,33 @@ dependencies = [
  "namada_vm_env",
  "namada_vp_env",
  "sha2 0.9.9",
+]
+
+[[package]]
+name = "namada_wallet"
+version = "0.43.0"
+dependencies = [
+ "bimap",
+ "borsh",
+ "borsh-ext",
+ "data-encoding",
+ "derivation-path",
+ "itertools 0.12.1",
+ "masp_primitives",
+ "namada_core",
+ "namada_ibc",
+ "namada_macros",
+ "orion",
+ "rand 0.8.5",
+ "rand_core 0.6.4",
+ "serde",
+ "slip10_ed25519",
+ "smooth-operator",
+ "thiserror",
+ "tiny-bip39",
+ "tiny-hderive",
+ "toml 0.5.11",
+ "zeroize",
 ]
 
 [[package]]

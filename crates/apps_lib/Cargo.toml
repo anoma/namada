@@ -23,6 +23,7 @@ benches = ["lazy_static", "namada_sdk/benches"]
 migrations = [
   "namada_migrations",
   "namada_sdk/migrations",
+  "namada_token/migrations",
   "linkme"
 ]
 namada-eth-bridge = [
@@ -31,10 +32,13 @@ namada-eth-bridge = [
 
 [dependencies]
 namada_core = {path = "../core"}
+namada_io = { path = "../io" }
 namada_macros = {path = "../macros"}
 namada_migrations = {path = "../migrations", optional = true}
 namada_sdk = {path = "../sdk", features = ["download-params", "multicore"]}
+namada_token = {path = "../token"}
 namada_vm = {path = "../vm"}
+namada_wallet = { path = "../wallet", features = ["std"]}
 
 async-trait.workspace = true
 base64.workspace = true

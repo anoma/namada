@@ -1,18 +1,14 @@
 use std::time::Duration;
 
 use color_eyre::owo_colors::OwoColorize;
+#[cfg(any(test, feature = "testing"))]
+use namada_io::DevNullProgressBar;
+use namada_io::{display, display_line, Client, Io, MaybeSend, MaybeSync};
 use namada_sdk::args::ShieldedSync;
 use namada_sdk::control_flow::install_shutdown_signal;
 use namada_sdk::error::Error;
-#[cfg(any(test, feature = "testing"))]
-use namada_sdk::io::DevNullProgressBar;
-use namada_sdk::io::Io;
-use namada_sdk::masp::utils::{IndexerMaspClient, LedgerMaspClient};
-use namada_sdk::masp::{
-    MaspLocalTaskEnv, ShieldedContext, ShieldedSyncConfig, ShieldedUtils,
-};
-use namada_sdk::queries::Client;
-use namada_sdk::{display, display_line, MaybeSend, MaybeSync};
+use namada_sdk::masp::{IndexerMaspClient, LedgerMaspClient, ShieldedContext};
+use namada_token::masp::{MaspLocalTaskEnv, ShieldedSyncConfig, ShieldedUtils};
 
 #[allow(clippy::too_many_arguments)]
 pub async fn syncing<
@@ -88,7 +84,8 @@ pub async fn syncing<
                 .retry_strategy(args.retry_strategy)
                 .build();
 
-            let env = MaspLocalTaskEnv::new(500)?;
+            let env = MaspLocalTaskEnv::new(500)
+                .map_err(|e| Error::Other(e.to_string()))?;
             let ctx = shielded
                 .sync(
                     env,
@@ -98,7 +95,8 @@ pub async fn syncing<
                     &vks,
                 )
                 .await
-                .map(|_| shielded);
+                .map(|_| shielded)
+                .map_err(|e| Error::Other(e.to_string()));
 
             display!(io, "\nSyncing finished\n");
 

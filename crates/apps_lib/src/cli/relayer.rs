@@ -1,5 +1,5 @@
 use color_eyre::eyre::Result;
-use namada_sdk::io::Io;
+use namada_io::Io;
 
 use crate::cli;
 use crate::cli::api::{CliApi, CliClient};
@@ -14,7 +14,7 @@ impl CliApi {
     where
         C: CliClient,
     {
-        use namada_sdk::display_line;
+        use namada_io::display_line;
 
         display_line!(&io, "The Namada Ethereum bridge is disabled");
         Ok(())
