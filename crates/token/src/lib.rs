@@ -266,7 +266,7 @@ impl Transfer {
     }
 }
 
-#[cfg(any(test, feature = "testing"))]
+#[cfg(all(any(test, feature = "testing"), feature = "masp"))]
 /// Testing helpers and strategies for tokens
 pub mod testing {
     use std::collections::BTreeMap;

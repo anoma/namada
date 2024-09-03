@@ -16,6 +16,7 @@ version.workspace = true
 default = []
 std = ["namada_shielded_token/std"]
 mainnet = ["namada_shielded_token/mainnet"]
+masp = ["namada_shielded_token/masp"]
 migrations = ["namada_migrations", "namada_shielded_token/migrations", "linkme"]
 multicore = ["namada_shielded_token/multicore"]
 download-params = ["namada_shielded_token/download-params"]

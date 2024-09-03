@@ -15,7 +15,7 @@ version.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["std"]
+default = ["std", "masp"]
 mainnet = ["namada_core/mainnet", "namada_events/mainnet", "namada_token/mainnet"]
 multicore = ["masp_proofs/multicore", "namada_token/multicore"]
 std = ["fd-lock", "download-params", "namada_token/std"]
@@ -23,7 +23,7 @@ async-send = ["namada_io/async-send"]
 namada-eth-bridge = ["namada_ethereum_bridge/namada-eth-bridge"]
 benches = ["namada_core/benches", "namada_core/testing", "namada_state/benches"]
 wasm-runtime = ["namada_vm/wasm-runtime"]
-
+masp = ["namada_core/task_env", "namada_core/control_flow", "namada_token/masp"]
 # for tests and test utilities
 testing = [
   "masp_primitives/test-dependencies",
@@ -69,7 +69,7 @@ migrations = [
 
 [dependencies]
 namada_account = { path = "../account" }
-namada_core = { path = "../core", features = ["control_flow", "rand"] }
+namada_core = { path = "../core" }
 namada_ethereum_bridge = { path = "../ethereum_bridge", default-features = false }
 namada_events = { path = "../events" }
 namada_gas = { path = "../gas" }
@@ -162,7 +162,7 @@ namada_proof_of_stake = { path = "../proof_of_stake", default-features = false, 
 ] }
 namada_state = { path = "../state", features = ["testing"] }
 namada_storage = { path = "../storage", features = ["testing"] }
-namada_token = { path = "../token", features = ["testing"] }
+namada_token = { path = "../token", features = ["testing", "masp"] }
 namada_tx = { path = "../tx", features = ["testing"]}
 namada_vm = { path = "../vm" }
 namada_vote_ext = { path = "../vote_ext" }

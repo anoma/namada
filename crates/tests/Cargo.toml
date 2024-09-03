@@ -14,6 +14,7 @@ version.workspace = true
 
 [features]
 default = []
+#default = ["namada_sdk/std", "namada_sdk/masp"]
 mainnet = [
   "namada_sdk/mainnet",
 ]
@@ -28,7 +29,7 @@ namada-eth-bridge = [
 
 [dependencies]
 namada_core = {path = "../core", features = ["testing"]}
-namada_sdk = {path = "../sdk", features = ["download-params", "testing", "wasm-runtime"]}
+namada_sdk = {path = "../sdk", default-features=false, features = ["download-params", "testing", "wasm-runtime"]}
 namada_test_utils = {path = "../test_utils"}
 namada_token = {path = "../token"}
 namada_tx_env = {path = "../tx_env"}
