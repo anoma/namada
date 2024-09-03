@@ -23,6 +23,11 @@ use namada_sdk::{display_line, edisplay_line, error, signing, tx, Namada};
 use rand::rngs::OsRng;
 use tokio::sync::RwLock;
 
+use masp_primitives::transaction::components::sapling::builder::{
+    BuildParams, ConvertBuildParams, OutputBuildParams, RngBuildParams,
+    SpendBuildParams, StoredBuildParams,
+};
+
 use super::rpc;
 use crate::cli::{args, safe_exit};
 use crate::client::tx::signing::{default_sign, SigningTxData};
@@ -788,7 +793,58 @@ pub async fn submit_shielded_transfer(
     namada: &impl Namada,
     args: args::TxShieldedTransfer,
 ) -> Result<(), error::Error> {
-    let (mut tx, signing_data) = args.clone().build(namada).await?;
+    let mut bparams: Box<dyn BuildParams> = if args.tx.use_device {
+        let transport = WalletTransport::from_arg(args.tx.device_transport);
+        let app = NamadaApp::new(transport);
+        let mut bparams = StoredBuildParams::default();
+        // Number of spend descriptions is the number of transfers
+        let spend_len = args.data.len();
+        // Number of convert description is assumed to be double the number of
+        // transfers. This is because each spend description might first be
+        // converted to epoch 0 before going to the intended epoch.
+        let convert_len = args.data.len() * 2;
+        // Number of output descriptions is assumed to be double the number of
+        // transfers. This is because there may be change from each output
+        // that's destined for the sender.
+        let output_len = args.data.len() * 2;
+        for _ in 0..spend_len {
+            let spend_randomness = app
+                .get_spend_randomness()
+                .await
+                .map_err(|err| error::Error::Other(err.to_string()))?;
+            bparams.spend_params.push(SpendBuildParams {
+                rcv: jubjub::Fr::from_bytes(&spend_randomness.rcv).unwrap(),
+                alpha: jubjub::Fr::from_bytes(&spend_randomness.alpha).unwrap(),
+                ..SpendBuildParams::default()
+            });
+        }
+        for _ in 0..convert_len {
+            let convert_randomness = app
+                .get_convert_randomness()
+                .await
+                .map_err(|err| error::Error::Other(err.to_string()))?;
+            bparams.convert_params.push(ConvertBuildParams {
+                rcv: jubjub::Fr::from_bytes(&convert_randomness.rcv).unwrap(),
+                ..ConvertBuildParams::default()
+            });
+        }
+        for _ in 0..output_len {
+            let output_randomness = app
+                .get_output_randomness()
+                .await
+                .map_err(|err| error::Error::Other(err.to_string()))?;
+            println!("RCM: {:?}", output_randomness.rcm);
+            bparams.output_params.push(OutputBuildParams {
+                rcv: jubjub::Fr::from_bytes(&output_randomness.rcv).unwrap(),
+                rseed: output_randomness.rcm,
+                ..OutputBuildParams::default()
+            });
+        }
+        Box::new(bparams)
+    } else {
+        Box::new(RngBuildParams::new(OsRng))
+    };
+    let (mut tx, signing_data) = args.clone().build(namada, &mut bparams).await?;
 
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);

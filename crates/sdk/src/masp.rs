@@ -27,7 +27,7 @@ use masp_primitives::sapling::{
 };
 use masp_primitives::transaction::builder::{self, *};
 use masp_primitives::transaction::components::sapling::builder::{
-    RngBuildParams, SaplingMetadata,
+    BuildParams, RngBuildParams, SaplingMetadata,
 };
 use masp_primitives::transaction::components::{
     I128Sum, TxOut, U64Sum, ValueSum,
@@ -1163,6 +1163,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         data: Vec<MaspTransferData>,
         fee_data: Option<MaspFeeData>,
         update_ctx: bool,
+        bparams: &mut impl BuildParams,
     ) -> Result<Option<ShieldedTransfer>, TransferErr> {
         // Try to get a seed from env var, if any.
         #[allow(unused_mut)]
@@ -1330,7 +1331,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 &prover,
                 &FeeRule::non_standard(U64Sum::zero()),
                 &mut rng,
-                &mut RngBuildParams::new(OsRng),
+                bparams,
             )
             .map_err(|error| TransferErr::Build { error, data: None })?;
 

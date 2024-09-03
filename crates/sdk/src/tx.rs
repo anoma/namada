@@ -16,6 +16,7 @@ use masp_primitives::transaction::components::sapling::fees::{
 use masp_primitives::transaction::components::transparent::fees::{
     InputView as TransparentInputView, OutputView as TransparentOutputView,
 };
+use masp_primitives::transaction::components::sapling::builder::{BuildParams, RngBuildParams};
 use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::transaction::{builder, Transaction as MaspTransaction};
 use namada_account::{InitAccount, UpdateAccount};
@@ -2612,6 +2613,7 @@ pub async fn build_ibc_transfer(
         masp_transfer_data,
         masp_fee_data,
         !(args.tx.dry_run || args.tx.dry_run_wrapper),
+        &mut RngBuildParams::new(OsRng),
     )
     .await?;
     let shielded_tx_epoch = shielded_parts.as_ref().map(|trans| trans.0.epoch);
@@ -3009,6 +3011,7 @@ pub async fn build_transparent_transfer<N: Namada>(
 pub async fn build_shielded_transfer<N: Namada>(
     context: &N,
     args: &mut args::TxShieldedTransfer,
+    bparams: &mut impl BuildParams,
 ) -> Result<(Tx, SigningTxData)> {
     let signing_data = signing::aux_signing_data(
         context,
@@ -3072,6 +3075,7 @@ pub async fn build_shielded_transfer<N: Namada>(
         transfer_data,
         masp_fee_data,
         !(args.tx.dry_run || args.tx.dry_run_wrapper),
+        bparams,
     )
     .await?
     .expect("Shielded transfer must have shielded parts");
@@ -3237,6 +3241,7 @@ pub async fn build_shielding_transfer<N: Namada>(
         transfer_data,
         None,
         !(args.tx.dry_run || args.tx.dry_run_wrapper),
+        &mut RngBuildParams::new(OsRng),
     )
     .await?
     .expect("Shielding transfer must have shielded parts");
@@ -3358,6 +3363,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
         transfer_data,
         masp_fee_data,
         !(args.tx.dry_run || args.tx.dry_run_wrapper),
+        &mut RngBuildParams::new(OsRng),
     )
     .await?
     .expect("Shielding transfer must have shielded parts");
@@ -3410,6 +3416,7 @@ async fn construct_shielded_parts<N: Namada>(
     data: Vec<MaspTransferData>,
     fee_data: Option<MaspFeeData>,
     update_ctx: bool,
+    bparams: &mut impl BuildParams,
 ) -> Result<Option<(ShieldedTransfer, HashSet<AssetData>)>> {
     // Precompute asset types to increase chances of success in decoding
     let token_map = context.wallet().await.get_addresses();
@@ -3421,7 +3428,7 @@ async fn construct_shielded_parts<N: Namada>(
         .await;
     let stx_result =
         ShieldedContext::<N::ShieldedUtils>::gen_shielded_transfer(
-            context, data, fee_data, update_ctx,
+            context, data, fee_data, update_ctx, bparams,
         )
         .await;
 
@@ -3778,6 +3785,7 @@ pub async fn gen_ibc_shielding_transfer<N: Namada>(
             // Fees are paid from the transparent balance of the relayer
             None,
             true,
+            &mut RngBuildParams::new(OsRng),
         )
         .await
         .map_err(|err| TxSubmitError::MaspError(err.to_string()))?;

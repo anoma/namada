@@ -5,6 +5,8 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration as StdDuration;
 
+use masp_primitives::transaction::components::sapling::builder::BuildParams;
+
 use namada_core::address::Address;
 use namada_core::chain::{BlockHeight, ChainId, Epoch};
 use namada_core::collections::HashMap;
@@ -378,8 +380,9 @@ impl TxShieldedTransfer {
     pub async fn build(
         &mut self,
         context: &impl Namada,
+        bparams: &mut impl BuildParams,
     ) -> crate::error::Result<(namada_tx::Tx, SigningTxData)> {
-        tx::build_shielded_transfer(context, self).await
+        tx::build_shielded_transfer(context, self, bparams).await
     }
 }
 
