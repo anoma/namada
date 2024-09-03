@@ -13,7 +13,7 @@ repository.workspace = true
 version.workspace = true
 
 [features]
-default = ["std"]
+default = []
 std = ["download-params", "multicore"]
 async-send = ["namada_io/async-send"]
 mainnet = []

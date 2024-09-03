@@ -1,7 +1,9 @@
 use std::collections::BTreeMap;
+#[cfg(not(target_family = "wasm"))]
 use std::future::Future;
 use std::ops::ControlFlow;
 
+#[cfg(not(target_family = "wasm"))]
 use eyre::eyre;
 use masp_primitives::sapling::note_encryption::{
     try_sapling_note_decryption, PreparedIncomingViewingKey,
