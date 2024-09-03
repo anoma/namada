@@ -9,7 +9,7 @@ const PROTO_SRC: &str = "./proto";
 
 fn main() {
     // Discover the repository version, if it exists
-    println!("cargo:rerun-if-changed=../.git");
+    println!("cargo:rerun-if-changed=../../.git");
     let describe_opts = DescribeOptions::new();
     let mut describe_format = DescribeFormatOptions::new();
     describe_format.dirty_suffix("-dirty");
