@@ -111,8 +111,8 @@ pub enum TallyResult {
 impl Display for TallyResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TallyResult::Passed => write!(f, "passed"),
-            TallyResult::Rejected => write!(f, "rejected"),
+            TallyResult::Passed => write!(f, "Passed"),
+            TallyResult::Rejected => write!(f, "Rejected"),
         }
     }
 }
