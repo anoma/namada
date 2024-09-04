@@ -37,7 +37,7 @@ where
     let gas_scale = parameters::get_gas_scale(&state)?;
 
     // Wrapper dry run to allow estimating the gas cost of a transaction
-    let (wrapper_hash, extended_tx_result, tx_gas_meter) =
+    let (wrapper_hash, extended_tx_result, tx_gas_meter, gas_used) =
         match tx.header().tx_type {
             TxType::Wrapper(wrapper) => {
                 let gas_limit = wrapper
@@ -64,10 +64,12 @@ where
 
                 state.write_log_mut().commit_tx_to_batch();
                 let available_gas = tx_gas_meter.borrow().get_available_gas();
+                let consumed_gas = tx_gas_meter.borrow().get_tx_consumed_gas();
                 (
                     Some(tx.header_hash()),
                     tx_result,
                     TxGasMeter::new(available_gas),
+                    consumed_gas,
                 )
             }
             _ => {
@@ -81,6 +83,7 @@ where
                     None,
                     TxResult::default().to_extended_result(None),
                     TxGasMeter::new(gas_limit),
+                    0.into(),
                 )
             }
         };
@@ -119,9 +122,9 @@ where
         );
     }
     // Account gas for both batch and wrapper
-    let gas_used = tx_gas_meter
-        .borrow()
-        .get_tx_consumed_gas()
+    let gas_used = gas_used
+        .checked_add(tx_gas_meter.borrow().get_tx_consumed_gas())
+        .unwrap_or(u64::MAX.into())
         .get_whole_gas_units(gas_scale);
     let tx_result_string = tx_result.to_result_string();
     let dry_run_result = DryRunResult(tx_result_string, gas_used);
