@@ -6862,10 +6862,8 @@ pub mod args {
                         .help(wrap!(
                             "The expiration datetime of the masp transaction, \
                              after which the tx won't be accepted anymore. If \
-                             not provided, a default will be set. All of \
-                             these examples are \
-                             equivalent:\n2012-12-12T12:12:12Z\n2012-12-12 \
-                             12:12:12Z\n2012-  12-12T12:  12:12Z"
+                             not provided, a default will be set. Example: \
+                             2012-12-12T12:12:12Z"
                         ))
                         .conflicts_with_all([NO_EXPIRATION.name]),
                 )
@@ -7319,10 +7317,8 @@ pub mod args {
                     .help(wrap!(
                         "The expiration datetime of the transaction, after \
                          which the tx won't be accepted anymore. If not \
-                         provided, a default will be set. All of these \
-                         examples are \
-                         equivalent:\n2012-12-12T12:12:12Z\n2012-12-12 \
-                         12:12:12Z\n2012-  12-12T12:  12:12Z"
+                         provided, a default will be set. Example: \
+                         2012-12-12T12:12:12Z"
                     ))
                     .conflicts_with_all([NO_EXPIRATION.name]),
             )
