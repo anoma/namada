@@ -289,6 +289,19 @@ impl Uint {
             }
         }
     }
+
+    /// Return the ceiling of the product of an integer and a fraction
+    /// (represented as `num / denom`)
+    pub fn frac_mul_ceil(
+        &self,
+        num: Self,
+        denom: Self,
+    ) -> Result<Self, arith::Error> {
+        let val = checked!(self * num)?;
+        let adj_den = checked!(denom - Uint::one())?;
+        let val = checked!(val + adj_den)?;
+        checked!(val / denom)
+    }
 }
 
 construct_uint! {
