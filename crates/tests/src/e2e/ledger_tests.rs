@@ -2044,7 +2044,7 @@ fn proposal_change_shielded_reward() -> Result<()> {
         "--data-path",
         valid_proposal_json_path.to_str().unwrap(),
         "--gas-limit",
-        "4000000",
+        "10000000",
         "--node",
         &validator_one_rpc,
     ]);
