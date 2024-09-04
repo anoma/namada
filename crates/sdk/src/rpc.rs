@@ -953,12 +953,7 @@ pub async fn query_proposal_result<C: namada_io::Client + Sync>(
 
     let current_epoch = query_epoch(client).await?;
     if current_epoch < proposal.voting_start_epoch {
-        return Err(Error::Other(format!(
-            "Proposal {} is still pending, voting period will start in {} \
-             epochs.",
-            proposal_id,
-            proposal.voting_end_epoch.0 - current_epoch.0
-        )));
+        return Ok(None);
     }
 
     let stored_proposal_result = convert_response::<C, Option<ProposalResult>>(
