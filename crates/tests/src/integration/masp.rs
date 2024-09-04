@@ -1380,7 +1380,7 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
 
-    // 2. Shielded operations without fetching. Dump the txs to than reload and
+    // 2. Shielded operations without fetching. Dump the txs to then reload and
     // submit in the same block
     let tempdir = tempfile::tempdir().unwrap();
     let mut txs_bytes = vec![];
@@ -1578,7 +1578,7 @@ fn expired_masp_tx() -> Result<()> {
     )?;
 
     // 2. Shielded operation to avoid the need of a signature on the inner tx.
-    //    Dump the tx to than reload and submit
+    //    Dump the tx to then reload and submit
     let tempdir = tempfile::tempdir().unwrap();
 
     _ = node.next_epoch();
