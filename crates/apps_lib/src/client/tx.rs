@@ -25,6 +25,10 @@ use tokio::sync::RwLock;
 use namada_sdk::masp::ExtendedViewingKey;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use masp_primitives::sapling::ProofGenerationKey;
+use namada_sdk::collections::HashMap;
+use masp_primitives::sapling::redjubjub;
+use masp_primitives::transaction::components::sapling::fees::InputView;
+use crate::masp_primitives::transaction::components::sapling;
 
 use masp_primitives::transaction::components::sapling::builder::{
     BuildParams, ConvertBuildParams, OutputBuildParams, RngBuildParams,
@@ -792,10 +796,41 @@ pub async fn submit_transparent_transfer(
     Ok(())
 }
 
+// A mapper that replaces authorization signatures with those in a built-in map
+struct MapSaplingSigAuth(
+    HashMap<usize, <sapling::Authorized as sapling::Authorization>::AuthSig>,
+);
+
+impl sapling::MapAuth<sapling::Authorized, sapling::Authorized> for MapSaplingSigAuth {
+    fn map_proof(
+        &self,
+        p: <sapling::Authorized as sapling::Authorization>::Proof,
+        _pos: usize,
+    ) -> <sapling::Authorized as sapling::Authorization>::Proof {
+        p
+    }
+
+    fn map_auth_sig(
+        &self,
+        s: <sapling::Authorized as sapling::Authorization>::AuthSig,
+        pos: usize,
+    ) -> <sapling::Authorized as sapling::Authorization>::AuthSig {
+        self.0.get(&pos).cloned().unwrap_or(s)
+    }
+
+    fn map_authorization(&self, a: sapling::Authorized) -> sapling::Authorized {
+        a
+    }
+}
+
 pub async fn submit_shielded_transfer(
     namada: &impl Namada,
     mut args: args::TxShieldedTransfer,
 ) -> Result<(), error::Error> {
+    // Records the shielded keys that are on the hardware wallet
+    let mut shielded_hw_keys = HashMap::new();
+    // Construct the build parameters that parameterized the Transaction
+    // authorizations
     let mut bparams: Box<dyn BuildParams> = if args.tx.use_device {
         let transport = WalletTransport::from_arg(args.tx.device_transport);
         let app = NamadaApp::new(transport);
@@ -870,6 +905,7 @@ pub async fn submit_shielded_transfer(
                     "Proof generation key in response from the hardware wallet \
                      does not correspond to stored viewing key.",
                 )))?;
+                shielded_hw_keys.insert(path.path, viewing_key);
             }
         }
         // Get randomness to aid in construction of various descriptors
@@ -925,6 +961,73 @@ pub async fn submit_shielded_transfer(
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
+        // Get the MASP section that is the target of our signing
+        if let Some(shielded_hash) = signing_data.shielded_hash {
+            let mut masp_tx = tx.get_masp_section(&shielded_hash)
+                .expect("Expected to find the indicated MASP Transaction")
+                .clone();
+
+            let masp_builder = tx.get_masp_builder(&shielded_hash)
+                .expect("Expected to find the indicated MASP Builder");
+            
+            // Reverse the spend metadata to enable looking up construction
+            // material
+            let sapling_inputs = masp_builder.builder.sapling_inputs();
+            let mut descriptor_map = vec![0; sapling_inputs.len()];
+            for i in 0.. {
+                if let Some(pos) = masp_builder.metadata.spend_index(i) {
+                    descriptor_map[pos] = i;
+                } else {
+                    break;
+                };
+            }
+            // Sign the MASP Transaction using each relevant key in the
+            // hardware wallet
+            let transport = WalletTransport::from_arg(args.tx.device_transport);
+            let app = NamadaApp::new(transport);
+            for (path, vk) in shielded_hw_keys {
+                // Sign the MASP Transaction using the current viewing key
+                let path = BIP44Path { path: path.to_string() };
+                let response = app
+                    .sign_masp(&path, &tx.serialize_to_vec())
+                    .await
+                    .map_err(|err| error::Error::Other(err.to_string()))?;
+                // Now prepare a new list of authorizations based on hardware
+                // wallet responses
+                let mut authorizations = HashMap::new();
+                for (tx_pos, builder_pos) in descriptor_map.iter().enumerate() {
+                    // Read the next spend authorization signature from the
+                    // hardware wallet
+                    let response = app
+                        .get_spend_signature()
+                        .await
+                        .map_err(|err| error::Error::Other(err.to_string()))?;
+                    let signature = redjubjub::Signature::try_from_slice(
+                        &[response.rbar, response.sbar].concat(),
+                    ).map_err(|err| error::Error::Other(format!(
+                        "Unexpected spend authorization key in response from the \
+                         hardware wallet: {}.",
+                        err,
+                    )))?;
+                    if *sapling_inputs[*builder_pos].key() == ExtendedFullViewingKey::from(vk) {
+                        // If this descriptor was produced by the current
+                        // viewing key (which comes from the hardware wallet),
+                        // then use the authorization from the hardware wallet
+                        authorizations.insert(tx_pos, signature);
+                    }
+                }
+                // Finally, patch the MASP Transaction with the fetched spend
+                // authorization signature
+                masp_tx = (*masp_tx).clone().map_authorization::<masp_primitives::transaction::Authorized>(
+                    (),
+                    MapSaplingSigAuth(authorizations),
+                ).freeze().map_err(|err| error::Error::Other(format!(
+                    "Unable to apply hardware walleet sourced authorization \
+                     signatures to the transaction being constructed: {}.",
+                    err,
+                )))?;
+            }
+        }
         sign(namada, &mut tx, &args.tx, signing_data).await?;
         namada.submit(tx, &args.tx).await?;
     }

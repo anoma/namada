@@ -3014,7 +3014,7 @@ pub async fn build_shielded_transfer<N: Namada>(
     args: &mut args::TxShieldedTransfer,
     bparams: &mut impl BuildParams,
 ) -> Result<(Tx, SigningTxData)> {
-    let signing_data = signing::aux_signing_data(
+    let mut signing_data = signing::aux_signing_data(
         context,
         &args.tx,
         Some(MASP),
@@ -3106,6 +3106,7 @@ pub async fn build_shielded_transfer<N: Namada>(
         });
 
         data.shielded_section_hash = Some(section_hash);
+        signing_data.shielded_hash = Some(section_hash);
         tracing::debug!("Transfer data {data:?}");
         Ok(())
     };
