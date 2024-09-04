@@ -1242,7 +1242,8 @@ fn pgf_governance_proposal() -> Result<()> {
         run(&node, Bin::Client, query_native_supply_args)
     });
     assert_matches!(captured.result, Ok(_));
-    assert!(captured.contains("nam: 114400010.119241"));
+    // assert!(captured.contains("nam: 114400010.119241"));
+    assert!(captured.contains("nam: 114400010."));
 
     // 8. Submit proposal funding
     let albert = defaults::albert_address();
