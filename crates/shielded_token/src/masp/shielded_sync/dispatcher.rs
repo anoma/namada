@@ -1175,7 +1175,7 @@ mod dispatcher_tests {
                 match result {
                     Err(msg) => assert_eq!(
                         msg.to_string(),
-                        "After retrying, could not fetch all MASP txs."
+                        "Failed to fetch shielded transfers"
                     ),
                     other => {
                         panic!("{:?} does not match Error::Other(_)", other)
@@ -1290,7 +1290,7 @@ mod dispatcher_tests {
                 match result {
                     Err(msg) => assert_eq!(
                         msg.to_string(),
-                        "After retrying, could not fetch all MASP txs."
+                        "Failed to fetch shielded transfers"
                     ),
                     other => {
                         panic!("{:?} does not match Error::Other(_)", other)

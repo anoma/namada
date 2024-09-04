@@ -5287,7 +5287,6 @@ dependencies = [
  "namada_core",
  "namada_events",
  "namada_gas",
- "namada_ibc",
  "namada_io",
  "namada_macros",
  "namada_migrations",
