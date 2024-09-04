@@ -856,8 +856,7 @@ fn proposal_submission() -> Result<()> {
     let expected = regex::escape(
         "Passed with 120000.000000 yay votes, 900.000000 nay votes and \
          0.000000 abstain votes, total voting power: 120900.000000, threshold \
-         (fraction) of total voting power needed to tally: 80600.000000 \
-         (0.666666666666)",
+         (fraction) of total voting power needed to tally: 48360.000000 (0.4)",
     );
     assert!(captured.contains(&expected));
 

@@ -2134,10 +2134,9 @@ fn proposal_change_shielded_reward() -> Result<()> {
     let mut client = run!(test, Bin::Client, query_proposal, Some(15))?;
     client.exp_string("Proposal Id: 0")?;
     client.exp_string(
-        "passed with 100000.000000 yay votes, 900.000000 nay votes and \
+        "Passed with 100000.000000 yay votes, 900.000000 nay votes and \
          0.000000 abstain votes, total voting power: 100900.000000, threshold \
-         (fraction) of total voting power needed to tally: 67266.666667 \
-         (0.666666666669)",
+         (fraction) of total voting power needed to tally: 40360.000000 (0.4)",
     )?;
     client.assert_success();
 
