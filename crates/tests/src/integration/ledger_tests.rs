@@ -989,6 +989,21 @@ fn pgf_governance_proposal() -> Result<()> {
     assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(TX_APPLIED_SUCCESS));
 
+    // 1.1 Query total NAM supply and PGF balance
+    let query_balance_args = vec![
+        "balance",
+        "--owner",
+        PGF_ADDRESS,
+        "--token",
+        NAM,
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let captured =
+        CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains("nam: 0"));
+
     // 1. Submit proposal
     let albert = defaults::albert_address();
     let pgf_stewards = StewardsUpdate {
@@ -1096,6 +1111,24 @@ fn pgf_governance_proposal() -> Result<()> {
     // 4. Query the proposal and check the result is the one voted by the
     // validator (majority)
     while node.current_epoch().0 <= 25 {
+        if node.current_epoch().0 == 25 {
+            let query_total_supply_args = vec![
+                "total-supply",
+                "--token",
+                NAM,
+                "--ledger-address",
+                &validator_one_rpc,
+            ];
+            let captured = CapturedOutput::of(|| {
+                run(&node, Bin::Client, query_total_supply_args)
+            });
+            assert_matches!(captured.result, Ok(_));
+            assert!(captured.contains(
+                "token tnam1q9kn74xfzytqkqyycfrhycr8ajam8ny935cge0z5: \
+                 114400019.043523"
+            ));
+        }
+
         node.next_epoch();
     }
 
@@ -1113,6 +1146,23 @@ fn pgf_governance_proposal() -> Result<()> {
 
     // 5. Wait proposals grace and check proposal author funds
     while node.current_epoch().0 < 31 {
+        if node.current_epoch().0 == 30 {
+            let query_total_supply_args = vec![
+                "total-supply",
+                "--token",
+                NAM,
+                "--ledger-address",
+                &validator_one_rpc,
+            ];
+            let captured = CapturedOutput::of(|| {
+                run(&node, Bin::Client, query_total_supply_args)
+            });
+            assert_matches!(captured.result, Ok(_));
+            assert!(captured.contains(
+                "token tnam1q9kn74xfzytqkqyycfrhycr8ajam8ny935cge0z5: \
+                 114400023.070159"
+            ));
+        }
         node.next_epoch();
     }
     let query_balance_args = vec![
