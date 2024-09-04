@@ -1157,6 +1157,7 @@ fn pgf_governance_proposal() -> Result<()> {
     assert!(captured.contains("Pgf fundings: no fundings are currently set."));
 
     // 7.1 Query total NAM supply and PGF balance
+    node.finalize_and_commit();
     let query_balance_args = vec![
         "balance",
         "--owner",
