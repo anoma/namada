@@ -159,14 +159,12 @@ impl PosRewardsCalculator {
 
     /// Implement as ceiling of (2/3) * validator set stake
     fn get_min_required_votes(&self) -> token::Amount {
-        (self
+        let min_votes = self
             .total_stake
-            .checked_mul(2_u64)
-            .expect("Amount overflow while computing minimum required votes")
-            .checked_add((3u64 - 1u64).into())
-            .expect("Amount overflow while computing minimum required votes"))
-        .checked_div_u64(3u64)
-        .expect("Div by non-zero cannot fail")
+            .raw_amount()
+            .frac_mul_ceil(2.into(), 3.into())
+            .expect("Amount overflow while computing minimum required votes");
+        min_votes.into()
     }
 }
 
