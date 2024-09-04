@@ -51,6 +51,7 @@ pub use std::marker::Sync as MaybeSync;
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use masp_primitives::zip32::sapling::PseudoExtendedSpendingKey;
 use args::{DeviceTransport, InputAmount, SdkTypes};
 use io::Io;
 use masp::{ShieldedContext, ShieldedUtils};
@@ -189,7 +190,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     fn new_shielded_transfer(
         &self,
         data: Vec<args::TxShieldedTransferData>,
-        gas_spending_keys: Vec<ExtendedSpendingKey>,
+        gas_spending_keys: Vec<PseudoExtendedSpendingKey>,
         disposable_signing_key: bool,
     ) -> args::TxShieldedTransfer {
         args::TxShieldedTransfer {
@@ -220,9 +221,9 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     /// arguments
     fn new_unshielding_transfer(
         &self,
-        source: ExtendedSpendingKey,
+        source: PseudoExtendedSpendingKey,
         data: Vec<args::TxUnshieldingTransferData>,
-        gas_spending_keys: Vec<ExtendedSpendingKey>,
+        gas_spending_keys: Vec<PseudoExtendedSpendingKey>,
         disposable_signing_key: bool,
     ) -> args::TxUnshieldingTransfer {
         args::TxUnshieldingTransfer {

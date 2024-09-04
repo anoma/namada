@@ -982,6 +982,16 @@ impl<U: WalletIo> Wallet<U> {
             .ok_or_else(|| FindKeyError::KeyNotFound(pkh.to_string()))
     }
 
+    /// Find a derivation path by viewing key
+    pub fn find_path_by_viewing_key(
+        &self,
+        vk: &ExtendedViewingKey,
+    ) -> Result<DerivationPath, FindKeyError> {
+        self.store
+            .find_path_by_viewing_key(vk)
+            .ok_or_else(|| FindKeyError::KeyNotFound(vk.to_string()))
+    }
+
     /// Find the public key by a public key hash.
     /// If the key is encrypted and password not supplied, then password will be
     /// interactively prompted for. Any keys that are decrypted are stored in

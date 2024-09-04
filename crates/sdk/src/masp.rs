@@ -29,6 +29,7 @@ use masp_primitives::transaction::builder::{self, *};
 use masp_primitives::transaction::components::sapling::builder::{
     BuildParams, RngBuildParams, SaplingMetadata,
 };
+use masp_primitives::zip32::sapling::PseudoExtendedSpendingKey;
 use masp_primitives::transaction::components::{
     I128Sum, TxOut, U64Sum, ValueSum,
 };
@@ -110,7 +111,7 @@ pub struct ShieldedTransfer {
 #[allow(missing_docs)]
 #[derive(Debug)]
 pub struct MaspFeeData {
-    pub sources: Vec<namada_core::masp::ExtendedSpendingKey>,
+    pub sources: Vec<PseudoExtendedSpendingKey>,
     pub target: Address,
     pub token: Address,
     pub amount: token::DenominatedAmount,
@@ -159,7 +160,7 @@ struct MaspTxReorderedData {
 // Data about the unspent amounts for any given shielded source coming from the
 // spent notes in their posses that have been added to the builder. Can be used
 // to either pay fees or to return a change
-type Changes = HashMap<namada_core::masp::ExtendedSpendingKey, I128Sum>;
+type Changes = HashMap<PseudoExtendedSpendingKey, I128Sum>;
 
 /// Shielded pool data for a token
 #[allow(missing_docs)]
@@ -941,7 +942,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         &mut self,
         context: &impl Namada,
         spent_notes: &mut SpentNotesTracker,
-        sk: namada_core::masp::ExtendedSpendingKey,
+        sk: PseudoExtendedSpendingKey,
         is_native_token: bool,
         target: I128Sum,
         target_epoch: MaspEpoch,
@@ -954,7 +955,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         ),
         Error,
     > {
-        let vk = &to_viewing_key(&sk.into()).vk;
+        let vk = &sk.to_viewing_key().fvk.vk;
         // TODO: we should try to use the smallest notes possible to fund the
         // transaction to allow people to fetch less often
         // Establish connection with which to do exchange rate queries
@@ -1496,7 +1497,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             for (diversifier, note, merkle_path) in unspent_notes {
                 builder
                     .add_sapling_spend(
-                        sk.into(),
+                        sk.partial_spending_key().ok_or_else(|| {
+                            Error::Other(format!(
+                                "Unable to get proof authorization"
+                            ))
+                        })?,
                         diversifier,
                         note,
                         merkle_path,
@@ -1615,7 +1620,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 // viewing key in the following computations.
                 let ovk_opt = source
                     .spending_key()
-                    .map(|x| MaspExtendedSpendingKey::from(x).expsk.ovk);
+                    .map(|x| x.to_viewing_key().fvk.ovk);
                 // Make transaction output tied to the current token,
                 // denomination, and epoch.
                 if let Some(pa) = payment_address {
@@ -1708,7 +1713,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         context: &impl Namada,
         builder: &mut Builder<Network>,
         source_data: &HashMap<MaspSourceTransferData, token::DenominatedAmount>,
-        sources: Vec<namada_core::masp::ExtendedSpendingKey>,
+        sources: Vec<PseudoExtendedSpendingKey>,
         target: &Address,
         token: &Address,
         amount: &token::DenominatedAmount,
@@ -1950,7 +1955,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         for (sp, changes) in changes.into_iter() {
             for (asset_type, amt) in changes.components() {
                 if let Ordering::Greater = amt.cmp(&0) {
-                    let sk = MaspExtendedSpendingKey::from(sp.to_owned());
+                    let sk = sp.partial_spending_key().ok_or_else(|| {
+                        Error::Other(format!(
+                            "Unable to get proof authorization"
+                        ))
+                    })?;
                     // Send the change in this asset type back to the sender
                     builder
                         .add_sapling_output(

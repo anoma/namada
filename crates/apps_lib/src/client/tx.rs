@@ -3,7 +3,7 @@ use std::io::Write;
 
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
-use ledger_namada_rs::{BIP44Path, NamadaApp};
+use ledger_namada_rs::{BIP44Path, NamadaApp, KeyResponse, NamadaKeys};
 use namada_sdk::address::{Address, ImplicitAddress};
 use namada_sdk::args::TxBecomeValidator;
 use namada_sdk::collections::HashSet;
@@ -22,6 +22,9 @@ use namada_sdk::wallet::{Wallet, WalletIo};
 use namada_sdk::{display_line, edisplay_line, error, signing, tx, Namada};
 use rand::rngs::OsRng;
 use tokio::sync::RwLock;
+use namada_sdk::masp::ExtendedViewingKey;
+use masp_primitives::zip32::ExtendedFullViewingKey;
+use masp_primitives::sapling::ProofGenerationKey;
 
 use masp_primitives::transaction::components::sapling::builder::{
     BuildParams, ConvertBuildParams, OutputBuildParams, RngBuildParams,
@@ -791,11 +794,85 @@ pub async fn submit_transparent_transfer(
 
 pub async fn submit_shielded_transfer(
     namada: &impl Namada,
-    args: args::TxShieldedTransfer,
+    mut args: args::TxShieldedTransfer,
 ) -> Result<(), error::Error> {
     let mut bparams: Box<dyn BuildParams> = if args.tx.use_device {
         let transport = WalletTransport::from_arg(args.tx.device_transport);
         let app = NamadaApp::new(transport);
+        let wallet = namada.wallet().await;
+        // Augment the pseudo spending key with a proof authorization key
+        for data in &mut args.data {
+            // Only attempt an augmentation if proof authorization is not there
+            if data.source.partial_spending_key().is_none() {
+                // First find the derivation path corresponding to this viewing
+                // key
+                let viewing_key =
+                    ExtendedViewingKey::from(data.source.to_viewing_key());
+                let path = wallet
+                    .find_path_by_viewing_key(&viewing_key)
+                    .map_err(|err| error::Error::Other(format!(
+                        "Unable to find derivation path from the wallet for \
+                         viewing key {}. Error: {}",
+                        viewing_key,
+                        err,
+                    )))?;
+                let path = BIP44Path { path: path.to_string() };
+                // Then confirm that the viewing key at this path in the
+                // hardware wallet matches the viewing key in this pseudo
+                // spending key
+                let response = app
+                    .retrieve_keys(&path, NamadaKeys::ViewKey, true)
+                    .await
+                    .map_err(|err| error::Error::Other(format!(
+                        "Unable to obtain viewing key from the hardware wallet \
+                         at path {}. Error: {}",
+                        path.path,
+                        err,
+                    )))?;
+                let KeyResponse::ViewKey(response_key) = response else {
+                    return Err(error::Error::Other(
+                        "Unexpected response from Ledger".to_string(),
+                    ))
+                };
+                let xfvk = ExtendedFullViewingKey::try_from_slice(&response_key.xfvk)
+                    .expect("unable to decode extended full viewing key from the hardware wallet");
+                if ExtendedFullViewingKey::from(viewing_key) != xfvk {
+                    return Err(error::Error::Other(format!(
+                        "Unexpected viewing key response from Ledger: {}",
+                        ExtendedViewingKey::from(xfvk),
+                    )))
+                }
+                // Then obtain the proof authorization key at this path in the
+                // hardware wallet
+                let response = app
+                    .retrieve_keys(&path, NamadaKeys::ProofGenerationKey, false)
+                    .await
+                    .map_err(|err| error::Error::Other(format!(
+                        "Unable to obtain proof generation key from the \
+                         hardware wallet for viewing key {}. Error: {}",
+                        viewing_key,
+                        err,
+                    )))?;
+                let KeyResponse::ProofGenKey(response_key) = response else {
+                    return Err(error::Error::Other(
+                        "Unexpected response from Ledger".to_string(),
+                    ))
+                };
+                let pgk = ProofGenerationKey::try_from_slice(
+                    &[response_key.ak, response_key.nsk].concat(),
+                ).map_err(|err| error::Error::Other(format!(
+                    "Unexpected proof generation key in response from the \
+                     hardware wallet: {}.",
+                    err,
+                )))?;
+                // Finally augment the pseudo spending key
+                data.source.augment(pgk).map_err(|_| error::Error::Other(format!(
+                    "Proof generation key in response from the hardware wallet \
+                     does not correspond to stored viewing key.",
+                )))?;
+            }
+        }
+        // Get randomness to aid in construction of various descriptors
         let mut bparams = StoredBuildParams::default();
         // Number of spend descriptions is the number of transfers
         let spend_len = args.data.len();
@@ -833,7 +910,6 @@ pub async fn submit_shielded_transfer(
                 .get_output_randomness()
                 .await
                 .map_err(|err| error::Error::Other(err.to_string()))?;
-            println!("RCM: {:?}", output_randomness.rcm);
             bparams.output_params.push(OutputBuildParams {
                 rcv: jubjub::Fr::from_bytes(&output_randomness.rcv).unwrap(),
                 rseed: output_randomness.rcm,

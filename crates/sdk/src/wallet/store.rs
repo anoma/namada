@@ -194,6 +194,19 @@ impl Store {
         self.derivation_paths.get(self.pkhs.get(pkh)?).cloned()
     }
 
+    /// Find a derivation path by viewing key
+    pub fn find_path_by_viewing_key(
+        &self,
+        viewing_key: &ExtendedViewingKey,
+    ) -> Option<DerivationPath> {
+        for (alias, vk) in &self.view_keys {
+            if *viewing_key == vk.key {
+                return self.derivation_paths.get(&alias).cloned()
+            }
+        }
+        None
+    }
+
     /// Find the public key by a public key hash.
     pub fn find_public_key_by_pkh(
         &self,

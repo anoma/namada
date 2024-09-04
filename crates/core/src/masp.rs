@@ -10,6 +10,7 @@ use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::sapling::ViewingKey;
 use masp_primitives::transaction::TransparentAddress;
+use masp_primitives::zip32::sapling::PseudoExtendedSpendingKey;
 pub use masp_primitives::transaction::TxId as TxIdInner;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
@@ -517,7 +518,7 @@ pub enum TransferSource {
     /// A transfer coming from a transparent address
     Address(Address),
     /// A transfer coming from a shielded address
-    ExtendedSpendingKey(ExtendedSpendingKey),
+    ExtendedSpendingKey(PseudoExtendedSpendingKey),
 }
 
 impl TransferSource {
@@ -532,7 +533,7 @@ impl TransferSource {
     }
 
     /// Get the contained ExtendedSpendingKey contained, if any
-    pub fn spending_key(&self) -> Option<ExtendedSpendingKey> {
+    pub fn spending_key(&self) -> Option<PseudoExtendedSpendingKey> {
         match self {
             Self::ExtendedSpendingKey(x) => Some(*x),
             _ => None,
@@ -560,7 +561,7 @@ impl Display for TransferSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Address(x) => x.fmt(f),
-            Self::ExtendedSpendingKey(x) => x.fmt(f),
+            Self::ExtendedSpendingKey(x) => ExtendedViewingKey::from(x.to_viewing_key()).fmt(f),
         }
     }
 }

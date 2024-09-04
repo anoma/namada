@@ -16,6 +16,7 @@ use masp_primitives::transaction::components::sapling::fees::{
 use masp_primitives::transaction::components::transparent::fees::{
     InputView as TransparentInputView, OutputView as TransparentOutputView,
 };
+use masp_primitives::zip32::sapling::PseudoExtendedSpendingKey;
 use masp_primitives::transaction::components::sapling::builder::{BuildParams, RngBuildParams};
 use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::transaction::{builder, Transaction as MaspTransaction};
@@ -3129,7 +3130,7 @@ async fn get_masp_fee_payment_amount<N: Namada>(
     args: &args::Tx<SdkTypes>,
     fee_amount: DenominatedAmount,
     fee_payer: &common::PublicKey,
-    gas_spending_keys: Vec<ExtendedSpendingKey>,
+    gas_spending_keys: Vec<PseudoExtendedSpendingKey>,
 ) -> Result<Option<MaspFeeData>> {
     let fee_payer_address = Address::from(fee_payer);
     let balance_key = balance_key(&args.fee_token, &fee_payer_address);
