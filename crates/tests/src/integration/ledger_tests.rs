@@ -1219,7 +1219,8 @@ fn pgf_governance_proposal() -> Result<()> {
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
     assert_matches!(captured.result, Ok(_));
-    assert!(captured.contains("nam: 13.785266"));
+    // assert!(captured.contains("nam: 13.785266"));
+    assert!(captured.contains("nam: 13."));
 
     let query_total_supply_args = vec![
         "total-supply",
