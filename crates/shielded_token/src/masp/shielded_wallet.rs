@@ -40,7 +40,10 @@ use namada_core::token::{
     Amount, Change, DenominatedAmount, Denomination, MaspDigitPos,
 };
 use namada_io::client::Client;
-use namada_io::{display_line, edisplay_line, Io, NamadaIo, ProgressBar};
+use namada_io::{
+    display_line, edisplay_line, Io, MaybeSend, MaybeSync, NamadaIo,
+    ProgressBar,
+};
 use namada_tx::IndexedTx;
 use namada_wallet::{DatedKeypair, DatedSpendingKey};
 use rand::prelude::StdRng;
@@ -117,7 +120,7 @@ impl<U: ShieldedUtils + Default> Default for ShieldedWallet<U> {
     }
 }
 
-impl<U: ShieldedUtils> ShieldedWallet<U> {
+impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
     /// Try to load the last saved shielded context from the given context
     /// directory. If this fails, then leave the current context unchanged.
     pub async fn load(&mut self) -> std::io::Result<()> {
@@ -374,7 +377,7 @@ impl<U: ShieldedUtils> ShieldedWallet<U> {
 
 /// A trait that allows downstream types specify how a shielded wallet
 /// should interact / query a node.
-pub trait ShieldedQueries<U: ShieldedUtils>:
+pub trait ShieldedQueries<U: ShieldedUtils + MaybeSend + MaybeSync>:
     std::ops::Deref<Target = ShieldedWallet<U>> + std::ops::DerefMut
 {
     /// Get the address of the native token
@@ -425,7 +428,9 @@ pub trait ShieldedQueries<U: ShieldedUtils>:
 
 ///  The methods of the shielded wallet that depend on the [`ShieldedQueries`]
 /// trait. These cannot be overridden downstream.
-pub trait ShieldedApi<U: ShieldedUtils>: ShieldedQueries<U> {
+pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
+    ShieldedQueries<U>
+{
     /// Use the addresses already stored in the wallet to precompute as many
     /// asset types as possible.
     #[allow(async_fn_in_trait)]
@@ -1811,4 +1816,7 @@ pub trait ShieldedApi<U: ShieldedUtils>: ShieldedQueries<U> {
     }
 }
 
-impl<U: ShieldedUtils, T: ShieldedQueries<U>> ShieldedApi<U> for T {}
+impl<U: ShieldedUtils + MaybeSend + MaybeSync, T: ShieldedQueries<U>>
+    ShieldedApi<U> for T
+{
+}

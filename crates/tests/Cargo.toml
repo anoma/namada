@@ -13,8 +13,7 @@ repository.workspace = true
 version.workspace = true
 
 [features]
-default = []
-#default = ["namada_sdk/std", "namada_sdk/masp"]
+default = ["namada_sdk/std", "namada_sdk/masp"]
 mainnet = [
   "namada_sdk/mainnet",
 ]

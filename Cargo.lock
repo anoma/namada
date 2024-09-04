@@ -5217,7 +5217,6 @@ dependencies = [
  "init-once",
  "itertools 0.12.1",
  "jubjub 0.10.0 (git+https://github.com/heliaxdev/jubjub.git?rev=a373686962f4e9d0edb3b4716f86ff6bbd9aa86c)",
- "kdam",
  "lazy_static",
  "linkme",
  "masp_primitives",

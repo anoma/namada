@@ -14,7 +14,6 @@ use namada_token::masp::utils::{
     IndexedNoteEntry, MaspClient, MaspClientCapabilities,
 };
 use namada_tx::{IndexedTx, Tx};
-#[cfg(not(target_family = "wasm"))]
 use tokio::sync::Semaphore;
 
 use crate::error::{Error, QueryError};
@@ -23,20 +22,17 @@ use crate::masp::{
     get_indexed_masp_events_at_height,
 };
 
-#[cfg(not(target_family = "wasm"))]
 struct LedgerMaspClientInner<C> {
     client: C,
     semaphore: Semaphore,
 }
 
 /// An inefficient MASP client which simply uses a
-/// client to the blockchain to query it directly.
-#[cfg(not(target_family = "wasm"))]
+/// client to the blockchain to query it
 pub struct LedgerMaspClient<C> {
     inner: Arc<LedgerMaspClientInner<C>>,
 }
 
-#[cfg(not(target_family = "wasm"))]
 impl<C> Clone for LedgerMaspClient<C> {
     fn clone(&self) -> Self {
         Self {
@@ -45,7 +41,6 @@ impl<C> Clone for LedgerMaspClient<C> {
     }
 }
 
-#[cfg(not(target_family = "wasm"))]
 impl<C> LedgerMaspClient<C> {
     /// Create a new [`MaspClient`] given an rpc client.
     #[inline(always)]
@@ -59,7 +54,6 @@ impl<C> LedgerMaspClient<C> {
     }
 }
 
-#[cfg(not(target_family = "wasm"))]
 impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
     type Error = Error;
 
@@ -180,7 +174,6 @@ impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
 }
 
 #[derive(Debug)]
-#[cfg(not(target_family = "wasm"))]
 struct IndexerMaspClientShared {
     /// Limits open connections so as not to exhaust
     /// the connection limit at the OS level.
@@ -198,19 +191,16 @@ struct IndexerMaspClientShared {
 /// [`namada-masp-indexer`].
 ///
 /// [`namada-masp-indexer`]: <https://github.com/anoma/namada-masp-indexer>
-#[cfg(not(target_family = "wasm"))]
 #[derive(Clone, Debug)]
 pub struct IndexerMaspClient {
     client: reqwest::Client,
     shared: Arc<IndexerMaspClientShared>,
 }
 
-#[cfg(not(target_family = "wasm"))]
 trait RequestBuilderExt {
     fn keep_alive(self) -> reqwest::RequestBuilder;
 }
 
-#[cfg(not(target_family = "wasm"))]
 impl RequestBuilderExt for reqwest::RequestBuilder {
     #[inline(always)]
     fn keep_alive(self) -> reqwest::RequestBuilder {
@@ -218,7 +208,6 @@ impl RequestBuilderExt for reqwest::RequestBuilder {
     }
 }
 
-#[cfg(not(target_family = "wasm"))]
 impl IndexerMaspClient {
     /// Create a new [`IndexerMaspClient`].
     #[inline]
@@ -307,7 +296,6 @@ impl IndexerMaspClient {
     }
 }
 
-#[cfg(not(target_family = "wasm"))]
 impl MaspClient for IndexerMaspClient {
     type Error = Error;
 
@@ -709,7 +697,6 @@ impl MaspClient for IndexerMaspClient {
 }
 #[derive(Copy, Clone)]
 #[allow(clippy::enum_variant_names)]
-#[cfg(not(target_family = "wasm"))]
 enum BlockIndex {
     BelowRange {
         from: u64,
@@ -726,7 +713,6 @@ enum BlockIndex {
     },
 }
 
-#[cfg(not(target_family = "wasm"))]
 impl BlockIndex {
     /// Get the sub-range or [`from`, `to`]  for which a [`BlockIndex`]
     /// built at height `block_index_height` is applicable.

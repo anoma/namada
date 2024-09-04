@@ -755,8 +755,8 @@ impl<C, U, V, I> NamadaIo for NamadaImpl<C, U, V, I>
 where
     C: Client + MaybeSend + Sync,
     U: WalletIo + WalletStorage + MaybeSync + MaybeSend,
-    V: ShieldedUtils,
-    I: Io,
+    V: ShieldedUtils + MaybeSync + MaybeSend,
+    I: Io + MaybeSync + MaybeSend,
 {
     type Client = C;
     type Io = I;

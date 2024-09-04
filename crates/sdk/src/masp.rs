@@ -31,7 +31,7 @@ use crate::rpc::{
     query_block, query_conversion, query_denom, query_masp_epoch,
     query_max_block_time_estimate, query_native_token,
 };
-use crate::{token, ShieldedUtils, ShieldedWallet};
+use crate::{token, MaybeSend, MaybeSync, ShieldedUtils, ShieldedWallet};
 
 /// Extract the relevant shield portions of a [`Tx`], if any.
 fn extract_masp_tx(
@@ -173,7 +173,9 @@ macro_rules! wrap_err {
     };
 }
 
-impl<U: ShieldedUtils> ShieldedQueries<U> for ShieldedContext<U> {
+impl<U: ShieldedUtils + MaybeSync + MaybeSend> ShieldedQueries<U>
+    for ShieldedContext<U>
+{
     async fn query_native_token<C: Client + Sync>(
         client: &C,
     ) -> Result<Address, eyre::Report> {

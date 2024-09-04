@@ -15,7 +15,7 @@ version.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["std", "masp"]
+default = ["std"]
 mainnet = ["namada_core/mainnet", "namada_events/mainnet", "namada_token/mainnet"]
 multicore = ["masp_proofs/multicore", "namada_token/multicore"]
 std = ["fd-lock", "download-params", "namada_token/std"]
@@ -82,7 +82,7 @@ namada_parameters = { path = "../parameters" }
 namada_proof_of_stake = { path = "../proof_of_stake" }
 namada_state = { path = "../state" }
 namada_storage = { path = "../storage" }
-namada_token = { path = "../token" }
+namada_token = { path = "../token", features = ["masp"] }
 namada_tx = { path = "../tx" }
 namada_vm = { path = "../vm", default-features = false }
 namada_vote_ext = { path = "../vote_ext" }
@@ -121,6 +121,7 @@ prost.workspace = true
 rand.workspace = true
 rand_core.workspace = true
 regex.workspace = true
+reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
@@ -128,19 +129,16 @@ smooth-operator.workspace = true
 tendermint-rpc.workspace = true
 thiserror.workspace = true
 tiny-bip39.workspace = true
-
-
 toml.workspace = true
 tracing.workspace = true
 zeroize.workspace = true
+xorf.workspace = true
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
-kdam.workspace = true
 rayon.workspace = true
-reqwest.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["full"] }
-xorf.workspace = true
+
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 tokio = { workspace = true, default-features = false, features = ["sync"] }

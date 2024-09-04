@@ -276,7 +276,7 @@ pub mod testing {
     #[cfg(feature = "mainnet")]
     use masp_primitives::consensus::MainNetwork as Network;
     #[cfg(not(feature = "mainnet"))]
-    use masp_primitives::consensus::{BranchId, TestNetwork as Network};
+    use masp_primitives::consensus::TestNetwork as Network;
     use masp_primitives::merkle_tree::FrozenCommitmentTree;
     use masp_primitives::transaction::builder::Builder;
     use masp_primitives::transaction::components::sapling::builder::{
@@ -350,7 +350,7 @@ pub mod testing {
                 asset_range,
             ),
         )(
-            expiration_height in arb_height(BranchId::MASP, &Network),
+            expiration_height in arb_height(masp_primitives::consensus::BranchId::MASP, &Network),
             spend_descriptions in assets
                 .iter()
                 .map(|(asset, values)| arb_spend_descriptions(asset.clone(), values.clone()))

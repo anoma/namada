@@ -26,7 +26,13 @@ testing = [
   "proptest"
 ]
 download-params = ["masp_proofs/download-params"]
-masp = ["namada_wallet", "namada_core/control_flow", "namada_core/task_env"]
+masp = [
+  "namada_io",
+  "namada_wallet",
+  "namada_core/control_flow",
+  "namada_core/task_env",
+  "flume",
+]
 
 [dependencies]
 namada_account = { path = "../account" }
@@ -35,7 +41,7 @@ namada_core = { path = "../core"}
 namada_events = {path = "../events" }
 namada_gas = { path = "../gas" }
 namada_ibc = {path = "../ibc" }
-namada_io = { path = "../io" }
+namada_io = { path = "../io", optional = true }
 namada_macros = {path = "../macros" }
 namada_migrations = { path = "../migrations", optional = true }
 namada_state = { path = "../state" }
@@ -48,12 +54,12 @@ async-trait.workspace = true
 borsh.workspace = true
 eyre.workspace = true
 futures.workspace = true
-flume.workspace = true
+flume = { workspace = true, optional = true }
 itertools.workspace = true
 lazy_static.workspace = true
 linkme = {workspace = true, optional = true}
 masp_primitives.workspace = true
-masp_proofs = { workspace = true }
+masp_proofs.workspace = true
 proptest = {workspace = true, optional = true}
 rand.workspace = true
 rand_core.workspace = true

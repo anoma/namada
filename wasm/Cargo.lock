@@ -1884,6 +1884,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "25cbce373ec4653f1a01a31e8a5e5ec0c622dc27ff9c4e6606eefef5cbbed4a5"
 
 [[package]]
+name = "fd-lock"
+version = "3.0.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef033ed5e9bad94e55838ca0ca906db0e043f517adda0c8b79c7a8c66c93c1b5"
+dependencies = [
+ "cfg-if",
+ "rustix",
+ "windows-sys 0.48.0",
+]
+
+[[package]]
 name = "ff"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3796,11 +3807,11 @@ dependencies = [
  "ethbridge-bridge-contract",
  "ethers",
  "eyre",
+ "fd-lock",
  "futures",
  "init-once",
  "itertools 0.12.1",
  "jubjub 0.10.0 (git+https://github.com/heliaxdev/jubjub.git?rev=a373686962f4e9d0edb3b4716f86ff6bbd9aa86c)",
- "kdam",
  "lazy_static",
  "masp_primitives",
  "masp_proofs",
@@ -3875,6 +3886,7 @@ dependencies = [
  "namada_systems",
  "namada_tx",
  "namada_vp",
+ "namada_wallet",
  "proptest",
  "rand 0.8.5",
  "rand_core 0.6.4",
