@@ -110,7 +110,7 @@ impl NamadaTypes for SdkTypes {
     type AddrOrNativeToken = Address;
     type Address = Address;
     type BalanceOwner = namada_core::masp::BalanceOwner;
-    type BlockHeight = namada_core::storage::BlockHeight;
+    type BlockHeight = namada_core::chain::BlockHeight;
     type BpConversionTable = HashMap<Address, BpConversionTableEntry>;
     type ConfigRpcTendermintAddress = tendermint_rpc::Url;
     type Data = Vec<u8>;

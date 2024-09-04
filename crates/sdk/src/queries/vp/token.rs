@@ -54,7 +54,7 @@ where
 pub mod client_only_methods {
     use borsh::BorshDeserialize;
     use namada_core::address::Address;
-    use namada_core::storage::BlockHeight;
+    use namada_core::chain::BlockHeight;
     use namada_core::token;
     use namada_io::Client;
     use namada_token::storage_key::{balance_key, masp_total_rewards};
