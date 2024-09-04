@@ -185,6 +185,7 @@ pub fn open(
     subspace_cf_opts.set_level_compaction_dynamic_level_bytes(true);
     subspace_cf_opts.set_compaction_style(DBCompactionStyle::Level);
     subspace_cf_opts.set_block_based_table_factory(&table_opts);
+    subspace_cf_opts.set_disable_auto_compactions(true);
     cfs.push(ColumnFamilyDescriptor::new(SUBSPACE_CF, subspace_cf_opts));
 
     // for diffs (insert-intensive)
@@ -193,6 +194,7 @@ pub fn open(
     diffs_cf_opts.set_compression_options(0, 0, 0, 1024 * 1024);
     diffs_cf_opts.set_compaction_style(DBCompactionStyle::Universal);
     diffs_cf_opts.set_block_based_table_factory(&table_opts);
+    diffs_cf_opts.set_disable_auto_compactions(true);
     cfs.push(ColumnFamilyDescriptor::new(DIFFS_CF, diffs_cf_opts));
 
     // for non-persisted diffs for rollback (read/update-intensive)
@@ -201,6 +203,7 @@ pub fn open(
     rollback_cf_opts.set_compression_options(0, 0, 0, 1024 * 1024);
     rollback_cf_opts.set_compaction_style(DBCompactionStyle::Level);
     rollback_cf_opts.set_block_based_table_factory(&table_opts);
+    rollback_cf_opts.set_disable_auto_compactions(true);
     cfs.push(ColumnFamilyDescriptor::new(ROLLBACK_CF, rollback_cf_opts));
 
     // for the ledger state (update-intensive)
@@ -209,6 +212,7 @@ pub fn open(
     state_cf_opts.set_level_compaction_dynamic_level_bytes(true);
     state_cf_opts.set_compaction_style(DBCompactionStyle::Level);
     state_cf_opts.set_block_based_table_factory(&table_opts);
+    state_cf_opts.set_disable_auto_compactions(true);
     cfs.push(ColumnFamilyDescriptor::new(STATE_CF, state_cf_opts));
 
     // for blocks (insert-intensive)
@@ -217,6 +221,7 @@ pub fn open(
     block_cf_opts.set_compression_options(0, 0, 0, 1024 * 1024);
     block_cf_opts.set_compaction_style(DBCompactionStyle::Universal);
     block_cf_opts.set_block_based_table_factory(&table_opts);
+    block_cf_opts.set_disable_auto_compactions(true);
     cfs.push(ColumnFamilyDescriptor::new(BLOCK_CF, block_cf_opts));
 
     // for replay protection (read/insert-intensive)
@@ -227,6 +232,7 @@ pub fn open(
     // Prioritize minimizing read amplification
     replay_protection_cf_opts.set_compaction_style(DBCompactionStyle::Level);
     replay_protection_cf_opts.set_block_based_table_factory(&table_opts);
+    replay_protection_cf_opts.set_disable_auto_compactions(true);
     cfs.push(ColumnFamilyDescriptor::new(
         REPLAY_PROTECTION_CF,
         replay_protection_cf_opts,
