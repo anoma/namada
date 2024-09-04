@@ -1597,8 +1597,13 @@ fn expired_masp_tx() -> Result<()> {
             "50",
             "--gas-payer",
             CHRISTEL_KEY,
-            // This is used to set the correct expiration in the masp object,
-            // we don't care about the expiration at the tx level
+            // We want to create an expired masp tx. Doing so will also set the
+            // expiration field of the header which can be a problem because
+            // this would lead to the transaction being rejected by the
+            // protocol check while we want to test expiration in the masp vp.
+            // However, this is not a real issue: to avoid the failure in
+            // protocol we are going to overwrite the header with one having no
+            // expiration
             "--expiration",
             #[allow(clippy::disallowed_methods)]
             &DateTimeUtc::now().to_string(),
