@@ -1,6 +1,8 @@
 use std::collections::BTreeSet;
 use std::num::NonZeroU64;
 use std::str::FromStr;
+use std::thread::sleep;
+use std::time::Duration;
 
 use assert_matches::assert_matches;
 use borsh::BorshDeserialize;
@@ -972,7 +974,13 @@ fn pgf_governance_proposal() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
     let validator_one_rpc = "http://127.0.0.1:26567";
     // 1. start the ledger node
-    let (mut node, _services) = setup::setup()?;
+    let (mut node, _services) = setup::initialize_genesis(|mut genesis| {
+        genesis.parameters.pgf_params.stewards_inflation_rate =
+            Dec::from_str("0.0").unwrap();
+        genesis.parameters.pgf_params.pgf_inflation_rate = Dec::from_str("0.0").unwrap();
+        genesis
+    })?;
+
 
     let tx_args = apply_use_device(vec![
         "bond",
@@ -988,6 +996,21 @@ fn pgf_governance_proposal() -> Result<()> {
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
     assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    // 1.1 Query total NAM supply and PGF balance
+    let query_balance_args = vec![
+        "balance",
+        "--owner",
+        PGF_ADDRESS,
+        "--token",
+        NAM,
+        "--ledger-address",
+        &validator_one_rpc,
+    ];
+    let captured =
+        CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains("nam: 0"));
 
     // 1. Submit proposal
     let albert = defaults::albert_address();
@@ -1096,6 +1119,24 @@ fn pgf_governance_proposal() -> Result<()> {
     // 4. Query the proposal and check the result is the one voted by the
     // validator (majority)
     while node.current_epoch().0 <= 25 {
+        if node.current_epoch().0 == 25 {
+            let query_total_supply_args = vec![
+                "total-supply",
+                "--token",
+                NAM,
+                "--ledger-address",
+                &validator_one_rpc,
+            ];
+            let captured = CapturedOutput::of(|| {
+                run(&node, Bin::Client, query_total_supply_args)
+            });
+            assert_matches!(captured.result, Ok(_));
+            assert!(captured.contains(
+                "token tnam1q9kn74xfzytqkqyycfrhycr8ajam8ny935cge0z5: \
+                 114400008.160723"
+            ));
+        }
+
         node.next_epoch();
     }
 
@@ -1113,6 +1154,23 @@ fn pgf_governance_proposal() -> Result<()> {
 
     // 5. Wait proposals grace and check proposal author funds
     while node.current_epoch().0 < 31 {
+        if node.current_epoch().0 == 30 {
+            let query_total_supply_args = vec![
+                "total-supply",
+                "--token",
+                NAM,
+                "--ledger-address",
+                &validator_one_rpc,
+            ];
+            let captured = CapturedOutput::of(|| {
+                run(&node, Bin::Client, query_total_supply_args)
+            });
+            assert_matches!(captured.result, Ok(_));
+            assert!(captured.contains(
+                "token tnam1q9kn74xfzytqkqyycfrhycr8ajam8ny935cge0z5: \
+                 114400009.974523"
+            ));
+        }
         node.next_epoch();
     }
     let query_balance_args = vec![
@@ -1169,7 +1227,7 @@ fn pgf_governance_proposal() -> Result<()> {
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
     assert_matches!(captured.result, Ok(_));
-    assert!(captured.contains("nam: 13.785266"));
+    assert!(captured.contains("nam: 2.539706"));
 
     let query_total_supply_args = vec![
         "total-supply",
@@ -1182,7 +1240,7 @@ fn pgf_governance_proposal() -> Result<()> {
         CapturedOutput::of(|| run(&node, Bin::Client, query_total_supply_args));
     assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(
-        "token tnam1q9kn74xfzytqkqyycfrhycr8ajam8ny935cge0z5: 114400023.904507"
+        "token tnam1q9kn74xfzytqkqyycfrhycr8ajam8ny935cge0z5: 114400010.337283"
     ));
 
     let query_native_supply_args =
@@ -1191,7 +1249,8 @@ fn pgf_governance_proposal() -> Result<()> {
         run(&node, Bin::Client, query_native_supply_args)
     });
     assert_matches!(captured.result, Ok(_));
-    assert!(captured.contains("nam: 114400010.119241"));
+    assert!(captured.contains("nam: 114400007.797577"));
+    // assert!(captured.contains("nam: 114400010."));
 
     // 8. Submit proposal funding
     let albert = defaults::albert_address();
