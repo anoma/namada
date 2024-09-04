@@ -261,7 +261,7 @@ pub struct InnerMockNode {
 pub struct MockNode(pub Arc<InnerMockNode>);
 
 impl Deref for MockNode {
-    type Target = Arc<InnerMockNode>;
+    type Target = InnerMockNode;
 
     fn deref(&self) -> &Self::Target {
         &self.0
