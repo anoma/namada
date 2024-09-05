@@ -36,7 +36,6 @@ namada_io = { path = "../io" }
 namada_macros = {path = "../macros"}
 namada_migrations = {path = "../migrations", optional = true}
 namada_sdk = {path = "../sdk", features = ["download-params", "multicore"]}
-namada_token = {path = "../token"}
 namada_vm = {path = "../vm"}
 namada_wallet = { path = "../wallet", features = ["std"]}
 
