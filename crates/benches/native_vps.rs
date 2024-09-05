@@ -56,7 +56,7 @@ use namada_node::bench_utils::{
     TX_BRIDGE_POOL_WASM, TX_IBC_WASM, TX_INIT_PROPOSAL_WASM, TX_RESIGN_STEWARD,
     TX_TRANSFER_WASM, TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL_WASM,
 };
-use namada_token::masp::{
+use namada_apps_lib::token::masp::{
     partial_deauthorize, preload_verifying_keys, PVKs, TransferSource,
     TransferTarget,
 };
