@@ -389,7 +389,7 @@ fn invalid_transactions() -> Result<()> {
     assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(TX_REJECTED));
 
-    node.finalize_and_commit();
+    node.finalize_and_commit(None);
     // There should be state now
     {
         let locked = node.shell.lock().unwrap();
@@ -1719,7 +1719,7 @@ fn enforce_fee_payment() -> Result<()> {
     }
     // Finalize the next block to execute the txs
     node.clear_results();
-    node.finalize_and_commit();
+    node.finalize_and_commit(None);
     {
         let results = node.results.lock().unwrap();
         for result in results.iter() {
@@ -2028,7 +2028,7 @@ fn scheduled_migration() -> Result<()> {
     }
 
     while node.block_height().0 != 4 {
-        node.finalize_and_commit()
+        node.finalize_and_commit(None)
     }
     // check that the key doesn't exist before the scheduled block
     let rt = tokio::runtime::Runtime::new().unwrap();
@@ -2045,7 +2045,7 @@ fn scheduled_migration() -> Result<()> {
     assert!(bytes.is_empty());
 
     // check that the key now exists and has the expected value
-    node.finalize_and_commit();
+    node.finalize_and_commit(None);
     let rt = tokio::runtime::Runtime::new().unwrap();
     let bytes = rt
         .block_on(RPC.shell().storage_value(
