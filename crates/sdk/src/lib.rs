@@ -54,6 +54,7 @@ use namada_core::key::*;
 use namada_core::masp::{ExtendedSpendingKey, PaymentAddress, TransferSource};
 pub use namada_core::{control_flow, task_env};
 use namada_io::{Client, Io, NamadaIo};
+pub use namada_io as io;
 pub use namada_io::{MaybeSend, MaybeSync};
 pub use namada_token::masp::{ShieldedUtils, ShieldedWallet};
 use namada_tx::data::wrapper::GasLimit;
