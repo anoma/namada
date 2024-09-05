@@ -389,7 +389,7 @@ fn invalid_transactions() -> Result<()> {
     assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(TX_REJECTED));
 
-    node.finalize_and_commit();
+    node.finalize_and_commit(None);
     // There should be state now
     {
         let locked = node.shell.lock().unwrap();
@@ -949,6 +949,106 @@ fn proposal_submission() -> Result<()> {
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, transfer));
     assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    Ok(())
+}
+
+#[test]
+fn inflation() -> Result<()> {
+    // This address doesn't matter for tests. But an argument is required.
+    let validator_one_rpc = "http://127.0.0.1:26567";
+    // 1. start the ledger node
+    let (mut node, _services) = setup::initialize_genesis(|mut genesis| {
+        genesis.parameters.pos_params.max_inflation_rate =
+            Dec::from_str("0.1").unwrap();
+        genesis.parameters.pgf_params.stewards_inflation_rate =
+            Dec::from_str("0.1").unwrap();
+        genesis.parameters.pgf_params.pgf_inflation_rate =
+            Dec::from_str("0.1").unwrap();
+        genesis.parameters.pgf_params.stewards =
+            BTreeSet::from_iter([defaults::albert_address()]);
+        genesis
+    })?;
+
+    let pos_inflation = [
+        114400000.785983,
+        114400001.632333,
+        114400002.53905,
+        114400003.506134,
+        114400004.533585,
+    ];
+    let steward_inflation = [
+        1980000.36276,
+        1980000.72552,
+        1980001.08828,
+        1980001.45104,
+        1980001.8138,
+    ];
+    let pgf_inflation = [0.399038, 0.792006, 1.200066, 1.623217, 2.06146];
+
+    for epoch in 0..5 {
+        node.next_epoch();
+
+        let query_total_supply_args = vec![
+            "total-supply",
+            "--token",
+            NAM,
+            "--ledger-address",
+            &validator_one_rpc,
+        ];
+        let captured = CapturedOutput::of(|| {
+            run(&node, Bin::Client, query_total_supply_args)
+        });
+        assert_matches!(captured.result, Ok(_));
+        assert!(captured.contains(&format!(
+            "token tnam1q9kn74xfzytqkqyycfrhycr8ajam8ny935cge0z5: {}",
+            pos_inflation[epoch]
+        )));
+
+        let query_balance_args = vec![
+            "balance",
+            "--owner",
+            PGF_ADDRESS,
+            "--token",
+            NAM,
+            "--ledger-address",
+            &validator_one_rpc,
+        ];
+        let captured =
+            CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
+        assert_matches!(captured.result, Ok(_));
+        assert!(captured.contains(&format!("nam: {}", pgf_inflation[epoch])));
+
+        let query_balance_args = vec![
+            "balance",
+            "--owner",
+            ALBERT,
+            "--token",
+            NAM,
+            "--ledger-address",
+            &validator_one_rpc,
+        ];
+        let captured =
+            CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
+        assert_matches!(captured.result, Ok(_));
+        assert!(
+            captured.contains(&format!("nam: {}", steward_inflation[epoch]))
+        );
+
+        let query_balance_args = vec![
+            "balance",
+            "--owner",
+            BERTHA,
+            "--token",
+            NAM,
+            "--ledger-address",
+            &validator_one_rpc,
+        ];
+        let captured =
+            CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
+        assert_matches!(captured.result, Ok(_));
+        assert!(captured.contains(&format!("nam: {}", 2000000)));
+    }
 
     Ok(())
 }
@@ -1719,7 +1819,7 @@ fn enforce_fee_payment() -> Result<()> {
     }
     // Finalize the next block to execute the txs
     node.clear_results();
-    node.finalize_and_commit();
+    node.finalize_and_commit(None);
     {
         let results = node.results.lock().unwrap();
         for result in results.iter() {
@@ -2028,7 +2128,7 @@ fn scheduled_migration() -> Result<()> {
     }
 
     while node.block_height().0 != 4 {
-        node.finalize_and_commit()
+        node.finalize_and_commit(None)
     }
     // check that the key doesn't exist before the scheduled block
     let rt = tokio::runtime::Runtime::new().unwrap();
@@ -2045,7 +2145,7 @@ fn scheduled_migration() -> Result<()> {
     assert!(bytes.is_empty());
 
     // check that the key now exists and has the expected value
-    node.finalize_and_commit();
+    node.finalize_and_commit(None);
     let rt = tokio::runtime::Runtime::new().unwrap();
     let bytes = rt
         .block_on(RPC.shell().storage_value(
