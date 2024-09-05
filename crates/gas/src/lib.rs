@@ -367,7 +367,7 @@ pub trait GasMetering {
         )
     }
 
-    /// Get the gas consumed by the tx alone
+    /// Get the gas consumed by the tx
     fn get_tx_consumed_gas(&self) -> Gas;
 
     /// Get the gas limit
@@ -434,6 +434,7 @@ impl GasMetering for TxGasMeter {
         Ok(())
     }
 
+    /// Get the entire gas used by the transaction up until this point
     fn get_tx_consumed_gas(&self) -> Gas {
         if !self.gas_overflow {
             self.transaction_gas
@@ -512,6 +513,7 @@ impl GasMetering for VpGasMeter {
         Ok(())
     }
 
+    /// Get the gas consumed by the tx alone before the vps were executed
     fn get_tx_consumed_gas(&self) -> Gas {
         if !self.gas_overflow {
             self.initial_gas
