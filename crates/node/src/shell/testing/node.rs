@@ -363,8 +363,8 @@ impl MockNode {
     }
 
     pub fn next_epoch(&mut self) -> Epoch {
-        let header_time = #[allow(clippy::disallowed_methods)]
-        DateTimeUtc::now();
+        #[allow(clippy::disallowed_methods)]
+        let header_time = DateTimeUtc::now();
         {
             let mut locked = self.shell.lock().unwrap();
 
