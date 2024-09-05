@@ -47,7 +47,6 @@ namada_migrations = {path = "../migrations", optional = true}
 namada_replay_protection = {path = "../replay_protection"}
 namada_sdk = {path = "../sdk", features = ["wasm-runtime"]}
 namada_test_utils = {path = "../test_utils", optional = true}
-namada_token = {path = "../token"}
 namada_vm = {path = "../vm"}
 namada_vote_ext = { path = "../vote_ext" }
 namada_vp = {path = "../vp"}
