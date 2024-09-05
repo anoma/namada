@@ -43,7 +43,6 @@ namada-eth-bridge = [
 [dev-dependencies]
 namada_apps_lib = { path = "../apps_lib", features = ["benches"] }
 namada_node = { path = "../node", features = ["benches"] }
-namada_token = {path = "../token"}
 namada_vm = { path = "../vm", features = ["wasm-runtime"] }
 namada_vp = { path = "../vp" }
 
