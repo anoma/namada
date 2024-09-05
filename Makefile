@@ -177,8 +177,8 @@ test-e2e:
 
 # Run integration tests
 test-integration:
-	RUST_LOG=info RUST_BACKTRACE=$(RUST_BACKTRACE) \
-	$(cargo) +$(nightly) test --lib $(jobs) integration::pgf_governance_proposal \
+	RUST_BACKTRACE=$(RUST_BACKTRACE) \
+	$(cargo) +$(nightly) test --lib $(jobs) integration::$(TEST_FILTER) \
 	-Z unstable-options \
 	-- \
 	--test-threads=1 \
@@ -206,9 +206,9 @@ test-unit-with-coverage:
 		-Z unstable-options --report-time
 
 test-integration-with-coverage:
-	$(cargo) +$(nightly) llvm-cov --lib --output-path lcov.info \
+	RUST_LOG=info $(cargo) +$(nightly) llvm-cov --lib --output-path lcov.info \
 		--lcov \
-		-- integration \
+		-- integration::ledger_tests::pgf_governance_proposal \
 		--test-threads=1 \
 		-Z unstable-options --report-time
 
