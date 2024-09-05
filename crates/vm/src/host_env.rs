@@ -2134,8 +2134,6 @@ where
     H: 'static + StorageHasher,
     CA: WasmCacheAccess,
 {
-    let _sentinel = unsafe { env.ctx.sentinel.get() };
-    let _gas_meter = unsafe { env.ctx.gas_meter.get() };
     let (serialized_transaction, gas) = env
         .memory
         .read_bytes(transaction_ptr, transaction_len.try_into()?)
