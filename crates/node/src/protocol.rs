@@ -323,17 +323,18 @@ pub(crate) fn get_batch_txs_to_execute<'a>(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn dispatch_inner_txs<'a, D, H, CA>(
+pub(crate) fn dispatch_inner_txs<'a, S, D, H, CA>(
     tx: &Tx,
     wrapper_hash: Option<&'a Hash>,
     mut extended_tx_result: ExtendedTxResult<Error>,
     tx_index: TxIndex,
     tx_gas_meter: &'a RefCell<TxGasMeter>,
-    state: &'a mut WlState<D, H>,
+    state: &'a mut S,
     vp_wasm_cache: &'a mut VpCache<CA>,
     tx_wasm_cache: &'a mut TxCache<CA>,
 ) -> std::result::Result<ExtendedTxResult<Error>, DispatchError>
 where
+    S: 'static + State<D = D, H = H> + Read<Err = state::Error> + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
@@ -925,9 +926,9 @@ where
     }
 }
 
-/// Apply a transaction going via the wasm environment. Gas will be metered and
-/// validity predicates will be triggered in the normal way.
-pub fn apply_wasm_tx<S, D, H, CA>(
+// Apply a transaction going via the wasm environment. Gas will be metered and
+// validity predicates will be triggered in the normal way.
+fn apply_wasm_tx<S, D, H, CA>(
     batched_tx: &BatchedTxRef<'_>,
     tx_index: &TxIndex,
     shell_params: ShellParams<'_, S, D, H, CA>,
