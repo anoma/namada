@@ -1,8 +1,8 @@
 use std::str::FromStr;
 
-use namada_io::StdIo;
 use namada_sdk::address::Address;
 use namada_sdk::error::{EncodingError, Error};
+use namada_sdk::io::StdIo;
 use namada_sdk::queries::RPC;
 use namada_sdk::rpc;
 use namada_sdk::state::LastBlock;

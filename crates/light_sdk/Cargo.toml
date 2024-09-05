@@ -19,7 +19,6 @@ blocking = ["tokio"]
 namada-eth-bridge = ["namada_sdk/namada-eth-bridge"]
 
 [dependencies]
-namada_io = { path = "../io" }
 namada_sdk = { path = "../sdk" }
 
 borsh.workspace = true

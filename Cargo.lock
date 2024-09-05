@@ -5015,7 +5015,6 @@ version = "0.43.0"
 dependencies = [
  "borsh",
  "borsh-ext",
- "namada_io",
  "namada_sdk",
  "prost 0.12.3",
  "serde_json",
