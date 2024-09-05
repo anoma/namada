@@ -4483,7 +4483,11 @@ pub mod args {
                 .arg(
                     TX_PATH_OPT
                         .def()
-                        .help(wrap!("The path to a serialized transaction."))
+                        .help(wrap!(
+                            "The path to a serialized transaction. It is \
+                             expected that this transaction is contained in a \
+                             .tx file, typically produced from a tx dump."
+                        ))
                         .conflicts_with_all([
                             CODE_PATH_OPT.name,
                             DATA_PATH_OPT.name,
