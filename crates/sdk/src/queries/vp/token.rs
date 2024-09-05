@@ -80,8 +80,7 @@ pub mod client_only_methods {
             let balance = if response.data.is_empty() {
                 token::Amount::zero()
             } else {
-                token::Amount::try_from_slice(&response.data)
-                    .unwrap_or_default()
+                token::Amount::try_from_slice(&response.data)?
             };
             Ok(balance)
         }
@@ -103,8 +102,7 @@ pub mod client_only_methods {
             let tokens = if response.data.is_empty() {
                 token::Amount::zero()
             } else {
-                token::Amount::try_from_slice(&response.data)
-                    .unwrap_or_default()
+                token::Amount::try_from_slice(&response.data)?
             };
             Ok(tokens)
         }
