@@ -955,6 +955,106 @@ fn proposal_submission() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn inflation() -> Result<()> {
+    // This address doesn't matter for tests. But an argument is required.
+    let validator_one_rpc = "http://127.0.0.1:26567";
+    // 1. start the ledger node
+    let (mut node, _services) = setup::initialize_genesis(|mut genesis| {
+        genesis.parameters.pos_params.max_inflation_rate =
+            Dec::from_str("0.1").unwrap();
+        genesis.parameters.pgf_params.stewards_inflation_rate =
+            Dec::from_str("0.1").unwrap();
+        genesis.parameters.pgf_params.pgf_inflation_rate =
+            Dec::from_str("0.1").unwrap();
+        genesis.parameters.pgf_params.stewards =
+            BTreeSet::from_iter([defaults::albert_address()]);
+        genesis
+    })?;
+
+    let pos_inflation = vec![
+        114400000.785983,
+        114400001.632333,
+        114400002.53905,
+        114400003.506134,
+        114400004.533585,
+    ];
+    let steward_inflation = vec![
+        1980000.36276,
+        1980000.72552,
+        1980001.08828,
+        1980001.45104,
+        1980001.8138,
+    ];
+    let pgf_inflation = vec![0.399038, 0.792006, 1.200066, 1.623217, 2.06146];
+
+    for epoch in 0..5 {
+        node.next_epoch();
+
+        let query_total_supply_args = vec![
+            "total-supply",
+            "--token",
+            NAM,
+            "--ledger-address",
+            &validator_one_rpc,
+        ];
+        let captured = CapturedOutput::of(|| {
+            run(&node, Bin::Client, query_total_supply_args)
+        });
+        assert_matches!(captured.result, Ok(_));
+        assert!(captured.contains(&format!(
+            "token tnam1q9kn74xfzytqkqyycfrhycr8ajam8ny935cge0z5: {}",
+            pos_inflation[epoch]
+        )));
+
+        let query_balance_args = vec![
+            "balance",
+            "--owner",
+            PGF_ADDRESS,
+            "--token",
+            NAM,
+            "--ledger-address",
+            &validator_one_rpc,
+        ];
+        let captured =
+            CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
+        assert_matches!(captured.result, Ok(_));
+        assert!(captured.contains(&format!("nam: {}", pgf_inflation[epoch])));
+
+        let query_balance_args = vec![
+            "balance",
+            "--owner",
+            ALBERT,
+            "--token",
+            NAM,
+            "--ledger-address",
+            &validator_one_rpc,
+        ];
+        let captured =
+            CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
+        assert_matches!(captured.result, Ok(_));
+        assert!(
+            captured.contains(&format!("nam: {}", steward_inflation[epoch]))
+        );
+
+        let query_balance_args = vec![
+            "balance",
+            "--owner",
+            BERTHA,
+            "--token",
+            NAM,
+            "--ledger-address",
+            &validator_one_rpc,
+        ];
+        let captured =
+            CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
+        assert_matches!(captured.result, Ok(_));
+        assert!(captured.contains(&format!("nam: {}", 2000000)));
+    }
+
+    Ok(())
+}
+
 /// Test submission and vote of a PGF proposal
 ///
 /// 1. Submit proposal
@@ -977,10 +1077,10 @@ fn pgf_governance_proposal() -> Result<()> {
     let (mut node, _services) = setup::initialize_genesis(|mut genesis| {
         genesis.parameters.pgf_params.stewards_inflation_rate =
             Dec::from_str("0.0").unwrap();
-        genesis.parameters.pgf_params.pgf_inflation_rate = Dec::from_str("0.0").unwrap();
+        genesis.parameters.pgf_params.pgf_inflation_rate =
+            Dec::from_str("0.0").unwrap();
         genesis
     })?;
-
 
     let tx_args = apply_use_device(vec![
         "bond",
@@ -1379,10 +1479,8 @@ fn pgf_steward_change_commission() -> Result<()> {
     assert!(
         captured.contains(&format!("- 0.7 to {}", defaults::bertha_address()))
     );
-    assert!(
-        captured
-            .contains(&format!("- 0.05 to {}", defaults::christel_address()))
-    );
+    assert!(captured
+        .contains(&format!("- 0.05 to {}", defaults::christel_address())));
     assert!(captured.contains("Pgf fundings: no fundings are currently set."));
 
     Ok(())
