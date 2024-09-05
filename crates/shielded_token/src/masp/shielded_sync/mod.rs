@@ -1,25 +1,27 @@
 use std::collections::BTreeMap;
+#[cfg(not(target_family = "wasm"))]
 use std::future::Future;
 use std::ops::ControlFlow;
 
+#[cfg(not(target_family = "wasm"))]
+use eyre::eyre;
 use masp_primitives::sapling::note_encryption::{
     try_sapling_note_decryption, PreparedIncomingViewingKey,
 };
 use masp_primitives::sapling::ViewingKey;
 use masp_primitives::transaction::components::OutputDescription;
 use masp_primitives::transaction::{Authorization, Authorized, Transaction};
+#[cfg(not(target_family = "wasm"))]
+use namada_core::task_env::{
+    LocalSetSpawner, LocalSetTaskEnvironment, TaskEnvironment,
+};
+use namada_io::{MaybeSend, MaybeSync};
 use typed_builder::TypedBuilder;
 
 use super::shielded_sync::utils::{MaspClient, RetryStrategy};
-use crate::error::Error;
 use crate::masp::shielded_sync::dispatcher::Dispatcher;
 use crate::masp::utils::DecryptedData;
 use crate::masp::{ShieldedUtils, NETWORK};
-#[cfg(not(target_family = "wasm"))]
-use crate::task_env::{
-    LocalSetSpawner, LocalSetTaskEnvironment, TaskEnvironment,
-};
-use crate::{MaybeSend, MaybeSync};
 
 pub mod dispatcher;
 pub mod utils;
@@ -52,16 +54,15 @@ pub struct ShieldedSyncConfig<M, T, I> {
 pub struct MaspLocalTaskEnv(LocalSetTaskEnvironment);
 
 #[cfg(not(target_family = "wasm"))]
+#[cfg(feature = "std")]
 impl MaspLocalTaskEnv {
     /// create a new [`MaspLocalTaskEnv`]
-    pub fn new(num_threads: usize) -> Result<Self, Error> {
+    pub fn new(num_threads: usize) -> Result<Self, eyre::Error> {
         let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(num_threads)
             .panic_handler(|_| {})
             .build()
-            .map_err(|err| {
-                Error::Other(format!("Failed to create thread pool: {err}"))
-            })?;
+            .map_err(|err| eyre!("Failed to create thread pool: {err}"))?;
         Ok(Self(LocalSetTaskEnvironment::new(pool)))
     }
 }

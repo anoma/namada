@@ -11,12 +11,12 @@ use std::{env, fs};
 use namada_sdk::bip39::{Language, Mnemonic};
 use namada_sdk::key::*;
 pub use namada_sdk::wallet::alias::Alias;
-use namada_sdk::wallet::fs::FsWalletStorage;
 use namada_sdk::wallet::store::Store;
 use namada_sdk::wallet::{
     ConfirmationResponse, FindKeyError, LoadStoreError, Wallet, WalletIo,
 };
 pub use namada_sdk::wallet::{ValidatorData, ValidatorKeys};
+use namada_wallet::fs::FsWalletStorage;
 use rand_core::OsRng;
 pub use store::wallet_file;
 pub use transport::{TransportTcp, WalletTransport};

@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use namada_sdk::error::{EncodingError, Error, TxSubmitError};
-use namada_sdk::queries::Client;
+use namada_sdk::io::Client;
 use namada_sdk::tx::Tx;
 use tendermint_config::net::Address as TendermintAddress;
 use tendermint_rpc::endpoint::broadcast::tx_sync::Response;

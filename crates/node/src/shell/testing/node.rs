@@ -20,6 +20,7 @@ use namada_sdk::events::extend::Height as HeightAttr;
 use namada_sdk::events::log::dumb_queries;
 use namada_sdk::events::Event;
 use namada_sdk::hash::Hash;
+use namada_sdk::io::Client;
 use namada_sdk::key::tm_consensus_key_raw_hash;
 use namada_sdk::proof_of_stake::storage::{
     read_consensus_validator_set_addresses_with_stake, read_pos_params,
@@ -27,7 +28,7 @@ use namada_sdk::proof_of_stake::storage::{
 };
 use namada_sdk::proof_of_stake::types::WeightedValidator;
 use namada_sdk::queries::{
-    Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
+    EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
 };
 use namada_sdk::state::{
     LastBlock, Sha256Hasher, StorageRead, DB, EPOCH_SWITCH_BLOCKS_DELAY,
@@ -737,7 +738,7 @@ impl Client for MockNode {
         data: Option<Vec<u8>>,
         height: Option<BlockHeight>,
         prove: bool,
-    ) -> std::result::Result<EncodedResponseQuery, Self::Error> {
+    ) -> std::result::Result<EncodedResponseQuery, Report> {
         self.drive_mock_services_bg().await;
         let rpc = RPC;
         let data = data.unwrap_or_default();

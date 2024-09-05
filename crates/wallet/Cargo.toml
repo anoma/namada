@@ -1,0 +1,48 @@
+[package]
+name = "namada_wallet"
+description = "Namada wallet"
+resolver = "2"
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[features]
+default = []
+std = ["fd-lock", "download-params"]
+download-params = []
+migrations = ["namada_migrations"]
+
+[dependencies]
+namada_core = { path = "../core", features = ["rand"]}
+namada_ibc = {path = "../ibc" }
+namada_macros = { path = "../macros" }
+namada_migrations = {path = "../migrations", optional = true }
+
+bimap.workspace = true
+borsh.workspace = true
+borsh-ext.workspace = true
+itertools.workspace = true
+derivation-path.workspace = true
+data-encoding.workspace = true
+fd-lock = {workspace = true, optional = true}
+masp_primitives.workspace = true
+orion.workspace = true
+rand.workspace = true
+rand_core.workspace = true
+serde.workspace = true
+slip10_ed25519.workspace = true
+smooth-operator.workspace = true
+thiserror.workspace = true
+tiny-bip39.workspace = true
+tiny-hderive.workspace = true
+toml.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+base58.workspace = true

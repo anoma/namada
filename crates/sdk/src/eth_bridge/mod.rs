@@ -13,14 +13,13 @@ pub use namada_ethereum_bridge::storage::eth_bridge_queries::*;
 pub use namada_ethereum_bridge::storage::parameters::*;
 pub use namada_ethereum_bridge::storage::wrapped_erc20s;
 pub use namada_ethereum_bridge::{ADDRESS, *};
+use namada_io::{display_line, edisplay_line, Io};
 use num256::Uint256;
 
 use crate::control_flow::time::{
     Constant, Duration, Instant, LinearBackoff, Sleep,
 };
 use crate::error::{Error, EthereumBridgeError};
-use crate::io::Io;
-use crate::{display_line, edisplay_line};
 
 const DEFAULT_BACKOFF: Duration = std::time::Duration::from_millis(500);
 const DEFAULT_CEILING: Duration = std::time::Duration::from_secs(30);
