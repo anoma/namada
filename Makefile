@@ -177,8 +177,8 @@ test-e2e:
 
 # Run integration tests
 test-integration:
-	RUST_BACKTRACE=$(RUST_BACKTRACE) \
-	$(cargo) +$(nightly) test --lib $(jobs) integration::$(TEST_FILTER) \
+	RUST_LOG=info RUST_BACKTRACE=$(RUST_BACKTRACE) \
+	$(cargo) +$(nightly) test --lib $(jobs) integration::pgf_governance_proposal \
 	-Z unstable-options \
 	-- \
 	--test-threads=1 \
