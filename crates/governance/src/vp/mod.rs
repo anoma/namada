@@ -566,7 +566,7 @@ where
         if !proposal_type.is_default_with_wasm() {
             return Err(Error::new_alloc(format!(
                 "Proposal with id {proposal_id} modified a proposal code key, \
-                 but its type is not default.",
+                 but its type is not allowed this change.",
             )));
         }
 
