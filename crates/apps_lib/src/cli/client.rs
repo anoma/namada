@@ -1,7 +1,7 @@
 use std::io::Read;
 
 use color_eyre::eyre::Result;
-use namada_io::{display_line, Io, NamadaIo};
+use namada_sdk::io::{display_line, Io, NamadaIo};
 use namada_sdk::masp::ShieldedContext;
 use namada_sdk::{Namada, NamadaImpl};
 

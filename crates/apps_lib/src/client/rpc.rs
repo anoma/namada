@@ -10,7 +10,7 @@ use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
 use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::zip32::ExtendedFullViewingKey;
-use namada_io::{display, display_line, edisplay_line, Client, Io};
+use namada_core::masp::{BalanceOwner, MaspEpoch};
 use namada_sdk::address::{Address, InternalAddress, MASP};
 use namada_sdk::chain::{BlockHeight, Epoch};
 use namada_sdk::collections::{HashMap, HashSet};
@@ -26,7 +26,10 @@ use namada_sdk::governance::storage::proposal::{
 use namada_sdk::governance::utils::{ProposalVotes, VotePower};
 use namada_sdk::governance::ProposalVote;
 use namada_sdk::hash::Hash;
+use namada_sdk::io::{display, display_line, edisplay_line, Client, Io};
 use namada_sdk::key::*;
+use namada_sdk::masp::shielded_wallet::ShieldedApi;
+use namada_sdk::masp::MaspTokenRewardData;
 use namada_sdk::parameters::{storage as param_storage, EpochDuration};
 use namada_sdk::proof_of_stake::types::{
     CommissionPair, Slash, ValidatorMetaData, ValidatorState,
@@ -44,8 +47,6 @@ use namada_sdk::token::MaspDigitPos;
 use namada_sdk::tx::display_batch_resp;
 use namada_sdk::wallet::AddressVpType;
 use namada_sdk::{error, state as storage, token, Namada};
-use namada_token::masp::shielded_wallet::ShieldedApi;
-use namada_token::masp::{BalanceOwner, MaspEpoch, MaspTokenRewardData};
 
 use crate::cli::{self, args};
 use crate::tendermint::merkle::proof::ProofOps;

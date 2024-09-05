@@ -42,6 +42,9 @@ use namada_apps_lib::masp_primitives::transaction::Transaction;
 use namada_apps_lib::masp_proofs::sapling::SaplingVerificationContextInner;
 use namada_apps_lib::proof_of_stake::KeySeg;
 use namada_apps_lib::state::{Epoch, StorageRead, StorageWrite, TxIndex};
+use namada_apps_lib::token::masp::{
+    partial_deauthorize, preload_verifying_keys, PVKs,
+};
 use namada_apps_lib::token::{Amount, Transfer};
 use namada_apps_lib::tx::{BatchedTx, Code, Section, Tx};
 use namada_apps_lib::validation::{
@@ -49,16 +52,15 @@ use namada_apps_lib::validation::{
     IbcVpContext, MaspVp, MultitokenVp, ParametersVp, PgfVp, PosVp,
 };
 use namada_apps_lib::wallet::defaults;
-use namada_apps_lib::{governance, parameters, proof_of_stake, storage, token};
+use namada_apps_lib::{
+    governance, parameters, proof_of_stake, storage, token, TransferSource,
+    TransferTarget,
+};
 use namada_node::bench_utils::{
     generate_foreign_key_tx, BenchShell, BenchShieldedCtx,
     ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,
     TX_BRIDGE_POOL_WASM, TX_IBC_WASM, TX_INIT_PROPOSAL_WASM, TX_RESIGN_STEWARD,
     TX_TRANSFER_WASM, TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL_WASM,
-};
-use namada_apps_lib::token::masp::{
-    partial_deauthorize, preload_verifying_keys, PVKs, TransferSource,
-    TransferTarget,
 };
 use namada_vp::native_vp::{Ctx, NativeVp};
 use rand_core::OsRng;

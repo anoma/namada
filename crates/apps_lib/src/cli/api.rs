@@ -1,5 +1,5 @@
-use namada_io::{Client, Io};
 use namada_sdk::error::Error;
+use namada_sdk::io::{Client, Io};
 use namada_sdk::rpc::wait_until_node_is_synched;
 
 use crate::tendermint_rpc::client::CompatMode;

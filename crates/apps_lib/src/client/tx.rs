@@ -4,7 +4,6 @@ use std::io::Write;
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use ledger_namada_rs::{BIP44Path, NamadaApp};
-use namada_io::{display_line, edisplay_line, Io};
 use namada_sdk::address::{Address, ImplicitAddress};
 use namada_sdk::args::TxBecomeValidator;
 use namada_sdk::collections::HashSet;
@@ -12,6 +11,7 @@ use namada_sdk::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal,
 };
 use namada_sdk::ibc::convert_masp_tx_to_ibc_memo;
+use namada_sdk::io::{display_line, edisplay_line, Io};
 use namada_sdk::key::*;
 use namada_sdk::rpc::{InnerTxResult, TxBroadcastData, TxResponse};
 use namada_sdk::state::EPOCH_SWITCH_BLOCKS_DELAY;
@@ -231,7 +231,7 @@ async fn batch_opt_reveal_pk_and_submit<N: Namada>(
     tx_data: (Tx, SigningTxData),
 ) -> Result<ProcessTxResponse, error::Error>
 where
-    <N::Client as namada_io::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
     let mut batched_tx_data = vec![];
 
@@ -279,7 +279,7 @@ pub async fn submit_custom<N: Namada>(
     args: args::TxCustom,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada_io::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
     let custom_tx_data = args.build(namada).await?;
 
@@ -303,7 +303,7 @@ pub async fn submit_update_account<N: Namada>(
     args: args::TxUpdateAccount,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada_io::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 
@@ -323,7 +323,7 @@ pub async fn submit_init_account<N: Namada>(
     args: args::TxInitAccount,
 ) -> Result<Option<Address>, error::Error>
 where
-    <N::Client as namada_io::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
     let (mut tx, signing_data) = tx::build_init_account(namada, &args).await?;
 
@@ -907,7 +907,7 @@ pub async fn submit_ibc_transfer<N: Namada>(
     args: args::TxIbcTransfer,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada_io::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
     let (tx, signing_data, _) = args.build(namada).await?;
 
@@ -933,7 +933,7 @@ pub async fn submit_init_proposal<N: Namada>(
     args: args::InitProposal,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada_io::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
     let current_epoch = rpc::query_and_print_epoch(namada).await;
     let governance_parameters =
@@ -1040,7 +1040,7 @@ pub async fn submit_vote_proposal<N: Namada>(
     args: args::VoteProposal,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada_io::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
     let (mut tx_builder, signing_data) = args.build(namada).await?;
 
@@ -1065,7 +1065,7 @@ pub async fn sign_tx<N: Namada>(
     }: args::SignTx,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada_io::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
     let tx = if let Ok(transaction) = Tx::deserialize(tx_data.as_ref()) {
         transaction
@@ -1135,7 +1135,7 @@ pub async fn submit_reveal_pk<N: Namada>(
     args: args::RevealPk,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada_io::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
     let tx_data =
         submit_reveal_aux(namada, &args.tx, &(&args.public_key).into()).await?;
@@ -1153,7 +1153,7 @@ pub async fn submit_bond<N: Namada>(
     args: args::Bond,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada_io::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
     let submit_bond_tx_data = args.build(namada).await?;
 
@@ -1178,7 +1178,7 @@ pub async fn submit_unbond<N: Namada>(
     args: args::Unbond,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada_io::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
     let (mut tx, signing_data, latest_withdrawal_pre) =
         args.build(namada).await?;
@@ -1209,7 +1209,7 @@ pub async fn submit_withdraw<N: Namada>(
     args: args::Withdraw,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada_io::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 
@@ -1229,7 +1229,7 @@ pub async fn submit_claim_rewards<N: Namada>(
     args: args::ClaimRewards,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada_io::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 
@@ -1249,7 +1249,7 @@ pub async fn submit_redelegate<N: Namada>(
     args: args::Redelegate,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada_io::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 
@@ -1269,7 +1269,7 @@ pub async fn submit_validator_commission_change<N: Namada>(
     args: args::CommissionRateChange,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada_io::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 
@@ -1289,7 +1289,7 @@ pub async fn submit_validator_metadata_change<N: Namada>(
     args: args::MetaDataChange,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada_io::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 
@@ -1309,7 +1309,7 @@ pub async fn submit_unjail_validator<N: Namada>(
     args: args::TxUnjailValidator,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada_io::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 
@@ -1329,7 +1329,7 @@ pub async fn submit_deactivate_validator<N: Namada>(
     args: args::TxDeactivateValidator,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada_io::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 
@@ -1349,7 +1349,7 @@ pub async fn submit_reactivate_validator<N: Namada>(
     args: args::TxReactivateValidator,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada_io::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 
@@ -1369,7 +1369,7 @@ pub async fn submit_update_steward_commission<N: Namada>(
     args: args::UpdateStewardCommission,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada_io::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 
@@ -1389,7 +1389,7 @@ pub async fn submit_resign_steward<N: Namada>(
     args: args::ResignSteward,
 ) -> Result<(), error::Error>
 where
-    <N::Client as namada_io::Client>::Error: std::fmt::Display,
+    <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 

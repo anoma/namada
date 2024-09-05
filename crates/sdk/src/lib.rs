@@ -51,15 +51,16 @@ use namada_core::dec::Dec;
 use namada_core::ethereum_events::EthAddress;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::key::*;
-use namada_core::masp::{ExtendedSpendingKey, PaymentAddress, TransferSource};
+pub use namada_core::masp::{
+    ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress, TransferSource,
+    TransferTarget,
+};
 pub use namada_core::{control_flow, task_env};
 use namada_io::{Client, Io, NamadaIo};
-pub use namada_io as io;
 pub use namada_io::{MaybeSend, MaybeSync};
 pub use namada_token::masp::{ShieldedUtils, ShieldedWallet};
 use namada_tx::data::wrapper::GasLimit;
 use namada_tx::Tx;
-pub use namada_wallet as wallet;
 use rpc::{denominate_amount, format_denominated_amount, query_native_token};
 use signing::SigningTxData;
 use token::{DenominatedAmount, NATIVE_MAX_DECIMAL_PLACES};
@@ -76,6 +77,7 @@ use tx::{
     VP_USER_WASM,
 };
 use wallet::{Wallet, WalletIo, WalletStorage};
+pub use {namada_io as io, namada_wallet as wallet};
 
 use crate::masp::ShieldedContext;
 

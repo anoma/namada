@@ -1,14 +1,16 @@
 use std::time::Duration;
 
 use color_eyre::owo_colors::OwoColorize;
-#[cfg(any(test, feature = "testing"))]
-use namada_io::DevNullProgressBar;
-use namada_io::{display, display_line, Client, Io, MaybeSend, MaybeSync};
 use namada_sdk::args::ShieldedSync;
 use namada_sdk::control_flow::install_shutdown_signal;
 use namada_sdk::error::Error;
-use namada_sdk::masp::{IndexerMaspClient, LedgerMaspClient, ShieldedContext};
-use namada_token::masp::{MaspLocalTaskEnv, ShieldedSyncConfig, ShieldedUtils};
+#[cfg(any(test, feature = "testing"))]
+use namada_sdk::io::DevNullProgressBar;
+use namada_sdk::io::{display, display_line, Client, Io, MaybeSend, MaybeSync};
+use namada_sdk::masp::{
+    IndexerMaspClient, LedgerMaspClient, MaspLocalTaskEnv, ShieldedContext,
+    ShieldedSyncConfig, ShieldedUtils,
+};
 
 #[allow(clippy::too_many_arguments)]
 pub async fn syncing<

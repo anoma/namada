@@ -21,7 +21,6 @@ use namada_apps_lib::cli;
 use namada_apps_lib::cli::context::FromContext;
 use namada_apps_lib::cli::Context;
 use namada_apps_lib::wallet::{defaults, CliWalletUtils};
-use namada_io::{Client, NamadaIo, StdIo};
 use namada_sdk::address::{self, Address, InternalAddress, MASP};
 use namada_sdk::args::ShieldedSync;
 use namada_sdk::chain::testing::get_dummy_header;
@@ -70,15 +69,23 @@ use namada_sdk::ibc::storage::{
     channel_key, connection_key, mint_limit_key, port_key, throughput_limit_key,
 };
 use namada_sdk::ibc::{MsgTransfer, COMMITMENT_PREFIX};
+use namada_sdk::io::{Client, NamadaIo, StdIo};
 use namada_sdk::key::common::SecretKey;
-use namada_sdk::masp::ShieldedContext;
+use namada_sdk::masp::shielded_wallet::ShieldedApi;
+use namada_sdk::masp::utils::RetryStrategy;
+use namada_sdk::masp::{
+    self, ContextSyncStatus, DispatcherCache, MaspTransferData,
+    ShieldedContext, ShieldedUtils, ShieldedWallet,
+};
 use namada_sdk::queries::{
     EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
 };
 use namada_sdk::state::StorageRead;
 use namada_sdk::storage::{Key, KeySeg, TxIndex};
 use namada_sdk::time::DateTimeUtc;
-use namada_sdk::token::{self, Amount, DenominatedAmount, Transfer};
+use namada_sdk::token::{
+    self, Amount, DenominatedAmount, MaspTxRefs, Transfer,
+};
 use namada_sdk::tx::data::pos::Bond;
 use namada_sdk::tx::data::{BatchedTxResult, Fee, TxResult, VpsResult};
 use namada_sdk::tx::event::{new_tx_event, Batch};
@@ -99,15 +106,11 @@ pub use namada_sdk::tx::{
     TX_WITHDRAW_WASM, VP_USER_WASM,
 };
 use namada_sdk::wallet::Wallet;
-use namada_sdk::{parameters, proof_of_stake, tendermint, Namada, NamadaImpl};
-use namada_test_utils::tx_data::TxWriteData;
-use namada_token::masp::shielded_wallet::ShieldedApi;
-use namada_token::masp::utils::RetryStrategy;
-use namada_token::masp::{
-    self, ContextSyncStatus, DispatcherCache, ExtendedViewingKey,
-    MaspTransferData, MaspTxRefs, PaymentAddress, ShieldedUtils,
-    ShieldedWallet, TransferSource, TransferTarget,
+use namada_sdk::{
+    parameters, proof_of_stake, tendermint, Namada, NamadaImpl, PaymentAddress,
+    TransferSource, TransferTarget,
 };
+use namada_test_utils::tx_data::TxWriteData;
 use namada_vm::wasm::run;
 use rand_core::OsRng;
 use tempfile::TempDir;
@@ -1124,21 +1127,21 @@ impl Default for BenchShieldedCtx {
         ]
         .map(|(p, s)| (p.to_owned(), s.to_owned()))
         {
-            let viewing_key: FromContext<ExtendedViewingKey> = FromContext::new(
-                chain_ctx
-                    .wallet
-                    .find_viewing_key(viewing_alias)
-                    .unwrap()
-                    .key
-                    .to_string(),
-            );
+            let viewing_key: FromContext<namada_sdk::ExtendedViewingKey> =
+                FromContext::new(
+                    chain_ctx
+                        .wallet
+                        .find_viewing_key(viewing_alias)
+                        .unwrap()
+                        .key
+                        .to_string(),
+                );
             let viewing_key = ExtendedFullViewingKey::from(
                 chain_ctx.get_cached(&viewing_key),
             )
             .fvk
             .vk;
-            let (div, _g_d) =
-                namada_token::masp::find_valid_diversifier(&mut OsRng);
+            let (div, _g_d) = masp::find_valid_diversifier(&mut OsRng);
             let payment_addr = viewing_key.to_payment_address(div).unwrap();
             let _ = chain_ctx
                 .wallet

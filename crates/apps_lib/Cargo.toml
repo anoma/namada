@@ -31,7 +31,6 @@ namada-eth-bridge = [
 
 [dependencies]
 namada_core = {path = "../core"}
-namada_io = { path = "../io" }
 namada_macros = {path = "../macros"}
 namada_migrations = {path = "../migrations", optional = true}
 namada_sdk = {path = "../sdk", features = ["download-params", "multicore"]}

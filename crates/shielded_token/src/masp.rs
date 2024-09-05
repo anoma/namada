@@ -32,7 +32,7 @@ use masp_proofs::prover::LocalTxProver;
 use namada_core::address::Address;
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::dec::Dec;
-pub use namada_core::masp::*;
+use namada_core::masp::*;
 use namada_core::token;
 use namada_core::token::Denomination;
 use namada_core::uint::Uint;

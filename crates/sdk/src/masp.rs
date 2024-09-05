@@ -1,6 +1,6 @@
 //! MASP verification wrappers.
 
-mod utils;
+mod utilities;
 
 use eyre::eyre;
 use masp_primitives::asset_type::AssetType;
@@ -23,15 +23,16 @@ use namada_events::extend::{
 use namada_ibc::{decode_message, extract_masp_tx_from_envelope, IbcMessage};
 use namada_io::client::Client;
 use namada_token::masp::shielded_wallet::ShieldedQueries;
+pub use namada_token::masp::{utils, *};
 use namada_tx::Tx;
-pub use utils::{IndexerMaspClient, LedgerMaspClient};
+pub use utilities::{IndexerMaspClient, LedgerMaspClient};
 
 use crate::error::{Error, QueryError};
 use crate::rpc::{
     query_block, query_conversion, query_denom, query_masp_epoch,
     query_max_block_time_estimate, query_native_token,
 };
-use crate::{token, MaybeSend, MaybeSync, ShieldedUtils, ShieldedWallet};
+use crate::{token, MaybeSend, MaybeSync};
 
 /// Extract the relevant shield portions of a [`Tx`], if any.
 fn extract_masp_tx(

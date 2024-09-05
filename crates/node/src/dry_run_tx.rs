@@ -138,10 +138,10 @@ where
 mod test {
     use borsh::BorshDeserialize;
     use borsh_ext::BorshSerializeExt;
-    use namada_io::Client;
     use namada_sdk::chain::BlockHeight;
     use namada_sdk::events::log::EventLog;
     use namada_sdk::hash::Hash;
+    use namada_sdk::io::Client;
     use namada_sdk::queries::{
         EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
     };

@@ -9,11 +9,11 @@ use namada_core::masp::TokenMap;
 use namada_node::shell::testing::client::run;
 use namada_node::shell::testing::node::NodeResults;
 use namada_node::shell::testing::utils::{Bin, CapturedOutput};
+use namada_sdk::masp::fs::FsShieldedUtils;
 use namada_sdk::state::{StorageRead, StorageWrite};
 use namada_sdk::token::storage_key::masp_token_map_key;
 use namada_sdk::token::{self, DenominatedAmount};
 use namada_sdk::DEFAULT_GAS_LIMIT;
-use namada_token::masp::fs::FsShieldedUtils;
 use test_log::test;
 
 use super::setup;

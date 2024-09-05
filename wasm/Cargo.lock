@@ -3974,7 +3974,6 @@ dependencies = [
  "namada_core",
  "namada_sdk",
  "namada_test_utils",
- "namada_token",
  "namada_tx_env",
  "namada_tx_prelude",
  "namada_vm",

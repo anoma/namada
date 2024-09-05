@@ -10,14 +10,13 @@ use color_eyre::eyre::Result;
 use itertools::sorted;
 use ledger_namada_rs::{BIP44Path, NamadaApp};
 use namada_core::chain::BlockHeight;
-use namada_io::{display_line, edisplay_line, Io};
+use namada_core::masp::{ExtendedSpendingKey, MaspValue, PaymentAddress};
 use namada_sdk::address::{Address, DecodeError};
+use namada_sdk::io::{display_line, edisplay_line, Io};
 use namada_sdk::key::*;
+use namada_sdk::masp::find_valid_diversifier;
 use namada_sdk::wallet::{
     DecryptionError, DerivationPath, DerivationPathError, FindKeyError, Wallet,
-};
-use namada_token::masp::{
-    find_valid_diversifier, ExtendedSpendingKey, MaspValue, PaymentAddress,
 };
 use rand_core::OsRng;
 

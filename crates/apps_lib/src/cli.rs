@@ -15,7 +15,7 @@ pub mod wallet;
 
 use clap::{ArgGroup, ArgMatches, ColorChoice};
 use color_eyre::eyre::Result;
-use namada_io::StdIo;
+use namada_sdk::io::StdIo;
 use utils::*;
 pub use utils::{safe_exit, Cmd};
 
@@ -3220,6 +3220,7 @@ pub mod args {
     use std::str::FromStr;
 
     use data_encoding::HEXUPPER;
+    use namada_core::masp::{MaspEpoch, PaymentAddress};
     use namada_sdk::address::{Address, EstablishedAddress};
     pub use namada_sdk::args::*;
     use namada_sdk::chain::{ChainId, ChainIdPrefix};
@@ -3230,6 +3231,7 @@ pub mod args {
     use namada_sdk::ibc::core::host::types::identifiers::{ChannelId, PortId};
     use namada_sdk::keccak::KeccakHash;
     use namada_sdk::key::*;
+    use namada_sdk::masp::utils::RetryStrategy;
     use namada_sdk::storage::{self, BlockHeight, Epoch};
     use namada_sdk::time::DateTimeUtc;
     use namada_sdk::token::NATIVE_MAX_DECIMAL_PLACES;
@@ -3246,8 +3248,6 @@ pub mod args {
         VP_USER_WASM,
     };
     use namada_sdk::{token, DEFAULT_GAS_LIMIT};
-    use namada_token::masp::utils::RetryStrategy;
-    use namada_token::masp::{MaspEpoch, PaymentAddress};
 
     use super::context::*;
     use super::utils::*;
