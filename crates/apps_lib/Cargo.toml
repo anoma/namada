@@ -23,7 +23,6 @@ benches = ["lazy_static", "namada_sdk/benches"]
 migrations = [
   "namada_migrations",
   "namada_sdk/migrations",
-  "namada_token/migrations",
   "linkme"
 ]
 namada-eth-bridge = [
