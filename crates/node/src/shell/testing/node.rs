@@ -363,7 +363,16 @@ impl MockNode {
     }
 
     pub fn next_epoch(&mut self) -> Epoch {
-        {
+        println!("next_epoch");
+        let before = self
+            .shell
+            .lock()
+            .unwrap()
+            .state
+            .in_mem()
+            .get_current_epoch()
+            .0;
+        let is_already_switching = {
             let mut locked = self.shell.lock().unwrap();
 
             let next_epoch_height =
@@ -381,10 +390,20 @@ impl MockNode {
             {
                 *height = next_epoch_min_start_height;
             }
-        }
+            dbg!(locked.state.in_mem().update_epoch_blocks_delay.is_some())
+        };
+        println!("1. finalize_and_commit");
         self.finalize_and_commit();
+        if !is_already_switching {
+            let locked = self.shell.lock().unwrap();
+            assert_eq!(
+                locked.state.in_mem().update_epoch_blocks_delay,
+                Some(EPOCH_SWITCH_BLOCKS_DELAY)
+            )
+        };
 
-        for _ in 0..EPOCH_SWITCH_BLOCKS_DELAY {
+        for i in 0..EPOCH_SWITCH_BLOCKS_DELAY {
+            println!("{}. finalize_and_commit", i + 2);
             self.finalize_and_commit();
         }
         self.shell

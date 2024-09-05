@@ -155,7 +155,7 @@ where
         time: DateTimeUtc,
         parameters: &Parameters,
     ) -> Result<bool> {
-        match self.in_mem.update_epoch_blocks_delay.as_mut() {
+        match dbg!(self.in_mem.update_epoch_blocks_delay.as_mut()) {
             None => {
                 // Check if the new epoch minimum start height and start time
                 // have been fulfilled. If so, queue the next
@@ -163,10 +163,10 @@ where
                 // as to align validator set updates + etc with
                 // tendermint. This is because tendermint has a two block delay
                 // to validator changes.
-                let current_epoch_duration_satisfied = height
-                    >= self.in_mem.next_epoch_min_start_height
-                    && time >= self.in_mem.next_epoch_min_start_time;
-                if current_epoch_duration_satisfied {
+                let current_epoch_duration_satisfied =
+                    dbg!(height >= self.in_mem.next_epoch_min_start_height)
+                        && dbg!(time >= self.in_mem.next_epoch_min_start_time);
+                if dbg!(current_epoch_duration_satisfied) {
                     self.in_mem.update_epoch_blocks_delay =
                         Some(EPOCH_SWITCH_BLOCKS_DELAY);
                 }
