@@ -363,8 +363,6 @@ impl MockNode {
     }
 
     pub fn next_epoch(&mut self) -> Epoch {
-        let header_time = #[allow(clippy::disallowed_methods)]
-        DateTimeUtc::now();
         {
             let mut locked = self.shell.lock().unwrap();
 
@@ -372,19 +370,22 @@ impl MockNode {
                 locked.state.in_mem().get_last_block_height() + 1;
             locked.state.in_mem_mut().next_epoch_min_start_height =
                 next_epoch_height;
-            locked.state.in_mem_mut().next_epoch_min_start_time = header_time;
+            locked.state.in_mem_mut().next_epoch_min_start_time = {
+                #[allow(clippy::disallowed_methods)]
+                DateTimeUtc::now()
+            };
+            let next_epoch_min_start_height =
+                locked.state.in_mem().next_epoch_min_start_height;
             if let Some(LastBlock { height, .. }) =
                 locked.state.in_mem_mut().last_block.as_mut()
             {
-                *height = next_epoch_height;
+                *height = next_epoch_min_start_height;
             }
         }
-        // Use the same timestamp as `next_epoch_min_start_time` to ensure a new
-        // epoch is started on this block
-        self.finalize_and_commit(Some(header_time));
+        self.finalize_and_commit();
 
         for _ in 0..EPOCH_SWITCH_BLOCKS_DELAY {
-            self.finalize_and_commit(None);
+            self.finalize_and_commit();
         }
         self.shell
             .lock()
@@ -458,7 +459,7 @@ impl MockNode {
 
     /// Simultaneously call the `FinalizeBlock` and
     /// `Commit` handlers.
-    pub fn finalize_and_commit(&self, header_time: Option<DateTimeUtc>) {
+    pub fn finalize_and_commit(&self) {
         let (proposer_address, votes) = self.prepare_request();
 
         let mut locked = self.shell.lock().unwrap();
@@ -489,7 +490,7 @@ impl MockNode {
             header: BlockHeader {
                 hash: Hash([0; 32]),
                 #[allow(clippy::disallowed_methods)]
-                time: header_time.unwrap_or_else(DateTimeUtc::now),
+                time: DateTimeUtc::now(),
                 next_validators_hash: Hash([0; 32]),
             },
             block_hash: Hash([0; 32]),
@@ -569,7 +570,7 @@ impl MockNode {
     /// Send a tx through Process Proposal and Finalize Block
     /// and register the results.
     pub fn submit_txs(&self, txs: Vec<Vec<u8>>) {
-        self.finalize_and_commit(None);
+        self.finalize_and_commit();
         let (proposer_address, votes) = self.prepare_request();
 
         #[allow(clippy::disallowed_methods)]

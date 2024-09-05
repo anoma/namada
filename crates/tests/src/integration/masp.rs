@@ -1527,7 +1527,7 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
     }
     // Finalize the next block to actually execute the decrypted txs
     node.clear_results();
-    node.finalize_and_commit(None);
+    node.finalize_and_commit();
     {
         let results = node.results.lock().unwrap();
         for result in results.iter() {
