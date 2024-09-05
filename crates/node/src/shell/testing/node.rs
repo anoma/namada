@@ -363,6 +363,14 @@ impl MockNode {
     }
 
     pub fn next_epoch(&mut self) -> Epoch {
+        let before = self
+            .shell
+            .lock()
+            .unwrap()
+            .state
+            .in_mem()
+            .get_current_epoch()
+            .0;
         {
             let mut locked = self.shell.lock().unwrap();
 
@@ -387,13 +395,16 @@ impl MockNode {
         for _ in 0..EPOCH_SWITCH_BLOCKS_DELAY {
             self.finalize_and_commit();
         }
-        self.shell
+        let after = self
+            .shell
             .lock()
             .unwrap()
             .state
             .in_mem()
             .get_current_epoch()
-            .0
+            .0;
+        assert_eq!(before.next(), after);
+        after
     }
 
     pub fn next_masp_epoch(&mut self) -> Epoch {
