@@ -38,10 +38,15 @@ name = "namadaw"
 path = "src/bin/namada-wallet/main.rs"
 
 # Namada relayer
-[[bin]]
-doc = false
-name = "namadar"
-path = "src/bin/namada-relayer/main.rs"
+#
+# NOTE: uncomment lines below and mv
+# `_main.rs` to `main.rs` in `src/bin/namada-relayer/`
+# to build the Namada relayer binary
+#
+#[[bin]]
+#doc = false
+#name = "namadar"
+#path = "src/bin/namada-relayer/main.rs"
 
 [features]
 default = ["migrations"]
