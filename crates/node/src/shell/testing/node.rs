@@ -604,11 +604,20 @@ impl MockNode {
         }
 
         // process proposal succeeded, now run finalize block
+
+        let time = {
+            #[allow(clippy::disallowed_methods)]
+            let time = DateTimeUtc::now();
+            // Set the block time in the past to avoid non-deterministically
+            // starting new epochs
+            let dur = namada_sdk::time::Duration::minutes(10);
+            time - dur
+        };
         let req = FinalizeBlock {
             header: BlockHeader {
                 hash: Hash([0; 32]),
                 #[allow(clippy::disallowed_methods)]
-                time: DateTimeUtc::now(),
+                time,
                 next_validators_hash: Hash([0; 32]),
             },
             block_hash: Hash([0; 32]),
