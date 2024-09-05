@@ -533,7 +533,7 @@ where
     if reward_tokens_remaining > token::Amount::zero() {
         tracing::info!(
             "Minting tokens remaining from PoS rewards distribution into the \
-             Governance account. Amount: {}.",
+             PGF account. Amount: {}.",
             reward_tokens_remaining.to_string_native()
         );
         Token::credit_tokens(
