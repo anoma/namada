@@ -83,4 +83,4 @@ Please see the [contributing page](./CONTRIBUTING.md).
 
 ### Dependencies
 
-The ledger currently requires [CometBFT v0.37.9](https://github.com/cometbft/cometbft/releases/tag/v0.37.9) is installed and available on path. This can be achieved through following [these instructions](https://github.com/cometbft/cometbft/blob/main/docs/guides/install.md)
+The ledger currently requires [CometBFT v0.37.11](https://github.com/cometbft/cometbft/releases/tag/v0.37.11) is installed and available on path. This can be achieved through following [these instructions](https://github.com/cometbft/cometbft/blob/main/docs/guides/install.md)
