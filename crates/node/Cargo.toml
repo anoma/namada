@@ -43,7 +43,6 @@ namada-eth-bridge = [
 
 [dependencies]
 namada_apps_lib = {path = "../apps_lib"}
-namada_io = {path = "../io"}
 namada_migrations = {path = "../migrations", optional = true}
 namada_replay_protection = {path = "../replay_protection"}
 namada_sdk = {path = "../sdk", features = ["wasm-runtime"]}
