@@ -310,7 +310,7 @@ where
                 )
                 .ok_or_else(underflow_err)?
         };
-        // Wite the new balance
+        // Write the new balance
         storage.write(&owner_key, new_owner_balance)?;
     }
     Ok(debited_accounts)
