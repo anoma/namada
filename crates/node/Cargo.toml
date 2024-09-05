@@ -59,6 +59,7 @@ borsh.workspace = true
 borsh-ext.workspace = true
 byte-unit.workspace = true
 bytes = "1.1.0"
+chrono.workspace = true
 clap = { workspace = true, optional = true }
 color-eyre.workspace = true
 data-encoding.workspace = true

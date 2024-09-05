@@ -372,7 +372,9 @@ impl MockNode {
                 next_epoch_height;
             locked.state.in_mem_mut().next_epoch_min_start_time = {
                 #[allow(clippy::disallowed_methods)]
-                DateTimeUtc::now()
+                let time = DateTimeUtc::now();
+                let dur = chrono::Duration::seconds(5);
+                time - dur
             };
             let next_epoch_min_start_height =
                 locked.state.in_mem().next_epoch_min_start_height;
