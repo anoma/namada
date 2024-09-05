@@ -19,6 +19,9 @@ use namada_vm::WasmCacheAccess;
 use crate::protocol;
 use crate::protocol::ShellParams;
 
+// FIXME: at the end try to use dispatch_tx andh change everything needed
+// FIXME: or maybe just change dispatch_inner_tx to handle S isntead of
+// WlState??
 /// Dry run a transaction
 pub fn dry_run_tx<D, H, CA>(
     mut state: namada_sdk::state::TempWlState<'static, D, H>,
@@ -37,7 +40,7 @@ where
     let gas_scale = parameters::get_gas_scale(&state)?;
 
     // Wrapper dry run to allow estimating the gas cost of a transaction
-    let (wrapper_hash, extended_tx_result, tx_gas_meter, gas_used) =
+    let (wrapper_hash, extended_tx_result, tx_gas_meter) =
         match tx.header().tx_type {
             TxType::Wrapper(wrapper) => {
                 let gas_limit = wrapper
@@ -63,14 +66,7 @@ where
                 .into_storage_result()?;
 
                 state.write_log_mut().commit_tx_to_batch();
-                let available_gas = tx_gas_meter.borrow().get_available_gas();
-                let consumed_gas = tx_gas_meter.borrow().get_tx_consumed_gas();
-                (
-                    Some(tx.header_hash()),
-                    tx_result,
-                    TxGasMeter::new(available_gas),
-                    consumed_gas,
-                )
+                (Some(tx.header_hash()), tx_result, tx_gas_meter)
             }
             _ => {
                 // If dry run only the inner tx, use the max block gas as
@@ -82,8 +78,7 @@ where
                 (
                     None,
                     TxResult::default().to_extended_result(None),
-                    TxGasMeter::new(gas_limit),
-                    0.into(),
+                    RefCell::new(TxGasMeter::new(gas_limit)),
                 )
             }
         };
@@ -93,7 +88,6 @@ where
         ref masp_tx_refs,
         ibc_tx_data_refs,
     } = extended_tx_result;
-    let tx_gas_meter = RefCell::new(tx_gas_meter);
     for cmt in
         protocol::get_batch_txs_to_execute(&tx, masp_tx_refs, &ibc_tx_data_refs)
     {
@@ -108,26 +102,37 @@ where
                 &mut tx_wasm_cache,
             ),
         );
-        let is_accepted =
-            matches!(&batched_tx_result, Ok(result) if result.is_accepted());
-        if is_accepted {
-            state.write_log_mut().commit_tx_to_batch();
-        } else {
-            state.write_log_mut().drop_tx();
+        match &batched_tx_result {
+            Err(crate::protocol::Error::GasError(err)) => {
+                // Gas errors interrupt the execution of the batch
+                Err(crate::protocol::Error::GasError(err.to_owned()))
+                    .into_storage_result()?;
+            }
+            res => {
+                let is_accepted =
+                    matches!(res, Ok(result) if result.is_accepted());
+                if is_accepted {
+                    state.write_log_mut().commit_tx_to_batch();
+                } else {
+                    state.write_log_mut().drop_tx();
+                }
+
+                tx_result.insert_inner_tx_result(
+                    wrapper_hash.as_ref(),
+                    either::Right(cmt),
+                    batched_tx_result,
+                );
+            }
         }
-        tx_result.insert_inner_tx_result(
-            wrapper_hash.as_ref(),
-            either::Right(cmt),
-            batched_tx_result,
-        );
     }
-    // Account gas for both batch and wrapper
-    let gas_used = gas_used
-        .checked_add(tx_gas_meter.borrow().get_tx_consumed_gas())
-        .unwrap_or(u64::MAX.into())
-        .get_whole_gas_units(gas_scale);
     let tx_result_string = tx_result.to_result_string();
-    let dry_run_result = DryRunResult(tx_result_string, gas_used);
+    let dry_run_result = DryRunResult(
+        tx_result_string,
+        tx_gas_meter
+            .borrow()
+            .get_tx_consumed_gas()
+            .get_whole_gas_units(gas_scale),
+    );
 
     Ok(EncodedResponseQuery {
         data: dry_run_result.serialize_to_vec(),
