@@ -854,10 +854,9 @@ fn proposal_submission() -> Result<()> {
     assert_matches!(captured.result, Ok(_));
     assert!(captured.contains("Proposal Id: 0"));
     let expected = regex::escape(
-        "passed with 120000.000000 yay votes, 900.000000 nay votes and \
+        "Passed with 120000.000000 yay votes, 900.000000 nay votes and \
          0.000000 abstain votes, total voting power: 120900.000000, threshold \
-         (fraction) of total voting power needed to tally: 80600.000000 \
-         (0.666666666666)",
+         (fraction) of total voting power needed to tally: 48360.000000 (0.4)",
     );
     assert!(captured.contains(&expected));
 
@@ -1209,7 +1208,7 @@ fn pgf_governance_proposal() -> Result<()> {
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, query_proposal));
     assert_matches!(captured.result, Ok(_));
-    assert!(captured.contains("passed"));
+    assert!(captured.contains("Passed"));
 
     // 5. Wait proposals grace and check proposal author funds
     while node.current_epoch().0 < 31 {

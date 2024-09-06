@@ -8,6 +8,7 @@ use namada_core::chain::Epoch;
 use namada_core::collections::HashMap;
 use namada_core::dec::Dec;
 use namada_core::token;
+use namada_core::uint::Uint;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
@@ -111,8 +112,8 @@ pub enum TallyResult {
 impl Display for TallyResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TallyResult::Passed => write!(f, "passed"),
-            TallyResult::Rejected => write!(f, "rejected"),
+            TallyResult::Passed => write!(f, "Passed"),
+            TallyResult::Rejected => write!(f, "Rejected"),
         }
     }
 }
@@ -247,7 +248,7 @@ impl Display for ProposalResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let threshold = match self.tally_type {
             TallyType::TwoFifths => {
-                self.total_voting_power.mul_ceil(Dec::two_thirds())
+                self.total_voting_power.mul_ceil(Dec::two_fifths())
             }
             TallyType::LessOneHalfOverOneThirdNay => Ok(token::Amount::zero()),
             _ => self.total_voting_power.mul_ceil(Dec::one_third()),
@@ -422,10 +423,10 @@ pub fn compute_proposal_result(
 }
 
 /// Calculate the valid voting window for a validator given proposal epoch
-/// details. The valid window is within 2/3 of the voting period.
-/// NOTE: technically the window can be more generous than 2/3 since the end
-/// epoch is a valid epoch for voting too.
-/// Returns `false` if any arithmetic fails.
+/// details. The valid window is approximately within 2/3 of the voting period.
+/// NOTE: technically the window can be more generous than 2/3, especially for
+/// low `voting_end_epoch - voting_start_epoch`, but it will never be less than
+/// 2/3. Returns `false` if any arithmetic fails.
 pub fn is_valid_validator_voting_period(
     current_epoch: Epoch,
     voting_start_epoch: Epoch,
@@ -433,17 +434,55 @@ pub fn is_valid_validator_voting_period(
 ) -> bool {
     if voting_start_epoch >= voting_end_epoch {
         false
+    } else if voting_end_epoch
+        .0
+        .checked_sub(voting_start_epoch.0)
+        .unwrap() // safe unwrap
+        <= 2
+    {
+        current_epoch == voting_start_epoch
     } else {
         (|| {
-            // From e_cur <= e_start + 2/3 * (e_end - e_start)
+            // From e_cur < e_start + 2/3 * (e_end - e_start)
             let is_within_two_thirds = checked!(
-                current_epoch * 3 <= voting_start_epoch + voting_end_epoch * 2
+                current_epoch * 3 < voting_start_epoch + voting_end_epoch * 2
             )
             .ok()?;
 
             Some(current_epoch >= voting_start_epoch && is_within_two_thirds)
         })()
         .unwrap_or_default()
+    }
+}
+
+/// Returns the latest epoch in which a validator can vote, given the voting
+/// start and end epochs. If the pair of start and end epoch is invalid, then
+/// return `None`.
+pub fn last_validator_voting_epoch(
+    voting_start_epoch: Epoch,
+    voting_end_epoch: Epoch,
+) -> Result<Option<Epoch>, arith::Error> {
+    if voting_start_epoch >= voting_end_epoch {
+        return Ok(None);
+    }
+
+    #[allow(clippy::arithmetic_side_effects)]
+    let diff_epochs = voting_end_epoch.0 - voting_start_epoch.0;
+
+    if diff_epochs <= 2 {
+        Ok(Some(voting_start_epoch))
+    } else {
+        let diff_epochs = Uint::from_u64(diff_epochs);
+        // ceiling multiplication by 2/3
+        let valid_period =
+            u64::try_from(diff_epochs.frac_mul_ceil(2.into(), 3.into())?).ok();
+
+        if let Some(period) = valid_period {
+            let latest = checked!(voting_start_epoch + period - 1u64)?;
+            Ok(Some(latest))
+        } else {
+            Ok(None)
+        }
     }
 }
 
@@ -1420,6 +1459,7 @@ mod test {
 
     #[test]
     fn test_validator_voting_period() {
+        // Voting period of 2 epochs
         assert!(!is_valid_validator_voting_period(
             0.into(),
             2.into(),
@@ -1430,7 +1470,7 @@ mod test {
             2.into(),
             4.into()
         ));
-        assert!(is_valid_validator_voting_period(
+        assert!(!is_valid_validator_voting_period(
             3.into(),
             2.into(),
             4.into()
@@ -1440,13 +1480,20 @@ mod test {
             2.into(),
             4.into()
         ));
+        assert_eq!(
+            last_validator_voting_epoch(2.into(), 4.into())
+                .unwrap()
+                .unwrap(),
+            2.into()
+        );
 
+        // Voting period of 3 epochs
         assert!(is_valid_validator_voting_period(
             3.into(),
             2.into(),
             5.into()
         ));
-        assert!(is_valid_validator_voting_period(
+        assert!(!is_valid_validator_voting_period(
             4.into(),
             2.into(),
             5.into()
@@ -1456,5 +1503,27 @@ mod test {
             2.into(),
             5.into()
         ));
+        assert_eq!(
+            last_validator_voting_epoch(2.into(), 5.into())
+                .unwrap()
+                .unwrap(),
+            3.into()
+        );
+
+        for end_epoch in 1u64..=20 {
+            let last = last_validator_voting_epoch(0.into(), end_epoch.into())
+                .unwrap()
+                .unwrap();
+            assert!(is_valid_validator_voting_period(
+                last,
+                0.into(),
+                end_epoch.into()
+            ));
+            assert!(!is_valid_validator_voting_period(
+                last.next(),
+                0.into(),
+                end_epoch.into()
+            ));
+        }
     }
 }

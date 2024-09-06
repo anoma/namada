@@ -450,33 +450,88 @@ pub async fn query_proposal_result<N: Namada>(
         namada_sdk::rpc::query_proposal_by_id(context.client(), proposal_id)
             .await;
 
-    if let (Ok(Some(proposal_result)), Ok(Some(proposal_query))) =
-        (proposal_result, proposal_query)
-    {
-        display_line!(context.io(), "Proposal Id: {} ", proposal_id);
-        if current_epoch >= proposal_query.voting_end_epoch {
-            display_line!(context.io(), "{:4}{}", "", proposal_result);
-        } else {
-            display_line!(
-                context.io(),
-                "{:4}Still voting until epoch {} begins.",
-                "",
-                proposal_query.voting_end_epoch
-            );
-            let res = format!("{}", proposal_result);
-            if let Some(idx) = res.find(' ') {
-                let slice = &res[idx..];
-                display_line!(context.io(), "{:4}Currently{}", "", slice);
+    match (proposal_query, proposal_result) {
+        // The proposal is found in storage and voting has at least begun (a
+        // result is being tallied or is completely tallied)
+        (Ok(Some(proposal_query)), Ok(Some(proposal_result))) => {
+            display_line!(context.io(), "Proposal Id: {} ", proposal_id);
+            if current_epoch >= proposal_query.voting_end_epoch {
+                display_line!(
+                    context.io(),
+                    "{:4}The voting period has ended.",
+                    ""
+                );
+                display_line!(context.io(), "{:4}{}", "", proposal_result);
             } else {
                 display_line!(
                     context.io(),
-                    "{:4}Error parsing the result string",
+                    "{:4}The voting period is underway and will continue \
+                     until epoch {} begins.",
                     "",
+                    proposal_query.voting_end_epoch,
                 );
+                if let Ok(Some(last_epoch)) =
+                    namada_sdk::governance::utils::last_validator_voting_epoch(
+                        proposal_query.voting_start_epoch,
+                        proposal_query.voting_end_epoch,
+                    )
+                {
+                    display_line!(
+                        context.io(),
+                        "{:4}NOTE: Validators can vote only until the end of \
+                         epoch {}.",
+                        "",
+                        last_epoch
+                    )
+                }
+                let res = format!("{}", proposal_result);
+                if let Some(idx) = res.find(' ') {
+                    let slice = &res[idx..];
+                    display_line!(context.io(), "{:4}Currently{}", "", slice);
+                } else {
+                    display_line!(
+                        context.io(),
+                        "{:4}Error parsing the result string",
+                        "",
+                    );
+                }
             }
         }
-    } else {
-        edisplay_line!(context.io(), "Proposal {} not found.", proposal_id);
+        // The proposal is found in storage but no result is found (voting has
+        // not begun)
+        (Ok(Some(proposal_query)), Ok(None)) => {
+            display_line!(context.io(), "Proposal Id: {} ", proposal_id);
+            display_line!(
+                context.io(),
+                "{:4}The voting period has not begun yet.",
+                ""
+            );
+            display_line!(
+                context.io(),
+                "{:4}Start epoch: {}. End epoch: {}",
+                "",
+                proposal_query.voting_start_epoch,
+                proposal_query.voting_end_epoch
+            );
+            if let Ok(Some(last_epoch)) =
+                namada_sdk::governance::utils::last_validator_voting_epoch(
+                    proposal_query.voting_start_epoch,
+                    proposal_query.voting_end_epoch,
+                )
+            {
+                display_line!(
+                    context.io(),
+                    "{:4}NOTE: Validators will be able to vote only until the \
+                     end of epoch {}.",
+                    "",
+                    last_epoch
+                )
+            }
+        }
+        // The proposal could not be found
+        _ => {
+            edisplay_line!(context.io(), "Proposal {} not found.", proposal_id);
+        }
     }
 }
 

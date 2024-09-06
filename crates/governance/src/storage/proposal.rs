@@ -96,7 +96,13 @@ impl TryFrom<DefaultProposal> for InitProposalData {
             content: Hash::default(),
             author: value.proposal.author,
             r#type: match value.data {
-                Some(_) => ProposalType::DefaultWithWasm(Hash::default()),
+                Some(bytes) => {
+                    if bytes.is_empty() {
+                        ProposalType::Default
+                    } else {
+                        ProposalType::DefaultWithWasm(Hash::default())
+                    }
+                }
                 None => ProposalType::Default,
             },
             voting_start_epoch: value.proposal.voting_start_epoch,
