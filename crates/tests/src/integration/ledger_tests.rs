@@ -1,5 +1,7 @@
 use std::collections::BTreeSet;
+use std::fs;
 use std::num::NonZeroU64;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use assert_matches::assert_matches;
@@ -37,7 +39,7 @@ use crate::e2e::setup::constants::{
 };
 use crate::e2e::setup::{apply_use_device, ensure_hot_key};
 use crate::integration::helpers::{
-    find_address, prepare_steward_commission_update_data,
+    find_address, find_keypair, prepare_steward_commission_update_data,
 };
 use crate::integration::setup;
 use crate::strings::{
@@ -1671,6 +1673,107 @@ fn change_validator_metadata() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn offline_sign() -> Result<()> {
+    // This address doesn't matter for tests. But an argument is required.
+    let validator_one_rpc = "http://127.0.0.1:26567";
+    // 1. start the ledger node
+    let (node, _services) = setup::setup()?;
+
+    let output_folder = tempfile::tempdir().unwrap();
+
+    // 2. Dump a transfer tx
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            apply_use_device(vec![
+                "transparent-transfer",
+                "--source",
+                BERTHA,
+                "--target",
+                ALBERT,
+                "--token",
+                NAM,
+                "--amount",
+                "10.1",
+                "--gas-price",
+                "0.00090",
+                "--signing-keys",
+                BERTHA_KEY,
+                "--node",
+                &validator_one_rpc,
+                "--dump-tx",
+                "--output-folder-path",
+                &output_folder.path().to_str().unwrap(),
+            ]),
+        )
+    });
+    assert!(captured.result.is_ok());
+
+    let offline_tx = find_file_with_ext(output_folder.path(), "tx")
+        .unwrap()
+        .expect("Offline tx should be found.")
+        .to_path_buf()
+        .display()
+        .to_string();
+
+    let bertha_address = find_address(&node, BERTHA).unwrap().to_string();
+    let bertha_sk = find_keypair(&node, BERTHA_KEY).unwrap().to_string();
+
+    // 2. Dump a transfer tx
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            apply_use_device(vec![
+                "utils",
+                "sign-offline",
+                "--data-path",
+                &offline_tx,
+                "--owner",
+                &bertha_address,
+                "--secret-keys",
+                &bertha_sk,
+                "--output-folder-path",
+                &output_folder.path().to_str().unwrap(),
+            ]),
+        )
+    });
+    assert!(captured.result.is_ok());
+
+    let offline_sig = find_file_with_ext(output_folder.path(), "sig")
+        .unwrap()
+        .expect("Offline signature should be found.")
+        .to_path_buf()
+        .display()
+        .to_string();
+
+    // 3. Offline sign a transfer tx
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "tx",
+                "--owner",
+                BERTHA_KEY,
+                "--tx-path",
+                &offline_tx,
+                "--signatures",
+                &offline_sig,
+                "--node",
+                &validator_one_rpc,
+                "--gas-payer",
+                BERTHA_KEY,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+
+    Ok(())
+}
+
 // Test that fee payment is enforced and aligned with process proposal. The test
 // generates a tx that subtract funds from the fee payer of a following tx. Test
 // that wrappers (and fee payments) are evaluated before the inner transactions.
@@ -2182,4 +2285,25 @@ fn make_migration_json() -> (Hash, tempfile::NamedTempFile) {
     let hash = Hash::sha256(json.as_bytes());
     std::fs::write(file.path(), json).expect("Test failed");
     (hash, file)
+}
+
+pub fn find_file_with_ext(
+    dir: &Path,
+    extension: &str,
+) -> Result<Option<PathBuf>> {
+    // Read the directory entries
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        if path.is_file() {
+            if let Some(file_extension) = path.extension() {
+                if file_extension == extension {
+                    return Ok(Some(path));
+                }
+            }
+        }
+    }
+
+    Ok(None)
 }
