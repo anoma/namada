@@ -222,7 +222,13 @@ pub trait IbcCommonContext: IbcStorageContext {
                     "Decoding the client update time failed: ID {client_id}",
                 ),
             })?
-            .into();
+            .try_into()
+            .map_err(|_| ClientError::Other {
+                description: format!(
+                    "Conversion of the client update time failed: ID \
+                     {client_id}",
+                ),
+            })?;
 
         let key = storage::client_update_height_key(client_id);
         let value = self.storage().read_bytes(&key)?.ok_or({
@@ -251,11 +257,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         host_height: Height,
     ) -> Result<()> {
         let key = storage::client_update_timestamp_key(client_id);
-        let time = host_timestamp.into_tm_time().ok_or(ClientError::Other {
-            description: format!(
-                "The client timestamp is invalid: ID {client_id}",
-            ),
-        })?;
+        let time = host_timestamp.into_tm_time();
         self.storage_mut()
             .write_bytes(&key, time.encode_vec())
             .map_err(ContextError::from)?;
@@ -301,12 +303,18 @@ pub trait IbcCommonContext: IbcStorageContext {
                     description: "No host block header".to_string(),
                 })
             })?;
-        let time = TmTime::try_from(header.time).map_err(|_| {
-            ContextError::ClientError(ClientError::Other {
-                description: "Converting to Tendermint time failed".to_string(),
-            })
-        })?;
-        Ok(time.into())
+        let time = TmTime::try_from(header.time)
+            .map_err(|_| {
+                ContextError::ClientError(ClientError::Other {
+                    description: "Converting to Tendermint time failed"
+                        .to_string(),
+                })
+            })?
+            .try_into()
+            .map_err(|_| ClientError::Other {
+                description: "Converting to timestamp failed".to_string(),
+            })?;
+        Ok(time)
     }
 
     /// Get the consensus state of this chain
