@@ -21,7 +21,9 @@ pub mod token;
 
 use core::slice;
 use std::marker::PhantomData;
+use std::str::FromStr;
 
+use chain::ChainId;
 use namada_account::AccountPublicKeysMap;
 pub use namada_core::address::Address;
 pub use namada_core::borsh::{
@@ -156,15 +158,17 @@ impl StorageRead for Ctx {
         Ok(HostEnvResult::is_success(found))
     }
 
-    fn get_chain_id(&self) -> Result<String> {
+    fn get_chain_id(&self) -> Result<ChainId> {
         let result = Vec::with_capacity(CHAIN_ID_LENGTH);
         unsafe {
             namada_tx_get_chain_id(result.as_ptr() as _);
         }
         let slice =
             unsafe { slice::from_raw_parts(result.as_ptr(), CHAIN_ID_LENGTH) };
-        Ok(String::from_utf8(slice.to_vec())
-            .expect("Cannot convert the ID string"))
+        Ok(ChainId::from_str(
+            std::str::from_utf8(slice).expect("Chain ID must be valid utf8"),
+        )
+        .expect("Chain ID must be valid"))
     }
 
     fn get_block_height(&self) -> Result<BlockHeight> {

@@ -322,7 +322,7 @@ where
         let unbonding_period_secs =
             checked!(pipeline_len * epoch_duration.min_duration.0)?;
         Ok(ValidationParams {
-            chain_id: IbcChainId::from_str(&chain_id)
+            chain_id: IbcChainId::from_str(chain_id.as_str())
                 .map_err(ActionError::ChainId)?,
             proof_specs: proof_specs
                 .try_into()

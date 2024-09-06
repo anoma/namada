@@ -207,11 +207,11 @@ where
     }
 
     /// Get the chain ID as a raw string
-    pub fn get_chain_id(&self) -> (String, u64) {
+    pub fn get_chain_id(&self) -> (ChainId, u64) {
         // Adding consts that cannot overflow
         #[allow(clippy::arithmetic_side_effects)]
         (
-            self.chain_id.to_string(),
+            self.chain_id.clone(),
             CHAIN_ID_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
         )
     }
