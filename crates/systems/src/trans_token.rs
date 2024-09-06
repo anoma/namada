@@ -5,6 +5,8 @@ use std::borrow::Cow;
 use namada_core::address::Address;
 pub use namada_core::token::*;
 use namada_core::{storage, token};
+pub use namada_events::extend::UserAccount;
+pub use namada_events::EventLevel;
 pub use namada_storage::Result;
 
 /// Abstract token keys interface
@@ -94,6 +96,17 @@ pub trait Write<S>: Read<S> {
 
 /// Abstract token events interface
 pub trait Events<S>: Read<S> {
+    /// Emit transfer token event
+    fn emit_transfer_event(
+        storage: &mut S,
+        descriptor: Cow<'static, str>,
+        level: EventLevel,
+        token: &Address,
+        amount: token::Amount,
+        source: UserAccount,
+        target: UserAccount,
+    ) -> Result<()>;
+
     /// Emit mint token event
     fn emit_mint_event(
         storage: &mut S,

@@ -1,7 +1,7 @@
 //! The ledger's protocol
 use std::cell::RefCell;
 use std::collections::BTreeSet;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
 use either::Either;
 use eyre::{eyre, WrapErr};
@@ -142,6 +142,12 @@ pub struct DispatchError {
     /// The extended tx result produced. It could be produced even in case of
     /// an error
     pub tx_result: Option<ExtendedTxResult<Error>>,
+}
+
+impl Display for DispatchError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.error)
+    }
 }
 
 impl From<Error> for DispatchError {
