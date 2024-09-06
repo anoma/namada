@@ -2616,6 +2616,7 @@ pub async fn build_ibc_transfer(
         masp_transfer_data,
         masp_fee_data,
         !(args.tx.dry_run || args.tx.dry_run_wrapper),
+        args.tx.expiration.to_datetime(),
     )
     .await?;
     let shielded_tx_epoch = shielded_parts.as_ref().map(|trans| trans.0.epoch);
@@ -3080,6 +3081,7 @@ pub async fn build_shielded_transfer<N: Namada>(
         transfer_data,
         masp_fee_data,
         !(args.tx.dry_run || args.tx.dry_run_wrapper),
+        args.tx.expiration.to_datetime(),
     )
     .await?
     .expect("Shielded transfer must have shielded parts");
@@ -3245,6 +3247,7 @@ pub async fn build_shielding_transfer<N: Namada>(
         transfer_data,
         None,
         !(args.tx.dry_run || args.tx.dry_run_wrapper),
+        args.tx.expiration.to_datetime(),
     )
     .await?
     .expect("Shielding transfer must have shielded parts");
@@ -3366,6 +3369,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
         transfer_data,
         masp_fee_data,
         !(args.tx.dry_run || args.tx.dry_run_wrapper),
+        args.tx.expiration.to_datetime(),
     )
     .await?
     .expect("Shielding transfer must have shielded parts");
@@ -3418,13 +3422,13 @@ async fn construct_shielded_parts<N: Namada>(
     data: Vec<MaspTransferData>,
     fee_data: Option<MaspFeeData>,
     update_ctx: bool,
+    expiration: Option<DateTimeUtc>,
 ) -> Result<Option<(ShieldedTransfer, HashSet<AssetData>)>> {
     // Precompute asset types to increase chances of success in decoding
     let token_map = context.wallet().await.get_addresses();
     let tokens = token_map.values().collect();
 
     let stx_result = {
-        let expiration = context.tx_builder().expiration.to_datetime();
         let mut shielded = context.shielded_mut().await;
         _ = shielded
             .precompute_asset_types(context.client(), tokens)
@@ -3789,7 +3793,6 @@ pub async fn gen_ibc_shielding_transfer<N: Namada>(
         amount: validated_amount,
     };
     let shielded_transfer = {
-        let expiration = context.tx_builder().expiration.to_datetime();
         let mut shielded = context.shielded_mut().await;
         shielded
             .gen_shielded_transfer(
@@ -3797,7 +3800,7 @@ pub async fn gen_ibc_shielding_transfer<N: Namada>(
                 vec![masp_transfer_data],
                 // Fees are paid from the transparent balance of the relayer
                 None,
-                expiration,
+                args.expiration.to_datetime(),
                 true,
             )
             .await

@@ -6090,7 +6090,7 @@ mod test_finalize_block {
         assert_eq!(tx_results.len(), 2);
 
         // all txs should have succeeded
-        assert!(tx_results.are_results_ok());
+        assert!(tx_results.are_results_successfull());
     }
 
     #[test]

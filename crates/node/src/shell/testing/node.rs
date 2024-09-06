@@ -38,7 +38,7 @@ use namada_sdk::tendermint::abci::types::VoteInfo;
 use namada_sdk::tendermint_proto::google::protobuf::Timestamp;
 use namada_sdk::time::DateTimeUtc;
 use namada_sdk::tx::data::ResultCode;
-use namada_sdk::tx::event::Code as CodeAttr;
+use namada_sdk::tx::event::{Batch as BatchAttr, Code as CodeAttr};
 use namada_sdk::{ethereum_structs, governance};
 use regex::Regex;
 use tokio::sync::mpsc;
@@ -247,15 +247,25 @@ pub enum NodeResults {
     Failed(ResultCode),
 }
 
-// TODO: wrap `MockNode` in a single `Arc`
-#[derive(Clone)]
-pub struct MockNode {
-    pub shell: Arc<Mutex<Shell<storage::PersistentDB, Sha256Hasher>>>,
-    pub test_dir: Arc<SalvageableTestDir>,
-    pub results: Arc<Mutex<Vec<NodeResults>>>,
-    pub blocks: Arc<Mutex<HashMap<BlockHeight, block::Response>>>,
-    pub services: Arc<MockServices>,
+pub struct InnerMockNode {
+    pub shell: Mutex<Shell<storage::PersistentDB, Sha256Hasher>>,
+    pub test_dir: SalvageableTestDir,
+    pub tx_result_codes: Mutex<Vec<NodeResults>>,
+    pub tx_results: Mutex<Vec<namada_sdk::tx::data::TxResult<String>>>,
+    pub blocks: Mutex<HashMap<BlockHeight, block::Response>>,
+    pub services: MockServices,
     pub auto_drive_services: bool,
+}
+
+#[derive(Clone)]
+pub struct MockNode(pub Arc<InnerMockNode>);
+
+impl Deref for MockNode {
+    type Target = InnerMockNode;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 pub struct SalvageableTestDir {
@@ -505,9 +515,9 @@ impl MockNode {
         };
 
         let resp = locked.finalize_block(req).expect("Test failed");
-        let mut error_codes = resp
+        let mut result_codes = resp
             .events
-            .into_iter()
+            .iter()
             .map(|e| {
                 let code = e
                     .read_attribute_opt::<CodeAttr>()
@@ -520,7 +530,16 @@ impl MockNode {
                 }
             })
             .collect::<Vec<_>>();
-        self.results.lock().unwrap().append(&mut error_codes);
+        let mut tx_results = resp
+            .events
+            .into_iter()
+            .filter_map(|e| e.read_attribute_opt::<BatchAttr<'_>>().unwrap())
+            .collect::<Vec<_>>();
+        self.tx_result_codes
+            .lock()
+            .unwrap()
+            .append(&mut result_codes);
+        self.tx_results.lock().unwrap().append(&mut tx_results);
         locked.commit();
 
         // Cache the block
@@ -599,7 +618,7 @@ impl MockNode {
             })
             .collect();
         if result != tendermint::abci::response::ProcessProposal::Accept {
-            self.results.lock().unwrap().append(&mut errors);
+            self.tx_result_codes.lock().unwrap().append(&mut errors);
             return;
         }
 
@@ -643,7 +662,7 @@ impl MockNode {
         let resp = locked.finalize_block(req).unwrap();
         let mut error_codes = resp
             .events
-            .into_iter()
+            .iter()
             .map(|e| {
                 let code = e
                     .read_attribute_opt::<CodeAttr>()
@@ -656,7 +675,16 @@ impl MockNode {
                 }
             })
             .collect::<Vec<_>>();
-        self.results.lock().unwrap().append(&mut error_codes);
+        let mut txs_results = resp
+            .events
+            .into_iter()
+            .filter_map(|e| e.read_attribute_opt::<BatchAttr<'_>>().unwrap())
+            .collect::<Vec<_>>();
+        self.tx_result_codes
+            .lock()
+            .unwrap()
+            .append(&mut error_codes);
+        self.tx_results.lock().unwrap().append(&mut txs_results);
         self.blocks.lock().unwrap().insert(
             height,
             block::Response {
@@ -702,35 +730,46 @@ impl MockNode {
 
     /// Check that applying a tx succeeded.
     pub fn success(&self) -> bool {
-        self.results
+        self.tx_result_codes
             .lock()
             .unwrap()
             .iter()
             .all(|r| *r == NodeResults::Ok)
+            && self
+                .tx_results
+                .lock()
+                .unwrap()
+                .iter()
+                .all(|inner_results| inner_results.are_results_successfull())
     }
 
     /// Return a tx result if the tx failed in mempool
     pub fn is_broadcast_err(&self) -> Option<TxResult> {
-        self.results.lock().unwrap().iter().find_map(|r| match r {
-            NodeResults::Ok | NodeResults::Failed(_) => None,
-            NodeResults::Rejected(tx_result) => Some(tx_result.clone()),
-        })
+        self.tx_result_codes
+            .lock()
+            .unwrap()
+            .iter()
+            .find_map(|r| match r {
+                NodeResults::Ok | NodeResults::Failed(_) => None,
+                NodeResults::Rejected(tx_result) => Some(tx_result.clone()),
+            })
     }
 
     pub fn clear_results(&self) {
-        self.results.lock().unwrap().clear();
+        self.tx_result_codes.lock().unwrap().clear();
+        self.tx_results.lock().unwrap().clear();
     }
 
     pub fn assert_success(&self) {
         if !self.success() {
             panic!(
                 "Assert failed: The node did not execute \
-                 successfully:\nErrors:\n    {:?}",
-                self.results.lock().unwrap()
+                 successfully:\nErrors:\n    {:?},\nTxs results:\n    {:?}",
+                self.tx_result_codes.lock().unwrap(),
+                self.tx_results.lock().unwrap()
             );
-        } else {
-            self.clear_results();
         }
+        self.clear_results();
     }
 }
 

@@ -910,14 +910,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         expiration: Option<DateTimeUtc>,
         update_ctx: bool,
     ) -> Result<Option<ShieldedTransfer>, TransferErr> {
-        let last_block_height = Self::query_block(context.client())
-            .await
-            .map_err(|e| TransferErr::General(e.to_string()))?
-            .unwrap_or(1);
-        let max_block_time =
-            Self::query_max_block_time_estimate(context.client())
-                .await
-                .map_err(|e| TransferErr::General(e.to_string()))?;
         // Determine epoch in which to submit potential shielded transaction
         let epoch = Self::query_masp_epoch(context.client())
             .await
@@ -949,13 +941,24 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
 
         // TODO: if the user requested the default expiration, there might be a
         // small discrepancy between the datetime we calculate here and the one
-        // we set for the transaction. This should be small enough to not cause
-        // any issue, in case refactor this function to request the precise
-        // datetime to the caller
+        // we set for the transaction (since we compute two different
+        // DateTimeUtc::now()). This should be small enough to not cause
+        // any issue, in case refactor the build process to compute a single
+        // expiration at the beginning and use it both here and for the
+        // transaction
         let expiration_height: u32 = match expiration {
             Some(expiration) => {
                 // Try to match a DateTime expiration with a plausible
                 // corresponding block height
+                let last_block_height = Self::query_block(context.client())
+                    .await
+                    .map_err(|e| TransferErr::General(e.to_string()))?
+                    .unwrap_or(1);
+                let max_block_time =
+                    Self::query_max_block_time_estimate(context.client())
+                        .await
+                        .map_err(|e| TransferErr::General(e.to_string()))?;
+
                 #[allow(clippy::disallowed_methods)]
                 let current_time = DateTimeUtc::now();
                 let delta_time =
