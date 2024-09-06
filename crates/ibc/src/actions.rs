@@ -13,6 +13,7 @@ use ibc::apps::transfer::types::PrefixedCoin;
 use ibc::core::channel::types::timeout::TimeoutHeight;
 use namada_core::address::Address;
 use namada_core::borsh::{BorshSerialize, BorshSerializeExt};
+use namada_core::chain::ChainId;
 use namada_core::ibc::PGFIbcTarget;
 use namada_core::tendermint::Time as TmTime;
 use namada_core::token::Amount;
@@ -65,7 +66,7 @@ where
         self.state.iter_next(iter)
     }
 
-    fn get_chain_id(&self) -> Result<String> {
+    fn get_chain_id(&self) -> Result<ChainId> {
         self.state.get_chain_id()
     }
 

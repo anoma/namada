@@ -23,7 +23,9 @@ pub mod ibc {
 use core::slice;
 pub use std::collections::BTreeSet;
 use std::marker::PhantomData;
+use std::str::FromStr;
 
+use chain::ChainId;
 pub use namada_core::address::Address;
 pub use namada_core::borsh::{
     BorshDeserialize, BorshSerialize, BorshSerializeExt,
@@ -296,7 +298,7 @@ impl<'view> VpEnv<'view> for Ctx {
         Ok(read_from_buffer(read_result, namada_vp_result_buffer))
     }
 
-    fn get_chain_id(&self) -> Result<String, Error> {
+    fn get_chain_id(&self) -> Result<ChainId, Error> {
         // Both `CtxPreStorageRead` and `CtxPostStorageRead` have the same impl
         get_chain_id()
     }
@@ -447,7 +449,7 @@ impl StorageRead for CtxPreStorageRead<'_> {
         ))
     }
 
-    fn get_chain_id(&self) -> Result<String, Error> {
+    fn get_chain_id(&self) -> Result<ChainId, Error> {
         get_chain_id()
     }
 
@@ -517,7 +519,7 @@ impl StorageRead for CtxPostStorageRead<'_> {
         ))
     }
 
-    fn get_chain_id(&self) -> Result<String, Error> {
+    fn get_chain_id(&self) -> Result<ChainId, Error> {
         get_chain_id()
     }
 
@@ -569,17 +571,17 @@ fn iter_prefix_post_impl(
     Ok(KeyValIterator(iter_id, PhantomData))
 }
 
-fn get_chain_id() -> Result<String, Error> {
+fn get_chain_id() -> Result<ChainId, Error> {
     let result = Vec::with_capacity(CHAIN_ID_LENGTH);
     unsafe {
         namada_vp_get_chain_id(result.as_ptr() as _);
     }
     let slice =
         unsafe { slice::from_raw_parts(result.as_ptr(), CHAIN_ID_LENGTH) };
-    Ok(
-        String::from_utf8(slice.to_vec())
-            .expect("Cannot convert the ID string"),
+    Ok(ChainId::from_str(
+        std::str::from_utf8(slice).expect("Chain ID must be valid utf8"),
     )
+    .expect("Chain ID must be valid"))
 }
 
 fn get_block_height() -> Result<BlockHeight, Error> {

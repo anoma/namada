@@ -22,6 +22,7 @@ pub mod collection_validation;
 
 use namada_core::address::Address;
 use namada_core::borsh::BorshDeserialize;
+use namada_core::chain::ChainId;
 pub use namada_core::chain::{BlockHeader, BlockHeight, Epoch, Epochs};
 use namada_core::hash::Hash;
 pub use namada_core::storage::{Key, TxIndex};
@@ -67,7 +68,7 @@ where
     ) -> Result<Option<Vec<u8>>, namada_storage::Error>;
 
     /// Getting the chain ID.
-    fn get_chain_id(&self) -> Result<String, namada_storage::Error>;
+    fn get_chain_id(&self) -> Result<ChainId, namada_storage::Error>;
 
     /// Getting the block height. The height is that of the block to which the
     /// current transaction is being applied.
