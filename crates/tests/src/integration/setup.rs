@@ -19,8 +19,8 @@ use namada_apps_lib::wallet::pre_genesis;
 use namada_core::chain::ChainIdPrefix;
 use namada_core::collections::HashMap;
 use namada_node::shell::testing::node::{
-    mock_services, MockNode, MockServicesCfg, MockServicesController,
-    MockServicesPackage, SalvageableTestDir,
+    mock_services, InnerMockNode, MockNode, MockServicesCfg,
+    MockServicesController, MockServicesPackage, SalvageableTestDir,
 };
 use namada_node::shell::testing::utils::TestDir;
 use namada_node::shell::Shell;
@@ -202,8 +202,8 @@ fn create_node(
         shell_handlers,
         controller,
     } = mock_services(services_cfg);
-    let node = MockNode {
-        shell: Arc::new(Mutex::new(Shell::new(
+    let node = MockNode(Arc::new(InnerMockNode {
+        shell: Mutex::new(Shell::new(
             config::Ledger::new(
                 global_args.base_dir,
                 chain_id.clone(),
@@ -218,16 +218,17 @@ fn create_node(
             None,
             50 * 1024 * 1024, // 50 kiB
             50 * 1024 * 1024, // 50 kiB
-        ))),
-        test_dir: Arc::new(SalvageableTestDir {
+        )),
+        test_dir: SalvageableTestDir {
             keep_temp,
             test_dir: ManuallyDrop::new(test_dir),
-        }),
-        services: Arc::new(services),
-        results: Arc::new(Mutex::new(vec![])),
-        blocks: Arc::new(Mutex::new(HashMap::new())),
+        },
+        services,
+        tx_result_codes: Mutex::new(vec![]),
+        tx_results: Mutex::new(vec![]),
+        blocks: Mutex::new(HashMap::new()),
         auto_drive_services,
-    };
+    }));
     let init_req =
         namada_apps_lib::tendermint::abci::request::InitChain {
             time: Timestamp {

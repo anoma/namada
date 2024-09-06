@@ -1910,24 +1910,29 @@ fn enforce_fee_payment() -> Result<()> {
 
     node.clear_results();
     node.submit_txs(txs);
-    {
-        let results = node.results.lock().unwrap();
-        // If empty than failed in process proposal
-        assert!(!results.is_empty());
+    // If empty than failed in process proposal
+    let codes = node.tx_result_codes.lock().unwrap();
+    assert!(!codes.is_empty());
 
-        for result in results.iter() {
-            assert!(matches!(result, NodeResults::Ok));
-        }
+    for code in codes.iter() {
+        assert!(matches!(code, NodeResults::Ok));
     }
-    // Finalize the next block to execute the txs
-    node.clear_results();
-    node.finalize_and_commit(None);
-    {
-        let results = node.results.lock().unwrap();
-        for result in results.iter() {
-            assert!(matches!(result, NodeResults::Ok));
-        }
-    }
+
+    let results = node.tx_results.lock().unwrap();
+    // We submitted two batches
+    assert_eq!(results.len(), 2);
+    let first_result = &results[0];
+    let second_result = &results[1];
+
+    // The batches should contain a single inner tx each
+    assert_eq!(first_result.0.len(), 1);
+    assert_eq!(second_result.0.len(), 1);
+
+    // First transaction pay fees but then fails on the token transfer because
+    // of a lack of funds
+    assert!(first_result.are_any_err());
+    // Second transaction is correctly applied
+    assert!(second_result.are_results_successfull());
 
     // Assert balances
     let captured = CapturedOutput::of(|| {
@@ -1946,7 +1951,7 @@ fn enforce_fee_payment() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    // This is the result of the two fee payemnts and the successful transfer to
+    // This is the result of the two fee payments and the successful transfer to
     // Christel
     assert!(captured.contains("nam: 1799950"));
 
@@ -1968,7 +1973,7 @@ fn enforce_fee_payment() -> Result<()> {
     assert!(captured.result.is_ok());
     // Bertha must not receive anything because the transaction fails. This is
     // because we evaluate fee payments before the inner transactions, so by the
-    // time we execute the transfer, Albert doesn't have enough funds anynmore
+    // time we execute the transfer, Albert doesn't have enough funds anymore
     assert!(captured.contains("nam: 2000000"));
 
     let captured = CapturedOutput::of(|| {

@@ -363,31 +363,33 @@ impl<T> TxResult<T> {
         self.0.iter()
     }
 
-    /// Return the length of the collecction of inner tx results.
+    /// Return the length of the collection of inner tx results.
     #[inline]
     pub fn len(&self) -> usize {
         self.0.len()
     }
 
-    /// Check if the collecction of inner tx results is empty.
+    /// Check if the collection of inner tx results is empty.
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
-    /// Check if the collecction of inner tx results contains no errors.
+    /// Check if all the inner txs in the collection have been successfully
+    /// applied.
     #[inline]
-    pub fn are_results_ok(&self) -> bool {
-        self.iter().all(|(_, res)| res.is_ok())
+    pub fn are_results_successfull(&self) -> bool {
+        self.iter().all(|(_, res)| matches!(res, Ok(batched_result) if batched_result.is_accepted())
+        )
     }
 
-    /// Check if the collecction of inner tx results contains any ok results.
+    /// Check if the collection of inner tx results contains any ok results.
     #[inline]
     pub fn are_any_ok(&self) -> bool {
         self.iter().any(|(_, res)| res.is_ok())
     }
 
-    /// Check if the collecction of inner tx results contains any errors.
+    /// Check if the collection of inner tx results contains any errors.
     #[inline]
     pub fn are_any_err(&self) -> bool {
         self.iter().any(|(_, res)| res.is_err())

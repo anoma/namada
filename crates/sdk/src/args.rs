@@ -2892,6 +2892,8 @@ pub struct GenIbcShieldingTransfer<C: NamadaTypes = SdkTypes> {
     pub token: String,
     /// Transferred token amount
     pub amount: InputAmount,
+    /// The optional expiration of the masp shielding transaction
+    pub expiration: TxExpiration,
     /// Port ID via which the token is received
     pub port_id: PortId,
     /// Channel ID via which the token is received
