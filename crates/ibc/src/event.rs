@@ -4,7 +4,9 @@ use std::cmp::Ordering;
 use std::str::FromStr;
 
 use ibc::core::channel::types::packet::Packet;
-use ibc::core::channel::types::timeout::TimeoutHeight as IbcTimeoutHeight;
+use ibc::core::channel::types::timeout::{
+    TimeoutHeight as IbcTimeoutHeight, TimeoutTimestamp as IbcTimeoutTimestamp,
+};
 use ibc::core::client::types::events::{
     CLIENT_ID_ATTRIBUTE_KEY, CONSENSUS_HEIGHTS_ATTRIBUTE_KEY,
 };
@@ -14,7 +16,7 @@ use ibc::core::host::types::identifiers::{
     ChannelId as IbcChannelId, ClientId as IbcClientId,
     ConnectionId as IbcConnectionId, PortId, Sequence,
 };
-use ibc::primitives::Timestamp;
+use ibc::primitives::{Timestamp, TimestampError};
 use namada_core::borsh::*;
 use namada_core::collections::HashMap;
 use namada_core::tendermint::abci::Event as AbciEvent;
@@ -366,11 +368,39 @@ impl EventAttributeEntry<'static> for PacketTimeoutHeight {
     }
 }
 
+/// Represents an IBC timeout timestamp.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TimeoutTimestamp(pub IbcTimeoutTimestamp);
+
+impl FromStr for TimeoutTimestamp {
+    type Err = TimestampError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let timestamp = Timestamp::from_str(s)?;
+        if timestamp.nanoseconds() == 0 {
+            Ok(TimeoutTimestamp(IbcTimeoutTimestamp::Never))
+        } else {
+            Ok(TimeoutTimestamp(IbcTimeoutTimestamp::At(timestamp)))
+        }
+    }
+}
+
+impl std::fmt::Display for TimeoutTimestamp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.0 {
+            IbcTimeoutTimestamp::Never => {
+                write!(f, "{}", Timestamp::from_nanoseconds(0))
+            }
+            IbcTimeoutTimestamp::At(h) => write!(f, "{h}"),
+        }
+    }
+}
+
 /// Extend an [`Event`] with packet timeout timestamp data.
-pub struct PacketTimeoutTimestamp(pub Timestamp);
+pub struct PacketTimeoutTimestamp(pub TimeoutTimestamp);
 
 impl EventAttributeEntry<'static> for PacketTimeoutTimestamp {
-    type Value = Timestamp;
+    type Value = TimeoutTimestamp;
     type ValueOwned = Self::Value;
 
     const KEY: &'static str = "packet_timeout_timestamp";
@@ -424,7 +454,7 @@ pub fn packet_from_event_attributes<A: AttributesMap>(
         )?
         .0,
         timeout_timestamp_on_b:
-            PacketTimeoutTimestamp::read_from_event_attributes(attributes)?,
+            PacketTimeoutTimestamp::read_from_event_attributes(attributes)?.0,
     })
 }
 

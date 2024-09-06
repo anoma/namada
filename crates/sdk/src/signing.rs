@@ -1317,12 +1317,7 @@ pub async fn to_ledger_vector(
                     ),
                     format!(
                         "Timeout timestamp : {}",
-                        transfer
-                            .message
-                            .timeout_timestamp_on_b
-                            .into_tm_time()
-                            .map_or("no timestamp".to_string(), |time| time
-                                .to_rfc3339())
+                        transfer.message.timeout_timestamp_on_b,
                     ),
                 ]);
                 tv.output_expert.extend(vec![
@@ -1351,12 +1346,7 @@ pub async fn to_ledger_vector(
                     ),
                     format!(
                         "Timeout timestamp : {}",
-                        transfer
-                            .message
-                            .timeout_timestamp_on_b
-                            .into_tm_time()
-                            .map_or("no timestamp".to_string(), |time| time
-                                .to_rfc3339())
+                        transfer.message.timeout_timestamp_on_b,
                     ),
                 ]);
                 if let Some(transfer) = transfer.transfer {
@@ -1449,12 +1439,7 @@ pub async fn to_ledger_vector(
                     ),
                     format!(
                         "Timeout timestamp : {}",
-                        transfer
-                            .message
-                            .timeout_timestamp_on_b
-                            .into_tm_time()
-                            .map_or("no timestamp".to_string(), |time| time
-                                .to_rfc3339())
+                        transfer.message.timeout_timestamp_on_b,
                     ),
                 ]);
                 tv.output_expert.extend(vec![
@@ -1522,12 +1507,7 @@ pub async fn to_ledger_vector(
                     ),
                     format!(
                         "Timeout timestamp : {}",
-                        transfer
-                            .message
-                            .timeout_timestamp_on_b
-                            .into_tm_time()
-                            .map_or("no timestamp".to_string(), |time| time
-                                .to_rfc3339())
+                        transfer.message.timeout_timestamp_on_b,
                     ),
                 ]);
                 if let Some(transfer) = transfer.transfer {
