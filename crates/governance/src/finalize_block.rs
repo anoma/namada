@@ -1,11 +1,10 @@
 //! Governance logic applied on an end of a block.
 
 use std::collections::BTreeSet;
-use std::str::FromStr;
 
 use borsh::BorshDeserialize;
 use namada_core::address::Address;
-use namada_core::chain::{ChainId, Epoch};
+use namada_core::chain::Epoch;
 use namada_core::collections::HashMap;
 use namada_core::encode;
 use namada_core::ibc::PGFIbcTarget;
@@ -374,7 +373,7 @@ where
     state.write(&pending_execution_key, ())?;
 
     let mut tx = Tx::from_type(TxType::Raw);
-    tx.header.chain_id = ChainId::from_str(&state.get_chain_id()?).unwrap();
+    tx.header.chain_id = state.get_chain_id()?;
     tx.set_data(Data::new(encode(&id)));
     tx.set_code(Code::new(proposal_code, None));
 
