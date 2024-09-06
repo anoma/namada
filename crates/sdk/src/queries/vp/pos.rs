@@ -317,7 +317,7 @@ where
     let state = namada_proof_of_stake::storage::read_validator_state::<
         _,
         governance::Store<_>,
-    >(ctx.state, &validator, &epoch)?;
+    >(ctx.state, &validator, epoch)?;
     Ok((state, epoch))
 }
 
