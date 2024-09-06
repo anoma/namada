@@ -32,8 +32,8 @@ use thiserror::Error;
 
 use crate::data::protocol::ProtocolTx;
 use crate::data::{hash_tx, Fee, GasLimit, TxType, WrapperTx};
-use crate::proto;
 use crate::sign::SignatureIndex;
+use crate::{hex_data_serde, hex_salt_serde, proto, SALT_LENGTH};
 
 /// Represents an error in signature verification
 #[allow(missing_docs)]
@@ -232,8 +232,10 @@ pub fn verify_standalone_sig<T, S: Signable<T>>(
 )]
 pub struct Data {
     /// Salt with additional random data (usually a timestamp)
-    pub salt: [u8; 8],
+    #[serde(with = "hex_salt_serde")]
+    pub salt: [u8; SALT_LENGTH],
     /// Data bytes
+    #[serde(with = "hex_data_serde")]
     pub data: Vec<u8>,
 }
 
@@ -250,7 +252,7 @@ impl Data {
 
         Self {
             salt: {
-                let mut buf = [0; 8];
+                let mut buf = [0; SALT_LENGTH];
                 OsRng.fill_bytes(&mut buf);
                 buf
             },
@@ -349,7 +351,8 @@ impl Commitment {
 )]
 pub struct Code {
     /// Additional random data
-    pub salt: [u8; 8],
+    #[serde(with = "hex_salt_serde")]
+    pub salt: [u8; SALT_LENGTH],
     /// Actual transaction code
     pub code: Commitment,
     /// The tag for the transaction code
@@ -369,7 +372,7 @@ impl Code {
 
         Self {
             salt: {
-                let mut buf = [0; 8];
+                let mut buf = [0; SALT_LENGTH];
                 OsRng.fill_bytes(&mut buf);
                 buf
             },
@@ -387,7 +390,7 @@ impl Code {
 
         Self {
             salt: {
-                let mut buf = [0; 8];
+                let mut buf = [0; SALT_LENGTH];
                 OsRng.fill_bytes(&mut buf);
                 buf
             },
@@ -1188,14 +1191,10 @@ impl Tx {
         HEXUPPER.encode(&tx_bytes)
     }
 
-    /// Deserialize from hex encoding
+    /// Deserialize tx from json
     pub fn deserialize(data: &[u8]) -> Result<Self, DecodeError> {
-        if let Ok(hex) = serde_json::from_slice::<String>(data) {
-            match HEXUPPER.decode(hex.as_bytes()) {
-                Ok(bytes) => Tx::try_from_slice(&bytes)
-                    .map_err(DecodeError::InvalidEncoding),
-                Err(e) => Err(DecodeError::InvalidHex(e)),
-            }
+        if let Ok(tx) = serde_json::from_slice::<Tx>(data) {
+            Ok(tx)
         } else {
             Err(DecodeError::InvalidJsonString)
         }
