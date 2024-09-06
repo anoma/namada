@@ -3714,7 +3714,12 @@ pub async fn build_custom(
 
     let mut tx = if let Some(serialized_tx) = serialized_tx {
         Tx::deserialize(serialized_tx.as_ref()).map_err(|_| {
-            Error::Other("Invalid tx deserialization.".to_string())
+            Error::Other(
+                "Invalid tx deserialization. Please make sure you are passing \
+                 a file in .tx format, typically produced from using the \
+                 `--dump-tx` flag."
+                    .to_string(),
+            )
         })?
     } else {
         let code_path = code_path
