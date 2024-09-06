@@ -742,7 +742,7 @@ pub async fn get_all_validators<C: namada_io::Client + Sync>(
 }
 
 /// Get all consensus validators in the given epoch
-pub async fn get_all_consensus_validators<C: crate::queries::Client + Sync>(
+pub async fn get_all_consensus_validators<C: namada_io::Client + Sync>(
     client: &C,
     epoch: Epoch,
 ) -> Result<BTreeSet<WeightedValidator>, error::Error> {
