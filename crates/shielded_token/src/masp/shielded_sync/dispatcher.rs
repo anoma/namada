@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use eyre::{eyre, WrapErr};
 use futures::future::{select, Either};
 use futures::task::AtomicWaker;
 use masp_primitives::merkle_tree::{CommitmentTree, IncrementalWitness};
@@ -16,24 +17,22 @@ use masp_primitives::transaction::Transaction;
 use namada_core::chain::BlockHeight;
 use namada_core::collections::HashMap;
 use namada_core::control_flow::time::{Duration, LinearBackoff, Sleep};
+use namada_core::control_flow::ShutdownSignal;
 use namada_core::hints;
+use namada_core::task_env::TaskSpawner;
+use namada_io::{MaybeSend, MaybeSync, ProgressBar};
 use namada_tx::IndexedTx;
+use namada_wallet::{DatedKeypair, DatedSpendingKey};
 
 use super::utils::{IndexedNoteEntry, MaspClient};
-use crate::control_flow::ShutdownSignal;
-use crate::error::Error;
-use crate::io::ProgressBar;
 use crate::masp::shielded_sync::trial_decrypt;
 use crate::masp::utils::{
     blocks_left_to_fetch, DecryptedData, Fetched, RetryStrategy, TrialDecrypted,
 };
 use crate::masp::{
-    to_viewing_key, MaspExtendedSpendingKey, NoteIndex, ShieldedContext,
-    ShieldedUtils, WitnessMap,
+    to_viewing_key, MaspExtendedSpendingKey, NoteIndex, ShieldedUtils,
+    ShieldedWallet, WitnessMap,
 };
-use crate::task_env::TaskSpawner;
-use crate::wallet::{DatedKeypair, DatedSpendingKey};
-use crate::{MaybeSend, MaybeSync};
 
 struct AsyncCounterInner {
     waker: AtomicWaker,
@@ -147,7 +146,7 @@ impl Drop for PanicFlag {
 }
 
 struct TaskError<C> {
-    error: Error,
+    error: eyre::Error,
     context: C,
 }
 
@@ -218,7 +217,7 @@ pub struct DispatcherCache {
 enum DispatcherState {
     Normal,
     Interrupted,
-    Errored(Error),
+    Errored(eyre::Error),
 }
 
 #[derive(Default, Debug)]
@@ -247,7 +246,7 @@ where
     client: M,
     state: DispatcherState,
     tasks: DispatcherTasks<S>,
-    ctx: ShieldedContext<U>,
+    ctx: ShieldedWallet<U>,
     config: Config<T, I>,
     cache: DispatcherCache,
     /// We are syncing up to this height
@@ -269,7 +268,7 @@ where
     U: ShieldedUtils + MaybeSend + MaybeSync,
 {
     let ctx = {
-        let mut ctx = ShieldedContext {
+        let mut ctx = ShieldedWallet {
             utils: utils.clone(),
             ..Default::default()
         };
@@ -321,7 +320,7 @@ where
         last_query_height: Option<BlockHeight>,
         sks: &[DatedSpendingKey],
         fvks: &[DatedKeypair<ViewingKey>],
-    ) -> Result<Option<ShieldedContext<U>>, Error> {
+    ) -> Result<Option<ShieldedWallet<U>>, eyre::Error> {
         let initial_state = self
             .perform_initial_setup(
                 start_query_height,
@@ -353,9 +352,7 @@ where
                 self.apply_cache_to_shielded_context(&initial_state)?;
                 self.finish_progress_bars();
                 self.ctx.save().await.map_err(|err| {
-                    Error::Other(format!(
-                        "Failed to save the shielded context: {err}"
-                    ))
+                    eyre!("Failed to save the shielded context: {err}")
                 })?;
                 self.save_cache().await;
                 Ok(Some(self.ctx))
@@ -390,7 +387,7 @@ where
             last_query_height,
             ..
         }: &InitialState,
-    ) -> Result<(), Error> {
+    ) -> Result<(), eyre::Error> {
         if let Some((_, cmt)) = self.cache.commitment_tree.take() {
             self.ctx.tree = cmt;
         }
@@ -457,13 +454,13 @@ where
         last_query_height: Option<BlockHeight>,
         sks: &[DatedSpendingKey],
         fvks: &[DatedKeypair<ViewingKey>],
-    ) -> Result<InitialState, Error> {
+    ) -> Result<InitialState, eyre::Error> {
         if start_query_height > last_query_height {
-            return Err(Error::Other(format!(
+            return Err(eyre!(
                 "The start height {start_query_height:?} cannot be higher \
                  than the ending height {last_query_height:?} in the shielded \
                  sync"
-            )));
+            ));
         }
 
         for vk in sks
@@ -502,22 +499,25 @@ where
             if self.config.wait_for_last_query_height
                 && shutdown_signal.borrow_mut().received()
             {
-                return ControlFlow::Break(Err(Error::Other(
-                    "Interrupted while waiting for last query height"
-                        .to_string(),
+                return ControlFlow::Break(Err(eyre!(
+                    "Interrupted while waiting for last query height",
                 )));
             }
 
             // Query for the last produced block height
-            let last_block_height = match self.client.last_block_height().await
+            let last_block_height = match self
+                .client
+                .last_block_height()
+                .await
+                .wrap_err("Failed to fetch last  block height")
             {
                 Ok(Some(last_block_height)) => last_block_height,
                 Ok(None) => {
                     return if self.config.wait_for_last_query_height {
                         ControlFlow::Continue(())
                     } else {
-                        ControlFlow::Break(Err(Error::Other(
-                            "No block has been committed yet".to_string(),
+                        ControlFlow::Break(Err(eyre!(
+                            "No block has been committed yet",
                         )))
                     };
                 }
@@ -568,8 +568,8 @@ where
 
     fn check_exit_conditions(&mut self) {
         if hints::unlikely(self.tasks.panic_flag.panicked()) {
-            self.state = DispatcherState::Errored(Error::Other(
-                "A worker thread panicked during the shielded sync".into(),
+            self.state = DispatcherState::Errored(eyre!(
+                "A worker thread panicked during the shielded sync".to_string(),
             ));
         }
         if matches!(
@@ -580,7 +580,7 @@ where
         }
         if self.config.shutdown_signal.received() {
             self.config.fetched_tracker.message(
-                "Interrupt received, shutting down shielded sync".into(),
+                "Interrupt received, shutting down shielded sync".to_string(),
             );
             self.state = DispatcherState::Interrupted;
             self.interrupt_flag.set();
@@ -692,7 +692,7 @@ where
     }
 
     /// Check if we can launch a new fetch task retry.
-    fn can_launch_new_fetch_retry(&mut self, error: Error) -> bool {
+    fn can_launch_new_fetch_retry(&mut self, error: eyre::Error) -> bool {
         if matches!(
             self.state,
             DispatcherState::Errored(_) | DispatcherState::Interrupted
@@ -717,12 +717,14 @@ where
         let client = self.client.clone();
         self.spawn_async(Box::pin(async move {
             Message::UpdateWitnessMap(
-                client.fetch_witness_map(height).await.map_err(|error| {
-                    TaskError {
+                client
+                    .fetch_witness_map(height)
+                    .await
+                    .wrap_err("Failed to fetch witness map")
+                    .map_err(|error| TaskError {
                         error,
                         context: height,
-                    }
-                }),
+                    }),
             )
         }));
     }
@@ -734,12 +736,14 @@ where
         let client = self.client.clone();
         self.spawn_async(Box::pin(async move {
             Message::UpdateCommitmentTree(
-                client.fetch_commitment_tree(height).await.map_err(|error| {
-                    TaskError {
+                client
+                    .fetch_commitment_tree(height)
+                    .await
+                    .wrap_err("Failed to fetch commitment tree")
+                    .map_err(|error| TaskError {
                         error,
                         context: height,
-                    }
-                }),
+                    }),
             )
         }));
     }
@@ -751,12 +755,14 @@ where
         let client = self.client.clone();
         self.spawn_async(Box::pin(async move {
             Message::UpdateNotesMap(
-                client.fetch_note_index(height).await.map_err(|error| {
-                    TaskError {
+                client
+                    .fetch_note_index(height)
+                    .await
+                    .wrap_err("Failed to fetch note index")
+                    .map_err(|error| TaskError {
                         error,
                         context: height,
-                    }
-                }),
+                    }),
             )
         }));
     }
@@ -772,8 +778,9 @@ where
                     client
                         .fetch_shielded_transfers(from, to)
                         .await
+                        .wrap_err("Failed to fetch shielded transfers")
                         .map_err(|error| TaskError {
-                            error,
+                            error: eyre!("{error}"),
                             context: [from, to],
                         })
                         .map(|batch| (from, to, batch)),
@@ -863,21 +870,21 @@ mod dispatcher_tests {
 
     use futures::join;
     use namada_core::chain::BlockHeight;
+    use namada_core::control_flow::testing::shutdown_signal;
     use namada_core::storage::TxIndex;
+    use namada_core::task_env::TaskEnvironment;
+    use namada_io::DevNullProgressBar;
     use namada_tx::IndexedTx;
+    use namada_wallet::StoredKeypair;
     use tempfile::tempdir;
 
     use super::*;
-    use crate::control_flow::testing::shutdown_signal;
-    use crate::io::DevNullProgressBar;
     use crate::masp::fs::FsShieldedUtils;
     use crate::masp::test_utils::{
         arbitrary_masp_tx, arbitrary_masp_tx_with_fee_unshielding,
         arbitrary_vk, dated_arbitrary_vk, TestingMaspClient,
     };
     use crate::masp::{MaspLocalTaskEnv, ShieldedSyncConfig};
-    use crate::task_env::TaskEnvironment;
-    use crate::wallet::StoredKeypair;
 
     #[tokio::test]
     async fn test_applying_cache_drains_decrypted_data() {
@@ -1015,7 +1022,7 @@ mod dispatcher_tests {
                     dispatcher.spawn_async(Box::pin(async move {
                         barrier.wait().await;
                         Message::UpdateWitnessMap(Err(TaskError {
-                            error: Error::Other("Test".to_string()),
+                            error: eyre!("Test"),
                             context: BlockHeight::first(),
                         }))
                     }));
@@ -1074,12 +1081,10 @@ mod dispatcher_tests {
                     fut,
                 };
 
-                let Err(Error::Other(ref msg)) = res else {
-                    panic!("Test failed")
-                };
+                let Err(msg) = res else { panic!("Test failed") };
 
                 assert_eq!(
-                    msg,
+                    msg.to_string(),
                     "A worker thread panicked during the shielded sync",
                 );
             })
@@ -1168,9 +1173,9 @@ mod dispatcher_tests {
 
                 let result = dispatcher.run(None, None, &[], &[vk]).await;
                 match result {
-                    Err(Error::Other(msg)) => assert_eq!(
-                        msg.as_str(),
-                        "After retrying, could not fetch all MASP txs."
+                    Err(msg) => assert_eq!(
+                        msg.to_string(),
+                        "Failed to fetch shielded transfers"
                     ),
                     other => {
                         panic!("{:?} does not match Error::Other(_)", other)
@@ -1283,9 +1288,9 @@ mod dispatcher_tests {
                 masp_tx_sender.send(None).expect("Test failed");
                 let result = dispatcher.run(None, None, &[], &[vk]).await;
                 match result {
-                    Err(Error::Other(msg)) => assert_eq!(
-                        msg.as_str(),
-                        "After retrying, could not fetch all MASP txs."
+                    Err(msg) => assert_eq!(
+                        msg.to_string(),
+                        "Failed to fetch shielded transfers"
                     ),
                     other => {
                         panic!("{:?} does not match Error::Other(_)", other)

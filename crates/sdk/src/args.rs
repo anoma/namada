@@ -19,6 +19,7 @@ use namada_governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal,
 };
 use namada_ibc::IbcShieldingData;
+use namada_token::masp::utils::RetryStrategy;
 use namada_tx::data::GasLimit;
 use namada_tx::Memo;
 use serde::{Deserialize, Serialize};
@@ -26,7 +27,6 @@ use zeroize::Zeroizing;
 
 use crate::eth_bridge::bridge_pool;
 use crate::ibc::core::host::types::identifiers::{ChannelId, PortId};
-use crate::masp::utils::RetryStrategy;
 use crate::signing::SigningTxData;
 use crate::wallet::{DatedSpendingKey, DatedViewingKey};
 use crate::{rpc, tx, Namada};

@@ -37,15 +37,14 @@ use namada_apps_lib::ibc::primitives::ToProto;
 use namada_apps_lib::ibc::{
     IbcActions, NftTransferModule, TransferModule, COMMITMENT_PREFIX,
 };
-use namada_apps_lib::masp::{
-    partial_deauthorize, preload_verifying_keys, PVKs, TransferSource,
-    TransferTarget,
-};
 use namada_apps_lib::masp_primitives::merkle_tree::CommitmentTree;
 use namada_apps_lib::masp_primitives::transaction::Transaction;
 use namada_apps_lib::masp_proofs::sapling::SaplingVerificationContextInner;
 use namada_apps_lib::proof_of_stake::KeySeg;
 use namada_apps_lib::state::{Epoch, StorageRead, StorageWrite, TxIndex};
+use namada_apps_lib::token::masp::{
+    partial_deauthorize, preload_verifying_keys, PVKs,
+};
 use namada_apps_lib::token::{Amount, Transfer};
 use namada_apps_lib::tx::{BatchedTx, Code, Section, Tx};
 use namada_apps_lib::validation::{
@@ -53,7 +52,10 @@ use namada_apps_lib::validation::{
     IbcVpContext, MaspVp, MultitokenVp, ParametersVp, PgfVp, PosVp,
 };
 use namada_apps_lib::wallet::defaults;
-use namada_apps_lib::{governance, parameters, proof_of_stake, storage, token};
+use namada_apps_lib::{
+    governance, parameters, proof_of_stake, storage, token, TransferSource,
+    TransferTarget,
+};
 use namada_node::bench_utils::{
     generate_foreign_key_tx, BenchShell, BenchShieldedCtx,
     ALBERT_PAYMENT_ADDRESS, ALBERT_SPENDING_KEY, BERTHA_PAYMENT_ADDRESS,

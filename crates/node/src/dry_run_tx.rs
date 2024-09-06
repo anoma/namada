@@ -141,8 +141,9 @@ mod test {
     use namada_sdk::chain::BlockHeight;
     use namada_sdk::events::log::EventLog;
     use namada_sdk::hash::Hash;
+    use namada_sdk::io::Client;
     use namada_sdk::queries::{
-        Client, EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
+        EncodedResponseQuery, RequestCtx, RequestQuery, Router, RPC,
     };
     use namada_sdk::state::testing::TestState;
     use namada_sdk::state::StorageWrite;

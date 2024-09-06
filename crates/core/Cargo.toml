@@ -37,6 +37,7 @@ arbitrary = [
   "indexmap/arbitrary",
   "masp_primitives/arbitrary",
 ]
+task_env = ["tokio"]
 
 [dependencies]
 namada_macros = {path = "../macros"}
@@ -86,8 +87,11 @@ uint = "0.9.5"
 zeroize.workspace = true
 wasmtimer = { workspace = true, optional = true }
 
+
+
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 tokio = { workspace = true, optional = true, features = ["full"] }
+rayon.workspace = true
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 tokio = { workspace = true, optional = true, default-features = false, features = ["sync"] }

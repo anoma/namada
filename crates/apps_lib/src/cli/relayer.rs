@@ -14,7 +14,7 @@ impl CliApi {
     where
         C: CliClient,
     {
-        use namada_sdk::display_line;
+        use namada_sdk::io::display_line;
 
         display_line!(&io, "The Namada Ethereum bridge is disabled");
         Ok(())

@@ -3220,6 +3220,7 @@ pub mod args {
     use std::str::FromStr;
 
     use data_encoding::HEXUPPER;
+    use namada_core::masp::{MaspEpoch, PaymentAddress};
     use namada_sdk::address::{Address, EstablishedAddress};
     pub use namada_sdk::args::*;
     use namada_sdk::chain::{ChainId, ChainIdPrefix};
@@ -3231,7 +3232,6 @@ pub mod args {
     use namada_sdk::keccak::KeccakHash;
     use namada_sdk::key::*;
     use namada_sdk::masp::utils::RetryStrategy;
-    use namada_sdk::masp::{MaspEpoch, PaymentAddress};
     use namada_sdk::storage::{self, BlockHeight, Epoch};
     use namada_sdk::time::DateTimeUtc;
     use namada_sdk::token::NATIVE_MAX_DECIMAL_PLACES;

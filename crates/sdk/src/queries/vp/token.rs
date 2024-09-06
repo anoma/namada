@@ -55,10 +55,11 @@ pub mod client_only_methods {
     use borsh::BorshDeserialize;
     use namada_core::address::Address;
     use namada_core::token;
+    use namada_io::Client;
     use namada_token::storage_key::{balance_key, masp_total_rewards};
 
     use super::Token;
-    use crate::queries::{Client, RPC};
+    use crate::queries::RPC;
 
     impl Token {
         /// Get the balance of the given `token` belonging to the given `owner`.

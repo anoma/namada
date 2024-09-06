@@ -80,6 +80,8 @@ pub mod masp;
 pub mod parameters;
 pub mod storage;
 pub mod string_encoding;
+#[cfg(any(test, feature = "task_env"))]
+pub mod task_env;
 pub mod time;
 pub mod token;
 pub mod uint;

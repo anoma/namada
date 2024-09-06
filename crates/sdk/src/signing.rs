@@ -24,6 +24,7 @@ use namada_governance::storage::proposal::{
 };
 use namada_governance::storage::vote::ProposalVote;
 use namada_ibc::{MsgNftTransfer, MsgTransfer};
+use namada_io::*;
 use namada_parameters::storage as parameter_storage;
 use namada_token as token;
 use namada_token::storage_key::balance_key;
@@ -39,7 +40,6 @@ use crate::args::SdkTypes;
 use crate::error::{EncodingError, Error, TxSubmitError};
 use crate::eth_bridge_pool::PendingTransfer;
 use crate::governance::storage::proposal::{AddRemove, PGFAction, PGFTarget};
-use crate::io::*;
 use crate::rpc::validate_amount;
 use crate::token::Account;
 use crate::tx::{
@@ -55,7 +55,7 @@ use crate::tx::{
 };
 pub use crate::wallet::store::AddressVpType;
 use crate::wallet::{Wallet, WalletIo};
-use crate::{args, display_line, rpc, MaybeSend, Namada};
+use crate::{args, rpc, Namada};
 
 /// A structure holding the signing data to craft a transaction
 #[derive(Clone, PartialEq)]
