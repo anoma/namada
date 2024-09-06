@@ -70,7 +70,7 @@ ark-bls12-381 = {version = "0.3"}
 ark-serialize = {version = "0.3"}
 ark-std = "0.3.0"
 # branch = "bat/feat/validate-root"
-arse-merkle-tree = {package = "sparse-merkle-tree", git = "https://github.com/heliaxdev/sparse-merkle-tree", rev = "bab8cb96872db22cc9a139b2d3dfc4e00521d097", default-features = false, features = ["std", "borsh"]}
+arse-merkle-tree = {package = "sparse-merkle-tree", git = "https://github.com/heliaxdev/sparse-merkle-tree", rev = "a93c55ccd47840ee0967eee237e47d9245478594", default-features = false, features = ["std", "borsh"]}
 assert_cmd = "1.0.7"
 assert_matches = "1.5.0"
 async-trait = {version = "0.1.51"}
@@ -117,10 +117,11 @@ flume = "0.11.0"
 fs_extra = "1.2.0"
 futures = "0.3"
 git2 = { version = "0.18.1", default-features = false }
-ibc = { git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "0c3b3c0ab598e1e627089d06941efe0e39b61cd7", features = ["serde"] }
-ibc-derive = { git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "0c3b3c0ab598e1e627089d06941efe0e39b61cd7" }
-ibc-testkit = { git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "0c3b3c0ab598e1e627089d06941efe0e39b61cd7", default-features = false }
-ics23 = "0.11.0"
+# branch yuji/derive-arbitrary
+ibc = { git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "38bd2a32f35117d4d9165a3c68c64ccd87ad56dd", features = ["serde"] }
+ibc-derive = { git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "38bd2a32f35117d4d9165a3c68c64ccd87ad56dd" }
+ibc-testkit = { git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "38bd2a32f35117d4d9165a3c68c64ccd87ad56dd", default-features = false }
+ics23 = "0.12.0"
 index-set = { git = "https://github.com/heliaxdev/index-set", tag = "v0.8.1", features = ["serialize-borsh", "serialize-serde"] }
 indexmap = { git = "https://github.com/heliaxdev/indexmap", tag = "2.2.4-heliax-1", features = ["borsh-schema", "serde"] }
 init-once = "0.6.0"
@@ -156,8 +157,8 @@ pretty_assertions = "1.4.0"
 primitive-types = "0.12.1"
 proptest = "1.4.0"
 proptest-state-machine = "0.3.0"
-prost = "0.12.0"
-prost-types = "0.12.0"
+prost = "0.13.1"
+prost-types = "0.13.1"
 rand = {version = "0.8", default-features = false}
 rand_core = {version = "0.6", default-features = false}
 rayon = "1.5.3"
@@ -181,11 +182,11 @@ smooth-operator = {git = "https://github.com/heliaxdev/smooth-operator", tag = "
 sysinfo = {version = "0.27.8", default-features = false}
 tar = "0.4.37"
 tempfile = {version = "3.2.0"}
-tendermint = {version = "0.37.0", features = ["secp256k1"]}
-tendermint-config = "0.37.0"
-tendermint-light-client = "0.37.0"
-tendermint-proto = "0.37.0"
-tendermint-rpc = {version = "0.37.0", default-features = false}
+tendermint = {version = "0.38.0", features = ["secp256k1"]}
+tendermint-config = "0.38.0"
+tendermint-light-client = "0.38.0"
+tendermint-proto = "0.38.0"
+tendermint-rpc = {version = "0.38.0", default-features = false}
 test-log = {version = "0.2.14", default-features = false, features = ["trace"]}
 tiny-bip39 = {git = "https://github.com/anoma/tiny-bip39.git", rev = "bf0f6d8713589b83af7a917366ec31f5275c0e57"}
 tiny-hderive = {git = "https://github.com/heliaxdev/tiny-hderive.git", rev = "173ae03abed0cd25d88a5a13efac00af96b75b87"}
@@ -197,7 +198,8 @@ toml = "0.5.8"
 tonic = "0.8.3"
 tonic-build = "0.11.0"
 tower = "0.4"
-tower-abci = "0.15.0"
+# branch yuji/tendermint-0.38
+tower-abci = { git = "https://github.com/heliaxdev/tower-abci", rev = "30d2a8cdf8321b599ae13ba74f4c78217a64ce58" }
 tracing = "0.1.30"
 tracing-appender = "0.2.2"
 tracing-log = "0.2.0"
