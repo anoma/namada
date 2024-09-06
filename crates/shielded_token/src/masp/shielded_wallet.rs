@@ -20,7 +20,7 @@ use masp_primitives::sapling::{
 use masp_primitives::transaction::builder::Builder;
 use masp_primitives::transaction::components::sapling::builder::RngBuildParams;
 use masp_primitives::transaction::components::{
-    I128Sum, TxOut, U64Sum, ValueSum,
+    I128Sum, TxOut, U128Sum, U64Sum, ValueSum,
 };
 use masp_primitives::transaction::fees::fixed::FeeRule;
 use masp_primitives::transaction::{builder, Transaction};
@@ -1502,16 +1502,10 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             (asset_types, amount)
         };
 
-        let mut fees = I128Sum::zero();
-        // Convert the shortfall into a I128Sum
+        let mut fees = U128Sum::zero();
+        // Convert the shortfall into a U128Sum
         for (asset_type, val) in asset_types.iter().zip(raw_amount) {
-            fees += I128Sum::from_nonnegative(*asset_type, val.into())
-                .map_err(|()| {
-                    TransferErr::General(
-                        "Fee amount is expected expected to be non-negative"
-                            .to_string(),
-                    )
-                })?;
+            fees += U128Sum::from_pair(*asset_type, val.into());
         }
 
         // 1. Try to use the change to pay fees
@@ -1526,22 +1520,24 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 {
                     // Get the minimum between the available change and
                     // the due fee
-                    let output_amt = I128Sum::from_nonnegative(
+                    let output_amt = U128Sum::from_pair(
                         asset_type.to_owned(),
                         *change.min(fee_amt),
-                    )
-                    .map_err(|()| {
-                        TransferErr::General(
-                            "Fee amount is expected to be non-negative"
-                                .to_string(),
-                        )
-                    })?;
+                    );
                     let denominated_output_amt = self
                         .convert_masp_amount_to_namada(
                             context.client(),
                             // Safe to unwrap
                             denoms.get(token).unwrap().to_owned(),
-                            output_amt.clone(),
+                            I128Sum::try_from_sum(output_amt.clone()).map_err(
+                                |e| {
+                                    TransferErr::General(format!(
+                                        "Fee amount is expected to be \
+                                         non-negative: {}",
+                                        e
+                                    ))
+                                },
+                            )?,
                         )
                         .await
                         .map_err(|e| TransferErr::General(e.to_string()))?;
@@ -1575,16 +1571,8 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         // Decrease the changes by the amounts used for fee payment
         for (sp, temp_changes) in temp_changes.iter() {
             for (asset_type, temp_change) in temp_changes.components() {
-                let output_amt = I128Sum::from_nonnegative(
-                    asset_type.to_owned(),
-                    *temp_change,
-                )
-                .map_err(|()| {
-                    TransferErr::General(
-                        "Fee amount is expected expected to be non-negative"
-                            .to_string(),
-                    )
-                })?;
+                let output_amt =
+                    U128Sum::from_pair(asset_type.to_owned(), *temp_change);
 
                 // Entry is guaranteed to be in the map
                 changes.entry(*sp).and_modify(|amt| *amt -= &output_amt);
@@ -1604,7 +1592,8 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 for (asset_type, fee_amt) in fees.clone().components() {
                     let input_amt = I128Sum::from_nonnegative(
                         asset_type.to_owned(),
-                        *fee_amt,
+                        i128::try_from(*fee_amt)
+                            .map_err(|e| TransferErr::General(e.to_string()))?,
                     )
                     .map_err(|()| {
                         TransferErr::General(
@@ -1669,7 +1658,12 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                     .await
                     .map_err(|e| TransferErr::General(e.to_string()))?;
 
-                    fees -= &output_amt;
+                    fees -= U128Sum::try_from_sum(output_amt).map_err(|e| {
+                        TransferErr::General(format!(
+                            "Output amount is expected to be non-negative: {}",
+                            e
+                        ))
+                    })?;
                 }
 
                 if fees.is_zero() {
@@ -1679,8 +1673,15 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         }
 
         if !fees.is_zero() {
+            let signed_fees = I128Sum::try_from_sum(fees).map_err(|e| {
+                TransferErr::General(format!(
+                    "Fee amount cannot be casted to a signed integer: {}",
+                    e
+                ))
+            })?;
+
             return Result::Err(TransferErr::Build {
-                error: builder::Error::InsufficientFunds(fees),
+                error: builder::Error::InsufficientFunds(signed_fees),
                 data: Some(MaspDataLog {
                     source: None,
                     token: token.to_owned(),
@@ -1806,9 +1807,11 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         let value_sum = self.decode_sum(client, amt).await;
 
         for ((_, decoded), val) in value_sum.components() {
-            let positioned_amt =
-                Amount::from_masp_denominated_i128(*val, decoded.position)
-                    .unwrap_or_default();
+            let positioned_amt = Amount::from_masp_denominated_u128(
+                *val as u128,
+                decoded.position,
+            )
+            .unwrap_or_default();
             amount = checked!(amount + positioned_amt)?;
         }
 

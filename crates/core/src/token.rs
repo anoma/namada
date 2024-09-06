@@ -232,16 +232,14 @@ impl Amount {
         Self { raw: Uint(raw) }
     }
 
-    /// Given a i128 and [`MaspDigitPos`], construct the corresponding
+    /// Given a u128 and [`MaspDigitPos`], construct the corresponding
     /// amount.
-    pub fn from_masp_denominated_i128(
-        val: i128,
+    pub fn from_masp_denominated_u128(
+        val: u128,
         denom: MaspDigitPos,
     ) -> Option<Self> {
-        #[allow(clippy::cast_sign_loss)]
         #[allow(clippy::cast_possible_truncation)]
         let lo = val as u64;
-        #[allow(clippy::cast_sign_loss)]
         let hi = (val >> 64) as u64;
         let lo_pos = denom as usize;
         let hi_pos = lo_pos.checked_add(1)?;

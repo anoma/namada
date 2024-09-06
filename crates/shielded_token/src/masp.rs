@@ -23,7 +23,7 @@ use masp_primitives::sapling::keys::FullViewingKey;
 use masp_primitives::sapling::{Diversifier, Node, ViewingKey};
 use masp_primitives::transaction::builder::{self, *};
 use masp_primitives::transaction::components::sapling::builder::SaplingMetadata;
-use masp_primitives::transaction::components::{I128Sum, ValueSum};
+use masp_primitives::transaction::components::{I128Sum, U128Sum, ValueSum};
 use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::{
     ExtendedFullViewingKey, ExtendedSpendingKey as MaspExtendedSpendingKey,
@@ -131,7 +131,7 @@ pub struct MaspTxReorderedData {
 /// Data about the unspent amounts for any given shielded source coming from the
 /// spent notes in their posses that have been added to the builder. Can be used
 /// to either pay fees or to return a change
-pub type Changes = HashMap<namada_core::masp::ExtendedSpendingKey, I128Sum>;
+pub type Changes = HashMap<namada_core::masp::ExtendedSpendingKey, U128Sum>;
 
 /// Shielded pool data for a token
 #[allow(missing_docs)]
@@ -253,7 +253,7 @@ pub fn is_amount_required(
     dest: I128Sum,
     normed_delta: I128Sum,
     opt_delta: Option<I128Sum>,
-) -> Option<I128Sum> {
+) -> Option<U128Sum> {
     let mut changes = None;
     let gap = dest.clone() - src;
 
@@ -262,7 +262,7 @@ pub fn is_amount_required(
             let signed_change_amt =
                 checked!(normed_delta[asset_type] - *value).unwrap_or_default();
             let unsigned_change_amt = if signed_change_amt > 0 {
-                signed_change_amt
+                signed_change_amt as u128
             } else {
                 // Even if there's no change we still need to set the return
                 // value of this function to be Some so that the caller sees
@@ -270,11 +270,8 @@ pub fn is_amount_required(
                 0
             };
 
-            let change_amt = I128Sum::from_nonnegative(
-                asset_type.to_owned(),
-                unsigned_change_amt,
-            )
-            .expect("Change is guaranteed to be non-negative");
+            let change_amt =
+                U128Sum::from_pair(asset_type.to_owned(), unsigned_change_amt);
             changes = changes
                 .map(|prev| prev + change_amt.clone())
                 .or(Some(change_amt));
@@ -289,11 +286,10 @@ pub fn is_amount_required(
         changes = changes.map(|mut chngs| {
             for (delta_asset_type, delta_amt) in delta.components() {
                 if !dest.asset_types().contains(delta_asset_type) {
-                    let rmng = I128Sum::from_nonnegative(
+                    let rmng = U128Sum::from_pair(
                         delta_asset_type.to_owned(),
-                        *delta_amt,
-                    )
-                    .expect("Change is guaranteed to be non-negative");
+                        *delta_amt as u128,
+                    );
                     chngs += rmng;
                 }
             }
