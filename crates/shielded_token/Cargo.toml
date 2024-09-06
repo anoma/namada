@@ -14,36 +14,67 @@ version.workspace = true
 
 [features]
 default = []
+std = ["download-params", "multicore"]
+async-send = ["namada_io/async-send"]
+mainnet = []
+migrations = ["namada_migrations", "linkme"]
 multicore = ["dep:rayon"]
 testing = [
   "multicore",
   "namada_core/testing",
   "masp_primitives/test-dependencies",
+  "proptest",
+  "std"
 ]
 download-params = ["masp_proofs/download-params"]
+masp = [
+  "namada_io",
+  "namada_wallet",
+  "namada_core/control_flow",
+  "namada_core/task_env",
+  "flume",
+]
 
 [dependencies]
 namada_account = { path = "../account" }
 namada_controller = { path = "../controller" }
-namada_core = { path = "../core" }
+namada_core = { path = "../core"}
+namada_events = {path = "../events" }
 namada_gas = { path = "../gas" }
+namada_io = { path = "../io", optional = true }
+namada_macros = {path = "../macros" }
+namada_migrations = { path = "../migrations", optional = true }
 namada_state = { path = "../state" }
 namada_systems = { path = "../systems" }
 namada_tx = { path = "../tx" }
 namada_vp = { path = "../vp" }
+namada_wallet = { path = "../wallet", optional = true }
 
+async-trait.workspace = true
 borsh.workspace = true
+eyre.workspace = true
+futures.workspace = true
+flume = { workspace = true, optional = true }
+itertools.workspace = true
 lazy_static.workspace = true
+linkme = {workspace = true, optional = true}
 masp_primitives.workspace = true
-masp_proofs = { workspace = true }
+masp_proofs.workspace = true
+proptest = {workspace = true, optional = true}
+rand.workspace = true
 rand_core.workspace = true
 rayon = { workspace = true, optional = true }
 ripemd.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 sha2.workspace = true
 smooth-operator.workspace = true
+tempfile.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+typed-builder.workspace = true
+xorf.workspace = true
+
 
 [dev-dependencies]
 namada_gas = { path = "../gas" }
@@ -52,8 +83,10 @@ namada_state = { path = "../state", features = ["testing"] }
 namada_trans_token = { path = "../trans_token" }
 
 lazy_static.workspace = true
+masp_primitives = { workspace = true, features = ["test-dependencies"] }
 masp_proofs = { workspace = true, features = ["download-params"] }
 proptest.workspace = true
 rand_core.workspace = true
 rayon.workspace = true
 test-log.workspace = true
+tokio.workspace = true

@@ -1,0 +1,29 @@
+[package]
+name = "namada_io"
+description = "Namada IO"
+resolver = "2"
+authors.workspace = true
+edition.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+version.workspace = true
+
+[features]
+async-send = []
+
+[dependencies]
+namada_core = { path = "../core" }
+async-trait.workspace = true
+tendermint-rpc.workspace = true
+thiserror.workspace = true
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+tokio = { workspace = true, default-features = false, features = ["sync"] }
+
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+kdam.workspace = true
+tokio = { workspace = true, features = ["full"] }

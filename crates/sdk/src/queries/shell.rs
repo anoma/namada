@@ -22,6 +22,7 @@ use namada_core::uint::Uint;
 use namada_ibc::event::IbcEventType;
 use namada_state::{DBIter, LastBlock, StateRead, StorageHasher, DB};
 use namada_storage::{ResultExt, StorageRead};
+use namada_token::masp::MaspTokenRewardData;
 use namada_token::storage_key::masp_token_map_key;
 use namada_tx::data::DryRunResult;
 
@@ -31,7 +32,6 @@ use crate::events::Event;
 use crate::ibc::core::host::types::identifiers::{
     ChannelId, ClientId, PortId, Sequence,
 };
-use crate::masp::MaspTokenRewardData;
 use crate::queries::types::{RequestCtx, RequestQuery};
 use crate::queries::{require_latest_height, EncodedResponseQuery};
 use crate::tendermint::merkle::proof::ProofOps;

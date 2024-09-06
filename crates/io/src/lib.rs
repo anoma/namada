@@ -4,7 +4,27 @@
 
 #![allow(clippy::print_stdout, clippy::print_stderr)]
 
-use crate::{MaybeSend, MaybeSync};
+pub mod client;
+
+#[cfg(feature = "async-send")]
+pub use std::marker::Send as MaybeSend;
+#[cfg(feature = "async-send")]
+pub use std::marker::Sync as MaybeSync;
+
+pub use client::Client;
+use namada_core::*;
+
+#[allow(missing_docs)]
+#[cfg(not(feature = "async-send"))]
+pub trait MaybeSync {}
+#[cfg(not(feature = "async-send"))]
+impl<T> MaybeSync for T where T: ?Sized {}
+
+#[allow(missing_docs)]
+#[cfg(not(feature = "async-send"))]
+pub trait MaybeSend {}
+#[cfg(not(feature = "async-send"))]
+impl<T> MaybeSend for T where T: ?Sized {}
 
 /// NOOP progress bar implementation.
 #[derive(Debug, Clone, Copy)]
@@ -278,4 +298,19 @@ macro_rules! prompt {
     ($io:expr,$($arg:tt)*) => {{
         $io.prompt(format!("{}", format_args!($($arg)*)))
     }}
+}
+
+#[cfg_attr(feature = "async-send", async_trait::async_trait)]
+#[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
+pub trait NamadaIo: Sized + MaybeSync + MaybeSend {
+    /// A client with async request dispatcher method
+    type Client: Client + MaybeSend + Sync;
+    /// Captures the input/output streams used by this object
+    type Io: Io + MaybeSend + MaybeSync;
+
+    /// Obtain the client for communicating with the ledger
+    fn client(&self) -> &Self::Client;
+
+    /// Obtain the input/output handle for this context
+    fn io(&self) -> &Self::Io;
 }

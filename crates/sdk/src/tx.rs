@@ -52,11 +52,17 @@ use namada_governance::storage::vote::ProposalVote;
 use namada_ibc::storage::channel_key;
 use namada_ibc::trace::is_nft_trace;
 use namada_ibc::{MsgNftTransfer, MsgTransfer};
+use namada_io::{display_line, edisplay_line, Client, Io};
 use namada_proof_of_stake::parameters::{
     PosParams, MAX_VALIDATOR_METADATA_LEN,
 };
 use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
 use namada_token as token;
+use namada_token::masp::shielded_wallet::ShieldedApi;
+use namada_token::masp::TransferErr::Build;
+use namada_token::masp::{
+    MaspDataLog, MaspFeeData, MaspTransferData, ShieldedTransfer,
+};
 use namada_token::storage_key::balance_key;
 use namada_token::DenominatedAmount;
 use namada_tx::data::pgf::UpdateStewardCommission;
@@ -74,13 +80,6 @@ use crate::args::{
 };
 use crate::control_flow::time;
 use crate::error::{EncodingError, Error, QueryError, Result, TxSubmitError};
-use crate::io::Io;
-use crate::masp::TransferErr::Build;
-use crate::masp::{
-    MaspDataLog, MaspFeeData, MaspTransferData, ShieldedContext,
-    ShieldedTransfer,
-};
-use crate::queries::Client;
 use crate::rpc::{
     self, get_validator_stake, query_wasm_code_hash, validate_amount,
     InnerTxResult, TxBroadcastData, TxResponse,
@@ -91,7 +90,7 @@ use crate::signing::{
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::tendermint_rpc::error::Error as RpcError;
 use crate::wallet::WalletIo;
-use crate::{args, display_line, edisplay_line, Namada};
+use crate::{args, Namada};
 
 /// Initialize account transaction WASM
 pub const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
@@ -286,7 +285,7 @@ pub async fn process_tx(
 }
 
 /// Check if a reveal public key transaction is needed
-pub async fn is_reveal_pk_needed<C: crate::queries::Client + Sync>(
+pub async fn is_reveal_pk_needed<C: Client + Sync>(
     client: &C,
     address: &Address,
 ) -> Result<bool> {
@@ -295,7 +294,7 @@ pub async fn is_reveal_pk_needed<C: crate::queries::Client + Sync>(
 }
 
 /// Check if the public key for the given address has been revealed
-pub async fn has_revealed_pk<C: crate::queries::Client + Sync>(
+pub async fn has_revealed_pk<C: Client + Sync>(
     client: &C,
     address: &Address,
 ) -> Result<bool> {
@@ -3414,16 +3413,20 @@ async fn construct_shielded_parts<N: Namada>(
     // Precompute asset types to increase chances of success in decoding
     let token_map = context.wallet().await.get_addresses();
     let tokens = token_map.values().collect();
-    let _ = context
-        .shielded_mut()
-        .await
-        .precompute_asset_types(context.client(), tokens)
-        .await;
-    let stx_result =
-        ShieldedContext::<N::ShieldedUtils>::gen_shielded_transfer(
-            context, data, fee_data, update_ctx,
-        )
-        .await;
+
+    let stx_result = {
+        let expiration = context.tx_builder().expiration.to_datetime();
+        let mut shielded = context.shielded_mut().await;
+        _ = shielded
+            .precompute_asset_types(context.client(), tokens)
+            .await;
+
+        shielded
+            .gen_shielded_transfer(
+                context, data, fee_data, expiration, update_ctx,
+            )
+            .await
+    };
 
     let shielded_parts = match stx_result {
         Ok(Some(stx)) => stx,
@@ -3771,16 +3774,21 @@ pub async fn gen_ibc_shielding_transfer<N: Namada>(
         token: token.clone(),
         amount: validated_amount,
     };
-    let shielded_transfer =
-        ShieldedContext::<N::ShieldedUtils>::gen_shielded_transfer(
-            context,
-            vec![masp_transfer_data],
-            // Fees are paid from the transparent balance of the relayer
-            None,
-            true,
-        )
-        .await
-        .map_err(|err| TxSubmitError::MaspError(err.to_string()))?;
+    let shielded_transfer = {
+        let expiration = context.tx_builder().expiration.to_datetime();
+        let mut shielded = context.shielded_mut().await;
+        shielded
+            .gen_shielded_transfer(
+                context,
+                vec![masp_transfer_data],
+                // Fees are paid from the transparent balance of the relayer
+                None,
+                expiration,
+                true,
+            )
+            .await
+            .map_err(|err| TxSubmitError::MaspError(err.to_string()))?
+    };
 
     Ok(shielded_transfer.map(|st| st.masp_tx))
 }

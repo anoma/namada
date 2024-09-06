@@ -35,12 +35,14 @@ use namada_governance::utils::{
 use namada_ibc::storage::{
     ibc_trace_key, ibc_trace_key_prefix, is_ibc_trace_key,
 };
+use namada_io::{display_line, edisplay_line, Client, Io};
 use namada_parameters::{storage as params_storage, EpochDuration};
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{
     BondsAndUnbondsDetails, CommissionPair, ValidatorMetaData,
 };
 use namada_state::LastBlock;
+use namada_token::masp::MaspTokenRewardData;
 use namada_tx::data::{BatchedTxResult, DryRunResult, ResultCode, TxResult};
 use namada_tx::event::{Batch as BatchAttr, Code as CodeAttr};
 use serde::Serialize;
@@ -50,23 +52,21 @@ use crate::control_flow::time;
 use crate::error::{EncodingError, Error, QueryError, TxSubmitError};
 use crate::events::{extend, Event};
 use crate::internal_macros::echo_error;
-use crate::io::Io;
-use crate::masp::MaspTokenRewardData;
 use crate::queries::vp::pos::{
     EnrichedBondsAndUnbondsDetails, ValidatorStateInfo,
 };
-use crate::queries::{Client, RPC};
+use crate::queries::RPC;
 use crate::tendermint::block::Height;
 use crate::tendermint::merkle::proof::ProofOps;
 use crate::tendermint_rpc::query::Query;
-use crate::{display_line, edisplay_line, error, Namada, Tx};
+use crate::{error, Namada, Tx};
 
 /// Query an estimate of the maximum block time.
-pub async fn query_max_block_time_estimate(
-    context: &impl Namada,
+pub async fn query_max_block_time_estimate<C: Client + Sync>(
+    client: &C,
 ) -> Result<DurationSecs, Error> {
     RPC.shell()
-        .max_block_time(context.client())
+        .max_block_time(client)
         .await
         .map_err(|err| Error::from(QueryError::NoResponse(err.to_string())))
 }
@@ -80,8 +80,8 @@ pub async fn query_tx_status2<C, IO>(
     deadline: time::Instant,
 ) -> Result<Event, Error>
 where
-    C: crate::queries::Client + Sync,
-    IO: crate::io::Io + crate::MaybeSend + crate::MaybeSync,
+    C: namada_io::Client + Sync,
+    IO: Io + crate::MaybeSend + crate::MaybeSync,
 {
     time::Sleep {
         strategy: time::LinearBackoff {
@@ -141,21 +141,21 @@ pub async fn query_tx_status(
 }
 
 /// Query the epoch of the last committed block
-pub async fn query_epoch<C: crate::queries::Client + Sync>(
+pub async fn query_epoch<C: namada_io::Client + Sync>(
     client: &C,
 ) -> Result<Epoch, error::Error> {
     convert_response::<C, _>(RPC.shell().epoch(client).await)
 }
 
 /// Query the masp epoch of the last committed block
-pub async fn query_masp_epoch<C: crate::queries::Client + Sync>(
+pub async fn query_masp_epoch<C: namada_io::Client + Sync>(
     client: &C,
 ) -> Result<MaspEpoch, error::Error> {
     convert_response::<C, _>(RPC.shell().masp_epoch(client).await)
 }
 
 /// Query the address of the native token
-pub async fn query_native_token<C: crate::queries::Client + Sync>(
+pub async fn query_native_token<C: namada_io::Client + Sync>(
     client: &C,
 ) -> Result<Address, error::Error> {
     convert_response::<C, _>(RPC.shell().native_token(client).await)
@@ -164,7 +164,7 @@ pub async fn query_native_token<C: crate::queries::Client + Sync>(
 /// Query the epoch of the given block height, if it exists.
 /// Will return none if the input block height is greater than
 /// the latest committed block height.
-pub async fn query_epoch_at_height<C: crate::queries::Client + Sync>(
+pub async fn query_epoch_at_height<C: namada_io::Client + Sync>(
     client: &C,
     height: BlockHeight,
 ) -> Result<Option<Epoch>, error::Error> {
@@ -172,7 +172,7 @@ pub async fn query_epoch_at_height<C: crate::queries::Client + Sync>(
 }
 
 /// Query the last committed block, if any.
-pub async fn query_block<C: crate::queries::Client + Sync>(
+pub async fn query_block<C: namada_io::Client + Sync>(
     client: &C,
 ) -> Result<Option<LastBlock>, error::Error> {
     // NOTE: We're not using `client.latest_block()` because it may return an
@@ -181,7 +181,7 @@ pub async fn query_block<C: crate::queries::Client + Sync>(
 }
 
 /// A helper to unwrap client's response. Will shut down process on error.
-fn unwrap_client_response<C: crate::queries::Client, T>(
+fn unwrap_client_response<C: namada_io::Client, T>(
     response: Result<T, C::Error>,
 ) -> T {
     response.unwrap_or_else(|err| {
@@ -192,21 +192,21 @@ fn unwrap_client_response<C: crate::queries::Client, T>(
 /// A helper to turn client's response into an error type that can be used with
 /// ? The exact error type is a `QueryError::NoResponse`, and thus should be
 /// seen as getting no response back from a query.
-fn convert_response<C: crate::queries::Client, T>(
+fn convert_response<C: namada_io::Client, T>(
     response: Result<T, C::Error>,
 ) -> Result<T, Error> {
     response.map_err(|err| Error::from(QueryError::NoResponse(err.to_string())))
 }
 
 /// Query the results of the last committed block
-pub async fn query_results<C: crate::queries::Client + Sync>(
+pub async fn query_results<C: namada_io::Client + Sync>(
     client: &C,
 ) -> Result<Vec<BlockResults>, Error> {
     convert_response::<C, _>(RPC.shell().read_results(client).await)
 }
 
 /// Query token amount of owner.
-pub async fn get_token_balance<C: crate::queries::Client + Sync>(
+pub async fn get_token_balance<C: namada_io::Client + Sync>(
     client: &C,
     token: &Address,
     owner: &Address,
@@ -217,7 +217,7 @@ pub async fn get_token_balance<C: crate::queries::Client + Sync>(
 }
 
 /// Query token total supply.
-pub async fn get_token_total_supply<C: crate::queries::Client + Sync>(
+pub async fn get_token_total_supply<C: namada_io::Client + Sync>(
     client: &C,
     token: &Address,
 ) -> Result<token::Amount, error::Error> {
@@ -225,7 +225,7 @@ pub async fn get_token_total_supply<C: crate::queries::Client + Sync>(
 }
 
 /// Query the effective total supply of the native token
-pub async fn get_effective_native_supply<C: crate::queries::Client + Sync>(
+pub async fn get_effective_native_supply<C: Client + Sync>(
     client: &C,
 ) -> Result<token::Amount, error::Error> {
     convert_response::<C, _>(
@@ -234,7 +234,7 @@ pub async fn get_effective_native_supply<C: crate::queries::Client + Sync>(
 }
 
 /// Check if the given address is a known validator.
-pub async fn is_validator<C: crate::queries::Client + Sync>(
+pub async fn is_validator<C: namada_io::Client + Sync>(
     client: &C,
     address: &Address,
 ) -> Result<bool, Error> {
@@ -242,7 +242,7 @@ pub async fn is_validator<C: crate::queries::Client + Sync>(
 }
 
 /// Check if the given address is a pgf steward.
-pub async fn is_steward<C: crate::queries::Client + Sync>(
+pub async fn is_steward<C: namada_io::Client + Sync>(
     client: &C,
     address: &Address,
 ) -> bool {
@@ -252,7 +252,7 @@ pub async fn is_steward<C: crate::queries::Client + Sync>(
 }
 
 /// Check if a given address is a known delegator
-pub async fn is_delegator<C: crate::queries::Client + Sync>(
+pub async fn is_delegator<C: namada_io::Client + Sync>(
     client: &C,
     address: &Address,
 ) -> Result<bool, error::Error> {
@@ -262,7 +262,7 @@ pub async fn is_delegator<C: crate::queries::Client + Sync>(
 }
 
 /// Check if a given address is a known delegator at the given epoch
-pub async fn is_delegator_at<C: crate::queries::Client + Sync>(
+pub async fn is_delegator_at<C: namada_io::Client + Sync>(
     client: &C,
     address: &Address,
     epoch: Epoch,
@@ -276,7 +276,7 @@ pub async fn is_delegator_at<C: crate::queries::Client + Sync>(
 }
 
 /// Find if the given source address has any bonds.
-pub async fn has_bonds<C: crate::queries::Client + Sync>(
+pub async fn has_bonds<C: namada_io::Client + Sync>(
     client: &C,
     source: &Address,
 ) -> Result<bool, error::Error> {
@@ -284,7 +284,7 @@ pub async fn has_bonds<C: crate::queries::Client + Sync>(
 }
 
 /// Get the set of pgf stewards
-pub async fn query_pgf_stewards<C: crate::queries::Client + Sync>(
+pub async fn query_pgf_stewards<C: namada_io::Client + Sync>(
     client: &C,
 ) -> Result<Vec<StewardDetail>, error::Error> {
     convert_response::<C, Vec<StewardDetail>>(
@@ -293,9 +293,7 @@ pub async fn query_pgf_stewards<C: crate::queries::Client + Sync>(
 }
 
 /// Query the consensus key by validator address
-pub async fn query_validator_consensus_keys<
-    C: crate::queries::Client + Sync,
->(
+pub async fn query_validator_consensus_keys<C: namada_io::Client + Sync>(
     client: &C,
     address: &Address,
 ) -> Result<Option<common::PublicKey>, error::Error> {
@@ -305,7 +303,7 @@ pub async fn query_validator_consensus_keys<
 }
 
 /// Get the set of consensus keys registered in the network
-pub async fn get_consensus_keys<C: crate::queries::Client + Sync>(
+pub async fn get_consensus_keys<C: namada_io::Client + Sync>(
     client: &C,
 ) -> Result<BTreeSet<common::PublicKey>, error::Error> {
     convert_response::<C, BTreeSet<common::PublicKey>>(
@@ -316,7 +314,7 @@ pub async fn get_consensus_keys<C: crate::queries::Client + Sync>(
 /// Check if the address exists on chain. Established address exists if it has a
 /// stored validity predicate. Implicit and internal addresses always return
 /// true.
-pub async fn known_address<C: crate::queries::Client + Sync>(
+pub async fn known_address<C: namada_io::Client + Sync>(
     client: &C,
     address: &Address,
 ) -> Result<bool, Error> {
@@ -331,7 +329,7 @@ pub async fn known_address<C: crate::queries::Client + Sync>(
 }
 
 /// Query a conversion.
-pub async fn query_conversion<C: crate::queries::Client + Sync>(
+pub async fn query_conversion<C: namada_io::Client + Sync>(
     client: &C,
     asset_type: AssetType,
 ) -> Option<(
@@ -348,7 +346,7 @@ pub async fn query_conversion<C: crate::queries::Client + Sync>(
 }
 
 /// Query conversions
-pub async fn query_conversions<C: crate::queries::Client + Sync>(
+pub async fn query_conversions<C: namada_io::Client + Sync>(
     client: &C,
 ) -> Result<
     BTreeMap<
@@ -367,14 +365,14 @@ pub async fn query_conversions<C: crate::queries::Client + Sync>(
 }
 
 /// Query the total rewards minted by MASP
-pub async fn query_masp_total_rewards<C: crate::queries::Client + Sync>(
+pub async fn query_masp_total_rewards<C: namada_io::Client + Sync>(
     client: &C,
 ) -> Result<token::Amount, error::Error> {
     convert_response::<C, _>(RPC.vp().token().masp_total_rewards(client).await)
 }
 
 /// Query to read the tokens that earn masp rewards.
-pub async fn query_masp_reward_tokens<C: crate::queries::Client + Sync>(
+pub async fn query_masp_reward_tokens<C: namada_io::Client + Sync>(
     client: &C,
 ) -> Result<Vec<MaspTokenRewardData>, Error> {
     convert_response::<C, _>(RPC.shell().masp_reward_tokens(client).await)
@@ -412,7 +410,7 @@ pub async fn query_storage_value<C, T>(
 ) -> Result<T, Error>
 where
     T: BorshDeserialize,
-    C: crate::queries::Client + Sync,
+    C: namada_io::Client + Sync,
 {
     // In case `T` is a unit (only thing that encodes to 0 bytes), we have to
     // use `storage_has_key` instead of `storage_value`, because `storage_value`
@@ -441,7 +439,7 @@ where
 }
 
 /// Query a storage value and the proof without decoding.
-pub async fn query_storage_value_bytes<C: crate::queries::Client + Sync>(
+pub async fn query_storage_value_bytes<C: namada_io::Client + Sync>(
     client: &C,
     key: &storage::Key,
     height: Option<BlockHeight>,
@@ -498,7 +496,7 @@ where
 }
 
 /// Query to check if the given storage key exists.
-pub async fn query_has_storage_key<C: crate::queries::Client + Sync>(
+pub async fn query_has_storage_key<C: namada_io::Client + Sync>(
     client: &C,
     key: &storage::Key,
 ) -> Result<bool, Error> {
@@ -541,10 +539,10 @@ impl<'a> From<TxEventQuery<'a>> for Query {
 
 /// Call the corresponding `tx_event_query` RPC method, to fetch
 /// the current status of a transaction.
-pub async fn query_tx_events<C: crate::queries::Client + Sync>(
+pub async fn query_tx_events<C: namada_io::Client + Sync>(
     client: &C,
     tx_event_query: TxEventQuery<'_>,
-) -> std::result::Result<Option<Event>, <C as crate::queries::Client>::Error> {
+) -> std::result::Result<Option<Event>, <C as namada_io::Client>::Error> {
     let tx_hash: Hash = tx_event_query.tx_hash().try_into().unwrap();
     match tx_event_query {
         TxEventQuery::Applied(_) => RPC.shell().applied(client, &tx_hash).await, /* .wrap_err_with(|| {
@@ -723,14 +721,14 @@ impl TxResponse {
 }
 
 /// Get the PoS parameters
-pub async fn get_pos_params<C: crate::queries::Client + Sync>(
+pub async fn get_pos_params<C: namada_io::Client + Sync>(
     client: &C,
 ) -> Result<PosParams, error::Error> {
     convert_response::<C, _>(RPC.vp().pos().pos_params(client).await)
 }
 
 /// Get all validators in the given epoch
-pub async fn get_all_validators<C: crate::queries::Client + Sync>(
+pub async fn get_all_validators<C: namada_io::Client + Sync>(
     client: &C,
     epoch: Epoch,
 ) -> Result<HashSet<Address>, error::Error> {
@@ -743,7 +741,7 @@ pub async fn get_all_validators<C: crate::queries::Client + Sync>(
 }
 
 /// Get the total staked tokens in the given epoch
-pub async fn get_total_staked_tokens<C: crate::queries::Client + Sync>(
+pub async fn get_total_staked_tokens<C: namada_io::Client + Sync>(
     client: &C,
     epoch: Epoch,
 ) -> Result<token::Amount, error::Error> {
@@ -753,7 +751,7 @@ pub async fn get_total_staked_tokens<C: crate::queries::Client + Sync>(
 }
 
 /// Get the total active voting power in the given epoch
-pub async fn get_total_active_voting_power<C: crate::queries::Client + Sync>(
+pub async fn get_total_active_voting_power<C: namada_io::Client + Sync>(
     client: &C,
     epoch: Epoch,
 ) -> Result<token::Amount, error::Error> {
@@ -766,7 +764,7 @@ pub async fn get_total_active_voting_power<C: crate::queries::Client + Sync>(
 }
 
 /// Get the given validator's stake at the given epoch
-pub async fn get_validator_stake<C: crate::queries::Client + Sync>(
+pub async fn get_validator_stake<C: namada_io::Client + Sync>(
     client: &C,
     epoch: Epoch,
     validator: &Address,
@@ -781,7 +779,7 @@ pub async fn get_validator_stake<C: crate::queries::Client + Sync>(
 }
 
 /// Query and return a validator's state
-pub async fn get_validator_state<C: crate::queries::Client + Sync>(
+pub async fn get_validator_state<C: namada_io::Client + Sync>(
     client: &C,
     validator: &Address,
     epoch: Option<Epoch>,
@@ -795,7 +793,7 @@ pub async fn get_validator_state<C: crate::queries::Client + Sync>(
 }
 
 /// Get the validators to which a delegator is bonded at a certain epoch
-pub async fn get_delegation_validators<C: crate::queries::Client + Sync>(
+pub async fn get_delegation_validators<C: namada_io::Client + Sync>(
     client: &C,
     address: &Address,
     epoch: Epoch,
@@ -810,9 +808,7 @@ pub async fn get_delegation_validators<C: crate::queries::Client + Sync>(
 
 /// Get the delegations of a delegator at some epoch, including the validator
 /// and bond amount
-pub async fn get_delegations_of_delegator_at<
-    C: crate::queries::Client + Sync,
->(
+pub async fn get_delegations_of_delegator_at<C: namada_io::Client + Sync>(
     client: &C,
     address: &Address,
     epoch: Epoch,
@@ -826,7 +822,7 @@ pub async fn get_delegations_of_delegator_at<
 }
 
 /// Query proposal by Id
-pub async fn query_proposal_by_id<C: crate::queries::Client + Sync>(
+pub async fn query_proposal_by_id<C: namada_io::Client + Sync>(
     client: &C,
     proposal_id: u64,
 ) -> Result<Option<StorageProposal>, Error> {
@@ -837,7 +833,7 @@ pub async fn query_proposal_by_id<C: crate::queries::Client + Sync>(
 
 /// Query and return validator's commission rate and max commission rate change
 /// per epoch
-pub async fn query_commission_rate<C: crate::queries::Client + Sync>(
+pub async fn query_commission_rate<C: namada_io::Client + Sync>(
     client: &C,
     validator: &Address,
     epoch: Option<Epoch>,
@@ -852,7 +848,7 @@ pub async fn query_commission_rate<C: crate::queries::Client + Sync>(
 
 /// Query and return validator's metadata, including the commission rate and max
 /// commission rate change
-pub async fn query_metadata<C: crate::queries::Client + Sync>(
+pub async fn query_metadata<C: namada_io::Client + Sync>(
     client: &C,
     validator: &Address,
     epoch: Option<Epoch>,
@@ -871,7 +867,7 @@ pub async fn query_metadata<C: crate::queries::Client + Sync>(
 
 /// Query and return the incoming redelegation epoch for a given pair of source
 /// validator and delegator, if there is any.
-pub async fn query_incoming_redelegations<C: crate::queries::Client + Sync>(
+pub async fn query_incoming_redelegations<C: namada_io::Client + Sync>(
     client: &C,
     src_validator: &Address,
     delegator: &Address,
@@ -885,7 +881,7 @@ pub async fn query_incoming_redelegations<C: crate::queries::Client + Sync>(
 }
 
 /// Query a validator's bonds for a given epoch
-pub async fn query_bond<C: crate::queries::Client + Sync>(
+pub async fn query_bond<C: namada_io::Client + Sync>(
     client: &C,
     source: &Address,
     validator: &Address,
@@ -897,7 +893,7 @@ pub async fn query_bond<C: crate::queries::Client + Sync>(
 }
 
 /// Query a validator's bonds for a given epoch
-pub async fn query_last_infraction_epoch<C: crate::queries::Client + Sync>(
+pub async fn query_last_infraction_epoch<C: namada_io::Client + Sync>(
     client: &C,
     validator: &Address,
 ) -> Result<Option<Epoch>, error::Error> {
@@ -910,7 +906,7 @@ pub async fn query_last_infraction_epoch<C: crate::queries::Client + Sync>(
 }
 
 /// Query the accunt substorage space of an address
-pub async fn get_account_info<C: crate::queries::Client + Sync>(
+pub async fn get_account_info<C: namada_io::Client + Sync>(
     client: &C,
     owner: &Address,
 ) -> Result<Option<Account>, error::Error> {
@@ -920,7 +916,7 @@ pub async fn get_account_info<C: crate::queries::Client + Sync>(
 }
 
 /// Query if the public_key is revealed
-pub async fn is_public_key_revealed<C: crate::queries::Client + Sync>(
+pub async fn is_public_key_revealed<C: namada_io::Client + Sync>(
     client: &C,
     owner: &Address,
 ) -> Result<bool, error::Error> {
@@ -928,7 +924,7 @@ pub async fn is_public_key_revealed<C: crate::queries::Client + Sync>(
 }
 
 /// Query an account substorage at a specific index
-pub async fn get_public_key_at<C: crate::queries::Client + Sync>(
+pub async fn get_public_key_at<C: namada_io::Client + Sync>(
     client: &C,
     owner: &Address,
     index: u8,
@@ -944,7 +940,7 @@ pub async fn get_public_key_at<C: crate::queries::Client + Sync>(
 }
 
 /// Query the proposal result
-pub async fn query_proposal_result<C: crate::queries::Client + Sync>(
+pub async fn query_proposal_result<C: namada_io::Client + Sync>(
     client: &C,
     proposal_id: u64,
 ) -> Result<Option<ProposalResult>, Error> {
@@ -1075,7 +1071,7 @@ pub async fn query_and_print_unbonds(
 }
 
 /// Query withdrawable tokens in a validator account for a given epoch
-pub async fn query_withdrawable_tokens<C: crate::queries::Client + Sync>(
+pub async fn query_withdrawable_tokens<C: namada_io::Client + Sync>(
     client: &C,
     bond_source: &Address,
     validator: &Address,
@@ -1090,7 +1086,7 @@ pub async fn query_withdrawable_tokens<C: crate::queries::Client + Sync>(
 }
 
 /// Query all unbonds for a validator, applying slashes
-pub async fn query_unbond_with_slashing<C: crate::queries::Client + Sync>(
+pub async fn query_unbond_with_slashing<C: namada_io::Client + Sync>(
     client: &C,
     source: &Address,
     validator: &Address,
@@ -1104,21 +1100,21 @@ pub async fn query_unbond_with_slashing<C: crate::queries::Client + Sync>(
 }
 
 /// Get the governance parameters
-pub async fn query_governance_parameters<C: crate::queries::Client + Sync>(
+pub async fn query_governance_parameters<C: namada_io::Client + Sync>(
     client: &C,
 ) -> GovernanceParameters {
     unwrap_client_response::<C, _>(RPC.vp().gov().parameters(client).await)
 }
 
 /// Get the public good fundings parameters
-pub async fn query_pgf_parameters<C: crate::queries::Client + Sync>(
+pub async fn query_pgf_parameters<C: namada_io::Client + Sync>(
     client: &C,
 ) -> PgfParameters {
     unwrap_client_response::<C, _>(RPC.vp().pgf().parameters(client).await)
 }
 
 /// Get all the votes of a proposal
-pub async fn query_proposal_votes<C: crate::queries::Client + Sync>(
+pub async fn query_proposal_votes<C: namada_io::Client + Sync>(
     client: &C,
     proposal_id: u64,
 ) -> Result<Vec<Vote>, error::Error> {
@@ -1128,7 +1124,7 @@ pub async fn query_proposal_votes<C: crate::queries::Client + Sync>(
 }
 
 /// Query the information to estimate next epoch start
-pub async fn query_next_epoch_info<C: crate::queries::Client + Sync>(
+pub async fn query_next_epoch_info<C: namada_io::Client + Sync>(
     client: &C,
 ) -> Result<(BlockHeight, EpochDuration), error::Error> {
     let this_epoch_first_height = convert_response::<C, BlockHeight>(
@@ -1145,7 +1141,7 @@ pub async fn query_next_epoch_info<C: crate::queries::Client + Sync>(
 }
 
 /// Get the bond amount at the given epoch
-pub async fn get_bond_amount_at<C: crate::queries::Client + Sync>(
+pub async fn get_bond_amount_at<C: namada_io::Client + Sync>(
     client: &C,
     delegator: &Address,
     validator: &Address,
@@ -1162,7 +1158,7 @@ pub async fn get_bond_amount_at<C: crate::queries::Client + Sync>(
 
 /// Get bonds and unbonds with all details (slashes and rewards, if any)
 /// grouped by their bond IDs.
-pub async fn bonds_and_unbonds<C: crate::queries::Client + Sync>(
+pub async fn bonds_and_unbonds<C: namada_io::Client + Sync>(
     client: &C,
     source: &Option<Address>,
     validator: &Option<Address>,
@@ -1178,7 +1174,7 @@ pub async fn bonds_and_unbonds<C: crate::queries::Client + Sync>(
 /// Get bonds and unbonds with all details (slashes and rewards, if any)
 /// grouped by their bond IDs, enriched with extra information calculated from
 /// the data.
-pub async fn enriched_bonds_and_unbonds<C: crate::queries::Client + Sync>(
+pub async fn enriched_bonds_and_unbonds<C: namada_io::Client + Sync>(
     client: &C,
     current_epoch: Epoch,
     source: &Option<Address>,
@@ -1198,7 +1194,7 @@ pub async fn enriched_bonds_and_unbonds<C: crate::queries::Client + Sync>(
 }
 
 /// Query the denomination of the given token
-pub async fn query_denom<C: crate::queries::Client + Sync>(
+pub async fn query_denom<C: namada_io::Client + Sync>(
     client: &C,
     token: &Address,
 ) -> Option<Denomination> {
@@ -1270,7 +1266,7 @@ pub async fn validate_amount<N: Namada>(
 
 /// Wait for a first block and node to be synced.
 pub async fn wait_until_node_is_synched(
-    client: &(impl Client + Sync),
+    client: &(impl namada_io::Client + Sync),
     io: &impl Io,
 ) -> Result<(), Error> {
     let height_one = Height::try_from(1_u64).unwrap();
@@ -1328,7 +1324,7 @@ pub async fn wait_until_node_is_synched(
 
 /// Look up the denomination of a token in order to make a correctly denominated
 /// amount.
-pub async fn denominate_amount<C: Client + Sync>(
+pub async fn denominate_amount<C: namada_io::Client + Sync>(
     client: &C,
     io: &impl Io,
     token: &Address,
@@ -1355,7 +1351,7 @@ pub async fn denominate_amount<C: Client + Sync>(
 /// Look up the denomination of a token in order to format it
 /// correctly as a string.
 pub async fn format_denominated_amount(
-    client: &(impl Client + Sync),
+    client: &(impl namada_io::Client + Sync),
     io: &impl Io,
     token: &Address,
     amount: token::Amount,

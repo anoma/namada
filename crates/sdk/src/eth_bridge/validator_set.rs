@@ -14,20 +14,20 @@ use namada_core::eth_abi::EncodeCell;
 use namada_core::ethereum_events::EthAddress;
 use namada_core::hints;
 use namada_ethereum_bridge::storage::proof::EthereumProof;
+use namada_io::{display_line, edisplay_line, Client, Io};
 use namada_vote_ext::validator_set_update::{
     ValidatorSetArgs, VotingPowersMap,
 };
 
 use super::{block_on_eth_sync, eth_sync_or, eth_sync_or_exit, BlockOnEthSync};
+use crate::args;
 use crate::control_flow::time::{self, Duration, Instant};
 use crate::error::{Error as SdkError, EthereumBridgeError, QueryError};
 use crate::eth_bridge::ethers::abi::{AbiDecode, AbiType, Tokenizable};
 use crate::eth_bridge::ethers::types::TransactionReceipt;
 use crate::eth_bridge::structs::Signature;
 use crate::internal_macros::{echo_error, trace_error};
-use crate::io::Io;
-use crate::queries::{Client, RPC};
-use crate::{args, display_line, edisplay_line};
+use crate::queries::RPC;
 
 /// Relayer related errors.
 #[derive(Debug, Default)]

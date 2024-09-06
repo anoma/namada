@@ -20,6 +20,7 @@ use namada_core::ethereum_events::EthAddress;
 use namada_core::keccak::KeccakHash;
 use namada_core::voting_power::FractionalVotingPower;
 use namada_ethereum_bridge::storage::bridge_pool::get_pending_key;
+use namada_io::{display, display_line, edisplay_line, Client, Io};
 use namada_token::storage_key::balance_key;
 use namada_token::Amount;
 use namada_tx::Tx;
@@ -33,18 +34,14 @@ use crate::error::{
 };
 use crate::eth_bridge::ethers::abi::AbiDecode;
 use crate::internal_macros::echo_error;
-use crate::io::Io;
 use crate::queries::{
-    Client, GenBridgePoolProofReq, GenBridgePoolProofRsp, TransferToErcArgs,
+    GenBridgePoolProofReq, GenBridgePoolProofRsp, TransferToErcArgs,
     TransferToEthereumStatus, RPC,
 };
 use crate::rpc::{query_storage_value, query_wasm_code_hash, validate_amount};
 use crate::signing::{aux_signing_data, validate_transparent_fee};
 use crate::tx::prepare_tx;
-use crate::{
-    args, display, display_line, edisplay_line, MaybeSync, Namada,
-    SigningTxData,
-};
+use crate::{args, MaybeSync, Namada, SigningTxData};
 
 /// Craft a transaction that adds a transfer to the Ethereum bridge pool.
 pub async fn build_bridge_pool_tx(
@@ -746,12 +743,12 @@ mod recommendations {
     use namada_core::ethereum_events::Uint as EthUint;
     use namada_core::uint::{self, Uint, I256};
     use namada_ethereum_bridge::storage::proof::BridgePoolRootProof;
+    use namada_io::edisplay_line;
     use namada_vote_ext::validator_set_update::{
         EthAddrBook, VotingPowersMap, VotingPowersMapExt,
     };
 
     use super::*;
-    use crate::edisplay_line;
     use crate::eth_bridge::storage::bridge_pool::{
         get_nonce_key, get_signed_root_key,
     };
@@ -1221,9 +1218,9 @@ mod recommendations {
     #[cfg(test)]
     mod test_recommendations {
         use namada_core::address;
+        use namada_io::StdIo;
 
         use super::*;
-        use crate::io::StdIo;
 
         /// An established user address for testing & development
         pub fn bertha_address() -> Address {

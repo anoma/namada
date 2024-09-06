@@ -410,9 +410,9 @@ macro_rules! pattern_and_handler_to_method {
             )
                 -> std::result::Result<
                     $crate::queries::ResponseQuery<Vec<u8>>,
-                    <CLIENT as $crate::queries::Client>::Error
+                    <CLIENT as namada_io::Client>::Error
                 >
-                where CLIENT: $crate::queries::Client + std::marker::Sync {
+                where CLIENT: namada_io::Client + std::marker::Sync {
                     let path = self.storage_value_path( $( $param ),* );
 
                     let $crate::queries::ResponseQuery {
@@ -462,9 +462,9 @@ macro_rules! pattern_and_handler_to_method {
             )
                 -> std::result::Result<
                     $crate::queries::ResponseQuery<$return_type>,
-                    <CLIENT as $crate::queries::Client>::Error
+                    <CLIENT as namada_io::Client>::Error
                 >
-                where CLIENT: $crate::queries::Client + std::marker::Sync {
+                where CLIENT: namada_io::Client + std::marker::Sync {
                     let path = self.[<$handle _path>]( $( $param ),* );
 
                     let $crate::queries::ResponseQuery {
@@ -513,9 +513,9 @@ macro_rules! pattern_and_handler_to_method {
             )
                 -> std::result::Result<
                     $return_type,
-                    <CLIENT as $crate::queries::Client>::Error
+                    <CLIENT as namada_io::Client>::Error
                 >
-                where CLIENT: $crate::queries::Client + std::marker::Sync {
+                where CLIENT: namada_io::Client + std::marker::Sync {
                     let path = self.[<$handle _path>]( $( $param ),* );
 
                     let data = client.simple_request(path).await?;

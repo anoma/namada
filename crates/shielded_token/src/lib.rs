@@ -18,6 +18,9 @@
 )]
 
 pub mod conversion;
+
+#[cfg(feature = "masp")]
+pub mod masp;
 mod storage;
 pub mod storage_key;
 pub mod utils;
@@ -36,6 +39,9 @@ pub use namada_state::{
 };
 use serde::{Deserialize, Serialize};
 pub use storage::*;
+
+#[cfg(feature = "masp")]
+pub use crate::masp::shielded_wallet::ShieldedWallet;
 
 /// Token parameters for each kind of asset held on chain
 #[derive(

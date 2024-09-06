@@ -1,8 +1,9 @@
 use std::io::Read;
 
 use color_eyre::eyre::Result;
-use namada_sdk::io::Io;
-use namada_sdk::{display_line, Namada, NamadaImpl};
+use namada_sdk::io::{display_line, Io, NamadaIo};
+use namada_sdk::masp::ShieldedContext;
+use namada_sdk::{Namada, NamadaImpl};
 
 use crate::cli;
 use crate::cli::api::{CliApi, CliClient};
@@ -353,7 +354,7 @@ impl CliApi {
                         );
 
                         crate::client::masp::syncing(
-                            chain_ctx.shielded,
+                            ShieldedContext::new(chain_ctx.shielded),
                             client,
                             args,
                             &io,
