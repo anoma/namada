@@ -1417,6 +1417,15 @@ pub fn validate_validator_account(
             );
         }
     }
+    if let Some(name) = metadata.name.as_ref() {
+        if name.len() as u64 > MAX_VALIDATOR_METADATA_LEN {
+            panic!(
+                "The name metadata of the validator with address {} is too \
+                 long, must be within {MAX_VALIDATOR_METADATA_LEN} characters",
+                signed_tx.data.address
+            );
+        }
+    }
 
     // Check signature
     let mut is_valid = {
