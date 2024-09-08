@@ -9,9 +9,7 @@ use namada_sdk::queries::{EncodedResponseQuery, RequestQuery};
 use namada_sdk::state::{
     DBIter, Result, ResultExt, StorageHasher, TxIndex, DB,
 };
-use namada_sdk::tx::data::{
-    DryRunResult, ExtendedTxResult, GasLimit, TxResult, TxType,
-};
+use namada_sdk::tx::data::{DryRunResult, GasLimit, TxResult, TxType};
 use namada_sdk::tx::Tx;
 use namada_vm::wasm::{TxCache, VpCache};
 use namada_vm::WasmCacheAccess;
@@ -36,8 +34,8 @@ where
 
     let gas_scale = parameters::get_gas_scale(&state)?;
 
-    // Wrapper dry run to allow estimating the gas cost of a transaction
-    let (wrapper_hash, extended_tx_result, tx_gas_meter, gas_used) =
+    // Wrapper dry run to allow estimating the entire gas cost of a transaction
+    let (wrapper_hash, extended_tx_result, tx_gas_meter) =
         match tx.header().tx_type {
             TxType::Wrapper(wrapper) => {
                 let gas_limit = wrapper
@@ -63,18 +61,11 @@ where
                 .into_storage_result()?;
 
                 state.write_log_mut().commit_tx_to_batch();
-                let available_gas = tx_gas_meter.borrow().get_available_gas();
-                let consumed_gas = tx_gas_meter.borrow().get_tx_consumed_gas();
-                (
-                    Some(tx.header_hash()),
-                    tx_result,
-                    TxGasMeter::new(available_gas),
-                    consumed_gas,
-                )
+                (Some(tx.header_hash()), tx_result, tx_gas_meter)
             }
             _ => {
-                // If dry run only the inner tx, use the max block gas as
-                // the gas limit
+                // When dry running only the inner tx(s), use the max block gas
+                // as the gas limit
                 let max_block_gas = parameters::get_max_block_gas(&state)?;
                 let gas_limit = GasLimit::from(max_block_gas)
                     .as_scaled_gas(gas_scale)
@@ -82,52 +73,31 @@ where
                 (
                     None,
                     TxResult::default().to_extended_result(None),
-                    TxGasMeter::new(gas_limit),
-                    0.into(),
+                    RefCell::new(TxGasMeter::new(gas_limit)),
                 )
             }
         };
 
-    let ExtendedTxResult {
-        mut tx_result,
-        ref masp_tx_refs,
-        ibc_tx_data_refs,
-    } = extended_tx_result;
-    let tx_gas_meter = RefCell::new(tx_gas_meter);
-    for cmt in
-        protocol::get_batch_txs_to_execute(&tx, masp_tx_refs, &ibc_tx_data_refs)
-    {
-        let batched_tx = tx.batch_ref_tx(cmt);
-        let batched_tx_result = protocol::apply_wasm_tx(
-            &batched_tx,
-            &TxIndex(0),
-            ShellParams::new(
-                &tx_gas_meter,
-                &mut state,
-                &mut vp_wasm_cache,
-                &mut tx_wasm_cache,
-            ),
-        );
-        let is_accepted =
-            matches!(&batched_tx_result, Ok(result) if result.is_accepted());
-        if is_accepted {
-            state.write_log_mut().commit_tx_to_batch();
-        } else {
-            state.write_log_mut().drop_tx();
-        }
-        tx_result.insert_inner_tx_result(
-            wrapper_hash.as_ref(),
-            either::Right(cmt),
-            batched_tx_result,
-        );
-    }
-    // Account gas for both batch and wrapper
-    let gas_used = gas_used
-        .checked_add(tx_gas_meter.borrow().get_tx_consumed_gas())
-        .unwrap_or(u64::MAX.into())
-        .get_whole_gas_units(gas_scale);
-    let tx_result_string = tx_result.to_result_string();
-    let dry_run_result = DryRunResult(tx_result_string, gas_used);
+    let extended_tx_result = protocol::dispatch_inner_txs(
+        &tx,
+        wrapper_hash.as_ref(),
+        extended_tx_result,
+        TxIndex(0),
+        &tx_gas_meter,
+        &mut state,
+        &mut vp_wasm_cache,
+        &mut tx_wasm_cache,
+    )
+    .map_err(|err| err.error)
+    .into_storage_result()?;
+    let tx_result_string = extended_tx_result.tx_result.to_result_string();
+    let dry_run_result = DryRunResult(
+        tx_result_string,
+        tx_gas_meter
+            .borrow()
+            .get_tx_consumed_gas()
+            .get_whole_gas_units(gas_scale),
+    );
 
     Ok(EncodedResponseQuery {
         data: dry_run_result.serialize_to_vec(),
