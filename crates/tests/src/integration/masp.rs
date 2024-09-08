@@ -687,7 +687,7 @@ fn masp_incentives() -> Result<()> {
             "--token",
             NAM,
             "--gas-limit",
-            "200000",
+            "250000",
             "--amount",
             "1.451732",
             "--signing-keys",
@@ -3067,7 +3067,7 @@ fn masp_fee_payment_with_custom_spending_key() -> Result<()> {
             "--token",
             NAM,
             "--amount",
-            "300000",
+            "250000",
             "--ledger-address",
             validator_one_rpc,
         ],
@@ -3117,7 +3117,7 @@ fn masp_fee_payment_with_custom_spending_key() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 300000"));
+    assert!(captured.contains("nam: 250000"));
 
     // Masp fee payment with custom gas payer
     let captured = CapturedOutput::of(|| {
@@ -3135,7 +3135,7 @@ fn masp_fee_payment_with_custom_spending_key() -> Result<()> {
                 "--amount",
                 "9000",
                 "--gas-limit",
-                "200000",
+                "250000",
                 "--gas-price",
                 "1",
                 "--gas-spending-key",
@@ -3193,7 +3193,7 @@ fn masp_fee_payment_with_custom_spending_key() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 101000"));
+    assert!(captured.contains("nam: 1000"));
 
     let captured = CapturedOutput::of(|| {
         run(
@@ -3314,7 +3314,7 @@ fn masp_fee_payment_with_different_token() -> Result<()> {
             "--token",
             BTC,
             "--amount",
-            "200000",
+            "250000",
             "--gas-payer",
             ALBERT_KEY,
             "--ledger-address",
@@ -3383,7 +3383,7 @@ fn masp_fee_payment_with_different_token() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("btc: 200000"));
+    assert!(captured.contains("btc: 250000"));
 
     // Masp fee payment with custom token and gas payer
     let captured = CapturedOutput::of(|| {
@@ -3403,7 +3403,7 @@ fn masp_fee_payment_with_different_token() -> Result<()> {
                 "--gas-token",
                 BTC,
                 "--gas-limit",
-                "200000",
+                "250000",
                 "--gas-price",
                 "1",
                 "--gas-spending-key",
