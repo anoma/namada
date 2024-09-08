@@ -6,8 +6,7 @@ use std::str::FromStr;
 use std::time::Duration as StdDuration;
 
 use masp_primitives::transaction::components::sapling::builder::BuildParams;
-use masp_primitives::zip32::sapling::PseudoExtendedSpendingKey;
-
+use masp_primitives::zip32::sapling::PseudoExtendedKey;
 use namada_core::address::Address;
 use namada_core::chain::{BlockHeight, ChainId, Epoch};
 use namada_core::collections::HashMap;
@@ -121,7 +120,7 @@ impl NamadaTypes for SdkTypes {
     type MaspIndexerAddress = String;
     type PaymentAddress = namada_core::masp::PaymentAddress;
     type PublicKey = namada_core::key::common::PublicKey;
-    type SpendingKey = PseudoExtendedSpendingKey;
+    type SpendingKey = PseudoExtendedKey;
     type TendermintAddress = tendermint_rpc::Url;
     type TransferSource = namada_core::masp::TransferSource;
     type TransferTarget = namada_core::masp::TransferTarget;

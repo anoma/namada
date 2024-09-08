@@ -10,16 +10,18 @@ use borsh::BorshSerialize;
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::transaction::builder::Builder;
+use masp_primitives::transaction::components::sapling::builder::{
+    BuildParams, RngBuildParams,
+};
 use masp_primitives::transaction::components::sapling::fees::{
     ConvertView, InputView as SaplingInputView, OutputView as SaplingOutputView,
 };
 use masp_primitives::transaction::components::transparent::fees::{
     InputView as TransparentInputView, OutputView as TransparentOutputView,
 };
-use masp_primitives::zip32::sapling::PseudoExtendedSpendingKey;
-use masp_primitives::transaction::components::sapling::builder::{BuildParams, RngBuildParams};
 use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::transaction::{builder, Transaction as MaspTransaction};
+use masp_primitives::zip32::sapling::PseudoExtendedKey;
 use namada_account::{InitAccount, UpdateAccount};
 use namada_core::address::{Address, IBC, MASP};
 use namada_core::arith::checked;
@@ -38,9 +40,7 @@ use namada_core::ibc::core::client::types::Height as IbcHeight;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::ibc::primitives::Timestamp as IbcTimestamp;
 use namada_core::key::{self, *};
-use namada_core::masp::{
-    AssetData, ExtendedSpendingKey, MaspEpoch, TransferSource, TransferTarget,
-};
+use namada_core::masp::{AssetData, MaspEpoch, TransferSource, TransferTarget};
 use namada_core::storage;
 use namada_core::time::DateTimeUtc;
 use namada_governance::cli::onchain::{
@@ -3131,7 +3131,7 @@ async fn get_masp_fee_payment_amount<N: Namada>(
     args: &args::Tx<SdkTypes>,
     fee_amount: DenominatedAmount,
     fee_payer: &common::PublicKey,
-    gas_spending_keys: Vec<PseudoExtendedSpendingKey>,
+    gas_spending_keys: Vec<PseudoExtendedKey>,
 ) -> Result<Option<MaspFeeData>> {
     let fee_payer_address = Address::from(fee_payer);
     let balance_key = balance_key(&args.fee_token, &fee_payer_address);

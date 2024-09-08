@@ -16,6 +16,7 @@ use masp_primitives::transaction::txid::TxIdDigester;
 use masp_primitives::transaction::{
     Authorization, Authorized, Transaction, TransactionData, Unauthorized,
 };
+use masp_primitives::zip32::ExtendedSpendingKey;
 use masp_proofs::bellman::groth16::VerifyingKey;
 use masp_proofs::sapling::BatchValidator;
 use rand_core::OsRng;
@@ -55,7 +56,8 @@ pub struct PartialAuthorized;
 
 impl Authorization for PartialAuthorized {
     type SaplingAuth = <Authorized as Authorization>::SaplingAuth;
-    type TransparentAuth = <Unauthorized as Authorization>::TransparentAuth;
+    type TransparentAuth =
+        <Unauthorized<ExtendedSpendingKey> as Authorization>::TransparentAuth;
 }
 
 /// MASP verifying keys

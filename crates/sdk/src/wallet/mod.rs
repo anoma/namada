@@ -594,13 +594,12 @@ impl<U: WalletIo> Wallet<U> {
             seed.as_bytes(),
             zip32_seed_path,
         )
-            .try_to_sk::<ed25519::SecretKey>()
-            .expect("Expected Ed25519 key")
-            .0
-            .to_bytes();
+        .try_to_sk::<ed25519::SecretKey>()
+        .expect("Expected Ed25519 key")
+        .0
+        .to_bytes();
         // Now ZIP32 derive the extended spending key from the new seed
-        let spend_key =
-            derive_hd_spending_key(&seed, derivation_path.clone());
+        let spend_key = derive_hd_spending_key(&seed, derivation_path.clone());
 
         self.insert_spending_key(
             alias,

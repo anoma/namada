@@ -51,10 +51,10 @@ pub use std::marker::Sync as MaybeSync;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use masp_primitives::zip32::sapling::PseudoExtendedSpendingKey;
 use args::{DeviceTransport, InputAmount, SdkTypes};
 use io::Io;
 use masp::{ShieldedContext, ShieldedUtils};
+use masp_primitives::zip32::sapling::PseudoExtendedKey;
 use namada_core::address::Address;
 use namada_core::collections::HashSet;
 pub use namada_core::control_flow;
@@ -62,7 +62,7 @@ use namada_core::dec::Dec;
 use namada_core::ethereum_events::EthAddress;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::key::*;
-use namada_core::masp::{ExtendedSpendingKey, PaymentAddress, TransferSource};
+use namada_core::masp::{PaymentAddress, TransferSource};
 use namada_tx::data::wrapper::GasLimit;
 use namada_tx::Tx;
 use rpc::{denominate_amount, format_denominated_amount, query_native_token};
@@ -190,7 +190,7 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     fn new_shielded_transfer(
         &self,
         data: Vec<args::TxShieldedTransferData>,
-        gas_spending_keys: Vec<PseudoExtendedSpendingKey>,
+        gas_spending_keys: Vec<PseudoExtendedKey>,
         disposable_signing_key: bool,
     ) -> args::TxShieldedTransfer {
         args::TxShieldedTransfer {
@@ -221,9 +221,9 @@ pub trait Namada: Sized + MaybeSync + MaybeSend {
     /// arguments
     fn new_unshielding_transfer(
         &self,
-        source: PseudoExtendedSpendingKey,
+        source: PseudoExtendedKey,
         data: Vec<args::TxUnshieldingTransferData>,
-        gas_spending_keys: Vec<PseudoExtendedSpendingKey>,
+        gas_spending_keys: Vec<PseudoExtendedKey>,
         disposable_signing_key: bool,
     ) -> args::TxUnshieldingTransfer {
         args::TxUnshieldingTransfer {

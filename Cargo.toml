@@ -138,8 +138,8 @@ libc = "0.2.97"
 libloading = "0.7.2"
 linkme = "0.3.24"
 # branch = "tomas/arbitrary"
-masp_primitives = { git = "https://github.com/anoma/masp", rev = "e6451ecf64d519409f9b1a67aa1d8322a9fe0717" }
-masp_proofs = { git = "https://github.com/anoma/masp", rev = "e6451ecf64d519409f9b1a67aa1d8322a9fe0717", default-features = false, features = ["local-prover"] }
+masp_primitives = { git = "https://github.com/anoma/masp", rev = "f2b0cae3e495e4f7d482e587432ec4e5f2793528" }
+masp_proofs = { git = "https://github.com/anoma/masp", rev = "f2b0cae3e495e4f7d482e587432ec4e5f2793528", default-features = false, features = ["local-prover"] }
 num256 = "0.3.5"
 num_cpus = "1.13.0"
 num-derive = "0.4"

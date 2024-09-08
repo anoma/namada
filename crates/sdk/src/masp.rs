@@ -27,16 +27,17 @@ use masp_primitives::sapling::{
 };
 use masp_primitives::transaction::builder::{self, *};
 use masp_primitives::transaction::components::sapling::builder::{
-    BuildParams, RngBuildParams, SaplingMetadata,
+    BuildParams, SaplingMetadata,
 };
-use masp_primitives::zip32::sapling::PseudoExtendedSpendingKey;
 use masp_primitives::transaction::components::{
     I128Sum, TxOut, U64Sum, ValueSum,
 };
 use masp_primitives::transaction::fees::fixed::FeeRule;
 use masp_primitives::transaction::Transaction;
+use masp_primitives::zip32::sapling::PseudoExtendedKey;
 use masp_primitives::zip32::{
-    ExtendedFullViewingKey, ExtendedSpendingKey as MaspExtendedSpendingKey,
+    ExtendedFullViewingKey, ExtendedKey,
+    ExtendedSpendingKey as MaspExtendedSpendingKey,
 };
 use masp_proofs::prover::LocalTxProver;
 use namada_core::address::Address;
@@ -111,7 +112,7 @@ pub struct ShieldedTransfer {
 #[allow(missing_docs)]
 #[derive(Debug)]
 pub struct MaspFeeData {
-    pub sources: Vec<PseudoExtendedSpendingKey>,
+    pub sources: Vec<PseudoExtendedKey>,
     pub target: Address,
     pub token: Address,
     pub amount: token::DenominatedAmount,
@@ -160,7 +161,7 @@ struct MaspTxReorderedData {
 // Data about the unspent amounts for any given shielded source coming from the
 // spent notes in their posses that have been added to the builder. Can be used
 // to either pay fees or to return a change
-type Changes = HashMap<PseudoExtendedSpendingKey, I128Sum>;
+type Changes = HashMap<PseudoExtendedKey, I128Sum>;
 
 /// Shielded pool data for a token
 #[allow(missing_docs)]
@@ -198,20 +199,20 @@ struct WalletMap;
 impl<P1>
     masp_primitives::transaction::components::sapling::builder::MapBuilder<
         P1,
-        MaspExtendedSpendingKey,
+        PseudoExtendedKey,
         (),
         ExtendedFullViewingKey,
     > for WalletMap
 {
     fn map_params(&self, _s: P1) {}
 
-    fn map_key(&self, s: MaspExtendedSpendingKey) -> ExtendedFullViewingKey {
-        (&s).into()
+    fn map_key(&self, s: PseudoExtendedKey) -> ExtendedFullViewingKey {
+        s.to_viewing_key()
     }
 }
 
 impl<P1, N1>
-    MapBuilder<P1, MaspExtendedSpendingKey, N1, (), ExtendedFullViewingKey, ()>
+    MapBuilder<P1, PseudoExtendedKey, N1, (), ExtendedFullViewingKey, ()>
     for WalletMap
 {
     fn map_notifier(&self, _s: N1) {}
@@ -942,7 +943,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
         &mut self,
         context: &impl Namada,
         spent_notes: &mut SpentNotesTracker,
-        sk: PseudoExtendedSpendingKey,
+        sk: PseudoExtendedKey,
         is_native_token: bool,
         target: I128Sum,
         target_epoch: MaspEpoch,
@@ -1227,7 +1228,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                     u32::MAX - 20
                 }
             };
-        let mut builder = Builder::<Network, _>::new(
+        let mut builder = Builder::<Network, PseudoExtendedKey>::new(
             NETWORK,
             // NOTE: this is going to add 20 more blocks to the actual
             // expiration but there's no other exposed function that we could
@@ -1437,7 +1438,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     #[allow(clippy::too_many_arguments)]
     async fn add_inputs(
         context: &impl Namada,
-        builder: &mut Builder<Network>,
+        builder: &mut Builder<Network, PseudoExtendedKey>,
         source: &TransferSource,
         token: &Address,
         amount: &token::DenominatedAmount,
@@ -1496,16 +1497,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
             // Commit the notes found to our transaction
             for (diversifier, note, merkle_path) in unspent_notes {
                 builder
-                    .add_sapling_spend(
-                        sk.partial_spending_key().ok_or_else(|| {
-                            Error::Other(format!(
-                                "Unable to get proof authorization"
-                            ))
-                        })?,
-                        diversifier,
-                        note,
-                        merkle_path,
-                    )
+                    .add_sapling_spend(sk, diversifier, note, merkle_path)
                     .map_err(|e| TransferErr::Build {
                         error: builder::Error::SaplingBuild(e),
                         data: None,
@@ -1570,7 +1562,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     #[allow(clippy::too_many_arguments)]
     async fn add_outputs(
         context: &impl Namada,
-        builder: &mut Builder<Network>,
+        builder: &mut Builder<Network, PseudoExtendedKey>,
         source: TransferSource,
         target: &TransferTarget,
         token: Address,
@@ -1618,9 +1610,8 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
                 let contr = std::cmp::min(*rem_amount as u128, val) as u64;
                 // If we are sending to a shielded address, we need the outgoing
                 // viewing key in the following computations.
-                let ovk_opt = source
-                    .spending_key()
-                    .map(|x| x.to_viewing_key().fvk.ovk);
+                let ovk_opt =
+                    source.spending_key().map(|x| x.to_viewing_key().fvk.ovk);
                 // Make transaction output tied to the current token,
                 // denomination, and epoch.
                 if let Some(pa) = payment_address {
@@ -1711,9 +1702,9 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     #[allow(clippy::too_many_arguments)]
     async fn add_fees(
         context: &impl Namada,
-        builder: &mut Builder<Network>,
+        builder: &mut Builder<Network, PseudoExtendedKey>,
         source_data: &HashMap<MaspSourceTransferData, token::DenominatedAmount>,
-        sources: Vec<PseudoExtendedSpendingKey>,
+        sources: Vec<PseudoExtendedKey>,
         target: &Address,
         token: &Address,
         amount: &token::DenominatedAmount,
@@ -1949,21 +1940,17 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedContext<U> {
     // `add_fees` cause we might have some change coming from there too
     #[allow(clippy::result_large_err)]
     fn add_changes(
-        builder: &mut Builder<Network>,
+        builder: &mut Builder<Network, PseudoExtendedKey>,
         changes: Changes,
     ) -> Result<(), TransferErr> {
         for (sp, changes) in changes.into_iter() {
             for (asset_type, amt) in changes.components() {
                 if let Ordering::Greater = amt.cmp(&0) {
-                    let sk = sp.partial_spending_key().ok_or_else(|| {
-                        Error::Other(format!(
-                            "Unable to get proof authorization"
-                        ))
-                    })?;
+                    let sk = sp.to_viewing_key();
                     // Send the change in this asset type back to the sender
                     builder
                         .add_sapling_output(
-                            Some(sk.expsk.ovk),
+                            Some(sk.fvk.ovk),
                             sk.default_address().1,
                             *asset_type,
                             *amt as u64,
@@ -2319,7 +2306,9 @@ pub mod testing {
     use masp_primitives::sapling::prover::TxProver;
     use masp_primitives::sapling::redjubjub::{PublicKey, Signature};
     use masp_primitives::sapling::{ProofGenerationKey, Rseed};
-    use masp_primitives::transaction::components::sapling::builder::StoredBuildParams;
+    use masp_primitives::transaction::components::sapling::builder::{
+        RngBuildParams, StoredBuildParams,
+    };
     use masp_primitives::transaction::components::{
         OutputDescription, GROTH_PROOF_SIZE,
     };
@@ -2662,7 +2651,7 @@ pub mod testing {
             mut rng in arb_rng().prop_map(TestCsprng),
             bparams_rng in arb_rng().prop_map(TestCsprng),
             prover_rng in arb_rng().prop_map(TestCsprng),
-        ) -> (MaspExtendedSpendingKey, Diversifier, Note, Node) {
+        ) -> (PseudoExtendedKey, Diversifier, Note, Node) {
             let mut spending_key_seed = [0; 32];
             rng.fill_bytes(&mut spending_key_seed);
             let spending_key = MaspExtendedSpendingKey::master(spending_key_seed.as_ref());
@@ -2673,7 +2662,7 @@ pub mod testing {
                 .to_payment_address(div)
                 .expect("a PaymentAddress");
 
-            let mut builder = Builder::<Network, _>::new(
+            let mut builder = Builder::<Network, PseudoExtendedKey>::new(
                 NETWORK,
                 // NOTE: this is going to add 20 more blocks to the actual
                 // expiration but there's no other exposed function that we could
@@ -2707,7 +2696,7 @@ pub mod testing {
             assert_eq!(payment_addr, pa);
             // Make a path to out new note
             let node = Node::new(shielded_output.cmu.to_repr());
-            (spending_key, div, note, node)
+            (PseudoExtendedKey::from(spending_key), div, note, node)
         }
     }
 
@@ -2757,7 +2746,7 @@ pub mod testing {
                     ).unwrap(),
                     *value,
                 )).collect::<Vec<_>>()
-        ) -> Vec<(MaspExtendedSpendingKey, Diversifier, Note, Node)> {
+        ) -> Vec<(PseudoExtendedKey, Diversifier, Note, Node)> {
             spend_description
         }
     }
@@ -2833,7 +2822,7 @@ pub mod testing {
             assets in Just(assets),
         ) -> (
             Transfer,
-            Builder::<Network>,
+            Builder::<Network, PseudoExtendedKey>,
             HashMap<AssetData, u64>,
         ) {
             // Enable assets to be more easily decoded

@@ -270,7 +270,10 @@ async fn shielded_key_derive(
             cli::safe_exit(1)
         };
         let xfvk = ExtendedFullViewingKey::try_from_slice(&response_key.xfvk)
-            .expect("unable to decode extended full viewing key from the hardware wallet");
+            .expect(
+                "unable to decode extended full viewing key from the hardware \
+                 wallet",
+            );
 
         wallet
             .insert_viewing_key(
@@ -416,7 +419,13 @@ fn shielded_key_address_add(
     let (alias, typ) = match masp_value {
         MaspValue::FullViewingKey(viewing_key) => {
             let alias = wallet
-                .insert_viewing_key(alias, viewing_key, birthday, alias_force, None)
+                .insert_viewing_key(
+                    alias,
+                    viewing_key,
+                    birthday,
+                    alias_force,
+                    None,
+                )
                 .unwrap_or_else(|| {
                     edisplay_line!(io, "Viewing key not added");
                     cli::safe_exit(1);

@@ -201,7 +201,7 @@ impl Store {
     ) -> Option<DerivationPath> {
         for (alias, vk) in &self.view_keys {
             if *viewing_key == vk.key {
-                return self.derivation_paths.get(&alias).cloned()
+                return self.derivation_paths.get(alias).cloned();
             }
         }
         None
