@@ -87,6 +87,8 @@ pub trait NamadaTypes: Clone + std::fmt::Debug {
     type BpConversionTable: Clone + std::fmt::Debug;
     /// Address of a `namada-masp-indexer` live instance
     type MaspIndexerAddress: Clone + std::fmt::Debug;
+    /// Represents a block height
+    type BlockHeight: Clone + std::fmt::Debug;
 }
 
 /// The concrete types being used in Namada SDK
@@ -108,6 +110,7 @@ impl NamadaTypes for SdkTypes {
     type AddrOrNativeToken = Address;
     type Address = Address;
     type BalanceOwner = namada_core::masp::BalanceOwner;
+    type BlockHeight = namada_core::chain::BlockHeight;
     type BpConversionTable = HashMap<Address, BpConversionTableEntry>;
     type ConfigRpcTendermintAddress = tendermint_rpc::Url;
     type Data = Vec<u8>;
@@ -718,6 +721,7 @@ impl InitProposal {
                 context.client(),
                 &nam_address,
                 &proposal.proposal.author,
+                None,
             )
             .await?;
             let proposal = proposal
@@ -746,6 +750,7 @@ impl InitProposal {
                 context.client(),
                 &nam_address,
                 &proposal.proposal.author,
+                None,
             )
             .await?;
             let proposal = proposal
@@ -1604,6 +1609,8 @@ pub struct QueryBalance<C: NamadaTypes = SdkTypes> {
     pub token: C::Address,
     /// Whether not to convert balances
     pub no_conversions: bool,
+    /// Optional height to query balances at
+    pub height: Option<C::BlockHeight>,
 }
 
 /// Query historical transfer(s)
