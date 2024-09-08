@@ -18,6 +18,10 @@
     clippy::print_stderr
 )]
 
+#[cfg(feature = "ctx")]
+pub mod ctx;
+#[cfg(any(test, feature = "testing"))]
+pub mod testing;
 pub use namada_core::address::Address;
 pub use namada_core::borsh::{
     BorshDeserialize, BorshSerialize, BorshSerializeExt,

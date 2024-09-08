@@ -15,7 +15,7 @@ use namada_vm::WasmCacheRwAccess;
 use namada_vp_prelude::Ctx;
 use tempfile::TempDir;
 
-use crate::tx::{tx_host_env, TestTxEnv};
+use crate::tx_env::{self, TestTxEnv};
 
 /// VP execution context provides access to host env functions
 pub static CTX: Ctx = unsafe { Ctx::new() };
@@ -187,10 +187,10 @@ mod native_vp_host_env {
         let vp_key = Key::validity_predicate(&addr);
         tx_env.state.db_write(&vp_key, vec![]).unwrap();
 
-        tx_host_env::set(tx_env);
+        tx_env::set(tx_env);
         apply_tx(&addr);
 
-        let tx_env = tx_host_env::take();
+        let tx_env = tx_env::take();
         let verifiers_from_tx = &tx_env.verifiers;
         let (verifiers, keys_changed) = tx_env
             .state

@@ -81,7 +81,8 @@ use namada_vm::{wasm, WasmCacheRwAccess};
 use namada_vp::native_vp;
 use namada_vp::native_vp::{Ctx, NativeVp};
 
-use crate::tx::*;
+use super::tx_env;
+use crate::tx_env::*;
 
 const ADDRESS: Address = Address::Internal(InternalAddress::Ibc);
 pub const ANY_DENOMINATION: u8 = token::NATIVE_MAX_DECIMAL_PLACES;
@@ -191,13 +192,13 @@ pub fn validate_multitoken_vp_from_tx<'a>(
     TestMultitokenVp { multitoken_vp }.validate(batched_tx)
 }
 
-/// Initialize the test storage. Requires initialized [`tx_host_env::ENV`].
+/// Initialize the test storage. Requires initialized [`tx_env::ENV`].
 pub fn init_storage() -> (Address, Address) {
     // wasm for init_account
     let code = TestWasms::VpAlwaysTrue.read_bytes();
     let code_hash = Hash::sha256(&code);
 
-    tx_host_env::with(|env| {
+    tx_env::with(|env| {
         namada_sdk::parameters::init_test_storage(&mut env.state).unwrap();
         ibc::init_genesis_storage(&mut env.state);
         let gov_params = GovernanceParameters::default();
@@ -235,18 +236,14 @@ pub fn init_storage() -> (Address, Address) {
     });
 
     // initialize a token
-    let token = tx_host_env::ctx()
-        .init_account(code_hash, &None, &[])
-        .unwrap();
+    let token = tx_env::ctx().init_account(code_hash, &None, &[]).unwrap();
     let denom_key = token::storage_key::denom_key(&token);
     let token_denom = token::Denomination(ANY_DENOMINATION);
     // initialize an account
-    let account = tx_host_env::ctx()
-        .init_account(code_hash, &None, &[])
-        .unwrap();
+    let account = tx_env::ctx().init_account(code_hash, &None, &[]).unwrap();
     let key = token::storage_key::balance_key(&token, &account);
     let init_bal = token::Amount::from_uint(100, token_denom).unwrap();
-    tx_host_env::with(|env| {
+    tx_env::with(|env| {
         env.state
             .db_write(&denom_key, &token_denom.serialize_to_vec())
             .unwrap();
@@ -262,12 +259,12 @@ pub fn init_storage() -> (Address, Address) {
         min_duration: DurationSecs(100),
     };
     let bytes = epoch_duration.serialize_to_vec();
-    tx_host_env::with(|env| {
+    tx_env::with(|env| {
         env.state.db_write(&key, &bytes).unwrap();
     });
 
     // commit the initialized token and account
-    tx_host_env::with(|env| {
+    tx_env::with(|env| {
         env.state.commit_tx_batch();
         env.state.commit_block().unwrap();
 
@@ -302,7 +299,7 @@ pub fn prepare_client() -> (ClientId, Any, HashMap<storage::Key, Vec<u8>>) {
     writes.insert(key, bytes);
     // client update time
     let key = client_update_timestamp_key(&client_id);
-    let time = tx_host_env::with(|env| {
+    let time = tx_env::with(|env| {
         let header = StateRead::get_block_header(&env.state, None)
             .unwrap()
             .0
@@ -313,7 +310,7 @@ pub fn prepare_client() -> (ClientId, Any, HashMap<storage::Key, Vec<u8>>) {
     writes.insert(key, bytes);
     // client update height
     let key = client_update_height_key(&client_id);
-    let height = tx_host_env::with(|env| {
+    let height = tx_env::with(|env| {
         let height = env.state.in_mem().get_block_height().0;
         Height::new(0, height.0).expect("invalid height")
     });

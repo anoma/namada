@@ -1,7 +1,7 @@
 //! A tx for a validator to change various metadata, including its commission
 //! rate.
 
-use namada_tx_prelude::transaction::pos::MetaDataChange;
+use namada_tx_prelude::data::pos::MetaDataChange;
 use namada_tx_prelude::*;
 
 #[transaction]
@@ -16,7 +16,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
         avatar,
         name,
         commission_rate,
-    } = transaction::pos::MetaDataChange::try_from_slice(&data[..])
+    } = data::pos::MetaDataChange::try_from_slice(&data[..])
         .wrap_err("Failed to decode MetaDataChange value")?;
     ctx.change_validator_metadata(
         &validator,

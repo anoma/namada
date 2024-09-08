@@ -12,7 +12,48 @@ readme.workspace = true
 repository.workspace = true
 version.workspace = true
 
+[features]
+default = []
+
+# Provides `Ctx` implementation - this should only be used by
+# `namada_tx_prelude` and for testing code that uses `trait TxEnv`
+ctx = [
+    "namada_gas",
+    "namada_state",
+    "namada_tx",
+    "namada_vm_env",
+]
+
+testing = [
+    "ctx",
+    "namada_state/testing",
+    "namada_tx/testing",
+    "namada_vm",
+    "namada_vm/testing",
+    "concat-idents",
+    "tempfile",
+]
+
 [dependencies]
 namada_core = { path = "../core" }
 namada_events = { path = "../events", default-features = false }
+namada_gas = { path = "../gas", optional = true }
 namada_storage = { path = "../storage" }
+namada_state = { path = "../state", optional = true }
+namada_tx = { path = "../tx", optional = true }
+namada_vm = { path = "../vm", optional = true }
+namada_vm_env = { path = "../vm_env", optional = true }
+
+concat-idents = { workspace = true, optional = true }
+tempfile = { workspace = true, optional = true }
+
+[dev-dependencies]
+namada_state = { path = "../state" }
+namada_tx = { path = "../tx" }
+namada_vm = { path = "../vm" }
+namada_vm_env = { path = "../vm_env" }
+
+concat-idents.workspace = true
+proptest.workspace = true
+tempfile.workspace = true
+test-log.workspace = true

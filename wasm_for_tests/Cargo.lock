@@ -2315,7 +2315,11 @@ version = "0.43.0"
 dependencies = [
  "namada_core",
  "namada_events",
+ "namada_gas",
+ "namada_state",
  "namada_storage",
+ "namada_tx",
+ "namada_vm_env",
 ]
 
 [[package]]

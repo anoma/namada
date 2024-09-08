@@ -223,9 +223,9 @@ mod tests {
     // Use this as `#[test]` annotation to enable logging
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
-    use namada_tests::tx::data::{self, TxType};
-    use namada_tests::tx::{
-        self, tx_host_env, Authorization, Code, Data, TestTxEnv,
+    use namada_tests::tx_env::data::{self, TxType};
+    use namada_tests::tx_env::{
+        self, Authorization, Code, Data, TestTxEnv, TestTxEnvExt,
     };
     use namada_tests::vp::vp_host_env::storage::Key;
     use namada_tests::vp::*;
@@ -235,7 +235,7 @@ mod tests {
         OwnedPosParams, PosParams,
     };
     use namada_tx_prelude::proof_of_stake::types::GenesisValidator;
-    use namada_tx_prelude::{StorageWrite, TxEnv};
+    use namada_tx_prelude::{PosCtxExt, StorageWrite, TxEnv};
     use namada_vp_prelude::account::AccountPublicKeysMap;
     use namada_vp_prelude::key::RefTo;
     use proof_of_stake::jail_validator;
@@ -305,8 +305,8 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Apply transfer in a transaction
-            tx_host_env::token::transfer(
-                tx::ctx(),
+            tx_env::token::transfer(
+                tx_env::ctx(),
                 &source,
                 address,
                 &token,
@@ -366,8 +366,8 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Apply transfer in a transaction
-            tx_host_env::token::transfer(
-                tx::ctx(),
+            tx_env::token::transfer(
+                tx_env::ctx(),
                 address,
                 &target,
                 &token,
@@ -436,8 +436,8 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Apply transfer in a transaction
-            tx_host_env::token::transfer(
-                tx::ctx(),
+            tx_env::token::transfer(
+                tx_env::ctx(),
                 address,
                 &target,
                 &token,
@@ -499,7 +499,7 @@ mod tests {
         init_pos(&genesis_validators[..], &pos_params, Epoch(0));
 
         // Initialize a tx environment
-        let mut tx_env = tx_host_env::take();
+        let mut tx_env = tx_env::take();
 
         let secret_key = key::testing::keypair_1();
         let public_key = secret_key.ref_to();
@@ -528,10 +528,10 @@ mod tests {
         // Initialize VP environment from non-validator PoS actions
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
             // Bond the tokens, then unbond some of them
-            tx::ctx()
+            tx_env::ctx()
                 .bond_tokens(Some(&vp_owner), &validator, bond_amount)
                 .unwrap();
-            tx::ctx()
+            tx_env::ctx()
                 .unbond_tokens(Some(&vp_owner), &validator, unbond_amount)
                 .unwrap();
         });
@@ -642,7 +642,7 @@ mod tests {
         init_pos(&genesis_validators[..], &pos_params, Epoch(0));
 
         // Initialize a tx environment
-        let mut tx_env = tx_host_env::take();
+        let mut tx_env = tx_env::take();
         // Set the validator accounts' keys
         tx_env.init_account_storage(&validator1, vec![ck1], 1);
         tx_env.init_account_storage(&validator2, vec![ck2], 1);
@@ -671,7 +671,7 @@ mod tests {
         // Initialize VP environment
         vp_host_env::init_from_tx(validator3.clone(), tx_env, |_address| {
             // Unjail validator3
-            tx::ctx().unjail_validator(&validator3).unwrap()
+            tx_env::ctx().unjail_validator(&validator3).unwrap()
         });
 
         let pks_map = AccountPublicKeysMap::from_iter(vec![ck3]);
@@ -744,7 +744,7 @@ mod tests {
         init_pos(&genesis_validators[..], &pos_params, Epoch(0));
 
         // Initialize a tx environment
-        let mut tx_env = tx_host_env::take();
+        let mut tx_env = tx_env::take();
 
         let secret_key = key::testing::keypair_1();
         let public_key = secret_key.ref_to();
@@ -784,7 +784,7 @@ mod tests {
                 avatar: None,
                 name: None,
             };
-            tx::ctx().become_validator(args).unwrap();
+            tx_env::ctx().become_validator(args).unwrap();
         });
 
         let vp_env = vp_host_env::take();
@@ -841,7 +841,7 @@ mod tests {
         init_pos(&genesis_validators[..], &pos_params, Epoch(0));
 
         // Initialize a tx environment
-        let mut tx_env = tx_host_env::take();
+        let mut tx_env = tx_env::take();
 
         let secret_key = key::testing::keypair_1();
         let public_key = secret_key.ref_to();
@@ -869,14 +869,14 @@ mod tests {
         // Validator PoS actions
         vp_host_env::init_from_tx(validator.clone(), tx_env, |_address| {
             // Bond the tokens, then unbond some of them
-            tx::ctx()
+            tx_env::ctx()
                 .bond_tokens(Some(&validator), &validator, bond_amount)
                 .unwrap();
-            tx::ctx()
+            tx_env::ctx()
                 .unbond_tokens(Some(&validator), &validator, unbond_amount)
                 .unwrap();
-            tx::ctx().deactivate_validator(&validator).unwrap();
-            tx::ctx()
+            tx_env::ctx().deactivate_validator(&validator).unwrap();
+            tx_env::ctx()
                 .change_validator_metadata(
                     &validator,
                     Some("email".to_owned()),
@@ -948,7 +948,7 @@ mod tests {
         init_pos(&genesis_validators[..], &pos_params, Epoch(0));
 
         // Initialize a tx environment
-        let mut tx_env = tx_host_env::take();
+        let mut tx_env = tx_env::take();
 
         let secret_key = key::testing::keypair_1();
         let public_key = secret_key.ref_to();
@@ -978,10 +978,10 @@ mod tests {
         // Initialize VP environment from non-validator PoS actions
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
             // Bond the tokens, then unbond some of them
-            tx::ctx()
+            tx_env::ctx()
                 .bond_tokens(Some(&vp_owner), &validator, bond_amount)
                 .unwrap();
-            tx::ctx()
+            tx_env::ctx()
                 .unbond_tokens(Some(&vp_owner), &validator, unbond_amount)
                 .unwrap();
         });
@@ -1039,7 +1039,7 @@ mod tests {
         init_pos(&genesis_validators[..], &pos_params, Epoch(0));
 
         // Initialize a tx environment
-        let mut tx_env = tx_host_env::take();
+        let mut tx_env = tx_env::take();
 
         let secret_key = key::testing::keypair_1();
         let public_key = secret_key.ref_to();
@@ -1079,7 +1079,7 @@ mod tests {
                 avatar: None,
                 name: None,
             };
-            tx::ctx().become_validator(args).unwrap();
+            tx_env::ctx().become_validator(args).unwrap();
         });
 
         let pks_map = AccountPublicKeysMap::from_iter(vec![public_key]);
@@ -1139,7 +1139,7 @@ mod tests {
         init_pos(&genesis_validators[..], &pos_params, Epoch(0));
 
         // Initialize a tx environment
-        let mut tx_env = tx_host_env::take();
+        let mut tx_env = tx_env::take();
 
         let secret_key = key::testing::keypair_1();
         let public_key = secret_key.ref_to();
@@ -1168,14 +1168,14 @@ mod tests {
         // Validator PoS actions
         vp_host_env::init_from_tx(validator.clone(), tx_env, |_address| {
             // Bond the tokens, then unbond some of them
-            tx::ctx()
+            tx_env::ctx()
                 .bond_tokens(Some(&validator), &validator, bond_amount)
                 .unwrap();
-            tx::ctx()
+            tx_env::ctx()
                 .unbond_tokens(Some(&validator), &validator, unbond_amount)
                 .unwrap();
-            tx::ctx().deactivate_validator(&validator).unwrap();
-            tx::ctx()
+            tx_env::ctx().deactivate_validator(&validator).unwrap();
+            tx_env::ctx()
                 .change_validator_metadata(
                     &validator,
                     Some("email".to_owned()),
@@ -1238,10 +1238,10 @@ mod tests {
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
-            tx::ctx().insert_verifier(address).unwrap();
+            tx_env::ctx().insert_verifier(address).unwrap();
             // Apply transfer in a transaction
-            tx_host_env::token::transfer(
-                tx::ctx(),
+            tx_env::token::transfer(
+                tx_env::ctx(),
                 &source,
                 &target,
                 &token,
@@ -1276,7 +1276,7 @@ mod tests {
             (address in arb_non_internal_address())
             // Generate a storage key other than its VP key (VP cannot be
             // modified directly via `write`, it has to be modified via
-            // `tx::update_validity_predicate`.
+            // `tx_env::update_validity_predicate`.
             (storage_key in arb_account_storage_key_no_vp(address.clone()),
             // Use the generated address too
             address in Just(address))
@@ -1306,9 +1306,9 @@ mod tests {
             vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
                 // Write or delete some data in the transaction
                 if let Some(value) = &storage_value {
-                    tx::ctx().write(&storage_key, value).unwrap();
+                    tx_env::ctx().write(&storage_key, value).unwrap();
                 } else {
-                    tx::ctx().delete(&storage_key).unwrap();
+                    tx_env::ctx().delete(&storage_key).unwrap();
                 }
             });
 
@@ -1356,9 +1356,9 @@ mod tests {
             vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
                 // Write or delete some data in the transaction
                 if let Some(value) = &storage_value {
-                    tx::ctx().write(&storage_key, value).unwrap();
+                    tx_env::ctx().write(&storage_key, value).unwrap();
                 } else {
-                    tx::ctx().delete(&storage_key).unwrap();
+                    tx_env::ctx().delete(&storage_key).unwrap();
                 }
             });
 
@@ -1402,7 +1402,7 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Update VP in a transaction
-            tx::ctx()
+            tx_env::ctx()
                 .update_validity_predicate(address, vp_hash, &None)
                 .unwrap();
         });
@@ -1455,7 +1455,7 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Update VP in a transaction
-            tx::ctx()
+            tx_env::ctx()
                 .update_validity_predicate(address, vp_hash, &None)
                 .unwrap();
         });
@@ -1506,7 +1506,7 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Update VP in a transaction
-            tx::ctx()
+            tx_env::ctx()
                 .update_validity_predicate(address, vp_hash, &None)
                 .unwrap();
         });

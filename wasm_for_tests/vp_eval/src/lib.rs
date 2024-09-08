@@ -8,7 +8,7 @@ fn validate_tx(
     _keys_changed: BTreeSet<storage::Key>,
     _verifiers: BTreeSet<Address>,
 ) -> VpResult {
-    use namada_tx_prelude::transaction::eval_vp::EvalVp;
+    use namada_tx_prelude::data::eval_vp::EvalVp;
     let BatchedTx {
         tx: tx_data,
         ref cmt,

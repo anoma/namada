@@ -6,7 +6,7 @@ use namada_tx_prelude::*;
 #[transaction]
 fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
     let data = ctx.get_tx_data(&tx_data)?;
-    let unbond = transaction::pos::Unbond::try_from_slice(&data[..])
+    let unbond = data::pos::Unbond::try_from_slice(&data[..])
         .wrap_err("Failed to decode Unbond tx data")?;
 
     ctx.unbond_tokens(unbond.source.as_ref(), &unbond.validator, unbond.amount)
@@ -25,7 +25,8 @@ mod tests {
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
     use namada_tests::native_vp::TestNativeVpEnv;
-    use namada_tests::tx::*;
+    use namada_tests::tx_env;
+    use namada_tests::tx_env::{ctx, TestTxEnvExt};
     use namada_tests::validation::PosVp;
     use namada_tx_prelude::address::InternalAddress;
     use namada_tx_prelude::chain::ChainId;
@@ -67,7 +68,7 @@ mod tests {
 
     fn test_tx_unbond_aux(
         initial_stake: token::Amount,
-        unbond: transaction::pos::Unbond,
+        unbond: data::pos::Unbond,
         key: key::common::SecretKey,
         pos_params: OwnedPosParams,
     ) -> TxResult {
@@ -110,7 +111,7 @@ mod tests {
         let pos_params =
             init_pos(&genesis_validators[..], &pos_params, Epoch(0));
 
-        let native_token = tx_host_env::with(|tx_env| {
+        let native_token = tx_env::with(|tx_env| {
             let native_token = tx_env.state.in_mem().native_token.clone();
             if is_delegation {
                 let source = unbond.source.as_ref().unwrap();
@@ -135,7 +136,7 @@ mod tests {
                 initial_stake,
             )?;
         }
-        tx_host_env::commit_tx_and_block();
+        tx_env::commit_tx_and_block();
 
         let tx_code = vec![];
         let tx_data = unbond.serialize_to_vec();
@@ -336,7 +337,7 @@ mod tests {
         }
 
         // Use the tx_env to run PoS VP
-        let tx_env = tx_host_env::take();
+        let tx_env = tx_env::take();
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &tx_env.gas_meter.borrow(),
         ));
@@ -353,7 +354,7 @@ mod tests {
     /// Generates an initial validator stake and a unbond, while making sure
     /// that the `initial_stake >= unbond.amount`.
     fn arb_initial_stake_and_unbond()
-    -> impl Strategy<Value = (token::Amount, transaction::pos::Unbond)> {
+    -> impl Strategy<Value = (token::Amount, data::pos::Unbond)> {
         // Generate initial stake
         token::testing::arb_amount_ceiled((i64::MAX / 8) as u64).prop_flat_map(
             |initial_stake| {
@@ -367,9 +368,7 @@ mod tests {
     }
 
     /// Generates an arbitrary unbond, with the amount constrained from above.
-    fn arb_unbond(
-        max_amount: u64,
-    ) -> impl Strategy<Value = transaction::pos::Unbond> {
+    fn arb_unbond(max_amount: u64) -> impl Strategy<Value = data::pos::Unbond> {
         (
             address::testing::arb_established_address(),
             prop::option::of(address::testing::arb_non_internal_address()),
@@ -377,7 +376,7 @@ mod tests {
         )
             .prop_map(|(validator, source, amount)| {
                 let validator = Address::Established(validator);
-                transaction::pos::Unbond {
+                data::pos::Unbond {
                     validator,
                     amount,
                     source,

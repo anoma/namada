@@ -5,7 +5,7 @@ use namada_tx_prelude::*;
 #[transaction]
 fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
     let data = ctx.get_tx_data(&tx_data)?;
-    let bond = transaction::pos::Bond::try_from_slice(&data[..])
+    let bond = data::pos::Bond::try_from_slice(&data[..])
         .wrap_err("Failed to decode Bond tx data")?;
 
     ctx.bond_tokens(bond.source.as_ref(), &bond.validator, bond.amount)
@@ -19,7 +19,8 @@ mod tests {
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
     use namada_tests::native_vp::TestNativeVpEnv;
-    use namada_tests::tx::*;
+    use namada_tests::tx_env;
+    use namada_tests::tx_env::{ctx, TestTxEnvExt};
     use namada_tests::validation::PosVp;
     use namada_tx_prelude::address::testing::{
         arb_established_address, arb_non_internal_address,
@@ -63,7 +64,7 @@ mod tests {
 
     fn test_tx_bond_aux(
         initial_stake: token::Amount,
-        bond: transaction::pos::Bond,
+        bond: data::pos::Bond,
         key: key::common::SecretKey,
         pos_params: OwnedPosParams,
     ) -> TxResult {
@@ -98,7 +99,7 @@ mod tests {
         let pos_params =
             init_pos(&genesis_validators[..], &pos_params, Epoch(0));
 
-        let native_token = tx_host_env::with(|tx_env| {
+        let native_token = tx_env::with(|tx_env| {
             if let Some(source) = &bond.source {
                 tx_env.spawn_accounts([source]);
             }
@@ -324,7 +325,7 @@ mod tests {
         }
 
         // Use the tx_env to run PoS VP
-        let tx_env = tx_host_env::take();
+        let tx_env = tx_env::take();
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &tx_env.gas_meter.borrow(),
         ));
@@ -349,25 +350,21 @@ mod tests {
             (bond in arb_bond(((i64::MAX/8) as u64) - u128::try_from(initial_stake).unwrap() as u64),
             // Use the generated initial stake too
             initial_stake in Just(initial_stake),
-        ) -> (token::Amount, transaction::pos::Bond) {
+        ) -> (token::Amount, data::pos::Bond) {
             (initial_stake, bond)
         }
     }
 
-    fn arb_bond(
-        max_amount: u64,
-    ) -> impl Strategy<Value = transaction::pos::Bond> {
+    fn arb_bond(max_amount: u64) -> impl Strategy<Value = data::pos::Bond> {
         (
             arb_established_address(),
             prop::option::of(arb_non_internal_address()),
             token::testing::arb_amount_non_zero_ceiled(max_amount),
         )
-            .prop_map(|(validator, source, amount)| {
-                transaction::pos::Bond {
-                    validator: Address::Established(validator),
-                    amount,
-                    source,
-                }
+            .prop_map(|(validator, source, amount)| data::pos::Bond {
+                validator: Address::Established(validator),
+                amount,
+                source,
             })
     }
 }

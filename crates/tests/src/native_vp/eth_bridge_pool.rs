@@ -26,7 +26,7 @@ mod test_bridge_pool_vp {
     use namada_tx_prelude::BatchedTx;
 
     use crate::native_vp::TestNativeVpEnv;
-    use crate::tx::{tx_host_env, TestTxEnv};
+    use crate::tx_env::{self, TestTxEnv, TestTxEnvExt};
     const ASSET: EthAddress = EthAddress([1; 20]);
     const BERTHA_WEALTH: u64 = 1_000_000;
     const BERTHA_TOKENS: u64 = 10_000;
@@ -110,8 +110,8 @@ mod test_bridge_pool_vp {
 
     fn run_vp(tx: BatchedTx) -> bool {
         let env = setup_env(tx);
-        tx_host_env::set(env);
-        let mut tx_env = tx_host_env::take();
+        tx_env::set(env);
+        let mut tx_env = tx_env::take();
         tx_env.execute_tx().expect("Test failed.");
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &tx_env.gas_meter.borrow(),

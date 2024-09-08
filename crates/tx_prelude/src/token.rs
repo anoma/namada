@@ -12,9 +12,8 @@ pub use namada_token::testing;
 pub use namada_token::{
     storage_key, utils, Amount, DenominatedAmount, Store, Transfer,
 };
-use namada_tx_env::TxEnv;
-
-use crate::{Ctx, Result, TxResult};
+use namada_tx_env::ctx::{Ctx, TxResult};
+use namada_tx_env::{Result, TxEnv};
 
 /// A transparent token transfer that can be used in a transaction.
 pub fn transfer(

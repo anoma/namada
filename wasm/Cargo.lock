@@ -4150,9 +4150,16 @@ dependencies = [
 name = "namada_tx_env"
 version = "0.43.0"
 dependencies = [
+ "concat-idents",
  "namada_core",
  "namada_events",
+ "namada_gas",
+ "namada_state",
  "namada_storage",
+ "namada_tx",
+ "namada_vm",
+ "namada_vm_env",
+ "tempfile",
 ]
 
 [[package]]

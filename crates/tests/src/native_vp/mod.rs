@@ -14,7 +14,7 @@ use namada_vm::wasm::VpCache;
 use namada_vm::WasmCacheRwAccess;
 use namada_vp::native_vp::{self, Ctx, NativeVp};
 
-use crate::tx::TestTxEnv;
+use crate::tx_env::TestTxEnv;
 
 type NativeVpCtx<'a> = Ctx<
     'a,

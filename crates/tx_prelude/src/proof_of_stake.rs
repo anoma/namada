@@ -1,5 +1,6 @@
 //! Proof of Stake system integration with functions for transactions
 
+use namada_account::Address;
 use namada_core::dec::Dec;
 use namada_core::key;
 pub use namada_proof_of_stake::parameters::PosParams;
@@ -13,19 +14,113 @@ use namada_proof_of_stake::{
     redelegate_tokens, unbond_tokens, unjail_validator, withdraw_tokens,
 };
 pub use namada_proof_of_stake::{parameters, storage, storage_key, types};
+pub use namada_state::StorageRead;
 use namada_tx::action::{
     Action, ClaimRewards, PosAction, Redelegation, Unbond, Withdraw, Write,
 };
 use namada_tx::data::pos::{BecomeValidator, Bond};
+use namada_tx_env::ctx::{common, Ctx, TxResult};
+use namada_tx_env::{Result, TxEnv};
 
-use super::*;
-use crate::token;
+use crate::{governance, token};
 
-impl Ctx {
+/// Extension trait to add PoS methods to `Ctx`.
+pub trait PosCtxExt {
     /// Self-bond tokens to a validator when `source` is `None` or equal to
     /// the `validator` address, or delegate tokens from the `source` to the
     /// `validator`.
-    pub fn bond_tokens(
+    fn bond_tokens(
+        &mut self,
+        source: Option<&Address>,
+        validator: &Address,
+        amount: token::Amount,
+    ) -> TxResult;
+
+    /// Unbond self-bonded tokens from a validator when `source` is `None`
+    /// or equal to the `validator` address, or unbond delegated tokens from
+    /// the `source` to the `validator`.
+    fn unbond_tokens(
+        &mut self,
+        source: Option<&Address>,
+        validator: &Address,
+        amount: token::Amount,
+    ) -> Result<ResultSlashing>;
+
+    /// Withdraw unbonded tokens from a self-bond to a validator when
+    /// `source` is `None` or equal to the `validator` address, or withdraw
+    /// unbonded tokens delegated to the `validator` to the `source`.
+    fn withdraw_tokens(
+        &mut self,
+        source: Option<&Address>,
+        validator: &Address,
+    ) -> Result<token::Amount>;
+
+    /// Change validator consensus key.
+    fn change_validator_consensus_key(
+        &mut self,
+        validator: &Address,
+        consensus_key: &common::PublicKey,
+    ) -> TxResult;
+
+    /// Change validator commission rate.
+    fn change_validator_commission_rate(
+        &mut self,
+        validator: &Address,
+        rate: &Dec,
+    ) -> TxResult;
+
+    /// Unjail a jailed validator and re-enter the validator sets.
+    fn unjail_validator(&mut self, validator: &Address) -> TxResult;
+
+    /// Redelegate bonded tokens from one validator to another one.
+    fn redelegate_tokens(
+        &mut self,
+        owner: &Address,
+        src_validator: &Address,
+        dest_validator: &Address,
+        amount: token::Amount,
+    ) -> TxResult;
+
+    /// Claim available reward tokens
+    fn claim_reward_tokens(
+        &mut self,
+        source: Option<&Address>,
+        validator: &Address,
+    ) -> Result<token::Amount>;
+
+    /// Attempt to initialize a validator account. On success, returns the
+    /// initialized validator account's address.
+    fn become_validator(
+        &mut self,
+        become_validator: BecomeValidator,
+    ) -> Result<Address>;
+
+    /// Deactivate validator
+    fn deactivate_validator(&mut self, validator: &Address) -> TxResult;
+
+    /// Reactivate validator
+    fn reactivate_validator(&mut self, validator: &Address) -> TxResult;
+
+    /// Change validator metadata.
+    #[allow(clippy::too_many_arguments)]
+    fn change_validator_metadata(
+        &mut self,
+        validator: &Address,
+        email: Option<String>,
+        description: Option<String>,
+        website: Option<String>,
+        discord_handle: Option<String>,
+        avatar: Option<String>,
+        name: Option<String>,
+        commission_rate: Option<Dec>,
+    ) -> TxResult;
+}
+
+impl PosCtxExt for Ctx {
+    /// Self-bond tokens to a validator when `source` is `None` or equal to
+    /// the `validator` address, or delegate tokens from the `source` to the
+    /// `validator`.
+    fn bond_tokens(
         &mut self,
         source: Option<&Address>,
         validator: &Address,
@@ -55,7 +150,7 @@ impl Ctx {
     /// Unbond self-bonded tokens from a validator when `source` is `None`
     /// or equal to the `validator` address, or unbond delegated tokens from
     /// the `source` to the `validator`.
-    pub fn unbond_tokens(
+    fn unbond_tokens(
         &mut self,
         source: Option<&Address>,
         validator: &Address,
@@ -85,7 +180,7 @@ impl Ctx {
     /// Withdraw unbonded tokens from a self-bond to a validator when
     /// `source` is `None` or equal to the `validator` address, or withdraw
     /// unbonded tokens delegated to the `validator` to the `source`.
-    pub fn withdraw_tokens(
+    fn withdraw_tokens(
         &mut self,
         source: Option<&Address>,
         validator: &Address,
@@ -109,7 +204,7 @@ impl Ctx {
     }
 
     /// Change validator consensus key.
-    pub fn change_validator_consensus_key(
+    fn change_validator_consensus_key(
         &mut self,
         validator: &Address,
         consensus_key: &common::PublicKey,
@@ -131,7 +226,7 @@ impl Ctx {
     }
 
     /// Change validator commission rate.
-    pub fn change_validator_commission_rate(
+    fn change_validator_commission_rate(
         &mut self,
         validator: &Address,
         rate: &Dec,
@@ -153,7 +248,7 @@ impl Ctx {
     }
 
     /// Unjail a jailed validator and re-enter the validator sets.
-    pub fn unjail_validator(&mut self, validator: &Address) -> TxResult {
+    fn unjail_validator(&mut self, validator: &Address) -> TxResult {
         // The tx must be authorized by the source address
         self.insert_verifier(validator)?;
 
@@ -168,7 +263,7 @@ impl Ctx {
     }
 
     /// Redelegate bonded tokens from one validator to another one.
-    pub fn redelegate_tokens(
+    fn redelegate_tokens(
         &mut self,
         owner: &Address,
         src_validator: &Address,
@@ -197,7 +292,7 @@ impl Ctx {
     }
 
     /// Claim available reward tokens
-    pub fn claim_reward_tokens(
+    fn claim_reward_tokens(
         &mut self,
         source: Option<&Address>,
         validator: &Address,
@@ -222,7 +317,7 @@ impl Ctx {
 
     /// Attempt to initialize a validator account. On success, returns the
     /// initialized validator account's address.
-    pub fn become_validator(
+    fn become_validator(
         &mut self,
         BecomeValidator {
             address,
@@ -280,7 +375,7 @@ impl Ctx {
     }
 
     /// Deactivate validator
-    pub fn deactivate_validator(&mut self, validator: &Address) -> TxResult {
+    fn deactivate_validator(&mut self, validator: &Address) -> TxResult {
         // The tx must be authorized by the source address
         self.insert_verifier(validator)?;
 
@@ -297,7 +392,7 @@ impl Ctx {
     }
 
     /// Reactivate validator
-    pub fn reactivate_validator(&mut self, validator: &Address) -> TxResult {
+    fn reactivate_validator(&mut self, validator: &Address) -> TxResult {
         // The tx must be authorized by the source address
         self.insert_verifier(validator)?;
 
@@ -315,7 +410,7 @@ impl Ctx {
 
     /// Change validator metadata.
     #[allow(clippy::too_many_arguments)]
-    pub fn change_validator_metadata(
+    fn change_validator_metadata(
         &mut self,
         validator: &Address,
         email: Option<String>,

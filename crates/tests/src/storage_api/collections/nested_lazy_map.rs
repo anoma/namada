@@ -18,7 +18,7 @@ mod tests {
     };
     use test_log::test;
 
-    use crate::tx::tx_host_env;
+    use crate::tx_env;
     use crate::vp::vp_host_env;
 
     prop_state_machine! {
@@ -213,12 +213,12 @@ mod tests {
             _initial_state: &<Self::Reference as ReferenceStateMachine>::State,
         ) -> Self::SystemUnderTest {
             // Init transaction env in which we'll be applying the transitions
-            tx_host_env::init();
+            tx_env::init();
 
             // The lazy_map's path must be prefixed by the address to be able
             // to trigger a validity predicate on it
             let address = address::testing::established_address_1();
-            tx_host_env::with(|env| env.spawn_accounts([&address]));
+            tx_env::with(|env| env.spawn_accounts([&address]));
             let lazy_map_prefix: storage::Key = address.to_db_key().into();
 
             Self {
@@ -237,7 +237,7 @@ mod tests {
             transition: <Self::Reference as ReferenceStateMachine>::Transition,
         ) -> Self::SystemUnderTest {
             // Apply transitions in transaction env
-            let ctx = tx_host_env::ctx();
+            let ctx = tx_env::ctx();
 
             // Persist the transitions in the current tx, or clear previous ones
             // if we're committing a tx
@@ -254,11 +254,11 @@ mod tests {
             match &transition {
                 Transition::CommitTx => {
                     // commit the tx without committing the block
-                    tx_host_env::with(|env| env.state.commit_tx_batch());
+                    tx_env::with(|env| env.state.commit_tx_batch());
                 }
                 Transition::CommitTxAndBlock => {
                     // commit the tx and the block
-                    tx_host_env::commit_tx_and_block();
+                    tx_env::commit_tx_and_block();
                 }
                 Transition::Insert(
                     (key_outer, key_middle, key_inner),
@@ -461,7 +461,7 @@ mod tests {
         fn assert_validation_accepted(&self) {
             // Init the VP env from tx env in which we applied the map
             // transitions
-            let tx_env = tx_host_env::take();
+            let tx_env = tx_env::take();
             vp_host_env::init_from_tx(self.address.clone(), tx_env, |_| {});
 
             // Simulate a validity predicate run using the lazy map's validation
@@ -608,7 +608,7 @@ mod tests {
             }
 
             // Put the tx_env back before checking the result
-            tx_host_env::set_from_vp_env(vp_host_env::take());
+            tx_env::set_from_vp_env(vp_host_env::take());
         }
     }
 

@@ -1,6 +1,6 @@
 //! A tx for a validator to change their commission rate for PoS rewards.
 
-use namada_tx_prelude::transaction::pos::CommissionChange;
+use namada_tx_prelude::data::pos::CommissionChange;
 use namada_tx_prelude::*;
 
 #[transaction]
@@ -9,7 +9,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
     let CommissionChange {
         validator,
         new_rate,
-    } = transaction::pos::CommissionChange::try_from_slice(&data[..])
+    } = data::pos::CommissionChange::try_from_slice(&data[..])
         .wrap_err("Failed to decode CommissionChange value")?;
     ctx.change_validator_commission_rate(&validator, &new_rate)
         .wrap_err("Failed to change validator's commission rate")
@@ -23,7 +23,8 @@ mod tests {
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
     use namada_tests::native_vp::TestNativeVpEnv;
-    use namada_tests::tx::*;
+    use namada_tests::tx_env;
+    use namada_tests::tx_env::ctx;
     use namada_tests::validation::PosVp;
     use namada_tx_prelude::address::testing::arb_established_address;
     use namada_tx_prelude::chain::ChainId;
@@ -62,7 +63,7 @@ mod tests {
     fn test_tx_change_validator_commission_aux(
         initial_rate: Dec,
         max_change: Dec,
-        commission_change: transaction::pos::CommissionChange,
+        commission_change: data::pos::CommissionChange,
         key: key::common::SecretKey,
         pos_params: OwnedPosParams,
     ) -> TxResult {
@@ -149,7 +150,7 @@ mod tests {
         }
 
         // Use the tx_env to run PoS VP
-        let tx_env = tx_host_env::take();
+        let tx_env = tx_env::take();
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &tx_env.gas_meter.borrow(),
         ));
@@ -216,7 +217,7 @@ mod tests {
     fn arb_commission_change(
         rate_pre: Dec,
         max_change: Dec,
-    ) -> impl Strategy<Value = transaction::pos::CommissionChange> {
+    ) -> impl Strategy<Value = data::pos::CommissionChange> {
         (
             arb_established_address(),
             if max_change.is_zero() {
@@ -226,7 +227,7 @@ mod tests {
             },
         )
             .prop_map(|(validator, new_rate)| {
-                transaction::pos::CommissionChange {
+                data::pos::CommissionChange {
                     validator: Address::Established(validator),
                     new_rate,
                 }
@@ -234,8 +235,7 @@ mod tests {
     }
 
     fn arb_commission_info()
-    -> impl Strategy<Value = (Dec, Dec, transaction::pos::CommissionChange)>
-    {
+    -> impl Strategy<Value = (Dec, Dec, data::pos::CommissionChange)> {
         let min = Dec::zero();
         let max = Dec::one();
         let non_zero_min = Dec::one() / scale();

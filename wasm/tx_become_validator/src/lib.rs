@@ -2,7 +2,7 @@
 //! validity predicates.
 
 use booleans::ResultBoolExt;
-use namada_tx_prelude::transaction::pos::BecomeValidator;
+use namada_tx_prelude::data::pos::BecomeValidator;
 use namada_tx_prelude::*;
 
 #[transaction]

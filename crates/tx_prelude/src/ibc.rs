@@ -17,37 +17,40 @@ pub use namada_ibc::{
     IbcActions, IbcCommonContext, IbcStorageContext, NftTransferModule,
     ProofSpec, TransferModule,
 };
-use namada_tx_env::TxEnv;
 
-use crate::token::transfer;
-use crate::{Ctx, Result};
+use super::token::transfer;
+use super::{parameters, token, Ctx};
+use crate::{Result, TxEnv};
 
 /// IBC actions to handle an IBC message. The `verifiers` inserted into the set
 /// must be inserted into the tx context with `Ctx::insert_verifier` after tx
 /// execution.
 pub fn ibc_actions(
     ctx: &mut Ctx,
-) -> IbcActions<'_, Ctx, crate::parameters::Store<Ctx>, crate::token::Store<Ctx>>
-{
-    let ctx = Rc::new(RefCell::new(ctx.clone()));
+) -> IbcActions<'_, CtxWrapper, parameters::Store<Ctx>, token::Store<Ctx>> {
+    let ctx = Rc::new(RefCell::new(CtxWrapper(ctx.clone())));
     let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
     let mut actions = IbcActions::new(ctx.clone(), verifiers.clone());
     let module = TransferModule::new(ctx.clone(), verifiers);
     actions.add_transfer_module(module);
-    let module = NftTransferModule::<Ctx, crate::token::Store<Ctx>>::new(ctx);
+    let module = NftTransferModule::<CtxWrapper, token::Store<Ctx>>::new(ctx);
     actions.add_transfer_module(module);
     actions
 }
 
-impl IbcStorageContext for Ctx {
-    type Storage = Self;
+/// A wrapper type to impl foreign traits on foreign type
+#[derive(Debug)]
+pub struct CtxWrapper(Ctx);
+
+impl IbcStorageContext for CtxWrapper {
+    type Storage = Ctx;
 
     fn storage(&self) -> &Self::Storage {
-        self
+        &self.0
     }
 
     fn storage_mut(&mut self) -> &mut Self::Storage {
-        self
+        &mut self.0
     }
 
     fn log_string(&self, message: String) {
@@ -55,7 +58,7 @@ impl IbcStorageContext for Ctx {
     }
 
     fn emit_ibc_event(&mut self, event: IbcEvent) -> Result<()> {
-        <Ctx as TxEnv>::emit_event(self, event)
+        <Ctx as TxEnv>::emit_event(&mut self.0, event)
     }
 
     fn transfer_token(
@@ -65,7 +68,7 @@ impl IbcStorageContext for Ctx {
         token: &Address,
         amount: Amount,
     ) -> Result<()> {
-        transfer(self, src, dest, token, amount)
+        transfer(&mut self.0, src, dest, token, amount)
     }
 
     fn mint_token(
@@ -74,7 +77,7 @@ impl IbcStorageContext for Ctx {
         token: &Address,
         amount: Amount,
     ) -> Result<()> {
-        mint_tokens::<_, crate::token::Store<_>>(self, target, token, amount)
+        mint_tokens::<_, token::Store<_>>(&mut self.0, target, token, amount)
     }
 
     fn burn_token(
@@ -83,12 +86,12 @@ impl IbcStorageContext for Ctx {
         token: &Address,
         amount: Amount,
     ) -> Result<()> {
-        burn_tokens::<_, crate::token::Store<_>>(self, target, token, amount)
+        burn_tokens::<_, token::Store<_>>(&mut self.0, target, token, amount)
     }
 
     fn insert_verifier(&mut self, addr: &Address) -> Result<()> {
-        TxEnv::insert_verifier(self, addr)
+        TxEnv::insert_verifier(&mut self.0, addr)
     }
 }
 
-impl IbcCommonContext for Ctx {}
+impl IbcCommonContext for CtxWrapper {}

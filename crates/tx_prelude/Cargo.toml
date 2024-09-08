@@ -29,7 +29,7 @@ namada_proof_of_stake = { path = "../proof_of_stake" }
 namada_state = { path = "../state" }
 namada_token = { path = "../token" }
 namada_tx = { path = "../tx", default-features = false }
-namada_tx_env = { path = "../tx_env" }
+namada_tx_env = { path = "../tx_env", features = ["ctx"] }
 namada_vm_env = { path = "../vm_env" }
 
 borsh.workspace = true

@@ -1,7 +1,7 @@
 //! A tx for a validator to change their consensus key.
 
 use booleans::ResultBoolExt;
-use namada_tx_prelude::transaction::pos::ConsensusKeyChange;
+use namada_tx_prelude::data::pos::ConsensusKeyChange;
 use namada_tx_prelude::*;
 
 #[transaction]
@@ -10,7 +10,7 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
     let ConsensusKeyChange {
         validator,
         consensus_key,
-    } = transaction::pos::ConsensusKeyChange::try_from_slice(&data[..])
+    } = data::pos::ConsensusKeyChange::try_from_slice(&data[..])
         .wrap_err("Failed to decode ConsensusKeyChange value")?;
 
     // Check that the tx has been signed with the new consensus key

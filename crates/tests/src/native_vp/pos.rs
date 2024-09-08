@@ -100,7 +100,8 @@ use namada_sdk::proof_of_stake::parameters::{OwnedPosParams, PosParams};
 use namada_sdk::proof_of_stake::test_utils::test_init_genesis as init_genesis;
 use namada_sdk::proof_of_stake::types::GenesisValidator;
 
-use crate::tx::tx_host_env;
+use crate::tx_env;
+use crate::tx_env::TestTxEnvExt;
 
 /// initialize proof-of-stake genesis with the given list of validators and
 /// parameters.
@@ -109,9 +110,9 @@ pub fn init_pos(
     params: &OwnedPosParams,
     start_epoch: Epoch,
 ) -> PosParams {
-    tx_host_env::init();
+    tx_env::init();
 
-    tx_host_env::with(|tx_env| {
+    tx_env::with(|tx_env| {
         // Ensure that all the used
         // addresses exist
         let native_token = tx_env.state.in_mem().native_token.clone();
@@ -255,7 +256,7 @@ mod tests {
                 change.clone().apply(true)
             }
             // Commit the genesis block
-            tx_host_env::commit_tx_and_block();
+            tx_env::commit_tx_and_block();
 
             Self {
                 // we only generate and apply valid actions in the initial state
@@ -272,19 +273,19 @@ mod tests {
                 Transition::CommitTx => {
                     if !test_state.is_current_tx_valid {
                         // Clear out the changes
-                        tx_host_env::with(|env| {
+                        tx_env::with(|env| {
                             env.state.drop_tx_batch();
                         });
                     }
 
                     // Commit the last transaction(s) changes, if any
-                    tx_host_env::commit_tx_and_block();
+                    tx_env::commit_tx_and_block();
 
                     // Starting a new tx
                     test_state.is_current_tx_valid = true;
                 }
                 Transition::NextEpoch => {
-                    tx_host_env::with(|env| {
+                    tx_env::with(|env| {
                         // Clear out the changes
                         if !test_state.is_current_tx_valid {
                             env.state.drop_tx_batch();
@@ -322,7 +323,7 @@ mod tests {
                     test_state.validate_transitions();
 
                     // Clear out the invalid changes
-                    tx_host_env::with(|env| {
+                    tx_env::with(|env| {
                         env.state.drop_tx_batch();
                     })
                 }
@@ -443,7 +444,7 @@ mod tests {
     impl ConcretePosState {
         fn validate_transitions(&self) {
             // Use the tx_env to run PoS VP
-            let tx_env = tx_host_env::take();
+            let tx_env = tx_env::take();
 
             let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
                 &tx_env.gas_meter.borrow(),
@@ -453,7 +454,7 @@ mod tests {
             let result = vp_env.validate_tx(&vp);
 
             // Put the tx_env back before checking the result
-            tx_host_env::set(vp_env.tx_env);
+            tx_env::set(vp_env.tx_env);
 
             // The expected result depends on the current state
             match (self.is_current_tx_valid, result) {
@@ -608,7 +609,7 @@ pub mod testing {
     use namada_tx_prelude::{Address, StorageRead, StorageWrite};
     use proptest::prelude::*;
 
-    use crate::tx::{self, tx_host_env};
+    use crate::tx_env;
 
     #[derive(Clone, Debug, Default)]
     pub struct TestValidator {
@@ -872,9 +873,10 @@ pub mod testing {
         pub fn apply(self, is_current_tx_valid: bool) {
             // Read the PoS parameters
             let params =
-                read_pos_params::<_, governance::Store<_>>(tx::ctx()).unwrap();
+                read_pos_params::<_, governance::Store<_>>(tx_env::ctx())
+                    .unwrap();
 
-            let current_epoch = tx_host_env::with(|env| {
+            let current_epoch = tx_env::with(|env| {
                 // Reset the gas meter on each change, so that we never run
                 // out in this test
                 let gas_limit = env.gas_meter.borrow().tx_gas_limit;
@@ -1079,7 +1081,7 @@ pub mod testing {
     ) {
         match change {
             PosStorageChange::SpawnAccount { address } => {
-                tx_host_env::with(move |env| {
+                tx_env::with(move |env| {
                     env.spawn_accounts([&address]);
                 });
             }
@@ -1331,11 +1333,13 @@ pub mod testing {
             }
             PosStorageChange::StakingTokenPosBalance { delta } => {
                 let balance_key = token::storage_key::balance_key(
-                    &tx::ctx().get_native_token().unwrap(),
+                    &tx_env::ctx().get_native_token().unwrap(),
                     &POS_ADDRESS,
                 );
-                let mut balance: token::Amount =
-                    tx::ctx().read(&balance_key).unwrap().unwrap_or_default();
+                let mut balance: token::Amount = tx_env::ctx()
+                    .read(&balance_key)
+                    .unwrap()
+                    .unwrap_or_default();
                 if !delta.non_negative() {
                     let to_spend = token::Amount::from_change(delta);
                     balance.spend(&to_spend).unwrap();
@@ -1343,7 +1347,7 @@ pub mod testing {
                     let to_recv = token::Amount::from_change(delta);
                     balance.receive(&to_recv).unwrap();
                 }
-                tx::ctx().write(&balance_key, balance).unwrap();
+                tx_env::ctx().write(&balance_key, balance).unwrap();
             }
             PosStorageChange::WithdrawUnbond {
                 owner: _,
@@ -1587,7 +1591,8 @@ pub mod testing {
         pub fn apply(self) {
             // Read the PoS parameters
             let params =
-                read_pos_params::<_, governance::Store<_>>(tx::ctx()).unwrap();
+                read_pos_params::<_, governance::Store<_>>(tx_env::ctx())
+                    .unwrap();
 
             for (epoch, changes) in self.changes {
                 for change in changes {
@@ -1603,7 +1608,7 @@ pub mod testing {
         current_epoch: Epoch,
     ) -> bool {
         let num_consensus_validators =
-            get_num_consensus_validators(tx::ctx(), current_epoch).unwrap();
+            get_num_consensus_validators(tx_env::ctx(), current_epoch).unwrap();
         params.max_validator_slots > num_consensus_validators
     }
 }

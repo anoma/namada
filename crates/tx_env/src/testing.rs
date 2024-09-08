@@ -1,29 +1,29 @@
+//! Utils for testing with transaction code with `Ctx` and/or `TxEnv`.
+
+#![allow(missing_docs)]
+#![allow(clippy::print_stdout, clippy::arithmetic_side_effects)]
+
 use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::rc::Rc;
 
-use namada_sdk::address::Address;
-use namada_sdk::gas::TxGasMeter;
-use namada_sdk::hash::Hash;
-use namada_sdk::parameters::{self, EpochDuration};
-use namada_sdk::state::prefix_iter::PrefixIterators;
-use namada_sdk::state::testing::TestState;
-use namada_sdk::storage::mockdb::MockDB;
-use namada_sdk::storage::{Key, TxIndex};
-use namada_sdk::time::DurationSecs;
-pub use namada_sdk::tx::data::TxType;
-pub use namada_sdk::tx::*;
-use namada_sdk::{account, token};
-use namada_tx_prelude::transaction::TxSentinel;
-use namada_tx_prelude::{BorshSerializeExt, Ctx};
+use namada_core::address::Address;
+use namada_core::hash::Hash;
+use namada_gas::TxGasMeter;
+use namada_state::mockdb::MockDB;
+use namada_state::prefix_iter::PrefixIterators;
+use namada_state::testing::TestState;
+use namada_state::{Key, TxIndex};
+use namada_tx::data::TxSentinel;
+pub use namada_tx::data::TxType;
+pub use namada_tx::*;
 use namada_vm::wasm::run::Error;
-use namada_vm::wasm::{self, TxCache, VpCache};
+use namada_vm::wasm::{self, wasmer, TxCache, VpCache};
 use namada_vm::WasmCacheRwAccess;
-use namada_vp_prelude::key::common;
 use tempfile::TempDir;
 
-use crate::vp::TestVpEnv;
+use crate::ctx::Ctx;
 
 /// Tx execution context provides access to host env functions
 static mut CTX: Ctx = unsafe { Ctx::new() };
@@ -31,17 +31,6 @@ static mut CTX: Ctx = unsafe { Ctx::new() };
 /// Tx execution context provides access to host env functions
 pub fn ctx() -> &'static mut Ctx {
     unsafe { &mut *std::ptr::addr_of_mut!(CTX) }
-}
-
-/// This module combines the native host function implementations from
-/// `native_tx_host_env` with the functions exposed to the tx wasm
-/// that will call to the native functions, instead of interfacing via a
-/// wasm runtime. It can be used for host environment integration tests.
-pub mod tx_host_env {
-    pub use namada_tx_prelude::*;
-
-    pub use super::ctx;
-    pub use super::native_tx_host_env::*;
 }
 
 /// Host environment structures required for transactions.
@@ -109,32 +98,6 @@ impl TestTxEnv {
             .0
     }
 
-    pub fn init_parameters(
-        &mut self,
-        epoch_duration: Option<EpochDuration>,
-        vp_allowlist: Option<Vec<String>>,
-        tx_allowlist: Option<Vec<String>>,
-    ) {
-        parameters::update_epoch_parameter(
-            &mut self.state,
-            &epoch_duration.unwrap_or(EpochDuration {
-                min_num_of_blocks: 1,
-                min_duration: DurationSecs(5),
-            }),
-        )
-        .unwrap();
-        parameters::update_tx_allowlist_parameter(
-            &mut self.state,
-            tx_allowlist.unwrap_or_default(),
-        )
-        .unwrap();
-        parameters::update_vp_allowlist_parameter(
-            &mut self.state,
-            vp_allowlist.unwrap_or_default(),
-        )
-        .unwrap();
-    }
-
     pub fn store_wasm_code(&mut self, code: Vec<u8>) {
         let hash = Hash::sha256(&code);
         let key = Key::wasm_code(&hash);
@@ -166,33 +129,6 @@ impl TestTxEnv {
         }
     }
 
-    pub fn init_account_storage(
-        &mut self,
-        owner: &Address,
-        public_keys: Vec<common::PublicKey>,
-        threshold: u8,
-    ) {
-        account::init_account_storage(
-            &mut self.state,
-            owner,
-            &public_keys,
-            threshold,
-        )
-        .expect("Unable to write Account substorage.");
-    }
-
-    /// Set public key for the address.
-    pub fn write_account_threshold(
-        &mut self,
-        address: &Address,
-        threshold: u8,
-    ) {
-        let storage_key = account::threshold_key(address);
-        self.state
-            .db_write(&storage_key, threshold.serialize_to_vec())
-            .unwrap();
-    }
-
     /// Commit the genesis state. Typically, you'll want to call this after
     /// setting up the initial state, before running a transaction.
     pub fn commit_genesis(&mut self) {
@@ -207,19 +143,6 @@ impl TestTxEnv {
             .ok();
         self.iterators = PrefixIterators::default();
         self.verifiers = BTreeSet::default();
-    }
-
-    /// Credit tokens to the target account.
-    pub fn credit_tokens(
-        &mut self,
-        target: &Address,
-        token: &Address,
-        amount: token::Amount,
-    ) {
-        let storage_key = token::storage_key::balance_key(token, target);
-        self.state
-            .db_write(&storage_key, amount.serialize_to_vec())
-            .unwrap();
     }
 
     /// Apply the tx changes to the write log.
@@ -241,7 +164,7 @@ impl TestTxEnv {
 /// It keeps a thread-local global `TxEnv`, which is passed to any of
 /// invoked host environment functions and so it must be initialized
 /// before the test.
-mod native_tx_host_env {
+pub mod native_tx_env {
     use std::pin::Pin;
 
     // TODO replace with `std::concat_idents` once stabilized (https://github.com/rust-lang/rust/issues/29599)
@@ -284,7 +207,7 @@ mod native_tx_host_env {
                 .as_mut()
                 .expect(
                     "Did you forget to initialize the ENV? (e.g. call to \
-                     `tx_host_env::init()`)",
+                     `tx_env::init()`)",
                 )
                 .as_mut();
             f(&mut env)
@@ -297,7 +220,7 @@ mod native_tx_host_env {
             let mut env = env.borrow_mut();
             let env = env.take().expect(
                 "Did you forget to initialize the ENV? (e.g. call to \
-                 `tx_host_env::init()`)",
+                 `tx_env::init()`)",
             );
             let env = Pin::into_inner(env);
             *env
@@ -306,27 +229,6 @@ mod native_tx_host_env {
 
     pub fn commit_tx_and_block() {
         with(|env| env.commit_tx_and_block())
-    }
-
-    /// Set the [`TestTxEnv`] back from a [`TestVpEnv`]. This is useful when
-    /// testing validation with multiple transactions that accumulate some state
-    /// changes.
-    pub fn set_from_vp_env(vp_env: TestVpEnv) {
-        let TestVpEnv {
-            state,
-            batched_tx,
-            vp_wasm_cache,
-            vp_cache_dir,
-            ..
-        } = vp_env;
-        let tx_env = TestTxEnv {
-            state,
-            vp_wasm_cache,
-            vp_cache_dir,
-            batched_tx,
-            ..Default::default()
-        };
-        set(tx_env);
     }
 
     /// A helper macro to create implementations of the host environment
@@ -535,8 +437,7 @@ mod native_tx_host_env {
 #[cfg(test)]
 mod tests {
     use namada_core::hash::Sha256Hasher;
-    use namada_sdk::storage;
-    use namada_tx_prelude::StorageWrite;
+    use namada_state::{Key as StorageKey, StorageWrite};
     use namada_vm::host_env::{self, TxVmEnv};
     use namada_vm::memory::VmMemory;
     use proptest::prelude::*;
@@ -549,7 +450,7 @@ mod tests {
         write_to_memory: bool,
         write_to_wl: bool,
         write_to_storage: bool,
-        key: storage::Key,
+        key: StorageKey,
         key_memory_ptr: u64,
         read_buffer_memory_ptr: u64,
         val: Vec<u8>,
@@ -793,7 +694,7 @@ mod tests {
             any::<bool>(),
             any::<bool>(),
             any::<bool>(),
-            namada_sdk::storage::testing::arb_key(),
+            namada_state::testing::arb_key(),
             arb_u64(),
             arb_u64(),
             any::<Vec<u8>>(),
@@ -826,10 +727,10 @@ mod tests {
         prop_oneof![
             5 => Just(u64::MIN),
             5 => Just(u64::MIN + 1),
-            5 => u64::MIN + 2..=u32::MAX as u64,
+            5 => u64::MIN + 2..=u64::from(u32::MAX),
             1 => Just(u64::MAX),
             1 => Just(u64::MAX - 1),
-            1 => u32::MAX as u64 + 1..u64::MAX - 1,
+            1 => u64::from(u32::MAX) + 1..u64::MAX - 1,
         ]
     }
 }

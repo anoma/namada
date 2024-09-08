@@ -6,7 +6,7 @@ use namada_tx_prelude::*;
 #[transaction]
 fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
     let data = ctx.get_tx_data(&tx_data)?;
-    let withdraw = transaction::pos::Withdraw::try_from_slice(&data[..])
+    let withdraw = data::pos::Withdraw::try_from_slice(&data[..])
         .wrap_err("Failed to decode Withdraw tx data")?;
 
     let slashed = ctx
@@ -25,7 +25,8 @@ mod tests {
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
     use namada_tests::native_vp::TestNativeVpEnv;
-    use namada_tests::tx::*;
+    use namada_tests::tx_env;
+    use namada_tests::tx_env::{ctx, TestTxEnvExt};
     use namada_tests::validation::PosVp;
     use namada_tx_prelude::address::testing::{
         arb_established_address, arb_non_internal_address,
@@ -69,7 +70,7 @@ mod tests {
     fn test_tx_withdraw_aux(
         initial_stake: token::Amount,
         unbonded_amount: token::Amount,
-        withdraw: transaction::pos::Withdraw,
+        withdraw: data::pos::Withdraw,
         key: key::common::SecretKey,
         pos_params: OwnedPosParams,
     ) -> TxResult {
@@ -111,7 +112,7 @@ mod tests {
         let pos_params =
             init_pos(&genesis_validators[..], &pos_params, Epoch(0));
 
-        let native_token = tx_host_env::with(|tx_env| {
+        let native_token = tx_env::with(|tx_env| {
             let native_token = tx_env.state.in_mem().native_token.clone();
             if is_delegation {
                 let source = withdraw.source.as_ref().unwrap();
@@ -143,12 +144,12 @@ mod tests {
             unbonded_amount,
         )?;
 
-        tx_host_env::commit_tx_and_block();
+        tx_env::commit_tx_and_block();
 
         // Fast forward to pipeline + unbonding + cubic_slashing_window_length
         // offset epoch so that it's possible to withdraw the unbonded
         // tokens
-        tx_host_env::with(|env| {
+        tx_env::with(|env| {
             for _ in 0..(pos_params.pipeline_len
                 + pos_params.unbonding_len
                 + pos_params.cubic_slashing_window_length)
@@ -169,7 +170,7 @@ mod tests {
         );
 
         assert_eq!(
-            tx_host_env::with(|env| env.state.in_mem().block.epoch),
+            tx_env::with(|env| env.state.in_mem().block.epoch),
             Epoch(
                 pos_params.pipeline_len
                     + pos_params.unbonding_len
@@ -222,7 +223,7 @@ mod tests {
         assert_eq!(pos_balance_pre - pos_balance_post, unbonded_amount);
 
         // Use the tx_env to run PoS VP
-        let tx_env = tx_host_env::take();
+        let tx_env = tx_env::take();
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &tx_env.gas_meter.borrow(),
         ));
@@ -252,16 +253,14 @@ mod tests {
             })
     }
 
-    fn arb_withdraw() -> impl Strategy<Value = transaction::pos::Withdraw> {
+    fn arb_withdraw() -> impl Strategy<Value = data::pos::Withdraw> {
         (
             arb_established_address(),
             prop::option::of(arb_non_internal_address()),
         )
-            .prop_map(|(validator, source)| {
-                transaction::pos::Withdraw {
-                    validator: Address::Established(validator),
-                    source,
-                }
+            .prop_map(|(validator, source)| data::pos::Withdraw {
+                validator: Address::Established(validator),
+                source,
             })
     }
 }

@@ -6,12 +6,12 @@ use namada_tx_prelude::*;
 #[transaction]
 fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
     let data = ctx.get_tx_data(&tx_data)?;
-    let transaction::pos::Redelegation {
+    let data::pos::Redelegation {
         src_validator,
         dest_validator,
         owner,
         amount,
-    } = transaction::pos::Redelegation::try_from_slice(&data[..])
+    } = data::pos::Redelegation::try_from_slice(&data[..])
         .wrap_err("Failed to decode a Redelegation tx data")?;
     ctx.redelegate_tokens(&owner, &src_validator, &dest_validator, amount)
         .wrap_err("Failed to redelegate tokens")
@@ -25,7 +25,8 @@ mod tests {
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
     use namada_tests::native_vp::TestNativeVpEnv;
-    use namada_tests::tx::*;
+    use namada_tests::tx_env;
+    use namada_tests::tx_env::{ctx, TestTxEnvExt};
     use namada_tests::validation::PosVp;
     use namada_tx_prelude::address::InternalAddress;
     use namada_tx_prelude::chain::ChainId;
@@ -67,7 +68,7 @@ mod tests {
 
     fn test_tx_redelegate_aux(
         initial_stake: token::Amount,
-        redelegation: transaction::pos::Redelegation,
+        redelegation: data::pos::Redelegation,
         key: key::common::SecretKey,
         pos_params: OwnedPosParams,
     ) -> TxResult {
@@ -114,7 +115,7 @@ mod tests {
         let pos_params =
             init_pos(&genesis_validators[..], &pos_params, Epoch(0));
 
-        let native_token = tx_host_env::with(|tx_env| {
+        let native_token = tx_env::with(|tx_env| {
             let native_token = tx_env.state.in_mem().native_token.clone();
             let owner = &redelegation.owner;
             tx_env.spawn_accounts([owner]);
@@ -131,7 +132,7 @@ mod tests {
             &redelegation.src_validator,
             initial_stake,
         )?;
-        tx_host_env::commit_tx_and_block();
+        tx_env::commit_tx_and_block();
 
         let tx_code = vec![];
         let tx_data = redelegation.serialize_to_vec();
@@ -360,7 +361,7 @@ mod tests {
         }
 
         // Use the tx_env to run PoS VP
-        let tx_env = tx_host_env::take();
+        let tx_env = tx_env::take();
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &tx_env.gas_meter.borrow(),
         ));
@@ -377,8 +378,7 @@ mod tests {
     /// Generates an initial validator stake and a redelegation, while making
     /// sure that the `initial_stake >= redelegation.amount`.
     fn arb_initial_stake_and_redelegation()
-    -> impl Strategy<Value = (token::Amount, transaction::pos::Redelegation)>
-    {
+    -> impl Strategy<Value = (token::Amount, data::pos::Redelegation)> {
         // Generate initial stake
         token::testing::arb_amount_ceiled((i64::MAX / 8) as u64).prop_flat_map(
             |initial_stake| {
@@ -396,7 +396,7 @@ mod tests {
     /// above.
     fn arb_redelegation(
         max_amount: u64,
-    ) -> impl Strategy<Value = transaction::pos::Redelegation> {
+    ) -> impl Strategy<Value = data::pos::Redelegation> {
         (
             address::testing::arb_established_address(),
             address::testing::arb_established_address(),
@@ -418,7 +418,7 @@ mod tests {
                         let src_validator = Address::Established(src_validator);
                         let dest_validator =
                             Address::Established(dest_validator);
-                        Some(transaction::pos::Redelegation {
+                        Some(data::pos::Redelegation {
                             src_validator,
                             dest_validator,
                             owner,

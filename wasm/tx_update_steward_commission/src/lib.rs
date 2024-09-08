@@ -1,7 +1,7 @@
 //! A tx to update the commission distribution for a steward
 
 use namada_tx_prelude::action::{Action, PgfAction, Write};
-use namada_tx_prelude::transaction::pgf::UpdateStewardCommission;
+use namada_tx_prelude::data::pgf::UpdateStewardCommission;
 use namada_tx_prelude::*;
 
 #[transaction]

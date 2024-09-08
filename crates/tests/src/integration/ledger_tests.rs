@@ -24,6 +24,9 @@ use namada_node::shell::SnapshotSync;
 use namada_node::storage::DbSnapshot;
 use namada_sdk::account::AccountPublicKeysMap;
 use namada_sdk::collections::HashMap;
+use namada_sdk::governance::cli::onchain::{PgfFunding, StewardsUpdate};
+use namada_sdk::governance::pgf::cli::steward::Commission;
+use namada_sdk::governance::storage::proposal::{PGFInternalTarget, PGFTarget};
 use namada_sdk::migrations;
 use namada_sdk::queries::RPC;
 use namada_sdk::token::{self, DenominatedAmount};
@@ -46,13 +49,6 @@ use crate::strings::{
     TX_APPLIED_SUCCESS, TX_INSUFFICIENT_BALANCE, TX_REJECTED,
 };
 use crate::tendermint::abci::ApplySnapshotChunkResult;
-use crate::tx::tx_host_env::gov_storage::proposal::{
-    PGFInternalTarget, PGFTarget,
-};
-use crate::tx::tx_host_env::governance::cli::onchain::{
-    PgfFunding, StewardsUpdate,
-};
-use crate::tx::tx_host_env::governance::pgf::cli::steward::Commission;
 
 /// In this test we:
 /// 1. Run the ledger node

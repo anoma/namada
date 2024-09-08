@@ -252,9 +252,9 @@ mod tests {
     use namada_test_utils::TestWasms;
     use namada_tests::log::test;
     use namada_tests::native_vp::pos::init_pos;
-    use namada_tests::tx::data::TxType;
-    use namada_tests::tx::{
-        self, tx_host_env, Authorization, Code, Data, TestTxEnv,
+    use namada_tests::tx_env::data::TxType;
+    use namada_tests::tx_env::{
+        self, Authorization, Code, Data, TestTxEnv, TestTxEnvExt,
     };
     use namada_tests::vp::vp_host_env::storage::Key;
     use namada_tests::vp::*;
@@ -263,7 +263,7 @@ mod tests {
     use namada_tx_prelude::dec::Dec;
     use namada_tx_prelude::proof_of_stake::parameters::OwnedPosParams;
     use namada_tx_prelude::proof_of_stake::types::GenesisValidator;
-    use namada_tx_prelude::{StorageWrite, TxEnv};
+    use namada_tx_prelude::{PosCtxExt, StorageWrite, TxEnv};
     use namada_vp_prelude::account::AccountPublicKeysMap;
     use namada_vp_prelude::key::RefTo;
     use proptest::prelude::*;
@@ -311,7 +311,7 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(addr.clone(), tx_env, |_address| {
             // Apply reveal_pk in a transaction
-            tx_host_env::key::reveal_pk(tx::ctx(), &public_key).unwrap();
+            tx_env::key::reveal_pk(tx_env::ctx(), &public_key).unwrap();
         });
 
         let vp_env = vp_host_env::take();
@@ -337,14 +337,14 @@ mod tests {
 
         // Commit the transaction and create another tx_env
         let vp_env = vp_host_env::take();
-        tx_host_env::set_from_vp_env(vp_env);
-        tx_host_env::commit_tx_and_block();
-        let tx_env = tx_host_env::take();
+        tx_env::set_from_vp_env(vp_env);
+        tx_env::commit_tx_and_block();
+        let tx_env = tx_env::take();
 
         // Try to reveal it again
         vp_host_env::init_from_tx(addr.clone(), tx_env, |_address| {
             // Apply reveal_pk in a transaction
-            tx_host_env::key::reveal_pk(tx::ctx(), &public_key).unwrap();
+            tx_env::key::reveal_pk(tx_env::ctx(), &public_key).unwrap();
         });
 
         let vp_env = vp_host_env::take();
@@ -388,7 +388,7 @@ mod tests {
         vp_host_env::init_from_tx(addr.clone(), tx_env, |_address| {
             // Do the same as reveal_pk, but with the wrong key
             let _ = account::set_public_key_at(
-                tx_host_env::ctx(),
+                tx_env::ctx(),
                 &addr,
                 &mismatched_pk,
                 0,
@@ -454,8 +454,8 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Apply transfer in a transaction
-            tx_host_env::token::transfer(
-                tx::ctx(),
+            tx_env::token::transfer(
+                tx_env::ctx(),
                 &source,
                 address,
                 &token,
@@ -513,7 +513,7 @@ mod tests {
         init_pos(&genesis_validators[..], &pos_params, Epoch(0));
 
         // Initialize a tx environment
-        let mut tx_env = tx_host_env::take();
+        let mut tx_env = tx_env::take();
 
         tx_env.init_parameters(None, Some(vec![]), Some(vec![]));
 
@@ -544,10 +544,10 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
             // Bond the tokens, then unbond some of them
-            tx::ctx()
+            tx_env::ctx()
                 .bond_tokens(Some(&vp_owner), &validator, bond_amount)
                 .unwrap();
-            tx::ctx()
+            tx_env::ctx()
                 .unbond_tokens(Some(&vp_owner), &validator, unbond_amount)
                 .unwrap();
         });
@@ -611,7 +611,7 @@ mod tests {
         init_pos(&genesis_validators[..], &pos_params, Epoch(0));
 
         // Initialize a tx environment
-        let mut tx_env = tx_host_env::take();
+        let mut tx_env = tx_env::take();
 
         let secret_key = key::testing::keypair_1();
         let public_key = secret_key.ref_to();
@@ -640,10 +640,10 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
             // Bond the tokens, then unbond some of them
-            tx::ctx()
+            tx_env::ctx()
                 .bond_tokens(Some(&vp_owner), &validator, bond_amount)
                 .unwrap();
-            tx::ctx()
+            tx_env::ctx()
                 .unbond_tokens(Some(&vp_owner), &validator, unbond_amount)
                 .unwrap();
         });
@@ -708,8 +708,8 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Apply transfer in a transaction
-            tx_host_env::token::transfer(
-                tx::ctx(),
+            tx_env::token::transfer(
+                tx_env::ctx(),
                 address,
                 &target,
                 &token,
@@ -779,8 +779,8 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Apply transfer in a transaction
-            tx_host_env::token::transfer(
-                tx::ctx(),
+            tx_env::token::transfer(
+                tx_env::ctx(),
                 address,
                 &target,
                 &token,
@@ -850,10 +850,10 @@ mod tests {
 
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
-            tx::ctx().insert_verifier(address).unwrap();
+            tx_env::ctx().insert_verifier(address).unwrap();
             // Apply transfer in a transaction
-            tx_host_env::token::transfer(
-                tx::ctx(),
+            tx_env::token::transfer(
+                tx_env::ctx(),
                 &source,
                 &target,
                 &token,
@@ -891,7 +891,7 @@ mod tests {
             let addr: Address = (&pk).into();
             // Generate a storage key other than its VP key (VP cannot be
             // modified directly via `write`, it has to be modified via
-            // `tx::update_validity_predicate`.
+            // `tx_env::update_validity_predicate`.
             let storage_key = arb_account_storage_key_no_vp(addr.clone());
             (Just(sk), Just(addr), storage_key)
         })
@@ -918,9 +918,9 @@ mod tests {
             vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
                 // Write or delete some data in the transaction
                 if let Some(value) = &storage_value {
-                    tx::ctx().write(&storage_key, value).unwrap();
+                    tx_env::ctx().write(&storage_key, value).unwrap();
                 } else {
-                    tx::ctx().delete(&storage_key).unwrap();
+                    tx_env::ctx().delete(&storage_key).unwrap();
                 }
             });
 
@@ -957,15 +957,15 @@ mod tests {
             tx_env.spawn_accounts(storage_key_addresses);
 
             let public_key = secret_key.ref_to();
-            let _ = account::set_public_key_at(tx_host_env::ctx(), &vp_owner, &public_key, 0);
+            let _ = account::set_public_key_at(tx_env::ctx(), &vp_owner, &public_key, 0);
 
             // Initialize VP environment from a transaction
             vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |_address| {
                 // Write or delete some data in the transaction
                 if let Some(value) = &storage_value {
-                    tx::ctx().write(&storage_key, value).unwrap();
+                    tx_env::ctx().write(&storage_key, value).unwrap();
                 } else {
-                    tx::ctx().delete(&storage_key).unwrap();
+                    tx_env::ctx().delete(&storage_key).unwrap();
                 }
             });
 
@@ -1011,7 +1011,7 @@ mod tests {
         // Initialize VP environment from a transaction
         vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
             // Update VP in a transaction
-            tx::ctx()
+            tx_env::ctx()
                 .update_validity_predicate(address, vp_hash, &None)
                 .unwrap();
         });
