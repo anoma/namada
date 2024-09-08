@@ -846,6 +846,18 @@ pub async fn build_validator_metadata_change(
             }
         }
     }
+    if let Some(name) = name.as_ref() {
+        if name.len() as u64 > MAX_VALIDATOR_METADATA_LEN {
+            edisplay_line!(
+                context.io(),
+                "Name provided is too long, must be within \
+                 {MAX_VALIDATOR_METADATA_LEN} characters"
+            );
+            if !tx_args.force {
+                return Err(Error::from(TxSubmitError::MetadataTooLong));
+            }
+        }
+    }
 
     // If there's a new commission rate, it must be valid
     if let Some(rate) = commission_rate.as_ref() {
