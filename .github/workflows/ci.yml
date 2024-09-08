@@ -611,7 +611,8 @@ jobs:
           path: |
             /tmp/.*/logs/
             /tmp/.*/setup/validator-*/logs/
-            /tmp/.*/setup/valiator-*/e2e-test.*/*.toml 
+            /tmp/.*/setup/validator-*/e2e-test.*/*.toml 
+          if-no-files-found: error
           retention-days: 5
       - name: Clean cargo cache
         if: steps.cache.outputs.cache-hit != 'true'
