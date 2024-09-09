@@ -218,7 +218,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// fees.
 #[derive(
     Clone,
-    Copy,
     Debug,
     Default,
     PartialEq,
@@ -438,7 +437,7 @@ impl GasMetering for TxGasMeter {
     /// Get the entire gas used by the transaction up until this point
     fn get_tx_consumed_gas(&self) -> Gas {
         if !self.gas_overflow {
-            self.transaction_gas
+            self.transaction_gas.clone()
         } else {
             hints::cold();
             u64::MAX.into()
@@ -446,7 +445,7 @@ impl GasMetering for TxGasMeter {
     }
 
     fn get_gas_limit(&self) -> Gas {
-        self.tx_gas_limit
+        self.tx_gas_limit.clone()
     }
 }
 
@@ -483,7 +482,7 @@ impl TxGasMeter {
     /// Get the amount of gas still available to the transaction
     pub fn get_available_gas(&self) -> Gas {
         self.tx_gas_limit
-            .checked_sub(self.transaction_gas)
+            .checked_sub(self.transaction_gas.clone())
             .unwrap_or_default()
     }
 }
@@ -504,7 +503,7 @@ impl GasMetering for VpGasMeter {
 
         let current_total = self
             .initial_gas
-            .checked_add(self.current_gas)
+            .checked_add(self.current_gas.clone())
             .ok_or(Error::GasOverflow)?;
 
         if current_total > self.tx_gas_limit {
@@ -517,7 +516,7 @@ impl GasMetering for VpGasMeter {
     /// Get the gas consumed by the tx alone before the vps were executed
     fn get_tx_consumed_gas(&self) -> Gas {
         if !self.gas_overflow {
-            self.initial_gas
+            self.initial_gas.clone()
         } else {
             hints::cold();
             u64::MAX.into()
@@ -525,7 +524,7 @@ impl GasMetering for VpGasMeter {
     }
 
     fn get_gas_limit(&self) -> Gas {
-        self.tx_gas_limit
+        self.tx_gas_limit.clone()
     }
 }
 
@@ -534,15 +533,15 @@ impl VpGasMeter {
     pub fn new_from_tx_meter(tx_gas_meter: &TxGasMeter) -> Self {
         Self {
             gas_overflow: false,
-            tx_gas_limit: tx_gas_meter.tx_gas_limit,
-            initial_gas: tx_gas_meter.transaction_gas,
+            tx_gas_limit: tx_gas_meter.tx_gas_limit.clone(),
+            initial_gas: tx_gas_meter.transaction_gas.clone(),
             current_gas: Gas::default(),
         }
     }
 
     /// Get the gas consumed by the VP alone
     pub fn get_vp_consumed_gas(&self) -> Gas {
-        self.current_gas
+        self.current_gas.clone()
     }
 }
 

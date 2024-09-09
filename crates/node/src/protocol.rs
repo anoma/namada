@@ -1380,7 +1380,7 @@ where
                     ))?;
                 gas_meter
                     .borrow()
-                    .check_vps_limit(vps_gas)
+                    .check_vps_limit(vps_gas.clone())
                     .map_err(|err| Error::GasError(err.to_string()))?;
 
                 Ok((result, vps_gas))
@@ -1412,7 +1412,7 @@ fn merge_vp_results(
         .checked_add(b_gas)
         .ok_or(Error::GasError(gas::Error::GasOverflow.to_string()))?;
     tx_gas_meter
-        .check_vps_limit(vps_gas)
+        .check_vps_limit(vps_gas.clone())
         .map_err(|err| Error::GasError(err.to_string()))?;
 
     Ok((
