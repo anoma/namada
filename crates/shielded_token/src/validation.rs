@@ -165,6 +165,7 @@ where
 
     if !ctx.check_bundle(sapling_bundle.to_owned(), sighash.as_ref().to_owned())
     {
+        tracing::error!("FAILED CHECK BUNDLE");
         tracing::debug!("failed check bundle");
         return Err(Error::SimpleMessage("Invalid sapling bundle"));
     }
@@ -173,6 +174,7 @@ where
     // Charge gas before final validation
     charge_masp_validate_gas(sapling_bundle, consume_verify_gas)?;
     if !ctx.validate(spend_vk, convert_vk, output_vk, OsRng) {
+        tracing::error!("FAILED MASP CRYPTO VALIDATION");
         return Err(Error::SimpleMessage("Invalid proofs or signatures"));
     }
     Ok(())

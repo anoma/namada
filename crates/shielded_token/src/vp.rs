@@ -73,8 +73,18 @@ struct ChangedBalances {
     post: BTreeMap<TransparentAddress, ValueSum<Address, Amount>>,
 }
 
-impl<'view, 'ctx: 'view, S, CA, EVAL, Params, Gov, Ibc, TransToken, Transfer>
-    MaspVp<'ctx, S, CA, EVAL, Params, Gov, Ibc, TransToken, Transfer>
+impl<
+        'view,
+        'ctx: 'view,
+        S,
+        CA,
+        EVAL,
+        Params,
+        Gov,
+        Ibc,
+        TransToken,
+        Transfer,
+    > MaspVp<'ctx, S, CA, EVAL, Params, Gov, Ibc, TransToken, Transfer>
 where
     S: 'static + StateRead,
     CA: 'static + Clone,
@@ -413,6 +423,7 @@ where
         let shielded_tx = if let Some(tx) =
             Ibc::try_extract_masp_tx_from_envelope::<Transfer>(&tx_data)?
         {
+            tracing::error!("FOUND MASP DATA IN IBC TRANSACTION");
             tx
         } else {
             // Get the Transaction object from the actions
@@ -424,6 +435,7 @@ where
                             "Missing MASP section reference in action",
                         )
                     })?;
+            tracing::error!("FOUND MASP DATA ACTIONS");
             batched_tx
                 .tx
                 .get_masp_section(&masp_section_ref)
@@ -448,6 +460,7 @@ where
         // Check the validity of the keys and get the transfer data
         let changed_balances =
             self.validate_state_and_get_transfer_data(keys_changed, &tx_data)?;
+        tracing::error!("OK STATE AND TRANSFER");
 
         // Some constants that will be used repeatedly
         let zero = ValueSum::zero();
@@ -466,6 +479,7 @@ where
             &changed_balances.tokens,
             conversion_state,
         )?;
+        tracing::error!("OK SAPLING VALUE BALANCE");
 
         // The set of addresses that are required to authorize this transaction
         let mut authorizers = BTreeSet::new();
@@ -479,9 +493,13 @@ where
         // 4. The transaction must correctly update the note commitment tree
         // in storage with the new output descriptions
         self.valid_spend_descriptions_anchor(&shielded_tx)?;
+        tracing::error!("OK SPEND DESCRIPTIONS");
         self.valid_convert_descriptions_anchor(&shielded_tx)?;
+        tracing::error!("OK CONVERT DESCRIPTIONS");
         self.valid_nullifiers_reveal(keys_changed, &shielded_tx)?;
+        tracing::error!("OK NULLIFIERS");
         self.valid_note_commitment_update(&shielded_tx)?;
+        tracing::error!("OK NOTE COMMITMENTS");
 
         // Checks on the transparent bundle, if present
         let mut changed_bals_minus_txn = changed_balances.clone();
@@ -492,6 +510,7 @@ where
             conversion_state,
             &mut authorizers,
         )?;
+        tracing::error!("OK TRANSPARENT BUNDLE");
 
         // Ensure that every account for which balance has gone down as a result
         // of the Transaction has authorized this transaction
@@ -552,6 +571,7 @@ where
                         if let Some(TAddrData::Ibc(_)) =
                             changed_bals_minus_txn.decoder.get(&vout.address)
                         {
+                            tracing::error!("SIMULATANEOUS CREDIT AND DEBIT");
                             let error = native_vp::Error::new_const(
                                 "Simultaneous credit and debit of IBC account \
                                  in a MASP transaction not allowed",
@@ -568,6 +588,7 @@ where
                 // Otherwise the owner's vp must have been triggered and the
                 // relative action must have been written
                 if !verifiers.contains(signer) {
+                    tracing::error!("REQUIRED VP NOT TRIGGERED");
                     let error = native_vp::Error::new_alloc(format!(
                         "The required vp of address {signer} was not triggered"
                     ))
@@ -582,6 +603,7 @@ where
                 // because of a masp transaction, which might require a
                 // different validation than a normal balance change
                 if !actions_authorizers.swap_remove(signer) {
+                    tracing::error!("MISSING AUTHORIZER");
                     let error = native_vp::Error::new_alloc(format!(
                         "The required masp authorizer action for address \
                          {signer} is missing"
@@ -591,6 +613,7 @@ where
                     return Err(error);
                 }
             } else {
+                tracing::error!("COULD NOT DECODE AUTHORIZER");
                 // We are not able to decode the authorizer, so just fail
                 let error = native_vp::Error::new_const(
                     "Unable to decode a transaction authorizer",
@@ -603,6 +626,7 @@ where
         // The transaction shall not push masp authorizer actions that are not
         // needed cause this might lead vps to run a wrong validation logic
         if !actions_authorizers.is_empty() {
+            tracing::error!("FOUND NON-REQURIED MASP ACTIONS");
             let error = native_vp::Error::new_const(
                 "Found masp authorizer actions that are not required",
             )
@@ -917,8 +941,18 @@ fn verify_sapling_balancing_value(
     }
 }
 
-impl<'view, 'ctx: 'view, S, CA, EVAL, Params, Gov, Ibc, TransToken, Transfer>
-    NativeVp<'view>
+impl<
+        'view,
+        'ctx: 'view,
+        S,
+        CA,
+        EVAL,
+        Params,
+        Gov,
+        Ibc,
+        TransToken,
+        Transfer,
+    > NativeVp<'view>
     for MaspVp<'ctx, S, CA, EVAL, Params, Gov, Ibc, TransToken, Transfer>
 where
     S: 'static + StateRead,
@@ -939,6 +973,7 @@ where
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
+        tracing::error!("IN MASP VP");
         let masp_keys_changed: Vec<&Key> =
             keys_changed.iter().filter(|key| is_masp_key(key)).collect();
         let non_allowed_changes = masp_keys_changed.iter().any(|key| {
@@ -947,6 +982,7 @@ where
 
         // Check that the transaction didn't write unallowed masp keys
         if non_allowed_changes {
+            tracing::error!("IN MASP VP, NON ALLOWED CHANGES");
             return Err(Error::NativeVpError(native_vp::Error::SimpleMessage(
                 "Found modifications to non-allowed masp keys",
             )));
@@ -958,18 +994,22 @@ where
             .iter()
             .any(|key| is_masp_transfer_key(key));
         if masp_token_map_changed && masp_transfer_changes {
+            tracing::error!("IN MASP VP, UNKNOWN CHANGES");
             Err(Error::NativeVpError(native_vp::Error::SimpleMessage(
                 "Cannot simultaneously do governance proposal and MASP \
                  transfer",
             )))
         } else if masp_token_map_changed {
+            tracing::error!("IN MASP VALIDATE PARAMS");
             // The token map can only be changed by a successful governance
             // proposal
             self.is_valid_parameter_change(tx_data)
         } else if masp_transfer_changes {
             // The MASP transfer keys can only be changed by a valid Transaction
+            tracing::error!("IN MASP VALIDATE TRANSFER");
             self.is_valid_masp_transfer(tx_data, keys_changed, verifiers)
         } else {
+            tracing::error!("IN MASP OK");
             // Changing no MASP keys at all is also fine
             Ok(())
         }
