@@ -627,7 +627,7 @@ pub async fn query_protocol_parameters(
     display_line!(context.io(), "\nGovernance Parameters");
     display_line!(
         context.io(),
-        "{:4}Min. proposal fund: {} NAM",
+        "{:4}Min. proposal fund: {} native tokens",
         "",
         min_proposal_fund.to_string_native()
     );
