@@ -399,7 +399,7 @@ pub struct TxGasMeter {
 }
 
 /// Gas metering in a validity predicate
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct VpGasMeter {
     /// Track gas overflow
     gas_overflow: bool,
