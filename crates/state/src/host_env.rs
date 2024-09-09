@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 
 use namada_events::{EmitEvents, EventToEmit};
-use namada_gas::{GasMetering, TxGasMeter, VpGasMeter};
+use namada_gas::{Gas, GasMetering, TxGasMeter, VpGasMeter};
 use namada_tx::data::TxSentinel;
 
 use crate::in_memory::InMemory;
@@ -66,19 +66,15 @@ where
         self.in_mem
     }
 
-    // FIXME: should request Gas
-    fn charge_gas(&self, gas: u64) -> Result<()> {
-        self.gas_meter
-            .borrow_mut()
-            .consume(gas.into())
-            .map_err(|err| {
-                self.sentinel.borrow_mut().set_out_of_gas();
-                tracing::info!(
-                    "Stopping transaction execution because of gas error: {}",
-                    err
-                );
-                Error::from(StateError::Gas(err))
-            })
+    fn charge_gas(&self, gas: Gas) -> Result<()> {
+        self.gas_meter.borrow_mut().consume(gas).map_err(|err| {
+            self.sentinel.borrow_mut().set_out_of_gas();
+            tracing::info!(
+                "Stopping transaction execution because of gas error: {}",
+                err
+            );
+            Error::from(StateError::Gas(err))
+        })
     }
 }
 
@@ -142,11 +138,11 @@ where
         self.in_mem
     }
 
-    fn charge_gas(&self, gas: u64) -> Result<()> {
+    fn charge_gas(&self, gas: Gas) -> Result<()> {
         Ok(self
             .gas_meter
             .borrow_mut()
-            .consume(gas.into())
+            .consume(gas)
             .map_err(StateError::Gas)?)
     }
 }

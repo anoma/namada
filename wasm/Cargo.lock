@@ -4026,6 +4026,7 @@ dependencies = [
  "borsh",
  "itertools 0.12.1",
  "namada_core",
+ "namada_gas",
  "namada_macros",
  "namada_merkle_tree",
  "namada_replay_protection",

@@ -12,6 +12,7 @@ use namada_core::chain::{BlockHeader, BlockHeight, Epoch};
 use namada_core::hash::Hash;
 use namada_core::storage::{DbColFam, Key, KeySeg, KEY_SEGMENT_SEPARATOR};
 use namada_core::{decode, encode, ethereum_events};
+use namada_gas::Gas;
 use namada_merkle_tree::{
     tree_key_prefix_with_epoch, tree_key_prefix_with_height,
     MerkleTreeStoresRead, StoreType,
@@ -764,10 +765,10 @@ impl Iterator for MockIterator {
 }
 
 impl Iterator for PrefixIterator<MockIterator> {
-    type Item = (String, Vec<u8>, u64);
+    type Item = (String, Vec<u8>, Gas);
 
     /// Returns the next pair and the gas cost
-    fn next(&mut self) -> Option<(String, Vec<u8>, u64)> {
+    fn next(&mut self) -> Option<(String, Vec<u8>, Gas)> {
         match self.iter.next() {
             Some(result) => {
                 let (key, val) =
@@ -777,7 +778,7 @@ impl Iterator for PrefixIterator<MockIterator> {
                 match key.strip_prefix(&self.stripped_prefix) {
                     Some(k) => {
                         let gas = k.len() + val.len();
-                        Some((k.to_owned(), val.to_vec(), gas as _))
+                        Some((k.to_owned(), val.to_vec(), (gas as u64).into()))
                     }
                     None => self.next(),
                 }
@@ -795,10 +796,10 @@ pub struct MockPatternIterator {
 }
 
 impl Iterator for MockPatternIterator {
-    type Item = (String, Vec<u8>, u64);
+    type Item = (String, Vec<u8>, Gas);
 
     /// Returns the next pair and the gas cost
-    fn next(&mut self) -> Option<(String, Vec<u8>, u64)> {
+    fn next(&mut self) -> Option<(String, Vec<u8>, Gas)> {
         if self.finished {
             return None;
         }

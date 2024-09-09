@@ -380,7 +380,7 @@ mod tests {
             &nam(),
             &Address::decode(ARBITRARY_OWNER_A_ADDRESS).expect("Test failed"),
         );
-        state
+        let _ = state
             .write_log_mut()
             .write(
                 &account_key,
@@ -391,7 +391,7 @@ mod tests {
 
         // credit the balance to the escrow
         let escrow_key = balance_key(&nam(), &crate::ADDRESS);
-        state
+        let _ = state
             .write_log_mut()
             .write(
                 &escrow_key,
@@ -434,7 +434,7 @@ mod tests {
             &nam(),
             &Address::decode(ARBITRARY_OWNER_A_ADDRESS).expect("Test failed"),
         );
-        state
+        let _ = state
             .write_log_mut()
             .write(
                 &account_key,
@@ -445,7 +445,7 @@ mod tests {
 
         // do not credit the balance to the escrow
         let escrow_key = balance_key(&nam(), &crate::ADDRESS);
-        state
+        let _ = state
             .write_log_mut()
             .write(
                 &escrow_key,
@@ -487,7 +487,7 @@ mod tests {
             &nam(),
             &Address::decode(ARBITRARY_OWNER_A_ADDRESS).expect("Test failed"),
         );
-        state
+        let _ = state
             .write_log_mut()
             .write(
                 &account_key,
@@ -498,7 +498,7 @@ mod tests {
 
         // credit the balance to the escrow
         let escrow_key = balance_key(&nam(), &crate::ADDRESS);
-        state
+        let _ = state
             .write_log_mut()
             .write(
                 &escrow_key,

@@ -450,7 +450,7 @@ mod tests {
 
         // transfer 10
         let amount = Amount::native_whole(90);
-        state
+        let _ = state
             .write_log_mut()
             .write(&src_key, amount.serialize_to_vec())
             .expect("write failed");
@@ -458,7 +458,7 @@ mod tests {
 
         let dest_key = balance_key(&nam(), dest);
         let amount = Amount::native_whole(10);
-        state
+        let _ = state
             .write_log_mut()
             .write(&dest_key, amount.serialize_to_vec())
             .expect("write failed");
@@ -511,7 +511,7 @@ mod tests {
         // receive more than 10
         let dest_key = balance_key(&nam(), &dest);
         let amount = Amount::native_whole(100);
-        state
+        let _ = state
             .write_log_mut()
             .write(&dest_key, amount.serialize_to_vec())
             .expect("write failed");
@@ -554,14 +554,14 @@ mod tests {
         let target = established_address_1();
         let target_key = balance_key(&token, &target);
         let amount = Amount::native_whole(100);
-        state
+        let _ = state
             .write_log_mut()
             .write(&target_key, amount.serialize_to_vec())
             .expect("write failed");
         keys_changed.insert(target_key);
         let minted_key = minted_balance_key(&token);
         let amount = Amount::native_whole(100);
-        state
+        let _ = state
             .write_log_mut()
             .write(&minted_key, amount.serialize_to_vec())
             .expect("write failed");
@@ -570,7 +570,7 @@ mod tests {
         // minter
         let minter = Address::Internal(InternalAddress::Ibc);
         let minter_key = minter_key(&token);
-        state
+        let _ = state
             .write_log_mut()
             .write(&minter_key, minter.serialize_to_vec())
             .expect("write failed");
@@ -616,14 +616,14 @@ mod tests {
         let target_key = balance_key(&nam(), &target);
         // mint more than 100
         let amount = Amount::native_whole(1000);
-        state
+        let _ = state
             .write_log_mut()
             .write(&target_key, amount.serialize_to_vec())
             .expect("write failed");
         keys_changed.insert(target_key);
         let minted_key = minted_balance_key(&nam());
         let amount = Amount::native_whole(100);
-        state
+        let _ = state
             .write_log_mut()
             .write(&minted_key, amount.serialize_to_vec())
             .expect("write failed");
@@ -632,7 +632,7 @@ mod tests {
         // minter
         let minter = nam();
         let minter_key = minter_key(&nam());
-        state
+        let _ = state
             .write_log_mut()
             .write(&minter_key, minter.serialize_to_vec())
             .expect("write failed");
@@ -678,14 +678,14 @@ mod tests {
         let target = established_address_1();
         let target_key = balance_key(&token, &target);
         let amount = Amount::native_whole(100);
-        state
+        let _ = state
             .write_log_mut()
             .write(&target_key, amount.serialize_to_vec())
             .expect("write failed");
         keys_changed.insert(target_key);
         let minted_key = minted_balance_key(&token);
         let amount = Amount::native_whole(100);
-        state
+        let _ = state
             .write_log_mut()
             .write(&minted_key, amount.serialize_to_vec())
             .expect("write failed");
@@ -731,14 +731,14 @@ mod tests {
         let target = established_address_1();
         let target_key = balance_key(&token, &target);
         let amount = Amount::native_whole(100);
-        state
+        let _ = state
             .write_log_mut()
             .write(&target_key, amount.serialize_to_vec())
             .expect("write failed");
         keys_changed.insert(target_key);
         let minted_key = minted_balance_key(&token);
         let amount = Amount::native_whole(100);
-        state
+        let _ = state
             .write_log_mut()
             .write(&minted_key, amount.serialize_to_vec())
             .expect("write failed");
@@ -747,7 +747,7 @@ mod tests {
         // invalid minter
         let minter = established_address_1();
         let minter_key = minter_key(&token);
-        state
+        let _ = state
             .write_log_mut()
             .write(&minter_key, minter.serialize_to_vec())
             .expect("write failed");
@@ -788,7 +788,7 @@ mod tests {
 
         let minter_key = minter_key(&nam());
         let minter = established_address_1();
-        state
+        let _ = state
             .write_log_mut()
             .write(&minter_key, minter.serialize_to_vec())
             .expect("write failed");
@@ -833,7 +833,7 @@ mod tests {
         )
         .push(&"invalid_segment".to_string())
         .unwrap();
-        state
+        let _ = state
             .write_log_mut()
             .write(&key, 0.serialize_to_vec())
             .expect("write failed");

@@ -8,7 +8,7 @@ use std::str::Utf8Error;
 
 use namada_core::arith::{self, checked};
 use namada_core::borsh::BorshSerializeExt;
-use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
+use namada_gas::{Gas, MEMORY_ACCESS_GAS_PER_BYTE};
 use namada_tx::BatchedTxRef;
 use thiserror::Error;
 use wasmer::sys::BaseTunables;
@@ -351,7 +351,7 @@ impl VmMemory for WasmMemory {
         &mut self,
         offset: u64,
         len: usize,
-    ) -> Result<(Vec<u8>, u64)> {
+    ) -> Result<(Vec<u8>, Gas)> {
         self.access(|memory| {
             let store = self
                 .store
@@ -361,7 +361,7 @@ impl VmMemory for WasmMemory {
             let bytes = read_memory_bytes(&mut *store, memory, offset, len)?;
             let len = bytes.len() as u64;
             let gas = checked!(len * MEMORY_ACCESS_GAS_PER_BYTE)?;
-            Ok((bytes, gas))
+            Ok((bytes, gas.into()))
         })
     }
 
@@ -370,7 +370,7 @@ impl VmMemory for WasmMemory {
         &mut self,
         offset: u64,
         bytes: impl AsRef<[u8]>,
-    ) -> Result<u64> {
+    ) -> Result<Gas> {
         self.access(|memory| {
             // No need for a separate gas multiplier for writes since we are
             // only writing to memory and we already charge gas for
@@ -383,7 +383,7 @@ impl VmMemory for WasmMemory {
                 .expect("Store must be accessible while the WASM is running");
             let mut store = store.borrow_mut();
             write_memory_bytes(&mut *store, memory, offset, bytes)?;
-            Ok(gas)
+            Ok(gas.into())
         })
     }
 
@@ -393,7 +393,7 @@ impl VmMemory for WasmMemory {
         &mut self,
         offset: u64,
         len: usize,
-    ) -> Result<(String, u64)> {
+    ) -> Result<(String, Gas)> {
         let (bytes, gas) = self.read_bytes(offset, len)?;
         let string = std::str::from_utf8(&bytes)
             .map_err(Error::InvalidUtf8String)?
@@ -403,7 +403,7 @@ impl VmMemory for WasmMemory {
 
     /// Write string into memory at the given offset and return the gas cost
     #[allow(dead_code)]
-    fn write_string(&mut self, offset: u64, string: String) -> Result<u64> {
+    fn write_string(&mut self, offset: u64, string: String) -> Result<Gas> {
         self.write_bytes(offset, string.as_bytes())
     }
 }

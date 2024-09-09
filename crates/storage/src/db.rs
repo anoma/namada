@@ -7,6 +7,7 @@ use namada_core::hash::{Error as HashError, Hash};
 use namada_core::storage::{BlockResults, DbColFam, EthEventsQueue, Key};
 use namada_core::time::DateTimeUtc;
 use namada_core::{arith, ethereum_events, ethereum_structs};
+use namada_gas::Gas;
 use namada_merkle_tree::{
     Error as MerkleTreeError, MerkleTreeStoresRead, MerkleTreeStoresWrite,
     StoreType,
@@ -310,9 +311,9 @@ pub trait DB: Debug {
 /// A database prefix iterator.
 pub trait DBIter<'iter> {
     /// Prefix iterator
-    type PrefixIter: Debug + Iterator<Item = (String, Vec<u8>, u64)>;
+    type PrefixIter: Debug + Iterator<Item = (String, Vec<u8>, Gas)>;
     /// Pattern iterator
-    type PatternIter: Debug + Iterator<Item = (String, Vec<u8>, u64)>;
+    type PatternIter: Debug + Iterator<Item = (String, Vec<u8>, Gas)>;
 
     /// WARNING: This only works for values that have been committed to DB.
     /// To be able to see values written or deleted, but not yet committed,

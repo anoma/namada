@@ -198,7 +198,7 @@ fn write_log_read(c: &mut Criterion) {
         group.throughput(criterion::Throughput::Bytes(throughput_len));
         // Generate random bytes for the value and write it to storage
         let value: Vec<u8> = (0..value_len).map(|_| rand::random()).collect();
-        shell.state.write_log_mut().write(&key, value).unwrap();
+        let _ = shell.state.write_log_mut().write(&key, value).unwrap();
 
         group.bench_function(
             format!("key: {key}, bytes: {throughput_len}"),

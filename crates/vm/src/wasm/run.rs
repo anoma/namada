@@ -1172,8 +1172,8 @@ mod tests {
         let key = Key::wasm_code(&code_hash);
         let len_key = Key::wasm_code_len(&code_hash);
         let code_len = (tx_code.len() as u64).serialize_to_vec();
-        state.write_log_mut().write(&key, tx_code.clone()).unwrap();
-        state.write_log_mut().write(&len_key, code_len).unwrap();
+        let _ = state.write_log_mut().write(&key, tx_code.clone()).unwrap();
+        let _ = state.write_log_mut().write(&len_key, code_len).unwrap();
 
         // Assuming 200 pages, 12.8 MiB limit
         assert_eq!(memory::TX_MEMORY_MAX_PAGES, 200);
@@ -1408,11 +1408,11 @@ mod tests {
         let key = Key::wasm_code(&code_hash);
         let len_key = Key::wasm_code_len(&code_hash);
         let code_len = (tx_no_op.len() as u64).serialize_to_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&key, tx_no_op.serialize_to_vec())
             .unwrap();
-        state.write_log_mut().write(&len_key, code_len).unwrap();
+        let _ = state.write_log_mut().write(&len_key, code_len).unwrap();
 
         // Assuming 200 pages, 12.8 MiB limit
         assert_eq!(memory::TX_MEMORY_MAX_PAGES, 200);
@@ -1539,11 +1539,11 @@ mod tests {
         let code_len = (tx_read_key.len() as u64).serialize_to_vec();
         let key = Key::wasm_code(&code_hash);
         let len_key = Key::wasm_code_len(&code_hash);
-        state
+        let _ = state
             .write_log_mut()
             .write(&key, tx_read_key.clone())
             .unwrap();
-        state.write_log_mut().write(&len_key, code_len).unwrap();
+        let _ = state.write_log_mut().write(&len_key, code_len).unwrap();
 
         // Allocating `2^24` (16 MiB) for a value in storage that the tx
         // attempts to read should be above the memory limit and should
@@ -1796,8 +1796,8 @@ mod tests {
         let key = Key::wasm_code(&code_hash);
         let len_key = Key::wasm_code_len(&code_hash);
         let code_len = (tx_code.len() as u64).serialize_to_vec();
-        state.write_log_mut().write(&key, tx_code.clone()).unwrap();
-        state.write_log_mut().write(&len_key, code_len).unwrap();
+        let _ = state.write_log_mut().write(&key, tx_code.clone()).unwrap();
+        let _ = state.write_log_mut().write(&len_key, code_len).unwrap();
 
         let (mut vp_cache, _) =
             wasm::compilation_cache::common::testing::vp_cache();
@@ -1835,8 +1835,8 @@ mod tests {
         let key = Key::wasm_code(&code_hash);
         let len_key = Key::wasm_code_len(&code_hash);
         let code_len = (tx_code.len() as u64).serialize_to_vec();
-        state.write_log_mut().write(&key, tx_code.clone()).unwrap();
-        state.write_log_mut().write(&len_key, code_len).unwrap();
+        let _ = state.write_log_mut().write(&key, tx_code.clone()).unwrap();
+        let _ = state.write_log_mut().write(&len_key, code_len).unwrap();
 
         let (mut vp_cache, _) =
             wasm::compilation_cache::common::testing::vp_cache();
@@ -1879,8 +1879,8 @@ mod tests {
         let key = Key::wasm_code(&code_hash);
         let len_key = Key::wasm_code_len(&code_hash);
         let code_len = (tx_code.len() as u64).serialize_to_vec();
-        state.write_log_mut().write(&key, tx_code.clone()).unwrap();
-        state.write_log_mut().write(&len_key, code_len).unwrap();
+        let _ = state.write_log_mut().write(&key, tx_code.clone()).unwrap();
+        let _ = state.write_log_mut().write(&len_key, code_len).unwrap();
 
         let (vp_cache, _) =
             wasm::compilation_cache::common::testing::vp_cache();
@@ -1923,8 +1923,8 @@ mod tests {
         let key = Key::wasm_code(&code_hash);
         let len_key = Key::wasm_code_len(&code_hash);
         let code_len = (tx_code.len() as u64).serialize_to_vec();
-        state.write_log_mut().write(&key, tx_code.clone()).unwrap();
-        state.write_log_mut().write(&len_key, code_len).unwrap();
+        let _ = state.write_log_mut().write(&key, tx_code.clone()).unwrap();
+        let _ = state.write_log_mut().write(&len_key, code_len).unwrap();
 
         let (vp_cache, _) =
             wasm::compilation_cache::common::testing::vp_cache();
@@ -2142,11 +2142,11 @@ mod tests {
         let code_len = (tx_code.len() as u64).serialize_to_vec();
         let key = Key::wasm_code(&code_hash);
         let len_key = Key::wasm_code_len(&code_hash);
-        state
+        let _ = state
             .write_log_mut()
             .write(&key, tx_code.serialize_to_vec())
             .unwrap();
-        state.write_log_mut().write(&len_key, code_len).unwrap();
+        let _ = state.write_log_mut().write(&len_key, code_len).unwrap();
 
         let mut outer_tx = Tx::from_type(TxType::Raw);
         outer_tx.set_code(Code::from_hash(code_hash, None));

@@ -5440,6 +5440,7 @@ dependencies = [
  "itertools 0.12.1",
  "linkme",
  "namada_core",
+ "namada_gas",
  "namada_macros",
  "namada_merkle_tree",
  "namada_migrations",

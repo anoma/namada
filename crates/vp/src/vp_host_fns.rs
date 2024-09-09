@@ -10,7 +10,7 @@ use namada_core::hash::{Hash, HASH_LENGTH};
 use namada_core::storage::{Key, TxIndex, TX_INDEX_LENGTH};
 use namada_events::{Event, EventTypeBuilder};
 use namada_gas::{
-    self as gas, GasMetering, VpGasMeter, MEMORY_ACCESS_GAS_PER_BYTE,
+    self as gas, Gas, GasMetering, VpGasMeter, MEMORY_ACCESS_GAS_PER_BYTE,
 };
 use namada_tx::{BatchedTxRef, Section};
 use thiserror::Error;
@@ -43,18 +43,11 @@ impl From<RuntimeError> for Error {
 pub type EnvResult<T> = std::result::Result<T, RuntimeError>;
 
 /// Add a gas cost incured in a validity predicate
-// FIXME: should request Gas
-pub fn add_gas(gas_meter: &RefCell<VpGasMeter>, used_gas: u64) -> Result<()> {
-    gas_meter
-        .borrow_mut()
-        .consume(used_gas.into())
-        .map_err(|err| {
-            tracing::info!(
-                "Stopping VP execution because of gas error: {}",
-                err
-            );
-            Error::new(RuntimeError::OutOfGas(err))
-        })
+pub fn add_gas(gas_meter: &RefCell<VpGasMeter>, used_gas: Gas) -> Result<()> {
+    gas_meter.borrow_mut().consume(used_gas).map_err(|err| {
+        tracing::info!("Stopping VP execution because of gas error: {}", err);
+        Error::new(RuntimeError::OutOfGas(err))
+    })
 }
 
 /// Storage read prior state (before tx execution). It will try to read from the
@@ -255,7 +248,8 @@ pub fn get_tx_code_hash(
         gas_meter,
         (HASH_LENGTH as u64)
             .checked_mul(MEMORY_ACCESS_GAS_PER_BYTE)
-            .expect("Consts mul that cannot overflow"),
+            .expect("Consts mul that cannot overflow")
+            .into(),
     )?;
     let hash = batched_tx
         .tx
@@ -289,7 +283,8 @@ pub fn get_tx_index(
         gas_meter,
         (TX_INDEX_LENGTH as u64)
             .checked_mul(MEMORY_ACCESS_GAS_PER_BYTE)
-            .expect("Consts mul that cannot overflow"),
+            .expect("Consts mul that cannot overflow")
+            .into(),
     )?;
     Ok(*tx_index)
 }
@@ -306,7 +301,8 @@ where
         gas_meter,
         (ESTABLISHED_ADDRESS_BYTES_LEN as u64)
             .checked_mul(MEMORY_ACCESS_GAS_PER_BYTE)
-            .expect("Consts mul that cannot overflow"),
+            .expect("Consts mul that cannot overflow")
+            .into(),
     )?;
     Ok(state.in_mem().native_token.clone())
 }
@@ -320,7 +316,10 @@ where
     S: StateRead + Debug,
 {
     let len = state.in_mem().block.pred_epochs.first_block_heights.len() as u64;
-    add_gas(gas_meter, checked!(len * 8 * MEMORY_ACCESS_GAS_PER_BYTE)?)?;
+    add_gas(
+        gas_meter,
+        checked!(len * 8 * MEMORY_ACCESS_GAS_PER_BYTE)?.into(),
+    )?;
     Ok(state.in_mem().block.pred_epochs.clone())
 }
 

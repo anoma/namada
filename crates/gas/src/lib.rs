@@ -216,6 +216,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// metering from fee payment, allowing higher resolution when accounting for
 /// gas while, at the same time, providing a contained gas value when paying
 /// fees.
+// This type should not implement the Copy trait to prevent charging gas more
+// than once
 #[derive(
     Clone,
     Debug,

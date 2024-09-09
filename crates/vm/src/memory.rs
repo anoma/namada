@@ -2,6 +2,8 @@
 
 use std::error::Error;
 
+use namada_gas::Gas;
+
 /// Abstract representation of virtual machine's memory.
 pub trait VmMemory: Clone + Send + Sync {
     /// Error type for the methods' results.
@@ -12,28 +14,28 @@ pub trait VmMemory: Clone + Send + Sync {
         &mut self,
         offset: u64,
         len: usize,
-    ) -> Result<(Vec<u8>, u64), Self::Error>;
+    ) -> Result<(Vec<u8>, Gas), Self::Error>;
 
     /// Write bytes to memory. Returns the gas cost.
     fn write_bytes(
         &mut self,
         offset: u64,
         bytes: impl AsRef<[u8]>,
-    ) -> Result<u64, Self::Error>;
+    ) -> Result<Gas, Self::Error>;
 
     /// Returns string read from memory together with the associated gas cost.
     fn read_string(
         &mut self,
         offset: u64,
         len: usize,
-    ) -> Result<(String, u64), Self::Error>;
+    ) -> Result<(String, Gas), Self::Error>;
 
     /// Write string to memory. Returns the gas cost.
     fn write_string(
         &mut self,
         offset: u64,
         string: String,
-    ) -> Result<u64, Self::Error>;
+    ) -> Result<Gas, Self::Error>;
 }
 
 /// Helper module for VM testing
@@ -58,43 +60,43 @@ pub mod testing {
             &mut self,
             offset: u64,
             len: usize,
-        ) -> Result<(Vec<u8>, u64)> {
+        ) -> Result<(Vec<u8>, Gas)> {
             let slice = unsafe { slice::from_raw_parts(offset as _, len as _) };
-            Ok((slice.to_vec(), 0))
+            Ok((slice.to_vec(), Gas::default()))
         }
 
         fn write_bytes(
             &mut self,
             offset: u64,
             bytes: impl AsRef<[u8]>,
-        ) -> Result<u64> {
+        ) -> Result<Gas> {
             let bytes = bytes.as_ref();
             let len = bytes.len();
             let target =
                 unsafe { slice::from_raw_parts_mut(offset as _, len as _) };
             target.clone_from_slice(bytes);
-            Ok(0)
+            Ok(Gas::default())
         }
 
         fn read_string(
             &mut self,
             offset: u64,
             len: usize,
-        ) -> Result<(String, u64)> {
+        ) -> Result<(String, Gas)> {
             let slice = unsafe { slice::from_raw_parts(offset as _, len as _) };
             let string = std::str::from_utf8(slice)
                 .expect("unable to decode string from memory")
                 .to_string();
-            Ok((string, 0))
+            Ok((string, Gas::default()))
         }
 
-        fn write_string(&mut self, offset: u64, string: String) -> Result<u64> {
+        fn write_string(&mut self, offset: u64, string: String) -> Result<Gas> {
             let bytes = string.as_bytes();
             let len = bytes.len();
             let target =
                 unsafe { slice::from_raw_parts_mut(offset as _, len as _) };
             target.clone_from_slice(bytes);
-            Ok(0)
+            Ok(Gas::default())
         }
     }
 }
