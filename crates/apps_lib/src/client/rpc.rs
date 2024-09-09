@@ -30,12 +30,14 @@ use namada_sdk::io::{display, display_line, edisplay_line, Client, Io};
 use namada_sdk::key::*;
 use namada_sdk::masp::shielded_wallet::ShieldedApi;
 use namada_sdk::masp::MaspTokenRewardData;
-use namada_sdk::parameters::{storage as param_storage, EpochDuration};
+use namada_sdk::parameters::{
+    storage as param_storage, EpochDuration, ProposalBytes,
+};
 use namada_sdk::proof_of_stake::types::{
     CommissionPair, Slash, ValidatorMetaData, ValidatorState,
     ValidatorStateInfo, WeightedValidator,
 };
-use namada_sdk::proof_of_stake::PosParams;
+use namada_sdk::proof_of_stake::{OwnedPosParams, PosParams};
 use namada_sdk::queries::RPC;
 use namada_sdk::rpc::{
     self, enriched_bonds_and_unbonds, format_denominated_amount, query_epoch,
@@ -43,7 +45,7 @@ use namada_sdk::rpc::{
 };
 use namada_sdk::storage::BlockResults;
 use namada_sdk::tendermint_rpc::endpoint::status;
-use namada_sdk::token::MaspDigitPos;
+use namada_sdk::token::{DenominatedAmount, MaspDigitPos};
 use namada_sdk::tx::display_batch_resp;
 use namada_sdk::wallet::AddressVpType;
 use namada_sdk::{error, state as storage, token, Namada};
@@ -612,59 +614,84 @@ pub async fn query_protocol_parameters(
     context: &impl Namada,
     _args: args::QueryProtocolParameters,
 ) {
-    let governance_parameters =
-        query_governance_parameters(context.client()).await;
+    let GovernanceParameters {
+        min_proposal_fund,
+        max_proposal_code_size,
+        min_proposal_voting_period,
+        max_proposal_period,
+        max_proposal_content_size,
+        min_proposal_grace_epochs,
+        max_proposal_latency,
+    } = query_governance_parameters(context.client()).await;
+
     display_line!(context.io(), "\nGovernance Parameters");
     display_line!(
         context.io(),
-        "{:4}Min. proposal fund: {}",
+        "{:4}Min. proposal fund: {} native tokens",
         "",
-        governance_parameters.min_proposal_fund.to_string_native()
+        min_proposal_fund.to_string_native()
     );
     display_line!(
         context.io(),
-        "{:4}Max. proposal code size: {}",
+        "{:4}Max. proposal code size: {} kB",
         "",
-        governance_parameters.max_proposal_code_size
+        max_proposal_code_size
     );
     display_line!(
         context.io(),
-        "{:4}Min. proposal voting period: {}",
+        "{:4}Min. proposal voting period: {} epochs",
         "",
-        governance_parameters.min_proposal_voting_period
+        min_proposal_voting_period
     );
     display_line!(
         context.io(),
-        "{:4}Max. proposal period: {}",
+        "{:4}Max. proposal period: {} epochs",
         "",
-        governance_parameters.max_proposal_period
+        max_proposal_period
     );
     display_line!(
         context.io(),
-        "{:4}Max. proposal content size: {}",
+        "{:4}Max. proposal content size: {} characters",
         "",
-        governance_parameters.max_proposal_content_size
+        max_proposal_content_size
     );
     display_line!(
         context.io(),
         "{:4}Min. proposal grace epochs: {}",
         "",
-        governance_parameters.min_proposal_grace_epochs
+        min_proposal_grace_epochs
+    );
+    display_line!(
+        context.io(),
+        "{:4}Max. proposal latency: {} epochs",
+        "",
+        max_proposal_latency
     );
 
-    let pgf_parameters = query_pgf_parameters(context.client()).await;
+    let PgfParameters {
+        stewards: _,
+        pgf_inflation_rate,
+        stewards_inflation_rate,
+        maximum_number_of_stewards,
+    } = query_pgf_parameters(context.client()).await;
     display_line!(context.io(), "\nPublic Goods Funding Parameters");
     display_line!(
         context.io(),
         "{:4}Pgf inflation rate: {}",
         "",
-        pgf_parameters.pgf_inflation_rate
+        pgf_inflation_rate
     );
     display_line!(
         context.io(),
         "{:4}Steward inflation rate: {}",
         "",
-        pgf_parameters.stewards_inflation_rate
+        stewards_inflation_rate
+    );
+    display_line!(
+        context.io(),
+        "{:4}Max. number of stewards: {}",
+        "",
+        maximum_number_of_stewards
     );
 
     display_line!(context.io(), "\nProtocol parameters");
@@ -675,7 +702,7 @@ pub async fn query_protocol_parameters(
             .expect("Parameter should be defined.");
     display_line!(
         context.io(),
-        "{:4}Min. epoch duration: {}",
+        "{:4}Min. epoch duration: {} seconds",
         "",
         epoch_duration.min_duration
     );
@@ -684,6 +711,18 @@ pub async fn query_protocol_parameters(
         "{:4}Min. number of blocks: {}",
         "",
         epoch_duration.min_num_of_blocks
+    );
+
+    let key = param_storage::get_masp_epoch_multiplier_key();
+    let masp_epoch_multiplier: u64 =
+        query_storage_value(context.client(), &key)
+            .await
+            .expect("Parameter should be defined.");
+    display_line!(
+        context.io(),
+        "{:4}Masp epoch multiplier: {:?}",
+        "",
+        masp_epoch_multiplier
     );
 
     let key = param_storage::get_tx_allowlist_storage_key();
@@ -703,11 +742,34 @@ pub async fn query_protocol_parameters(
         tx_allowlist
     );
 
+    let key = param_storage::get_max_proposal_bytes_key();
+    let max_proposal_bytes: ProposalBytes =
+        query_storage_value(context.client(), &key)
+            .await
+            .expect("Parameter should be defined.");
+    display_line!(
+        context.io(),
+        "{:4}Max. proposal bytes: {:?}",
+        "",
+        max_proposal_bytes.get()
+    );
+
+    let key = param_storage::get_max_tx_bytes_key();
+    let max_tx_bytes: u32 = query_storage_value(context.client(), &key)
+        .await
+        .expect("Parameter should be defined.");
+    display_line!(context.io(), "{:4}Max tx bytes: {:?}", "", max_tx_bytes);
+
     let key = param_storage::get_max_block_gas_key();
     let max_block_gas: u64 = query_storage_value(context.client(), &key)
         .await
         .expect("Parameter should be defined.");
-    display_line!(context.io(), "{:4}Max block gas: {:?}", "", max_block_gas);
+    display_line!(
+        context.io(),
+        "{:4}Max. block gas: {:?} gas units",
+        "",
+        max_block_gas
+    );
 
     let key = param_storage::get_masp_fee_payment_gas_limit_key();
     let masp_fee_payment_gas_limit: u64 =
@@ -716,7 +778,7 @@ pub async fn query_protocol_parameters(
             .expect("Parameter should be defined.");
     display_line!(
         context.io(),
-        "{:4}Masp fee payment gas limit: {:?}",
+        "{:4}Masp fee payment gas limit: {:?} gas units",
         "",
         masp_fee_payment_gas_limit
     );
@@ -726,108 +788,145 @@ pub async fn query_protocol_parameters(
         query_storage_value(context.client(), &key)
             .await
             .expect("Parameter should be defined.");
-    display_line!(context.io(), "{:4}Gas cost table:", "");
+    display_line!(context.io(), "{:4}Minimum gas costs:", "");
     for (token, gas_cost) in gas_cost_table {
-        display_line!(context.io(), "{:8}{}: {:?}", "", token, gas_cost);
+        let denom = rpc::query_denom(context.client(), &token)
+            .await
+            .expect("Token should have denom");
+        let den_amt = DenominatedAmount::new(gas_cost, denom);
+        display_line!(
+            context.io(),
+            "{:8}{}: {} per gas unit",
+            "",
+            &token,
+            den_amt
+        );
     }
 
-    display_line!(context.io(), "\nPoS parameters");
-    let pos_params = query_pos_parameters(context.client()).await;
+    let key = param_storage::get_gas_scale_key();
+    let gas_scale: u64 = query_storage_value(context.client(), &key)
+        .await
+        .expect("Parameter should be defined.");
+    display_line!(context.io(), "{:4}Gas scale: {:?}", "", gas_scale);
+
+    display_line!(context.io(), "\nProof of Stake parameters");
+    let PosParams {
+        owned:
+            OwnedPosParams {
+                max_validator_slots,
+                pipeline_len,
+                unbonding_len,
+                tm_votes_per_token,
+                block_proposer_reward,
+                block_vote_reward,
+                max_inflation_rate,
+                target_staked_ratio,
+                duplicate_vote_min_slash_rate,
+                light_client_attack_min_slash_rate,
+                cubic_slashing_window_length,
+                validator_stake_threshold,
+                liveness_window_check,
+                liveness_threshold,
+                rewards_gain_p,
+                rewards_gain_d,
+            },
+        max_proposal_period: _,
+    } = query_pos_parameters(context.client()).await;
     display_line!(
         context.io(),
-        "{:4}Pipeline length: {}",
+        "{:4}Pipeline length: {} epochs",
         "",
-        pos_params.pipeline_len
+        pipeline_len
     );
     display_line!(
         context.io(),
-        "{:4}Unbonding length: {}",
+        "{:4}Unbonding length: {} epochs",
         "",
-        pos_params.unbonding_len
+        unbonding_len
     );
     display_line!(
         context.io(),
-        "{:4}Cubic slashing window length: {}",
+        "{:4}Cubic slashing window length: {} epoch",
         "",
-        pos_params.cubic_slashing_window_length
+        cubic_slashing_window_length
     );
     display_line!(
         context.io(),
         "{:4}Max. consensus validator slots: {}",
         "",
-        pos_params.max_validator_slots
+        max_validator_slots
     );
     display_line!(
         context.io(),
-        "{:4}Validator stake threshold: {} NAM",
+        "{:4}Validator stake threshold: {} native tokens",
         "",
-        pos_params.validator_stake_threshold.to_string_native()
+        validator_stake_threshold.to_string_native()
     );
     display_line!(
         context.io(),
         "{:4}Duplicate vote minimum slash rate: {}",
         "",
-        pos_params.duplicate_vote_min_slash_rate
+        duplicate_vote_min_slash_rate
     );
     display_line!(
         context.io(),
         "{:4}Light client attack minimum slash rate: {}",
         "",
-        pos_params.light_client_attack_min_slash_rate
+        light_client_attack_min_slash_rate
     );
     display_line!(
         context.io(),
         "{:4}Liveness window: {} blocks",
         "",
-        pos_params.liveness_window_check
+        liveness_window_check
     );
     display_line!(
         context.io(),
         "{:4}Liveness threshold: {}",
         "",
-        pos_params.liveness_threshold
+        liveness_threshold
     );
     display_line!(
         context.io(),
         "{:4}Block proposer reward: {}",
         "",
-        pos_params.block_proposer_reward
+        block_proposer_reward
     );
     display_line!(
         context.io(),
         "{:4}Block vote reward: {}",
         "",
-        pos_params.block_vote_reward
+        block_vote_reward
     );
     display_line!(
         context.io(),
         "{:4}Max inflation rate: {}",
         "",
-        pos_params.max_inflation_rate
+        max_inflation_rate
     );
     display_line!(
         context.io(),
         "{:4}Target staked ratio: {}",
         "",
-        pos_params.target_staked_ratio
+        target_staked_ratio
     );
     display_line!(
         context.io(),
         "{:4}Inflation kP gain: {}",
         "",
-        pos_params.rewards_gain_p
+        rewards_gain_p
     );
     display_line!(
         context.io(),
         "{:4}Inflation kD gain: {}",
         "",
-        pos_params.rewards_gain_d
+        rewards_gain_d
     );
     display_line!(
         context.io(),
-        "{:4}Votes per raw token: {}",
+        "{:4}Votes per raw native token: {}",
         "",
-        pos_params.tm_votes_per_token
+        tm_votes_per_token
     );
 }
 
