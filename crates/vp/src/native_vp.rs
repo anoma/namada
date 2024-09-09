@@ -409,10 +409,14 @@ where
         EVAL::eval(self, vp_code_hash, input_data)
     }
 
+    // FIXME: should request Gas
     fn charge_gas(&self, used_gas: u64) -> Result<()> {
-        self.gas_meter.borrow_mut().consume(used_gas).map_err(|_| {
-            Error::SimpleMessage("Gas limit exceeded in native vp")
-        })
+        self.gas_meter
+            .borrow_mut()
+            .consume(used_gas.into())
+            .map_err(|_| {
+                Error::SimpleMessage("Gas limit exceeded in native vp")
+            })
     }
 
     fn get_tx_code_hash(&self) -> Result<Option<Hash>> {

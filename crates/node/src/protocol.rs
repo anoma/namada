@@ -794,7 +794,7 @@ where
 
     tx_gas_meter
         .borrow_mut()
-        .consume(masp_gas_meter.borrow().get_tx_consumed_gas().into())
+        .consume(masp_gas_meter.borrow().get_tx_consumed_gas())
         .map_err(|e| Error::GasError(e.to_string()))?;
 
     Ok(valid_batched_tx_result)
@@ -1143,7 +1143,7 @@ where
     tracing::debug!("Total VPs gas cost {:?}", vps_gas);
 
     tx_gas_meter
-        .consume(vps_gas.into())
+        .consume(vps_gas)
         .map_err(|err| Error::GasError(err.to_string()))?;
 
     Ok(vps_result)
@@ -1173,12 +1173,13 @@ where
                     RefCell::new(VpGasMeter::new_from_tx_meter(tx_gas_meter));
                 let tx_accepted = match &addr {
                     Address::Implicit(_) | Address::Established(_) => {
+                        // FIXME: should return Gas
                         let (vp_hash, gas) = state
                             .validity_predicate::<parameters::Store<()>>(addr)
                             .map_err(Error::StateError)?;
                         gas_meter
                             .borrow_mut()
-                            .consume(gas)
+                            .consume(gas.into())
                             .map_err(|err| Error::GasError(err.to_string()))?;
                         let Some(vp_code_hash) = vp_hash else {
                             return Err(Error::MissingAddress(addr.clone()));

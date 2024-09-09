@@ -574,6 +574,7 @@ where
 }
 
 /// Add a gas cost incured in a transaction
+// FIXME: should request Gas
 pub fn tx_charge_gas<MEM, D, H, CA>(
     env: &mut TxVmEnv<MEM, D, H, CA>,
     used_gas: u64,
@@ -588,7 +589,7 @@ where
     // if we run out of gas, we need to stop the execution
     gas_meter
         .borrow_mut()
-        .consume(used_gas)
+        .consume(used_gas.into())
         .map_err(|err| {
             sentinel.borrow_mut().set_out_of_gas();
             tracing::info!(
@@ -1951,7 +1952,11 @@ where
         public_keys_map,
         &Some(signer),
         threshold,
-        || gas_meter.borrow_mut().consume(gas::VERIFY_TX_SIG_GAS),
+        || {
+            gas_meter
+                .borrow_mut()
+                .consume(gas::VERIFY_TX_SIG_GAS.into())
+        },
     ) {
         Ok(_) => Ok(()),
         Err(err) => match err {
@@ -2105,7 +2110,11 @@ where
         public_keys_map,
         &None,
         threshold,
-        || gas_meter.borrow_mut().consume(gas::VERIFY_TX_SIG_GAS),
+        || {
+            gas_meter
+                .borrow_mut()
+                .consume(gas::VERIFY_TX_SIG_GAS.into())
+        },
     ) {
         Ok(_) => Ok(HostEnvResult::Success.to_i64()),
         Err(err) => match err {

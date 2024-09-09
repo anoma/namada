@@ -43,11 +43,18 @@ impl From<RuntimeError> for Error {
 pub type EnvResult<T> = std::result::Result<T, RuntimeError>;
 
 /// Add a gas cost incured in a validity predicate
+// FIXME: should request Gas
 pub fn add_gas(gas_meter: &RefCell<VpGasMeter>, used_gas: u64) -> Result<()> {
-    gas_meter.borrow_mut().consume(used_gas).map_err(|err| {
-        tracing::info!("Stopping VP execution because of gas error: {}", err);
-        Error::new(RuntimeError::OutOfGas(err))
-    })
+    gas_meter
+        .borrow_mut()
+        .consume(used_gas.into())
+        .map_err(|err| {
+            tracing::info!(
+                "Stopping VP execution because of gas error: {}",
+                err
+            );
+            Error::new(RuntimeError::OutOfGas(err))
+        })
 }
 
 /// Storage read prior state (before tx execution). It will try to read from the

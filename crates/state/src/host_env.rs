@@ -66,15 +66,19 @@ where
         self.in_mem
     }
 
+    // FIXME: should request Gas
     fn charge_gas(&self, gas: u64) -> Result<()> {
-        self.gas_meter.borrow_mut().consume(gas).map_err(|err| {
-            self.sentinel.borrow_mut().set_out_of_gas();
-            tracing::info!(
-                "Stopping transaction execution because of gas error: {}",
-                err
-            );
-            Error::from(StateError::Gas(err))
-        })
+        self.gas_meter
+            .borrow_mut()
+            .consume(gas.into())
+            .map_err(|err| {
+                self.sentinel.borrow_mut().set_out_of_gas();
+                tracing::info!(
+                    "Stopping transaction execution because of gas error: {}",
+                    err
+                );
+                Error::from(StateError::Gas(err))
+            })
     }
 }
 
@@ -142,7 +146,7 @@ where
         Ok(self
             .gas_meter
             .borrow_mut()
-            .consume(gas)
+            .consume(gas.into())
             .map_err(StateError::Gas)?)
     }
 }
