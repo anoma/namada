@@ -202,9 +202,8 @@ where
     }
 
     /// Store in memory a total gas of a transaction with the given hash.
-    // FIXME: take has here
-    pub fn add_tx_gas(&mut self, tx_hash: Hash, gas: u64) {
-        self.commit_only_data.tx_gas.insert(tx_hash, gas);
+    pub fn add_tx_gas(&mut self, tx_hash: Hash, gas: Gas) {
+        self.commit_only_data.tx_gas.insert(tx_hash, gas.into());
     }
 
     /// Get the chain ID as a raw string

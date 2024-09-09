@@ -251,7 +251,7 @@ where
         let module = NftTransferModule::<_, Token>::new(ctx.clone());
         actions.add_transfer_module(module);
         // Charge gas for the expensive execution
-        self.ctx.charge_gas(IBC_ACTION_EXECUTE_GAS)?;
+        self.ctx.charge_gas(IBC_ACTION_EXECUTE_GAS.into())?;
         actions.execute::<Transfer>(tx_data)?;
 
         let changed_ibc_keys: HashSet<&Key> =
@@ -306,7 +306,7 @@ where
         let module = NftTransferModule::<_, Token>::new(ctx);
         actions.add_transfer_module(module);
         // Charge gas for the expensive validation
-        self.ctx.charge_gas(IBC_ACTION_VALIDATE_GAS)?;
+        self.ctx.charge_gas(IBC_ACTION_VALIDATE_GAS.into())?;
         Ok(actions.validate::<Transfer>(tx_data)?)
     }
 

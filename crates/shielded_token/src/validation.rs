@@ -18,6 +18,7 @@ use masp_primitives::transaction::{
 };
 use masp_proofs::bellman::groth16::VerifyingKey;
 use masp_proofs::sapling::BatchValidator;
+use namada_gas::Gas;
 use rand_core::OsRng;
 use smooth_operator::checked;
 
@@ -121,7 +122,7 @@ pub fn verify_shielded_tx<F>(
     consume_verify_gas: F,
 ) -> Result<()>
 where
-    F: Fn(u64) -> Result<()>,
+    F: Fn(Gas) -> Result<()>,
 {
     tracing::debug!("entered verify_shielded_tx()");
 
@@ -217,14 +218,17 @@ fn charge_masp_validate_gas<F>(
     consume_verify_gas: F,
 ) -> Result<()>
 where
-    F: Fn(u64) -> Result<()>,
+    F: Fn(Gas) -> Result<()>,
 {
     // Signatures gas
-    consume_verify_gas(checked!(
-        // Add one for the binding signature
-        ((sapling_bundle.shielded_spends.len() as u64) + 1)
-            * namada_gas::MASP_VERIFY_SIG_GAS
-    )?)?;
+    consume_verify_gas(
+        checked!(
+            // Add one for the binding signature
+            ((sapling_bundle.shielded_spends.len() as u64) + 1)
+                * namada_gas::MASP_VERIFY_SIG_GAS
+        )?
+        .into(),
+    )?;
 
     // If at least one note is present charge the fixed costs. Then charge the
     // variable cost for every other note, amortized on the fixed expected
@@ -232,28 +236,37 @@ where
     if let Some(remaining_notes) =
         sapling_bundle.shielded_spends.len().checked_sub(1)
     {
-        consume_verify_gas(namada_gas::MASP_FIXED_SPEND_GAS)?;
-        consume_verify_gas(checked!(
-            namada_gas::MASP_VARIABLE_SPEND_GAS * remaining_notes as u64
-        )?)?;
+        consume_verify_gas(namada_gas::MASP_FIXED_SPEND_GAS.into())?;
+        consume_verify_gas(
+            checked!(
+                namada_gas::MASP_VARIABLE_SPEND_GAS * remaining_notes as u64
+            )?
+            .into(),
+        )?;
     }
 
     if let Some(remaining_notes) =
         sapling_bundle.shielded_converts.len().checked_sub(1)
     {
-        consume_verify_gas(namada_gas::MASP_FIXED_CONVERT_GAS)?;
-        consume_verify_gas(checked!(
-            namada_gas::MASP_VARIABLE_CONVERT_GAS * remaining_notes as u64
-        )?)?;
+        consume_verify_gas(namada_gas::MASP_FIXED_CONVERT_GAS.into())?;
+        consume_verify_gas(
+            checked!(
+                namada_gas::MASP_VARIABLE_CONVERT_GAS * remaining_notes as u64
+            )?
+            .into(),
+        )?;
     }
 
     if let Some(remaining_notes) =
         sapling_bundle.shielded_outputs.len().checked_sub(1)
     {
-        consume_verify_gas(namada_gas::MASP_FIXED_OUTPUT_GAS)?;
-        consume_verify_gas(checked!(
-            namada_gas::MASP_VARIABLE_OUTPUT_GAS * remaining_notes as u64
-        )?)?;
+        consume_verify_gas(namada_gas::MASP_FIXED_OUTPUT_GAS.into())?;
+        consume_verify_gas(
+            checked!(
+                namada_gas::MASP_VARIABLE_OUTPUT_GAS * remaining_notes as u64
+            )?
+            .into(),
+        )?;
     }
 
     Ok(())
@@ -265,22 +278,31 @@ fn charge_masp_check_bundle_gas<F>(
     consume_verify_gas: F,
 ) -> Result<()>
 where
-    F: Fn(u64) -> Result<()>,
+    F: Fn(Gas) -> Result<()>,
 {
-    consume_verify_gas(checked!(
-        (sapling_bundle.shielded_spends.len() as u64)
-            * namada_gas::MASP_SPEND_CHECK_GAS
-    )?)?;
+    consume_verify_gas(
+        checked!(
+            (sapling_bundle.shielded_spends.len() as u64)
+                * namada_gas::MASP_SPEND_CHECK_GAS
+        )?
+        .into(),
+    )?;
 
-    consume_verify_gas(checked!(
-        (sapling_bundle.shielded_converts.len() as u64)
-            * namada_gas::MASP_CONVERT_CHECK_GAS
-    )?)?;
+    consume_verify_gas(
+        checked!(
+            (sapling_bundle.shielded_converts.len() as u64)
+                * namada_gas::MASP_CONVERT_CHECK_GAS
+        )?
+        .into(),
+    )?;
 
-    consume_verify_gas(checked!(
-        (sapling_bundle.shielded_outputs.len() as u64)
-            * namada_gas::MASP_OUTPUT_CHECK_GAS
-    )?)
+    consume_verify_gas(
+        checked!(
+            (sapling_bundle.shielded_outputs.len() as u64)
+                * namada_gas::MASP_OUTPUT_CHECK_GAS
+        )?
+        .into(),
+    )
 }
 
 #[cfg(any(test, feature = "testing"))]

@@ -137,9 +137,8 @@ pub trait StateRead: StorageRead + Debug {
     }
 
     /// Returns an iterator over the block results
-    // FIXME: is this gas?
-    fn db_iter_results(&self) -> (<Self::D as DBIter<'_>>::PrefixIter, u64) {
-        (self.db().iter_results(), 0)
+    fn db_iter_results(&self) -> (<Self::D as DBIter<'_>>::PrefixIter, Gas) {
+        (self.db().iter_results(), Gas::default())
     }
 
     /// Get the hash of a validity predicate for the given account address and

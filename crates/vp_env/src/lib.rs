@@ -27,6 +27,7 @@ pub use namada_core::chain::{BlockHeader, BlockHeight, Epoch, Epochs};
 use namada_core::hash::Hash;
 pub use namada_core::storage::{Key, TxIndex};
 use namada_events::{Event, EventType};
+use namada_gas::Gas;
 pub use namada_storage::StorageRead;
 use namada_tx::BatchedTxRef;
 
@@ -122,7 +123,7 @@ where
     fn get_tx_code_hash(&self) -> Result<Option<Hash>, namada_storage::Error>;
 
     /// Charge the provided gas for the current vp
-    fn charge_gas(&self, used_gas: u64) -> Result<(), namada_storage::Error>;
+    fn charge_gas(&self, used_gas: Gas) -> Result<(), namada_storage::Error>;
 
     // ---- Methods below have default implementation via `pre/post` ----
 

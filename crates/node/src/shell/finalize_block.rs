@@ -233,7 +233,7 @@ where
         (height, new_epoch)
     }
 
-    fn update_tx_gas(&mut self, tx_hash: Hash, gas: u64) {
+    fn update_tx_gas(&mut self, tx_hash: Hash, gas: Gas) {
         self.state.in_mem_mut().add_tx_gas(tx_hash, gas);
     }
 
@@ -787,7 +787,7 @@ where
             let consumed_gas = tx_gas_meter.get_tx_consumed_gas();
 
             // save the gas cost
-            self.update_tx_gas(tx_hash, consumed_gas.into());
+            self.update_tx_gas(tx_hash, consumed_gas);
 
             if let Some(wrapper_cache) = self.evaluate_tx_result(
                 response,
@@ -860,7 +860,7 @@ where
             let consumed_gas = tx_gas_meter.get_tx_consumed_gas();
 
             // update the gas cost of the corresponding wrapper
-            self.update_tx_gas(tx_hash, consumed_gas.into());
+            self.update_tx_gas(tx_hash, consumed_gas);
 
             self.evaluate_tx_result(
                 response,

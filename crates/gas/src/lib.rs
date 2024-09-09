@@ -280,14 +280,12 @@ impl Gas {
     }
 }
 
-// FIXME: remove this?
 impl From<u64> for Gas {
     fn from(sub: u64) -> Self {
         Self { sub }
     }
 }
 
-// FIXME: remove this?
 impl From<Gas> for u64 {
     fn from(gas: Gas) -> Self {
         gas.sub
