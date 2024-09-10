@@ -560,6 +560,8 @@ fn pos_bonds() -> Result<()> {
                     &format!("file:{}", path.to_string_lossy()),
                     "--log-level",
                     "automation:DEBUG",
+                    "--display",
+                    "headless",
                 ])
                 .spawn()
                 .unwrap(),
