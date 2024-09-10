@@ -32,6 +32,7 @@ use namada_core::collections::HashMap;
 use namada_core::key::{RefTo, SchemeType};
 use namada_core::string_encoding::StringEncoded;
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
+use namada_node::tendermint_config::net::Address as TendermintAddress;
 use namada_sdk::chain::ChainId;
 use namada_sdk::wallet::alias::Alias;
 use namada_tx_prelude::token;
@@ -565,6 +566,23 @@ pub fn network(
         )?;
         join_network.exp_string("Successfully configured for chain")?;
         join_network.assert_success();
+
+        // Increment the default port, because the default from
+        // `DEFAULT_COMETBFT_CONFIG` 26657 is being used by gaia.
+        let mut config = Config::load(base_dir, &net.chain_id, None);
+
+        // For validators the arg is the index of a validator. We usually only
+        // have a few of them so `20` shouldn't collide with anything
+        let offset = default_port_offset(20);
+        let incr_port = |addr: &mut TendermintAddress| {
+            if let TendermintAddress::Tcp { port, .. } = addr {
+                *port += offset;
+            }
+        };
+        incr_port(&mut config.ledger.cometbft.p2p.laddr);
+        incr_port(&mut config.ledger.cometbft.rpc.laddr);
+        incr_port(&mut config.ledger.cometbft.proxy_app);
+        config.write(base_dir, &net.chain_id, true).unwrap();
     }
 
     copy_wasm_to_chain_dir(&working_dir, test_dir.path(), &net.chain_id);
