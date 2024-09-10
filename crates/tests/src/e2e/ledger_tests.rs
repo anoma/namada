@@ -54,7 +54,7 @@ use crate::strings::{
     LEDGER_SHUTDOWN, LEDGER_STARTED, NON_VALIDATOR_NODE, TX_APPLIED_SUCCESS,
     TX_REJECTED, VALIDATOR_NODE,
 };
-use crate::{run, run_as, LastSignState};
+use crate::{hw_wallet_automation, run, run_as, LastSignState};
 
 const ENV_VAR_NAMADA_SEED_NODES: &str = "NAMADA_SEED_NODES";
 
@@ -540,6 +540,32 @@ fn pos_bonds() -> Result<()> {
         None,
     );
 
+    // If used, keep Speculos alive for duration of the test
+    let mut speculos: Option<std::process::Child> = None;
+    if hw_wallet_automation::uses_automation() {
+        // Gen automation for Speculos
+        let automation = hw_wallet_automation::gen_automation_e2e_pos_bonds();
+        let json = serde_json::to_vec_pretty(&automation).unwrap();
+        let path = test.test_dir.path().join("automation.json");
+        std::fs::write(&path, json).unwrap();
+
+        // Start Speculos with the automation
+        speculos = Some(
+            Command::new("speculos")
+                .args([
+                    "app_s2.elf",
+                    "--seed",
+                    hw_wallet_automation::SEED,
+                    "--automation",
+                    &format!("file:{}", path.to_string_lossy()),
+                    "--log-level",
+                    "automation:DEBUG",
+                ])
+                .spawn()
+                .unwrap(),
+        );
+    }
+
     // 1. Run the ledger node
     let _bg_validator_0 =
         start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
@@ -739,6 +765,10 @@ fn pos_bonds() -> Result<()> {
     let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
+
+    if let Some(mut process) = speculos {
+        process.kill().unwrap()
+    }
 
     Ok(())
 }
