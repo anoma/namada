@@ -98,6 +98,16 @@ where
         let mut dec_mints: HashMap<Address, Amount> = HashMap::new();
         for key in keys_changed {
             if let Some([token, owner]) = is_any_token_balance_key(key) {
+                if owner.is_internal() && !verifiers.contains(owner) {
+                    // Internal addresses need to always verify the transaction
+                    // (credit and debit)
+                    return Err(Error::new_alloc(format!(
+                        "The vp of debited internal address {} has not been \
+                         triggered",
+                        owner
+                    )));
+                }
+
                 let pre: Amount = ctx.read_pre(key)?.unwrap_or_default();
                 let post: Amount = ctx.read_post(key)?.unwrap_or_default();
                 match post.checked_sub(pre) {
