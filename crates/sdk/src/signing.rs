@@ -483,6 +483,7 @@ pub async fn validate_transparent_fee<N: Namada>(
     let fee_payer_address = Address::from(fee_payer);
 
     let balance_key = balance_key(&args.fee_token, &fee_payer_address);
+    #[allow(clippy::disallowed_methods)]
     let balance = rpc::query_storage_value::<_, token::Amount>(
         context.client(),
         &balance_key,

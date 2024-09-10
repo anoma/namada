@@ -508,7 +508,9 @@ fn ibc_token_inflation() -> Result<()> {
     let delegated = epoch + PIPELINE_LEN;
     while epoch < delegated {
         sleep(10);
-        epoch = get_epoch(&test, &rpc).unwrap_or_default();
+        #[allow(clippy::disallowed_methods)]
+        let new_epoch = get_epoch(&test, &rpc).unwrap_or_default();
+        epoch = new_epoch;
     }
     // inflation proposal on Namada
     let start_epoch = propose_inflation(&test)?;
@@ -516,7 +518,9 @@ fn ibc_token_inflation() -> Result<()> {
     // Vote
     while epoch < start_epoch {
         sleep(10);
-        epoch = get_epoch(&test, &rpc).unwrap_or_default();
+        #[allow(clippy::disallowed_methods)]
+        let new_epoch = get_epoch(&test, &rpc).unwrap_or_default();
+        epoch = new_epoch;
     }
     submit_votes(&test)?;
 
@@ -566,7 +570,9 @@ fn ibc_token_inflation() -> Result<()> {
     let new_epoch = epoch + MASP_EPOCH_MULTIPLIER;
     while epoch < new_epoch {
         sleep(10);
-        epoch = get_epoch(&test, &rpc).unwrap_or_default();
+        #[allow(clippy::disallowed_methods)]
+        let new_epoch = get_epoch(&test, &rpc).unwrap_or_default();
+        epoch = new_epoch;
     }
 
     // Check balances

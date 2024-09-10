@@ -223,6 +223,7 @@ pub mod shim {
                 let header = req.header;
                 FinalizeBlock {
                     header: BlockHeader {
+                        #[allow(clippy::disallowed_methods)]
                         hash: Hash::try_from(header.app_hash.as_bytes())
                             .unwrap_or_default(),
                         time: DateTimeUtc::try_from(header.time).unwrap(),
