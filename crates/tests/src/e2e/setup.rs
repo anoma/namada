@@ -65,6 +65,12 @@ const ENV_VAR_TEMP_PATH: &str = "NAMADA_E2E_TEMP_PATH";
 pub const ENV_VAR_USE_PREBUILT_BINARIES: &str =
     "NAMADA_E2E_USE_PREBUILT_BINARIES";
 
+/// Env. var to set a path to `speculos` executable
+pub const ENV_VAR_SPECULOS_PATH: &str = "NAMADA_SPECULOS_PATH";
+
+/// Env. var to set a path to ledger-namada wallet ELF file for `speculos`
+pub const ENV_VAR_SPECULOS_APP_ELF: &str = "NAMADA_SPECULOS_APP_ELF";
+
 /// An E2E test network.
 #[derive(Debug, Clone)]
 pub struct Network {
@@ -1543,4 +1549,19 @@ pub fn get_all_wasms_hashes(
             }
         })
         .collect()
+}
+
+/// Get the path to `speculos` executable from [`ENV_VAR_SPECULOS_PATH`] if set,
+/// or default to `speculos.py`.
+pub fn speculos_path() -> String {
+    env::var(ENV_VAR_SPECULOS_PATH)
+        .unwrap_or_else(|_| "speculos.py".to_string())
+}
+
+/// Get the path to ledger-namada wallet ELF file for `speculos` executable from
+/// [`ENV_VAR_SPECULOS_APP_ELF`] if set, or default to `app_s2.elf` in working
+/// dir or path.
+pub fn speculos_app_elf() -> String {
+    env::var(ENV_VAR_SPECULOS_APP_ELF)
+        .unwrap_or_else(|_| "app_s2.elf".to_string())
 }

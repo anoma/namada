@@ -48,7 +48,7 @@ use crate::e2e::helpers::{
 };
 use crate::e2e::setup::{
     self, allow_duplicate_ips, apply_use_device, default_port_offset, sleep,
-    Bin, Who,
+    speculos_app_elf, speculos_path, Bin, Who,
 };
 use crate::strings::{
     LEDGER_SHUTDOWN, LEDGER_STARTED, NON_VALIDATOR_NODE, TX_APPLIED_SUCCESS,
@@ -551,9 +551,9 @@ fn pos_bonds() -> Result<()> {
 
         // Start Speculos with the automation
         speculos = Some(
-            Command::new("speculos")
+            Command::new(speculos_path())
                 .args([
-                    "app_s2.elf",
+                    &speculos_app_elf(),
                     "--seed",
                     hw_wallet_automation::SEED,
                     "--automation",
