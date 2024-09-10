@@ -34,12 +34,11 @@ The E2E and integration tests can be made to use these hardware wallet based gen
 
 #### Speculos automation
 
-To run a test that has implemented Speculos automation (only `e2e::ledger_tests::pos_bonds` at the moment), set `NAMADA_DEVICE_AUTOMATION=true` in addition to the ones from above when running this test.
+To run a test that has implemented Speculos automation (only `e2e::ledger_tests::pos_bonds` at the moment), in addition to the ones from above when running this test set:
 
-The automation requires to have available on path:
-
-* `speculos` launcher
-* `app_s2.elf` built from [ledger-namada](https://github.com/Zondax/ledger-namada)
+* `NAMADA_DEVICE_AUTOMATION=true`
+* `NAMADA_SPECULOS_PATH` to the `speculos`/`speculos.py` executable
+* `NAMADA_SPECULOS_APP_ELF` to the ELF file for Ledger Nano S Plus (`app_s2.elf`) built from [ledger-namada](https://github.com/Zondax/ledger-namada)
 
 In CI, these are already provided in the docker image.
 
