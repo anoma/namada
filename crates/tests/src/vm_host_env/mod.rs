@@ -1344,8 +1344,10 @@ mod tests {
 
         // Check
         let mut env = tx_host_env::take();
-        // The token must be part of the verifier set (checked by MultitokenVp)
+        // The token and sender must be part of the verifier set (checked by
+        // MultitokenVp)
         env.verifiers.insert(ibc_token);
+        env.verifiers.insert(sender);
         let result = ibc::validate_ibc_vp_from_tx(
             &env,
             &tx.batch_ref_first_tx().unwrap(),
