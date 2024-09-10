@@ -450,6 +450,18 @@ where
         }
     };
 
+    if let Some([token, owner]) =
+        crate::token::storage_key::is_any_token_balance_key(&storage_key)
+    {
+        tracing::warn!(
+            "last committed height {}, queried height {}, token: {}, owner: {}",
+            last_committed_height,
+            queried_height,
+            token,
+            owner
+        );
+    };
+
     if let Some(past_height_limit) = ctx.storage_read_past_height_limit {
         if checked!(queried_height + past_height_limit)? < last_committed_height
         {
@@ -479,6 +491,18 @@ where
             } else {
                 None
             };
+
+            if crate::token::storage_key::is_any_token_balance_key(&storage_key)
+                .is_some()
+            {
+                tracing::warn!(
+                    "token amount: {}",
+                    crate::token::Amount::try_from_slice(&value)
+                        .unwrap()
+                        .to_string_native()
+                );
+            };
+
             Ok(EncodedResponseQuery {
                 data: value,
                 proof,

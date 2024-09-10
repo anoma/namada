@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::ops::{Deref, DerefMut};
 
-use namada_core::address::Address;
+use namada_core::address::{Address, InternalAddress};
 use namada_core::arith::checked;
 use namada_core::borsh::BorshSerializeExt;
 use namada_core::chain::ChainId;
@@ -17,7 +17,8 @@ use namada_storage::conversion_state::{
     ConversionState, ReadConversionState, WithConversionState,
 };
 use namada_storage::{
-    BlockHeight, BlockStateRead, BlockStateWrite, ResultExt, StorageRead,
+    BlockHeight, BlockStateRead, BlockStateWrite, DbKeySeg, ResultExt,
+    StorageRead,
 };
 
 use crate::in_memory::InMemory;
@@ -771,6 +772,26 @@ where
         height: BlockHeight,
     ) -> Result<(Option<Vec<u8>>, Gas)> {
         // `0` means last committed height
+
+        let is_token = match &key.segments[..] {
+            [DbKeySeg::AddressSeg(addr), DbKeySeg::AddressSeg(token), DbKeySeg::StringSeg(balance), DbKeySeg::AddressSeg(owner)]
+                if *addr == Address::Internal(InternalAddress::Multitoken)
+                    && balance == "balance" =>
+            {
+                true
+            }
+            _ => false,
+        };
+
+        if is_token {
+            tracing::warn!(
+                "height: {}, last_block_height: {}, wut: {}",
+                height,
+                self.in_mem().get_last_block_height(),
+                height >= self.in_mem().get_last_block_height(),
+            );
+        };
+
         if height == BlockHeight(0)
             || height >= self.in_mem().get_last_block_height()
         {
