@@ -47,6 +47,7 @@ prost.workspace = true
 regex.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+serde_tuple.workspace = true
 sha2.workspace = true
 tempfile.workspace = true
 test-log.workspace = true
