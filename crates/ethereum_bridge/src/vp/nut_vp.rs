@@ -178,14 +178,14 @@ mod test_nuts {
             state.commit_block().expect("Test failed");
 
             // write the updated balances
-            state
+            let _ = state
                 .write_log_mut()
                 .write(
                     &src_balance_key,
                     Amount::from(100_u64).serialize_to_vec(),
                 )
                 .expect("Test failed");
-            state
+            let _ = state
                 .write_log_mut()
                 .write(
                     &dst_balance_key,

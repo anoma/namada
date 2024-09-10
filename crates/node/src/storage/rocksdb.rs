@@ -60,6 +60,7 @@ use namada_sdk::arith::checked;
 use namada_sdk::collections::HashSet;
 use namada_sdk::eth_bridge::storage::bridge_pool;
 use namada_sdk::eth_bridge::storage::proof::BridgePoolRootProof;
+use namada_sdk::gas::Gas;
 use namada_sdk::hash::Hash;
 use namada_sdk::migrations::{DBUpdateVisitor, DbUpdateType};
 use namada_sdk::state::merkle_tree::{
@@ -2079,10 +2080,10 @@ pub struct PersistentPrefixIterator<'a>(
 );
 
 impl<'a> Iterator for PersistentPrefixIterator<'a> {
-    type Item = (String, Vec<u8>, u64);
+    type Item = (String, Vec<u8>, Gas);
 
     /// Returns the next pair and the gas cost
-    fn next(&mut self) -> Option<(String, Vec<u8>, u64)> {
+    fn next(&mut self) -> Option<(String, Vec<u8>, Gas)> {
         loop {
             match self.0.iter.next() {
                 Some(result) => {
@@ -2092,7 +2093,11 @@ impl<'a> Iterator for PersistentPrefixIterator<'a> {
                         .expect("Cannot convert from bytes to key string");
                     if let Some(k) = key.strip_prefix(&self.0.stripped_prefix) {
                         let gas = k.len().checked_add(val.len())?;
-                        return Some((k.to_owned(), val.to_vec(), gas as _));
+                        return Some((
+                            k.to_owned(),
+                            val.to_vec(),
+                            (gas as u64).into(),
+                        ));
                     } else {
                         tracing::warn!(
                             "Unmatched prefix \"{}\" in iterator's key \
@@ -2113,10 +2118,10 @@ pub struct PersistentPatternIterator<'a> {
 }
 
 impl<'a> Iterator for PersistentPatternIterator<'a> {
-    type Item = (String, Vec<u8>, u64);
+    type Item = (String, Vec<u8>, Gas);
 
     /// Returns the next pair and the gas cost
-    fn next(&mut self) -> Option<(String, Vec<u8>, u64)> {
+    fn next(&mut self) -> Option<(String, Vec<u8>, Gas)> {
         loop {
             let next_result = self.inner.iter.next()?;
             if self.inner.pattern.is_match(&next_result.0) {

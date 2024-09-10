@@ -11,7 +11,7 @@ use namada_core::hash::Hash;
 use namada_core::{arith, storage};
 use namada_events::{Event, EventToEmit, EventType};
 use namada_gas::{
-    MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_DELETE_GAS_PER_BYTE,
+    Gas, MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_DELETE_GAS_PER_BYTE,
     STORAGE_WRITE_GAS_PER_BYTE,
 };
 use patricia_tree::map::StringPatriciaMap;
@@ -187,7 +187,7 @@ impl WriteLog {
     pub fn read(
         &self,
         key: &storage::Key,
-    ) -> std::result::Result<(Option<&StorageModification>, u64), arith::Error>
+    ) -> std::result::Result<(Option<&StorageModification>, Gas), arith::Error>
     {
         // try to read from tx write log first
         match self
@@ -216,11 +216,14 @@ impl WriteLog {
                         checked!(key.len() + vp_code_hash.len())?
                     }
                 } as u64;
-                Ok((Some(v), checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?))
+                Ok((
+                    Some(v),
+                    checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?.into(),
+                ))
             }
             None => {
                 let gas = key.len() as u64;
-                Ok((None, checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?))
+                Ok((None, checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?.into()))
             }
         }
     }
@@ -231,7 +234,7 @@ impl WriteLog {
     pub fn read_pre(
         &self,
         key: &storage::Key,
-    ) -> std::result::Result<(Option<&StorageModification>, u64), arith::Error>
+    ) -> std::result::Result<(Option<&StorageModification>, Gas), arith::Error>
     {
         for bucket in self
             .batch_write_log
@@ -252,12 +255,12 @@ impl WriteLog {
                 } as u64;
                 return Ok((
                     Some(v),
-                    checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?,
+                    checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?.into(),
                 ));
             }
         }
         let gas = key.len() as u64;
-        Ok((None, checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?))
+        Ok((None, checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?.into()))
     }
 
     /// Read a temp value at the given key and return the value and the gas
@@ -266,17 +269,20 @@ impl WriteLog {
     pub fn read_temp(
         &self,
         key: &storage::Key,
-    ) -> Result<(Option<&Vec<u8>>, u64)> {
+    ) -> Result<(Option<&Vec<u8>>, Gas)> {
         // try to read from tx write log first
         match self.tx_write_log.tx_temp_log.get(key) {
             Some(value) => {
                 let gas = checked!(key.len() + value.len())? as u64;
 
-                Ok((Some(value), checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?))
+                Ok((
+                    Some(value),
+                    checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?.into(),
+                ))
             }
             None => {
                 let gas = key.len() as u64;
-                Ok((None, checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?))
+                Ok((None, checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?.into()))
             }
         }
     }
@@ -290,7 +296,7 @@ impl WriteLog {
         &mut self,
         key: &storage::Key,
         value: Vec<u8>,
-    ) -> Result<(u64, i64)> {
+    ) -> Result<(Gas, i64)> {
         let len = value.len();
         if self.tx_write_log.tx_temp_log.contains_key(key) {
             return Err(Error::UpdateTemporaryValue);
@@ -325,7 +331,10 @@ impl WriteLog {
             .insert(key.clone(), StorageModification::Write { value });
 
         let gas = checked!(key.len() + len)? as u64;
-        Ok((checked!(gas * STORAGE_WRITE_GAS_PER_BYTE)?, size_diff))
+        Ok((
+            checked!(gas * STORAGE_WRITE_GAS_PER_BYTE)?.into(),
+            size_diff,
+        ))
     }
 
     /// Write a key and a value.
@@ -367,7 +376,7 @@ impl WriteLog {
         &mut self,
         key: &storage::Key,
         value: Vec<u8>,
-    ) -> Result<(u64, i64)> {
+    ) -> Result<(Gas, i64)> {
         if let Some(prev) = self.tx_write_log.write_log.get(key) {
             match prev {
                 StorageModification::Write { .. } => {
@@ -402,14 +411,17 @@ impl WriteLog {
         // Temp writes are not propagated to db so just charge the cost of
         // accessing storage
         let gas = checked!(key.len() + len)? as u64;
-        Ok((checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?, size_diff))
+        Ok((
+            checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?.into(),
+            size_diff,
+        ))
     }
 
     /// Delete a key and its value, and return the gas cost and the size
     /// difference.
     /// Fails with [`Error::DeleteVp`] for a validity predicate key, which are
     /// not possible to delete.
-    pub fn delete(&mut self, key: &storage::Key) -> Result<(u64, i64)> {
+    pub fn delete(&mut self, key: &storage::Key) -> Result<(Gas, i64)> {
         if key.is_validity_predicate().is_some() {
             return Err(Error::DeleteVp);
         }
@@ -434,7 +446,10 @@ impl WriteLog {
             .ok()
             .and_then(i64::checked_neg)
             .ok_or(Error::SizeDiffOverflow)?;
-        Ok((checked!(gas * STORAGE_DELETE_GAS_PER_BYTE)?, size_diff))
+        Ok((
+            checked!(gas * STORAGE_DELETE_GAS_PER_BYTE)?.into(),
+            size_diff,
+        ))
     }
 
     /// Delete a key and its value.
@@ -465,7 +480,7 @@ impl WriteLog {
         storage_address_gen: &EstablishedAddressGen,
         vp_code_hash: Hash,
         entropy_source: &[u8],
-    ) -> (Address, u64) {
+    ) -> (Address, Gas) {
         // If we've previously generated a new account, we use the local copy of
         // the generator. Otherwise, we create a new copy from the storage
         let address_gen = self
@@ -483,12 +498,12 @@ impl WriteLog {
         self.tx_write_log
             .write_log
             .insert(key, StorageModification::InitAccount { vp_code_hash });
-        (addr, gas)
+        (addr, gas.into())
     }
 
     /// Set an event and return the gas cost. Returns `None` on gas u64
     /// overflow.
-    pub fn emit_event<E: EventToEmit>(&mut self, event: E) -> Option<u64> {
+    pub fn emit_event<E: EventToEmit>(&mut self, event: E) -> Option<Gas> {
         let event = event.into();
         let gas_cost = event.emission_gas_cost(MEMORY_ACCESS_GAS_PER_BYTE);
         if gas_cost.as_ref().is_some() {
@@ -506,7 +521,7 @@ impl WriteLog {
                 .unwrap()
                 .insert(event);
         }
-        gas_cost
+        gas_cost.map(|gas| gas.into())
     }
 
     /// Get the non-temporary storage keys changed and accounts keys initialized
@@ -767,11 +782,17 @@ mod tests {
         // read a non-existing key
         let (value, gas) = write_log.read(&key).unwrap();
         assert!(value.is_none());
-        assert_eq!(gas, (key.len() as u64) * MEMORY_ACCESS_GAS_PER_BYTE);
+        assert_eq!(
+            gas,
+            ((key.len() as u64) * MEMORY_ACCESS_GAS_PER_BYTE).into()
+        );
 
         // delete a non-existing key
         let (gas, diff) = write_log.delete(&key).unwrap();
-        assert_eq!(gas, key.len() as u64 * STORAGE_DELETE_GAS_PER_BYTE);
+        assert_eq!(
+            gas,
+            (key.len() as u64 * STORAGE_DELETE_GAS_PER_BYTE).into()
+        );
         assert_eq!(diff, 0);
 
         // insert a value
@@ -779,7 +800,8 @@ mod tests {
         let (gas, diff) = write_log.write(&key, inserted.clone()).unwrap();
         assert_eq!(
             gas,
-            (key.len() + inserted.len()) as u64 * STORAGE_WRITE_GAS_PER_BYTE
+            ((key.len() + inserted.len()) as u64 * STORAGE_WRITE_GAS_PER_BYTE)
+                .into()
         );
         assert_eq!(diff, inserted.len() as i64);
 
@@ -793,7 +815,9 @@ mod tests {
         }
         assert_eq!(
             gas,
-            ((key.len() + inserted.len()) as u64) * MEMORY_ACCESS_GAS_PER_BYTE
+            (((key.len() + inserted.len()) as u64)
+                * MEMORY_ACCESS_GAS_PER_BYTE)
+                .into()
         );
 
         // update the value
@@ -801,7 +825,8 @@ mod tests {
         let (gas, diff) = write_log.write(&key, updated.clone()).unwrap();
         assert_eq!(
             gas,
-            (key.len() + updated.len()) as u64 * STORAGE_WRITE_GAS_PER_BYTE
+            ((key.len() + updated.len()) as u64 * STORAGE_WRITE_GAS_PER_BYTE)
+                .into()
         );
         assert_eq!(diff, updated.len() as i64 - inserted.len() as i64);
 
@@ -809,13 +834,17 @@ mod tests {
         let (gas, diff) = write_log.delete(&key).unwrap();
         assert_eq!(
             gas,
-            (key.len() + updated.len()) as u64 * STORAGE_DELETE_GAS_PER_BYTE
+            ((key.len() + updated.len()) as u64 * STORAGE_DELETE_GAS_PER_BYTE)
+                .into()
         );
         assert_eq!(diff, -(updated.len() as i64));
 
         // delete the deleted key again
         let (gas, diff) = write_log.delete(&key).unwrap();
-        assert_eq!(gas, key.len() as u64 * STORAGE_DELETE_GAS_PER_BYTE);
+        assert_eq!(
+            gas,
+            (key.len() as u64 * STORAGE_DELETE_GAS_PER_BYTE).into()
+        );
         assert_eq!(diff, 0);
 
         // read the deleted key
@@ -824,14 +853,16 @@ mod tests {
             StorageModification::Delete => {}
             _ => panic!("unexpected result"),
         }
-        assert_eq!(gas, key.len() as u64 * MEMORY_ACCESS_GAS_PER_BYTE);
+        assert_eq!(gas, (key.len() as u64 * MEMORY_ACCESS_GAS_PER_BYTE).into());
 
         // insert again
         let reinserted = "reinserted".as_bytes().to_vec();
         let (gas, diff) = write_log.write(&key, reinserted.clone()).unwrap();
         assert_eq!(
             gas,
-            (key.len() + reinserted.len()) as u64 * STORAGE_WRITE_GAS_PER_BYTE
+            ((key.len() + reinserted.len()) as u64
+                * STORAGE_WRITE_GAS_PER_BYTE)
+                .into()
         );
         assert_eq!(diff, reinserted.len() as i64);
     }
@@ -848,7 +879,9 @@ mod tests {
         let vp_key = storage::Key::validity_predicate(&addr);
         assert_eq!(
             gas,
-            (vp_key.len() + vp_hash.len()) as u64 * STORAGE_WRITE_GAS_PER_BYTE
+            ((vp_key.len() + vp_hash.len()) as u64
+                * STORAGE_WRITE_GAS_PER_BYTE)
+                .into()
         );
 
         // read
@@ -861,7 +894,9 @@ mod tests {
         }
         assert_eq!(
             gas,
-            (vp_key.len() + vp_hash.len()) as u64 * MEMORY_ACCESS_GAS_PER_BYTE
+            ((vp_key.len() + vp_hash.len()) as u64
+                * MEMORY_ACCESS_GAS_PER_BYTE)
+                .into()
         );
 
         // get all
@@ -936,23 +971,23 @@ mod tests {
 
         // write values
         let val1 = "val1".as_bytes().to_vec();
-        state.write_log.write(&key1, val1.clone()).unwrap();
-        state.write_log.write(&key2, val1.clone()).unwrap();
-        state.write_log.write(&key3, val1.clone()).unwrap();
-        state.write_log.write_temp(&key4, val1.clone()).unwrap();
+        let _ = state.write_log.write(&key1, val1.clone()).unwrap();
+        let _ = state.write_log.write(&key2, val1.clone()).unwrap();
+        let _ = state.write_log.write(&key3, val1.clone()).unwrap();
+        let _ = state.write_log.write_temp(&key4, val1.clone()).unwrap();
         state.write_log.commit_batch_and_current_tx();
 
         // these values are not written due to drop_tx
         let val2 = "val2".as_bytes().to_vec();
-        state.write_log.write(&key1, val2.clone()).unwrap();
-        state.write_log.write(&key2, val2.clone()).unwrap();
-        state.write_log.write(&key3, val2).unwrap();
+        let _ = state.write_log.write(&key1, val2.clone()).unwrap();
+        let _ = state.write_log.write(&key2, val2.clone()).unwrap();
+        let _ = state.write_log.write(&key3, val2).unwrap();
         state.write_log.drop_tx();
 
         // deletes and updates values
         let val3 = "val3".as_bytes().to_vec();
-        state.write_log.delete(&key2).unwrap();
-        state.write_log.write(&key3, val3.clone()).unwrap();
+        let _ = state.write_log.delete(&key2).unwrap();
+        let _ = state.write_log.write(&key3, val3.clone()).unwrap();
         state.write_log.commit_batch_and_current_tx();
 
         // commit a block
@@ -1068,7 +1103,7 @@ mod tests {
             storage::Key::parse("key1").expect("cannot parse the key string");
         let val1 = "val1".as_bytes().to_vec();
         // Test from tx_write_log
-        state.write_log.write_temp(&key1, val1.clone()).unwrap();
+        let _ = state.write_log.write_temp(&key1, val1.clone()).unwrap();
         assert!(matches!(
             state.write_log.write(&key1, val1.clone()),
             Err(Error::UpdateTemporaryValue)
@@ -1084,7 +1119,7 @@ mod tests {
             storage::Key::parse("key1").expect("cannot parse the key string");
         let val1 = "val1".as_bytes().to_vec();
         // Test from tx_write_log
-        state.write_log.write(&key1, val1.clone()).unwrap();
+        let _ = state.write_log.write(&key1, val1.clone()).unwrap();
         assert!(matches!(
             state.write_log.write_temp(&key1, val1.clone()),
             Err(Error::WriteTempAfterWrite)
@@ -1100,7 +1135,7 @@ mod tests {
             storage::Key::parse("key1").expect("cannot parse the key string");
         let val1 = "val1".as_bytes().to_vec();
         // Test from tx_write_log
-        state.write_log.delete(&key1).unwrap();
+        let _ = state.write_log.delete(&key1).unwrap();
         assert!(matches!(
             state.write_log.write_temp(&key1, val1.clone()),
             Err(Error::WriteTempAfterDelete)

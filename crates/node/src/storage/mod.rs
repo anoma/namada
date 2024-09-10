@@ -104,10 +104,16 @@ mod tests {
         // before insertion
         let (result, gas) = state.db_has_key(&key).expect("has_key failed");
         assert!(!result);
-        assert_eq!(gas, key.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE);
+        assert_eq!(
+            gas,
+            (key.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE).into()
+        );
         let (result, gas) = state.db_read(&key).expect("read failed");
         assert_eq!(result, None);
-        assert_eq!(gas, key.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE);
+        assert_eq!(
+            gas,
+            (key.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE).into()
+        );
 
         // insert
         state.db_write(&key, value_bytes).expect("write failed");
@@ -115,15 +121,19 @@ mod tests {
         // read
         let (result, gas) = state.db_has_key(&key).expect("has_key failed");
         assert!(result);
-        assert_eq!(gas, key.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE);
+        assert_eq!(
+            gas,
+            (key.len() as u64 * STORAGE_ACCESS_GAS_PER_BYTE).into()
+        );
         let (result, gas) = state.db_read(&key).expect("read failed");
         let read_value: u64 = decode(result.expect("value doesn't exist"))
             .expect("decoding failed");
         assert_eq!(read_value, value);
         assert_eq!(
             gas,
-            (key.len() as u64 + value_bytes_len as u64)
-                * STORAGE_ACCESS_GAS_PER_BYTE
+            ((key.len() as u64 + value_bytes_len as u64)
+                * STORAGE_ACCESS_GAS_PER_BYTE)
+                .into()
         );
 
         // delete
@@ -234,14 +244,17 @@ mod tests {
         state.commit_block().expect("commit failed");
 
         let (iter, gas) = state.db_iter_prefix(&prefix).unwrap();
-        assert_eq!(gas, (prefix.len() as u64) * STORAGE_ACCESS_GAS_PER_BYTE);
+        assert_eq!(
+            gas,
+            ((prefix.len() as u64) * STORAGE_ACCESS_GAS_PER_BYTE).into()
+        );
         for (k, v, gas) in iter {
             match expected.pop() {
                 Some((expected_key, expected_val)) => {
                     assert_eq!(k, expected_key);
                     assert_eq!(v, expected_val);
                     let expected_gas = expected_key.len() + expected_val.len();
-                    assert_eq!(gas, expected_gas as u64);
+                    assert_eq!(gas, (expected_gas as u64).into());
                 }
                 None => panic!("read a pair though no expected pair"),
             }
@@ -276,7 +289,10 @@ mod tests {
             .validity_predicate::<validation::ParamKeys>(&addr)
             .expect("VP load failed");
         assert_eq!(vp, None);
-        assert_eq!(gas, (key.len() as u64) * STORAGE_ACCESS_GAS_PER_BYTE);
+        assert_eq!(
+            gas,
+            ((key.len() as u64) * STORAGE_ACCESS_GAS_PER_BYTE).into()
+        );
 
         // insert
         let vp1 = Hash::sha256("vp1".as_bytes());
@@ -289,7 +305,8 @@ mod tests {
         assert_eq!(vp_code_hash.expect("no VP"), vp1);
         assert_eq!(
             gas,
-            ((key.len() + vp1.len()) as u64) * STORAGE_ACCESS_GAS_PER_BYTE
+            (((key.len() + vp1.len()) as u64) * STORAGE_ACCESS_GAS_PER_BYTE)
+                .into()
         );
     }
 

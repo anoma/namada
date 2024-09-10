@@ -1295,7 +1295,7 @@ mod test {
         S: State,
     {
         let balance_key = balance_key(&nam(), address);
-        state
+        let _ = state
             .write_log_mut()
             .write(&balance_key, amount.serialize_to_vec())
             .expect("write failed");
@@ -1376,12 +1376,12 @@ mod test {
         current_source.spend(&amount).unwrap();
         current_target.receive(&amount).unwrap();
 
-        state
+        let _ = state
             .write_log_mut()
             .write(&source_balance_key, current_source.serialize_to_vec())
             .expect("write failed");
 
-        state
+        let _ = state
             .write_log_mut()
             .write(&target_balance_key, current_target.serialize_to_vec())
             .expect("write failed");
@@ -1419,41 +1419,41 @@ mod test {
             }))
             .unwrap();
 
-        state
+        let _ = state
             .write_log_mut()
             .write(&counter_key, (proposal_id + 1).serialize_to_vec())
             .unwrap();
-        state
+        let _ = state
             .write_log_mut()
             .write(&voting_end_epoch_key, Epoch(end_epoch).serialize_to_vec())
             .unwrap();
-        state
+        let _ = state
             .write_log_mut()
             .write(
                 &voting_start_epoch_key,
                 Epoch(start_epoch).serialize_to_vec(),
             )
             .unwrap();
-        state
+        let _ = state
             .write_log_mut()
             .write(
                 &activation_epoch_key,
                 Epoch(activation_epoch).serialize_to_vec(),
             )
             .unwrap();
-        state
+        let _ = state
             .write_log_mut()
             .write(&content_key, vec![1, 2, 3, 4])
             .unwrap();
-        state
+        let _ = state
             .write_log_mut()
             .write(&author_key, signer_address.serialize_to_vec())
             .unwrap();
-        state
+        let _ = state
             .write_log_mut()
             .write(&proposal_type_key, ProposalType::Default.serialize_to_vec())
             .unwrap();
-        state
+        let _ = state
             .write_log_mut()
             .write(
                 &funds_key,
@@ -1461,7 +1461,7 @@ mod test {
             )
             .unwrap();
         if !no_commiting_key {
-            state
+            let _ = state
                 .write_log_mut()
                 .write(&commiting_key, ().serialize_to_vec())
                 .unwrap();
@@ -2283,7 +2283,7 @@ mod test {
                 voter: validator_address.clone(),
             }))
             .unwrap();
-        state
+        let _ = state
             .write_log_mut()
             .write(&vote_key, ProposalVote::Yay.serialize_to_vec())
             .unwrap();
@@ -2412,7 +2412,7 @@ mod test {
                 voter: validator_address.clone(),
             }))
             .unwrap();
-        state
+        let _ = state
             .write_log_mut()
             .write(&vote_key, ProposalVote::Yay.serialize_to_vec())
             .unwrap();
@@ -2541,7 +2541,7 @@ mod test {
                 voter: validator_address.clone(),
             }))
             .unwrap();
-        state
+        let _ = state
             .write_log_mut()
             .write(&vote_key, ProposalVote::Yay.serialize_to_vec())
             .unwrap();
@@ -2687,7 +2687,7 @@ mod test {
                 voter: delegator_address.clone(),
             }))
             .unwrap();
-        state
+        let _ = state
             .write_log_mut()
             .write(&vote_key, ProposalVote::Yay.serialize_to_vec())
             .unwrap();
@@ -2833,7 +2833,7 @@ mod test {
                 voter: delegator_address.clone(),
             }))
             .unwrap();
-        state
+        let _ = state
             .write_log_mut()
             .write(&vote_key, ProposalVote::Yay.serialize_to_vec())
             .unwrap();
@@ -2979,7 +2979,7 @@ mod test {
                 voter: delegator_address.clone(),
             }))
             .unwrap();
-        state
+        let _ = state
             .write_log_mut()
             .write(&vote_key, ProposalVote::Yay.serialize_to_vec())
             .unwrap();

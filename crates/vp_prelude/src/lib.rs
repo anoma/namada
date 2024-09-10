@@ -40,6 +40,7 @@ use namada_core::storage::TxIndex;
 pub use namada_core::validity_predicate::{VpError, VpErrorExtResult};
 pub use namada_core::*;
 use namada_events::{Event, EventType};
+use namada_gas::Gas;
 pub use namada_governance::pgf::storage as pgf_storage;
 pub use namada_governance::storage as gov_storage;
 pub use namada_macros::validity_predicate;
@@ -395,8 +396,8 @@ impl<'view> VpEnv<'view> for Ctx {
         })
     }
 
-    fn charge_gas(&self, used_gas: u64) -> Result<(), Error> {
-        unsafe { namada_vp_charge_gas(used_gas) };
+    fn charge_gas(&self, used_gas: Gas) -> Result<(), Error> {
+        unsafe { namada_vp_charge_gas(used_gas.into()) };
         Ok(())
     }
 }

@@ -97,16 +97,16 @@ Self: 'iter;
         match self.store.get(key) {
             Some(StorageModification::Write { ref value }) => {
                 let gas = checked!(key.len() + value.len())? as u64;
-                self.ctx
-                    .ctx
-                    .charge_gas(checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?)?;
+                self.ctx.ctx.charge_gas(
+                    checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?.into(),
+                )?;
                 Ok(Some(value.clone()))
             }
             Some(StorageModification::Delete) => {
                 let len = key.len() as u64;
-                self.ctx
-                    .ctx
-                    .charge_gas(checked!(len * MEMORY_ACCESS_GAS_PER_BYTE)?)?;
+                self.ctx.ctx.charge_gas(
+                    checked!(len * MEMORY_ACCESS_GAS_PER_BYTE)?.into(),
+                )?;
                 Ok(None)
             }
             Some(StorageModification::InitAccount { .. }) => {
@@ -114,9 +114,9 @@ Self: 'iter;
             }
             None => {
                 let len = key.len() as u64;
-                self.ctx
-                    .ctx
-                    .charge_gas(checked!(len * MEMORY_ACCESS_GAS_PER_BYTE)?)?;
+                self.ctx.ctx.charge_gas(
+                    checked!(len * MEMORY_ACCESS_GAS_PER_BYTE)?.into(),
+                )?;
                 self.ctx.read_bytes(key)
             }
         }
@@ -192,7 +192,7 @@ where
             .insert(key.clone(), StorageModification::Write { value });
         self.ctx
             .ctx
-            .charge_gas(checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?)
+            .charge_gas(checked!(gas * MEMORY_ACCESS_GAS_PER_BYTE)?.into())
     }
 
     fn delete(&mut self, key: &Key) -> Result<()> {
@@ -200,7 +200,7 @@ where
         let len = key.len() as u64;
         self.ctx
             .ctx
-            .charge_gas(checked!(len * MEMORY_ACCESS_GAS_PER_BYTE)?)
+            .charge_gas(checked!(len * MEMORY_ACCESS_GAS_PER_BYTE)?.into())
     }
 }
 

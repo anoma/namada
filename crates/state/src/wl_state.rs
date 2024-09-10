@@ -10,6 +10,7 @@ use namada_core::parameters::{EpochDuration, Parameters};
 use namada_core::time::DateTimeUtc;
 use namada_core::{decode, storage};
 use namada_events::{EmitEvents, EventToEmit};
+use namada_gas::Gas;
 use namada_merkle_tree::NO_DIFF_KEY_PREFIX;
 use namada_replay_protection as replay_protection;
 use namada_storage::conversion_state::{ConversionState, WithConversionState};
@@ -142,7 +143,7 @@ where
 
     #[allow(dead_code)]
     /// Check if the given address exists on chain and return the gas cost.
-    pub fn db_exists(&self, addr: &Address) -> Result<(bool, u64)> {
+    pub fn db_exists(&self, addr: &Address) -> Result<(bool, Gas)> {
         let key = storage::Key::validity_predicate(addr);
         self.db_has_key(&key)
     }
@@ -746,7 +747,7 @@ where
         &self,
         key: &storage::Key,
         height: BlockHeight,
-    ) -> Result<(Option<Vec<u8>>, u64)> {
+    ) -> Result<(Option<Vec<u8>>, Gas)> {
         // `0` means last committed height
         if height == BlockHeight(0)
             || height >= self.in_mem().get_last_block_height()
@@ -754,7 +755,7 @@ where
             self.db_read(key)
         } else {
             if !(self.diff_key_filter)(key) {
-                return Ok((None, 0));
+                return Ok((None, Gas::default()));
             }
 
             match self.db().read_subspace_val_with_height(
@@ -764,11 +765,17 @@ where
             )? {
                 Some(v) => {
                     let gas = checked!(key.len() + v.len())? as u64;
-                    Ok((Some(v), checked!(gas * STORAGE_ACCESS_GAS_PER_BYTE)?))
+                    Ok((
+                        Some(v),
+                        checked!(gas * STORAGE_ACCESS_GAS_PER_BYTE)?.into(),
+                    ))
                 }
                 None => {
                     let gas = key.len() as u64;
-                    Ok((None, checked!(gas * STORAGE_ACCESS_GAS_PER_BYTE)?))
+                    Ok((
+                        None,
+                        checked!(gas * STORAGE_ACCESS_GAS_PER_BYTE)?.into(),
+                    ))
                 }
             }
         }
@@ -1176,7 +1183,7 @@ where
         &self.0.write_log
     }
 
-    fn charge_gas(&self, _gas: u64) -> Result<()> {
+    fn charge_gas(&self, _gas: Gas) -> Result<()> {
         Ok(())
     }
 }
@@ -1255,7 +1262,7 @@ where
         &self.in_mem
     }
 
-    fn charge_gas(&self, _gas: u64) -> Result<()> {
+    fn charge_gas(&self, _gas: Gas) -> Result<()> {
         Ok(())
     }
 }
@@ -1310,7 +1317,7 @@ where
         self.in_mem
     }
 
-    fn charge_gas(&self, _gas: u64) -> Result<()> {
+    fn charge_gas(&self, _gas: Gas) -> Result<()> {
         Ok(())
     }
 }
@@ -1375,7 +1382,7 @@ where
         self.in_mem
     }
 
-    fn charge_gas(&self, _gas: u64) -> Result<()> {
+    fn charge_gas(&self, _gas: Gas) -> Result<()> {
         Ok(())
     }
 }

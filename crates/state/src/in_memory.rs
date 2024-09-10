@@ -8,7 +8,7 @@ use namada_core::hash::Hash;
 use namada_core::parameters::{EpochDuration, Parameters};
 use namada_core::time::DateTimeUtc;
 use namada_core::{encode, ethereum_structs};
-use namada_gas::MEMORY_ACCESS_GAS_PER_BYTE;
+use namada_gas::{Gas, MEMORY_ACCESS_GAS_PER_BYTE};
 use namada_macros::BorshDeserializer;
 use namada_merkle_tree::{MerkleRoot, MerkleTree};
 #[cfg(feature = "migrations")]
@@ -202,47 +202,47 @@ where
     }
 
     /// Store in memory a total gas of a transaction with the given hash.
-    pub fn add_tx_gas(&mut self, tx_hash: Hash, gas: u64) {
-        self.commit_only_data.tx_gas.insert(tx_hash, gas);
+    pub fn add_tx_gas(&mut self, tx_hash: Hash, gas: Gas) {
+        self.commit_only_data.tx_gas.insert(tx_hash, gas.into());
     }
 
     /// Get the chain ID as a raw string
-    pub fn get_chain_id(&self) -> (ChainId, u64) {
+    pub fn get_chain_id(&self) -> (ChainId, Gas) {
         // Adding consts that cannot overflow
         #[allow(clippy::arithmetic_side_effects)]
         (
             self.chain_id.clone(),
-            CHAIN_ID_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
+            (CHAIN_ID_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE).into(),
         )
     }
 
     /// Get the block height
-    pub fn get_block_height(&self) -> (BlockHeight, u64) {
+    pub fn get_block_height(&self) -> (BlockHeight, Gas) {
         // Adding consts that cannot overflow
         #[allow(clippy::arithmetic_side_effects)]
         (
             self.block.height,
-            BLOCK_HEIGHT_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
+            (BLOCK_HEIGHT_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE).into(),
         )
     }
 
     /// Get the current (yet to be committed) block epoch
-    pub fn get_current_epoch(&self) -> (Epoch, u64) {
+    pub fn get_current_epoch(&self) -> (Epoch, Gas) {
         // Adding consts that cannot overflow
         #[allow(clippy::arithmetic_side_effects)]
         (
             self.block.epoch,
-            EPOCH_TYPE_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
+            (EPOCH_TYPE_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE).into(),
         )
     }
 
     /// Get the epoch of the last committed block
-    pub fn get_last_epoch(&self) -> (Epoch, u64) {
+    pub fn get_last_epoch(&self) -> (Epoch, Gas) {
         // Adding consts that cannot overflow
         #[allow(clippy::arithmetic_side_effects)]
         (
             self.last_epoch,
-            EPOCH_TYPE_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE,
+            (EPOCH_TYPE_LENGTH as u64 * MEMORY_ACCESS_GAS_PER_BYTE).into(),
         )
     }
 

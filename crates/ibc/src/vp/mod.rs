@@ -251,7 +251,7 @@ where
         let module = NftTransferModule::<_, Token>::new(ctx.clone());
         actions.add_transfer_module(module);
         // Charge gas for the expensive execution
-        self.ctx.charge_gas(IBC_ACTION_EXECUTE_GAS)?;
+        self.ctx.charge_gas(IBC_ACTION_EXECUTE_GAS.into())?;
         actions.execute::<Transfer>(tx_data)?;
 
         let changed_ibc_keys: HashSet<&Key> =
@@ -306,7 +306,7 @@ where
         let module = NftTransferModule::<_, Token>::new(ctx);
         actions.add_transfer_module(module);
         // Charge gas for the expensive validation
-        self.ctx.charge_gas(IBC_ACTION_VALIDATE_GAS)?;
+        self.ctx.charge_gas(IBC_ACTION_VALIDATE_GAS.into())?;
         Ok(actions.validate::<Transfer>(tx_data)?)
     }
 
@@ -647,7 +647,7 @@ mod tests {
             min_num_of_blocks: 10,
             min_duration: DurationSecs(100),
         };
-        state
+        let _ = state
             .write_log_mut()
             .write(&epoch_duration_key, epoch_duration.serialize_to_vec())
             .expect("write failed");
@@ -673,7 +673,7 @@ mod tests {
         };
         let client_state = MockClientState::new(header);
         let bytes = Protobuf::<Any>::encode_vec(client_state);
-        state
+        let _ = state
             .write_log_mut()
             .write(&client_state_key, bytes)
             .expect("write failed");
@@ -681,7 +681,7 @@ mod tests {
         let consensus_key = consensus_state_key(&client_id, height);
         let consensus_state = MockConsensusState::new(header);
         let bytes = Protobuf::<Any>::encode_vec(consensus_state);
-        state
+        let _ = state
             .write_log_mut()
             .write(&consensus_key, bytes)
             .expect("write failed");
@@ -693,7 +693,7 @@ mod tests {
             .unwrap()
             .time;
         let bytes = TmTime::try_from(time).unwrap().encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&client_update_time_key, bytes)
             .expect("write failed");
@@ -701,7 +701,7 @@ mod tests {
         let host_height = state.in_mem().get_block_height().0;
         let host_height =
             Height::new(0, host_height.0).expect("invalid height");
-        state
+        let _ = state
             .write_log_mut()
             .write(&client_update_height_key, host_height.encode_vec())
             .expect("write failed");
@@ -808,7 +808,7 @@ mod tests {
             }
             None => 0,
         };
-        state
+        let _ = state
             .write_log_mut()
             .write(key, (count + 1).to_be_bytes().to_vec())
             .expect("write failed");
@@ -821,7 +821,7 @@ mod tests {
             }
             None => unreachable!("The counter should be initialized"),
         };
-        state
+        let _ = state
             .write_log_mut()
             .write(key, (count + 1).serialize_to_vec())
             .expect("write failed");
@@ -953,7 +953,7 @@ mod tests {
         // client state
         let client_state_key = client_state_key(&get_client_id());
         let bytes = Protobuf::<Any>::encode_vec(client_state);
-        state
+        let _ = state
             .write_log_mut()
             .write(&client_state_key, bytes)
             .expect("write failed");
@@ -961,7 +961,7 @@ mod tests {
         // client consensus
         let consensus_key = consensus_state_key(&client_id, height);
         let bytes = Protobuf::<Any>::encode_vec(consensus_state);
-        state
+        let _ = state
             .write_log_mut()
             .write(&consensus_key, bytes)
             .expect("write failed");
@@ -978,7 +978,7 @@ mod tests {
             .unwrap()
             .time;
         let bytes = TmTime::try_from(time).unwrap().encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&client_update_time_key, bytes)
             .expect("write failed");
@@ -988,7 +988,7 @@ mod tests {
         let host_height = state.in_mem().get_block_height().0;
         let host_height =
             Height::new(0, host_height.0).expect("invalid height");
-        state
+        let _ = state
             .write_log_mut()
             .write(&client_update_height_key, host_height.encode_vec())
             .expect("write failed");
@@ -1072,7 +1072,7 @@ mod tests {
         let client_state = MockClientState::new(header);
         let client_state_key = client_state_key(&get_client_id());
         let bytes = Protobuf::<Any>::encode_vec(client_state);
-        state
+        let _ = state
             .write_log_mut()
             .write(&client_state_key, bytes)
             .expect("write failed");
@@ -1158,7 +1158,7 @@ mod tests {
         // client state
         let client_state = MockClientState::new(header);
         let bytes = Protobuf::<Any>::encode_vec(client_state);
-        state
+        let _ = state
             .write_log_mut()
             .write(&client_state_key, bytes)
             .expect("write failed");
@@ -1167,7 +1167,7 @@ mod tests {
         let consensus_key = consensus_state_key(&client_id, height);
         let consensus_state = MockConsensusState::new(header);
         let bytes = Protobuf::<Any>::encode_vec(consensus_state);
-        state
+        let _ = state
             .write_log_mut()
             .write(&consensus_key, bytes)
             .expect("write failed");
@@ -1180,7 +1180,7 @@ mod tests {
             .unwrap()
             .time;
         let bytes = TmTime::try_from(time).unwrap().encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&client_update_time_key, bytes)
             .expect("write failed");
@@ -1190,7 +1190,7 @@ mod tests {
         let host_height = state.in_mem().get_block_height().0;
         let host_height =
             Height::new(0, host_height.0).expect("invalid height");
-        state
+        let _ = state
             .write_log_mut()
             .write(&client_update_height_key, host_height.encode_vec())
             .expect("write failed");
@@ -1286,7 +1286,7 @@ mod tests {
         )
         .expect("invalid connection");
         let bytes = conn.encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&conn_key, bytes)
             .expect("write failed");
@@ -1295,7 +1295,7 @@ mod tests {
         let client_conn_key = client_connections_key(&msg.client_id_on_a);
         let conn_list = conn_id.to_string();
         let bytes = conn_list.serialize_to_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&client_conn_key, bytes)
             .expect("write failed");
@@ -1395,7 +1395,7 @@ mod tests {
         )
         .expect("invalid connection");
         let bytes = conn.encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&conn_key, bytes)
             .expect("write failed");
@@ -1404,7 +1404,7 @@ mod tests {
         let client_conn_key = client_connections_key(&msg.client_id_on_a);
         let conn_list = conn_id.to_string();
         let bytes = conn_list.serialize_to_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&client_conn_key, bytes)
             .expect("write failed");
@@ -1504,7 +1504,7 @@ mod tests {
         )
         .expect("invalid connection");
         let bytes = conn.encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&conn_key, bytes)
             .expect("write failed");
@@ -1513,7 +1513,7 @@ mod tests {
         let client_conn_key = client_connections_key(&msg.client_id_on_b);
         let conn_list = conn_id.to_string();
         let bytes = conn_list.serialize_to_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&client_conn_key, bytes)
             .expect("write failed");
@@ -1583,7 +1583,7 @@ mod tests {
         let conn_key = connection_key(&get_connection_id());
         let conn = get_connection(ConnState::Init);
         let bytes = conn.encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&conn_key, bytes)
             .expect("write failed");
@@ -1599,7 +1599,7 @@ mod tests {
         // update the connection to Open
         let conn = get_connection(ConnState::Open);
         let bytes = conn.encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&conn_key, bytes)
             .expect("write failed");
@@ -1692,7 +1692,7 @@ mod tests {
         let conn_key = connection_key(&get_connection_id());
         let conn = get_connection(ConnState::TryOpen);
         let bytes = conn.encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&conn_key, bytes)
             .expect("write failed");
@@ -1708,7 +1708,7 @@ mod tests {
         // update the connection to Open
         let conn = get_connection(ConnState::Open);
         let bytes = conn.encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&conn_key, bytes)
             .expect("write failed");
@@ -1788,7 +1788,7 @@ mod tests {
         let conn_key = connection_key(&conn_id);
         let conn = get_connection(ConnState::Open);
         let bytes = conn.encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&conn_key, bytes)
             .expect("write failed");
@@ -1824,7 +1824,7 @@ mod tests {
         )
         .unwrap();
         let bytes = channel.encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&channel_key, bytes)
             .expect("write failed");
@@ -1910,7 +1910,7 @@ mod tests {
         let conn_key = connection_key(&get_connection_id());
         let conn = get_connection(ConnState::Open);
         let bytes = conn.encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&conn_key, bytes)
             .expect("write failed");
@@ -1945,7 +1945,7 @@ mod tests {
         let channel_key = channel_key(&get_port_id(), &get_channel_id());
         let channel = get_channel(ChanState::TryOpen, Order::Unordered);
         let bytes = channel.encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&channel_key, bytes)
             .expect("write failed");
@@ -2032,7 +2032,7 @@ mod tests {
         let conn_key = connection_key(&get_connection_id());
         let conn = get_connection(ConnState::Open);
         let bytes = conn.encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&conn_key, bytes)
             .expect("write failed");
@@ -2040,7 +2040,7 @@ mod tests {
         let channel_key = channel_key(&get_port_id(), &get_channel_id());
         let channel = get_channel(ChanState::Init, Order::Unordered);
         let bytes = channel.encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&channel_key, bytes)
             .expect("write failed");
@@ -2069,7 +2069,7 @@ mod tests {
         // update the channel to Open
         let channel = get_channel(ChanState::Open, Order::Unordered);
         let bytes = channel.encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&channel_key, bytes)
             .expect("write failed");
@@ -2139,7 +2139,7 @@ mod tests {
         let conn_key = connection_key(&get_connection_id());
         let conn = get_connection(ConnState::Open);
         let bytes = conn.encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&conn_key, bytes)
             .expect("write failed");
@@ -2147,7 +2147,7 @@ mod tests {
         let channel_key = channel_key(&get_port_id(), &get_channel_id());
         let channel = get_channel(ChanState::TryOpen, Order::Ordered);
         let bytes = channel.encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&channel_key, bytes)
             .expect("write failed");
@@ -2173,7 +2173,7 @@ mod tests {
         // update the channel to Open
         let channel = get_channel(ChanState::Open, Order::Ordered);
         let bytes = channel.encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&channel_key, bytes)
             .expect("write failed");
@@ -2244,7 +2244,7 @@ mod tests {
         let conn_key = connection_key(&get_connection_id());
         let conn = get_connection(ConnState::Open);
         let bytes = conn.encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&conn_key, bytes)
             .expect("write failed");
@@ -2252,7 +2252,7 @@ mod tests {
         let channel_key = channel_key(&get_port_id(), &get_channel_id());
         let channel = get_channel(ChanState::Open, Order::Unordered);
         let bytes = channel.encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&channel_key, bytes)
             .expect("write failed");
@@ -2260,7 +2260,7 @@ mod tests {
         let sender = established_address_1();
         let balance_key = balance_key(&nam(), &sender);
         let amount = Amount::native_whole(100);
-        state
+        let _ = state
             .write_log_mut()
             .write(&balance_key, amount.serialize_to_vec())
             .expect("write failed");
@@ -2293,7 +2293,7 @@ mod tests {
         // the sequence send
         let seq_key = next_sequence_send_key(&get_port_id(), &get_channel_id());
         let sequence = get_next_seq(&state, &seq_key);
-        state
+        let _ = state
             .write_log_mut()
             .write(&seq_key, (u64::from(sequence) + 1).to_be_bytes().to_vec())
             .expect("write failed");
@@ -2305,7 +2305,7 @@ mod tests {
             commitment_key(&msg.port_id_on_a, &msg.chan_id_on_a, sequence);
         let commitment = commitment(&packet);
         let bytes = commitment.into_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&commitment_key, bytes)
             .expect("write failed");
@@ -2313,7 +2313,7 @@ mod tests {
         // withdraw
         let withdraw_key = withdraw_key(&nam());
         let bytes = amount.serialize_to_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&withdraw_key, bytes)
             .expect("write failed");
@@ -2397,7 +2397,7 @@ mod tests {
         let conn_key = connection_key(&get_connection_id());
         let conn = get_connection(ConnState::Open);
         let bytes = conn.encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&conn_key, bytes)
             .expect("write failed");
@@ -2405,7 +2405,7 @@ mod tests {
         let channel_key = channel_key(&get_port_id(), &get_channel_id());
         let channel = get_channel(ChanState::Open, Order::Unordered);
         let bytes = channel.encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&channel_key, bytes)
             .expect("write failed");
@@ -2453,7 +2453,7 @@ mod tests {
             msg.packet.seq_on_a,
         );
         let bytes = [1_u8].to_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&receipt_key, bytes)
             .expect("write failed");
@@ -2467,7 +2467,7 @@ mod tests {
         let transfer_ack = AcknowledgementStatus::success(ack_success_b64());
         let acknowledgement: Acknowledgement = transfer_ack.into();
         let bytes = sha2::Sha256::digest(acknowledgement.as_bytes()).to_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&ack_key, bytes)
             .expect("write failed");
@@ -2484,7 +2484,7 @@ mod tests {
         let bytes = Amount::from_str(coin.amount.to_string(), 0)
             .unwrap()
             .serialize_to_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&mint_key, bytes)
             .expect("write failed");
@@ -2494,7 +2494,7 @@ mod tests {
         let bytes = Amount::from_str(coin.amount.to_string(), 0)
             .unwrap()
             .serialize_to_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&deposit_key, bytes)
             .expect("write failed");
@@ -2503,14 +2503,14 @@ mod tests {
         let trace_hash = calc_hash(coin.denom.to_string());
         let trace_key = ibc_trace_key(receiver.to_string(), &trace_hash);
         let bytes = coin.denom.to_string().serialize_to_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&trace_key, bytes)
             .expect("write failed");
         keys_changed.insert(trace_key);
         let trace_key = ibc_trace_key(nam().to_string(), &trace_hash);
         let bytes = coin.denom.to_string().serialize_to_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&trace_key, bytes)
             .expect("write failed");
@@ -2608,7 +2608,7 @@ mod tests {
         let conn_key = connection_key(&get_connection_id());
         let conn = get_connection(ConnState::Open);
         let bytes = conn.encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&conn_key, bytes)
             .expect("write failed");
@@ -2616,7 +2616,7 @@ mod tests {
         let channel_key = channel_key(&get_port_id(), &get_channel_id());
         let channel = get_channel(ChanState::Open, Order::Unordered);
         let bytes = channel.encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&channel_key, bytes)
             .expect("write failed");
@@ -2650,7 +2650,7 @@ mod tests {
         );
         let commitment = commitment(&packet);
         let bytes = commitment.into_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&commitment_key, bytes)
             .expect("write failed");
@@ -2674,7 +2674,7 @@ mod tests {
         };
 
         // delete the commitment
-        state
+        let _ = state
             .write_log_mut()
             .delete(&commitment_key)
             .expect("delete failed");
@@ -2763,7 +2763,7 @@ mod tests {
         let conn_key = connection_key(&get_connection_id());
         let conn = get_connection(ConnState::Open);
         let bytes = conn.encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&conn_key, bytes)
             .expect("write failed");
@@ -2771,7 +2771,7 @@ mod tests {
         let channel_key = channel_key(&get_port_id(), &get_channel_id());
         let channel = get_channel(ChanState::Open, Order::Unordered);
         let bytes = channel.encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&channel_key, bytes)
             .expect("write failed");
@@ -2779,7 +2779,7 @@ mod tests {
         let balance_key =
             balance_key(&nam(), &Address::Internal(InternalAddress::Ibc));
         let amount = Amount::native_whole(100);
-        state
+        let _ = state
             .write_log_mut()
             .write(&balance_key, amount.serialize_to_vec())
             .expect("write failed");
@@ -2814,7 +2814,7 @@ mod tests {
         );
         let commitment = commitment(&packet);
         let bytes = commitment.into_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&commitment_key, bytes)
             .expect("write failed");
@@ -2837,7 +2837,7 @@ mod tests {
         };
 
         // delete the commitment
-        state
+        let _ = state
             .write_log_mut()
             .delete(&commitment_key)
             .expect("delete failed");
@@ -2847,7 +2847,7 @@ mod tests {
             .expect("decoding packet data failed");
         let deposit_key = deposit_key(&nam());
         let bytes = amount.serialize_to_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&deposit_key, bytes)
             .expect("write failed");
@@ -2921,7 +2921,7 @@ mod tests {
         let conn_key = connection_key(&get_connection_id());
         let conn = get_connection(ConnState::Open);
         let bytes = conn.encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&conn_key, bytes)
             .expect("write failed");
@@ -2929,7 +2929,7 @@ mod tests {
         let channel_key = channel_key(&get_port_id(), &get_channel_id());
         let channel = get_channel(ChanState::Open, Order::Unordered);
         let bytes = channel.encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&channel_key, bytes)
             .expect("write failed");
@@ -2937,7 +2937,7 @@ mod tests {
         let balance_key =
             balance_key(&nam(), &Address::Internal(InternalAddress::Ibc));
         let amount = Amount::native_whole(100);
-        state
+        let _ = state
             .write_log_mut()
             .write(&balance_key, amount.serialize_to_vec())
             .expect("write failed");
@@ -2971,7 +2971,7 @@ mod tests {
         );
         let commitment = commitment(&packet);
         let bytes = commitment.into_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&commitment_key, bytes)
             .expect("write failed");
@@ -2995,7 +2995,7 @@ mod tests {
         };
 
         // delete the commitment
-        state
+        let _ = state
             .write_log_mut()
             .delete(&commitment_key)
             .expect("delete failed");
@@ -3005,7 +3005,7 @@ mod tests {
             .expect("decoding packet data failed");
         let deposit_key = deposit_key(&nam());
         let bytes = amount.serialize_to_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&deposit_key, bytes)
             .expect("write failed");
@@ -3079,7 +3079,7 @@ mod tests {
         let conn_key = connection_key(&get_connection_id());
         let conn = get_connection(ConnState::Open);
         let bytes = conn.encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&conn_key, bytes)
             .expect("write failed");
@@ -3087,7 +3087,7 @@ mod tests {
         let channel_key = channel_key(&get_nft_port_id(), &get_channel_id());
         let channel = get_channel_for_nft(ChanState::Open, Order::Unordered);
         let bytes = channel.encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&channel_key, bytes)
             .expect("write failed");
@@ -3098,21 +3098,21 @@ mod tests {
         let ibc_token = crate::trace::ibc_token_for_nft(&class_id, &token_id);
         let balance_key = balance_key(&ibc_token, &sender);
         let amount = Amount::from_u64(1);
-        state
+        let _ = state
             .write_log_mut()
             .write(&balance_key, amount.serialize_to_vec())
             .expect("write failed");
         // nft class
         let class = dummy_nft_class();
         let class_key = storage::nft_class_key(&class_id);
-        state
+        let _ = state
             .write_log_mut()
             .write(&class_key, class.serialize_to_vec())
             .expect("write failed");
         // nft metadata
         let metadata = dummy_nft_metadata();
         let metadata_key = storage::nft_metadata_key(&class_id, &token_id);
-        state
+        let _ = state
             .write_log_mut()
             .write(&metadata_key, metadata.serialize_to_vec())
             .expect("write failed");
@@ -3149,7 +3149,7 @@ mod tests {
         let seq_key =
             next_sequence_send_key(&get_nft_port_id(), &get_channel_id());
         let sequence = get_next_seq(&state, &seq_key);
-        state
+        let _ = state
             .write_log_mut()
             .write(&seq_key, (u64::from(sequence) + 1).to_be_bytes().to_vec())
             .expect("write failed");
@@ -3164,7 +3164,7 @@ mod tests {
             commitment_key(&msg.port_id_on_a, &msg.chan_id_on_a, sequence);
         let commitment = commitment(&packet);
         let bytes = commitment.into_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&commitment_key, bytes)
             .expect("write failed");
@@ -3172,7 +3172,7 @@ mod tests {
         // withdraw
         let withdraw_key = withdraw_key(&ibc_token);
         let bytes = Amount::from_u64(1).serialize_to_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&withdraw_key, bytes)
             .expect("write failed");
@@ -3257,7 +3257,7 @@ mod tests {
         let conn_key = connection_key(&get_connection_id());
         let conn = get_connection(ConnState::Open);
         let bytes = conn.encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&conn_key, bytes)
             .expect("write failed");
@@ -3265,7 +3265,7 @@ mod tests {
         let channel_key = channel_key(&get_nft_port_id(), &get_channel_id());
         let channel = get_channel_for_nft(ChanState::Open, Order::Unordered);
         let bytes = channel.encode_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&channel_key, bytes)
             .expect("write failed");
@@ -3317,7 +3317,7 @@ mod tests {
             msg.packet.seq_on_a,
         );
         let bytes = [1_u8].to_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&receipt_key, bytes)
             .expect("write failed");
@@ -3332,7 +3332,7 @@ mod tests {
             AcknowledgementStatus::success(nft_types::ack_success_b64());
         let acknowledgement: Acknowledgement = transfer_ack.into();
         let bytes = sha2::Sha256::digest(acknowledgement.as_bytes()).to_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&ack_key, bytes)
             .expect("write failed");
@@ -3348,14 +3348,14 @@ mod tests {
         let trace_hash = calc_hash(&ibc_trace);
         let trace_key = ibc_trace_key(receiver.to_string(), &trace_hash);
         let bytes = ibc_trace.serialize_to_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&trace_key, bytes)
             .expect("write failed");
         keys_changed.insert(trace_key);
         let trace_key = ibc_trace_key(token_id, &trace_hash);
         let bytes = ibc_trace.serialize_to_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&trace_key, bytes)
             .expect("write failed");
@@ -3365,7 +3365,7 @@ mod tests {
         let mut class = dummy_nft_class();
         class.class_id = class_id.clone();
         let bytes = class.serialize_to_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&class_key, bytes)
             .expect("write failed");
@@ -3375,7 +3375,7 @@ mod tests {
         let mut metadata = dummy_nft_metadata();
         metadata.class_id = class_id.clone();
         let bytes = metadata.serialize_to_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&metadata_key, bytes)
             .expect("write failed");
@@ -3384,7 +3384,7 @@ mod tests {
         let ibc_token = ibc_token(&ibc_trace);
         let mint_key = mint_amount_key(&ibc_token);
         let bytes = Amount::from_u64(1).serialize_to_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&mint_key, bytes)
             .expect("write failed");
@@ -3392,7 +3392,7 @@ mod tests {
         // deposit
         let deposit_key = deposit_key(&ibc_token);
         let bytes = Amount::from_u64(1).serialize_to_vec();
-        state
+        let _ = state
             .write_log_mut()
             .write(&deposit_key, bytes)
             .expect("write failed");

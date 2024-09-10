@@ -794,7 +794,7 @@ where
 
     tx_gas_meter
         .borrow_mut()
-        .consume(masp_gas_meter.borrow().get_tx_consumed_gas().into())
+        .consume(masp_gas_meter.borrow().get_tx_consumed_gas())
         .map_err(|e| Error::GasError(e.to_string()))?;
 
     Ok(valid_batched_tx_result)
@@ -1143,7 +1143,7 @@ where
     tracing::debug!("Total VPs gas cost {:?}", vps_gas);
 
     tx_gas_meter
-        .consume(vps_gas.into())
+        .consume(vps_gas)
         .map_err(|err| Error::GasError(err.to_string()))?;
 
     Ok(vps_result)
@@ -1380,7 +1380,7 @@ where
                     ))?;
                 gas_meter
                     .borrow()
-                    .check_vps_limit(vps_gas)
+                    .check_vps_limit(vps_gas.clone())
                     .map_err(|err| Error::GasError(err.to_string()))?;
 
                 Ok((result, vps_gas))
@@ -1412,7 +1412,7 @@ fn merge_vp_results(
         .checked_add(b_gas)
         .ok_or(Error::GasError(gas::Error::GasOverflow.to_string()))?;
     tx_gas_meter
-        .check_vps_limit(vps_gas)
+        .check_vps_limit(vps_gas.clone())
         .map_err(|err| Error::GasError(err.to_string()))?;
 
     Ok((

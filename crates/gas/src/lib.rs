@@ -216,9 +216,10 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// metering from fee payment, allowing higher resolution when accounting for
 /// gas while, at the same time, providing a contained gas value when paying
 /// fees.
+// This type should not implement the Copy trait to prevent charging gas more
+// than once
 #[derive(
     Clone,
-    Copy,
     Debug,
     Default,
     PartialEq,
@@ -230,6 +231,7 @@ pub type Result<T> = std::result::Result<T, Error>;
     Serialize,
     Deserialize,
 )]
+#[must_use = "Gas must be accounted for by the gas meter"]
 pub struct Gas {
     sub: u64,
 }
@@ -338,14 +340,15 @@ pub trait GasMetering {
     /// Add gas cost. It will return error when the
     /// consumed gas exceeds the provided transaction gas limit, but the state
     /// will still be updated
-    fn consume(&mut self, gas: u64) -> Result<()>;
+    fn consume(&mut self, gas: Gas) -> Result<()>;
 
     /// Add the compiling cost proportionate to the code length
     fn add_compiling_gas(&mut self, bytes_len: u64) -> Result<()> {
         self.consume(
             bytes_len
                 .checked_mul(COMPILE_GAS_PER_BYTE)
-                .ok_or(Error::GasOverflow)?,
+                .ok_or(Error::GasOverflow)?
+                .into(),
         )
     }
 
@@ -354,7 +357,8 @@ pub trait GasMetering {
         self.consume(
             bytes_len
                 .checked_mul(STORAGE_ACCESS_GAS_PER_BYTE)
-                .ok_or(Error::GasOverflow)?,
+                .ok_or(Error::GasOverflow)?
+                .into(),
         )
     }
 
@@ -363,7 +367,8 @@ pub trait GasMetering {
         self.consume(
             bytes_len
                 .checked_mul(WASM_CODE_VALIDATION_GAS_PER_BYTE)
-                .ok_or(Error::GasOverflow)?,
+                .ok_or(Error::GasOverflow)?
+                .into(),
         )
     }
 
@@ -399,7 +404,7 @@ pub struct TxGasMeter {
 }
 
 /// Gas metering in a validity predicate
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct VpGasMeter {
     /// Track gas overflow
     gas_overflow: bool,
@@ -412,16 +417,14 @@ pub struct VpGasMeter {
 }
 
 impl GasMetering for TxGasMeter {
-    fn consume(&mut self, gas: u64) -> Result<()> {
+    fn consume(&mut self, gas: Gas) -> Result<()> {
         if self.gas_overflow {
             hints::cold();
             return Err(Error::GasOverflow);
         }
 
-        self.transaction_gas = self
-            .transaction_gas
-            .checked_add(gas.into())
-            .ok_or_else(|| {
+        self.transaction_gas =
+            self.transaction_gas.checked_add(gas).ok_or_else(|| {
                 hints::cold();
                 self.gas_overflow = true;
                 Error::GasOverflow
@@ -437,7 +440,7 @@ impl GasMetering for TxGasMeter {
     /// Get the entire gas used by the transaction up until this point
     fn get_tx_consumed_gas(&self) -> Gas {
         if !self.gas_overflow {
-            self.transaction_gas
+            self.transaction_gas.clone()
         } else {
             hints::cold();
             u64::MAX.into()
@@ -445,7 +448,7 @@ impl GasMetering for TxGasMeter {
     }
 
     fn get_gas_limit(&self) -> Gas {
-        self.tx_gas_limit
+        self.tx_gas_limit.clone()
     }
 }
 
@@ -466,7 +469,7 @@ impl TxGasMeter {
     ///  - cost of downloading (as part of the block) the transaction bytes over
     ///    the network
     pub fn add_wrapper_gas(&mut self, tx_bytes: &[u8]) -> Result<()> {
-        self.consume(WRAPPER_TX_VALIDATION_GAS)?;
+        self.consume(WRAPPER_TX_VALIDATION_GAS.into())?;
 
         let bytes_len = tx_bytes.len() as u64;
         self.consume(
@@ -475,27 +478,28 @@ impl TxGasMeter {
                     STORAGE_OCCUPATION_GAS_PER_BYTE
                         + NETWORK_TRANSMISSION_GAS_PER_BYTE,
                 )
-                .ok_or(Error::GasOverflow)?,
+                .ok_or(Error::GasOverflow)?
+                .into(),
         )
     }
 
     /// Get the amount of gas still available to the transaction
     pub fn get_available_gas(&self) -> Gas {
         self.tx_gas_limit
-            .checked_sub(self.transaction_gas)
+            .checked_sub(self.transaction_gas.clone())
             .unwrap_or_default()
     }
 }
 
 impl GasMetering for VpGasMeter {
-    fn consume(&mut self, gas: u64) -> Result<()> {
+    fn consume(&mut self, gas: Gas) -> Result<()> {
         if self.gas_overflow {
             hints::cold();
             return Err(Error::GasOverflow);
         }
 
         self.current_gas =
-            self.current_gas.checked_add(gas.into()).ok_or_else(|| {
+            self.current_gas.checked_add(gas).ok_or_else(|| {
                 hints::cold();
                 self.gas_overflow = true;
                 Error::GasOverflow
@@ -503,7 +507,7 @@ impl GasMetering for VpGasMeter {
 
         let current_total = self
             .initial_gas
-            .checked_add(self.current_gas)
+            .checked_add(self.current_gas.clone())
             .ok_or(Error::GasOverflow)?;
 
         if current_total > self.tx_gas_limit {
@@ -516,7 +520,7 @@ impl GasMetering for VpGasMeter {
     /// Get the gas consumed by the tx alone before the vps were executed
     fn get_tx_consumed_gas(&self) -> Gas {
         if !self.gas_overflow {
-            self.initial_gas
+            self.initial_gas.clone()
         } else {
             hints::cold();
             u64::MAX.into()
@@ -524,7 +528,7 @@ impl GasMetering for VpGasMeter {
     }
 
     fn get_gas_limit(&self) -> Gas {
-        self.tx_gas_limit
+        self.tx_gas_limit.clone()
     }
 }
 
@@ -533,15 +537,15 @@ impl VpGasMeter {
     pub fn new_from_tx_meter(tx_gas_meter: &TxGasMeter) -> Self {
         Self {
             gas_overflow: false,
-            tx_gas_limit: tx_gas_meter.tx_gas_limit,
-            initial_gas: tx_gas_meter.transaction_gas,
+            tx_gas_limit: tx_gas_meter.tx_gas_limit.clone(),
+            initial_gas: tx_gas_meter.transaction_gas.clone(),
             current_gas: Gas::default(),
         }
     }
 
     /// Get the gas consumed by the VP alone
     pub fn get_vp_consumed_gas(&self) -> Gas {
-        self.current_gas
+        self.current_gas.clone()
     }
 }
 
@@ -563,7 +567,7 @@ mod tests {
                 transaction_gas: Gas::default(),
             };
             let mut meter = VpGasMeter::new_from_tx_meter(&tx_gas_meter);
-            meter.consume(gas).expect("cannot add the gas");
+            meter.consume(gas.into()).expect("cannot add the gas");
         }
 
     }
@@ -577,7 +581,9 @@ mod tests {
         };
         let mut meter = VpGasMeter::new_from_tx_meter(&tx_gas_meter);
         assert_matches!(
-            meter.consume(u64::MAX).expect_err("unexpectedly succeeded"),
+            meter
+                .consume(u64::MAX.into())
+                .expect_err("unexpectedly succeeded"),
             Error::GasOverflow
         );
     }
@@ -592,7 +598,7 @@ mod tests {
         let mut meter = VpGasMeter::new_from_tx_meter(&tx_gas_meter);
         assert_matches!(
             meter
-                .consume(TX_GAS_LIMIT)
+                .consume(TX_GAS_LIMIT.into())
                 .expect_err("unexpectedly succeeded"),
             Error::TransactionGasExceededError
         );
@@ -601,9 +607,11 @@ mod tests {
     #[test]
     fn test_tx_gas_overflow() {
         let mut meter = TxGasMeter::new(BLOCK_GAS_LIMIT);
-        meter.consume(1).expect("cannot add the gas");
+        meter.consume(1.into()).expect("cannot add the gas");
         assert_matches!(
-            meter.consume(u64::MAX).expect_err("unexpectedly succeeded"),
+            meter
+                .consume(u64::MAX.into())
+                .expect_err("unexpectedly succeeded"),
             Error::GasOverflow
         );
     }
@@ -613,7 +621,7 @@ mod tests {
         let mut meter = TxGasMeter::new(TX_GAS_LIMIT);
         assert_matches!(
             meter
-                .consume(TX_GAS_LIMIT + 1)
+                .consume((TX_GAS_LIMIT + 1).into())
                 .expect_err("unexpectedly succeeded"),
             Error::TransactionGasExceededError
         );

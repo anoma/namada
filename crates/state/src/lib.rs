@@ -44,7 +44,9 @@ pub use namada_core::storage::{
     BlockResults, EthEventsQueue, Key, KeySeg, TxIndex, EPOCH_TYPE_LENGTH,
 };
 use namada_core::tendermint::merkle::proof::ProofOps;
-use namada_gas::{MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_ACCESS_GAS_PER_BYTE};
+use namada_gas::{
+    Gas, MEMORY_ACCESS_GAS_PER_BYTE, STORAGE_ACCESS_GAS_PER_BYTE,
+};
 use namada_merkle_tree::Error as MerkleTreeError;
 pub use namada_merkle_tree::{
     self as merkle_tree, ics23_specs, MembershipProof, MerkleTree,
@@ -88,32 +90,32 @@ pub trait StateRead: StorageRead + Debug {
     fn in_mem(&self) -> &InMemory<Self::H>;
 
     /// Try to charge a given gas amount. Returns an error on out-of-gas.
-    fn charge_gas(&self, gas: u64) -> Result<()>;
+    fn charge_gas(&self, gas: Gas) -> Result<()>;
 
     /// Check if the given key is present in storage. Returns the result and the
     /// gas cost.
-    fn db_has_key(&self, key: &storage::Key) -> Result<(bool, u64)> {
+    fn db_has_key(&self, key: &storage::Key) -> Result<(bool, Gas)> {
         let len = key.len() as u64;
         Ok((
             self.db().read_subspace_val(key)?.is_some(),
-            checked!(len * STORAGE_ACCESS_GAS_PER_BYTE)?,
+            checked!(len * STORAGE_ACCESS_GAS_PER_BYTE)?.into(),
         ))
     }
 
     /// Returns a value from the specified subspace and the gas cost
-    fn db_read(&self, key: &storage::Key) -> Result<(Option<Vec<u8>>, u64)> {
+    fn db_read(&self, key: &storage::Key) -> Result<(Option<Vec<u8>>, Gas)> {
         tracing::trace!("storage read key {}", key);
 
         match self.db().read_subspace_val(key)? {
             Some(v) => {
                 let len = checked!(key.len() + v.len())? as u64;
                 let gas = checked!(len * STORAGE_ACCESS_GAS_PER_BYTE)?;
-                Ok((Some(v), gas))
+                Ok((Some(v), gas.into()))
             }
             None => {
                 let len = key.len() as u64;
                 let gas = checked!(len * STORAGE_ACCESS_GAS_PER_BYTE)?;
-                Ok((None, gas))
+                Ok((None, gas.into()))
             }
         }
     }
@@ -126,17 +128,17 @@ pub trait StateRead: StorageRead + Debug {
     fn db_iter_prefix(
         &self,
         prefix: &Key,
-    ) -> Result<(<Self::D as DBIter<'_>>::PrefixIter, u64)> {
+    ) -> Result<(<Self::D as DBIter<'_>>::PrefixIter, Gas)> {
         let len = prefix.len() as u64;
         Ok((
             self.db().iter_prefix(Some(prefix)),
-            checked!(len * STORAGE_ACCESS_GAS_PER_BYTE)?,
+            checked!(len * STORAGE_ACCESS_GAS_PER_BYTE)?.into(),
         ))
     }
 
     /// Returns an iterator over the block results
-    fn db_iter_results(&self) -> (<Self::D as DBIter<'_>>::PrefixIter, u64) {
-        (self.db().iter_results(), 0)
+    fn db_iter_results(&self) -> (<Self::D as DBIter<'_>>::PrefixIter, Gas) {
+        (self.db().iter_results(), Gas::default())
     }
 
     /// Get the hash of a validity predicate for the given account address and
@@ -144,7 +146,7 @@ pub trait StateRead: StorageRead + Debug {
     fn validity_predicate<Params: parameters::Keys>(
         &self,
         addr: &Address,
-    ) -> Result<(Option<Hash>, u64)> {
+    ) -> Result<(Option<Hash>, Gas)> {
         let key = if let Address::Implicit(_) = addr {
             Params::implicit_vp_key()
         } else {
@@ -163,7 +165,7 @@ pub trait StateRead: StorageRead + Debug {
     fn get_block_header(
         &self,
         height: Option<BlockHeight>,
-    ) -> Result<(Option<BlockHeader>, u64)> {
+    ) -> Result<(Option<BlockHeader>, Gas)> {
         match height {
             Some(h) if h == self.in_mem().get_block_height().0 => {
                 let header = self.in_mem().header.clone();
@@ -173,19 +175,20 @@ pub trait StateRead: StorageRead + Debug {
                 } else {
                     MEMORY_ACCESS_GAS_PER_BYTE
                 };
-                Ok((header, gas))
+                Ok((header, gas.into()))
             }
             Some(h) => match self.db().read_block_header(h)? {
                 Some(header) => {
                     let len = BlockHeader::encoded_len() as u64;
                     let gas = checked!(len * STORAGE_ACCESS_GAS_PER_BYTE)?;
-                    Ok((Some(header), gas))
+                    Ok((Some(header), gas.into()))
                 }
-                None => Ok((None, STORAGE_ACCESS_GAS_PER_BYTE)),
+                None => Ok((None, STORAGE_ACCESS_GAS_PER_BYTE.into())),
             },
-            None => {
-                Ok((self.in_mem().header.clone(), STORAGE_ACCESS_GAS_PER_BYTE))
-            }
+            None => Ok((
+                self.in_mem().header.clone(),
+                STORAGE_ACCESS_GAS_PER_BYTE.into(),
+            )),
         }
     }
 }
@@ -326,7 +329,7 @@ macro_rules! impl_storage_read {
 
             fn get_pred_epochs(&self) -> namada_storage::Result<Epochs> {
                 self.charge_gas(
-                    namada_gas::STORAGE_ACCESS_GAS_PER_BYTE,
+                    namada_gas::STORAGE_ACCESS_GAS_PER_BYTE.into(),
                 ).into_storage_result()?;
                 Ok(self.in_mem().block.pred_epochs.clone())
             }
@@ -335,14 +338,14 @@ macro_rules! impl_storage_read {
                 &self,
             ) -> std::result::Result<storage::TxIndex, namada_storage::Error> {
                 self.charge_gas(
-                    namada_gas::STORAGE_ACCESS_GAS_PER_BYTE,
+                    namada_gas::STORAGE_ACCESS_GAS_PER_BYTE.into(),
                 ).into_storage_result()?;
                 Ok(self.in_mem().tx_index)
             }
 
             fn get_native_token(&self) -> namada_storage::Result<Address> {
                 self.charge_gas(
-                    namada_gas::STORAGE_ACCESS_GAS_PER_BYTE,
+                    namada_gas::STORAGE_ACCESS_GAS_PER_BYTE.into(),
                 ).into_storage_result()?;
                 Ok(self.in_mem().native_token.clone())
             }
@@ -465,7 +468,7 @@ pub fn iter_prefix_pre<'a, D>(
     write_log: &'a WriteLog,
     db: &'a D,
     prefix: &storage::Key,
-) -> namada_storage::Result<(PrefixIter<'a, D>, u64)>
+) -> namada_storage::Result<(PrefixIter<'a, D>, Gas)>
 where
     D: DB + for<'iter> DBIter<'iter>,
 {
@@ -477,7 +480,7 @@ where
             storage_iter,
             write_log_iter,
         },
-        checked!(len * STORAGE_ACCESS_GAS_PER_BYTE)?,
+        checked!(len * STORAGE_ACCESS_GAS_PER_BYTE)?.into(),
     ))
 }
 
@@ -490,7 +493,7 @@ pub fn iter_prefix_post<'a, D>(
     write_log: &'a WriteLog,
     db: &'a D,
     prefix: &storage::Key,
-) -> namada_storage::Result<(PrefixIter<'a, D>, u64)>
+) -> namada_storage::Result<(PrefixIter<'a, D>, Gas)>
 where
     D: DB + for<'iter> DBIter<'iter>,
 {
@@ -502,7 +505,7 @@ where
             storage_iter,
             write_log_iter,
         },
-        checked!(len * STORAGE_ACCESS_GAS_PER_BYTE)?,
+        checked!(len * STORAGE_ACCESS_GAS_PER_BYTE)?.into(),
     ))
 }
 
@@ -510,7 +513,7 @@ impl<'iter, D> Iterator for PrefixIter<'iter, D>
 where
     D: DB + DBIter<'iter>,
 {
-    type Item = (String, Vec<u8>, u64);
+    type Item = (String, Vec<u8>, Gas);
 
     fn next(&mut self) -> Option<Self::Item> {
         enum Next {
@@ -555,13 +558,17 @@ where
                         match modification {
                             write_log::StorageModification::Write { value } => {
                                 let gas = value.len() as u64;
-                                return Some((key, value, gas));
+                                return Some((key, value, gas.into()));
                             }
                             write_log::StorageModification::InitAccount {
                                 vp_code_hash,
                             } => {
                                 let gas = vp_code_hash.len() as u64;
-                                return Some((key, vp_code_hash.to_vec(), gas));
+                                return Some((
+                                    key,
+                                    vp_code_hash.to_vec(),
+                                    gas.into(),
+                                ));
                             }
                             write_log::StorageModification::Delete => {
                                 continue;
@@ -1181,7 +1188,8 @@ mod tests {
                 | Level::BlockWriteLog(WlMod::Delete | WlMod::DeletePrefix) => {
                 }
                 Level::TxWriteLog(WlMod::Write(val)) => {
-                    s.write_log_mut()
+                    let _ = s
+                        .write_log_mut()
                         .write(key, val.serialize_to_vec())
                         .unwrap();
                 }
@@ -1200,7 +1208,7 @@ mod tests {
         for (key, val) in kvs {
             match val {
                 Level::TxWriteLog(WlMod::Delete) => {
-                    s.write_log_mut().delete(key).unwrap();
+                    let _ = s.write_log_mut().delete(key).unwrap();
                 }
                 Level::BlockWriteLog(WlMod::Delete) => {
                     s.delete(key).unwrap();
@@ -1218,7 +1226,7 @@ mod tests {
                     for key in keys {
                         // Skip validity predicates which cannot be deleted
                         if key.is_validity_predicate().is_none() {
-                            s.write_log_mut().delete(&key).unwrap();
+                            let _ = s.write_log_mut().delete(&key).unwrap();
                         }
                     }
                 }
