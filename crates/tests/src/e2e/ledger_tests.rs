@@ -169,8 +169,13 @@ fn test_node_connectivity_and_consensus() -> Result<()> {
     let bg_validator_1 =
         start_namada_ledger_node_wait_wasm(&test, Some(1), Some(40))?
             .background();
-    let _bg_non_validator =
-        start_namada_ledger_node_wait_wasm(&test, None, Some(40))?.background();
+    let non_validator =
+        start_namada_ledger_node_wait_wasm(&test, None, Some(40));
+    println!(
+        "PORTS: {}",
+        Command::new("netstat").arg("-tpl").output().unwrap()
+    );
+    let _bg_non_validator = non_validator?.background();
 
     // 2. Cross over epoch to check for consensus with multiple nodes
     let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
