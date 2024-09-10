@@ -102,8 +102,7 @@ where
                     // Internal addresses need to always verify the transaction
                     // (credit and debit)
                     return Err(Error::new_alloc(format!(
-                        "The vp of debited internal address {} has not been \
-                         triggered",
+                        "The vp of internal address {} has not been triggered",
                         owner
                     )));
                 }
@@ -135,6 +134,14 @@ where
                             return Err(Error::new_const(
                                 "Native token deposit isn't allowed",
                             ));
+                        }
+                        if !verifiers.contains(owner) {
+                            // Debit must be verified by the controlling vp
+                            return Err(Error::new_alloc(format!(
+                                "The vp of debited address {} has not been \
+                                 triggered",
+                                owner
+                            )));
                         }
                         let diff = pre
                             .checked_sub(post)
