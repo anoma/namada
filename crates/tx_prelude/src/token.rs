@@ -26,6 +26,11 @@ pub fn transfer(
 ) -> TxResult {
     // The tx must be authorized by the source address
     ctx.insert_verifier(src)?;
+    if dest.is_internal() {
+        // If the destination address is an internal address we trigger its vp
+        // for extra validation
+        ctx.insert_verifier(dest)?;
+    }
     if token.is_internal() {
         // Established address tokens do not have VPs themselves, their
         // validation is handled by the `Multitoken` internal address, but
@@ -84,6 +89,11 @@ pub fn multi_transfer(
     }
 
     for ((dest, token), amount) in dests {
+        if dest.is_internal() {
+            // If the destination address is an internal address we trigger its
+            // vp for extra validation
+            ctx.insert_verifier(dest)?;
+        }
         if token.is_internal() {
             // Established address tokens do not have VPs themselves, their
             // validation is handled by the `Multitoken` internal address, but
