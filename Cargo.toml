@@ -173,6 +173,7 @@ rpassword = "5.0.1"
 serde = {version = "1.0.125", features = ["derive"]}
 serde_bytes = "0.11.5"
 serde_json = "1.0.62"
+serde_tuple = "0.5.0"
 sha2 = "0.9.3"
 sha2-const = "0.1.2"
 signal-hook = "0.3.9"

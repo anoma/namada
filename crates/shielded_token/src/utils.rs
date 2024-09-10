@@ -29,7 +29,7 @@ fn reveal_nullifiers(
 /// Appends the note commitments of the provided transaction to the merkle tree
 /// and updates the anchor
 /// NOTE: this function is public as a temporary workaround because of an issue
-/// when running it in WASM (https://github.com/anoma/masp/issues/73)
+/// when running it in WASM (<https://github.com/anoma/masp/issues/73>)
 pub fn update_note_commitment_tree(
     ctx: &mut (impl StorageRead + StorageWrite),
     transaction: &Transaction,
