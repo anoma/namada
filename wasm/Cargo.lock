@@ -4284,6 +4284,7 @@ dependencies = [
  "borsh-ext",
  "data-encoding",
  "derivation-path",
+ "fd-lock",
  "itertools 0.12.1",
  "masp_primitives",
  "namada_core",
