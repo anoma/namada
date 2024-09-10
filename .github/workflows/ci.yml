@@ -649,3 +649,97 @@ jobs:
           files: integration-cov/lcov.info, unit-cov/lcov.info, wasm-cov/lcov.info
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
+
+  test-e2e-with-device-automation:
+    runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
+    container: 
+      image: ghcr.io/heliaxdev/namada-ci:namada-main
+    if: github.event.pull_request.draft == false || contains(github.head_ref, 'mergify/merge-queue') || contains(github.ref_name, 'mergify/merge-queue')
+    needs: [build-wasm, build-binaries]
+    timeout-minutes: 50
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        if: ${{ github.event_name != 'pull_request_target' }}
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        if: ${{ github.event_name == 'pull_request_target' }}
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Configure AWS 
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE }}
+      - name: Cache cargo
+        id: cache
+        uses: runs-on/cache@v4
+        env:
+          RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
+        with:
+          path: /usr/local/cargo
+          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+      - name: Start sccache server
+        id: sccache
+        run: sccache --start-server
+      - name: Download wasm artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-${{ github.event.pull_request.head.sha|| github.sha }}
+          path: wasm
+      - name: Download wasm-for-tests artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-for-tests-${{ github.event.pull_request.head.sha|| github.sha }}
+          path: wasm_for_tests
+      - name: Download namada binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: binaries-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ./target/release/
+      - name: Download Hermes
+        run: |
+          HERMES_VERSION=$(cat .github/workflows/scripts/hermes.txt)
+          echo "Using hermes version: ${HERMES_VERSION}"
+          curl -o hermes.zip -LO https://github.com/heliaxdev/hermes/releases/download/v${HERMES_VERSION}/hermes-v${HERMES_VERSION}-x86_64-unknown-linux-gnu.zip
+          unzip hermes.zip
+          mv hermes /usr/local/bin
+      - name: Change permissions
+        run: |
+          chmod +x target/release/namada
+          chmod +x target/release/namadaw
+          chmod +x target/release/namadan
+          chmod +x target/release/namadac
+          chmod +x /usr/local/bin/hermes
+      - name: Run e2e tests with device automation
+        id: e2e
+        run: cargo +${{ env.NIGHTLY }} test --lib "e2e::ledger_tests::pos_bonds" -- --exact
+        env:
+          NAMADA_DEVICE_AUTOMATION: "true"
+          NAMADA_DEVICE_TRANSPORT: "tcp"
+          NAMADA_E2E_USE_DEVICE: "true"
+          NAMADA_E2E_USE_PREBUILT_BINARIES: "true"
+          NAMADA_E2E_KEEP_TEMP: "true"
+          NAMADA_TM_STDOUT: "false"
+          NAMADA_LOG_COLOR: "false"
+          NAMADA_LOG: "info"
+          RUSTFLAGS: "-C linker=clang -C debug_assertions=true -C link-arg=-fuse-ld=/usr/local/bin/mold"
+      - name: Upload e2e logs
+        if: success() || steps.e2e.conclusion == 'failure' || steps.e2e.conclusion == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-e2e-with-automation-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            /tmp/.*/logs/
+            /tmp/.*/setup/validator-*/logs/
+            /tmp/.*/setup/validator-*/e2e-test.*/*.toml 
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 5
+      - name: Clean cargo cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: cargo cache --autoclean-expensive
+      - name: Stop sccache
+        if: always() && steps.sccache.conclusion == 'success'
+        run: sccache --stop-server || true
