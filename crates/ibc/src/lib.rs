@@ -32,6 +32,7 @@ use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::rc::Rc;
+use std::str::FromStr;
 
 pub use actions::transfer_over_ibc;
 use apps::transfer::types::packet::PacketData;
@@ -612,6 +613,18 @@ where
                     self.ctx.inner.clone(),
                     self.verifiers.clone(),
                 );
+                // Add the source to the set of verifiers
+                self.verifiers.borrow_mut().insert(
+                    Address::from_str(msg.message.packet_data.sender.as_ref())
+                        .map_err(|_| {
+                            Error::TokenTransfer(TokenTransferError::Other(
+                                format!(
+                                    "Cannot convert the sender address {}",
+                                    msg.message.packet_data.sender
+                                ),
+                            ))
+                        })?,
+                );
                 self.insert_verifiers()?;
                 if msg.transfer.is_some() {
                     token_transfer_ctx.enable_shielded_transfer();
@@ -630,6 +643,19 @@ where
                 if msg.transfer.is_some() {
                     nft_transfer_ctx.enable_shielded_transfer();
                 }
+                // Add the source to the set of verifiers
+                self.verifiers.borrow_mut().insert(
+                    Address::from_str(msg.message.packet_data.sender.as_ref())
+                        .map_err(|_| {
+                            Error::TokenTransfer(TokenTransferError::Other(
+                                format!(
+                                    "Cannot convert the sender address {}",
+                                    msg.message.packet_data.sender
+                                ),
+                            ))
+                        })?,
+                );
+                self.insert_verifiers()?;
                 send_nft_transfer_execute(
                     &mut self.ctx,
                     &mut nft_transfer_ctx,
