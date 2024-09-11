@@ -51,6 +51,8 @@ enum Panic {
         "Config for token '{0}' with configured balance not found in genesis"
     )]
     MissingTokenConfig(String),
+    #[error("The MASP parameters for the native token is missing")]
+    MissingMaspParams,
     #[error("Failed to read wasm {0} with reason: {1}")]
     ReadingWasm(String, String),
 }
@@ -446,6 +448,7 @@ where
     /// Init genesis token accounts
     fn init_token_accounts(&mut self, genesis: &genesis::chain::Finalized) {
         let mut token_map = BTreeMap::new();
+        let native_alias = &genesis.parameters.parameters.native_token;
         for (alias, token) in &genesis.tokens.token {
             tracing::debug!("Initializing token {alias}");
 
@@ -453,6 +456,9 @@ where
                 address,
                 config: TokenConfig { denom, masp_params },
             } = token;
+            if alias == native_alias && masp_params.is_none() {
+                self.register_err(Panic::MissingMaspParams);
+            }
             // associate a token with its denomination.
             write_denom(&mut self.state, address, *denom).unwrap();
             namada_sdk::token::write_params(
@@ -1210,5 +1216,24 @@ mod test {
             ),
         )];
         assert_eq!(expected, initializer.warnings);
+    }
+
+    #[test]
+    fn test_dry_run_native_token_masp_params() {
+        let (mut shell, _x, _y, _z) = TestShell::new_at_height(0);
+        shell.wasm_dir = PathBuf::new();
+        let mut genesis = genesis::make_dev_genesis(1, &shell.base_dir);
+        let mut initializer = InitChainValidation::new(&mut shell, true);
+        genesis
+            .tokens
+            .token
+            .get_mut(&genesis.parameters.parameters.native_token)
+            .expect("Test failed")
+            .config
+            .masp_params = None;
+        initializer.init_token_accounts(&genesis);
+        let [panic]: [Panic; 1] =
+            initializer.panics.clone().try_into().expect("Test failed");
+        assert_eq!(panic, Panic::MissingMaspParams);
     }
 }
