@@ -4961,7 +4961,8 @@ pub mod args {
                      produce the signature."
                 )))
                 .arg(RECEIVER.def().help(wrap!(
-                    "The receiver address on the destination chain as string."
+                    "The receiver address on the destination chain as a \
+                     string."
                 )))
                 .arg(TOKEN.def().help(wrap!("The transfer token.")))
                 .arg(
@@ -4980,13 +4981,14 @@ pub mod args {
                         .help(wrap!("The timeout as seconds.")),
                 )
                 .arg(REFUND_TARGET.def().help(wrap!(
-                    "The refund target address when IBC shielded transfer \
-                     failure."
+                    "The refund target address to use if the IBC shielded \
+                     transfer fails."
                 )))
                 .arg(IBC_SHIELDING_DATA_PATH.def().help(wrap!(
-                    "The file path of the IBC shielding data for the \
-                     destination Namada. This can't be set with --ibc-memo at \
-                     the same time."
+                    "Used only when shielding over IBC from one instance of \
+                     the Namada blockchain to another. The file path of the \
+                     IBC shielding data for the destination Namada chain. \
+                     This can't be set with --ibc-memo at the same time."
                 )))
                 .arg(
                     IBC_MEMO
