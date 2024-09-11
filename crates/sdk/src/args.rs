@@ -1587,6 +1587,8 @@ pub struct QueryConversions<C: NamadaTypes = SdkTypes> {
     pub token: Option<C::Address>,
     /// Epoch of the asset
     pub epoch: Option<MaspEpoch>,
+    /// Flag to dump the conversion tree
+    pub dump_tree: bool,
 }
 
 /// Query token balance(s)

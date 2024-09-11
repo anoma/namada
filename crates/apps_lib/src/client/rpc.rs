@@ -1885,7 +1885,7 @@ pub async fn query_conversions(
         let total_rewards = rpc::query_masp_total_rewards(context.client())
             .await
             .expect("MASP total rewards should be present");
-        display!(
+        display_line!(
             context.io(),
             "Total rewards of native token minted for shielded pool: {}",
             total_rewards.to_string_native()
@@ -1900,6 +1900,11 @@ pub async fn query_conversions(
     let conversions = rpc::query_conversions(context.client())
         .await
         .expect("Conversions should be defined");
+
+    if args.dump_tree {
+        display_line!(context.io(), "Conversions: {conversions:?}");
+    }
+
     // Track whether any non-sentinel conversions are found
     let mut conversions_found = false;
     for (addr, _denom, digit, epoch, amt) in conversions.values() {
@@ -1945,7 +1950,7 @@ pub async fn query_conversions(
     if !conversions_found {
         display_line!(
             context.io(),
-            "No conversions found satisfying specified criteria."
+            "\nNo conversions found satisfying specified criteria."
         );
     }
 }

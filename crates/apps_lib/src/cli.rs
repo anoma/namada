@@ -3364,6 +3364,7 @@ pub mod args {
     pub const DRY_RUN_TX: ArgFlag = flag("dry-run");
     pub const DRY_RUN_WRAPPER_TX: ArgFlag = flag("dry-run-wrapper");
     pub const DUMP_TX: ArgFlag = flag("dump-tx");
+    pub const DUMP_CONVERSION_TREE: ArgFlag = flag("dump-conversion-tree");
     pub const EPOCH: ArgOpt<Epoch> = arg_opt("epoch");
     pub const ERC20: Arg<EthAddress> = arg("erc20");
     pub const ETH_CONFIRMATIONS: Arg<u64> = arg("confirmations");
@@ -4960,7 +4961,8 @@ pub mod args {
                      produce the signature."
                 )))
                 .arg(RECEIVER.def().help(wrap!(
-                    "The receiver address on the destination chain as string."
+                    "The receiver address on the destination chain as a \
+                     string."
                 )))
                 .arg(TOKEN.def().help(wrap!("The transfer token.")))
                 .arg(
@@ -4979,13 +4981,14 @@ pub mod args {
                         .help(wrap!("The timeout as seconds.")),
                 )
                 .arg(REFUND_TARGET.def().help(wrap!(
-                    "The refund target address when IBC shielded transfer \
-                     failure."
+                    "The refund target address to use if the IBC shielded \
+                     transfer fails."
                 )))
                 .arg(IBC_SHIELDING_DATA_PATH.def().help(wrap!(
-                    "The file path of the IBC shielding data for the \
-                     destination Namada. This can't be set with --ibc-memo at \
-                     the same time."
+                    "Used only when shielding over IBC from one instance of \
+                     the Namada blockchain to another. The file path of the \
+                     IBC shielding data for the destination Namada chain. \
+                     This can't be set with --ibc-memo at the same time."
                 )))
                 .arg(
                     IBC_MEMO
@@ -6135,6 +6138,7 @@ pub mod args {
                 query: self.query.to_sdk(ctx)?,
                 token: self.token.map(|x| ctx.borrow_chain_or_exit().get(&x)),
                 epoch: self.epoch,
+                dump_tree: self.dump_tree,
             })
         }
     }
@@ -6144,10 +6148,12 @@ pub mod args {
             let query = Query::parse(matches);
             let token = TOKEN_OPT.parse(matches);
             let epoch = MASP_EPOCH.parse(matches);
+            let dump_tree = DUMP_CONVERSION_TREE.parse(matches);
             Self {
                 query,
                 epoch,
                 token,
+                dump_tree,
             }
         }
 
@@ -6158,6 +6164,9 @@ pub mod args {
                 )))
                 .arg(TOKEN_OPT.def().help(wrap!(
                     "The token address for which to query conversions."
+                )))
+                .arg(DUMP_CONVERSION_TREE.def().help(wrap!(
+                    "Dumps the full conversion tree if the flag is set."
                 )))
         }
     }
