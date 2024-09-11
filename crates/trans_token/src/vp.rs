@@ -455,6 +455,7 @@ mod tests {
         let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let mut verifiers = BTreeSet::new();
         verifiers.insert(src);
+        verifiers.insert(dest);
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -566,8 +567,10 @@ mod tests {
         let mut verifiers = BTreeSet::new();
         // for the minter
         verifiers.insert(minter);
-        // The token must be part of the verifier set (checked by MultitokenVp)
+        // The token and minter must be part of the verifier set (checked by
+        // MultitokenVp)
         verifiers.insert(token);
+        verifiers.insert(target);
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1087,6 +1090,7 @@ mod tests {
         let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let mut verifiers = BTreeSet::new();
         verifiers.insert(src);
+        verifiers.insert(dest);
         let ctx = Ctx::new(
             &ADDRESS,
             &state,

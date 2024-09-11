@@ -1436,10 +1436,12 @@ mod tests {
         );
         assert!(result.is_ok());
         // Check if the token was minted
-        // The token must be part of the verifier set (checked by MultitokenVp)
+        // The token and recevier must be part of the verifier set (checked by
+        // MultitokenVp)
         let denom = format!("{}/{}/{}", port_id, channel_id, token);
         let ibc_token = ibc::ibc_token(&denom);
         env.verifiers.insert(ibc_token.clone());
+        env.verifiers.insert(receiver.clone());
         let result = ibc::validate_ibc_vp_from_tx(
             &env,
             &tx.batch_ref_first_tx().unwrap(),
