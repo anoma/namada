@@ -700,7 +700,7 @@ where
         &mut self,
         envelope: &MsgEnvelope,
     ) -> Result<(), Error> {
-        match envelope {
+        let opt_verifier = match envelope {
             MsgEnvelope::Packet(PacketMsg::Recv(msg)) => {
                 if self.is_receiving_success(msg)? {
                     match msg.packet.port_id_on_b.as_str() {
@@ -709,23 +709,7 @@ where
                                 serde_json::from_slice::<PacketData>(
                                     &msg.packet.data,
                                 ).map_err(|_| Error::TokenTransfer(TokenTransferError::PacketDataDeserialization))?;
-                            self.verifiers.borrow_mut().insert(
-                                Address::from_str(
-                                    packet_data.receiver.as_ref(),
-                                )
-                                .map_err(
-                                    |_| {
-                                        Error::TokenTransfer(
-                                            TokenTransferError::Other(format!(
-                                                "Cannot convert the receiver \
-                                                 address {}",
-                                                packet_data.receiver
-                                            )),
-                                        )
-                                    },
-                                )?,
-                            );
-                            self.insert_verifiers()?;
+                            Some(packet_data.receiver)
                         }
                         NFT_PORT_ID_STR => {
                             let packet_data = serde_json::from_slice::<
@@ -738,23 +722,7 @@ where
                                     NftTransferError::PacketDataDeserialization,
                                 )
                             })?;
-                            self.verifiers.borrow_mut().insert(
-                                Address::from_str(
-                                    packet_data.receiver.as_ref(),
-                                )
-                                .map_err(
-                                    |_| {
-                                        Error::NftTransfer(
-                                            NftTransferError::Other(format!(
-                                                "Cannot convert the receiver \
-                                                 address {}",
-                                                packet_data.receiver
-                                            )),
-                                        )
-                                    },
-                                )?,
-                            );
-                            self.insert_verifiers()?;
+                            Some(packet_data.receiver)
                         }
                         _ => {
                             tracing::warn!(
@@ -762,52 +730,44 @@ where
                                  unsupported IBC packet data for Port ID {}",
                                 msg.packet.port_id_on_b
                             );
+                            None
                         }
                     }
+                } else {
+                    None
                 }
             }
             MsgEnvelope::Packet(PacketMsg::Ack(msg)) => {
-                match msg.packet.port_id_on_a.as_str() {
-                    FT_PORT_ID_STR => {
-                        let packet_data = serde_json::from_slice::<PacketData>(
-                            &msg.packet.data,
-                        )
-                        .map_err(|_| {
-                            Error::TokenTransfer(
-                                TokenTransferError::PacketDataDeserialization,
-                            )
-                        })?;
+                let ack = serde_json::from_slice::<AcknowledgementStatus>(
+                    msg.acknowledgement.as_ref(),
+                )
+                .map_err(|_| {
+                    Error::TokenTransfer(TokenTransferError::AckDeserialization)
+                })?;
 
-                        let ack =
-                            serde_json::from_slice::<AcknowledgementStatus>(
-                                msg.acknowledgement.as_ref(),
+                if ack.is_successful() {
+                    None
+                } else {
+                    match msg.packet.port_id_on_a.as_str() {
+                        FT_PORT_ID_STR => {
+                            let packet_data = serde_json::from_slice::<
+                                PacketData,
+                            >(
+                                &msg.packet.data
                             )
                             .map_err(|_| {
                                 Error::TokenTransfer(
-                                    TokenTransferError::AckDeserialization,
-                                )
+                                TokenTransferError::PacketDataDeserialization,
+                            )
                             })?;
 
-                        if !ack.is_successful() {
-                            self.verifiers.borrow_mut().insert(
-                                Address::from_str(packet_data.sender.as_ref())
-                                    .map_err(|_| {
-                                        Error::TokenTransfer(
-                                            TokenTransferError::Other(format!(
-                                                "Cannot convert the sender \
-                                                 address {}",
-                                                packet_data.sender
-                                            )),
-                                        )
-                                    })?,
-                            );
-                            self.insert_verifiers()?;
+                            Some(packet_data.sender)
                         }
-                    }
-                    NFT_PORT_ID_STR => {
-                        let packet_data =
-                            serde_json::from_slice::<NftPacketData>(
-                                &msg.packet.data,
+                        NFT_PORT_ID_STR => {
+                            let packet_data = serde_json::from_slice::<
+                                NftPacketData,
+                            >(
+                                &msg.packet.data
                             )
                             .map_err(|_| {
                                 Error::NftTransfer(
@@ -815,40 +775,19 @@ where
                                 )
                             })?;
 
-                        let ack =
-                            serde_json::from_slice::<AcknowledgementStatus>(
-                                msg.acknowledgement.as_ref(),
-                            )
-                            .map_err(|_| {
-                                Error::NftTransfer(
-                                    NftTransferError::AckDeserialization,
-                                )
-                            })?;
-
-                        if !ack.is_successful() {
-                            self.verifiers.borrow_mut().insert(
-                                Address::from_str(packet_data.sender.as_ref())
-                                    .map_err(|_| {
-                                        Error::TokenTransfer(
-                                            TokenTransferError::Other(format!(
-                                                "Cannot convert the sender \
-                                                 address {}",
-                                                packet_data.sender
-                                            )),
-                                        )
-                                    })?,
+                            Some(packet_data.sender)
+                        }
+                        _ => {
+                            tracing::warn!(
+                                "Receiver couldn't be extracted from the \
+                                 unsupported IBC packet data for Port ID {}",
+                                msg.packet.port_id_on_a
                             );
-                            self.insert_verifiers()?;
+
+                            None
                         }
                     }
-                    _ => {
-                        tracing::warn!(
-                            "Receiver couldn't be extracted from the \
-                             unsupported IBC packet data for Port ID {}",
-                            msg.packet.port_id_on_a
-                        );
-                    }
-                };
+                }
             }
             MsgEnvelope::Packet(PacketMsg::Timeout(msg)) => {
                 match msg.packet.port_id_on_a.as_str() {
@@ -861,19 +800,8 @@ where
                                 TokenTransferError::PacketDataDeserialization,
                             )
                         })?;
-                        self.verifiers.borrow_mut().insert(
-                            Address::from_str(packet_data.sender.as_ref())
-                                .map_err(|_| {
-                                    Error::TokenTransfer(
-                                        TokenTransferError::Other(format!(
-                                            "Cannot convert the sender \
-                                             address {}",
-                                            packet_data.sender
-                                        )),
-                                    )
-                                })?,
-                        );
-                        self.insert_verifiers()?;
+
+                        Some(packet_data.sender)
                     }
                     NFT_PORT_ID_STR => {
                         let packet_data =
@@ -885,19 +813,8 @@ where
                                     NftTransferError::PacketDataDeserialization,
                                 )
                             })?;
-                        self.verifiers.borrow_mut().insert(
-                            Address::from_str(packet_data.sender.as_ref())
-                                .map_err(|_| {
-                                    Error::NftTransfer(NftTransferError::Other(
-                                        format!(
-                                            "Cannot convert the sender \
-                                             address {}",
-                                            packet_data.sender
-                                        ),
-                                    ))
-                                })?,
-                        );
-                        self.insert_verifiers()?;
+
+                        Some(packet_data.sender)
                     }
                     _ => {
                         tracing::warn!(
@@ -905,10 +822,24 @@ where
                              unsupported IBC packet data for Port ID {}",
                             msg.packet.port_id_on_a
                         );
+
+                        None
                     }
                 }
             }
-            _ => (),
+            _ => None,
+        };
+
+        if let Some(verifier) = opt_verifier {
+            self.verifiers.borrow_mut().insert(
+                Address::from_str(verifier.as_ref()).map_err(|_| {
+                    Error::TokenTransfer(TokenTransferError::Other(format!(
+                        "Cannot convert the address {}",
+                        verifier
+                    )))
+                })?,
+            );
+            self.insert_verifiers()?;
         }
 
         Ok(())
