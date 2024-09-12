@@ -17,12 +17,10 @@ pub type NativeVpCtx<'a, S, CA> =
 type Eval<S, CA> = VpEvalWasm<<S as StateRead>::D, <S as StateRead>::H, CA>;
 
 /// Native PoS VP
-pub type PosVp<'a, S, CA> = proof_of_stake::vp::PosVp<
-    'a,
-    S,
-    VpCache<CA>,
-    Eval<S, CA>,
-    GovPreStore<'a, S, CA>,
+pub type PosVp<'ctx, CTX> = proof_of_stake::vp::PosVp<
+    'ctx,
+    CTX,
+    governance::Store<<CTX as VpEnv<'ctx>>::Pre>,
 >;
 
 /// Native IBC VP

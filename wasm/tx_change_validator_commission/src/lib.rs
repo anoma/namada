@@ -154,8 +154,13 @@ mod tests {
             &tx_env.gas_meter.borrow(),
         ));
         let vp_env = TestNativeVpEnv::from_tx_env(tx_env, address::POS);
-        let vp = vp_env.init_vp(&gas_meter, PosVp::new);
-        let result = vp_env.validate_tx(&vp);
+        let ctx = vp_env.ctx(&gas_meter);
+        let result = PosVp::validate_tx(
+            &ctx,
+            &vp_env.tx_env.batched_tx.to_ref(),
+            &vp_env.keys_changed,
+            &vp_env.verifiers,
+        );
         assert!(
             result.is_ok(),
             "PoS Validity predicate must accept this transaction"

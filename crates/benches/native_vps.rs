@@ -1640,7 +1640,7 @@ fn pos(c: &mut Criterion) {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new(u64::MAX),
         ));
-        let pos = PosVp::new(Ctx::new(
+        let ctx = Ctx::new(
             &vp_address,
             &shell.state,
             &signed_tx.tx,
@@ -1650,15 +1650,16 @@ fn pos(c: &mut Criterion) {
             &keys_changed,
             &verifiers,
             shell.vp_wasm_cache.clone(),
-        ));
+        );
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
                 assert!(
-                    pos.validate_tx(
+                    PosVp::validate_tx(
+                        &ctx,
                         &signed_tx.to_ref(),
-                        pos.ctx.keys_changed,
-                        pos.ctx.verifiers,
+                        ctx.keys_changed,
+                        ctx.verifiers,
                     )
                     .is_ok()
                 )

@@ -1219,15 +1219,13 @@ where
                         );
 
                         match internal_addr {
-                            InternalAddress::PoS => {
-                                let pos = PosVp::new(ctx);
-                                pos.validate_tx(
-                                    batched_tx,
-                                    &keys_changed,
-                                    &verifiers,
-                                )
-                                .map_err(Error::NativeVpError)
-                            }
+                            InternalAddress::PoS => PosVp::validate_tx(
+                                &ctx,
+                                batched_tx,
+                                &keys_changed,
+                                &verifiers,
+                            )
+                            .map_err(Error::NativeVpError),
                             InternalAddress::Ibc => {
                                 let ibc = IbcVp::new(ctx);
                                 ibc.validate_tx(

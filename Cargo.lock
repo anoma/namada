@@ -5262,7 +5262,7 @@ dependencies = [
  "namada_systems",
  "namada_trans_token",
  "namada_tx",
- "namada_vp",
+ "namada_vp_env",
  "once_cell",
  "pretty_assertions",
  "proptest",
