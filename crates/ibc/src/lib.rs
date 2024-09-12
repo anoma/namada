@@ -55,13 +55,16 @@ use ibc::apps::nft_transfer::types::msgs::transfer::MsgTransfer as IbcMsgNftTran
 use ibc::apps::nft_transfer::types::{
     ack_success_b64, is_receiver_chain_source as is_nft_receiver_chain_source,
     PrefixedClassId, TokenId, TracePrefix as NftTracePrefix,
+    PORT_ID_STR as NFT_PORT_ID_STR,
 };
 use ibc::apps::transfer::handler::{
     send_transfer_execute, send_transfer_validate,
 };
 use ibc::apps::transfer::types::error::TokenTransferError;
 use ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
-use ibc::apps::transfer::types::{is_receiver_chain_source, TracePrefix};
+use ibc::apps::transfer::types::{
+    is_receiver_chain_source, TracePrefix, PORT_ID_STR as FT_PORT_ID_STR,
+};
 use ibc::core::channel::types::acknowledgement::AcknowledgementStatus;
 use ibc::core::channel::types::commitment::compute_ack_commitment;
 use ibc::core::channel::types::msgs::{
@@ -647,7 +650,7 @@ where
                 self.verifiers.borrow_mut().insert(
                     Address::from_str(msg.message.packet_data.sender.as_ref())
                         .map_err(|_| {
-                            Error::TokenTransfer(TokenTransferError::Other(
+                            Error::NftTransfer(NftTransferError::Other(
                                 format!(
                                     "Cannot convert the sender address {}",
                                     msg.message.packet_data.sender
@@ -667,6 +670,76 @@ where
             IbcMessage::Envelope(envelope) => {
                 execute(&mut self.ctx, &mut self.router, *envelope.clone())
                     .map_err(|e| Error::Context(Box::new(e)))?;
+
+                // Extract destination address from the packet to trigger its
+                // address FIXME: refactor, maybe can share with
+                // the extract_memofrom_packet function? Maybe extract both at
+                // the same time
+                if let MsgEnvelope::Packet(PacketMsg::Recv(ref msg)) = *envelope
+                {
+                    if self.is_receiving_success(msg)? {
+                        match msg.packet.port_id_on_b.as_str() {
+                            FT_PORT_ID_STR => {
+                                let packet_data =
+                                serde_json::from_slice::<PacketData>(
+                                    &msg.packet.data,
+                                ).map_err(|_| Error::TokenTransfer(TokenTransferError::PacketDataDeserialization))?;
+                                tracing::error!(
+                                    "ADDING {} TO THE VERIFIER",
+                                    packet_data.receiver
+                                ); //FIXME: remove
+                                self.verifiers.borrow_mut().insert(
+                                    Address::from_str(
+                                        packet_data.receiver.as_ref(),
+                                    )
+                                    .map_err(|_| {
+                                        Error::TokenTransfer(
+                                            TokenTransferError::Other(format!(
+                                                "Cannot convert the receiver \
+                                                 address {}",
+                                                packet_data.receiver
+                                            )),
+                                        )
+                                    })?,
+                                );
+                            }
+                            NFT_PORT_ID_STR => {
+                                let packet_data =
+                                    serde_json::from_slice::<NftPacketData>(
+                                        &msg.packet.data,
+                                    )
+                                    .map_err(|_| {
+                                        Error::NftTransfer(
+                                    NftTransferError::PacketDataDeserialization,
+                                )
+                                    })?;
+                                self.verifiers.borrow_mut().insert(
+                                    Address::from_str(
+                                        packet_data.receiver.as_ref(),
+                                    )
+                                    .map_err(|_| {
+                                        Error::NftTransfer(
+                                            NftTransferError::Other(format!(
+                                                "Cannot convert the receiver \
+                                                 address {}",
+                                                packet_data.receiver
+                                            )),
+                                        )
+                                    })?,
+                                );
+                            }
+                            _ => {
+                                tracing::warn!(
+                                    "Sender couldn't be extracted from the \
+                                     unsupported IBC packet data for Port ID \
+                                     {}",
+                                    msg.packet.port_id_on_b
+                                );
+                            }
+                        }
+                    }
+                }
+
                 // Extract MASP tx from the memo in the packet if needed
                 let masp_tx = match &*envelope {
                     MsgEnvelope::Packet(PacketMsg::Recv(msg))
