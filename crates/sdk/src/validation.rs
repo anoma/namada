@@ -68,13 +68,11 @@ pub type GovernanceVp<'ctx, CTX> = governance::vp::GovernanceVp<
 pub type PgfVp<'ctx, CTX> = governance::vp::pgf::PgfVp<'ctx, CTX>;
 
 /// Native multitoken VP
-pub type MultitokenVp<'a, S, CA> = token::vp::MultitokenVp<
-    'a,
-    S,
-    VpCache<CA>,
-    Eval<S, CA>,
-    ParamsPreStore<'a, S, CA>,
-    GovPreStore<'a, S, CA>,
+pub type MultitokenVp<'ctx, CTX> = token::vp::MultitokenVp<
+    'ctx,
+    CTX,
+    parameters::Store<<CTX as VpEnv<'ctx>>::Pre>,
+    governance::Store<<CTX as VpEnv<'ctx>>::Pre>,
 >;
 
 /// Native MASP VP

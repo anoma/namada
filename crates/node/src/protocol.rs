@@ -1266,14 +1266,13 @@ where
                             )
                             .map_err(Error::NativeVpError),
                             InternalAddress::Multitoken => {
-                                let multitoken = MultitokenVp::new(ctx);
-                                multitoken
-                                    .validate_tx(
-                                        batched_tx,
-                                        &keys_changed,
-                                        &verifiers,
-                                    )
-                                    .map_err(Error::NativeVpError)
+                                MultitokenVp::validate_tx(
+                                    &ctx,
+                                    batched_tx,
+                                    &keys_changed,
+                                    &verifiers,
+                                )
+                                .map_err(Error::NativeVpError)
                             }
                             InternalAddress::Masp => {
                                 let masp = MaspVp::new(ctx);
