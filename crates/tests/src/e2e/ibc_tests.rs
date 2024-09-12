@@ -156,7 +156,7 @@ fn ibc_transfers() -> Result<()> {
         &port_id_gaia,
         &channel_id_gaia,
         None,
-        None,
+        Some(Duration::new(10, 0)),
     )?;
     wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test)?;
 
@@ -273,7 +273,7 @@ fn ibc_transfers() -> Result<()> {
         &port_id_gaia,
         &channel_id_gaia,
         Some(memo_path),
-        None,
+        Some(Duration::new(10, 0)),
     )?;
     wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test)?;
     // Check the token on Namada
