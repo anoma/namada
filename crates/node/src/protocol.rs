@@ -1297,14 +1297,13 @@ where
                                     .map_err(Error::NativeVpError)
                             }
                             InternalAddress::EthBridgePool => {
-                                let bridge_pool = EthBridgePoolVp::new(ctx);
-                                bridge_pool
-                                    .validate_tx(
-                                        batched_tx,
-                                        &keys_changed,
-                                        &verifiers,
-                                    )
-                                    .map_err(Error::NativeVpError)
+                                EthBridgePoolVp::validate_tx(
+                                    &ctx,
+                                    batched_tx,
+                                    &keys_changed,
+                                    &verifiers,
+                                )
+                                .map_err(Error::NativeVpError)
                             }
                             InternalAddress::Nut(_) => {
                                 let non_usable_tokens =

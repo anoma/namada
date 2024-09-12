@@ -97,8 +97,8 @@ pub type EthBridgeVp<'a, S, CA> =
     eth_bridge::vp::EthBridge<'a, S, VpCache<CA>, Eval<S, CA>, TokenKeys>;
 
 /// Native ETH bridge pool VP
-pub type EthBridgePoolVp<'a, S, CA> =
-    eth_bridge::vp::BridgePool<'a, S, VpCache<CA>, Eval<S, CA>, TokenKeys>;
+pub type EthBridgePoolVp<'ctx, CTX> =
+    eth_bridge::vp::BridgePool<'ctx, CTX, TokenKeys>;
 
 /// Native ETH bridge NUT VP
 pub type EthBridgeNutVp<'a, S, CA> =

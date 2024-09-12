@@ -42,6 +42,7 @@ namada_trans_token = {path = "../trans_token"}
 namada_tx = {path = "../tx"}
 namada_vote_ext = {path = "../vote_ext"}
 namada_vp = {path = "../vp"}
+namada_vp_env = {path = "../vp_env"}
 
 borsh.workspace = true
 ethers.workspace = true

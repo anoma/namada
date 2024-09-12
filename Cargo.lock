@@ -4941,6 +4941,7 @@ dependencies = [
  "namada_vm",
  "namada_vote_ext",
  "namada_vp",
+ "namada_vp_env",
  "proptest",
  "rand 0.8.5",
  "serde",
