@@ -668,8 +668,20 @@ where
                 Ok((msg.transfer, None))
             }
             IbcMessage::Envelope(envelope) => {
-                self.trigger_envelope_verifier(envelope.as_ref())?;
-
+                if let Some(verifier) = get_envelope_verifier(envelope.as_ref())
+                {
+                    self.verifiers.borrow_mut().insert(
+                        Address::from_str(verifier.as_ref()).map_err(|_| {
+                            Error::NftTransfer(NftTransferError::Other(
+                                format!(
+                                    "Cannot convert the address {}",
+                                    verifier
+                                ),
+                            ))
+                        })?,
+                    );
+                    self.insert_verifiers()?;
+                }
                 execute(&mut self.ctx, &mut self.router, *envelope.clone())
                     .map_err(|e| Error::Context(Box::new(e)))?;
 
@@ -692,157 +704,6 @@ where
                 Ok((None, masp_tx))
             }
         }
-    }
-
-    // Extract the relevant namada address from the packet (either sender or
-    // receiver) and trigger its vp
-    fn trigger_envelope_verifier(
-        &mut self,
-        envelope: &MsgEnvelope,
-    ) -> Result<(), Error> {
-        let opt_verifier = match envelope {
-            MsgEnvelope::Packet(PacketMsg::Recv(msg)) => {
-                if self.is_receiving_success(msg)? {
-                    match msg.packet.port_id_on_b.as_str() {
-                        FT_PORT_ID_STR => {
-                            let packet_data =
-                                serde_json::from_slice::<PacketData>(
-                                    &msg.packet.data,
-                                ).map_err(|_| Error::TokenTransfer(TokenTransferError::PacketDataDeserialization))?;
-                            Some(packet_data.receiver)
-                        }
-                        NFT_PORT_ID_STR => {
-                            let packet_data = serde_json::from_slice::<
-                                NftPacketData,
-                            >(
-                                &msg.packet.data
-                            )
-                            .map_err(|_| {
-                                Error::NftTransfer(
-                                    NftTransferError::PacketDataDeserialization,
-                                )
-                            })?;
-                            Some(packet_data.receiver)
-                        }
-                        _ => {
-                            tracing::warn!(
-                                "Receiver couldn't be extracted from the \
-                                 unsupported IBC packet data for Port ID {}",
-                                msg.packet.port_id_on_b
-                            );
-                            None
-                        }
-                    }
-                } else {
-                    None
-                }
-            }
-            MsgEnvelope::Packet(PacketMsg::Ack(msg)) => {
-                let ack = serde_json::from_slice::<AcknowledgementStatus>(
-                    msg.acknowledgement.as_ref(),
-                )
-                .map_err(|_| {
-                    Error::TokenTransfer(TokenTransferError::AckDeserialization)
-                })?;
-
-                if ack.is_successful() {
-                    None
-                } else {
-                    match msg.packet.port_id_on_a.as_str() {
-                        FT_PORT_ID_STR => {
-                            let packet_data = serde_json::from_slice::<
-                                PacketData,
-                            >(
-                                &msg.packet.data
-                            )
-                            .map_err(|_| {
-                                Error::TokenTransfer(
-                                TokenTransferError::PacketDataDeserialization,
-                            )
-                            })?;
-
-                            Some(packet_data.sender)
-                        }
-                        NFT_PORT_ID_STR => {
-                            let packet_data = serde_json::from_slice::<
-                                NftPacketData,
-                            >(
-                                &msg.packet.data
-                            )
-                            .map_err(|_| {
-                                Error::NftTransfer(
-                                    NftTransferError::PacketDataDeserialization,
-                                )
-                            })?;
-
-                            Some(packet_data.sender)
-                        }
-                        _ => {
-                            tracing::warn!(
-                                "Receiver couldn't be extracted from the \
-                                 unsupported IBC packet data for Port ID {}",
-                                msg.packet.port_id_on_a
-                            );
-
-                            None
-                        }
-                    }
-                }
-            }
-            MsgEnvelope::Packet(PacketMsg::Timeout(msg)) => {
-                match msg.packet.port_id_on_a.as_str() {
-                    FT_PORT_ID_STR => {
-                        let packet_data = serde_json::from_slice::<PacketData>(
-                            &msg.packet.data,
-                        )
-                        .map_err(|_| {
-                            Error::TokenTransfer(
-                                TokenTransferError::PacketDataDeserialization,
-                            )
-                        })?;
-
-                        Some(packet_data.sender)
-                    }
-                    NFT_PORT_ID_STR => {
-                        let packet_data =
-                            serde_json::from_slice::<NftPacketData>(
-                                &msg.packet.data,
-                            )
-                            .map_err(|_| {
-                                Error::NftTransfer(
-                                    NftTransferError::PacketDataDeserialization,
-                                )
-                            })?;
-
-                        Some(packet_data.sender)
-                    }
-                    _ => {
-                        tracing::warn!(
-                            "Receiver couldn't be extracted from the \
-                             unsupported IBC packet data for Port ID {}",
-                            msg.packet.port_id_on_a
-                        );
-
-                        None
-                    }
-                }
-            }
-            _ => None,
-        };
-
-        if let Some(verifier) = opt_verifier {
-            self.verifiers.borrow_mut().insert(
-                Address::from_str(verifier.as_ref()).map_err(|_| {
-                    Error::TokenTransfer(TokenTransferError::Other(format!(
-                        "Cannot convert the address {}",
-                        verifier
-                    )))
-                })?,
-            );
-            self.insert_verifiers()?;
-        }
-
-        Ok(())
     }
 
     /// Check the result of receiving the packet by checking the packet
@@ -914,6 +775,70 @@ where
             ctx.insert_verifier(verifier).map_err(Error::Verifier)?;
         }
         Ok(())
+    }
+}
+
+// Extract the involved namada address from the packet (either sender or
+// receiver) to trigger its vp. Returns None if an address could not be found
+fn get_envelope_verifier(
+    envelope: &MsgEnvelope,
+) -> Option<ibc::primitives::Signer> {
+    match envelope {
+        MsgEnvelope::Packet(PacketMsg::Recv(msg)) => {
+            match msg.packet.port_id_on_b.as_str() {
+                FT_PORT_ID_STR => {
+                    serde_json::from_slice::<PacketData>(&msg.packet.data)
+                        .ok()
+                        .map(|packet_data| packet_data.receiver)
+                }
+                NFT_PORT_ID_STR => {
+                    serde_json::from_slice::<NftPacketData>(&msg.packet.data)
+                        .ok()
+                        .map(|packet_data| packet_data.receiver)
+                }
+                _ => None,
+            }
+        }
+        MsgEnvelope::Packet(PacketMsg::Ack(msg)) => serde_json::from_slice::<
+            AcknowledgementStatus,
+        >(
+            msg.acknowledgement.as_ref(),
+        )
+        .map_or(None, |ack| {
+            if ack.is_successful() {
+                None
+            } else {
+                match msg.packet.port_id_on_a.as_str() {
+                    FT_PORT_ID_STR => {
+                        serde_json::from_slice::<PacketData>(&msg.packet.data)
+                            .ok()
+                            .map(|packet_data| packet_data.sender)
+                    }
+                    NFT_PORT_ID_STR => serde_json::from_slice::<NftPacketData>(
+                        &msg.packet.data,
+                    )
+                    .ok()
+                    .map(|packet_data| packet_data.sender),
+                    _ => None,
+                }
+            }
+        }),
+        MsgEnvelope::Packet(PacketMsg::Timeout(msg)) => {
+            match msg.packet.port_id_on_a.as_str() {
+                FT_PORT_ID_STR => {
+                    serde_json::from_slice::<PacketData>(&msg.packet.data)
+                        .ok()
+                        .map(|packet_data| packet_data.sender)
+                }
+                NFT_PORT_ID_STR => {
+                    serde_json::from_slice::<NftPacketData>(&msg.packet.data)
+                        .ok()
+                        .map(|packet_data| packet_data.sender)
+                }
+                _ => None,
+            }
+        }
+        _ => None,
     }
 }
 
