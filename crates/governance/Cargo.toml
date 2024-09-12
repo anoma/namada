@@ -30,6 +30,7 @@ namada_state = { path = "../state" }
 namada_systems = { path = "../systems" }
 namada_tx = { path = "../tx" }
 namada_vp = { path = "../vp" }
+namada_vp_env = { path = "../vp_env" }
 
 arbitrary = { workspace = true, optional = true }
 borsh.workspace = true

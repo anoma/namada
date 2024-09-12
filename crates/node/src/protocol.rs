@@ -1252,14 +1252,13 @@ where
                                 ))
                             }
                             InternalAddress::Governance => {
-                                let governance = GovernanceVp::new(ctx);
-                                governance
-                                    .validate_tx(
-                                        batched_tx,
-                                        &keys_changed,
-                                        &verifiers,
-                                    )
-                                    .map_err(Error::NativeVpError)
+                                GovernanceVp::validate_tx(
+                                    &ctx,
+                                    batched_tx,
+                                    &keys_changed,
+                                    &verifiers,
+                                )
+                                .map_err(Error::NativeVpError)
                             }
                             InternalAddress::Pgf => {
                                 let pgf_vp = PgfVp::new(ctx);

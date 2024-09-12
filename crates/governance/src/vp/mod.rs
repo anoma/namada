@@ -11,14 +11,10 @@ use namada_core::arith::checked;
 use namada_core::booleans::{BoolResultUnitExt, ResultBoolExt};
 use namada_core::chain::Epoch;
 use namada_core::storage;
-use namada_state::{StateRead, StorageRead};
 use namada_systems::{proof_of_stake, trans_token as token};
-use namada_tx::action::{Action, GovAction, Read};
+use namada_tx::action::{Action, GovAction};
 use namada_tx::BatchedTxRef;
-use namada_vp::native_vp::{
-    Ctx, CtxPreStorageRead, Error, NativeVp, Result, VpEvaluator,
-};
-use namada_vp::VpEnv;
+use namada_vp_env::{Error, Result, StorageRead, VpEnv};
 use thiserror::Error;
 
 use self::utils::ReadType;
@@ -50,33 +46,26 @@ impl From<VpError> for Error {
 }
 
 /// Governance VP
-pub struct GovernanceVp<'ctx, S, CA, EVAL, PoS, TokenKeys>
-where
-    S: StateRead,
-{
-    /// Context to interact with the host structures.
-    pub ctx: Ctx<'ctx, S, CA, EVAL>,
+pub struct GovernanceVp<'ctx, CTX, PoS, TokenKeys> {
     /// Generic types for DI
-    pub _marker: PhantomData<(PoS, TokenKeys)>,
+    pub _marker: PhantomData<(&'ctx CTX, PoS, TokenKeys)>,
 }
 
-impl<'view, 'ctx: 'view, S, CA, EVAL, PoS, TokenKeys> NativeVp<'view>
-    for GovernanceVp<'ctx, S, CA, EVAL, PoS, TokenKeys>
+impl<'ctx, CTX, PoS, TokenKeys> GovernanceVp<'ctx, CTX, PoS, TokenKeys>
 where
-    S: StateRead,
-    CA: 'static + Clone,
-    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
-    PoS: proof_of_stake::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
+    CTX: VpEnv<'ctx> + namada_tx::action::Read<Err = Error>,
+    PoS: proof_of_stake::Read<<CTX as VpEnv<'ctx>>::Pre>,
     TokenKeys: token::Keys,
 {
-    fn validate_tx(
-        &'view self,
+    /// Run the validity predicate
+    pub fn validate_tx(
+        ctx: &'ctx CTX,
         tx_data: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<storage::Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
         let (is_valid_keys_set, set_count) =
-            self.is_valid_init_proposal_key_set(keys_changed)?;
+            Self::is_valid_init_proposal_key_set(ctx, keys_changed)?;
         if !is_valid_keys_set {
             tracing::info!("Invalid changed governance key set");
             return Err(Error::new_const("Invalid changed governance key set"));
@@ -84,16 +73,16 @@ where
 
         // Is VP triggered by a governance proposal?
         if is_proposal_accepted(
-            &self.ctx.pre(),
+            &ctx.pre(),
             tx_data.tx.data(tx_data.cmt).unwrap_or_default().as_ref(),
         )? {
             return Ok(());
         }
 
-        let native_token = self.ctx.pre().get_native_token()?;
+        let native_token = ctx.pre().get_native_token()?;
 
         // Find the actions applied in the tx
-        let actions = self.ctx.read_actions()?;
+        let actions = ctx.read_actions()?;
 
         // There must be at least one action if any of the keys belong to gov
         if actions.is_empty()
@@ -143,45 +132,48 @@ where
             }
         }
 
-        // keys_changed.iter().try_for_each(|key| {
         for key in keys_changed.iter() {
             let proposal_id = gov_storage::get_proposal_id(key);
             let key_type = KeyType::from_key::<TokenKeys>(key, &native_token);
 
             let result = match (key_type, proposal_id) {
                 (KeyType::VOTE, Some(proposal_id)) => {
-                    self.is_valid_vote_key(proposal_id, key, verifiers)
+                    Self::is_valid_vote_key(ctx, proposal_id, key, verifiers)
                 }
                 (KeyType::CONTENT, Some(proposal_id)) => {
-                    self.is_valid_content_key(proposal_id)
+                    Self::is_valid_content_key(ctx, proposal_id)
                 }
                 (KeyType::TYPE, Some(proposal_id)) => {
-                    self.is_valid_proposal_type(proposal_id)
+                    Self::is_valid_proposal_type(ctx, proposal_id)
                 }
                 (KeyType::PROPOSAL_CODE, Some(proposal_id)) => {
-                    self.is_valid_proposal_code(proposal_id)
+                    Self::is_valid_proposal_code(ctx, proposal_id)
                 }
                 (KeyType::ACTIVATION_EPOCH, Some(proposal_id)) => {
-                    self.is_valid_activation_epoch(proposal_id)
+                    Self::is_valid_activation_epoch(ctx, proposal_id)
                 }
                 (KeyType::START_EPOCH, Some(proposal_id)) => {
-                    self.is_valid_start_epoch(proposal_id)
+                    Self::is_valid_start_epoch(ctx, proposal_id)
                 }
                 (KeyType::END_EPOCH, Some(proposal_id)) => {
-                    self.is_valid_end_epoch(proposal_id)
+                    Self::is_valid_end_epoch(ctx, proposal_id)
                 }
                 (KeyType::FUNDS, Some(proposal_id)) => {
-                    self.is_valid_funds(proposal_id, &native_token)
+                    Self::is_valid_funds(ctx, proposal_id, &native_token)
                 }
                 (KeyType::AUTHOR, Some(proposal_id)) => {
-                    self.is_valid_author(proposal_id, verifiers)
+                    Self::is_valid_author(ctx, proposal_id, verifiers)
                 }
-                (KeyType::COUNTER, _) => self.is_valid_counter(set_count),
+                (KeyType::COUNTER, _) => Self::is_valid_counter(ctx, set_count),
                 (KeyType::PROPOSAL_COMMIT, _) => {
-                    self.is_valid_proposal_commit()
+                    Self::is_valid_proposal_commit(ctx)
                 }
-                (KeyType::PARAMETER, _) => self.is_valid_parameter(tx_data),
-                (KeyType::BALANCE, _) => self.is_valid_balance(&native_token),
+                (KeyType::PARAMETER, _) => {
+                    Self::is_valid_parameter(ctx, tx_data)
+                }
+                (KeyType::BALANCE, _) => {
+                    Self::is_valid_balance(ctx, &native_token)
+                }
                 (KeyType::UNKNOWN_GOVERNANCE, _) => Err(Error::new_alloc(
                     format!("Unkown governance key change: {key}"),
                 )),
@@ -199,33 +191,16 @@ where
         }
         Ok(())
     }
-}
-
-impl<'view, 'ctx: 'view, S, CA, EVAL, PoS, TokenKeys>
-    GovernanceVp<'ctx, S, CA, EVAL, PoS, TokenKeys>
-where
-    S: StateRead,
-    CA: 'static + Clone,
-    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
-    PoS: proof_of_stake::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
-    TokenKeys: token::Keys,
-{
-    /// Instantiate a Governance VP
-    pub fn new(ctx: Ctx<'ctx, S, CA, EVAL>) -> Self {
-        Self {
-            ctx,
-            _marker: PhantomData,
-        }
-    }
 
     fn is_valid_init_proposal_key_set(
-        &self,
+        ctx: &'ctx CTX,
         keys: &BTreeSet<storage::Key>,
     ) -> Result<(bool, u64)> {
         let counter_key = gov_storage::get_counter_key();
-        let pre_counter: u64 = self.force_read(&counter_key, ReadType::Pre)?;
+        let pre_counter: u64 =
+            Self::force_read(ctx, &counter_key, ReadType::Pre)?;
         let post_counter: u64 =
-            self.force_read(&counter_key, ReadType::Post)?;
+            Self::force_read(ctx, &counter_key, ReadType::Post)?;
 
         if post_counter < pre_counter {
             return Ok((false, 0));
@@ -256,7 +231,7 @@ where
     }
 
     fn is_valid_vote_key(
-        &'view self,
+        ctx: &'ctx CTX,
         proposal_id: u64,
         key: &storage::Key,
         verifiers: &BTreeSet<Address>,
@@ -267,13 +242,14 @@ where
         let voting_end_epoch_key =
             gov_storage::get_voting_end_epoch_key(proposal_id);
 
-        let current_epoch = self.ctx.get_block_epoch()?;
+        let current_epoch = ctx.get_block_epoch()?;
 
-        let pre_counter: u64 = self.force_read(&counter_key, ReadType::Pre)?;
+        let pre_counter: u64 =
+            Self::force_read(ctx, &counter_key, ReadType::Pre)?;
         let pre_voting_start_epoch: Epoch =
-            self.force_read(&voting_start_epoch_key, ReadType::Pre)?;
+            Self::force_read(ctx, &voting_start_epoch_key, ReadType::Pre)?;
         let pre_voting_end_epoch: Epoch =
-            self.force_read(&voting_end_epoch_key, ReadType::Pre)?;
+            Self::force_read(ctx, &voting_end_epoch_key, ReadType::Pre)?;
 
         let voter =
             gov_storage::get_voter_address(key).ok_or(Error::new_alloc(
@@ -301,8 +277,7 @@ where
             validator.clone(),
         );
 
-        if self
-            .force_read::<ProposalVote>(&vote_key, ReadType::Post)
+        if Self::force_read::<ProposalVote>(ctx, &vote_key, ReadType::Post)
             .is_err()
         {
             return Err(Error::new_alloc(format!(
@@ -317,7 +292,7 @@ where
         // Voted outside of voting window. We dont check for validator because
         // if the proposal type is validator, we need to let
         // them vote for the entire voting window.
-        if !self.is_valid_voting_window(
+        if !Self::is_valid_voting_window(
             current_epoch,
             pre_voting_start_epoch,
             pre_voting_end_epoch,
@@ -332,7 +307,8 @@ where
         }
 
         // first check if validator, then check if delegator
-        let is_validator = self.is_validator(verifiers, voter, validator)?;
+        let is_validator =
+            Self::is_validator(ctx, verifiers, voter, validator)?;
 
         if is_validator {
             return is_valid_validator_voting_period(
@@ -350,7 +326,8 @@ where
             });
         }
 
-        let is_delegator = self.is_delegator(
+        let is_delegator = Self::is_delegator(
+            ctx,
             pre_voting_start_epoch,
             verifiers,
             voter,
@@ -368,13 +345,16 @@ where
     }
 
     /// Validate a content key
-    pub fn is_valid_content_key(&self, proposal_id: u64) -> Result<()> {
+    pub fn is_valid_content_key(
+        ctx: &'ctx CTX,
+        proposal_id: u64,
+    ) -> Result<()> {
         let content_key: storage::Key =
             gov_storage::get_content_key(proposal_id);
         let max_content_length_parameter_key =
             gov_storage::get_max_proposal_content_key();
 
-        let has_pre_content: bool = self.ctx.has_key_pre(&content_key)?;
+        let has_pre_content: bool = ctx.has_key_pre(&content_key)?;
         if has_pre_content {
             return Err(Error::new_alloc(format!(
                 "Proposal with id {proposal_id} already had content written \
@@ -382,11 +362,14 @@ where
             )));
         }
 
-        let max_content_length: usize =
-            self.force_read(&max_content_length_parameter_key, ReadType::Pre)?;
+        let max_content_length: usize = Self::force_read(
+            ctx,
+            &max_content_length_parameter_key,
+            ReadType::Pre,
+        )?;
         // Check the byte length
         let post_content_bytes =
-            self.ctx.read_bytes_post(&content_key)?.unwrap_or_default();
+            ctx.read_bytes_post(&content_key)?.unwrap_or_default();
 
         let is_valid = post_content_bytes.len() <= max_content_length;
         if !is_valid {
@@ -401,10 +384,13 @@ where
     }
 
     /// Validate the proposal type
-    pub fn is_valid_proposal_type(&self, proposal_id: u64) -> Result<()> {
+    pub fn is_valid_proposal_type(
+        ctx: &'ctx CTX,
+        proposal_id: u64,
+    ) -> Result<()> {
         let proposal_type_key = gov_storage::get_proposal_type_key(proposal_id);
         let proposal_type: ProposalType =
-            self.force_read(&proposal_type_key, ReadType::Post)?;
+            Self::force_read(ctx, &proposal_type_key, ReadType::Post)?;
 
         match proposal_type {
             ProposalType::PGFSteward(stewards) => {
@@ -446,8 +432,11 @@ where
                     };
                 } else if let Some(address) = stewards_added.first() {
                     let author_key = gov_storage::get_author_key(proposal_id);
-                    let author = self
-                        .force_read::<Address>(&author_key, ReadType::Post)?;
+                    let author = Self::force_read::<Address>(
+                        ctx,
+                        &author_key,
+                        ReadType::Post,
+                    )?;
                     let is_valid_author = address.eq(&author);
 
                     if !is_valid_author {
@@ -558,10 +547,13 @@ where
     }
 
     /// Validate a proposal code
-    pub fn is_valid_proposal_code(&self, proposal_id: u64) -> Result<()> {
+    pub fn is_valid_proposal_code(
+        ctx: &'ctx CTX,
+        proposal_id: u64,
+    ) -> Result<()> {
         let proposal_type_key = gov_storage::get_proposal_type_key(proposal_id);
         let proposal_type: ProposalType =
-            self.force_read(&proposal_type_key, ReadType::Post)?;
+            Self::force_read(ctx, &proposal_type_key, ReadType::Post)?;
 
         if !proposal_type.is_default_with_wasm() {
             return Err(Error::new_alloc(format!(
@@ -574,7 +566,7 @@ where
         let max_code_size_parameter_key =
             gov_storage::get_max_proposal_code_size_key();
 
-        let has_pre_code: bool = self.ctx.has_key_pre(&code_key)?;
+        let has_pre_code: bool = ctx.has_key_pre(&code_key)?;
         if has_pre_code {
             return Err(Error::new_alloc(format!(
                 "Proposal with id {proposal_id} already had wasm code written \
@@ -583,9 +575,8 @@ where
         }
 
         let max_proposal_length: usize =
-            self.force_read(&max_code_size_parameter_key, ReadType::Pre)?;
-        let post_code: Vec<u8> =
-            self.ctx.read_post(&code_key)?.unwrap_or_default();
+            Self::force_read(ctx, &max_code_size_parameter_key, ReadType::Pre)?;
+        let post_code: Vec<u8> = ctx.read_post(&code_key)?.unwrap_or_default();
 
         let wasm_code_below_max_len = post_code.len() <= max_proposal_length;
 
@@ -602,7 +593,10 @@ where
     }
 
     /// Validate an activation_epoch key
-    pub fn is_valid_activation_epoch(&self, proposal_id: u64) -> Result<()> {
+    pub fn is_valid_activation_epoch(
+        ctx: &'ctx CTX,
+        proposal_id: u64,
+    ) -> Result<()> {
         let start_epoch_key =
             gov_storage::get_voting_start_epoch_key(proposal_id);
         let end_epoch_key = gov_storage::get_voting_end_epoch_key(proposal_id);
@@ -613,7 +607,7 @@ where
             gov_storage::get_min_proposal_grace_epochs_key();
 
         let has_pre_activation_epoch =
-            self.ctx.has_key_pre(&activation_epoch_key)?;
+            ctx.has_key_pre(&activation_epoch_key)?;
         if has_pre_activation_epoch {
             return Err(Error::new_alloc(format!(
                 "Proposal with id {proposal_id} already had a grace epoch \
@@ -622,22 +616,22 @@ where
         }
 
         let start_epoch: Epoch =
-            self.force_read(&start_epoch_key, ReadType::Post)?;
+            Self::force_read(ctx, &start_epoch_key, ReadType::Post)?;
         let end_epoch: Epoch =
-            self.force_read(&end_epoch_key, ReadType::Post)?;
+            Self::force_read(ctx, &end_epoch_key, ReadType::Post)?;
         let activation_epoch: Epoch =
-            self.force_read(&activation_epoch_key, ReadType::Post)?;
+            Self::force_read(ctx, &activation_epoch_key, ReadType::Post)?;
         let min_grace_epochs: u64 =
-            self.force_read(&min_grace_epochs_key, ReadType::Pre)?;
+            Self::force_read(ctx, &min_grace_epochs_key, ReadType::Pre)?;
         let max_proposal_period: u64 =
-            self.force_read(&max_proposal_period, ReadType::Pre)?;
+            Self::force_read(ctx, &max_proposal_period, ReadType::Pre)?;
 
         let committing_epoch_key = gov_storage::get_committing_proposals_key(
             proposal_id,
             activation_epoch.into(),
         );
         let has_post_committing_epoch =
-            self.ctx.has_key_post(&committing_epoch_key)?;
+            ctx.has_key_post(&committing_epoch_key)?;
         if !has_post_committing_epoch {
             let error =
                 Error::new_const("Committing proposal key is missing present");
@@ -673,7 +667,10 @@ where
     }
 
     /// Validate a start_epoch key
-    pub fn is_valid_start_epoch(&self, proposal_id: u64) -> Result<()> {
+    pub fn is_valid_start_epoch(
+        ctx: &'ctx CTX,
+        proposal_id: u64,
+    ) -> Result<()> {
         let start_epoch_key =
             gov_storage::get_voting_start_epoch_key(proposal_id);
         let end_epoch_key = gov_storage::get_voting_end_epoch_key(proposal_id);
@@ -682,9 +679,9 @@ where
         let max_latency_paramater_key =
             gov_storage::get_max_proposal_latency_key();
 
-        let current_epoch = self.ctx.get_block_epoch()?;
+        let current_epoch = ctx.get_block_epoch()?;
 
-        let has_pre_start_epoch = self.ctx.has_key_pre(&start_epoch_key)?;
+        let has_pre_start_epoch = ctx.has_key_pre(&start_epoch_key)?;
         if has_pre_start_epoch {
             let error = Error::new_alloc(format!(
                 "Failed to validate start epoch. Proposal with id \
@@ -695,7 +692,7 @@ where
             return Err(error);
         }
 
-        let has_pre_end_epoch = self.ctx.has_key_pre(&end_epoch_key)?;
+        let has_pre_end_epoch = ctx.has_key_pre(&end_epoch_key)?;
         if has_pre_end_epoch {
             let error = Error::new_alloc(format!(
                 "Failed to validate start epoch. Proposal with id \
@@ -707,11 +704,11 @@ where
         }
 
         let start_epoch: Epoch =
-            self.force_read(&start_epoch_key, ReadType::Post)?;
+            Self::force_read(ctx, &start_epoch_key, ReadType::Post)?;
         let end_epoch: Epoch =
-            self.force_read(&end_epoch_key, ReadType::Post)?;
+            Self::force_read(ctx, &end_epoch_key, ReadType::Post)?;
         let min_period: u64 =
-            self.force_read(&min_period_parameter_key, ReadType::Pre)?;
+            Self::force_read(ctx, &min_period_parameter_key, ReadType::Pre)?;
 
         if end_epoch <= start_epoch {
             return Err(Error::new_alloc(format!(
@@ -730,7 +727,7 @@ where
         }
 
         let latency: u64 =
-            self.force_read(&max_latency_paramater_key, ReadType::Pre)?;
+            Self::force_read(ctx, &max_latency_paramater_key, ReadType::Pre)?;
         if checked!(start_epoch.0 - current_epoch.0)? > latency {
             return Err(Error::new_alloc(format!(
                 "Starting epoch {start_epoch} of the proposal with id \
@@ -753,7 +750,7 @@ where
     }
 
     /// Validate a end_epoch key
-    fn is_valid_end_epoch(&self, proposal_id: u64) -> Result<()> {
+    fn is_valid_end_epoch(ctx: &'ctx CTX, proposal_id: u64) -> Result<()> {
         let start_epoch_key =
             gov_storage::get_voting_start_epoch_key(proposal_id);
         let end_epoch_key = gov_storage::get_voting_end_epoch_key(proposal_id);
@@ -762,9 +759,9 @@ where
         let max_period_parameter_key =
             gov_storage::get_max_proposal_period_key();
 
-        let current_epoch = self.ctx.get_block_epoch()?;
+        let current_epoch = ctx.get_block_epoch()?;
 
-        let has_pre_start_epoch = self.ctx.has_key_pre(&start_epoch_key)?;
+        let has_pre_start_epoch = ctx.has_key_pre(&start_epoch_key)?;
         if has_pre_start_epoch {
             let error = Error::new_alloc(format!(
                 "Failed to validate end epoch. Proposal with id {proposal_id} \
@@ -774,7 +771,7 @@ where
             return Err(error);
         }
 
-        let has_pre_end_epoch = self.ctx.has_key_pre(&end_epoch_key)?;
+        let has_pre_end_epoch = ctx.has_key_pre(&end_epoch_key)?;
         if has_pre_end_epoch {
             let error = Error::new_alloc(format!(
                 "Failed to validate end epoch. Proposal with id {proposal_id} \
@@ -785,13 +782,13 @@ where
         }
 
         let start_epoch: Epoch =
-            self.force_read(&start_epoch_key, ReadType::Post)?;
+            Self::force_read(ctx, &start_epoch_key, ReadType::Post)?;
         let end_epoch: Epoch =
-            self.force_read(&end_epoch_key, ReadType::Post)?;
+            Self::force_read(ctx, &end_epoch_key, ReadType::Post)?;
         let min_period: u64 =
-            self.force_read(&min_period_parameter_key, ReadType::Pre)?;
+            Self::force_read(ctx, &min_period_parameter_key, ReadType::Pre)?;
         let max_period: u64 =
-            self.force_read(&max_period_parameter_key, ReadType::Pre)?;
+            Self::force_read(ctx, &max_period_parameter_key, ReadType::Pre)?;
 
         if end_epoch <= start_epoch || start_epoch <= current_epoch {
             let error = Error::new_alloc(format!(
@@ -818,23 +815,23 @@ where
 
     /// Validate a funds key
     pub fn is_valid_funds(
-        &self,
+        ctx: &'ctx CTX,
         proposal_id: u64,
         native_token_address: &Address,
     ) -> Result<()> {
         let funds_key = gov_storage::get_funds_key(proposal_id);
         let balance_key =
-            TokenKeys::balance_key(native_token_address, self.ctx.address);
+            TokenKeys::balance_key(native_token_address, &ADDRESS);
         let min_funds_parameter_key = gov_storage::get_min_proposal_fund_key();
 
         let min_funds_parameter: token::Amount =
-            self.force_read(&min_funds_parameter_key, ReadType::Pre)?;
+            Self::force_read(ctx, &min_funds_parameter_key, ReadType::Pre)?;
         let pre_balance: Option<token::Amount> =
-            self.ctx.pre().read(&balance_key)?;
+            ctx.pre().read(&balance_key)?;
         let post_balance: token::Amount =
-            self.force_read(&balance_key, ReadType::Post)?;
+            Self::force_read(ctx, &balance_key, ReadType::Post)?;
         let post_funds: token::Amount =
-            self.force_read(&funds_key, ReadType::Post)?;
+            Self::force_read(ctx, &funds_key, ReadType::Post)?;
 
         pre_balance.map_or_else(
             // null pre balance
@@ -883,18 +880,21 @@ where
     }
 
     /// Validate a balance key
-    fn is_valid_balance(&self, native_token_address: &Address) -> Result<()> {
+    fn is_valid_balance(
+        ctx: &'ctx CTX,
+        native_token_address: &Address,
+    ) -> Result<()> {
         let balance_key =
-            TokenKeys::balance_key(native_token_address, self.ctx.address);
+            TokenKeys::balance_key(native_token_address, &ADDRESS);
         let min_funds_parameter_key = gov_storage::get_min_proposal_fund_key();
 
         let pre_balance: Option<token::Amount> =
-            self.ctx.pre().read(&balance_key)?;
+            ctx.pre().read(&balance_key)?;
 
         let min_funds_parameter: token::Amount =
-            self.force_read(&min_funds_parameter_key, ReadType::Pre)?;
+            Self::force_read(ctx, &min_funds_parameter_key, ReadType::Pre)?;
         let post_balance: token::Amount =
-            self.force_read(&balance_key, ReadType::Post)?;
+            Self::force_read(ctx, &balance_key, ReadType::Post)?;
 
         let balance_is_valid = if let Some(pre_balance) = pre_balance {
             post_balance > pre_balance
@@ -913,13 +913,13 @@ where
 
     /// Validate a author key
     pub fn is_valid_author(
-        &self,
+        ctx: &'ctx CTX,
         proposal_id: u64,
         verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
         let author_key = gov_storage::get_author_key(proposal_id);
 
-        let has_pre_author = self.ctx.has_key_pre(&author_key)?;
+        let has_pre_author = ctx.has_key_pre(&author_key)?;
         if has_pre_author {
             return Err(Error::new_alloc(format!(
                 "Proposal with id {proposal_id} already had an author written \
@@ -927,15 +927,13 @@ where
             )));
         }
 
-        let author = self.force_read(&author_key, ReadType::Post)?;
-        namada_account::exists(&self.ctx.pre(), &author).true_or_else(
-            || {
-                Error::new_alloc(format!(
-                    "No author account {author} could be found for the \
-                     proposal with id {proposal_id}"
-                ))
-            },
-        )?;
+        let author = Self::force_read(ctx, &author_key, ReadType::Post)?;
+        namada_account::exists(&ctx.pre(), &author).true_or_else(|| {
+            Error::new_alloc(format!(
+                "No author account {author} could be found for the proposal \
+                 with id {proposal_id}"
+            ))
+        })?;
 
         verifiers.contains(&author).ok_or_else(|| {
             Error::new_alloc(format!(
@@ -946,11 +944,12 @@ where
     }
 
     /// Validate a counter key
-    pub fn is_valid_counter(&self, set_count: u64) -> Result<()> {
+    pub fn is_valid_counter(ctx: &'ctx CTX, set_count: u64) -> Result<()> {
         let counter_key = gov_storage::get_counter_key();
-        let pre_counter: u64 = self.force_read(&counter_key, ReadType::Pre)?;
+        let pre_counter: u64 =
+            Self::force_read(ctx, &counter_key, ReadType::Pre)?;
         let post_counter: u64 =
-            self.force_read(&counter_key, ReadType::Post)?;
+            Self::force_read(ctx, &counter_key, ReadType::Post)?;
 
         let expected_counter = checked!(pre_counter + set_count)?;
         let valid_counter = expected_counter == post_counter;
@@ -964,11 +963,12 @@ where
     }
 
     /// Validate a commit key
-    pub fn is_valid_proposal_commit(&self) -> Result<()> {
+    pub fn is_valid_proposal_commit(ctx: &'ctx CTX) -> Result<()> {
         let counter_key = gov_storage::get_counter_key();
-        let pre_counter: u64 = self.force_read(&counter_key, ReadType::Pre)?;
+        let pre_counter: u64 =
+            Self::force_read(ctx, &counter_key, ReadType::Pre)?;
         let post_counter: u64 =
-            self.force_read(&counter_key, ReadType::Post)?;
+            Self::force_read(ctx, &counter_key, ReadType::Post)?;
 
         // NOTE: can't do pre_counter + set_count == post_counter here
         // because someone may update an empty proposal that just
@@ -985,7 +985,7 @@ where
 
     /// Validate a governance parameter
     pub fn is_valid_parameter(
-        &self,
+        ctx: &'ctx CTX,
         batched_tx: &BatchedTxRef<'_>,
     ) -> Result<()> {
         let BatchedTxRef { tx, cmt } = batched_tx;
@@ -997,21 +997,22 @@ where
                 ))
             },
             |data| {
-                is_proposal_accepted(&self.ctx.pre(), data.as_ref())?
-                    .ok_or_else(|| {
+                is_proposal_accepted(&ctx.pre(), data.as_ref())?.ok_or_else(
+                    || {
                         Error::new_const(
                             "Governance parameter changes can only be \
                              performed by a governance proposal that has been \
                              accepted",
                         )
-                    })
+                    },
+                )
             },
         )
     }
 
     /// Check if a vote is from a validator
     pub fn is_validator(
-        &'view self,
+        ctx: &'ctx CTX,
         verifiers: &BTreeSet<Address>,
         voter: &Address,
         validator: &Address,
@@ -1020,14 +1021,14 @@ where
             return Ok(false);
         }
 
-        let is_validator = PoS::is_validator(&self.ctx.pre(), voter)?;
+        let is_validator = PoS::is_validator(&ctx.pre(), voter)?;
 
         Ok(is_validator && verifiers.contains(voter))
     }
 
     /// Private method to read from storage data that are 100% in storage.
     fn force_read<T>(
-        &self,
+        ctx: &'ctx CTX,
         key: &storage::Key,
         read_type: ReadType,
     ) -> Result<T>
@@ -1035,8 +1036,8 @@ where
         T: BorshDeserialize,
     {
         let res = match read_type {
-            ReadType::Pre => self.ctx.pre().read::<T>(key),
-            ReadType::Post => self.ctx.post().read::<T>(key),
+            ReadType::Pre => ctx.pre().read::<T>(key),
+            ReadType::Post => ctx.post().read::<T>(key),
         }?;
 
         if let Some(data) = res {
@@ -1049,7 +1050,6 @@ where
     }
 
     fn is_valid_voting_window(
-        &self,
         current_epoch: Epoch,
         start_epoch: Epoch,
         end_epoch: Epoch,
@@ -1068,7 +1068,7 @@ where
 
     /// Check if a vote is from a delegator
     pub fn is_delegator(
-        &'view self,
+        ctx: &'ctx CTX,
         epoch: Epoch,
         verifiers: &BTreeSet<Address>,
         address: &Address,
@@ -1076,7 +1076,7 @@ where
     ) -> Result<bool> {
         Ok(address != delegation_address
             && verifiers.contains(address)
-            && PoS::is_delegator(&self.ctx.pre(), address, Some(epoch))?)
+            && PoS::is_delegator(&ctx.pre(), address, Some(epoch))?)
     }
 }
 
@@ -1188,7 +1188,7 @@ mod test {
     use namada_vm::wasm::run::VpEvalWasm;
     use namada_vm::wasm::VpCache;
     use namada_vm::{wasm, WasmCacheRwAccess};
-    use namada_vp::native_vp::{Ctx, CtxPreStorageRead, NativeVp};
+    use namada_vp::native_vp::{self, CtxPreStorageRead};
 
     use crate::storage::keys::{
         get_activation_epoch_key, get_author_key, get_committing_proposals_key,
@@ -1200,11 +1200,10 @@ mod test {
 
     type CA = WasmCacheRwAccess;
     type Eval<S> = VpEvalWasm<<S as StateRead>::D, <S as StateRead>::H, CA>;
+    type Ctx<'ctx, S> = native_vp::Ctx<'ctx, S, VpCache<CA>, Eval<S>>;
     type GovernanceVp<'ctx, S> = super::GovernanceVp<
         'ctx,
-        S,
-        VpCache<CA>,
-        Eval<S>,
+        Ctx<'ctx, S>,
         namada_proof_of_stake::Store<
             CtxPreStorageRead<'ctx, 'ctx, S, VpCache<CA>, Eval<S>>,
         >,
@@ -1279,10 +1278,14 @@ mod test {
             vp_wasm_cache,
         );
 
-        let governance_vp = GovernanceVp::new(ctx);
         // this should return true because state has been stored
         assert_matches!(
-            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
+            GovernanceVp::validate_tx(
+                &ctx,
+                &batched_tx,
+                &keys_changed,
+                &verifiers
+            ),
             Ok(_)
         );
     }
@@ -1538,10 +1541,14 @@ mod test {
             vp_wasm_cache,
         );
 
-        let governance_vp = GovernanceVp::new(ctx);
         // this should return true because state has been stored
         assert_matches!(
-            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
+            GovernanceVp::validate_tx(
+                &ctx,
+                &batched_tx,
+                &keys_changed,
+                &verifiers
+            ),
             Ok(_)
         );
 
@@ -1634,9 +1641,12 @@ mod test {
             vp_wasm_cache,
         );
 
-        let governance_vp = GovernanceVp::new(ctx);
-        let result =
-            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers); // this should fail
+        let result = GovernanceVp::validate_tx(
+            &ctx,
+            &batched_tx,
+            &keys_changed,
+            &verifiers,
+        ); // this should fail
         assert_matches!(&result, Err(_));
 
         if result.is_err() {
@@ -1732,9 +1742,12 @@ mod test {
             vp_wasm_cache,
         );
 
-        let governance_vp = GovernanceVp::new(ctx);
-        let result =
-            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers);
+        let result = GovernanceVp::validate_tx(
+            &ctx,
+            &batched_tx,
+            &keys_changed,
+            &verifiers,
+        );
         assert_matches!(&result, Ok(_));
 
         if result.is_err() {
@@ -1830,10 +1843,14 @@ mod test {
             vp_wasm_cache,
         );
 
-        let governance_vp = GovernanceVp::new(ctx);
         // this should return true because state has been stored
         assert_matches!(
-            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
+            GovernanceVp::validate_tx(
+                &ctx,
+                &batched_tx,
+                &keys_changed,
+                &verifiers
+            ),
             Err(_)
         );
     }
@@ -1908,10 +1925,14 @@ mod test {
             vp_wasm_cache,
         );
 
-        let governance_vp = GovernanceVp::new(ctx);
         // this should return true because state has been stored
         assert_matches!(
-            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
+            GovernanceVp::validate_tx(
+                &ctx,
+                &batched_tx,
+                &keys_changed,
+                &verifiers
+            ),
             Err(_)
         );
     }
@@ -1986,10 +2007,14 @@ mod test {
             vp_wasm_cache,
         );
 
-        let governance_vp = GovernanceVp::new(ctx);
         // this should return true because state has been stored
         assert_matches!(
-            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
+            GovernanceVp::validate_tx(
+                &ctx,
+                &batched_tx,
+                &keys_changed,
+                &verifiers
+            ),
             Err(_)
         );
     }
@@ -2082,10 +2107,14 @@ mod test {
             vp_wasm_cache,
         );
 
-        let governance_vp = GovernanceVp::new(ctx);
         // this should return true because state has been stored
         assert_matches!(
-            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
+            GovernanceVp::validate_tx(
+                &ctx,
+                &batched_tx,
+                &keys_changed,
+                &verifiers
+            ),
             Err(_)
         );
     }
@@ -2178,10 +2207,14 @@ mod test {
             vp_wasm_cache,
         );
 
-        let governance_vp = GovernanceVp::new(ctx);
         // this should return true because state has been stored
         assert_matches!(
-            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
+            GovernanceVp::validate_tx(
+                &ctx,
+                &batched_tx,
+                &keys_changed,
+                &verifiers
+            ),
             Err(_)
         );
     }
@@ -2256,10 +2289,14 @@ mod test {
             vp_wasm_cache.clone(),
         );
 
-        let governance_vp = GovernanceVp::new(ctx);
         // this should return true because state has been stored
         assert_matches!(
-            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
+            GovernanceVp::validate_tx(
+                &ctx,
+                &batched_tx,
+                &keys_changed,
+                &verifiers
+            ),
             Ok(_)
         );
 
@@ -2307,10 +2344,13 @@ mod test {
             vp_wasm_cache,
         );
 
-        let governance_vp = GovernanceVp::new(ctx);
-
         assert_matches!(
-            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
+            GovernanceVp::validate_tx(
+                &ctx,
+                &batched_tx,
+                &keys_changed,
+                &verifiers
+            ),
             Ok(_)
         );
     }
@@ -2385,10 +2425,14 @@ mod test {
             vp_wasm_cache.clone(),
         );
 
-        let governance_vp = GovernanceVp::new(ctx);
         // this should return true because state has been stored
         assert_matches!(
-            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
+            GovernanceVp::validate_tx(
+                &ctx,
+                &batched_tx,
+                &keys_changed,
+                &verifiers
+            ),
             Ok(_)
         );
 
@@ -2436,10 +2480,13 @@ mod test {
             vp_wasm_cache,
         );
 
-        let governance_vp = GovernanceVp::new(ctx);
-
         assert_matches!(
-            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
+            GovernanceVp::validate_tx(
+                &ctx,
+                &batched_tx,
+                &keys_changed,
+                &verifiers
+            ),
             Err(_)
         );
     }
@@ -2514,10 +2561,14 @@ mod test {
             vp_wasm_cache.clone(),
         );
 
-        let governance_vp = GovernanceVp::new(ctx);
         // this should return true because state has been stored
         assert_matches!(
-            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
+            GovernanceVp::validate_tx(
+                &ctx,
+                &batched_tx,
+                &keys_changed,
+                &verifiers
+            ),
             Ok(_)
         );
 
@@ -2565,10 +2616,13 @@ mod test {
             vp_wasm_cache,
         );
 
-        let governance_vp = GovernanceVp::new(ctx);
-
         assert_matches!(
-            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
+            GovernanceVp::validate_tx(
+                &ctx,
+                &batched_tx,
+                &keys_changed,
+                &verifiers
+            ),
             Err(_)
         );
     }
@@ -2643,10 +2697,13 @@ mod test {
             vp_wasm_cache.clone(),
         );
 
-        let governance_vp = GovernanceVp::new(ctx);
-
         assert_matches!(
-            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
+            GovernanceVp::validate_tx(
+                &ctx,
+                &batched_tx,
+                &keys_changed,
+                &verifiers
+            ),
             Ok(_)
         );
 
@@ -2711,10 +2768,13 @@ mod test {
             vp_wasm_cache,
         );
 
-        let governance_vp = GovernanceVp::new(ctx);
-
         assert_matches!(
-            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
+            GovernanceVp::validate_tx(
+                &ctx,
+                &batched_tx,
+                &keys_changed,
+                &verifiers
+            ),
             Ok(_)
         );
     }
@@ -2789,10 +2849,13 @@ mod test {
             vp_wasm_cache.clone(),
         );
 
-        let governance_vp = GovernanceVp::new(ctx);
-
         assert_matches!(
-            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
+            GovernanceVp::validate_tx(
+                &ctx,
+                &batched_tx,
+                &keys_changed,
+                &verifiers
+            ),
             Ok(_)
         );
 
@@ -2857,10 +2920,13 @@ mod test {
             vp_wasm_cache,
         );
 
-        let governance_vp = GovernanceVp::new(ctx);
-
         assert_matches!(
-            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
+            GovernanceVp::validate_tx(
+                &ctx,
+                &batched_tx,
+                &keys_changed,
+                &verifiers
+            ),
             Err(_)
         );
     }
@@ -2935,10 +3001,13 @@ mod test {
             vp_wasm_cache.clone(),
         );
 
-        let governance_vp = GovernanceVp::new(ctx);
-
         assert_matches!(
-            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
+            GovernanceVp::validate_tx(
+                &ctx,
+                &batched_tx,
+                &keys_changed,
+                &verifiers
+            ),
             Ok(_)
         );
 
@@ -3003,10 +3072,13 @@ mod test {
             vp_wasm_cache,
         );
 
-        let governance_vp = GovernanceVp::new(ctx);
-
         assert_matches!(
-            governance_vp.validate_tx(&batched_tx, &keys_changed, &verifiers),
+            GovernanceVp::validate_tx(
+                &ctx,
+                &batched_tx,
+                &keys_changed,
+                &verifiers
+            ),
             Err(_)
         );
     }

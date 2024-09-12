@@ -59,12 +59,10 @@ pub type ParametersVp<'ctx, CTX> = parameters::vp::ParametersVp<
 >;
 
 /// Native governance VP
-pub type GovernanceVp<'a, S, CA> = governance::vp::GovernanceVp<
-    'a,
-    S,
-    VpCache<CA>,
-    Eval<S, CA>,
-    PosPreStore<'a, S, CA>,
+pub type GovernanceVp<'ctx, CTX> = governance::vp::GovernanceVp<
+    'ctx,
+    CTX,
+    proof_of_stake::Store<<CTX as VpEnv<'ctx>>::Pre>,
     TokenKeys,
 >;
 

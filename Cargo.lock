@@ -5042,6 +5042,7 @@ dependencies = [
  "namada_tx",
  "namada_vm",
  "namada_vp",
+ "namada_vp_env",
  "proptest",
  "serde",
  "serde_json",
