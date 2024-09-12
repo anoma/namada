@@ -6,36 +6,27 @@ use std::marker::PhantomData;
 use namada_core::address::{Address, InternalAddress};
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::storage::Key;
-use namada_state::StateRead;
 use namada_systems::trans_token::{self as token, Amount};
 use namada_tx::BatchedTxRef;
-use namada_vp::native_vp::{self, Ctx, Error, NativeVp, Result, VpEvaluator};
-use namada_vp::VpEnv;
+use namada_vp_env::{Error, Result, VpEnv};
 
 /// Validity predicate for non-usable tokens.
 ///
 /// All this VP does is reject NUT transfers whose destination
 /// address is not the Bridge pool escrow address.
-pub struct NonUsableTokens<'ctx, S, CA, EVAL, TokenKeys>
-where
-    S: 'static + StateRead,
-{
-    /// Context to interact with the host structures.
-    pub ctx: Ctx<'ctx, S, CA, EVAL>,
+pub struct NonUsableTokens<'ctx, CTX, TokenKeys> {
     /// Generic types for DI
-    pub _marker: PhantomData<TokenKeys>,
+    pub _marker: PhantomData<(&'ctx CTX, TokenKeys)>,
 }
 
-impl<'view, 'ctx: 'view, S, CA, EVAL, TokenKeys> NativeVp<'view>
-    for NonUsableTokens<'ctx, S, CA, EVAL, TokenKeys>
+impl<'ctx, CTX, TokenKeys> NonUsableTokens<'ctx, CTX, TokenKeys>
 where
-    S: 'static + StateRead,
-    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
-    CA: 'static + Clone,
+    CTX: VpEnv<'ctx> + namada_tx::action::Read<Err = Error>,
     TokenKeys: token::Keys,
 {
-    fn validate_tx(
-        &'view self,
+    /// Run the validity predicate
+    pub fn validate_tx(
+        ctx: &'ctx CTX,
         _: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
@@ -65,10 +56,8 @@ where
         });
 
         for (changed_key, token_owner) in nut_owners {
-            let pre: Amount =
-                self.ctx.read_pre(changed_key)?.unwrap_or_default();
-            let post: Amount =
-                self.ctx.read_post(changed_key)?.unwrap_or_default();
+            let pre: Amount = ctx.read_pre(changed_key)?.unwrap_or_default();
+            let post: Amount = ctx.read_post(changed_key)?.unwrap_or_default();
 
             match token_owner {
                 // the NUT balance of the bridge pool should increase
@@ -80,7 +69,7 @@ where
                             post_amount = ?post,
                             "Bridge pool balance should have increased"
                         );
-                        return Err(native_vp::Error::new_alloc(format!(
+                        return Err(Error::new_alloc(format!(
                             "Bridge pool balance should have increased. The \
                              previous balance was {pre:?}, the post balance \
                              is {post:?}.",
@@ -96,7 +85,7 @@ where
                             post_amount = ?post,
                             "Balance should have decreased"
                         );
-                        return Err(native_vp::Error::new_alloc(format!(
+                        return Err(Error::new_alloc(format!(
                             "Balance should have decreased. The previous \
                              balance was {pre:?}, the post balance is \
                              {post:?}."
@@ -107,22 +96,6 @@ where
         }
 
         Ok(())
-    }
-}
-
-impl<'ctx, S, CA, EVAL, TokenKeys> NonUsableTokens<'ctx, S, CA, EVAL, TokenKeys>
-where
-    S: 'static + StateRead,
-    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
-    CA: 'static + Clone,
-    TokenKeys: token::Keys,
-{
-    /// Instantiate NUT VP
-    pub fn new(ctx: Ctx<'ctx, S, CA, EVAL>) -> Self {
-        Self {
-            ctx,
-            _marker: PhantomData,
-        }
     }
 }
 
@@ -137,27 +110,25 @@ mod test_nuts {
     use namada_core::storage::TxIndex;
     use namada_gas::{TxGasMeter, VpGasMeter};
     use namada_state::testing::TestState;
-    use namada_state::StorageWrite;
+    use namada_state::{StateRead, StorageWrite};
     use namada_trans_token::storage_key::balance_key;
     use namada_tx::data::TxType;
     use namada_tx::Tx;
     use namada_vm::wasm::run::VpEvalWasm;
     use namada_vm::wasm::VpCache;
     use namada_vm::WasmCacheRwAccess;
+    use namada_vp::native_vp;
     use proptest::prelude::*;
 
     use super::*;
     use crate::storage::wrapped_erc20s;
 
     type CA = WasmCacheRwAccess;
-    type Eval = VpEvalWasm<
-        <TestState as StateRead>::D,
-        <TestState as StateRead>::H,
-        CA,
-    >;
+    type Eval<S> = VpEvalWasm<<S as StateRead>::D, <S as StateRead>::H, CA>;
+    type Ctx<'ctx, S> = native_vp::Ctx<'ctx, S, VpCache<CA>, Eval<S>>;
     type TokenKeys = namada_token::Store<()>;
-    type NonUsableTokens<'a, S> =
-        super::NonUsableTokens<'a, S, VpCache<CA>, Eval, TokenKeys>;
+    type NonUsableTokens<'ctx, S> =
+        super::NonUsableTokens<'ctx, Ctx<'ctx, S>, TokenKeys>;
 
     /// Run a VP check on a NUT transfer between the two provided addresses.
     fn check_nut_transfer(src: Address, dst: Address) -> bool {
@@ -215,7 +186,7 @@ mod test_nuts {
             &TxGasMeter::new(u64::MAX),
         ));
         let batched_tx = tx.batch_ref_first_tx().unwrap();
-        let ctx = Ctx::<_, VpCache<WasmCacheRwAccess>, Eval>::new(
+        let ctx = Ctx::new(
             &Address::Internal(InternalAddress::Nut(DAI_ERC20_ETH_ADDRESS)),
             &state,
             batched_tx.tx,
@@ -226,25 +197,23 @@ mod test_nuts {
             &verifiers,
             VpCache::new(temp_dir(), 100usize),
         );
-        let vp = NonUsableTokens::new(ctx);
 
         // print debug info in case we run into failures
         for key in &keys_changed {
-            let pre: Amount = vp
-                .ctx
-                .read_pre(key)
-                .expect("Test failed")
-                .unwrap_or_default();
-            let post: Amount = vp
-                .ctx
-                .read_post(key)
-                .expect("Test failed")
-                .unwrap_or_default();
+            let pre: Amount =
+                ctx.read_pre(key).expect("Test failed").unwrap_or_default();
+            let post: Amount =
+                ctx.read_post(key).expect("Test failed").unwrap_or_default();
             println!("{key}: PRE={pre:?} POST={post:?}");
         }
 
-        vp.validate_tx(&batched_tx, &keys_changed, &verifiers)
-            .map_or_else(|_| false, |()| true)
+        NonUsableTokens::validate_tx(
+            &ctx,
+            &batched_tx,
+            &keys_changed,
+            &verifiers,
+        )
+        .map_or_else(|_| false, |()| true)
     }
 
     proptest! {

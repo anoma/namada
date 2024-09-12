@@ -101,8 +101,8 @@ pub type EthBridgePoolVp<'ctx, CTX> =
     eth_bridge::vp::BridgePool<'ctx, CTX, TokenKeys>;
 
 /// Native ETH bridge NUT VP
-pub type EthBridgeNutVp<'a, S, CA> =
-    eth_bridge::vp::NonUsableTokens<'a, S, VpCache<CA>, Eval<S, CA>, TokenKeys>;
+pub type EthBridgeNutVp<'ctx, CTX> =
+    eth_bridge::vp::NonUsableTokens<'ctx, CTX, TokenKeys>;
 
 /// Governance store implementation over the native prior context
 pub type GovPreStore<'a, S, CA> =

@@ -1322,7 +1322,7 @@ fn eth_bridge_nut(c: &mut Criterion) {
         Address::Internal(InternalAddress::Nut(native_erc20_addres));
     let gas_meter =
         RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(u64::MAX)));
-    let nut = EthBridgeNutVp::new(Ctx::new(
+    let ctx = Ctx::new(
         &vp_address,
         &shell.state,
         &signed_tx.tx,
@@ -1332,15 +1332,16 @@ fn eth_bridge_nut(c: &mut Criterion) {
         &keys_changed,
         &verifiers,
         shell.vp_wasm_cache.clone(),
-    ));
+    );
 
     c.bench_function("vp_eth_bridge_nut", |b| {
         b.iter(|| {
             assert!(
-                nut.validate_tx(
+                EthBridgeNutVp::validate_tx(
+                    &ctx,
                     &signed_tx.to_ref(),
-                    nut.ctx.keys_changed,
-                    nut.ctx.verifiers,
+                    ctx.keys_changed,
+                    ctx.verifiers,
                 )
                 .is_ok()
             )

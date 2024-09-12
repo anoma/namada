@@ -1305,15 +1305,13 @@ where
                                 .map_err(Error::NativeVpError)
                             }
                             InternalAddress::Nut(_) => {
-                                let non_usable_tokens =
-                                    EthBridgeNutVp::new(ctx);
-                                non_usable_tokens
-                                    .validate_tx(
-                                        batched_tx,
-                                        &keys_changed,
-                                        &verifiers,
-                                    )
-                                    .map_err(Error::NativeVpError)
+                                EthBridgeNutVp::validate_tx(
+                                    &ctx,
+                                    batched_tx,
+                                    &keys_changed,
+                                    &verifiers,
+                                )
+                                .map_err(Error::NativeVpError)
                             }
                             internal_addr @ (InternalAddress::IbcToken(_)
                             | InternalAddress::Erc20(_)) => {

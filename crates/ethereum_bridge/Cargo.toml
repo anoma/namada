@@ -41,7 +41,6 @@ namada_systems = { path = "../systems" }
 namada_trans_token = {path = "../trans_token"}
 namada_tx = {path = "../tx"}
 namada_vote_ext = {path = "../vote_ext"}
-namada_vp = {path = "../vp"}
 namada_vp_env = {path = "../vp_env"}
 
 borsh.workspace = true
@@ -65,6 +64,7 @@ namada_state = { path = "../state", features = ["testing"] }
 namada_token = {path = "../token", features = ["testing"]}
 namada_tx = {path = "../tx", features = ["testing"]}
 namada_vm = {path = "../vm", features = ["testing"]}
+namada_vp = {path = "../vp"}
 
 assert_matches.workspace = true
 data-encoding.workspace = true

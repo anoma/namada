@@ -3717,7 +3717,6 @@ dependencies = [
  "namada_trans_token",
  "namada_tx",
  "namada_vote_ext",
- "namada_vp",
  "namada_vp_env",
  "serde",
  "smooth-operator",
