@@ -93,8 +93,8 @@ pub type MaspVp<'a, S, CA> = token::vp::MaspVp<
 >;
 
 /// Native ETH bridge VP
-pub type EthBridgeVp<'a, S, CA> =
-    eth_bridge::vp::EthBridge<'a, S, VpCache<CA>, Eval<S, CA>, TokenKeys>;
+pub type EthBridgeVp<'ctx, CTX> =
+    eth_bridge::vp::EthBridge<'ctx, CTX, TokenKeys>;
 
 /// Native ETH bridge pool VP
 pub type EthBridgePoolVp<'ctx, CTX> =

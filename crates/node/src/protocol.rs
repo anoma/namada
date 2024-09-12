@@ -1287,14 +1287,13 @@ where
                                 .map_err(Error::NativeVpError)
                             }
                             InternalAddress::EthBridge => {
-                                let bridge = EthBridgeVp::new(ctx);
-                                bridge
-                                    .validate_tx(
-                                        batched_tx,
-                                        &keys_changed,
-                                        &verifiers,
-                                    )
-                                    .map_err(Error::NativeVpError)
+                                EthBridgeVp::validate_tx(
+                                    &ctx,
+                                    batched_tx,
+                                    &keys_changed,
+                                    &verifiers,
+                                )
+                                .map_err(Error::NativeVpError)
                             }
                             InternalAddress::EthBridgePool => {
                                 EthBridgePoolVp::validate_tx(

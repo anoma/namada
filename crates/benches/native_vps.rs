@@ -1393,7 +1393,7 @@ fn eth_bridge(c: &mut Criterion) {
     let vp_address = Address::Internal(InternalAddress::EthBridge);
     let gas_meter =
         RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(u64::MAX)));
-    let eth_bridge = EthBridgeVp::new(Ctx::new(
+    let ctx = Ctx::new(
         &vp_address,
         &shell.state,
         &signed_tx.tx,
@@ -1403,18 +1403,18 @@ fn eth_bridge(c: &mut Criterion) {
         &keys_changed,
         &verifiers,
         shell.vp_wasm_cache.clone(),
-    ));
+    );
 
     c.bench_function("vp_eth_bridge", |b| {
         b.iter(|| {
             assert!(
-                eth_bridge
-                    .validate_tx(
-                        &signed_tx.to_ref(),
-                        eth_bridge.ctx.keys_changed,
-                        eth_bridge.ctx.verifiers,
-                    )
-                    .is_ok()
+                EthBridgeVp::validate_tx(
+                    &ctx,
+                    &signed_tx.to_ref(),
+                    ctx.keys_changed,
+                    ctx.verifiers,
+                )
+                .is_ok()
             )
         })
     });
