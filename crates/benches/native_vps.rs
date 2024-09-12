@@ -1246,7 +1246,7 @@ fn pgf(c: &mut Criterion) {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new(u64::MAX),
         ));
-        let pgf = PgfVp::new(Ctx::new(
+        let ctx = Ctx::new(
             &Address::Internal(InternalAddress::Pgf),
             &shell.state,
             &signed_tx.tx,
@@ -1256,15 +1256,16 @@ fn pgf(c: &mut Criterion) {
             &keys_changed,
             &verifiers,
             shell.vp_wasm_cache.clone(),
-        ));
+        );
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
                 assert!(
-                    pgf.validate_tx(
+                    PgfVp::validate_tx(
+                        &ctx,
                         &signed_tx.to_ref(),
-                        pgf.ctx.keys_changed,
-                        pgf.ctx.verifiers,
+                        ctx.keys_changed,
+                        ctx.verifiers,
                     )
                     .is_ok()
                 )

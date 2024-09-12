@@ -67,8 +67,7 @@ pub type GovernanceVp<'ctx, CTX> = governance::vp::GovernanceVp<
 >;
 
 /// Native PGF VP
-pub type PgfVp<'a, S, CA> =
-    governance::vp::pgf::PgfVp<'a, S, VpCache<CA>, Eval<S, CA>>;
+pub type PgfVp<'ctx, CTX> = governance::vp::pgf::PgfVp<'ctx, CTX>;
 
 /// Native multitoken VP
 pub type MultitokenVp<'a, S, CA> = token::vp::MultitokenVp<
