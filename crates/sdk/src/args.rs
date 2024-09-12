@@ -2492,6 +2492,13 @@ pub trait TxBuilder<C: NamadaTypes>: Sized {
             ..x
         })
     }
+    /// Change memo
+    fn memo(self, memo: Vec<u8>) -> Self {
+        self.tx(|x| Tx {
+            memo: Some(memo),
+            ..x
+        })
+    }
 }
 
 impl<C: NamadaTypes> TxBuilder<C> for Tx<C> {
