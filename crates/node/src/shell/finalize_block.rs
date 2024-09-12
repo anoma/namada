@@ -1339,8 +1339,8 @@ mod test_finalize_block {
     use namada_sdk::validation::ParametersVp;
     use namada_test_utils::tx_data::TxWriteData;
     use namada_test_utils::TestWasms;
+    use namada_vm::wasm::run::VpEvalWasm;
     use namada_vote_ext::ethereum_events;
-    use namada_vp::native_vp::NativeVp;
     use proof_of_stake::{bond_tokens, PosParams};
     use test_log::test;
 
@@ -5650,7 +5650,7 @@ mod test_finalize_block {
         let keys_changed = BTreeSet::from([min_confirmations_key()]);
         let verifiers = BTreeSet::default();
         let batched_tx = tx.batch_ref_first_tx().unwrap();
-        let ctx = namada_vp::native_vp::Ctx::new(
+        let ctx = namada_vp::native_vp::Ctx::<_, _, VpEvalWasm<_, _, _>>::new(
             shell.mode.get_validator_address().expect("Test failed"),
             shell.state.read_only(),
             batched_tx.tx,
@@ -5661,11 +5661,14 @@ mod test_finalize_block {
             &verifiers,
             shell.vp_wasm_cache.clone(),
         );
-        let parameters = ParametersVp::new(ctx);
         assert!(
-            parameters
-                .validate_tx(&batched_tx, &keys_changed, &verifiers)
-                .is_ok()
+            ParametersVp::validate_tx(
+                &ctx,
+                &batched_tx,
+                &keys_changed,
+                &verifiers
+            )
+            .is_ok()
         );
 
         // we advance forward to the next epoch

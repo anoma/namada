@@ -62,8 +62,13 @@ use namada_node::bench_utils::{
     TX_BRIDGE_POOL_WASM, TX_IBC_WASM, TX_INIT_PROPOSAL_WASM, TX_RESIGN_STEWARD,
     TX_TRANSFER_WASM, TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL_WASM,
 };
-use namada_vp::native_vp::{Ctx, NativeVp};
+use namada_vm::wasm::run::VpEvalWasm;
+use namada_vm::wasm::VpCache;
+use namada_vp::native_vp::{self, NativeVp};
 use rand_core::OsRng;
+
+type Ctx<'ctx, S, D, H, CA> =
+    native_vp::Ctx<'ctx, S, VpCache<CA>, VpEvalWasm<D, H, CA>>;
 
 fn governance(c: &mut Criterion) {
     let mut group = c.benchmark_group("vp_governance");
@@ -1557,7 +1562,7 @@ fn parameters(c: &mut Criterion) {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new(u64::MAX),
         ));
-        let parameters = ParametersVp::new(Ctx::new(
+        let ctx = Ctx::new(
             &vp_address,
             &shell.state,
             &signed_tx.tx,
@@ -1567,18 +1572,18 @@ fn parameters(c: &mut Criterion) {
             &keys_changed,
             &verifiers,
             shell.vp_wasm_cache.clone(),
-        ));
+        );
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
                 assert!(
-                    parameters
-                        .validate_tx(
-                            &signed_tx.to_ref(),
-                            parameters.ctx.keys_changed,
-                            parameters.ctx.verifiers,
-                        )
-                        .is_ok()
+                    ParametersVp::validate_tx(
+                        &ctx,
+                        &signed_tx.to_ref(),
+                        ctx.keys_changed,
+                        ctx.verifiers,
+                    )
+                    .is_ok()
                 )
             })
         });

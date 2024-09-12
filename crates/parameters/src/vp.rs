@@ -1,40 +1,30 @@
-//! Native VP for protocol parameters
+//! VP for protocol parameters
 
 use std::collections::BTreeSet;
 use std::marker::PhantomData;
 
 use namada_core::address::Address;
 use namada_core::booleans::BoolResultUnitExt;
-use namada_state::{Key, StateRead};
 use namada_systems::governance;
 use namada_tx::BatchedTxRef;
-use namada_vp::native_vp::{
-    Ctx, CtxPreStorageRead, Error, NativeVp, Result, VpEvaluator,
-};
+use namada_vp_env::{Error, Key, Result, VpEnv};
 
 use crate::storage;
 
 /// Parameters VP
-pub struct ParametersVp<'ctx, S, CA, EVAL, Gov>
-where
-    S: 'static + StateRead,
-{
-    /// Context to interact with the host structures.
-    pub ctx: Ctx<'ctx, S, CA, EVAL>,
-    /// Generic types for DI
-    pub _marker: PhantomData<Gov>,
+pub struct ParametersVp<'ctx, CTX, Gov> {
+    /// Generic types for VP context and DI
+    pub _marker: PhantomData<(&'ctx CTX, Gov)>,
 }
 
-impl<'view, 'ctx: 'view, S, CA, EVAL, Gov> NativeVp<'view>
-    for ParametersVp<'ctx, S, CA, EVAL, Gov>
+impl<'ctx, CTX, Gov> ParametersVp<'ctx, CTX, Gov>
 where
-    S: 'static + StateRead,
-    CA: 'static + Clone,
-    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
-    Gov: governance::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
+    CTX: VpEnv<'ctx>,
+    Gov: governance::Read<<CTX as VpEnv<'ctx>>::Pre>,
 {
-    fn validate_tx(
-        &'view self,
+    /// Run the validity predicate
+    pub fn validate_tx(
+        ctx: &'ctx CTX,
         batched_tx: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         _verifiers: &BTreeSet<Address>,
@@ -45,40 +35,25 @@ where
                 data
             } else {
                 return Err(Error::new_const(
-                    "Token parameter changes require tx data to be present",
+                    "Parameter changes require tx data to be present",
                 ));
             };
             match key_type {
                 KeyType::PARAMETER | KeyType::UNKNOWN_PARAMETER => {
-                    Gov::is_proposal_accepted(&self.ctx.pre(), &data)?
-                        .ok_or_else(|| {
+                    Gov::is_proposal_accepted(&ctx.pre(), &data)?.ok_or_else(
+                        || {
                             Error::new_alloc(format!(
                                 "Attempted to change a protocol parameter \
                                  from outside of a governance proposal, or \
                                  from a non-accepted governance proposal: \
                                  {key}",
                             ))
-                        })
+                        },
+                    )
                 }
                 KeyType::UNKNOWN => Ok(()),
             }
         })
-    }
-}
-
-impl<'ctx, S, CA, EVAL, Gov> ParametersVp<'ctx, S, CA, EVAL, Gov>
-where
-    S: 'static + StateRead,
-    CA: 'static + Clone,
-    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
-    Gov: governance::Read<CtxPreStorageRead<'ctx, 'ctx, S, CA, EVAL>>,
-{
-    /// Instantiate parameters VP
-    pub fn new(ctx: Ctx<'ctx, S, CA, EVAL>) -> Self {
-        Self {
-            ctx,
-            _marker: PhantomData,
-        }
     }
 }
 

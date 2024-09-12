@@ -1238,14 +1238,13 @@ where
                                 .map_err(Error::NativeVpError)
                             }
                             InternalAddress::Parameters => {
-                                let parameters = ParametersVp::new(ctx);
-                                parameters
-                                    .validate_tx(
-                                        batched_tx,
-                                        &keys_changed,
-                                        &verifiers,
-                                    )
-                                    .map_err(Error::NativeVpError)
+                                ParametersVp::validate_tx(
+                                    &ctx,
+                                    batched_tx,
+                                    &keys_changed,
+                                    &verifiers,
+                                )
+                                .map_err(Error::NativeVpError)
                             }
                             InternalAddress::PosSlashPool => {
                                 Err(Error::AccessForbidden(

@@ -4,6 +4,7 @@
 use namada_vm::wasm::run::VpEvalWasm;
 use namada_vm::wasm::VpCache;
 use namada_vp::native_vp::{self, CtxPostStorageRead, CtxPreStorageRead};
+use namada_vp::VpEnv;
 
 use crate::state::StateRead;
 use crate::{eth_bridge, governance, ibc, parameters, proof_of_stake, token};
@@ -51,12 +52,10 @@ pub type IbcVpContext<'view, 'a, S, CA, EVAL> =
     >;
 
 /// Native parameters VP
-pub type ParametersVp<'a, S, CA> = parameters::vp::ParametersVp<
-    'a,
-    S,
-    VpCache<CA>,
-    Eval<S, CA>,
-    GovPreStore<'a, S, CA>,
+pub type ParametersVp<'ctx, CTX> = parameters::vp::ParametersVp<
+    'ctx,
+    CTX,
+    governance::Store<<CTX as VpEnv<'ctx>>::Pre>,
 >;
 
 /// Native governance VP
