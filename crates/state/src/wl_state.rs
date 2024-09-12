@@ -13,7 +13,9 @@ use namada_events::{EmitEvents, EventToEmit};
 use namada_gas::Gas;
 use namada_merkle_tree::NO_DIFF_KEY_PREFIX;
 use namada_replay_protection as replay_protection;
-use namada_storage::conversion_state::{ConversionState, WithConversionState};
+use namada_storage::conversion_state::{
+    ConversionState, ReadConversionState, WithConversionState,
+};
 use namada_storage::{
     BlockHeight, BlockStateRead, BlockStateWrite, ResultExt, StorageRead,
 };
@@ -53,6 +55,16 @@ where
     pub diff_key_filter: fn(&storage::Key) -> bool,
 }
 
+impl<D, H> ReadConversionState for WlState<D, H>
+where
+    D: DB + for<'iter> DBIter<'iter>,
+    H: StorageHasher,
+{
+    fn conversion_state(&self) -> &ConversionState {
+        self.in_mem.get_conversion_state()
+    }
+}
+
 /// State with a temporary write log. This is used for dry-running txs and ABCI
 /// prepare and processs proposal, which must not modify the actual state.
 #[derive(Debug)]
@@ -83,6 +95,16 @@ where
     pub(crate) db: &'a D,
     /// State
     pub(crate) in_mem: &'a InMemory<H>,
+}
+
+impl<D, H> ReadConversionState for TempWlState<'_, D, H>
+where
+    D: DB + for<'iter> DBIter<'iter>,
+    H: StorageHasher,
+{
+    fn conversion_state(&self) -> &ConversionState {
+        self.in_mem.get_conversion_state()
+    }
 }
 
 impl<D, H> FullAccessState<D, H>
@@ -1228,7 +1250,7 @@ where
     }
 }
 
-impl<D, H> WithConversionState for FullAccessState<D, H>
+impl<D, H> ReadConversionState for FullAccessState<D, H>
 where
     D: 'static + DB + for<'iter> DBIter<'iter>,
     H: 'static + StorageHasher,
@@ -1236,7 +1258,13 @@ where
     fn conversion_state(&self) -> &ConversionState {
         &self.in_mem().conversion_state
     }
+}
 
+impl<D, H> WithConversionState for FullAccessState<D, H>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
+{
     fn conversion_state_mut(&mut self) -> &mut ConversionState {
         &mut self.in_mem_mut().conversion_state
     }

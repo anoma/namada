@@ -76,15 +76,13 @@ pub type MultitokenVp<'ctx, CTX> = token::vp::MultitokenVp<
 >;
 
 /// Native MASP VP
-pub type MaspVp<'a, S, CA> = token::vp::MaspVp<
-    'a,
-    S,
-    VpCache<CA>,
-    Eval<S, CA>,
-    ParamsPreStore<'a, S, CA>,
-    GovPreStore<'a, S, CA>,
-    IbcPostStore<'a, S, CA>,
-    TokenPreStore<'a, S, CA>,
+pub type MaspVp<'ctx, CTX> = token::vp::MaspVp<
+    'ctx,
+    CTX,
+    parameters::Store<<CTX as VpEnv<'ctx>>::Pre>,
+    governance::Store<<CTX as VpEnv<'ctx>>::Pre>,
+    ibc::Store<<CTX as VpEnv<'ctx>>::Post>,
+    token::Store<<CTX as VpEnv<'ctx>>::Pre>,
     token::Transfer,
 >;
 

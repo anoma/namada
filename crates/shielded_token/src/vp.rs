@@ -22,15 +22,12 @@ use namada_core::storage::Key;
 use namada_core::token;
 use namada_core::token::{Amount, MaspDigitPos};
 use namada_core::uint::I320;
-use namada_state::{ConversionState, OptionExt, ResultExt, StateRead};
-use namada_systems::{governance, ibc, parameters, trans_token};
-use namada_tx::action::Read;
-use namada_tx::BatchedTxRef;
-use namada_vp::native_vp::{
-    Ctx, CtxPostStorageRead, CtxPreStorageRead, Error, NativeVp, Result,
-    VpEvaluator,
+use namada_state::{
+    ConversionState, OptionExt, ReadConversionState, ResultExt,
 };
-use namada_vp::VpEnv;
+use namada_systems::{governance, ibc, parameters, trans_token};
+use namada_tx::BatchedTxRef;
+use namada_vp_env::{Error, Result, VpEnv};
 
 use crate::storage_key::{
     is_masp_key, is_masp_nullifier_key, is_masp_token_map_key,
@@ -40,14 +37,10 @@ use crate::storage_key::{
 use crate::validation::verify_shielded_tx;
 
 /// MASP VP
-pub struct MaspVp<'ctx, S, CA, EVAL, Params, Gov, Ibc, TransToken, Transfer>
-where
-    S: 'static + StateRead,
-{
-    /// Context to interact with the host structures.
-    pub ctx: Ctx<'ctx, S, CA, EVAL>,
+pub struct MaspVp<'ctx, CTX, Params, Gov, Ibc, TransToken, Transfer> {
     /// Generic types for DI
-    pub _marker: PhantomData<(Params, Gov, Ibc, TransToken, Transfer)>,
+    pub _marker:
+        PhantomData<(&'ctx CTX, Params, Gov, Ibc, TransToken, Transfer)>,
 }
 
 // Balances changed by a transaction
@@ -63,30 +56,65 @@ struct ChangedBalances {
     post: BTreeMap<TransparentAddress, ValueSum<Address, Amount>>,
 }
 
-impl<'view, 'ctx: 'view, S, CA, EVAL, Params, Gov, Ibc, TransToken, Transfer>
-    MaspVp<'ctx, S, CA, EVAL, Params, Gov, Ibc, TransToken, Transfer>
+impl<'view, 'ctx: 'view, CTX, Params, Gov, Ibc, TransToken, Transfer>
+    MaspVp<'ctx, CTX, Params, Gov, Ibc, TransToken, Transfer>
 where
-    S: 'static + StateRead,
-    CA: 'static + Clone,
-    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
-    Params: parameters::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
-    Gov: governance::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
-    Ibc: ibc::Read<CtxPostStorageRead<'view, 'ctx, S, CA, EVAL>>,
-    TransToken: trans_token::Keys
-        + trans_token::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
+    CTX: VpEnv<'ctx>
+        + namada_tx::action::Read<Err = Error>
+        + ReadConversionState,
+    Params: parameters::Read<<CTX as VpEnv<'ctx>>::Pre>,
+    Gov: governance::Read<<CTX as VpEnv<'ctx>>::Pre>,
+    Ibc: ibc::Read<<CTX as VpEnv<'ctx>>::Post>,
+    TransToken:
+        trans_token::Keys + trans_token::Read<<CTX as VpEnv<'ctx>>::Pre>,
     Transfer: BorshDeserialize,
 {
-    /// Instantiate MASP VP
-    pub fn new(ctx: Ctx<'ctx, S, CA, EVAL>) -> Self {
-        Self {
-            ctx,
-            _marker: PhantomData,
+    /// Run the validity predicate
+    pub fn validate_tx(
+        ctx: &'ctx CTX,
+        tx_data: &BatchedTxRef<'_>,
+        keys_changed: &BTreeSet<Key>,
+        verifiers: &BTreeSet<Address>,
+    ) -> Result<()> {
+        let masp_keys_changed: Vec<&Key> =
+            keys_changed.iter().filter(|key| is_masp_key(key)).collect();
+        let non_allowed_changes = masp_keys_changed.iter().any(|key| {
+            !is_masp_transfer_key(key) && !is_masp_token_map_key(key)
+        });
+
+        // Check that the transaction didn't write unallowed masp keys
+        if non_allowed_changes {
+            return Err(Error::new_const(
+                "Found modifications to non-allowed masp keys",
+            ));
+        }
+        let masp_token_map_changed = masp_keys_changed
+            .iter()
+            .any(|key| is_masp_token_map_key(key));
+        let masp_transfer_changes = masp_keys_changed
+            .iter()
+            .any(|key| is_masp_transfer_key(key));
+        if masp_token_map_changed && masp_transfer_changes {
+            Err(Error::new_const(
+                "Cannot simultaneously do governance proposal and MASP \
+                 transfer",
+            ))
+        } else if masp_token_map_changed {
+            // The token map can only be changed by a successful governance
+            // proposal
+            Self::is_valid_parameter_change(ctx, tx_data)
+        } else if masp_transfer_changes {
+            // The MASP transfer keys can only be changed by a valid Transaction
+            Self::is_valid_masp_transfer(ctx, tx_data, keys_changed, verifiers)
+        } else {
+            // Changing no MASP keys at all is also fine
+            Ok(())
         }
     }
 
     /// Return if the parameter change was done via a governance proposal
     pub fn is_valid_parameter_change(
-        &'view self,
+        ctx: &'ctx CTX,
         tx: &BatchedTxRef<'_>,
     ) -> Result<()> {
         tx.tx.data(tx.cmt).map_or_else(
@@ -96,7 +124,7 @@ where
                 ))
             },
             |data| {
-                Gov::is_proposal_accepted(&self.ctx.pre(), data.as_ref())?
+                Gov::is_proposal_accepted(&ctx.pre(), data.as_ref())?
                     .ok_or_else(|| {
                         Error::new_const(
                             "MASP parameter changes can only be performed by \
@@ -109,7 +137,7 @@ where
 
     // Check that the transaction correctly revealed the nullifiers, if needed
     fn valid_nullifiers_reveal(
-        &self,
+        ctx: &'ctx CTX,
         keys_changed: &BTreeSet<Key>,
         transaction: &Transaction,
     ) -> Result<()> {
@@ -122,7 +150,7 @@ where
             .map_or(&vec![], |bundle| &bundle.shielded_spends)
         {
             let nullifier_key = masp_nullifier_key(&description.nullifier);
-            if self.ctx.has_key_pre(&nullifier_key)?
+            if ctx.has_key_pre(&nullifier_key)?
                 || revealed_nullifiers.contains(&nullifier_key)
             {
                 let error = Error::new_alloc(format!(
@@ -138,8 +166,7 @@ where
             // and no delete) and carries no associated data (the latter not
             // strictly necessary for validation, but we don't expect any
             // value for this key anyway)
-            self.ctx
-                .read_bytes_post(&nullifier_key)?
+            ctx.read_bytes_post(&nullifier_key)?
                 .is_some_and(|value| value.is_empty())
                 .ok_or_else(|| {
                     Error::new_const(
@@ -171,18 +198,16 @@ where
     // Check that a transaction carrying output descriptions correctly updates
     // the tree and anchor in storage
     fn valid_note_commitment_update(
-        &self,
+        ctx: &'ctx CTX,
         transaction: &Transaction,
     ) -> Result<()> {
         // Check that the merkle tree in storage has been correctly updated with
         // the output descriptions cmu
         let tree_key = masp_commitment_tree_key();
-        let mut previous_tree: CommitmentTree<Node> = self
-            .ctx
+        let mut previous_tree: CommitmentTree<Node> = ctx
             .read_pre(&tree_key)?
             .ok_or(Error::new_const("Cannot read storage"))?;
-        let post_tree: CommitmentTree<Node> = self
-            .ctx
+        let post_tree: CommitmentTree<Node> = ctx
             .read_post(&tree_key)?
             .ok_or(Error::new_const("Cannot read storage"))?;
 
@@ -214,7 +239,7 @@ where
 
     // Check that the spend descriptions anchors of a transaction are valid
     fn valid_spend_descriptions_anchor(
-        &self,
+        ctx: &'ctx CTX,
         transaction: &Transaction,
     ) -> Result<()> {
         for description in transaction
@@ -224,7 +249,7 @@ where
             let anchor_key = masp_commitment_anchor_key(description.anchor);
 
             // Check if the provided anchor was published before
-            if !self.ctx.has_key_pre(&anchor_key)? {
+            if !ctx.has_key_pre(&anchor_key)? {
                 let error = Error::new_const(
                     "Spend description refers to an invalid anchor",
                 );
@@ -238,14 +263,13 @@ where
 
     // Check that the convert descriptions anchors of a transaction are valid
     fn valid_convert_descriptions_anchor(
-        &'view self,
+        ctx: &'ctx CTX,
         transaction: &Transaction,
     ) -> Result<()> {
         if let Some(bundle) = transaction.sapling_bundle() {
             if !bundle.shielded_converts.is_empty() {
                 let anchor_key = masp_convert_anchor_key();
-                let expected_anchor = self
-                    .ctx
+                let expected_anchor = ctx
                     .read_pre::<namada_core::hash::Hash>(&anchor_key)?
                     .ok_or(Error::new_const("Cannot read storage"))?;
 
@@ -270,26 +294,21 @@ where
 
     // Apply the balance change to the changed balances structure
     fn apply_balance_change(
-        &'view self,
+        ctx: &'ctx CTX,
         mut result: ChangedBalances,
         [token, counterpart]: [&Address; 2],
     ) -> Result<ChangedBalances> {
-        let denom = TransToken::read_denom(&self.ctx.pre(), token)?
-            .ok_or_err_msg(
-                "No denomination found in storage for the given token",
-            )?;
+        let denom = TransToken::read_denom(&ctx.pre(), token)?.ok_or_err_msg(
+            "No denomination found in storage for the given token",
+        )?;
         // Record the token without an epoch to facilitate later decoding
         unepoched_tokens(token, denom, &mut result.tokens)?;
         let counterpart_balance_key =
             TransToken::balance_key(token, counterpart);
-        let pre_balance: Amount = self
-            .ctx
-            .read_pre(&counterpart_balance_key)?
-            .unwrap_or_default();
-        let post_balance: Amount = self
-            .ctx
-            .read_post(&counterpart_balance_key)?
-            .unwrap_or_default();
+        let pre_balance: Amount =
+            ctx.read_pre(&counterpart_balance_key)?.unwrap_or_default();
+        let post_balance: Amount =
+            ctx.read_post(&counterpart_balance_key)?.unwrap_or_default();
         // Public keys must be the hash of the sources/targets
         let addr_hash = addr_taddr(counterpart.clone());
         // Enable the decoding of these counterpart addresses
@@ -322,7 +341,7 @@ where
 
     // Check that transfer is pinned correctly and record the balance changes
     fn validate_state_and_get_transfer_data(
-        &'view self,
+        ctx: &'ctx CTX,
         keys_changed: &BTreeSet<Key>,
         tx_data: &[u8],
     ) -> Result<ChangedBalances> {
@@ -334,7 +353,7 @@ where
         // Apply the balance changes to the changed balances structure
         let mut changed_balances = counterparts_balances
             .try_fold(ChangedBalances::default(), |acc, account| {
-                self.apply_balance_change(acc, account)
+                Self::apply_balance_change(ctx, acc, account)
             })?;
 
         let ibc_addr = TAddrData::Addr(address::IBC);
@@ -352,7 +371,7 @@ where
         } = changed_balances;
         let ibc::ChangedBalances { decoder, pre, post } =
             Ibc::apply_ibc_packet::<Transfer>(
-                &self.ctx.post(),
+                &ctx.post(),
                 tx_data,
                 ibc::ChangedBalances { decoder, pre, post },
                 keys_changed,
@@ -367,24 +386,23 @@ where
 
     // Check that MASP Transaction and state changes are valid
     fn is_valid_masp_transfer(
-        &'view self,
+        ctx: &'ctx CTX,
         batched_tx: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
-        let masp_epoch_multiplier =
-            Params::masp_epoch_multiplier(&self.ctx.pre())?;
+        let masp_epoch_multiplier = Params::masp_epoch_multiplier(&ctx.pre())?;
         let masp_epoch = MaspEpoch::try_from_epoch(
-            self.ctx.get_block_epoch()?,
+            ctx.get_block_epoch()?,
             masp_epoch_multiplier,
         )
         .map_err(Error::new_const)?;
-        let conversion_state = self.ctx.state.in_mem().get_conversion_state();
+        let conversion_state = ctx.conversion_state();
         let tx_data = batched_tx
             .tx
             .data(batched_tx.cmt)
             .ok_or_err_msg("No transaction data")?;
-        let actions = self.ctx.read_actions()?;
+        let actions = ctx.read_actions()?;
         // Try to get the Transaction object from the tx first (IBC) and from
         // the actions afterwards
         let shielded_tx = if let Some(tx) =
@@ -410,7 +428,7 @@ where
                 })?
         };
 
-        if u64::from(self.ctx.get_block_height()?)
+        if u64::from(ctx.get_block_height()?)
             > u64::from(shielded_tx.expiry_height())
         {
             let error = Error::new_const("MASP transaction is expired");
@@ -419,8 +437,11 @@ where
         }
 
         // Check the validity of the keys and get the transfer data
-        let changed_balances =
-            self.validate_state_and_get_transfer_data(keys_changed, &tx_data)?;
+        let changed_balances = Self::validate_state_and_get_transfer_data(
+            ctx,
+            keys_changed,
+            &tx_data,
+        )?;
 
         // Some constants that will be used repeatedly
         let zero = ValueSum::zero();
@@ -451,10 +472,10 @@ where
         // nullifier is being revealed by the tx
         // 4. The transaction must correctly update the note commitment tree
         // in storage with the new output descriptions
-        self.valid_spend_descriptions_anchor(&shielded_tx)?;
-        self.valid_convert_descriptions_anchor(&shielded_tx)?;
-        self.valid_nullifiers_reveal(keys_changed, &shielded_tx)?;
-        self.valid_note_commitment_update(&shielded_tx)?;
+        Self::valid_spend_descriptions_anchor(ctx, &shielded_tx)?;
+        Self::valid_convert_descriptions_anchor(ctx, &shielded_tx)?;
+        Self::valid_nullifiers_reveal(ctx, keys_changed, &shielded_tx)?;
+        Self::valid_note_commitment_update(ctx, &shielded_tx)?;
 
         // Checks on the transparent bundle, if present
         let mut changed_bals_minus_txn = changed_balances.clone();
@@ -580,7 +601,7 @@ where
         }
 
         // Verify the proofs
-        verify_shielded_tx(&shielded_tx, |gas| self.ctx.charge_gas(gas))
+        verify_shielded_tx(&shielded_tx, |gas| ctx.charge_gas(gas))
     }
 }
 
@@ -855,62 +876,5 @@ fn verify_sapling_balancing_value(
         );
         tracing::debug!("{error}");
         Err(error)
-    }
-}
-
-impl<'view, 'ctx: 'view, S, CA, EVAL, Params, Gov, Ibc, TransToken, Transfer>
-    NativeVp<'view>
-    for MaspVp<'ctx, S, CA, EVAL, Params, Gov, Ibc, TransToken, Transfer>
-where
-    S: 'static + StateRead,
-    CA: 'static + Clone,
-    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
-    Params: parameters::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
-    Gov: governance::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
-    Ibc: ibc::Read<CtxPostStorageRead<'view, 'ctx, S, CA, EVAL>>,
-    TransToken: trans_token::Keys
-        + trans_token::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
-    Transfer: BorshDeserialize,
-{
-    fn validate_tx(
-        &'view self,
-        tx_data: &BatchedTxRef<'_>,
-        keys_changed: &BTreeSet<Key>,
-        verifiers: &BTreeSet<Address>,
-    ) -> Result<()> {
-        let masp_keys_changed: Vec<&Key> =
-            keys_changed.iter().filter(|key| is_masp_key(key)).collect();
-        let non_allowed_changes = masp_keys_changed.iter().any(|key| {
-            !is_masp_transfer_key(key) && !is_masp_token_map_key(key)
-        });
-
-        // Check that the transaction didn't write unallowed masp keys
-        if non_allowed_changes {
-            return Err(Error::new_const(
-                "Found modifications to non-allowed masp keys",
-            ));
-        }
-        let masp_token_map_changed = masp_keys_changed
-            .iter()
-            .any(|key| is_masp_token_map_key(key));
-        let masp_transfer_changes = masp_keys_changed
-            .iter()
-            .any(|key| is_masp_transfer_key(key));
-        if masp_token_map_changed && masp_transfer_changes {
-            Err(Error::new_const(
-                "Cannot simultaneously do governance proposal and MASP \
-                 transfer",
-            ))
-        } else if masp_token_map_changed {
-            // The token map can only be changed by a successful governance
-            // proposal
-            self.is_valid_parameter_change(tx_data)
-        } else if masp_transfer_changes {
-            // The MASP transfer keys can only be changed by a valid Transaction
-            self.is_valid_masp_transfer(tx_data, keys_changed, verifiers)
-        } else {
-            // Changing no MASP keys at all is also fine
-            Ok(())
-        }
     }
 }

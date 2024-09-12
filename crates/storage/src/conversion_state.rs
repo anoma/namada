@@ -44,11 +44,14 @@ pub struct ConversionState {
     pub assets: BTreeMap<AssetType, ConversionLeaf>,
 }
 
-/// Able to borrow mutable conversion state.
-pub trait WithConversionState {
+/// Able to borrow conversion state.
+pub trait ReadConversionState {
     /// Borrow immutable conversion state
     fn conversion_state(&self) -> &ConversionState;
+}
 
+/// Able to borrow mutable conversion state.
+pub trait WithConversionState: ReadConversionState {
     /// Borrow mutable conversion state
     fn conversion_state_mut(&mut self) -> &mut ConversionState;
 }

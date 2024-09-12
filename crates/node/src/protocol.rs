@@ -38,6 +38,7 @@ use namada_vm::wasm::{TxCache, VpCache};
 use namada_vm::{self, wasm, WasmCacheAccess};
 use namada_vote_ext::EthereumTxData;
 use namada_vp::native_vp::NativeVp;
+use namada_vp::state::ReadConversionState;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use smooth_operator::checked;
 use thiserror::Error;
@@ -340,7 +341,11 @@ pub(crate) fn dispatch_inner_txs<'a, S, D, H, CA>(
     tx_wasm_cache: &'a mut TxCache<CA>,
 ) -> std::result::Result<ExtendedTxResult<Error>, DispatchError>
 where
-    S: 'static + State<D = D, H = H> + Read<Err = state::Error> + Sync,
+    S: 'static
+        + State<D = D, H = H>
+        + Read<Err = state::Error>
+        + ReadConversionState
+        + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
@@ -457,6 +462,7 @@ where
         + State<D = D, H = H>
         + Read<Err = state::Error>
         + TxWrites
+        + ReadConversionState
         + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -531,6 +537,7 @@ where
         + StorageRead
         + TxWrites
         + Read<Err = state::Error>
+        + ReadConversionState
         + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -693,6 +700,7 @@ where
         + State<D = D, H = H>
         + StorageRead
         + Read<Err = state::Error>
+        + ReadConversionState
         + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -870,6 +878,7 @@ where
         + State<D = D, H = H>
         + StorageRead
         + Read<Err = state::Error>
+        + ReadConversionState
         + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -940,7 +949,7 @@ fn apply_wasm_tx<S, D, H, CA>(
     shell_params: ShellParams<'_, S, D, H, CA>,
 ) -> Result<BatchedTxResult>
 where
-    S: 'static + State<D = D, H = H> + Sync,
+    S: 'static + State<D = D, H = H> + ReadConversionState + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
@@ -1124,7 +1133,7 @@ fn check_vps<S, CA>(
     }: CheckVps<'_, S, CA>,
 ) -> Result<VpsResult>
 where
-    S: 'static + State + Sync,
+    S: 'static + ReadConversionState + State + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
     let (verifiers, keys_changed) = state
@@ -1161,7 +1170,7 @@ fn execute_vps<S, CA>(
     vp_wasm_cache: &mut VpCache<CA>,
 ) -> Result<(VpsResult, namada_sdk::gas::Gas)>
 where
-    S: 'static + State + Sync,
+    S: 'static + ReadConversionState + State + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
     let vps_result = verifiers
@@ -1274,15 +1283,13 @@ where
                                 )
                                 .map_err(Error::NativeVpError)
                             }
-                            InternalAddress::Masp => {
-                                let masp = MaspVp::new(ctx);
-                                masp.validate_tx(
-                                    batched_tx,
-                                    &keys_changed,
-                                    &verifiers,
-                                )
-                                .map_err(Error::NativeVpError)
-                            }
+                            InternalAddress::Masp => MaspVp::validate_tx(
+                                &ctx,
+                                batched_tx,
+                                &keys_changed,
+                                &verifiers,
+                            )
+                            .map_err(Error::NativeVpError),
                             InternalAddress::EthBridge => {
                                 EthBridgeVp::validate_tx(
                                     &ctx,

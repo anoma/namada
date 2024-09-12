@@ -634,7 +634,7 @@ fn masp(c: &mut Criterion) {
             let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
                 &TxGasMeter::new(u64::MAX),
             ));
-            let masp = MaspVp::new(Ctx::new(
+            let ctx = Ctx::new(
                 &Address::Internal(InternalAddress::Masp),
                 &shell_read.state,
                 &signed_tx.tx,
@@ -644,14 +644,15 @@ fn masp(c: &mut Criterion) {
                 &keys_changed,
                 &verifiers,
                 shell_read.vp_wasm_cache.clone(),
-            ));
+            );
 
             b.iter(|| {
                 assert!(
-                    masp.validate_tx(
+                    MaspVp::validate_tx(
+                        &ctx,
                         &signed_tx.to_ref(),
-                        masp.ctx.keys_changed,
-                        masp.ctx.verifiers,
+                        ctx.keys_changed,
+                        ctx.verifiers,
                     )
                     .is_ok()
                 );

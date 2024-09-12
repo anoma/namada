@@ -3978,7 +3978,7 @@ dependencies = [
  "namada_state",
  "namada_systems",
  "namada_tx",
- "namada_vp",
+ "namada_vp_env",
  "namada_wallet",
  "proptest",
  "rand 0.8.5",
