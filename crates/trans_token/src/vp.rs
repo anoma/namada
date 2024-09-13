@@ -1113,4 +1113,78 @@ mod tests {
             Ok(_)
         );
     }
+
+    // The multitoken vps ensures that all the involved parties have their vp
+    // triggered
+    #[test]
+    fn test_verifiers() {
+        let mut state = init_state();
+        let src1 = established_address_1();
+        let dest1 = namada_core::address::MASP;
+        let src2 = namada_core::address::IBC;
+        let dest2 = established_address_2();
+        let mut keys_changed = transfer(&mut state, &src1, &dest1);
+        keys_changed.append(&mut transfer(&mut state, &src2, &dest2));
+
+        let tx_index = TxIndex::default();
+        let BatchedTx { tx, cmt } = dummy_tx(&state);
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new(u64::MAX),
+        ));
+        let (vp_vp_cache, _vp_cache_dir) = vp_cache();
+
+        let parties = BTreeSet::from([src1, dest1, src2, dest2]);
+
+        // One at a time remove one of the expected verifiers of this
+        // transaction and check that the multitoken vp rejects the tx
+        for verifier in &parties {
+            let mut verifiers = parties.clone();
+            verifiers.remove(verifier);
+
+            let ctx = Ctx::new(
+                &ADDRESS,
+                &state,
+                &tx,
+                &cmt,
+                &tx_index,
+                &gas_meter,
+                &keys_changed,
+                &verifiers,
+                vp_vp_cache.clone(),
+            );
+
+            let vp = MultitokenVp::new(ctx);
+            let err_msg = format!(
+                "The vp of the address {} has not been triggered",
+                verifier
+            );
+
+            match vp
+                .validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
+                .unwrap_err()
+            {
+                Error::AllocMessage(msg) if msg == err_msg => (),
+                _ => panic!("Test failed with an unexpected error"),
+            }
+        }
+
+        // Fnally run the validation with all the required verifiers
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            &tx,
+            &cmt,
+            &tx_index,
+            &gas_meter,
+            &keys_changed,
+            &parties,
+            vp_vp_cache,
+        );
+
+        let vp = MultitokenVp::new(ctx);
+        assert!(
+            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &parties)
+                .is_ok()
+        );
+    }
 }
