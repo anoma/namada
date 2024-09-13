@@ -1,13 +1,13 @@
 //! Pgf VP
 
 use std::collections::BTreeSet;
+use std::marker::PhantomData;
 
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::storage::Key;
-use namada_state::StateRead;
-use namada_tx::action::{Action, PgfAction, Read};
+use namada_tx::action::{Action, PgfAction};
 use namada_tx::BatchedTxRef;
-use namada_vp::native_vp::{self, Ctx, Error, NativeVp, Result, VpEvaluator};
+use namada_vp_env::{Error, Result, VpEnv};
 use thiserror::Error;
 
 use crate::address::{Address, InternalAddress};
@@ -33,32 +33,28 @@ impl From<VpError> for Error {
 }
 
 /// Pgf VP
-pub struct PgfVp<'ctx, S, CA, EVAL>
-where
-    S: 'static + StateRead,
-{
-    /// Context to interact with the host structures.
-    pub ctx: Ctx<'ctx, S, CA, EVAL>,
+pub struct PgfVp<'ctx, CTX> {
+    /// Generic types for DI
+    pub _marker: PhantomData<&'ctx CTX>,
 }
 
-impl<'view, 'ctx, S, CA, EVAL> NativeVp<'view> for PgfVp<'ctx, S, CA, EVAL>
+impl<'ctx, CTX> PgfVp<'ctx, CTX>
 where
-    S: 'static + StateRead,
-    CA: 'static + Clone,
-    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
+    CTX: VpEnv<'ctx> + namada_tx::action::Read<Err = Error>,
 {
-    fn validate_tx(
-        &'view self,
+    /// Run the validity predicate
+    pub fn validate_tx(
+        ctx: &'ctx CTX,
         batched_tx: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
         // Find the actions applied in the tx
-        let actions = self.ctx.read_actions()?;
+        let actions = ctx.read_actions()?;
 
         // Is VP triggered by a governance proposal?
         if is_proposal_accepted(
-            &self.ctx.pre(),
+            &ctx.pre(),
             batched_tx
                 .tx
                 .data(batched_tx.cmt)
@@ -75,7 +71,7 @@ where
             tracing::info!(
                 "Rejecting tx without any action written to temp storage"
             );
-            return Err(native_vp::Error::new_const(
+            return Err(Error::new_const(
                 "Rejecting tx without any action written to temp storage",
             ));
         }
@@ -126,108 +122,93 @@ where
                         // TODO(namada#3238): we should check errors here, which
                         // could be out-of-gas related
                         let total_stewards_pre = pgf_storage::stewards_handle()
-                            .len(&self.ctx.pre())
+                            .len(&ctx.pre())
                             .unwrap_or_default();
                         let total_stewards_post =
                             pgf_storage::stewards_handle()
-                                .len(&self.ctx.post())
+                                .len(&ctx.post())
                                 .unwrap_or_default();
 
                         total_stewards_pre < total_stewards_post
                     };
 
                     if stewards_have_increased {
-                        return Err(native_vp::Error::new_const(
+                        return Err(Error::new_const(
                             "Stewards can only be added via governance \
                              proposals",
                         ));
                     }
 
-                    pgf::storage::get_steward(
-                        &self.ctx.post(),
-                        steward_address,
-                    )?
-                    .map_or_else(
-                        // if a steward resigns, check their signature
-                        || {
-                            verifiers.contains(steward_address).ok_or_else(
-                                || {
-                                    native_vp::Error::new_alloc(format!(
+                    pgf::storage::get_steward(&ctx.post(), steward_address)?
+                        .map_or_else(
+                            // if a steward resigns, check their signature
+                            || {
+                                verifiers.contains(steward_address).ok_or_else(
+                                    || {
+                                        Error::new_alloc(format!(
+                                            "The VP of the steward \
+                                             {steward_address} should have \
+                                             been triggered to check their \
+                                             signature"
+                                        ))
+                                    },
+                                )
+                            },
+                            // if a steward updates the reward distribution (so
+                            // total_stewards_pre == total_stewards_post) check
+                            // their signature and if commissions are valid
+                            |steward| {
+                                if !verifiers.contains(steward_address) {
+                                    return Err(Error::new_alloc(format!(
                                         "The VP of the steward \
                                          {steward_address} should have been \
                                          triggered to check their signature"
-                                    ))
-                                },
-                            )
-                        },
-                        // if a steward updates the reward distribution (so
-                        // total_stewards_pre == total_stewards_post) check
-                        // their signature and if commissions are valid
-                        |steward| {
-                            if !verifiers.contains(steward_address) {
-                                return Err(native_vp::Error::new_alloc(
-                                    format!(
-                                        "The VP of the steward \
-                                         {steward_address} should have been \
-                                         triggered to check their signature"
-                                    ),
-                                ));
-                            }
-                            steward.is_valid_reward_distribution().ok_or_else(
-                                || {
-                                    native_vp::Error::new_const(
-                                        "Steward commissions are invalid",
-                                    )
-                                },
-                            )
-                        },
-                    )
+                                    )));
+                                }
+                                steward
+                                    .is_valid_reward_distribution()
+                                    .ok_or_else(|| {
+                                        Error::new_const(
+                                            "Steward commissions are invalid",
+                                        )
+                                    })
+                            },
+                        )
                 }
-                KeyType::Fundings => Err(native_vp::Error::new_alloc(format!(
+                KeyType::Fundings => Err(Error::new_alloc(format!(
                     "Cannot update PGF fundings key: {key}"
                 ))),
                 KeyType::PgfInflationRate | KeyType::StewardInflationRate => {
-                    self.is_valid_parameter_change(batched_tx)
+                    Self::is_valid_parameter_change(ctx, batched_tx)
                 }
-                KeyType::UnknownPgf => Err(native_vp::Error::new_alloc(
-                    format!("Unknown PGF state update on key: {key}"),
-                )),
+                KeyType::UnknownPgf => Err(Error::new_alloc(format!(
+                    "Unknown PGF state update on key: {key}"
+                ))),
                 KeyType::Unknown => Ok(()),
             }
         })
     }
-}
-
-impl<'view, 'ctx, S, CA, EVAL> PgfVp<'ctx, S, CA, EVAL>
-where
-    S: 'static + StateRead,
-    CA: 'static + Clone,
-    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
-{
-    /// Instantiate PGF VP
-    pub fn new(ctx: Ctx<'ctx, S, CA, EVAL>) -> Self {
-        Self { ctx }
-    }
 
     /// Validate a governance parameter
     pub fn is_valid_parameter_change(
-        &'view self,
+        ctx: &'ctx CTX,
         batched_tx: &BatchedTxRef<'_>,
     ) -> Result<()> {
         batched_tx.tx.data(batched_tx.cmt).map_or_else(
             || {
-                Err(native_vp::Error::new_const(
+                Err(Error::new_const(
                     "PGF parameter changes require tx data to be present",
                 ))
             },
             |data| {
-                is_proposal_accepted(&self.ctx.pre(), data.as_ref())?
-                    .ok_or_else(|| {
-                        native_vp::Error::new_const(
+                is_proposal_accepted(&ctx.pre(), data.as_ref())?.ok_or_else(
+                    || {
+                        Error::new_const(
                             "PGF parameter changes can only be performed by a \
                              governance proposal that has been accepted",
                         )
-                    })
+                    },
+                )
             },
         )
     }

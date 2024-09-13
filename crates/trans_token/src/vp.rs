@@ -8,16 +8,12 @@ use namada_core::booleans::BoolResultUnitExt;
 use namada_core::collections::HashMap;
 use namada_core::storage::{Key, KeySeg};
 use namada_core::token::Amount;
-use namada_state::StateRead;
 use namada_systems::{governance, parameters};
 use namada_tx::action::{
-    Action, Bond, ClaimRewards, GovAction, PosAction, Read, Withdraw,
+    Action, Bond, ClaimRewards, GovAction, PosAction, Withdraw,
 };
 use namada_tx::BatchedTxRef;
-use namada_vp::native_vp::{
-    Ctx, CtxPreStorageRead, Error, NativeVp, Result, VpEvaluator,
-};
-use namada_vp::VpEnv;
+use namada_vp_env::{Error, Result, VpEnv};
 
 use crate::storage_key::{
     is_any_minted_balance_key, is_any_minter_key, is_any_token_balance_key,
@@ -33,43 +29,36 @@ enum Owner<'a> {
 }
 
 /// Multitoken VP
-pub struct MultitokenVp<'ctx, S, CA, EVAL, Params, Gov>
-where
-    S: 'static + StateRead,
-{
-    /// Context to interact with the host structures.
-    pub ctx: Ctx<'ctx, S, CA, EVAL>,
+pub struct MultitokenVp<'ctx, CTX, Params, Gov> {
     /// Generic types for DI
-    pub _marker: PhantomData<(Params, Gov)>,
+    pub _marker: PhantomData<(&'ctx CTX, Params, Gov)>,
 }
 
-impl<'view, 'ctx: 'view, S, CA, EVAL, Params, Gov> NativeVp<'view>
-    for MultitokenVp<'ctx, S, CA, EVAL, Params, Gov>
+impl<'ctx, CTX, Params, Gov> MultitokenVp<'ctx, CTX, Params, Gov>
 where
-    S: 'static + StateRead,
-    CA: 'static + Clone,
-    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
-    Params: parameters::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
-    Gov: governance::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
+    CTX: VpEnv<'ctx> + namada_tx::action::Read<Err = Error>,
+    Params: parameters::Read<<CTX as VpEnv<'ctx>>::Pre>,
+    Gov: governance::Read<<CTX as VpEnv<'ctx>>::Pre>,
 {
-    fn validate_tx(
-        &'view self,
+    /// Run the validity predicate
+    pub fn validate_tx(
+        ctx: &'ctx CTX,
         tx_data: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
         // Is VP triggered by a governance proposal?
         if Gov::is_proposal_accepted(
-            &self.ctx.pre(),
+            &ctx.pre(),
             tx_data.tx.data(tx_data.cmt).unwrap_or_default().as_ref(),
         )? {
             return Ok(());
         }
 
-        let native_token = self.ctx.pre().get_native_token()?;
+        let native_token = ctx.pre().get_native_token()?;
         let is_native_token_transferable =
-            Params::is_native_token_transferable(&self.ctx.pre())?;
-        let actions = self.ctx.read_actions()?;
+            Params::is_native_token_transferable(&ctx.pre())?;
+        let actions = ctx.read_actions()?;
         // The native token can be transferred to and out of the `PoS` and `Gov`
         // accounts, even if `is_native_token_transferable` is false
         let is_allowed_inc = |token: &Address, bal_owner: &Address| -> bool {
@@ -109,8 +98,8 @@ where
         let mut dec_mints: HashMap<Address, Amount> = HashMap::new();
         for key in keys_changed {
             if let Some([token, owner]) = is_any_token_balance_key(key) {
-                let pre: Amount = self.ctx.read_pre(key)?.unwrap_or_default();
-                let post: Amount = self.ctx.read_post(key)?.unwrap_or_default();
+                let pre: Amount = ctx.read_pre(key)?.unwrap_or_default();
+                let post: Amount = ctx.read_post(key)?.unwrap_or_default();
                 match post.checked_sub(pre) {
                     Some(diff) => {
                         if !is_allowed_inc(token, owner) {
@@ -158,8 +147,8 @@ where
                     ));
                 }
 
-                let pre: Amount = self.ctx.read_pre(key)?.unwrap_or_default();
-                let post: Amount = self.ctx.read_post(key)?.unwrap_or_default();
+                let pre: Amount = ctx.read_pre(key)?.unwrap_or_default();
+                let post: Amount = ctx.read_post(key)?.unwrap_or_default();
                 match post.checked_sub(pre) {
                     Some(diff) => {
                         let mint = inc_mints.entry(token.clone()).or_default();
@@ -178,11 +167,11 @@ where
                     }
                 }
                 // Check if the minter is set
-                self.is_valid_minter(token, verifiers)?;
+                Self::is_valid_minter(ctx, token, verifiers)?;
             } else if let Some(token) = is_any_minter_key(key) {
-                self.is_valid_minter(token, verifiers)?;
+                Self::is_valid_minter(ctx, token, verifiers)?;
             } else if is_any_token_parameter_key(key).is_some() {
-                return self.is_valid_parameter(tx_data);
+                return Self::is_valid_parameter(ctx, tx_data);
             } else if key.segments.first()
                 == Some(
                     &Address::Internal(InternalAddress::Multitoken).to_db_key(),
@@ -243,28 +232,10 @@ where
             })
         })
     }
-}
-
-impl<'view, 'ctx: 'view, S, CA, EVAL, Params, Gov>
-    MultitokenVp<'ctx, S, CA, EVAL, Params, Gov>
-where
-    S: 'static + StateRead,
-    CA: 'static + Clone,
-    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
-    Params: parameters::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
-    Gov: governance::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
-{
-    /// Instantiate token VP
-    pub fn new(ctx: Ctx<'ctx, S, CA, EVAL>) -> Self {
-        Self {
-            ctx,
-            _marker: PhantomData,
-        }
-    }
 
     /// Return the minter if the minter is valid and the minter VP exists
     pub fn is_valid_minter(
-        &self,
+        ctx: &'ctx CTX,
         token: &Address,
         verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
@@ -272,7 +243,7 @@ where
             Address::Internal(InternalAddress::IbcToken(_)) => {
                 // Check if the minter is set
                 let minter_key = minter_key(token);
-                match self.ctx.read_post::<Address>(&minter_key)? {
+                match ctx.read_post::<Address>(&minter_key)? {
                     Some(minter)
                         if minter
                             == Address::Internal(InternalAddress::Ibc) =>
@@ -294,7 +265,7 @@ where
 
     /// Return if the parameter change was done via a governance proposal
     pub fn is_valid_parameter(
-        &'view self,
+        ctx: &'ctx CTX,
         batched_tx: &BatchedTxRef<'_>,
     ) -> Result<()> {
         batched_tx.tx.data(batched_tx.cmt).map_or_else(
@@ -304,7 +275,7 @@ where
                 ))
             },
             |data| {
-                Gov::is_proposal_accepted(&self.ctx.pre(), data.as_ref())?
+                Gov::is_proposal_accepted(&ctx.pre(), data.as_ref())?
                     .ok_or_else(|| {
                         Error::new_const(
                             "Token parameter changes can only be performed by \
@@ -380,7 +351,7 @@ mod tests {
     use namada_ibc::trace::ibc_token;
     use namada_parameters::storage::get_native_token_transferable_key;
     use namada_state::testing::TestState;
-    use namada_state::{StorageWrite, TxIndex};
+    use namada_state::{StateRead, StorageWrite, TxIndex};
     use namada_tx::action::Write;
     use namada_tx::data::TxType;
     use namada_tx::{Authorization, BatchedTx, Code, Data, Section, Tx};
@@ -388,6 +359,7 @@ mod tests {
     use namada_vm::wasm::run::VpEvalWasm;
     use namada_vm::wasm::VpCache;
     use namada_vm::WasmCacheRwAccess;
+    use namada_vp::native_vp::{self, CtxPreStorageRead};
 
     use super::*;
     use crate::storage_key::{balance_key, minted_balance_key};
@@ -395,22 +367,16 @@ mod tests {
     const ADDRESS: Address = Address::Internal(InternalAddress::Multitoken);
 
     type CA = WasmCacheRwAccess;
-    type Eval = VpEvalWasm<
-        <TestState as StateRead>::D,
-        <TestState as StateRead>::H,
-        CA,
-    >;
-    type Ctx<'ctx> = super::Ctx<'ctx, TestState, VpCache<CA>, Eval>;
-    type MultitokenVp<'ctx> = super::MultitokenVp<
+    type Eval<S> = VpEvalWasm<<S as StateRead>::D, <S as StateRead>::H, CA>;
+    type Ctx<'ctx, S> = native_vp::Ctx<'ctx, S, VpCache<CA>, Eval<S>>;
+    type MultitokenVp<'ctx, S> = super::MultitokenVp<
         'ctx,
-        TestState,
-        VpCache<CA>,
-        Eval,
+        Ctx<'ctx, S>,
         namada_parameters::Store<
-            CtxPreStorageRead<'ctx, 'ctx, TestState, VpCache<CA>, Eval>,
+            CtxPreStorageRead<'ctx, 'ctx, S, VpCache<CA>, Eval<S>>,
         >,
         namada_governance::Store<
-            CtxPreStorageRead<'ctx, 'ctx, TestState, VpCache<CA>, Eval>,
+            CtxPreStorageRead<'ctx, 'ctx, S, VpCache<CA>, Eval<S>>,
         >,
     >;
 
@@ -494,10 +460,14 @@ mod tests {
             vp_vp_cache,
         );
 
-        let vp = MultitokenVp::new(ctx);
         assert!(
-            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
-                .is_ok()
+            MultitokenVp::validate_tx(
+                &ctx,
+                &tx.batch_ref_tx(&cmt),
+                &keys_changed,
+                &verifiers
+            )
+            .is_ok()
         );
     }
 
@@ -535,10 +505,14 @@ mod tests {
             vp_vp_cache,
         );
 
-        let vp = MultitokenVp::new(ctx);
         assert!(
-            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
-                .is_err()
+            MultitokenVp::validate_tx(
+                &ctx,
+                &tx.batch_ref_tx(&cmt),
+                &keys_changed,
+                &verifiers
+            )
+            .is_err()
         );
     }
 
@@ -599,10 +573,14 @@ mod tests {
             vp_vp_cache,
         );
 
-        let vp = MultitokenVp::new(ctx);
         assert!(
-            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
-                .is_ok()
+            MultitokenVp::validate_tx(
+                &ctx,
+                &tx.batch_ref_tx(&cmt),
+                &keys_changed,
+                &verifiers
+            )
+            .is_ok()
         );
     }
 
@@ -659,10 +637,14 @@ mod tests {
             vp_vp_cache,
         );
 
-        let vp = MultitokenVp::new(ctx);
         assert!(
-            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
-                .is_err()
+            MultitokenVp::validate_tx(
+                &ctx,
+                &tx.batch_ref_tx(&cmt),
+                &keys_changed,
+                &verifiers
+            )
+            .is_err()
         );
     }
 
@@ -712,10 +694,14 @@ mod tests {
             vp_vp_cache,
         );
 
-        let vp = MultitokenVp::new(ctx);
         assert!(
-            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
-                .is_err()
+            MultitokenVp::validate_tx(
+                &ctx,
+                &tx.batch_ref_tx(&cmt),
+                &keys_changed,
+                &verifiers
+            )
+            .is_err()
         );
     }
 
@@ -774,10 +760,14 @@ mod tests {
             vp_vp_cache,
         );
 
-        let vp = MultitokenVp::new(ctx);
         assert!(
-            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
-                .is_err()
+            MultitokenVp::validate_tx(
+                &ctx,
+                &tx.batch_ref_tx(&cmt),
+                &keys_changed,
+                &verifiers
+            )
+            .is_err()
         );
     }
 
@@ -816,10 +806,14 @@ mod tests {
             vp_vp_cache,
         );
 
-        let vp = MultitokenVp::new(ctx);
         assert!(
-            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
-                .is_err()
+            MultitokenVp::validate_tx(
+                &ctx,
+                &tx.batch_ref_tx(&cmt),
+                &keys_changed,
+                &verifiers
+            )
+            .is_err()
         );
     }
 
@@ -859,10 +853,14 @@ mod tests {
             vp_vp_cache,
         );
 
-        let vp = MultitokenVp::new(ctx);
         assert!(
-            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
-                .is_err()
+            MultitokenVp::validate_tx(
+                &ctx,
+                &tx.batch_ref_tx(&cmt),
+                &keys_changed,
+                &verifiers
+            )
+            .is_err()
         );
     }
 
@@ -897,9 +895,13 @@ mod tests {
             vp_vp_cache,
         );
 
-        let vp = MultitokenVp::new(ctx);
         assert_matches!(
-            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers),
+            MultitokenVp::validate_tx(
+                &ctx,
+                &tx.batch_ref_tx(&cmt),
+                &keys_changed,
+                &verifiers
+            ),
             Err(_)
         );
     }
@@ -942,9 +944,13 @@ mod tests {
             vp_vp_cache,
         );
 
-        let vp = MultitokenVp::new(ctx);
         assert_matches!(
-            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers),
+            MultitokenVp::validate_tx(
+                &ctx,
+                &tx.batch_ref_tx(&cmt),
+                &keys_changed,
+                &verifiers
+            ),
             Ok(_)
         );
     }
@@ -985,9 +991,13 @@ mod tests {
             vp_vp_cache,
         );
 
-        let vp = MultitokenVp::new(ctx);
         assert_matches!(
-            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers),
+            MultitokenVp::validate_tx(
+                &ctx,
+                &tx.batch_ref_tx(&cmt),
+                &keys_changed,
+                &verifiers
+            ),
             Err(_)
         );
     }
@@ -1028,9 +1038,13 @@ mod tests {
             vp_vp_cache,
         );
 
-        let vp = MultitokenVp::new(ctx);
         assert_matches!(
-            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers),
+            MultitokenVp::validate_tx(
+                &ctx,
+                &tx.batch_ref_tx(&cmt),
+                &keys_changed,
+                &verifiers
+            ),
             Ok(_)
         );
     }
@@ -1076,9 +1090,13 @@ mod tests {
             vp_vp_cache,
         );
 
-        let vp = MultitokenVp::new(ctx);
         assert_matches!(
-            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers),
+            MultitokenVp::validate_tx(
+                &ctx,
+                &tx.batch_ref_tx(&cmt),
+                &keys_changed,
+                &verifiers
+            ),
             Ok(_)
         );
     }

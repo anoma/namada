@@ -24,7 +24,7 @@ namada_events = { path = "../events", default-features = false }
 namada_state = { path = "../state" }
 namada_systems = { path = "../systems" }
 namada_tx = { path = "../tx" }
-namada_vp = { path = "../vp" }
+namada_vp_env = { path = "../vp_env" }
 
 konst.workspace = true
 linkme = {workspace =  true, optional = true}
@@ -40,5 +40,6 @@ namada_parameters = { path = "../parameters", features = ["testing"] }
 namada_state = { path = "../state", features = ["testing"] }
 namada_tx = { path = "../tx", features = ["testing"] }
 namada_vm = { path = "../vm", features = ["testing"] }
+namada_vp = { path = "../vp" }
 
 assert_matches.workspace = true

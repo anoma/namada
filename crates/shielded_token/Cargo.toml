@@ -47,7 +47,7 @@ namada_migrations = { path = "../migrations", optional = true }
 namada_state = { path = "../state" }
 namada_systems = { path = "../systems" }
 namada_tx = { path = "../tx" }
-namada_vp = { path = "../vp" }
+namada_vp_env = { path = "../vp_env" }
 namada_wallet = { path = "../wallet", optional = true }
 
 async-trait.workspace = true

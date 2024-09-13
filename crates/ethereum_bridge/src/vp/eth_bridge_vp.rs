@@ -7,84 +7,22 @@ use namada_core::address::Address;
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::collections::HashSet;
 use namada_core::storage::Key;
-use namada_state::StateRead;
 use namada_systems::trans_token::{self as token, Amount};
 use namada_tx::BatchedTxRef;
-use namada_vp::native_vp::{
-    self, Ctx, NativeVp, Result, StorageReader, VpEvaluator,
-};
+use namada_vp_env::{Error, Result, StorageRead, VpEnv};
 
 use crate::storage;
 use crate::storage::escrow_key;
 
 /// Validity predicate for the Ethereum bridge
-pub struct EthBridge<'ctx, S, CA, EVAL, TokenKeys>
-where
-    S: 'static + StateRead,
-{
-    /// Context to interact with the host structures.
-    pub ctx: Ctx<'ctx, S, CA, EVAL>,
+pub struct EthBridge<'ctx, CTX, TokenKeys> {
     /// Generic types for DI
-    pub _marker: PhantomData<TokenKeys>,
+    pub _marker: PhantomData<(&'ctx CTX, TokenKeys)>,
 }
 
-impl<'ctx, S, CA, EVAL, TokenKeys> EthBridge<'ctx, S, CA, EVAL, TokenKeys>
+impl<'ctx, CTX, TokenKeys> EthBridge<'ctx, CTX, TokenKeys>
 where
-    S: 'static + StateRead,
-    CA: 'static + Clone,
-    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
-    TokenKeys: token::Keys,
-{
-    /// Instantiate eth bridge VP
-    pub fn new(ctx: Ctx<'ctx, S, CA, EVAL>) -> Self {
-        Self {
-            ctx,
-            _marker: PhantomData,
-        }
-    }
-
-    /// If the Ethereum bridge's escrow key was written to, we check
-    /// that the NAM balance increased and that the Bridge pool VP has
-    /// been triggered.
-    fn check_escrow(&self, verifiers: &BTreeSet<Address>) -> Result<()> {
-        let escrow_key = TokenKeys::balance_key(
-            &self.ctx.state.in_mem().native_token,
-            &crate::ADDRESS,
-        );
-
-        let escrow_pre: Amount =
-            (&self.ctx).read_pre_value(&escrow_key)?.unwrap_or_default();
-        let escrow_post: Amount =
-            (&self.ctx).must_read_post_value(&escrow_key)?;
-
-        // The amount escrowed should increase.
-        if escrow_pre < escrow_post {
-            // NB: normally, we only escrow NAM under the Ethereum bridge
-            // address in the context of a Bridge pool transfer
-            let bridge_pool_is_verifier =
-                verifiers.contains(&storage::bridge_pool::BRIDGE_POOL_ADDRESS);
-
-            bridge_pool_is_verifier.ok_or_else(|| {
-                native_vp::Error::new_const(
-                    "Bridge pool VP was not marked as a verifier of the \
-                     transaction",
-                )
-            })
-        } else {
-            Err(native_vp::Error::new_const(
-                "User tx attempted to decrease the amount of native tokens \
-                 escrowed in the Ethereum Bridge's account",
-            ))
-        }
-    }
-}
-
-impl<'view, 'ctx: 'view, S, CA, EVAL, TokenKeys> NativeVp<'view>
-    for EthBridge<'ctx, S, CA, EVAL, TokenKeys>
-where
-    S: 'static + StateRead,
-    CA: 'static + Clone,
-    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
+    CTX: VpEnv<'ctx> + namada_tx::action::Read<Err = Error>,
     TokenKeys: token::Keys,
 {
     /// Validate that a wasm transaction is permitted to change keys under this
@@ -97,8 +35,8 @@ where
     /// to happen natively i.e. bypassing this validity predicate. For example,
     /// changes to the `eth_msgs/...` keys. For those cases, we reject here as
     /// no wasm transactions should be able to modify those keys.
-    fn validate_tx(
-        &'view self,
+    pub fn validate_tx(
+        ctx: &'ctx CTX,
         _: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
@@ -109,12 +47,48 @@ where
             "Ethereum Bridge VP triggered",
         );
 
-        validate_changed_keys::<TokenKeys>(
-            &self.ctx.state.in_mem().native_token,
-            keys_changed,
-        )?;
+        let native_token = ctx.get_native_token()?;
+        validate_changed_keys::<TokenKeys>(&native_token, keys_changed)?;
 
-        self.check_escrow(verifiers)
+        Self::check_escrow(ctx, &native_token, verifiers)
+    }
+
+    /// If the Ethereum bridge's escrow key was written to, we check
+    /// that the NAM balance increased and that the Bridge pool VP has
+    /// been triggered.
+    fn check_escrow(
+        ctx: &'ctx CTX,
+        native_token: &Address,
+        verifiers: &BTreeSet<Address>,
+    ) -> Result<()> {
+        let escrow_key = TokenKeys::balance_key(native_token, &crate::ADDRESS);
+
+        let escrow_pre: Amount =
+            ctx.pre().read(&escrow_key)?.unwrap_or_default();
+        let escrow_post: Amount = ctx
+            .post()
+            .read(&escrow_key)?
+            .ok_or_else(|| Error::new_const("Escrow must be present"))?;
+
+        // The amount escrowed should increase.
+        if escrow_pre < escrow_post {
+            // NB: normally, we only escrow NAM under the Ethereum bridge
+            // address in the context of a Bridge pool transfer
+            let bridge_pool_is_verifier =
+                verifiers.contains(&storage::bridge_pool::BRIDGE_POOL_ADDRESS);
+
+            bridge_pool_is_verifier.ok_or_else(|| {
+                Error::new_const(
+                    "Bridge pool VP was not marked as a verifier of the \
+                     transaction",
+                )
+            })
+        } else {
+            Err(Error::new_const(
+                "User tx attempted to decrease the amount of native tokens \
+                 escrowed in the Ethereum Bridge's account",
+            ))
+        }
     }
 }
 
@@ -143,7 +117,7 @@ fn validate_changed_keys<TokenKeys: token::Keys>(
         })
         .collect();
     if keys_changed.is_empty() {
-        return Err(native_vp::Error::SimpleMessage(
+        return Err(Error::SimpleMessage(
             "No keys changed under our account so this validity predicate \
              shouldn't have been triggered",
         ));
@@ -154,7 +128,7 @@ fn validate_changed_keys<TokenKeys: token::Keys>(
     );
     let nam_escrow_addr_modified = keys_changed.contains(&escrow_key(nam_addr));
     if !nam_escrow_addr_modified {
-        let error = native_vp::Error::new_const(
+        let error = Error::new_const(
             "The native token's escrow balance should have been modified",
         );
         tracing::debug!("{error}");
@@ -164,7 +138,7 @@ fn validate_changed_keys<TokenKeys: token::Keys>(
         .iter()
         .all(|key| TokenKeys::is_balance_key(nam_addr, key).is_some());
     if !all_keys_are_nam_balance {
-        let error = native_vp::Error::new_const(
+        let error = Error::new_const(
             "Some modified keys were not a native token's balance key",
         );
         tracing::debug!("{error}");
@@ -184,13 +158,14 @@ mod tests {
     use namada_core::ethereum_events::EthAddress;
     use namada_gas::{TxGasMeter, VpGasMeter};
     use namada_state::testing::TestState;
-    use namada_state::{StorageWrite, TxIndex};
+    use namada_state::{StateRead, StorageWrite, TxIndex};
     use namada_trans_token::storage_key::{balance_key, minted_balance_key};
     use namada_tx::data::TxType;
     use namada_tx::{Tx, TxCommitments};
     use namada_vm::wasm::run::VpEvalWasm;
     use namada_vm::wasm::VpCache;
     use namada_vm::WasmCacheRwAccess;
+    use namada_vp::native_vp;
     use rand::Rng;
 
     use super::*;
@@ -207,14 +182,10 @@ mod tests {
     const BRIDGE_POOL_ESCROW_INITIAL_BALANCE: u64 = 0;
 
     type CA = WasmCacheRwAccess;
-    type Eval = VpEvalWasm<
-        <TestState as StateRead>::D,
-        <TestState as StateRead>::H,
-        CA,
-    >;
+    type Eval<S> = VpEvalWasm<<S as StateRead>::D, <S as StateRead>::H, CA>;
+    type Ctx<'ctx, S> = native_vp::Ctx<'ctx, S, VpCache<CA>, Eval<S>>;
     type TokenKeys = namada_token::Store<()>;
-    type EthBridge<'a, S> =
-        super::EthBridge<'a, S, VpCache<CA>, Eval, TokenKeys>;
+    type EthBridge<'ctx, S> = super::EthBridge<'ctx, Ctx<'ctx, S>, TokenKeys>;
 
     /// Return some arbitrary random key belonging to this account
     fn arbitrary_key() -> Key {
@@ -267,7 +238,7 @@ mod tests {
         gas_meter: &'ctx RefCell<VpGasMeter>,
         keys_changed: &'ctx BTreeSet<Key>,
         verifiers: &'ctx BTreeSet<Address>,
-    ) -> Ctx<'ctx, TestState, VpCache<WasmCacheRwAccess>, Eval> {
+    ) -> Ctx<'ctx, TestState> {
         Ctx::new(
             &crate::ADDRESS,
             state,
@@ -412,16 +383,21 @@ mod tests {
             &TxGasMeter::new(u64::MAX),
         ));
         let batched_tx = tx.batch_ref_first_tx().unwrap();
-        let vp = EthBridge::new(setup_ctx(
+        let ctx = setup_ctx(
             batched_tx.tx,
             batched_tx.cmt,
             &state,
             &gas_meter,
             &keys_changed,
             &verifiers,
-        ));
+        );
 
-        let res = vp.validate_tx(&batched_tx, &keys_changed, &verifiers);
+        let res = EthBridge::validate_tx(
+            &ctx,
+            &batched_tx,
+            &keys_changed,
+            &verifiers,
+        );
         assert!(res.is_ok());
     }
 
@@ -464,16 +440,21 @@ mod tests {
             &TxGasMeter::new(u64::MAX),
         ));
         let batched_tx = tx.batch_ref_first_tx().unwrap();
-        let vp = EthBridge::new(setup_ctx(
+        let ctx = setup_ctx(
             batched_tx.tx,
             batched_tx.cmt,
             &state,
             &gas_meter,
             &keys_changed,
             &verifiers,
-        ));
+        );
 
-        let res = vp.validate_tx(&batched_tx, &keys_changed, &verifiers);
+        let res = EthBridge::validate_tx(
+            &ctx,
+            &batched_tx,
+            &keys_changed,
+            &verifiers,
+        );
         assert!(res.is_err());
     }
 
@@ -519,16 +500,21 @@ mod tests {
             &TxGasMeter::new(u64::MAX),
         ));
         let batched_tx = tx.batch_ref_first_tx().unwrap();
-        let vp = EthBridge::new(setup_ctx(
+        let ctx = setup_ctx(
             batched_tx.tx,
             batched_tx.cmt,
             &state,
             &gas_meter,
             &keys_changed,
             &verifiers,
-        ));
+        );
 
-        let res = vp.validate_tx(&batched_tx, &keys_changed, &verifiers);
+        let res = EthBridge::validate_tx(
+            &ctx,
+            &batched_tx,
+            &keys_changed,
+            &verifiers,
+        );
         assert!(res.is_err());
     }
 }

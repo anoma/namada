@@ -304,6 +304,7 @@ where
 /// Helpers for testing components that depend on storage
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
+    use conversion_state::ReadConversionState;
     use namada_core::address;
     use namada_core::chain::ChainId;
     use namada_core::collections::HashMap;
@@ -440,11 +441,13 @@ pub mod testing {
         }
     }
 
-    impl WithConversionState for TestStorage {
+    impl ReadConversionState for TestStorage {
         fn conversion_state(&self) -> &ConversionState {
             &self.conversion_state
         }
+    }
 
+    impl WithConversionState for TestStorage {
         fn conversion_state_mut(&mut self) -> &mut ConversionState {
             &mut self.conversion_state
         }

@@ -11,6 +11,7 @@ use namada_core::borsh;
 use namada_core::borsh::BorshDeserialize;
 use namada_core::chain::{ChainId, Epochs};
 use namada_gas::{Gas, GasMetering, VpGasMeter};
+use namada_state::{ConversionState, ReadConversionState};
 use namada_tx::{BatchedTxRef, Tx, TxCommitments};
 
 use super::vp_host_fns;
@@ -533,6 +534,17 @@ where
         T: BorshDeserialize,
     {
         Ctx::read_pre(self, key)
+    }
+}
+
+impl<'a, S, CA, EVAL> ReadConversionState for Ctx<'a, S, CA, EVAL>
+where
+    S: StateRead + ReadConversionState,
+    EVAL: 'static + VpEvaluator<'a, S, CA, EVAL>,
+    CA: 'static + Clone,
+{
+    fn conversion_state(&self) -> &ConversionState {
+        self.state.conversion_state()
     }
 }
 
