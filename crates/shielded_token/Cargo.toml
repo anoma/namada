@@ -46,6 +46,7 @@ namada_macros = {path = "../macros" }
 namada_migrations = { path = "../migrations", optional = true }
 namada_state = { path = "../state" }
 namada_systems = { path = "../systems" }
+namada_trans_token = { path = "../trans_token" }
 namada_tx = { path = "../tx" }
 namada_vp_env = { path = "../vp_env" }
 namada_wallet = { path = "../wallet", optional = true }
@@ -78,9 +79,12 @@ xorf.workspace = true
 
 [dev-dependencies]
 namada_gas = { path = "../gas" }
+namada_governance = { path = "../governance", features = ["testing"] }
+namada_ibc = { path = "../ibc", features = ["testing"] }
 namada_parameters = { path = "../parameters", features = ["testing"] }
 namada_state = { path = "../state", features = ["testing"] }
-namada_trans_token = { path = "../trans_token" }
+namada_vm = { path = "../vm", features = ["testing"] }
+namada_vp = { path = "../vp" }
 
 lazy_static.workspace = true
 masp_primitives = { workspace = true, features = ["test-dependencies"] }

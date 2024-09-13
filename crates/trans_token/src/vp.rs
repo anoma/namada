@@ -1153,15 +1153,18 @@ mod tests {
                 vp_vp_cache.clone(),
             );
 
-            let vp = MultitokenVp::new(ctx);
             let err_msg = format!(
                 "The vp of the address {} has not been triggered",
                 verifier
             );
 
-            match vp
-                .validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &verifiers)
-                .unwrap_err()
+            match MultitokenVp::validate_tx(
+                &ctx,
+                &tx.batch_ref_tx(&cmt),
+                &keys_changed,
+                &verifiers,
+            )
+            .unwrap_err()
             {
                 Error::AllocMessage(msg) if msg == err_msg => (),
                 _ => panic!("Test failed with an unexpected error"),
@@ -1181,10 +1184,14 @@ mod tests {
             vp_vp_cache,
         );
 
-        let vp = MultitokenVp::new(ctx);
         assert!(
-            vp.validate_tx(&tx.batch_ref_tx(&cmt), &keys_changed, &parties)
-                .is_ok()
+            MultitokenVp::validate_tx(
+                &ctx,
+                &tx.batch_ref_tx(&cmt),
+                &keys_changed,
+                &parties
+            )
+            .is_ok()
         );
     }
 }

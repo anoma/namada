@@ -2177,6 +2177,7 @@ dependencies = [
  "namada_macros",
  "namada_state",
  "namada_systems",
+ "namada_trans_token",
  "namada_tx",
  "namada_vp_env",
  "rand",
