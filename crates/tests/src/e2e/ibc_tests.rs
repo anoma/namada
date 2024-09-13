@@ -159,7 +159,7 @@ fn ibc_transfers() -> Result<()> {
         &port_id_gaia,
         &channel_id_gaia,
         None,
-        Some(Duration::new(10, 0)),
+        None,
     )?;
     wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test)?;
 
@@ -267,8 +267,6 @@ fn ibc_transfers() -> Result<()> {
         &port_id_namada,
         &channel_id_namada,
     )?;
-    // FIXME: try to remove the timeouts where we technically don't need them. I
-    // believe we only need them when the transaction fails because of vps
     transfer_from_gaia(
         &test_gaia,
         GAIA_USER,
@@ -278,7 +276,7 @@ fn ibc_transfers() -> Result<()> {
         &port_id_gaia,
         &channel_id_gaia,
         Some(memo_path),
-        Some(Duration::new(10, 0)),
+        None,
     )?;
     wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test)?;
     // Check the token on Namada
