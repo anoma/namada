@@ -6,8 +6,9 @@ use namada_core::address::{self, Address};
 use namada_core::hash::Hash;
 use namada_core::storage::{self, DbKeySeg, KeySeg};
 use namada_systems::trans_token;
-use namada_trans_token::storage_key::is_any_token_balance_key;
 
+// Key segment for a balance key
+const BALANCE_STORAGE_KEY: &str = "balance";
 /// Key segment prefix for the nullifiers
 pub const MASP_NULLIFIERS_KEY: &str = "nullifiers";
 /// Key segment prefix for the note commitment merkle tree
@@ -85,8 +86,14 @@ pub fn masp_last_inflation_key<TransToken: trans_token::Keys>(
 }
 
 fn is_masp_balance_key(key: &storage::Key) -> bool {
-    is_any_token_balance_key(key)
-        .map_or(false, |[_token, owner]| *owner == address::MASP)
+    matches!(
+        &key.segments[..],
+        [DbKeySeg::AddressSeg(addr), DbKeySeg::AddressSeg(_token), DbKeySeg::StringSeg(balance), DbKeySeg::AddressSeg(owner)]
+            if *addr
+                == Address::Internal(address::InternalAddress::Multitoken)
+                && balance == BALANCE_STORAGE_KEY
+                && *owner == address::MASP
+    )
 }
 
 /// Check if the given storage key is a masp key
