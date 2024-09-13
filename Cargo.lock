@@ -5559,6 +5559,7 @@ name = "namada_trans_token"
 version = "0.43.0"
 dependencies = [
  "assert_matches",
+ "itertools 0.12.1",
  "konst",
  "linkme",
  "namada_core",
@@ -5575,6 +5576,7 @@ dependencies = [
  "namada_vm",
  "namada_vp",
  "namada_vp_env",
+ "proptest",
  "thiserror",
  "tracing",
 ]
