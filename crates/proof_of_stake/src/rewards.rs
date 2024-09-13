@@ -656,6 +656,41 @@ where
     Ok(storage.read::<token::Amount>(&key)?.unwrap_or_default())
 }
 
+/// Compute an estimation of the most recent staking rewards rate.
+pub fn estimate_staking_reward_rate<S, Token, Parameters>(
+    storage: &S,
+) -> Result<Dec>
+where
+    S: StorageRead,
+    Parameters: parameters::Read<S>,
+    Token: trans_token::Read<S> + trans_token::Write<S>,
+{
+    // Get needed data in desired form
+    let total_native_tokens =
+        Token::get_effective_total_native_supply(storage)?;
+    let last_staked_ratio = read_last_staked_ratio(storage)?
+        .expect("Last staked ratio should exist in PoS storage");
+    let last_inflation_amount = read_last_pos_inflation_amount(storage)?
+        .expect("Last inflation amount should exist in PoS storage");
+    let epochs_per_year: u64 = Parameters::epochs_per_year(storage)?;
+
+    let total_native_tokens =
+        Dec::try_from(total_native_tokens).into_storage_result()?;
+    let last_inflation_amount =
+        Dec::try_from(last_inflation_amount).into_storage_result()?;
+
+    // Estimate annual inflation rate
+    let est_inflation_rate = checked!(
+        last_inflation_amount * epochs_per_year / total_native_tokens
+    )?;
+
+    // Estimate annual staking rewards rate
+    let est_staking_reward_rate =
+        checked!(est_inflation_rate / last_staked_ratio)?;
+
+    Ok(est_staking_reward_rate)
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;

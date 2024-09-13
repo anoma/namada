@@ -2,9 +2,10 @@
 
 use namada_core::address::Address;
 use namada_core::token;
+use namada_proof_of_stake::rewards::estimate_staking_reward_rate;
 use namada_state::{DBIter, StorageHasher, DB};
 use namada_token::{
-    get_effective_total_native_supply, read_denom, read_total_supply,
+    get_effective_total_native_supply, read_denom, read_total_supply, Dec,
 };
 
 use crate::queries::RequestCtx;
@@ -13,6 +14,7 @@ router! {TOKEN,
     ( "denomination" / [token: Address] ) -> Option<token::Denomination> = denomination,
     ( "total_supply" / [token: Address] ) -> token::Amount = total_supply,
     ( "effective_native_supply" ) -> token::Amount = effective_native_supply,
+    ( "staking_rewards_rate" ) -> Dec = staking_rewards_rate,
 }
 
 /// Get the number of decimal places (in base 10) for a
@@ -49,6 +51,21 @@ where
     H: 'static + StorageHasher + Sync,
 {
     get_effective_total_native_supply(ctx.state)
+}
+
+/// Get the effective total supply of the native token
+fn staking_rewards_rate<D, H, V, T>(
+    ctx: RequestCtx<'_, D, H, V, T>,
+) -> namada_storage::Result<Dec>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    estimate_staking_reward_rate::<
+        _,
+        crate::token::Store<_>,
+        crate::parameters::Store<_>,
+    >(ctx.state)
 }
 
 pub mod client_only_methods {
