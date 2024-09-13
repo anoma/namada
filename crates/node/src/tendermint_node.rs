@@ -275,10 +275,13 @@ async fn update_tendermint_config(
     home_dir: impl AsRef<Path>,
     mut config: TendermintConfig,
 ) -> Result<()> {
-    let path = configuration(home_dir);
-
+    let path: PathBuf = configuration(home_dir);
+    let actual_moniker = config.moniker.to_string();
+    let actual_moniker = actual_moniker
+        .strip_suffix(namada_version())
+        .unwrap_or(&actual_moniker);
     config.moniker =
-        Moniker::from_str(&format!("{}-{}", config.moniker, namada_version()))
+        Moniker::from_str(&format!("{}-{}", actual_moniker, namada_version()))
             .expect("Invalid moniker");
 
     config.consensus.create_empty_blocks = true;
