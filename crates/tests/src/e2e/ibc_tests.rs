@@ -73,6 +73,9 @@ const UPGRADED_CHAIN_ID: &str = "upgraded-chain";
 ///   - When unshielding transfer failure,
 ///     - Mint the IBC token for the refund
 ///     - Unescrow the token for the refund
+/// 6. Malformed shielded actions
+///   - Missing memo
+///   - Wrong memo
 #[test]
 fn ibc_transfers() -> Result<()> {
     let update_genesis =
@@ -264,6 +267,8 @@ fn ibc_transfers() -> Result<()> {
         &port_id_namada,
         &channel_id_namada,
     )?;
+    // FIXME: try to remove the timeouts where we technically don't need them. I
+    // believe we only need them when the transaction fails because of vps
     transfer_from_gaia(
         &test_gaia,
         GAIA_USER,
@@ -383,6 +388,53 @@ fn ibc_transfers() -> Result<()> {
     // Check the token has been refunded to the refund target
     check_balance(&test, AA_VIEWING_KEY, APFEL, 0)?;
     check_balance(&test, IBC_REFUND_TARGET_ALIAS, APFEL, 1)?;
+
+    // 6. Malformed shielded actions
+
+    // Check initial balance
+    check_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
+
+    // Missing memo
+    transfer_from_gaia(
+        &test_gaia,
+        GAIA_USER,
+        AA_PAYMENT_ADDRESS,
+        GAIA_COIN,
+        100,
+        &port_id_gaia,
+        &channel_id_gaia,
+        None,
+        // MASP VP shall reject it, make it timeout
+        Some(Duration::new(10, 0)),
+    )?;
+    wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
+    // Check the balance didn't change
+    check_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
+
+    // Wrong memo (different amount)
+    let shielding_data_path = gen_ibc_shielding_data(
+        &test,
+        AA_PAYMENT_ADDRESS,
+        GAIA_COIN,
+        100,
+        &port_id_namada,
+        &channel_id_namada,
+    )?;
+    transfer_from_gaia(
+        &test_gaia,
+        GAIA_USER,
+        AA_PAYMENT_ADDRESS,
+        GAIA_COIN,
+        101,
+        &port_id_gaia,
+        &channel_id_gaia,
+        Some(shielding_data_path),
+        // MASP VP shall reject it, make it timeout
+        Some(Duration::new(10, 0)),
+    )?;
+    wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test_gaia)?;
+    // Check the balances didn't change
+    check_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
 
     Ok(())
 }
