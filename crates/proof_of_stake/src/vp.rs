@@ -6,15 +6,12 @@ use std::marker::PhantomData;
 use namada_core::address::Address;
 use namada_core::booleans::BoolResultUnitExt;
 use namada_core::storage::Key;
-use namada_state::StateRead;
 use namada_systems::governance;
 use namada_tx::action::{
-    Action, Bond, ClaimRewards, PosAction, Read, Redelegation, Unbond, Withdraw,
+    Action, Bond, ClaimRewards, PosAction, Redelegation, Unbond, Withdraw,
 };
 use namada_tx::BatchedTxRef;
-use namada_vp::native_vp::{
-    Ctx, CtxPreStorageRead, Error, NativeVp, Result, VpEvaluator,
-};
+use namada_vp_env::{Error, Result, VpEnv};
 use thiserror::Error;
 
 use crate::storage::read_owned_pos_params;
@@ -38,26 +35,19 @@ impl From<VpError> for Error {
 }
 
 /// Proof-of-Stake validity predicate
-pub struct PosVp<'ctx, S, CA, EVAL, Gov>
-where
-    S: StateRead,
-{
-    /// Context to interact with the host structures.
-    pub ctx: Ctx<'ctx, S, CA, EVAL>,
+pub struct PosVp<'ctx, CTX, Gov> {
     /// Generic types for DI
-    pub _marker: PhantomData<Gov>,
+    pub _marker: PhantomData<(&'ctx CTX, Gov)>,
 }
 
-impl<'view, 'ctx: 'view, S, CA, EVAL, Gov> NativeVp<'view>
-    for PosVp<'ctx, S, CA, EVAL, Gov>
+impl<'ctx, CTX, Gov> PosVp<'ctx, CTX, Gov>
 where
-    S: StateRead,
-    CA: 'static + Clone,
-    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
-    Gov: governance::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
+    CTX: VpEnv<'ctx> + namada_tx::action::Read<Err = Error>,
+    Gov: governance::Read<<CTX as VpEnv<'ctx>>::Pre>,
 {
-    fn validate_tx(
-        &'view self,
+    /// Run the validity predicate
+    pub fn validate_tx(
+        ctx: &'ctx CTX,
         batched_tx: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
@@ -68,7 +58,7 @@ where
         if batched_tx
             .tx
             .data(batched_tx.cmt)
-            .map(|tx_data| Gov::is_proposal_accepted(&self.ctx.pre(), &tx_data))
+            .map(|tx_data| Gov::is_proposal_accepted(&ctx.pre(), &tx_data))
             .transpose()?
             .unwrap_or(false)
         {
@@ -76,7 +66,7 @@ where
                 if is_params_key(key) {
                     // If governance changes PoS params, the params have to be
                     // valid
-                    self.is_valid_parameter_change()?;
+                    Self::is_valid_parameter_change(ctx)?;
                 }
                 // Any other change from governance is allowed without further
                 // checks
@@ -85,7 +75,7 @@ where
         }
 
         // Find the actions applied in the tx
-        let actions = self.ctx.read_actions()?;
+        let actions = ctx.read_actions()?;
 
         // There must be at least one action
         if actions.is_empty()
@@ -320,26 +310,11 @@ where
         }
         Ok(())
     }
-}
-
-impl<'view, 'ctx: 'view, S, CA, EVAL, Gov> PosVp<'ctx, S, CA, EVAL, Gov>
-where
-    S: StateRead,
-    CA: 'static + Clone,
-    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
-{
-    /// Instantiate a `PosVP`.
-    pub fn new(ctx: Ctx<'ctx, S, CA, EVAL>) -> Self {
-        Self {
-            ctx,
-            _marker: PhantomData,
-        }
-    }
 
     /// Return `Ok` if the changed parameters are valid
-    fn is_valid_parameter_change(&self) -> Result<()> {
+    fn is_valid_parameter_change(ctx: &'ctx CTX) -> Result<()> {
         let validation_errors: Vec<crate::parameters::ValidationError> =
-            read_owned_pos_params(&self.ctx.post())?.validate();
+            read_owned_pos_params(&ctx.post())?.validate();
         validation_errors.is_empty().ok_or_else(|| {
             let validation_errors_str =
                 itertools::join(validation_errors, ", ");

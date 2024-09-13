@@ -29,7 +29,7 @@ namada_migrations = { path= "../migrations", optional = true }
 namada_state = { path = "../state" }
 namada_systems = { path = "../systems" }
 namada_tx = { path = "../tx" }
-namada_vp = { path = "../vp" }
+namada_vp_env = { path = "../vp_env" }
 
 arbitrary = { workspace = true, optional = true }
 borsh.workspace = true
@@ -53,6 +53,7 @@ namada_state = { path = "../state", features = ["testing"] }
 namada_token = { path = "../token", features = ["testing"] }
 namada_tx = { path = "../tx", features = ["testing"] }
 namada_vm = { path = "../vm", features = ["testing"] }
+namada_vp = { path = "../vp" }
 
 assert_matches.workspace = true
 proptest.workspace = true

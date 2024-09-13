@@ -38,6 +38,7 @@ use namada_vm::wasm::{TxCache, VpCache};
 use namada_vm::{self, wasm, WasmCacheAccess};
 use namada_vote_ext::EthereumTxData;
 use namada_vp::native_vp::NativeVp;
+use namada_vp::state::ReadConversionState;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use smooth_operator::checked;
 use thiserror::Error;
@@ -340,7 +341,11 @@ pub(crate) fn dispatch_inner_txs<'a, S, D, H, CA>(
     tx_wasm_cache: &'a mut TxCache<CA>,
 ) -> std::result::Result<ExtendedTxResult<Error>, DispatchError>
 where
-    S: 'static + State<D = D, H = H> + Read<Err = state::Error> + Sync,
+    S: 'static
+        + State<D = D, H = H>
+        + Read<Err = state::Error>
+        + ReadConversionState
+        + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
@@ -457,6 +462,7 @@ where
         + State<D = D, H = H>
         + Read<Err = state::Error>
         + TxWrites
+        + ReadConversionState
         + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -531,6 +537,7 @@ where
         + StorageRead
         + TxWrites
         + Read<Err = state::Error>
+        + ReadConversionState
         + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -693,6 +700,7 @@ where
         + State<D = D, H = H>
         + StorageRead
         + Read<Err = state::Error>
+        + ReadConversionState
         + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -870,6 +878,7 @@ where
         + State<D = D, H = H>
         + StorageRead
         + Read<Err = state::Error>
+        + ReadConversionState
         + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
@@ -940,7 +949,7 @@ fn apply_wasm_tx<S, D, H, CA>(
     shell_params: ShellParams<'_, S, D, H, CA>,
 ) -> Result<BatchedTxResult>
 where
-    S: 'static + State<D = D, H = H> + Sync,
+    S: 'static + State<D = D, H = H> + ReadConversionState + Sync,
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
@@ -1124,7 +1133,7 @@ fn check_vps<S, CA>(
     }: CheckVps<'_, S, CA>,
 ) -> Result<VpsResult>
 where
-    S: 'static + State + Sync,
+    S: 'static + ReadConversionState + State + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
     let (verifiers, keys_changed) = state
@@ -1161,7 +1170,7 @@ fn execute_vps<S, CA>(
     vp_wasm_cache: &mut VpCache<CA>,
 ) -> Result<(VpsResult, namada_sdk::gas::Gas)>
 where
-    S: 'static + State + Sync,
+    S: 'static + ReadConversionState + State + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
     let vps_result = verifiers
@@ -1219,15 +1228,13 @@ where
                         );
 
                         match internal_addr {
-                            InternalAddress::PoS => {
-                                let pos = PosVp::new(ctx);
-                                pos.validate_tx(
-                                    batched_tx,
-                                    &keys_changed,
-                                    &verifiers,
-                                )
-                                .map_err(Error::NativeVpError)
-                            }
+                            InternalAddress::PoS => PosVp::validate_tx(
+                                &ctx,
+                                batched_tx,
+                                &keys_changed,
+                                &verifiers,
+                            )
+                            .map_err(Error::NativeVpError),
                             InternalAddress::Ibc => {
                                 let ibc = IbcVp::new(ctx);
                                 ibc.validate_tx(
@@ -1238,14 +1245,13 @@ where
                                 .map_err(Error::NativeVpError)
                             }
                             InternalAddress::Parameters => {
-                                let parameters = ParametersVp::new(ctx);
-                                parameters
-                                    .validate_tx(
-                                        batched_tx,
-                                        &keys_changed,
-                                        &verifiers,
-                                    )
-                                    .map_err(Error::NativeVpError)
+                                ParametersVp::validate_tx(
+                                    &ctx,
+                                    batched_tx,
+                                    &keys_changed,
+                                    &verifiers,
+                                )
+                                .map_err(Error::NativeVpError)
                             }
                             InternalAddress::PosSlashPool => {
                                 Err(Error::AccessForbidden(
@@ -1253,74 +1259,63 @@ where
                                 ))
                             }
                             InternalAddress::Governance => {
-                                let governance = GovernanceVp::new(ctx);
-                                governance
-                                    .validate_tx(
-                                        batched_tx,
-                                        &keys_changed,
-                                        &verifiers,
-                                    )
-                                    .map_err(Error::NativeVpError)
-                            }
-                            InternalAddress::Pgf => {
-                                let pgf_vp = PgfVp::new(ctx);
-                                pgf_vp
-                                    .validate_tx(
-                                        batched_tx,
-                                        &keys_changed,
-                                        &verifiers,
-                                    )
-                                    .map_err(Error::NativeVpError)
-                            }
-                            InternalAddress::Multitoken => {
-                                let multitoken = MultitokenVp::new(ctx);
-                                multitoken
-                                    .validate_tx(
-                                        batched_tx,
-                                        &keys_changed,
-                                        &verifiers,
-                                    )
-                                    .map_err(Error::NativeVpError)
-                            }
-                            InternalAddress::Masp => {
-                                let masp = MaspVp::new(ctx);
-                                masp.validate_tx(
+                                GovernanceVp::validate_tx(
+                                    &ctx,
                                     batched_tx,
                                     &keys_changed,
                                     &verifiers,
                                 )
                                 .map_err(Error::NativeVpError)
                             }
+                            InternalAddress::Pgf => PgfVp::validate_tx(
+                                &ctx,
+                                batched_tx,
+                                &keys_changed,
+                                &verifiers,
+                            )
+                            .map_err(Error::NativeVpError),
+                            InternalAddress::Multitoken => {
+                                MultitokenVp::validate_tx(
+                                    &ctx,
+                                    batched_tx,
+                                    &keys_changed,
+                                    &verifiers,
+                                )
+                                .map_err(Error::NativeVpError)
+                            }
+                            InternalAddress::Masp => MaspVp::validate_tx(
+                                &ctx,
+                                batched_tx,
+                                &keys_changed,
+                                &verifiers,
+                            )
+                            .map_err(Error::NativeVpError),
                             InternalAddress::EthBridge => {
-                                let bridge = EthBridgeVp::new(ctx);
-                                bridge
-                                    .validate_tx(
-                                        batched_tx,
-                                        &keys_changed,
-                                        &verifiers,
-                                    )
-                                    .map_err(Error::NativeVpError)
+                                EthBridgeVp::validate_tx(
+                                    &ctx,
+                                    batched_tx,
+                                    &keys_changed,
+                                    &verifiers,
+                                )
+                                .map_err(Error::NativeVpError)
                             }
                             InternalAddress::EthBridgePool => {
-                                let bridge_pool = EthBridgePoolVp::new(ctx);
-                                bridge_pool
-                                    .validate_tx(
-                                        batched_tx,
-                                        &keys_changed,
-                                        &verifiers,
-                                    )
-                                    .map_err(Error::NativeVpError)
+                                EthBridgePoolVp::validate_tx(
+                                    &ctx,
+                                    batched_tx,
+                                    &keys_changed,
+                                    &verifiers,
+                                )
+                                .map_err(Error::NativeVpError)
                             }
                             InternalAddress::Nut(_) => {
-                                let non_usable_tokens =
-                                    EthBridgeNutVp::new(ctx);
-                                non_usable_tokens
-                                    .validate_tx(
-                                        batched_tx,
-                                        &keys_changed,
-                                        &verifiers,
-                                    )
-                                    .map_err(Error::NativeVpError)
+                                EthBridgeNutVp::validate_tx(
+                                    &ctx,
+                                    batched_tx,
+                                    &keys_changed,
+                                    &verifiers,
+                                )
+                                .map_err(Error::NativeVpError)
                             }
                             internal_addr @ (InternalAddress::IbcToken(_)
                             | InternalAddress::Erc20(_)) => {

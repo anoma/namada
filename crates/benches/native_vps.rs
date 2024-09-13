@@ -62,8 +62,13 @@ use namada_node::bench_utils::{
     TX_BRIDGE_POOL_WASM, TX_IBC_WASM, TX_INIT_PROPOSAL_WASM, TX_RESIGN_STEWARD,
     TX_TRANSFER_WASM, TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL_WASM,
 };
-use namada_vp::native_vp::{Ctx, NativeVp};
+use namada_vm::wasm::run::VpEvalWasm;
+use namada_vm::wasm::VpCache;
+use namada_vp::native_vp::{self, NativeVp};
 use rand_core::OsRng;
+
+type Ctx<'ctx, S, D, H, CA> =
+    native_vp::Ctx<'ctx, S, VpCache<CA>, VpEvalWasm<D, H, CA>>;
 
 fn governance(c: &mut Criterion) {
     let mut group = c.benchmark_group("vp_governance");
@@ -215,7 +220,7 @@ fn governance(c: &mut Criterion) {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new(u64::MAX),
         ));
-        let governance = GovernanceVp::new(Ctx::new(
+        let ctx = Ctx::new(
             &Address::Internal(InternalAddress::Governance),
             &shell.state,
             &signed_tx.tx,
@@ -225,18 +230,18 @@ fn governance(c: &mut Criterion) {
             &keys_changed,
             &verifiers,
             shell.vp_wasm_cache.clone(),
-        ));
+        );
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
                 assert!(
-                    governance
-                        .validate_tx(
-                            &signed_tx.to_ref(),
-                            governance.ctx.keys_changed,
-                            governance.ctx.verifiers,
-                        )
-                        .is_ok()
+                    GovernanceVp::validate_tx(
+                        &ctx,
+                        &signed_tx.to_ref(),
+                        ctx.keys_changed,
+                        ctx.verifiers,
+                    )
+                    .is_ok()
                 )
             })
         });
@@ -508,7 +513,7 @@ fn vp_multitoken(c: &mut Criterion) {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new(u64::MAX),
         ));
-        let multitoken = MultitokenVp::new(Ctx::new(
+        let ctx = Ctx::new(
             &Address::Internal(InternalAddress::Multitoken),
             &shell.state,
             &signed_tx.tx,
@@ -518,18 +523,18 @@ fn vp_multitoken(c: &mut Criterion) {
             &keys_changed,
             &verifiers,
             shell.vp_wasm_cache.clone(),
-        ));
+        );
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
                 assert!(
-                    multitoken
-                        .validate_tx(
-                            &signed_tx.to_ref(),
-                            multitoken.ctx.keys_changed,
-                            multitoken.ctx.verifiers,
-                        )
-                        .is_ok()
+                    MultitokenVp::validate_tx(
+                        &ctx,
+                        &signed_tx.to_ref(),
+                        ctx.keys_changed,
+                        ctx.verifiers,
+                    )
+                    .is_ok()
                 )
             })
         });
@@ -629,7 +634,7 @@ fn masp(c: &mut Criterion) {
             let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
                 &TxGasMeter::new(u64::MAX),
             ));
-            let masp = MaspVp::new(Ctx::new(
+            let ctx = Ctx::new(
                 &Address::Internal(InternalAddress::Masp),
                 &shell_read.state,
                 &signed_tx.tx,
@@ -639,14 +644,15 @@ fn masp(c: &mut Criterion) {
                 &keys_changed,
                 &verifiers,
                 shell_read.vp_wasm_cache.clone(),
-            ));
+            );
 
             b.iter(|| {
                 assert!(
-                    masp.validate_tx(
+                    MaspVp::validate_tx(
+                        &ctx,
                         &signed_tx.to_ref(),
-                        masp.ctx.keys_changed,
-                        masp.ctx.verifiers,
+                        ctx.keys_changed,
+                        ctx.verifiers,
                     )
                     .is_ok()
                 );
@@ -1241,7 +1247,7 @@ fn pgf(c: &mut Criterion) {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new(u64::MAX),
         ));
-        let pgf = PgfVp::new(Ctx::new(
+        let ctx = Ctx::new(
             &Address::Internal(InternalAddress::Pgf),
             &shell.state,
             &signed_tx.tx,
@@ -1251,15 +1257,16 @@ fn pgf(c: &mut Criterion) {
             &keys_changed,
             &verifiers,
             shell.vp_wasm_cache.clone(),
-        ));
+        );
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
                 assert!(
-                    pgf.validate_tx(
+                    PgfVp::validate_tx(
+                        &ctx,
                         &signed_tx.to_ref(),
-                        pgf.ctx.keys_changed,
-                        pgf.ctx.verifiers,
+                        ctx.keys_changed,
+                        ctx.verifiers,
                     )
                     .is_ok()
                 )
@@ -1316,7 +1323,7 @@ fn eth_bridge_nut(c: &mut Criterion) {
         Address::Internal(InternalAddress::Nut(native_erc20_addres));
     let gas_meter =
         RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(u64::MAX)));
-    let nut = EthBridgeNutVp::new(Ctx::new(
+    let ctx = Ctx::new(
         &vp_address,
         &shell.state,
         &signed_tx.tx,
@@ -1326,15 +1333,16 @@ fn eth_bridge_nut(c: &mut Criterion) {
         &keys_changed,
         &verifiers,
         shell.vp_wasm_cache.clone(),
-    ));
+    );
 
     c.bench_function("vp_eth_bridge_nut", |b| {
         b.iter(|| {
             assert!(
-                nut.validate_tx(
+                EthBridgeNutVp::validate_tx(
+                    &ctx,
                     &signed_tx.to_ref(),
-                    nut.ctx.keys_changed,
-                    nut.ctx.verifiers,
+                    ctx.keys_changed,
+                    ctx.verifiers,
                 )
                 .is_ok()
             )
@@ -1387,7 +1395,7 @@ fn eth_bridge(c: &mut Criterion) {
     let vp_address = Address::Internal(InternalAddress::EthBridge);
     let gas_meter =
         RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(u64::MAX)));
-    let eth_bridge = EthBridgeVp::new(Ctx::new(
+    let ctx = Ctx::new(
         &vp_address,
         &shell.state,
         &signed_tx.tx,
@@ -1397,18 +1405,18 @@ fn eth_bridge(c: &mut Criterion) {
         &keys_changed,
         &verifiers,
         shell.vp_wasm_cache.clone(),
-    ));
+    );
 
     c.bench_function("vp_eth_bridge", |b| {
         b.iter(|| {
             assert!(
-                eth_bridge
-                    .validate_tx(
-                        &signed_tx.to_ref(),
-                        eth_bridge.ctx.keys_changed,
-                        eth_bridge.ctx.verifiers,
-                    )
-                    .is_ok()
+                EthBridgeVp::validate_tx(
+                    &ctx,
+                    &signed_tx.to_ref(),
+                    ctx.keys_changed,
+                    ctx.verifiers,
+                )
+                .is_ok()
             )
         })
     });
@@ -1484,7 +1492,7 @@ fn eth_bridge_pool(c: &mut Criterion) {
     let vp_address = Address::Internal(InternalAddress::EthBridgePool);
     let gas_meter =
         RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(u64::MAX)));
-    let bridge_pool = EthBridgePoolVp::new(Ctx::new(
+    let ctx = Ctx::new(
         &vp_address,
         &shell.state,
         &signed_tx.tx,
@@ -1494,18 +1502,18 @@ fn eth_bridge_pool(c: &mut Criterion) {
         &keys_changed,
         &verifiers,
         shell.vp_wasm_cache.clone(),
-    ));
+    );
 
     c.bench_function("vp_eth_bridge_pool", |b| {
         b.iter(|| {
             assert!(
-                bridge_pool
-                    .validate_tx(
-                        &signed_tx.to_ref(),
-                        bridge_pool.ctx.keys_changed,
-                        bridge_pool.ctx.verifiers,
-                    )
-                    .is_ok()
+                EthBridgePoolVp::validate_tx(
+                    &ctx,
+                    &signed_tx.to_ref(),
+                    ctx.keys_changed,
+                    ctx.verifiers,
+                )
+                .is_ok()
             )
         })
     });
@@ -1557,7 +1565,7 @@ fn parameters(c: &mut Criterion) {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new(u64::MAX),
         ));
-        let parameters = ParametersVp::new(Ctx::new(
+        let ctx = Ctx::new(
             &vp_address,
             &shell.state,
             &signed_tx.tx,
@@ -1567,18 +1575,18 @@ fn parameters(c: &mut Criterion) {
             &keys_changed,
             &verifiers,
             shell.vp_wasm_cache.clone(),
-        ));
+        );
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
                 assert!(
-                    parameters
-                        .validate_tx(
-                            &signed_tx.to_ref(),
-                            parameters.ctx.keys_changed,
-                            parameters.ctx.verifiers,
-                        )
-                        .is_ok()
+                    ParametersVp::validate_tx(
+                        &ctx,
+                        &signed_tx.to_ref(),
+                        ctx.keys_changed,
+                        ctx.verifiers,
+                    )
+                    .is_ok()
                 )
             })
         });
@@ -1633,7 +1641,7 @@ fn pos(c: &mut Criterion) {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new(u64::MAX),
         ));
-        let pos = PosVp::new(Ctx::new(
+        let ctx = Ctx::new(
             &vp_address,
             &shell.state,
             &signed_tx.tx,
@@ -1643,15 +1651,16 @@ fn pos(c: &mut Criterion) {
             &keys_changed,
             &verifiers,
             shell.vp_wasm_cache.clone(),
-        ));
+        );
 
         group.bench_function(bench_name, |b| {
             b.iter(|| {
                 assert!(
-                    pos.validate_tx(
+                    PosVp::validate_tx(
+                        &ctx,
                         &signed_tx.to_ref(),
-                        pos.ctx.keys_changed,
-                        pos.ctx.verifiers,
+                        ctx.keys_changed,
+                        ctx.verifiers,
                     )
                     .is_ok()
                 )

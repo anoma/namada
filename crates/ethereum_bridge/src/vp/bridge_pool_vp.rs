@@ -26,10 +26,10 @@ use namada_core::ethereum_events::EthAddress;
 use namada_core::hints;
 use namada_core::storage::Key;
 use namada_core::uint::I320;
-use namada_state::{ResultExt, StateRead};
+use namada_state::ResultExt;
 use namada_systems::trans_token::{self as token, Amount};
 use namada_tx::BatchedTxRef;
-use namada_vp::native_vp::{Ctx, Error, NativeVp, StorageReader, VpEvaluator};
+use namada_vp_env::{Error, Result, StorageRead, VpEnv};
 
 use crate::storage::bridge_pool::{
     get_pending_key, is_bridge_pool_key, BRIDGE_POOL_ADDRESS,
@@ -51,47 +51,164 @@ struct AmountDelta {
 impl AmountDelta {
     /// Resolve the updated amount by applying the delta value.
     #[inline]
-    fn resolve(self) -> Result<I320, Error> {
+    fn resolve(self) -> Result<I320> {
         checked!(self.delta + I320::from(self.base)).map_err(Into::into)
     }
 }
 
 /// Validity predicate for the Ethereum bridge
-pub struct BridgePool<'ctx, S, CA, EVAL, TokenKeys>
-where
-    S: 'static + StateRead,
-{
-    /// Context to interact with the host structures.
-    pub ctx: Ctx<'ctx, S, CA, EVAL>,
+pub struct BridgePool<'ctx, CTX, TokenKeys> {
     /// Generic types for DI
-    pub _marker: PhantomData<TokenKeys>,
+    pub _marker: PhantomData<(&'ctx CTX, TokenKeys)>,
 }
 
-impl<'ctx, S, CA, EVAL, TokenKeys> BridgePool<'ctx, S, CA, EVAL, TokenKeys>
+impl<'ctx, CTX, TokenKeys> BridgePool<'ctx, CTX, TokenKeys>
 where
-    S: 'static + StateRead,
-    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
-    CA: 'static + Clone,
+    CTX: VpEnv<'ctx> + namada_tx::action::Read<Err = Error>,
     TokenKeys: token::Keys,
 {
-    /// Instantiate bridge pool VP
-    pub fn new(ctx: Ctx<'ctx, S, CA, EVAL>) -> Self {
-        Self {
-            ctx,
-            _marker: PhantomData,
+    /// Run the validity predicate
+    pub fn validate_tx(
+        ctx: &'ctx CTX,
+        batched_tx: &BatchedTxRef<'_>,
+        keys_changed: &BTreeSet<Key>,
+        _verifiers: &BTreeSet<Address>,
+    ) -> Result<()> {
+        tracing::debug!(
+            keys_changed_len = keys_changed.len(),
+            verifiers_len = _verifiers.len(),
+            "Ethereum Bridge Pool VP triggered",
+        );
+        if !is_bridge_active_at(&ctx.pre(), ctx.get_block_epoch()?)? {
+            tracing::debug!(
+                "Rejecting transaction, since the Ethereum bridge is disabled."
+            );
+            return Err(Error::new_const(
+                "Rejecting transaction, since the Ethereum bridge is disabled.",
+            ));
         }
+        let Some(tx_data) = batched_tx.tx.data(batched_tx.cmt) else {
+            return Err(Error::new_const("No transaction data found"));
+        };
+        let transfer: PendingTransfer =
+            BorshDeserialize::try_from_slice(&tx_data[..])
+                .into_storage_result()?;
+
+        let pending_key = get_pending_key(&transfer);
+        // check that transfer is not already in the pool
+        match ctx.pre().read::<PendingTransfer>(&pending_key) {
+            Ok(Some(_)) => {
+                let error = Error::new_const(
+                    "Rejecting transaction as the transfer is already in the \
+                     Ethereum bridge pool.",
+                );
+                tracing::debug!("{error}");
+                return Err(error);
+            }
+            // NOTE: make sure we don't erase storage errors returned by the
+            // ctx, as these may contain gas errors!
+            Err(e) => return Err(e),
+            _ => {}
+        }
+        for key in keys_changed.iter().filter(|k| is_bridge_pool_key(k)) {
+            if *key != pending_key {
+                let error = Error::new_alloc(format!(
+                    "Rejecting transaction as it is attempting to change an \
+                     incorrect key in the Ethereum bridge pool: {key}.\n \
+                     Expected key: {pending_key}",
+                ));
+                tracing::debug!("{error}");
+                return Err(error);
+            }
+        }
+        let pending: PendingTransfer =
+            ctx.post().read(&pending_key)?.ok_or_else(|| {
+                Error::new_const(
+                    "Rejecting transaction as the transfer wasn't added to \
+                     the pool of pending transfers",
+                )
+            })?;
+        if pending != transfer {
+            let error = Error::new_alloc(format!(
+                "An incorrect transfer was added to the Ethereum bridge pool: \
+                 {transfer:?}.\n Expected: {pending:?}",
+            ));
+            tracing::debug!("{error}");
+            return Err(error);
+        }
+        // The deltas in the escrowed amounts we must check.
+        let wnam_address = read_native_erc20_address(&ctx.pre())?;
+        let escrow_checks =
+            Self::determine_escrow_checks(ctx, &wnam_address, &transfer)?;
+        if !escrow_checks.validate::<TokenKeys>(keys_changed) {
+            let error = Error::new_const(
+                // TODO(namada#3247): specify which storage changes are missing
+                // or which ones are invalid
+                "Invalid storage modifications in the Bridge pool",
+            );
+            tracing::debug!("{error}");
+            return Err(error);
+        }
+        // check that gas was correctly escrowed.
+        if !Self::check_gas_escrow(
+            ctx,
+            &wnam_address,
+            &transfer,
+            escrow_checks.gas_check,
+        )? {
+            return Err(Error::new_const(
+                "Gas was not correctly escrowed into the Bridge pool storage",
+            ));
+        }
+        // check the escrowed assets
+        if transfer.transfer.asset == wnam_address {
+            Self::check_wnam_escrow(
+                ctx,
+                &wnam_address,
+                &transfer,
+                escrow_checks.token_check,
+            )?
+            .ok_or_else(|| {
+                Error::new_const(
+                    "The wrapped NAM tokens were not escrowed properly",
+                )
+            })
+        } else {
+            Self::check_escrowed_toks(ctx, escrow_checks.token_check)?
+                .ok_or_else(|| {
+                    Error::new_alloc(format!(
+                        "The {} tokens were not escrowed properly",
+                        transfer.transfer.asset
+                    ))
+                })
+        }
+        .inspect(|_| {
+            tracing::info!(
+                "The Ethereum bridge pool VP accepted the transfer {:?}.",
+                transfer
+            );
+        })
+        .inspect_err(|err| {
+            tracing::debug!(
+                ?transfer,
+                reason = ?err,
+                "The assets of the transfer were not properly escrowed \
+                 into the Ethereum bridge pool."
+            );
+        })
     }
 
     /// Get the change in the balance of an account
     /// associated with an address
     fn account_balance_delta(
-        &self,
+        ctx: &'ctx CTX,
         token: &Address,
         address: &Address,
-    ) -> Result<Option<AmountDelta>, Error> {
+    ) -> Result<Option<AmountDelta>> {
         let account_key = TokenKeys::balance_key(token, address);
-        let before: Amount = (&self.ctx)
-            .read_pre_value(&account_key)
+        let before: Amount = ctx
+            .pre()
+            .read(&account_key)
             .map_err(|error| {
                 tracing::warn!(?error, %account_key, "reading pre value");
                 error
@@ -101,7 +218,7 @@ where
             // being credited, such as when we escrow gas under
             // the Bridge pool
             .unwrap_or_default();
-        let after: Amount = match (&self.ctx).read_post_value(&account_key)? {
+        let after: Amount = match ctx.post().read(&account_key)? {
             Some(after) => after,
             None => {
                 tracing::warn!(%account_key, "no post value");
@@ -123,10 +240,10 @@ where
     /// from the correct account into escrow.
     #[inline]
     fn check_escrowed_toks<K>(
-        &self,
+        ctx: &'ctx CTX,
         delta: EscrowDelta<'_, K>,
-    ) -> Result<bool, Error> {
-        self.check_escrowed_toks_balance(delta)
+    ) -> Result<bool> {
+        Self::check_escrowed_toks_balance(ctx, delta)
             .map(|balance| balance.is_some())
     }
 
@@ -134,9 +251,9 @@ where
     /// from the correct account into escrow, and return
     /// the updated escrow balance.
     fn check_escrowed_toks_balance<K>(
-        &self,
+        ctx: &'ctx CTX,
         delta: EscrowDelta<'_, K>,
-    ) -> Result<Option<AmountDelta>, Error> {
+    ) -> Result<Option<AmountDelta>> {
         let EscrowDelta {
             token,
             payer_account,
@@ -145,8 +262,8 @@ where
             expected_credit,
             ..
         } = delta;
-        let debit = self.account_balance_delta(&token, payer_account)?;
-        let credit = self.account_balance_delta(&token, escrow_account)?;
+        let debit = Self::account_balance_delta(ctx, &token, payer_account)?;
+        let credit = Self::account_balance_delta(ctx, &token, escrow_account)?;
 
         match (debit, credit) {
             // success case
@@ -186,11 +303,11 @@ where
 
     /// Check that the gas was correctly escrowed.
     fn check_gas_escrow(
-        &self,
+        ctx: &'ctx CTX,
         wnam_address: &EthAddress,
         transfer: &PendingTransfer,
         gas_check: EscrowDelta<'_, GasCheck>,
-    ) -> Result<bool, Error> {
+    ) -> Result<bool> {
         if hints::unlikely(
             *gas_check.token == erc20_token_address(wnam_address),
         ) {
@@ -212,7 +329,7 @@ where
             );
             return Ok(false);
         }
-        if !self.check_escrowed_toks(gas_check)? {
+        if !Self::check_escrowed_toks(ctx, gas_check)? {
             tracing::debug!(
                 ?transfer,
                 "The gas fees of the transfer were not properly escrowed into \
@@ -225,11 +342,11 @@ where
 
     /// Validate a wrapped NAM transfer to Ethereum.
     fn check_wnam_escrow(
-        &self,
+        ctx: &'ctx CTX,
         &wnam_address: &EthAddress,
         transfer: &PendingTransfer,
         token_check: EscrowDelta<'_, TokenCheck>,
-    ) -> Result<bool, Error> {
+    ) -> Result<bool> {
         if hints::unlikely(matches!(
             &transfer.transfer.kind,
             TransferToEthereumKind::Nut
@@ -251,7 +368,7 @@ where
                 suffix: whitelist::KeyType::Whitelisted,
             }
             .into();
-            (&self.ctx).read_pre_value(&key)?.unwrap_or(false)
+            ctx.pre().read(&key)?.unwrap_or(false)
         };
         if !wnam_whitelisted {
             tracing::debug!(
@@ -265,7 +382,7 @@ where
         // amount of Nam must be escrowed in the Ethereum bridge VP's
         // storage.
         let escrowed_balance =
-            match self.check_escrowed_toks_balance(token_check)? {
+            match Self::check_escrowed_toks_balance(ctx, token_check)? {
                 Some(balance) => balance.resolve()?,
                 None => return Ok(false),
             };
@@ -276,7 +393,7 @@ where
                 suffix: whitelist::KeyType::Cap,
             }
             .into();
-            (&self.ctx).read_pre_value(&key)?.unwrap_or_default()
+            ctx.pre().read(&key)?.unwrap_or_default()
         };
         if escrowed_balance > I320::from(wnam_cap) {
             tracing::debug!(
@@ -293,11 +410,11 @@ where
     }
 
     /// Determine the debit and credit amounts that should be checked.
-    fn determine_escrow_checks<'trans, 'this: 'trans>(
-        &'this self,
+    fn determine_escrow_checks<'trans>(
+        ctx: &'ctx CTX,
         wnam_address: &EthAddress,
         transfer: &'trans PendingTransfer,
-    ) -> Result<EscrowCheck<'trans>, Error> {
+    ) -> Result<EscrowCheck<'trans>> {
         let tok_is_native_asset = &transfer.transfer.asset == wnam_address;
 
         // NB: this comparison is not enough to check
@@ -315,7 +432,7 @@ where
             let same_sender_and_fee_payer =
                 transfer.gas_fee.payer == transfer.transfer.sender;
             let gas_is_native_asset =
-                transfer.gas_fee.token == self.ctx.state.in_mem().native_token;
+                transfer.gas_fee.token == ctx.get_native_token()?;
             let gas_and_token_is_native_asset =
                 gas_is_native_asset && tok_is_native_asset;
             let same_token_and_gas_asset =
@@ -347,7 +464,7 @@ where
         {
             // when minting wrapped NAM on Ethereum, escrow to the Ethereum
             // bridge address, and draw from NAM token accounts
-            let token = Cow::Borrowed(&self.ctx.state.in_mem().native_token);
+            let token = Cow::Owned(ctx.get_native_token()?);
             let escrow_account = &BRIDGE_ADDRESS;
             (token, escrow_account)
         } else {
@@ -494,9 +611,7 @@ enum TokenCheck {}
 
 /// Sum gas and token amounts on a pending transfer, checking for overflows.
 #[inline]
-fn sum_gas_and_token_amounts(
-    transfer: &PendingTransfer,
-) -> Result<Amount, Error> {
+fn sum_gas_and_token_amounts(transfer: &PendingTransfer) -> Result<Amount> {
     transfer
         .gas_fee
         .amount
@@ -506,146 +621,6 @@ fn sum_gas_and_token_amounts(
                 "Addition overflowed adding gas fee + transfer amount.",
             )
         })
-}
-
-impl<'view, 'ctx: 'view, S, CA, EVAL, TokenKeys> NativeVp<'view>
-    for BridgePool<'ctx, S, CA, EVAL, TokenKeys>
-where
-    S: 'static + StateRead,
-    EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL>,
-    CA: 'static + Clone,
-    TokenKeys: token::Keys,
-{
-    fn validate_tx(
-        &'view self,
-        batched_tx: &BatchedTxRef<'_>,
-        keys_changed: &BTreeSet<Key>,
-        _verifiers: &BTreeSet<Address>,
-    ) -> Result<(), Error> {
-        tracing::debug!(
-            keys_changed_len = keys_changed.len(),
-            verifiers_len = _verifiers.len(),
-            "Ethereum Bridge Pool VP triggered",
-        );
-        if !is_bridge_active_at(
-            &self.ctx.pre(),
-            self.ctx.state.in_mem().get_current_epoch().0,
-        )? {
-            tracing::debug!(
-                "Rejecting transaction, since the Ethereum bridge is disabled."
-            );
-            return Err(Error::new_const(
-                "Rejecting transaction, since the Ethereum bridge is disabled.",
-            ));
-        }
-        let Some(tx_data) = batched_tx.tx.data(batched_tx.cmt) else {
-            return Err(Error::new_const("No transaction data found"));
-        };
-        let transfer: PendingTransfer =
-            BorshDeserialize::try_from_slice(&tx_data[..])
-                .into_storage_result()?;
-
-        let pending_key = get_pending_key(&transfer);
-        // check that transfer is not already in the pool
-        match (&self.ctx).read_pre_value::<PendingTransfer>(&pending_key) {
-            Ok(Some(_)) => {
-                let error = Error::new_const(
-                    "Rejecting transaction as the transfer is already in the \
-                     Ethereum bridge pool.",
-                );
-                tracing::debug!("{error}");
-                return Err(error);
-            }
-            // NOTE: make sure we don't erase storage errors returned by the
-            // ctx, as these may contain gas errors!
-            Err(e) => return Err(e),
-            _ => {}
-        }
-        for key in keys_changed.iter().filter(|k| is_bridge_pool_key(k)) {
-            if *key != pending_key {
-                let error = Error::new_alloc(format!(
-                    "Rejecting transaction as it is attempting to change an \
-                     incorrect key in the Ethereum bridge pool: {key}.\n \
-                     Expected key: {pending_key}",
-                ));
-                tracing::debug!("{error}");
-                return Err(error);
-            }
-        }
-        let pending: PendingTransfer =
-            (&self.ctx).read_post_value(&pending_key)?.ok_or_else(|| {
-                Error::new_const(
-                    "Rejecting transaction as the transfer wasn't added to \
-                     the pool of pending transfers",
-                )
-            })?;
-        if pending != transfer {
-            let error = Error::new_alloc(format!(
-                "An incorrect transfer was added to the Ethereum bridge pool: \
-                 {transfer:?}.\n Expected: {pending:?}",
-            ));
-            tracing::debug!("{error}");
-            return Err(error);
-        }
-        // The deltas in the escrowed amounts we must check.
-        let wnam_address = read_native_erc20_address(&self.ctx.pre())?;
-        let escrow_checks =
-            self.determine_escrow_checks(&wnam_address, &transfer)?;
-        if !escrow_checks.validate::<TokenKeys>(keys_changed) {
-            let error = Error::new_const(
-                // TODO(namada#3247): specify which storage changes are missing
-                // or which ones are invalid
-                "Invalid storage modifications in the Bridge pool",
-            );
-            tracing::debug!("{error}");
-            return Err(error);
-        }
-        // check that gas was correctly escrowed.
-        if !self.check_gas_escrow(
-            &wnam_address,
-            &transfer,
-            escrow_checks.gas_check,
-        )? {
-            return Err(Error::new_const(
-                "Gas was not correctly escrowed into the Bridge pool storage",
-            ));
-        }
-        // check the escrowed assets
-        if transfer.transfer.asset == wnam_address {
-            self.check_wnam_escrow(
-                &wnam_address,
-                &transfer,
-                escrow_checks.token_check,
-            )?
-            .ok_or_else(|| {
-                Error::new_const(
-                    "The wrapped NAM tokens were not escrowed properly",
-                )
-            })
-        } else {
-            self.check_escrowed_toks(escrow_checks.token_check)?
-                .ok_or_else(|| {
-                    Error::new_alloc(format!(
-                        "The {} tokens were not escrowed properly",
-                        transfer.transfer.asset
-                    ))
-                })
-        }
-        .inspect(|_| {
-            tracing::info!(
-                "The Ethereum bridge pool VP accepted the transfer {:?}.",
-                transfer
-            );
-        })
-        .inspect_err(|err| {
-            tracing::debug!(
-                ?transfer,
-                reason = ?err,
-                "The assets of the transfer were not properly escrowed \
-                 into the Ethereum bridge pool."
-            );
-        })
-    }
 }
 
 #[allow(clippy::arithmetic_side_effects)]
@@ -661,13 +636,14 @@ mod test_bridge_pool_vp {
     use namada_gas::{TxGasMeter, VpGasMeter};
     use namada_state::testing::TestState;
     use namada_state::write_log::WriteLog;
-    use namada_state::{StorageWrite, TxIndex};
+    use namada_state::{StateRead, StorageWrite, TxIndex};
     use namada_trans_token::storage_key::balance_key;
     use namada_tx::data::TxType;
     use namada_tx::Tx;
     use namada_vm::wasm::run::VpEvalWasm;
     use namada_vm::wasm::VpCache;
     use namada_vm::WasmCacheRwAccess;
+    use namada_vp::native_vp;
 
     use super::*;
     use crate::storage::bridge_pool::get_signed_root_key;
@@ -677,14 +653,10 @@ mod test_bridge_pool_vp {
     use crate::storage::wrapped_erc20s;
 
     type CA = WasmCacheRwAccess;
-    type Eval = VpEvalWasm<
-        <TestState as StateRead>::D,
-        <TestState as StateRead>::H,
-        CA,
-    >;
+    type Eval<S> = VpEvalWasm<<S as StateRead>::D, <S as StateRead>::H, CA>;
+    type Ctx<'ctx, S> = native_vp::Ctx<'ctx, S, VpCache<CA>, Eval<S>>;
     type TokenKeys = namada_token::Store<()>;
-    type BridgePool<'a, S> =
-        super::BridgePool<'a, S, VpCache<CA>, Eval, TokenKeys>;
+    type BridgePool<'ctx, S> = super::BridgePool<'ctx, Ctx<'ctx, S>, TokenKeys>;
 
     /// The amount of NAM Bertha has
     const ASSET: EthAddress = EthAddress([0; 20]);
@@ -941,7 +913,7 @@ mod test_bridge_pool_vp {
         gas_meter: &'ctx RefCell<VpGasMeter>,
         keys_changed: &'ctx BTreeSet<Key>,
         verifiers: &'ctx BTreeSet<Address>,
-    ) -> Ctx<'ctx, TestState, VpCache<WasmCacheRwAccess>, Eval> {
+    ) -> Ctx<'ctx, TestState> {
         let batched_tx = tx.batch_ref_first_tx().unwrap();
         Ctx::new(
             &BRIDGE_POOL_ADDRESS,
@@ -1031,19 +1003,13 @@ mod test_bridge_pool_vp {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new(u64::MAX),
         ));
-        let vp = BridgePool::new(setup_ctx(
-            &tx,
-            &state,
-            &gas_meter,
-            &keys_changed,
-            &verifiers,
-        ));
+        let ctx = setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers);
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
 
         let tx = tx.batch_ref_first_tx().unwrap();
-        let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
+        let res = BridgePool::validate_tx(&ctx, &tx, &keys_changed, &verifiers);
         match (expect, res) {
             (Expect::Accepted, Ok(())) => (),
             (Expect::Accepted, Err(err)) => {
@@ -1393,19 +1359,13 @@ mod test_bridge_pool_vp {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new(u64::MAX),
         ));
-        let vp = BridgePool::new(setup_ctx(
-            &tx,
-            &state,
-            &gas_meter,
-            &keys_changed,
-            &verifiers,
-        ));
+        let ctx = setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers);
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
 
         let tx = tx.batch_ref_first_tx().unwrap();
-        let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
+        let res = BridgePool::validate_tx(&ctx, &tx, &keys_changed, &verifiers);
         assert!(res.is_err());
     }
 
@@ -1457,19 +1417,13 @@ mod test_bridge_pool_vp {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new(u64::MAX),
         ));
-        let vp = BridgePool::new(setup_ctx(
-            &tx,
-            &state,
-            &gas_meter,
-            &keys_changed,
-            &verifiers,
-        ));
+        let ctx = setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers);
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
 
         let tx = tx.batch_ref_first_tx().unwrap();
-        let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
+        let res = BridgePool::validate_tx(&ctx, &tx, &keys_changed, &verifiers);
         assert!(res.is_err());
     }
 
@@ -1542,19 +1496,13 @@ mod test_bridge_pool_vp {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new(u64::MAX),
         ));
-        let vp = BridgePool::new(setup_ctx(
-            &tx,
-            &state,
-            &gas_meter,
-            &keys_changed,
-            &verifiers,
-        ));
+        let ctx = setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers);
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
 
         let tx = tx.batch_ref_first_tx().unwrap();
-        let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
+        let res = BridgePool::validate_tx(&ctx, &tx, &keys_changed, &verifiers);
         assert!(res.is_ok());
     }
 
@@ -1622,19 +1570,13 @@ mod test_bridge_pool_vp {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new(u64::MAX),
         ));
-        let vp = BridgePool::new(setup_ctx(
-            &tx,
-            &state,
-            &gas_meter,
-            &keys_changed,
-            &verifiers,
-        ));
+        let ctx = setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers);
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
 
         let tx = tx.batch_ref_first_tx().unwrap();
-        let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
+        let res = BridgePool::validate_tx(&ctx, &tx, &keys_changed, &verifiers);
         assert!(res.is_err());
     }
 
@@ -1719,19 +1661,13 @@ mod test_bridge_pool_vp {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new(u64::MAX),
         ));
-        let vp = BridgePool::new(setup_ctx(
-            &tx,
-            &state,
-            &gas_meter,
-            &keys_changed,
-            &verifiers,
-        ));
+        let ctx = setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers);
 
         let mut tx = Tx::new(state.in_mem().chain_id.clone(), None);
         tx.add_data(transfer);
 
         let tx = tx.batch_ref_first_tx().unwrap();
-        let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
+        let res = BridgePool::validate_tx(&ctx, &tx, &keys_changed, &verifiers);
         assert!(res.is_err());
     }
 
@@ -1802,20 +1738,14 @@ mod test_bridge_pool_vp {
         let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
             &TxGasMeter::new(u64::MAX),
         ));
-        let vp = BridgePool::new(setup_ctx(
-            &tx,
-            &state,
-            &gas_meter,
-            &keys_changed,
-            &verifiers,
-        ));
+        let ctx = setup_ctx(&tx, &state, &gas_meter, &keys_changed, &verifiers);
 
         let mut tx = Tx::from_type(TxType::Raw);
         tx.push_default_inner_tx();
         tx.add_data(transfer);
 
         let tx = tx.batch_ref_first_tx().unwrap();
-        let res = vp.validate_tx(&tx, &keys_changed, &verifiers);
+        let res = BridgePool::validate_tx(&ctx, &tx, &keys_changed, &verifiers);
         match (expect, res) {
             (Expect::Accepted, Ok(())) => (),
             (Expect::Accepted, Err(err)) => {

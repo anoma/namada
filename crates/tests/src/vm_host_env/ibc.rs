@@ -77,6 +77,7 @@ use namada_sdk::{ibc, proof_of_stake, token};
 use namada_test_utils::TestWasms;
 use namada_tx_env::TxEnv;
 use namada_tx_prelude::BorshSerializeExt;
+use namada_vm::wasm::run::VpEvalWasm;
 use namada_vm::{wasm, WasmCacheRwAccess};
 use namada_vp::native_vp;
 use namada_vp::native_vp::{Ctx, NativeVp};
@@ -96,20 +97,6 @@ impl<'a> TestIbcVp<'a> {
             batched_tx,
             self.ibc.ctx.keys_changed,
             self.ibc.ctx.verifiers,
-        )
-    }
-}
-
-pub struct TestMultitokenVp<'a> {
-    pub multitoken_vp: MultitokenVp<'a, TestState, WasmCacheRwAccess>,
-}
-
-impl<'a> TestMultitokenVp<'a> {
-    pub fn validate(&self, batched_tx: &BatchedTxRef) -> native_vp::Result<()> {
-        self.multitoken_vp.validate_tx(
-            batched_tx,
-            self.multitoken_vp.ctx.keys_changed,
-            self.multitoken_vp.ctx.verifiers,
         )
     }
 }
@@ -170,12 +157,12 @@ pub fn validate_multitoken_vp_from_tx<'a>(
         );
     }
     let (vp_wasm_cache, _vp_cache_dir) =
-        wasm::compilation_cache::common::testing::cache();
+        wasm::compilation_cache::common::testing::vp_cache();
 
     let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
         &TxGasMeter::new(10_000_000_000),
     ));
-    let ctx = Ctx::new(
+    let ctx = Ctx::<_, _, VpEvalWasm<_, _, _>>::new(
         &ADDRESS,
         &tx_env.state,
         batched_tx.tx,
@@ -186,9 +173,8 @@ pub fn validate_multitoken_vp_from_tx<'a>(
         &verifiers,
         vp_wasm_cache,
     );
-    let multitoken_vp = MultitokenVp::new(ctx);
 
-    TestMultitokenVp { multitoken_vp }.validate(batched_tx)
+    MultitokenVp::validate_tx(&ctx, batched_tx, ctx.keys_changed, ctx.verifiers)
 }
 
 /// Initialize the test storage. Requires initialized [`tx_host_env::ENV`].

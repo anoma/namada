@@ -4,6 +4,7 @@
 use namada_vm::wasm::run::VpEvalWasm;
 use namada_vm::wasm::VpCache;
 use namada_vp::native_vp::{self, CtxPostStorageRead, CtxPreStorageRead};
+use namada_vp::VpEnv;
 
 use crate::state::StateRead;
 use crate::{eth_bridge, governance, ibc, parameters, proof_of_stake, token};
@@ -16,12 +17,10 @@ pub type NativeVpCtx<'a, S, CA> =
 type Eval<S, CA> = VpEvalWasm<<S as StateRead>::D, <S as StateRead>::H, CA>;
 
 /// Native PoS VP
-pub type PosVp<'a, S, CA> = proof_of_stake::vp::PosVp<
-    'a,
-    S,
-    VpCache<CA>,
-    Eval<S, CA>,
-    GovPreStore<'a, S, CA>,
+pub type PosVp<'ctx, CTX> = proof_of_stake::vp::PosVp<
+    'ctx,
+    CTX,
+    governance::Store<<CTX as VpEnv<'ctx>>::Pre>,
 >;
 
 /// Native IBC VP
@@ -51,62 +50,53 @@ pub type IbcVpContext<'view, 'a, S, CA, EVAL> =
     >;
 
 /// Native parameters VP
-pub type ParametersVp<'a, S, CA> = parameters::vp::ParametersVp<
-    'a,
-    S,
-    VpCache<CA>,
-    Eval<S, CA>,
-    GovPreStore<'a, S, CA>,
+pub type ParametersVp<'ctx, CTX> = parameters::vp::ParametersVp<
+    'ctx,
+    CTX,
+    governance::Store<<CTX as VpEnv<'ctx>>::Pre>,
 >;
 
 /// Native governance VP
-pub type GovernanceVp<'a, S, CA> = governance::vp::GovernanceVp<
-    'a,
-    S,
-    VpCache<CA>,
-    Eval<S, CA>,
-    PosPreStore<'a, S, CA>,
+pub type GovernanceVp<'ctx, CTX> = governance::vp::GovernanceVp<
+    'ctx,
+    CTX,
+    proof_of_stake::Store<<CTX as VpEnv<'ctx>>::Pre>,
     TokenKeys,
 >;
 
 /// Native PGF VP
-pub type PgfVp<'a, S, CA> =
-    governance::vp::pgf::PgfVp<'a, S, VpCache<CA>, Eval<S, CA>>;
+pub type PgfVp<'ctx, CTX> = governance::vp::pgf::PgfVp<'ctx, CTX>;
 
 /// Native multitoken VP
-pub type MultitokenVp<'a, S, CA> = token::vp::MultitokenVp<
-    'a,
-    S,
-    VpCache<CA>,
-    Eval<S, CA>,
-    ParamsPreStore<'a, S, CA>,
-    GovPreStore<'a, S, CA>,
+pub type MultitokenVp<'ctx, CTX> = token::vp::MultitokenVp<
+    'ctx,
+    CTX,
+    parameters::Store<<CTX as VpEnv<'ctx>>::Pre>,
+    governance::Store<<CTX as VpEnv<'ctx>>::Pre>,
 >;
 
 /// Native MASP VP
-pub type MaspVp<'a, S, CA> = token::vp::MaspVp<
-    'a,
-    S,
-    VpCache<CA>,
-    Eval<S, CA>,
-    ParamsPreStore<'a, S, CA>,
-    GovPreStore<'a, S, CA>,
-    IbcPostStore<'a, S, CA>,
-    TokenPreStore<'a, S, CA>,
+pub type MaspVp<'ctx, CTX> = token::vp::MaspVp<
+    'ctx,
+    CTX,
+    parameters::Store<<CTX as VpEnv<'ctx>>::Pre>,
+    governance::Store<<CTX as VpEnv<'ctx>>::Pre>,
+    ibc::Store<<CTX as VpEnv<'ctx>>::Post>,
+    token::Store<<CTX as VpEnv<'ctx>>::Pre>,
     token::Transfer,
 >;
 
 /// Native ETH bridge VP
-pub type EthBridgeVp<'a, S, CA> =
-    eth_bridge::vp::EthBridge<'a, S, VpCache<CA>, Eval<S, CA>, TokenKeys>;
+pub type EthBridgeVp<'ctx, CTX> =
+    eth_bridge::vp::EthBridge<'ctx, CTX, TokenKeys>;
 
 /// Native ETH bridge pool VP
-pub type EthBridgePoolVp<'a, S, CA> =
-    eth_bridge::vp::BridgePool<'a, S, VpCache<CA>, Eval<S, CA>, TokenKeys>;
+pub type EthBridgePoolVp<'ctx, CTX> =
+    eth_bridge::vp::BridgePool<'ctx, CTX, TokenKeys>;
 
 /// Native ETH bridge NUT VP
-pub type EthBridgeNutVp<'a, S, CA> =
-    eth_bridge::vp::NonUsableTokens<'a, S, VpCache<CA>, Eval<S, CA>, TokenKeys>;
+pub type EthBridgeNutVp<'ctx, CTX> =
+    eth_bridge::vp::NonUsableTokens<'ctx, CTX, TokenKeys>;
 
 /// Governance store implementation over the native prior context
 pub type GovPreStore<'a, S, CA> =

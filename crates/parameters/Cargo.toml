@@ -25,7 +25,7 @@ namada_macros = { path = "../macros" }
 namada_state = { path = "../state" }
 namada_systems = { path = "../systems" }
 namada_tx = { path = "../tx" }
-namada_vp = { path = "../vp" }
+namada_vp_env = { path = "../vp_env" }
 
 smooth-operator.workspace = true
 thiserror.workspace = true

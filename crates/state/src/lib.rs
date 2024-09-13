@@ -54,7 +54,7 @@ pub use namada_merkle_tree::{
 };
 pub use namada_storage as storage;
 pub use namada_storage::conversion_state::{
-    ConversionLeaf, ConversionState, WithConversionState,
+    ConversionLeaf, ConversionState, ReadConversionState, WithConversionState,
 };
 pub use namada_storage::types::{KVBytes, PatternIterator, PrefixIterator};
 pub use namada_storage::{

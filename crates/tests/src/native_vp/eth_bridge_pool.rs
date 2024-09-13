@@ -118,8 +118,14 @@ mod test_bridge_pool_vp {
         ));
         let vp_env = TestNativeVpEnv::from_tx_env(tx_env, BRIDGE_POOL_ADDRESS);
 
-        let vp = vp_env.init_vp(&gas_meter, EthBridgePoolVp::new);
-        vp_env.validate_tx(&vp).is_ok()
+        let ctx = vp_env.ctx(&gas_meter);
+        EthBridgePoolVp::validate_tx(
+            &ctx,
+            &vp_env.tx_env.batched_tx.to_ref(),
+            &vp_env.keys_changed,
+            &vp_env.verifiers,
+        )
+        .is_ok()
     }
 
     fn validate_tx(tx: BatchedTx) {

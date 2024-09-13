@@ -75,6 +75,24 @@ impl TestNativeVpEnv {
         init_native_vp(ctx)
     }
 
+    /// Instantiate a native VP ctx to run a VP
+    pub fn ctx<'ctx>(
+        &'ctx self,
+        gas_meter: &'ctx RefCell<VpGasMeter>,
+    ) -> NativeVpCtx<'ctx> {
+        NativeVpCtx::new(
+            &self.address,
+            &self.tx_env.state,
+            &self.tx_env.batched_tx.tx,
+            &self.tx_env.batched_tx.cmt,
+            &self.tx_env.tx_index,
+            gas_meter,
+            &self.keys_changed,
+            &self.verifiers,
+            self.tx_env.vp_wasm_cache.clone(),
+        )
+    }
+
     /// Run some transaction code `apply_tx` and validate it with a native VP
     pub fn validate_tx<'view, 'ctx: 'view, T>(
         &'ctx self,
