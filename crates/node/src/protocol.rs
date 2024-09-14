@@ -14,7 +14,6 @@ use namada_sdk::events::extend::{
 use namada_sdk::events::EventLevel;
 use namada_sdk::gas::{self, Gas, GasMetering, TxGasMeter, VpGasMeter};
 use namada_sdk::hash::Hash;
-use namada_sdk::ibc::IbcTxDataHash;
 use namada_sdk::parameters::get_gas_scale;
 use namada_sdk::state::{
     DBIter, State, StorageHasher, StorageRead, TxWrites, WlState, DB,
@@ -22,7 +21,7 @@ use namada_sdk::state::{
 use namada_sdk::storage::TxIndex;
 use namada_sdk::token::event::{TokenEvent, TokenOperation};
 use namada_sdk::token::utils::is_masp_transfer;
-use namada_sdk::token::{Amount, MaspTxId};
+use namada_sdk::token::Amount;
 use namada_sdk::tx::action::{self, Read};
 use namada_sdk::tx::data::protocol::{ProtocolTx, ProtocolTxType};
 use namada_sdk::tx::data::{
@@ -396,21 +395,7 @@ where
                             cmt,
                             Either::Right(res),
                         )? {
-                            // FIXME: can improve this?
-                            match masp_ref {
-                                Either::Left(masp_section_ref) => {
-                                    extended_tx_result
-                                        .masp_tx_refs
-                                        .0
-                                        .push(namada_sdk::events::extend::MaspTxRef::MaspSection(masp_section_ref));
-                                }
-                                Either::Right(data_sechash) => {
-                                    extended_tx_result
-                                        .masp_tx_refs
-                                        .0
-                                        .push(namada_sdk::events::extend::MaspTxRef::IbcData(data_sechash))
-                                }
-                            }
+                            extended_tx_result.masp_tx_refs.0.push(masp_ref)
                         }
                         state.write_log_mut().commit_tx_to_batch();
                     }
@@ -439,7 +424,7 @@ where
 /// Transaction result for masp transfer
 pub struct MaspTxResult {
     tx_result: BatchedTxResult,
-    masp_section_ref: Either<MaspTxId, IbcTxDataHash>,
+    masp_section_ref: MaspTxRef,
 }
 
 /// Performs the required operation on a wrapper transaction:
@@ -501,12 +486,10 @@ where
                 either::Right(tx.first_commitments().unwrap()),
                 Ok(masp_tx_result.tx_result),
             );
-            // FIXME: can improve?
-            let masp_section_ref = match masp_tx_result.masp_section_ref {
-                Either::Left(id) => MaspTxRef::MaspSection(id),
-                Either::Right(hash) => MaspTxRef::IbcData(hash),
-            };
-            (batch, Some(MaspTxRefs(vec![masp_section_ref])))
+            (
+                batch,
+                Some(MaspTxRefs(vec![masp_tx_result.masp_section_ref])),
+            )
         },
     );
 
@@ -816,7 +799,7 @@ fn get_optional_masp_ref<S: Read<Err = state::Error>>(
     state: &S,
     cmt: &TxCommitments,
     is_masp_tx: Either<bool, &BatchedTxResult>,
-) -> Result<Option<Either<MaspTxId, Hash>>> {
+) -> Result<Option<MaspTxRef>> {
     // Always check that the transaction was indeed a MASP one by looking at the
     // changed keys. A malicious tx could push a MASP Action without touching
     // any storage keys associated with the shielded pool
@@ -831,14 +814,14 @@ fn get_optional_masp_ref<S: Read<Err = state::Error>>(
     let masp_ref = if action::is_ibc_shielding_transfer(state)
         .map_err(Error::StateError)?
     {
-        Some(Either::Right(cmt.data_sechash().to_owned()))
+        Some(MaspTxRef::IbcData(cmt.data_sechash().to_owned()))
     } else {
         let actions = state.read_actions().map_err(Error::StateError)?;
         action::get_masp_section_ref(&actions)
             .map_err(|msg| {
                 Error::StateError(state::Error::new_alloc(msg.to_string()))
             })?
-            .map(Either::Left)
+            .map(MaspTxRef::MaspSection)
     };
 
     Ok(masp_ref)
