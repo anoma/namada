@@ -39,60 +39,80 @@ fn extract_masp_tx(
     tx: &Tx,
     masp_refs: &MaspTxRefs,
 ) -> Result<Vec<Transaction>, Error> {
-    let mut masp_txs = Vec::new();
-    // FIXME: use iter?
-    for masp_ref in &masp_refs.0 {
-        match masp_ref {
-            MaspTxRef::MaspSection(id) => {
-                // NOTE: simply looking for masp sections attached to the tx
-                // is not safe. We don't validate the sections attached to a
-                // transaction se we could end up with transactions carrying
-                // an unnecessary masp section. We must instead look for the
-                // required masp sections published in the events
-                let transaction = tx
-                    .get_masp_section(id)
-                    .ok_or_else(|| {
-                        Error::Other(format!(
-                            "Missing expected masp transaction with id {id}"
-                        ))
-                    })?
-                    .clone();
-                masp_txs.push(transaction);
-            }
-            // FIXME: we are not using this hash, why????
-            MaspTxRef::IbcData(hash) => {
-                // FIXME: improve if possible
-                let mut ibc_masp_tx = None;
+    // NOTE: It is possible to have two identical references in a same batch:
+    // this is because, some types of MASP data packet can be correctly executed
+    // more than once. We have to make sure we account for this by not using
+    // collections that allow for duplicates (both in the inputs and in the
+    // outputs): if the same reference shows up multiple times in the input we
+    // must process it the same number of times to ensure we contruct the
+    // correct state
+    masp_refs
+        .0
+        .iter()
+        .try_fold(vec![], |mut acc, ref masp_ref| {
+            match masp_ref {
+                MaspTxRef::MaspSection(id) => {
+                    // Simply looking for masp sections attached to the tx
+                    // is not safe. We don't validate the sections attached to a
+                    // transaction se we could end up with transactions carrying
+                    // an unnecessary masp section. We must instead look for the
+                    // required masp sections published in the events
+                    let transaction = tx
+                        .get_masp_section(id)
+                        .ok_or_else(|| {
+                            Error::Other(format!(
+                                "Missing expected masp transaction with id \
+                                 {id}"
+                            ))
+                        })?
+                        .clone();
+                    acc.push(transaction);
 
-                for cmt in &tx.header.batch {
-                    let Some(tx_data) = tx.data(cmt) else {
-                        continue;
-                    };
-                    let Ok(IbcMessage::Envelope(ref envelope)) =
+                    Ok(acc)
+                }
+                MaspTxRef::IbcData(hash) => {
+                    // Dereference the masp ref to the first instance that
+                    // matches is, even if it is not the exact one that produced
+                    // the event, the data we extract will be exactly the same
+                    let masp_ibc_tx = tx
+                        .commitments()
+                        .iter()
+                        .find(|cmt| cmt.data_sechash() == hash)
+                        .ok_or_else(|| {
+                            Error::Other(format!(
+                                "Couldn't find data section with hash {hash}"
+                            ))
+                        })?;
+                    let tx_data = tx.data(masp_ibc_tx).ok_or_else(|| {
+                        Error::Other(
+                            "Missing expected data section".to_string(),
+                        )
+                    })?;
+
+                    let IbcMessage::Envelope(envelope) =
                         decode_message::<token::Transfer>(&tx_data)
+                            .map_err(|e| Error::Other(e.to_string()))?
                     else {
-                        continue;
+                        return Err(Error::Other(
+                            "Expected IBC packet to be an envelope".to_string(),
+                        ));
                     };
-                    if let Some(masp_tx) =
-                        extract_masp_tx_from_envelope(envelope)
+
+                    if let Some(transaction) =
+                        extract_masp_tx_from_envelope(&envelope)
                     {
-                        ibc_masp_tx = Some(masp_tx);
+                        acc.push(transaction);
+
+                        Ok(acc)
+                    } else {
+                        Err(Error::Other(
+                            "Failed to retrieve MASP over IBC transaction"
+                                .to_string(),
+                        ))
                     }
                 }
-
-                if let Some(transaction) = ibc_masp_tx {
-                    masp_txs.push(transaction);
-                } else {
-                    return Err(Error::Other(format!(
-                        "Missing expected ibc masp transaction with data \
-                         section hash: {hash}"
-                    )));
-                }
             }
-        }
-    }
-
-    Ok(masp_txs)
+        })
 }
 
 // Retrieves all the indexes at the specified height which refer

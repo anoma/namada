@@ -192,7 +192,9 @@ pub struct ExtendedTxResult<T> {
     /// for shielded actions)
     // NOTE: it's paramount to enforce a single, ordered collection for all the
     // masp transactions to ensure that the exact view on the tx sequence is
-    // preserved in the events
+    // preserved in the events. Also, it is possible for two refs to be exactly
+    // the same, we must make sure to emit events for both so that the
+    // client/indexer can properly construct their internal state
     pub masp_tx_refs: MaspTxRefs,
 }
 
