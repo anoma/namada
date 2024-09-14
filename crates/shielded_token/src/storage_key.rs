@@ -85,7 +85,8 @@ pub fn masp_last_inflation_key<TransToken: trans_token::Keys>(
         .with_segment(MASP_LAST_INFLATION_KEY.to_owned())
 }
 
-fn is_masp_balance_key(key: &storage::Key) -> bool {
+/// Check if the given storage key is MASP transparent balance key
+pub fn is_masp_balance_key(key: &storage::Key) -> bool {
     matches!(
         &key.segments[..],
         [DbKeySeg::AddressSeg(addr), DbKeySeg::AddressSeg(_token), DbKeySeg::StringSeg(balance), DbKeySeg::AddressSeg(owner)]
