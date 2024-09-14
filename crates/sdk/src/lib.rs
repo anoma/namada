@@ -87,7 +87,10 @@ pub const DEFAULT_GAS_LIMIT: u64 = 200_000;
 /// An interface for high-level interaction with the Namada SDK
 #[cfg_attr(feature = "async-send", async_trait::async_trait)]
 #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
-#[rustversion::attr(nightly, allow(elided_named_lifetimes, reason = "Not actually named"))]
+#[rustversion::attr(
+    nightly,
+    allow(elided_named_lifetimes, reason = "Not actually named")
+)]
 pub trait Namada: NamadaIo {
     /// Captures the interactive parts of the wallet's functioning
     type WalletUtils: WalletIo + WalletStorage + MaybeSend + MaybeSync;
@@ -776,7 +779,10 @@ where
 
 #[cfg_attr(feature = "async-send", async_trait::async_trait)]
 #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
-#[rustversion::attr(nightly, allow(elided_named_lifetimes, reason = "Not actually named"))]
+#[rustversion::attr(
+    nightly,
+    allow(elided_named_lifetimes, reason = "Not actually named")
+)]
 impl<C, U, V, I> Namada for NamadaImpl<C, U, V, I>
 where
     C: Client + MaybeSend + Sync,
