@@ -544,6 +544,16 @@ fn pos_rewards() -> Result<()> {
     .unwrap();
     assert!(amount_post > amount_pre);
 
+    let query_staking_rewards_rate =
+        vec!["staking-rewards-rate", "--node", &validator_one_rpc];
+    let captured = CapturedOutput::of(|| {
+        run(&node, Bin::Client, query_staking_rewards_rate)
+    });
+    assert_matches!(captured.result, Ok(_));
+    let _res = captured
+        .matches(r"Current annual staking rewards rate: 63.483")
+        .expect("Test failed");
+
     Ok(())
 }
 
