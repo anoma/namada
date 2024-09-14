@@ -128,12 +128,8 @@ jobs:
         run: sccache --start-server
       - name: Clippy lints
         run: make clippy
-        env:
-          RUSTFLAGS: "-Z threads=8"
       - name: Check format
         run: make fmt-check
-        env:
-          RUSTFLAGS: "-Z threads=8"
       - name: Clean cargo cache
         if: steps.cache.outputs.cache-hit != 'true'
         run: cargo cache --autoclean-expensive
