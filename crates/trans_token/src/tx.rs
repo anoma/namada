@@ -1,5 +1,7 @@
 //! Token transfers
 
+use std::borrow::Cow;
+
 use namada_core::address::Address;
 use namada_events::{EmitEvents, EventLevel};
 use namada_tx_env::{Result, TxEnv};
@@ -15,6 +17,7 @@ pub fn transfer<ENV>(
     dest: &Address,
     token: &Address,
     amount: Amount,
+    event_desc: Cow<'static, str>,
 ) -> Result<()>
 where
     ENV: TxEnv + EmitEvents,
@@ -36,7 +39,7 @@ where
     crate::storage::transfer(env, token, src, dest, amount)?;
 
     env.emit(TokenEvent {
-        descriptor: "transfer-from-wasm".into(),
+        descriptor: event_desc,
         level: EventLevel::Tx,
         operation: TokenOperation::transfer(
             UserAccount::Internal(src.clone()),
@@ -68,6 +71,8 @@ mod test {
     use super::*;
     use crate::event::{PostBalances, SourceAccounts, TargetAccounts};
 
+    const EVENT_DESC: Cow<'static, str> = Cow::Borrowed("event-desc");
+
     proptest! {
         #[test]
         fn test_valid_transfer_tx(
@@ -98,7 +103,7 @@ mod test {
         });
         assert_eq!(read_balance(ctx(), &token, &src).unwrap(), amount);
 
-        transfer(ctx(), &src, &dest, &token, amount).unwrap();
+        transfer(ctx(), &src, &dest, &token, amount, EVENT_DESC).unwrap();
 
         // Dest received the amount
         assert_eq!(read_balance(ctx(), &token, &dest).unwrap(), amount);
@@ -161,7 +166,7 @@ mod test {
                     (TargetAccounts::KEY.to_string(), exp_targets),
                     (
                         "token-event-descriptor".to_string(),
-                        "transfer-from-wasm".to_string(),
+                        EVENT_DESC.to_string(),
                     ),
                 ]),
             );
@@ -185,7 +190,7 @@ mod test {
             tx_env.credit_tokens(&dest, &token, src_balance);
         });
 
-        transfer(ctx(), &src, &dest, &token, amount).unwrap();
+        transfer(ctx(), &src, &dest, &token, amount, EVENT_DESC).unwrap();
 
         // Dest balance is still the same
         assert_eq!(read_balance(ctx(), &token, &dest).unwrap(), dest_balance);
@@ -227,7 +232,7 @@ mod test {
             tx_env.credit_tokens(&dest, &token, src_balance);
         });
 
-        transfer(ctx(), &src, &dest, &token, amount).unwrap();
+        transfer(ctx(), &src, &dest, &token, amount, EVENT_DESC).unwrap();
 
         // Dest balance is still the same
         assert_eq!(read_balance(ctx(), &token, &dest).unwrap(), dest_balance);

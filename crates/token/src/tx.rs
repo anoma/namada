@@ -1,5 +1,6 @@
 //! Token transaction
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 
 use namada_core::collections::HashSet;
@@ -21,6 +22,7 @@ pub fn multi_transfer<ENV>(
     env: &mut ENV,
     transfers: Transfer,
     tx_data: &BatchedTx,
+    event_desc: Cow<'static, str>,
 ) -> Result<()>
 where
     ENV: TxEnv + EmitEvents + action::Write<Err = Error>,
@@ -28,7 +30,7 @@ where
     // Effect the transparent multi transfer(s)
     let debited_accounts =
         if let Some(transparent) = transfers.transparent_part() {
-            apply_transparent_transfers(env, transparent)
+            apply_transparent_transfers(env, transparent, event_desc)
                 .wrap_err("Transparent token transfer failed")?
         } else {
             HashSet::new()
@@ -48,13 +50,14 @@ where
 }
 
 /// Transfer tokens from `sources` to `targets` and submit a transfer event.
-/// 
+///
 /// Returns an `Err` if any source has insufficient balance or if the transfer
 /// to any destination would overflow (This can only happen if the total supply
 /// doesn't fit in `token::Amount`). Returns a set of debited accounts.
 pub fn apply_transparent_transfers<ENV>(
     env: &mut ENV,
     transfers: TransparentTransfersRef<'_>,
+    event_desc: Cow<'static, str>,
 ) -> Result<HashSet<Address>>
 where
     ENV: TxEnv + EmitEvents,
@@ -109,7 +112,7 @@ where
     }
 
     env.emit(TokenEvent {
-        descriptor: "transfer-from-wasm".into(),
+        descriptor: event_desc,
         level: EventLevel::Tx,
         operation: TokenOperation::Transfer {
             sources: evt_sources,
