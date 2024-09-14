@@ -54,9 +54,9 @@ mod test {
     use namada_core::address::testing::{
         arb_address, arb_non_internal_address,
     };
-    use namada_core::token;
     use namada_core::token::testing::arb_amount;
     use namada_core::uint::Uint;
+    use namada_core::{address, token};
     use namada_events::extend::EventAttributeEntry;
     use namada_tests::tx::{ctx, tx_host_env};
     use proptest::prelude::*;
@@ -162,5 +162,88 @@ mod test {
                 ]),
             );
         })
+    }
+
+    #[test]
+    fn test_transfer_tx_zero_amount_is_noop() {
+        let src = address::testing::established_address_1();
+        let dest = address::testing::established_address_2();
+        let token = address::testing::established_address_3();
+        let amount = token::Amount::zero();
+        let src_balance = token::Amount::native_whole(1);
+        let dest_balance = token::Amount::native_whole(1);
+
+        tx_host_env::init();
+
+        tx_host_env::with(|tx_env| {
+            tx_env.spawn_accounts([&src, &dest, &token]);
+            tx_env.credit_tokens(&src, &token, src_balance);
+            tx_env.credit_tokens(&dest, &token, src_balance);
+        });
+
+        transfer(ctx(), &src, &dest, &token, amount).unwrap();
+
+        // Dest balance is still the same
+        assert_eq!(read_balance(ctx(), &token, &dest).unwrap(), dest_balance);
+
+        // Src balance is still the same
+        assert_eq!(read_balance(ctx(), &token, &src).unwrap(), src_balance);
+
+        // Verifiers set is empty
+        tx_host_env::with(|tx_env| {
+            assert!(tx_env.verifiers.is_empty());
+        });
+
+        // Must no emit an event
+        tx_host_env::with(|tx_env| {
+            let events: Vec<_> = tx_env
+                .state
+                .write_log()
+                .get_events_of::<TokenEvent>()
+                .collect();
+            assert!(events.is_empty());
+        });
+    }
+
+    #[test]
+    fn test_transfer_tx_src_eq_dest_is_noop() {
+        let src = address::testing::established_address_1();
+        let dest = address::testing::established_address_1();
+        assert_eq!(src, dest);
+        let token = address::testing::established_address_2();
+        let amount = token::Amount::zero();
+        let src_balance = token::Amount::native_whole(1);
+        let dest_balance = token::Amount::native_whole(1);
+
+        tx_host_env::init();
+
+        tx_host_env::with(|tx_env| {
+            tx_env.spawn_accounts([&src, &dest, &token]);
+            tx_env.credit_tokens(&src, &token, src_balance);
+            tx_env.credit_tokens(&dest, &token, src_balance);
+        });
+
+        transfer(ctx(), &src, &dest, &token, amount).unwrap();
+
+        // Dest balance is still the same
+        assert_eq!(read_balance(ctx(), &token, &dest).unwrap(), dest_balance);
+
+        // Src balance is still the same
+        assert_eq!(read_balance(ctx(), &token, &src).unwrap(), src_balance);
+
+        // Verifiers set is empty
+        tx_host_env::with(|tx_env| {
+            assert!(tx_env.verifiers.is_empty());
+        });
+
+        // Must no emit an event
+        tx_host_env::with(|tx_env| {
+            let events: Vec<_> = tx_env
+                .state
+                .write_log()
+                .get_events_of::<TokenEvent>()
+                .collect();
+            assert!(events.is_empty());
+        });
     }
 }
