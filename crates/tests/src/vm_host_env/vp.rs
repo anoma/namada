@@ -226,7 +226,7 @@ mod native_vp_host_env {
             ( $fn:ident ( $($arg:ident : $type:ty),* $(,)?) ) => {
                 concat_idents!(extern_fn_name = namada, _, $fn {
                     #[no_mangle]
-                    extern "C" fn extern_fn_name( $($arg: $type),* ) {
+                    extern "C-unwind" fn extern_fn_name( $($arg: $type),* ) {
                         with(|TestVpEnv {
                                 addr,
                                 state,
@@ -271,7 +271,7 @@ mod native_vp_host_env {
             ( $fn:ident ( $($arg:ident : $type:ty),* $(,)?) -> $ret:ty ) => {
                 concat_idents!(extern_fn_name = namada, _, $fn {
                     #[no_mangle]
-                    extern "C" fn extern_fn_name( $($arg: $type),* ) -> $ret {
+                    extern "C-unwind" fn extern_fn_name( $($arg: $type),* ) -> $ret {
                         with(|TestVpEnv {
                                 addr,
                                 state,
