@@ -2,7 +2,6 @@
 
 mod utilities;
 
-use eyre::eyre;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
@@ -10,15 +9,14 @@ use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::transaction::Transaction;
 use namada_core::address::Address;
 use namada_core::chain::BlockHeight;
-use namada_core::ibc::IbcTxDataRefs;
-use namada_core::masp::{MaspEpoch, MaspTxRefs};
+use namada_core::masp::MaspEpoch;
 use namada_core::storage::TxIndex;
 use namada_core::time::DurationSecs;
 use namada_core::token::{Denomination, MaspDigitPos};
 use namada_events::extend::{
-    IbcMaspTxBatchRefs as IbcMaspTxBatchRefsAttr,
     MaspTxBatchRefs as MaspTxBatchRefsAttr,
-    MaspTxBlockIndex as MaspTxBlockIndexAttr, ReadFromEventAttributes,
+    MaspTxBlockIndex as MaspTxBlockIndexAttr, MaspTxRef, MaspTxRefs,
+    ReadFromEventAttributes,
 };
 use namada_ibc::{decode_message, extract_masp_tx_from_envelope, IbcMessage};
 use namada_io::client::Client;
@@ -34,58 +32,67 @@ use crate::rpc::{
 };
 use crate::{token, MaybeSend, MaybeSync};
 
-/// Extract the relevant shield portions of a [`Tx`], if any.
+/// Extract the relevant shield portions from a [`Tx`] MASP section or an IBC
+/// message, if any.
+#[allow(clippy::result_large_err)]
 fn extract_masp_tx(
     tx: &Tx,
-    masp_section_refs: &MaspTxRefs,
-) -> Result<Vec<Transaction>, eyre::Error> {
-    // NOTE: simply looking for masp sections attached to the tx
-    // is not safe. We don't validate the sections attached to a
-    // transaction se we could end up with transactions carrying
-    // an unnecessary masp section. We must instead look for the
-    // required masp sections coming from the events
-
-    masp_section_refs
-        .0
-        .iter()
-        .try_fold(vec![], |mut acc, hash| {
-            match tx.get_masp_section(hash).cloned().ok_or_else(|| {
-                eyre!("Missing expected masp transaction".to_string())
-            }) {
-                Ok(transaction) => {
-                    acc.push(transaction);
-                    Ok(acc)
-                }
-                Err(e) => Err(e),
-            }
-        })
-}
-
-/// Extract the relevant shield portions from the IBC messages in [`Tx`]
-#[allow(clippy::result_large_err)]
-fn extract_masp_tx_from_ibc_message(
-    tx: &Tx,
+    masp_refs: &MaspTxRefs,
 ) -> Result<Vec<Transaction>, Error> {
     let mut masp_txs = Vec::new();
-    for cmt in &tx.header.batch {
-        let tx_data = tx.data(cmt).ok_or_else(|| {
-            Error::Other("Missing transaction data".to_string())
-        })?;
-        let ibc_msg = decode_message::<token::Transfer>(&tx_data)
-            .map_err(|_| Error::Other("Invalid IBC message".to_string()))?;
-        if let IbcMessage::Envelope(ref envelope) = ibc_msg {
-            if let Some(masp_tx) = extract_masp_tx_from_envelope(envelope) {
-                masp_txs.push(masp_tx);
+    // FIXME: use iter?
+    for masp_ref in &masp_refs.0 {
+        match masp_ref {
+            MaspTxRef::MaspSection(id) => {
+                // NOTE: simply looking for masp sections attached to the tx
+                // is not safe. We don't validate the sections attached to a
+                // transaction se we could end up with transactions carrying
+                // an unnecessary masp section. We must instead look for the
+                // required masp sections published in the events
+                let transaction = tx
+                    .get_masp_section(id)
+                    .ok_or_else(|| {
+                        Error::Other(format!(
+                            "Missing expected masp transaction with id {id}"
+                        ))
+                    })?
+                    .clone();
+                masp_txs.push(transaction);
+            }
+            // FIXME: we are not using this hash, why????
+            MaspTxRef::IbcData(hash) => {
+                // FIXME: improve if possible
+                let mut ibc_masp_tx = None;
+
+                for cmt in &tx.header.batch {
+                    let Some(tx_data) = tx.data(cmt) else {
+                        continue;
+                    };
+                    let Ok(IbcMessage::Envelope(ref envelope)) =
+                        decode_message::<token::Transfer>(&tx_data)
+                    else {
+                        continue;
+                    };
+                    if let Some(masp_tx) =
+                        extract_masp_tx_from_envelope(envelope)
+                    {
+                        ibc_masp_tx = Some(masp_tx);
+                    }
+                }
+
+                if let Some(transaction) = ibc_masp_tx {
+                    masp_txs.push(transaction);
+                } else {
+                    return Err(Error::Other(format!(
+                        "Missing expected ibc masp transaction with data \
+                         section hash: {hash}"
+                    )));
+                }
             }
         }
     }
-    if !masp_txs.is_empty() {
-        Ok(masp_txs)
-    } else {
-        Err(Error::Other(
-            "IBC message doesn't have masp transaction".to_string(),
-        ))
-    }
+
+    Ok(masp_txs)
 }
 
 // Retrieves all the indexes at the specified height which refer
@@ -95,10 +102,7 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
     client: &C,
     height: BlockHeight,
     first_idx_to_query: Option<TxIndex>,
-) -> Result<
-    Option<Vec<(TxIndex, Option<MaspTxRefs>, Option<IbcTxDataRefs>)>>,
-    Error,
-> {
+) -> Result<Option<Vec<(TxIndex, Option<MaspTxRefs>)>>, Error> {
     let first_idx_to_query = first_idx_to_query.unwrap_or_default();
 
     Ok(client
@@ -118,18 +122,13 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
 
                     if tx_index >= first_idx_to_query {
                         // Extract the references to the correct masp sections
-                        let masp_section_refs =
+                        let masp_refs =
                             MaspTxBatchRefsAttr::read_from_event_attributes(
                                 &event.attributes,
                             )
                             .ok();
-                        let ibc_tx_data_refs =
-                            IbcMaspTxBatchRefsAttr::read_from_event_attributes(
-                                &event.attributes,
-                            )
-                            .ok();
 
-                        Some((tx_index, masp_section_refs, ibc_tx_data_refs))
+                        Some((tx_index, masp_refs))
                     } else {
                         None
                     }

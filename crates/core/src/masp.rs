@@ -76,6 +76,12 @@ impl From<TxIdInner> for MaspTxId {
     }
 }
 
+impl Display for MaspTxId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// Wrapper type around `Epoch` for type safe operations involving the masp
 /// epoch
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
@@ -763,24 +769,6 @@ impl FromStr for MaspValue {
             .or_else(|_err| {
                 ExtendedViewingKey::from_str(s).map(Self::FullViewingKey)
             })
-    }
-}
-
-/// The masp transactions' references of a given batch
-#[derive(Default, Clone, Serialize, Deserialize)]
-pub struct MaspTxRefs(pub Vec<MaspTxId>);
-
-impl Display for MaspTxRefs {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", serde_json::to_string(self).unwrap())
-    }
-}
-
-impl FromStr for MaspTxRefs {
-    type Err = serde_json::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        serde_json::from_str(s)
     }
 }
 

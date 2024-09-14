@@ -17,10 +17,7 @@ use namada_tx::{IndexedTx, Tx};
 use tokio::sync::Semaphore;
 
 use crate::error::{Error, QueryError};
-use crate::masp::{
-    extract_masp_tx, extract_masp_tx_from_ibc_message,
-    get_indexed_masp_events_at_height,
-};
+use crate::masp::{extract_masp_tx, get_indexed_masp_events_at_height};
 
 struct LedgerMaspClientInner<C> {
     client: C,
@@ -109,20 +106,16 @@ impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
                     .data
             };
 
-            for (idx, masp_sections_refs, ibc_tx_data_refs) in txs_results {
+            for (idx, masp_refs) in txs_results {
                 let tx = Tx::try_from(block[idx.0 as usize].as_ref())
                     .map_err(|e| Error::Other(e.to_string()))?;
                 let mut extracted_masp_txs = vec![];
-                if let Some(masp_sections_refs) = masp_sections_refs {
+                if let Some(masp_refs) = masp_refs {
                     extracted_masp_txs.extend(
-                        extract_masp_tx(&tx, &masp_sections_refs)
+                        extract_masp_tx(&tx, &masp_refs)
                             .map_err(|e| Error::Other(e.to_string()))?,
                     );
                 };
-                if ibc_tx_data_refs.is_some() {
-                    extracted_masp_txs
-                        .extend(extract_masp_tx_from_ibc_message(&tx)?);
-                }
 
                 txs.push((
                     IndexedTx {

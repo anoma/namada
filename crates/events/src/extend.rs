@@ -9,8 +9,8 @@ use namada_core::address::Address;
 use namada_core::chain::BlockHeight;
 use namada_core::collections::HashMap;
 use namada_core::hash::Hash;
-use namada_core::ibc::IbcTxDataRefs;
-use namada_core::masp::MaspTxRefs;
+use namada_core::ibc::IbcTxDataHash;
+use namada_core::masp::MaspTxId;
 use namada_core::storage::TxIndex;
 use serde::Deserializer;
 
@@ -503,9 +503,37 @@ impl EventAttributeEntry<'static> for MaspTxBlockIndex {
     }
 }
 
-/// Extend an [`Event`] with `masp_tx_batch_refs` data, indicating the specific
-/// inner transactions inside the batch that are valid masp txs and the
-/// references to the relative masp sections.
+/// A type representing the possible reference to some MASP data, either a masp
+/// section or ibc tx data
+#[derive(Clone, Serialize, Deserialize)]
+pub enum MaspTxRef {
+    /// Reference to a MASP section
+    MaspSection(MaspTxId),
+    /// Reference to an ibc tx data section
+    IbcData(IbcTxDataHash),
+}
+
+/// A list of MASP tx references
+#[derive(Default, Clone, Serialize, Deserialize)]
+pub struct MaspTxRefs(pub Vec<MaspTxRef>);
+
+impl Display for MaspTxRefs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", serde_json::to_string(self).unwrap())
+    }
+}
+
+impl FromStr for MaspTxRefs {
+    type Err = serde_json::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_json::from_str(s)
+    }
+}
+
+/// Extend an [`Event`] with `masp_tx_batch_refs` data, indicating the
+/// references to either the MASP sections or the data sections for shielded
+/// actions.
 pub struct MaspTxBatchRefs(pub MaspTxRefs);
 
 impl EventAttributeEntry<'static> for MaspTxBatchRefs {
@@ -513,20 +541,6 @@ impl EventAttributeEntry<'static> for MaspTxBatchRefs {
     type ValueOwned = Self::Value;
 
     const KEY: &'static str = "masp_tx_batch_refs";
-
-    fn into_value(self) -> Self::Value {
-        self.0
-    }
-}
-
-/// Extend an [`Event`] with data sections for IBC shielding transfer.
-pub struct IbcMaspTxBatchRefs(pub IbcTxDataRefs);
-
-impl EventAttributeEntry<'static> for IbcMaspTxBatchRefs {
-    type Value = IbcTxDataRefs;
-    type ValueOwned = Self::Value;
-
-    const KEY: &'static str = "ibc_masp_tx_batch_refs";
 
     fn into_value(self) -> Self::Value {
         self.0

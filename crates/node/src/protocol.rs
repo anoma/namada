@@ -8,12 +8,13 @@ use eyre::{eyre, WrapErr};
 use namada_sdk::address::{Address, InternalAddress};
 use namada_sdk::booleans::BoolResultUnitExt;
 use namada_sdk::events::extend::{
-    ComposeEvent, Height as HeightAttr, TxHash as TxHashAttr, UserAccount,
+    ComposeEvent, Height as HeightAttr, MaspTxRef, MaspTxRefs,
+    TxHash as TxHashAttr, UserAccount,
 };
 use namada_sdk::events::EventLevel;
 use namada_sdk::gas::{self, Gas, GasMetering, TxGasMeter, VpGasMeter};
 use namada_sdk::hash::Hash;
-use namada_sdk::ibc::{IbcTxDataHash, IbcTxDataRefs};
+use namada_sdk::ibc::IbcTxDataHash;
 use namada_sdk::parameters::get_gas_scale;
 use namada_sdk::state::{
     DBIter, State, StorageHasher, StorageRead, TxWrites, WlState, DB,
@@ -21,7 +22,7 @@ use namada_sdk::state::{
 use namada_sdk::storage::TxIndex;
 use namada_sdk::token::event::{TokenEvent, TokenOperation};
 use namada_sdk::token::utils::is_masp_transfer;
-use namada_sdk::token::{Amount, MaspTxId, MaspTxRefs};
+use namada_sdk::token::{Amount, MaspTxId};
 use namada_sdk::tx::action::{self, Read};
 use namada_sdk::tx::data::protocol::{ProtocolTx, ProtocolTxType};
 use namada_sdk::tx::data::{
@@ -318,10 +319,9 @@ where
 pub(crate) fn get_batch_txs_to_execute<'a>(
     tx: &'a Tx,
     masp_tx_refs: &MaspTxRefs,
-    ibc_tx_data_refs: &IbcTxDataRefs,
 ) -> impl Iterator<Item = &'a TxCommitments> {
     let mut batch_iter = tx.commitments().iter();
-    if !masp_tx_refs.0.is_empty() || !ibc_tx_data_refs.0.is_empty() {
+    if !masp_tx_refs.0.is_empty() {
         // If fees were paid via masp skip the first transaction of the batch
         // which has already been executed
         batch_iter.next();
@@ -351,11 +351,7 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    for cmt in get_batch_txs_to_execute(
-        tx,
-        &extended_tx_result.masp_tx_refs,
-        &extended_tx_result.ibc_tx_data_refs,
-    ) {
+    for cmt in get_batch_txs_to_execute(tx, &extended_tx_result.masp_tx_refs) {
         match apply_wasm_tx(
             &tx.batch_ref_tx(cmt),
             &tx_index,
@@ -400,18 +396,19 @@ where
                             cmt,
                             Either::Right(res),
                         )? {
+                            // FIXME: can improve this?
                             match masp_ref {
                                 Either::Left(masp_section_ref) => {
                                     extended_tx_result
                                         .masp_tx_refs
                                         .0
-                                        .push(masp_section_ref);
+                                        .push(namada_sdk::events::extend::MaspTxRef::MaspSection(masp_section_ref));
                                 }
                                 Either::Right(data_sechash) => {
                                     extended_tx_result
-                                        .ibc_tx_data_refs
+                                        .masp_tx_refs
                                         .0
-                                        .push(data_sechash)
+                                        .push(namada_sdk::events::extend::MaspTxRef::IbcData(data_sechash))
                                 }
                             }
                         }
@@ -504,12 +501,12 @@ where
                 either::Right(tx.first_commitments().unwrap()),
                 Ok(masp_tx_result.tx_result),
             );
-            let masp_section_refs =
-                Some(masp_tx_result.masp_section_ref.map_either(
-                    |masp_tx_ref| MaspTxRefs(vec![masp_tx_ref]),
-                    |ibc_tx_data| IbcTxDataRefs(vec![ibc_tx_data]),
-                ));
-            (batch, masp_section_refs)
+            // FIXME: can improve?
+            let masp_section_ref = match masp_tx_result.masp_section_ref {
+                Either::Left(id) => MaspTxRef::MaspSection(id),
+                Either::Right(hash) => MaspTxRef::IbcData(hash),
+            };
+            (batch, Some(MaspTxRefs(vec![masp_section_ref])))
         },
     );
 
