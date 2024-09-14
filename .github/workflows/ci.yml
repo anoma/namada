@@ -82,7 +82,7 @@ jobs:
           RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
         with:
           path: /usr/local/cargo
-          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}-${{ env.NIGHTLY }}
       - name: Start sccache server
         id: sccache
         run: sccache --start-server
@@ -122,7 +122,7 @@ jobs:
           RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
         with:
           path: /usr/local/cargo
-          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}-${{ env.NIGHTLY }}
       - name: Start sccache server
         id: sccache
         run: sccache --start-server
@@ -184,7 +184,7 @@ jobs:
           RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
         with:
           path: /usr/local/cargo
-          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}-${{ env.NIGHTLY }}
       - name: Build ${{ matrix.make.name }}
         run: make ${{ matrix.make.command }}
       - name: Upload ${{ matrix.make.name }} artifacts 
@@ -224,7 +224,7 @@ jobs:
           RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
         with:
           path: /usr/local/cargo
-          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}-${{ env.NIGHTLY }}
       - name: Download wasm artifacts
         uses: actions/download-artifact@v4
         with:
@@ -277,7 +277,7 @@ jobs:
           RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
         with:
           path: /usr/local/cargo
-          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}-${{ env.NIGHTLY }}
       - name: Start sccache server
         id: sccache
         run: sccache --start-server
@@ -335,7 +335,7 @@ jobs:
           RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
         with:
           path: /usr/local/cargo
-          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}-${{ env.NIGHTLY }}
       - name: Start sccache server
         id: sccache
         run: sccache --start-server
@@ -378,7 +378,7 @@ jobs:
           RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
         with:
           path: /usr/local/cargo
-          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}-${{ env.NIGHTLY }}
       - name: Start sccache server
         id: sccache
         run: sccache --start-server
@@ -438,7 +438,7 @@ jobs:
           RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
         with:
           path: /usr/local/cargo
-          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}-${{ env.NIGHTLY }}
       - name: Start sccache server
         id: sccache
         run: sccache --start-server
@@ -490,7 +490,7 @@ jobs:
           RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
         with:
           path: /usr/local/cargo
-          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}-${{ env.NIGHTLY }}
       - name: Start sccache server
         id: sccache
         run: sccache --start-server
@@ -558,7 +558,7 @@ jobs:
           RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
         with:
           path: /usr/local/cargo
-          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}-${{ env.NIGHTLY }}
       - name: Start sccache server
         id: sccache
         run: sccache --start-server
@@ -679,7 +679,7 @@ jobs:
           RUNS_ON_S3_BUCKET_CACHE: ${{ env.CACHE_BUCKET }}
         with:
           path: /usr/local/cargo
-          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}
+          key: /cache/${{ runner.os }}-${{ github.job }}-${{ hashFiles('**/Cargo.lock') }}-${{ env.NIGHTLY }}
       - name: Start sccache server
         id: sccache
         run: sccache --start-server
