@@ -122,7 +122,7 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
     client: &C,
     height: BlockHeight,
     first_idx_to_query: Option<TxIndex>,
-) -> Result<Option<Vec<(TxIndex, Option<MaspTxRefs>)>>, Error> {
+) -> Result<Vec<(TxIndex, MaspTxRefs)>, Error> {
     let first_idx_to_query = first_idx_to_query.unwrap_or_default();
 
     Ok(client
@@ -146,7 +146,7 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
                             MaspTxBatchRefsAttr::read_from_event_attributes(
                                 &event.attributes,
                             )
-                            .ok();
+                            .unwrap_or_default();
 
                         Some((tx_index, masp_refs))
                     } else {
@@ -154,7 +154,8 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
                     }
                 })
                 .collect::<Vec<_>>()
-        }))
+        })
+        .unwrap_or_default())
 }
 
 /// An implementation of a shielded wallet

@@ -79,11 +79,9 @@ impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
                 .await
             };
 
-            let txs_results = match maybe_txs_results.await? {
-                Some(events) => events,
-                None => {
-                    continue;
-                }
+            let txs_results = maybe_txs_results.await?;
+            if txs_results.is_empty() {
+                continue;
             };
 
             let block = {
@@ -110,12 +108,10 @@ impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
                 let tx = Tx::try_from(block[idx.0 as usize].as_ref())
                     .map_err(|e| Error::Other(e.to_string()))?;
                 let mut extracted_masp_txs = vec![];
-                if let Some(masp_refs) = masp_refs {
-                    extracted_masp_txs.extend(
-                        extract_masp_tx(&tx, &masp_refs)
-                            .map_err(|e| Error::Other(e.to_string()))?,
-                    );
-                };
+                extracted_masp_txs.extend(
+                    extract_masp_tx(&tx, &masp_refs)
+                        .map_err(|e| Error::Other(e.to_string()))?,
+                );
 
                 txs.push((
                     IndexedTx {
