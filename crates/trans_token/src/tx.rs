@@ -19,6 +19,10 @@ pub fn transfer<ENV>(
 where
     ENV: TxEnv + EmitEvents,
 {
+    if amount.is_zero() || src == dest {
+        return Ok(());
+    }
+
     // The tx must be authorized by the source and destination addresses
     env.insert_verifier(src)?;
     env.insert_verifier(dest)?;
