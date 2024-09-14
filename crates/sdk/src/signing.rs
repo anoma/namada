@@ -1,4 +1,7 @@
 //! Functions to sign transactions
+
+#![allow(clippy::result_large_err)]
+
 use std::collections::BTreeMap;
 use std::fmt::Display;
 
@@ -73,7 +76,9 @@ pub struct SigningTxData {
 }
 
 /// Find the public key for the given address and try to load the keypair
-/// for it from the wallet. If the keypair is encrypted but a password is not
+/// for it from the wallet.
+///
+/// If the keypair is encrypted but a password is not
 /// supplied, then it is interactively prompted. Errors if the key cannot be
 /// found or loaded.
 pub async fn find_pk(
@@ -114,6 +119,7 @@ pub async fn find_pk(
 }
 
 /// Load the secret key corresponding to the given public key from the wallet.
+///
 /// If the keypair is encrypted but a password is not supplied, then it is
 /// interactively prompted. Errors if the key cannot be found or loaded.
 pub fn find_key_by_pk<U: WalletIo>(
@@ -133,7 +139,9 @@ pub fn find_key_by_pk<U: WalletIo>(
 }
 
 /// Given CLI arguments and some defaults, determine the rightful transaction
-/// signer. Return the given signing key or public key of the given signer if
+/// signer.
+///
+/// Return the given signing key or public key of the given signer if
 /// possible. If no explicit signer given, use the `default`. If no `default`
 /// is given, an `Error` is returned.
 pub async fn tx_signers(

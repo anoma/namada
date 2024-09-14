@@ -1361,7 +1361,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 );
                 // We want to take at most the remaining quota for the
                 // current denomination to the receiver
-                let contr = std::cmp::min(*rem_amount as u128, val) as u64;
+                let contr = std::cmp::min(u128::from(*rem_amount), val) as u64;
                 // If we are sending to a shielded address, we need the outgoing
                 // viewing key in the following computations.
                 let ovk_opt = source

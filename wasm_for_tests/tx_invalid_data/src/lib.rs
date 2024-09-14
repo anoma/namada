@@ -10,9 +10,8 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
         signed
             .data(cmt)
             .ok_or_err_msg("Missing data")
-            .map_err(|err| {
+            .inspect_err(|_| {
                 ctx.set_commitment_sentinel();
-                err
             })?;
     Ok(())
 }

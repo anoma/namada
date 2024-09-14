@@ -1,3 +1,5 @@
+//! Actions applied in a transaction.
+//!
 //! Tx actions are used to indicate from tx to VPs the type of actions that have
 //! been applied by the tx to simplify validation (We can check that the
 //! storage changes are valid based on the action, rather than trying to derive

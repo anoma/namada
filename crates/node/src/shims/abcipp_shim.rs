@@ -448,7 +448,7 @@ impl AbciService {
                     tracing::info!("ABCI response channel didn't respond");
                     Err(err.into())
                 })
-                .map(|res| {
+                .inspect(|_| {
                     // emit a log line stating that we are sleeping until
                     // genesis.
                     #[allow(clippy::disallowed_methods)]
@@ -465,7 +465,6 @@ impl AbciService {
                             );
                         }
                     }
-                    res
                 })
         }
         .boxed()

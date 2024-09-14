@@ -108,7 +108,9 @@ pub mod shim {
         }
     }
 
-    /// Custom response types. These will be returned by the shell along with
+    /// Custom response types.
+    ///
+    /// These will be returned by the shell along with
     /// custom payload types (which may be unit structs). It is the duty of
     /// the shim to convert these to responses understandable to tower-abci
     #[derive(Debug)]

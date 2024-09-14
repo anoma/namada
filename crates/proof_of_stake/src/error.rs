@@ -87,9 +87,7 @@ pub enum SlashError {
 pub enum CommissionRateChangeError {
     #[error("Unexpected negative commission rate {0} for validator {1}")]
     NegativeRate(Dec, Address),
-    #[error(
-        "Unexpected commission rate {0} larger than 1.0 for validator {1}"
-    )]
+    #[error("Unexpected commission rate {0} larger than 1.0 for validator {1}")]
     LargerThanOne(Dec, Address),
     #[error("Rate change of {0} is too large for validator {1}")]
     RateChangeTooLarge(Dec, Address),

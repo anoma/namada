@@ -1317,9 +1317,10 @@ where
 }
 
 /// Storage prefix iterator function for prior state (before tx execution)
-/// exposed to the wasm VM VP environment. It will try to get an iterator from
-/// the storage and return the corresponding ID of the iterator, ordered by
-/// storage keys.
+/// exposed to the wasm VM VP environment.
+///
+/// It will try to get an iterator from the storage and return the corresponding
+/// ID of the iterator, ordered by storage keys.
 pub fn vp_iter_prefix_pre<MEM, D, H, EVAL, CA>(
     env: &mut VpVmEnv<MEM, D, H, EVAL, CA>,
     prefix_ptr: u64,
@@ -1355,9 +1356,10 @@ where
 }
 
 /// Storage prefix iterator function for posterior state (after tx execution)
-/// exposed to the wasm VM VP environment. It will try to get an iterator from
-/// the storage and return the corresponding ID of the iterator, ordered by
-/// storage keys.
+/// exposed to the wasm VM VP environment.
+///
+/// It will try to get an iterator from the storage and return the corresponding
+/// ID of the iterator, ordered by storage keys.
 pub fn vp_iter_prefix_post<MEM, D, H, EVAL, CA>(
     env: &mut VpVmEnv<MEM, D, H, EVAL, CA>,
     prefix_ptr: u64,

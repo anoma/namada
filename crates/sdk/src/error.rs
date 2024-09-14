@@ -124,9 +124,7 @@ pub enum TxSubmitError {
     )]
     ValidatorNotCurrentlyJailed(Address),
     /// Already inactive at pipeline epoch
-    #[error(
-        "The validator address {0} is inactive at the pipeline epoch {1}."
-    )]
+    #[error("The validator address {0} is inactive at the pipeline epoch {1}.")]
     ValidatorInactive(Address, Epoch),
     /// Validator not inactive
     #[error(
@@ -345,9 +343,7 @@ pub enum EthereumBridgeError {
     #[error("Failed to query Ethereum voting powers: {0}")]
     QueryVotingPowers(String),
     /// Ethereum node timeout error.
-    #[error(
-        "Timed out while attempting to communicate with the Ethereum node"
-    )]
+    #[error("Timed out while attempting to communicate with the Ethereum node")]
     NodeTimeout,
     /// Error generating Bridge pool proof.
     #[error("Failed to generate Bridge pool proof: {0}")]

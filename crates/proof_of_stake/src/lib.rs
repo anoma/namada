@@ -1931,9 +1931,12 @@ where
 }
 
 /// Get bond amounts within the `claim_start..=claim_end` epoch range for
-/// claiming rewards for a given bond ID. Returns a map of bond amounts
-/// associated with every epoch within the given epoch range (accumulative) in
-/// which an amount contributed to the validator's stake.
+/// claiming rewards for a given bond ID.
+///
+/// Returns a map of bond amounts associated with every epoch within the given
+/// epoch range (accumulative) in which an amount contributed to the validator's
+/// stake.
+///
 /// This function will only consider slashes that were processed before or at
 /// the epoch in which we're calculating the bond amount to correspond to the
 /// validator stake that was used to calculate reward products (slashes do *not*
@@ -2145,9 +2148,11 @@ where
     Ok(())
 }
 
-/// Check if a validator is frozen. A validator is frozen until after all of its
-/// enqueued slashes have been processed, i.e. until `unbonding_len + 1 +
-/// cubic_slashing_window_length` epochs after its most recent infraction epoch.
+/// Check if a validator is frozen.
+///
+/// A validator is frozen until after all of its enqueued slashes have been
+/// processed, i.e. until `unbonding_len + 1 + cubic_slashing_window_length`
+/// epochs after its most recent infraction epoch.
 pub fn is_validator_frozen<S>(
     storage: &S,
     validator: &Address,

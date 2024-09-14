@@ -14,9 +14,11 @@ use crate::ethereum_oracle as oracle;
 const EVENTS_POST_ENDPOINT: &str = "eth_events";
 
 /// Starts a [`warp::Server`] that listens for Borsh-serialized Ethereum events
-/// and then forwards them to `sender`. It shuts down if a signal is sent on the
-/// `abort_recv` channel. Accepts the receive-half of an oracle control channel
-/// (`control_recv`) that will be kept alive until shutdown.
+/// and then forwards them to `sender`.
+///
+/// It shuts down if a signal is sent on the `abort_recv` channel. Accepts the
+/// receive-half of an oracle control channel (`control_recv`) that will be kept
+/// alive until shutdown.
 pub async fn serve(
     listen_addr: String,
     sender: BoundedSender<EthereumEvent>,

@@ -13,9 +13,11 @@ use namada_storage::collections::LazyCollection;
 
 use crate::VpEnv;
 
-/// Validation builder from storage changes. The changes can
-/// be accumulated with `LazyCollection::accumulate()` and then turned into a
-/// list of valid actions on the collection with `LazyCollection::validate()`.
+/// Validation builder from storage changes.
+///
+/// The changes can be accumulated with `LazyCollection::accumulate()` and then
+/// turned into a list of valid actions on the collection with
+/// `LazyCollection::validate()`.
 #[derive(Debug, Derivative)]
 // https://mcarton.github.io/rust-derivative/latest/Default.html#custom-bound
 #[derivative(Default(bound = ""))]

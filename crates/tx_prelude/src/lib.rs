@@ -127,9 +127,8 @@ impl Ctx {
     pub fn get_tx_data(&mut self, batched_tx: &BatchedTx) -> Result<Vec<u8>> {
         let BatchedTx { tx, ref cmt } = batched_tx;
 
-        tx.data(cmt).ok_or_err_msg("Missing data").map_err(|err| {
+        tx.data(cmt).ok_or_err_msg("Missing data").inspect_err(|_| {
             self.set_commitment_sentinel();
-            err
         })
     }
 }

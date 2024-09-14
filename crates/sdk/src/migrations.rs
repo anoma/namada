@@ -292,7 +292,7 @@ impl DbUpdateType {
                         )
                     })?;
                 }
-                db.write(key, cf, &value.to_write());
+                db.write(key, cf, value.to_write());
                 Ok(UpdateStatus::Add(vec![(key.to_string(), deserialized)]))
             }
             Self::Delete(key, cf) => {

@@ -208,8 +208,10 @@ impl<State> BlockAllocator<State> {
 }
 
 /// Allotted resource for a batch of transactions of the same kind in some
-/// proposed block. At the moment this is used to track two resources of the
-/// block: space and gas. Space is measured in bytes while gas in gas units.
+/// proposed block.
+///
+/// At the moment this is used to track two resources of the block: space and
+/// gas. Space is measured in bytes while gas in gas units.
 #[derive(Debug, Copy, Clone, Default)]
 pub struct TxBin<R: Resource> {
     /// The current resource utilization of the batch of transactions.

@@ -104,3 +104,6 @@ rand.workspace = true
 rand_core.workspace = true
 tokio = { workspace = true, features = ["full"] }
 toml.workspace = true
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }

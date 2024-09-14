@@ -195,7 +195,9 @@ where
 }
 
 /// Collect the details of all bonds and unbonds that match the source and
-/// validator arguments. If either source or validator is `None`, then grab the
+/// validator arguments.
+///
+/// If either source or validator is `None`, then grab the
 /// information for all sources or validators, respectively.
 pub fn bonds_and_unbonds<S, Gov>(
     storage: &S,

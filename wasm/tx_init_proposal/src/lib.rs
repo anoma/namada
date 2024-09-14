@@ -22,15 +22,13 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
     let content = tx
         .get_section(&tx_data.content)
         .ok_or_err_msg("Missing proposal content")
-        .map_err(|err| {
+        .inspect_err(|_| {
             ctx.set_commitment_sentinel();
-            err
         })?
         .extra_data()
         .ok_or_err_msg("Missing full proposal content")
-        .map_err(|err| {
+        .inspect_err(|_| {
             ctx.set_commitment_sentinel();
-            err
         })?;
 
     // Get the code from the referred to section
@@ -39,15 +37,13 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
         .map(|hash| {
             tx.get_section(&hash)
                 .ok_or_err_msg("Missing proposal code")
-                .map_err(|err| {
+                .inspect_err(|_| {
                     ctx.set_commitment_sentinel();
-                    err
                 })?
                 .extra_data()
                 .ok_or_err_msg("Missing full proposal code")
-                .map_err(|err| {
+                .inspect_err(|_| {
                     ctx.set_commitment_sentinel();
-                    err
                 })
         })
         .transpose()

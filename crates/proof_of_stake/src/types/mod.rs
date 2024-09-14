@@ -138,7 +138,8 @@ pub type ValidatorAddresses = crate::epoched::NestedEpoched<
 pub type ValidatorSlashes = NestedMap<Address, LazyMap<u64, Slash>>;
 
 /// Epoched slashes, where the outer epoch key is the epoch in which the slash
-/// is processed
+/// is processed.
+///
 /// NOTE: the `enqueued_slashes_handle` this is used for shouldn't need these
 /// slashes earlier than `cubic_window_width` epochs behind the current
 pub type EpochedSlashes = crate::epoched::NestedEpoched<
@@ -158,6 +159,7 @@ pub type Unbonds = NestedMap<Epoch, LazyMap<Epoch, token::Amount>>;
 pub type ConsensusKeys = LazySet<common::PublicKey>;
 
 /// Total unbonded for validators needed for slashing computations.
+///
 /// The outer `Epoch` corresponds to the epoch at which the unbond is active
 /// (affects the deltas, pipeline after submission). The inner `Epoch`
 /// corresponds to the epoch from which the underlying bond became active
@@ -257,7 +259,9 @@ pub type EagerRedelegatedBondsMap =
 pub type LivenessMissedVotes = NestedMap<Address, LazySet<u64>>;
 
 /// The sum of missed votes within some interval for each of the consensus
-/// validators. The value in this map should in principle be the number of
+/// validators.
+///
+/// The value in this map should in principle be the number of
 /// elements in the corresponding inner LazySet of [`LivenessMissedVotes`].
 pub type LivenessSumMissedVotes = LazyMap<Address, u64>;
 

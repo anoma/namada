@@ -30,6 +30,7 @@ use crate::internal_macros::{echo_error, trace_error};
 use crate::queries::RPC;
 
 /// Relayer related errors.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Default)]
 enum Error {
     /// An error, with no further context.
@@ -81,6 +82,7 @@ impl Error {
 
     /// Display the error message, and return a new [`Result`],
     /// with the error already handled appropriately.
+    #[allow(clippy::result_large_err)]
     fn handle(self) -> Result<(), SdkError> {
         let (critical, reason) = match self {
             Error::WithReason {

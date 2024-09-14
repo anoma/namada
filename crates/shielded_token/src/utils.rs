@@ -27,7 +27,8 @@ fn reveal_nullifiers(
 }
 
 /// Appends the note commitments of the provided transaction to the merkle tree
-/// and updates the anchor
+/// and updates the anchor.
+///
 /// NOTE: this function is public as a temporary workaround because of an issue
 /// when running it in WASM (<https://github.com/anoma/masp/issues/73>)
 pub fn update_note_commitment_tree(
@@ -72,10 +73,11 @@ pub fn handle_masp_tx(
     Ok(())
 }
 
-/// Check if a transaction was a MASP transaction. This means
-/// that at least one key owned by MASP was changed. We cannot
-/// simply check that the MASP VP was triggered, as this can
-/// be manually requested to be triggered by users.
+/// Check if a transaction was a MASP transaction.
+///
+/// This means that at least one key owned by MASP was changed. We cannot simply
+/// check that the MASP VP was triggered, as this can be manually requested to
+/// be triggered by users.
 pub fn is_masp_transfer(changed_keys: &BTreeSet<Key>) -> bool {
     changed_keys.iter().any(is_masp_transfer_key)
 }

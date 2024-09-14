@@ -33,10 +33,12 @@ pub fn ctx() -> &'static mut Ctx {
     unsafe { &mut *std::ptr::addr_of_mut!(CTX) }
 }
 
+/// Host environment for tx and integration tests.
+///
 /// This module combines the native host function implementations from
 /// `native_tx_host_env` with the functions exposed to the tx wasm
 /// that will call to the native functions, instead of interfacing via a
-/// wasm runtime. It can be used for host environment integration tests.
+/// wasm runtime.
 pub mod tx_host_env {
     pub use namada_tx_prelude::*;
 

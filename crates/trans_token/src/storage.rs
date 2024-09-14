@@ -219,9 +219,11 @@ where
     storage.write(&key, denom)
 }
 
-/// Transfer `token` from `src` to `dest`. Returns an `Err` if `src` has
-/// insufficient balance or if the transfer the `dest` would overflow (This can
-/// only happen if the total supply doesn't fit in `token::Amount`).
+/// Transfer `token` from `src` to `dest`.
+///
+/// Returns an `Err` if `src` has insufficient balance or if the transfer the
+/// `dest` would overflow (This can only happen if the total supply doesn't fit
+/// in `token::Amount`).
 pub fn transfer<S>(
     storage: &mut S,
     token: &Address,
@@ -258,10 +260,11 @@ where
     }
 }
 
-/// Transfer tokens from `sources` to `dests`. Returns an `Err` if any source
-/// has insufficient balance or if the transfer to any destination would
-/// overflow (This can only happen if the total supply doesn't fit in
-/// `token::Amount`). Returns the set of debited accounts.
+/// Transfer tokens from `sources` to `dests`.
+///
+/// Returns an `Err` if any source has insufficient balance or if the transfer
+/// to any destination would overflow (This can only happen if the total supply
+/// doesn't fit in `token::Amount`). Returns the set of debited accounts.
 pub fn multi_transfer<S>(
     storage: &mut S,
     sources: &BTreeMap<(Address, Address), Amount>,
@@ -349,9 +352,11 @@ where
     increment_total_supply(storage, token, amount)
 }
 
-/// Burn a specified amount of tokens from some address. If the burn amount is
-/// larger than the total balance of the given address, then the remaining
-/// balance is burned. The total supply of the token is properly adjusted.
+/// Burn a specified amount of tokens from some address.
+///
+/// If the burn amount is larger than the total balance of the given address,
+/// then the remaining balance is burned. The total supply of the token is
+/// properly adjusted.
 pub fn burn_tokens<S>(
     storage: &mut S,
     token: &Address,
