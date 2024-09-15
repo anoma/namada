@@ -2245,6 +2245,13 @@ pub struct QueryEffNativeSupply<C: NamadaTypes = SdkTypes> {
     pub query: Query<C>,
 }
 
+/// Query estimate of staking rewards rate
+#[derive(Clone, Debug)]
+pub struct QueryStakingRewardsRate<C: NamadaTypes = SdkTypes> {
+    /// Common query args
+    pub query: Query<C>,
+}
+
 /// Query PoS to find a validator
 #[derive(Clone, Debug)]
 pub struct QueryFindValidator<C: NamadaTypes = SdkTypes> {

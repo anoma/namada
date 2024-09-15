@@ -46,6 +46,7 @@ use namada_proof_of_stake::types::{
 };
 use namada_state::LastBlock;
 use namada_token::masp::MaspTokenRewardData;
+use namada_token::Dec;
 use namada_tx::data::{BatchedTxResult, DryRunResult, ResultCode, TxResult};
 use namada_tx::event::{Batch as BatchAttr, Code as CodeAttr};
 use serde::Serialize;
@@ -234,6 +235,15 @@ pub async fn get_effective_native_supply<C: Client + Sync>(
 ) -> Result<token::Amount, error::Error> {
     convert_response::<C, _>(
         RPC.vp().token().effective_native_supply(client).await,
+    )
+}
+
+/// Query the effective total supply of the native token
+pub async fn get_staking_rewards_rate<C: Client + Sync>(
+    client: &C,
+) -> Result<Dec, error::Error> {
+    convert_response::<C, _>(
+        RPC.vp().token().staking_rewards_rate(client).await,
     )
 }
 

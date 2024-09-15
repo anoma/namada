@@ -656,11 +656,52 @@ where
     Ok(storage.read::<token::Amount>(&key)?.unwrap_or_default())
 }
 
+/// Compute an estimation of the most recent staking rewards rate.
+pub fn estimate_staking_reward_rate<S, Token, Parameters>(
+    storage: &S,
+) -> Result<Dec>
+where
+    S: StorageRead,
+    Parameters: parameters::Read<S>,
+    Token: trans_token::Read<S> + trans_token::Write<S>,
+{
+    // Get needed data in desired form
+    let total_native_tokens =
+        Token::get_effective_total_native_supply(storage)?;
+    let last_staked_ratio = read_last_staked_ratio(storage)?
+        .expect("Last staked ratio should exist in PoS storage");
+    let last_inflation_amount = read_last_pos_inflation_amount(storage)?
+        .expect("Last inflation amount should exist in PoS storage");
+    let epochs_per_year: u64 = Parameters::epochs_per_year(storage)?;
+
+    let total_native_tokens =
+        Dec::try_from(total_native_tokens).into_storage_result()?;
+    let last_inflation_amount =
+        Dec::try_from(last_inflation_amount).into_storage_result()?;
+
+    // Estimate annual inflation rate
+    let est_inflation_rate = checked!(
+        last_inflation_amount * epochs_per_year / total_native_tokens
+    )?;
+
+    // Estimate annual staking rewards rate
+    let est_staking_reward_rate =
+        checked!(est_inflation_rate / last_staked_ratio)?;
+
+    Ok(est_staking_reward_rate)
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
 
+    use namada_parameters::storage::get_epochs_per_year_key;
+    use namada_state::testing::TestState;
+    use namada_trans_token::storage_key::minted_balance_key;
+    use storage::write_pos_params;
+
     use super::*;
+    use crate::OwnedPosParams;
 
     #[test]
     fn test_inflation_calc_up() {
@@ -842,10 +883,19 @@ mod tests {
 
     #[test]
     fn test_pos_inflation_playground() {
+        let mut storage = TestState::default();
+        let gov_params =
+            namada_governance::parameters::GovernanceParameters::default();
+        gov_params.init_storage(&mut storage).unwrap();
+        write_pos_params(&mut storage, &OwnedPosParams::default()).unwrap();
+
         let epochs_per_year = 365_u64;
+        let epy_key = get_epochs_per_year_key();
+        storage.write(&epy_key, epochs_per_year).unwrap();
 
         let init_locked_ratio = Dec::from_str("0.1").unwrap();
         let mut last_locked_ratio = init_locked_ratio;
+
         let total_native_tokens = 1_000_000_000_u64;
         let locked_amount = u64::try_from(
             (init_locked_ratio * total_native_tokens).to_uint().unwrap(),
@@ -855,6 +905,13 @@ mod tests {
         let mut last_inflation_amount = token::Amount::zero();
         let mut total_native_tokens =
             token::Amount::native_whole(total_native_tokens);
+
+        update_state_for_pos_playground(
+            &mut storage,
+            last_locked_ratio,
+            last_inflation_amount,
+            total_native_tokens,
+        );
 
         let max_reward_rate = Dec::from_str("0.1").unwrap();
         let target_ratio = Dec::from_str("0.66666666").unwrap();
@@ -882,17 +939,42 @@ mod tests {
             let locked_ratio = Dec::try_from(locked_amount).unwrap()
                 / Dec::try_from(total_native_tokens).unwrap();
 
-            let rate = Dec::try_from(inflation).unwrap()
+            let inflation_rate = Dec::try_from(inflation).unwrap()
                 * Dec::from(epochs_per_year)
                 / Dec::try_from(total_native_tokens).unwrap();
+            let staking_rate = inflation_rate / locked_ratio;
+
             println!(
                 "Round {round}: Locked ratio: {locked_ratio}, inflation rate: \
-                 {rate}",
+                 {inflation_rate}, staking rate: {staking_rate}",
             );
 
             last_inflation_amount = inflation;
             total_native_tokens += inflation;
             last_locked_ratio = locked_ratio;
+            update_state_for_pos_playground(
+                &mut storage,
+                last_locked_ratio,
+                last_inflation_amount,
+                total_native_tokens,
+            );
+
+            let query_staking_rate = estimate_staking_reward_rate::<
+                _,
+                namada_trans_token::Store<_>,
+                namada_parameters::Store<_>,
+            >(&storage)
+            .unwrap();
+            // println!("  ----> Query staking rate: {query_staking_rate}");
+            if !staking_rate.is_zero() && !query_staking_rate.is_zero() {
+                let ratio = staking_rate / query_staking_rate;
+                let residual = ratio.abs_diff(Dec::one()).unwrap();
+                assert!(residual < Dec::from_str("0.001").unwrap());
+                // println!(
+                //     "  ----> Ratio: {}\n",
+                //     staking_rate / query_staking_rate
+                // );
+            }
 
             // if rate.abs_diff(&controller.max_reward_rate)
             //     < Dec::from_str("0.01").unwrap()
@@ -929,5 +1011,23 @@ mod tests {
             //     controller.total_tokens,
             // );
         }
+    }
+
+    fn update_state_for_pos_playground<S>(
+        storage: &mut S,
+        last_staked_ratio: Dec,
+        last_inflation_amount: token::Amount,
+        total_native_amount: token::Amount,
+    ) where
+        S: StorageRead + StorageWrite,
+    {
+        write_last_staked_ratio(storage, last_staked_ratio).unwrap();
+        write_last_pos_inflation_amount(storage, last_inflation_amount)
+            .unwrap();
+        let total_native_tokens_key =
+            minted_balance_key(&storage.get_native_token().unwrap());
+        storage
+            .write(&total_native_tokens_key, total_native_amount)
+            .unwrap();
     }
 }

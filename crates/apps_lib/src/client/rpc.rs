@@ -15,6 +15,7 @@ use namada_sdk::address::{Address, InternalAddress, MASP};
 use namada_sdk::chain::{BlockHeight, Epoch};
 use namada_sdk::collections::{HashMap, HashSet};
 use namada_sdk::control_flow::time::{Duration, Instant};
+use namada_sdk::dec::Dec;
 use namada_sdk::events::Event;
 use namada_sdk::governance::parameters::GovernanceParameters;
 use namada_sdk::governance::pgf::parameters::PgfParameters;
@@ -1362,6 +1363,21 @@ pub async fn query_effective_native_supply<N: Namada>(context: &N) {
             .await,
     );
     display_line!(context.io(), "nam: {}", native_supply.to_string_native());
+}
+
+/// Query the staking rewards rate estimate
+pub async fn query_staking_rewards_rate<N: Namada>(context: &N) {
+    let rewards_rate = unwrap_client_response::<N::Client, Dec>(
+        RPC.vp()
+            .token()
+            .staking_rewards_rate(context.client())
+            .await,
+    );
+    display_line!(
+        context.io(),
+        "Current annual staking rewards rate: {}",
+        rewards_rate
+    );
 }
 
 /// Query a validator's state information

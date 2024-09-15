@@ -298,6 +298,7 @@ pub mod cmds {
                 .subcommand(QueryMetaData::def().display_order(5))
                 .subcommand(QueryTotalSupply::def().display_order(5))
                 .subcommand(QueryEffNativeSupply::def().display_order(5))
+                .subcommand(QueryStakingRewardsRate::def().display_order(5))
                 // Actions
                 .subcommand(SignTx::def().display_order(6))
                 .subcommand(ShieldedSync::def().display_order(6))
@@ -373,6 +374,8 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, QueryTotalSupply);
             let query_native_supply =
                 Self::parse_with_ctx(matches, QueryEffNativeSupply);
+            let query_staking_rewards_rate =
+                Self::parse_with_ctx(matches, QueryStakingRewardsRate);
             let query_find_validator =
                 Self::parse_with_ctx(matches, QueryFindValidator);
             let query_result = Self::parse_with_ctx(matches, QueryResult);
@@ -449,6 +452,7 @@ pub mod cmds {
                 .or(query_metadata)
                 .or(query_total_supply)
                 .or(query_native_supply)
+                .or(query_staking_rewards_rate)
                 .or(query_account)
                 .or(sign_tx)
                 .or(shielded_sync)
@@ -534,6 +538,7 @@ pub mod cmds {
         QueryDelegations(QueryDelegations),
         QueryTotalSupply(QueryTotalSupply),
         QueryEffNativeSupply(QueryEffNativeSupply),
+        QueryStakingRewardsRate(QueryStakingRewardsRate),
         QueryFindValidator(QueryFindValidator),
         QueryRawBytes(QueryRawBytes),
         QueryProposal(QueryProposal),
@@ -2115,6 +2120,36 @@ pub mod cmds {
                      amount used in inflation calculations."
                 ))
                 .add_args::<args::QueryEffNativeSupply<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryStakingRewardsRate(
+        pub args::QueryStakingRewardsRate<args::CliTypes>,
+    );
+
+    impl SubCmd for QueryStakingRewardsRate {
+        const CMD: &'static str = "staking-rewards-rate";
+
+        fn parse(matches: &ArgMatches) -> Option<Self>
+        where
+            Self: Sized,
+        {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                QueryStakingRewardsRate(args::QueryStakingRewardsRate::parse(
+                    matches,
+                ))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(wrap!(
+                    "Query the latest estimate of the staking rewards rate \
+                     based on the most recent minted inflation amount at the \
+                     last epoch change."
+                ))
+                .add_args::<args::QueryStakingRewardsRate<args::CliTypes>>()
         }
     }
 
@@ -7152,6 +7187,32 @@ pub mod args {
             ctx: &mut Context,
         ) -> Result<QueryEffNativeSupply<SdkTypes>, Self::Error> {
             Ok(QueryEffNativeSupply::<SdkTypes> {
+                query: self.query.to_sdk(ctx)?,
+            })
+        }
+    }
+
+    impl Args for QueryStakingRewardsRate<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            Self { query }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query<CliTypes>>()
+        }
+    }
+
+    impl CliToSdk<QueryStakingRewardsRate<SdkTypes>>
+        for QueryStakingRewardsRate<CliTypes>
+    {
+        type Error = std::convert::Infallible;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<QueryStakingRewardsRate<SdkTypes>, Self::Error> {
+            Ok(QueryStakingRewardsRate::<SdkTypes> {
                 query: self.query.to_sdk(ctx)?,
             })
         }
