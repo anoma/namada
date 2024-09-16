@@ -334,6 +334,8 @@ mod test_blocks_left_to_fetch {
     fn fetched_cache_with_blocks(
         blocks_in_cache: impl IntoIterator<Item = BlockHeight>,
     ) -> Fetched {
+        let masp_tx = arbitrary_masp_tx();
+
         let txs = blocks_in_cache
             .into_iter()
             .map(|height| {
@@ -343,7 +345,7 @@ mod test_blocks_left_to_fetch {
                         index: TxIndex(0),
                         batch_index: None,
                     },
-                    arbitrary_masp_tx(),
+                    masp_tx.clone(),
                 )
             })
             .collect();
