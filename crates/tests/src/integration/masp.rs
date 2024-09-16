@@ -3,13 +3,15 @@ use std::str::FromStr;
 
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
-use namada_apps_lib::wallet::defaults::christel_keypair;
+use namada_apps_lib::wallet::defaults::{albert_keypair, christel_keypair};
 use namada_core::dec::Dec;
 use namada_core::masp::TokenMap;
 use namada_node::shell::testing::client::run;
 use namada_node::shell::testing::node::NodeResults;
 use namada_node::shell::testing::utils::{Bin, CapturedOutput};
+use namada_sdk::account::AccountPublicKeysMap;
 use namada_sdk::masp::fs::FsShieldedUtils;
+use namada_sdk::signing::SigningTxData;
 use namada_sdk::state::{StorageRead, StorageWrite};
 use namada_sdk::time::DateTimeUtc;
 use namada_sdk::token::storage_key::masp_token_map_key;
@@ -3498,6 +3500,263 @@ fn masp_fee_payment_with_different_token() -> Result<()> {
     });
     assert!(captured.result.is_ok());
     assert!(captured.contains("btc: 1000"));
+
+    Ok(())
+}
+
+// An ouput description of the masp can be replayed (pushed to the commitment
+// tree more than once). The nullifiers and merkle paths will be unique. Test
+// that a batch containing two identical shielding txs can be executed correctly
+// and the two identical notes can be spent with no issues.
+#[test]
+fn identical_output_descriptions() -> Result<()> {
+    // This address doesn't matter for tests. But an argument is required.
+    let validator_one_rpc = "http://127.0.0.1:26567";
+    // Download the shielded pool parameters before starting node
+    let _ = FsShieldedUtils::new(PathBuf::new());
+    let (mut node, _services) = setup::setup()?;
+    _ = node.next_masp_epoch();
+    let tempdir = tempfile::tempdir().unwrap();
+
+    // Add the relevant viewing keys to the wallet otherwise the shielded
+    // context won't precache the masp data
+    run(
+        &node,
+        Bin::Wallet,
+        vec![
+            "add",
+            "--alias",
+            "alias_a",
+            "--value",
+            AA_VIEWING_KEY,
+            "--unsafe-dont-encrypt",
+        ],
+    )?;
+    node.assert_success();
+
+    // Generate a tx to shield some tokens
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shield",
+            "--source",
+            ALBERT_KEY,
+            "--target",
+            AA_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "1000",
+            "--gas-limit",
+            "300000",
+            "--gas-payer",
+            ALBERT_KEY,
+            "--output-folder-path",
+            tempdir.path().to_str().unwrap(),
+            "--dump-tx",
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+    let file_path = tempdir
+        .path()
+        .read_dir()
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let tx_bytes = std::fs::read(&file_path).unwrap();
+    std::fs::remove_file(&file_path).unwrap();
+
+    // Create a batch that contains the same shielding tx twice
+    let tx: namada_sdk::tx::Tx = serde_json::from_slice(&tx_bytes).unwrap();
+    // Inject some randomness in the cloned tx to chagne the hash
+    let mut tx_clone = tx.clone();
+    let mut cmt = tx_clone.header.batch.first().unwrap().to_owned();
+    let random_hash: Vec<_> = (0..namada_sdk::hash::HASH_LENGTH)
+        .map(|_| rand::random::<u8>())
+        .collect();
+    cmt.memo_hash = namada_sdk::hash::Hash(random_hash.try_into().unwrap());
+    tx_clone.header.batch.clear();
+    tx_clone.header.batch.insert(cmt);
+
+    let signing_data = SigningTxData {
+        owner: None,
+        public_keys: vec![albert_keypair().to_public()],
+        threshold: 1,
+        account_public_keys_map: None,
+        fee_payer: albert_keypair().to_public(),
+    };
+
+    let (mut batched_tx, _signing_data) = namada_sdk::tx::build_batch(vec![
+        (tx, signing_data.clone()),
+        (tx_clone, signing_data),
+    ])
+    .unwrap();
+
+    batched_tx.sign_raw(
+        vec![albert_keypair()],
+        AccountPublicKeysMap::from_iter(
+            vec![(albert_keypair().to_public())].into_iter(),
+        ),
+        None,
+    );
+    batched_tx.sign_wrapper(albert_keypair());
+
+    let wrapper_hash = batched_tx.wrapper_hash();
+    let inner_cmts = batched_tx.commitments();
+
+    let txs = vec![batched_tx.to_bytes()];
+
+    node.clear_results();
+    node.submit_txs(txs);
+
+    // Check that the batch was successful
+    {
+        let codes = node.tx_result_codes.lock().unwrap();
+        // If empty than failed in process proposal
+        assert!(!codes.is_empty());
+
+        for code in codes.iter() {
+            assert!(matches!(code, NodeResults::Ok));
+        }
+
+        let results = node.tx_results.lock().unwrap();
+        // We submitted a single batch
+        assert_eq!(results.len(), 1);
+
+        for result in results.iter() {
+            // The batch should contain a two inner tx
+            assert_eq!(result.0.len(), 2);
+
+            for inner_cmt in inner_cmts {
+                let inner_tx_result = result
+                    .get_inner_tx_result(
+                        wrapper_hash.as_ref(),
+                        itertools::Either::Right(inner_cmt),
+                    )
+                    .expect("Missing expected tx result")
+                    .as_ref()
+                    .expect("Result is supposed to be Ok");
+
+                assert!(inner_tx_result.is_accepted());
+            }
+        }
+    }
+
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shielded-sync",
+            "--viewing-keys",
+            AA_VIEWING_KEY,
+            "--node",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+
+    // Assert NAM balance at VK(A) is 2000
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 2000"));
+
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                CHRISTEL,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 2000000"));
+
+    // Spend both notes successfully
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "unshield",
+            "--source",
+            A_SPENDING_KEY,
+            "--target",
+            CHRISTEL,
+            "--token",
+            NAM,
+            // Spend the entire shielded amount
+            "--amount",
+            "2000",
+            "--gas-payer",
+            BERTHA_KEY,
+            "--node",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+
+    // Assert NAM balance at VK(A) is 0
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 0"));
+
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                CHRISTEL,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 2002000"));
 
     Ok(())
 }
