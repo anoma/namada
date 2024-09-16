@@ -391,6 +391,7 @@ fn ibc_transfers() -> Result<()> {
 
     // Check initial balance
     check_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
+    check_gaia_balance(&test_gaia, GAIA_USER, GAIA_COIN, 810)?;
 
     // Missing memo
     transfer_from_gaia(
@@ -408,6 +409,7 @@ fn ibc_transfers() -> Result<()> {
     wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
     // Check the balance didn't change
     check_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
+    check_gaia_balance(&test_gaia, GAIA_USER, GAIA_COIN, 810)?;
 
     // Wrong memo (different amount)
     let shielding_data_path = gen_ibc_shielding_data(
@@ -433,6 +435,7 @@ fn ibc_transfers() -> Result<()> {
     wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test_gaia)?;
     // Check the balances didn't change
     check_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
+    check_gaia_balance(&test_gaia, GAIA_USER, GAIA_COIN, 810)?;
 
     Ok(())
 }
