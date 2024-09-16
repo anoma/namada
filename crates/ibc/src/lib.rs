@@ -143,6 +143,8 @@ pub enum Error {
     ChainId(IdentifierError),
     #[error("Verifier insertion error: {0}")]
     Verifier(StorageError),
+    #[error("IBC error: {0}")]
+    Other(String),
 }
 
 impl From<Error> for StorageError {
@@ -672,11 +674,9 @@ where
                 {
                     self.verifiers.borrow_mut().insert(
                         Address::from_str(verifier.as_ref()).map_err(|_| {
-                            Error::NftTransfer(NftTransferError::Other(
-                                format!(
-                                    "Cannot convert the address {}",
-                                    verifier
-                                ),
+                            Error::Other(format!(
+                                "Cannot convert the address {}",
+                                verifier,
                             ))
                         })?,
                     );
