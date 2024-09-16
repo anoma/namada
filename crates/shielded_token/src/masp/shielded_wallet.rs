@@ -148,33 +148,32 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
     pub(crate) fn update_witness_map(
         &mut self,
         indexed_tx: IndexedTx,
-        shielded: &[Transaction],
+        shielded: &Transaction,
     ) -> Result<(), eyre::Error> {
         let mut note_pos = self.tree.size();
         self.note_index.insert(indexed_tx, note_pos);
 
-        for tx in shielded {
-            for so in
-                tx.sapling_bundle().map_or(&vec![], |x| &x.shielded_outputs)
-            {
-                // Create merkle tree leaf node from note commitment
-                let node = Node::new(so.cmu.to_repr());
-                // Update each merkle tree in the witness map with the latest
-                // addition
-                for (_, witness) in self.witness_map.iter_mut() {
-                    witness.append(node).map_err(|()| {
-                        eyre!("note commitment tree is full".to_string())
-                    })?;
-                }
-                self.tree.append(node).map_err(|()| {
+        for so in shielded
+            .sapling_bundle()
+            .map_or(&vec![], |x| &x.shielded_outputs)
+        {
+            // Create merkle tree leaf node from note commitment
+            let node = Node::new(so.cmu.to_repr());
+            // Update each merkle tree in the witness map with the latest
+            // addition
+            for (_, witness) in self.witness_map.iter_mut() {
+                witness.append(node).map_err(|()| {
                     eyre!("note commitment tree is full".to_string())
                 })?;
-                // Finally, make it easier to construct merkle paths to this new
-                // note
-                let witness = IncrementalWitness::<Node>::from_tree(&self.tree);
-                self.witness_map.insert(note_pos, witness);
-                note_pos = checked!(note_pos + 1).unwrap();
             }
+            self.tree.append(node).map_err(|()| {
+                eyre!("note commitment tree is full".to_string())
+            })?;
+            // Finally, make it easier to construct merkle paths to this new
+            // note
+            let witness = IncrementalWitness::<Node>::from_tree(&self.tree);
+            self.witness_map.insert(note_pos, witness);
+            note_pos = checked!(note_pos + 1).unwrap();
         }
         Ok(())
     }
@@ -255,16 +254,15 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
     }
 
     #[allow(missing_docs)]
-    pub fn save_shielded_spends(&mut self, transactions: &[Transaction]) {
-        for stx in transactions {
-            for ss in
-                stx.sapling_bundle().map_or(&vec![], |x| &x.shielded_spends)
-            {
-                // If the shielded spend's nullifier is in our map, then target
-                // note is rendered unusable
-                if let Some(note_pos) = self.nf_map.get(&ss.nullifier) {
-                    self.spents.insert(*note_pos);
-                }
+    pub fn save_shielded_spends(&mut self, transaction: &Transaction) {
+        for ss in transaction
+            .sapling_bundle()
+            .map_or(&vec![], |x| &x.shielded_spends)
+        {
+            // If the shielded spend's nullifier is in our map, then target
+            // note is rendered unusable
+            if let Some(note_pos) = self.nf_map.get(&ss.nullifier) {
+                self.spents.insert(*note_pos);
             }
         }
     }
@@ -363,9 +361,9 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
     /// tree
     async fn pre_cache_transaction(
         &mut self,
-        masp_txs: &[Transaction],
+        masp_tx: &Transaction,
     ) -> Result<(), eyre::Error> {
-        self.save_shielded_spends(masp_txs);
+        self.save_shielded_spends(masp_tx);
 
         // Save the speculative state for future usage
         self.sync_status = ContextSyncStatus::Speculative;
@@ -1089,7 +1087,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             .map_err(|error| TransferErr::Build { error, data: None })?;
 
         if update_ctx {
-            self.pre_cache_transaction(std::slice::from_ref(&masp_tx))
+            self.pre_cache_transaction(&masp_tx)
                 .await
                 .map_err(|e| TransferErr::General(e.to_string()))?;
         }

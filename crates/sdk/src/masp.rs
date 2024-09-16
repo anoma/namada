@@ -41,11 +41,11 @@ fn extract_masp_tx(
 ) -> Result<Vec<Transaction>, Error> {
     // NOTE: It is possible to have two identical references in a same batch:
     // this is because, some types of MASP data packet can be correctly executed
-    // more than once. We have to make sure we account for this by not using
-    // collections that allow for duplicates (both in the inputs and in the
-    // outputs): if the same reference shows up multiple times in the input we
-    // must process it the same number of times to ensure we contruct the
-    // correct state
+    // more than once (output descriptions). We have to make sure we account for
+    // this by using collections that allow for duplicates (both in the args
+    // and in the returned type): if the same reference shows up multiple
+    // times in the input we must process it the same number of times to
+    // ensure we contruct the correct state
     masp_refs
         .0
         .iter()

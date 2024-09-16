@@ -11,13 +11,13 @@ use namada_core::collections::HashMap;
 use namada_tx::{IndexedTx, IndexedTxRange};
 
 /// Type alias for convenience and profit
-pub type IndexedNoteData = BTreeMap<IndexedTx, Vec<Transaction>>;
+pub type IndexedNoteData = BTreeMap<IndexedTx, Transaction>;
 
 /// Type alias for the entries of [`IndexedNoteData`] iterators
-pub type IndexedNoteEntry = (IndexedTx, Vec<Transaction>);
+pub type IndexedNoteEntry = (IndexedTx, Transaction);
 
 /// Borrowed version of an [`IndexedNoteEntry`]
-pub type IndexedNoteEntryRefs<'a> = (&'a IndexedTx, &'a Vec<Transaction>);
+pub type IndexedNoteEntryRefs<'a> = (&'a IndexedTx, &'a Transaction);
 
 /// Type alias for a successful note decryption.
 pub type DecryptedData = (Note, PaymentAddress, MemoBytes);
@@ -315,6 +315,7 @@ mod test_blocks_left_to_fetch {
     use proptest::prelude::*;
 
     use super::*;
+    use crate::masp::test_utils::arbitrary_masp_tx;
 
     struct ArbRange {
         max_from: u64,
@@ -340,8 +341,9 @@ mod test_blocks_left_to_fetch {
                     IndexedTx {
                         height,
                         index: TxIndex(0),
+                        batch_index: None,
                     },
-                    vec![],
+                    arbitrary_masp_tx(),
                 )
             })
             .collect();

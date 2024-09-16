@@ -107,19 +107,28 @@ impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
             for (idx, masp_refs) in txs_results {
                 let tx = Tx::try_from(block[idx.0 as usize].as_ref())
                     .map_err(|e| Error::Other(e.to_string()))?;
-                let mut extracted_masp_txs = vec![];
-                extracted_masp_txs.extend(
-                    extract_masp_tx(&tx, &masp_refs)
-                        .map_err(|e| Error::Other(e.to_string()))?,
-                );
+                let extracted_masp_txs = extract_masp_tx(&tx, &masp_refs)
+                    .map_err(|e| Error::Other(e.to_string()))?;
 
-                txs.push((
-                    IndexedTx {
-                        height: height.into(),
-                        index: idx,
-                    },
-                    extracted_masp_txs,
-                ));
+                // Note that the index of the extracted MASP transaction does
+                // not necessarely match the index of the inner tx in the batch,
+                // we are only interested in giving a sequential ordering to the
+                // data
+                for (batch_index, transaction) in
+                    extracted_masp_txs.into_iter().enumerate()
+                {
+                    txs.push((
+                        IndexedTx {
+                            height: height.into(),
+                            index: idx,
+                            batch_index: Some(
+                                u32::try_from(batch_index)
+                                    .map_err(|e| Error::Other(e.to_string()))?,
+                            ),
+                        },
+                        transaction,
+                    ));
+                }
             }
         }
 
@@ -490,13 +499,25 @@ impl MaspClient for IndexerMaspClient {
                     );
                 }
 
-                txs.push((
-                    IndexedTx {
-                        height: BlockHeight(block_height),
-                        index: TxIndex(block_index),
-                    },
-                    extracted_masp_txs,
-                ));
+                // Note that the index of the extracted MASP transaction does
+                // not necessarely match the index of the inner tx in the batch,
+                // we are only interested in giving a sequential ordering to the
+                // data
+                for (batch_index, transaction) in
+                    extracted_masp_txs.into_iter().enumerate()
+                {
+                    txs.push((
+                        IndexedTx {
+                            height: BlockHeight(block_height),
+                            index: TxIndex(block_index),
+                            batch_index: Some(
+                                u32::try_from(batch_index)
+                                    .map_err(|e| Error::Other(e.to_string()))?,
+                            ),
+                        },
+                        transaction,
+                    ));
+                }
             }
         }
 
@@ -566,6 +587,7 @@ impl MaspClient for IndexerMaspClient {
         struct Note {
             // masp_tx_index: u64,
             note_position: usize,
+            batch_index: u32,
             block_index: u32,
             block_height: u64,
         }
@@ -608,6 +630,7 @@ impl MaspClient for IndexerMaspClient {
             .map(
                 |Note {
                      block_index,
+                     batch_index,
                      block_height,
                      note_position,
                  }| {
@@ -615,6 +638,7 @@ impl MaspClient for IndexerMaspClient {
                         IndexedTx {
                             index: TxIndex(block_index),
                             height: BlockHeight(block_height),
+                            batch_index: Some(batch_index),
                         },
                         note_position,
                     )
