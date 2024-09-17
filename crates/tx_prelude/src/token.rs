@@ -24,8 +24,9 @@ pub fn transfer(
     token: &Address,
     amount: Amount,
 ) -> TxResult {
-    // The tx must be authorized by the source address
+    // The tx must be authorized by the source and destination addresses
     ctx.insert_verifier(src)?;
+    ctx.insert_verifier(dest)?;
     if token.is_internal() {
         // Established address tokens do not have VPs themselves, their
         // validation is handled by the `Multitoken` internal address, but
@@ -65,7 +66,7 @@ pub fn multi_transfer(
     let mut post_balances = BTreeMap::new();
 
     for ((src, token), amount) in sources {
-        // The tx must be authorized by the source address
+        // The tx must be authorized by the involved address
         ctx.insert_verifier(src)?;
         if token.is_internal() {
             // Established address tokens do not have VPs themselves, their
@@ -84,6 +85,8 @@ pub fn multi_transfer(
     }
 
     for ((dest, token), amount) in dests {
+        // The tx must be authorized by the involved address
+        ctx.insert_verifier(dest)?;
         if token.is_internal() {
             // Established address tokens do not have VPs themselves, their
             // validation is handled by the `Multitoken` internal address, but

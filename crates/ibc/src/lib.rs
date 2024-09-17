@@ -32,6 +32,7 @@ use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::rc::Rc;
+use std::str::FromStr;
 
 pub use actions::transfer_over_ibc;
 use apps::transfer::types::packet::PacketData;
@@ -54,13 +55,16 @@ use ibc::apps::nft_transfer::types::msgs::transfer::MsgTransfer as IbcMsgNftTran
 use ibc::apps::nft_transfer::types::{
     ack_success_b64, is_receiver_chain_source as is_nft_receiver_chain_source,
     PrefixedClassId, TokenId, TracePrefix as NftTracePrefix,
+    PORT_ID_STR as NFT_PORT_ID_STR,
 };
 use ibc::apps::transfer::handler::{
     send_transfer_execute, send_transfer_validate,
 };
 use ibc::apps::transfer::types::error::TokenTransferError;
 use ibc::apps::transfer::types::msgs::transfer::MsgTransfer as IbcMsgTransfer;
-use ibc::apps::transfer::types::{is_receiver_chain_source, TracePrefix};
+use ibc::apps::transfer::types::{
+    is_receiver_chain_source, TracePrefix, PORT_ID_STR as FT_PORT_ID_STR,
+};
 use ibc::core::channel::types::acknowledgement::AcknowledgementStatus;
 use ibc::core::channel::types::commitment::compute_ack_commitment;
 use ibc::core::channel::types::msgs::{
@@ -139,6 +143,8 @@ pub enum Error {
     ChainId(IdentifierError),
     #[error("Verifier insertion error: {0}")]
     Verifier(StorageError),
+    #[error("IBC error: {0}")]
+    Other(String),
 }
 
 impl From<Error> for StorageError {
@@ -612,6 +618,18 @@ where
                     self.ctx.inner.clone(),
                     self.verifiers.clone(),
                 );
+                // Add the source to the set of verifiers
+                self.verifiers.borrow_mut().insert(
+                    Address::from_str(msg.message.packet_data.sender.as_ref())
+                        .map_err(|_| {
+                            Error::TokenTransfer(TokenTransferError::Other(
+                                format!(
+                                    "Cannot convert the sender address {}",
+                                    msg.message.packet_data.sender
+                                ),
+                            ))
+                        })?,
+                );
                 self.insert_verifiers()?;
                 if msg.transfer.is_some() {
                     token_transfer_ctx.enable_shielded_transfer();
@@ -630,6 +648,19 @@ where
                 if msg.transfer.is_some() {
                     nft_transfer_ctx.enable_shielded_transfer();
                 }
+                // Add the source to the set of verifiers
+                self.verifiers.borrow_mut().insert(
+                    Address::from_str(msg.message.packet_data.sender.as_ref())
+                        .map_err(|_| {
+                            Error::NftTransfer(NftTransferError::Other(
+                                format!(
+                                    "Cannot convert the sender address {}",
+                                    msg.message.packet_data.sender
+                                ),
+                            ))
+                        })?,
+                );
+                self.insert_verifiers()?;
                 send_nft_transfer_execute(
                     &mut self.ctx,
                     &mut nft_transfer_ctx,
@@ -639,8 +670,21 @@ where
                 Ok((msg.transfer, None))
             }
             IbcMessage::Envelope(envelope) => {
+                if let Some(verifier) = get_envelope_verifier(envelope.as_ref())
+                {
+                    self.verifiers.borrow_mut().insert(
+                        Address::from_str(verifier.as_ref()).map_err(|_| {
+                            Error::Other(format!(
+                                "Cannot convert the address {}",
+                                verifier,
+                            ))
+                        })?,
+                    );
+                    self.insert_verifiers()?;
+                }
                 execute(&mut self.ctx, &mut self.router, *envelope.clone())
                     .map_err(|e| Error::Context(Box::new(e)))?;
+
                 // Extract MASP tx from the memo in the packet if needed
                 let masp_tx = match &*envelope {
                     MsgEnvelope::Packet(PacketMsg::Recv(msg))
@@ -731,6 +775,70 @@ where
             ctx.insert_verifier(verifier).map_err(Error::Verifier)?;
         }
         Ok(())
+    }
+}
+
+// Extract the involved namada address from the packet (either sender or
+// receiver) to trigger its vp. Returns None if an address could not be found
+fn get_envelope_verifier(
+    envelope: &MsgEnvelope,
+) -> Option<ibc::primitives::Signer> {
+    match envelope {
+        MsgEnvelope::Packet(PacketMsg::Recv(msg)) => {
+            match msg.packet.port_id_on_b.as_str() {
+                FT_PORT_ID_STR => {
+                    serde_json::from_slice::<PacketData>(&msg.packet.data)
+                        .ok()
+                        .map(|packet_data| packet_data.receiver)
+                }
+                NFT_PORT_ID_STR => {
+                    serde_json::from_slice::<NftPacketData>(&msg.packet.data)
+                        .ok()
+                        .map(|packet_data| packet_data.receiver)
+                }
+                _ => None,
+            }
+        }
+        MsgEnvelope::Packet(PacketMsg::Ack(msg)) => serde_json::from_slice::<
+            AcknowledgementStatus,
+        >(
+            msg.acknowledgement.as_ref(),
+        )
+        .map_or(None, |ack| {
+            if ack.is_successful() {
+                None
+            } else {
+                match msg.packet.port_id_on_a.as_str() {
+                    FT_PORT_ID_STR => {
+                        serde_json::from_slice::<PacketData>(&msg.packet.data)
+                            .ok()
+                            .map(|packet_data| packet_data.sender)
+                    }
+                    NFT_PORT_ID_STR => serde_json::from_slice::<NftPacketData>(
+                        &msg.packet.data,
+                    )
+                    .ok()
+                    .map(|packet_data| packet_data.sender),
+                    _ => None,
+                }
+            }
+        }),
+        MsgEnvelope::Packet(PacketMsg::Timeout(msg)) => {
+            match msg.packet.port_id_on_a.as_str() {
+                FT_PORT_ID_STR => {
+                    serde_json::from_slice::<PacketData>(&msg.packet.data)
+                        .ok()
+                        .map(|packet_data| packet_data.sender)
+                }
+                NFT_PORT_ID_STR => {
+                    serde_json::from_slice::<NftPacketData>(&msg.packet.data)
+                        .ok()
+                        .map(|packet_data| packet_data.sender)
+                }
+                _ => None,
+            }
+        }
+        _ => None,
     }
 }
 

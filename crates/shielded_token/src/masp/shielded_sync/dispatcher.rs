@@ -291,6 +291,7 @@ where
         panic_flag: PanicFlag::default(),
     };
 
+    #[allow(clippy::disallowed_methods)]
     let cache = ctx.utils.cache_load().await.unwrap_or_default();
 
     Dispatcher {

@@ -259,6 +259,7 @@ pub fn is_amount_required(
 
     for (asset_type, value) in gap.components() {
         if *value > 0 && normed_delta[asset_type] > 0 {
+            #[allow(clippy::disallowed_methods)]
             let signed_change_amt =
                 checked!(normed_delta[asset_type] - *value).unwrap_or_default();
             let unsigned_change_amt = if signed_change_amt > 0 {

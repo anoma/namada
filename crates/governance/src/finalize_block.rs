@@ -324,6 +324,7 @@ where
         if vote.is_validator() {
             let vote_data = vote.data.clone();
 
+            #[allow(clippy::disallowed_methods)]
             let validator_stake = PoS::read_validator_stake::<crate::Store<_>>(
                 storage, validator, epoch,
             )

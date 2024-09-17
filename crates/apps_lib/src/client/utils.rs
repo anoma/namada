@@ -991,6 +991,7 @@ pub async fn sign_genesis_tx(
         if let Some(output_path) = output.as_ref() {
             // If the output path contains existing signed txs, we append
             // the newly signed txs to the file
+            #[allow(clippy::disallowed_methods)]
             let mut prev_txs =
                 genesis::templates::read_transactions(output_path)
                     .unwrap_or_default();

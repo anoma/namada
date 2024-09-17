@@ -82,7 +82,7 @@ pub use {namada_io as io, namada_wallet as wallet};
 use crate::masp::ShieldedContext;
 
 /// Default gas-limit
-pub const DEFAULT_GAS_LIMIT: u64 = 200_000;
+pub const DEFAULT_GAS_LIMIT: u64 = 250_000;
 
 /// An interface for high-level interaction with the Namada SDK
 #[cfg_attr(feature = "async-send", async_trait::async_trait)]

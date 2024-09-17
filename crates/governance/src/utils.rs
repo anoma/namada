@@ -221,6 +221,7 @@ impl ProposalResult {
     /// Return true if at least 2/3 of the total voting power voted and at least
     /// two third of the non-abstained voting power voted nay.
     /// Returns `false` if any arithmetic fails.
+    #[allow(clippy::disallowed_methods)]
     pub fn two_thirds_nay_over_two_thirds_total(&self) -> bool {
         (|| {
             let two_thirds_power =

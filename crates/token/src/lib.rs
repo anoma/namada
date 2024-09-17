@@ -474,6 +474,9 @@ pub mod testing {
 #[cfg(test)]
 mod test_token_transfer_actions {
     use namada_core::address::testing::{established_address_1, nam};
+    use namada_core::address::{self};
+    use namada_core::storage::DbKeySeg;
+    use namada_shielded_token::storage_key::is_masp_balance_key;
 
     use super::*;
 
@@ -598,5 +601,38 @@ mod test_token_transfer_actions {
             transfer,
             transfer2(BTreeMap::from([(account.clone(), amount_80)])),
         );
+    }
+
+    /// Check that the MASP balance key is a transparent balance key.
+    #[test]
+    fn test_masp_trans_balance_key() {
+        let token = nam();
+        let key = namada_trans_token::storage_key::balance_key(
+            &token,
+            &address::MASP,
+        );
+        assert!(is_masp_balance_key(&key));
+
+        // Replace the token address and check that it still matches
+        let mut another_token_key = key.clone();
+        another_token_key.segments[1] =
+            DbKeySeg::AddressSeg(address::testing::gen_established_address());
+        assert!(is_masp_balance_key(&another_token_key));
+
+        // Replace one of the non-token segments with some random string or
+        // address and check that it no longer matches.
+        // Skip index 1 which is the token address.
+        for segment_num in [0, 2, 3] {
+            let mut key = key.clone();
+            key.segments[segment_num] = match &key.segments[segment_num] {
+                DbKeySeg::AddressSeg(_) => DbKeySeg::AddressSeg(
+                    address::testing::gen_established_address(),
+                ),
+                DbKeySeg::StringSeg(_) => {
+                    DbKeySeg::StringSeg("Dangus".to_string())
+                }
+            };
+            assert!(!is_masp_balance_key(&key));
+        }
     }
 }

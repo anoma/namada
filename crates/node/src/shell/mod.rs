@@ -633,6 +633,7 @@ where
         };
 
         if let Some(schedule_migration) = scheduled_migration.as_ref() {
+            #[allow(clippy::disallowed_methods)]
             let current = state.get_block_height().unwrap_or_default();
             if schedule_migration.height < current {
                 panic!(

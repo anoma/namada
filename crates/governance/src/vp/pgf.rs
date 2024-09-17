@@ -119,15 +119,10 @@ where
             match key_type {
                 KeyType::Stewards(steward_address) => {
                     let stewards_have_increased = {
-                        // TODO(namada#3238): we should check errors here, which
-                        // could be out-of-gas related
-                        let total_stewards_pre = pgf_storage::stewards_handle()
-                            .len(&ctx.pre())
-                            .unwrap_or_default();
+                        let total_stewards_pre =
+                            pgf_storage::stewards_handle().len(&ctx.pre())?;
                         let total_stewards_post =
-                            pgf_storage::stewards_handle()
-                                .len(&ctx.post())
-                                .unwrap_or_default();
+                            pgf_storage::stewards_handle().len(&ctx.post())?;
 
                         total_stewards_pre < total_stewards_post
                     };

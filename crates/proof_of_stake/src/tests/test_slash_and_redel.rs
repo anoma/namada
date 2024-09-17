@@ -1638,6 +1638,7 @@ fn test_slashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
 
     let pipeline_epoch = current_epoch + params.pipeline_len;
 
+    #[allow(clippy::disallowed_methods)]
     let del_bond_amount = bond_amount(
         &storage,
         &BondId {
@@ -1648,6 +1649,7 @@ fn test_slashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
     )
     .unwrap_or_default();
 
+    #[allow(clippy::disallowed_methods)]
     let self_bond_amount = bond_amount(
         &storage,
         &BondId {

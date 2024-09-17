@@ -7,6 +7,8 @@ use namada_core::hash::Hash;
 use namada_core::storage::{self, DbKeySeg, KeySeg};
 use namada_systems::trans_token;
 
+// Key segment for a balance key
+const BALANCE_STORAGE_KEY: &str = "balance";
 /// Key segment prefix for the nullifiers
 pub const MASP_NULLIFIERS_KEY: &str = "nullifiers";
 /// Key segment prefix for the note commitment merkle tree
@@ -83,12 +85,27 @@ pub fn masp_last_inflation_key<TransToken: trans_token::Keys>(
         .with_segment(MASP_LAST_INFLATION_KEY.to_owned())
 }
 
-/// Check if the given storage key is a masp key
-pub fn is_masp_key(key: &storage::Key) -> bool {
-    matches!(&key.segments[..],
-        [DbKeySeg::AddressSeg(addr), ..] if *addr == address::MASP
+/// Check if the given storage key is MASP transparent balance key
+pub fn is_masp_balance_key(key: &storage::Key) -> bool {
+    matches!(
+        &key.segments[..],
+        [DbKeySeg::AddressSeg(addr), DbKeySeg::AddressSeg(_token), DbKeySeg::StringSeg(balance), DbKeySeg::AddressSeg(owner)]
+            if *addr
+                == Address::Internal(address::InternalAddress::Multitoken)
+                && balance == BALANCE_STORAGE_KEY
+                && *owner == address::MASP
     )
 }
+
+/// Check if the given storage key is a masp key
+pub fn is_masp_key(key: &storage::Key) -> bool {
+    match &key.segments[..] {
+        [DbKeySeg::AddressSeg(addr), ..] if *addr == address::MASP => true,
+        // The balance key of the MASP is also considered a MASP key
+        _ => is_masp_balance_key(key),
+    }
+}
+
 /// Check if the given storage key is allowed to be touched by a masp transfer
 pub fn is_masp_transfer_key(key: &storage::Key) -> bool {
     match &key.segments[..] {
@@ -98,13 +115,12 @@ pub fn is_masp_transfer_key(key: &storage::Key) -> bool {
         {
             true
         }
-
         [
             DbKeySeg::AddressSeg(addr),
             DbKeySeg::StringSeg(key),
             DbKeySeg::StringSeg(_nullifier),
         ] if *addr == address::MASP && key == MASP_NULLIFIERS_KEY => true,
-        _ => false,
+        _ => is_masp_balance_key(key),
     }
 }
 

@@ -3151,6 +3151,7 @@ async fn get_masp_fee_payment_amount<N: Namada>(
 ) -> Result<Option<MaspFeeData>> {
     let fee_payer_address = Address::from(fee_payer);
     let balance_key = balance_key(&args.fee_token, &fee_payer_address);
+    #[allow(clippy::disallowed_methods)]
     let balance = rpc::query_storage_value::<_, token::Amount>(
         context.client(),
         &balance_key,
@@ -3492,6 +3493,7 @@ async fn construct_shielded_parts<N: Namada>(
 
     // Get the decoded asset types used in the transaction to give offline
     // wallet users more information
+    #[allow(clippy::disallowed_methods)]
     let asset_types = used_asset_types(context, &shielded_parts.builder)
         .await
         .unwrap_or_default();

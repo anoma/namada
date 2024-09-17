@@ -878,3 +878,104 @@ fn verify_sapling_balancing_value(
         Err(error)
     }
 }
+
+#[cfg(test)]
+mod shielded_token_tests {
+    use std::cell::RefCell;
+    use std::collections::BTreeSet;
+
+    use namada_core::address::testing::nam;
+    use namada_core::address::MASP;
+    use namada_core::borsh::BorshSerializeExt;
+    use namada_gas::{TxGasMeter, VpGasMeter};
+    use namada_state::testing::TestState;
+    use namada_state::{StateRead, TxIndex};
+    use namada_trans_token::storage_key::balance_key;
+    use namada_trans_token::Amount;
+    use namada_tx::{BatchedTx, Tx};
+    use namada_vm::wasm::compilation_cache::common::testing::vp_cache;
+    use namada_vm::wasm::run::VpEvalWasm;
+    use namada_vm::wasm::VpCache;
+    use namada_vm::WasmCacheRwAccess;
+    use namada_vp::native_vp::{self, CtxPostStorageRead, CtxPreStorageRead};
+
+    type CA = WasmCacheRwAccess;
+    type Eval<S> = VpEvalWasm<<S as StateRead>::D, <S as StateRead>::H, CA>;
+    type Ctx<'ctx, S> = native_vp::Ctx<'ctx, S, VpCache<CA>, Eval<S>>;
+    type MaspVp<'ctx, S> = super::MaspVp<
+        'ctx,
+        Ctx<'ctx, S>,
+        namada_parameters::Store<
+            CtxPreStorageRead<'ctx, 'ctx, S, VpCache<CA>, Eval<S>>,
+        >,
+        namada_governance::Store<
+            CtxPreStorageRead<'ctx, 'ctx, S, VpCache<CA>, Eval<S>>,
+        >,
+        namada_ibc::Store<
+            CtxPostStorageRead<'ctx, 'ctx, S, VpCache<CA>, Eval<S>>,
+        >,
+        namada_trans_token::Store<
+            CtxPreStorageRead<'ctx, 'ctx, S, VpCache<CA>, Eval<S>>,
+        >,
+        (),
+    >;
+
+    // Changing only the balance key of the MASP alone is invalid
+    #[test]
+    fn test_balance_change() {
+        let mut state = TestState::default();
+        namada_parameters::init_test_storage(&mut state).unwrap();
+        let src_key = balance_key(&nam(), &MASP);
+        let amount = Amount::native_whole(100);
+        let keys_changed = BTreeSet::from([src_key.clone()]);
+        let verifiers = Default::default();
+
+        // Initialize MASP balance
+        state
+            .db_write(&src_key, Amount::native_whole(100).serialize_to_vec())
+            .unwrap();
+
+        state.db_write(&src_key, amount.serialize_to_vec()).unwrap();
+
+        let tx_index = TxIndex::default();
+        let mut tx = Tx::from_type(namada_tx::data::TxType::Raw);
+        tx.push_default_inner_tx();
+        let BatchedTx { tx, cmt } = tx.batch_first_tx();
+
+        // Test both credit and debit
+        for new_amount in [150, 1] {
+            // Update the balance key
+            let new_amount = Amount::native_whole(new_amount);
+            let _ = state
+                .write_log_mut()
+                .write(&src_key, new_amount.serialize_to_vec())
+                .unwrap();
+
+            let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+                &TxGasMeter::new(u64::MAX),
+            ));
+            let (vp_vp_cache, _vp_cache_dir) = vp_cache();
+            let ctx = Ctx::new(
+                &MASP,
+                &state,
+                &tx,
+                &cmt,
+                &tx_index,
+                &gas_meter,
+                &keys_changed,
+                &verifiers,
+                vp_vp_cache,
+            );
+
+            assert!(
+                MaspVp::validate_tx(
+                    &ctx,
+                    &tx.batch_ref_tx(&cmt),
+                    &keys_changed,
+                    &verifiers
+                )
+                .is_err()
+            );
+        }
+    }
+}

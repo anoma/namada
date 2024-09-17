@@ -101,6 +101,7 @@ pub mod client_only_methods {
             let balance = if response.data.is_empty() {
                 token::Amount::zero()
             } else {
+                #[allow(clippy::disallowed_methods)]
                 token::Amount::try_from_slice(&response.data)
                     .unwrap_or_default()
             };
@@ -124,6 +125,7 @@ pub mod client_only_methods {
             let tokens = if response.data.is_empty() {
                 token::Amount::zero()
             } else {
+                #[allow(clippy::disallowed_methods)]
                 token::Amount::try_from_slice(&response.data)
                     .unwrap_or_default()
             };
