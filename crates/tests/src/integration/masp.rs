@@ -687,7 +687,7 @@ fn masp_incentives() -> Result<()> {
             "--token",
             NAM,
             "--gas-limit",
-            "250000",
+            "300000",
             "--amount",
             "1.451732",
             "--signing-keys",
@@ -2582,8 +2582,6 @@ fn masp_fee_payment() -> Result<()> {
             NAM,
             "--amount",
             "10000",
-            "--gas-limit",
-            "200000",
             "--gas-price",
             "1",
             "--disposable-gas-payer",
@@ -2617,7 +2615,7 @@ fn masp_fee_payment() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 290000"));
+    assert!(captured.contains("nam: 240000"));
     let captured = CapturedOutput::of(|| {
         run(
             &node,
@@ -2750,7 +2748,7 @@ fn masp_fee_payment_gas_limit() -> Result<()> {
                 "--amount",
                 "1",
                 "--gas-limit",
-                "300000",
+                "500000",
                 "--gas-price",
                 "1",
                 "--disposable-gas-payer",
@@ -2920,7 +2918,7 @@ fn masp_fee_payment_with_non_disposable() -> Result<()> {
                 "--amount",
                 "1",
                 "--gas-limit",
-                "200000",
+                "300000",
                 "--gas-price",
                 "1",
                 "--gas-payer",
@@ -2959,7 +2957,7 @@ fn masp_fee_payment_with_non_disposable() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1799999"));
+    assert!(captured.contains("nam: 1699999"));
 
     let captured = CapturedOutput::of(|| {
         run(
@@ -3067,7 +3065,7 @@ fn masp_fee_payment_with_custom_spending_key() -> Result<()> {
             "--token",
             NAM,
             "--amount",
-            "250000",
+            "300000",
             "--ledger-address",
             validator_one_rpc,
         ],
@@ -3117,7 +3115,7 @@ fn masp_fee_payment_with_custom_spending_key() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 250000"));
+    assert!(captured.contains("nam: 300000"));
 
     // Masp fee payment with custom gas payer
     let captured = CapturedOutput::of(|| {
@@ -3135,7 +3133,7 @@ fn masp_fee_payment_with_custom_spending_key() -> Result<()> {
                 "--amount",
                 "9000",
                 "--gas-limit",
-                "250000",
+                "300000",
                 "--gas-price",
                 "1",
                 "--gas-spending-key",
@@ -3314,7 +3312,7 @@ fn masp_fee_payment_with_different_token() -> Result<()> {
             "--token",
             BTC,
             "--amount",
-            "250000",
+            "300000",
             "--gas-payer",
             ALBERT_KEY,
             "--ledger-address",
@@ -3383,7 +3381,7 @@ fn masp_fee_payment_with_different_token() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("btc: 250000"));
+    assert!(captured.contains("btc: 300000"));
 
     // Masp fee payment with custom token and gas payer
     let captured = CapturedOutput::of(|| {
@@ -3403,7 +3401,7 @@ fn masp_fee_payment_with_different_token() -> Result<()> {
                 "--gas-token",
                 BTC,
                 "--gas-limit",
-                "250000",
+                "300000",
                 "--gas-price",
                 "1",
                 "--gas-spending-key",

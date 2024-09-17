@@ -73,11 +73,11 @@ pub fn handle_masp_tx(
     Ok(())
 }
 
-/// Check if a transaction was a MASP transaction.
+/// Check if a transaction is a MASP transfer transaction.
 ///
-/// This means that at least one key owned by MASP was changed. We cannot simply
-/// check that the MASP VP was triggered, as this can be manually requested to
-/// be triggered by users.
+/// We do that by looking at the changed keys. We cannot simply check that the
+/// MASP VP was triggered, as this can be manually requested to be triggered by
+/// users.
 pub fn is_masp_transfer(changed_keys: &BTreeSet<Key>) -> bool {
     changed_keys.iter().any(is_masp_transfer_key)
 }

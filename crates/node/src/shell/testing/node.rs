@@ -361,6 +361,7 @@ impl MockNode {
     }
 
     pub fn block_height(&self) -> BlockHeight {
+        #[allow(clippy::disallowed_methods)]
         self.shell
             .lock()
             .unwrap()

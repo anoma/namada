@@ -98,6 +98,13 @@ where
         let mut dec_mints: HashMap<Address, Amount> = HashMap::new();
         for key in keys_changed {
             if let Some([token, owner]) = is_any_token_balance_key(key) {
+                if !verifiers.contains(owner) {
+                    return Err(Error::new_alloc(format!(
+                        "The vp of the address {} has not been triggered",
+                        owner
+                    )));
+                }
+
                 let pre: Amount = ctx.read_pre(key)?.unwrap_or_default();
                 let post: Amount = ctx.read_post(key)?.unwrap_or_default();
                 match post.checked_sub(pre) {
@@ -448,6 +455,7 @@ mod tests {
         let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let mut verifiers = BTreeSet::new();
         verifiers.insert(src);
+        verifiers.insert(dest);
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -559,8 +567,10 @@ mod tests {
         let mut verifiers = BTreeSet::new();
         // for the minter
         verifiers.insert(minter);
-        // The token must be part of the verifier set (checked by MultitokenVp)
+        // The token and minter must be part of the verifier set (checked by
+        // MultitokenVp)
         verifiers.insert(token);
+        verifiers.insert(target);
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -932,6 +942,7 @@ mod tests {
         let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let mut verifiers = BTreeSet::new();
         verifiers.insert(src);
+        verifiers.insert(dest);
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1026,6 +1037,7 @@ mod tests {
         let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let mut verifiers = BTreeSet::new();
         verifiers.insert(src);
+        verifiers.insert(dest);
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1078,6 +1090,7 @@ mod tests {
         let (vp_vp_cache, _vp_cache_dir) = vp_cache();
         let mut verifiers = BTreeSet::new();
         verifiers.insert(src);
+        verifiers.insert(dest);
         let ctx = Ctx::new(
             &ADDRESS,
             &state,
@@ -1098,6 +1111,87 @@ mod tests {
                 &verifiers
             ),
             Ok(_)
+        );
+    }
+
+    // The multitoken vps ensures that all the involved parties have their vp
+    // triggered
+    #[test]
+    fn test_verifiers() {
+        let mut state = init_state();
+        let src1 = established_address_1();
+        let dest1 = namada_core::address::MASP;
+        let src2 = namada_core::address::IBC;
+        let dest2 = established_address_2();
+        let mut keys_changed = transfer(&mut state, &src1, &dest1);
+        keys_changed.append(&mut transfer(&mut state, &src2, &dest2));
+
+        let tx_index = TxIndex::default();
+        let BatchedTx { tx, cmt } = dummy_tx(&state);
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new(u64::MAX),
+        ));
+        let (vp_vp_cache, _vp_cache_dir) = vp_cache();
+
+        let parties = BTreeSet::from([src1, dest1, src2, dest2]);
+
+        // One at a time remove one of the expected verifiers of this
+        // transaction and check that the multitoken vp rejects the tx
+        for verifier in &parties {
+            let mut verifiers = parties.clone();
+            verifiers.remove(verifier);
+
+            let ctx = Ctx::new(
+                &ADDRESS,
+                &state,
+                &tx,
+                &cmt,
+                &tx_index,
+                &gas_meter,
+                &keys_changed,
+                &verifiers,
+                vp_vp_cache.clone(),
+            );
+
+            let err_msg = format!(
+                "The vp of the address {} has not been triggered",
+                verifier
+            );
+
+            match MultitokenVp::validate_tx(
+                &ctx,
+                &tx.batch_ref_tx(&cmt),
+                &keys_changed,
+                &verifiers,
+            )
+            .unwrap_err()
+            {
+                Error::AllocMessage(msg) if msg == err_msg => (),
+                _ => panic!("Test failed with an unexpected error"),
+            }
+        }
+
+        // Fnally run the validation with all the required verifiers
+        let ctx = Ctx::new(
+            &ADDRESS,
+            &state,
+            &tx,
+            &cmt,
+            &tx_index,
+            &gas_meter,
+            &keys_changed,
+            &parties,
+            vp_vp_cache,
+        );
+
+        assert!(
+            MultitokenVp::validate_tx(
+                &ctx,
+                &tx.batch_ref_tx(&cmt),
+                &keys_changed,
+                &parties
+            )
+            .is_ok()
         );
     }
 }

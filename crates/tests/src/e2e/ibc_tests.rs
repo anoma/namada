@@ -73,6 +73,9 @@ const UPGRADED_CHAIN_ID: &str = "upgraded-chain";
 ///   - When unshielding transfer failure,
 ///     - Mint the IBC token for the refund
 ///     - Unescrow the token for the refund
+/// 6. Malformed shielded actions
+///   - Missing memo
+///   - Wrong memo
 #[test]
 fn ibc_transfers() -> Result<()> {
     let update_genesis =
@@ -384,6 +387,56 @@ fn ibc_transfers() -> Result<()> {
     check_balance(&test, AA_VIEWING_KEY, APFEL, 0)?;
     check_balance(&test, IBC_REFUND_TARGET_ALIAS, APFEL, 1)?;
 
+    // 6. Malformed shielded actions
+
+    // Check initial balance
+    check_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
+    check_gaia_balance(&test_gaia, GAIA_USER, GAIA_COIN, 810)?;
+
+    // Missing memo
+    transfer_from_gaia(
+        &test_gaia,
+        GAIA_USER,
+        AA_PAYMENT_ADDRESS,
+        GAIA_COIN,
+        100,
+        &port_id_gaia,
+        &channel_id_gaia,
+        None,
+        // MASP VP shall reject it, make it timeout
+        Some(Duration::new(10, 0)),
+    )?;
+    wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
+    // Check the balance didn't change
+    check_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
+    check_gaia_balance(&test_gaia, GAIA_USER, GAIA_COIN, 810)?;
+
+    // Wrong memo (different amount)
+    let shielding_data_path = gen_ibc_shielding_data(
+        &test,
+        AA_PAYMENT_ADDRESS,
+        GAIA_COIN,
+        100,
+        &port_id_namada,
+        &channel_id_namada,
+    )?;
+    transfer_from_gaia(
+        &test_gaia,
+        GAIA_USER,
+        AA_PAYMENT_ADDRESS,
+        GAIA_COIN,
+        101,
+        &port_id_gaia,
+        &channel_id_gaia,
+        Some(shielding_data_path),
+        // MASP VP shall reject it, make it timeout
+        Some(Duration::new(10, 0)),
+    )?;
+    wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test_gaia)?;
+    // Check the balances didn't change
+    check_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
+    check_gaia_balance(&test_gaia, GAIA_USER, GAIA_COIN, 810)?;
+
     Ok(())
 }
 
@@ -508,7 +561,9 @@ fn ibc_token_inflation() -> Result<()> {
     let delegated = epoch + PIPELINE_LEN;
     while epoch < delegated {
         sleep(10);
-        epoch = get_epoch(&test, &rpc).unwrap_or_default();
+        #[allow(clippy::disallowed_methods)]
+        let new_epoch = get_epoch(&test, &rpc).unwrap_or_default();
+        epoch = new_epoch;
     }
     // inflation proposal on Namada
     let start_epoch = propose_inflation(&test)?;
@@ -516,7 +571,9 @@ fn ibc_token_inflation() -> Result<()> {
     // Vote
     while epoch < start_epoch {
         sleep(10);
-        epoch = get_epoch(&test, &rpc).unwrap_or_default();
+        #[allow(clippy::disallowed_methods)]
+        let new_epoch = get_epoch(&test, &rpc).unwrap_or_default();
+        epoch = new_epoch;
     }
     submit_votes(&test)?;
 
@@ -566,7 +623,9 @@ fn ibc_token_inflation() -> Result<()> {
     let new_epoch = epoch + MASP_EPOCH_MULTIPLIER;
     while epoch < new_epoch {
         sleep(10);
-        epoch = get_epoch(&test, &rpc).unwrap_or_default();
+        #[allow(clippy::disallowed_methods)]
+        let new_epoch = get_epoch(&test, &rpc).unwrap_or_default();
+        epoch = new_epoch;
     }
 
     // Check balances

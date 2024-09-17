@@ -994,10 +994,12 @@ pub async fn query_proposal_result<C: namada_io::Client + Sync>(
 
             let is_author_pgf_steward =
                 is_steward(client, &proposal.author).await;
+            #[allow(clippy::disallowed_methods)]
             let votes = query_proposal_votes(client, proposal_id)
                 .await
                 .unwrap_or_default();
             let tally_type = proposal.get_tally_type(is_author_pgf_steward);
+            #[allow(clippy::disallowed_methods)]
             let total_active_voting_power =
                 get_total_active_voting_power(client, tally_epoch)
                     .await
@@ -1008,6 +1010,7 @@ pub async fn query_proposal_result<C: namada_io::Client + Sync>(
             for vote in votes {
                 match vote.is_validator() {
                     true => {
+                        #[allow(clippy::disallowed_methods)]
                         let voting_power = get_validator_stake(
                             client,
                             tally_epoch,
@@ -1023,6 +1026,7 @@ pub async fn query_proposal_result<C: namada_io::Client + Sync>(
                         );
                     }
                     false => {
+                        #[allow(clippy::disallowed_methods)]
                         let voting_power = get_bond_amount_at(
                             client,
                             &vote.delegator,

@@ -112,6 +112,7 @@ impl Shell<storage::PersistentDB, Sha256Hasher> {
         }
         match self.syncing.as_ref() {
             None => {
+                #[allow(clippy::disallowed_methods)]
                 if self.state.get_block_height().unwrap_or_default().0
                     < u64::from(req.snapshot.height)
                 {

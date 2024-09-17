@@ -1159,6 +1159,7 @@ fn test_unslashed_bond_amount_aux(validators: Vec<GenesisValidator>) {
         Epoch(0),
         current_epoch + params.pipeline_len,
     ) {
+        #[allow(clippy::disallowed_methods)]
         let amount = bond_amount(
             &storage,
             &BondId {

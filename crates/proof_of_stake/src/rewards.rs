@@ -261,12 +261,14 @@ where
 
         // Ensure TM stake updates properly with a debug_assert
         if cfg!(debug_assertions) {
+            #[allow(clippy::disallowed_methods)]
+            let validator_vp = i64::try_from(validator_vp).unwrap_or_default();
             debug_assert_eq!(
                 into_tm_voting_power(
                     params.tm_votes_per_token,
                     stake_from_deltas,
                 ),
-                i64::try_from(validator_vp).unwrap_or_default(),
+                validator_vp
             );
         }
 
