@@ -1856,7 +1856,8 @@ impl<'tx> Tx {
 }
 
 /// Represents the pointers to a indexed tx, which are the block height and the
-/// index inside that block
+/// index inside that block. Optionally points to a specific inner tx inside a
+/// batch if such level of granularity is required.
 #[derive(
     Debug,
     Copy,
@@ -1875,6 +1876,8 @@ pub struct IndexedTx {
     pub height: BlockHeight,
     /// The index in the block of the tx
     pub index: TxIndex,
+    /// The optional index of an inner tx within this batc
+    pub batch_index: Option<u32>,
 }
 
 impl IndexedTx {
@@ -1884,6 +1887,7 @@ impl IndexedTx {
         Self {
             height,
             index: TxIndex(u32::MAX),
+            batch_index: None,
         }
     }
 }
@@ -1893,6 +1897,7 @@ impl Default for IndexedTx {
         Self {
             height: BlockHeight::first(),
             index: TxIndex(0),
+            batch_index: None,
         }
     }
 }
@@ -1916,10 +1921,12 @@ impl IndexedTxRange {
             IndexedTx {
                 height: from,
                 index: TxIndex(0),
+                batch_index: None,
             },
             IndexedTx {
                 height: to,
                 index: TxIndex(u32::MAX),
+                batch_index: None,
             },
         )
     }

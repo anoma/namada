@@ -22,9 +22,8 @@ use namada_core::borsh::{
     BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
 };
 use namada_core::hash::Hash;
-use namada_core::ibc::IbcTxDataRefs;
-use namada_core::masp::MaspTxRefs;
 use namada_core::storage;
+use namada_events::extend::MaspTxRefs;
 use namada_events::Event;
 use namada_gas::WholeGas;
 use namada_macros::BorshDeserializer;
@@ -189,10 +188,14 @@ pub fn compute_inner_tx_hash(
 pub struct ExtendedTxResult<T> {
     /// The transaction result
     pub tx_result: TxResult<T>,
-    /// The optional references to masp sections
+    /// The optional references to masp data (either MASP sections or tx Data
+    /// for shielded actions)
+    // NOTE: it's paramount to enforce a single, ordered collection for all the
+    // masp transactions to ensure that the exact view on the tx sequence is
+    // preserved in the events. Also, it is possible for two refs to be exactly
+    // the same, we must make sure to emit events for both so that the
+    // client/indexer can properly construct their internal state
     pub masp_tx_refs: MaspTxRefs,
-    /// The optional data section hashes of IBC transaction
-    pub ibc_tx_data_refs: IbcTxDataRefs,
 }
 
 impl<T> Default for ExtendedTxResult<T> {
@@ -200,7 +203,6 @@ impl<T> Default for ExtendedTxResult<T> {
         Self {
             tx_result: Default::default(),
             masp_tx_refs: Default::default(),
-            ibc_tx_data_refs: Default::default(),
         }
     }
 }
@@ -307,21 +309,11 @@ impl<T: Display> TxResult<T> {
     /// Converts this result to [`ExtendedTxResult`]
     pub fn to_extended_result(
         self,
-        masp_section_refs: Option<Either<MaspTxRefs, IbcTxDataRefs>>,
+        masp_tx_refs: Option<MaspTxRefs>,
     ) -> ExtendedTxResult<T> {
-        let (masp_tx_refs, ibc_tx_data_refs) = match masp_section_refs {
-            Some(Either::Left(masp_tx_refs)) => {
-                (masp_tx_refs, Default::default())
-            }
-            Some(Either::Right(ibc_tx_data_refs)) => {
-                (Default::default(), ibc_tx_data_refs)
-            }
-            None => (Default::default(), Default::default()),
-        };
         ExtendedTxResult {
             tx_result: self,
-            masp_tx_refs,
-            ibc_tx_data_refs,
+            masp_tx_refs: masp_tx_refs.unwrap_or_default(),
         }
     }
 }
