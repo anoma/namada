@@ -617,8 +617,8 @@ where
             .fetched_tracker
             .set_upper_limit(number_of_fetches);
 
-        for (itx, txs) in self.cache.fetched.iter() {
-            self.spawn_trial_decryptions(*itx, txs);
+        for (itx, tx) in self.cache.fetched.iter() {
+            self.spawn_trial_decryptions(*itx, tx);
         }
     }
 
@@ -792,24 +792,22 @@ where
         spawned_tasks
     }
 
-    fn spawn_trial_decryptions(&self, itx: IndexedTx, txs: &[Transaction]) {
-        for tx in txs {
-            for (vk, vk_height) in self.ctx.vk_heights.iter() {
-                let key_is_outdated = vk_height.as_ref() < Some(&itx);
-                let cached = self.cache.trial_decrypted.get(&itx, vk).is_some();
+    fn spawn_trial_decryptions(&self, itx: IndexedTx, tx: &Transaction) {
+        for (vk, vk_height) in self.ctx.vk_heights.iter() {
+            let key_is_outdated = vk_height.as_ref() < Some(&itx);
+            let cached = self.cache.trial_decrypted.get(&itx, vk).is_some();
 
-                if key_is_outdated && !cached {
-                    let tx = tx.clone();
-                    let vk = *vk;
+            if key_is_outdated && !cached {
+                let tx = tx.clone();
+                let vk = *vk;
 
-                    self.spawn_sync(move |interrupt| {
-                        Message::TrialDecrypt(
-                            itx,
-                            vk,
-                            trial_decrypt(tx, vk, || interrupt.get()),
-                        )
-                    })
-                }
+                self.spawn_sync(move |interrupt| {
+                    Message::TrialDecrypt(
+                        itx,
+                        vk,
+                        trial_decrypt(tx, vk, || interrupt.get()),
+                    )
+                })
             }
         }
     }
@@ -913,8 +911,9 @@ mod dispatcher_tests {
                     let itx = IndexedTx {
                         height: h.into(),
                         index: Default::default(),
+                        batch_index: None,
                     };
-                    dispatcher.cache.fetched.insert((itx, vec![]));
+                    dispatcher.cache.fetched.insert((itx, arbitrary_masp_tx()));
                     dispatcher.ctx.note_index.insert(itx, h as usize);
                     dispatcher.cache.trial_decrypted.insert(
                         itx,
@@ -1118,6 +1117,7 @@ mod dispatcher_tests {
         *shielded_ctx.vk_heights.get_mut(&vk).unwrap() = Some(IndexedTx {
             height: 6.into(),
             index: TxIndex(0),
+            batch_index: None,
         });
 
         // the min height should now be 6
@@ -1197,8 +1197,9 @@ mod dispatcher_tests {
                         IndexedTx {
                             height: 1.into(),
                             index: TxIndex(1),
+                            batch_index: None,
                         },
-                        vec![masp_tx.clone()],
+                        masp_tx.clone(),
                     )))
                     .expect("Test failed");
                 masp_tx_sender
@@ -1206,8 +1207,9 @@ mod dispatcher_tests {
                         IndexedTx {
                             height: 1.into(),
                             index: TxIndex(2),
+                            batch_index: None,
                         },
-                        vec![masp_tx.clone()],
+                        masp_tx.clone(),
                     )))
                     .expect("Test failed");
                 config.retry_strategy = RetryStrategy::Times(1);
@@ -1224,10 +1226,12 @@ mod dispatcher_tests {
                     IndexedTx {
                         height: 1.into(),
                         index: TxIndex(1),
+                        batch_index: None,
                     },
                     IndexedTx {
                         height: 1.into(),
                         index: TxIndex(2),
+                        batch_index: None,
                     },
                 ]);
 
@@ -1273,8 +1277,9 @@ mod dispatcher_tests {
                         IndexedTx {
                             height: 1.into(),
                             index: TxIndex(1),
+                            batch_index: None,
                         },
-                        vec![masp_tx.clone()],
+                        masp_tx.clone(),
                     )))
                     .expect("Test failed");
                 masp_tx_sender
@@ -1282,8 +1287,9 @@ mod dispatcher_tests {
                         IndexedTx {
                             height: 1.into(),
                             index: TxIndex(2),
+                            batch_index: None,
                         },
-                        vec![masp_tx.clone()],
+                        masp_tx.clone(),
                     )))
                     .expect("Test failed");
                 masp_tx_sender.send(None).expect("Test failed");
@@ -1303,15 +1309,17 @@ mod dispatcher_tests {
                         IndexedTx {
                             height: 1.into(),
                             index: TxIndex(1),
+                            batch_index: None,
                         },
-                        vec![masp_tx.clone()],
+                        masp_tx.clone(),
                     ),
                     (
                         IndexedTx {
                             height: 1.into(),
                             index: TxIndex(2),
+                            batch_index: None,
                         },
-                        vec![masp_tx.clone()],
+                        masp_tx.clone(),
                     ),
                 ]);
                 assert_eq!(cache.fetched.txs, expected);
@@ -1351,8 +1359,9 @@ mod dispatcher_tests {
                         IndexedTx {
                             height: 1.into(),
                             index: TxIndex(1),
+                            batch_index: None,
                         },
-                        vec![masp_tx.clone()],
+                        masp_tx.clone(),
                     )))
                     .expect("Test failed");
 
@@ -1397,8 +1406,9 @@ mod dispatcher_tests {
                 IndexedTx {
                     height: 1.into(),
                     index: TxIndex(1),
+                    batch_index: None,
                 },
-                vec![masp_tx.clone()],
+                masp_tx.clone(),
             )))
             .expect("Test failed");
         let (_shutdown_send, shutdown_sig) = shutdown_signal();
@@ -1443,8 +1453,9 @@ mod dispatcher_tests {
                 IndexedTx {
                     height: 1.into(),
                     index: TxIndex(1),
+                    batch_index: None,
                 },
-                vec![masp_tx.clone()],
+                masp_tx.clone(),
             )))
             .expect("Test failed");
         shielded_ctx

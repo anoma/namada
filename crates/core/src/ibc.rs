@@ -57,24 +57,6 @@ impl FromStr for IbcTokenHash {
 /// IBC transaction data section hash
 pub type IbcTxDataHash = Hash;
 
-/// IBC transaction data references to retrieve IBC messages
-#[derive(Default, Clone, Serialize, Deserialize)]
-pub struct IbcTxDataRefs(pub Vec<IbcTxDataHash>);
-
-impl Display for IbcTxDataRefs {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", serde_json::to_string(self).unwrap())
-    }
-}
-
-impl FromStr for IbcTxDataRefs {
-    type Err = serde_json::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        serde_json::from_str(s)
-    }
-}
-
 /// The target of a PGF payment
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(

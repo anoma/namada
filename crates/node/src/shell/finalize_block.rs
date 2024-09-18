@@ -4,8 +4,7 @@ use data_encoding::HEXUPPER;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use namada_sdk::events::extend::{
-    ComposeEvent, Height, IbcMaspTxBatchRefs, Info, MaspTxBatchRefs,
-    MaspTxBlockIndex, TxHash,
+    ComposeEvent, Height, Info, MaspTxBatchRefs, MaspTxBlockIndex, TxHash,
 };
 use namada_sdk::events::{EmitEvents, Event};
 use namada_sdk::gas::event::GasUsed;
@@ -1047,14 +1046,6 @@ impl<'finalize> TempTxLogs {
                 .extend(MaspTxBlockIndex(TxIndex::must_from_usize(tx_index)));
             self.tx_event.extend(MaspTxBatchRefs(
                 extended_tx_result.masp_tx_refs.clone(),
-            ));
-        }
-
-        if !extended_tx_result.ibc_tx_data_refs.0.is_empty() {
-            self.tx_event
-                .extend(MaspTxBlockIndex(TxIndex::must_from_usize(tx_index)));
-            self.tx_event.extend(IbcMaspTxBatchRefs(
-                extended_tx_result.ibc_tx_data_refs.clone(),
             ));
         }
 
