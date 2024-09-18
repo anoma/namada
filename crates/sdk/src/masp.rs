@@ -10,7 +10,6 @@ use masp_primitives::transaction::Transaction;
 use namada_core::address::Address;
 use namada_core::chain::BlockHeight;
 use namada_core::masp::MaspEpoch;
-use namada_core::storage::TxIndex;
 use namada_core::time::DurationSecs;
 use namada_core::token::{Denomination, MaspDigitPos};
 use namada_events::extend::{
@@ -115,16 +114,11 @@ fn extract_masp_tx(
 }
 
 // Retrieves all the indexes at the specified height which refer
-// to a valid masp transaction. If an index is given, it filters only the
-// transactions with an index equal or greater to the provided one.
+// to a valid masp transaction.
 async fn get_indexed_masp_events_at_height<C: Client + Sync>(
     client: &C,
     height: BlockHeight,
-    // FIXME: think this arg isn't needed anymore
-    first_idx_to_query: Option<TxIndex>,
 ) -> Result<Vec<IndexedMaspData>, Error> {
-    let first_idx_to_query = first_idx_to_query.unwrap_or_default();
-
     Ok(client
         .block_results(height.0)
         .await
@@ -134,17 +128,10 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
             events
                 .into_iter()
                 .filter_map(|event| {
-                    let indexed_masp_data =
-                        MaspTxBatchRefsAttr::read_from_event_attributes(
-                            &event.attributes,
-                        )
-                        .ok()?;
-
-                    if indexed_masp_data.tx_index >= first_idx_to_query {
-                        Some(indexed_masp_data)
-                    } else {
-                        None
-                    }
+                    MaspTxBatchRefsAttr::read_from_event_attributes(
+                        &event.attributes,
+                    )
+                    .ok()
                 })
                 .collect::<Vec<_>>()
         })

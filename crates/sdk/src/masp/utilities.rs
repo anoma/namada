@@ -76,7 +76,6 @@ impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
                 get_indexed_masp_events_at_height(
                     &self.inner.client,
                     height.into(),
-                    None,
                 )
                 .await
             };
