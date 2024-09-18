@@ -179,3 +179,167 @@ where
 
     Ok(())
 }
+
+#[cfg(test)]
+#[allow(clippy::arithmetic_side_effects, clippy::disallowed_types)]
+mod test {
+    use std::collections::HashMap;
+
+    use namada_core::address::testing::{
+        arb_address, arb_non_internal_address,
+    };
+    use namada_core::token;
+    use namada_tests::tx::{ctx, tx_host_env};
+    use namada_trans_token::testing::arb_amount;
+    use namada_trans_token::{read_balance, Amount, DenominatedAmount};
+    use namada_tx::{Tx, TxCommitments};
+    use proptest::prelude::*;
+
+    use super::*;
+
+    const EVENT_DESC: Cow<'static, str> = Cow::Borrowed("event-desc");
+
+    proptest! {
+        #[test]
+        fn test_valid_trans_multi_transfer_tx(
+            transfers in prop::collection::vec(arb_trans_transfer(), 1..10)
+        ) {
+            test_valid_trans_multi_transfer_tx_aux(transfers)
+        }
+    }
+
+    #[derive(Debug)]
+    struct SingleTransfer {
+        src: Address,
+        dest: Address,
+        token: Address,
+        amount: Amount,
+    }
+
+    fn arb_trans_transfer() -> impl Strategy<Value = SingleTransfer> {
+        ((
+            arb_non_internal_address(),
+            arb_non_internal_address(),
+            arb_address(),
+            arb_amount(),
+        )
+            .prop_filter(
+                "unique addresses",
+                |(src, dest, token, _amount)| {
+                    src != dest && dest != token && src != token
+                },
+            ))
+        .prop_map(|(src, dest, token, amount)| SingleTransfer {
+            src,
+            dest,
+            token,
+            amount,
+        })
+    }
+
+    fn test_valid_trans_multi_transfer_tx_aux(transfers: Vec<SingleTransfer>) {
+        tx_host_env::init();
+
+        let mut genesis_balances = HashMap::<
+            // Token address
+            Address,
+            HashMap<
+                // Owner address
+                Address,
+                token::Amount,
+            >,
+        >::new();
+
+        for SingleTransfer {
+            src,
+            dest,
+            token,
+            amount,
+        } in &transfers
+        {
+            tx_host_env::with(|tx_env| {
+                tx_env.spawn_accounts([src, dest, token]);
+                tx_env.credit_tokens(src, token, *amount);
+            });
+            // Store the credited token balances
+            *genesis_balances
+                .entry(token.clone())
+                .or_default()
+                .entry(src.clone())
+                .or_default() += *amount;
+        }
+
+        let mut transfer = Transfer::default();
+        for SingleTransfer {
+            src,
+            dest,
+            token,
+            amount,
+        } in &transfers
+        {
+            let denom = DenominatedAmount::native(*amount);
+            transfer = transfer
+                .transfer(src.clone(), dest.clone(), token.clone(), denom)
+                .unwrap();
+        }
+
+        let tx_data = BatchedTx {
+            tx: Tx::default(),
+            cmt: TxCommitments::default(),
+        };
+        multi_transfer(ctx(), transfer, &tx_data, EVENT_DESC).unwrap();
+
+        let mut changes = HashMap::<
+            // Token address
+            Address,
+            HashMap<
+                // Owner address
+                Address,
+                token::Change,
+            >,
+        >::new();
+
+        for SingleTransfer {
+            src,
+            dest,
+            token,
+            amount,
+        } in &transfers
+        {
+            // Accumulate all token changes
+            let token_changes = changes.entry(token.clone()).or_default();
+            let change = token::Change::from(*amount);
+            *token_changes.entry(src.clone()).or_default() -= change;
+            *token_changes.entry(dest.clone()).or_default() += change;
+
+            // Every address has to be in the verifier set
+            tx_host_env::with(|tx_env| {
+                // Internal token address have to be part of the verifier set
+                assert!(
+                    !token.is_internal() || tx_env.verifiers.contains(token)
+                );
+                assert!(tx_env.verifiers.contains(src));
+                assert!(tx_env.verifiers.contains(dest));
+            })
+        }
+
+        // Check all the changed balances
+        for (token, changes) in changes {
+            for (owner, change) in changes {
+                let expected_balance = token::Change::from(
+                    genesis_balances
+                        .get(&token)
+                        .and_then(|balances| balances.get(&owner))
+                        .cloned()
+                        .unwrap_or_default(),
+                ) + change;
+                assert_eq!(
+                    token::Change::from(
+                        read_balance(ctx(), &token, &owner).unwrap()
+                    ),
+                    expected_balance
+                );
+            }
+        }
+    }
+}

@@ -1136,8 +1136,9 @@ impl PartialOrd for I320 {
     }
 }
 
-#[cfg(any(test, feature = "testing"))]
 /// Testing helpers
+#[cfg(any(test, feature = "testing"))]
+#[allow(clippy::arithmetic_side_effects)]
 pub mod testing {
     use super::*;
 
@@ -1163,6 +1164,12 @@ pub mod testing {
 
         fn sub(self, rhs: I256) -> Self::Output {
             self.checked_sub(rhs).unwrap()
+        }
+    }
+
+    impl std::ops::SubAssign<I256> for I256 {
+        fn sub_assign(&mut self, rhs: I256) {
+            *self = *self - rhs;
         }
     }
 
