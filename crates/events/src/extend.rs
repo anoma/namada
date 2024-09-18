@@ -488,21 +488,6 @@ impl EventAttributeEntry<'static> for Info {
     }
 }
 
-/// Extend an [`Event`] with `masp_tx_block_index` data, indicating that the tx
-/// at the specified index in the block contains a valid masp transaction.
-pub struct MaspTxBlockIndex(pub TxIndex);
-
-impl EventAttributeEntry<'static> for MaspTxBlockIndex {
-    type Value = TxIndex;
-    type ValueOwned = Self::Value;
-
-    const KEY: &'static str = "masp_tx_block_index";
-
-    fn into_value(self) -> Self::Value {
-        self.0
-    }
-}
-
 /// A type representing the possible reference to some MASP data, either a masp
 /// section or ibc tx data
 #[derive(Clone, Serialize, Deserialize)]
@@ -517,12 +502,14 @@ pub enum MaspTxRef {
 #[derive(Default, Clone, Serialize, Deserialize)]
 pub struct MaspTxRefs(pub Vec<MaspTxRef>);
 
+// FIXME: need this?
 impl Display for MaspTxRefs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", serde_json::to_string(self).unwrap())
     }
 }
 
+// FIXME: need this?
 impl FromStr for MaspTxRefs {
     type Err = serde_json::Error;
 
@@ -531,13 +518,39 @@ impl FromStr for MaspTxRefs {
     }
 }
 
-/// Extend an [`Event`] with `masp_tx_batch_refs` data, indicating the
-/// references to either the MASP sections or the data sections for shielded
-/// actions.
-pub struct MaspTxBatchRefs(pub MaspTxRefs);
+/// A mapping between the index of a transaction in a block and the set of
+/// associated masp data
+#[derive(Clone, Serialize, Deserialize)]
+pub struct IndexedMaspData {
+    /// The transaction index in the block
+    pub tx_index: TxIndex,
+    /// The set of masp data
+    pub masp_refs: MaspTxRefs,
+}
+
+impl Display for IndexedMaspData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", serde_json::to_string(self).unwrap())
+    }
+}
+
+impl FromStr for IndexedMaspData {
+    type Err = serde_json::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_json::from_str(s)
+    }
+}
+
+/// Extend an [`Event`] with `masp_tx_batch_refs` data, mapping a transaction
+/// index in the block to a collection of either the MASP sections or the data
+/// sections for shielded actions.
+// FIXME: maybe rename? Also the KEY?
+// FIXME: maybe rename to masp_data_refs
+pub struct MaspTxBatchRefs(pub IndexedMaspData);
 
 impl EventAttributeEntry<'static> for MaspTxBatchRefs {
-    type Value = MaspTxRefs;
+    type Value = IndexedMaspData;
     type ValueOwned = Self::Value;
 
     const KEY: &'static str = "masp_tx_batch_refs";

@@ -14,9 +14,8 @@ use namada_core::storage::TxIndex;
 use namada_core::time::DurationSecs;
 use namada_core::token::{Denomination, MaspDigitPos};
 use namada_events::extend::{
-    MaspTxBatchRefs as MaspTxBatchRefsAttr,
-    MaspTxBlockIndex as MaspTxBlockIndexAttr, MaspTxRef, MaspTxRefs,
-    ReadFromEventAttributes,
+    IndexedMaspData, MaspTxBatchRefs as MaspTxBatchRefsAttr, MaspTxRef,
+    MaspTxRefs, ReadFromEventAttributes,
 };
 use namada_ibc::{decode_message, extract_masp_tx_from_envelope, IbcMessage};
 use namada_io::client::Client;
@@ -121,8 +120,9 @@ fn extract_masp_tx(
 async fn get_indexed_masp_events_at_height<C: Client + Sync>(
     client: &C,
     height: BlockHeight,
+    // FIXME: think this arg isn't needed anymore
     first_idx_to_query: Option<TxIndex>,
-) -> Result<Vec<(TxIndex, MaspTxRefs)>, Error> {
+) -> Result<Vec<IndexedMaspData>, Error> {
     let first_idx_to_query = first_idx_to_query.unwrap_or_default();
 
     Ok(client
@@ -134,21 +134,14 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
             events
                 .into_iter()
                 .filter_map(|event| {
-                    let tx_index =
-                        MaspTxBlockIndexAttr::read_from_event_attributes(
+                    let indexed_masp_data =
+                        MaspTxBatchRefsAttr::read_from_event_attributes(
                             &event.attributes,
                         )
                         .ok()?;
 
-                    if tx_index >= first_idx_to_query {
-                        // Extract the references to the correct masp sections
-                        let masp_refs =
-                            MaspTxBatchRefsAttr::read_from_event_attributes(
-                                &event.attributes,
-                            )
-                            .unwrap_or_default();
-
-                        Some((tx_index, masp_refs))
+                    if indexed_masp_data.tx_index >= first_idx_to_query {
+                        Some(indexed_masp_data)
                     } else {
                         None
                     }
