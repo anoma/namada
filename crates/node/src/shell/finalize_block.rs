@@ -4,7 +4,7 @@ use data_encoding::HEXUPPER;
 use masp_primitives::merkle_tree::CommitmentTree;
 use masp_primitives::sapling::Node;
 use namada_sdk::events::extend::{
-    ComposeEvent, Height, IndexedMaspData, Info, MaspTxBatchRefs, TxHash,
+    ComposeEvent, Height, IndexedMaspData, Info, MaspDataRefs, TxHash,
 };
 use namada_sdk::events::{EmitEvents, Event};
 use namada_sdk::gas::event::GasUsed;
@@ -1042,7 +1042,7 @@ impl<'finalize> TempTxLogs {
         // If at least one of the inner transactions is a valid masp tx, update
         // the events
         if !extended_tx_result.masp_tx_refs.0.is_empty() {
-            self.tx_event.extend(MaspTxBatchRefs(IndexedMaspData {
+            self.tx_event.extend(MaspDataRefs(IndexedMaspData {
                 tx_index: TxIndex::must_from_usize(tx_index),
                 masp_refs: extended_tx_result.masp_tx_refs.clone(),
             }));

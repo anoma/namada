@@ -13,8 +13,8 @@ use namada_core::masp::MaspEpoch;
 use namada_core::time::DurationSecs;
 use namada_core::token::{Denomination, MaspDigitPos};
 use namada_events::extend::{
-    IndexedMaspData, MaspTxBatchRefs as MaspTxBatchRefsAttr, MaspTxRef,
-    MaspTxRefs, ReadFromEventAttributes,
+    IndexedMaspData, MaspDataRefs as MaspDataRefsAttr, MaspTxRef, MaspTxRefs,
+    ReadFromEventAttributes,
 };
 use namada_ibc::{decode_message, extract_masp_tx_from_envelope, IbcMessage};
 use namada_io::client::Client;
@@ -128,7 +128,7 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
             events
                 .into_iter()
                 .filter_map(|event| {
-                    MaspTxBatchRefsAttr::read_from_event_attributes(
+                    MaspDataRefsAttr::read_from_event_attributes(
                         &event.attributes,
                     )
                     .ok()

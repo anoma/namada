@@ -526,18 +526,16 @@ impl FromStr for IndexedMaspData {
     }
 }
 
-/// Extend an [`Event`] with `masp_tx_batch_refs` data, mapping a transaction
+/// Extend an [`Event`] with `masp_data_refs` data, mapping a transaction
 /// index in the block to a collection of either the MASP sections or the data
 /// sections for shielded actions.
-// FIXME: maybe rename? Also the KEY?
-// FIXME: maybe rename to masp_data_refs
-pub struct MaspTxBatchRefs(pub IndexedMaspData);
+pub struct MaspDataRefs(pub IndexedMaspData);
 
-impl EventAttributeEntry<'static> for MaspTxBatchRefs {
+impl EventAttributeEntry<'static> for MaspDataRefs {
     type Value = IndexedMaspData;
     type ValueOwned = Self::Value;
 
-    const KEY: &'static str = "masp_tx_batch_refs";
+    const KEY: &'static str = "masp_data_refs";
 
     fn into_value(self) -> Self::Value {
         self.0
