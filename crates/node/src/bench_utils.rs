@@ -26,7 +26,7 @@ use namada_sdk::args::ShieldedSync;
 use namada_sdk::chain::testing::get_dummy_header;
 use namada_sdk::chain::{BlockHeight, ChainId, Epoch};
 use namada_sdk::events::extend::{
-    ComposeEvent, MaspTxBatchRefs, MaspTxBlockIndex, MaspTxRefs,
+    ComposeEvent, MaspTxBatchRefs, MaspTxBlockIndex, MaspTxRef, MaspTxRefs,
 };
 use namada_sdk::events::Event;
 use namada_sdk::gas::TxGasMeter;
@@ -1044,7 +1044,9 @@ impl Client for BenchShell {
                                         if let Section::MaspTx(transaction) =
                                             section
                                         {
-                                            Some(namada_sdk::events::extend::MaspTxRef::MaspSection(transaction.txid().into()))
+                                            Some(MaspTxRef::MaspSection(
+                                                transaction.txid().into(),
+                                            ))
                                         } else {
                                             None
                                         }

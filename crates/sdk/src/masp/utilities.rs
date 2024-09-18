@@ -6,6 +6,7 @@ use std::sync::Arc;
 use borsh::BorshDeserialize;
 use masp_primitives::merkle_tree::{CommitmentTree, IncrementalWitness};
 use masp_primitives::sapling::Node;
+use masp_primitives::transaction::Transaction as MaspTx;
 use namada_core::chain::BlockHeight;
 use namada_core::collections::HashMap;
 use namada_core::storage::TxIndex;
@@ -110,25 +111,7 @@ impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
                 let extracted_masp_txs = extract_masp_tx(&tx, &masp_refs)
                     .map_err(|e| Error::Other(e.to_string()))?;
 
-                // Note that the index of the extracted MASP transaction does
-                // not necessarely match the index of the inner tx in the batch,
-                // we are only interested in giving a sequential ordering to the
-                // data
-                for (batch_index, transaction) in
-                    extracted_masp_txs.into_iter().enumerate()
-                {
-                    txs.push((
-                        IndexedTx {
-                            height: height.into(),
-                            index: idx,
-                            batch_index: Some(
-                                u32::try_from(batch_index)
-                                    .map_err(|e| Error::Other(e.to_string()))?,
-                            ),
-                        },
-                        transaction,
-                    ));
-                }
+                index_txs(&mut txs, extracted_masp_txs, height.into(), idx)?;
             }
         }
 
@@ -486,8 +469,6 @@ impl MaspClient for IndexerMaspClient {
                 let mut extracted_masp_txs = Vec::with_capacity(batch.len());
 
                 for TransactionSlot { bytes } in batch {
-                    type MaspTx = masp_primitives::transaction::Transaction;
-
                     extracted_masp_txs.push(
                         MaspTx::try_from_slice(&bytes).map_err(|err| {
                             Error::Other(format!(
@@ -499,25 +480,12 @@ impl MaspClient for IndexerMaspClient {
                     );
                 }
 
-                // Note that the index of the extracted MASP transaction does
-                // not necessarely match the index of the inner tx in the batch,
-                // we are only interested in giving a sequential ordering to the
-                // data
-                for (batch_index, transaction) in
-                    extracted_masp_txs.into_iter().enumerate()
-                {
-                    txs.push((
-                        IndexedTx {
-                            height: BlockHeight(block_height),
-                            index: TxIndex(block_index),
-                            batch_index: Some(
-                                u32::try_from(batch_index)
-                                    .map_err(|e| Error::Other(e.to_string()))?,
-                            ),
-                        },
-                        transaction,
-                    ));
-                }
+                index_txs(
+                    &mut txs,
+                    extracted_masp_txs,
+                    block_height.into(),
+                    block_index.into(),
+                )?;
             }
         }
 
@@ -708,6 +676,36 @@ impl MaspClient for IndexerMaspClient {
         )
     }
 }
+
+#[allow(clippy::result_large_err)]
+fn index_txs(
+    txs: &mut Vec<(IndexedTx, MaspTx)>,
+    extracted_masp_txs: impl IntoIterator<Item = MaspTx>,
+    height: BlockHeight,
+    index: TxIndex,
+) -> Result<(), Error> {
+    // Note that the index of the extracted MASP transaction does
+    // not necessarely match the index of the inner tx in the batch,
+    // we are only interested in giving a sequential ordering to the
+    // data
+    for (batch_index, transaction) in extracted_masp_txs.into_iter().enumerate()
+    {
+        txs.push((
+            IndexedTx {
+                height,
+                index,
+                batch_index: Some(
+                    u32::try_from(batch_index)
+                        .map_err(|e| Error::Other(e.to_string()))?,
+                ),
+            },
+            transaction,
+        ));
+    }
+
+    Ok(())
+}
+
 #[derive(Copy, Clone)]
 #[allow(clippy::enum_variant_names)]
 enum BlockIndex {
