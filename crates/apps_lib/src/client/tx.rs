@@ -834,6 +834,12 @@ pub async fn submit_shielded_transfer(
     let mut bparams: Box<dyn BuildParams> = if args.tx.use_device {
         let transport = WalletTransport::from_arg(args.tx.device_transport);
         let app = NamadaApp::new(transport);
+        // Clear hardware wallet randomness buffers
+        app.clean_randomness_buffers().await.map_err(|err| {
+            error::Error::Other(format!(
+                "Unable to clear randomness buffer. Error: {}", err,
+            ))
+        })?;
         let wallet = namada.wallet().await;
         // Augment the pseudo spending key with a proof authorization key
         for data in &mut args.data {

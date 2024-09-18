@@ -233,7 +233,9 @@ where
 
         for public_key in &signing_data.public_keys {
             if !used_pubkeys.contains(public_key) {
-                let secret_key = find_key_by_pk(&mut wallet, args, public_key)?;
+                let Ok(secret_key) = find_key_by_pk(&mut wallet, args, public_key) else {
+                    continue;
+                };
                 used_pubkeys.insert(public_key.clone());
                 signing_tx_keypairs.push(secret_key);
             }
