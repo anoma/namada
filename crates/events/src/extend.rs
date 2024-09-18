@@ -502,22 +502,6 @@ pub enum MaspTxRef {
 #[derive(Default, Clone, Serialize, Deserialize)]
 pub struct MaspTxRefs(pub Vec<MaspTxRef>);
 
-// FIXME: need this?
-impl Display for MaspTxRefs {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", serde_json::to_string(self).unwrap())
-    }
-}
-
-// FIXME: need this?
-impl FromStr for MaspTxRefs {
-    type Err = serde_json::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        serde_json::from_str(s)
-    }
-}
-
 /// A mapping between the index of a transaction in a block and the set of
 /// associated masp data
 #[derive(Clone, Serialize, Deserialize)]
