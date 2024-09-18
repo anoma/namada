@@ -1018,7 +1018,7 @@ pub async fn submit_shielded_transfer(
                 let path = BIP44Path {
                     path: path.to_string(),
                 };
-                app.sign_masp(&path, &tx.serialize_to_vec())
+                app.sign_masp_spends(&path, &tx.serialize_to_vec())
                     .await
                     .map_err(|err| error::Error::Other(err.to_string()))?;
                 // Now prepare a new list of authorizations based on hardware

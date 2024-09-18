@@ -131,7 +131,7 @@ konst = { version = "0.3.8", default-features = false }
 lazy_static = "1.4.0"
 # TODO: upstreamed in https://github.com/ledger-community/rust-ledger/pull/9
 ledger-lib = { git = "https://github.com/heliaxdev/rust-ledger", rev = "f96f4559b3237d09218f7583df01acf36034ea79", default-features = false, features = ["transport_tcp"] }
-ledger-namada-rs = { git = "https://github.com/heliaxdev/ledger-namada", rev = "e91aabd2d4235e35f7cddae7f86a8d197f91bd06" }
+ledger-namada-rs = { git = "https://github.com/heliaxdev/ledger-namada", rev = "96e71198665fcc35929d1be1f1f8347bf12ad166" }
 ledger-transport = "0.10.0"
 ledger-transport-hid = "0.10.0"
 libc = "0.2.97"
