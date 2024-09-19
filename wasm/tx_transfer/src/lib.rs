@@ -1,6 +1,5 @@
 //! A tx for transparent token transfer.
-//! This tx uses `token::TransparentTransfer` wrapped inside `SignedTxData`
-//! as its input as declared in `namada` crate.
+//! This tx uses `token::Transfer` as its input.
 
 use std::collections::{BTreeMap, BTreeSet};
 
