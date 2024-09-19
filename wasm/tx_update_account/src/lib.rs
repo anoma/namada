@@ -1,6 +1,5 @@
 //! A tx for updating an account's validity predicate.
-//! This tx wraps the validity predicate inside `SignedTxData` as
-//! its input as declared in `namada` crate.
+//! This tx uses `account::UpdateAccount` as its input.
 
 use namada_tx_prelude::*;
 

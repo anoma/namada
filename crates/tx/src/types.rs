@@ -72,29 +72,6 @@ pub enum DecodeError {
     InvalidJSONDeserialization(String),
 }
 
-/// This can be used to sign an arbitrary tx. The signature is produced and
-/// verified on the tx data concatenated with the tx code, however the tx code
-/// itself is not part of this structure.
-///
-/// Because the signature is not checked by the ledger, we don't inline it into
-/// the `Tx` type directly. Instead, the signature is attached to the `tx.data`,
-/// which can then be checked by a validity predicate wasm.
-#[derive(
-    Clone,
-    Debug,
-    BorshSerialize,
-    BorshDeserialize,
-    BorshDeserializer,
-    BorshSchema,
-)]
-pub struct SignedTxData {
-    /// The original tx data bytes, if any
-    pub data: Option<Vec<u8>>,
-    /// The signature is produced on the tx data concatenated with the tx code
-    /// and the timestamp.
-    pub sig: common::Signature,
-}
-
 /// A generic signed data wrapper for serialize-able types.
 ///
 /// The default serialization method is [`BorshSerialize`].
