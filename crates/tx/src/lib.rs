@@ -21,6 +21,7 @@ pub mod action;
 pub mod data;
 pub mod event;
 pub mod proto;
+mod section;
 mod sign;
 mod types;
 
@@ -28,14 +29,16 @@ use data::TxType;
 pub use either;
 pub use event::new_tx_event;
 pub use namada_core::key::SignableEthMessage;
+pub use section::{
+    Authorization, Code, Commitment, CompressedAuthorization, Data, Header,
+    MaspBuilder, Memo, Section, Signer, TxCommitments,
+};
 pub use sign::{
     standalone_signature, verify_standalone_sig, SignatureIndex, Signed,
     VerifySigError,
 };
 pub use types::{
-    Authorization, BatchedTx, BatchedTxRef, Code, Commitment,
-    CompressedAuthorization, Data, DecodeError, Header, IndexedTx,
-    IndexedTxRange, MaspBuilder, Memo, Section, Signer, Tx, TxCommitments,
+    BatchedTx, BatchedTxRef, DecodeError, IndexedTx, IndexedTxRange, Tx,
     TxError,
 };
 
