@@ -110,7 +110,10 @@ impl Shell {
                 .map(Response::InitChain)
             }
             Request::Info(_) => Ok(Response::Info(self.last_state())),
-            Request::Query(query) => Ok(Response::Query(self.query(query))),
+            Request::Query(query) => {
+                tracing::info!("query");
+                Ok(Response::Query(self.query(query)))
+            },
             Request::PrepareProposal(block) => {
                 tracing::debug!("Request PrepareProposal");
                 // TODO: use TM domain type in the handler
@@ -157,13 +160,13 @@ impl Shell {
                 Ok(Response::RevertProposal(self.revert_proposal(_req)))
             }
             Request::FinalizeBlock(finalize) => {
-                tracing::debug!("Request FinalizeBlock");
+                tracing::info!("Request FinalizeBlock");
 
                 self.try_recheck_process_proposal(&finalize)?;
                 self.finalize_block(finalize).map(Response::FinalizeBlock)
             }
             Request::Commit => {
-                tracing::debug!("Request Commit");
+                tracing::info!("Request Commit");
                 Ok(self.commit())
             }
             Request::Flush => Ok(Response::Flush),
