@@ -1,15 +1,161 @@
 //! Types for signing
 
 use std::cmp::Ordering;
+use std::collections::BTreeMap;
+use std::hash::{Hash, Hasher};
 use std::io;
+use std::marker::PhantomData;
 
+use borsh::schema::{self, Declaration, Definition};
 use namada_core::address::Address;
 use namada_core::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use namada_core::key::common;
+use namada_core::key::{common, SerializeWithBorsh, SigScheme, Signable};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+/// Represents an error in signature verification
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum VerifySigError {
+    #[error("{0}")]
+    VerifySig(#[from] namada_core::key::VerifySigError),
+    #[error("{0}")]
+    Gas(#[from] namada_gas::Error),
+    #[error("The wrapper signature is invalid.")]
+    InvalidWrapperSignature,
+    #[error("The section signature is invalid: {0}")]
+    InvalidSectionSignature(String),
+    #[error("The number of PKs overflows u8::MAX")]
+    PksOverflow,
+    #[error("An expected signature is missing.")]
+    MissingSignature,
+}
+
+/// A generic signed data wrapper for serialize-able types.
+///
+/// The default serialization method is [`BorshSerialize`].
+#[derive(
+    Clone, Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize,
+)]
+pub struct Signed<T, S = SerializeWithBorsh> {
+    /// Arbitrary data to be signed
+    pub data: T,
+    /// The signature of the data
+    pub sig: common::Signature,
+    /// The method to serialize the data with,
+    /// before it being signed
+    _serialization: PhantomData<S>,
+}
+
+impl<S, T: Eq> Eq for Signed<T, S> {}
+
+impl<S, T: PartialEq> PartialEq for Signed<T, S> {
+    fn eq(&self, other: &Self) -> bool {
+        self.data == other.data && self.sig == other.sig
+    }
+}
+
+impl<S, T: Hash> Hash for Signed<T, S> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.data.hash(state);
+        self.sig.hash(state);
+    }
+}
+
+impl<S, T: PartialOrd> PartialOrd for Signed<T, S> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.data.partial_cmp(&other.data)
+    }
+}
+impl<S, T: Ord> Ord for Signed<T, S> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.data.cmp(&other.data)
+    }
+}
+
+impl<S, T: BorshSchema> BorshSchema for Signed<T, S> {
+    fn add_definitions_recursively(
+        definitions: &mut BTreeMap<Declaration, Definition>,
+    ) {
+        let fields = schema::Fields::NamedFields(vec![
+            ("data".to_string(), T::declaration()),
+            ("sig".to_string(), <common::Signature>::declaration()),
+        ]);
+        let definition = schema::Definition::Struct { fields };
+        schema::add_definition(Self::declaration(), definition, definitions);
+        T::add_definitions_recursively(definitions);
+        <common::Signature>::add_definitions_recursively(definitions);
+    }
+
+    fn declaration() -> schema::Declaration {
+        format!("Signed<{}>", T::declaration())
+    }
+}
+
+impl<T, S> Signed<T, S> {
+    /// Initialize a new [`Signed`] instance from an existing signature.
+    #[inline]
+    pub fn new_from(data: T, sig: common::Signature) -> Self {
+        Self {
+            data,
+            sig,
+            _serialization: PhantomData,
+        }
+    }
+}
+
+impl<T, S: Signable<T>> Signed<T, S> {
+    /// Initialize a new [`Signed`] instance.
+    pub fn new(keypair: &common::SecretKey, data: T) -> Self {
+        let to_sign = S::as_signable(&data);
+        let sig =
+            common::SigScheme::sign_with_hasher::<S::Hasher>(keypair, to_sign);
+        Self::new_from(data, sig)
+    }
+
+    /// Verify that the data has been signed by the secret key
+    /// counterpart of the given public key.
+    pub fn verify(
+        &self,
+        pk: &common::PublicKey,
+    ) -> std::result::Result<(), VerifySigError> {
+        let signed_bytes = S::as_signable(&self.data);
+        common::SigScheme::verify_signature_with_hasher::<S::Hasher>(
+            pk,
+            &signed_bytes,
+            &self.sig,
+        )
+        .map_err(Into::into)
+    }
+}
+
+/// Get a signature for data
+pub fn standalone_signature<T, S: Signable<T>>(
+    keypair: &common::SecretKey,
+    data: &T,
+) -> common::Signature {
+    let to_sign = S::as_signable(data);
+    common::SigScheme::sign_with_hasher::<S::Hasher>(keypair, to_sign)
+}
+
+/// Verify that the input data has been signed by the secret key
+/// counterpart of the given public key.
+pub fn verify_standalone_sig<T, S: Signable<T>>(
+    data: &T,
+    pk: &common::PublicKey,
+    sig: &common::Signature,
+) -> std::result::Result<(), VerifySigError> {
+    let signed_data = S::as_signable(data);
+    common::SigScheme::verify_signature_with_hasher::<S::Hasher>(
+        pk,
+        &signed_data,
+        sig,
+    )
+    .map_err(Into::into)
+}
 
 #[derive(
     Clone,
@@ -91,7 +237,7 @@ mod test {
         let sk = key::testing::keypair_1();
         let pubkey = sk.to_public();
         let data = [0_u8];
-        let signature = key::common::SigScheme::sign(&sk, &data);
+        let signature = key::common::SigScheme::sign(&sk, data);
         let sig_index = SignatureIndex {
             pubkey,
             index: Some((address::testing::established_address_1(), 1)),
