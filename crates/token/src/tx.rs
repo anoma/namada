@@ -1,16 +1,14 @@
 //! Token transaction
 
 use std::borrow::Cow;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use namada_core::collections::HashSet;
 use namada_core::masp;
-use namada_events::{EmitEvents, EventLevel};
+use namada_events::EmitEvents;
 use namada_shielded_token::{utils, MaspTxId};
 use namada_storage::{Error, OptionExt, ResultExt};
-use namada_trans_token::event::{TokenEvent, TokenOperation};
 pub use namada_trans_token::tx::transfer;
-use namada_trans_token::UserAccount;
 use namada_tx::action::{self, Action, MaspAction};
 use namada_tx::BatchedTx;
 use namada_tx_env::{Address, Result, TxEnv};
@@ -64,63 +62,9 @@ where
 {
     let sources = transfers.sources();
     let targets = transfers.targets();
-    let debited_accounts =
-        namada_trans_token::multi_transfer(env, &sources, &targets)?;
-
-    let mut evt_sources = BTreeMap::new();
-    let mut evt_targets = BTreeMap::new();
-    let mut post_balances = BTreeMap::new();
-
-    for ((src, token), amount) in sources {
-        // The tx must be authorized by the source address
-        env.insert_verifier(&src)?;
-        if token.is_internal() {
-            // Established address tokens do not have VPs themselves, their
-            // validation is handled by the `Multitoken` internal address,
-            // but internal token addresses have to verify
-            // the transfer
-            env.insert_verifier(&token)?;
-        }
-        evt_sources.insert(
-            (UserAccount::Internal(src.clone()), token.clone()),
-            amount.into(),
-        );
-        post_balances.insert(
-            (UserAccount::Internal(src.clone()), token.clone()),
-            crate::read_balance(env, &token, &src)?.into(),
-        );
-    }
-
-    for ((target, token), amount) in targets {
-        // The tx must be authorized by the involved address
-        env.insert_verifier(&target)?;
-        if token.is_internal() {
-            // Established address tokens do not have VPs themselves, their
-            // validation is handled by the `Multitoken` internal address,
-            // but internal token addresses have to verify
-            // the transfer
-            env.insert_verifier(&token)?;
-        }
-        evt_targets.insert(
-            (UserAccount::Internal(target.clone()), token.clone()),
-            amount.into(),
-        );
-        post_balances.insert(
-            (UserAccount::Internal(target.clone()), token.clone()),
-            crate::read_balance(env, &token, &target)?.into(),
-        );
-    }
-
-    env.emit(TokenEvent {
-        descriptor: event_desc,
-        level: EventLevel::Tx,
-        operation: TokenOperation::Transfer {
-            sources: evt_sources,
-            targets: evt_targets,
-            post_balances,
-        },
-    });
-
+    let debited_accounts = namada_trans_token::tx::multi_transfer(
+        env, sources, targets, event_desc,
+    )?;
     Ok(debited_accounts)
 }
 

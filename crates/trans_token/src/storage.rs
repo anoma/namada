@@ -1,7 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
-
 use namada_core::address::{Address, InternalAddress};
-use namada_core::collections::HashSet;
 use namada_core::hints;
 pub use namada_core::storage::Key;
 use namada_core::token::{self, Amount, AmountError, DenominatedAmount};
@@ -264,65 +261,6 @@ where
     }
 }
 
-/// Transfer tokens from `sources` to `dests`.
-///
-/// Returns an `Err` if any source has insufficient balance or if the transfer
-/// to any destination would overflow (This can only happen if the total supply
-/// doesn't fit in `token::Amount`). Returns the set of debited accounts.
-pub fn multi_transfer<S>(
-    storage: &mut S,
-    sources: &BTreeMap<(Address, Address), Amount>,
-    dests: &BTreeMap<(Address, Address), Amount>,
-) -> Result<HashSet<Address>>
-where
-    S: StorageRead + StorageWrite,
-{
-    let mut debited_accounts = HashSet::new();
-    // Collect all the accounts whose balance has changed
-    let mut accounts = BTreeSet::new();
-    accounts.extend(sources.keys().cloned());
-    accounts.extend(dests.keys().cloned());
-
-    let unexpected_err = || {
-        Error::new_const(
-            "Computing difference between amounts should never overflow",
-        )
-    };
-    // Apply the balance change for each account in turn
-    for ref account @ (ref owner, ref token) in accounts {
-        let overflow_err = || {
-            Error::new_alloc(format!(
-                "The transfer would overflow balance of {owner}"
-            ))
-        };
-        let underflow_err =
-            || Error::new_alloc(format!("{owner} has insufficient balance"));
-        // Load account balances and deltas
-        let owner_key = balance_key(token, owner);
-        let owner_balance = read_balance(storage, token, owner)?;
-        let src_amt = sources.get(account).cloned().unwrap_or_default();
-        let dest_amt = dests.get(account).cloned().unwrap_or_default();
-        // Compute owner_balance + dest_amt - src_amt
-        let new_owner_balance = if src_amt <= dest_amt {
-            owner_balance
-                .checked_add(
-                    dest_amt.checked_sub(src_amt).ok_or_else(unexpected_err)?,
-                )
-                .ok_or_else(overflow_err)?
-        } else {
-            debited_accounts.insert(owner.to_owned());
-            owner_balance
-                .checked_sub(
-                    src_amt.checked_sub(dest_amt).ok_or_else(unexpected_err)?,
-                )
-                .ok_or_else(underflow_err)?
-        };
-        // Write the new balance
-        storage.write(&owner_key, new_owner_balance)?;
-    }
-    Ok(debited_accounts)
-}
-
 /// Mint `amount` of `token` as `minter` to `dest`.
 pub fn mint_tokens<S>(
     storage: &mut S,
@@ -427,52 +365,12 @@ pub fn denom_to_amount(
 
 #[cfg(test)]
 mod testing {
-    use std::collections::BTreeMap;
-
     use namada_core::{address, token};
     use namada_state::testing::TestStorage;
 
     use super::{
-        burn_tokens, credit_tokens, multi_transfer, read_balance,
-        read_total_supply, transfer,
+        burn_tokens, credit_tokens, read_balance, read_total_supply, transfer,
     };
-
-    #[test]
-    fn test_multi_transfer() {
-        let mut storage = TestStorage::default();
-        let native_token = address::testing::nam();
-
-        // Get one account
-        let addr = address::testing::gen_implicit_address();
-
-        // Credit the account some balance
-        let pre_balance = token::Amount::native_whole(1);
-        credit_tokens(&mut storage, &native_token, &addr, pre_balance).unwrap();
-
-        let pre_balance_check =
-            read_balance(&storage, &native_token, &addr).unwrap();
-
-        assert_eq!(pre_balance_check, pre_balance);
-
-        // sources
-        let sources = BTreeMap::from_iter([(
-            (addr.clone(), native_token.clone()),
-            pre_balance,
-        )]);
-
-        // targets
-        let targets = BTreeMap::from_iter([(
-            (addr.clone(), native_token.clone()),
-            pre_balance,
-        )]);
-
-        multi_transfer(&mut storage, &sources, &targets).unwrap();
-
-        let post_balance_check =
-            read_balance(&storage, &native_token, &addr).unwrap();
-
-        assert_eq!(post_balance_check, pre_balance);
-    }
 
     #[test]
     fn test_credit() {
