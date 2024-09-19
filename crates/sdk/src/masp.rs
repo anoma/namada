@@ -142,6 +142,7 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
 
                     if tx_index >= first_idx_to_query {
                         // Extract the references to the correct masp sections
+                        #[allow(clippy::disallowed_methods)]
                         let masp_refs =
                             MaspTxBatchRefsAttr::read_from_event_attributes(
                                 &event.attributes,
