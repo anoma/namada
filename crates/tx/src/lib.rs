@@ -28,7 +28,7 @@ use data::TxType;
 pub use either;
 pub use event::new_tx_event;
 pub use namada_core::key::SignableEthMessage;
-pub use sign::{SigIndexDecodeError, SignatureIndex};
+pub use sign::SignatureIndex;
 pub use types::{
     standalone_signature, verify_standalone_sig, Authorization, BatchedTx,
     BatchedTxRef, Code, Commitment, CompressedAuthorization, Data, DecodeError,
