@@ -72,6 +72,7 @@ where
         )
     };
     // Apply the balance change for each account in turn
+    let mut any_balance_changed = false;
     for ref account @ (ref owner, ref token) in accounts {
         let overflow_err = || {
             Error::new_alloc(format!(
@@ -101,7 +102,14 @@ where
                 .ok_or_else(underflow_err)?
         };
         // Write the new balance
-        env.write(&owner_key, new_owner_balance)?;
+        if new_owner_balance != owner_balance {
+            any_balance_changed = true;
+            env.write(&owner_key, new_owner_balance)?;
+        }
+    }
+
+    if !any_balance_changed {
+        return Ok(debited_accounts);
     }
 
     let mut evt_sources = BTreeMap::new();
@@ -203,10 +211,6 @@ pub fn transfer<ENV>(
 where
     ENV: TxEnv + EmitEvents,
 {
-    if amount.is_zero() || source == target {
-        return Ok(());
-    }
-
     multi_transfer(
         env,
         SingleCreditOrDebit {
