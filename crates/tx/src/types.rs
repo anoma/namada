@@ -267,9 +267,6 @@ impl Data {
     }
 }
 
-/// Error representing the case where the supplied code has incorrect hash
-pub struct CommitmentError;
-
 /// Represents either some code bytes or their SHA-256 hash
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
@@ -296,29 +293,6 @@ impl PartialEq for Commitment {
 }
 
 impl Commitment {
-    /// Substitute bytes with their SHA-256 hash
-    pub fn contract(&mut self) {
-        if let Self::Id(code) = self {
-            *self = Self::Hash(hash_tx(code));
-        }
-    }
-
-    /// Substitute a code hash with the supplied bytes if the hashes are
-    /// consistent, otherwise return an error
-    pub fn expand(
-        &mut self,
-        code: Vec<u8>,
-    ) -> std::result::Result<(), CommitmentError> {
-        match self {
-            Self::Id(c) if *c == code => Ok(()),
-            Self::Hash(hash) if *hash == hash_tx(&code) => {
-                *self = Self::Id(code);
-                Ok(())
-            }
-            _ => Err(CommitmentError),
-        }
-    }
-
     /// Return the contained hash commitment
     pub fn hash(&self) -> namada_core::hash::Hash {
         match self {
@@ -497,11 +471,6 @@ impl Authorization {
             signatures,
             ..partial
         }
-    }
-
-    /// Get the number of signatures if it fits in `u8`
-    pub fn total_signatures(&self) -> Option<u8> {
-        u8::try_from(self.signatures.len()).ok()
     }
 
     /// Hash this signature section
@@ -1610,29 +1579,6 @@ impl Tx {
                 // other private information and must be removed prior to
                 // submission to protocol
                 filtered.push(self.sections.remove(i));
-            }
-        }
-        filtered
-    }
-
-    /// Filter out all the sections that need not be sent to the hardware wallet
-    /// and return them
-    pub fn wallet_filter(&mut self) -> Vec<Section> {
-        let mut filtered = Vec::new();
-        for i in (0..self.sections.len()).rev() {
-            match &mut self.sections[i] {
-                // This section is known to be large and can be contracted
-                Section::Code(section) => {
-                    filtered.push(Section::Code(section.clone()));
-                    section.code.contract();
-                }
-                // This section is known to be large and can be contracted
-                Section::ExtraData(section) => {
-                    filtered.push(Section::ExtraData(section.clone()));
-                    section.code.contract();
-                }
-                // Everything else is fine to add
-                _ => {}
             }
         }
         filtered
