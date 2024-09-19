@@ -28,12 +28,15 @@ use data::TxType;
 pub use either;
 pub use event::new_tx_event;
 pub use namada_core::key::SignableEthMessage;
-pub use sign::SignatureIndex;
+pub use sign::{
+    standalone_signature, verify_standalone_sig, SignatureIndex, Signed,
+    VerifySigError,
+};
 pub use types::{
-    standalone_signature, verify_standalone_sig, Authorization, BatchedTx,
-    BatchedTxRef, Code, Commitment, CompressedAuthorization, Data, DecodeError,
-    Header, IndexedTx, IndexedTxRange, MaspBuilder, Memo, Section, Signed,
-    Signer, Tx, TxCommitments, TxError, VerifySigError,
+    Authorization, BatchedTx, BatchedTxRef, Code, Commitment,
+    CompressedAuthorization, Data, DecodeError, Header, IndexedTx,
+    IndexedTxRange, MaspBuilder, Memo, Section, Signer, Tx, TxCommitments,
+    TxError,
 };
 
 /// Length of the transaction sections salt
