@@ -10,12 +10,10 @@ use masp_primitives::transaction::Transaction;
 use namada_core::address::Address;
 use namada_core::chain::BlockHeight;
 use namada_core::masp::MaspEpoch;
-use namada_core::storage::TxIndex;
 use namada_core::time::DurationSecs;
 use namada_core::token::{Denomination, MaspDigitPos};
 use namada_events::extend::{
-    MaspTxBatchRefs as MaspTxBatchRefsAttr,
-    MaspTxBlockIndex as MaspTxBlockIndexAttr, MaspTxRef, MaspTxRefs,
+    IndexedMaspData, MaspDataRefs as MaspDataRefsAttr, MaspTxRef, MaspTxRefs,
     ReadFromEventAttributes,
 };
 use namada_ibc::{decode_message, extract_masp_tx_from_envelope, IbcMessage};
@@ -116,15 +114,11 @@ fn extract_masp_tx(
 }
 
 // Retrieves all the indexes at the specified height which refer
-// to a valid masp transaction. If an index is given, it filters only the
-// transactions with an index equal or greater to the provided one.
+// to a valid masp transaction.
 async fn get_indexed_masp_events_at_height<C: Client + Sync>(
     client: &C,
     height: BlockHeight,
-    first_idx_to_query: Option<TxIndex>,
-) -> Result<Vec<(TxIndex, MaspTxRefs)>, Error> {
-    let first_idx_to_query = first_idx_to_query.unwrap_or_default();
-
+) -> Result<Vec<IndexedMaspData>, Error> {
     Ok(client
         .block_results(height.0)
         .await
@@ -134,24 +128,10 @@ async fn get_indexed_masp_events_at_height<C: Client + Sync>(
             events
                 .into_iter()
                 .filter_map(|event| {
-                    let tx_index =
-                        MaspTxBlockIndexAttr::read_from_event_attributes(
-                            &event.attributes,
-                        )
-                        .ok()?;
-
-                    if tx_index >= first_idx_to_query {
-                        // Extract the references to the correct masp sections
-                        let masp_refs =
-                            MaspTxBatchRefsAttr::read_from_event_attributes(
-                                &event.attributes,
-                            )
-                            .unwrap_or_default();
-
-                        Some((tx_index, masp_refs))
-                    } else {
-                        None
-                    }
+                    MaspDataRefsAttr::read_from_event_attributes(
+                        &event.attributes,
+                    )
+                    .ok()
                 })
                 .collect::<Vec<_>>()
         })

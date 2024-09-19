@@ -10,6 +10,7 @@ use masp_primitives::transaction::Transaction as MaspTx;
 use namada_core::chain::BlockHeight;
 use namada_core::collections::HashMap;
 use namada_core::storage::TxIndex;
+use namada_events::extend::IndexedMaspData;
 use namada_io::Client;
 use namada_token::masp::utils::{
     IndexedNoteEntry, MaspClient, MaspClientCapabilities,
@@ -75,7 +76,6 @@ impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
                 get_indexed_masp_events_at_height(
                     &self.inner.client,
                     height.into(),
-                    None,
                 )
                 .await
             };
@@ -105,13 +105,22 @@ impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
                     .data
             };
 
-            for (idx, masp_refs) in txs_results {
-                let tx = Tx::try_from(block[idx.0 as usize].as_ref())
+            for IndexedMaspData {
+                tx_index,
+                masp_refs,
+            } in txs_results
+            {
+                let tx = Tx::try_from(block[tx_index.0 as usize].as_ref())
                     .map_err(|e| Error::Other(e.to_string()))?;
                 let extracted_masp_txs = extract_masp_tx(&tx, &masp_refs)
                     .map_err(|e| Error::Other(e.to_string()))?;
 
-                index_txs(&mut txs, extracted_masp_txs, height.into(), idx)?;
+                index_txs(
+                    &mut txs,
+                    extracted_masp_txs,
+                    height.into(),
+                    tx_index,
+                )?;
             }
         }
 
