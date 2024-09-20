@@ -109,7 +109,7 @@ fn pre_genesis_tx_timestamp() -> DateTimeUtc {
 /// Return a ready to sign genesis [`Tx`].
 fn get_tx_to_sign(tag: impl AsRef<str>, data: impl BorshSerialize) -> Tx {
     let genesis_chain_id = env::var(NAMADA_GENESIS_TX_ENV_VAR)
-        .unwrap_or_else(|| NAMADA_GENESIS_TX_CHAIN_ID.to_string());
+        .unwrap_or_else(|_| NAMADA_GENESIS_TX_CHAIN_ID.to_string());
 
     let mut tx = Tx::from_type(TxType::Raw);
     tx.header.chain_id = ChainId(genesis_chain_id);
