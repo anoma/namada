@@ -1667,6 +1667,7 @@ where
     S: StorageRead + StorageWrite,
     Gov: governance::Read<S>,
 {
+    // Check that the rate is a number between 0.0 and 1.0
     if new_rate.is_negative() {
         return Err(CommissionRateChangeError::NegativeRate(
             new_rate,
@@ -1674,7 +1675,6 @@ where
         )
         .into());
     }
-
     if new_rate > Dec::one() {
         return Err(CommissionRateChangeError::LargerThanOne(
             new_rate,
@@ -1690,6 +1690,16 @@ where
             })?;
 
     let params = read_pos_params::<S, Gov>(storage)?;
+
+    // Check that the new rate is allowed by the min commission rate
+    if new_rate < params.min_commission_rate {
+        return Err(CommissionRateChangeError::RateBelowMin(
+            new_rate,
+            params.min_commission_rate,
+        )
+        .into());
+    }
+
     let commission_handle = validator_commission_rate_handle(validator);
     let pipeline_epoch = checked!(current_epoch + params.pipeline_len)?;
 

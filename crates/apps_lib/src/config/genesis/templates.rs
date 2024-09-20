@@ -415,6 +415,8 @@ pub struct PosParams {
     pub rewards_gain_p: Dec,
     /// PoS gain d (read only)
     pub rewards_gain_d: Dec,
+    /// Minimum validator commission rate
+    pub min_commission_rate: Dec,
 }
 
 #[derive(

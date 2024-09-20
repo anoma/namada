@@ -71,6 +71,8 @@ liveness_threshold = "0.9"
 rewards_gain_p = "0.25"
 # The D gain factor in the Proof of Stake rewards controller
 rewards_gain_d = "0.25"
+# Minimum allowable validator commission rate
+min_commission_rate = "0.05"
 
 # Governance parameters.
 [gov_params]

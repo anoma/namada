@@ -636,6 +636,18 @@ pub async fn build_validator_commission_change(
                 *rate,
             )));
         }
+        if *rate < params.min_commission_rate {
+            edisplay_line!(
+                context.io(),
+                "New rate is below the minimum allowed by the protocol: {}",
+                params.min_commission_rate
+            );
+            if !tx_args.force {
+                return Err(Error::from(TxSubmitError::InvalidCommissionRate(
+                    *rate,
+                )));
+            }
+        }
 
         let pipeline_epoch_minus_one =
             epoch.unchecked_add(params.pipeline_len - 1);
@@ -873,6 +885,19 @@ pub async fn build_validator_metadata_change(
                 )));
             }
         }
+        if *rate < params.min_commission_rate {
+            edisplay_line!(
+                context.io(),
+                "New rate is below the minimum allowed by the protocol: {}",
+                params.min_commission_rate
+            );
+            if !tx_args.force {
+                return Err(Error::from(TxSubmitError::InvalidCommissionRate(
+                    *rate,
+                )));
+            }
+        }
+
         let pipeline_epoch_minus_one =
             epoch.unchecked_add(params.pipeline_len - 1);
 

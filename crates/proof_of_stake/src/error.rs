@@ -92,6 +92,11 @@ pub enum CommissionRateChangeError {
     #[error("Rate change of {0} is too large for validator {1}")]
     RateChangeTooLarge(Dec, Address),
     #[error(
+        "Invalid commission rate of {0}; the minimum allowed by the protocol \
+         is {1}"
+    )]
+    RateBelowMin(Dec, Dec),
+    #[error(
         "There is no maximum rate change written in storage for validator {0}"
     )]
     NoMaxSetInStorage(Address),
