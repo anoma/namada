@@ -166,11 +166,7 @@ enum Message {
             TaskError<[BlockHeight; 2]>,
         >,
     ),
-    TrialDecrypt(
-        IndexedTx,
-        ViewingKey,
-        ControlFlow<(), BTreeMap<usize, DecryptedData>>,
-    ),
+    TrialDecrypt(IndexedTx, ViewingKey, ControlFlow<(), Vec<DecryptedData>>),
 }
 
 struct DispatcherTasks<Spawner> {
@@ -418,6 +414,8 @@ where
                     .trial_decrypted
                     .take(&indexed_tx, vk)
                     .unwrap_or_default()
+                    .into_iter()
+                    .enumerate()
                 {
                     self.ctx.save_decrypted_shielded_outputs(
                         vk,
@@ -918,7 +916,7 @@ mod dispatcher_tests {
                     dispatcher.cache.trial_decrypted.insert(
                         itx,
                         arbitrary_vk(),
-                        BTreeMap::new(),
+                        vec![],
                     )
                 }
 

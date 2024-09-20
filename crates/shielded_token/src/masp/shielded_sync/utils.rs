@@ -25,8 +25,7 @@ pub type DecryptedData = (Note, PaymentAddress, MemoBytes);
 /// Cache of decrypted notes.
 #[derive(Default, BorshSerialize, BorshDeserialize)]
 pub struct TrialDecrypted {
-    inner:
-        HashMap<IndexedTx, HashMap<ViewingKey, BTreeMap<usize, DecryptedData>>>,
+    inner: HashMap<IndexedTx, HashMap<ViewingKey, Vec<DecryptedData>>>,
 }
 
 impl TrialDecrypted {
@@ -44,8 +43,10 @@ impl TrialDecrypted {
         &self,
         itx: &IndexedTx,
         vk: &ViewingKey,
-    ) -> Option<&BTreeMap<usize, DecryptedData>> {
-        self.inner.get(itx).and_then(|h| h.get(vk))
+    ) -> Option<&[DecryptedData]> {
+        self.inner
+            .get(itx)
+            .and_then(|h| h.get(vk).map(|data| data.as_slice()))
     }
 
     /// Take cached notes decrypted with `vk`, indexed at `itx`.
@@ -53,7 +54,7 @@ impl TrialDecrypted {
         &mut self,
         itx: &IndexedTx,
         vk: &ViewingKey,
-    ) -> Option<BTreeMap<usize, DecryptedData>> {
+    ) -> Option<Vec<DecryptedData>> {
         let (notes, no_more_notes) = {
             let viewing_keys_to_notes = self.inner.get_mut(itx)?;
             let notes = viewing_keys_to_notes.swap_remove(vk)?;
@@ -70,7 +71,7 @@ impl TrialDecrypted {
         &mut self,
         itx: IndexedTx,
         vk: ViewingKey,
-        notes: BTreeMap<usize, DecryptedData>,
+        notes: Vec<DecryptedData>,
     ) {
         self.inner.entry(itx).or_default().insert(vk, notes);
     }

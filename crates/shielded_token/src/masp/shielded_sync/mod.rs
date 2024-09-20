@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 #[cfg(not(target_family = "wasm"))]
 use std::future::Future;
 use std::ops::ControlFlow;
@@ -117,7 +116,7 @@ pub fn trial_decrypt(
     shielded: Transaction,
     vk: ViewingKey,
     mut interrupted: impl FnMut() -> bool,
-) -> ControlFlow<(), BTreeMap<usize, DecryptedData>> {
+) -> ControlFlow<(), Vec<DecryptedData>> {
     type Proof = OutputDescription<
         <
         <Authorized as Authorization>::SaplingAuth
@@ -129,8 +128,7 @@ pub fn trial_decrypt(
         .sapling_bundle()
         .map_or(&vec![], |x| &x.shielded_outputs)
         .iter()
-        .enumerate()
-        .try_fold(BTreeMap::new(), |mut accum, (note_pos_offset, so)| {
+        .try_fold(vec![], |mut accum, so| {
             if interrupted() {
                 return ControlFlow::Break(());
             }
@@ -142,7 +140,7 @@ pub fn trial_decrypt(
                 &PreparedIncomingViewingKey::new(&vk.ivk()),
                 so,
             ) {
-                accum.insert(note_pos_offset, decrypted);
+                accum.push(decrypted);
             }
             ControlFlow::Continue(accum)
         })
