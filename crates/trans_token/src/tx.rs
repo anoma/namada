@@ -260,15 +260,41 @@ mod test {
 
             amount in arb_amount(),
         ) {
-            test_valid_transfer_tx_aux(src, dest, token, amount)
+            // Test via `fn transfer`
+            test_valid_transfer_tx_aux(src.clone(), dest.clone(), token.clone(), amount, || {
+                transfer(ctx(), &src, &dest, &token, amount, EVENT_DESC).unwrap();
+            });
+
+            // Clean-up tx env before running next test
+            let _old_env = tx_host_env::take();
+
+            // Test via `fn multi_transfer`
+            test_valid_transfer_tx_aux(src.clone(), dest.clone(), token.clone(), amount, || {
+                let sources =
+                    BTreeMap::from_iter([((src.clone(), token.clone()), amount)]);
+
+                let targets =
+                    BTreeMap::from_iter([((dest.clone(), token.clone()), amount)]);
+
+                let debited_accounts =
+                    multi_transfer(ctx(), sources, targets, EVENT_DESC).unwrap();
+
+                if amount.is_zero() {
+                    assert!(debited_accounts.is_empty());
+                } else {
+                    assert_eq!(debited_accounts.len(), 1);
+                    assert!(debited_accounts.contains(&src));
+                }
+            });
         }
     }
 
-    fn test_valid_transfer_tx_aux(
+    fn test_valid_transfer_tx_aux<F: FnOnce()>(
         src: Address,
         dest: Address,
         token: Address,
         amount: Amount,
+        apply_transfer: F,
     ) {
         tx_host_env::init();
 
@@ -278,7 +304,7 @@ mod test {
         });
         assert_eq!(read_balance(ctx(), &token, &src).unwrap(), amount);
 
-        transfer(ctx(), &src, &dest, &token, amount, EVENT_DESC).unwrap();
+        apply_transfer();
 
         // Dest received the amount
         assert_eq!(read_balance(ctx(), &token, &dest).unwrap(), amount);
@@ -460,6 +486,97 @@ mod test {
         });
     }
 
+    /// Test a 3-way transfer between three participants:
+    ///
+    /// 1. (p1, token1, amount1) -> p2
+    /// 2. (p2, token1, amount2) -> p3
+    /// 3. (p3, token2, amount3) -> p1
+    #[test]
+    fn test_three_way_multi_transfer_tx() {
+        tx_host_env::init();
+
+        let p1 = address::testing::established_address_1();
+        let p2 = address::testing::established_address_2();
+        let p3 = address::testing::established_address_3();
+        let token1 = address::testing::established_address_4();
+        let token2 = address::testing::established_address_5();
+        let amount1 = token::Amount::native_whole(10);
+        let amount2 = token::Amount::native_whole(3);
+        let amount3 = token::Amount::native_whole(90);
+
+        tx_host_env::with(|tx_env| {
+            tx_env.spawn_accounts([&p1, &p2, &p3, &token1, &token2]);
+            tx_env.credit_tokens(&p1, &token1, amount1);
+            tx_env.credit_tokens(&p3, &token2, amount3);
+        });
+        assert_eq!(read_balance(ctx(), &token1, &p1).unwrap(), amount1);
+        assert_eq!(read_balance(ctx(), &token1, &p2).unwrap(), Amount::zero());
+        assert_eq!(read_balance(ctx(), &token1, &p3).unwrap(), Amount::zero());
+        assert_eq!(read_balance(ctx(), &token2, &p1).unwrap(), Amount::zero());
+        assert_eq!(read_balance(ctx(), &token2, &p2).unwrap(), Amount::zero());
+        assert_eq!(read_balance(ctx(), &token2, &p3).unwrap(), amount3);
+
+        let sources = BTreeMap::from_iter([
+            ((p1.clone(), token1.clone()), amount1),
+            ((p2.clone(), token1.clone()), amount2),
+            ((p3.clone(), token2.clone()), amount3),
+        ]);
+
+        let targets = BTreeMap::from_iter([
+            ((p2.clone(), token1.clone()), amount1),
+            ((p3.clone(), token1.clone()), amount2),
+            ((p1.clone(), token2.clone()), amount3),
+        ]);
+
+        let debited_accounts =
+            multi_transfer(ctx(), sources, targets, EVENT_DESC).unwrap();
+
+        // p2 is not debited as it received more of token1 than it spent
+        assert_eq!(debited_accounts.len(), 2);
+        assert!(debited_accounts.contains(&p1));
+        assert!(debited_accounts.contains(&p3));
+
+        // p1 spent all token1
+        assert_eq!(read_balance(ctx(), &token1, &p1).unwrap(), Amount::zero());
+        // p1 received token2
+        assert_eq!(read_balance(ctx(), &token2, &p1).unwrap(), amount3);
+
+        // p2 received amount1 and spent amount2 of token1
+        assert_eq!(
+            read_balance(ctx(), &token1, &p2).unwrap(),
+            amount1 - amount2
+        );
+        // p2 doesn't have any token2
+        assert_eq!(read_balance(ctx(), &token2, &p2).unwrap(), Amount::zero());
+
+        // p3 received token1
+        assert_eq!(read_balance(ctx(), &token1, &p3).unwrap(), amount2);
+        // p3 spent token2
+        assert_eq!(read_balance(ctx(), &token2, &p3).unwrap(), Amount::zero());
+
+        tx_host_env::with(|tx_env| {
+            // All parties should always verify
+            assert!(tx_env.verifiers.contains(&p1));
+            assert!(tx_env.verifiers.contains(&p2));
+            assert!(tx_env.verifiers.contains(&p3));
+        });
+
+        // The transfer must emit an event
+        tx_host_env::with(|tx_env| {
+            let events: Vec<_> = tx_env
+                .state
+                .write_log()
+                .get_events_of::<TokenEvent>()
+                .collect();
+            assert_eq!(events.len(), 1);
+            let event = events[0].clone();
+            assert_eq!(event.level(), &EventLevel::Tx);
+            assert_eq!(event.kind(), &crate::event::types::TRANSFER);
+
+            dbg!(event.into_attributes());
+        })
+    }
+
     #[test]
     fn test_multi_transfer_to_self_is_no_op() {
         tx_host_env::init();
@@ -485,7 +602,11 @@ mod test {
         let targets =
             BTreeMap::from_iter([((addr.clone(), token.clone()), pre_balance)]);
 
-        multi_transfer(ctx(), sources, targets, EVENT_DESC).unwrap();
+        let debited_accounts =
+            multi_transfer(ctx(), sources, targets, EVENT_DESC).unwrap();
+
+        // No account has been debited
+        assert!(debited_accounts.is_empty());
 
         // Balance is the same
         let post_balance_check = read_balance(ctx(), &token, &addr).unwrap();
@@ -528,7 +649,11 @@ mod test {
         let targets =
             BTreeMap::from_iter([((src.clone(), token.clone()), amount)]);
 
-        multi_transfer(ctx(), sources, targets, EVENT_DESC).unwrap();
+        let debited_accounts =
+            multi_transfer(ctx(), sources, targets, EVENT_DESC).unwrap();
+
+        // No account has been debited
+        assert!(debited_accounts.is_empty());
 
         // Src balance is still the same
         assert_eq!(read_balance(ctx(), &token, &src).unwrap(), src_balance);
