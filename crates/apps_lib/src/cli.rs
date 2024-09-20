@@ -75,10 +75,10 @@ pub mod cmds {
     impl Cmd for Namada {
         fn add_sub(app: App) -> App {
             app.subcommand(NamadaNode::def().display_order(1))
-                .subcommand(NamadaRelayer::def().display_order(1))
+                // .subcommand(NamadaRelayer::def().display_order(1))
                 .subcommand(NamadaClient::def().display_order(1))
                 .subcommand(NamadaWallet::def().display_order(1))
-                .subcommand(EthBridgePool::def().display_order(2))
+                // .subcommand(EthBridgePool::def().display_order(2))
                 .subcommand(Ledger::def().display_order(2))
                 .subcommand(TxCustom::def().display_order(2))
                 .subcommand(TxTransparentTransfer::def().display_order(2))
