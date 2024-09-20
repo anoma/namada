@@ -227,6 +227,7 @@ impl PartialOrd for SignatureIndex {
 
 #[cfg(test)]
 mod test {
+    use assert_matches::assert_matches;
     use namada_core::key::SigScheme;
     use namada_core::{address, key};
 
@@ -250,5 +251,34 @@ mod test {
         let deserialized =
             SignatureIndex::try_from_json_bytes(&buffer).unwrap();
         assert_eq!(sig_index, deserialized);
+    }
+
+    #[test]
+    fn test_standalone_signing() {
+        let sk1 = key::testing::keypair_1();
+        let sk2 = key::testing::keypair_2();
+        let data = vec![30_u8, 1, 5];
+        let sig =
+            standalone_signature::<Vec<u8>, SerializeWithBorsh>(&sk1, &data);
+
+        assert_matches!(
+            verify_standalone_sig::<Vec<u8>, SerializeWithBorsh>(
+                &data,
+                &sk1.to_public(),
+                &sig
+            ),
+            Ok(())
+        );
+
+        let wrong_sig =
+            standalone_signature::<Vec<u8>, SerializeWithBorsh>(&sk2, &data);
+        assert_matches!(
+            verify_standalone_sig::<Vec<u8>, SerializeWithBorsh>(
+                &data,
+                &sk1.to_public(),
+                &wrong_sig
+            ),
+            Err(VerifySigError::VerifySig(_))
+        );
     }
 }

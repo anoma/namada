@@ -919,18 +919,24 @@ mod test {
     use std::collections::BTreeMap;
     use std::fs;
 
+    use assert_matches::assert_matches;
     use data_encoding::HEXLOWER;
+    use namada_core::address::testing::nam;
     use namada_core::borsh::schema::BorshSchema;
+    use namada_core::key;
+    use namada_core::token::DenominatedAmount;
 
     use super::*;
+    use crate::data;
+    use crate::data::protocol::{ProtocolTx, ProtocolTxType};
 
     /// Test that the BorshSchema for Tx gets generated without any name
     /// conflicts
     #[test]
     fn test_tx_schema() {
-        let _declaration = super::Tx::declaration();
+        let _declaration = Tx::declaration();
         let mut definitions = BTreeMap::new();
-        super::Tx::add_definitions_recursively(&mut definitions);
+        Tx::add_definitions_recursively(&mut definitions);
     }
 
     /// Tx encoding must not change
@@ -942,8 +948,276 @@ mod test {
             serde_json::from_reader(file).expect("file should be proper JSON");
 
         for serialized_tx in serialized_txs {
-            let tmp = HEXLOWER.decode(serialized_tx.as_bytes()).unwrap();
-            Tx::try_from(tmp.as_ref()).unwrap();
+            let raw_bytes = HEXLOWER.decode(serialized_tx.as_bytes()).unwrap();
+            let tx = Tx::try_from(raw_bytes.as_ref()).unwrap();
+
+            assert_eq!(tx.try_to_bytes().unwrap(), raw_bytes);
+            assert_eq!(tx.to_bytes(), raw_bytes);
+        }
+    }
+
+    #[test]
+    fn test_wrapper_tx_signing() {
+        let sk1 = key::testing::keypair_1();
+        let sk2 = key::testing::keypair_2();
+        let pk1 = sk1.to_public();
+        let token = nam();
+
+        let mut tx = Tx::default();
+        tx.add_wrapper(
+            data::wrapper::Fee {
+                amount_per_gas_unit: DenominatedAmount::native(1.into()),
+                token,
+            },
+            pk1,
+            1.into(),
+        );
+
+        // Unsigned tx should fail validation
+        tx.validate_tx().expect_err("Unsigned");
+
+        {
+            let mut tx = tx.clone();
+            // Sign the tx
+            tx.sign_wrapper(sk1);
+
+            // Signed tx should pass validation
+            tx.validate_tx()
+                .expect("valid tx")
+                .expect("with authorization");
+        }
+
+        {
+            let mut tx = tx.clone();
+            // Sign the tx with a wrong key
+            tx.sign_wrapper(sk2);
+
+            // Should be rejected
+            tx.validate_tx().expect_err("invalid signature - wrong key");
+        }
+    }
+
+    #[test]
+    fn test_protocol_tx_signing() {
+        let sk1 = key::testing::keypair_1();
+        let sk2 = key::testing::keypair_2();
+        let pk1 = sk1.to_public();
+        let tx = Tx::from_type(TxType::Protocol(Box::new(ProtocolTx {
+            pk: pk1,
+            tx: ProtocolTxType::BridgePool,
+        })));
+
+        // Unsigned tx should fail validation
+        tx.validate_tx().expect_err("Unsigned");
+
+        {
+            let mut tx = tx.clone();
+            // Sign the tx
+            tx.add_section(Section::Authorization(Authorization::new(
+                tx.sechashes(),
+                BTreeMap::from_iter([(0, sk1)]),
+                None,
+            )));
+
+            // Signed tx should pass validation
+            tx.validate_tx()
+                .expect("valid tx")
+                .expect("with authorization");
+        }
+
+        {
+            let mut tx = tx.clone();
+            // Sign the tx with a wrong key
+            tx.add_section(Section::Authorization(Authorization::new(
+                tx.sechashes(),
+                BTreeMap::from_iter([(0, sk2)]),
+                None,
+            )));
+
+            // Should be rejected
+            tx.validate_tx().expect_err("invalid signature - wrong key");
+        }
+    }
+
+    #[test]
+    fn test_inner_tx_signing() {
+        let sk1 = key::testing::keypair_1();
+        let sk2 = key::testing::keypair_2();
+        let pk1 = sk1.to_public();
+        let pk2 = sk2.to_public();
+        let pks_map = AccountPublicKeysMap::from_iter(vec![pk1.clone()]);
+        let threshold = 1_u8;
+
+        let tx = Tx::default();
+
+        // Unsigned tx should fail validation
+        tx.verify_signatures(
+            &[tx.header_hash()],
+            pks_map.clone(),
+            &None,
+            threshold,
+            || Ok(()),
+        )
+        .expect_err("Unsigned");
+
+        // Sign the tx
+        {
+            let mut tx = tx.clone();
+            let signatures =
+                tx.compute_section_signature(&[sk1], &pks_map, None);
+            assert_eq!(signatures.len(), 1);
+            tx.add_signatures(signatures);
+
+            // Signed tx should pass validation
+            let authorizations = tx
+                .verify_signatures(
+                    &[tx.header_hash()],
+                    pks_map.clone(),
+                    &None,
+                    threshold,
+                    || Ok(()),
+                )
+                .expect("valid tx");
+            assert_eq!(authorizations.len(), 1);
+        }
+
+        // Sign the tx with a wrong key
+        {
+            let mut tx = tx.clone();
+            let pks_map_wrong =
+                AccountPublicKeysMap::from_iter(vec![pk2.clone()]);
+            let signatures =
+                tx.compute_section_signature(&[sk2], &pks_map_wrong, None);
+            assert_eq!(signatures.len(), 1);
+            tx.add_signatures(signatures);
+
+            // Should be rejected
+            assert_matches!(
+                tx.verify_signatures(
+                    &[tx.header_hash()],
+                    pks_map.clone(),
+                    &None,
+                    threshold,
+                    || Ok(()),
+                ),
+                Err(VerifySigError::InvalidSectionSignature(_))
+            );
+        }
+    }
+
+    #[test]
+    fn test_inner_tx_multisig_signing() {
+        let sk1 = key::testing::keypair_1();
+        let sk2 = key::testing::keypair_2();
+        let sk3 = key::testing::keypair_3();
+        let pk1 = sk1.to_public();
+        let pk2 = sk2.to_public();
+        let pk3 = sk3.to_public();
+
+        // A multisig with pk/sk 1 and 2 requiring both signatures
+        let pks_map =
+            AccountPublicKeysMap::from_iter(vec![pk1.clone(), pk2.clone()]);
+        let threshold = 2_u8;
+
+        let tx = Tx::default();
+
+        // Unsigned tx should fail validation
+        tx.verify_signatures(
+            &[tx.header_hash()],
+            pks_map.clone(),
+            &None,
+            threshold,
+            || Ok(()),
+        )
+        .expect_err("Unsigned");
+
+        // Sign the tx with both keys
+        {
+            let mut tx = tx.clone();
+            let signatures = tx.compute_section_signature(
+                &[sk1.clone(), sk2.clone()],
+                &pks_map,
+                None,
+            );
+            assert_eq!(signatures.len(), 2);
+            tx.add_signatures(signatures);
+
+            // Signed tx should pass validation
+            let authorizations = tx
+                .verify_signatures(
+                    &[tx.header_hash()],
+                    pks_map.clone(),
+                    &None,
+                    threshold,
+                    || Ok(()),
+                )
+                .expect("valid tx");
+            assert_eq!(authorizations.len(), 1);
+        }
+
+        // Sign the tx with one key only - sk1
+        {
+            let mut tx = tx.clone();
+            let signatures =
+                tx.compute_section_signature(&[sk1.clone()], &pks_map, None);
+            assert_eq!(signatures.len(), 1);
+            tx.add_signatures(signatures);
+
+            // Should be rejected
+            assert_matches!(
+                tx.verify_signatures(
+                    &[tx.header_hash()],
+                    pks_map.clone(),
+                    &None,
+                    threshold,
+                    || Ok(()),
+                ),
+                Err(VerifySigError::InvalidSectionSignature(_))
+            );
+        }
+
+        // Sign the tx with one key only - sk2
+        {
+            let mut tx = tx.clone();
+            let pks_map_wrong = AccountPublicKeysMap::from_iter(vec![pk2]);
+            let signatures =
+                tx.compute_section_signature(&[sk2], &pks_map_wrong, None);
+            assert_eq!(signatures.len(), 1);
+            tx.add_signatures(signatures);
+
+            // Should be rejected
+            assert_matches!(
+                tx.verify_signatures(
+                    &[tx.header_hash()],
+                    pks_map.clone(),
+                    &None,
+                    threshold,
+                    || Ok(()),
+                ),
+                Err(VerifySigError::InvalidSectionSignature(_))
+            );
+        }
+
+        // Sign the tx with two keys but one of them incorrect - sk3
+        {
+            let mut tx = tx.clone();
+            let pks_map_wrong = AccountPublicKeysMap::from_iter(vec![pk1, pk3]);
+            let signatures =
+                tx.compute_section_signature(&[sk1, sk3], &pks_map_wrong, None);
+            assert_eq!(signatures.len(), 2);
+            tx.add_signatures(signatures);
+
+            // Should be rejected
+            assert_matches!(
+                tx.verify_signatures(
+                    &[tx.header_hash()],
+                    pks_map.clone(),
+                    &None,
+                    threshold,
+                    || Ok(()),
+                ),
+                Err(VerifySigError::InvalidSectionSignature(_))
+            );
         }
     }
 }
