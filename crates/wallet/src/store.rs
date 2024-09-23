@@ -194,6 +194,19 @@ impl Store {
         self.derivation_paths.get(self.pkhs.get(pkh)?).cloned()
     }
 
+    /// Find a derivation path by viewing key
+    pub fn find_path_by_viewing_key(
+        &self,
+        viewing_key: &ExtendedViewingKey,
+    ) -> Option<DerivationPath> {
+        for (alias, vk) in &self.view_keys {
+            if *viewing_key == vk.key {
+                return self.derivation_paths.get(alias).cloned();
+            }
+        }
+        None
+    }
+
     /// Find the public key by a public key hash.
     pub fn find_public_key_by_pkh(
         &self,
@@ -418,6 +431,7 @@ impl Store {
         alias: Alias,
         viewkey: ExtendedViewingKey,
         birthday: Option<BlockHeight>,
+        path: Option<DerivationPath>,
         force: bool,
     ) -> Option<Alias> {
         // abort if the alias is reserved
@@ -435,7 +449,7 @@ impl Store {
                 ConfirmationResponse::Replace => {}
                 ConfirmationResponse::Reselect(new_alias) => {
                     return self.insert_viewing_key::<U>(
-                        new_alias, viewkey, birthday, false,
+                        new_alias, viewkey, birthday, path, false,
                     );
                 }
                 ConfirmationResponse::Skip => return None,
@@ -444,6 +458,7 @@ impl Store {
         self.remove_alias(&alias);
         self.view_keys
             .insert(alias.clone(), DatedKeypair::new(viewkey, birthday));
+        path.map(|p| self.derivation_paths.insert(alias.clone(), p));
         Some(alias)
     }
 

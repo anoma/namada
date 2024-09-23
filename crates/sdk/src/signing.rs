@@ -77,6 +77,8 @@ pub struct SigningTxData {
     pub account_public_keys_map: Option<AccountPublicKeysMap>,
     /// The public key of the fee payer
     pub fee_payer: common::PublicKey,
+    /// ID of the Transaction needing signing
+    pub shielded_hash: Option<MaspTxId>,
 }
 
 impl PartialEq for SigningTxData {
@@ -433,6 +435,7 @@ pub async fn aux_signing_data(
         threshold,
         account_public_keys_map,
         fee_payer,
+        shielded_hash: None,
     })
 }
 
@@ -2480,6 +2483,7 @@ mod test_signing {
             threshold: 1,
             account_public_keys_map: Some(Default::default()),
             fee_payer: public_key_fee.clone(),
+            shielded_hash: None,
         };
 
         let Error::Tx(TxSubmitError::MissingSigningKeys(1, 0)) = sign_tx(
@@ -2515,6 +2519,7 @@ mod test_signing {
             threshold: 1,
             account_public_keys_map: Some(Default::default()),
             fee_payer: public_key.clone(),
+            shielded_hash: None,
         };
         sign_tx(
             &RwLock::new(wallet),

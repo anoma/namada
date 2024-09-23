@@ -585,8 +585,21 @@ impl<U: WalletIo> Wallet<U> {
                 (mnemonic, passphrase)
             };
         let seed = Seed::new(&mnemonic, &passphrase);
-        let spend_key =
-            derive_hd_spending_key(seed.as_bytes(), derivation_path.clone());
+        // Path to obtain the ZIP32 seed
+        let zip32_seed_path =
+            DerivationPath::default_for_transparent_scheme(SchemeType::Ed25519);
+        // Obtain the ZIP32 seed using SLIP10
+        let seed = derive_hd_secret_key(
+            SchemeType::Ed25519,
+            seed.as_bytes(),
+            zip32_seed_path,
+        )
+        .try_to_sk::<ed25519::SecretKey>()
+        .expect("Expected Ed25519 key")
+        .0
+        .to_bytes();
+        // Now ZIP32 derive the extended spending key from the new seed
+        let spend_key = derive_hd_spending_key(&seed, derivation_path.clone());
 
         self.insert_spending_key(
             alias,
@@ -597,6 +610,16 @@ impl<U: WalletIo> Wallet<U> {
             Some(derivation_path),
         )
         .map(|alias| (alias, spend_key))
+    }
+
+    /// Find a derivation path by viewing key
+    pub fn find_path_by_viewing_key(
+        &self,
+        vk: &ExtendedViewingKey,
+    ) -> Result<DerivationPath, FindKeyError> {
+        self.store
+            .find_path_by_viewing_key(vk)
+            .ok_or_else(|| FindKeyError::KeyNotFound(vk.to_string()))
     }
 
     /// Restore a keypair from the user mnemonic code (read from stdin) using
@@ -1137,12 +1160,14 @@ impl<U: WalletIo> Wallet<U> {
         view_key: ExtendedViewingKey,
         birthday: Option<BlockHeight>,
         force_alias: bool,
+        path: Option<DerivationPath>,
     ) -> Option<String> {
         self.store
             .insert_viewing_key::<U>(
                 alias.into(),
                 view_key,
                 birthday,
+                path,
                 force_alias,
             )
             .map(Into::into)

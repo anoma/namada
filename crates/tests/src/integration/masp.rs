@@ -8,7 +8,7 @@ use namada_apps_lib::wallet::defaults::{
 };
 use namada_core::address::Address;
 use namada_core::dec::Dec;
-use namada_core::masp::TokenMap;
+use namada_core::masp::{MaspTxId, TokenMap};
 use namada_node::shell::testing::client::run;
 use namada_node::shell::testing::node::NodeResults;
 use namada_node::shell::testing::utils::{Bin, CapturedOutput};
@@ -19,7 +19,7 @@ use namada_sdk::state::{StorageRead, StorageWrite};
 use namada_sdk::time::DateTimeUtc;
 use namada_sdk::token::storage_key::masp_token_map_key;
 use namada_sdk::token::{self, Amount, DenominatedAmount};
-use namada_sdk::tx::Tx;
+use namada_sdk::tx::{Section, Tx};
 use namada_sdk::{tx, DEFAULT_GAS_LIMIT};
 use test_log::test;
 
@@ -5176,6 +5176,7 @@ fn identical_output_descriptions() -> Result<()> {
         threshold: 1,
         account_public_keys_map: None,
         fee_payer: albert_keypair().to_public(),
+        shielded_hash: None,
     };
 
     let (mut batched_tx, _signing_data) = namada_sdk::tx::build_batch(vec![
@@ -5368,6 +5369,16 @@ fn identical_output_descriptions() -> Result<()> {
     Ok(())
 }
 
+// Extract the shielded section hash from the transaction
+fn get_shielded_hash(tx: &namada_sdk::tx::Tx) -> Option<MaspTxId> {
+    for section in &tx.sections {
+        if let Section::MaspTx(masp) = section {
+            return Some(MaspTxId::from(masp.txid()));
+        }
+    }
+    None
+}
+
 // Test MASP batched txs where one is failing and one is successful and check
 // that both the protocol and the shielded sync command behave correctly. Since
 // the batches are not atomic check that the valid transactions get committed
@@ -5461,6 +5472,7 @@ fn masp_batch() -> Result<()> {
         threshold: 1,
         account_public_keys_map: None,
         fee_payer: albert_keypair().to_public(),
+        shielded_hash: None,
     };
 
     let mut txs = vec![];
@@ -5472,8 +5484,14 @@ fn masp_batch() -> Result<()> {
     for (tx0, tx1) in [(tx0.clone(), tx1.clone()), (tx1, tx0)] {
         let (mut batched_tx, _signing_data) =
             namada_sdk::tx::build_batch(vec![
-                (tx0, signing_data.clone()),
-                (tx1, signing_data.clone()),
+                (tx0.clone(), SigningTxData {
+                    shielded_hash: get_shielded_hash(&tx0),
+                    ..signing_data.clone()
+                }),
+                (tx1.clone(), SigningTxData {
+                    shielded_hash: get_shielded_hash(&tx1),
+                    ..signing_data.clone()
+                }),
             ])
             .unwrap();
         batched_tx.header.atomic = false;
@@ -5695,6 +5713,7 @@ fn masp_atomic_batch() -> Result<()> {
         threshold: 1,
         account_public_keys_map: None,
         fee_payer: albert_keypair().to_public(),
+        shielded_hash: None,
     };
 
     let mut txs = vec![];
@@ -5706,8 +5725,14 @@ fn masp_atomic_batch() -> Result<()> {
     for (tx0, tx1) in [(tx0.clone(), tx1.clone()), (tx1, tx0)] {
         let (mut batched_tx, _signing_data) =
             namada_sdk::tx::build_batch(vec![
-                (tx0, signing_data.clone()),
-                (tx1, signing_data.clone()),
+                (tx0.clone(), SigningTxData {
+                    shielded_hash: get_shielded_hash(&tx0),
+                    ..signing_data.clone()
+                }),
+                (tx1.clone(), SigningTxData {
+                    shielded_hash: get_shielded_hash(&tx1),
+                    ..signing_data.clone()
+                }),
             ])
             .unwrap();
         batched_tx.header.atomic = true;
