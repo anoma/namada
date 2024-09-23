@@ -20,6 +20,7 @@
 pub mod event;
 mod storage;
 pub mod storage_key;
+pub mod tx;
 pub mod vp;
 
 use std::collections::BTreeMap;

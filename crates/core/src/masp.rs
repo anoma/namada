@@ -10,7 +10,9 @@ use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::sapling::ViewingKey;
 use masp_primitives::transaction::TransparentAddress;
-pub use masp_primitives::transaction::TxId as TxIdInner;
+pub use masp_primitives::transaction::{
+    Transaction as MaspTransaction, TxId as TxIdInner,
+};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;

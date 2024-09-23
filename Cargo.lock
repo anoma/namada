@@ -5545,8 +5545,12 @@ dependencies = [
  "namada_macros",
  "namada_migrations",
  "namada_shielded_token",
+ "namada_storage",
  "namada_systems",
+ "namada_tests",
  "namada_trans_token",
+ "namada_tx",
+ "namada_tx_env",
  "proptest",
  "serde",
 ]
@@ -5556,6 +5560,7 @@ name = "namada_trans_token"
 version = "0.43.0"
 dependencies = [
  "assert_matches",
+ "itertools 0.12.1",
  "konst",
  "linkme",
  "namada_core",
@@ -5566,10 +5571,13 @@ dependencies = [
  "namada_parameters",
  "namada_state",
  "namada_systems",
+ "namada_tests",
  "namada_tx",
+ "namada_tx_env",
  "namada_vm",
  "namada_vp",
  "namada_vp_env",
+ "proptest",
  "thiserror",
  "tracing",
 ]

@@ -528,6 +528,10 @@ mod native_tx_host_env {
         public_keys_map_len: u64,
         threshold: u8,
     ) -> i64);
+    native_host_fn!(tx_update_masp_note_commitment_tree(
+        transaction_ptr: u64,
+        transaction_len: u64,
+    ) -> i64);
     native_host_fn!(tx_yield_value(
         buf_ptr: u64,
         buf_len: u64,
