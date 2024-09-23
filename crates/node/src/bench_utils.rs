@@ -14,6 +14,7 @@ use std::sync::{Arc, Once, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
+use masp_primitives::transaction::components::sapling::builder::RngBuildParams;
 use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use masp_proofs::prover::LocalTxProver;
@@ -1223,6 +1224,7 @@ impl BenchShieldedCtx {
                         None,
                         expiration,
                         true,
+                        &mut RngBuildParams::new(OsRng),
                     )
                     .await
             })
