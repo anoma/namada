@@ -284,6 +284,7 @@ pub mod testing {
     };
     use masp_primitives::transaction::components::{TxOut, U64Sum};
     use masp_primitives::transaction::fees::fixed::FeeRule;
+    use masp_primitives::zip32::PseudoExtendedKey;
     use namada_core::address::testing::{
         arb_established_address, arb_non_internal_address,
     };
@@ -364,7 +365,7 @@ pub mod testing {
             assets in Just(assets),
         ) -> (
             Transfer,
-            Builder::<Network>,
+            Builder::<Network, PseudoExtendedKey>,
             HashMap<AssetData, u64>,
         ) {
             // Enable assets to be more easily decoded

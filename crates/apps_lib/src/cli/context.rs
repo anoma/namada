@@ -6,6 +6,11 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use color_eyre::eyre::Result;
+use masp_primitives::zip32::sapling::PseudoExtendedKey;
+use masp_primitives::zip32::{
+    ExtendedFullViewingKey as MaspExtendedViewingKey,
+    ExtendedSpendingKey as MaspExtendedSpendingKey,
+};
 use namada_core::masp::{
     BalanceOwner, ExtendedSpendingKey, ExtendedViewingKey, PaymentAddress,
     TransferSource, TransferTarget,
@@ -47,7 +52,7 @@ pub type WalletAddrOrNativeToken = FromContext<AddrOrNativeToken>;
 
 /// A raw extended spending key (bech32m encoding) or an alias of an extended
 /// spending key in the wallet
-pub type WalletSpendingKey = FromContext<ExtendedSpendingKey>;
+pub type WalletSpendingKey = FromContext<PseudoExtendedKey>;
 
 /// A raw dated extended spending key (bech32m encoding) or an alias of an
 /// extended spending key in the wallet
@@ -588,6 +593,48 @@ impl ArgFromMutContext for ExtendedSpendingKey {
     }
 }
 
+impl ArgFromMutContext for PseudoExtendedKey {
+    fn arg_from_mut_ctx(
+        ctx: &mut ChainContext,
+        raw: impl AsRef<str>,
+    ) -> Result<Self, String> {
+        let raw = raw.as_ref();
+        // Either the string is a raw extended spending key
+        ExtendedSpendingKey::from_str(raw)
+            .map(|x| PseudoExtendedKey::from(MaspExtendedSpendingKey::from(x)))
+            .or_else(|_parse_err| {
+                ExtendedViewingKey::from_str(raw).map(|x| {
+                    PseudoExtendedKey::from(MaspExtendedViewingKey::from(x))
+                })
+            })
+            .or_else(|_parse_err| {
+                // Or it is a stored alias of one
+                ctx.wallet
+                    .find_spending_key(raw, None)
+                    .map(|k| {
+                        PseudoExtendedKey::from(MaspExtendedSpendingKey::from(
+                            k.key,
+                        ))
+                    })
+                    .map_err(|_find_err| {
+                        format!("Unknown spending key {}", raw)
+                    })
+            })
+            .or_else(|_parse_err| {
+                // Or it is a stored alias of one
+                ctx.wallet
+                    .find_viewing_key(raw)
+                    .copied()
+                    .map(|k| {
+                        PseudoExtendedKey::from(MaspExtendedViewingKey::from(
+                            k.key,
+                        ))
+                    })
+                    .map_err(|_find_err| format!("Unknown viewing key {}", raw))
+            })
+    }
+}
+
 impl ArgFromMutContext for DatedSpendingKey {
     fn arg_from_mut_ctx(
         ctx: &mut ChainContext,
@@ -666,8 +713,18 @@ impl ArgFromMutContext for TransferSource {
         Address::arg_from_ctx(ctx, raw)
             .map(Self::Address)
             .or_else(|_| {
-                ExtendedSpendingKey::arg_from_mut_ctx(ctx, raw)
-                    .map(Self::ExtendedSpendingKey)
+                ExtendedSpendingKey::arg_from_mut_ctx(ctx, raw).map(|x| {
+                    Self::ExtendedSpendingKey(PseudoExtendedKey::from(
+                        MaspExtendedSpendingKey::from(x),
+                    ))
+                })
+            })
+            .or_else(|_| {
+                ExtendedViewingKey::arg_from_mut_ctx(ctx, raw).map(|x| {
+                    Self::ExtendedSpendingKey(PseudoExtendedKey::from(
+                        MaspExtendedViewingKey::from(x),
+                    ))
+                })
             })
     }
 }

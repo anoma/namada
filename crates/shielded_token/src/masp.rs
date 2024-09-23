@@ -26,7 +26,8 @@ use masp_primitives::transaction::components::sapling::builder::SaplingMetadata;
 use masp_primitives::transaction::components::{I128Sum, ValueSum};
 use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::{
-    ExtendedFullViewingKey, ExtendedSpendingKey as MaspExtendedSpendingKey,
+    ExtendedFullViewingKey, ExtendedKey,
+    ExtendedSpendingKey as MaspExtendedSpendingKey, PseudoExtendedKey,
 };
 use masp_proofs::prover::LocalTxProver;
 use namada_core::address::Address;
@@ -81,7 +82,7 @@ pub struct ShieldedTransfer {
 #[allow(missing_docs)]
 #[derive(Debug)]
 pub struct MaspFeeData {
-    pub sources: Vec<ExtendedSpendingKey>,
+    pub sources: Vec<PseudoExtendedKey>,
     pub target: Address,
     pub token: Address,
     pub amount: token::DenominatedAmount,
@@ -131,7 +132,7 @@ pub struct MaspTxReorderedData {
 /// Data about the unspent amounts for any given shielded source coming from the
 /// spent notes in their posses that have been added to the builder. Can be used
 /// to either pay fees or to return a change
-pub type Changes = HashMap<namada_core::masp::ExtendedSpendingKey, I128Sum>;
+pub type Changes = HashMap<PseudoExtendedKey, I128Sum>;
 
 /// Shielded pool data for a token
 #[allow(missing_docs)]
@@ -169,20 +170,20 @@ pub struct WalletMap;
 impl<P1>
     masp_primitives::transaction::components::sapling::builder::MapBuilder<
         P1,
-        MaspExtendedSpendingKey,
+        PseudoExtendedKey,
         (),
         ExtendedFullViewingKey,
     > for WalletMap
 {
     fn map_params(&self, _s: P1) {}
 
-    fn map_key(&self, s: MaspExtendedSpendingKey) -> ExtendedFullViewingKey {
-        (&s).into()
+    fn map_key(&self, s: PseudoExtendedKey) -> ExtendedFullViewingKey {
+        s.to_viewing_key()
     }
 }
 
 impl<P1, N1>
-    MapBuilder<P1, MaspExtendedSpendingKey, N1, (), ExtendedFullViewingKey, ()>
+    MapBuilder<P1, PseudoExtendedKey, N1, (), ExtendedFullViewingKey, ()>
     for WalletMap
 {
     fn map_notifier(&self, _s: N1) {}
@@ -826,7 +827,7 @@ pub mod testing {
             mut rng in arb_rng().prop_map(TestCsprng),
             bparams_rng in arb_rng().prop_map(TestCsprng),
             prover_rng in arb_rng().prop_map(TestCsprng),
-        ) -> (MaspExtendedSpendingKey, Diversifier, Note, Node) {
+        ) -> (PseudoExtendedKey, Diversifier, Note, Node) {
             let mut spending_key_seed = [0; 32];
             rng.fill_bytes(&mut spending_key_seed);
             let spending_key = MaspExtendedSpendingKey::master(spending_key_seed.as_ref());
@@ -837,7 +838,7 @@ pub mod testing {
                 .to_payment_address(div)
                 .expect("a PaymentAddress");
 
-            let mut builder = Builder::<Network, _>::new(
+            let mut builder = Builder::<Network, PseudoExtendedKey>::new(
                 NETWORK,
                 // NOTE: this is going to add 20 more blocks to the actual
                 // expiration but there's no other exposed function that we could
@@ -871,7 +872,7 @@ pub mod testing {
             assert_eq!(payment_addr, pa);
             // Make a path to out new note
             let node = Node::new(shielded_output.cmu.to_repr());
-            (spending_key, div, note, node)
+            (PseudoExtendedKey::from(spending_key), div, note, node)
         }
     }
 
@@ -916,7 +917,7 @@ pub mod testing {
                     ).unwrap(),
                     *value,
                 )).collect::<Vec<_>>()
-        ) -> Vec<(MaspExtendedSpendingKey, Diversifier, Note, Node)> {
+        ) -> Vec<(PseudoExtendedKey, Diversifier, Note, Node)> {
             spend_description
         }
     }

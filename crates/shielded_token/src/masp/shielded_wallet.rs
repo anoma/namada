@@ -18,13 +18,13 @@ use masp_primitives::sapling::{
     Diversifier, Node, Note, Nullifier, ViewingKey,
 };
 use masp_primitives::transaction::builder::Builder;
-use masp_primitives::transaction::components::sapling::builder::RngBuildParams;
+use masp_primitives::transaction::components::sapling::builder::BuildParams;
 use masp_primitives::transaction::components::{
     I128Sum, TxOut, U64Sum, ValueSum,
 };
 use masp_primitives::transaction::fees::fixed::FeeRule;
 use masp_primitives::transaction::{builder, Transaction};
-use masp_primitives::zip32::ExtendedSpendingKey as MaspExtendedSpendingKey;
+use masp_primitives::zip32::{ExtendedKey, PseudoExtendedKey};
 use namada_core::address::Address;
 use namada_core::arith::checked;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
@@ -51,12 +51,11 @@ use rand_core::{OsRng, SeedableRng};
 
 use crate::masp::utils::MaspClient;
 use crate::masp::{
-    cloned_pair, is_amount_required, to_viewing_key, Changes,
-    ContextSyncStatus, Conversions, MaspAmount, MaspDataLog, MaspFeeData,
-    MaspSourceTransferData, MaspTargetTransferData, MaspTransferData,
-    MaspTxReorderedData, NoteIndex, ShieldedSyncConfig, ShieldedTransfer,
-    ShieldedUtils, SpentNotesTracker, TransferErr, WalletMap, WitnessMap,
-    NETWORK,
+    cloned_pair, is_amount_required, Changes, ContextSyncStatus, Conversions,
+    MaspAmount, MaspDataLog, MaspFeeData, MaspSourceTransferData,
+    MaspTargetTransferData, MaspTransferData, MaspTxReorderedData, NoteIndex,
+    ShieldedSyncConfig, ShieldedTransfer, ShieldedUtils, SpentNotesTracker,
+    TransferErr, WalletMap, WitnessMap, NETWORK,
 };
 #[cfg(any(test, feature = "testing"))]
 use crate::masp::{testing, ENV_VAR_MASP_TEST_SEED};
@@ -689,7 +688,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         &mut self,
         context: &impl NamadaIo,
         spent_notes: &mut SpentNotesTracker,
-        sk: namada_core::masp::ExtendedSpendingKey,
+        sk: PseudoExtendedKey,
         is_native_token: bool,
         target: I128Sum,
         target_epoch: MaspEpoch,
@@ -702,7 +701,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         ),
         eyre::Error,
     > {
-        let vk = &to_viewing_key(&sk.into()).vk;
+        let vk = &sk.to_viewing_key().fvk.vk;
         // TODO: we should try to use the smallest notes possible to fund the
         // transaction to allow people to fetch less often
         // Establish connection with which to do exchange rate queries
@@ -907,6 +906,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         fee_data: Option<MaspFeeData>,
         expiration: Option<DateTimeUtc>,
         update_ctx: bool,
+        bparams: &mut impl BuildParams,
     ) -> Result<Option<ShieldedTransfer>, TransferErr> {
         // Determine epoch in which to submit potential shielded transaction
         let epoch = Self::query_masp_epoch(context.client())
@@ -979,7 +979,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 u32::MAX - 20
             }
         };
-        let mut builder = Builder::<Network, _>::new(
+        let mut builder = Builder::<Network, PseudoExtendedKey>::new(
             NETWORK,
             // NOTE: this is going to add 20 more blocks to the actual
             // expiration but there's no other exposed function that we could
@@ -1082,7 +1082,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 &prover,
                 &FeeRule::non_standard(U64Sum::zero()),
                 &mut rng,
-                &mut RngBuildParams::new(OsRng),
+                bparams,
             )
             .map_err(|error| TransferErr::Build { error, data: None })?;
 
@@ -1187,7 +1187,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
     async fn add_inputs(
         &mut self,
         context: &impl NamadaIo,
-        builder: &mut Builder<Network>,
+        builder: &mut Builder<Network, PseudoExtendedKey>,
         source: &TransferSource,
         token: &Address,
         amount: &DenominatedAmount,
@@ -1244,12 +1244,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             // Commit the notes found to our transaction
             for (diversifier, note, merkle_path) in unspent_notes {
                 builder
-                    .add_sapling_spend(
-                        sk.into(),
-                        diversifier,
-                        note,
-                        merkle_path,
-                    )
+                    .add_sapling_spend(sk, diversifier, note, merkle_path)
                     .map_err(|e| TransferErr::Build {
                         error: builder::Error::SaplingBuild(e),
                         data: None,
@@ -1316,7 +1311,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
     async fn add_outputs(
         &mut self,
         context: &impl NamadaIo,
-        builder: &mut Builder<Network>,
+        builder: &mut Builder<Network, PseudoExtendedKey>,
         source: TransferSource,
         target: &TransferTarget,
         token: Address,
@@ -1362,9 +1357,8 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 let contr = std::cmp::min(u128::from(*rem_amount), val) as u64;
                 // If we are sending to a shielded address, we need the outgoing
                 // viewing key in the following computations.
-                let ovk_opt = source
-                    .spending_key()
-                    .map(|x| MaspExtendedSpendingKey::from(x).expsk.ovk);
+                let ovk_opt =
+                    source.spending_key().map(|x| x.to_viewing_key().fvk.ovk);
                 // Make transaction output tied to the current token,
                 // denomination, and epoch.
                 if let Some(pa) = payment_address {
@@ -1457,9 +1451,9 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
     async fn add_fees(
         &mut self,
         context: &impl NamadaIo,
-        builder: &mut Builder<Network>,
+        builder: &mut Builder<Network, PseudoExtendedKey>,
         source_data: &HashMap<MaspSourceTransferData, DenominatedAmount>,
-        sources: Vec<namada_core::masp::ExtendedSpendingKey>,
+        sources: Vec<PseudoExtendedKey>,
         target: &Address,
         token: &Address,
         amount: &DenominatedAmount,
@@ -1699,17 +1693,17 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
     #[allow(clippy::result_large_err)]
     #[allow(async_fn_in_trait)]
     fn add_changes(
-        builder: &mut Builder<Network>,
+        builder: &mut Builder<Network, PseudoExtendedKey>,
         changes: Changes,
     ) -> Result<(), TransferErr> {
         for (sp, changes) in changes.into_iter() {
             for (asset_type, amt) in changes.components() {
                 if let Ordering::Greater = amt.cmp(&0) {
-                    let sk = MaspExtendedSpendingKey::from(sp.to_owned());
+                    let sk = sp.to_viewing_key();
                     // Send the change in this asset type back to the sender
                     builder
                         .add_sapling_output(
-                            Some(sk.expsk.ovk),
+                            Some(sk.fvk.ovk),
                             sk.default_address().1,
                             *asset_type,
                             *amt as u64,
