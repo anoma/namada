@@ -864,33 +864,23 @@ impl sapling::MapAuth<sapling::Authorized, sapling::Authorized>
     }
 }
 
-pub async fn submit_shielded_transfer(
+// Identify the viewing keys in the given transaction for which we do not
+// possess spending keys in the software wallet, and augment them with a proof
+// generation key from the hardware wallet. Returns a mapping from viewing keys
+// to corresponding ZIP 32 paths in the hardware wallet. This function errors
+// out if any ZIP 32 path that it handles maps to a different viewing key than
+// it does on the software client.
+async fn augment_masp_hardware_keys(
     namada: &impl Namada,
-    mut args: args::TxShieldedTransfer,
-) -> Result<(), error::Error> {
-    display_line!(
-        namada.io(),
-        "{}: {}\n",
-        "WARNING".bold().underline().yellow(),
-        "Some information might be leaked if your shielded wallet is not up \
-         to date, make sure to run `namadac shielded-sync` before running \
-         this command.",
-    );
-    
+    args: &mut args::TxShieldedTransfer,
+) -> Result<HashMap<String, ExtendedViewingKey>, error::Error> {
     // Records the shielded keys that are on the hardware wallet
     let mut shielded_hw_keys = HashMap::new();
     // Construct the build parameters that parameterized the Transaction
     // authorizations
-    let mut bparams: Box<dyn BuildParams> = if args.tx.use_device {
+    if args.tx.use_device {
         let transport = WalletTransport::from_arg(args.tx.device_transport);
         let app = NamadaApp::new(transport);
-        // Clear hardware wallet randomness buffers
-        app.clean_randomness_buffers().await.map_err(|err| {
-            error::Error::Other(format!(
-                "Unable to clear randomness buffer. Error: {}",
-                err,
-            ))
-        })?;
         let wallet = namada.wallet().await;
         // Augment the pseudo spending key with a proof authorization key
         for data in &mut args.data {
@@ -988,6 +978,29 @@ pub async fn submit_shielded_transfer(
                 shielded_hw_keys.insert(path.path, viewing_key);
             }
         }
+        Ok(shielded_hw_keys)
+    } else {
+        Ok(HashMap::new())
+    }
+}
+
+// If the hardware wallet is beig used, use it to generate the random build
+// parameters for the spend, convert, and output descriptions.
+async fn generate_masp_build_params(
+    args: &args::TxShieldedTransfer,
+) -> Result<Box<dyn BuildParams>, error::Error> {
+    // Construct the build parameters that parameterized the Transaction
+    // authorizations
+    if args.tx.use_device {
+        let transport = WalletTransport::from_arg(args.tx.device_transport);
+        let app = NamadaApp::new(transport);
+        // Clear hardware wallet randomness buffers
+        app.clean_randomness_buffers().await.map_err(|err| {
+            error::Error::Other(format!(
+                "Unable to clear randomness buffer. Error: {}",
+                err,
+            ))
+        })?;
         // Get randomness to aid in construction of various descriptors
         let mut bparams = StoredBuildParams::default();
         // Number of spend descriptions is the number of transfers
@@ -1031,10 +1044,127 @@ pub async fn submit_shielded_transfer(
                 ..OutputBuildParams::default()
             });
         }
-        Box::new(bparams)
+        Ok(Box::new(bparams))
     } else {
-        Box::new(RngBuildParams::new(OsRng))
-    };
+        Ok(Box::new(RngBuildParams::new(OsRng)))
+    }
+}
+
+// Sign the given transaction's MASP component using signatures produced by the
+// hardware wallet. This function takes the list of spending keys that are
+// hosted on the hardware wallet.
+async fn masp_sign(
+    tx: &mut Tx,
+    args: &args::Tx,
+    signing_data: &SigningTxData,
+    shielded_hw_keys: HashMap<String, ExtendedViewingKey>,
+) -> Result<(), error::Error> {
+    // Get the MASP section that is the target of our signing
+    if let Some(shielded_hash) = signing_data.shielded_hash {
+        let mut masp_tx = tx
+            .get_masp_section(&shielded_hash)
+            .expect("Expected to find the indicated MASP Transaction")
+            .clone();
+
+        let masp_builder = tx
+            .get_masp_builder(&shielded_hash)
+            .expect("Expected to find the indicated MASP Builder");
+
+        // Reverse the spend metadata to enable looking up construction
+        // material
+        let sapling_inputs = masp_builder.builder.sapling_inputs();
+        let mut descriptor_map = vec![0; sapling_inputs.len()];
+        for i in 0.. {
+            if let Some(pos) = masp_builder.metadata.spend_index(i) {
+                descriptor_map[pos] = i;
+            } else {
+                break;
+            };
+        }
+        // Sign the MASP Transaction using each relevant key in the
+        // hardware wallet
+        let mut app = None;
+        for (path, vk) in shielded_hw_keys {
+            // Initialize the Ledger app interface if it is uninitialized
+            let app = app.get_or_insert_with(|| {
+                NamadaApp::new(WalletTransport::from_arg(args.device_transport))
+            });
+            // Sign the MASP Transaction using the current viewing key
+            let path = BIP44Path {
+                path: path.to_string(),
+            };
+            app.sign_masp_spends(&path, &tx.serialize_to_vec())
+                .await
+                .map_err(|err| error::Error::Other(err.to_string()))?;
+            // Now prepare a new list of authorizations based on hardware
+            // wallet responses
+            let mut authorizations = HashMap::new();
+            for (tx_pos, builder_pos) in descriptor_map.iter().enumerate() {
+                // Read the next spend authorization signature from the
+                // hardware wallet
+                let response = app
+                    .get_spend_signature()
+                    .await
+                    .map_err(|err| error::Error::Other(err.to_string()))?;
+                let signature = redjubjub::Signature::try_from_slice(
+                    &[response.rbar, response.sbar].concat(),
+                )
+                .map_err(|err| {
+                    error::Error::Other(format!(
+                        "Unexpected spend authorization key in response from \
+                         the hardware wallet: {}.",
+                        err,
+                    ))
+                })?;
+                if *sapling_inputs[*builder_pos].key()
+                    == ExtendedFullViewingKey::from(vk)
+                {
+                    // If this descriptor was produced by the current
+                    // viewing key (which comes from the hardware wallet),
+                    // then use the authorization from the hardware wallet
+                    authorizations.insert(tx_pos, signature);
+                }
+            }
+            // Finally, patch the MASP Transaction with the fetched spend
+            // authorization signature
+            masp_tx = (*masp_tx)
+                .clone()
+                .map_authorization::<masp_primitives::transaction::Authorized>(
+                    (),
+                    MapSaplingSigAuth(authorizations),
+                )
+                .freeze()
+                .map_err(|err| {
+                    error::Error::Other(format!(
+                        "Unable to apply hardware walleet sourced \
+                         authorization signatures to the transaction being \
+                         constructed: {}.",
+                        err,
+                    ))
+                })?;
+        }
+        tx.remove_masp_section(&shielded_hash);
+        tx.add_section(Section::MaspTx(masp_tx));
+    }
+    Ok(())
+}
+
+pub async fn submit_shielded_transfer(
+    namada: &impl Namada,
+    mut args: args::TxShieldedTransfer,
+) -> Result<(), error::Error> {
+    display_line!(
+        namada.io(),
+        "{}: {}\n",
+        "WARNING".bold().underline().yellow(),
+        "Some information might be leaked if your shielded wallet is not up \
+         to date, make sure to run `namadac shielded-sync` before running \
+         this command.",
+    );
+    
+    let shielded_hw_keys =
+        augment_masp_hardware_keys(namada, &mut args).await?;
+    let mut bparams = generate_masp_build_params(&args).await?;
     let (mut tx, signing_data) =
         args.clone().build(namada, &mut bparams).await?;
 
@@ -1051,88 +1181,7 @@ pub async fn submit_shielded_transfer(
         tx::dump_tx(namada.io(), &args.tx, tx)?;
         pre_cache_masp_data(namada, &masp_section).await;
     } else {
-        // Get the MASP section that is the target of our signing
-        if let Some(shielded_hash) = signing_data.shielded_hash {
-            let mut masp_tx = tx
-                .get_masp_section(&shielded_hash)
-                .expect("Expected to find the indicated MASP Transaction")
-                .clone();
-
-            let masp_builder = tx
-                .get_masp_builder(&shielded_hash)
-                .expect("Expected to find the indicated MASP Builder");
-
-            // Reverse the spend metadata to enable looking up construction
-            // material
-            let sapling_inputs = masp_builder.builder.sapling_inputs();
-            let mut descriptor_map = vec![0; sapling_inputs.len()];
-            for i in 0.. {
-                if let Some(pos) = masp_builder.metadata.spend_index(i) {
-                    descriptor_map[pos] = i;
-                } else {
-                    break;
-                };
-            }
-            // Sign the MASP Transaction using each relevant key in the
-            // hardware wallet
-            let mut app = None;
-            for (path, vk) in shielded_hw_keys {
-                // Initialize the Ledger app interface if it is uninitialized
-                let app = app.get_or_insert_with(|| {
-                    NamadaApp::new(WalletTransport::from_arg(
-                        args.tx.device_transport,
-                    ))
-                });
-                // Sign the MASP Transaction using the current viewing key
-                let path = BIP44Path {
-                    path: path.to_string(),
-                };
-                app.sign_masp_spends(&path, &tx.serialize_to_vec())
-                    .await
-                    .map_err(|err| error::Error::Other(err.to_string()))?;
-                // Now prepare a new list of authorizations based on hardware
-                // wallet responses
-                let mut authorizations = HashMap::new();
-                for (tx_pos, builder_pos) in descriptor_map.iter().enumerate() {
-                    // Read the next spend authorization signature from the
-                    // hardware wallet
-                    let response = app
-                        .get_spend_signature()
-                        .await
-                        .map_err(|err| error::Error::Other(err.to_string()))?;
-                    let signature = redjubjub::Signature::try_from_slice(
-                        &[response.rbar, response.sbar].concat(),
-                    )
-                    .map_err(|err| {
-                        error::Error::Other(format!(
-                            "Unexpected spend authorization key in response \
-                             from the hardware wallet: {}.",
-                            err,
-                        ))
-                    })?;
-                    if *sapling_inputs[*builder_pos].key()
-                        == ExtendedFullViewingKey::from(vk)
-                    {
-                        // If this descriptor was produced by the current
-                        // viewing key (which comes from the hardware wallet),
-                        // then use the authorization from the hardware wallet
-                        authorizations.insert(tx_pos, signature);
-                    }
-                }
-                // Finally, patch the MASP Transaction with the fetched spend
-                // authorization signature
-                masp_tx = (*masp_tx).clone().map_authorization::<masp_primitives::transaction::Authorized>(
-                    (),
-                    MapSaplingSigAuth(authorizations),
-                ).freeze().map_err(|err| error::Error::Other(format!(
-                    "Unable to apply hardware walleet sourced authorization \
-                     signatures to the transaction being constructed: {}.",
-                    err,
-                )))?;
-            }
-            tx.remove_masp_section(&shielded_hash);
-            tx.add_section(Section::MaspTx(masp_tx));
-        }
+        masp_sign(&mut tx, &args.tx, &signing_data, shielded_hw_keys).await?;
         sign(namada, &mut tx, &args.tx, signing_data).await?;
         let res = namada.submit(tx, &args.tx).await?;
         pre_cache_masp_data_on_tx_result(namada, &res, &masp_section).await;
