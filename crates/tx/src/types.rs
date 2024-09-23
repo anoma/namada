@@ -259,6 +259,30 @@ impl Tx {
         None
     }
 
+    /// Remove the transaction section with the given hash
+    pub fn remove_masp_section(&mut self, hash: &MaspTxId) {
+        self.sections.retain(|section| {
+            if let Section::MaspTx(masp) = section {
+                if MaspTxId::from(masp.txid()) == *hash {
+                    return false;
+                }
+            }
+            true
+        });
+    }
+
+    /// Get the MASP builder section with the given hash
+    pub fn get_masp_builder(&self, hash: &MaspTxId) -> Option<&MaspBuilder> {
+        for section in &self.sections {
+            if let Section::MaspBuilder(builder) = section {
+                if builder.target == *hash {
+                    return Some(builder);
+                }
+            }
+        }
+        None
+    }
+
     /// Set the last transaction memo hash stored in the header
     pub fn set_memo_sechash(&mut self, hash: namada_core::hash::Hash) {
         let item = match self.header.batch.pop() {
