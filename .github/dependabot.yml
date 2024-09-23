@@ -1,0 +1,20 @@
+version: 2
+updates:
+  - package-ecosystem: "cargo"
+
+    directory: "/"
+
+    schedule:
+      interval: "daily"
+
+    open-pull-requests-limit: 10
+
+    ignore:
+      - dependency-name: "mach"
+        versions: ["0.3.2"]
+      - dependency-name: "parity-wasm"
+        versions: ["0.45.0"]
+      - dependency-name: "serde_cbor"
+        versions: ["0.11.2"]
+      - dependency-name: "crossbeam-utils"
+        versions: ["0.7.2"]
