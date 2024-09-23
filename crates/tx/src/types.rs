@@ -1,9 +1,9 @@
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::hash::Hash;
+use std::io;
 use std::ops::{Bound, RangeBounds};
 
-use data_encoding::HEXUPPER;
 use masp_primitives::transaction::Transaction;
 use namada_account::AccountPublicKeysMap;
 use namada_core::address::Address;
@@ -34,8 +34,6 @@ use crate::{
 pub enum DecodeError {
     #[error("Invalid signature index bytes: {0}")]
     InvalidEncoding(std::io::Error),
-    #[error("Invalid signature index JSON string")]
-    InvalidJsonString,
     #[error("Invalid signature index: {0}")]
     InvalidHex(data_encoding::DecodeError),
     #[error("Error decoding a transaction from bytes: {0}")]
@@ -73,6 +71,7 @@ pub enum TxError {
     BorshSchema,
     Serialize,
     Deserialize,
+    PartialEq,
 )]
 pub struct Tx {
     /// Type indicating how to process transaction
@@ -86,12 +85,7 @@ impl TryFrom<&[u8]> for Tx {
     type Error = DecodeError;
 
     fn try_from(tx_bytes: &[u8]) -> Result<Self, DecodeError> {
-        use prost::Message;
-
-        let tx = proto::Tx::decode(tx_bytes)
-            .map_err(DecodeError::TxDecodingError)?;
-        BorshDeserialize::try_from_slice(&tx.data)
-            .map_err(DecodeError::InvalidEncoding)
+        Tx::try_from_bytes(tx_bytes)
     }
 }
 
@@ -125,19 +119,21 @@ impl Tx {
         }
     }
 
-    /// Serialize tx to hex string
-    pub fn serialize(&self) -> String {
-        let tx_bytes = self.serialize_to_vec();
-        HEXUPPER.encode(&tx_bytes)
+    /// Serialize tx to pretty JSON into an I/O stream
+    ///
+    /// For protobuf encoding, see `to_bytes/try_to_bytes`.
+    pub fn to_writer_json<W>(&self, writer: W) -> serde_json::Result<()>
+    where
+        W: io::Write,
+    {
+        serde_json::to_writer_pretty(writer, self)
     }
 
-    /// Deserialize tx from json
-    pub fn deserialize(data: &[u8]) -> Result<Self, DecodeError> {
-        if let Ok(tx) = serde_json::from_slice::<Tx>(data) {
-            Ok(tx)
-        } else {
-            Err(DecodeError::InvalidJsonString)
-        }
+    /// Deserialize tx from JSON string bytes
+    ///
+    /// For protobuf decoding, see `try_from_bytes`.
+    pub fn try_from_json_bytes(data: &[u8]) -> serde_json::Result<Self> {
+        serde_json::from_slice::<Tx>(data)
     }
 
     /// Add new default commitments to the transaction. Returns false if the
@@ -341,7 +337,9 @@ impl Tx {
         }
     }
 
-    /// Convert this transaction into protobufs bytes
+    /// Convert this transaction into protobufs bytes.
+    ///
+    /// For JSON encoding see `to_writer_json`.
     pub fn to_bytes(&self) -> Vec<u8> {
         use prost::Message;
 
@@ -355,6 +353,8 @@ impl Tx {
     }
 
     /// Convert this transaction into protobufs bytes
+    ///
+    /// For JSON encoding see `to_writer_json`.
     pub fn try_to_bytes(&self) -> std::io::Result<Vec<u8>> {
         use prost::Message;
 
@@ -366,6 +366,18 @@ impl Tx {
             std::io::Error::new(std::io::ErrorKind::InvalidData, e)
         })?;
         Ok(bytes)
+    }
+
+    /// Try to deserialize a tx from protobuf bytes
+    ///
+    /// For JSON decoding see `try_from_json_bytes`.
+    pub fn try_from_bytes(tx_bytes: &[u8]) -> Result<Self, DecodeError> {
+        use prost::Message;
+
+        let tx = proto::Tx::decode(tx_bytes)
+            .map_err(DecodeError::TxDecodingError)?;
+        BorshDeserialize::try_from_slice(&tx.data)
+            .map_err(DecodeError::InvalidEncoding)
     }
 
     /// Verify that the section with the given hash has been signed by the given
@@ -949,11 +961,32 @@ mod test {
 
         for serialized_tx in serialized_txs {
             let raw_bytes = HEXLOWER.decode(serialized_tx.as_bytes()).unwrap();
-            let tx = Tx::try_from(raw_bytes.as_ref()).unwrap();
+            let tx = Tx::try_from_bytes(raw_bytes.as_ref()).unwrap();
 
             assert_eq!(tx.try_to_bytes().unwrap(), raw_bytes);
             assert_eq!(tx.to_bytes(), raw_bytes);
         }
+    }
+
+    #[test]
+    fn test_tx_protobuf_serialization() {
+        let tx = Tx::default();
+
+        let buffer = tx.to_bytes();
+
+        let deserialized = Tx::try_from_bytes(&buffer).unwrap();
+        assert_eq!(tx, deserialized);
+    }
+
+    #[test]
+    fn test_tx_json_serialization() {
+        let tx = Tx::default();
+
+        let mut buffer = vec![];
+        tx.to_writer_json(&mut buffer).unwrap();
+
+        let deserialized = Tx::try_from_json_bytes(&buffer).unwrap();
+        assert_eq!(tx, deserialized);
     }
 
     #[test]
