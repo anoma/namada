@@ -96,9 +96,9 @@ pub mod cmds {
         fn parse(matches: &ArgMatches) -> Option<Self> {
             let node = SubCmd::parse(matches).map(Self::Node);
             let client = SubCmd::parse(matches).map(Self::Client);
-            let relayer = SubCmd::parse(matches).map(Self::Relayer);
-            let eth_bridge_pool =
-                SubCmd::parse(matches).map(Self::EthBridgePool);
+            // let relayer = SubCmd::parse(matches).map(Self::Relayer);
+            // let eth_bridge_pool =
+            //    SubCmd::parse(matches).map(Self::EthBridgePool);
             let wallet = SubCmd::parse(matches).map(Self::Wallet);
             let ledger = SubCmd::parse(matches).map(Self::Ledger);
             let tx_custom = SubCmd::parse(matches).map(Self::TxCustom);
@@ -121,8 +121,8 @@ pub mod cmds {
             let tx_reveal_pk = SubCmd::parse(matches).map(Self::TxRevealPk);
             let complete = SubCmd::parse(matches).map(Self::Complete);
             node.or(client)
-                .or(relayer)
-                .or(eth_bridge_pool)
+                //    .or(relayer)
+                //    .or(eth_bridge_pool)
                 .or(wallet)
                 .or(ledger)
                 .or(tx_custom)
