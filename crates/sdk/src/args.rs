@@ -5,6 +5,8 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration as StdDuration;
 
+use masp_primitives::transaction::components::sapling::builder::BuildParams;
+use masp_primitives::zip32::PseudoExtendedKey;
 use namada_core::address::Address;
 use namada_core::chain::{BlockHeight, ChainId, Epoch};
 use namada_core::collections::HashMap;
@@ -121,7 +123,7 @@ impl NamadaTypes for SdkTypes {
     type MaspIndexerAddress = String;
     type PaymentAddress = namada_core::masp::PaymentAddress;
     type PublicKey = namada_core::key::common::PublicKey;
-    type SpendingKey = namada_core::masp::ExtendedSpendingKey;
+    type SpendingKey = PseudoExtendedKey;
     type TendermintAddress = tendermint_rpc::Url;
     type TransferSource = namada_core::masp::TransferSource;
     type TransferTarget = namada_core::masp::TransferTarget;
@@ -381,8 +383,9 @@ impl TxShieldedTransfer {
     pub async fn build(
         &mut self,
         context: &impl Namada,
+        bparams: &mut impl BuildParams,
     ) -> crate::error::Result<(namada_tx::Tx, SigningTxData)> {
-        tx::build_shielded_transfer(context, self).await
+        tx::build_shielded_transfer(context, self, bparams).await
     }
 }
 

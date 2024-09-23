@@ -73,6 +73,8 @@ pub struct SigningTxData {
     pub account_public_keys_map: Option<AccountPublicKeysMap>,
     /// The public keys of the fee payer
     pub fee_payer: common::PublicKey,
+    /// ID of the Transaction needing signing
+    pub shielded_hash: Option<MaspTxId>,
 }
 
 impl PartialEq for SigningTxData {
@@ -416,6 +418,7 @@ pub async fn aux_signing_data(
         threshold,
         account_public_keys_map,
         fee_payer,
+        shielded_hash: None,
     })
 }
 

@@ -3624,6 +3624,7 @@ fn identical_output_descriptions() -> Result<()> {
         threshold: 1,
         account_public_keys_map: None,
         fee_payer: albert_keypair().to_public(),
+        shielded_hash: None,
     };
 
     let (mut batched_tx, _signing_data) = namada_sdk::tx::build_batch(vec![

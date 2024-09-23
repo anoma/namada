@@ -8,7 +8,10 @@ use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use color_eyre::eyre::Result;
 use itertools::sorted;
-use ledger_namada_rs::{BIP44Path, NamadaApp};
+use ledger_namada_rs::{BIP44Path, KeyResponse, NamadaApp, NamadaKeys};
+use ledger_transport_hid::hidapi::HidApi;
+use ledger_transport_hid::TransportNativeHID;
+use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada_core::chain::BlockHeight;
 use namada_core::masp::{ExtendedSpendingKey, MaspValue, PaymentAddress};
 use namada_sdk::address::{Address, DecodeError};
@@ -184,7 +187,7 @@ fn payment_addresses_list(
 }
 
 /// Derives a masp spending key from the mnemonic code in the wallet.
-fn shielded_key_derive(
+async fn shielded_key_derive(
     ctx: Context,
     io: &impl Io,
     args::KeyDerive {
@@ -232,9 +235,56 @@ fn shielded_key_derive(
             })
             .0
     } else {
-        display_line!(io, "Not implemented.");
-        display_line!(io, "No changes are persisted. Exiting.");
-        cli::safe_exit(1)
+        let hidapi = HidApi::new().unwrap_or_else(|err| {
+            edisplay_line!(io, "Failed to create HidApi: {}", err);
+            cli::safe_exit(1)
+        });
+        let app = NamadaApp::new(
+            TransportNativeHID::new(&hidapi).unwrap_or_else(|err| {
+                edisplay_line!(io, "Unable to connect to Ledger: {}", err);
+                cli::safe_exit(1)
+            }),
+        );
+        let response = app
+            .retrieve_keys(
+                &BIP44Path {
+                    path: derivation_path.to_string(),
+                },
+                NamadaKeys::ViewKey,
+                true,
+            )
+            .await
+            .unwrap_or_else(|err| {
+                edisplay_line!(
+                    io,
+                    "Unable to connect to query address and public key from \
+                     Ledger: {}",
+                    err
+                );
+                cli::safe_exit(1)
+            });
+        let KeyResponse::ViewKey(response_key) = response else {
+            edisplay_line!(io, "Unexpected response from Ledger");
+            cli::safe_exit(1)
+        };
+        let xfvk = ExtendedFullViewingKey::try_from_slice(&response_key.xfvk)
+            .expect(
+                "unable to decode extended full viewing key from the hardware \
+                 wallet",
+            );
+
+        wallet
+            .insert_viewing_key(
+                alias,
+                xfvk.into(),
+                birthday,
+                alias_force,
+                Some(derivation_path),
+            )
+            .unwrap_or_else(|| {
+                display_line!(io, "No changes are persisted. Exiting.");
+                cli::safe_exit(1)
+            })
     };
     wallet
         .save()
@@ -367,7 +417,13 @@ fn shielded_key_address_add(
     let (alias, typ) = match masp_value {
         MaspValue::FullViewingKey(viewing_key) => {
             let alias = wallet
-                .insert_viewing_key(alias, viewing_key, birthday, alias_force)
+                .insert_viewing_key(
+                    alias,
+                    viewing_key,
+                    birthday,
+                    alias_force,
+                    None,
+                )
                 .unwrap_or_else(|| {
                     edisplay_line!(io, "Viewing key not added");
                     cli::safe_exit(1);
@@ -638,7 +694,7 @@ async fn key_derive(
     if !args_key_derive.shielded {
         transparent_key_and_address_derive(ctx, io, args_key_derive).await
     } else {
-        shielded_key_derive(ctx, io, args_key_derive)
+        shielded_key_derive(ctx, io, args_key_derive).await
     }
 }
 

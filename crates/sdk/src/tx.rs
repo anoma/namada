@@ -10,6 +10,9 @@ use borsh::BorshSerialize;
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::transaction::builder::Builder;
+use masp_primitives::transaction::components::sapling::builder::{
+    BuildParams, RngBuildParams,
+};
 use masp_primitives::transaction::components::sapling::fees::{
     ConvertView, InputView as SaplingInputView, OutputView as SaplingOutputView,
 };
@@ -18,6 +21,7 @@ use masp_primitives::transaction::components::transparent::fees::{
 };
 use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::transaction::{builder, Transaction as MaspTransaction};
+use masp_primitives::zip32::PseudoExtendedKey;
 use namada_account::{InitAccount, UpdateAccount};
 use namada_core::address::{Address, IBC, MASP};
 use namada_core::arith::checked;
@@ -38,9 +42,7 @@ use namada_core::ibc::core::client::types::Height as IbcHeight;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::ibc::primitives::Timestamp as IbcTimestamp;
 use namada_core::key::{self, *};
-use namada_core::masp::{
-    AssetData, ExtendedSpendingKey, MaspEpoch, TransferSource, TransferTarget,
-};
+use namada_core::masp::{AssetData, MaspEpoch, TransferSource, TransferTarget};
 use namada_core::storage;
 use namada_core::time::DateTimeUtc;
 use namada_governance::cli::onchain::{
@@ -2629,6 +2631,7 @@ pub async fn build_ibc_transfer(
         masp_fee_data,
         !(args.tx.dry_run || args.tx.dry_run_wrapper),
         args.tx.expiration.to_datetime(),
+        &mut RngBuildParams::new(OsRng),
     )
     .await?;
     let shielded_tx_epoch = shielded_parts.as_ref().map(|trans| trans.0.epoch);
@@ -3030,8 +3033,9 @@ pub async fn build_transparent_transfer<N: Namada>(
 pub async fn build_shielded_transfer<N: Namada>(
     context: &N,
     args: &mut args::TxShieldedTransfer,
+    bparams: &mut impl BuildParams,
 ) -> Result<(Tx, SigningTxData)> {
-    let signing_data = signing::aux_signing_data(
+    let mut signing_data = signing::aux_signing_data(
         context,
         &args.tx,
         Some(MASP),
@@ -3094,6 +3098,7 @@ pub async fn build_shielded_transfer<N: Namada>(
         masp_fee_data,
         !(args.tx.dry_run || args.tx.dry_run_wrapper),
         args.tx.expiration.to_datetime(),
+        bparams,
     )
     .await?
     .expect("Shielded transfer must have shielded parts");
@@ -3123,6 +3128,7 @@ pub async fn build_shielded_transfer<N: Namada>(
         });
 
         data.shielded_section_hash = Some(section_hash);
+        signing_data.shielded_hash = Some(section_hash);
         tracing::debug!("Transfer data {data:?}");
         Ok(())
     };
@@ -3147,7 +3153,7 @@ async fn get_masp_fee_payment_amount<N: Namada>(
     args: &args::Tx<SdkTypes>,
     fee_amount: DenominatedAmount,
     fee_payer: &common::PublicKey,
-    gas_spending_keys: Vec<ExtendedSpendingKey>,
+    gas_spending_keys: Vec<PseudoExtendedKey>,
 ) -> Result<Option<MaspFeeData>> {
     let fee_payer_address = Address::from(fee_payer);
     let balance_key = balance_key(&args.fee_token, &fee_payer_address);
@@ -3261,6 +3267,7 @@ pub async fn build_shielding_transfer<N: Namada>(
         None,
         !(args.tx.dry_run || args.tx.dry_run_wrapper),
         args.tx.expiration.to_datetime(),
+        &mut RngBuildParams::new(OsRng),
     )
     .await?
     .expect("Shielding transfer must have shielded parts");
@@ -3383,6 +3390,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
         masp_fee_data,
         !(args.tx.dry_run || args.tx.dry_run_wrapper),
         args.tx.expiration.to_datetime(),
+        &mut RngBuildParams::new(OsRng),
     )
     .await?
     .expect("Shielding transfer must have shielded parts");
@@ -3436,6 +3444,7 @@ async fn construct_shielded_parts<N: Namada>(
     fee_data: Option<MaspFeeData>,
     update_ctx: bool,
     expiration: Option<DateTimeUtc>,
+    bparams: &mut impl BuildParams,
 ) -> Result<Option<(ShieldedTransfer, HashSet<AssetData>)>> {
     // Precompute asset types to increase chances of success in decoding
     let token_map = context.wallet().await.get_addresses();
@@ -3449,7 +3458,7 @@ async fn construct_shielded_parts<N: Namada>(
 
         shielded
             .gen_shielded_transfer(
-                context, data, fee_data, expiration, update_ctx,
+                context, data, fee_data, expiration, update_ctx, bparams,
             )
             .await
     };
@@ -3816,6 +3825,7 @@ pub async fn gen_ibc_shielding_transfer<N: Namada>(
                 None,
                 args.expiration.to_datetime(),
                 true,
+                &mut RngBuildParams::new(OsRng),
             )
             .await
             .map_err(|err| TxSubmitError::MaspError(err.to_string()))?

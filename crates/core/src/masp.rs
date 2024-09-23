@@ -13,6 +13,7 @@ use masp_primitives::transaction::TransparentAddress;
 pub use masp_primitives::transaction::{
     Transaction as MaspTransaction, TxId as TxIdInner,
 };
+use masp_primitives::zip32::{ExtendedKey, PseudoExtendedKey};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
@@ -69,7 +70,7 @@ pub struct MaspTxId(
         serialize_with = "serialize_txid",
         deserialize_with = "deserialize_txid"
     )]
-    TxIdInner,
+    pub TxIdInner,
 );
 
 impl From<TxIdInner> for MaspTxId {
@@ -520,12 +521,13 @@ impl<'de> serde::Deserialize<'de> for ExtendedSpendingKey {
 }
 
 /// Represents a source of funds for a transfer
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum TransferSource {
     /// A transfer coming from a transparent address
     Address(Address),
     /// A transfer coming from a shielded address
-    ExtendedSpendingKey(ExtendedSpendingKey),
+    ExtendedSpendingKey(PseudoExtendedKey),
 }
 
 impl TransferSource {
@@ -540,7 +542,7 @@ impl TransferSource {
     }
 
     /// Get the contained ExtendedSpendingKey contained, if any
-    pub fn spending_key(&self) -> Option<ExtendedSpendingKey> {
+    pub fn spending_key(&self) -> Option<PseudoExtendedKey> {
         match self {
             Self::ExtendedSpendingKey(x) => Some(*x),
             _ => None,
@@ -568,7 +570,9 @@ impl Display for TransferSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Address(x) => x.fmt(f),
-            Self::ExtendedSpendingKey(x) => x.fmt(f),
+            Self::ExtendedSpendingKey(x) => {
+                ExtendedViewingKey::from(x.to_viewing_key()).fmt(f)
+            }
         }
     }
 }

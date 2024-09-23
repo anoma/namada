@@ -45,6 +45,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use args::{DeviceTransport, InputAmount, SdkTypes};
+use masp_primitives::zip32::PseudoExtendedKey;
 use namada_core::address::Address;
 use namada_core::collections::HashSet;
 use namada_core::dec::Dec;
@@ -171,7 +172,7 @@ pub trait Namada: NamadaIo {
     fn new_shielded_transfer(
         &self,
         data: Vec<args::TxShieldedTransferData>,
-        gas_spending_keys: Vec<ExtendedSpendingKey>,
+        gas_spending_keys: Vec<PseudoExtendedKey>,
         disposable_signing_key: bool,
     ) -> args::TxShieldedTransfer {
         args::TxShieldedTransfer {
@@ -202,9 +203,9 @@ pub trait Namada: NamadaIo {
     /// arguments
     fn new_unshielding_transfer(
         &self,
-        source: ExtendedSpendingKey,
+        source: PseudoExtendedKey,
         data: Vec<args::TxUnshieldingTransferData>,
-        gas_spending_keys: Vec<ExtendedSpendingKey>,
+        gas_spending_keys: Vec<PseudoExtendedKey>,
         disposable_signing_key: bool,
     ) -> args::TxUnshieldingTransfer {
         args::TxUnshieldingTransfer {
