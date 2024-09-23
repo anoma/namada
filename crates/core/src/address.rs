@@ -779,6 +779,12 @@ pub mod testing {
             .expect("The token address decoding shouldn't fail")
     }
 
+    /// A sampled established address for tests
+    pub fn established_address_5() -> Address {
+        Address::decode("tnam1qyftuue8fq25ezm0s8vj75d3qz759r2225ug7hll")
+            .expect("The token address decoding shouldn't fail")
+    }
+
     /// Generate an arbitrary [`Address`] (established or implicit).
     pub fn arb_non_internal_address() -> impl Strategy<Value = Address> {
         prop_oneof![

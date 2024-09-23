@@ -24,6 +24,7 @@ namada_events = { path = "../events", default-features = false }
 namada_state = { path = "../state" }
 namada_systems = { path = "../systems" }
 namada_tx = { path = "../tx" }
+namada_tx_env = { path = "../tx_env" }
 namada_vp_env = { path = "../vp_env" }
 
 konst.workspace = true
@@ -38,11 +39,14 @@ namada_governance = { path = "../governance", features = ["testing"] }
 namada_ibc = { path = "../ibc", features = ["testing"] }
 namada_parameters = { path = "../parameters", features = ["testing"] }
 namada_state = { path = "../state", features = ["testing"] }
+namada_tests = { path = "../tests" }
 namada_tx = { path = "../tx", features = ["testing"] }
 namada_vm = { path = "../vm", features = ["testing"] }
 namada_vp = { path = "../vp" }
 
 assert_matches.workspace = true
+itertools.workspace = true
+proptest.workspace = true
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(fuzzing)'] }

@@ -19,22 +19,20 @@ pub use namada_ibc::{
 };
 use namada_tx_env::TxEnv;
 
-use crate::token::transfer;
-use crate::{Ctx, Result};
+use crate::{token, Ctx, Result};
 
 /// IBC actions to handle an IBC message. The `verifiers` inserted into the set
 /// must be inserted into the tx context with `Ctx::insert_verifier` after tx
 /// execution.
 pub fn ibc_actions(
     ctx: &mut Ctx,
-) -> IbcActions<'_, Ctx, crate::parameters::Store<Ctx>, crate::token::Store<Ctx>>
-{
+) -> IbcActions<'_, Ctx, crate::parameters::Store<Ctx>, token::Store<Ctx>> {
     let ctx = Rc::new(RefCell::new(ctx.clone()));
     let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
     let mut actions = IbcActions::new(ctx.clone(), verifiers.clone());
     let module = TransferModule::new(ctx.clone(), verifiers);
     actions.add_transfer_module(module);
-    let module = NftTransferModule::<Ctx, crate::token::Store<Ctx>>::new(ctx);
+    let module = NftTransferModule::<Ctx, token::Store<Ctx>>::new(ctx);
     actions.add_transfer_module(module);
     actions
 }
@@ -65,7 +63,7 @@ impl IbcStorageContext for Ctx {
         token: &Address,
         amount: Amount,
     ) -> Result<()> {
-        transfer(self, src, dest, token, amount)
+        token::transfer(self, src, dest, token, amount)
     }
 
     fn mint_token(
@@ -74,7 +72,7 @@ impl IbcStorageContext for Ctx {
         token: &Address,
         amount: Amount,
     ) -> Result<()> {
-        mint_tokens::<_, crate::token::Store<_>>(self, target, token, amount)
+        mint_tokens::<_, token::Store<_>>(self, target, token, amount)
     }
 
     fn burn_token(
@@ -83,7 +81,7 @@ impl IbcStorageContext for Ctx {
         token: &Address,
         amount: Amount,
     ) -> Result<()> {
-        burn_tokens::<_, crate::token::Store<_>>(self, target, token, amount)
+        burn_tokens::<_, token::Store<_>>(self, target, token, amount)
     }
 
     fn insert_verifier(&mut self, addr: &Address) -> Result<()> {

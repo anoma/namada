@@ -30,6 +30,8 @@ pub use namada_shielded_token::*;
 use namada_systems::parameters;
 pub use namada_trans_token::*;
 
+pub mod tx;
+
 /// Validity predicates
 pub mod vp {
     pub use namada_shielded_token::vp::MaspVp;
@@ -38,6 +40,7 @@ pub mod vp {
     pub use namada_shielded_token::{Error, Result};
     pub use namada_trans_token::vp::MultitokenVp;
 }
+
 use serde::{Deserialize, Serialize};
 
 /// Token storage keys
@@ -172,6 +175,15 @@ pub struct Transfer {
     pub shielded_section_hash: Option<MaspTxId>,
 }
 
+/// References to the transparent sections of a [`Transfer`].
+#[derive(Debug, Clone)]
+pub struct TransparentTransfersRef<'a> {
+    /// Sources of this transfer
+    pub sources: &'a BTreeMap<Account, DenominatedAmount>,
+    /// Targets of this transfer
+    pub targets: &'a BTreeMap<Account, DenominatedAmount>,
+}
+
 impl Transfer {
     /// Create a MASP transaction
     pub fn masp(hash: MaspTxId) -> Self {
@@ -263,6 +275,46 @@ impl Transfer {
     ) -> Option<Self> {
         self.debit(source, token.clone(), amount)?
             .credit(target, token, amount)
+    }
+
+    /// Get references to the transparent sections.
+    pub fn transparent_part(&self) -> Option<TransparentTransfersRef<'_>> {
+        if self.sources.is_empty() && self.targets.is_empty() {
+            None
+        } else {
+            Some(TransparentTransfersRef {
+                sources: &self.sources,
+                targets: &self.targets,
+            })
+        }
+    }
+}
+
+impl TransparentTransfersRef<'_> {
+    /// Construct pairs of source address and token with a debited amount
+    pub fn sources(&self) -> BTreeMap<(Address, Address), Amount> {
+        self.sources
+            .iter()
+            .map(|(account, amount)| {
+                (
+                    (account.owner.clone(), account.token.clone()),
+                    amount.amount(),
+                )
+            })
+            .collect::<BTreeMap<_, _>>()
+    }
+
+    /// Construct pairs of target address and token with a credited amount
+    pub fn targets(&self) -> BTreeMap<(Address, Address), Amount> {
+        self.targets
+            .iter()
+            .map(|(account, amount)| {
+                (
+                    (account.owner.clone(), account.token.clone()),
+                    amount.amount(),
+                )
+            })
+            .collect::<BTreeMap<_, _>>()
     }
 }
 

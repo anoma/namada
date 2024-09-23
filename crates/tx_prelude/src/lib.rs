@@ -403,6 +403,12 @@ impl TxEnv for Ctx {
     fn set_commitment_sentinel(&mut self) {
         unsafe { namada_tx_set_commitment_sentinel() }
     }
+
+    fn update_masp_note_commitment_tree(
+        transaction: &MaspTransaction,
+    ) -> Result<bool> {
+        update_masp_note_commitment_tree(transaction)
+    }
 }
 
 impl namada_tx::action::Read for Ctx {
