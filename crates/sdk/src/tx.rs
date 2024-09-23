@@ -200,7 +200,7 @@ pub fn dump_tx<IO: Io>(io: &IO, args: &args::Tx, tx: Tx) {
             ));
             let out = File::create(&tx_path)
                 .expect("Should be able to create a file to dump tx");
-            serde_json::to_writer_pretty(out, &tx)
+            tx.to_writer_json(out)
                 .expect("Should be able to write to file.");
             display_line!(
                 io,
@@ -3734,7 +3734,7 @@ pub async fn build_custom(
     let fee_amount = validate_fee(context, tx_args).await?;
 
     let mut tx = if let Some(serialized_tx) = serialized_tx {
-        Tx::deserialize(serialized_tx.as_ref()).map_err(|_| {
+        Tx::try_from_json_bytes(serialized_tx.as_ref()).map_err(|_| {
             Error::Other(
                 "Invalid tx deserialization. Please make sure you are passing \
                  a file in .tx format, typically produced from using the \

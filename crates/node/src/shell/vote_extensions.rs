@@ -124,7 +124,7 @@ where
     ) -> DrainFilter<'shell, TxBytes, impl FnMut(&mut TxBytes) -> bool + 'shell>
     {
         drain_filter_polyfill::VecExt::drain_filter(txs, move |tx_bytes| {
-            let tx = match Tx::try_from(tx_bytes.as_ref()) {
+            let tx = match Tx::try_from_bytes(tx_bytes.as_ref()) {
                 Ok(tx) => tx,
                 Err(err) => {
                     tracing::warn!(

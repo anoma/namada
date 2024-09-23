@@ -1069,7 +1069,8 @@ pub async fn sign_tx<N: Namada>(
 where
     <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
-    let tx = if let Ok(transaction) = Tx::deserialize(tx_data.as_ref()) {
+    let tx = if let Ok(transaction) = Tx::try_from_json_bytes(tx_data.as_ref())
+    {
         transaction
     } else {
         edisplay_line!(namada.io(), "Couldn't decode the transaction.");

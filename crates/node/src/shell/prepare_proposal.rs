@@ -289,7 +289,7 @@ where
     H: StorageHasher + Sync + 'static,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    let tx = Tx::try_from(tx_bytes).map_err(|_| ())?;
+    let tx = Tx::try_from_bytes(tx_bytes).map_err(|_| ())?;
     let wrapper = tx.header.wrapper().ok_or(())?;
 
     // If tx doesn't have an expiration it is valid. If time cannot be
@@ -754,7 +754,7 @@ mod test_prepare_proposal {
         assert_eq!(rsp.txs.len(), 1);
 
         let tx_bytes = rsp.txs.remove(0);
-        let got = Tx::try_from(&tx_bytes[..]).unwrap();
+        let got = Tx::try_from_bytes(&tx_bytes[..]).unwrap();
         let eth_tx_data = (&got).try_into().expect("Test failed");
         let rsp_ext = match eth_tx_data {
             EthereumTxData::EthEventsVext(ext) => ext,
@@ -1371,7 +1371,7 @@ mod test_prepare_proposal {
             };
             let proposed_txs =
                 shell.prepare_proposal(req).txs.into_iter().map(|tx_bytes| {
-                    Tx::try_from(tx_bytes.as_ref()).expect("Test failed")
+                    Tx::try_from_bytes(tx_bytes.as_ref()).expect("Test failed")
                 });
             // since no events with valid nonces are contained in the vote
             // extension, we drop it from the proposal
@@ -1419,7 +1419,7 @@ mod test_prepare_proposal {
             };
             let proposed_txs =
                 shell.prepare_proposal(req).txs.into_iter().map(|tx_bytes| {
-                    Tx::try_from(tx_bytes.as_ref()).expect("Test failed")
+                    Tx::try_from_bytes(tx_bytes.as_ref()).expect("Test failed")
                 });
             // find the event with the good nonce
             let mut ext = 'ext: {
