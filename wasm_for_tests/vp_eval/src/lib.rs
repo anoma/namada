@@ -9,15 +9,11 @@ fn validate_tx(
     _verifiers: BTreeSet<Address>,
 ) -> VpResult {
     use namada_tx_prelude::transaction::eval_vp::EvalVp;
-    let BatchedTx {
-        tx: tx_data,
-        ref cmt,
-    } = tx_data;
     let EvalVp {
         vp_code_hash,
         input,
     }: EvalVp =
-        EvalVp::try_from_slice(&tx_data.data(cmt).as_ref().unwrap()[..])
+        EvalVp::try_from_slice(&tx_data.to_ref().data().as_ref().unwrap()[..])
             .unwrap();
     ctx.eval(vp_code_hash, input.to_ref()).into_vp_error()
 }

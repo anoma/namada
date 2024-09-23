@@ -31,7 +31,7 @@ where
     ) -> Result<()> {
         keys_changed.iter().try_for_each(|key| {
             let key_type: KeyType = key.into();
-            let data = if let Some(data) = batched_tx.tx.data(batched_tx.cmt) {
+            let data = if let Some(data) = batched_tx.data() {
                 data
             } else {
                 return Err(Error::new_const(

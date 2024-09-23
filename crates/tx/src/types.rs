@@ -244,9 +244,10 @@ impl Tx {
         self.header.batch.insert(item);
     }
 
-    /// Get the memo designated by the memo hash in the header for the specified
-    /// commitment
-    pub fn memo(&self, cmt: &TxCommitments) -> Option<Vec<u8>> {
+    /// Get the memo designated by the memo hash in the header for the selected
+    /// tx, if contained within this tx
+    pub fn memo(&self, inner_tx: InnerTxRef<'_>) -> Option<Vec<u8>> {
+        let cmt = self.get_inner_tx_commitments(inner_tx)?;
         if cmt.memo_hash == namada_core::hash::Hash::default() {
             return None;
         }
@@ -281,7 +282,8 @@ impl Tx {
 
     /// Get the code designated by the transaction code hash in the header for
     /// the specified commitment
-    pub fn code(&self, cmt: &TxCommitments) -> Option<Vec<u8>> {
+    pub fn code(&self, inner_tx: InnerTxRef<'_>) -> Option<Vec<u8>> {
+        let cmt = self.get_inner_tx_commitments(inner_tx)?;
         match self.get_section(&cmt.code_hash).as_ref().map(Cow::as_ref) {
             Some(Section::Code(section)) => section.code.id(),
             _ => None,
@@ -320,9 +322,10 @@ impl Tx {
         self.sections.last_mut().unwrap()
     }
 
-    /// Get the data designated by the transaction data hash in the header at
-    /// the specified commitment
-    pub fn data(&self, cmt: &TxCommitments) -> Option<Vec<u8>> {
+    /// Get the data designated by the transaction data hash in the header for
+    /// the selected tx, if contained within this tx
+    pub fn data(&self, inner_tx: InnerTxRef<'_>) -> Option<Vec<u8>> {
+        let cmt = self.get_inner_tx_commitments(inner_tx)?;
         self.get_data_section(&cmt.data_hash)
     }
 
@@ -772,6 +775,28 @@ impl Tx {
         let cmt = self.first_commitments().unwrap().to_owned();
         BatchedTx { tx: self, cmt }
     }
+
+    /// Select a given inner tx commitment if contained within this tx.
+    fn get_inner_tx_commitments(
+        &self,
+        commitment: InnerTxRef<'_>,
+    ) -> Option<&TxCommitments> {
+        match commitment {
+            InnerTxRef::Commitment(commitments) => {
+                // Check that `commitments` is present in `batch`
+                self.commitments()
+                    .into_iter()
+                    .find(|batch_commitments| *batch_commitments == commitments)
+            }
+            InnerTxRef::CommitmentHash(commitments_hash) => self
+                .commitments()
+                .into_iter()
+                .find(|commitments| commitments.get_hash() == commitments_hash),
+            InnerTxRef::Index(index) => {
+                self.commitments().into_iter().nth(index)
+            }
+        }
+    }
 }
 
 impl<'tx> Tx {
@@ -782,6 +807,17 @@ impl<'tx> Tx {
     ) -> BatchedTxRef<'tx> {
         BatchedTxRef { tx: self, cmt }
     }
+}
+
+/// A key to select an inner tx and its sections
+#[derive(Debug, Clone)]
+pub enum InnerTxRef<'a> {
+    /// A direct ref to tx commitments
+    Commitment(&'a TxCommitments),
+    /// A hash of a `TxCommitments`
+    CommitmentHash(namada_core::hash::Hash),
+    /// Index of an inner tx
+    Index(usize),
 }
 
 /// Represents the pointers to a indexed tx, which are the block height and the
@@ -904,6 +940,23 @@ pub struct BatchedTxRef<'tx> {
     pub cmt: &'tx TxCommitments,
 }
 
+impl BatchedTxRef<'_> {
+    /// Get the code designated by the code hash in the header
+    pub fn code(&self) -> Option<Vec<u8>> {
+        self.tx.code(InnerTxRef::Commitment(self.cmt))
+    }
+
+    /// Get the data designated by the data hash in the header
+    pub fn data(&self) -> Option<Vec<u8>> {
+        self.tx.data(InnerTxRef::Commitment(self.cmt))
+    }
+
+    /// Get the memo designated by the memo hash in the header
+    pub fn memo(&self) -> Option<Vec<u8>> {
+        self.tx.memo(InnerTxRef::Commitment(self.cmt))
+    }
+}
+
 /// A transaction with the commitment to a specific inner transaction of the
 /// batch
 #[derive(
@@ -935,6 +988,7 @@ mod test {
     use data_encoding::HEXLOWER;
     use namada_core::address::testing::nam;
     use namada_core::borsh::schema::BorshSchema;
+    use namada_core::hash::Hash;
     use namada_core::key;
     use namada_core::token::DenominatedAmount;
 
@@ -1251,6 +1305,202 @@ mod test {
                 ),
                 Err(VerifySigError::InvalidSectionSignature(_))
             );
+        }
+    }
+
+    #[test]
+    fn test_inner_tx_sections() {
+        let mut tx = Tx::default();
+        dbg!(&tx);
+        assert!(tx.first_commitments().is_none());
+
+        for cmt in [
+            InnerTxRef::CommitmentHash(Hash::default()),
+            InnerTxRef::Index(0),
+            InnerTxRef::Index(1),
+        ] {
+            assert!(tx.code(cmt.clone()).is_none());
+            assert!(tx.data(cmt.clone()).is_none());
+            assert!(tx.memo(cmt).is_none());
+        }
+
+        // Set inner tx code
+        let code_bytes = "code brrr".as_bytes();
+        let code = Code::new(code_bytes.to_owned(), None);
+        tx.set_code(code);
+        assert!(tx.first_commitments().is_some());
+        for cmt in [
+            InnerTxRef::Commitment(tx.first_commitments().unwrap()),
+            InnerTxRef::CommitmentHash(
+                tx.first_commitments().unwrap().get_hash(),
+            ),
+            InnerTxRef::Index(0),
+        ] {
+            assert!(tx.code(cmt.clone()).is_some());
+            assert_eq!(tx.code(cmt.clone()).unwrap(), code_bytes);
+
+            assert!(tx.data(cmt.clone()).is_none());
+            assert!(tx.memo(cmt).is_none());
+        }
+        for cmt in [
+            InnerTxRef::CommitmentHash(Hash::default()),
+            InnerTxRef::Index(1),
+        ] {
+            assert!(tx.code(cmt.clone()).is_none());
+            assert!(tx.data(cmt.clone()).is_none());
+            assert!(tx.memo(cmt).is_none());
+        }
+
+        // Set inner tx data
+        let data_bytes = "bingbong".as_bytes();
+        let data = Data::new(data_bytes.to_owned());
+        tx.set_data(data);
+        assert!(tx.first_commitments().is_some());
+        for cmt in [
+            InnerTxRef::Commitment(tx.first_commitments().unwrap()),
+            InnerTxRef::CommitmentHash(
+                tx.first_commitments().unwrap().get_hash(),
+            ),
+            InnerTxRef::Index(0),
+        ] {
+            assert!(tx.code(cmt.clone()).is_some());
+
+            assert!(tx.data(cmt.clone()).is_some());
+            assert_eq!(tx.data(cmt.clone()).unwrap(), data_bytes);
+
+            assert!(tx.memo(cmt).is_none());
+        }
+        for cmt in [
+            InnerTxRef::CommitmentHash(Hash::default()),
+            InnerTxRef::Index(1),
+        ] {
+            assert!(tx.code(cmt.clone()).is_none());
+            assert!(tx.data(cmt.clone()).is_none());
+            assert!(tx.memo(cmt).is_none());
+        }
+
+        // Set inner tx memo
+        let memo_bytes = "extradata".as_bytes();
+        tx.add_memo(memo_bytes);
+        assert!(tx.first_commitments().is_some());
+        for cmt in [
+            InnerTxRef::Commitment(tx.first_commitments().unwrap()),
+            InnerTxRef::CommitmentHash(
+                tx.first_commitments().unwrap().get_hash(),
+            ),
+            InnerTxRef::Index(0),
+        ] {
+            assert!(tx.code(cmt.clone()).is_some());
+
+            assert!(tx.data(cmt.clone()).is_some());
+
+            assert!(tx.memo(cmt.clone()).is_some());
+            assert_eq!(tx.memo(cmt.clone()).unwrap(), memo_bytes);
+        }
+        for cmt in [
+            InnerTxRef::CommitmentHash(Hash::default()),
+            InnerTxRef::Index(1),
+        ] {
+            assert!(tx.code(cmt.clone()).is_none());
+            assert!(tx.data(cmt.clone()).is_none());
+            assert!(tx.memo(cmt).is_none());
+        }
+    }
+
+    #[test]
+    fn test_batched_tx_sections() {
+        let code_bytes1 = "code brrr".as_bytes();
+        let data_bytes1 = "bingbong".as_bytes();
+        let memo_bytes1 = "extradata".as_bytes();
+
+        let code_bytes2 = code_bytes1;
+        let data_bytes2 = "WASD".as_bytes();
+        let memo_bytes2 = "hjkl".as_bytes();
+
+        let inner_tx1 = {
+            let mut tx = Tx::default();
+
+            let code = Code::new(code_bytes1.to_owned(), None);
+            tx.set_code(code);
+
+            let data = Data::new(data_bytes1.to_owned());
+            tx.set_data(data);
+
+            tx.add_memo(memo_bytes1);
+
+            tx
+        };
+
+        let inner_tx2 = {
+            let mut tx = Tx::default();
+
+            let code = Code::new(code_bytes2.to_owned(), None);
+            tx.set_code(code);
+
+            let data = Data::new(data_bytes2.to_owned());
+            tx.set_data(data);
+
+            tx.add_memo(memo_bytes2);
+
+            tx
+        };
+
+        let cmt1 = inner_tx1.first_commitments().unwrap().to_owned();
+        let cmt2 = inner_tx2.first_commitments().unwrap().to_owned();
+
+        // Batch `inner_tx1` and `inner_tx1` into `tx`
+        let tx = {
+            let mut tx = Tx::default();
+
+            tx.add_inner_tx(inner_tx1, cmt1.clone());
+            assert_eq!(tx.first_commitments().unwrap(), &cmt1);
+            assert_eq!(tx.header.batch.len(), 1);
+
+            tx.add_inner_tx(inner_tx2, cmt2.clone());
+            assert_eq!(tx.first_commitments().unwrap(), &cmt1);
+            assert_eq!(tx.header.batch.len(), 2);
+            assert_eq!(tx.header.batch.get_index(1).unwrap(), &cmt2);
+
+            tx
+        };
+
+        // Check sections of `inner_tx1`
+        for cmt in [
+            InnerTxRef::Commitment(&cmt1),
+            InnerTxRef::CommitmentHash(cmt1.get_hash()),
+            InnerTxRef::Index(0),
+        ] {
+            assert!(tx.code(cmt.clone()).is_some());
+            assert_eq!(tx.code(cmt.clone()).unwrap(), code_bytes1);
+
+            assert!(tx.data(cmt.clone()).is_some());
+            assert_eq!(tx.data(cmt.clone()).unwrap(), data_bytes1);
+
+            assert!(tx.memo(cmt.clone()).is_some());
+            assert_eq!(tx.memo(cmt.clone()).unwrap(), memo_bytes1);
+        }
+
+        // Check sections of `inner_tx2`
+        for cmt in [
+            InnerTxRef::Commitment(&cmt2),
+            InnerTxRef::CommitmentHash(cmt2.get_hash()),
+            InnerTxRef::Index(1),
+        ] {
+            assert!(tx.code(cmt.clone()).is_some());
+            assert_eq!(tx.code(cmt.clone()).unwrap(), code_bytes2);
+
+            assert!(tx.data(cmt.clone()).is_some());
+            assert_eq!(tx.data(cmt.clone()).unwrap(), data_bytes2);
+
+            assert!(tx.memo(cmt.clone()).is_some());
+            assert_eq!(tx.memo(cmt.clone()).unwrap(), memo_bytes2);
+        }
+
+        // Check invalid indices
+        for cmt in [InnerTxRef::Index(2), InnerTxRef::Index(3)] {
+            assert!(tx.code(cmt.clone()).is_none());
+            assert!(tx.data(cmt.clone()).is_none());
+            assert!(tx.memo(cmt.clone()).is_none());
         }
     }
 }

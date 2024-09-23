@@ -20,7 +20,7 @@ use namada_ibc::{decode_message, extract_masp_tx_from_envelope, IbcMessage};
 use namada_io::client::Client;
 use namada_token::masp::shielded_wallet::ShieldedQueries;
 pub use namada_token::masp::{utils, *};
-use namada_tx::Tx;
+use namada_tx::{InnerTxRef, Tx};
 pub use utilities::{IndexerMaspClient, LedgerMaspClient};
 
 use crate::error::{Error, QueryError};
@@ -72,20 +72,13 @@ fn extract_masp_tx(
                     // Dereference the masp ref to the first instance that
                     // matches is, even if it is not the exact one that produced
                     // the event, the data we extract will be exactly the same
-                    let masp_ibc_tx = tx
-                        .commitments()
-                        .iter()
-                        .find(|cmt| cmt.data_sechash() == hash)
+                    let tx_data = tx
+                        .data(InnerTxRef::CommitmentHash(*hash))
                         .ok_or_else(|| {
                             Error::Other(format!(
-                                "Couldn't find data section with hash {hash}"
+                                "Couldn't find data section with hash {hash}",
                             ))
                         })?;
-                    let tx_data = tx.data(masp_ibc_tx).ok_or_else(|| {
-                        Error::Other(
-                            "Missing expected data section".to_string(),
-                        )
-                    })?;
 
                     let IbcMessage::Envelope(envelope) =
                         decode_message::<token::Transfer>(&tx_data)

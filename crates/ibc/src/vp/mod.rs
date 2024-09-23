@@ -148,19 +148,12 @@ where
         // Is VP triggered by a governance proposal?
         if Gov::is_proposal_accepted(
             &self.ctx.pre(),
-            batched_tx
-                .tx
-                .data(batched_tx.cmt)
-                .unwrap_or_default()
-                .as_ref(),
+            batched_tx.data().unwrap_or_default().as_ref(),
         )? {
             return Ok(());
         }
 
-        let tx_data = batched_tx
-            .tx
-            .data(batched_tx.cmt)
-            .ok_or(VpError::NoTxData)?;
+        let tx_data = batched_tx.data().ok_or(VpError::NoTxData)?;
 
         // Pseudo execution and compare them
         self.validate_state(&tx_data, keys_changed)?;

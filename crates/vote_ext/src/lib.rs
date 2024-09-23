@@ -31,7 +31,7 @@ use namada_macros::BorshDeserializer;
 use namada_migrations::*;
 use namada_tx::data::protocol::{ProtocolTx, ProtocolTxType};
 use namada_tx::data::TxType;
-use namada_tx::{Authorization, Signed, Tx, TxError};
+use namada_tx::{Authorization, InnerTxRef, Signed, Tx, TxError};
 
 /// This type represents the data we pass to the extension of
 /// a vote at the PreCommit phase of Tendermint.
@@ -61,11 +61,13 @@ macro_rules! ethereum_tx_data_deserialize_inner {
 
             fn try_from(tx: &Tx) -> Result<Self, TxError> {
                 let tx_data = tx
-                    .data(tx.commitments().first().ok_or_else(|| {
-                        TxError::Deserialization(
-                            "Missing inner protocol tx commitments".into(),
-                        )
-                    })?)
+                    .data(InnerTxRef::Commitment(
+                        tx.commitments().first().ok_or_else(|| {
+                            TxError::Deserialization(
+                                "Missing inner protocol tx commitments".into(),
+                            )
+                        })?,
+                    ))
                     .ok_or_else(|| {
                         TxError::Deserialization(
                             "Expected protocol tx type associated data".into(),
@@ -150,13 +152,13 @@ impl TryFrom<&Tx> for EthereumTxData {
                 "Expected protocol tx type".into(),
             ));
         };
-        let Some(tx_data) =
-            tx.data(tx.commitments().first().ok_or_else(|| {
+        let Some(tx_data) = tx.data(InnerTxRef::Commitment(
+            tx.commitments().first().ok_or_else(|| {
                 TxError::Deserialization(
                     "Missing inner protocol tx commitments".into(),
                 )
-            })?)
-        else {
+            })?,
+        )) else {
             return Err(TxError::Deserialization(
                 "Expected protocol tx type associated data".into(),
             ));

@@ -60,7 +60,7 @@ where
     /// Run the validity predicate
     pub fn validate_tx(
         ctx: &'ctx CTX,
-        tx_data: &BatchedTxRef<'_>,
+        tx: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<storage::Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
@@ -74,7 +74,7 @@ where
         // Is VP triggered by a governance proposal?
         if is_proposal_accepted(
             &ctx.pre(),
-            tx_data.tx.data(tx_data.cmt).unwrap_or_default().as_ref(),
+            tx.data().unwrap_or_default().as_ref(),
         )? {
             return Ok(());
         }
@@ -168,9 +168,7 @@ where
                 (KeyType::PROPOSAL_COMMIT, _) => {
                     Self::is_valid_proposal_commit(ctx)
                 }
-                (KeyType::PARAMETER, _) => {
-                    Self::is_valid_parameter(ctx, tx_data)
-                }
+                (KeyType::PARAMETER, _) => Self::is_valid_parameter(ctx, tx),
                 (KeyType::BALANCE, _) => {
                     Self::is_valid_balance(ctx, &native_token)
                 }
@@ -988,8 +986,7 @@ where
         ctx: &'ctx CTX,
         batched_tx: &BatchedTxRef<'_>,
     ) -> Result<()> {
-        let BatchedTxRef { tx, cmt } = batched_tx;
-        tx.data(cmt).map_or_else(
+        batched_tx.data().map_or_else(
             || {
                 Err(Error::new_const(
                     "Governance parameter changes require tx data to be \

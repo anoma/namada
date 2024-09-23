@@ -1684,7 +1684,7 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
 
         let verifiers_from_tx =
             shielded_ctx.shell.write().execute_tx(&signed_tx.to_ref());
-        let tx_data = signed_tx.tx.data(&signed_tx.cmt).unwrap();
+        let tx_data = signed_tx.to_ref().data().unwrap();
         let shell_read = shielded_ctx.shell.read();
         let (verifiers, keys_changed) = shell_read
             .state
@@ -1745,7 +1745,7 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
         let verifiers_from_tx =
             shielded_ctx.shell.write().execute_tx(&signed_tx.to_ref());
         let shell_read = shielded_ctx.shell.read();
-        let tx_data = signed_tx.tx.data(&signed_tx.cmt).unwrap();
+        let tx_data = signed_tx.to_ref().data().unwrap();
         let (verifiers, keys_changed) = shell_read
             .state
             .write_log()

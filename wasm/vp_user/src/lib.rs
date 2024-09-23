@@ -30,10 +30,10 @@ fn validate_tx(
         verifiers
     );
 
-    let BatchedTx { tx, ref cmt } = tx;
     // Check if this is a governance proposal first
     let is_gov_proposal = tx
-        .data(cmt)
+        .to_ref()
+        .data()
         .and_then(|tx_data| {
             let proposal_id = u64::try_from_slice(&tx_data).ok()?;
             Some(is_proposal_accepted(ctx, proposal_id))
@@ -44,6 +44,7 @@ fn validate_tx(
         // Any change from governance is allowed without further checks
         return Ok(());
     }
+    let BatchedTx { tx, cmt: _ } = tx;
 
     let mut gadget = VerifySigGadget::new();
 

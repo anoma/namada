@@ -38,8 +38,8 @@ pub use sign::{
     VerifySigError,
 };
 pub use types::{
-    BatchedTx, BatchedTxRef, DecodeError, IndexedTx, IndexedTxRange, Tx,
-    TxError,
+    BatchedTx, BatchedTxRef, DecodeError, IndexedTx, IndexedTxRange,
+    InnerTxRef, Tx, TxError,
 };
 
 /// Length of the transaction sections salt

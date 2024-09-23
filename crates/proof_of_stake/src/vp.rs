@@ -10,7 +10,7 @@ use namada_systems::governance;
 use namada_tx::action::{
     Action, Bond, ClaimRewards, PosAction, Redelegation, Unbond, Withdraw,
 };
-use namada_tx::BatchedTxRef;
+use namada_tx::{BatchedTxRef, InnerTxRef};
 use namada_vp_env::{Error, Result, VpEnv};
 use thiserror::Error;
 
@@ -57,7 +57,7 @@ where
         // Check if this is a governance proposal first
         if batched_tx
             .tx
-            .data(batched_tx.cmt)
+            .data(InnerTxRef::Index(0))
             .map(|tx_data| Gov::is_proposal_accepted(&ctx.pre(), &tx_data))
             .transpose()?
             .unwrap_or(false)

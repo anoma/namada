@@ -34,7 +34,7 @@ use namada_token::storage_key::balance_key;
 use namada_tx::data::pgf::UpdateStewardCommission;
 use namada_tx::data::pos::BecomeValidator;
 use namada_tx::data::{pos, Fee};
-use namada_tx::{MaspBuilder, Section, SignatureIndex, Tx};
+use namada_tx::{InnerTxRef, MaspBuilder, Section, SignatureIndex, Tx};
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
@@ -987,6 +987,7 @@ pub async fn to_ledger_vector(
     };
 
     for cmt in tx.commitments() {
+        let inner_tx = InnerTxRef::Commitment(cmt);
         // FIXME: need to push some string to differentiate between the
         // different txs of the bundle?
         let code_sec = tx
@@ -1007,7 +1008,7 @@ pub async fn to_ledger_vector(
 
         if code_sec.tag == Some(TX_INIT_ACCOUNT_WASM.to_string()) {
             let init_account = InitAccount::try_from_slice(
-                &tx.data(cmt)
+                &tx.data(inner_tx.clone())
                     .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
             )
             .map_err(|err| {
@@ -1050,7 +1051,7 @@ pub async fn to_ledger_vector(
             ]);
         } else if code_sec.tag == Some(TX_BECOME_VALIDATOR_WASM.to_string()) {
             let init_validator = BecomeValidator::try_from_slice(
-                &tx.data(cmt)
+                &tx.data(inner_tx.clone())
                     .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
             )
             .map_err(|err| {
@@ -1123,7 +1124,7 @@ pub async fn to_ledger_vector(
             }
         } else if code_sec.tag == Some(TX_INIT_PROPOSAL.to_string()) {
             let init_proposal_data = InitProposalData::try_from_slice(
-                &tx.data(cmt)
+                &tx.data(inner_tx.clone())
                     .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
             )
             .map_err(|err| {
@@ -1185,7 +1186,7 @@ pub async fn to_ledger_vector(
             ]);
         } else if code_sec.tag == Some(TX_VOTE_PROPOSAL.to_string()) {
             let vote_proposal = VoteProposalData::try_from_slice(
-                &tx.data(cmt)
+                &tx.data(inner_tx.clone())
                     .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
             )
             .map_err(|err| {
@@ -1208,7 +1209,7 @@ pub async fn to_ledger_vector(
             ]);
         } else if code_sec.tag == Some(TX_REVEAL_PK.to_string()) {
             let public_key = common::PublicKey::try_from_slice(
-                &tx.data(cmt)
+                &tx.data(inner_tx.clone())
                     .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
             )
             .map_err(|err| {
@@ -1226,7 +1227,7 @@ pub async fn to_ledger_vector(
                 .extend(vec![format!("Public key : {}", public_key)]);
         } else if code_sec.tag == Some(TX_UPDATE_ACCOUNT_WASM.to_string()) {
             let update_account = UpdateAccount::try_from_slice(
-                &tx.data(cmt)
+                &tx.data(inner_tx.clone())
                     .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
             )
             .map_err(|err| {
@@ -1292,7 +1293,7 @@ pub async fn to_ledger_vector(
             }
         } else if code_sec.tag == Some(TX_TRANSFER_WASM.to_string()) {
             let transfer = token::Transfer::try_from_slice(
-                &tx.data(cmt)
+                &tx.data(inner_tx.clone())
                     .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
             )
             .map_err(|err| {
@@ -1327,7 +1328,7 @@ pub async fn to_ledger_vector(
             .await?;
         } else if code_sec.tag == Some(TX_IBC_WASM.to_string()) {
             let data = tx
-                .data(cmt)
+                .data(inner_tx.clone())
                 .ok_or_else(|| Error::Other("Invalid Data".to_string()))?;
 
             if let Ok(transfer) =
@@ -1582,7 +1583,7 @@ pub async fn to_ledger_vector(
             }
         } else if code_sec.tag == Some(TX_BOND_WASM.to_string()) {
             let bond = pos::Bond::try_from_slice(
-                &tx.data(cmt)
+                &tx.data(inner_tx.clone())
                     .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
             )
             .map_err(|err| {
@@ -1615,7 +1616,7 @@ pub async fn to_ledger_vector(
             ]);
         } else if code_sec.tag == Some(TX_UNBOND_WASM.to_string()) {
             let unbond = pos::Unbond::try_from_slice(
-                &tx.data(cmt)
+                &tx.data(inner_tx.clone())
                     .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
             )
             .map_err(|err| {
@@ -1648,7 +1649,7 @@ pub async fn to_ledger_vector(
             ]);
         } else if code_sec.tag == Some(TX_WITHDRAW_WASM.to_string()) {
             let withdraw = pos::Withdraw::try_from_slice(
-                &tx.data(cmt)
+                &tx.data(inner_tx.clone())
                     .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
             )
             .map_err(|err| {
@@ -1671,7 +1672,7 @@ pub async fn to_ledger_vector(
                 .push(format!("Validator : {}", withdraw.validator));
         } else if code_sec.tag == Some(TX_CLAIM_REWARDS_WASM.to_string()) {
             let claim = pos::Withdraw::try_from_slice(
-                &tx.data(cmt)
+                &tx.data(inner_tx.clone())
                     .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
             )
             .map_err(|err| {
@@ -1693,7 +1694,7 @@ pub async fn to_ledger_vector(
                 .push(format!("Validator : {}", claim.validator));
         } else if code_sec.tag == Some(TX_CHANGE_COMMISSION_WASM.to_string()) {
             let commission_change = pos::CommissionChange::try_from_slice(
-                &tx.data(cmt)
+                &tx.data(inner_tx.clone())
                     .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
             )
             .map_err(|err| {
@@ -1714,7 +1715,7 @@ pub async fn to_ledger_vector(
             ]);
         } else if code_sec.tag == Some(TX_CHANGE_METADATA_WASM.to_string()) {
             let metadata_change = pos::MetaDataChange::try_from_slice(
-                &tx.data(cmt)
+                &tx.data(inner_tx.clone())
                     .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
             )
             .map_err(|err| {
@@ -1757,7 +1758,7 @@ pub async fn to_ledger_vector(
         } else if code_sec.tag == Some(TX_CHANGE_CONSENSUS_KEY_WASM.to_string())
         {
             let consensus_key_change = pos::ConsensusKeyChange::try_from_slice(
-                &tx.data(cmt)
+                &tx.data(inner_tx.clone())
                     .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
             )
             .map_err(|err| {
@@ -1784,7 +1785,7 @@ pub async fn to_ledger_vector(
             ]);
         } else if code_sec.tag == Some(TX_UNJAIL_VALIDATOR_WASM.to_string()) {
             let address = Address::try_from_slice(
-                &tx.data(cmt)
+                &tx.data(inner_tx.clone())
                     .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
             )
             .map_err(|err| {
@@ -1802,7 +1803,7 @@ pub async fn to_ledger_vector(
         } else if code_sec.tag == Some(TX_DEACTIVATE_VALIDATOR_WASM.to_string())
         {
             let address = Address::try_from_slice(
-                &tx.data(cmt)
+                &tx.data(inner_tx.clone())
                     .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
             )
             .map_err(|err| {
@@ -1820,7 +1821,7 @@ pub async fn to_ledger_vector(
         } else if code_sec.tag == Some(TX_REACTIVATE_VALIDATOR_WASM.to_string())
         {
             let address = Address::try_from_slice(
-                &tx.data(cmt)
+                &tx.data(inner_tx.clone())
                     .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
             )
             .map_err(|err| {
@@ -1837,7 +1838,7 @@ pub async fn to_ledger_vector(
             tv.output_expert.push(format!("Validator : {}", address));
         } else if code_sec.tag == Some(TX_REDELEGATE_WASM.to_string()) {
             let redelegation = pos::Redelegation::try_from_slice(
-                &tx.data(cmt)
+                &tx.data(inner_tx.clone())
                     .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
             )
             .map_err(|err| {
@@ -1875,7 +1876,7 @@ pub async fn to_ledger_vector(
         } else if code_sec.tag == Some(TX_UPDATE_STEWARD_COMMISSION.to_string())
         {
             let update = UpdateStewardCommission::try_from_slice(
-                &tx.data(cmt)
+                &tx.data(inner_tx.clone())
                     .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
             )
             .map_err(|err| {
@@ -1900,7 +1901,7 @@ pub async fn to_ledger_vector(
             }
         } else if code_sec.tag == Some(TX_RESIGN_STEWARD.to_string()) {
             let address = Address::try_from_slice(
-                &tx.data(cmt)
+                &tx.data(inner_tx.clone())
                     .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
             )
             .map_err(|err| {
@@ -1917,7 +1918,7 @@ pub async fn to_ledger_vector(
             tv.output_expert.push(format!("Steward : {}", address));
         } else if code_sec.tag == Some(TX_BRIDGE_POOL_WASM.to_string()) {
             let transfer = PendingTransfer::try_from_slice(
-                &tx.data(cmt)
+                &tx.data(inner_tx)
                     .ok_or_else(|| Error::Other("Invalid Data".to_string()))?,
             )
             .map_err(|err| {

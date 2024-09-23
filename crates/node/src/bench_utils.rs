@@ -1338,7 +1338,7 @@ impl BenchShieldedCtx {
         };
 
         let vectorized_transfer =
-            Transfer::deserialize(&mut tx.tx.data(&tx.cmt).unwrap().as_slice())
+            Transfer::deserialize(&mut tx.to_ref().data().unwrap().as_slice())
                 .unwrap();
         let sources =
             vec![vectorized_transfer.sources.into_iter().next().unwrap()]

@@ -37,7 +37,7 @@ mod tests {
     use namada_sdk::storage::{self, BlockHeight, Key, KeySeg};
     use namada_sdk::time::DateTimeUtc;
     use namada_sdk::token::{self, Amount};
-    use namada_sdk::tx::Tx;
+    use namada_sdk::tx::{InnerTxRef, Tx};
     use namada_sdk::{address, key};
     use namada_test_utils::TestWasms;
     use namada_tx_env::TxEnv;
@@ -562,7 +562,10 @@ mod tests {
                 env.batched_tx = batched_tx;
                 env.batched_tx.clone()
             });
-            assert_eq!(tx.data(&cmt).as_ref(), Some(data));
+            assert_eq!(
+                tx.data(InnerTxRef::Commitment(&cmt)).as_ref(),
+                Some(data)
+            );
             assert!(
                 tx.verify_signatures(
                     &[tx.header_hash(),],

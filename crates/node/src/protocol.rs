@@ -28,7 +28,7 @@ use namada_sdk::tx::data::{
     BatchedTxResult, ExtendedTxResult, TxResult, VpStatusFlags, VpsResult,
     WrapperTx,
 };
-use namada_sdk::tx::{BatchedTxRef, Tx, TxCommitments};
+use namada_sdk::tx::{BatchedTxRef, InnerTxRef, Tx, TxCommitments};
 use namada_sdk::validation::{
     EthBridgeNutVp, EthBridgePoolVp, EthBridgeVp, GovernanceVp, IbcVp, MaspVp,
     MultitokenVp, NativeVpCtx, ParametersVp, PgfVp, PosVp,
@@ -272,8 +272,11 @@ where
         DispatchArgs::Protocol(protocol_tx) => {
             // No bundles of protocol transactions, only take the first one
             let cmt = tx.first_commitments().ok_or(Error::MissingInnerTxs)?;
-            let batched_tx_result =
-                apply_protocol_tx(protocol_tx.tx, tx.data(cmt), state)?;
+            let batched_tx_result = apply_protocol_tx(
+                protocol_tx.tx,
+                tx.data(InnerTxRef::Commitment(cmt)),
+                state,
+            )?;
 
             Ok({
                 let mut batch_results = TxResult::new();

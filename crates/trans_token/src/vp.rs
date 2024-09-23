@@ -43,14 +43,14 @@ where
     /// Run the validity predicate
     pub fn validate_tx(
         ctx: &'ctx CTX,
-        tx_data: &BatchedTxRef<'_>,
+        tx: &BatchedTxRef<'_>,
         keys_changed: &BTreeSet<Key>,
         verifiers: &BTreeSet<Address>,
     ) -> Result<()> {
         // Is VP triggered by a governance proposal?
         if Gov::is_proposal_accepted(
             &ctx.pre(),
-            tx_data.tx.data(tx_data.cmt).unwrap_or_default().as_ref(),
+            tx.data().unwrap_or_default().as_ref(),
         )? {
             return Ok(());
         }
@@ -178,7 +178,7 @@ where
             } else if let Some(token) = is_any_minter_key(key) {
                 Self::is_valid_minter(ctx, token, verifiers)?;
             } else if is_any_token_parameter_key(key).is_some() {
-                return Self::is_valid_parameter(ctx, tx_data);
+                return Self::is_valid_parameter(ctx, tx);
             } else if key.segments.first()
                 == Some(
                     &Address::Internal(InternalAddress::Multitoken).to_db_key(),
@@ -275,7 +275,7 @@ where
         ctx: &'ctx CTX,
         batched_tx: &BatchedTxRef<'_>,
     ) -> Result<()> {
-        batched_tx.tx.data(batched_tx.cmt).map_or_else(
+        batched_tx.data().map_or_else(
             || {
                 Err(Error::new_const(
                     "Token parameter changes require tx data to be present",

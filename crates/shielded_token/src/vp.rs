@@ -117,7 +117,7 @@ where
         ctx: &'ctx CTX,
         tx: &BatchedTxRef<'_>,
     ) -> Result<()> {
-        tx.tx.data(tx.cmt).map_or_else(
+        tx.data().map_or_else(
             || {
                 Err(Error::new_const(
                     "MASP parameter changes require tx data to be present",
@@ -398,10 +398,7 @@ where
         )
         .map_err(Error::new_const)?;
         let conversion_state = ctx.conversion_state();
-        let tx_data = batched_tx
-            .tx
-            .data(batched_tx.cmt)
-            .ok_or_err_msg("No transaction data")?;
+        let tx_data = batched_tx.data().ok_or_err_msg("No transaction data")?;
         let actions = ctx.read_actions()?;
         // Try to get the Transaction object from the tx first (IBC) and from
         // the actions afterwards

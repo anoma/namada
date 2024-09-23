@@ -19,11 +19,7 @@ fn fatal_msg(msg: &str) -> ! {
 
 #[transaction]
 fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
-    let BatchedTx {
-        tx: signed,
-        ref cmt,
-    } = tx_data;
-    let data = match signed.data(cmt) {
+    let data = match tx_data.to_ref().data() {
         Some(data) => {
             log(&format!("got data ({} bytes)", data.len()));
             data
