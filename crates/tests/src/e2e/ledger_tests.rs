@@ -102,20 +102,24 @@ fn run_ledger() -> Result<()> {
         None,
     );
 
-    let cmd_combinations = vec![vec!["ledger"], vec!["ledger", "run"]];
+    let cmd_combinations = vec![
+        (Bin::Node, vec!["ledger"]),
+        (Bin::Node, vec!["ledger", "run"]),
+        (Bin::Namada, vec!["node", "ledger"]),
+    ];
 
     // Start the ledger as a validator
-    for args in &cmd_combinations {
+    for (bin, args) in &cmd_combinations {
         let mut ledger =
-            run_as!(test, Who::Validator(0), Bin::Node, args, Some(40))?;
+            run_as!(test, Who::Validator(0), *bin, args, Some(40))?;
         ledger.exp_string(LEDGER_STARTED)?;
         ledger.exp_string(VALIDATOR_NODE)?;
     }
 
     // Start the ledger as a non-validator
-    for args in &cmd_combinations {
+    for (bin, args) in &cmd_combinations {
         let mut ledger =
-            run_as!(test, Who::NonValidator, Bin::Node, args, Some(40))?;
+            run_as!(test, Who::NonValidator, *bin, args, Some(40))?;
         ledger.exp_string(LEDGER_STARTED)?;
         ledger.exp_string(NON_VALIDATOR_NODE)?;
     }
