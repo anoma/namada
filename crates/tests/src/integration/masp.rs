@@ -4470,50 +4470,7 @@ fn tricky_masp_txs() -> Result<()> {
     let txs = vec![tx0.to_bytes(), tx1.to_bytes()];
     node.clear_results();
     node.submit_txs(txs);
-
-    // Check the block result
-    {
-        let codes = node.tx_result_codes.lock().unwrap();
-        // If empty than failed in process proposal
-        assert!(!codes.is_empty());
-
-        // Both batches must succeed
-        for code in codes.iter() {
-            assert!(matches!(code, NodeResults::Ok))
-        }
-
-        let results = node.tx_results.lock().unwrap();
-        // We submitted two batches
-        assert_eq!(results.len(), 2);
-
-        // Check inner tx results of first batch
-        let res0 = &results[0];
-        assert_eq!(res0.len(), 1);
-        let inner_tx_result = res0
-            .get_inner_tx_result(
-                tx0.wrapper_hash().as_ref(),
-                itertools::Either::Right(tx0.first_commitments().unwrap()),
-            )
-            .expect("Missing expected tx result")
-            .as_ref()
-            .expect("Result is supposed to be Ok");
-        assert!(inner_tx_result.is_accepted());
-
-        // Check inner tx results of second batch
-        let res1 = &results[1];
-        assert_eq!(res1.len(), 1);
-        let inner_tx_result = res1
-            .get_inner_tx_result(
-                tx1.wrapper_hash().as_ref(),
-                itertools::Either::Right(tx1.first_commitments().unwrap()),
-            )
-            .expect("Missing expected tx result")
-            .as_ref()
-            .expect("Result is supposed to be Ok");
-        assert!(inner_tx_result.is_accepted());
-    }
-
-    node.clear_results();
+    node.assert_success();
 
     // sync the shielded context
     run(
