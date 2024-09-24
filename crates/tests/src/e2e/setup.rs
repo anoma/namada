@@ -1105,6 +1105,12 @@ where
         &working_dir.as_ref().join("Cargo.toml"),
     );
 
+    if let Bin::Namada = bin {
+        // Avoid `namada` running via "cargo" (see `fn handle_subcommand` in
+        // crates/apps/src/bin/namada/cli.rs)
+        run_cmd.env_remove("CARGO");
+    }
+
     run_cmd
         .env("NAMADA_LOG", log_level)
         .env("NAMADA_CMT_STDOUT", "true")
