@@ -10,6 +10,7 @@
 //! `NAMADA_E2E_KEEP_TEMP=true`.
 #![allow(clippy::type_complexity)]
 
+use std::env;
 use std::fmt::Display;
 use std::path::PathBuf;
 use std::process::Command;
@@ -2593,7 +2594,6 @@ fn masp_txs_and_queries() -> Result<()> {
 /// Test localnet genesis files with `namada node utils test-genesis` command.
 #[test]
 fn test_localnet_genesis() -> Result<()> {
-    let loc = format!("{}:{}", std::file!(), std::line!());
     let base_dir = setup::TestDir::new();
     let working_dir = working_dir();
     let genesis_path = wallet::defaults::derive_template_dir(&working_dir);
@@ -2630,12 +2630,104 @@ fn test_localnet_genesis() -> Result<()> {
         Some(30),
         &working_dir,
         &base_dir,
-        loc,
+        format!("{}:{}", std::file!(), std::line!()),
     )?;
     test_genesis_result
         .exp_string("Genesis files were dry-run successfully")?;
     test_genesis_result.exp_string("Able to sign with")?;
     test_genesis_result.exp_string("Able to sign with")?;
     test_genesis_result.exp_string("Able to sign with")?;
+
+    // Use a non-default "NAMADA_GENESIS_TX_CHAIN_ID"
+    env::set_var(
+        config::genesis::transactions::NAMADA_GENESIS_TX_ENV_VAR,
+        "e2e-test-genesis",
+    );
+
+    let mut test_genesis_result = setup::run_cmd(
+        Bin::Node,
+        [
+            "utils",
+            "test-genesis",
+            "--path",
+            &genesis_path.to_string_lossy(),
+            "--wasm-dir",
+            &wasm_dir.to_string_lossy(),
+        ],
+        Some(30),
+        &working_dir,
+        &base_dir,
+        format!("{}:{}", std::file!(), std::line!()),
+    )?;
+    // Signature should be invalid now
+    test_genesis_result.exp_string("Invalid validator account signature")?;
+    test_genesis_result.exp_string("Invalid bond tx signature")?;
+    test_genesis_result.exp_string("Invalid bond tx signature")?;
+    test_genesis_result.assert_failure();
+
+    Ok(())
+}
+
+/// Test change of genesis chain ID via "NAMADA_GENESIS_TX_CHAIN_ID" env var
+#[test]
+fn test_genesis_chain_id_change() -> Result<()> {
+    // Use a non-default "NAMADA_GENESIS_TX_CHAIN_ID"
+    env::set_var(
+        config::genesis::transactions::NAMADA_GENESIS_TX_ENV_VAR,
+        "e2e-test-genesis",
+    );
+
+    let working_dir = working_dir();
+    let wasm_dir = working_dir.join(config::DEFAULT_WASM_DIR);
+
+    let test = setup::network(
+        |mut genesis, base_dir: &_| {
+            // Empty the transactions as their signatures are invalid - created
+            // with the default genesis chain ID
+            genesis.transactions = Default::default();
+            genesis.parameters.pgf_params.stewards = Default::default();
+
+            setup::set_validators(1, genesis, base_dir, |_| 0u16, vec![])
+        },
+        None,
+    )
+    .unwrap();
+
+    let genesis_templates = test.test_dir.path().join("templates");
+    let base_dir = test.get_base_dir(Who::Validator(0));
+    let mut test_genesis_result = setup::run_cmd(
+        Bin::Node,
+        [
+            "utils",
+            "test-genesis",
+            "--path",
+            &genesis_templates.to_string_lossy(),
+            "--wasm-dir",
+            &wasm_dir.to_string_lossy(),
+        ],
+        Some(30),
+        &working_dir,
+        &base_dir,
+        format!("{}:{}", std::file!(), std::line!()),
+    )?;
+    test_genesis_result
+        .exp_string("Genesis files were dry-run successfully")?;
+
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+
+    // Start the ledger as a validator
+    let _bg_validator_0 =
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
+            .background();
+
+    let rpc = get_actor_rpc(&test, Who::Validator(0));
+    wait_for_block_height(&test, &rpc, 2, 30)?;
+
     Ok(())
 }
