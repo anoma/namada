@@ -605,13 +605,14 @@ pub fn network(
 }
 
 /// Namada binaries
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 #[allow(dead_code)]
 pub enum Bin {
     Node,
     Client,
     Wallet,
     Relayer,
+    Namada,
 }
 
 #[derive(Debug)]
@@ -1092,6 +1093,7 @@ where
 {
     // Root cargo workspace manifest path
     let (bin_name, log_level) = match bin {
+        Bin::Namada => ("namada", "info"),
         Bin::Node => ("namadan", "info"),
         Bin::Client => ("namadac", "tendermint_rpc=debug"),
         Bin::Wallet => ("namadaw", "info"),
