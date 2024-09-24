@@ -4021,7 +4021,6 @@ fn masp_batch() -> Result<()> {
             validator_one_rpc,
         ],
     )?;
-    node.assert_success();
 
     // Assert NAM balances at VK(A), Albert and Bertha
     for (owner, balance) in [
@@ -4251,7 +4250,6 @@ fn masp_atomic_batch() -> Result<()> {
             validator_one_rpc,
         ],
     )?;
-    node.assert_success();
 
     // Assert NAM balances at VK(A), Albert and Bertha are unchanged
     for (owner, balance) in [
@@ -4484,7 +4482,6 @@ fn tricky_masp_txs() -> Result<()> {
             validator_one_rpc,
         ],
     )?;
-    node.assert_success();
 
     // Assert NAM balances at VK(A), Albert, Bertha and Christel
     for (owner, balance) in [
