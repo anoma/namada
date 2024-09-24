@@ -549,6 +549,14 @@ impl TransferSource {
         }
     }
 
+    /// Get the contained ExtendedSpendingKey contained, if any
+    pub fn spending_key_mut(&mut self) -> Option<&mut PseudoExtendedKey> {
+        match self {
+            Self::ExtendedSpendingKey(x) => Some(x),
+            _ => None,
+        }
+    }
+
     /// Get the contained Address, if any
     pub fn address(&self) -> Option<Address> {
         match self {
