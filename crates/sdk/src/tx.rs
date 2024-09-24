@@ -2534,6 +2534,7 @@ pub async fn build_pgf_stewards_proposal(
 pub async fn build_ibc_transfer(
     context: &impl Namada,
     args: &args::TxIbcTransfer,
+    bparams: &mut impl BuildParams,
 ) -> Result<(Tx, SigningTxData, Option<MaspEpoch>)> {
     if args.ibc_shielding_data.is_some() && args.ibc_memo.is_some() {
         return Err(Error::Other(
@@ -2547,7 +2548,7 @@ pub async fn build_ibc_transfer(
         get_refund_target(context, &args.source, &args.refund_target).await?;
 
     let source = args.source.effective_address();
-    let signing_data = signing::aux_signing_data(
+    let mut signing_data = signing::aux_signing_data(
         context,
         &args.tx,
         Some(source.clone()),
@@ -2643,7 +2644,7 @@ pub async fn build_ibc_transfer(
         masp_fee_data,
         !(args.tx.dry_run || args.tx.dry_run_wrapper),
         args.tx.expiration.to_datetime(),
-        &mut RngBuildParams::new(OsRng),
+        bparams,
     )
     .await?;
     let shielded_tx_epoch = shielded_parts.as_ref().map(|trans| trans.0.epoch);
@@ -2694,6 +2695,7 @@ pub async fn build_ibc_transfer(
             let masp_tx_hash =
                 tx.add_masp_tx_section(shielded_transfer.masp_tx.clone()).1;
             transfer.shielded_section_hash = Some(masp_tx_hash);
+            signing_data.shielded_hash = Some(masp_tx_hash);
             tx.add_masp_builder(MaspBuilder {
                 asset_types,
                 metadata: shielded_transfer.metadata,
@@ -3193,6 +3195,7 @@ async fn get_masp_fee_payment_amount<N: Namada>(
 pub async fn build_shielding_transfer<N: Namada>(
     context: &N,
     args: &mut args::TxShieldingTransfer,
+    bparams: &mut impl BuildParams,
 ) -> Result<(Tx, SigningTxData, MaspEpoch)> {
     let source = if args.data.len() == 1 {
         // If only one transfer take its source as the signer
@@ -3204,7 +3207,7 @@ pub async fn build_shielding_transfer<N: Namada>(
         // argument
         None
     };
-    let signing_data = signing::aux_signing_data(
+    let mut signing_data = signing::aux_signing_data(
         context,
         &args.tx,
         source.clone(),
@@ -3279,7 +3282,7 @@ pub async fn build_shielding_transfer<N: Namada>(
         None,
         !(args.tx.dry_run || args.tx.dry_run_wrapper),
         args.tx.expiration.to_datetime(),
-        &mut RngBuildParams::new(OsRng),
+        bparams,
     )
     .await?
     .expect("Shielding transfer must have shielded parts");
@@ -3310,6 +3313,7 @@ pub async fn build_shielding_transfer<N: Namada>(
         });
 
         data.shielded_section_hash = Some(shielded_section_hash);
+        signing_data.shielded_hash = Some(shielded_section_hash);
         tracing::debug!("Transfer data {data:?}");
         Ok(())
     };
@@ -3331,8 +3335,9 @@ pub async fn build_shielding_transfer<N: Namada>(
 pub async fn build_unshielding_transfer<N: Namada>(
     context: &N,
     args: &mut args::TxUnshieldingTransfer,
+    bparams: &mut impl BuildParams,
 ) -> Result<(Tx, SigningTxData)> {
-    let signing_data = signing::aux_signing_data(
+    let mut signing_data = signing::aux_signing_data(
         context,
         &args.tx,
         Some(MASP),
@@ -3402,7 +3407,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
         masp_fee_data,
         !(args.tx.dry_run || args.tx.dry_run_wrapper),
         args.tx.expiration.to_datetime(),
-        &mut RngBuildParams::new(OsRng),
+        bparams,
     )
     .await?
     .expect("Shielding transfer must have shielded parts");
@@ -3432,6 +3437,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
         });
 
         data.shielded_section_hash = Some(shielded_section_hash);
+        signing_data.shielded_hash = Some(shielded_section_hash);
         tracing::debug!("Transfer data {data:?}");
         Ok(())
     };

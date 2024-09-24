@@ -418,8 +418,9 @@ impl TxShieldingTransfer {
     pub async fn build(
         &mut self,
         context: &impl Namada,
+        bparams: &mut impl BuildParams,
     ) -> crate::error::Result<(namada_tx::Tx, SigningTxData, MaspEpoch)> {
-        tx::build_shielding_transfer(context, self).await
+        tx::build_shielding_transfer(context, self, bparams).await
     }
 }
 
@@ -457,8 +458,9 @@ impl TxUnshieldingTransfer {
     pub async fn build(
         &mut self,
         context: &impl Namada,
+        bparams: &mut impl BuildParams,
     ) -> crate::error::Result<(namada_tx::Tx, SigningTxData)> {
-        tx::build_unshielding_transfer(context, self).await
+        tx::build_unshielding_transfer(context, self, bparams).await
     }
 }
 
@@ -603,9 +605,10 @@ impl TxIbcTransfer {
     pub async fn build(
         &self,
         context: &impl Namada,
+        bparams: &mut impl BuildParams,
     ) -> crate::error::Result<(namada_tx::Tx, SigningTxData, Option<MaspEpoch>)>
     {
-        tx::build_ibc_transfer(context, self).await
+        tx::build_ibc_transfer(context, self, bparams).await
     }
 }
 
