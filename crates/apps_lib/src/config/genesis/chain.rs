@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
+use eyre::eyre;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
@@ -106,6 +107,8 @@ impl Finalized {
 
     /// Try to read all genesis and the chain metadata TOML files from the given
     /// directory.
+    ///
+    /// The consistency of the files is checked with [`Finalized::is_valid`].
     pub fn read_toml_files(input_dir: &Path) -> eyre::Result<Self> {
         let vps_file = input_dir.join(templates::VPS_FILE_NAME);
         let tokens_file = input_dir.join(templates::TOKENS_FILE_NAME);
@@ -121,14 +124,20 @@ impl Finalized {
         let parameters = read_toml(&parameters_file, "Parameters")?;
         let transactions = read_toml(&transactions_file, "Transactions")?;
         let metadata = read_toml(&metadata_file, "Chain metadata")?;
-        Ok(Self {
+        let genesis = Self {
             vps,
             tokens,
             balances,
             parameters,
             transactions,
             metadata,
-        })
+        };
+
+        if !genesis.is_valid() {
+            return Err(eyre!("Invalid genesis files"));
+        }
+
+        Ok(genesis)
     }
 
     /// Find the address of the configured native token
@@ -485,6 +494,54 @@ impl Finalized {
     pub fn get_token_address(&self, alias: &Alias) -> Option<&Address> {
         self.tokens.token.get(alias).map(|token| &token.address)
     }
+
+    // Validate the chain ID against the genesis contents
+    pub fn is_valid(&self) -> bool {
+        let Self {
+            vps,
+            tokens,
+            balances,
+            parameters,
+            transactions,
+            metadata,
+        } = self.clone();
+        let Metadata {
+            chain_id,
+            genesis_time,
+            consensus_timeout_commit,
+            address_gen,
+        } = metadata.clone();
+
+        let Some(chain_id_prefix) = chain_id.prefix() else {
+            tracing::warn!(
+                "Invalid Chain ID \"{chain_id}\" - unable to find a prefix"
+            );
+            return false;
+        };
+        let metadata = Metadata {
+            chain_id: chain_id_prefix.clone(),
+            genesis_time,
+            consensus_timeout_commit,
+            address_gen,
+        };
+        let to_finalize = ToFinalize {
+            vps,
+            tokens,
+            balances,
+            parameters,
+            transactions,
+            metadata,
+        };
+        let derived_chain_id = derive_chain_id(chain_id_prefix, &to_finalize);
+        let is_valid = derived_chain_id == chain_id;
+        if !is_valid {
+            tracing::warn!(
+                "Invalid chain ID. This indicates that something in the \
+                 genesis files might have been modified."
+            );
+        }
+        is_valid
+    }
 }
 
 /// Create the [`Finalized`] chain configuration. Derives the chain ID from the
@@ -541,8 +598,7 @@ pub fn finalize(
         parameters,
         transactions,
     };
-    let to_finalize_bytes = to_finalize.serialize_to_vec();
-    let chain_id = ChainId::from_genesis(chain_id_prefix, to_finalize_bytes);
+    let chain_id = derive_chain_id(chain_id_prefix, &to_finalize);
 
     // Construct the `Finalized` chain
     let ToFinalize {
@@ -573,6 +629,15 @@ pub fn finalize(
         parameters,
         transactions,
     }
+}
+
+/// Derive a chain ID from genesis contents
+pub fn derive_chain_id(
+    chain_id_prefix: ChainIdPrefix,
+    to_finalize: &ToFinalize,
+) -> ChainId {
+    let to_finalize_bytes = to_finalize.serialize_to_vec();
+    ChainId::from_genesis(chain_id_prefix, to_finalize_bytes)
 }
 
 /// Chain genesis config to be finalized. This struct is used to derive the
