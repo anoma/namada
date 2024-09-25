@@ -133,14 +133,14 @@ where
         let genesis = {
             let chain_dir = self.base_dir.join(chain_id);
             genesis::chain::Finalized::read_toml_files(&chain_dir)
-                .expect("Missing genesis files")
+                .expect("Missing or invalid genesis files")
         };
         #[cfg(any(test, fuzzing, feature = "benches"))]
         let genesis = {
             let chain_dir = self.base_dir.join(chain_id);
             if chain_dir.join(genesis::chain::METADATA_FILE_NAME).exists() {
                 genesis::chain::Finalized::read_toml_files(&chain_dir)
-                    .expect("Missing genesis files")
+                    .expect("Missing or invalid genesis files")
             } else {
                 genesis::make_dev_genesis(num_validators, &chain_dir)
             }

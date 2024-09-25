@@ -22,14 +22,16 @@ use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
 use namada_apps_lib::cli::context::ENV_VAR_CHAIN_ID;
 use namada_apps_lib::client::utils::PRE_GENESIS_DIR;
+use namada_apps_lib::config::genesis::chain;
+use namada_apps_lib::config::genesis::templates::TokenBalances;
 use namada_apps_lib::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps_lib::config::{self, ethereum_bridge};
 use namada_apps_lib::tendermint_config::net::Address as TendermintAddress;
-use namada_apps_lib::wallet;
+use namada_apps_lib::wallet::{self, Alias};
 use namada_core::chain::ChainId;
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_sdk::address::Address;
-use namada_sdk::chain::Epoch;
+use namada_sdk::chain::{ChainIdPrefix, Epoch};
 use namada_sdk::time::DateTimeUtc;
 use namada_sdk::token;
 use namada_test_utils::TestWasms;
@@ -2735,6 +2737,74 @@ fn test_genesis_chain_id_change() -> Result<()> {
 
     let rpc = get_actor_rpc(&test, Who::Validator(0));
     wait_for_block_height(&test, &rpc, 2, 30)?;
+
+    Ok(())
+}
+
+/// Test that any changes done to a genesis config after a chain is finalized
+/// will make it fail validation.
+#[test]
+fn test_genesis_manipulation() -> Result<()> {
+    let test = setup::single_node_net().unwrap();
+
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+
+    let chain_dir = test.get_chain_dir(Who::Validator(0));
+    let genesis = chain::Finalized::read_toml_files(&chain_dir).unwrap();
+
+    let modified_genesis = [
+        {
+            let mut genesis = genesis.clone();
+            genesis
+                .balances
+                .token
+                .insert(Alias::from("test"), TokenBalances(Default::default()));
+            genesis
+        },
+        {
+            let mut genesis = genesis.clone();
+            genesis.balances.token.remove(&Alias::from("NAM"));
+            genesis
+        },
+        {
+            let mut genesis = genesis.clone();
+            genesis.metadata.address_gen = None;
+            genesis
+        },
+        {
+            let mut genesis = genesis.clone();
+            // Invalid chain ID
+            genesis.metadata.chain_id = ChainId("Invalid ID".to_string());
+            genesis
+        },
+        {
+            let mut genesis = genesis.clone();
+            // Random valid chain ID
+            genesis.metadata.chain_id = ChainId::from_genesis(
+                ChainIdPrefix::from_str("TEST").unwrap(),
+                [1, 2, 3],
+            );
+            genesis
+        },
+    ];
+
+    for genesis in modified_genesis {
+        // Any modification should invalide the genesis
+        assert!(!genesis.is_valid());
+
+        genesis.write_toml_files(&chain_dir).unwrap();
+
+        // A node should fail to start-up
+        let result =
+            start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40));
+        assert!(result.is_err())
+    }
 
     Ok(())
 }
