@@ -2721,6 +2721,9 @@ fn test_genesis_chain_id_change() -> Result<()> {
         None,
     );
 
+    // Unset the chain ID - the transaction signatures have been validated at
+    // init-network so we don't need it anymore
+    env::remove_var(config::genesis::transactions::NAMADA_GENESIS_TX_ENV_VAR);
     // Start the ledger as a validator
     let _bg_validator_0 =
         start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
