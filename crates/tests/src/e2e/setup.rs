@@ -1100,6 +1100,13 @@ where
         Bin::Relayer => ("namadar", "info"),
     };
 
+    let mut args = args.into_iter().peekable();
+    let is_node_ledger = matches!(bin, Bin::Node)
+        && args
+            .peek()
+            .map(|fst_arg| fst_arg.as_ref() == "ledger")
+            .unwrap_or_default();
+
     let mut run_cmd = generate_bin_command(
         bin_name,
         &working_dir.as_ref().join("Cargo.toml"),
@@ -1168,7 +1175,7 @@ where
 
     println!("{}:\n{}", "> Running".underline().green(), &cmd_process);
 
-    if let Bin::Node = &bin {
+    if is_node_ledger {
         // When running a node command, we need to wait a bit before checking
         // status
         sleep(1);
