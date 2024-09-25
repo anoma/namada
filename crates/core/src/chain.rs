@@ -109,6 +109,13 @@ impl ChainId {
         }
         errors
     }
+
+    /// Find the prefix of a valid ChainId.
+    pub fn prefix(&self) -> Option<ChainIdPrefix> {
+        let ChainId(chain_id) = self;
+        let (prefix, _) = chain_id.rsplit_once(CHAIN_ID_PREFIX_SEP)?;
+        Some(ChainIdPrefix(prefix.to_string()))
+    }
 }
 
 /// Height of a block, i.e. the level. The `default` is the
