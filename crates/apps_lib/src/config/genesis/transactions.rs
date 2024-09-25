@@ -1,6 +1,7 @@
 //! Genesis transactions
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::env;
 use std::fmt::Debug;
 use std::net::SocketAddr;
 
@@ -46,6 +47,7 @@ use crate::config::genesis::{utils, GenesisAddress};
 use crate::wallet::{CliWalletUtils, WalletTransport};
 
 /// Dummy chain id used to sign [`Tx`] objects at pre-genesis.
+pub const NAMADA_GENESIS_TX_ENV_VAR: &str = "NAMADA_GENESIS_TX_CHAIN_ID";
 const NAMADA_GENESIS_TX_CHAIN_ID: &str = "namada-genesis";
 
 /// Helper trait to fetch tx data to sign.
@@ -60,6 +62,15 @@ pub trait TxToSign {
     ) -> (Vec<common::PublicKey>, u8);
 
     fn get_owner(&self) -> GenesisAddress;
+}
+
+/// Get the genesis chain ID from "NAMADA_GENESIS_TX_CHAIN_ID" env var, if set,
+/// or the default
+pub fn genesis_chain_id() -> ChainId {
+    ChainId(
+        env::var(NAMADA_GENESIS_TX_ENV_VAR)
+            .unwrap_or_else(|_| NAMADA_GENESIS_TX_CHAIN_ID.to_string()),
+    )
 }
 
 /// Return a dummy set of tx arguments to sign with the
@@ -107,7 +118,7 @@ fn pre_genesis_tx_timestamp() -> DateTimeUtc {
 /// Return a ready to sign genesis [`Tx`].
 fn get_tx_to_sign(tag: impl AsRef<str>, data: impl BorshSerialize) -> Tx {
     let mut tx = Tx::from_type(TxType::Raw);
-    tx.header.chain_id = ChainId(NAMADA_GENESIS_TX_CHAIN_ID.to_string());
+    tx.header.chain_id = genesis_chain_id();
     tx.header.timestamp = pre_genesis_tx_timestamp();
     tx.set_code(Code {
         salt: [0; 8],

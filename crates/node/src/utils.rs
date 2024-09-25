@@ -19,7 +19,10 @@ pub fn test_genesis(args: TestGenesis, global_args: args::Global) {
         check_can_sign,
     } = args;
 
-    let templates = genesis::templates::load_and_validate(&path).unwrap();
+    let Some(templates) = genesis::templates::load_and_validate(&path) else {
+        eprintln!("Unable to load the genesis templates");
+        cli::safe_exit(1);
+    };
     let genesis = genesis::chain::finalize(
         templates,
         FromStr::from_str("namada-dryrun").unwrap(),
