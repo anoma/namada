@@ -431,7 +431,7 @@ pub struct PosParams {
 pub struct GovernanceParams {
     /// Min funds to stake to submit a proposal
     pub min_proposal_fund: u64,
-    /// Maximum size of proposal in kibibytes (KiB)
+    /// Maximum size of proposal in bytes
     pub max_proposal_code_size: u64,
     /// Minimum number of epochs between the proposal end epoch and start epoch
     pub min_proposal_voting_period: u64,
