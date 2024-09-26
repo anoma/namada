@@ -9,7 +9,7 @@ queue_rules:
         
 
 pull_request_rules:
-  - name: main-automatic-merge
+  - name: automatic merge to main
     conditions:
         - label = "merge"
         - label != "do-not-merge"
@@ -31,3 +31,11 @@ pull_request_rules:
 
           Sorry about that, but you can requeue the PR by using `@mergifyio requeue`
           if you think this was a mistake.
+
+  - name: backport PR to 0.44.0 lane
+    conditions:
+      - label = backport-44
+    actions:
+      backport:
+        branches:
+          - "0.44.0"
