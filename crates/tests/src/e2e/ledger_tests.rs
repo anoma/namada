@@ -25,6 +25,7 @@ use namada_apps_lib::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps_lib::config::{self, ethereum_bridge};
 use namada_apps_lib::tendermint_config::net::Address as TendermintAddress;
 use namada_apps_lib::wallet;
+use namada_apps_lib::wallet::defaults::is_use_device;
 use namada_core::chain::ChainId;
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_sdk::address::Address;
@@ -2570,16 +2571,24 @@ fn masp_txs_and_queries() -> Result<()> {
             Some(15),
         )?;
         sync.assert_success();
-        for &dry_run in &[true, false] {
-            let tx_args = if dry_run
-                && (tx_args[0] == "transfer"
-                    || tx_args[0] == "shield"
-                    || tx_args[0] == "unshield")
-            {
-                [tx_args.clone(), vec!["--dry-run"]].concat()
-            } else {
-                tx_args.clone()
-            };
+        for &dry_run in if is_use_device() {
+            // cannot dry-run with a device
+            // TODO: can we `--dry-run-wrapper` instead?
+            &[false]
+        } else {
+            &[true, false]
+        } {
+            let tx_args = apply_use_device(
+                if dry_run
+                    && (tx_args[0] == "transfer"
+                        || tx_args[0] == "shield"
+                        || tx_args[0] == "unshield")
+                {
+                    [tx_args.clone(), vec!["--dry-run"]].concat()
+                } else {
+                    tx_args.clone()
+                },
+            );
             let mut client =
                 run_as!(test, who, Bin::Client, tx_args, Some(720))?;
 
