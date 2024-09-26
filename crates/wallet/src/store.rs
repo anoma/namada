@@ -22,7 +22,6 @@ use zeroize::Zeroizing;
 use super::alias::{self, Alias};
 use super::derivation_path::DerivationPath;
 use super::pre_genesis;
-use crate::keys::{DatedKeypair, DatedSpendingKey, DatedViewingKey};
 use crate::{StoredKeypair, WalletIo};
 
 /// Actions that can be taken when there is an alias conflict
@@ -63,10 +62,12 @@ pub struct ValidatorData {
 /// A Storage area for keys and addresses
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Store {
+    /// Known birthdays
+    birthdays: BTreeMap<Alias, BlockHeight>,
     /// Known viewing keys
-    view_keys: BTreeMap<Alias, DatedViewingKey>,
+    view_keys: BTreeMap<Alias, ExtendedViewingKey>,
     /// Known spending keys
-    spend_keys: BTreeMap<Alias, StoredKeypair<DatedSpendingKey>>,
+    spend_keys: BTreeMap<Alias, StoredKeypair<ExtendedSpendingKey>>,
     /// Payment address book
     payment_addrs: BiBTreeMap<Alias, PaymentAddress>,
     /// Cryptographic keypairs
@@ -135,7 +136,7 @@ impl Store {
     pub fn find_spending_key(
         &self,
         alias: impl AsRef<str>,
-    ) -> Option<&StoredKeypair<DatedSpendingKey>> {
+    ) -> Option<&StoredKeypair<ExtendedSpendingKey>> {
         self.spend_keys.get(&alias.into())
     }
 
@@ -143,8 +144,16 @@ impl Store {
     pub fn find_viewing_key(
         &self,
         alias: impl AsRef<str>,
-    ) -> Option<&DatedViewingKey> {
+    ) -> Option<&ExtendedViewingKey> {
         self.view_keys.get(&alias.into())
+    }
+
+    /// Find the birthday of the given alias
+    pub fn find_birthday(
+        &self,
+        alias: impl AsRef<str>,
+    ) -> Option<&BlockHeight> {
+        self.birthdays.get(&alias.into())
     }
 
     /// Find the payment address with the given alias and return it
@@ -200,7 +209,7 @@ impl Store {
         viewing_key: &ExtendedViewingKey,
     ) -> Option<DerivationPath> {
         for (alias, vk) in &self.view_keys {
-            if *viewing_key == vk.key {
+            if *viewing_key == *vk {
                 return self.derivation_paths.get(alias).cloned();
             }
         }
@@ -267,14 +276,14 @@ impl Store {
     }
 
     /// Get all known viewing keys by their alias.
-    pub fn get_viewing_keys(&self) -> &BTreeMap<Alias, DatedViewingKey> {
+    pub fn get_viewing_keys(&self) -> &BTreeMap<Alias, ExtendedViewingKey> {
         &self.view_keys
     }
 
     /// Get all known spending keys by their alias.
     pub fn get_spending_keys(
         &self,
-    ) -> &BTreeMap<Alias, StoredKeypair<DatedSpendingKey>> {
+    ) -> &BTreeMap<Alias, StoredKeypair<ExtendedSpendingKey>> {
         &self.spend_keys
     }
 
@@ -412,15 +421,11 @@ impl Store {
         }
         self.remove_alias(&alias);
 
-        let (spendkey_to_store, _raw_spendkey) =
-            StoredKeypair::new(DatedKeypair::new(spendkey, birthday), password);
+        let (spendkey_to_store, _raw_spendkey) = StoredKeypair::new(spendkey, password);
         self.spend_keys.insert(alias.clone(), spendkey_to_store);
         // Simultaneously add the derived viewing key to ease balance viewing
-        let viewkey = DatedKeypair::new(
-            zip32::ExtendedFullViewingKey::from(&spendkey.into()).into(),
-            birthday,
-        );
-        self.view_keys.insert(alias.clone(), viewkey);
+        birthday.map(|x| self.birthdays.insert(alias.clone(), x));
+        self.view_keys.insert(alias.clone(), zip32::ExtendedFullViewingKey::from(&spendkey.into()).into());
         path.map(|p| self.derivation_paths.insert(alias.clone(), p));
         Some(alias)
     }
@@ -456,8 +461,8 @@ impl Store {
             }
         }
         self.remove_alias(&alias);
-        self.view_keys
-            .insert(alias.clone(), DatedKeypair::new(viewkey, birthday));
+        birthday.map(|x| self.birthdays.insert(alias.clone(), x));
+        self.view_keys.insert(alias.clone(), viewkey);
         path.map(|p| self.derivation_paths.insert(alias.clone(), p));
         Some(alias)
     }
@@ -600,6 +605,7 @@ impl Store {
             || self.pkhs.values().contains(alias)
             || self.public_keys.contains_key(alias)
             || self.derivation_paths.contains_key(alias)
+            || self.birthdays.contains_key(alias)
     }
 
     /// Completely remove the given alias from all maps in the wallet
@@ -612,12 +618,14 @@ impl Store {
         self.pkhs.retain(|_key, val| val != alias);
         self.public_keys.remove(alias);
         self.derivation_paths.remove(alias);
+        self.birthdays.remove(alias);
     }
 
     /// Extend this store from another store (typically pre-genesis).
     /// Note that this method ignores `validator_data` if any.
     pub fn extend(&mut self, store: Store) {
         let Self {
+            birthdays,
             view_keys,
             spend_keys,
             payment_addrs,
@@ -629,6 +637,7 @@ impl Store {
             validator_data: _,
             address_vp_types,
         } = self;
+        birthdays.extend(store.birthdays);
         view_keys.extend(store.view_keys);
         spend_keys.extend(store.spend_keys);
         payment_addrs.extend(store.payment_addrs);
