@@ -634,7 +634,7 @@ pub async fn query_protocol_parameters(
     );
     display_line!(
         context.io(),
-        "{:4}Max. proposal code size: {} kB",
+        "{:4}Max. proposal code size: {} bytes",
         "",
         max_proposal_code_size
     );

@@ -25,7 +25,7 @@ use super::storage::keys as goverance_storage;
 pub struct GovernanceParameters {
     /// Minimum amount of locked funds
     pub min_proposal_fund: token::Amount,
-    /// Maximum kibibyte length for proposal code
+    /// Maximum length for proposal code in bytes
     pub max_proposal_code_size: u64,
     /// Minimum number of epochs between the proposal end epoch and start epoch
     pub min_proposal_voting_period: u64,
