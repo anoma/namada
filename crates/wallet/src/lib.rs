@@ -274,7 +274,7 @@ pub struct Wallet<U> {
     utils: U,
     store: Store,
     decrypted_key_cache: HashMap<Alias, common::SecretKey>,
-    decrypted_spendkey_cache: HashMap<Alias, DatedSpendingKey>,
+    decrypted_spendkey_cache: HashMap<Alias, ExtendedSpendingKey>,
 }
 
 impl<U> From<Wallet<U>> for Store {
@@ -436,10 +436,18 @@ impl<U> Wallet<U> {
     pub fn find_viewing_key(
         &self,
         alias: impl AsRef<str>,
-    ) -> Result<&DatedViewingKey, FindKeyError> {
+    ) -> Result<&ExtendedViewingKey, FindKeyError> {
         self.store.find_viewing_key(alias.as_ref()).ok_or_else(|| {
             FindKeyError::KeyNotFound(alias.as_ref().to_string())
         })
+    }
+
+    /// Find the birthday of the given alias
+    pub fn find_birthday(
+        &self,
+        alias: impl AsRef<str>,
+    ) -> Option<&BlockHeight> {
+        self.store.find_birthday(alias.as_ref())
     }
 
     /// Find the payment address with the given alias in the wallet and return
@@ -501,7 +509,7 @@ impl<U> Wallet<U> {
     }
 
     /// Get all known viewing keys by their alias
-    pub fn get_viewing_keys(&self) -> HashMap<String, DatedViewingKey> {
+    pub fn get_viewing_keys(&self) -> HashMap<String, ExtendedViewingKey> {
         self.store
             .get_viewing_keys()
             .iter()
@@ -512,7 +520,7 @@ impl<U> Wallet<U> {
     /// Get all known viewing keys by their alias
     pub fn get_spending_keys(
         &self,
-    ) -> HashMap<String, &StoredKeypair<DatedSpendingKey>> {
+    ) -> HashMap<String, &StoredKeypair<ExtendedSpendingKey>> {
         self.store
             .get_spending_keys()
             .iter()
@@ -944,7 +952,7 @@ impl<U: WalletIo> Wallet<U> {
         &mut self,
         alias: impl AsRef<str>,
         password: Option<Zeroizing<String>>,
-    ) -> Result<DatedSpendingKey, FindKeyError> {
+    ) -> Result<ExtendedSpendingKey, FindKeyError> {
         // Try cache first
         if let Some(cached_key) = self
             .decrypted_spendkey_cache
@@ -1196,7 +1204,7 @@ impl<U: WalletIo> Wallet<U> {
                 // Cache the newly added key
                 self.decrypted_spendkey_cache.insert(
                     alias.clone(),
-                    DatedKeypair::new(spend_key, birthday),
+                    spend_key,
                 );
             })
             .map(Into::into)

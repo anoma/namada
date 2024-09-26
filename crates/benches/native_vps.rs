@@ -412,7 +412,7 @@ fn prepare_ibc_tx_and_ctx(bench_name: &str) -> (BenchShieldedCtx, BatchedTx) {
             shielded_ctx.generate_shielded_action(
                 Amount::native_whole(10),
                 TransferSource::ExtendedSpendingKey(
-                    ExtendedSpendingKey::from(albert_spending_key.key).into(),
+                    ExtendedSpendingKey::from(albert_spending_key).into(),
                 ),
                 defaults::bertha_address().to_string(),
             )
@@ -606,14 +606,14 @@ fn setup_storage_for_masp_verification(
         "unshielding" => shielded_ctx.generate_masp_tx(
             amount,
             TransferSource::ExtendedSpendingKey(
-                ExtendedSpendingKey::from(albert_spending_key.key).into(),
+                ExtendedSpendingKey::from(albert_spending_key).into(),
             ),
             TransferTarget::Address(defaults::albert_address()),
         ),
         "shielded" => shielded_ctx.generate_masp_tx(
             amount,
             TransferSource::ExtendedSpendingKey(
-                ExtendedSpendingKey::from(albert_spending_key.key).into(),
+                ExtendedSpendingKey::from(albert_spending_key).into(),
             ),
             TransferTarget::PaymentAddress(bertha_payment_addr),
         ),
