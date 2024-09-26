@@ -588,7 +588,6 @@ impl ArgFromMutContext for ExtendedSpendingKey {
             // Or it is a stored alias of one
             ctx.wallet
                 .find_spending_key(raw, None)
-                .map(|k| k.key)
                 .map_err(|_find_err| format!("Unknown spending key {}", raw))
         })
     }
@@ -613,9 +612,7 @@ impl ArgFromMutContext for PseudoExtendedKey {
                 ctx.wallet
                     .find_spending_key(raw, None)
                     .map(|k| {
-                        PseudoExtendedKey::from(MaspExtendedSpendingKey::from(
-                            k.key,
-                        ))
+                        PseudoExtendedKey::from(MaspExtendedSpendingKey::from(k))
                     })
                     .map_err(|_find_err| {
                         format!("Unknown spending key {}", raw)
@@ -627,9 +624,7 @@ impl ArgFromMutContext for PseudoExtendedKey {
                     .find_viewing_key(raw)
                     .copied()
                     .map(|k| {
-                        PseudoExtendedKey::from(MaspExtendedViewingKey::from(
-                            k.key,
-                        ))
+                        PseudoExtendedKey::from(MaspExtendedViewingKey::from(k))
                     })
                     .map_err(|_find_err| format!("Unknown viewing key {}", raw))
             })
@@ -645,9 +640,12 @@ impl ArgFromMutContext for DatedSpendingKey {
         // Either the string is a raw extended spending key
         FromStr::from_str(raw).or_else(|_parse_err| {
             // Or it is a stored alias of one
-            ctx.wallet
+            let sk = ctx.wallet
                 .find_spending_key(raw, None)
-                .map_err(|_find_err| format!("Unknown spending key {}", raw))
+                .map_err(|_find_err| format!("Unknown spending key {}", raw))?;
+            let birthday = ctx.wallet
+                .find_birthday(raw);
+            Ok(DatedSpendingKey::new(sk, birthday.copied()))
         })
     }
 }
@@ -664,7 +662,6 @@ impl ArgFromMutContext for ExtendedViewingKey {
             ctx.wallet
                 .find_viewing_key(raw)
                 .copied()
-                .map(|k| k.key)
                 .map_err(|_find_err| format!("Unknown viewing key {}", raw))
         })
     }
@@ -679,10 +676,12 @@ impl ArgFromMutContext for DatedViewingKey {
         // Either the string is a raw full viewing key
         FromStr::from_str(raw).or_else(|_parse_err| {
             // Or it is a stored alias of one
-            ctx.wallet
+            let vk = ctx.wallet
                 .find_viewing_key(raw)
-                .copied()
-                .map_err(|_find_err| format!("Unknown viewing key {}", raw))
+                .map_err(|_find_err| format!("Unknown viewing key {}", raw))?;
+            let birthday = ctx.wallet
+                .find_birthday(raw);
+            Ok(DatedViewingKey::new(*vk, birthday.copied()))
         })
     }
 }
