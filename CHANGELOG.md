@@ -1,5 +1,147 @@
 # CHANGELOG
 
+## v0.44.0
+
+Namada 0.44.0 is a minor release containing various fixes for shielded tokens, shielded sync, IBC and its interaction with shielded tokens and various other improvements.
+
+### BUG FIXES
+
+- Support only a transparent address as a refund target of IBC shielding
+  transfer ([\#3620](https://github.com/anoma/namada/issues/3620))
+- Make transfers with same source and destion a no-op.
+  ([\#3675](https://github.com/anoma/namada/pull/3675))
+- Fix path to compiled WASMs that's validated during join-network.
+  ([\#3694](https://github.com/anoma/namada/pull/3694))
+- Now we propagate the error coming from
+  `is_proposal_accepted` instead of falling back on a default.
+  ([\#3700](https://github.com/anoma/namada/pull/3700))
+- Handle errors when loading wallet file and only create a new one if not found.
+  ([\#2151](https://github.com/anoma/namada/issues/2151))
+- Fixed the SDK to generate MASP transactions with the correct expiration (if
+  provided). ([\#3724](https://github.com/anoma/namada/pull/3724))
+- Enable the signing logic to fall back to the hardware wallet
+  if a secret key is not found in software wallet store.
+  ([\#3730](https://github.com/anoma/namada/pull/3730))
+- The multitoken vp now checks that the involved parties
+  validate the transaction. Improved tests and transfer code.
+  ([\#3804](https://github.com/anoma/namada/pull/3804))
+- The masp ref events are now published in a single collection
+  enforcing a correct ordering. Fixed the shielded sync command
+  to account for multiple masp transactions in a single tx.
+  ([\#3821](https://github.com/anoma/namada/pull/3821))
+
+### IMPROVEMENTS
+
+- Add optional height parameter to get_token_balance
+  ([\#3530](https://github.com/anoma/namada/pull/3530))
+- Improved the consistency and safety of MASP events construction in protocol.
+  ([\#3669](https://github.com/anoma/namada/pull/3669))
+- Reorganized some types and modules and refactored crates re-
+  exports, error handling features and removed unused depdendencies.
+  ([\#3670](https://github.com/anoma/namada/pull/3670))
+- Removed the dev dependencies of wasm-for-tests.
+  ([\#3676](https://github.com/anoma/namada/pull/3676))
+- Improved the user experience of the secret key decryption process.
+  ([\#3681](https://github.com/anoma/namada/pull/3681))
+- Addresses the remaining points of Issue [\#3307](https://github.com/anoma/namada/issues/3307)
+
+    - Implements the `OfferSnapshot` ABCI call
+    - Implements the `ApplySnapshotChunk` ABCI call
+    - Adds integration tests
+
+  ([\#3687](https://github.com/anoma/namada/pull/3687))
+- Improved some governance messages and cli commands arguments.
+  ([\#3689](https://github.com/anoma/namada/pull/3689))
+- Updated toolchain to Rust 1.81.0.
+  ([\#3690](https://github.com/anoma/namada/pull/3690))
+- Include some CLI commands for querying the total supply of any token
+  and the effective total circulating supply of the native token.
+  ([\#3691](https://github.com/anoma/namada/pull/3691))
+- Only re-exporting tendermint-rs v0.37 modules.
+  ([\#3697](https://github.com/anoma/namada/pull/3697))
+- Made the `disposable-gas-payer` cli arg specific to some transactions.
+  ([\#3699](https://github.com/anoma/namada/pull/3699))
+- Optimize the format of snapshots taken for state syncing purposes.
+  Snapshots are taken over the entire RocksDB database, packaged into
+  a `zstd` compressed `tar` archive, and split into 10 MB chunks.
+  ([\#3701](https://github.com/anoma/namada/pull/3701))
+- Implement serde::Serialize for GovernanceParameters, PosParams, OwnedPosParams
+  ([\#3702](https://github.com/anoma/namada/pull/3702))
+- Change the quorum for voting on a default governance proposal from 2/3 to 40%.
+  ([\#3703](https://github.com/anoma/namada/pull/3703))
+- Improve the format of dumped txs. Added  command to
+  generate signature without requiring a network connection.
+  ([\#3715](https://github.com/anoma/namada/pull/3715))
+- Moved governance shell sub-module into governance crate using dependency-
+  injection. ([\#3718](https://github.com/anoma/namada/pull/3718))
+- If an additional `reveal_pk` transaction is required, the client now groups
+  it with the actual transaction into a single batch instead of submitting it
+  separately. ([\#3720](https://github.com/anoma/namada/pull/3720))
+- Improve the proposal result query to be more descriptive and detail
+  the validator voting period. Fix some other small logging bugs.
+  ([\#3728](https://github.com/anoma/namada/pull/3728))
+- Switched to use typed ChainId instead of a string in all `fn get_chain_id`.
+  ([\#3733](https://github.com/anoma/namada/pull/3733))
+- Add an RPC endpoint for the consensus validator set in the SDK.
+  ([\#3734](https://github.com/anoma/namada/pull/3734))
+- Update tendermint-rs, ibc-rs and tower-abci
+  ([\#3735](https://github.com/anoma/namada/issues/3735))
+- Refactored token transfer functions and fixed checks for no-op conditions.
+  ([\#3736](https://github.com/anoma/namada/pull/3736))
+- Support dynamically joining ledger managed tasks. With this change, adding
+  or removing managed tasks from the ledger should be a far easier process to
+  contend with. ([\#3741](https://github.com/anoma/namada/pull/3741))
+- Factored most of the masp code out of the sdk and into shielded token crate. These
+  required the creation of two futher crates: "namada_io" and "namada_wallet". ([\#3744](https://github.com/anoma/namada/pull/3744))
+- Increased the gas cost for storage consumption and improved gas tracking for
+  masp fee payments. ([\#3746](https://github.com/anoma/namada/pull/3746))
+- Upgrade CometBFT to v0.37.11.
+  ([\#3751](https://github.com/anoma/namada/pull/3751))
+- Remove namada-relayer from the build.
+  ([\#3752](https://github.com/anoma/namada/pull/3752))
+- Improve error and help messages to clarify that a .tx
+  file is expected as input to --tx-path for a custom tx.
+  ([\#3757](https://github.com/anoma/namada/pull/3757))
+- Miscellaneous improvements and bug fixes to the dry run command.
+  ([\#3758](https://github.com/anoma/namada/pull/3758))
+- Check the string length of the validator name in provided metadata.
+  ([\#3779](https://github.com/anoma/namada/pull/3779))
+- Improve the CLI query-protocol-parameters.
+  ([\#3788](https://github.com/anoma/namada/pull/3788))
+- Improved the invariants and the usage of the `Gas` type.
+  ([\#3792](https://github.com/anoma/namada/pull/3792))
+- Propagate "std" feature from SDK to wallet crate.
+  ([\#3795](https://github.com/anoma/namada/pull/3795))
+- Improve the logging options for querying MASP conversions.
+  ([\#3805](https://github.com/anoma/namada/pull/3805))
+ - When calling init chain, we now verify that the native token alias has masp
+   parameters set. ([\#3806](https://github.com/anoma/namada/pull/3806))
+- Refactored most native VPs to be agnostic to VP environment (WASM or native).
+  ([\#3807](https://github.com/anoma/namada/pull/3807))
+- Adds an SDK and CLI tool to estimate the latest annual staking rewards rate.
+  ([\#3816](https://github.com/anoma/namada/pull/3816))
+- Reduced the number of a tx event's masp attributes to a single one.
+  ([\#3826](https://github.com/anoma/namada/pull/3826))
+- Remove relayer help messages from namada binary.
+  ([\#3830](https://github.com/anoma/namada/pull/3830))
+- Let user customize the pre-genesis chain-id via environment variable
+  ([\#3833](https://github.com/anoma/namada/pull/3833))
+- Validate a chain ID of genesis on ABCI InitChain request
+  prior to applying it to ensure it's not been tampered with.
+  ([\#3843](https://github.com/anoma/namada/pull/3843))
+
+### TESTING
+
+- Clean IBC E2E tests and refine IBC client upgrade test with Gaia
+  ([\#3601](https://github.com/anoma/namada/issues/3601))
+- Updated the gaia e2e tests to use the MASP internal address instead of
+  the payment address as the receiver of an IBC shielding transaction.
+  ([\#3626](https://github.com/anoma/namada/pull/3626))
+- Augment the functionality of `gen_localnet.py` with the ability
+  to generate full node base directories. Moreover, add a new script
+  to boot up a localnet with two genesis validators or a full node.
+  ([\#3680](https://github.com/anoma/namada/pull/3680))
+
 ## v0.43.0
 
 Namada 0.43.0 is a minor relasing improving shielded sync and addressing some pre-genesis flow issues.
@@ -701,6 +843,9 @@ Namada 0.33.0 is a minor release that contains various new features, improvement
 
 - move query_ibc_tokens and lookup_ibc_token_alias to sdk
   ([\#2729](https://github.com/anoma/namada/issues/2729))
+
+### SDK
+
 - Add a new method to the sdk to change a validator consensus key.
   ([\#3037](https://github.com/anoma/namada/pull/3037))
 - Improve the function to update an enstablished address via the sdk.
