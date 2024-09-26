@@ -7638,8 +7638,7 @@ pub mod args {
                 find_viewing_key(&mut wallet)
             } else {
                 find_viewing_key(&mut ctx.borrow_mut_chain_or_exit().wallet)
-            }
-            .key;
+            };
 
             Ok(PayAddressGen::<SdkTypes> {
                 alias: self.alias,
