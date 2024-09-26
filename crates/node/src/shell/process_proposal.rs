@@ -116,8 +116,7 @@ where
     }
 
     /// Evaluates the corresponding [`TxResult`] for each tx in the
-    /// proposal. Additionally, counts the number of digest
-    /// txs and the bytes used by encrypted txs in the proposal.
+    /// proposal.
     ///
     /// `ProcessProposal` should be able to make a decision on whether a
     /// proposed block is acceptable or not based solely on what this
@@ -274,8 +273,8 @@ where
             // If it is a raw transaction, we do no further validation
             TxType::Raw => TxResult {
                 code: ResultCode::InvalidTx.into(),
-                info: "Transaction rejected: Non-encrypted transactions are \
-                       not supported"
+                info: "Transaction rejected: Raw transactions are not \
+                       supported"
                     .into(),
             },
             TxType::Protocol(protocol_tx) => {
@@ -1141,8 +1140,7 @@ mod test_process_proposal {
         assert_eq!(
             response.result.info,
             String::from(
-                "Transaction rejected: Non-encrypted transactions are not \
-                 supported"
+                "Transaction rejected: Raw transactions are not supported"
             ),
         );
     }
