@@ -4,10 +4,12 @@ on:
   push:
     branches:
       - main
+      - 'v?[0-9]+.[0-9]+.[0-9]+'
   # Run in PRs with conflicts (https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request)
   pull_request_target:
     branches:
       - main
+      - 'v?[0-9]+.[0-9]+.[0-9]+'
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
@@ -463,7 +465,7 @@ jobs:
     runs-on: [self-hosted, 16vcpu-32ram-ubuntu22-namada-x86]
     container: 
       image: ghcr.io/heliaxdev/namada-ci:namada-main
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - name: Checkout repo
