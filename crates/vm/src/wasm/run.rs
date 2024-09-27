@@ -160,6 +160,12 @@ where
     let batched_tx = tx.batch_ref_tx(cmt);
     check_tx_allowed(&batched_tx, state)?;
 
+    //FIXME: remove
+    let a = batched_tx.tx.data(batched_tx.cmt).unwrap();
+    let block_height = state.get_block_height().unwrap();
+    std::fs::write(format!("./fuck_{}_{}.me", block_height, cmt.get_hash()), a)
+        .unwrap();
+
     // If the transaction code has a tag, ensure that the tag hash equals the
     // transaction code's hash.
     if let Some(tag) = &tx_code.tag {
@@ -1276,20 +1282,18 @@ mod tests {
             wasm::compilation_cache::common::testing::vp_cache();
         // When the `eval`ed VP doesn't run out of memory, it should return
         // `true`
-        assert!(
-            vp(
-                code_hash,
-                &outer_tx.batch_ref_first_tx().unwrap(),
-                &tx_index,
-                &addr,
-                &state,
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-                vp_cache.clone(),
-            )
-            .is_ok()
-        );
+        assert!(vp(
+            code_hash,
+            &outer_tx.batch_ref_first_tx().unwrap(),
+            &tx_index,
+            &addr,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_cache.clone(),
+        )
+        .is_ok());
 
         // Allocating `2^24` (16 MiB) should be above the memory limit and
         // should fail
@@ -1308,20 +1312,18 @@ mod tests {
         // When the `eval`ed VP runs out of memory, its result should be
         // `false`, hence we should also get back `false` from the VP that
         // called `eval`.
-        assert!(
-            vp(
-                code_hash,
-                &outer_tx.batch_ref_first_tx().unwrap(),
-                &tx_index,
-                &addr,
-                &state,
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-                vp_cache,
-            )
-            .is_err()
-        );
+        assert!(vp(
+            code_hash,
+            &outer_tx.batch_ref_first_tx().unwrap(),
+            &tx_index,
+            &addr,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_cache,
+        )
+        .is_err());
     }
 
     /// Test that when a validity predicate wasm goes over the memory limit
@@ -1696,20 +1698,18 @@ mod tests {
 
         let (vp_cache, _) =
             wasm::compilation_cache::common::testing::vp_cache();
-        assert!(
-            vp(
-                code_hash,
-                &outer_tx.batch_ref_first_tx().unwrap(),
-                &tx_index,
-                &addr,
-                &state,
-                &gas_meter,
-                &keys_changed,
-                &verifiers,
-                vp_cache,
-            )
-            .is_err()
-        );
+        assert!(vp(
+            code_hash,
+            &outer_tx.batch_ref_first_tx().unwrap(),
+            &tx_index,
+            &addr,
+            &state,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_cache,
+        )
+        .is_err());
     }
 
     #[test]
