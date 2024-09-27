@@ -33,6 +33,9 @@ tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx = "200000"
 tnam1qrdrgx6d3rzl2f5yn6nde6wg20sl6kmtug3ecg7z = "200000"
 # validator-0-account-key
 tnam1qzwnw8rdyg8c5nrdwrcd87pgdxygr2eyguzy9c44 = "1000000"
+# frank
+tnam1qx9ggvnemv8j3a7u92r7mktgfq45q4cj3vch6wmn = "2000000"
+tnam1qq0345c0vr04wyjfkp0lfqkdp5n0t7ua4cswzkhm = "2000000"
 
 [token.BTC]
 # albert
@@ -47,6 +50,8 @@ tnam1qpca48f45pdtpcz06rue7k4kfdcjrvrux5cr3pwn = "1000000"
 tnam1qpm3dpsv76ttu382vfggtr7m8n00na3sfyzm2g2q = "1000000"
 # validator-0
 tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx = "1000000"
+# frank
+tnam1qx9ggvnemv8j3a7u92r7mktgfq45q4cj3vch6wmn = "1000000"
 
 [token.ETH]
 # albert
@@ -61,6 +66,8 @@ tnam1qpca48f45pdtpcz06rue7k4kfdcjrvrux5cr3pwn = "1000000"
 tnam1qpm3dpsv76ttu382vfggtr7m8n00na3sfyzm2g2q = "1000000"
 # validator-0
 tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx = "1000000"
+# frank
+tnam1qx9ggvnemv8j3a7u92r7mktgfq45q4cj3vch6wmn = "1000000"
 
 
 [token.DOT]
@@ -76,6 +83,8 @@ tnam1qpca48f45pdtpcz06rue7k4kfdcjrvrux5cr3pwn = "1000000"
 tnam1qpm3dpsv76ttu382vfggtr7m8n00na3sfyzm2g2q = "1000000"
 # validator-0
 tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx = "1000000"
+# frank
+tnam1qx9ggvnemv8j3a7u92r7mktgfq45q4cj3vch6wmn = "1000000"
 
 [token.Schnitzel]
 # albert
@@ -90,6 +99,8 @@ tnam1qpca48f45pdtpcz06rue7k4kfdcjrvrux5cr3pwn = "1000000"
 tnam1qpm3dpsv76ttu382vfggtr7m8n00na3sfyzm2g2q = "1000000"
 # validator-0
 tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx = "1000000"
+# frank
+tnam1qx9ggvnemv8j3a7u92r7mktgfq45q4cj3vch6wmn = "1000000"
 
 [token.Apfel]
 # albert
@@ -104,6 +115,8 @@ tnam1qpca48f45pdtpcz06rue7k4kfdcjrvrux5cr3pwn = "1000000"
 tnam1qpm3dpsv76ttu382vfggtr7m8n00na3sfyzm2g2q = "1000000"
 # validator-0
 tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx = "1000000"
+# frank
+tnam1qx9ggvnemv8j3a7u92r7mktgfq45q4cj3vch6wmn = "1000000"
 
 [token.Kartoffel]
 # albert
@@ -118,3 +131,5 @@ tnam1qpca48f45pdtpcz06rue7k4kfdcjrvrux5cr3pwn = "1000000"
 tnam1qpm3dpsv76ttu382vfggtr7m8n00na3sfyzm2g2q = "1000000"
 # validator-0
 tnam1q9vhfdur7gadtwx4r223agpal0fvlqhywylf2mzx = "1000000"
+# frank
+tnam1qx9ggvnemv8j3a7u92r7mktgfq45q4cj3vch6wmn = "1000000"

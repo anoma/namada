@@ -51,17 +51,17 @@ use crate::wallet::{
 // generated on the hardware wallet. It is hard to compute the exact required
 // number because a given MASP source could be distributed amongst several
 // notes.
-const MAX_HW_SPEND: usize = 10;
+const MAX_HW_SPEND: usize = 15;
 // Maximum number of convert description randomness parameters that can be
 // generated on the hardware wallet. It is hard to compute the exact required
 // number because the number of conversions that are used depends on the
 // protocol's current state.
-const MAX_HW_CONVERT: usize = 10;
+const MAX_HW_CONVERT: usize = 15;
 // Maximum number of output description randomness parameters that can be
 // generated on the hardware wallet. It is hard to compute the exact required
 // number because the number of outputs depends on the number of dummy outputs
 // introduced.
-const MAX_HW_OUTPUT: usize = 10;
+const MAX_HW_OUTPUT: usize = 15;
 
 /// Wrapper around `signing::aux_signing_data` that stores the optional
 /// disposable address to the wallet
