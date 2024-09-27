@@ -93,4 +93,4 @@ Compatibility table with Namada:
 
 | Namada | Hermes |
 | ----------- | ----------- |
-| v0.44.0 | v1.10.0-namada-beta15-rc2 |
+| v0.44.0 | 1.10.4-namada-beta17-rc2 |
