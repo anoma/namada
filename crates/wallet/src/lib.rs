@@ -1202,10 +1202,8 @@ impl<U: WalletIo> Wallet<U> {
             )
             .inspect(|alias| {
                 // Cache the newly added key
-                self.decrypted_spendkey_cache.insert(
-                    alias.clone(),
-                    spend_key,
-                );
+                self.decrypted_spendkey_cache
+                    .insert(alias.clone(), spend_key);
             })
             .map(Into::into)
     }
