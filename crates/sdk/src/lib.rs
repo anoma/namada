@@ -47,7 +47,6 @@ use std::str::FromStr;
 use args::{DeviceTransport, InputAmount, SdkTypes};
 use masp_primitives::zip32::PseudoExtendedKey;
 use namada_core::address::Address;
-use namada_core::collections::HashSet;
 use namada_core::dec::Dec;
 use namada_core::ethereum_events::EthAddress;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
@@ -609,7 +608,7 @@ pub trait Namada: NamadaIo {
         tx: &mut Tx,
         args: &args::Tx,
         signing_data: SigningTxData,
-        with: impl Fn(Tx, common::PublicKey, HashSet<signing::Signable>, D) -> F
+        with: impl Fn(Tx, common::PublicKey, signing::Signable, D) -> F
         + MaybeSend
         + MaybeSync,
         user_data: D,
