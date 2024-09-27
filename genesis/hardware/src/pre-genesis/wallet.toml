@@ -1,10 +1,17 @@
 [birthdays]
 
 [view_keys]
+albert-svk = "zvknam1qw7ysd8dqyqqpqp3rpe8e66t6y7elv4p5xgqh7904ck0ch87nsu8m3ftxnzzydg6l8q9yuzmczdgp9zjh4w8dtpmr880mn0r6wzefz35zdcucwqc8v2gz5cne222tszq20z9etczeeqs498zpjprfvkjl8uzqxcqp5a7665x6fuxdh8p8mn2haeryp8yjk4np6ka4xsdtmfw2hjwq3s7mk07pc6gjllc0u4yjnwu8fklf40rvcvgwqn6t87x97nd8ajqrgdffayv48q54ghg7"
+bertha-svk = "zvknam1qw7ysd8dqgqqpqzvpu7a7edpt7rwfwk4y99f0j4ngvules039mt205ljusd0q5jcf6spkwcdgpruphr54exyxwsuxaxkdpgl60wnpa7vzzrsk3w94rqv3ul03efva6w3kvpucwcrmj8hravjhf0xg8nkyrl865hadhty5ye590gr7xempm62s38yw4nxepytnrjn6mnln7f0qgnhpkj5850nwrvqkpfygvvhy4wp9edm4j4haftmclvxeymcktepjul847klrasr6rctw0mw8"
+christel-svk = "zvknam1qw7ysd8dqvqqpqxy9fcc0qc4ntgjz5rxnlds3ywqryel8xk9regvpynx0syfmmq8ngcagfgsd5g0rrlh0ux5trlsepwwlnhes24gx77zk3emft6nyxs6jjp7y6j2gph9h3y3utndzywsa365hfcj2em9svkgguu0hvm3ey4qj3y5hwr37vwmclchx8sztfc7547glxs9nhmtys78ysl5rekdqu8z0lw8cafejwj3ajce3vf86su2pa3pffrgqscmvacsehph82stsucn0r9gu"
 
 [spend_keys]
 
 [payment_addrs]
+albert-pa = "znam1zsdp40r8e52vg33fyd4gg4tkcjvvmj554l24m76zn6404wkklpjluexvrmppz7jkr8t4vvwfyan"
+bertha-pa-a = "znam13e60xy9n3ze7w385d00a5hzxp0qvwkg89kvqlv3gpv48h5n5w5d2shgqfjl5q0lp8zp9yx2kqvw"
+bertha-pa-b = "znam1dz4wxnjwvyz0ymvptwgp2fkr0fsjsgcum28swj6nm9uajwa8rt0aynf0463q6h8cw4sqsd9rg6g"
+christel-pa = "znam14gxuky9uh0md3uj7d3s60e2fwcne0nnu9w562lxjspdfvuawfjxuta4vp2nxv6rr9j72jmqpzf5"
 
 [secret_keys]
 faucet-key = "unencrypted:00548aa8393422b88dce5f4be8ee0320638061c3e0649ada1b0dacbec4c0c75bb2"
@@ -22,8 +29,11 @@ frank-key = "ED25519_PK_PREFIXtpknam1qqwfpuvn8x7yqtquejhppef4vddv9ghusec2rkaxav3
 
 [derivation_paths]
 albert-key = "m/44'/877'/0'/0'/0'"
+albert-svk = "m/32'/877'/1'"
 bertha-key = "m/44'/877'/0'/0'/1'"
+bertha-svk = "m/32'/877'/2'"
 christel-key = "m/44'/877'/0'/0'/2'"
+christel-svk = "m/32'/877'/3'"
 daewon = "m/44'/877'/0'/0'/3'"
 ester = "m/44'/877'/0'/0'/4'"
 validator-0-account-key = "m/44'/877'/0'/0'/5'"

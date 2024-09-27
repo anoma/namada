@@ -1517,23 +1517,23 @@ pub mod constants {
     pub const FRANK_KEY: &str = "Frank-key";
 
     // Shielded spending and viewing keys and payment addresses
-    pub const A_SPENDING_KEY: &str = "zsknam1qdrk9kd8qqqqpqy3pxzxu2kexydl7ug22s3808htl604emmz9qlde9cl9mx6euhvh3cpl9w7guustfzjxsyaeqtefhden6q8776t9cr9vkqztj7u0mgs5k9nz945sypev9ppptn5d85as3ccsnu3q6g3acqp2gpsrwe6naqg3stqp43uk9x2cj79gcxuum8a7jayjqlv4ptcfnunqkqzsj6m2r3sn8ft0tyqqpv28nghe4ag68eccaqx7v5f65he95g5uwq2wr4yuqc06jgc7";
-    pub const B_SPENDING_KEY: &str = "zsknam1qdml0zguqqqqpqx8elavks722m0cjelgh3r044cfregyw049jze9lwha2cfqdqnekecnttdvygd6s784kch2v3wjs45g5z0n36hpqv5ruy8jjfu5mz2snl8ljyz79h3szmyf43zve79l6hwnlfk94r422tfwr2f62vvgkeqvc4z2dgrvqy033ymq5ylz3gmf6wdzhsdmzm0h9uv9374x755rzgvmcxhxntu6v63acqktv6zk390e9pd6vr0pzqaq6auu59kwpnw0haczfyju8";
+    pub const A_SPENDING_KEY: &str = "albert-svk";
+    pub const B_SPENDING_KEY: &str = "bertha-svk";
     // A payment address derived from A_SPENDING_KEY
-    pub const AA_PAYMENT_ADDRESS: &str = "znam1ky620tz7z658cralqt693qpvk42wvth468zp38nqvq2apmex5rfut3dfqm2asrsqv0tc7saqje7";
+    pub const AA_PAYMENT_ADDRESS: &str = "albert-pa";
     // A payment address derived from B_SPENDING_KEY
-    pub const AB_PAYMENT_ADDRESS: &str = "znam1zxt8e22uz666ce7hxqpc69yfj3tpd9v26ep2epwn34kvyuwjh98hhre9897shcjj4cnqugwlv4q";
+    pub const AB_PAYMENT_ADDRESS: &str = "bertha-pa-a";
     // A viewing key derived from B_SPENDING_KEY
-    pub const AB_VIEWING_KEY: &str = "zvknam1qdml0zguqqqqpqx8elavks722m0cjelgh3r044cfregyw049jze9lwha2cfqdqnekem0xdqf9ytuhaxzeunyl7svgvxjv5g73m24k7w0h6q7wtvcltvlzynzhc5grlfgv7037lfh8w3su5krnzzzjh4nsleydtlns4gl0vmnc4z2dgrvqy033ymq5ylz3gmf6wdzhsdmzm0h9uv9374x755rzgvmcxhxntu6v63acqktv6zk390e9pd6vr0pzqaq6auu59kwpnw0hacdsfkws";
+    pub const AB_VIEWING_KEY: &str = "bertha-svk";
     // A payment address derived from B_VIEWING_KEY
-    pub const BB_PAYMENT_ADDRESS: &str = "znam1mqt0ja2zccy70du2d6rcr77jscgq3gkekfvhrqe7zkxa8rr3qsjsrd66gxnrykdmdeh5wmglmcm";
+    pub const BB_PAYMENT_ADDRESS: &str = "bertha-pa-b";
     // A viewing key derived from A_SPENDING_KEY
-    pub const AA_VIEWING_KEY: &str = "zvknam1qdrk9kd8qqqqpqy3pxzxu2kexydl7ug22s3808htl604emmz9qlde9cl9mx6euhvhnc63hymme53jz3mmwrzfkr9tk82nqacf5vlmj9du3s3rjz0h6usnh47pw0ufw4u6yrfvf95wfa9xj0m8pcrns9yh90s0jkf3cqy2z7c3stqp43uk9x2cj79gcxuum8a7jayjqlv4ptcfnunqkqzsj6m2r3sn8ft0tyqqpv28nghe4ag68eccaqx7v5f65he95g5uwq2wr4yuqc8djdrp";
-    pub const C_SPENDING_KEY: &str = "zsknam1qdy5g4udqqqqpqrfdzej0s45m8s6nprder4udwqm3ql8wx34e8f46dv8cwnmcjp40uj3qy5tgetj27jytvxk4vpa3pjsd80y332nj542w39wta8lsrzqzs822ydgmz5g2sd2k29hxc3uh77v5cmcext799fxn6sa9rd3zuggl6flgjz7wz9wwu9kxd4rth4clw6ug4drxln96y96nf8fmvgm5eddm93azuzlkjj0dpw343ukwcfuvkdhd772539cskgggcqsaaf0j7czshjwe";
+    pub const AA_VIEWING_KEY: &str = "albert-svk";
+    pub const C_SPENDING_KEY: &str = "christel-svk";
     // A viewing key derived from C_SPENDING_KEY
-    pub const AC_VIEWING_KEY: &str = "zvknam1qdy5g4udqqqqpqrfdzej0s45m8s6nprder4udwqm3ql8wx34e8f46dv8cwnmcjp40lr4vutffut7ed5x6egd6etcdh9sxh3j9fe5dshhrn3nq4yfp78gt8ve59y4vnu45xlt93vtrzsxtwlxjjgu2p496lc3ye8m83qplsqfl6flgjz7wz9wwu9kxd4rth4clw6ug4drxln96y96nf8fmvgm5eddm93azuzlkjj0dpw343ukwcfuvkdhd772539cskgggcqsaaf0j7cfyd3jr";
+    pub const AC_VIEWING_KEY: &str = "christel-svk";
     // A viewing key derived from C_VIEWING_KEY
-    pub const AC_PAYMENT_ADDRESS: &str = "znam1xv4ml6fp3zqjhw20xj3srd75cq8tyejdst0xweq60c70732ty2chd2v39tllpzf4uf6s66vfm6w";
+    pub const AC_PAYMENT_ADDRESS: &str = "christel-pa";
 
     //  Native VP aliases
     pub const GOVERNANCE_ADDRESS: &str = "governance";
