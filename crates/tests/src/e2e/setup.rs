@@ -1230,7 +1230,7 @@ pub fn setup_hermes(test_a: &Test, test_b: &Test) -> Result<()> {
             "--key-file",
             &key_file_path.to_string_lossy(),
         ];
-        let mut hermes = run_hermes_cmd(test, args, Some(10))?;
+        let mut hermes = run_hermes_cmd(test, args, Some(20))?;
         hermes.assert_success();
     }
 
