@@ -421,11 +421,15 @@ impl Store {
         }
         self.remove_alias(&alias);
 
-        let (spendkey_to_store, _raw_spendkey) = StoredKeypair::new(spendkey, password);
+        let (spendkey_to_store, _raw_spendkey) =
+            StoredKeypair::new(spendkey, password);
         self.spend_keys.insert(alias.clone(), spendkey_to_store);
         // Simultaneously add the derived viewing key to ease balance viewing
         birthday.map(|x| self.birthdays.insert(alias.clone(), x));
-        self.view_keys.insert(alias.clone(), zip32::ExtendedFullViewingKey::from(&spendkey.into()).into());
+        self.view_keys.insert(
+            alias.clone(),
+            zip32::ExtendedFullViewingKey::from(&spendkey.into()).into(),
+        );
         path.map(|p| self.derivation_paths.insert(alias.clone(), p));
         Some(alias)
     }
