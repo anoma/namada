@@ -1543,7 +1543,7 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
 
     node.clear_results();
     node.submit_txs(txs);
-    // If empty than failed in process proposal
+    // If empty then failed in process proposal
     assert!(!node.tx_result_codes.lock().unwrap().is_empty());
     node.assert_success();
 
@@ -1691,7 +1691,7 @@ fn expired_masp_tx() -> Result<()> {
     node.submit_txs(vec![tx.to_bytes()]);
     {
         let codes = node.tx_result_codes.lock().unwrap();
-        // If empty than failed in process proposal
+        // If empty then failed in process proposal
         assert!(!codes.is_empty());
 
         for code in codes.iter() {
@@ -3654,7 +3654,7 @@ fn identical_output_descriptions() -> Result<()> {
     // Check that the batch was successful
     {
         let codes = node.tx_result_codes.lock().unwrap();
-        // If empty than failed in process proposal
+        // If empty then failed in process proposal
         assert!(!codes.is_empty());
 
         for code in codes.iter() {
@@ -3950,7 +3950,7 @@ fn masp_batch() -> Result<()> {
     // Check the block result
     {
         let codes = node.tx_result_codes.lock().unwrap();
-        // If empty than failed in process proposal
+        // If empty then failed in process proposal
         assert!(!codes.is_empty());
 
         // Both batches must succeed
@@ -4182,7 +4182,7 @@ fn masp_atomic_batch() -> Result<()> {
     // Check the block result
     {
         let codes = node.tx_result_codes.lock().unwrap();
-        // If empty than failed in process proposal
+        // If empty then failed in process proposal
         assert!(!codes.is_empty());
 
         // Both batches must fail

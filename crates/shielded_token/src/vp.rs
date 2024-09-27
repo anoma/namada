@@ -1095,7 +1095,12 @@ mod shielded_token_tests {
 
         // Changing unknown masp keys is not allowed
         #[test]
-        fn test_unallowed_masp_keys_rejected(random_masp_key in arb_account_storage_key(MASP).prop_filter("MASP valid key", |key| !(is_masp_transfer_key(key) || is_masp_token_map_key(key) ))) {
+        fn test_unallowed_masp_keys_rejected(
+            random_masp_key in arb_account_storage_key(MASP).prop_filter(
+                "MASP valid key",
+                |key| !(is_masp_transfer_key(key) || is_masp_token_map_key(key)
+            ))
+        ) {
             let mut state = TestState::default();
             namada_parameters::init_test_storage(&mut state).unwrap();
             let verifiers = Default::default();
