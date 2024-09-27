@@ -19,7 +19,7 @@ use masp_primitives::zip32::{
 };
 use namada_sdk::address::{Address, ImplicitAddress};
 use namada_sdk::args::TxBecomeValidator;
-use namada_sdk::collections::{HashMap, HashSet};
+use namada_sdk::collections::HashMap;
 use namada_sdk::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal,
 };
@@ -105,7 +105,7 @@ pub async fn aux_signing_data(
 pub async fn with_hardware_wallet<'a, U, T>(
     mut tx: Tx,
     pubkey: common::PublicKey,
-    parts: HashSet<signing::Signable>,
+    parts: signing::Signable,
     (wallet, app): (&RwLock<Wallet<U>>, &NamadaApp<T>),
 ) -> Result<Tx, error::Error>
 where
@@ -152,7 +152,9 @@ where
         .await
         .map_err(|err| error::Error::Other(err.to_string()))?;
     // Sign the raw header if that is requested
-    if parts.contains(&signing::Signable::RawHeader) {
+    if parts == signing::Signable::RawHeader
+        || parts == signing::Signable::FeeRawHeader
+    {
         let pubkey = common::PublicKey::try_from_slice(&response.pubkey)
             .expect("unable to parse public key from Ledger");
         let signature =
@@ -170,7 +172,7 @@ where
         tx.add_section(Section::Authorization(compressed.expand(&tx)));
     }
     // Sign the fee header if that is requested
-    if parts.contains(&signing::Signable::FeeHeader) {
+    if parts == signing::Signable::FeeRawHeader {
         let pubkey = common::PublicKey::try_from_slice(&response.pubkey)
             .expect("unable to parse public key from Ledger");
         let signature =

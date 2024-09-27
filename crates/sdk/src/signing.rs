@@ -196,11 +196,12 @@ pub async fn tx_signers(
     }
 }
 
-/// The different parts of a transaction that can be signed
+/// The different parts of a transaction that can be signed. Note that it's
+/// impossible to sign the fee header without signing the raw header.
 #[derive(Eq, Hash, PartialEq)]
 pub enum Signable {
-    /// Fee header
-    FeeHeader,
+    /// Fee and raw header
+    FeeRawHeader,
     /// Raw header
     RawHeader,
 }
@@ -209,7 +210,7 @@ pub enum Signable {
 pub async fn default_sign(
     _tx: Tx,
     pubkey: common::PublicKey,
-    _parts: HashSet<Signable>,
+    _parts: Signable,
     _user: (),
 ) -> Result<Tx, Error> {
     Err(Error::Other(format!(
@@ -234,7 +235,7 @@ pub async fn sign_tx<'a, D, F, U>(
     args: &args::Tx,
     tx: &mut Tx,
     signing_data: SigningTxData,
-    sign: impl Fn(Tx, common::PublicKey, HashSet<Signable>, D) -> F,
+    sign: impl Fn(Tx, common::PublicKey, Signable, D) -> F,
     user_data: D,
 ) -> Result<(), Error>
 where
@@ -290,11 +291,13 @@ where
 
     // Then try to sign the raw header using the hardware wallet
     for pubkey in &signing_data.public_keys {
-        if !used_pubkeys.contains(pubkey) && *pubkey != signing_data.fee_payer {
+        if !used_pubkeys.contains(pubkey) &&
+            (*pubkey != signing_data.fee_payer || args.wrapper_signature.is_some())
+        {
             if let Ok(ntx) = sign(
                 tx.clone(),
                 pubkey.clone(),
-                HashSet::from([Signable::RawHeader]),
+                Signable::RawHeader,
                 user_data.clone(),
             )
             .await
@@ -323,33 +326,25 @@ where
             Ok(fee_payer_keypair) => {
                 tx.sign_wrapper(fee_payer_keypair);
             }
-            // The case where the fee payer also signs the inner transaction
-            Err(_)
-                if signing_data
-                    .public_keys
-                    .contains(&signing_data.fee_payer) =>
-            {
-                *tx = sign(
-                    tx.clone(),
-                    signing_data.fee_payer.clone(),
-                    HashSet::from([Signable::FeeHeader, Signable::RawHeader]),
-                    user_data,
-                )
-                .await?;
-                used_pubkeys.insert(signing_data.fee_payer.clone());
-            }
-            // The case where the fee payer does not sign the inner transaction
             Err(_) => {
                 *tx = sign(
                     tx.clone(),
                     signing_data.fee_payer.clone(),
-                    HashSet::from([Signable::FeeHeader]),
+                    Signable::FeeRawHeader,
                     user_data,
                 )
-                .await?;
+                    .await?;
+                if signing_data.public_keys.contains(&signing_data.fee_payer) {
+                    used_pubkeys.insert(signing_data.fee_payer.clone());
+                }
             }
         }
     }
+    // Remove redundant sections now that the signing process is complete.
+    // Though this call might be redundant in circumstances, it is placed here
+    // as a safeguard to prevent the transmission of private data to the
+    // network.
+    tx.protocol_filter();
     // Then make sure that the number of public keys used exceeds the threshold
     let used_pubkeys_len = used_pubkeys
         .len()
