@@ -3,9 +3,7 @@ use std::str::FromStr;
 
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
-use namada_apps_lib::wallet::defaults::{
-    albert_keypair, bertha_keypair, christel_keypair,
-};
+use namada_apps_lib::wallet::defaults::{albert_keypair, bertha_keypair, christel_keypair, is_use_device};
 use namada_core::address::Address;
 use namada_core::dec::Dec;
 use namada_core::masp::{MaspTxId, TokenMap};
@@ -2677,7 +2675,10 @@ fn masp_txs_and_queries() -> Result<()> {
                 Bin::Client,
                 vec!["shielded-sync", "--node", validator_one_rpc],
             )?;
-            let tx_args = if dry_run {
+            let tx_args = if dry_run && is_use_device()
+            {
+                continue;
+            } else if dry_run {
                 [tx_args.clone(), vec!["--dry-run"]].concat()
             } else {
                 tx_args.clone()
