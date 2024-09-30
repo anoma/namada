@@ -6119,7 +6119,7 @@ mod test_finalize_block {
             },
         }];
 
-        let events = shell
+        let mut events = shell
             .finalize_block(FinalizeBlock {
                 txs: processed_txs,
                 ..Default::default()
@@ -6129,29 +6129,103 @@ mod test_finalize_block {
         // three top level events
         assert_eq!(events.len(), 3);
 
-        // TODO(namada#3856): right now we lose events ordering in a batch
-        // because of the BTreeSet we use in BatchedTxResult so we need to
-        // reconstruct the BTreeSet to recover the original ordering of the
-        // events
-        let mut events_set: BTreeSet<_> =
-            events
-                .into_iter()
-                .fold(Default::default(), |mut acc, event| {
-                    acc.insert(event);
-                    acc
-                });
-
         // tx events. Check that they are present and in the correct order
-        let event = events_set.pop_first().unwrap();
+        // TODO(namada#3856): right now we lose events ordering in a batch
+        // because of the BTreeSet we use in BatchedTxResult so we can only
+        // check the presence of the events but not the order
+        let mut unordered_events = vec![];
+        let event = events.remove(0);
         let msg = event.read_attribute::<Log>().unwrap();
-        assert_eq!(&msg, "bing");
+        unordered_events.push(msg.as_str());
 
-        let event = events_set.pop_first().unwrap();
+        let event = events.remove(0);
         let msg = event.read_attribute::<Log>().unwrap();
-        assert_eq!(&msg, "bong");
+        unordered_events.push(msg.as_str());
+
+        assert!(unordered_events.contains(&"bing"));
+        assert!(unordered_events.contains(&"bong"));
 
         // multiple tx results (2)
-        let tx_event = events_set.pop_first().unwrap();
+        let tx_event = events.remove(0);
+        let tx_results = tx_event.read_attribute::<Batch<'_>>().unwrap();
+        assert_eq!(tx_results.len(), 2);
+
+        // all txs should have succeeded
+        assert!(tx_results.are_results_successfull());
+    }
+
+    #[test]
+    fn test_multiple_identical_events_from_batch_tx_all_valid() {
+        const EVENT_MSG: &str = "bing";
+        let (mut shell, _, _, _) = setup();
+
+        let sk = wallet::defaults::bertha_keypair();
+
+        let batch_tx = {
+            let mut batch =
+                Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                    Fee {
+                        amount_per_gas_unit: DenominatedAmount::native(
+                            1.into(),
+                        ),
+                        token: shell.state.in_mem().native_token.clone(),
+                    },
+                    sk.ref_to(),
+                    WRAPPER_GAS_LIMIT.into(),
+                ))));
+            batch.header.chain_id = shell.chain_id.clone();
+            batch.header.atomic = false;
+
+            // append first inner tx to batch
+            batch
+                .add_code(TestWasms::TxNoOpEvent.read_bytes(), None)
+                .add_data(EVENT_MSG);
+
+            // append second inner tx to batch
+            batch.push_default_inner_tx();
+            batch
+                .add_code(TestWasms::TxNoOpEvent.read_bytes(), None)
+                .add_data(EVENT_MSG);
+
+            // sign the batch of txs
+            batch.sign_wrapper(sk);
+
+            batch
+        };
+
+        let processed_txs = vec![ProcessedTx {
+            tx: batch_tx.to_bytes().into(),
+            result: TxResult {
+                code: ResultCode::Ok.into(),
+                info: "".into(),
+            },
+        }];
+
+        let mut events = shell
+            .finalize_block(FinalizeBlock {
+                txs: processed_txs,
+                ..Default::default()
+            })
+            .expect("Test failed");
+
+        // three top level events
+        assert_eq!(events.len(), 3);
+
+        // tx events. Check that they are both present even if they are
+        // identical. This is important because some inner txs of a single batch
+        // may correctly emit identical events and we don't want them to
+        // overshadow each other which could deceive external tools like
+        // indexers
+        let event = events.remove(0);
+        let msg = event.read_attribute::<Log>().unwrap();
+        assert_eq!(&msg, EVENT_MSG);
+
+        let event = events.remove(0);
+        let msg = event.read_attribute::<Log>().unwrap();
+        assert_eq!(&msg, EVENT_MSG);
+
+        // multiple tx results (2)
+        let tx_event = events.remove(0);
         let tx_results = tx_event.read_attribute::<Batch<'_>>().unwrap();
         assert_eq!(tx_results.len(), 2);
 
@@ -6296,7 +6370,7 @@ mod test_finalize_block {
         let result_code = tx_event
             .read_attribute::<namada_sdk::tx::event::Code>()
             .unwrap();
-        assert_ne!(result_code, ResultCode::Ok);
+        assert_eq!(result_code, ResultCode::WasmRuntimeError);
     }
 
     /// DI indirection
