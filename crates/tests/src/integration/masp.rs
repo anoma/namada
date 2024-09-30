@@ -3,8 +3,10 @@ use std::str::FromStr;
 
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
-use namada_apps_lib::wallet::defaults::{albert_keypair, bertha_keypair, christel_keypair, is_use_device};
 use namada_core::address::Address;
+use namada_apps_lib::wallet::defaults::{
+    get_unencrypted_keypair, is_use_device,
+};
 use namada_core::dec::Dec;
 use namada_core::masp::{MaspTxId, TokenMap};
 use namada_node::shell::testing::client::run;
@@ -22,13 +24,14 @@ use namada_sdk::{tx, DEFAULT_GAS_LIMIT};
 use test_log::test;
 
 use super::{helpers, setup};
-use crate::e2e::setup::apply_use_device;
 use crate::e2e::setup::constants::{
     AA_PAYMENT_ADDRESS, AA_VIEWING_KEY, AB_PAYMENT_ADDRESS, AB_VIEWING_KEY,
     AC_PAYMENT_ADDRESS, AC_VIEWING_KEY, ALBERT, ALBERT_KEY, A_SPENDING_KEY,
     BB_PAYMENT_ADDRESS, BERTHA, BERTHA_KEY, BTC, B_SPENDING_KEY, CHRISTEL,
-    CHRISTEL_KEY, C_SPENDING_KEY, ETH, MASP, NAM,
+    CHRISTEL_KEY, C_SPENDING_KEY, ETH, FRANK_KEY, MASP, NAM,
 };
+use crate::e2e::setup::{apply_use_device, ensure_hot_key};
+use crate::integration::helpers::make_temp_account;
 use crate::strings::TX_APPLIED_SUCCESS;
 
 /// Enable masp rewards before some token is shielded,
@@ -2675,8 +2678,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 Bin::Client,
                 vec!["shielded-sync", "--node", validator_one_rpc],
             )?;
-            let tx_args = if dry_run && is_use_device()
-            {
+            let tx_args = if dry_run && is_use_device() {
                 continue;
             } else if dry_run {
                 [tx_args.clone(), vec!["--dry-run"]].concat()
@@ -2947,7 +2949,9 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
     txs_bytes.push(std::fs::read(&file_path).unwrap());
     std::fs::remove_file(&file_path).unwrap();
 
-    let sk = christel_keypair();
+    let sk = get_unencrypted_keypair(
+        &ensure_hot_key(CHRISTEL_KEY).to_ascii_lowercase(),
+    );
     let pk = sk.to_public();
 
     let native_token = node
@@ -3073,7 +3077,9 @@ fn expired_masp_tx() -> Result<()> {
     let tx_bytes = std::fs::read(&file_path).unwrap();
     std::fs::remove_file(&file_path).unwrap();
 
-    let sk = christel_keypair();
+    let sk = get_unencrypted_keypair(
+        &ensure_hot_key(CHRISTEL_KEY).to_ascii_lowercase(),
+    );
     let pk = sk.to_public();
 
     let native_token = node
@@ -4947,7 +4953,7 @@ fn identical_output_descriptions() -> Result<()> {
             apply_use_device(vec![
                 "shield",
                 "--source",
-                ALBERT_KEY,
+                ensure_hot_key(ALBERT_KEY),
                 "--target",
                 AA_PAYMENT_ADDRESS,
                 "--token",
@@ -4955,7 +4961,7 @@ fn identical_output_descriptions() -> Result<()> {
                 "--amount",
                 "1000",
                 "--gas-payer",
-                BERTHA_KEY,
+                ensure_hot_key(ALBERT_KEY),
                 "--output-folder-path",
                 tempdir.path().to_str().unwrap(),
                 "--dump-wrapper-tx",
@@ -4983,12 +4989,15 @@ fn identical_output_descriptions() -> Result<()> {
     let mut tx_clone = tx.clone();
     tx_clone.add_memo(&[1, 2, 3]);
 
+    let keypair = get_unencrypted_keypair(
+        &ensure_hot_key(ALBERT_KEY).to_ascii_lowercase(),
+    );
     let signing_data = SigningTxData {
         owner: None,
-        public_keys: vec![albert_keypair().to_public()],
+        public_keys: vec![keypair.to_public()],
         threshold: 1,
         account_public_keys_map: None,
-        fee_payer: albert_keypair().to_public(),
+        fee_payer: keypair.to_public(),
         shielded_hash: None,
     };
 
@@ -4999,13 +5008,13 @@ fn identical_output_descriptions() -> Result<()> {
     .unwrap();
 
     batched_tx.sign_raw(
-        vec![albert_keypair()],
+        vec![keypair.clone()],
         AccountPublicKeysMap::from_iter(
-            vec![(albert_keypair().to_public())].into_iter(),
+            vec![(keypair.to_public())].into_iter(),
         ),
         None,
     );
-    batched_tx.sign_wrapper(bertha_keypair());
+    batched_tx.sign_wrapper(keypair);
 
     let wrapper_hash = batched_tx.wrapper_hash();
     let inner_cmts = batched_tx.commitments();
@@ -5206,11 +5215,19 @@ fn masp_batch() -> Result<()> {
     _ = node.next_masp_epoch();
     let tempdir = tempfile::tempdir().unwrap();
 
+    // Initialize accounts we can access the secret keys of
+    let (adam_alias, adam_key) =
+        make_temp_account(&node, validator_one_rpc, "Adam", NAM, 500_000)?;
+    let (bradley_alias, _bradley_key) =
+        make_temp_account(&node, validator_one_rpc, "Bradley", NAM, 500_000)?;
+    let (cooper_alias, cooper_key) =
+        make_temp_account(&node, validator_one_rpc, "Cooper", NAM, 500_000)?;
+
     // Assert reference NAM balances at VK(A), Albert and Bertha
     for (owner, balance) in [
         (AA_VIEWING_KEY, 0),
-        (ALBERT_KEY, 2_000_000),
-        (BERTHA_KEY, 2_000_000),
+        (adam_alias.as_ref(), 500_000),
+        (bradley_alias.as_ref(), 500_000),
     ] {
         let captured = CapturedOutput::of(|| {
             run(
@@ -5234,7 +5251,7 @@ fn masp_batch() -> Result<()> {
     // Generate txs for the batch to shield some tokens. Use two different
     // sources
     let mut batch = vec![];
-    for source in [ALBERT_KEY, BERTHA_KEY] {
+    for source in [adam_alias.as_ref(), bradley_alias.as_ref()] {
         let captured = CapturedOutput::of(|| {
             run(
                 &node,
@@ -5252,7 +5269,7 @@ fn masp_batch() -> Result<()> {
                     "--gas-limit",
                     "60000",
                     "--gas-payer",
-                    CHRISTEL_KEY,
+                    cooper_alias.as_ref(),
                     "--output-folder-path",
                     tempdir.path().to_str().unwrap(),
                     "--dump-wrapper-tx",
@@ -5281,10 +5298,10 @@ fn masp_batch() -> Result<()> {
 
     let signing_data = SigningTxData {
         owner: None,
-        public_keys: vec![albert_keypair().to_public()],
+        public_keys: vec![adam_key.to_public()],
         threshold: 1,
         account_public_keys_map: None,
-        fee_payer: albert_keypair().to_public(),
+        fee_payer: adam_key.to_public(),
         shielded_hash: None,
     };
 
@@ -5312,13 +5329,13 @@ fn masp_batch() -> Result<()> {
         // Sign the batch with just the signer of one tx to force the failure of
         // the other one
         batched_tx.sign_raw(
-            vec![albert_keypair()],
+            vec![adam_key.clone()],
             AccountPublicKeysMap::from_iter(
-                vec![(albert_keypair().to_public())].into_iter(),
+                vec![(adam_key.to_public())].into_iter(),
             ),
             None,
         );
-        batched_tx.sign_wrapper(christel_keypair());
+        batched_tx.sign_wrapper(cooper_key.clone());
 
         wrapper_hashes.push(batched_tx.wrapper_hash());
         for cmt in batched_tx.commitments() {
@@ -5406,11 +5423,11 @@ fn masp_batch() -> Result<()> {
         ],
     )?;
 
-    // Assert NAM balances at VK(A), Albert and Bertha
+    // Assert NAM balances at VK(A), Bob and Bertha
     for (owner, balance) in [
         (AA_VIEWING_KEY, 2_000),
-        (ALBERT_KEY, 1_998_000),
-        (BERTHA_KEY, 2_000_000),
+        (adam_alias.as_ref(), 498_000),
+        (bradley_alias.as_ref(), 500_000),
     ] {
         let captured = CapturedOutput::of(|| {
             run(
@@ -5448,11 +5465,19 @@ fn masp_atomic_batch() -> Result<()> {
     _ = node.next_masp_epoch();
     let tempdir = tempfile::tempdir().unwrap();
 
+    // Initialize accounts we can access the secret keys of
+    let (adam_alias, adam_key) =
+        make_temp_account(&node, validator_one_rpc, "Adam", NAM, 500_000)?;
+    let (bradley_alias, _bradley_key) =
+        make_temp_account(&node, validator_one_rpc, "Bradley", NAM, 500_000)?;
+    let (cooper_alias, cooper_key) =
+        make_temp_account(&node, validator_one_rpc, "Cooper", NAM, 500_000)?;
+
     // Assert reference NAM balances at VK(A), Albert and Bertha are unchanged
     for (owner, balance) in [
         (AA_VIEWING_KEY, 0),
-        (ALBERT_KEY, 2_000_000),
-        (BERTHA_KEY, 2_000_000),
+        (adam_alias.as_ref(), 500_000),
+        (bradley_alias.as_ref(), 500_000),
     ] {
         let captured = CapturedOutput::of(|| {
             run(
@@ -5476,7 +5501,7 @@ fn masp_atomic_batch() -> Result<()> {
     // Generate txs for the batch to shield some tokens. Use two different
     // sources
     let mut batch = vec![];
-    for source in [ALBERT_KEY, BERTHA_KEY] {
+    for source in [adam_alias.as_ref(), bradley_alias.as_ref()] {
         let captured = CapturedOutput::of(|| {
             run(
                 &node,
@@ -5494,7 +5519,7 @@ fn masp_atomic_batch() -> Result<()> {
                     "--gas-limit",
                     "60000",
                     "--gas-payer",
-                    CHRISTEL_KEY,
+                    cooper_alias.as_ref(),
                     "--output-folder-path",
                     tempdir.path().to_str().unwrap(),
                     "--dump-wrapper-tx",
@@ -5522,10 +5547,10 @@ fn masp_atomic_batch() -> Result<()> {
 
     let signing_data = SigningTxData {
         owner: None,
-        public_keys: vec![albert_keypair().to_public()],
+        public_keys: vec![adam_key.to_public()],
         threshold: 1,
         account_public_keys_map: None,
-        fee_payer: albert_keypair().to_public(),
+        fee_payer: adam_key.to_public(),
         shielded_hash: None,
     };
 
@@ -5553,13 +5578,13 @@ fn masp_atomic_batch() -> Result<()> {
         // Sign the batch with just the signer of one tx to force the failure of
         // the other one
         batched_tx.sign_raw(
-            vec![albert_keypair()],
+            vec![adam_key.clone()],
             AccountPublicKeysMap::from_iter(
-                vec![(albert_keypair().to_public())].into_iter(),
+                vec![(adam_key.to_public())].into_iter(),
             ),
             None,
         );
-        batched_tx.sign_wrapper(christel_keypair());
+        batched_tx.sign_wrapper(cooper_key.clone());
 
         wrapper_hashes.push(batched_tx.wrapper_hash());
         for cmt in batched_tx.commitments() {
@@ -5647,8 +5672,8 @@ fn masp_atomic_batch() -> Result<()> {
     // Assert NAM balances at VK(A), Albert and Bertha are unchanged
     for (owner, balance) in [
         (AA_VIEWING_KEY, 0),
-        (ALBERT_KEY, 2_000_000),
-        (BERTHA_KEY, 2_000_000),
+        (adam_alias.as_ref(), 500_000),
+        (bradley_alias.as_ref(), 500_000),
     ] {
         let captured = CapturedOutput::of(|| {
             run(
@@ -5687,13 +5712,23 @@ fn tricky_masp_txs() -> Result<()> {
     _ = node.next_masp_epoch();
     let tempdir = tempfile::tempdir().unwrap();
 
+    // Initialize accounts we can access the secret keys of
+    let (adam_alias, _adam_key) =
+        make_temp_account(&node, validator_one_rpc, "Adam", NAM, 500_000)?;
+    let (arthur_alias, arthur_key) =
+        make_temp_account(&node, validator_one_rpc, "Arthur", NAM, 500_000)?;
+    let (bradley_alias, bradley_key) =
+        make_temp_account(&node, validator_one_rpc, "Bradley", NAM, 500_000)?;
+    let (cooper_alias, _cooper_key) =
+        make_temp_account(&node, validator_one_rpc, "Cooper", NAM, 500_000)?;
+
     // Assert reference NAM balances at VK(A), Albert, Bertha and Christel
     for (owner, balance) in [
         (AA_VIEWING_KEY, 0),
-        (ALBERT_KEY, 2_000_000),
-        (BERTHA_KEY, 2_000_000),
-        (ALBERT, 1_980_000),
-        (CHRISTEL, 2_000_000),
+        (arthur_alias.as_ref(), 500_000),
+        (bradley_alias.as_ref(), 500_000),
+        (adam_alias.as_ref(), 500_000),
+        (cooper_alias.as_ref(), 500_000),
     ] {
         let captured = CapturedOutput::of(|| {
             run(
@@ -5722,7 +5757,7 @@ fn tricky_masp_txs() -> Result<()> {
             vec![
                 "shield",
                 "--source",
-                ALBERT,
+                adam_alias.as_ref(),
                 "--target",
                 AA_PAYMENT_ADDRESS,
                 "--token",
@@ -5730,7 +5765,7 @@ fn tricky_masp_txs() -> Result<()> {
                 "--amount",
                 "1000",
                 "--gas-payer",
-                CHRISTEL_KEY,
+                cooper_alias.as_ref(),
                 "--output-folder-path",
                 tempdir.path().to_str().unwrap(),
                 "--dump-tx",
@@ -5766,15 +5801,15 @@ fn tricky_masp_txs() -> Result<()> {
             vec![
                 "transparent-transfer",
                 "--source",
-                ALBERT_KEY,
+                arthur_alias.as_ref(),
                 "--target",
-                CHRISTEL,
+                cooper_alias.as_ref(),
                 "--token",
                 NAM,
                 "--amount",
                 "1000",
                 "--gas-payer",
-                CHRISTEL_KEY,
+                FRANK_KEY,
                 "--output-folder-path",
                 tempdir.path().to_str().unwrap(),
                 "--dump-wrapper-tx",
@@ -5801,13 +5836,13 @@ fn tricky_masp_txs() -> Result<()> {
     tx0.add_masp_tx_section(masp_transaction.clone());
 
     tx0.sign_raw(
-        vec![albert_keypair()],
+        vec![arthur_key.clone()],
         AccountPublicKeysMap::from_iter(
-            vec![(albert_keypair().to_public())].into_iter(),
+            vec![(arthur_key.to_public())].into_iter(),
         ),
         None,
     );
-    tx0.sign_wrapper(christel_keypair());
+    tx0.sign_wrapper(get_unencrypted_keypair("frank-key"));
 
     // Generate second tx
     let captured = CapturedOutput::of(|| {
@@ -5817,7 +5852,7 @@ fn tricky_masp_txs() -> Result<()> {
             vec![
                 "shield",
                 "--source",
-                BERTHA_KEY,
+                bradley_alias.as_ref(),
                 "--target",
                 AA_PAYMENT_ADDRESS,
                 "--token",
@@ -5825,7 +5860,7 @@ fn tricky_masp_txs() -> Result<()> {
                 "--amount",
                 "1000",
                 "--gas-payer",
-                CHRISTEL_KEY,
+                FRANK_KEY,
                 "--output-folder-path",
                 tempdir.path().to_str().unwrap(),
                 "--dump-wrapper-tx",
@@ -5852,13 +5887,13 @@ fn tricky_masp_txs() -> Result<()> {
     tx1.add_masp_tx_section(masp_transaction);
 
     tx1.sign_raw(
-        vec![bertha_keypair()],
+        vec![bradley_key.clone()],
         AccountPublicKeysMap::from_iter(
-            vec![(bertha_keypair().to_public())].into_iter(),
+            vec![(bradley_key.to_public())].into_iter(),
         ),
         None,
     );
-    tx1.sign_wrapper(christel_keypair());
+    tx1.sign_wrapper(get_unencrypted_keypair("frank-key"));
 
     let txs = vec![tx0.to_bytes(), tx1.to_bytes()];
     node.clear_results();
@@ -5881,10 +5916,10 @@ fn tricky_masp_txs() -> Result<()> {
     // Assert NAM balances at VK(A), Albert, Bertha and Christel
     for (owner, balance) in [
         (AA_VIEWING_KEY, 1_000),
-        (ALBERT_KEY, 1_999_000),
-        (BERTHA_KEY, 1_999_000),
-        (ALBERT, 1_980_000),
-        (CHRISTEL, 2_001_000),
+        (arthur_alias.as_ref(), 499_000),
+        (bradley_alias.as_ref(), 499_000),
+        (adam_alias.as_ref(), 500_000),
+        (cooper_alias.as_ref(), 501_000),
     ] {
         let captured = CapturedOutput::of(|| {
             run(

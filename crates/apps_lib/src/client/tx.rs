@@ -1188,6 +1188,7 @@ pub async fn submit_shielded_transfer(
     .await?;
     let (mut tx, signing_data) =
         args.clone().build(namada, &mut bparams).await?;
+    masp_sign(&mut tx, &args.tx, &signing_data, shielded_hw_keys).await?;
 
     let masp_section = tx
         .sections
@@ -1202,7 +1203,6 @@ pub async fn submit_shielded_transfer(
         tx::dump_tx(namada.io(), &args.tx, tx)?;
         pre_cache_masp_data(namada, &masp_section).await;
     } else {
-        masp_sign(&mut tx, &args.tx, &signing_data, shielded_hw_keys).await?;
         sign(namada, &mut tx, &args.tx, signing_data).await?;
         let res = namada.submit(tx, &args.tx).await?;
         pre_cache_masp_data_on_tx_result(namada, &res, &masp_section).await;
@@ -1300,6 +1300,7 @@ pub async fn submit_unshielding_transfer(
     .await?;
     let (mut tx, signing_data) =
         args.clone().build(namada, &mut bparams).await?;
+    masp_sign(&mut tx, &args.tx, &signing_data, shielded_hw_keys).await?;
 
     let masp_section = tx
         .sections
@@ -1314,7 +1315,6 @@ pub async fn submit_unshielding_transfer(
         tx::dump_tx(namada.io(), &args.tx, tx)?;
         pre_cache_masp_data(namada, &masp_section).await;
     } else {
-        masp_sign(&mut tx, &args.tx, &signing_data, shielded_hw_keys).await?;
         sign(namada, &mut tx, &args.tx, signing_data).await?;
         let res = namada.submit(tx, &args.tx).await?;
         pre_cache_masp_data_on_tx_result(namada, &res, &masp_section).await;
@@ -1344,6 +1344,7 @@ where
     )
     .await?;
     let (mut tx, signing_data, _) = args.build(namada, &mut bparams).await?;
+    masp_sign(&mut tx, &args.tx, &signing_data, shielded_hw_keys).await?;
 
     let opt_masp_section =
         tx.sections.iter().find_map(|section| section.masp_tx());
@@ -1353,7 +1354,6 @@ where
             pre_cache_masp_data(namada, &masp_section).await;
         }
     } else {
-        masp_sign(&mut tx, &args.tx, &signing_data, shielded_hw_keys).await?;
         let res = batch_opt_reveal_pk_and_submit(
             namada,
             &args.tx,
