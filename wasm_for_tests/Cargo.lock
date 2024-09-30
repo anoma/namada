@@ -3694,6 +3694,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tx_fail_event"
+version = "0.41.0"
+dependencies = [
+ "getrandom",
+ "namada_tx_prelude",
+ "rlsf",
+]
+
+[[package]]
 name = "tx_infinite_guest_gas"
 version = "0.41.0"
 dependencies = [
@@ -3731,6 +3740,15 @@ dependencies = [
 
 [[package]]
 name = "tx_no_op"
+version = "0.41.0"
+dependencies = [
+ "getrandom",
+ "namada_tx_prelude",
+ "rlsf",
+]
+
+[[package]]
+name = "tx_no_op_event"
 version = "0.41.0"
 dependencies = [
  "getrandom",

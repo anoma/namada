@@ -3,11 +3,13 @@ resolver = "2"
 
 members = [
     "tx_fail",
+    "tx_fail_event",
     "tx_infinite_guest_gas",
     "tx_infinite_host_gas",
     "tx_invalid_data",
     "tx_memory_limit",
     "tx_no_op",
+    "tx_no_op_event",
     "tx_proposal_code",
     "tx_proposal_ibc_token_inflation",
     "tx_proposal_masp_reward",

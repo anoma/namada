@@ -38,7 +38,10 @@ use namada_core::internal::HostEnvResult;
 use namada_core::key::common;
 use namada_core::storage::TxIndex;
 pub use namada_core::{address, encode, eth_bridge_pool, storage, *};
-use namada_events::{EmitEvents, Event, EventToEmit, EventType};
+pub use namada_events::extend::Log;
+pub use namada_events::{
+    EmitEvents, Event, EventLevel, EventToEmit, EventType,
+};
 pub use namada_governance::storage as gov_storage;
 pub use namada_macros::transaction;
 pub use namada_parameters::storage as parameters_storage;

@@ -1286,6 +1286,7 @@ mod test_finalize_block {
     };
     use namada_sdk::eth_bridge::MinimumConfirmations;
     use namada_sdk::ethereum_events::{EthAddress, Uint as ethUint};
+    use namada_sdk::events::extend::Log;
     use namada_sdk::events::Event;
     use namada_sdk::gas::VpGasMeter;
     use namada_sdk::governance::storage::keys::get_proposal_execution_key;
@@ -6094,21 +6095,17 @@ mod test_finalize_block {
             batch.header.atomic = false;
 
             // append first inner tx to batch
-            batch.set_code(Code::new(TestWasms::TxNoOp.read_bytes(), None));
-            batch.set_data(Data::new("bing".as_bytes().to_owned()));
+            batch
+                .add_code(TestWasms::TxNoOpEvent.read_bytes(), None)
+                .add_data("bing");
 
             // append second inner tx to batch
             batch.push_default_inner_tx();
-
-            batch.set_code(Code::new(TestWasms::TxNoOp.read_bytes(), None));
-            batch.set_data(Data::new("bong".as_bytes().to_owned()));
+            batch
+                .add_code(TestWasms::TxNoOpEvent.read_bytes(), None)
+                .add_data("bong");
 
             // sign the batch of txs
-            batch.sign_raw(
-                vec![sk.clone()],
-                vec![sk.ref_to()].into_iter().collect(),
-                None,
-            );
             batch.sign_wrapper(sk);
 
             batch
@@ -6122,19 +6119,40 @@ mod test_finalize_block {
             },
         }];
 
-        let mut events = shell
+        let events = shell
             .finalize_block(FinalizeBlock {
                 txs: processed_txs,
                 ..Default::default()
             })
             .expect("Test failed");
 
-        // one top level event
-        assert_eq!(events.len(), 1);
-        let event = events.remove(0);
+        // three top level events
+        assert_eq!(events.len(), 3);
+
+        // TODO(namada#3856): right now we lose events ordering in a batch
+        // because of the BTreeSet we use in BatchedTxResult so we need to
+        // reconstruct the BTreeSet to recover the original ordering of the
+        // events
+        let mut events_set: BTreeSet<_> =
+            events
+                .into_iter()
+                .fold(Default::default(), |mut acc, event| {
+                    acc.insert(event);
+                    acc
+                });
+
+        // tx events. Check that they are present and in the correct order
+        let event = events_set.pop_first().unwrap();
+        let msg = event.read_attribute::<Log>().unwrap();
+        assert_eq!(&msg, "bing");
+
+        let event = events_set.pop_first().unwrap();
+        let msg = event.read_attribute::<Log>().unwrap();
+        assert_eq!(&msg, "bong");
 
         // multiple tx results (2)
-        let tx_results = event.read_attribute::<Batch<'_>>().unwrap();
+        let tx_event = events_set.pop_first().unwrap();
+        let tx_results = tx_event.read_attribute::<Batch<'_>>().unwrap();
         assert_eq!(tx_results.len(), 2);
 
         // all txs should have succeeded
@@ -6163,25 +6181,16 @@ mod test_finalize_block {
             batch.header.atomic = false;
 
             // append first inner tx to batch (this one is valid)
-            batch.set_code(Code::new(TestWasms::TxNoOp.read_bytes(), None));
-            batch.set_data(Data::new("bing".as_bytes().to_owned()));
+            batch
+                .add_code(TestWasms::TxNoOpEvent.read_bytes(), None)
+                .add_data("bing");
 
-            // append second inner tx to batch (this one is invalid, because
-            // we pass the wrong data)
+            // append second inner tx to batch (this one is invalid)
             batch.push_default_inner_tx();
+            batch
+                .add_code(TestWasms::TxFailEvent.read_bytes(), None)
+                .add_data("bong");
 
-            batch.set_code(Code::new(
-                TestWasms::TxWriteStorageKey.read_bytes(),
-                None,
-            ));
-            batch.set_data(Data::new("bong".as_bytes().to_owned()));
-
-            // sign the batch of txs
-            batch.sign_raw(
-                vec![sk.clone()],
-                vec![sk.ref_to()].into_iter().collect(),
-                None,
-            );
             batch.sign_wrapper(sk);
 
             batch
@@ -6202,17 +6211,92 @@ mod test_finalize_block {
             })
             .expect("Test failed");
 
-        // one top level event
-        assert_eq!(events.len(), 1);
+        // two top level events
+        assert_eq!(events.len(), 2);
+
+        // tx events. Check the expected ones are present and in the correct
+        // order
         let event = events.remove(0);
+        let msg = event.read_attribute::<Log>().unwrap();
+        assert_eq!(&msg, "bing");
 
         // multiple tx results (2)
-        let tx_results = event.read_attribute::<Batch<'_>>().unwrap();
+        let tx_event = events.remove(0);
+        let tx_results = tx_event.read_attribute::<Batch<'_>>().unwrap();
         assert_eq!(tx_results.len(), 2);
 
         // check one succeeded and the other failed
         assert!(tx_results.are_any_ok());
         assert!(tx_results.are_any_err());
+    }
+
+    #[test]
+    fn test_multiple_events_from_atomic_batch_tx_one_valid_other_invalid() {
+        let (mut shell, _, _, _) = setup();
+
+        let sk = wallet::defaults::bertha_keypair();
+
+        let batch_tx = {
+            let mut batch =
+                Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                    Fee {
+                        amount_per_gas_unit: DenominatedAmount::native(
+                            1.into(),
+                        ),
+                        token: shell.state.in_mem().native_token.clone(),
+                    },
+                    sk.ref_to(),
+                    WRAPPER_GAS_LIMIT.into(),
+                ))));
+            batch.header.chain_id = shell.chain_id.clone();
+            batch.header.atomic = true;
+
+            // append first inner tx to batch (this one is valid)
+            batch
+                .add_code(TestWasms::TxNoOpEvent.read_bytes(), None)
+                .add_data("bing");
+
+            // append second inner tx to batch (this one is invalid)
+            batch.push_default_inner_tx();
+            batch
+                .add_code(TestWasms::TxFailEvent.read_bytes(), None)
+                .add_data("bong");
+
+            batch.sign_wrapper(sk);
+
+            batch
+        };
+
+        let processed_txs = vec![ProcessedTx {
+            tx: batch_tx.to_bytes().into(),
+            result: TxResult {
+                code: ResultCode::Ok.into(),
+                info: "".into(),
+            },
+        }];
+
+        let mut events = shell
+            .finalize_block(FinalizeBlock {
+                txs: processed_txs,
+                ..Default::default()
+            })
+            .expect("Test failed");
+
+        // one top level event (no tx events, only tx result)
+        assert_eq!(events.len(), 1);
+
+        // multiple tx results (2)
+        let tx_event = events.remove(0);
+        let tx_results = tx_event.read_attribute::<Batch<'_>>().unwrap();
+        assert_eq!(tx_results.len(), 2);
+
+        // check one succeeded and the other failed but the entire batch failed
+        assert!(tx_results.are_any_ok());
+        assert!(tx_results.are_any_err());
+        let result_code = tx_event
+            .read_attribute::<namada_sdk::tx::event::Code>()
+            .unwrap();
+        assert_ne!(result_code, ResultCode::Ok);
     }
 
     /// DI indirection
