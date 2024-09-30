@@ -569,6 +569,8 @@ where
 // process proposals
 #[cfg(test)]
 mod test_process_proposal {
+    use std::collections::BTreeMap;
+
     use namada_apps_lib::wallet;
     use namada_replay_protection as replay_protection;
     use namada_sdk::address;
@@ -579,7 +581,7 @@ mod test_process_proposal {
     use namada_sdk::state::StorageWrite;
     use namada_sdk::token::{read_denom, Amount, DenominatedAmount};
     use namada_sdk::tx::data::Fee;
-    use namada_sdk::tx::{Authorization, Code, Data, Signed};
+    use namada_sdk::tx::{Code, Data, Signed};
     use namada_vote_ext::{
         bridge_pool_roots, ethereum_events, validator_set_update,
     };
@@ -591,7 +593,7 @@ mod test_process_proposal {
     };
     use crate::shims::abcipp_shim_types::shim::request::ProcessedTx;
 
-    const GAS_LIMIT_MULTIPLIER: u64 = 100_000;
+    const GAS_LIMIT: u64 = 100_000;
 
     /// Check that we reject a validator set update protocol tx
     /// if the bridge is not active.
@@ -885,7 +887,7 @@ mod test_process_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 public_key,
-                GAS_LIMIT_MULTIPLIER.into(),
+                GAS_LIMIT.into(),
             ))));
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
@@ -935,16 +937,12 @@ mod test_process_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                GAS_LIMIT_MULTIPLIER.into(),
+                GAS_LIMIT.into(),
             ))));
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        outer_tx.add_section(Section::Authorization(Authorization::new(
-            outer_tx.sechashes(),
-            [(0, keypair)].into_iter().collect(),
-            None,
-        )));
+        outer_tx.sign_wrapper(keypair);
         let mut new_tx = outer_tx.clone();
         if let TxType::Wrapper(wrapper) = &mut new_tx.header.tx_type {
             // we mount a malleability attack to try and remove the fee
@@ -1007,16 +1005,12 @@ mod test_process_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                GAS_LIMIT_MULTIPLIER.into(),
+                GAS_LIMIT.into(),
             ))));
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        outer_tx.add_section(Section::Authorization(Authorization::new(
-            outer_tx.sechashes(),
-            [(0, keypair)].into_iter().collect(),
-            None,
-        )));
+        outer_tx.sign_wrapper(keypair);
 
         let response = {
             let request = ProcessProposal {
@@ -1071,16 +1065,12 @@ mod test_process_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                GAS_LIMIT_MULTIPLIER.into(),
+                GAS_LIMIT.into(),
             ))));
         outer_tx.header.chain_id = shell.chain_id.clone();
         outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        outer_tx.add_section(Section::Authorization(Authorization::new(
-            outer_tx.sechashes(),
-            [(0, keypair)].into_iter().collect(),
-            None,
-        )));
+        outer_tx.sign_wrapper(keypair);
 
         let response = {
             let request = ProcessProposal {
@@ -1162,16 +1152,12 @@ mod test_process_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                GAS_LIMIT_MULTIPLIER.into(),
+                GAS_LIMIT.into(),
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
-        wrapper.add_section(Section::Authorization(Authorization::new(
-            wrapper.sechashes(),
-            [(0, keypair)].into_iter().collect(),
-            None,
-        )));
+        wrapper.sign_wrapper(keypair);
 
         // Write wrapper hash to storage
         let mut batch = namada_sdk::state::testing::TestState::batch();
@@ -1230,16 +1216,12 @@ mod test_process_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                GAS_LIMIT_MULTIPLIER.into(),
+                GAS_LIMIT.into(),
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Authorization(Authorization::new(
-            wrapper.sechashes(),
-            [(0, keypair)].into_iter().collect(),
-            None,
-        )));
+        wrapper.sign_wrapper(keypair);
 
         // Run validation
         let request = ProcessProposal {
@@ -1282,16 +1264,12 @@ mod test_process_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                GAS_LIMIT_MULTIPLIER.into(),
+                GAS_LIMIT.into(),
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Authorization(Authorization::new(
-            wrapper.sechashes(),
-            [(0, keypair)].into_iter().collect(),
-            None,
-        )));
+        wrapper.sign_wrapper(keypair);
 
         // Write inner hash to storage
         let mut batch = namada_sdk::state::testing::TestState::batch();
@@ -1341,17 +1319,13 @@ mod test_process_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                GAS_LIMIT_MULTIPLIER.into(),
+                GAS_LIMIT.into(),
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         let mut new_wrapper = wrapper.clone();
-        wrapper.add_section(Section::Authorization(Authorization::new(
-            wrapper.sechashes(),
-            [(0, keypair)].into_iter().collect(),
-            None,
-        )));
+        wrapper.sign_wrapper(keypair);
 
         new_wrapper.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
@@ -1359,13 +1333,9 @@ mod test_process_proposal {
                 token: shell.state.in_mem().native_token.clone(),
             },
             keypair_2.ref_to(),
-            GAS_LIMIT_MULTIPLIER.into(),
+            GAS_LIMIT.into(),
         ))));
-        new_wrapper.add_section(Section::Authorization(Authorization::new(
-            new_wrapper.sechashes(),
-            [(0, keypair_2)].into_iter().collect(),
-            None,
-        )));
+        new_wrapper.sign_wrapper(keypair_2);
 
         // Run validation
         let request = ProcessProposal {
@@ -1393,17 +1363,13 @@ mod test_process_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                GAS_LIMIT_MULTIPLIER.into(),
+                GAS_LIMIT.into(),
             ))));
         let wrong_chain_id = ChainId("Wrong chain id".to_string());
         wrapper.header.chain_id = wrong_chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Authorization(Authorization::new(
-            wrapper.sechashes(),
-            [(0, keypair)].into_iter().collect(),
-            None,
-        )));
+        wrapper.sign_wrapper(keypair);
 
         let protocol_key = shell.mode.get_protocol_key().expect("Test failed");
         let protocol_tx = EthereumTxData::EthEventsVext({
@@ -1453,17 +1419,13 @@ mod test_process_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                GAS_LIMIT_MULTIPLIER.into(),
+                GAS_LIMIT.into(),
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.header.expiration = Some(DateTimeUtc::default());
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Authorization(Authorization::new(
-            wrapper.sechashes(),
-            [(0, keypair)].into_iter().collect(),
-            None,
-        )));
+        wrapper.sign_wrapper(keypair);
 
         // Run validation
         let request = ProcessProposal {
@@ -1502,11 +1464,7 @@ mod test_process_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Authorization(Authorization::new(
-            wrapper.sechashes(),
-            [(0, keypair)].into_iter().collect(),
-            None,
-        )));
+        wrapper.sign_wrapper(keypair);
 
         // Run validation
         let request = ProcessProposal {
@@ -1542,11 +1500,7 @@ mod test_process_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Authorization(Authorization::new(
-            wrapper.sechashes(),
-            [(0, keypair)].into_iter().collect(),
-            None,
-        )));
+        wrapper.sign_wrapper(keypair);
 
         // Run validation
         let request = ProcessProposal {
@@ -1583,18 +1537,13 @@ mod test_process_proposal {
                     token: address::testing::apfel(),
                 },
                 namada_apps_lib::wallet::defaults::albert_keypair().ref_to(),
-                GAS_LIMIT_MULTIPLIER.into(),
+                GAS_LIMIT.into(),
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Authorization(Authorization::new(
-            wrapper.sechashes(),
-            [(0, namada_apps_lib::wallet::defaults::albert_keypair())]
-                .into_iter()
-                .collect(),
-            None,
-        )));
+        wrapper
+            .sign_wrapper(namada_apps_lib::wallet::defaults::albert_keypair());
 
         // Run validation
         let request = ProcessProposal {
@@ -1611,6 +1560,66 @@ mod test_process_proposal {
         }
     }
 
+    // Check that a wrapper using a whitelisted non-native token for fee payment
+    // is accepted
+    #[test]
+    fn test_fee_whitelisted_non_native_token() {
+        let (mut shell, _recv, _, _) = test_utils::setup();
+
+        let apfel_denom = read_denom(&shell.state, &address::testing::apfel())
+            .expect("unable to read denomination from storage")
+            .expect("unable to find denomination of apfels");
+        let fee_amount: token::Amount = GAS_LIMIT.into();
+
+        // Credit some tokens for fee payment
+        namada_sdk::token::credit_tokens(
+            &mut shell.state,
+            &address::testing::apfel(),
+            &Address::from(&wallet::defaults::albert_keypair().to_public()),
+            fee_amount,
+        )
+        .unwrap();
+        let balance = token::read_balance(
+            &shell.state,
+            &address::testing::apfel(),
+            &Address::from(&wallet::defaults::albert_keypair().to_public()),
+        )
+        .unwrap();
+        assert_eq!(balance, fee_amount.clone());
+
+        // Whitelist Apfel for fee payment
+        let gas_cost_key = namada_sdk::parameters::storage::get_gas_cost_key();
+        let mut gas_prices: BTreeMap<Address, token::Amount> =
+            shell.read_storage_key(&gas_cost_key).unwrap();
+        gas_prices.insert(address::testing::apfel(), 1.into());
+        shell.shell.state.write(&gas_cost_key, gas_prices).unwrap();
+        shell.commit();
+
+        let mut wrapper =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount_per_gas_unit: DenominatedAmount::new(
+                        1.into(),
+                        apfel_denom,
+                    ),
+                    token: address::testing::apfel(),
+                },
+                namada_apps_lib::wallet::defaults::albert_keypair().ref_to(),
+                GAS_LIMIT.into(),
+            ))));
+        wrapper.header.chain_id = shell.chain_id.clone();
+        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
+        wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper
+            .sign_wrapper(namada_apps_lib::wallet::defaults::albert_keypair());
+
+        // Run validation
+        let request = ProcessProposal {
+            txs: vec![wrapper.to_bytes()],
+        };
+        assert!(shell.process_proposal(request).is_ok());
+    }
+
     // Check that a wrapper setting a fee amount lower than the minimum required
     // causes a block rejection
     #[test]
@@ -1624,18 +1633,13 @@ mod test_process_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 namada_apps_lib::wallet::defaults::albert_keypair().ref_to(),
-                GAS_LIMIT_MULTIPLIER.into(),
+                GAS_LIMIT.into(),
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Authorization(Authorization::new(
-            wrapper.sechashes(),
-            [(0, namada_apps_lib::wallet::defaults::albert_keypair())]
-                .into_iter()
-                .collect(),
-            None,
-        )));
+        wrapper
+            .sign_wrapper(namada_apps_lib::wallet::defaults::albert_keypair());
 
         // Run validation
         let request = ProcessProposal {
@@ -1672,13 +1676,8 @@ mod test_process_proposal {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Authorization(Authorization::new(
-            wrapper.sechashes(),
-            [(0, namada_apps_lib::wallet::defaults::albert_keypair())]
-                .into_iter()
-                .collect(),
-            None,
-        )));
+        wrapper
+            .sign_wrapper(namada_apps_lib::wallet::defaults::albert_keypair());
 
         // Run validation
         let request = ProcessProposal {
@@ -1710,18 +1709,13 @@ mod test_process_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 namada_apps_lib::wallet::defaults::albert_keypair().ref_to(),
-                GAS_LIMIT_MULTIPLIER.into(),
+                GAS_LIMIT.into(),
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Authorization(Authorization::new(
-            wrapper.sechashes(),
-            [(0, namada_apps_lib::wallet::defaults::albert_keypair())]
-                .into_iter()
-                .collect(),
-            None,
-        )));
+        wrapper
+            .sign_wrapper(namada_apps_lib::wallet::defaults::albert_keypair());
 
         // Run validation
         let request = ProcessProposal {
@@ -1764,17 +1758,13 @@ mod test_process_proposal {
                         token: shell.state.in_mem().native_token.clone(),
                     },
                     keypair.ref_to(),
-                    GAS_LIMIT_MULTIPLIER.into(),
+                    GAS_LIMIT.into(),
                 ))));
             wrapper.header.chain_id = shell.chain_id.clone();
             wrapper
                 .set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
             wrapper.set_data(Data::new(vec![0; size as usize]));
-            wrapper.add_section(Section::Authorization(Authorization::new(
-                wrapper.sechashes(),
-                [(0, keypair)].into_iter().collect(),
-                None,
-            )));
+            wrapper.sign_wrapper(keypair);
             wrapper
         };
 
