@@ -3,7 +3,9 @@ use std::str::FromStr;
 
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
-use namada_apps_lib::wallet::defaults::{albert_keypair, christel_keypair, is_use_device};
+use namada_apps_lib::wallet::defaults::{
+    get_unencrypted_keypair, is_use_device,
+};
 use namada_core::dec::Dec;
 use namada_core::masp::TokenMap;
 use namada_node::shell::testing::client::run;
@@ -20,13 +22,13 @@ use namada_sdk::DEFAULT_GAS_LIMIT;
 use test_log::test;
 
 use super::setup;
-use crate::e2e::setup::apply_use_device;
 use crate::e2e::setup::constants::{
     AA_PAYMENT_ADDRESS, AA_VIEWING_KEY, AB_PAYMENT_ADDRESS, AB_VIEWING_KEY,
     AC_PAYMENT_ADDRESS, AC_VIEWING_KEY, ALBERT, ALBERT_KEY, A_SPENDING_KEY,
     BB_PAYMENT_ADDRESS, BERTHA, BERTHA_KEY, BTC, B_SPENDING_KEY, CHRISTEL,
     CHRISTEL_KEY, ETH, MASP, NAM,
 };
+use crate::e2e::setup::{apply_use_device, ensure_hot_key};
 use crate::strings::TX_APPLIED_SUCCESS;
 
 /// In this test we verify that users of the MASP receive the correct rewards
@@ -1214,8 +1216,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 Bin::Client,
                 vec!["shielded-sync", "--node", validator_one_rpc],
             )?;
-            let tx_args = if dry_run && is_use_device()
-            {
+            let tx_args = if dry_run && is_use_device() {
                 continue;
             } else if dry_run {
                 [tx_args.clone(), vec!["--dry-run"]].concat()
@@ -1471,7 +1472,9 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
     txs_bytes.push(std::fs::read(&file_path).unwrap());
     std::fs::remove_file(&file_path).unwrap();
 
-    let sk = christel_keypair();
+    let sk = get_unencrypted_keypair(
+        &ensure_hot_key(CHRISTEL_KEY).to_ascii_lowercase(),
+    );
     let pk = sk.to_public();
 
     let native_token = node
@@ -1594,7 +1597,9 @@ fn expired_masp_tx() -> Result<()> {
     let tx_bytes = std::fs::read(&file_path).unwrap();
     std::fs::remove_file(&file_path).unwrap();
 
-    let sk = christel_keypair();
+    let sk = get_unencrypted_keypair(
+        &ensure_hot_key(CHRISTEL_KEY).to_ascii_lowercase(),
+    );
     let pk = sk.to_public();
 
     let native_token = node
@@ -3332,7 +3337,7 @@ fn identical_output_descriptions() -> Result<()> {
         apply_use_device(vec![
             "shield",
             "--source",
-            ALBERT_KEY,
+            ensure_hot_key(ALBERT_KEY),
             "--target",
             AA_PAYMENT_ADDRESS,
             "--token",
@@ -3342,7 +3347,7 @@ fn identical_output_descriptions() -> Result<()> {
             "--gas-limit",
             "300000",
             "--gas-payer",
-            ALBERT_KEY,
+            ensure_hot_key(ALBERT_KEY),
             "--output-folder-path",
             tempdir.path().to_str().unwrap(),
             "--dump-tx",
@@ -3374,12 +3379,15 @@ fn identical_output_descriptions() -> Result<()> {
     tx_clone.header.batch.clear();
     tx_clone.header.batch.insert(cmt);
 
+    let keypair = get_unencrypted_keypair(
+        &ensure_hot_key(ALBERT_KEY).to_ascii_lowercase(),
+    );
     let signing_data = SigningTxData {
         owner: None,
-        public_keys: vec![albert_keypair().to_public()],
+        public_keys: vec![keypair.to_public()],
         threshold: 1,
         account_public_keys_map: None,
-        fee_payer: albert_keypair().to_public(),
+        fee_payer: keypair.to_public(),
         shielded_hash: None,
     };
 
@@ -3390,13 +3398,13 @@ fn identical_output_descriptions() -> Result<()> {
     .unwrap();
 
     batched_tx.sign_raw(
-        vec![albert_keypair()],
+        vec![keypair.clone()],
         AccountPublicKeysMap::from_iter(
-            vec![(albert_keypair().to_public())].into_iter(),
+            vec![(keypair.to_public())].into_iter(),
         ),
         None,
     );
-    batched_tx.sign_wrapper(albert_keypair());
+    batched_tx.sign_wrapper(keypair);
 
     let wrapper_hash = batched_tx.wrapper_hash();
     let inner_cmts = batched_tx.commitments();
