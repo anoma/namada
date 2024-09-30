@@ -949,7 +949,6 @@ mod test_prepare_proposal {
             ..Default::default()
         };
         let result = shell.prepare_proposal(req);
-        eprintln!("Proposal: {:?}", result.txs);
         assert_eq!(result.txs.len(), 0);
     }
 
@@ -985,7 +984,6 @@ mod test_prepare_proposal {
             ..Default::default()
         };
         let result = shell.prepare_proposal(req);
-        eprintln!("Proposal: {:?}", result.txs);
         assert!(result.txs.is_empty());
     }
 
@@ -1019,7 +1017,6 @@ mod test_prepare_proposal {
             ..Default::default()
         };
         let result = shell.prepare_proposal(req);
-        eprintln!("Proposal: {:?}", result.txs);
         assert!(result.txs.is_empty());
     }
 
@@ -1073,7 +1070,6 @@ mod test_prepare_proposal {
             ..Default::default()
         };
         let result = shell.prepare_proposal(req);
-        eprintln!("Proposal: {:?}", result.txs);
         assert!(result.txs.is_empty());
     }
 
@@ -1114,7 +1110,6 @@ mod test_prepare_proposal {
             ..Default::default()
         };
         let result = shell.prepare_proposal(req);
-        eprintln!("Proposal: {:?}", result.txs);
         assert!(result.txs.is_empty());
     }
 
@@ -1180,8 +1175,6 @@ mod test_prepare_proposal {
             ..Default::default()
         };
         let result = shell.prepare_proposal(req);
-        // FIXME: why println here????
-        eprintln!("Proposal: {:?}", result.txs);
         assert_eq!(result.txs.first().unwrap(), &wrapper_tx.to_bytes());
     }
 
@@ -1227,7 +1220,6 @@ mod test_prepare_proposal {
             ..Default::default()
         };
         let result = shell.prepare_proposal(req);
-        eprintln!("Proposal: {:?}", result.txs);
         assert!(result.txs.is_empty());
     }
 
@@ -1260,7 +1252,6 @@ mod test_prepare_proposal {
             ..Default::default()
         };
         let result = shell.prepare_proposal(req);
-        eprintln!("Proposal: {:?}", result.txs);
         assert!(result.txs.is_empty());
     }
 
@@ -1294,7 +1285,6 @@ mod test_prepare_proposal {
             ..Default::default()
         };
         let result = shell.prepare_proposal(req);
-        eprintln!("Proposal: {:?}", result.txs);
         assert!(result.txs.is_empty());
     }
 
@@ -1328,7 +1318,6 @@ mod test_prepare_proposal {
             ..Default::default()
         };
         let result = shell.prepare_proposal(req);
-        eprintln!("Proposal: {:?}", result.txs);
         assert!(result.txs.is_empty());
     }
 
