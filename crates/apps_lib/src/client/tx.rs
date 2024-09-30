@@ -1178,11 +1178,11 @@ pub async fn submit_shielded_transfer(
     .await?;
     let (mut tx, signing_data) =
         args.clone().build(namada, &mut bparams).await?;
+    masp_sign(&mut tx, &args.tx, &signing_data, shielded_hw_keys).await?;
 
     if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, tx)?;
     } else {
-        masp_sign(&mut tx, &args.tx, &signing_data, shielded_hw_keys).await?;
         sign(namada, &mut tx, &args.tx, signing_data).await?;
         namada.submit(tx, &args.tx).await?;
     }
@@ -1270,11 +1270,11 @@ pub async fn submit_unshielding_transfer(
     .await?;
     let (mut tx, signing_data) =
         args.clone().build(namada, &mut bparams).await?;
+    masp_sign(&mut tx, &args.tx, &signing_data, shielded_hw_keys).await?;
 
     if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, tx)?;
     } else {
-        masp_sign(&mut tx, &args.tx, &signing_data, shielded_hw_keys).await?;
         sign(namada, &mut tx, &args.tx, signing_data).await?;
         namada.submit(tx, &args.tx).await?;
     }
@@ -1303,11 +1303,11 @@ where
     )
     .await?;
     let (mut tx, signing_data, _) = args.build(namada, &mut bparams).await?;
+    masp_sign(&mut tx, &args.tx, &signing_data, shielded_hw_keys).await?;
 
     if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, tx)?;
     } else {
-        masp_sign(&mut tx, &args.tx, &signing_data, shielded_hw_keys).await?;
         batch_opt_reveal_pk_and_submit(
             namada,
             &args.tx,
