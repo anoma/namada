@@ -2052,6 +2052,7 @@ pub mod test_utils {
 
 #[cfg(test)]
 mod shell_tests {
+    use std::collections::BTreeMap;
     use std::fs::File;
 
     use eth_bridge::storage::eth_bridge_queries::is_bridge_comptime_enabled;
@@ -2061,7 +2062,7 @@ mod shell_tests {
     use namada_sdk::token::read_denom;
     use namada_sdk::tx::data::protocol::{ProtocolTx, ProtocolTxType};
     use namada_sdk::tx::data::Fee;
-    use namada_sdk::tx::{Authorization, Code, Data, Signed};
+    use namada_sdk::tx::{Code, Data, Signed};
     use namada_vote_ext::{
         bridge_pool_roots, ethereum_events, ethereum_tx_data_variants,
     };
@@ -2073,7 +2074,7 @@ mod shell_tests {
     use crate::shell::token::DenominatedAmount;
     use crate::storage::{DbSnapshot, PersistentDB, SnapshotPath};
 
-    const GAS_LIMIT_MULTIPLIER: u64 = 100_000;
+    const GAS_LIMIT: u64 = 100_000;
 
     /// Check that the shell broadcasts validator set updates,
     /// even when the Ethereum oracle is not running (e.g.
@@ -2378,11 +2379,7 @@ mod shell_tests {
             // invalid tx type, it doesn't match the
             // tx type declared in the header
             tx.set_data(Data::new(ext.serialize_to_vec()));
-            tx.add_section(Section::Authorization(Authorization::new(
-                tx.sechashes(),
-                [(0, protocol_key)].into_iter().collect(),
-                None,
-            )));
+            tx.sign_wrapper(protocol_key);
             tx
         }
         .to_bytes();
@@ -2451,13 +2448,7 @@ mod shell_tests {
             .set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         invalid_wrapper
             .set_data(Data::new("transaction data".as_bytes().to_owned()));
-        invalid_wrapper.add_section(Section::Authorization(
-            Authorization::new(
-                invalid_wrapper.sechashes(),
-                [(0, keypair)].into_iter().collect(),
-                None,
-            ),
-        ));
+        invalid_wrapper.sign_wrapper(keypair);
 
         // we mount a malleability attack to try and remove the fee
         let mut new_wrapper =
@@ -2514,18 +2505,12 @@ mod shell_tests {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 wallet::defaults::albert_keypair().ref_to(),
-                GAS_LIMIT_MULTIPLIER.into(),
+                GAS_LIMIT.into(),
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Authorization(Authorization::new(
-            wrapper.sechashes(),
-            [(0, wallet::defaults::albert_keypair())]
-                .into_iter()
-                .collect(),
-            None,
-        )));
+        wrapper.sign_wrapper(wallet::defaults::albert_keypair());
 
         // Write wrapper hash to storage
         let mut batch = namada_sdk::state::testing::TestState::batch();
@@ -2574,15 +2559,9 @@ mod shell_tests {
                 token: shell.state.in_mem().native_token.clone(),
             },
             wallet::defaults::bertha_keypair().ref_to(),
-            GAS_LIMIT_MULTIPLIER.into(),
+            GAS_LIMIT.into(),
         ))));
-        wrapper.add_section(Section::Authorization(Authorization::new(
-            wrapper.sechashes(),
-            [(0, wallet::defaults::bertha_keypair())]
-                .into_iter()
-                .collect(),
-            None,
-        )));
+        wrapper.sign_wrapper(wallet::defaults::bertha_keypair());
         let batch_hash = wrapper.raw_header_hash();
         // Write batch hash in storage
         let batch_hash_key = replay_protection::current_key(&batch_hash);
@@ -2690,11 +2669,7 @@ mod shell_tests {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Authorization(Authorization::new(
-            wrapper.sechashes(),
-            [(0, keypair)].into_iter().collect(),
-            None,
-        )));
+        wrapper.sign_wrapper(keypair);
 
         let result = shell.mempool_validate(
             wrapper.to_bytes().as_ref(),
@@ -2721,11 +2696,7 @@ mod shell_tests {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Authorization(Authorization::new(
-            wrapper.sechashes(),
-            [(0, keypair)].into_iter().collect(),
-            None,
-        )));
+        wrapper.sign_wrapper(keypair);
 
         let result = shell.mempool_validate(
             wrapper.to_bytes().as_ref(),
@@ -2753,24 +2724,77 @@ mod shell_tests {
                     token: address::testing::apfel(),
                 },
                 wallet::defaults::albert_keypair().ref_to(),
-                GAS_LIMIT_MULTIPLIER.into(),
+                GAS_LIMIT.into(),
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Authorization(Authorization::new(
-            wrapper.sechashes(),
-            [(0, wallet::defaults::albert_keypair())]
-                .into_iter()
-                .collect(),
-            None,
-        )));
+        wrapper.sign_wrapper(wallet::defaults::albert_keypair());
 
         let result = shell.mempool_validate(
             wrapper.to_bytes().as_ref(),
             MempoolTxType::NewTransaction,
         );
         assert_eq!(result.code, ResultCode::FeeError.into());
+    }
+
+    // Check that a wrapper using a whitelisted non-native token for fee payment
+    // is accepted
+    #[test]
+    fn test_fee_whitelisted_non_native_token() {
+        let (mut shell, _recv, _, _) = test_utils::setup();
+        let apfel_denom = read_denom(&shell.state, &address::testing::apfel())
+            .expect("unable to read denomination from storage")
+            .expect("unable to find denomination of apfels");
+        let fee_amount: token::Amount = GAS_LIMIT.into();
+
+        // Credit some tokens for fee payment
+        namada_sdk::token::credit_tokens(
+            &mut shell.state,
+            &address::testing::apfel(),
+            &Address::from(&wallet::defaults::albert_keypair().to_public()),
+            fee_amount,
+        )
+        .unwrap();
+        let balance = token::read_balance(
+            &shell.state,
+            &address::testing::apfel(),
+            &Address::from(&wallet::defaults::albert_keypair().to_public()),
+        )
+        .unwrap();
+        assert_eq!(balance, fee_amount.clone());
+
+        // Whitelist Apfel for fee payment
+        let gas_cost_key = namada_sdk::parameters::storage::get_gas_cost_key();
+        let mut gas_prices: BTreeMap<Address, token::Amount> =
+            shell.read_storage_key(&gas_cost_key).unwrap();
+        gas_prices.insert(address::testing::apfel(), 1.into());
+        shell.shell.state.write(&gas_cost_key, gas_prices).unwrap();
+        shell.commit();
+
+        // Submit tx
+        let mut wrapper =
+            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                Fee {
+                    amount_per_gas_unit: DenominatedAmount::new(
+                        1.into(),
+                        apfel_denom,
+                    ),
+                    token: address::testing::apfel(),
+                },
+                wallet::defaults::albert_keypair().ref_to(),
+                GAS_LIMIT.into(),
+            ))));
+        wrapper.header.chain_id = shell.chain_id.clone();
+        wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
+        wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
+        wrapper.sign_wrapper(wallet::defaults::albert_keypair());
+
+        let result = shell.mempool_validate(
+            wrapper.to_bytes().as_ref(),
+            MempoolTxType::NewTransaction,
+        );
+        assert_eq!(result.code, ResultCode::Ok.into());
     }
 
     // Check that a wrapper setting a fee amount lower than the minimum required
@@ -2786,18 +2810,12 @@ mod shell_tests {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 wallet::defaults::albert_keypair().ref_to(),
-                GAS_LIMIT_MULTIPLIER.into(),
+                GAS_LIMIT.into(),
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Authorization(Authorization::new(
-            wrapper.sechashes(),
-            [(0, wallet::defaults::albert_keypair())]
-                .into_iter()
-                .collect(),
-            None,
-        )));
+        wrapper.sign_wrapper(wallet::defaults::albert_keypair());
 
         let result = shell.mempool_validate(
             wrapper.to_bytes().as_ref(),
@@ -2825,13 +2843,7 @@ mod shell_tests {
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Authorization(Authorization::new(
-            wrapper.sechashes(),
-            [(0, wallet::defaults::albert_keypair())]
-                .into_iter()
-                .collect(),
-            None,
-        )));
+        wrapper.sign_wrapper(wallet::defaults::albert_keypair());
 
         let result = shell.mempool_validate(
             wrapper.to_bytes().as_ref(),
@@ -2854,18 +2866,12 @@ mod shell_tests {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 wallet::defaults::albert_keypair().ref_to(),
-                GAS_LIMIT_MULTIPLIER.into(),
+                GAS_LIMIT.into(),
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
         wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Authorization(Authorization::new(
-            wrapper.sechashes(),
-            [(0, wallet::defaults::albert_keypair())]
-                .into_iter()
-                .collect(),
-            None,
-        )));
+        wrapper.sign_wrapper(wallet::defaults::albert_keypair());
 
         let result = shell.mempool_validate(
             wrapper.to_bytes().as_ref(),
@@ -2899,17 +2905,14 @@ mod shell_tests {
                         token: shell.state.in_mem().native_token.clone(),
                     },
                     keypair.ref_to(),
-                    GAS_LIMIT_MULTIPLIER.into(),
+                    GAS_LIMIT.into(),
                 ))));
             wrapper.header.chain_id = shell.chain_id.clone();
             wrapper
                 .set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
             wrapper.set_data(Data::new(vec![0; size as usize]));
-            wrapper.add_section(Section::Authorization(Authorization::new(
-                wrapper.sechashes(),
-                [(0, keypair)].into_iter().collect(),
-                None,
-            )));
+            wrapper.sign_wrapper(keypair);
+
             wrapper
         };
 
