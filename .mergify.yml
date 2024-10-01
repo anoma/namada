@@ -6,15 +6,24 @@ queue_rules:
       - "#approved-reviews-by >= 1"
       - base = main
     merge_method: merge
-        
+
+  - name: backport-0.44-queue
+    speculative_checks: 3
+    batch_size: 3
+    queue_conditions:
+      - "#approved-reviews-by >= 1"
+      - base = "0.44.0"
+    merge_method: merge
 
 pull_request_rules:
-  - name: automatic merge to main
+  - name: automatic merge to main or backport branch
     conditions:
         - label = "merge"
         - label != "do-not-merge"
         - "#approved-reviews-by >= 1"
-        - base = main
+        - or:
+          - base = main
+          - base = "0.44.0"
     actions:
       queue:
         autosquash: true   
