@@ -538,6 +538,8 @@ fn fee_payment_with_ibc_token() -> Result<()> {
     const PIPELINE_LEN: u64 = 2;
     let update_genesis =
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
+            genesis.parameters.parameters.epochs_per_year =
+                epochs_per_year_from_min_duration(60);
             genesis.parameters.ibc_params.default_mint_limit =
                 Amount::max_signed();
             genesis.parameters.gov_params.min_proposal_grace_epochs = 3;
@@ -545,6 +547,9 @@ fn fee_payment_with_ibc_token() -> Result<()> {
                 .parameters
                 .ibc_params
                 .default_per_epoch_throughput_limit = Amount::max_signed();
+            // Artificially increase the gas scale to allow for fee payment with
+            // the limited ibc tokens available
+            genesis.parameters.parameters.gas_scale = 10_000_000;
             setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
         };
     let (ledger, gaia, test, test_gaia) = run_namada_gaia(update_genesis)?;
@@ -563,7 +568,7 @@ fn fee_payment_with_ibc_token() -> Result<()> {
         let new_epoch = get_epoch(&test, &rpc).unwrap_or_default();
         epoch = new_epoch;
     }
-    // ib gas token proposal on Namada
+    // ibc gas token proposal on Namada
     let start_epoch = propose_gas_token(&test)?;
     let mut epoch = get_epoch(&test, &rpc).unwrap();
     // Vote
@@ -583,7 +588,6 @@ fn fee_payment_with_ibc_token() -> Result<()> {
     let port_id_namada = "transfer";
     let ibc_denom_on_namada =
         format!("{port_id_namada}/{channel_id_namada}/{GAIA_COIN}");
-
     // Start relaying
     let hermes = run_hermes(&test)?;
     let _bg_hermes = hermes.background();
@@ -595,14 +599,14 @@ fn fee_payment_with_ibc_token() -> Result<()> {
         epoch = get_epoch(&test, &rpc).unwrap();
     }
 
-    // Transfer 200 samoleans from Gaia to Namada
+    // Transfer 250 samoleans from Gaia to Namada
     let namada_receiver = find_address(&test, ALBERT_KEY)?.to_string();
     transfer_from_gaia(
         &test_gaia,
         GAIA_USER,
         &namada_receiver,
         GAIA_COIN,
-        200,
+        250,
         &port_id_gaia,
         &channel_id_gaia,
         None,
@@ -611,24 +615,24 @@ fn fee_payment_with_ibc_token() -> Result<()> {
     wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test)?;
 
     // Check the token on Namada
-    check_balance(&test, ALBERT_KEY, &ibc_denom_on_namada, 200)?;
-    check_gaia_balance(&test_gaia, GAIA_USER, GAIA_COIN, 800)?;
+    check_balance(&test, ALBERT_KEY, &ibc_denom_on_namada, 250)?;
+    check_gaia_balance(&test_gaia, GAIA_USER, GAIA_COIN, 750)?;
 
     // Transparent transfer in Namada paying gas with samoleans
     transfer_on_chain(
         &test,
         "transparent-transfer",
         ALBERT,
-        BERTHA,
+        CHRISTEL,
         NAM,
         50,
         ALBERT_KEY,
-        &["--gas-token", &ibc_denom_on_namada, "--gas-price", "1"],
+        &["--gas-token", &ibc_denom_on_namada, "--gas-limit", "250"],
     )?;
     check_balance(&test, ALBERT, NAM, 1_999_950)?;
-    check_balance(&test, BERTHA, NAM, 2_000_050)?;
-    check_balance(&test, ALBERT_KEY, &ibc_denom_on_namada, 475)?;
-    check_balance(&test, "validator-0", &ibc_denom_on_namada, 25)?;
+    check_balance(&test, CHRISTEL, NAM, 2_000_050)?;
+    check_balance(&test, ALBERT_KEY, &ibc_denom_on_namada, 0)?;
+    check_balance(&test, "validator-0", &ibc_denom_on_namada, 250)?;
 
     Ok(())
 }

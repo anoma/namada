@@ -2,7 +2,7 @@
     "e2e::eth_bridge_tests::everything": 4,
     "e2e::ibc_tests::ibc_transfers": 414,
     "e2e::ibc_tests::pgf_over_ibc": 415,
-    "e2e::ibc_tests::fee_payment_with_ibc_token": 840,
+    "e2e::ibc_tests::fee_payment_with_ibc_token": 750,
     "e2e::ibc_tests::ibc_token_inflation": 840,
     "e2e::ibc_tests::ibc_rate_limit": 485,
     "e2e::ibc_tests::ibc_upgrade_client": 280,
