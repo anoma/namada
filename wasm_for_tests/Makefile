@@ -6,11 +6,13 @@ nightly := $(shell cat ../rust-nightly-version)
 # All the wasms that can be built from this source, switched via Cargo features
 # Wasms can be added via the Cargo.toml `[features]` list.
 wasms := tx_fail
+wasms += tx_fail_event
 wasms += tx_infinite_guest_gas
 wasms += tx_infinite_host_gas
 wasms += tx_invalid_data
 wasms += tx_memory_limit
 wasms += tx_no_op
+wasms += tx_no_op_event
 wasms += tx_proposal_code
 wasms += tx_proposal_ibc_token_inflation
 wasms += tx_proposal_masp_reward

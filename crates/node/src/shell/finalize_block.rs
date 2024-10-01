@@ -1271,6 +1271,7 @@ mod test_finalize_block {
     use std::num::NonZeroU64;
     use std::str::FromStr;
 
+    use namada_apps_lib::wallet::defaults::albert_keypair;
     use namada_replay_protection as replay_protection;
     use namada_sdk::address;
     use namada_sdk::collections::{HashMap, HashSet};
@@ -1285,6 +1286,7 @@ mod test_finalize_block {
     };
     use namada_sdk::eth_bridge::MinimumConfirmations;
     use namada_sdk::ethereum_events::{EthAddress, Uint as ethUint};
+    use namada_sdk::events::extend::Log;
     use namada_sdk::events::Event;
     use namada_sdk::gas::VpGasMeter;
     use namada_sdk::governance::storage::keys::get_proposal_execution_key;
@@ -1318,7 +1320,7 @@ mod test_finalize_block {
     use namada_sdk::tendermint::abci::types::{Misbehavior, MisbehaviorKind};
     use namada_sdk::time::DurationSecs;
     use namada_sdk::token::{
-        read_balance, update_balance, Amount, DenominatedAmount,
+        read_balance, read_denom, update_balance, Amount, DenominatedAmount,
         NATIVE_MAX_DECIMAL_PLACES,
     };
     use namada_sdk::tx::data::Fee;
@@ -3471,7 +3473,6 @@ mod test_finalize_block {
         let (mut shell, _broadcaster, _, _) = setup();
         let keypair = namada_apps_lib::wallet::defaults::bertha_keypair();
         let mut out_of_gas_wrapper = {
-            let tx_code = TestWasms::TxNoOp.read_bytes();
             let mut wrapper_tx =
                 Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                     Fee {
@@ -3487,20 +3488,10 @@ mod test_finalize_block {
             wrapper_tx.set_data(Data::new(
                 "Encrypted transaction data".as_bytes().to_owned(),
             ));
-            wrapper_tx.set_code(Code::new(tx_code, None));
-            wrapper_tx.add_section(Section::Authorization(Authorization::new(
-                wrapper_tx.sechashes(),
-                [(0, keypair.clone())].into_iter().collect(),
-                None,
-            )));
+            wrapper_tx.add_code(TestWasms::TxNoOp.read_bytes(), None);
+            wrapper_tx.sign_wrapper(keypair.clone());
             wrapper_tx
         };
-
-        let mut wasm_path = top_level_directory();
-        // Write a key to trigger the vp to validate the signature
-        wasm_path.push("wasm_for_tests/tx_write.wasm");
-        let tx_code = std::fs::read(wasm_path)
-            .expect("Expected a file at given code path");
 
         let mut unsigned_wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
@@ -3517,26 +3508,20 @@ mod test_finalize_block {
 
         let mut failing_wrapper = unsigned_wrapper.clone();
 
-        unsigned_wrapper.set_code(Code::new(tx_code, None));
         let addr = Address::from(&keypair.to_public());
+        // Write a key to trigger the vp to validate the signature
         let key = Key::from(addr.to_db_key())
             .join(&Key::from("test".to_string().to_db_key()));
-        unsigned_wrapper.set_data(Data::new(
-            borsh::to_vec(&TxWriteData {
+        unsigned_wrapper
+            .add_code(TestWasms::TxWriteStorageKey.read_bytes(), None)
+            .add_data(TxWriteData {
                 key,
                 value: "test".as_bytes().to_owned(),
-            })
-            .unwrap(),
-        ));
+            });
 
-        let mut wasm_path = top_level_directory();
-        wasm_path.push("wasm_for_tests/tx_fail.wasm");
-        let tx_code = std::fs::read(wasm_path)
-            .expect("Expected a file at given code path");
-        failing_wrapper.set_code(Code::new(tx_code, None));
-        failing_wrapper.set_data(Data::new(
-            "Encrypted transaction data".as_bytes().to_owned(),
-        ));
+        failing_wrapper
+            .add_code(TestWasms::TxFail.read_bytes(), None)
+            .add_data("Encrypted transaction data");
 
         let mut wrong_commitment_wrapper = failing_wrapper.clone();
         let tx_code = TestWasms::TxInvalidData.read_bytes();
@@ -3915,6 +3900,86 @@ mod test_finalize_block {
         }
     }
 
+    // Test that paying fees with a whitelisted token which is not the native
+    // one is accepted
+    #[test]
+    fn test_fee_payment_whitelisted_token() {
+        let (mut shell, _, _, _) = setup();
+        let btc = namada_sdk::address::testing::btc();
+        let btc_denom = read_denom(&shell.state, &btc).unwrap().unwrap();
+        let fee_amount: Amount = WRAPPER_GAS_LIMIT.into();
+
+        // Credit some tokens for fee payment
+        namada_sdk::token::credit_tokens(
+            &mut shell.state,
+            &btc,
+            &Address::from(&albert_keypair().to_public()),
+            fee_amount,
+        )
+        .unwrap();
+        let balance = read_balance(
+            &shell.state,
+            &btc,
+            &Address::from(&albert_keypair().to_public()),
+        )
+        .unwrap();
+        assert_eq!(balance, fee_amount.clone());
+
+        // Whitelist BTC for fee payment
+        let gas_cost_key = namada_sdk::parameters::storage::get_gas_cost_key();
+        let mut gas_prices: BTreeMap<Address, Amount> =
+            shell.read_storage_key(&gas_cost_key).unwrap();
+        gas_prices.insert(btc.clone(), 1.into());
+        shell.shell.state.write(&gas_cost_key, gas_prices).unwrap();
+        shell.commit();
+
+        // Submit tx
+        let mut tx = Tx::new(shell.chain_id.clone(), None);
+        tx.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
+            Fee {
+                amount_per_gas_unit: DenominatedAmount::new(
+                    1.into(),
+                    btc_denom,
+                ),
+                token: btc.clone(),
+            },
+            albert_keypair().ref_to(),
+            WRAPPER_GAS_LIMIT.into(),
+        ))));
+        tx.add_code(TestWasms::TxNoOp.read_bytes(), None)
+            .add_data("Transaction data");
+        tx.sign_wrapper(albert_keypair());
+
+        let processed_tx = ProcessedTx {
+            tx: tx.to_bytes().into(),
+            result: TxResult {
+                code: ResultCode::Ok.into(),
+                info: "".into(),
+            },
+        };
+
+        let event = &shell
+            .finalize_block(FinalizeBlock {
+                txs: vec![processed_tx],
+                ..Default::default()
+            })
+            .expect("Test failed")[0];
+
+        // Check fee payment
+        assert_eq!(*event.kind(), APPLIED_TX);
+        let code = event.read_attribute::<CodeAttr>().expect("Test failed");
+        assert_eq!(code, ResultCode::Ok);
+
+        // Check fee payer balance
+        let balance = read_balance(
+            &shell.state,
+            &btc,
+            &Address::from(&albert_keypair().to_public()),
+        )
+        .unwrap();
+        assert_eq!(balance, 0.into());
+    }
+
     // Test that the fees collected from a block are withdrew from the wrapper
     // signer and credited to the block proposer
     #[test]
@@ -3939,10 +4004,6 @@ mod test_finalize_block {
         )
         .unwrap();
 
-        let mut wasm_path = top_level_directory();
-        wasm_path.push("wasm_for_tests/tx_no_op.wasm");
-        let tx_code = std::fs::read(wasm_path)
-            .expect("Expected a file at given code path");
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
@@ -3953,15 +4014,10 @@ mod test_finalize_block {
                 5_000_000.into(),
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
-        wrapper.set_code(Code::new(tx_code, None));
-        wrapper.set_data(Data::new("Transaction data".as_bytes().to_owned()));
-        wrapper.add_section(Section::Authorization(Authorization::new(
-            wrapper.sechashes(),
-            [(0, namada_apps_lib::wallet::defaults::albert_keypair())]
-                .into_iter()
-                .collect(),
-            None,
-        )));
+        wrapper
+            .add_code(TestWasms::TxNoOp.read_bytes(), None)
+            .add_data("Transaction data");
+        wrapper.sign_wrapper(albert_keypair());
         let fee_amount =
             wrapper.header().wrapper().unwrap().get_tx_fee().unwrap();
         let fee_amount = namada_sdk::token::denom_to_amount(
@@ -6039,21 +6095,17 @@ mod test_finalize_block {
             batch.header.atomic = false;
 
             // append first inner tx to batch
-            batch.set_code(Code::new(TestWasms::TxNoOp.read_bytes(), None));
-            batch.set_data(Data::new("bing".as_bytes().to_owned()));
+            batch
+                .add_code(TestWasms::TxNoOpEvent.read_bytes(), None)
+                .add_data("bing");
 
             // append second inner tx to batch
             batch.push_default_inner_tx();
-
-            batch.set_code(Code::new(TestWasms::TxNoOp.read_bytes(), None));
-            batch.set_data(Data::new("bong".as_bytes().to_owned()));
+            batch
+                .add_code(TestWasms::TxNoOpEvent.read_bytes(), None)
+                .add_data("bong");
 
             // sign the batch of txs
-            batch.sign_raw(
-                vec![sk.clone()],
-                vec![sk.ref_to()].into_iter().collect(),
-                None,
-            );
             batch.sign_wrapper(sk);
 
             batch
@@ -6074,12 +6126,107 @@ mod test_finalize_block {
             })
             .expect("Test failed");
 
-        // one top level event
-        assert_eq!(events.len(), 1);
+        // three top level events
+        assert_eq!(events.len(), 3);
+
+        // tx events. Check that they are present and in the correct order
+        // TODO(namada#3856): right now we lose events ordering in a batch
+        // because of the BTreeSet we use in BatchedTxResult so we can only
+        // check the presence of the events but not the order
+        let mut unordered_events = vec![];
         let event = events.remove(0);
+        let msg = event.read_attribute::<Log>().unwrap();
+        unordered_events.push(msg.as_str());
+
+        let event = events.remove(0);
+        let msg = event.read_attribute::<Log>().unwrap();
+        unordered_events.push(msg.as_str());
+
+        assert!(unordered_events.contains(&"bing"));
+        assert!(unordered_events.contains(&"bong"));
 
         // multiple tx results (2)
-        let tx_results = event.read_attribute::<Batch<'_>>().unwrap();
+        let tx_event = events.remove(0);
+        let tx_results = tx_event.read_attribute::<Batch<'_>>().unwrap();
+        assert_eq!(tx_results.len(), 2);
+
+        // all txs should have succeeded
+        assert!(tx_results.are_results_successfull());
+    }
+
+    #[test]
+    fn test_multiple_identical_events_from_batch_tx_all_valid() {
+        const EVENT_MSG: &str = "bing";
+        let (mut shell, _, _, _) = setup();
+
+        let sk = wallet::defaults::bertha_keypair();
+
+        let batch_tx = {
+            let mut batch =
+                Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                    Fee {
+                        amount_per_gas_unit: DenominatedAmount::native(
+                            1.into(),
+                        ),
+                        token: shell.state.in_mem().native_token.clone(),
+                    },
+                    sk.ref_to(),
+                    WRAPPER_GAS_LIMIT.into(),
+                ))));
+            batch.header.chain_id = shell.chain_id.clone();
+            batch.header.atomic = false;
+
+            // append first inner tx to batch
+            batch
+                .add_code(TestWasms::TxNoOpEvent.read_bytes(), None)
+                .add_data(EVENT_MSG);
+
+            // append second inner tx to batch
+            batch.push_default_inner_tx();
+            batch
+                .add_code(TestWasms::TxNoOpEvent.read_bytes(), None)
+                .add_data(EVENT_MSG);
+
+            // sign the batch of txs
+            batch.sign_wrapper(sk);
+
+            batch
+        };
+
+        let processed_txs = vec![ProcessedTx {
+            tx: batch_tx.to_bytes().into(),
+            result: TxResult {
+                code: ResultCode::Ok.into(),
+                info: "".into(),
+            },
+        }];
+
+        let mut events = shell
+            .finalize_block(FinalizeBlock {
+                txs: processed_txs,
+                ..Default::default()
+            })
+            .expect("Test failed");
+
+        // three top level events
+        assert_eq!(events.len(), 3);
+
+        // tx events. Check that they are both present even if they are
+        // identical. This is important because some inner txs of a single batch
+        // may correctly emit identical events and we don't want them to
+        // overshadow each other which could deceive external tools like
+        // indexers
+        let event = events.remove(0);
+        let msg = event.read_attribute::<Log>().unwrap();
+        assert_eq!(&msg, EVENT_MSG);
+
+        let event = events.remove(0);
+        let msg = event.read_attribute::<Log>().unwrap();
+        assert_eq!(&msg, EVENT_MSG);
+
+        // multiple tx results (2)
+        let tx_event = events.remove(0);
+        let tx_results = tx_event.read_attribute::<Batch<'_>>().unwrap();
         assert_eq!(tx_results.len(), 2);
 
         // all txs should have succeeded
@@ -6108,25 +6255,16 @@ mod test_finalize_block {
             batch.header.atomic = false;
 
             // append first inner tx to batch (this one is valid)
-            batch.set_code(Code::new(TestWasms::TxNoOp.read_bytes(), None));
-            batch.set_data(Data::new("bing".as_bytes().to_owned()));
+            batch
+                .add_code(TestWasms::TxNoOpEvent.read_bytes(), None)
+                .add_data("bing");
 
-            // append second inner tx to batch (this one is invalid, because
-            // we pass the wrong data)
+            // append second inner tx to batch (this one is invalid)
             batch.push_default_inner_tx();
+            batch
+                .add_code(TestWasms::TxFailEvent.read_bytes(), None)
+                .add_data("bong");
 
-            batch.set_code(Code::new(
-                TestWasms::TxWriteStorageKey.read_bytes(),
-                None,
-            ));
-            batch.set_data(Data::new("bong".as_bytes().to_owned()));
-
-            // sign the batch of txs
-            batch.sign_raw(
-                vec![sk.clone()],
-                vec![sk.ref_to()].into_iter().collect(),
-                None,
-            );
             batch.sign_wrapper(sk);
 
             batch
@@ -6147,17 +6285,92 @@ mod test_finalize_block {
             })
             .expect("Test failed");
 
-        // one top level event
-        assert_eq!(events.len(), 1);
+        // two top level events
+        assert_eq!(events.len(), 2);
+
+        // tx events. Check the expected ones are present and in the correct
+        // order
         let event = events.remove(0);
+        let msg = event.read_attribute::<Log>().unwrap();
+        assert_eq!(&msg, "bing");
 
         // multiple tx results (2)
-        let tx_results = event.read_attribute::<Batch<'_>>().unwrap();
+        let tx_event = events.remove(0);
+        let tx_results = tx_event.read_attribute::<Batch<'_>>().unwrap();
         assert_eq!(tx_results.len(), 2);
 
         // check one succeeded and the other failed
         assert!(tx_results.are_any_ok());
         assert!(tx_results.are_any_err());
+    }
+
+    #[test]
+    fn test_multiple_events_from_atomic_batch_tx_one_valid_other_invalid() {
+        let (mut shell, _, _, _) = setup();
+
+        let sk = wallet::defaults::bertha_keypair();
+
+        let batch_tx = {
+            let mut batch =
+                Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                    Fee {
+                        amount_per_gas_unit: DenominatedAmount::native(
+                            1.into(),
+                        ),
+                        token: shell.state.in_mem().native_token.clone(),
+                    },
+                    sk.ref_to(),
+                    WRAPPER_GAS_LIMIT.into(),
+                ))));
+            batch.header.chain_id = shell.chain_id.clone();
+            batch.header.atomic = true;
+
+            // append first inner tx to batch (this one is valid)
+            batch
+                .add_code(TestWasms::TxNoOpEvent.read_bytes(), None)
+                .add_data("bing");
+
+            // append second inner tx to batch (this one is invalid)
+            batch.push_default_inner_tx();
+            batch
+                .add_code(TestWasms::TxFailEvent.read_bytes(), None)
+                .add_data("bong");
+
+            batch.sign_wrapper(sk);
+
+            batch
+        };
+
+        let processed_txs = vec![ProcessedTx {
+            tx: batch_tx.to_bytes().into(),
+            result: TxResult {
+                code: ResultCode::Ok.into(),
+                info: "".into(),
+            },
+        }];
+
+        let mut events = shell
+            .finalize_block(FinalizeBlock {
+                txs: processed_txs,
+                ..Default::default()
+            })
+            .expect("Test failed");
+
+        // one top level event (no tx events, only tx result)
+        assert_eq!(events.len(), 1);
+
+        // multiple tx results (2)
+        let tx_event = events.remove(0);
+        let tx_results = tx_event.read_attribute::<Batch<'_>>().unwrap();
+        assert_eq!(tx_results.len(), 2);
+
+        // check one succeeded and the other failed but the entire batch failed
+        assert!(tx_results.are_any_ok());
+        assert!(tx_results.are_any_err());
+        let result_code = tx_event
+            .read_attribute::<namada_sdk::tx::event::Code>()
+            .unwrap();
+        assert_eq!(result_code, ResultCode::WasmRuntimeError);
     }
 
     /// DI indirection
