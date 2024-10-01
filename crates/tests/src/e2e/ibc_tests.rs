@@ -234,6 +234,7 @@ fn ibc_transfers() -> Result<()> {
         &ibc_denom_on_namada,
         50,
         ALBERT_KEY,
+        &[],
     )?;
     check_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 50)?;
     check_balance(&test, AB_VIEWING_KEY, &ibc_denom_on_namada, 50)?;
@@ -479,6 +480,7 @@ fn pgf_over_ibc() -> Result<()> {
         NAM,
         100,
         ALBERT_KEY,
+        &[],
     )?;
 
     // Proposal on Namada
@@ -522,6 +524,111 @@ fn pgf_over_ibc() -> Result<()> {
     let ibc_denom = format!("{port_id_gaia}/{channel_id_gaia}/{token_addr}");
     check_gaia_balance(&test_gaia, GAIA_RELAYER, &ibc_denom, 10_000_000)?;
     check_gaia_balance(&test_gaia, GAIA_USER, &ibc_denom, 5_000_000)?;
+
+    Ok(())
+}
+
+// Test fee payment with an ibc token
+//
+// 1. Submit governance proposal to allow fee payment with the IBC token
+// 2. Transfer some IBC tokens from gaia
+// 3. Transparent transfer in Namada with ibc token gas payment
+#[test]
+fn fee_payment_with_ibc_token() -> Result<()> {
+    const PIPELINE_LEN: u64 = 2;
+    let update_genesis =
+        |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
+            genesis.parameters.ibc_params.default_mint_limit =
+                Amount::max_signed();
+            genesis.parameters.gov_params.min_proposal_grace_epochs = 3;
+            genesis
+                .parameters
+                .ibc_params
+                .default_per_epoch_throughput_limit = Amount::max_signed();
+            setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
+        };
+    let (ledger, gaia, test, test_gaia) = run_namada_gaia(update_genesis)?;
+    let _bg_ledger = ledger.background();
+    let _bg_gaia = gaia.background();
+
+    // Proposal on Namada
+    // Delegate some token
+    delegate_token(&test)?;
+    let rpc = get_actor_rpc(&test, Who::Validator(0));
+    let mut epoch = get_epoch(&test, &rpc).unwrap();
+    let delegated = epoch + PIPELINE_LEN;
+    while epoch < delegated {
+        sleep(10);
+        #[allow(clippy::disallowed_methods)]
+        let new_epoch = get_epoch(&test, &rpc).unwrap_or_default();
+        epoch = new_epoch;
+    }
+    // ib gas token proposal on Namada
+    let start_epoch = propose_gas_token(&test)?;
+    let mut epoch = get_epoch(&test, &rpc).unwrap();
+    // Vote
+    while epoch < start_epoch {
+        sleep(10);
+        #[allow(clippy::disallowed_methods)]
+        let new_epoch = get_epoch(&test, &rpc).unwrap_or_default();
+        epoch = new_epoch;
+    }
+    submit_votes(&test)?;
+
+    // Create an IBC channel while waiting the grace epoch
+    setup_hermes(&test, &test_gaia)?;
+    let (channel_id_namada, channel_id_gaia) =
+        create_channel_with_hermes(&test, &test_gaia)?;
+    let port_id_gaia = "transfer".parse().unwrap();
+    let port_id_namada = "transfer";
+    let ibc_denom_on_namada =
+        format!("{port_id_namada}/{channel_id_namada}/{GAIA_COIN}");
+
+    // Start relaying
+    let hermes = run_hermes(&test)?;
+    let _bg_hermes = hermes.background();
+
+    // wait for the grace
+    let grace_epoch = start_epoch + 6u64;
+    while epoch < grace_epoch {
+        sleep(5);
+        epoch = get_epoch(&test, &rpc).unwrap();
+    }
+
+    // Transfer 200 samoleans from Gaia to Namada
+    let namada_receiver = find_address(&test, ALBERT_KEY)?.to_string();
+    transfer_from_gaia(
+        &test_gaia,
+        GAIA_USER,
+        &namada_receiver,
+        GAIA_COIN,
+        200,
+        &port_id_gaia,
+        &channel_id_gaia,
+        None,
+        None,
+    )?;
+    wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test)?;
+
+    // Check the token on Namada
+    check_balance(&test, ALBERT_KEY, &ibc_denom_on_namada, 200)?;
+    check_gaia_balance(&test_gaia, GAIA_USER, GAIA_COIN, 800)?;
+
+    // Transparent transfer in Namada paying gas with samoleans
+    transfer_on_chain(
+        &test,
+        "transparent-transfer",
+        ALBERT,
+        BERTHA,
+        NAM,
+        50,
+        ALBERT_KEY,
+        &["--gas-token", &ibc_denom_on_namada, "--gas-price", "1"],
+    )?;
+    check_balance(&test, ALBERT, NAM, 1_999_950)?;
+    check_balance(&test, BERTHA, NAM, 2_000_050)?;
+    check_balance(&test, ALBERT_KEY, &ibc_denom_on_namada, 475)?;
+    check_balance(&test, "validator-0", &ibc_denom_on_namada, 25)?;
 
     Ok(())
 }
@@ -1052,10 +1159,11 @@ fn transfer_on_chain(
     token: impl AsRef<str>,
     amount: u64,
     signer: impl AsRef<str>,
+    extra_args: &[&str],
 ) -> Result<()> {
     let rpc = get_actor_rpc(test, Who::Validator(0));
     let amount = amount.to_string();
-    let tx_args = apply_use_device(vec![
+    let mut tx_args = apply_use_device(vec![
         kind.as_ref(),
         "--source",
         sender.as_ref(),
@@ -1070,6 +1178,7 @@ fn transfer_on_chain(
         "--node",
         &rpc,
     ]);
+    tx_args.extend_from_slice(extra_args);
     let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
     client.exp_string(TX_APPLIED_SUCCESS)?;
     client.assert_success();
@@ -1365,6 +1474,50 @@ fn propose_upgrade_client(
     let mut gaia = run_gaia_cmd(test_gaia, submit_proposal_args, Some(40))?;
     gaia.assert_success();
     Ok(())
+}
+
+fn propose_gas_token(test: &Test) -> Result<Epoch> {
+    let albert = find_address(test, ALBERT)?;
+    let rpc = get_actor_rpc(test, Who::Validator(0));
+    let epoch = get_epoch(test, &rpc)?;
+    let start_epoch = (epoch.0 + 3) / 3 * 3;
+    let proposal_json = serde_json::json!({
+        "proposal": {
+            "content": {
+                "title": "IBC token gas",
+                "authors": "test@test.com",
+                "discussions-to": "www.github.com/anoma/aip/1",
+                "created": "2022-03-10T08:54:37Z",
+                "license": "MIT",
+                "abstract": "IBC token gas",
+                "motivation": "IBC token gas",
+                "details": "IBC token gas",
+                "requires": "2"
+            },
+            "author": albert,
+            "voting_start_epoch": start_epoch,
+            "voting_end_epoch": start_epoch + 3_u64,
+            "activation_epoch": start_epoch + 6_u64,
+        },
+        "data": TestWasms::TxProposalTokenGas.read_bytes()
+    });
+
+    let proposal_json_path = test.test_dir.path().join("proposal.json");
+    write_json_file(proposal_json_path.as_path(), proposal_json);
+
+    let submit_proposal_args = apply_use_device(vec![
+        "init-proposal",
+        "--data-path",
+        proposal_json_path.to_str().unwrap(),
+        "--gas-limit",
+        "10000000",
+        "--node",
+        &rpc,
+    ]);
+    let mut client = run!(test, Bin::Client, submit_proposal_args, Some(100))?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
+    client.assert_success();
+    Ok(start_epoch.into())
 }
 
 fn wait_for_pass(test: &Test) -> Result<()> {
