@@ -1050,7 +1050,8 @@ pub async fn sign_offline(
         safe_exit(1)
     };
 
-    let tx = if let Ok(transaction) = Tx::deserialize(tx_data.as_ref()) {
+    let tx = if let Ok(transaction) = Tx::try_from_json_bytes(tx_data.as_ref())
+    {
         transaction
     } else {
         eprintln!("Couldn't decode the transaction.");

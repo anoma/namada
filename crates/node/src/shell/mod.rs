@@ -1057,7 +1057,7 @@ where
         }
 
         // Tx format check
-        let tx = match Tx::try_from(tx_bytes).map_err(Error::TxDecoding) {
+        let tx = match Tx::try_from_bytes(tx_bytes).map_err(Error::TxDecoding) {
             Ok(t) => t,
             Err(msg) => {
                 response.code = ResultCode::InvalidTx.into();
@@ -2109,7 +2109,7 @@ mod shell_tests {
             )
             .await
             .unwrap();
-            let tx = Tx::try_from(&serialized_tx[..]).unwrap();
+            let tx = Tx::try_from_bytes(&serialized_tx[..]).unwrap();
 
             match ethereum_tx_data_variants::ValSetUpdateVext::try_from(&tx) {
                 Ok(signed_valset_upd) => break signed_valset_upd,
@@ -2159,7 +2159,7 @@ mod shell_tests {
         // attempt to receive vote extension tx aggregating
         // all expired events
         let serialized_tx = broadcaster_rx.blocking_recv().unwrap();
-        let tx = Tx::try_from(&serialized_tx[..]).unwrap();
+        let tx = Tx::try_from_bytes(&serialized_tx[..]).unwrap();
 
         // check data inside tx
         let vote_extension =
