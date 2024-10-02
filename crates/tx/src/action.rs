@@ -69,7 +69,7 @@ pub enum PgfAction {
 /// MASP tx actions.
 #[derive(Clone, Debug, BorshDeserialize, BorshSerialize, PartialEq)]
 pub enum MaspAction {
-    /// The hash of the masp [`crate::types::Section`]
+    /// The hash of the masp [`crate::Section`]
     MaspSectionRef(MaspTxId),
     /// A required authorizer for the transaction
     MaspAuthorizer(Address),
