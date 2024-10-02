@@ -539,10 +539,10 @@ fn fee_payment_with_ibc_token() -> Result<()> {
     let update_genesis =
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
             genesis.parameters.parameters.epochs_per_year =
-                epochs_per_year_from_min_duration(60);
+                epochs_per_year_from_min_duration(30);
             genesis.parameters.ibc_params.default_mint_limit =
                 Amount::max_signed();
-            genesis.parameters.gov_params.min_proposal_grace_epochs = 3;
+            genesis.parameters.gov_params.min_proposal_grace_epochs = 1;
             genesis
                 .parameters
                 .ibc_params
@@ -593,7 +593,7 @@ fn fee_payment_with_ibc_token() -> Result<()> {
     let _bg_hermes = hermes.background();
 
     // wait for the grace
-    let grace_epoch = start_epoch + 6u64;
+    let grace_epoch = start_epoch + 4u64;
     while epoch < grace_epoch {
         sleep(5);
         epoch = get_epoch(&test, &rpc).unwrap();
@@ -1501,7 +1501,7 @@ fn propose_gas_token(test: &Test) -> Result<Epoch> {
             "author": albert,
             "voting_start_epoch": start_epoch,
             "voting_end_epoch": start_epoch + 3_u64,
-            "activation_epoch": start_epoch + 6_u64,
+            "activation_epoch": start_epoch + 4_u64,
         },
         "data": TestWasms::TxProposalTokenGas.read_bytes()
     });
