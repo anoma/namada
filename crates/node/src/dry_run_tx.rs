@@ -29,7 +29,7 @@ where
     H: 'static + StorageHasher + Sync,
     CA: 'static + WasmCacheAccess + Sync,
 {
-    let tx = Tx::try_from(&request.data[..]).into_storage_result()?;
+    let tx = Tx::try_from_bytes(&request.data[..]).into_storage_result()?;
     tx.validate_tx().into_storage_result()?;
 
     let gas_scale = parameters::get_gas_scale(&state)?;

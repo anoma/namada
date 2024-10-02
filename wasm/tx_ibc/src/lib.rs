@@ -1,7 +1,6 @@
 //! A tx for IBC.
 //! This tx executes an IBC operation according to the given IBC message as the
-//! tx_data. This tx uses an IBC message wrapped inside
-//! `key::ed25519::SignedTxData` as its input as declared in `ibc` crate.
+//! tx_data. This tx uses an IBC message as its input.
 
 use namada_tx_prelude::action::{Action, MaspAction, Write};
 use namada_tx_prelude::*;

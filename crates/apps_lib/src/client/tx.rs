@@ -1069,7 +1069,8 @@ pub async fn sign_tx<N: Namada>(
 where
     <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
-    let tx = if let Ok(transaction) = Tx::deserialize(tx_data.as_ref()) {
+    let tx = if let Ok(transaction) = Tx::try_from_json_bytes(tx_data.as_ref())
+    {
         transaction
     } else {
         edisplay_line!(namada.io(), "Couldn't decode the transaction.");
@@ -1117,8 +1118,9 @@ where
             };
             let signature_path = File::create(&output_path)
                 .expect("Should be able to create signature file.");
-            serde_json::to_writer_pretty(signature_path, &signature)
-                .expect("Signature should be serializable.");
+            signature.to_writer_json(signature_path).expect(
+                "Signature should be serializable and the file writeable.",
+            );
 
             display_line!(
                 namada.io(),
