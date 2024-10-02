@@ -1253,4 +1253,142 @@ mod test {
             );
         }
     }
+
+    #[test]
+    fn test_inner_tx_sections() {
+        let mut tx = Tx::default();
+        assert!(tx.first_commitments().is_none());
+
+        let cmt = TxCommitments::default();
+        assert!(tx.code(&cmt).is_none());
+        assert!(tx.data(&cmt).is_none());
+        assert!(tx.memo(&cmt).is_none());
+
+        // Set inner tx code
+        let code_bytes = "code brrr".as_bytes();
+        let code = Code::new(code_bytes.to_owned(), None);
+        tx.set_code(code);
+        assert!(tx.first_commitments().is_some());
+
+        let cmt = tx.first_commitments().unwrap();
+        assert!(tx.code(cmt).is_some());
+        assert_eq!(tx.code(cmt).unwrap(), code_bytes);
+        assert!(tx.data(cmt).is_none());
+        assert!(tx.memo(cmt).is_none());
+
+        let cmt = TxCommitments::default();
+        assert!(tx.code(&cmt).is_none());
+        assert!(tx.data(&cmt).is_none());
+        assert!(tx.memo(&cmt).is_none());
+
+        // Set inner tx data
+        let data_bytes = "bingbong".as_bytes();
+        let data = Data::new(data_bytes.to_owned());
+        tx.set_data(data);
+        assert!(tx.first_commitments().is_some());
+
+        let cmt = tx.first_commitments().unwrap();
+        assert!(tx.code(cmt).is_some());
+        assert!(tx.data(cmt).is_some());
+        assert_eq!(tx.data(cmt).unwrap(), data_bytes);
+        assert!(tx.memo(cmt).is_none());
+
+        let cmt = TxCommitments::default();
+        assert!(tx.code(&cmt).is_none());
+        assert!(tx.data(&cmt).is_none());
+        assert!(tx.memo(&cmt).is_none());
+
+        // Set inner tx memo
+        let memo_bytes = "extradata".as_bytes();
+        tx.add_memo(memo_bytes);
+        assert!(tx.first_commitments().is_some());
+        let cmt = tx.first_commitments().unwrap();
+        assert!(tx.code(cmt).is_some());
+        assert!(tx.data(cmt).is_some());
+        assert!(tx.memo(cmt).is_some());
+        assert_eq!(tx.memo(cmt).unwrap(), memo_bytes);
+
+        let cmt = TxCommitments::default();
+        assert!(tx.code(&cmt).is_none());
+        assert!(tx.data(&cmt).is_none());
+        assert!(tx.memo(&cmt).is_none());
+    }
+
+    #[test]
+    fn test_batched_tx_sections() {
+        let code_bytes1 = "code brrr".as_bytes();
+        let data_bytes1 = "bingbong".as_bytes();
+        let memo_bytes1 = "extradata".as_bytes();
+
+        let code_bytes2 = code_bytes1;
+        let data_bytes2 = "WASD".as_bytes();
+        let memo_bytes2 = "hjkl".as_bytes();
+
+        let inner_tx1 = {
+            let mut tx = Tx::default();
+
+            let code = Code::new(code_bytes1.to_owned(), None);
+            tx.set_code(code);
+
+            let data = Data::new(data_bytes1.to_owned());
+            tx.set_data(data);
+
+            tx.add_memo(memo_bytes1);
+
+            tx
+        };
+
+        let inner_tx2 = {
+            let mut tx = Tx::default();
+
+            let code = Code::new(code_bytes2.to_owned(), None);
+            tx.set_code(code);
+
+            let data = Data::new(data_bytes2.to_owned());
+            tx.set_data(data);
+
+            tx.add_memo(memo_bytes2);
+
+            tx
+        };
+
+        let cmt1 = inner_tx1.first_commitments().unwrap().to_owned();
+        let cmt2 = inner_tx2.first_commitments().unwrap().to_owned();
+
+        // Batch `inner_tx1` and `inner_tx1` into `tx`
+        let tx = {
+            let mut tx = Tx::default();
+
+            tx.add_inner_tx(inner_tx1, cmt1.clone());
+            assert_eq!(tx.first_commitments().unwrap(), &cmt1);
+            assert_eq!(tx.header.batch.len(), 1);
+
+            tx.add_inner_tx(inner_tx2, cmt2.clone());
+            assert_eq!(tx.first_commitments().unwrap(), &cmt1);
+            assert_eq!(tx.header.batch.len(), 2);
+            assert_eq!(tx.header.batch.get_index(1).unwrap(), &cmt2);
+
+            tx
+        };
+
+        // Check sections of `inner_tx1`
+        assert!(tx.code(&cmt1).is_some());
+        assert_eq!(tx.code(&cmt1).unwrap(), code_bytes1);
+
+        assert!(tx.data(&cmt1).is_some());
+        assert_eq!(tx.data(&cmt1).unwrap(), data_bytes1);
+
+        assert!(tx.memo(&cmt1).is_some());
+        assert_eq!(tx.memo(&cmt1).unwrap(), memo_bytes1);
+
+        // Check sections of `inner_tx2`
+        assert!(tx.code(&cmt2).is_some());
+        assert_eq!(tx.code(&cmt2).unwrap(), code_bytes2);
+
+        assert!(tx.data(&cmt2).is_some());
+        assert_eq!(tx.data(&cmt2).unwrap(), data_bytes2);
+
+        assert!(tx.memo(&cmt2).is_some());
+        assert_eq!(tx.memo(&cmt2).unwrap(), memo_bytes2);
+    }
 }
