@@ -143,18 +143,72 @@ impl Tx {
         self.header.batch.insert(TxCommitments::default())
     }
 
+    // FIXME: update the comment on when we return false
     /// Add a new inner tx to the transaction. Returns `false` if the
     /// commitments already existed in the collection. This function expects a
     /// transaction carrying a single inner tx as input
-    pub fn add_inner_tx(&mut self, other: Tx, cmt: TxCommitments) -> bool {
-        if !self.header.batch.insert(cmt) {
+    // FIXME: wait if I change this to Result this becomes breaking! Maybe I can
+    // just return false in case of errors. Previously we were returnign false
+    // when the commitments were already present to signal that the tx had not
+    // been included in the tx. If I return false on errors I think it's ok as
+    // long as we guarantee that the tx has not been included in the batch
+    // FIXME: if we return a result should we aalso check that the tx indeed
+    // carries a single inner tx? Maybe yes. Probably this check should be done
+    // nayway FIXME: if returning a bollean is not enough/clen I caould keep
+    // this function as is and mark it as deprecated and then create a new one
+    // with the new API FIXME: do like this, remove the comment where I say
+    // that this exepct a Tx with a single inner and loop on all the
+    // commitments. Also check comments in teh caller. Keep the bool as returned
+    // type FIXME: can we also write a test for this? Should we? Maybe yes
+    // FIXME: I'm not sure if iterating on all the inner txs instead of passing
+    // a specific cmt is correct, the API here should take the commitments and
+    // the sections, without the rest of the header, so we'd probably need a
+    // completeley different API FIXME: also why d owe take a specific cmt?
+    // Can't we just take the first one of the tx? Why passing a specific one?
+    pub fn add_inner_tx(&mut self, other: Tx, mut cmt: TxCommitments) -> bool {
+        if self.header.batch.contains(&cmt) {
             return false;
         }
 
-        // TODO: avoid duplicated sections to reduce the size of the message
-        self.sections.extend(other.sections);
+        let Some(first_cmt_ref) = other.header.batch.first() else {
+            return false;
+        };
 
-        true
+        for section in other.sections {
+            // PartialEq implementation of Section relies on an implementation
+            // on the inner types that doesn't account for the possible salt
+            // which is the correct behavior for this logic
+            if let Some(duplicate) =
+                self.sections.iter().find(|&sec| sec == &section)
+            {
+                // Avoid pushing a duplicated section. Adjust the commitment of
+                // this inner tx for the different section's salt if needed
+                match duplicate {
+                    Section::Code(_) => {
+                        if first_cmt_ref.code_hash == section.get_hash() {
+                            cmt.code_hash = duplicate.get_hash();
+                        }
+                    }
+                    Section::Data(_) => {
+                        if first_cmt_ref.data_hash == section.get_hash() {
+                            cmt.data_hash = duplicate.get_hash();
+                        }
+                    }
+                    Section::ExtraData(_) => {
+                        if first_cmt_ref.memo_hash == section.get_hash() {
+                            cmt.memo_hash = duplicate.get_hash();
+                        }
+                    }
+                    // Other sections don't have a direct commitment in the
+                    // header
+                    _ => (),
+                }
+            } else {
+                self.sections.push(section);
+            }
+        }
+
+        self.header.batch.insert(cmt)
     }
 
     /// Get the transaction header
