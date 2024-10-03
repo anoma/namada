@@ -16,7 +16,8 @@ use namada_sdk::state::{StorageRead, StorageWrite};
 use namada_sdk::time::DateTimeUtc;
 use namada_sdk::token::storage_key::masp_token_map_key;
 use namada_sdk::token::{self, DenominatedAmount};
-use namada_sdk::DEFAULT_GAS_LIMIT;
+use namada_sdk::tx::Tx;
+use namada_sdk::{tx, DEFAULT_GAS_LIMIT};
 use test_log::test;
 
 use super::setup;
@@ -1503,9 +1504,9 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
         .clone();
     let mut txs = vec![];
     for bytes in txs_bytes {
-        let mut tx = namada_sdk::tx::Tx::deserialize(&bytes).unwrap();
+        let mut tx = Tx::try_from_json_bytes(&bytes).unwrap();
         tx.add_wrapper(
-            namada_sdk::tx::data::wrapper::Fee {
+            tx::data::wrapper::Fee {
                 amount_per_gas_unit: DenominatedAmount::native(1.into()),
                 token: native_token.clone(),
             },
@@ -1640,7 +1641,7 @@ fn expired_masp_tx() -> Result<()> {
         .in_mem()
         .native_token
         .clone();
-    let mut tx = namada_sdk::tx::Tx::deserialize(&tx_bytes).unwrap();
+    let mut tx = Tx::try_from_json_bytes(&tx_bytes).unwrap();
     // Remove the expiration field to avoid a failure because of it, we only
     // want to check the expiration in the masp vp
     tx.header.expiration = None;

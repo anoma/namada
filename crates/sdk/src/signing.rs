@@ -224,7 +224,7 @@ where
             .iter()
             .map(|bytes| {
                 let sigidx =
-                    serde_json::from_slice::<SignatureIndex>(bytes).unwrap();
+                    SignatureIndex::try_from_json_bytes(bytes).unwrap();
                 used_pubkeys.insert(sigidx.pubkey.clone());
                 sigidx
             })

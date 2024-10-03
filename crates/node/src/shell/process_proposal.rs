@@ -238,7 +238,7 @@ where
             };
         }
 
-        let maybe_tx = Tx::try_from(tx_bytes).map_or_else(
+        let maybe_tx = Tx::try_from_bytes(tx_bytes).map_or_else(
             |err| {
                 tracing::debug!(
                     ?err,

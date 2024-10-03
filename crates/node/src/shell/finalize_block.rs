@@ -605,16 +605,17 @@ where
         let mut successful_wrappers = vec![];
 
         for (tx_index, processed_tx) in processed_txs.iter().enumerate() {
-            let tx = if let Ok(tx) = Tx::try_from(processed_tx.tx.as_ref()) {
-                tx
-            } else {
-                tracing::error!(
-                    "FinalizeBlock received a tx that could not be \
-                     deserialized to a Tx type. This is likely a protocol \
-                     transaction."
-                );
-                continue;
-            };
+            let tx =
+                if let Ok(tx) = Tx::try_from_bytes(processed_tx.tx.as_ref()) {
+                    tx
+                } else {
+                    tracing::error!(
+                        "FinalizeBlock received a tx that could not be \
+                         deserialized to a Tx type. This is likely a protocol \
+                         transaction."
+                    );
+                    continue;
+                };
 
             let result_code = ResultCode::from_u32(processed_tx.result.code)
                 .expect("Result code conversion should not fail");

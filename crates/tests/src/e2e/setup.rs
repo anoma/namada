@@ -17,7 +17,7 @@ use expectrl::session::Session;
 use expectrl::stream::log::LogStream;
 use expectrl::{ControlCode, Eof, WaitStatus};
 use eyre::eyre;
-use itertools::{Either, Itertools};
+use itertools::{peek_nth, Either, Itertools};
 use namada_apps_lib::cli::context::ENV_VAR_CHAIN_ID;
 use namada_apps_lib::client::utils::{
     self, validator_pre_genesis_dir, validator_pre_genesis_txs_file,
@@ -1091,21 +1091,42 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
+    let mut args = peek_nth(args);
+    let is_node_ledger = (matches!(bin, Bin::Node)
+        && args
+            .peek()
+            .map(|fst_arg| fst_arg.as_ref() == "ledger")
+            .unwrap_or_default())
+        || (matches!(bin, Bin::Namada)
+            && args
+                .peek()
+                .map(|fst_arg| fst_arg.as_ref() == "node")
+                .unwrap_or_default()
+            && args
+                .peek_nth(1)
+                .map(|snd_arg| snd_arg.as_ref() == "ledger")
+                .unwrap_or_default());
+    let is_shielded_sync = matches!(bin, Bin::Client)
+        && args
+            .peek()
+            .map(|fst_arg| fst_arg.as_ref() == "shielded-sync")
+            .unwrap_or_default();
+
     // Root cargo workspace manifest path
     let (bin_name, log_level) = match bin {
         Bin::Namada => ("namada", "info"),
         Bin::Node => ("namadan", "info"),
-        Bin::Client => ("namadac", "tendermint_rpc=debug"),
+        Bin::Client => (
+            "namadac",
+            if is_shielded_sync {
+                "info"
+            } else {
+                "tendermint_rpc=debug"
+            },
+        ),
         Bin::Wallet => ("namadaw", "info"),
         Bin::Relayer => ("namadar", "info"),
     };
-
-    let mut args = args.into_iter().peekable();
-    let is_node_ledger = matches!(bin, Bin::Node)
-        && args
-            .peek()
-            .map(|fst_arg| fst_arg.as_ref() == "ledger")
-            .unwrap_or_default();
 
     let mut run_cmd = generate_bin_command(
         bin_name,

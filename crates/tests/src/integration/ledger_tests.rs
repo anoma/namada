@@ -27,7 +27,7 @@ use namada_sdk::collections::HashMap;
 use namada_sdk::migrations;
 use namada_sdk::queries::RPC;
 use namada_sdk::token::{self, DenominatedAmount};
-use namada_sdk::tx::{TX_TRANSFER_WASM, VP_USER_WASM};
+use namada_sdk::tx::{self, Tx, TX_TRANSFER_WASM, VP_USER_WASM};
 use namada_test_utils::TestWasms;
 use test_log::test;
 
@@ -1901,9 +1901,9 @@ fn enforce_fee_payment() -> Result<()> {
 
     let mut txs = vec![];
     for bytes in txs_bytes {
-        let mut tx = namada_sdk::tx::Tx::deserialize(&bytes).unwrap();
+        let mut tx = Tx::try_from_json_bytes(&bytes).unwrap();
         tx.add_wrapper(
-            namada_sdk::tx::data::wrapper::Fee {
+            tx::data::wrapper::Fee {
                 amount_per_gas_unit: DenominatedAmount::native(
                     token::Amount::native_whole(1),
                 ),
