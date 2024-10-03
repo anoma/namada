@@ -490,7 +490,7 @@ fn pgf_over_ibc() -> Result<()> {
     let mut epoch = get_epoch(&test, &rpc).unwrap();
     let delegated = epoch + PIPELINE_LEN;
     while epoch < delegated {
-        epoch = epoch_sleep(&test, &rpc, 30)?;
+        epoch = epoch_sleep(&test, &rpc, 120)?;
     }
     // funding proposal
     let continuous_receiver = find_gaia_address(&test_gaia, GAIA_RELAYER)?;
@@ -505,14 +505,14 @@ fn pgf_over_ibc() -> Result<()> {
     let mut epoch = get_epoch(&test, &rpc).unwrap();
     // Vote
     while epoch < start_epoch {
-        epoch = epoch_sleep(&test, &rpc, 30)?;
+        epoch = epoch_sleep(&test, &rpc, 120)?;
     }
     submit_votes(&test)?;
 
     // wait for the grace
     let grace_epoch = start_epoch + 6u64;
     while epoch < grace_epoch {
-        epoch = epoch_sleep(&test, &rpc, 30)?;
+        epoch = epoch_sleep(&test, &rpc, 120)?;
     }
     wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
 
@@ -560,14 +560,14 @@ fn fee_payment_with_ibc_token() -> Result<()> {
     let mut epoch = get_epoch(&test, &rpc).unwrap();
     let delegated = epoch + PIPELINE_LEN;
     while epoch < delegated {
-        epoch = epoch_sleep(&test, &rpc, 30)?;
+        epoch = epoch_sleep(&test, &rpc, 120)?;
     }
     // ibc gas token proposal on Namada
     let start_epoch = propose_gas_token(&test)?;
     let mut epoch = get_epoch(&test, &rpc).unwrap();
     // Vote
     while epoch < start_epoch {
-        epoch = epoch_sleep(&test, &rpc, 30)?;
+        epoch = epoch_sleep(&test, &rpc, 120)?;
     }
     submit_votes(&test)?;
 
@@ -586,7 +586,7 @@ fn fee_payment_with_ibc_token() -> Result<()> {
     // wait for the grace
     let grace_epoch = start_epoch + 4u64;
     while epoch < grace_epoch {
-        epoch = epoch_sleep(&test, &rpc, 30)?;
+        epoch = epoch_sleep(&test, &rpc, 120)?;
     }
 
     // Transfer 250 samoleans from Gaia to Namada
@@ -661,14 +661,14 @@ fn ibc_token_inflation() -> Result<()> {
     let mut epoch = get_epoch(&test, &rpc).unwrap();
     let delegated = epoch + PIPELINE_LEN;
     while epoch < delegated {
-        epoch = epoch_sleep(&test, &rpc, 30)?;
+        epoch = epoch_sleep(&test, &rpc, 120)?;
     }
     // inflation proposal on Namada
     let start_epoch = propose_inflation(&test)?;
     let mut epoch = get_epoch(&test, &rpc).unwrap();
     // Vote
     while epoch < start_epoch {
-        epoch = epoch_sleep(&test, &rpc, 30)?;
+        epoch = epoch_sleep(&test, &rpc, 120)?;
     }
     submit_votes(&test)?;
 
@@ -685,7 +685,7 @@ fn ibc_token_inflation() -> Result<()> {
     // wait for the grace
     let grace_epoch = start_epoch + 6u64;
     while epoch < grace_epoch {
-        epoch = epoch_sleep(&test, &rpc, 30)?;
+        epoch = epoch_sleep(&test, &rpc, 120)?;
     }
 
     // Check the target balance is zero before the inflation
@@ -716,7 +716,7 @@ fn ibc_token_inflation() -> Result<()> {
     let mut epoch = get_epoch(&test, &rpc).unwrap();
     let new_epoch = epoch + MASP_EPOCH_MULTIPLIER;
     while epoch < new_epoch {
-        epoch = epoch_sleep(&test, &rpc, 30)?;
+        epoch = epoch_sleep(&test, &rpc, 120)?;
     }
 
     // Check balances
@@ -817,7 +817,7 @@ fn ibc_rate_limit() -> Result<()> {
     let mut epoch = get_epoch(&test, &rpc).unwrap();
     let next_epoch = epoch.next();
     while epoch <= next_epoch {
-        epoch = epoch_sleep(&test, &rpc, 30)?;
+        epoch = epoch_sleep(&test, &rpc, 120)?;
     }
 
     // Transfer 1 NAM from Namada to Gaia
@@ -860,7 +860,7 @@ fn ibc_rate_limit() -> Result<()> {
     let mut epoch = get_epoch(&test, &rpc).unwrap();
     let next_epoch = epoch.next();
     while epoch <= next_epoch {
-        epoch = epoch_sleep(&test, &rpc, 30)?;
+        epoch = epoch_sleep(&test, &rpc, 120)?;
     }
 
     // Transfer 1 NAM from Namada to Gaia will succeed in the new epoch
