@@ -16,6 +16,7 @@ wasms += tx_no_op_event
 wasms += tx_proposal_code
 wasms += tx_proposal_ibc_token_inflation
 wasms += tx_proposal_masp_reward
+wasms += tx_proposal_token_gas
 wasms += tx_read_storage_key
 wasms += tx_write
 wasms += vp_always_false

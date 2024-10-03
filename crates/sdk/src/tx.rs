@@ -2265,7 +2265,7 @@ pub async fn build_become_validator(
         );
         if !tx_args.force {
             return Err(Error::Other(
-                "The given address must be enstablished".to_string(),
+                "The given address must be established".to_string(),
             ));
         }
     };

@@ -1789,7 +1789,7 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about(wrap!(
-                    "Query the substorage space of a specific enstablished \
+                    "Query the substorage space of a specific established \
                      address."
                 ))
                 .add_args::<args::QueryAccount<args::CliTypes>>()
