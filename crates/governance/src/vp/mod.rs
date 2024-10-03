@@ -328,7 +328,7 @@ where
 
         let is_delegator = Self::is_delegator(
             ctx,
-            pre_voting_start_epoch,
+            pre_voting_end_epoch,
             verifiers,
             voter,
             validator,
@@ -337,7 +337,7 @@ where
         if !is_delegator {
             return Err(Error::new_alloc(format!(
                 "Address {voter} is neither a validator nor a delegator at \
-                 the beginning of epoch {pre_voting_start_epoch}."
+                 the beginning of epoch {pre_voting_end_epoch}."
             )));
         }
 
