@@ -3785,6 +3785,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tx_proposal_token_gas"
+version = "0.41.0"
+dependencies = [
+ "getrandom",
+ "namada_tx_prelude",
+ "rlsf",
+]
+
+[[package]]
 name = "tx_read_storage_key"
 version = "0.41.0"
 dependencies = [
