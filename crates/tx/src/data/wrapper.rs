@@ -190,8 +190,8 @@ impl WrapperTx {
         hasher
     }
 
-    /// Get the [`Amount`] of fees to be paid by the given wrapper. Returns
-    /// an error if the amount overflows
+    /// Get the [`DenominatedAmount`] of fees to be paid by the given wrapper.
+    /// Returns an error if the amount overflows
     pub fn get_tx_fee(&self) -> Result<DenominatedAmount, WrapperTxErr> {
         self.fee
             .amount_per_gas_unit
