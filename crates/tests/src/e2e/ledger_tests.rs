@@ -28,6 +28,7 @@ use namada_apps_lib::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps_lib::config::{self, ethereum_bridge};
 use namada_apps_lib::tendermint_config::net::Address as TendermintAddress;
 use namada_apps_lib::wallet::{self, Alias};
+use namada_apps_lib::wallet::defaults::is_use_device;
 use namada_core::chain::ChainId;
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_sdk::address::Address;
@@ -2508,7 +2509,7 @@ fn masp_txs_and_queries() -> Result<()> {
     let txs_args = vec![
         // 2. Shield 20 BTC from Albert to PA(A)
         (
-            vec![
+            apply_use_device(vec![
                 "shield",
                 "--source",
                 ALBERT,
@@ -2518,12 +2519,12 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "20",
-            ],
+            ]),
             TX_APPLIED_SUCCESS,
         ),
         // 3. Transfer 7 BTC from SK(A) to PA(B)
         (
-            vec![
+            apply_use_device(vec![
                 "transfer",
                 "--source",
                 A_SPENDING_KEY,
@@ -2535,7 +2536,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "7",
                 "--gas-payer",
                 CHRISTEL_KEY,
-            ],
+            ]),
             TX_APPLIED_SUCCESS,
         ),
         // 4. Assert BTC balance at VK(A) is 13
@@ -2545,7 +2546,7 @@ fn masp_txs_and_queries() -> Result<()> {
         ),
         // 5. Unshield 5 BTC from SK(B) to Bertha
         (
-            vec![
+            apply_use_device(vec![
                 "unshield",
                 "--source",
                 B_SPENDING_KEY,
@@ -2557,7 +2558,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "5",
                 "--gas-payer",
                 CHRISTEL_KEY,
-            ],
+            ]),
             TX_APPLIED_SUCCESS,
         ),
         // 6. Assert BTC balance at VK(B) is 2
@@ -2578,6 +2579,9 @@ fn masp_txs_and_queries() -> Result<()> {
         )?;
         sync.assert_success();
         for &dry_run in &[true, false] {
+            if dry_run && is_use_device() {
+                continue;
+            }
             let tx_args = if dry_run
                 && (tx_args[0] == "transfer"
                     || tx_args[0] == "shield"
