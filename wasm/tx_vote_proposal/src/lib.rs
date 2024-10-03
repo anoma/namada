@@ -22,14 +22,23 @@ fn apply_tx(ctx: &mut Ctx, tx_data: BatchedTx) -> TxResult {
 
     debug_log!("apply_tx called to vote a governance proposal");
 
+    let voting_start_epoch_key =
+        gov_storage::keys::get_voting_start_epoch_key(tx_data.id);
+    let start_epoch = if let Some(epoch) = ctx.read(&voting_start_epoch_key)? {
+        epoch
+    } else {
+        return Err(Error::new_alloc(format!(
+            "Proposal id {} doesn't exist.",
+            tx_data.id
+        )));
+    };
+
     // Pass in all target validators to the proposal vote. Whether or not the
     // vote will be counted based on the validator state will be determined
     // when tallying the votes and executing the proposal.
-    let current_epoch = ctx.get_block_epoch()?;
-
     let is_validator = is_validator(ctx, &tx_data.voter).unwrap_or(false);
     let delegation_targets = if !is_validator {
-        find_delegation_validators(ctx, &tx_data.voter, &current_epoch)?
+        find_delegation_validators(ctx, &tx_data.voter, &start_epoch)?
     } else {
         [tx_data.voter.clone()].into()
     };
