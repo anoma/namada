@@ -2482,6 +2482,36 @@ fn masp_txs_and_queries() -> Result<()> {
         },
         None,
     )?;
+
+    // If used, keep Speculos alive for duration of the test
+    let mut speculos: Option<std::process::Child> = None;
+    if hw_wallet_automation::uses_automation() {
+        // Gen automation for Speculos
+        let automation =
+            hw_wallet_automation::gen_automation_e2e_masp_tx_and_queries();
+        let json = serde_json::to_vec_pretty(&automation).unwrap();
+        let path = test.test_dir.path().join("automation.json");
+        std::fs::write(&path, json).unwrap();
+
+        // Start Speculos with the automation
+        speculos = Some(
+            Command::new(speculos_path())
+                .args([
+                    &speculos_app_elf(),
+                    "--seed",
+                    hw_wallet_automation::SEED,
+                    "--automation",
+                    &format!("file:{}", path.to_string_lossy()),
+                    "--log-level",
+                    "automation:DEBUG",
+                    "--display",
+                    "headless",
+                ])
+                .spawn()
+                .unwrap(),
+        );
+    }
+
     // Run all cmds on the first validator
     let who = Who::Validator(0);
     set_ethereum_bridge_mode(
@@ -2606,6 +2636,10 @@ fn masp_txs_and_queries() -> Result<()> {
 
             client.exp_string(tx_result)?;
         }
+    }
+
+    if let Some(mut process) = speculos {
+        process.kill().unwrap()
     }
 
     Ok(())
