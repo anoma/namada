@@ -873,16 +873,29 @@ impl Display for NamadaCmd {
 
 /// A command under test running on a background thread
 pub struct NamadaBgCmd {
-    join_handle: std::thread::JoinHandle<NamadaCmd>,
-    abort_send: std::sync::mpsc::Sender<()>,
+    // Option workaround to allow moving the handle out of this object and
+    // still implement Drop
+    join_handle: Option<std::thread::JoinHandle<Option<NamadaCmd>>>,
+    abort_send: std::sync::mpsc::Sender<ControlCode>,
+}
+
+impl Drop for NamadaBgCmd {
+    fn drop(&mut self) {
+        let _ = self.abort_send.send(ControlCode::EndOfText);
+    }
 }
 
 impl NamadaBgCmd {
     /// Re-gain control of a background command (created with
     /// [`NamadaCmd::background()`]) to check its output.
-    pub fn foreground(self) -> NamadaCmd {
-        self.abort_send.send(()).unwrap();
-        self.join_handle.join().unwrap()
+    pub fn foreground(mut self) -> NamadaCmd {
+        self.abort_send.send(ControlCode::Enquiry).unwrap();
+        self.join_handle
+            .take()
+            .expect("Background task should always be present")
+            .join()
+            .unwrap()
+            .expect("Background task has been dropped")
     }
 }
 
@@ -897,17 +910,22 @@ impl NamadaCmd {
             let mut cmd = self;
             loop {
                 match abort_recv.try_recv() {
-                    Ok(())
-                    | Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                        return cmd;
+                    Ok(ControlCode::EndOfText) => {
+                        // Terminate the background task by dropping the
+                        // corresponding NamadaCmd
+                        return None;
                     }
-                    Err(std::sync::mpsc::TryRecvError::Empty) => {}
+                    Ok(ControlCode::Enquiry)
+                    | Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                        return Some(cmd);
+                    }
+                    Ok(_) | Err(std::sync::mpsc::TryRecvError::Empty) => {}
                 }
                 cmd.session.is_matched(Eof).unwrap();
             }
         });
         NamadaBgCmd {
-            join_handle,
+            join_handle: Some(join_handle),
             abort_send,
         }
     }
