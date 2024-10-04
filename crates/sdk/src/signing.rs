@@ -61,7 +61,7 @@ use crate::wallet::{Wallet, WalletIo};
 use crate::{args, rpc, Namada};
 
 /// A structure holding the signing data to craft a transaction
-#[derive(Clone, PartialEq)]
+#[derive(Clone)]
 pub struct SigningTxData {
     /// The address owning the transaction
     pub owner: Option<Address>,
@@ -73,6 +73,27 @@ pub struct SigningTxData {
     pub account_public_keys_map: Option<AccountPublicKeysMap>,
     /// The public keys of the fee payer
     pub fee_payer: common::PublicKey,
+}
+
+impl PartialEq for SigningTxData {
+    fn eq(&self, other: &Self) -> bool {
+        if !(self.owner == other.owner
+            && self.threshold == other.threshold
+            && self.account_public_keys_map == other.account_public_keys_map
+            && self.fee_payer == other.fee_payer)
+        {
+            return false;
+        }
+
+        // Check equivalence of the public keys ignoring the specific ordering
+        if self.public_keys.len() != other.public_keys.len() {
+            return false;
+        }
+
+        self.public_keys
+            .iter()
+            .all(|pubkey| other.public_keys.contains(pubkey))
+    }
 }
 
 /// Find the public key for the given address and try to load the keypair
@@ -290,7 +311,7 @@ where
         Ok(fee_payer_keypair) => {
             tx.sign_wrapper(fee_payer_keypair);
         }
-        // The case where tge fee payer also signs the inner transaction
+        // The case where the fee payer also signs the inner transaction
         Err(_)
             if signing_data.public_keys.contains(&signing_data.fee_payer) =>
         {
