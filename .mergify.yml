@@ -23,7 +23,7 @@ pull_request_rules:
         - "#approved-reviews-by >= 1"
         - or:
           - base = main
-          - base = "0.44.0"
+          - base = 0.44.0
     actions:
       queue:
         autosquash: true   
