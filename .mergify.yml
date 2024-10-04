@@ -1,6 +1,8 @@
+merge_queue:
+  max_parallel_checks: 3
+
 queue_rules:
   - name: main-queue
-    speculative_checks: 3
     batch_size: 3
     queue_conditions:
       - "#approved-reviews-by >= 1"
@@ -8,7 +10,6 @@ queue_rules:
     merge_method: merge
 
   - name: backport-0.45-queue
-    speculative_checks: 3
     batch_size: 3
     queue_conditions:
       - "#approved-reviews-by >= 1"
