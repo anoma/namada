@@ -16,7 +16,9 @@ use namada_sdk::key::*;
 use namada_sdk::rpc::{InnerTxResult, TxBroadcastData, TxResponse};
 use namada_sdk::state::EPOCH_SWITCH_BLOCKS_DELAY;
 use namada_sdk::tx::data::compute_inner_tx_hash;
-use namada_sdk::tx::{CompressedAuthorization, Section, Signer, Tx};
+use namada_sdk::tx::{
+    Authorization, CompressedAuthorization, Section, Signer, Tx,
+};
 use namada_sdk::wallet::alias::{validator_address, validator_consensus_key};
 use namada_sdk::wallet::{Wallet, WalletIo};
 use namada_sdk::{error, signing, tx, Namada};
@@ -247,7 +249,54 @@ where
     let (mut batched_tx, batched_signing_data) =
         namada_sdk::tx::build_batch(batched_tx_data)?;
     for sig_data in batched_signing_data {
+        // FIXME: also leave a not on build_batch that caller should always try
+        // to do this thing
         sign(namada, &mut batched_tx, args, sig_data).await?;
+    }
+
+    // FIXME: maybe export this whole thing to a function that we epoxse in the
+    // sdk?
+    // Find the wrapper signature with the least targets and keep it, delete all
+    // the others (redundant)
+    if let Some(expected_wrapper_signer) =
+        batched_tx.header.wrapper().map(|wrapper| wrapper.pk)
+    {
+        let mut keep_wrapper_sig: Option<&Authorization> = None;
+        let mut remove_sigs = vec![];
+
+        for section in batched_tx.sections.iter() {
+            if let Section::Authorization(auth) = section {
+                let targets = auth.targets.len();
+                // Examine only wrapper signatures
+                if targets > 1 {
+                    // If signer is not the expected one drop this signature
+                    match auth.signer {
+                        Signer::PubKeys(ref sigs)
+                            if sigs.as_slice()
+                                == [expected_wrapper_signer.clone()] => {}
+                        _ => {
+                            remove_sigs.push(auth.to_owned());
+                            continue;
+                        }
+                    }
+
+                    if let Some(prev) = keep_wrapper_sig {
+                        if targets < prev.targets.len() {
+                            remove_sigs.push(prev.to_owned());
+                            keep_wrapper_sig = Some(auth);
+                        }
+                    } else {
+                        keep_wrapper_sig = Some(auth);
+                    }
+                }
+            }
+        }
+
+        // Remove redundant wrapper signatures
+        batched_tx.sections.retain(|section| match section {
+            Section::Authorization(auth) => !remove_sigs.contains(auth),
+            _ => true,
+        });
     }
 
     namada.submit(batched_tx, args).await
@@ -799,6 +848,8 @@ pub async fn submit_transparent_transfer(
 
     let transfer_data = args.clone().build(namada).await?;
 
+    // FIXME: issue here, if they dump we don't dump the reveal pk tx, so they
+    // sign an incomplete tx
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, transfer_data.0);
     } else {
