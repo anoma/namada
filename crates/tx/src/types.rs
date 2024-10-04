@@ -145,16 +145,49 @@ impl Tx {
 
     /// Add a new inner tx to the transaction. Returns `false` if the
     /// commitments already existed in the collection. This function expects a
-    /// transaction carrying a single inner tx as input
-    pub fn add_inner_tx(&mut self, other: Tx, cmt: TxCommitments) -> bool {
-        if !self.header.batch.insert(cmt) {
+    /// transaction carrying a single inner tx as input and the provided
+    /// commitment is assumed to be present in the transaction without further
+    /// validation
+    pub fn add_inner_tx(&mut self, other: Tx, mut cmt: TxCommitments) -> bool {
+        if self.header.batch.contains(&cmt) {
             return false;
         }
 
-        // TODO: avoid duplicated sections to reduce the size of the message
-        self.sections.extend(other.sections);
+        for section in other.sections {
+            // PartialEq implementation of Section relies on an implementation
+            // on the inner types that doesn't account for the possible salt
+            // which is the correct behavior for this logic
+            if let Some(duplicate) =
+                self.sections.iter().find(|&sec| sec == &section)
+            {
+                // Avoid pushing a duplicated section. Adjust the commitment of
+                // this inner tx for the different section's salt if needed
+                match duplicate {
+                    Section::Code(_) => {
+                        if cmt.code_hash == section.get_hash() {
+                            cmt.code_hash = duplicate.get_hash();
+                        }
+                    }
+                    Section::Data(_) => {
+                        if cmt.data_hash == section.get_hash() {
+                            cmt.data_hash = duplicate.get_hash();
+                        }
+                    }
+                    Section::ExtraData(_) => {
+                        if cmt.memo_hash == section.get_hash() {
+                            cmt.memo_hash = duplicate.get_hash();
+                        }
+                    }
+                    // Other sections don't have a direct commitment in the
+                    // header
+                    _ => (),
+                }
+            } else {
+                self.sections.push(section);
+            }
+        }
 
-        true
+        self.header.batch.insert(cmt)
     }
 
     /// Get the transaction header
@@ -1324,6 +1357,11 @@ mod test {
         let data_bytes2 = "WASD".as_bytes();
         let memo_bytes2 = "hjkl".as_bytes();
 
+        // Some duplicated sections
+        let code_bytes3 = code_bytes1;
+        let data_bytes3 = data_bytes2;
+        let memo_bytes3 = memo_bytes1;
+
         let inner_tx1 = {
             let mut tx = Tx::default();
 
@@ -1352,10 +1390,25 @@ mod test {
             tx
         };
 
-        let cmt1 = inner_tx1.first_commitments().unwrap().to_owned();
-        let cmt2 = inner_tx2.first_commitments().unwrap().to_owned();
+        let inner_tx3 = {
+            let mut tx = Tx::default();
 
-        // Batch `inner_tx1` and `inner_tx1` into `tx`
+            let code = Code::new(code_bytes3.to_owned(), None);
+            tx.set_code(code);
+
+            let data = Data::new(data_bytes3.to_owned());
+            tx.set_data(data);
+
+            tx.add_memo(memo_bytes3);
+
+            tx
+        };
+
+        let cmt1 = inner_tx1.first_commitments().unwrap().to_owned();
+        let mut cmt2 = inner_tx2.first_commitments().unwrap().to_owned();
+        let mut cmt3 = inner_tx3.first_commitments().unwrap().to_owned();
+
+        // Batch `inner_tx1`, `inner_tx2` and `inner_tx3` into `tx`
         let tx = {
             let mut tx = Tx::default();
 
@@ -1364,9 +1417,21 @@ mod test {
             assert_eq!(tx.header.batch.len(), 1);
 
             tx.add_inner_tx(inner_tx2, cmt2.clone());
+            // Update cmt2 with the hash of cmt1 code section
+            cmt2.code_hash = cmt1.code_hash;
             assert_eq!(tx.first_commitments().unwrap(), &cmt1);
             assert_eq!(tx.header.batch.len(), 2);
             assert_eq!(tx.header.batch.get_index(1).unwrap(), &cmt2);
+
+            tx.add_inner_tx(inner_tx3, cmt3.clone());
+            // Update cmt3 with the hash of cmt1 code and memo sections and the
+            // hash of cmt2 data section
+            cmt3.code_hash = cmt1.code_hash;
+            cmt3.data_hash = cmt2.data_hash;
+            cmt3.memo_hash = cmt1.memo_hash;
+            assert_eq!(tx.first_commitments().unwrap(), &cmt1);
+            assert_eq!(tx.header.batch.len(), 3);
+            assert_eq!(tx.header.batch.get_index(2).unwrap(), &cmt3);
 
             tx
         };
@@ -1390,5 +1455,40 @@ mod test {
 
         assert!(tx.memo(&cmt2).is_some());
         assert_eq!(tx.memo(&cmt2).unwrap(), memo_bytes2);
+
+        // Check sections of `inner_tx3`
+        assert!(tx.code(&cmt3).is_some());
+        assert_eq!(tx.code(&cmt3).unwrap(), code_bytes3);
+
+        assert!(tx.data(&cmt3).is_some());
+        assert_eq!(tx.data(&cmt3).unwrap(), data_bytes3);
+
+        assert!(tx.memo(&cmt3).is_some());
+        assert_eq!(tx.memo(&cmt3).unwrap(), memo_bytes3);
+
+        // Check that the redundant sections have been included only once in the
+        // batch
+        assert_eq!(tx.sections.len(), 5);
+        assert_eq!(
+            tx.sections
+                .iter()
+                .filter(|section| section.code_sec().is_some())
+                .count(),
+            1
+        );
+        assert_eq!(
+            tx.sections
+                .iter()
+                .filter(|section| section.data().is_some())
+                .count(),
+            2
+        );
+        assert_eq!(
+            tx.sections
+                .iter()
+                .filter(|section| section.extra_data_sec().is_some())
+                .count(),
+            2
+        );
     }
 }
