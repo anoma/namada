@@ -1093,7 +1093,6 @@ pub async fn sign_offline(
         );
     }
 
-    // FIXME: also ensure that this thing can be reloaded and attached to a tx
     // Generate wrapper signature if requested
     if let Some(wrapper_signer) = wrapper_signer {
         if tx.header.wrapper().is_some() {

@@ -3599,6 +3599,7 @@ pub mod args {
     pub const WASM_DIR: ArgOpt<PathBuf> = arg_opt("wasm-dir");
     pub const WEBSITE_OPT: ArgOpt<String> = arg_opt("website");
     pub const WITH_INDEXER: ArgOpt<String> = arg_opt("with-indexer");
+    pub const WRAPPER_SIGNATURE: ArgOpt<PathBuf> = arg_opt("gas-signature");
     pub const TX_PATH: Arg<PathBuf> = arg("tx-path");
     pub const TX_PATH_OPT: ArgOpt<PathBuf> = TX_PATH.opt();
     pub const DEVICE_TRANSPORT: ArgDefault<DeviceTransport> = arg_default(
@@ -7351,6 +7352,17 @@ pub mod args {
                         })
                     })
                     .collect::<Result<Vec<_>, _>>()?,
+                wrapper_signature: self
+                    .wrapper_signature
+                    .map(|path| {
+                        std::fs::read(path).map_err(|e| {
+                            std::io::Error::new(
+                                std::io::ErrorKind::InvalidInput,
+                                format!("Error reading signature file: {}", e),
+                            )
+                        })
+                    })
+                    .transpose()?,
                 tx_reveal_code_path: self.tx_reveal_code_path,
                 password: self.password,
                 expiration: self.expiration,
@@ -7464,20 +7476,36 @@ pub mod args {
                          to be attached to a transaction. Requires to provide \
                          a gas payer."
                     ))
-                    .conflicts_with_all([SIGNING_KEYS.name])
-                    .requires(FEE_PAYER_OPT.name),
+                    .conflicts_with_all([SIGNING_KEYS.name]),
+            )
+            .arg(
+                WRAPPER_SIGNATURE
+                    .def()
+                    .help(wrap!(
+                        "The file path containing a serialized signature of \
+                         the entire transaction for gas payment."
+                    ))
+                    .conflicts_with(FEE_PAYER_OPT.name),
             )
             .arg(OUTPUT_FOLDER_PATH.def().help(wrap!(
                 "The output folder path where the artifact will be stored."
             )))
             .arg(CHAIN_ID_OPT.def().help(wrap!("The chain ID.")))
-            .arg(FEE_PAYER_OPT.def().help(wrap!(
-                "The implicit address of the gas payer. It defaults to the \
-                 address associated to the first key passed to \
-                 --signing-keys. If the specific transaction supports \
-                 --disposable-signing-key, then this one will overwrite this \
-                 argument."
-            )))
+            .arg(
+                FEE_PAYER_OPT
+                    .def()
+                    .help(wrap!(
+                        "The implicit address of the gas payer. It defaults \
+                         to the address associated to the first key passed to \
+                         --signing-keys. If the specific transaction supports \
+                         --disposable-signing-key, then this one will \
+                         overwrite this argument." /* FIXME: should I also
+                                                    * conflict with
+                                                    * diposable-signing-key
+                                                    * here? */
+                    ))
+                    .conflicts_with(WRAPPER_SIGNATURE.name),
+            )
             .arg(
                 USE_DEVICE
                     .def()
@@ -7520,6 +7548,7 @@ pub mod args {
             let expiration = EXPIRATION_OPT.parse(matches);
             let signing_keys = SIGNING_KEYS.parse(matches);
             let signatures = SIGNATURES.parse(matches);
+            let wrapper_signature = WRAPPER_SIGNATURE.parse(matches);
             let tx_reveal_code_path = PathBuf::from(TX_REVEAL_PK);
             let chain_id = CHAIN_ID_OPT.parse(matches);
             let password = None;
@@ -7553,6 +7582,7 @@ pub mod args {
                 expiration,
                 signing_keys,
                 signatures,
+                wrapper_signature,
                 tx_reveal_code_path,
                 password,
                 chain_id,
