@@ -255,7 +255,8 @@ where
     }
 
     // FIXME: maybe export this whole thing to a function that we epoxse in the
-    // sdk?
+    // sdk and call that function every time after build_batch?
+    // FIXME: write a test for this thing?
     // Find the wrapper signature with the least targets and keep it, delete all
     // the others (redundant)
     if let Some(expected_wrapper_signer) =
@@ -274,6 +275,10 @@ where
                         Signer::PubKeys(ref sigs)
                             if sigs.as_slice()
                                 == [expected_wrapper_signer.clone()] => {}
+                        Signer::Address(ref addr)
+                            if addr
+                                == &Address::from(&expected_wrapper_signer) => {
+                        }
                         _ => {
                             remove_sigs.push(auth.to_owned());
                             continue;
@@ -298,6 +303,10 @@ where
             _ => true,
         });
     }
+
+    // FIXME: remove after having checked that the new implementation doesn't
+    // carry multiple sigs for wrapper (the old one does, I checked it)
+    display_line!(namada.io(), "Submitting tx: {:#?}", batched_tx);
 
     namada.submit(batched_tx, args).await
 }
