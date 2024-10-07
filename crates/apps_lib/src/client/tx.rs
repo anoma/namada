@@ -16,9 +16,7 @@ use namada_sdk::key::*;
 use namada_sdk::rpc::{InnerTxResult, TxBroadcastData, TxResponse};
 use namada_sdk::state::EPOCH_SWITCH_BLOCKS_DELAY;
 use namada_sdk::tx::data::compute_inner_tx_hash;
-use namada_sdk::tx::{
-    Authorization, CompressedAuthorization, Section, Signer, Tx,
-};
+use namada_sdk::tx::{CompressedAuthorization, Section, Signer, Tx};
 use namada_sdk::wallet::alias::{validator_address, validator_consensus_key};
 use namada_sdk::wallet::{Wallet, WalletIo};
 use namada_sdk::{error, signing, tx, Namada};
@@ -194,6 +192,42 @@ pub async fn sign<N: Namada>(
     Ok(())
 }
 
+pub async fn rework_batch_wrapper_signatures<N: Namada>(
+    context: &N,
+    tx: &mut Tx,
+    args: &args::Tx,
+    signing_data: SigningTxData,
+) -> Result<(), error::Error> {
+    // Setup a reusable context for signing transactions using the Ledger
+    if args.use_device {
+        let transport = WalletTransport::from_arg(args.device_transport);
+        let app = NamadaApp::new(transport);
+        let with_hw_data = (context.wallet_lock(), &app);
+        // Finally, begin the re-signing with the Ledger as backup
+        context
+            .rework_batch_wrapper_signatures(
+                tx,
+                args,
+                signing_data,
+                with_hardware_wallet::<N::WalletUtils, _>,
+                with_hw_data,
+            )
+            .await?;
+    } else {
+        // Otherwise re-sign without a backup procedure
+        context
+            .rework_batch_wrapper_signatures(
+                tx,
+                args,
+                signing_data,
+                default_sign,
+                (),
+            )
+            .await?;
+    }
+    Ok(())
+}
+
 // Build a transaction to reveal the signer of the given transaction.
 pub async fn submit_reveal_aux(
     context: &impl Namada,
@@ -236,6 +270,7 @@ where
     <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
     let mut batched_tx_data = vec![];
+    let wrapper_signing_data = tx_data.1.clone();
 
     for owner in owners {
         if let Some(reveal_pk_tx_data) =
@@ -249,64 +284,16 @@ where
     let (mut batched_tx, batched_signing_data) =
         namada_sdk::tx::build_batch(batched_tx_data)?;
     for sig_data in batched_signing_data {
-        // FIXME: also leave a not on build_batch that caller should always try
-        // to do this thing
         sign(namada, &mut batched_tx, args, sig_data).await?;
     }
 
-    // FIXME: maybe export this whole thing to a function that we epoxse in the
-    // sdk and call that function every time after build_batch?
-    // FIXME: write a test for this thing?
-    // Find the wrapper signature with the least targets and keep it, delete all
-    // the others (redundant)
-    if let Some(expected_wrapper_signer) =
-        batched_tx.header.wrapper().map(|wrapper| wrapper.pk)
-    {
-        let mut keep_wrapper_sig: Option<&Authorization> = None;
-        let mut remove_sigs = vec![];
-
-        for section in batched_tx.sections.iter() {
-            if let Section::Authorization(auth) = section {
-                let targets = auth.targets.len();
-                // Examine only wrapper signatures
-                if targets > 1 {
-                    // If signer is not the expected one drop this signature
-                    match auth.signer {
-                        Signer::PubKeys(ref sigs)
-                            if sigs.as_slice()
-                                == [expected_wrapper_signer.clone()] => {}
-                        Signer::Address(ref addr)
-                            if addr
-                                == &Address::from(&expected_wrapper_signer) => {
-                        }
-                        _ => {
-                            remove_sigs.push(auth.to_owned());
-                            continue;
-                        }
-                    }
-
-                    if let Some(prev) = keep_wrapper_sig {
-                        if targets < prev.targets.len() {
-                            remove_sigs.push(prev.to_owned());
-                            keep_wrapper_sig = Some(auth);
-                        }
-                    } else {
-                        keep_wrapper_sig = Some(auth);
-                    }
-                }
-            }
-        }
-
-        // Remove redundant wrapper signatures
-        batched_tx.sections.retain(|section| match section {
-            Section::Authorization(auth) => !remove_sigs.contains(auth),
-            _ => true,
-        });
-    }
-
-    // FIXME: remove after having checked that the new implementation doesn't
-    // carry multiple sigs for wrapper (the old one does, I checked it)
-    display_line!(namada.io(), "Submitting tx: {:#?}", batched_tx);
+    rework_batch_wrapper_signatures(
+        namada,
+        &mut batched_tx,
+        args,
+        wrapper_signing_data,
+    )
+    .await?;
 
     namada.submit(batched_tx, args).await
 }

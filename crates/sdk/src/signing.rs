@@ -13,6 +13,7 @@ use masp_primitives::asset_type::AssetType;
 use masp_primitives::transaction::components::sapling::fees::{
     InputView, OutputView,
 };
+use namada_account::common::CommonPublicKey;
 use namada_account::{AccountPublicKeysMap, InitAccount, UpdateAccount};
 use namada_core::address::{Address, ImplicitAddress, InternalAddress, MASP};
 use namada_core::arith::checked;
@@ -215,14 +216,6 @@ pub async fn default_sign(
 /// Sign a transaction with a given signing key or public key of a given signer.
 /// If no explicit signer given, use the `default`. If no `default` is given,
 /// Error.
-///
-/// It also takes a second, optional keypair to sign the wrapper header
-/// separately.
-///
-/// If this is not a dry run, the tx is put in a wrapper and returned along with
-/// hashes needed for monitoring the tx on chain.
-///
-/// If it is a dry run, it is not put in a wrapper, but returned as is.
 pub async fn sign_tx<'a, D, F, U>(
     wallet: &RwLock<Wallet<U>>,
     args: &args::Tx,
@@ -301,40 +294,17 @@ where
 
     // Then try signing the wrapper header (fee payer) with the software wallet
     // otherwise use the fallback
-    let key = {
-        // Lock the wallet just long enough to extract a key from it without
-        // interfering with the sign closure call
-        let mut wallet = wallet.write().await;
-        find_key_by_pk(&mut *wallet, args, &signing_data.fee_payer)
-    };
-    match key {
-        Ok(fee_payer_keypair) => {
-            tx.sign_wrapper(fee_payer_keypair);
-        }
-        // The case where the fee payer also signs the inner transaction
-        Err(_)
-            if signing_data.public_keys.contains(&signing_data.fee_payer) =>
-        {
-            *tx = sign(
-                tx.clone(),
-                signing_data.fee_payer.clone(),
-                HashSet::from([Signable::FeeHeader, Signable::RawHeader]),
-                user_data,
-            )
-            .await?;
-            used_pubkeys.insert(signing_data.fee_payer.clone());
-        }
-        // The case where the fee payer does not sign the inner transaction
-        Err(_) => {
-            *tx = sign(
-                tx.clone(),
-                signing_data.fee_payer.clone(),
-                HashSet::from([Signable::FeeHeader]),
-                user_data,
-            )
-            .await?;
-        }
-    }
+    sign_wrapper(
+        wallet,
+        args,
+        tx,
+        signing_data.fee_payer,
+        &signing_data.public_keys,
+        sign,
+        user_data,
+        Some(&mut used_pubkeys),
+    )
+    .await?;
     // Then make sure that the number of public keys used exceeds the threshold
     let used_pubkeys_len = used_pubkeys
         .len()
@@ -348,6 +318,100 @@ where
     } else {
         Ok(())
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn sign_wrapper<'a, D, F, U>(
+    wallet: &RwLock<Wallet<U>>,
+    args: &args::Tx,
+    tx: &mut Tx,
+    fee_payer: common::PublicKey,
+    public_keys: &[common::PublicKey],
+    sign: impl Fn(Tx, common::PublicKey, HashSet<Signable>, D) -> F,
+    user_data: D,
+    used_pubkeys: Option<&mut HashSet<CommonPublicKey>>,
+) -> Result<(), Error>
+where
+    D: Clone + MaybeSend,
+    U: WalletIo,
+    F: std::future::Future<Output = Result<Tx, Error>>,
+{
+    // Try signing the wrapper header (fee payer) with the software wallet
+    // otherwise use the fallback
+    let key = {
+        // Lock the wallet just long enough to extract a key from it without
+        // interfering with the sign closure call
+        let mut wallet = wallet.write().await;
+        find_key_by_pk(&mut *wallet, args, &fee_payer)
+    };
+    match key {
+        Ok(fee_payer_keypair) => {
+            tx.sign_wrapper(fee_payer_keypair);
+        }
+        // The case where the fee payer also signs the inner transaction
+        Err(_) if public_keys.contains(&fee_payer) => {
+            *tx = sign(
+                tx.clone(),
+                fee_payer.clone(),
+                HashSet::from([Signable::FeeHeader, Signable::RawHeader]),
+                user_data,
+            )
+            .await?;
+            if let Some(used_pubkeys) = used_pubkeys {
+                used_pubkeys.insert(fee_payer.clone());
+            }
+        }
+        // The case where the fee payer does not sign the inner transaction
+        Err(_) => {
+            *tx = sign(
+                tx.clone(),
+                fee_payer.clone(),
+                HashSet::from([Signable::FeeHeader]),
+                user_data,
+            )
+            .await?;
+        }
+    }
+
+    Ok(())
+}
+
+// TODO(namada#3883): this function should become useless after the rework of
+// the batching API
+/// Reworks the wrapper transaction by removing all the wrapper's signatures and
+/// generataing a new one. This is to avoid submitting a batch with redundant
+/// signatures.
+pub async fn rework_batch_wrapper_signatures<D, F, U>(
+    wallet: &RwLock<Wallet<U>>,
+    args: &args::Tx,
+    tx: &mut Tx,
+    signing_data: SigningTxData,
+    sign: impl Fn(Tx, common::PublicKey, HashSet<Signable>, D) -> F,
+    user_data: D,
+) -> Result<(), Error>
+where
+    D: Clone + MaybeSend,
+    F: std::future::Future<Output = std::result::Result<Tx, Error>>,
+    U: WalletIo,
+{
+    // Prune all the current wrapper's signatures
+    tx.sections.retain(|section| match section {
+        Section::Authorization(auth) => auth.targets.len() == 1,
+        _ => true,
+    });
+
+    // Sign the wrapper
+    crate::signing::sign_wrapper(
+        wallet,
+        args,
+        tx,
+        signing_data.fee_payer,
+        &signing_data.public_keys,
+        sign,
+        user_data,
+        None,
+    )
+    .await
 }
 
 /// Return the necessary data regarding an account to be able to generate a
