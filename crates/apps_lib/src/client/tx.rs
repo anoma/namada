@@ -1063,6 +1063,7 @@ pub async fn sign_tx<N: Namada>(
         tx: tx_args,
         tx_data,
         owner,
+        // FIXME: need this arg? No, remvoe it
         disposable_signing_key,
     }: args::SignTx,
 ) -> Result<(), error::Error>
@@ -1109,7 +1110,7 @@ where
         for signature in &signatures {
             let filename = format!(
                 "offline_signature_{}_{}.tx",
-                tx.header_hash(),
+                tx.raw_header_hash(),
                 signature.pubkey,
             );
             let output_path = match &tx_args.output_folder {

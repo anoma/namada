@@ -17,7 +17,7 @@ use namada_sdk::dec::Dec;
 use namada_sdk::key::*;
 use namada_sdk::string_encoding::StringEncoded;
 use namada_sdk::token;
-use namada_sdk::tx::Tx;
+use namada_sdk::tx::{Authorization, Tx};
 use namada_sdk::uint::Uint;
 use namada_sdk::wallet::{alias, LoadStoreError, Wallet};
 use namada_vm::validate_untrusted_wasm;
@@ -1040,6 +1040,7 @@ pub async fn sign_offline(
         tx_path,
         secret_keys,
         owner,
+        wrapper_signer,
         output_folder_path,
     }: args::SignOffline,
 ) {
@@ -1071,25 +1072,59 @@ pub async fn sign_offline(
     for signature in &signatures {
         let filename = format!(
             "offline_signature_{}_{}.sig",
-            tx.header_hash().to_string().to_lowercase(),
+            tx.raw_header_hash().to_string().to_lowercase(),
             signature.pubkey,
         );
 
-        let tx_path = match output_folder_path {
+        let signature_path = match output_folder_path {
             Some(ref path) => path.join(filename).to_string_lossy().to_string(),
             None => filename,
         };
 
-        let signature_path = File::create(&tx_path)
+        let signature_file = File::create(&signature_path)
             .expect("Should be able to create signature file.");
 
-        serde_json::to_writer_pretty(signature_path, &signature)
-            .expect("Signature should be deserializable.");
+        serde_json::to_writer_pretty(signature_file, &signature)
+            .expect("Signature should be serializable.");
 
         println!(
             "Signature for {} serialized at {}",
-            signature.pubkey, tx_path
+            signature.pubkey, signature_path
         );
+    }
+
+    // FIXME: also ensure that this thing can be reloaded and attached to a tx
+    // Generate wrapper signature if requested
+    if let Some(wrapper_signer) = wrapper_signer {
+        if tx.header.wrapper().is_some() {
+            let wrapper_signature = Authorization::new(
+                tx.sechashes(),
+                [(0, wrapper_signer)].into_iter().collect(),
+                None,
+            );
+
+            let filename =
+                format!("offline_wrapper_signature_{}.tx", tx.header_hash(),);
+            let signature_path = match output_folder_path {
+                Some(ref path) => {
+                    path.join(filename).to_string_lossy().to_string()
+                }
+                None => filename,
+            };
+
+            let signature_file = File::create(&signature_path)
+                .expect("Should be able to create signature file.");
+
+            serde_json::to_writer_pretty(signature_file, &wrapper_signature)
+                .expect("Signature should be serializable.");
+
+            println!("Wrapper signature serialized at {}", signature_path);
+        } else {
+            println!(
+                "A gas payer was provided to this command but the transaction \
+                 is not a wrapper: skipping the wrapper signature"
+            );
+        }
     }
 }
 

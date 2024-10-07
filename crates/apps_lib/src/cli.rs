@@ -3237,7 +3237,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about(wrap!("Offlne sign a transaction."))
+                .about(wrap!("Offline sign a transaction."))
                 .add_args::<args::SignOffline<CliTypes>>()
         }
     }
@@ -3422,6 +3422,7 @@ pub mod args {
         arg_opt("gas-spending-key");
     pub const FEE_TOKEN: ArgDefaultFromCtx<WalletAddrOrNativeToken> =
         arg_default_from_ctx("gas-token", DefaultFn(|| "".parse().unwrap()));
+    // FIXME: are these used? Maybe for eth. No remove these two
     pub const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
     pub const FEE_AMOUNT: ArgDefault<token::DenominatedAmount> = arg_default(
         "fee-amount",
@@ -3499,6 +3500,7 @@ pub mod args {
         DefaultFn(|| PortId::from_str("transfer").unwrap()),
     );
     pub const PRE_GENESIS: ArgFlag = flag("pre-genesis");
+    pub const PRIVATE_KEY_OPT: ArgOpt<WalletKeypair> = arg_opt("secret-key");
     pub const PRIVATE_KEYS: ArgMulti<WalletKeypair, GlobStar> =
         arg_multi("secret-keys");
     pub const PROPOSAL_PGF_STEWARD: ArgFlag = flag("pgf-stewards");
@@ -8186,6 +8188,7 @@ pub mod args {
         pub tx_path: PathBuf,
         pub secret_keys: Vec<C::Keypair>,
         pub owner: C::Address,
+        pub wrapper_signer: Option<C::Keypair>,
         pub output_folder_path: Option<PathBuf>,
     }
 
@@ -8194,12 +8197,14 @@ pub mod args {
             let tx_path = DATA_PATH.parse(matches);
             let secret_keys = PRIVATE_KEYS.parse(matches);
             let owner = OWNER.parse(matches);
+            let wrapper_signer = PRIVATE_KEY_OPT.parse(matches);
             let output_folder_path = OUTPUT_FOLDER_PATH.parse(matches);
 
             Self {
                 tx_path,
                 secret_keys,
                 owner,
+                wrapper_signer,
                 output_folder_path,
             }
         }
@@ -8215,6 +8220,10 @@ pub mod args {
                  order matters."
             )))
             .arg(OWNER.def().help(wrap!("The owner's address.")))
+            .arg(PRIVATE_KEY_OPT.def().help(
+                "The optional signer of the wrapper transaction for gas \
+                 payment",
+            ))
             .arg(
                 OUTPUT_FOLDER_PATH
                     .def()
@@ -8240,6 +8249,9 @@ pub mod args {
                     .map(|key| chain_ctx.get_cached(key))
                     .collect(),
                 owner: chain_ctx.get(&self.owner),
+                wrapper_signer: self
+                    .wrapper_signer
+                    .map(|key| chain_ctx.get_cached(&key)),
                 output_folder_path: self.output_folder_path,
             })
         }
