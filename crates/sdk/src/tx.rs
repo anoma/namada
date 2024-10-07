@@ -191,16 +191,36 @@ impl ProcessTxResponse {
 }
 
 /// Build and dump a transaction either to file or to screen
-pub fn dump_tx<IO: Io>(io: &IO, args: &args::Tx, tx: Tx) {
+// FIXME: remove unwraps and return error from here
+pub fn dump_tx<IO: Io>(io: &IO, args: &args::Tx, mut tx: Tx) {
+    // FIXME: create cli command to sign the wrapper offline
+    let tx_to_dump = if args.dump_tx {
+        tx.update_header(data::TxType::Raw);
+        tx
+    } else if args.dump_wrapper_tx {
+        if tx.header.wrapper().is_none() {
+            edisplay_line!(
+                io,
+                "Requested wrapper dump on a tx which is not a wrapper"
+            );
+            return;
+        }
+        tx
+    } else {
+        // FIXME: remove this last branch and just do a check for the one above
+        unreachable!("Dump command should be either a dump or a dump-wrapper");
+    };
+
     match args.output_folder.clone() {
         Some(path) => {
             let tx_path = path.join(format!(
                 "{}.tx",
-                tx.header_hash().to_string().to_lowercase()
+                tx_to_dump.header_hash().to_string().to_lowercase()
             ));
             let out = File::create(&tx_path)
                 .expect("Should be able to create a file to dump tx");
-            tx.to_writer_json(out)
+            tx_to_dump
+                .to_writer_json(out)
                 .expect("Should be able to write to file.");
             display_line!(
                 io,
@@ -209,7 +229,7 @@ pub fn dump_tx<IO: Io>(io: &IO, args: &args::Tx, tx: Tx) {
             );
         }
         None => {
-            let serialized_tx = serde_json::to_string_pretty(&tx)
+            let serialized_tx = serde_json::to_string_pretty(&tx_to_dump)
                 .expect("Should be able to json encode the tx.");
             display_line!(io, "Below the serialized transaction: \n");
             display_line!(io, "{}", serialized_tx)
@@ -225,10 +245,12 @@ pub async fn prepare_tx(
     fee_amount: DenominatedAmount,
     fee_payer: common::PublicKey,
 ) -> Result<()> {
-    if !args.dry_run {
-        signing::wrap_tx(tx, args, fee_amount, fee_payer).await
-    } else {
+    // FIXME: should also check the dry_run_wrapper here? No in here it is
+    // correct FIXME: in general, look at all the places we use this
+    if args.dry_run || args.dump_tx {
         Ok(())
+    } else {
+        signing::wrap_tx(tx, args, fee_amount, fee_payer).await
     }
 }
 

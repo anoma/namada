@@ -3392,6 +3392,7 @@ pub mod args {
     pub const DRY_RUN_TX: ArgFlag = flag("dry-run");
     pub const DRY_RUN_WRAPPER_TX: ArgFlag = flag("dry-run-wrapper");
     pub const DUMP_TX: ArgFlag = flag("dump-tx");
+    pub const DUMP_WRAPPER_TX: ArgFlag = flag("dump-wrapper-tx");
     pub const DUMP_CONVERSION_TREE: ArgFlag = flag("dump-conversion-tree");
     pub const EPOCH: ArgOpt<Epoch> = arg_opt("epoch");
     pub const ERC20: Arg<EthAddress> = arg("erc20");
@@ -7321,6 +7322,7 @@ pub mod args {
                 dry_run: self.dry_run,
                 dry_run_wrapper: self.dry_run_wrapper,
                 dump_tx: self.dump_tx,
+                dump_wrapper_tx: self.dump_wrapper_tx,
                 output_folder: self.output_folder,
                 force: self.force,
                 broadcast_only: self.broadcast_only,
@@ -7382,7 +7384,14 @@ pub mod args {
             .arg(
                 DUMP_TX
                     .def()
-                    .help(wrap!("Dump transaction bytes to a file.")),
+                    .help(wrap!("Dump raw transaction bytes to a file."))
+                    .conflicts_with(DUMP_WRAPPER_TX.name),
+            )
+            .arg(
+                DUMP_WRAPPER_TX
+                    .def()
+                    .help(wrap!("Dump wrapper transaction bytes to a file."))
+                    .conflicts_with(DUMP_TX.name),
             )
             .arg(FORCE.def().help(wrap!(
                 "Submit the transaction even if it doesn't pass client checks."
@@ -7496,6 +7505,7 @@ pub mod args {
             let dry_run = DRY_RUN_TX.parse(matches);
             let dry_run_wrapper = DRY_RUN_WRAPPER_TX.parse(matches);
             let dump_tx = DUMP_TX.parse(matches);
+            let dump_wrapper_tx = DUMP_WRAPPER_TX.parse(matches);
             let force = FORCE.parse(matches);
             let broadcast_only = BROADCAST_ONLY.parse(matches);
             let ledger_address = CONFIG_RPC_LEDGER_ADDRESS.parse(matches);
@@ -7503,7 +7513,6 @@ pub mod args {
             let fee_amount =
                 FEE_AMOUNT_OPT.parse(matches).map(InputAmount::Unvalidated);
             let fee_token = FEE_TOKEN.parse(matches);
-            let _wallet_alias_force = WALLET_ALIAS_FORCE.parse(matches);
             let gas_limit = GAS_LIMIT.parse(matches);
             let wallet_alias_force = WALLET_ALIAS_FORCE.parse(matches);
             let expiration = EXPIRATION_OPT.parse(matches);
@@ -7530,6 +7539,7 @@ pub mod args {
                 dry_run,
                 dry_run_wrapper,
                 dump_tx,
+                dump_wrapper_tx,
                 force,
                 broadcast_only,
                 ledger_address,

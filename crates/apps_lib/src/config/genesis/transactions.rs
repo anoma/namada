@@ -82,6 +82,7 @@ fn get_tx_args(use_device: bool) -> TxArgs {
         dry_run: false,
         dry_run_wrapper: false,
         dump_tx: false,
+        dump_wrapper_tx: false,
         output_folder: None,
         force: false,
         broadcast_only: false,

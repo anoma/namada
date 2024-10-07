@@ -198,7 +198,7 @@ pub async fn submit_reveal_aux(
     args: &args::Tx,
     address: &Address,
 ) -> Result<Option<(Tx, SigningTxData)>, error::Error> {
-    if args.dump_tx {
+    if args.dump_tx || args.dump_wrapper_tx {
         return Ok(None);
     }
 
@@ -259,7 +259,7 @@ pub async fn submit_bridge_pool_tx<N: Namada>(
 ) -> Result<(), error::Error> {
     let bridge_pool_tx_data = args.clone().build(namada).await?;
 
-    if args.tx.dump_tx {
+    if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, bridge_pool_tx_data.0);
     } else {
         batch_opt_reveal_pk_and_submit(
@@ -283,7 +283,7 @@ where
 {
     let custom_tx_data = args.build(namada).await?;
 
-    if args.tx.dump_tx {
+    if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, custom_tx_data.0);
     } else {
         batch_opt_reveal_pk_and_submit(
@@ -307,7 +307,7 @@ where
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 
-    if args.tx.dump_tx {
+    if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
@@ -327,7 +327,7 @@ where
 {
     let (mut tx, signing_data) = tx::build_init_account(namada, &args).await?;
 
-    if args.tx.dump_tx {
+    if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
@@ -410,7 +410,7 @@ pub async fn submit_change_consensus_key(
 
     let (mut tx, signing_data) = args.build(namada).await?;
 
-    if args.tx.dump_tx {
+    if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
@@ -608,7 +608,7 @@ pub async fn submit_become_validator(
 
     let (mut tx, signing_data) = args.build(namada).await?;
 
-    if args.tx.dump_tx {
+    if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
@@ -799,7 +799,7 @@ pub async fn submit_transparent_transfer(
 
     let transfer_data = args.clone().build(namada).await?;
 
-    if args.tx.dump_tx {
+    if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, transfer_data.0);
     } else {
         let reveal_pks: Vec<_> =
@@ -822,7 +822,7 @@ pub async fn submit_shielded_transfer(
 ) -> Result<(), error::Error> {
     let (mut tx, signing_data) = args.clone().build(namada).await?;
 
-    if args.tx.dump_tx {
+    if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
@@ -839,7 +839,7 @@ pub async fn submit_shielding_transfer(
     for _ in 0..2 {
         let (tx, signing_data, tx_epoch) = args.clone().build(namada).await?;
 
-        if args.tx.dump_tx {
+        if args.tx.dump_tx || args.tx.dump_wrapper_tx {
             tx::dump_tx(namada.io(), &args.tx, tx);
             break;
         }
@@ -893,7 +893,7 @@ pub async fn submit_unshielding_transfer(
 ) -> Result<(), error::Error> {
     let (mut tx, signing_data) = args.clone().build(namada).await?;
 
-    if args.tx.dump_tx {
+    if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
@@ -911,7 +911,7 @@ where
 {
     let (tx, signing_data, _) = args.build(namada).await?;
 
-    if args.tx.dump_tx {
+    if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         batch_opt_reveal_pk_and_submit(
@@ -1022,7 +1022,7 @@ where
         )
     };
 
-    if args.tx.dump_tx {
+    if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, proposal_tx_data.0);
     } else {
         batch_opt_reveal_pk_and_submit(
@@ -1046,7 +1046,7 @@ where
 {
     let (mut tx_builder, signing_data) = args.build(namada).await?;
 
-    if args.tx.dump_tx {
+    if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, tx_builder);
     } else {
         sign(namada, &mut tx_builder, &args.tx, signing_data).await?;
@@ -1161,7 +1161,7 @@ where
 {
     let submit_bond_tx_data = args.build(namada).await?;
 
-    if args.tx.dump_tx {
+    if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, submit_bond_tx_data.0);
     } else {
         let default_address = args.source.as_ref().unwrap_or(&args.validator);
@@ -1187,7 +1187,7 @@ where
     let (mut tx, signing_data, latest_withdrawal_pre) =
         args.build(namada).await?;
 
-    if args.tx.dump_tx {
+    if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
@@ -1217,7 +1217,7 @@ where
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 
-    if args.tx.dump_tx {
+    if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
@@ -1237,7 +1237,7 @@ where
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 
-    if args.tx.dump_tx {
+    if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
@@ -1257,7 +1257,7 @@ where
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 
-    if args.tx.dump_tx {
+    if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
@@ -1277,7 +1277,7 @@ where
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 
-    if args.tx.dump_tx {
+    if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
@@ -1297,7 +1297,7 @@ where
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 
-    if args.tx.dump_tx {
+    if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
@@ -1317,7 +1317,7 @@ where
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 
-    if args.tx.dump_tx {
+    if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
@@ -1337,7 +1337,7 @@ where
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 
-    if args.tx.dump_tx {
+    if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
@@ -1357,7 +1357,7 @@ where
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 
-    if args.tx.dump_tx {
+    if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
@@ -1377,7 +1377,7 @@ where
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 
-    if args.tx.dump_tx {
+    if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
@@ -1397,7 +1397,7 @@ where
 {
     let (mut tx, signing_data) = args.build(namada).await?;
 
-    if args.tx.dump_tx {
+    if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, tx);
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
