@@ -2148,8 +2148,6 @@ pub struct SignTx<C: NamadaTypes = SdkTypes> {
     pub tx_data: C::Data,
     /// The account address
     pub owner: C::Address,
-    /// Flag to request a disposable signer of the wrapper transaction
-    pub disposable_signing_key: bool,
 }
 
 #[derive(Clone, Debug)]
