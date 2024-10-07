@@ -2307,8 +2307,10 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     pub dry_run: bool,
     /// Simulate applying both the wrapper and inner transactions
     pub dry_run_wrapper: bool,
-    /// Dump the transaction bytes to file
+    /// Dump the raw transaction bytes to file
     pub dump_tx: bool,
+    /// Dump the wrapper transaction bytes to file
+    pub dump_wrapper_tx: bool,
     /// The output directory path to where serialize the data
     pub output_folder: Option<PathBuf>,
     /// Submit the transaction even if it doesn't pass client checks
@@ -2340,6 +2342,7 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     /// List of signatures to attach to the transaction
     pub signatures: Vec<C::Data>,
     /// Path to the TX WASM code file to reveal PK
+    // FIXME: what's the purpose of this?
     pub tx_reveal_code_path: PathBuf,
     /// Password to decrypt key
     pub password: Option<Zeroizing<String>>,
