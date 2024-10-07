@@ -191,36 +191,27 @@ impl ProcessTxResponse {
 }
 
 /// Build and dump a transaction either to file or to screen
-// FIXME: remove unwraps and return error from here
-pub fn dump_tx<IO: Io>(io: &IO, args: &args::Tx, mut tx: Tx) {
+pub fn dump_tx<IO: Io>(io: &IO, args: &args::Tx, mut tx: Tx) -> Result<()> {
     // FIXME: create cli command to sign the wrapper offline
-    let tx_to_dump = if args.dump_tx {
+    if args.dump_tx {
         tx.update_header(data::TxType::Raw);
-        tx
-    } else if args.dump_wrapper_tx {
-        if tx.header.wrapper().is_none() {
-            edisplay_line!(
-                io,
-                "Requested wrapper dump on a tx which is not a wrapper"
-            );
-            return;
-        }
-        tx
-    } else {
-        // FIXME: remove this last branch and just do a check for the one above
-        unreachable!("Dump command should be either a dump or a dump-wrapper");
     };
+
+    if args.dump_wrapper_tx && tx.header.wrapper().is_none() {
+        return Err(Error::Other(
+            "Requested wrapper-dump on a tx which is not a wrapper".to_string(),
+        ));
+    }
 
     match args.output_folder.clone() {
         Some(path) => {
             let tx_path = path.join(format!(
                 "{}.tx",
-                tx_to_dump.header_hash().to_string().to_lowercase()
+                tx.header_hash().to_string().to_lowercase()
             ));
             let out = File::create(&tx_path)
                 .expect("Should be able to create a file to dump tx");
-            tx_to_dump
-                .to_writer_json(out)
+            tx.to_writer_json(out)
                 .expect("Should be able to write to file.");
             display_line!(
                 io,
@@ -229,12 +220,14 @@ pub fn dump_tx<IO: Io>(io: &IO, args: &args::Tx, mut tx: Tx) {
             );
         }
         None => {
-            let serialized_tx = serde_json::to_string_pretty(&tx_to_dump)
+            let serialized_tx = serde_json::to_string_pretty(&tx)
                 .expect("Should be able to json encode the tx.");
             display_line!(io, "Below the serialized transaction: \n");
             display_line!(io, "{}", serialized_tx)
         }
     }
+
+    Ok(())
 }
 
 /// Prepare a transaction for signing and submission by adding a wrapper header
@@ -245,8 +238,6 @@ pub async fn prepare_tx(
     fee_amount: DenominatedAmount,
     fee_payer: common::PublicKey,
 ) -> Result<()> {
-    // FIXME: should also check the dry_run_wrapper here? No in here it is
-    // correct FIXME: in general, look at all the places we use this
     if args.dry_run || args.dump_tx {
         Ok(())
     } else {
