@@ -7,7 +7,7 @@ use namada_core::address::Address;
 use namada_core::arith::{self, checked};
 use namada_core::chain::Epoch;
 use namada_core::collections::{HashMap, HashSet};
-use namada_core::key::common;
+use namada_core::key::{common, tm_consensus_key_raw_hash};
 use namada_core::token;
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::queries::{
@@ -17,7 +17,8 @@ use namada_proof_of_stake::slashing::{
     find_all_enqueued_slashes, find_all_slashes,
 };
 use namada_proof_of_stake::storage::{
-    bond_handle, read_all_validator_addresses,
+    bond_handle, get_consensus_key, liveness_sum_missed_votes_handle,
+    read_active_validator_addresses, read_all_validator_addresses,
     read_below_capacity_validator_set_addresses_with_stake,
     read_consensus_validator_set_addresses_with_stake, read_pos_params,
     read_total_active_stake, read_total_stake, read_validator_avatar,
@@ -50,6 +51,8 @@ router! {POS,
 
         ( "addresses" / [epoch: opt Epoch] )
             -> HashSet<Address> = validator_addresses,
+
+        ( "livenesses" ) -> Vec<(Address, String, u64)> = validator_livenesses,
 
         ( "stake" / [validator: Address] / [epoch: opt Epoch] )
             -> Option<token::Amount> = validator_stake,
@@ -247,6 +250,43 @@ where
 {
     let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
     read_all_validator_addresses(ctx.state, epoch)
+}
+
+/// Get all the validator livenesses.
+fn validator_livenesses<D, H, V, T>(
+    ctx: RequestCtx<'_, D, H, V, T>,
+) -> namada_storage::Result<Vec<(Address, String, u64)>>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let epoch = ctx.state.in_mem().last_epoch;
+    let mut result = vec![];
+    let active_validator_set = read_active_validator_addresses::<
+        _,
+        governance::Store<_>,
+    >(ctx.state, epoch)?;
+    for validator_address in active_validator_set.iter() {
+        if let Some(pubkey) = get_consensus_key::<_, governance::Store<_>>(
+            ctx.state,
+            validator_address,
+            epoch,
+        )? {
+            let tendermint_address = tm_consensus_key_raw_hash(&pubkey);
+            let sum_liveness_handle = liveness_sum_missed_votes_handle();
+            if let Some(missed_counter) =
+                sum_liveness_handle.get(ctx.state, validator_address)?
+            {
+                result.push((
+                    validator_address.to_owned(),
+                    tendermint_address,
+                    missed_counter,
+                ))
+            }
+        };
+    }
+
+    Ok(result)
 }
 
 /// Get the validator commission rate and max commission rate change per epoch
@@ -839,11 +879,9 @@ mod test {
         };
         let result = POS.handle(ctx, &request);
         assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("Invalid Tendermint address")
-        )
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid Tendermint address"))
     }
 }

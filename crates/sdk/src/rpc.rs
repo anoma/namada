@@ -754,6 +754,13 @@ pub async fn get_all_validators<C: namada_io::Client + Sync>(
     )
 }
 
+/// Get validators livenesses in the given epoch
+pub async fn get_validators_livenesses<C: namada_io::Client + Sync>(
+    client: &C,
+) -> Result<Vec<(Address, String, u64)>, error::Error> {
+    convert_response::<C, _>(RPC.vp().pos().validator_livenesses(client).await)
+}
+
 /// Get all consensus validators in the given epoch
 pub async fn get_all_consensus_validators<C: namada_io::Client + Sync>(
     client: &C,

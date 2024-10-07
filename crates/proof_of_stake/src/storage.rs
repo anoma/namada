@@ -710,6 +710,29 @@ where
         .collect()
 }
 
+/// Read all validator addresses from the consensus set
+pub fn read_active_validator_addresses<S, Gov>(
+    storage: &S,
+    epoch: namada_core::chain::Epoch,
+) -> Result<HashSet<Address>>
+where
+    S: StorageRead,
+    Gov: governance::Read<S>,
+{
+    let params = read_pos_params::<S, Gov>(storage)?;
+    Ok(validator_addresses_handle()
+        .at(&epoch)
+        .iter(storage)?
+        .map(Result::unwrap)
+        .filter(|address| {
+            matches!(
+                validator_state_handle(address).get(storage, epoch, &params),
+                Ok(Some(ValidatorState::Consensus))
+            )
+        })
+        .collect())
+}
+
 /// Update PoS total deltas.
 /// Note: for EpochedDelta, write the value to change storage by
 pub fn update_total_deltas<S, Gov>(
