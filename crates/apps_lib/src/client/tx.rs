@@ -844,8 +844,6 @@ pub async fn submit_transparent_transfer(
 
     let transfer_data = args.clone().build(namada).await?;
 
-    // FIXME: issue here, if they dump we don't dump the reveal pk tx, so they
-    // sign an incomplete tx
     if args.tx.dump_tx {
         tx::dump_tx(namada.io(), &args.tx, transfer_data.0);
     } else {
