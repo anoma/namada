@@ -3422,17 +3422,6 @@ pub mod args {
         arg_opt("gas-spending-key");
     pub const FEE_TOKEN: ArgDefaultFromCtx<WalletAddrOrNativeToken> =
         arg_default_from_ctx("gas-token", DefaultFn(|| "".parse().unwrap()));
-    // FIXME: are these used? Maybe for eth. No remove these two
-    pub const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
-    pub const FEE_AMOUNT: ArgDefault<token::DenominatedAmount> = arg_default(
-        "fee-amount",
-        DefaultFn(|| {
-            token::DenominatedAmount::new(
-                token::Amount::default(),
-                NATIVE_MAX_DECIMAL_PLACES.into(),
-            )
-        }),
-    );
     pub const GENESIS_BOND_SOURCE: ArgOpt<AddrOrPk> = arg_opt("source");
     pub const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
     pub const GENESIS_TIME: Arg<DateTimeUtc> = arg("genesis-time");
@@ -6736,7 +6725,6 @@ pub mod args {
                 tx,
                 tx_data,
                 owner: ctx.borrow_chain_or_exit().get(&self.owner),
-                disposable_signing_key: self.disposable_signing_key,
             })
         }
     }
@@ -6746,12 +6734,10 @@ pub mod args {
             let tx = Tx::parse(matches);
             let tx_path = TX_PATH.parse(matches);
             let owner = OWNER.parse(matches);
-            let disposable_signing_key = DISPOSABLE_SIGNING_KEY.parse(matches);
             Self {
                 tx,
                 tx_data: tx_path,
                 owner,
-                disposable_signing_key,
             }
         }
 
@@ -6762,15 +6748,6 @@ pub mod args {
                 )))
                 .arg(
                     OWNER.def().help(wrap!("The address of the account owner")),
-                )
-                .arg(
-                    DISPOSABLE_SIGNING_KEY
-                        .def()
-                        .help(wrap!(
-                            "Generates an ephemeral, disposable keypair to \
-                             sign the wrapper transaction."
-                        ))
-                        .conflicts_with(FEE_PAYER_OPT.name),
                 )
         }
     }

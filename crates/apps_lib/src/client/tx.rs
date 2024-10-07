@@ -1063,8 +1063,6 @@ pub async fn sign_tx<N: Namada>(
         tx: tx_args,
         tx_data,
         owner,
-        // FIXME: need this arg? No, remvoe it
-        disposable_signing_key,
     }: args::SignTx,
 ) -> Result<(), error::Error>
 where
@@ -1086,7 +1084,7 @@ where
         &tx_args,
         Some(owner.clone()),
         default_signer,
-        disposable_signing_key,
+        false,
     )
     .await?;
 
