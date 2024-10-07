@@ -192,7 +192,6 @@ impl ProcessTxResponse {
 
 /// Build and dump a transaction either to file or to screen
 pub fn dump_tx<IO: Io>(io: &IO, args: &args::Tx, mut tx: Tx) -> Result<()> {
-    // FIXME: create cli command to sign the wrapper offline
     if args.dump_tx {
         tx.update_header(data::TxType::Raw);
     };
