@@ -2341,6 +2341,8 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     pub signing_keys: Vec<C::PublicKey>,
     /// List of signatures to attach to the transaction
     pub signatures: Vec<C::Data>,
+    /// Optional path to a serialized wrapper signature
+    pub wrapper_signature: Option<C::Data>,
     /// Path to the TX WASM code file to reveal PK
     pub tx_reveal_code_path: PathBuf,
     /// Password to decrypt key

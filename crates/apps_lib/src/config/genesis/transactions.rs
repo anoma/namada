@@ -98,6 +98,7 @@ fn get_tx_args(use_device: bool) -> TxArgs {
         chain_id: None,
         signing_keys: vec![],
         signatures: vec![],
+        wrapper_signature: None,
         tx_reveal_code_path: Default::default(),
         password: None,
         memo: None,

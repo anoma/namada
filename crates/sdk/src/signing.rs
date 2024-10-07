@@ -71,7 +71,7 @@ pub struct SigningTxData {
     pub threshold: u8,
     /// The public keys to index map associated to an account
     pub account_public_keys_map: Option<AccountPublicKeysMap>,
-    /// The public keys of the fee payer
+    /// The public key of the fee payer
     pub fee_payer: common::PublicKey,
 }
 
@@ -299,40 +299,50 @@ where
         }
     }
 
-    // Then try signing the wrapper header (fee payer) with the software wallet
-    // otherwise use the fallback
-    let key = {
-        // Lock the wallet just long enough to extract a key from it without
-        // interfering with the sign closure call
-        let mut wallet = wallet.write().await;
-        find_key_by_pk(&mut *wallet, args, &signing_data.fee_payer)
-    };
-    match key {
-        Ok(fee_payer_keypair) => {
-            tx.sign_wrapper(fee_payer_keypair);
-        }
-        // The case where the fee payer also signs the inner transaction
-        Err(_)
-            if signing_data.public_keys.contains(&signing_data.fee_payer) =>
-        {
-            *tx = sign(
-                tx.clone(),
-                signing_data.fee_payer.clone(),
-                HashSet::from([Signable::FeeHeader, Signable::RawHeader]),
-                user_data,
-            )
-            .await?;
-            used_pubkeys.insert(signing_data.fee_payer.clone());
-        }
-        // The case where the fee payer does not sign the inner transaction
-        Err(_) => {
-            *tx = sign(
-                tx.clone(),
-                signing_data.fee_payer.clone(),
-                HashSet::from([Signable::FeeHeader]),
-                user_data,
-            )
-            .await?;
+    // Then try signing the wrapper header (fee payer). Check if there's a
+    // provided wrapper signature, otherwise sign with the software wallet or
+    // use the fallback FIXME: signing_data.fee_payer must becoem optional
+    // cause the wrapper sig could come from the file!
+    if let Some(sig_bytes) = &args.wrapper_signature {
+        let auth = serde_json::from_slice(sig_bytes)
+            .map_err(|e| Error::Encode(EncodingError::Serde(e.to_string())))?;
+        tx.add_section(Section::Authorization(auth));
+    } else {
+        let key = {
+            // Lock the wallet just long enough to extract a key from it without
+            // interfering with the sign closure call
+            let mut wallet = wallet.write().await;
+            find_key_by_pk(&mut *wallet, args, &signing_data.fee_payer)
+        };
+        match key {
+            Ok(fee_payer_keypair) => {
+                tx.sign_wrapper(fee_payer_keypair);
+            }
+            // The case where the fee payer also signs the inner transaction
+            Err(_)
+                if signing_data
+                    .public_keys
+                    .contains(&signing_data.fee_payer) =>
+            {
+                *tx = sign(
+                    tx.clone(),
+                    signing_data.fee_payer.clone(),
+                    HashSet::from([Signable::FeeHeader, Signable::RawHeader]),
+                    user_data,
+                )
+                .await?;
+                used_pubkeys.insert(signing_data.fee_payer.clone());
+            }
+            // The case where the fee payer does not sign the inner transaction
+            Err(_) => {
+                *tx = sign(
+                    tx.clone(),
+                    signing_data.fee_payer.clone(),
+                    HashSet::from([Signable::FeeHeader]),
+                    user_data,
+                )
+                .await?;
+            }
         }
     }
     // Then make sure that the number of public keys used exceeds the threshold
