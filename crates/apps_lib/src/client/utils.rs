@@ -1051,13 +1051,13 @@ pub async fn sign_offline(
         safe_exit(1)
     };
 
-    let tx = if let Ok(transaction) = Tx::try_from_json_bytes(tx_data.as_ref())
-    {
-        transaction
-    } else {
-        eprintln!("Couldn't decode the transaction.");
-        safe_exit(1)
-    };
+    let mut tx =
+        if let Ok(transaction) = Tx::try_from_json_bytes(tx_data.as_ref()) {
+            transaction
+        } else {
+            eprintln!("Couldn't decode the transaction.");
+            safe_exit(1)
+        };
 
     let account_public_keys_map = AccountPublicKeysMap::from_iter(
         secret_keys.iter().map(|sk| sk.to_public()),
@@ -1096,14 +1096,18 @@ pub async fn sign_offline(
     // Generate wrapper signature if requested
     if let Some(wrapper_signer) = wrapper_signer {
         if tx.header.wrapper().is_some() {
+            // Wrapper signatures must be computed over the raw signatures too
+            tx.add_signatures(signatures);
             let wrapper_signature = Authorization::new(
                 tx.sechashes(),
                 [(0, wrapper_signer)].into_iter().collect(),
                 None,
             );
 
-            let filename =
-                format!("offline_wrapper_signature_{}.tx", tx.header_hash(),);
+            let filename = format!(
+                "offline_wrapper_signature_{}.sig",
+                tx.header_hash().to_string().to_lowercase()
+            );
             let signature_path = match output_folder_path {
                 Some(ref path) => {
                     path.join(filename).to_string_lossy().to_string()
@@ -1120,8 +1124,8 @@ pub async fn sign_offline(
             println!("Wrapper signature serialized at {}", signature_path);
         } else {
             println!(
-                "A gas payer was provided to this command but the transaction \
-                 is not a wrapper: skipping the wrapper signature"
+                "A gas payer was provided but the transaction is not a \
+                 wrapper: skipping the wrapper signature"
             );
         }
     }
