@@ -1096,7 +1096,7 @@ pub async fn sign_offline(
     // Generate wrapper signature if requested
     if let Some(wrapper_signer) = wrapper_signer {
         if tx.header.wrapper().is_some() {
-            // Wrapper signatures must be computed over the raw signatures too
+            // Wrapper signature must be computed over the raw signatures too
             tx.add_signatures(signatures);
             let wrapper_signature = Authorization::new(
                 tx.sechashes(),
