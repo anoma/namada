@@ -3,7 +3,9 @@ use std::str::FromStr;
 
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
-use namada_apps_lib::wallet::defaults::{albert_keypair, christel_keypair};
+use namada_apps_lib::wallet::defaults::{
+    albert_keypair, bertha_keypair, christel_keypair,
+};
 use namada_core::dec::Dec;
 use namada_core::masp::TokenMap;
 use namada_node::shell::testing::client::run;
@@ -76,7 +78,6 @@ fn masp_incentives() -> Result<()> {
             validator_one_rpc,
         ],
     )?;
-    node.assert_success();
 
     // Assert BTC balance at VK(A) is 1
     let captured = CapturedOutput::of(|| {
@@ -125,7 +126,6 @@ fn masp_incentives() -> Result<()> {
         Bin::Client,
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
-    node.assert_success();
 
     // Assert BTC balance at VK(A) is still 1
     let captured = CapturedOutput::of(|| {
@@ -195,7 +195,6 @@ fn masp_incentives() -> Result<()> {
         Bin::Client,
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
-    node.assert_success();
 
     // Assert BTC balance at VK(A) is still 1
     let captured = CapturedOutput::of(|| {
@@ -285,7 +284,6 @@ fn masp_incentives() -> Result<()> {
         Bin::Client,
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
-    node.assert_success();
 
     // Assert ETH balance at VK(B) is 0.001
     let captured = CapturedOutput::of(|| {
@@ -334,7 +332,6 @@ fn masp_incentives() -> Result<()> {
         Bin::Client,
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
-    node.assert_success();
 
     // Assert ETH balance at VK(B) is still 0.001
     let captured = CapturedOutput::of(|| {
@@ -425,7 +422,6 @@ fn masp_incentives() -> Result<()> {
         Bin::Client,
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
-    node.assert_success();
 
     // Assert ETH balance at VK(B) is 0
     let captured = CapturedOutput::of(|| {
@@ -453,7 +449,6 @@ fn masp_incentives() -> Result<()> {
         Bin::Client,
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
-    node.assert_success();
 
     // Assert VK(B) retains the NAM rewards dispensed in the correct
     // amount.
@@ -482,7 +477,6 @@ fn masp_incentives() -> Result<()> {
         Bin::Client,
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
-    node.assert_success();
 
     // Assert NAM balance at MASP pool is
     // the accumulation of rewards from the shielded assets (BTC and ETH)
@@ -535,7 +529,6 @@ fn masp_incentives() -> Result<()> {
         Bin::Client,
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
-    node.assert_success();
 
     // Assert BTC balance at VK(A) is 0
     let captured = CapturedOutput::of(|| {
@@ -603,7 +596,6 @@ fn masp_incentives() -> Result<()> {
         Bin::Client,
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
-    node.assert_success();
 
     // Assert NAM balance at VK(A) is the rewards dispensed earlier
     // (since VK(A) has no shielded assets, no further rewards should
@@ -676,7 +668,6 @@ fn masp_incentives() -> Result<()> {
         Bin::Client,
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
-    node.assert_success();
     // Send all NAM rewards from SK(B) to Christel
     run(
         &node,
@@ -709,7 +700,6 @@ fn masp_incentives() -> Result<()> {
         Bin::Client,
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
-    node.assert_success();
     // Send all NAM rewards from SK(A) to Bertha
     run(
         &node,
@@ -738,7 +728,6 @@ fn masp_incentives() -> Result<()> {
         Bin::Client,
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
-    node.assert_success();
 
     // Assert NAM balance at VK(A) is 0
     let captured = CapturedOutput::of(|| {
@@ -765,7 +754,6 @@ fn masp_incentives() -> Result<()> {
         Bin::Client,
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
-    node.assert_success();
     // Assert NAM balance at VK(B) is 0
     let captured = CapturedOutput::of(|| {
         run(
@@ -884,7 +872,6 @@ fn spend_unconverted_asset_type() -> Result<()> {
             validator_one_rpc,
         ],
     )?;
-    node.assert_success();
     // 4. Check the shielded balance
     let captured = CapturedOutput::of(|| {
         run(
@@ -975,7 +962,6 @@ fn masp_txs_and_queries() -> Result<()> {
             validator_one_rpc,
         ],
     )?;
-    node.assert_success();
 
     let txs_args = vec![
         // 0. Attempt to spend 10 BTC at SK(A) to PA(B)
@@ -1303,7 +1289,6 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
             "--unsafe-dont-encrypt",
         ],
     )?;
-    node.assert_success();
     run(
         &node,
         Bin::Wallet,
@@ -1316,7 +1301,6 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
             "--unsafe-dont-encrypt",
         ],
     )?;
-    node.assert_success();
 
     // 1. Shield tokens
     _ = node.next_epoch();
@@ -1520,7 +1504,7 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
 
     node.clear_results();
     node.submit_txs(txs);
-    // If empty than failed in process proposal
+    // If empty then failed in process proposal
     assert!(!node.tx_result_codes.lock().unwrap().is_empty());
     node.assert_success();
 
@@ -1551,7 +1535,6 @@ fn expired_masp_tx() -> Result<()> {
             "--unsafe-dont-encrypt",
         ],
     )?;
-    node.assert_success();
 
     // 1. Shield tokens
     _ = node.next_epoch();
@@ -1666,7 +1649,7 @@ fn expired_masp_tx() -> Result<()> {
     node.submit_txs(vec![tx.to_bytes()]);
     {
         let codes = node.tx_result_codes.lock().unwrap();
-        // If empty than failed in process proposal
+        // If empty then failed in process proposal
         assert!(!codes.is_empty());
 
         for code in codes.iter() {
@@ -1749,7 +1732,6 @@ fn cross_epoch_unshield() -> Result<()> {
             validator_one_rpc,
         ],
     )?;
-    node.assert_success();
 
     // 2. Generate the tx in the current epoch
     let tempdir = tempfile::tempdir().unwrap();
@@ -1855,7 +1837,6 @@ fn dynamic_assets() -> Result<()> {
             validator_one_rpc,
         ],
     )?;
-    node.assert_success();
     // Wait till epoch boundary
     node.next_masp_epoch();
     // Send 1 BTC from Albert to PA
@@ -1883,7 +1864,6 @@ fn dynamic_assets() -> Result<()> {
         Bin::Client,
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
-    node.assert_success();
 
     // Assert BTC balance at VK(A) is 1
     let captured = CapturedOutput::of(|| {
@@ -1951,7 +1931,6 @@ fn dynamic_assets() -> Result<()> {
         Bin::Client,
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
-    node.assert_success();
 
     // Assert BTC balance at VK(A) is still 1
     let captured = CapturedOutput::of(|| {
@@ -2017,7 +1996,6 @@ fn dynamic_assets() -> Result<()> {
         Bin::Client,
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
-    node.assert_success();
 
     // Assert BTC balance at VK(A) is now 2
     let captured = CapturedOutput::of(|| {
@@ -2065,7 +2043,6 @@ fn dynamic_assets() -> Result<()> {
         Bin::Client,
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
-    node.assert_success();
 
     // Assert that VK(A) has now received a NAM rewward for second deposit
     let captured = CapturedOutput::of(|| {
@@ -2126,7 +2103,6 @@ fn dynamic_assets() -> Result<()> {
         Bin::Client,
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
-    node.assert_success();
 
     // Assert BTC balance at VK(A) is still 2
     let captured = CapturedOutput::of(|| {
@@ -2193,7 +2169,6 @@ fn dynamic_assets() -> Result<()> {
         Bin::Client,
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
-    node.assert_success();
 
     // Assert BTC balance at VK(A) is still 2
     let captured = CapturedOutput::of(|| {
@@ -2241,7 +2216,6 @@ fn dynamic_assets() -> Result<()> {
         Bin::Client,
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
-    node.assert_success();
     // Assert BTC balance at VK(A) is still 2
     let captured = CapturedOutput::of(|| {
         run(
@@ -2301,7 +2275,6 @@ fn dynamic_assets() -> Result<()> {
         Bin::Client,
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
-    node.assert_success();
     // Assert BTC balance at VK(A) is still 2
     let captured = CapturedOutput::of(|| {
         run(
@@ -2372,7 +2345,6 @@ fn masp_fee_payment() -> Result<()> {
             "--unsafe-dont-encrypt",
         ],
     )?;
-    node.assert_success();
     run(
         &node,
         Bin::Wallet,
@@ -2385,7 +2357,6 @@ fn masp_fee_payment() -> Result<()> {
             "--unsafe-dont-encrypt",
         ],
     )?;
-    node.assert_success();
 
     // Shield some tokens
     run(
@@ -2415,7 +2386,6 @@ fn masp_fee_payment() -> Result<()> {
         Bin::Client,
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
-    node.assert_success();
     let captured = CapturedOutput::of(|| {
         run(
             &node,
@@ -2599,7 +2569,6 @@ fn masp_fee_payment() -> Result<()> {
         Bin::Client,
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
-    node.assert_success();
     // Check the exact balance of the tx source to ensure that the masp fee
     // payment transaction was executed only once
     let captured = CapturedOutput::of(|| {
@@ -2670,7 +2639,6 @@ fn masp_fee_payment_gas_limit() -> Result<()> {
             "--unsafe-dont-encrypt",
         ],
     )?;
-    node.assert_success();
     run(
         &node,
         Bin::Wallet,
@@ -2683,7 +2651,6 @@ fn masp_fee_payment_gas_limit() -> Result<()> {
             "--unsafe-dont-encrypt",
         ],
     )?;
-    node.assert_success();
 
     // Shield some tokens
     run(
@@ -2713,7 +2680,6 @@ fn masp_fee_payment_gas_limit() -> Result<()> {
         Bin::Client,
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
-    node.assert_success();
 
     // Check that the balance hasn't changed
     let captured = CapturedOutput::of(|| {
@@ -2771,7 +2737,6 @@ fn masp_fee_payment_gas_limit() -> Result<()> {
         Bin::Client,
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
-    node.assert_success();
 
     // Check that the balance hasn't changed
     let captured = CapturedOutput::of(|| {
@@ -2820,7 +2785,6 @@ fn masp_fee_payment_with_non_disposable() -> Result<()> {
             "--unsafe-dont-encrypt",
         ],
     )?;
-    node.assert_success();
     run(
         &node,
         Bin::Wallet,
@@ -2833,7 +2797,6 @@ fn masp_fee_payment_with_non_disposable() -> Result<()> {
             "--unsafe-dont-encrypt",
         ],
     )?;
-    node.assert_success();
 
     // Shield some tokens
     run(
@@ -2867,7 +2830,6 @@ fn masp_fee_payment_with_non_disposable() -> Result<()> {
         Bin::Client,
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
-    node.assert_success();
 
     let captured = CapturedOutput::of(|| {
         run(
@@ -2942,7 +2904,6 @@ fn masp_fee_payment_with_non_disposable() -> Result<()> {
         Bin::Client,
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
-    node.assert_success();
 
     let captured = CapturedOutput::of(|| {
         run(
@@ -3009,7 +2970,6 @@ fn masp_fee_payment_with_custom_spending_key() -> Result<()> {
             "--unsafe-dont-encrypt",
         ],
     )?;
-    node.assert_success();
     run(
         &node,
         Bin::Wallet,
@@ -3022,7 +2982,6 @@ fn masp_fee_payment_with_custom_spending_key() -> Result<()> {
             "--unsafe-dont-encrypt",
         ],
     )?;
-    node.assert_success();
     run(
         &node,
         Bin::Wallet,
@@ -3035,7 +2994,6 @@ fn masp_fee_payment_with_custom_spending_key() -> Result<()> {
             "--unsafe-dont-encrypt",
         ],
     )?;
-    node.assert_success();
 
     // Shield some tokens
     run(
@@ -3083,7 +3041,6 @@ fn masp_fee_payment_with_custom_spending_key() -> Result<()> {
         Bin::Client,
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
-    node.assert_success();
 
     let captured = CapturedOutput::of(|| {
         run(
@@ -3158,7 +3115,6 @@ fn masp_fee_payment_with_custom_spending_key() -> Result<()> {
         Bin::Client,
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
-    node.assert_success();
 
     let captured = CapturedOutput::of(|| {
         run(
@@ -3249,7 +3205,6 @@ fn masp_fee_payment_with_different_token() -> Result<()> {
             "--unsafe-dont-encrypt",
         ],
     )?;
-    node.assert_success();
     run(
         &node,
         Bin::Wallet,
@@ -3262,7 +3217,6 @@ fn masp_fee_payment_with_different_token() -> Result<()> {
             "--unsafe-dont-encrypt",
         ],
     )?;
-    node.assert_success();
 
     // Shield some tokens
     run(
@@ -3332,7 +3286,6 @@ fn masp_fee_payment_with_different_token() -> Result<()> {
         Bin::Client,
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
-    node.assert_success();
 
     let captured = CapturedOutput::of(|| {
         run(
@@ -3426,7 +3379,6 @@ fn masp_fee_payment_with_different_token() -> Result<()> {
         Bin::Client,
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
-    node.assert_success();
 
     let captured = CapturedOutput::of(|| {
         run(
@@ -3506,7 +3458,7 @@ fn masp_fee_payment_with_different_token() -> Result<()> {
 // An ouput description of the masp can be replayed (pushed to the commitment
 // tree more than once). The nullifiers and merkle paths will be unique. Test
 // that a batch containing two identical shielding txs can be executed correctly
-// and the two identical notes can be spent with no issues.
+// and the two identical notes can be spent (nullified) with no issues.
 #[test]
 fn identical_output_descriptions() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
@@ -3531,7 +3483,6 @@ fn identical_output_descriptions() -> Result<()> {
             "--unsafe-dont-encrypt",
         ],
     )?;
-    node.assert_success();
 
     // Generate a tx to shield some tokens
     run(
@@ -3550,7 +3501,7 @@ fn identical_output_descriptions() -> Result<()> {
             "--gas-limit",
             "300000",
             "--gas-payer",
-            ALBERT_KEY,
+            BERTHA_KEY,
             "--output-folder-path",
             tempdir.path().to_str().unwrap(),
             "--dump-tx",
@@ -3603,7 +3554,7 @@ fn identical_output_descriptions() -> Result<()> {
         ),
         None,
     );
-    batched_tx.sign_wrapper(albert_keypair());
+    batched_tx.sign_wrapper(bertha_keypair());
 
     let wrapper_hash = batched_tx.wrapper_hash();
     let inner_cmts = batched_tx.commitments();
@@ -3616,7 +3567,7 @@ fn identical_output_descriptions() -> Result<()> {
     // Check that the batch was successful
     {
         let codes = node.tx_result_codes.lock().unwrap();
-        // If empty than failed in process proposal
+        // If empty then failed in process proposal
         assert!(!codes.is_empty());
 
         for code in codes.iter() {
@@ -3628,7 +3579,7 @@ fn identical_output_descriptions() -> Result<()> {
         assert_eq!(results.len(), 1);
 
         for result in results.iter() {
-            // The batch should contain a two inner tx
+            // The batch should contain two inner txs
             assert_eq!(result.0.len(), 2);
 
             for inner_cmt in inner_cmts {
@@ -3658,7 +3609,6 @@ fn identical_output_descriptions() -> Result<()> {
             validator_one_rpc,
         ],
     )?;
-    node.assert_success();
 
     // Assert NAM balance at VK(A) is 2000
     let captured = CapturedOutput::of(|| {
@@ -3678,6 +3628,24 @@ fn identical_output_descriptions() -> Result<()> {
     });
     assert!(captured.result.is_ok());
     assert!(captured.contains("nam: 2000"));
+
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                ALBERT_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 1998000"));
 
     let captured = CapturedOutput::of(|| {
         run(
@@ -3756,6 +3724,701 @@ fn identical_output_descriptions() -> Result<()> {
     });
     assert!(captured.result.is_ok());
     assert!(captured.contains("nam: 2002000"));
+
+    Ok(())
+}
+
+// Test MASP batched txs where one is failing and one is successful and check
+// that both the protocol and the shielded sync command behave correctly. Since
+// the batches are not atomic check that the valid transactions get committed
+// and the balances are correctly updated
+#[test]
+fn masp_batch() -> Result<()> {
+    // This address doesn't matter for tests. But an argument is required.
+    let validator_one_rpc = "http://127.0.0.1:26567";
+    // Download the shielded pool parameters before starting node
+    let _ = FsShieldedUtils::new(PathBuf::new());
+    let (mut node, _services) = setup::setup()?;
+    _ = node.next_masp_epoch();
+    let tempdir = tempfile::tempdir().unwrap();
+
+    // Assert reference NAM balances at VK(A), Albert and Bertha
+    for (owner, balance) in [
+        (AA_VIEWING_KEY, 0),
+        (ALBERT_KEY, 2_000_000),
+        (BERTHA_KEY, 2_000_000),
+    ] {
+        let captured = CapturedOutput::of(|| {
+            run(
+                &node,
+                Bin::Client,
+                vec![
+                    "balance",
+                    "--owner",
+                    owner,
+                    "--token",
+                    NAM,
+                    "--node",
+                    validator_one_rpc,
+                ],
+            )
+        });
+        assert!(captured.result.is_ok());
+        assert!(captured.contains(&format!("nam: {balance}")));
+    }
+
+    // Generate txs for the batch to shield some tokens. Use two different
+    // sources
+    let mut batch = vec![];
+    for source in [ALBERT_KEY, BERTHA_KEY] {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "shield",
+                "--source",
+                source,
+                "--target",
+                AA_PAYMENT_ADDRESS,
+                "--token",
+                NAM,
+                "--amount",
+                "1000",
+                "--gas-limit",
+                "300000",
+                "--gas-payer",
+                CHRISTEL_KEY,
+                "--output-folder-path",
+                tempdir.path().to_str().unwrap(),
+                "--dump-tx",
+                "--ledger-address",
+                validator_one_rpc,
+            ],
+        )?;
+        node.assert_success();
+        let file_path = tempdir
+            .path()
+            .read_dir()
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path();
+        batch.push(std::fs::read(&file_path).unwrap());
+        std::fs::remove_file(&file_path).unwrap();
+    }
+
+    // Create the batch
+    let tx0: namada_sdk::tx::Tx = serde_json::from_slice(&batch[0]).unwrap();
+    let tx1: namada_sdk::tx::Tx = serde_json::from_slice(&batch[1]).unwrap();
+
+    let signing_data = SigningTxData {
+        owner: None,
+        public_keys: vec![albert_keypair().to_public()],
+        threshold: 1,
+        account_public_keys_map: None,
+        fee_payer: albert_keypair().to_public(),
+    };
+
+    let mut txs = vec![];
+    let mut inner_cmts = vec![];
+    let mut wrapper_hashes = vec![];
+
+    // Try different tx orders and generate a single block with both batch
+    // combinations
+    for (tx0, tx1) in [(tx0.clone(), tx1.clone()), (tx1, tx0)] {
+        let (mut batched_tx, _signing_data) =
+            namada_sdk::tx::build_batch(vec![
+                (tx0, signing_data.clone()),
+                (tx1, signing_data.clone()),
+            ])
+            .unwrap();
+        batched_tx.header.atomic = false;
+
+        // Sign the batch with just the signer of one tx to force the failure of
+        // the other one
+        batched_tx.sign_raw(
+            vec![albert_keypair()],
+            AccountPublicKeysMap::from_iter(
+                vec![(albert_keypair().to_public())].into_iter(),
+            ),
+            None,
+        );
+        batched_tx.sign_wrapper(christel_keypair());
+
+        wrapper_hashes.push(batched_tx.wrapper_hash());
+        for cmt in batched_tx.commitments() {
+            inner_cmts.push(cmt.to_owned());
+        }
+
+        txs.push(batched_tx.to_bytes());
+    }
+
+    node.clear_results();
+    node.submit_txs(txs);
+
+    // Check the block result
+    {
+        let codes = node.tx_result_codes.lock().unwrap();
+        // If empty then failed in process proposal
+        assert!(!codes.is_empty());
+
+        // Both batches must succeed
+        for code in codes.iter() {
+            assert!(matches!(code, NodeResults::Ok))
+        }
+
+        let results = node.tx_results.lock().unwrap();
+        // We submitted two batches
+        assert_eq!(results.len(), 2);
+
+        // Check inner tx results of first batch
+        let res0 = &results[0];
+        assert_eq!(res0.len(), 2);
+        let inner_tx_result = res0
+            .get_inner_tx_result(
+                wrapper_hashes[0].as_ref(),
+                itertools::Either::Right(&inner_cmts[0]),
+            )
+            .expect("Missing expected tx result")
+            .as_ref()
+            .expect("Result is supposed to be Ok");
+        assert!(inner_tx_result.is_accepted());
+        let inner_tx_result = res0
+            .get_inner_tx_result(
+                wrapper_hashes[0].as_ref(),
+                itertools::Either::Right(&inner_cmts[1]),
+            )
+            .expect("Missing expected tx result")
+            .as_ref()
+            .expect("Result is supposed to be Ok");
+        assert!(!inner_tx_result.is_accepted());
+
+        // Check inner tx results of second batch
+        let res1 = &results[1];
+        assert_eq!(res1.len(), 2);
+        let inner_tx_result = res1
+            .get_inner_tx_result(
+                wrapper_hashes[1].as_ref(),
+                itertools::Either::Right(&inner_cmts[2]),
+            )
+            .expect("Missing expected tx result")
+            .as_ref()
+            .expect("Result is supposed to be Ok");
+        assert!(!inner_tx_result.is_accepted());
+        let inner_tx_result = res1
+            .get_inner_tx_result(
+                wrapper_hashes[1].as_ref(),
+                itertools::Either::Right(&inner_cmts[3]),
+            )
+            .expect("Missing expected tx result")
+            .as_ref()
+            .expect("Result is supposed to be Ok");
+        assert!(inner_tx_result.is_accepted());
+    }
+
+    node.clear_results();
+
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shielded-sync",
+            "--viewing-keys",
+            AA_VIEWING_KEY,
+            "--node",
+            validator_one_rpc,
+        ],
+    )?;
+
+    // Assert NAM balances at VK(A), Albert and Bertha
+    for (owner, balance) in [
+        (AA_VIEWING_KEY, 2_000),
+        (ALBERT_KEY, 1_998_000),
+        (BERTHA_KEY, 2_000_000),
+    ] {
+        let captured = CapturedOutput::of(|| {
+            run(
+                &node,
+                Bin::Client,
+                vec![
+                    "balance",
+                    "--owner",
+                    owner,
+                    "--token",
+                    NAM,
+                    "--node",
+                    validator_one_rpc,
+                ],
+            )
+        });
+        assert!(captured.result.is_ok());
+        assert!(captured.contains(&format!("nam: {balance}")));
+    }
+
+    Ok(())
+}
+
+// Test MASP atomic batched txs where one is failing and one is successful and
+// check that both the protocol and the shielded sync command behave correctly.
+// Verify that since the batch is atomic both transactions are rejected and no
+// storage modifications are committed.
+#[test]
+fn masp_atomic_batch() -> Result<()> {
+    // This address doesn't matter for tests. But an argument is required.
+    let validator_one_rpc = "http://127.0.0.1:26567";
+    // Download the shielded pool parameters before starting node
+    let _ = FsShieldedUtils::new(PathBuf::new());
+    let (mut node, _services) = setup::setup()?;
+    _ = node.next_masp_epoch();
+    let tempdir = tempfile::tempdir().unwrap();
+
+    // Assert reference NAM balances at VK(A), Albert and Bertha are unchanged
+    for (owner, balance) in [
+        (AA_VIEWING_KEY, 0),
+        (ALBERT_KEY, 2_000_000),
+        (BERTHA_KEY, 2_000_000),
+    ] {
+        let captured = CapturedOutput::of(|| {
+            run(
+                &node,
+                Bin::Client,
+                vec![
+                    "balance",
+                    "--owner",
+                    owner,
+                    "--token",
+                    NAM,
+                    "--node",
+                    validator_one_rpc,
+                ],
+            )
+        });
+        assert!(captured.result.is_ok());
+        assert!(captured.contains(&format!("nam: {balance}")));
+    }
+
+    // Generate txs for the batch to shield some tokens. Use two different
+    // sources
+    let mut batch = vec![];
+    for source in [ALBERT_KEY, BERTHA_KEY] {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "shield",
+                "--source",
+                source,
+                "--target",
+                AA_PAYMENT_ADDRESS,
+                "--token",
+                NAM,
+                "--amount",
+                "1000",
+                "--gas-limit",
+                "300000",
+                "--gas-payer",
+                CHRISTEL_KEY,
+                "--output-folder-path",
+                tempdir.path().to_str().unwrap(),
+                "--dump-tx",
+                "--ledger-address",
+                validator_one_rpc,
+            ],
+        )?;
+        node.assert_success();
+        let file_path = tempdir
+            .path()
+            .read_dir()
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path();
+        batch.push(std::fs::read(&file_path).unwrap());
+        std::fs::remove_file(&file_path).unwrap();
+    }
+
+    // Create the batch
+    let tx0: namada_sdk::tx::Tx = serde_json::from_slice(&batch[0]).unwrap();
+    let tx1: namada_sdk::tx::Tx = serde_json::from_slice(&batch[1]).unwrap();
+
+    let signing_data = SigningTxData {
+        owner: None,
+        public_keys: vec![albert_keypair().to_public()],
+        threshold: 1,
+        account_public_keys_map: None,
+        fee_payer: albert_keypair().to_public(),
+    };
+
+    let mut txs = vec![];
+    let mut inner_cmts = vec![];
+    let mut wrapper_hashes = vec![];
+
+    // Try different tx orders and generate a single block with both batch
+    // combinations
+    for (tx0, tx1) in [(tx0.clone(), tx1.clone()), (tx1, tx0)] {
+        let (mut batched_tx, _signing_data) =
+            namada_sdk::tx::build_batch(vec![
+                (tx0, signing_data.clone()),
+                (tx1, signing_data.clone()),
+            ])
+            .unwrap();
+        batched_tx.header.atomic = true;
+
+        // Sign the batch with just the signer of one tx to force the failure of
+        // the other one
+        batched_tx.sign_raw(
+            vec![albert_keypair()],
+            AccountPublicKeysMap::from_iter(
+                vec![(albert_keypair().to_public())].into_iter(),
+            ),
+            None,
+        );
+        batched_tx.sign_wrapper(christel_keypair());
+
+        wrapper_hashes.push(batched_tx.wrapper_hash());
+        for cmt in batched_tx.commitments() {
+            inner_cmts.push(cmt.to_owned());
+        }
+
+        txs.push(batched_tx.to_bytes());
+    }
+
+    node.clear_results();
+    node.submit_txs(txs);
+
+    // Check the block result
+    {
+        let codes = node.tx_result_codes.lock().unwrap();
+        // If empty then failed in process proposal
+        assert!(!codes.is_empty());
+
+        // Both batches must fail
+        for code in codes.iter() {
+            assert!(matches!(
+                code,
+                NodeResults::Failed(
+                    namada_node::shell::ResultCode::WasmRuntimeError
+                )
+            ))
+        }
+
+        let results = node.tx_results.lock().unwrap();
+        // We submitted two batches
+        assert_eq!(results.len(), 2);
+
+        // Check inner tx results of first batch
+        let res0 = &results[0];
+        assert_eq!(res0.len(), 2);
+        let inner_tx_result = res0
+            .get_inner_tx_result(
+                wrapper_hashes[0].as_ref(),
+                itertools::Either::Right(&inner_cmts[0]),
+            )
+            .expect("Missing expected tx result")
+            .as_ref()
+            .expect("Result is supposed to be Ok");
+        assert!(inner_tx_result.is_accepted());
+        let inner_tx_result = res0
+            .get_inner_tx_result(
+                wrapper_hashes[0].as_ref(),
+                itertools::Either::Right(&inner_cmts[1]),
+            )
+            .expect("Missing expected tx result")
+            .as_ref()
+            .expect("Result is supposed to be Ok");
+        assert!(!inner_tx_result.is_accepted());
+
+        // Check inner tx results of second batch, the second result is missing
+        // since the atomic batch gets short-circuited
+        let res1 = &results[1];
+        assert_eq!(res1.len(), 1);
+        let inner_tx_result = res1
+            .get_inner_tx_result(
+                wrapper_hashes[1].as_ref(),
+                itertools::Either::Right(&inner_cmts[2]),
+            )
+            .expect("Missing expected tx result")
+            .as_ref()
+            .expect("Result is supposed to be Ok");
+        assert!(!inner_tx_result.is_accepted());
+    }
+
+    node.clear_results();
+
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shielded-sync",
+            "--viewing-keys",
+            AA_VIEWING_KEY,
+            "--node",
+            validator_one_rpc,
+        ],
+    )?;
+
+    // Assert NAM balances at VK(A), Albert and Bertha are unchanged
+    for (owner, balance) in [
+        (AA_VIEWING_KEY, 0),
+        (ALBERT_KEY, 2_000_000),
+        (BERTHA_KEY, 2_000_000),
+    ] {
+        let captured = CapturedOutput::of(|| {
+            run(
+                &node,
+                Bin::Client,
+                vec![
+                    "balance",
+                    "--owner",
+                    owner,
+                    "--token",
+                    NAM,
+                    "--node",
+                    validator_one_rpc,
+                ],
+            )
+        });
+        assert!(captured.result.is_ok());
+        assert!(captured.contains(&format!("nam: {balance}")));
+    }
+
+    Ok(())
+}
+
+// Test some edge-case masp txs:
+//   1. A non masp tx that carries a masp section (check that both the protocol
+//      and the shielded-sync command ignore this)
+//   2. A masp tx that carries two masp sections (check that both the protocol
+//      and the shielded-sync command only pick the correct data)
+#[test]
+fn tricky_masp_txs() -> Result<()> {
+    // This address doesn't matter for tests. But an argument is required.
+    let validator_one_rpc = "http://127.0.0.1:26567";
+    // Download the shielded pool parameters before starting node
+    let _ = FsShieldedUtils::new(PathBuf::new());
+    let (mut node, _services) = setup::setup()?;
+    _ = node.next_masp_epoch();
+    let tempdir = tempfile::tempdir().unwrap();
+
+    // Assert reference NAM balances at VK(A), Albert, Bertha and Christel
+    for (owner, balance) in [
+        (AA_VIEWING_KEY, 0),
+        (ALBERT_KEY, 2_000_000),
+        (BERTHA_KEY, 2_000_000),
+        (ALBERT, 1_980_000),
+        (CHRISTEL, 2_000_000),
+    ] {
+        let captured = CapturedOutput::of(|| {
+            run(
+                &node,
+                Bin::Client,
+                vec![
+                    "balance",
+                    "--owner",
+                    owner,
+                    "--token",
+                    NAM,
+                    "--node",
+                    validator_one_rpc,
+                ],
+            )
+        });
+        assert!(captured.result.is_ok());
+        assert!(captured.contains(&format!("nam: {balance}")));
+    }
+
+    // Generate masp tx to extract the section
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shield",
+            "--source",
+            ALBERT,
+            "--target",
+            AA_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "1000",
+            "--gas-limit",
+            "300000",
+            "--gas-payer",
+            CHRISTEL_KEY,
+            "--output-folder-path",
+            tempdir.path().to_str().unwrap(),
+            "--dump-tx",
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+    let file_path = tempdir
+        .path()
+        .read_dir()
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let masp_tx_bytes = std::fs::read(&file_path).unwrap();
+    std::fs::remove_file(&file_path).unwrap();
+    let masp_tx: namada_sdk::tx::Tx =
+        serde_json::from_slice(&masp_tx_bytes).unwrap();
+    let masp_transaction = masp_tx
+        .sections
+        .into_iter()
+        .find_map(|sec| sec.masp_tx())
+        .unwrap();
+
+    // Generate first tx
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "transparent-transfer",
+            "--source",
+            ALBERT_KEY,
+            "--target",
+            CHRISTEL,
+            "--token",
+            NAM,
+            "--amount",
+            "1000",
+            "--gas-payer",
+            CHRISTEL_KEY,
+            "--output-folder-path",
+            tempdir.path().to_str().unwrap(),
+            "--dump-tx",
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+    let file_path = tempdir
+        .path()
+        .read_dir()
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let tx_bytes = std::fs::read(&file_path).unwrap();
+    std::fs::remove_file(&file_path).unwrap();
+
+    // Attach useless masp section to tx
+    let mut tx0: namada_sdk::tx::Tx =
+        serde_json::from_slice(&tx_bytes).unwrap();
+    tx0.add_masp_tx_section(masp_transaction.clone());
+
+    tx0.sign_raw(
+        vec![albert_keypair()],
+        AccountPublicKeysMap::from_iter(
+            vec![(albert_keypair().to_public())].into_iter(),
+        ),
+        None,
+    );
+    tx0.sign_wrapper(christel_keypair());
+
+    // Generate second tx
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shield",
+            "--source",
+            BERTHA_KEY,
+            "--target",
+            AA_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "1000",
+            "--gas-limit",
+            "300000",
+            "--gas-payer",
+            CHRISTEL_KEY,
+            "--output-folder-path",
+            tempdir.path().to_str().unwrap(),
+            "--dump-tx",
+            "--ledger-address",
+            validator_one_rpc,
+        ],
+    )?;
+    node.assert_success();
+    let file_path = tempdir
+        .path()
+        .read_dir()
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let tx_bytes = std::fs::read(&file_path).unwrap();
+    std::fs::remove_file(&file_path).unwrap();
+
+    // Attach another useless masp section to tx
+    let mut tx1: namada_sdk::tx::Tx =
+        serde_json::from_slice(&tx_bytes).unwrap();
+    tx1.add_masp_tx_section(masp_transaction);
+
+    tx1.sign_raw(
+        vec![bertha_keypair()],
+        AccountPublicKeysMap::from_iter(
+            vec![(bertha_keypair().to_public())].into_iter(),
+        ),
+        None,
+    );
+    tx1.sign_wrapper(christel_keypair());
+
+    let txs = vec![tx0.to_bytes(), tx1.to_bytes()];
+    node.clear_results();
+    node.submit_txs(txs);
+    node.assert_success();
+
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shielded-sync",
+            "--viewing-keys",
+            AA_VIEWING_KEY,
+            "--node",
+            validator_one_rpc,
+        ],
+    )?;
+
+    // Assert NAM balances at VK(A), Albert, Bertha and Christel
+    for (owner, balance) in [
+        (AA_VIEWING_KEY, 1_000),
+        (ALBERT_KEY, 1_999_000),
+        (BERTHA_KEY, 1_999_000),
+        (ALBERT, 1_980_000),
+        (CHRISTEL, 2_001_000),
+    ] {
+        let captured = CapturedOutput::of(|| {
+            run(
+                &node,
+                Bin::Client,
+                vec![
+                    "balance",
+                    "--owner",
+                    owner,
+                    "--token",
+                    NAM,
+                    "--node",
+                    validator_one_rpc,
+                ],
+            )
+        });
+        assert!(captured.result.is_ok());
+        assert!(captured.contains(&format!("nam: {balance}")));
+    }
 
     Ok(())
 }

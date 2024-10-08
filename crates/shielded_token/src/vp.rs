@@ -887,8 +887,9 @@ mod shielded_token_tests {
     use namada_core::address::testing::nam;
     use namada_core::address::MASP;
     use namada_core::borsh::BorshSerializeExt;
+    use namada_core::masp::TokenMap;
     use namada_gas::{TxGasMeter, VpGasMeter};
-    use namada_state::testing::TestState;
+    use namada_state::testing::{arb_account_storage_key, arb_key, TestState};
     use namada_state::{StateRead, TxIndex};
     use namada_trans_token::storage_key::balance_key;
     use namada_trans_token::Amount;
@@ -898,6 +899,14 @@ mod shielded_token_tests {
     use namada_vm::wasm::VpCache;
     use namada_vm::WasmCacheRwAccess;
     use namada_vp::native_vp::{self, CtxPostStorageRead, CtxPreStorageRead};
+    use namada_vp_env::Error;
+    use proptest::proptest;
+    use proptest::strategy::Strategy;
+
+    use crate::storage_key::{
+        is_masp_key, is_masp_token_map_key, is_masp_transfer_key,
+        masp_token_map_key,
+    };
 
     type CA = WasmCacheRwAccess;
     type Eval<S> = VpEvalWasm<<S as StateRead>::D, <S as StateRead>::H, CA>;
@@ -920,7 +929,7 @@ mod shielded_token_tests {
         (),
     >;
 
-    // Changing only the balance key of the MASP alone is invalid
+    // Changing only the balance key of the MASP is invalid
     #[test]
     fn test_balance_change() {
         let mut state = TestState::default();
@@ -967,6 +976,7 @@ mod shielded_token_tests {
                 vp_vp_cache,
             );
 
+            // We don't care about the specific error so long as it fails
             assert!(
                 MaspVp::validate_tx(
                     &ctx,
@@ -976,6 +986,164 @@ mod shielded_token_tests {
                 )
                 .is_err()
             );
+        }
+    }
+
+    // Changing keys for both a transfer and a governance proposal is not
+    // allowed
+    #[test]
+    fn test_mixed_keys_rejected() {
+        let mut state = TestState::default();
+        namada_parameters::init_test_storage(&mut state).unwrap();
+        let balance_key = balance_key(&nam(), &MASP);
+        let token_map_key = masp_token_map_key();
+        let keys_changed =
+            BTreeSet::from([balance_key.clone(), token_map_key.clone()]);
+        let verifiers = Default::default();
+
+        let tx_index = TxIndex::default();
+        let mut tx = Tx::from_type(namada_tx::data::TxType::Raw);
+        tx.push_default_inner_tx();
+        let BatchedTx { tx, cmt } = tx.batch_first_tx();
+
+        // Write the conflicting keys
+        let amount = Amount::native_whole(100);
+        let _ = state
+            .write_log_mut()
+            .write(&balance_key, amount.serialize_to_vec())
+            .unwrap();
+        let token_map = TokenMap::new();
+        let _ = state
+            .write_log_mut()
+            .write(&token_map_key, token_map.serialize_to_vec())
+            .unwrap();
+
+        let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+            &TxGasMeter::new(u64::MAX),
+        ));
+        let (vp_vp_cache, _vp_cache_dir) = vp_cache();
+        let ctx = Ctx::new(
+            &MASP,
+            &state,
+            &tx,
+            &cmt,
+            &tx_index,
+            &gas_meter,
+            &keys_changed,
+            &verifiers,
+            vp_vp_cache,
+        );
+
+        assert!(matches!(
+            MaspVp::validate_tx(
+                &ctx,
+                &tx.batch_ref_tx(&cmt),
+                &keys_changed,
+                &verifiers
+            ),
+            Err(Error::SimpleMessage(
+                "Cannot simultaneously do governance proposal and MASP \
+                 transfer"
+            ))
+        ));
+    }
+
+    proptest! {
+        // Changing no MASP keys at all is allowed
+        #[test]
+        fn test_no_masp_op_accepted(src_key in arb_key().prop_filter("MASP key", |key| !is_masp_key(key))) {
+            let mut state = TestState::default();
+            namada_parameters::init_test_storage(&mut state).unwrap();
+            let keys_changed = BTreeSet::from([src_key.clone()]);
+            let verifiers = Default::default();
+
+            let tx_index = TxIndex::default();
+            let mut tx = Tx::from_type(namada_tx::data::TxType::Raw);
+            tx.push_default_inner_tx();
+            let BatchedTx { tx, cmt } = tx.batch_first_tx();
+
+            // Write some random value
+            let _ = state
+                .write_log_mut()
+                .write(&src_key, "test".serialize_to_vec())
+                .unwrap();
+
+            let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+                &TxGasMeter::new(u64::MAX),
+            ));
+            let (vp_vp_cache, _vp_cache_dir) = vp_cache();
+            let ctx = Ctx::new(
+                &MASP,
+                &state,
+                &tx,
+                &cmt,
+                &tx_index,
+                &gas_meter,
+                &keys_changed,
+                &verifiers,
+                vp_vp_cache,
+            );
+
+            assert!(MaspVp::validate_tx(
+                &ctx,
+                &tx.batch_ref_tx(&cmt),
+                &keys_changed,
+                &verifiers
+            )
+            .is_ok());
+        }
+
+        // Changing unknown masp keys is not allowed
+        #[test]
+        fn test_unallowed_masp_keys_rejected(
+            random_masp_key in arb_account_storage_key(MASP).prop_filter(
+                "MASP valid key",
+                |key| !(is_masp_transfer_key(key) || is_masp_token_map_key(key)
+            ))
+        ) {
+            let mut state = TestState::default();
+            namada_parameters::init_test_storage(&mut state).unwrap();
+            let verifiers = Default::default();
+
+            let tx_index = TxIndex::default();
+            let mut tx = Tx::from_type(namada_tx::data::TxType::Raw);
+            tx.push_default_inner_tx();
+            let BatchedTx { tx, cmt } = tx.batch_first_tx();
+
+            // Write the random masp key
+            let _ = state
+                .write_log_mut()
+                .write(&random_masp_key, "random_value".serialize_to_vec())
+                .unwrap();
+            let keys_changed = BTreeSet::from([random_masp_key.clone()]);
+
+            let gas_meter = RefCell::new(VpGasMeter::new_from_tx_meter(
+                &TxGasMeter::new(u64::MAX),
+            ));
+            let (vp_vp_cache, _vp_cache_dir) = vp_cache();
+            let ctx = Ctx::new(
+                &MASP,
+                &state,
+                &tx,
+                &cmt,
+                &tx_index,
+                &gas_meter,
+                &keys_changed,
+                &verifiers,
+                vp_vp_cache,
+            );
+
+            assert!(matches!(
+                MaspVp::validate_tx(
+                    &ctx,
+                    &tx.batch_ref_tx(&cmt),
+                    &keys_changed,
+                    &verifiers
+                ),
+                Err(Error::SimpleMessage(
+                    "Found modifications to non-allowed masp keys"
+                ))
+            ));
         }
     }
 }
