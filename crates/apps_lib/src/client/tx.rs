@@ -281,20 +281,27 @@ pub async fn submit_custom<N: Namada>(
 where
     <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
-    let custom_tx_data = args.build(namada).await?;
+    let (tx, signing_data) = args.build(namada).await?;
 
     if args.tx.dump_tx || args.tx.dump_wrapper_tx {
-        tx::dump_tx(namada.io(), &args.tx, custom_tx_data.0)?;
-    } else if args.tx.wrapper_signature.is_some() {
-        // Just submit without signing
-        namada.submit(custom_tx_data.0, &args.tx).await?;
-    } else {
+        return tx::dump_tx(namada.io(), &args.tx, tx);
+    }
+
+    if let Some(signing_data) = signing_data {
         let owners = args
             .owner
             .map_or_else(Default::default, |owner| vec![owner]);
         let refs: Vec<&Address> = owners.iter().collect();
-        batch_opt_reveal_pk_and_submit(namada, &args.tx, &refs, custom_tx_data)
-            .await?;
+        batch_opt_reveal_pk_and_submit(
+            namada,
+            &args.tx,
+            &refs,
+            (tx, signing_data),
+        )
+        .await?;
+    } else {
+        // Just submit without the need for signing
+        namada.submit(tx, &args.tx).await?;
     }
 
     Ok(())

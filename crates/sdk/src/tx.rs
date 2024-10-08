@@ -3732,25 +3732,13 @@ pub async fn build_custom(
         owner,
         disposable_signing_key,
     }: &args::TxCustom,
-) -> Result<(Tx, SigningTxData)> {
-    let default_signer = owner.clone();
-    let signing_data = signing::aux_signing_data(
-        context,
-        tx_args,
-        owner.clone(),
-        default_signer,
-        vec![],
-        *disposable_signing_key,
-    )
-    .await?;
-    let fee_amount = validate_fee(context, tx_args).await?;
-
+) -> Result<(Tx, Option<SigningTxData>)> {
     let mut tx = if let Some(serialized_tx) = serialized_tx {
         Tx::try_from_json_bytes(serialized_tx.as_ref()).map_err(|_| {
             Error::Other(
                 "Invalid tx deserialization. Please make sure you are passing \
                  a file in .tx format, typically produced from using the \
-                 `--dump-tx` flag."
+                 `--dump-tx` or `--dump-wrapper-tx` flag."
                     .to_string(),
             )
         })?
@@ -3777,7 +3765,49 @@ pub async fn build_custom(
     //    1. The tx loaded is of type Wrapper
     //    2. The user also provided the offline signatures for the inner
     //       transaction(s)
-    if tx_args.wrapper_signature.is_none() {
+    // The workflow is the following:
+    //    1. If no signatures were provide we generate a SigningTxData to sign
+    //       the tx
+    //    2. If only the inner sigs were provided we generate a SigningTxData
+    //       that will attach them and then sign the wrapper online
+    //    3. If the wrapper signature was provided then we also expect the inner
+    //       signature(s) to have been provided, in this case we attach all the
+    //       signatures here and return no SigningTxData
+    let signing_data = if let Some(wrapper_signature) =
+        &tx_args.wrapper_signature
+    {
+        // Attach the provided signatures to the tx without the need to produce
+        // any mroe signatures
+        let signatures = tx_args.signatures.iter().try_fold(
+            vec![],
+            |mut acc, bytes| -> Result<Vec<_>> {
+                let sig = SignatureIndex::try_from_json_bytes(bytes).map_err(
+                    |err| Error::Encode(EncodingError::Serde(err.to_string())),
+                )?;
+                acc.push(sig);
+                Ok(acc)
+            },
+        )?;
+        tx.add_signatures(signatures)
+            .add_section(Section::Authorization(
+                serde_json::from_slice(wrapper_signature).map_err(|err| {
+                    Error::Encode(EncodingError::Serde(err.to_string()))
+                })?,
+            ));
+        None
+    } else {
+        let default_signer = owner.clone();
+        let fee_amount = validate_fee(context, tx_args).await?;
+
+        let signing_data = signing::aux_signing_data(
+            context,
+            tx_args,
+            owner.clone(),
+            default_signer,
+            vec![],
+            *disposable_signing_key,
+        )
+        .await?;
         prepare_tx(
             tx_args,
             &mut tx,
@@ -3785,7 +3815,8 @@ pub async fn build_custom(
             signing_data.fee_payer.clone(),
         )
         .await?;
-    }
+        Some(signing_data)
+    };
 
     Ok((tx, signing_data))
 }

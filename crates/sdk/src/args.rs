@@ -226,7 +226,7 @@ impl TxCustom {
     pub async fn build(
         &self,
         context: &impl Namada,
-    ) -> crate::error::Result<(namada_tx::Tx, SigningTxData)> {
+    ) -> crate::error::Result<(namada_tx::Tx, Option<SigningTxData>)> {
         tx::build_custom(context, self).await
     }
 }
