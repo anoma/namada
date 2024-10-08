@@ -3736,11 +3736,11 @@ pub async fn build_custom(
         disposable_signing_key,
     }: &args::TxCustom,
 ) -> Result<(Tx, SigningTxData)> {
-    let default_signer = Some(owner.clone());
+    let default_signer = owner.clone();
     let signing_data = signing::aux_signing_data(
         context,
         tx_args,
-        Some(owner.clone()),
+        owner.clone(),
         default_signer,
         vec![],
         *disposable_signing_key,
