@@ -18,8 +18,9 @@ use namada_proof_of_stake::slashing::{
 };
 use namada_proof_of_stake::storage::{
     bond_handle, get_consensus_key, liveness_sum_missed_votes_handle,
-    read_active_validator_addresses, read_all_validator_addresses,
+    read_all_validator_addresses,
     read_below_capacity_validator_set_addresses_with_stake,
+    read_consensus_validator_set_addresses,
     read_consensus_validator_set_addresses_with_stake, read_pos_params,
     read_total_active_stake, read_total_stake, read_validator_avatar,
     read_validator_description, read_validator_discord_handle,
@@ -32,7 +33,8 @@ use namada_proof_of_stake::storage::{
 pub use namada_proof_of_stake::types::ValidatorStateInfo;
 use namada_proof_of_stake::types::{
     BondId, BondsAndUnbondsDetail, BondsAndUnbondsDetails, CommissionPair,
-    Slash, ValidatorMetaData, WeightedValidator,
+    LivenessInfo, Slash, ValidatorLiveness, ValidatorMetaData,
+    WeightedValidator,
 };
 use namada_proof_of_stake::{bond_amount, query_reward_tokens};
 use namada_state::{DBIter, KeySeg, StorageHasher, DB};
@@ -52,7 +54,7 @@ router! {POS,
         ( "addresses" / [epoch: opt Epoch] )
             -> HashSet<Address> = validator_addresses,
 
-        ( "livenesses" ) -> Vec<(Address, String, u64)> = validator_livenesses,
+        ( "liveness_info" ) -> LivenessInfo = liveness_info,
 
         ( "stake" / [validator: Address] / [epoch: opt Epoch] )
             -> Option<token::Amount> = validator_stake,
@@ -252,41 +254,43 @@ where
     read_all_validator_addresses(ctx.state, epoch)
 }
 
-/// Get all the validator livenesses.
-fn validator_livenesses<D, H, V, T>(
+/// Get liveness information for all consensus validators in the current epoch.
+fn liveness_info<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
-) -> namada_storage::Result<Vec<(Address, String, u64)>>
+) -> namada_storage::Result<LivenessInfo>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
     let epoch = ctx.state.in_mem().last_epoch;
+    let consensus_validators =
+        read_consensus_validator_set_addresses(ctx.state, epoch)?;
+    let params = read_pos_params::<_, governance::Store<_>>(ctx.state)?;
+
     let mut result = vec![];
-    let active_validator_set = read_active_validator_addresses::<
-        _,
-        governance::Store<_>,
-    >(ctx.state, epoch)?;
-    for validator_address in active_validator_set.iter() {
+    for validator in consensus_validators {
         if let Some(pubkey) = get_consensus_key::<_, governance::Store<_>>(
-            ctx.state,
-            validator_address,
-            epoch,
+            ctx.state, &validator, epoch,
         )? {
-            let tendermint_address = tm_consensus_key_raw_hash(&pubkey);
+            let comet_address = tm_consensus_key_raw_hash(&pubkey);
             let sum_liveness_handle = liveness_sum_missed_votes_handle();
-            if let Some(missed_counter) =
-                sum_liveness_handle.get(ctx.state, validator_address)?
+            if let Some(missed_votes) =
+                sum_liveness_handle.get(ctx.state, &validator)?
             {
-                result.push((
-                    validator_address.to_owned(),
-                    tendermint_address,
-                    missed_counter,
-                ))
+                result.push(ValidatorLiveness {
+                    native_address: validator,
+                    comet_address,
+                    missed_votes,
+                })
             }
         };
     }
 
-    Ok(result)
+    Ok(LivenessInfo {
+        liveness_window_len: params.liveness_window_check,
+        liveness_threshold: params.liveness_threshold,
+        validators: result,
+    })
 }
 
 /// Get the validator commission rate and max commission rate change per epoch
@@ -879,9 +883,11 @@ mod test {
         };
         let result = POS.handle(ctx, &request);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid Tendermint address"))
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid Tendermint address")
+        )
     }
 }
