@@ -4521,7 +4521,10 @@ pub mod args {
                         .def()
                         .help(wrap!("The path to the transaction's WASM code."))
                         .requires(DATA_PATH_OPT.name)
-                        .conflicts_with(TX_PATH_OPT.name),
+                        .conflicts_with_all([
+                            TX_PATH_OPT.name,
+                            WRAPPER_SIGNATURE_OPT.name,
+                        ]),
                 )
                 .arg(
                     DATA_PATH_OPT
@@ -4532,7 +4535,10 @@ pub mod args {
                              when it's executed."
                         ))
                         .requires(CODE_PATH_OPT.name)
-                        .conflicts_with(TX_PATH_OPT.name),
+                        .conflicts_with_all([
+                            TX_PATH_OPT.name,
+                            WRAPPER_SIGNATURE_OPT.name,
+                        ]),
                 )
                 .arg(
                     TX_PATH_OPT
@@ -4556,7 +4562,8 @@ pub mod args {
                         .def()
                         .help(wrap!(
                             "Generates an ephemeral, disposable keypair to \
-                             sign the wrapper transaction."
+                             sign the wrapper transaction. If --gas-signature \
+                             is provided then that will take precedence."
                         ))
                         .conflicts_with_all([
                             FEE_PAYER_OPT.name,
@@ -7468,6 +7475,7 @@ pub mod args {
                         "The file path containing a serialized signature of \
                          the entire transaction for gas payment."
                     ))
+                    .requires(SIGNATURES.name)
                     .conflicts_with(FEE_PAYER_OPT.name),
             )
             .arg(OUTPUT_FOLDER_PATH.def().help(wrap!(
