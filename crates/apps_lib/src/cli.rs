@@ -3588,7 +3588,7 @@ pub mod args {
     pub const WASM_DIR: ArgOpt<PathBuf> = arg_opt("wasm-dir");
     pub const WEBSITE_OPT: ArgOpt<String> = arg_opt("website");
     pub const WITH_INDEXER: ArgOpt<String> = arg_opt("with-indexer");
-    pub const WRAPPER_SIGNATURE: ArgOpt<PathBuf> = arg_opt("gas-signature");
+    pub const WRAPPER_SIGNATURE_OPT: ArgOpt<PathBuf> = arg_opt("gas-signature");
     pub const TX_PATH: Arg<PathBuf> = arg("tx-path");
     pub const TX_PATH_OPT: ArgOpt<PathBuf> = TX_PATH.opt();
     pub const DEVICE_TRANSPORT: ArgDefault<DeviceTransport> = arg_default(
@@ -4518,6 +4518,7 @@ pub mod args {
                     CODE_PATH_OPT
                         .def()
                         .help(wrap!("The path to the transaction's WASM code."))
+                        .requires(DATA_PATH_OPT.name)
                         .conflicts_with(TX_PATH_OPT.name),
                 )
                 .arg(
@@ -4544,6 +4545,7 @@ pub mod args {
                             DATA_PATH_OPT.name,
                         ]),
                 )
+                // FIXME: shouldn't this be OWENR_OPT in case of MASP txs?
                 .arg(OWNER.def().help(wrap!(
                     "The address corresponding to the signatures or signing \
                      keys."
@@ -4555,6 +4557,7 @@ pub mod args {
                             "Generates an ephemeral, disposable keypair to \
                              sign the wrapper transaction."
                         ))
+                        // FIXME: also conflict with wrapper signature here
                         .conflicts_with(FEE_PAYER_OPT.name),
                 )
         }
@@ -7456,7 +7459,7 @@ pub mod args {
                     .conflicts_with_all([SIGNING_KEYS.name]),
             )
             .arg(
-                WRAPPER_SIGNATURE
+                WRAPPER_SIGNATURE_OPT
                     .def()
                     .help(wrap!(
                         "The file path containing a serialized signature of \
@@ -7476,12 +7479,9 @@ pub mod args {
                          to the address associated to the first key passed to \
                          --signing-keys. If the specific transaction supports \
                          --disposable-signing-key, then this one will \
-                         overwrite this argument." /* FIXME: should I also
-                                                    * conflict with
-                                                    * diposable-signing-key
-                                                    * here? */
+                         overwrite this argument."
                     ))
-                    .conflicts_with(WRAPPER_SIGNATURE.name),
+                    .conflicts_with(WRAPPER_SIGNATURE_OPT.name),
             )
             .arg(
                 USE_DEVICE
@@ -7525,7 +7525,7 @@ pub mod args {
             let expiration = EXPIRATION_OPT.parse(matches);
             let signing_keys = SIGNING_KEYS.parse(matches);
             let signatures = SIGNATURES.parse(matches);
-            let wrapper_signature = WRAPPER_SIGNATURE.parse(matches);
+            let wrapper_signature = WRAPPER_SIGNATURE_OPT.parse(matches);
             let tx_reveal_code_path = PathBuf::from(TX_REVEAL_PK);
             let chain_id = CHAIN_ID_OPT.parse(matches);
             let password = None;

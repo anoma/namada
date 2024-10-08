@@ -301,8 +301,7 @@ where
 
     // Then try signing the wrapper header (fee payer). Check if there's a
     // provided wrapper signature, otherwise sign with the software wallet or
-    // use the fallback FIXME: signing_data.fee_payer must becoem optional
-    // cause the wrapper sig could come from the file!
+    // use the fallback
     if let Some(sig_bytes) = &args.wrapper_signature {
         let auth = serde_json::from_slice(sig_bytes)
             .map_err(|e| Error::Encode(EncodingError::Serde(e.to_string())))?;
