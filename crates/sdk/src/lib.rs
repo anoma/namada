@@ -592,7 +592,7 @@ pub trait Namada: NamadaIo {
     }
 
     /// Make a TxCustom builder from the given minimum set of arguments
-    fn new_custom(&self, owner: Address) -> args::TxCustom {
+    fn new_custom(&self, owner: Option<Address>) -> args::TxCustom {
         args::TxCustom {
             owner,
             tx: self.tx_builder(),

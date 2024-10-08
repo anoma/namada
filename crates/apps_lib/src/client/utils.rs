@@ -1066,7 +1066,7 @@ pub async fn sign_offline(
     let signatures = tx.compute_section_signature(
         &secret_keys,
         &account_public_keys_map,
-        Some(owner),
+        owner,
     );
 
     for signature in &signatures {

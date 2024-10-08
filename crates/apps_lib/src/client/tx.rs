@@ -286,13 +286,12 @@ where
     if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, custom_tx_data.0)?;
     } else {
-        batch_opt_reveal_pk_and_submit(
-            namada,
-            &args.tx,
-            &[&args.owner],
-            custom_tx_data,
-        )
-        .await?;
+        let owners = args
+            .owner
+            .map_or_else(Default::default, |owner| vec![owner]);
+        let refs: Vec<&Address> = owners.iter().collect();
+        batch_opt_reveal_pk_and_submit(namada, &args.tx, &refs, custom_tx_data)
+            .await?;
     }
 
     Ok(())

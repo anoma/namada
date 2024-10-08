@@ -4488,7 +4488,9 @@ pub mod args {
                 serialized_tx: self.serialized_tx.map(|path| {
                     std::fs::read(path).expect("Expected a file at given path")
                 }),
-                owner: ctx.borrow_chain_or_exit().get(&self.owner),
+                owner: self
+                    .owner
+                    .map(|owner| ctx.borrow_chain_or_exit().get(&owner)),
                 disposable_signing_key: self.disposable_signing_key,
             })
         }
@@ -4500,7 +4502,7 @@ pub mod args {
             let code_path = CODE_PATH_OPT.parse(matches);
             let data_path = DATA_PATH_OPT.parse(matches);
             let serialized_tx = TX_PATH_OPT.parse(matches);
-            let owner = OWNER.parse(matches);
+            let owner = OWNER_OPT.parse(matches);
             let disposable_signing_key = DISPOSABLE_SIGNING_KEY.parse(matches);
             Self {
                 tx,
@@ -4545,10 +4547,9 @@ pub mod args {
                             DATA_PATH_OPT.name,
                         ]),
                 )
-                // FIXME: shouldn't this be OWENR_OPT in case of MASP txs?
-                .arg(OWNER.def().help(wrap!(
-                    "The address corresponding to the signatures or signing \
-                     keys."
+                .arg(OWNER_OPT.def().help(wrap!(
+                    "The optional address corresponding to the signatures or \
+                     signing keys."
                 )))
                 .arg(
                     DISPOSABLE_SIGNING_KEY
@@ -4557,8 +4558,10 @@ pub mod args {
                             "Generates an ephemeral, disposable keypair to \
                              sign the wrapper transaction."
                         ))
-                        // FIXME: also conflict with wrapper signature here
-                        .conflicts_with(FEE_PAYER_OPT.name),
+                        .conflicts_with_all([
+                            FEE_PAYER_OPT.name,
+                            WRAPPER_SIGNATURE_OPT.name,
+                        ]),
                 )
         }
     }
@@ -8194,7 +8197,7 @@ pub mod args {
     pub struct SignOffline<C: NamadaTypes = SdkTypes> {
         pub tx_path: PathBuf,
         pub secret_keys: Vec<C::Keypair>,
-        pub owner: C::Address,
+        pub owner: Option<C::Address>,
         pub wrapper_signer: Option<C::Keypair>,
         pub output_folder_path: Option<PathBuf>,
     }
@@ -8203,7 +8206,7 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let tx_path = DATA_PATH.parse(matches);
             let secret_keys = PRIVATE_KEYS.parse(matches);
-            let owner = OWNER.parse(matches);
+            let owner = OWNER_OPT.parse(matches);
             let wrapper_signer = PRIVATE_KEY_OPT.parse(matches);
             let output_folder_path = OUTPUT_FOLDER_PATH.parse(matches);
 
@@ -8226,7 +8229,7 @@ pub mod args {
                 "The set of private keys to use to sign the transaction. The \
                  order matters."
             )))
-            .arg(OWNER.def().help(wrap!("The owner's address.")))
+            .arg(OWNER_OPT.def().help(wrap!("The optional owner's address.")))
             .arg(PRIVATE_KEY_OPT.def().help(
                 "The optional signer of the wrapper transaction for gas \
                  payment",
@@ -8255,7 +8258,7 @@ pub mod args {
                     .iter()
                     .map(|key| chain_ctx.get_cached(key))
                     .collect(),
-                owner: chain_ctx.get(&self.owner),
+                owner: self.owner.map(|owner| chain_ctx.get(&owner)),
                 wrapper_signer: self
                     .wrapper_signer
                     .map(|key| chain_ctx.get_cached(&key)),
