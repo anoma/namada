@@ -1716,8 +1716,6 @@ fn offline_sign() -> Result<()> {
                 "200000",
                 "--gas-price",
                 "1",
-                "--signing-keys",
-                BERTHA_KEY,
                 "--gas-payer",
                 CHRISTEL_KEY,
                 "--node",
@@ -1738,7 +1736,6 @@ fn offline_sign() -> Result<()> {
         .display()
         .to_string();
 
-    let bertha_address = find_address(&node, BERTHA).unwrap().to_string();
     let bertha_sk = find_keypair(&node, BERTHA_KEY).unwrap().to_string();
     let christel_sk = find_keypair(&node, CHRISTEL_KEY).unwrap().to_string();
 
@@ -1752,8 +1749,6 @@ fn offline_sign() -> Result<()> {
                 "sign-offline",
                 "--data-path",
                 &offline_tx,
-                "--owner",
-                &bertha_address,
                 "--secret-keys",
                 &bertha_sk,
                 "--secret-key",
@@ -1802,8 +1797,6 @@ fn offline_sign() -> Result<()> {
             Bin::Client,
             vec![
                 "tx",
-                "--owner",
-                BERTHA_KEY,
                 "--tx-path",
                 &offline_tx,
                 "--signatures",
