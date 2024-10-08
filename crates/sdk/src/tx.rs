@@ -3730,9 +3730,6 @@ pub async fn build_custom(
         data_path,
         serialized_tx,
         owner,
-        // FIXME: what about this if we are loading offlien wrapper sig? Should
-        // this take precedence? Maybe yes FIXME: actually, we also need
-        // to avoid signing this tx again once we return from here!
         disposable_signing_key,
     }: &args::TxCustom,
 ) -> Result<(Tx, SigningTxData)> {
@@ -3775,10 +3772,11 @@ pub async fn build_custom(
         tx
     };
 
-    // Wrap the tx only if it's not already
-    // FIXME: should we also check the actual type of the tx? Cause if we load
-    // it from code and data it's gonna be raw FIXME: probably better to
-    // make the two args conflict! Cannot it's in the tx args!
+    // Wrap the tx only if it's not already. If the user passed the argument for
+    // the wrapper signatures we also assume the followings:
+    //    1. The tx loaded is of type Wrapper
+    //    2. The user also provided the offline signatures for the inner
+    //       transaction(s)
     if tx_args.wrapper_signature.is_none() {
         prepare_tx(
             tx_args,

@@ -285,6 +285,9 @@ where
 
     if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, custom_tx_data.0)?;
+    } else if args.tx.wrapper_signature.is_some() {
+        // Just submit without signing
+        namada.submit(custom_tx_data.0, &args.tx).await?;
     } else {
         let owners = args
             .owner
