@@ -911,8 +911,8 @@ impl NamadaCmd {
             loop {
                 match abort_recv.try_recv() {
                     Ok(ControlCode::EndOfText) => {
-                        // Terminate the background task by dropping the
-                        // corresponding NamadaCmd
+                        // Terminate the background task
+                        let _result = cmd.session.send(ControlCode::EndOfText);
                         return None;
                     }
                     Ok(ControlCode::Enquiry)
