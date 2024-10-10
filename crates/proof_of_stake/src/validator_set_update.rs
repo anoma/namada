@@ -146,9 +146,10 @@ where
                         )?;
                 }
             } else if tokens_post < max_below_capacity_validator_amount {
-                tracing::debug!(
-                    "Demoting this validator to the below-capacity set and \
-                     promoting another to the consensus set"
+                tracing::info!(
+                    "Demoting this validator {validator} to the \
+                     below-capacity set and promoting another \
+                     {removed_max_below_capacity} to the consensus set"
                 );
                 // Place the validator into the below-capacity set and promote
                 // the lowest position max below-capacity
@@ -225,9 +226,10 @@ where
                 // Place the validator into the consensus set and demote the
                 // last position min consensus validator to the
                 // below-capacity set
-                tracing::debug!(
+                tracing::info!(
                     "Inserting validator into the consensus set and demoting \
-                     a consensus validator to the below-capacity set"
+                     a consensus validator to the below-capacity set. \
+                     Validator {validator} has a position"
                 );
 
                 insert_into_consensus_and_demote_to_below_cap::<S, Gov>(
@@ -241,7 +243,9 @@ where
                     &below_capacity_val_handle,
                 )?;
             } else if tokens_post >= params.validator_stake_threshold {
-                tracing::debug!("Validator remains in below-capacity set");
+                tracing::info!(
+                    "Validator {validator} remains in below-capacity set"
+                );
                 // The current validator should remain in the below-capacity set
                 insert_validator_into_set(
                     &below_capacity_val_handle.at(&tokens_post.into()),
@@ -286,6 +290,9 @@ where
         // Move the validator into the appropriate set
         let num_consensus_validators =
             get_num_consensus_validators(storage, epoch)?;
+        tracing::info!(
+            "Number of consensus validators {num_consensus_validators}"
+        );
         if num_consensus_validators < params.max_validator_slots {
             // Just insert into the consensus set
             tracing::debug!("Inserting validator into the consensus set");
@@ -311,9 +318,10 @@ where
             if tokens_post > min_consensus_validator_amount {
                 // Insert this validator into consensus and demote one into the
                 // below-capacity
-                tracing::debug!(
+                tracing::info!(
                     "Inserting validator into the consensus set and demoting \
-                     a consensus validator to the below-capacity set"
+                     a consensus validator to the below-capacity set. \
+                     Validator {validator} doesn't have a position"
                 );
 
                 insert_into_consensus_and_demote_to_below_cap::<S, Gov>(
@@ -328,8 +336,9 @@ where
                 )?;
             } else {
                 // Insert this validator into below-capacity
-                tracing::debug!(
-                    "Inserting validator into the below-capacity set"
+                tracing::info!(
+                    "Inserting validator {validator} into the below-capacity \
+                     set"
                 );
 
                 insert_validator_into_set(
@@ -371,6 +380,7 @@ where
 
     let num_consensus_validators =
         get_num_consensus_validators(storage, target_epoch)?;
+    tracing::info!("Number of consensus validators {num_consensus_validators}");
 
     if stake < params.validator_stake_threshold {
         validator_state_handle(address).set::<S, Gov>(
@@ -411,6 +421,10 @@ where
                 .expect(
                     "There must be always be at least 1 consensus validator",
                 );
+            tracing::info!(
+                "Replace the validator {removed} with {address} in consensus \
+                 set and insert {removed} into below-capacity set"
+            );
             // Insert last min consensus validator into the below-capacity set
             insert_validator_into_set(
                 &below_cap_set.at(&min_consensus_amount.into()),
@@ -440,6 +454,9 @@ where
             )?;
         } else {
             // Insert the current genesis validator into the below-capacity set
+            tracing::info!(
+                "Insert the validator {address} into below-capacity set"
+            );
             insert_validator_into_set(
                 &below_cap_set.at(&stake.into()),
                 storage,
@@ -917,6 +934,10 @@ where
         &offset_epoch,
         &removed_min_consensus,
     )?;
+    tracing::info!(
+        "Demote {removed_min_consensus} to below capacity, replaced by \
+         {validator}"
+    );
     validator_state_handle(&removed_min_consensus).set::<S, Gov>(
         storage,
         ValidatorState::BelowCapacity,
