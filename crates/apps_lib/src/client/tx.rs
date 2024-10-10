@@ -192,6 +192,42 @@ pub async fn sign<N: Namada>(
     Ok(())
 }
 
+pub async fn rework_batch_wrapper_signatures<N: Namada>(
+    context: &N,
+    tx: &mut Tx,
+    args: &args::Tx,
+    signing_data: SigningTxData,
+) -> Result<(), error::Error> {
+    // Setup a reusable context for signing transactions using the Ledger
+    if args.use_device {
+        let transport = WalletTransport::from_arg(args.device_transport);
+        let app = NamadaApp::new(transport);
+        let with_hw_data = (context.wallet_lock(), &app);
+        // Finally, begin the re-signing with the Ledger as backup
+        context
+            .rework_batch_wrapper_signatures(
+                tx,
+                args,
+                signing_data,
+                with_hardware_wallet::<N::WalletUtils, _>,
+                with_hw_data,
+            )
+            .await?;
+    } else {
+        // Otherwise re-sign without a backup procedure
+        context
+            .rework_batch_wrapper_signatures(
+                tx,
+                args,
+                signing_data,
+                default_sign,
+                (),
+            )
+            .await?;
+    }
+    Ok(())
+}
+
 // Build a transaction to reveal the signer of the given transaction.
 pub async fn submit_reveal_aux(
     context: &impl Namada,
@@ -234,6 +270,7 @@ where
     <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
     let mut batched_tx_data = vec![];
+    let wrapper_signing_data = tx_data.1.clone();
 
     for owner in owners {
         if let Some(reveal_pk_tx_data) =
@@ -249,6 +286,14 @@ where
     for sig_data in batched_signing_data {
         sign(namada, &mut batched_tx, args, sig_data).await?;
     }
+
+    rework_batch_wrapper_signatures(
+        namada,
+        &mut batched_tx,
+        args,
+        wrapper_signing_data,
+    )
+    .await?;
 
     namada.submit(batched_tx, args).await
 }
