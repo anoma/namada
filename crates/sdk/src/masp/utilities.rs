@@ -563,8 +563,8 @@ impl MaspClient for IndexerMaspClient {
 
         #[derive(Deserialize)]
         struct Note {
-            // masp_tx_index: u64,
             note_position: usize,
+            #[serde(rename = "masp_tx_index")]
             batch_index: u32,
             block_index: u32,
             block_height: u64,
