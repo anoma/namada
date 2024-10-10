@@ -1,6 +1,17 @@
+experimental = ["setup-scripts"]
+
 [profile.default]
 retries = 0
 
 [[profile.default.overrides]]
 filter = 'test(e2e::)'
 retries = 2
+
+[[profile.default.scripts]]
+filter = 'test(e2e::)'
+setup = ['e2e-kill-processes']
+
+[script.e2e-kill-processes]
+command = '.github/workflows/scripts/pre-e2e-test.sh'
+capture-stdout = true
+capture-stderr = false
