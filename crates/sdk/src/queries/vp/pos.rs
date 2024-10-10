@@ -274,15 +274,14 @@ where
         )? {
             let comet_address = tm_consensus_key_raw_hash(&pubkey);
             let sum_liveness_handle = liveness_sum_missed_votes_handle();
-            if let Some(missed_votes) =
-                sum_liveness_handle.get(ctx.state, &validator)?
-            {
-                result.push(ValidatorLiveness {
-                    native_address: validator,
-                    comet_address,
-                    missed_votes,
-                })
-            }
+            let missed_votes = sum_liveness_handle
+                .get(ctx.state, &validator)?
+                .unwrap_or_default();
+            result.push(ValidatorLiveness {
+                native_address: validator,
+                comet_address,
+                missed_votes,
+            })
         };
     }
 
