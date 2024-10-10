@@ -146,11 +146,6 @@ where
                         )?;
                 }
             } else if tokens_post < max_below_capacity_validator_amount {
-                tracing::info!(
-                    "Demoting this validator {validator} to the \
-                     below-capacity set and promoting another \
-                     {removed_max_below_capacity} to the consensus set"
-                );
                 // Place the validator into the below-capacity set and promote
                 // the lowest position max below-capacity
                 // validator.
@@ -164,6 +159,11 @@ where
                 let removed_max_below_capacity = below_capacity_vals_max
                     .remove(storage, &lowest_position)?
                     .expect("Must have been removed");
+                tracing::info!(
+                    "Demoting this validator {validator} to the \
+                     below-capacity set and promoting another \
+                     {removed_max_below_capacity} to the consensus set"
+                );
 
                 // Insert the previous max below-capacity validator into the
                 // consensus set
@@ -605,7 +605,7 @@ where
     let prev_consensus_validator_handle =
         consensus_validator_set_handle().at(&current_epoch);
 
-    tracing::debug!("Iterating over new consensus validators:");
+    tracing::info!("Iterating over new consensus validators:");
     let new_consensus_validators = new_consensus_validator_handle
         .iter(storage)?
         .map(|validator| {
@@ -617,7 +617,7 @@ where
                 address,
             ) = validator.unwrap();
 
-            tracing::debug!(
+            tracing::info!(
                 "Consensus validator address {address}, stake {}",
                 new_stake.to_string_native()
             );
@@ -645,7 +645,7 @@ where
                 && *prev_tm_voting_power == 0
                 && *new_tm_voting_power == 0
             {
-                tracing::debug!(
+                tracing::info!(
                     "Skipping CometBFT validator set update, {address} is in \
                      consensus set but without voting power"
                 );
@@ -665,7 +665,7 @@ where
                 .get(storage, current_epoch, params)
                 .unwrap();
 
-            tracing::debug!(
+            tracing::info!(
                 "{address} new consensus key {}",
                 new_consensus_key.tm_raw_hash()
             );
@@ -697,7 +697,7 @@ where
                     ),
                 ]
             } else if *prev_tm_voting_power == *new_tm_voting_power {
-                tracing::debug!(
+                tracing::info!(
                     "Skipping CometBFT validator set update; {address} \
                      remains in consensus set but voting power hasn't changed"
                 );
@@ -710,7 +710,7 @@ where
             }
         });
 
-    tracing::debug!("Iterating over previous consensus validators:");
+    tracing::info!("Iterating over previous consensus validators:");
     let prev_consensus_validators = prev_consensus_validator_handle
         .iter(storage)?
         .map(|validator| {
@@ -755,7 +755,7 @@ where
                 // If the new state is not Consensus but its prev voting power
                 // was 0 and the stake threshold is 0, we can also skip the
                 // update
-                tracing::debug!(
+                tracing::info!(
                     "Skipping CometBFT validator set update, {address} is in \
                      not in consensus set anymore, but it previously had no \
                      voting power"
@@ -765,14 +765,7 @@ where
 
             // The remaining validators were previously Consensus but no longer
             // are, so they must be deactivated
-            let new_consensus_key = validator_consensus_key_handle(&address)
-                .get(storage, next_epoch, params)
-                .unwrap()
-                .unwrap();
-            tracing::debug!(
-                "{address} new consensus key {}",
-                new_consensus_key.tm_raw_hash()
-            );
+            tracing::info!("{address} new state {:?}", new_state);
             vec![ValidatorSetUpdate::Deactivated(prev_consensus_key)]
         });
 
