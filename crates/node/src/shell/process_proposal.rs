@@ -445,7 +445,7 @@ where
                 {
                     return TxResult {
                         code: ResultCode::TxGasLimit.into(),
-                        info: "Wrapper transactions exceeds its gas limit"
+                        info: "Wrapper transaction exceeds its gas limit"
                             .to_string(),
                     };
                 }

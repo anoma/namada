@@ -102,7 +102,7 @@ pub enum TxSubmitError {
          instead: {0:?}"
     )]
     ExpectDryRun(Tx),
-    /// Expect a wrapped encrypted running transaction
+    /// Expect a wrapped running transaction
     #[error("Cannot broadcast a dry-run transaction")]
     ExpectWrappedRun(Tx),
     /// Expect a live running transaction
