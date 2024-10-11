@@ -597,12 +597,15 @@ mod test_process_proposal {
     };
     use namada_sdk::key::*;
     use namada_sdk::state::StorageWrite;
+    use namada_sdk::testing::arb_tampered_tx;
     use namada_sdk::token::{read_denom, Amount, DenominatedAmount};
     use namada_sdk::tx::data::Fee;
     use namada_sdk::tx::{Code, Data, Signed};
     use namada_vote_ext::{
         bridge_pool_roots, ethereum_events, validator_set_update,
     };
+    use proptest::test_runner::{Config, TestCaseError, TestRunner};
+    use proptest::{prop_assert, prop_assert_eq};
 
     use super::*;
     use crate::shell::test_utils::{
@@ -943,63 +946,109 @@ mod test_process_proposal {
     /// Test that a block including a wrapper tx with invalid signature is
     /// rejected
     #[test]
-    fn test_wrapper_bad_signature_rejected() {
+    // FIXME: need a test in finalize bloc kfor malleability of an inner tx doen
+    // by the wrapper signer (check both one that fails because of signature and
+    // one that fails because of indirect inclusion in tx data), this does not
+    // need to be proptest
+    fn test_wrapper_bad_signature() {
         let (shell, _recv, _, _) = test_utils::setup_at_height(3u64);
-        let keypair = gen_keypair();
-        let mut outer_tx =
-            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-                Fee {
-                    amount_per_gas_unit: DenominatedAmount::native(
-                        Amount::from_uint(100, 0).expect("Test failed"),
-                    ),
-                    token: shell.state.in_mem().native_token.clone(),
-                },
-                keypair.ref_to(),
-                GAS_LIMIT.into(),
-            ))));
-        outer_tx.header.chain_id = shell.chain_id.clone();
-        outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
-        outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        outer_tx.sign_wrapper(keypair);
-        let mut new_tx = outer_tx.clone();
-        if let TxType::Wrapper(wrapper) = &mut new_tx.header.tx_type {
-            // we mount a malleability attack to try and remove the fee
-            wrapper.fee.amount_per_gas_unit =
-                DenominatedAmount::native(Default::default());
-        } else {
-            panic!("Test failed")
-        };
-        let request = ProcessProposal {
-            txs: vec![new_tx.to_bytes()],
-        };
 
-        match shell.process_proposal(request) {
-            Ok(_) => panic!("Test failed"),
-            Err(TestError::RejectProposal(response)) => {
-                let response = if let [response] = response.as_slice() {
-                    response.clone()
-                } else {
-                    panic!("Test failed")
-                };
-                let expected_error = "WrapperTx signature verification \
-                                      failed: The wrapper signature is \
-                                      invalid.";
-                assert_eq!(
-                    response.result.code,
-                    u32::from(ResultCode::InvalidSig)
-                );
-                assert!(
-                    response.result.info.contains(expected_error),
-                    "Result info {} doesn't contain the expected error {}",
-                    response.result.info,
-                    expected_error
-                );
+        let mut runner = TestRunner::new(Config::default());
+        let result = runner.run(&arb_tampered_tx(), |tx| {
+            let request = ProcessProposal {
+                txs: vec![tx.to_bytes()],
+            };
+
+            match shell.process_proposal(request) {
+                Ok(_) => Err(TestCaseError::fail(
+                    "Tampered transaction was mistakenly accepted",
+                )),
+                Err(TestError::RejectProposal(response)) => {
+                    let response = if let [response] = response.as_slice() {
+                        response.clone()
+                    } else {
+                        return Err(TestCaseError::fail("Missing tx result"));
+                    };
+                    let expected_error = "WrapperTx signature verification \
+                                          failed: The wrapper signature is \
+                                          invalid.";
+                    prop_assert_eq!(
+                        response.result.code,
+                        u32::from(ResultCode::InvalidSig)
+                    );
+                    prop_assert!(
+                        response.result.info.contains(expected_error),
+                        "Result info {} doesn't contain the expected error {}",
+                        response.result.info,
+                        expected_error
+                    );
+
+                    Ok(())
+                }
             }
-        }
+        });
+
+        assert!(result.is_ok());
+
+        // FIXME: remove
+        // let keypair = gen_keypair();
+        // let mut outer_tx =
+        //     Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+        //         Fee {
+        //             amount_per_gas_unit: DenominatedAmount::native(
+        //                 Amount::from_uint(100, 0).expect("Test failed"),
+        //             ),
+        //             token: shell.state.in_mem().native_token.clone(),
+        //         },
+        //         keypair.ref_to(),
+        //         GAS_LIMIT.into(),
+        //     ))));
+        // outer_tx.header.chain_id = shell.chain_id.clone();
+        // outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned(),
+        // None)); outer_tx.set_data(Data::new("transaction
+        // data".as_bytes().to_owned()));
+        // outer_tx.sign_wrapper(keypair);
+        // let mut new_tx = outer_tx.clone();
+        // if let TxType::Wrapper(wrapper) = &mut new_tx.header.tx_type {
+        //     // we mount a malleability attack to try and remove the fee
+        //     wrapper.fee.amount_per_gas_unit =
+        //         DenominatedAmount::native(Default::default());
+        // } else {
+        //     panic!("Test failed")
+        // };
+        // let request = ProcessProposal {
+        //     txs: vec![new_tx.to_bytes()],
+        // };
+
+        // match shell.process_proposal(request) {
+        //     Ok(_) => panic!("Test failed"),
+        //     Err(TestError::RejectProposal(response)) => {
+        //         let response = if let [response] = response.as_slice() {
+        //             response.clone()
+        //         } else {
+        //             panic!("Test failed")
+        //         };
+        //         let expected_error = "WrapperTx signature verification \
+        //                               failed: The wrapper signature is \
+        //                               invalid.";
+        //         assert_eq!(
+        //             response.result.code,
+        //             u32::from(ResultCode::InvalidSig)
+        //         );
+        //         assert!(
+        //             response.result.info.contains(expected_error),
+        //             "Result info {} doesn't contain the expected error {}",
+        //             response.result.info,
+        //             expected_error
+        //         );
+        //     }
+        // }
     }
 
     /// Test that if the account submitting the tx is not known and the fee is
     /// non-zero, [`process_proposal`] rejects that block
+    // FIXME: what's the putpose of this test? It's the same as the one that
+    // follows, unless we try to change the fees here to 0
     #[test]
     fn test_wrapper_unknown_address() {
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
@@ -1149,7 +1198,7 @@ mod test_process_proposal {
         );
     }
 
-    /// Test that if the unsigned wrapper tx hash is known (replay attack), the
+    /// Test that if the uwrapper tx hash is known (replay attack), the
     /// block is rejected
     #[test]
     fn test_wrapper_tx_hash() {
@@ -1261,7 +1310,7 @@ mod test_process_proposal {
         }
     }
 
-    /// Test that if the unsigned inner tx hash is known (replay attack), the
+    /// Test that if the inner tx hash is known (replay attack), the
     /// block is rejected
     #[test]
     fn test_inner_tx_hash() {

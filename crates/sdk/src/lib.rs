@@ -857,6 +857,7 @@ pub mod testing {
     use ::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
     use borsh_ext::BorshSerializeExt;
     use governance::ProposalType;
+    use itertools::Itertools;
     use masp_primitives::transaction::components::sapling::builder::StoredBuildParams;
     use namada_account::{InitAccount, UpdateAccount};
     use namada_core::address::testing::{
@@ -971,7 +972,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        /// Generate an arbitrary uttf8 commitment
+        /// Generate an arbitrary utf8 commitment
         pub fn arb_utf8_commitment()(
             commitment in prop_oneof![
                 arb_hash().prop_map(Commitment::Hash),
@@ -1075,6 +1076,7 @@ pub mod testing {
                 chain_id,
                 expiration,
                 timestamp,
+                //FIXME: try to do this
                 //TODO: arbitrary number of commitments
                 batch: [TxCommitments{
                     data_hash,
@@ -1654,6 +1656,68 @@ pub mod testing {
                 tx.0.add_section(Section::Authorization(sig));
             }
             (tx.0, tx.1)
+        }
+    }
+
+    // An enumeration representing different ways to tamper with a transaction
+    #[derive(Debug, Clone)]
+    enum TamperTx {
+        RemoveSection,
+        AddExtraSection,
+        SwapSection,
+        SwapHeader,
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary signed wrapped tx that has been tampered with.
+        //FIXME: wait how's this thing working in the test? It could produce rando mchain ids and expirations. Ah it's because we do the check on the signature before everything else
+        //FIXME: it's ok leave it like this for the moment cause we still assert the correct error message, but maybe leave a note in the test
+        pub fn arb_tampered_tx()(tx1 in arb_signed_tx())(
+            tamper in prop_oneof![
+                Just(TamperTx::RemoveSection),
+                Just(TamperTx::AddExtraSection),
+                Just(TamperTx::SwapSection),
+                Just(TamperTx::SwapHeader)
+            ],
+            tx2 in arb_signed_tx(),
+            //FIXME: need this?
+            mut tx in Just(tx1),
+        ) -> Tx {
+            match tamper {
+               TamperTx::RemoveSection => {
+                    //FIXME: pick the section to tamper at random
+                            //FIXME: is it ok to pick any of the sections which are also in the header? yes but also change the commitment
+                    let idx = tx.0.sections.iter().find_position(|section| section.code_sec().is_some()).unwrap().0;
+                            tx.0.sections.remove(idx);
+
+                    tx.0
+
+                        },
+               TamperTx::AddExtraSection => {
+                    //FIXME: pick the section to tamper at random
+                    let code = tx2.0.get_section(tx2.0.first_commitments().unwrap().code_sechash()).unwrap().into_owned();
+                    tx.0.sections.push( code);
+
+                    tx.0
+
+                        },
+               TamperTx::SwapSection => {
+
+                    //FIXME: pick the section to tamper at random
+                    //FIXME: esnure that the swapped sections are different
+                    let idx = tx.0.sections.iter().find_position(|section| section.code_sec().is_some()).unwrap().0;
+                    let code = tx2.0.get_section(tx2.0.first_commitments().unwrap().code_sechash()).unwrap().into_owned();
+                    tx.0.sections[idx] = code;
+
+                    tx.0
+                        },
+               TamperTx::SwapHeader => {
+                            //FIXME: should we leave the original pk? Yes
+                            tx.0.update_header(tx2.0.header.tx_type);
+
+                            tx.0
+                },
+            }
         }
     }
 }
