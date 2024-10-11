@@ -50,6 +50,7 @@ fn handle_command(cmd: cli::cmds::Namada, raw_sub_cmd: String) -> Result<()> {
         | cli::cmds::Namada::TxShieldingTransfer(_)
         | cli::cmds::Namada::TxUnshieldingTransfer(_)
         | cli::cmds::Namada::TxIbcTransfer(_)
+        | cli::cmds::Namada::TxOsmosisSwap(_)
         | cli::cmds::Namada::TxUpdateAccount(_)
         | cli::cmds::Namada::TxRevealPk(_)
         | cli::cmds::Namada::TxInitProposal(_)
