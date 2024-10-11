@@ -988,6 +988,12 @@ fn run_hermes(test: &Test) -> Result<NamadaCmd> {
 }
 
 fn run_gaia(test: &Test) -> Result<NamadaCmd> {
+    // gaiad process is sometimes left lingering causing subsequent runs to fail
+    std::process::Command::new("pkill")
+        .args(["-9", "gaiad"])
+        .output()
+        .unwrap();
+
     let args = [
         "start",
         "--pruning",
