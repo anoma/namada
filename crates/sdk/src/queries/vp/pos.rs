@@ -267,7 +267,7 @@ where
         read_consensus_validator_set_addresses(ctx.state, epoch)?;
     let params = read_pos_params::<_, governance::Store<_>>(ctx.state)?;
 
-    let mut result = vec![];
+    let mut result = Vec::with_capacity(consensus_validators.len());
     for validator in consensus_validators {
         if let Some(pubkey) = get_consensus_key::<_, governance::Store<_>>(
             ctx.state, &validator, epoch,
