@@ -329,6 +329,28 @@ pub struct Redelegation {
     /// Redelegation amount
     pub amount: token::Amount,
 }
+
+/// Some liveness data for a consensus validator
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshDeserializer)]
+pub struct ValidatorLiveness {
+    /// Validator address
+    pub native_address: Address,
+    /// CometBFT address
+    pub comet_address: String,
+    /// Validator missed votes
+    pub missed_votes: u64,
+}
+
+/// Liveness data related to the network and set of consensus validators
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, BorshDeserializer)]
+pub struct LivenessInfo {
+    /// Length of liveness window
+    pub liveness_window_len: u64,
+    /// Liveness threshold
+    pub liveness_threshold: Dec,
+    /// Validators' liveness info
+    pub validators: Vec<ValidatorLiveness>,
+}
 // --------------------------------------------------------------------------------------------
 
 /// A genesis validator definition.
