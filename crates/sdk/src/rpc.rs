@@ -41,7 +41,7 @@ use namada_io::{display_line, edisplay_line, Client, Io};
 use namada_parameters::{storage as params_storage, EpochDuration};
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::types::{
-    BondsAndUnbondsDetails, CommissionPair, ValidatorMetaData,
+    BondsAndUnbondsDetails, CommissionPair, LivenessInfo, ValidatorMetaData,
     WeightedValidator,
 };
 use namada_state::LastBlock;
@@ -752,6 +752,13 @@ pub async fn get_all_validators<C: namada_io::Client + Sync>(
             .validator_addresses(client, &Some(epoch))
             .await,
     )
+}
+
+/// Get liveness info for all consensus validators in the current epoch
+pub async fn get_validators_liveness_info<C: namada_io::Client + Sync>(
+    client: &C,
+) -> Result<LivenessInfo, error::Error> {
+    convert_response::<C, _>(RPC.vp().pos().liveness_info(client).await)
 }
 
 /// Get all consensus validators in the given epoch

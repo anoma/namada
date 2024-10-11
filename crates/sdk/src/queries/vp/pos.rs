@@ -7,7 +7,7 @@ use namada_core::address::Address;
 use namada_core::arith::{self, checked};
 use namada_core::chain::Epoch;
 use namada_core::collections::{HashMap, HashSet};
-use namada_core::key::common;
+use namada_core::key::{common, tm_consensus_key_raw_hash};
 use namada_core::token;
 use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::queries::{
@@ -17,8 +17,10 @@ use namada_proof_of_stake::slashing::{
     find_all_enqueued_slashes, find_all_slashes,
 };
 use namada_proof_of_stake::storage::{
-    bond_handle, read_all_validator_addresses,
+    bond_handle, get_consensus_key, liveness_sum_missed_votes_handle,
+    read_all_validator_addresses,
     read_below_capacity_validator_set_addresses_with_stake,
+    read_consensus_validator_set_addresses,
     read_consensus_validator_set_addresses_with_stake, read_pos_params,
     read_total_active_stake, read_total_stake, read_validator_avatar,
     read_validator_description, read_validator_discord_handle,
@@ -31,7 +33,8 @@ use namada_proof_of_stake::storage::{
 pub use namada_proof_of_stake::types::ValidatorStateInfo;
 use namada_proof_of_stake::types::{
     BondId, BondsAndUnbondsDetail, BondsAndUnbondsDetails, CommissionPair,
-    Slash, ValidatorMetaData, WeightedValidator,
+    LivenessInfo, Slash, ValidatorLiveness, ValidatorMetaData,
+    WeightedValidator,
 };
 use namada_proof_of_stake::{bond_amount, query_reward_tokens};
 use namada_state::{DBIter, KeySeg, StorageHasher, DB};
@@ -50,6 +53,8 @@ router! {POS,
 
         ( "addresses" / [epoch: opt Epoch] )
             -> HashSet<Address> = validator_addresses,
+
+        ( "liveness_info" ) -> LivenessInfo = liveness_info,
 
         ( "stake" / [validator: Address] / [epoch: opt Epoch] )
             -> Option<token::Amount> = validator_stake,
@@ -247,6 +252,44 @@ where
 {
     let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
     read_all_validator_addresses(ctx.state, epoch)
+}
+
+/// Get liveness information for all consensus validators in the current epoch.
+fn liveness_info<D, H, V, T>(
+    ctx: RequestCtx<'_, D, H, V, T>,
+) -> namada_storage::Result<LivenessInfo>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    let epoch = ctx.state.in_mem().last_epoch;
+    let consensus_validators =
+        read_consensus_validator_set_addresses(ctx.state, epoch)?;
+    let params = read_pos_params::<_, governance::Store<_>>(ctx.state)?;
+
+    let mut result = Vec::with_capacity(consensus_validators.len());
+    for validator in consensus_validators {
+        if let Some(pubkey) = get_consensus_key::<_, governance::Store<_>>(
+            ctx.state, &validator, epoch,
+        )? {
+            let comet_address = tm_consensus_key_raw_hash(&pubkey);
+            let sum_liveness_handle = liveness_sum_missed_votes_handle();
+            let missed_votes = sum_liveness_handle
+                .get(ctx.state, &validator)?
+                .unwrap_or_default();
+            result.push(ValidatorLiveness {
+                native_address: validator,
+                comet_address,
+                missed_votes,
+            })
+        };
+    }
+
+    Ok(LivenessInfo {
+        liveness_window_len: params.liveness_window_check,
+        liveness_threshold: params.liveness_threshold,
+        validators: result,
+    })
 }
 
 /// Get the validator commission rate and max commission rate change per epoch
