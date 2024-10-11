@@ -729,23 +729,23 @@ impl MockNode {
         locked.commit();
     }
 
-    /// Check that applying a tx succeeded.
-    pub fn success(&self) -> bool {
-        self.tx_result_codes
-            .lock()
-            .unwrap()
-            .iter()
-            .all(|r| *r == NodeResults::Ok)
-            && self
-                .tx_results
-                .lock()
-                .unwrap()
+    // Check that applying a tx succeeded.
+    fn success(&self) -> bool {
+        let tx_result_codes = self.tx_result_codes.lock().unwrap();
+        let tx_results = self.tx_results.lock().unwrap();
+
+        // If results are empty return false to avoid silently ignoring missing
+        // results
+        !tx_result_codes.is_empty()
+            && !tx_results.is_empty()
+            && tx_result_codes.iter().all(|r| *r == NodeResults::Ok)
+            && tx_results
                 .iter()
                 .all(|inner_results| inner_results.are_results_successfull())
     }
 
-    /// Return a tx result if the tx failed in mempool
-    pub fn is_broadcast_err(&self) -> Option<TxResult> {
+    // Return a tx result if the tx failed in mempool
+    fn is_broadcast_err(&self) -> Option<TxResult> {
         self.tx_result_codes
             .lock()
             .unwrap()
@@ -761,6 +761,12 @@ impl MockNode {
         self.tx_results.lock().unwrap().clear();
     }
 
+    /// WARNING: use this function only if you went through one of the methods
+    /// of `MockNode` to execute your tx (such as finalize_and_commit). If you
+    /// just submitted a tx using the Client command avoid calling this function
+    /// (which would return false since the support fields of MockNode would not
+    /// be populated or would be populated with stale data) and rely instead on
+    /// examining the captured output of your command.
     pub fn assert_success(&self) {
         if !self.success() {
             panic!(
