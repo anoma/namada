@@ -899,7 +899,7 @@ pub mod testing {
         arb_withdraw,
     };
     use crate::tx::{
-        Authorization, Code, Commitment, Data, Header, MaspBuilder, Section,
+        Authorization, Code, Commitment, Header, MaspBuilder, Section,
         TxCommitments,
     };
 
@@ -1656,20 +1656,65 @@ pub mod testing {
         }
     }
 
+    // An enumeration representing different ways to tamper with a transaction
+    #[derive(Debug, Clone)]
+    enum TamperTx {
+        RemoveSection,
+        AddExtraSection,
+        SwapSection,
+        SwapHeader,
+    }
+
     prop_compose! {
-        /// Generate an arbitrary signed wrapped tx that has been tampered with
+        /// Generate an arbitrary signed wrapped tx that has been tampered with.
+        //FIXME: wait how's this thing working in the test? It could produce rando mchain ids and expirations. Ah it's because we do the check on the signature before everything else
+        //FIXME: it's ok leave it like this for the moment cause we still assert the correct error message, but maybe leave a note in the test
         pub fn arb_tampered_tx()(tx1 in arb_signed_tx())(
+            tamper in prop_oneof![
+                Just(TamperTx::RemoveSection),
+                Just(TamperTx::AddExtraSection),
+                Just(TamperTx::SwapSection),
+                Just(TamperTx::SwapHeader)
+            ],
             tx2 in arb_signed_tx(),
+            //FIXME: need this?
             mut tx in Just(tx1),
         ) -> Tx {
-        //FIXME: essentially I need to compose this with another prop that generates either a section and I should try to add that section, remove a random section or swap it and check that the signature is always invalid
-            //FIXME: pick the section to tamper at random
-            //FIXME: esnure that the swapped sections are different
-            let idx = tx.0.sections.iter().find_position(|section| section.code_sec().is_some()).unwrap().0;
-            let code = tx2.0.get_section(tx2.0.first_commitments().unwrap().code_sechash()).unwrap().into_owned();
-            tx.0.sections[idx] = code;
+            match tamper {
+               TamperTx::RemoveSection => {
+                    //FIXME: pick the section to tamper at random
+                            //FIXME: is it ok to pick any of the sections which are also in the header? yes but also change the commitment
+                    let idx = tx.0.sections.iter().find_position(|section| section.code_sec().is_some()).unwrap().0;
+                            tx.0.sections.remove(idx);
 
-            tx.0
+                    tx.0
+
+                        },
+               TamperTx::AddExtraSection => {
+                    //FIXME: pick the section to tamper at random
+                    let code = tx2.0.get_section(tx2.0.first_commitments().unwrap().code_sechash()).unwrap().into_owned();
+                    tx.0.sections.push( code);
+
+                    tx.0
+
+                        },
+               TamperTx::SwapSection => {
+
+                    //FIXME: pick the section to tamper at random
+                    //FIXME: esnure that the swapped sections are different
+                    let idx = tx.0.sections.iter().find_position(|section| section.code_sec().is_some()).unwrap().0;
+                    let code = tx2.0.get_section(tx2.0.first_commitments().unwrap().code_sechash()).unwrap().into_owned();
+                    tx.0.sections[idx] = code;
+
+                    tx.0
+                        },
+               TamperTx::SwapHeader => {
+                            //FIXME: should we leave the original pk? Yes
+                            tx.0.update_header(tx2.0.header.tx_type);
+
+                            tx.0
+                },
+            }
         }
     }
 }
