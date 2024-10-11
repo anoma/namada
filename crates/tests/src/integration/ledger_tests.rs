@@ -736,7 +736,7 @@ fn proposal_submission() -> Result<()> {
         "--data-path",
         valid_proposal_json_path.to_str().unwrap(),
         "--gas-limit",
-        "10000000",
+        "11000000",
         "--node",
         &validator_one_rpc,
     ]);
@@ -1474,7 +1474,7 @@ fn implicit_account_reveal_pk() -> Result<()> {
                 "--signing-keys",
                 source,
                 "--gas-limit",
-                "3500000",
+                "11000000",
                 "--node",
                 &validator_one_rpc,
             ]
@@ -1556,8 +1556,10 @@ fn implicit_account_reveal_pk() -> Result<()> {
             "--node",
             &validator_one_rpc,
         ]);
-        run(&node, Bin::Client, credit_args)?;
-        node.assert_success();
+        let captured =
+            CapturedOutput::of(|| run(&node, Bin::Client, credit_args));
+        assert!(captured.result.is_ok());
+        assert!(captured.contains(TX_APPLIED_SUCCESS));
 
         // 2c. Submit the tx with the implicit account as the source.
         let captured = CapturedOutput::of(|| {
@@ -1580,7 +1582,8 @@ fn implicit_account_reveal_pk() -> Result<()> {
             )
         });
         assert!(!captured.contains("Submitting a tx to reveal the public key"));
-        node.assert_success();
+        assert!(captured.result.is_ok());
+        assert!(captured.contains(TX_APPLIED_SUCCESS));
     }
 
     Ok(())
@@ -1839,7 +1842,7 @@ fn enforce_fee_payment() -> Result<()> {
             validator_one_rpc,
         ]),
     )?;
-    node.assert_success();
+    assert!(captured.result.is_ok());
     let file_path = tempdir
         .path()
         .read_dir()
@@ -1873,7 +1876,7 @@ fn enforce_fee_payment() -> Result<()> {
             validator_one_rpc,
         ]),
     )?;
-    node.assert_success();
+    assert!(captured.result.is_ok());
     let file_path = tempdir
         .path()
         .read_dir()
