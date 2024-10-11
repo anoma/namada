@@ -162,8 +162,8 @@ pub struct TxCustom<C: NamadaTypes = SdkTypes> {
     pub data_path: Option<C::Data>,
     /// Path to the serialized transaction
     pub serialized_tx: Option<C::Data>,
-    /// The address that correspond to the signatures/signing-keys
-    pub owner: C::Address,
+    /// The optional address that correspond to the signatures/signing-keys
+    pub owner: Option<C::Address>,
     /// Generate an ephemeral signing key to be used only once to sign the
     /// wrapper tx
     pub disposable_signing_key: bool,
@@ -207,7 +207,7 @@ impl<C: NamadaTypes> TxCustom<C> {
     }
 
     /// The address that correspond to the signatures/signing-keys
-    pub fn owner(self, owner: C::Address) -> Self {
+    pub fn owner(self, owner: Option<C::Address>) -> Self {
         Self { owner, ..self }
     }
 
@@ -226,7 +226,7 @@ impl TxCustom {
     pub async fn build(
         &self,
         context: &impl Namada,
-    ) -> crate::error::Result<(namada_tx::Tx, SigningTxData)> {
+    ) -> crate::error::Result<(namada_tx::Tx, Option<SigningTxData>)> {
         tx::build_custom(context, self).await
     }
 }
@@ -2148,8 +2148,6 @@ pub struct SignTx<C: NamadaTypes = SdkTypes> {
     pub tx_data: C::Data,
     /// The account address
     pub owner: C::Address,
-    /// Flag to request a disposable signer of the wrapper transaction
-    pub disposable_signing_key: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -2307,8 +2305,10 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     pub dry_run: bool,
     /// Simulate applying both the wrapper and inner transactions
     pub dry_run_wrapper: bool,
-    /// Dump the transaction bytes to file
+    /// Dump the raw transaction bytes to file
     pub dump_tx: bool,
+    /// Dump the wrapper transaction bytes to file
+    pub dump_wrapper_tx: bool,
     /// The output directory path to where serialize the data
     pub output_folder: Option<PathBuf>,
     /// Submit the transaction even if it doesn't pass client checks
@@ -2339,6 +2339,8 @@ pub struct Tx<C: NamadaTypes = SdkTypes> {
     pub signing_keys: Vec<C::PublicKey>,
     /// List of signatures to attach to the transaction
     pub signatures: Vec<C::Data>,
+    /// Optional path to a serialized wrapper signature
+    pub wrapper_signature: Option<C::Data>,
     /// Path to the TX WASM code file to reveal PK
     pub tx_reveal_code_path: PathBuf,
     /// Password to decrypt key
