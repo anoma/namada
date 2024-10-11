@@ -8,22 +8,11 @@ use std::time::Duration;
 
 use borsh::BorshSerialize;
 use borsh_ext::BorshSerializeExt;
-use masp_primitives::asset_type::AssetType;
-use masp_primitives::transaction::builder::Builder;
-use masp_primitives::transaction::components::sapling::fees::{
-    ConvertView, InputView as SaplingInputView, OutputView as SaplingOutputView,
-};
-use masp_primitives::transaction::components::transparent::fees::{
-    InputView as TransparentInputView, OutputView as TransparentOutputView,
-};
-use masp_primitives::transaction::components::I128Sum;
-use masp_primitives::transaction::{builder, Transaction as MaspTransaction};
+use masp_primitives::transaction::Transaction as MaspTransaction;
 use namada_account::{InitAccount, UpdateAccount};
 use namada_core::address::{Address, IBC, MASP};
 use namada_core::arith::checked;
 use namada_core::chain::Epoch;
-use namada_core::collections::HashSet;
-use namada_core::dec::Dec;
 use namada_core::hash::Hash;
 use namada_core::ibc::apps::nft_transfer::types::msgs::transfer::MsgTransfer as IbcMsgNftTransfer;
 use namada_core::ibc::apps::nft_transfer::types::packet::PacketData as NftPacketData;
@@ -38,9 +27,7 @@ use namada_core::ibc::core::client::types::Height as IbcHeight;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::ibc::primitives::Timestamp as IbcTimestamp;
 use namada_core::key::{self, *};
-use namada_core::masp::{
-    AssetData, ExtendedSpendingKey, MaspEpoch, TransferSource, TransferTarget,
-};
+use namada_core::masp::{MaspEpoch, TransferSource, TransferTarget};
 use namada_core::storage;
 use namada_core::time::DateTimeUtc;
 use namada_governance::cli::onchain::{
@@ -59,14 +46,11 @@ use namada_proof_of_stake::parameters::{
     PosParams, MAX_VALIDATOR_METADATA_LEN,
 };
 use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
-use namada_token as token;
 use namada_token::masp::shielded_wallet::ShieldedApi;
-use namada_token::masp::TransferErr::Build;
-use namada_token::masp::{
-    MaspDataLog, MaspFeeData, MaspTransferData, ShieldedTransfer,
-};
+use namada_token::masp::{MaspTransferData, ShieldedTransfer};
 use namada_token::storage_key::balance_key;
 use namada_token::DenominatedAmount;
+use namada_token::{self as token, Dec};
 use namada_tx::data::pgf::UpdateStewardCommission;
 use namada_tx::data::pos::{BecomeValidator, ConsensusKeyChange};
 use namada_tx::data::{
@@ -77,8 +61,7 @@ use num_traits::Zero;
 use rand_core::{OsRng, RngCore};
 
 use crate::args::{
-    SdkTypes, TxShieldedTransferData, TxShieldingTransferData,
-    TxTransparentTransferData, TxUnshieldingTransferData,
+    TxShieldedTransferData, TxShieldingTransferData, TxTransparentTransferData,
 };
 use crate::control_flow::time;
 use crate::error::{EncodingError, Error, QueryError, Result, TxSubmitError};
@@ -91,6 +74,11 @@ use crate::signing::{
 };
 use crate::tendermint_rpc::endpoint::broadcast::tx_sync::Response;
 use crate::tendermint_rpc::error::Error as RpcError;
+use crate::tx_unshield::{
+    add_fee_data, add_shielded_parts_fn, add_transfer_data,
+    construct_shielded_parts, fee_data, get_masp_fee_payment_amount,
+    signing_data, validate_amounts,
+};
 use crate::wallet::WalletIo;
 use crate::{args, Namada};
 
@@ -2790,7 +2778,7 @@ pub async fn build_ibc_transfer(
 
 /// Abstraction for helping build transactions
 #[allow(clippy::too_many_arguments)]
-async fn build<F, D>(
+pub async fn build<F, D>(
     context: &impl Namada,
     tx_args: &crate::args::Tx,
     path: PathBuf,
@@ -2825,61 +2813,6 @@ where
 
     prepare_tx(tx_args, &mut tx_builder, fee_amount, gas_payer.clone()).await?;
     Ok(tx_builder)
-}
-
-/// Try to decode the given asset type and add its decoding to the supplied set.
-/// Returns true only if a new decoding has been added to the given set.
-async fn add_asset_type(
-    asset_types: &mut HashSet<AssetData>,
-    context: &impl Namada,
-    asset_type: AssetType,
-) -> bool {
-    if let Some(asset_type) = context
-        .shielded_mut()
-        .await
-        .decode_asset_type(context.client(), asset_type)
-        .await
-    {
-        asset_types.insert(asset_type)
-    } else {
-        false
-    }
-}
-
-/// Collect the asset types used in the given Builder and decode them. This
-/// function provides the data necessary for offline wallets to present asset
-/// type information.
-async fn used_asset_types<P, K, N>(
-    context: &impl Namada,
-    builder: &Builder<P, K, N>,
-) -> std::result::Result<HashSet<AssetData>, RpcError> {
-    let mut asset_types = HashSet::new();
-    // Collect all the asset types used in the Sapling inputs
-    for input in builder.sapling_inputs() {
-        add_asset_type(&mut asset_types, context, input.asset_type()).await;
-    }
-    // Collect all the asset types used in the transparent inputs
-    for input in builder.transparent_inputs() {
-        add_asset_type(&mut asset_types, context, input.coin().asset_type())
-            .await;
-    }
-    // Collect all the asset types used in the Sapling outputs
-    for output in builder.sapling_outputs() {
-        add_asset_type(&mut asset_types, context, output.asset_type()).await;
-    }
-    // Collect all the asset types used in the transparent outputs
-    for output in builder.transparent_outputs() {
-        add_asset_type(&mut asset_types, context, output.asset_type()).await;
-    }
-    // Collect all the asset types used in the Sapling converts
-    for output in builder.sapling_converts() {
-        for (asset_type, _) in
-            I128Sum::from(output.conversion().clone()).components()
-        {
-            add_asset_type(&mut asset_types, context, *asset_type).await;
-        }
-    }
-    Ok(asset_types)
 }
 
 /// Constructs the batched tx from the provided list. Returns also the data for
@@ -3140,37 +3073,6 @@ pub async fn build_shielded_transfer<N: Namada>(
     Ok((tx, signing_data))
 }
 
-// Check if the transaction will need to pay fees via the masp and extract the
-// right masp data
-async fn get_masp_fee_payment_amount<N: Namada>(
-    context: &N,
-    args: &args::Tx<SdkTypes>,
-    fee_amount: DenominatedAmount,
-    fee_payer: &common::PublicKey,
-    gas_spending_keys: Vec<ExtendedSpendingKey>,
-) -> Result<Option<MaspFeeData>> {
-    let fee_payer_address = Address::from(fee_payer);
-    let balance_key = balance_key(&args.fee_token, &fee_payer_address);
-    #[allow(clippy::disallowed_methods)]
-    let balance = rpc::query_storage_value::<_, token::Amount>(
-        context.client(),
-        &balance_key,
-    )
-    .await
-    .unwrap_or_default();
-    let total_fee = checked!(fee_amount.amount() * u64::from(args.gas_limit))?;
-
-    Ok(match total_fee.checked_sub(balance) {
-        Some(diff) if !diff.is_zero() => Some(MaspFeeData {
-            sources: gas_spending_keys,
-            target: fee_payer_address,
-            token: args.fee_token.clone(),
-            amount: DenominatedAmount::new(diff, fee_amount.denom()),
-        }),
-        _ => None,
-    })
-}
-
 /// Build a shielding transfer
 pub async fn build_shielding_transfer<N: Namada>(
     context: &N,
@@ -3313,70 +3215,23 @@ pub async fn build_unshielding_transfer<N: Namada>(
     context: &N,
     args: &mut args::TxUnshieldingTransfer,
 ) -> Result<(Tx, SigningTxData)> {
-    let signing_data = signing::aux_signing_data(
-        context,
-        &args.tx,
-        Some(MASP),
-        Some(MASP),
-        vec![],
-        args.disposable_signing_key,
-    )
-    .await?;
+    // START: Stuff that can run without the spending key
+    let amounts = validate_amounts(context, &args.data, args.tx.force).await?;
+    let signing_data =
+        signing_data(context, &args.tx, args.disposable_signing_key).await?;
+    let (fee_per_gas_unit, masp_fee_data) =
+        fee_data(context, args, &signing_data).await?;
+    // END: Stuff that can run without the spending key
 
-    // Shielded fee payment
-    let fee_per_gas_unit = validate_fee(context, &args.tx).await?;
+    // START: Stuff that can run with the spending key but without RPC client
+    let transfer_data = vec![];
+    let data = token::Transfer::default();
+    let (data, transfer_data) =
+        add_transfer_data(args.source, amounts, data, transfer_data).await?;
 
-    let mut transfer_data = vec![];
-    let mut data = token::Transfer::default();
-    for TxUnshieldingTransferData {
-        target,
-        token,
-        amount,
-    } in &args.data
-    {
-        // Validate the amount given
-        let validated_amount =
-            validate_amount(context, amount.to_owned(), token, args.tx.force)
-                .await?;
+    let data = add_fee_data(&masp_fee_data, data)?;
 
-        transfer_data.push(MaspTransferData {
-            source: TransferSource::ExtendedSpendingKey(args.source),
-            target: TransferTarget::Address(target.to_owned()),
-            token: token.to_owned(),
-            amount: validated_amount,
-        });
-
-        data = data
-            .transfer(
-                MASP,
-                target.to_owned(),
-                token.to_owned(),
-                validated_amount,
-            )
-            .ok_or(Error::Other("Combined transfer overflows".to_string()))?;
-    }
-
-    // Add masp fee payment if necessary
-    let masp_fee_data = get_masp_fee_payment_amount(
-        context,
-        &args.tx,
-        fee_per_gas_unit,
-        &signing_data.fee_payer,
-        args.gas_spending_keys.clone(),
-    )
-    .await?;
-    if let Some(fee_data) = &masp_fee_data {
-        // Add another unshield to the list
-        data = data
-            .transfer(
-                MASP,
-                fee_data.target.to_owned(),
-                fee_data.token.to_owned(),
-                fee_data.amount,
-            )
-            .ok_or(Error::Other("Combined transfer overflows".to_string()))?;
-    }
-
+    // This needs to be refactored
     let shielded_parts = construct_shielded_parts(
         context,
         transfer_data,
@@ -3386,35 +3241,10 @@ pub async fn build_unshielding_transfer<N: Namada>(
     )
     .await?
     .expect("Shielding transfer must have shielded parts");
+    // END: Stuff that can run with the spending key but without RPC client
 
-    let add_shielded_parts = |tx: &mut Tx, data: &mut token::Transfer| {
-        // Add the MASP Transaction and its Builder to facilitate validation
-        let (
-            ShieldedTransfer {
-                builder,
-                masp_tx,
-                metadata,
-                epoch: _,
-            },
-            asset_types,
-        ) = shielded_parts;
-        // Add a MASP Transaction section to the Tx and get the tx hash
-        let shielded_section_hash = tx.add_masp_tx_section(masp_tx).1;
-
-        tx.add_masp_builder(MaspBuilder {
-            asset_types,
-            // Store how the Info objects map to Descriptors/Outputs
-            metadata,
-            // Store the data that was used to construct the Transaction
-            builder,
-            // Link the Builder to the Transaction by hash code
-            target: shielded_section_hash,
-        });
-
-        data.shielded_section_hash = Some(shielded_section_hash);
-        tracing::debug!("Transfer data {data:?}");
-        Ok(())
-    };
+    // START: Stuff that can run without the spending key
+    let add_shielded_parts = add_shielded_parts_fn(shielded_parts);
 
     let tx = build(
         context,
@@ -3426,79 +3256,9 @@ pub async fn build_unshielding_transfer<N: Namada>(
         &signing_data.fee_payer,
     )
     .await?;
+    // END: Stuff that can run without the spending key
+
     Ok((tx, signing_data))
-}
-
-// Construct the shielded part of the transaction, if any
-async fn construct_shielded_parts<N: Namada>(
-    context: &N,
-    data: Vec<MaspTransferData>,
-    fee_data: Option<MaspFeeData>,
-    update_ctx: bool,
-    expiration: Option<DateTimeUtc>,
-) -> Result<Option<(ShieldedTransfer, HashSet<AssetData>)>> {
-    // Precompute asset types to increase chances of success in decoding
-    let token_map = context.wallet().await.get_addresses();
-    let tokens = token_map.values().collect();
-
-    let stx_result = {
-        let mut shielded = context.shielded_mut().await;
-        _ = shielded
-            .precompute_asset_types(context.client(), tokens)
-            .await;
-
-        shielded
-            .gen_shielded_transfer(
-                context, data, fee_data, expiration, update_ctx,
-            )
-            .await
-    };
-
-    let shielded_parts = match stx_result {
-        Ok(Some(stx)) => stx,
-        Ok(None) => return Ok(None),
-        Err(Build {
-            error: builder::Error::InsufficientFunds(_),
-            data,
-        }) => {
-            if let Some(MaspDataLog {
-                source,
-                token,
-                amount,
-            }) = data
-            {
-                if let Some(source) = source {
-                    return Err(TxSubmitError::NegativeBalanceAfterTransfer(
-                        Box::new(source.effective_address()),
-                        amount.to_string(),
-                        Box::new(token.clone()),
-                    )
-                    .into());
-                }
-                return Err(TxSubmitError::MaspError(format!(
-                    "Insufficient funds: Could not collect enough funds to \
-                     pay for fees: token {token}, amount: {amount}"
-                ))
-                .into());
-            }
-            return Err(TxSubmitError::MaspError(
-                "Insufficient funds".to_string(),
-            )
-            .into());
-        }
-        Err(err) => {
-            return Err(TxSubmitError::MaspError(err.to_string()).into());
-        }
-    };
-
-    // Get the decoded asset types used in the transaction to give offline
-    // wallet users more information
-    #[allow(clippy::disallowed_methods)]
-    let asset_types = used_asset_types(context, &shielded_parts.builder)
-        .await
-        .unwrap_or_default();
-
-    Ok(Some((shielded_parts, asset_types)))
 }
 
 /// Submit a transaction to initialize an account

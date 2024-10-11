@@ -79,7 +79,7 @@ pub struct ShieldedTransfer {
 
 /// The data for a masp fee payment
 #[allow(missing_docs)]
-#[derive(Debug)]
+#[derive(Debug, BorshSerialize, BorshDeserialize, BorshDeserializer)]
 pub struct MaspFeeData {
     pub sources: Vec<ExtendedSpendingKey>,
     pub target: Address,
@@ -89,7 +89,7 @@ pub struct MaspFeeData {
 
 /// The data for a single masp transfer
 #[allow(missing_docs)]
-#[derive(Debug)]
+#[derive(Debug, BorshSerialize, BorshDeserialize, BorshDeserializer)]
 pub struct MaspTransferData {
     pub source: TransferSource,
     pub target: TransferTarget,
@@ -214,7 +214,7 @@ pub trait ShieldedUtils:
     /// Save a cache of data as part of shielded sync if that
     /// process gets interrupted.
     async fn cache_save(&self, _cache: &DispatcherCache)
-    -> std::io::Result<()>;
+        -> std::io::Result<()>;
 
     /// Load a cache of data as part of shielded sync if that
     /// process gets interrupted.

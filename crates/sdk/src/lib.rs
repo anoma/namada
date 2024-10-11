@@ -76,6 +76,7 @@ use tx::{
     TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL, TX_WITHDRAW_WASM,
     VP_USER_WASM,
 };
+pub mod tx_unshield;
 use wallet::{Wallet, WalletIo, WalletStorage};
 pub use {namada_io as io, namada_wallet as wallet};
 
@@ -608,8 +609,8 @@ pub trait Namada: NamadaIo {
         args: &args::Tx,
         signing_data: SigningTxData,
         with: impl Fn(Tx, common::PublicKey, HashSet<signing::Signable>, D) -> F
-        + MaybeSend
-        + MaybeSync,
+            + MaybeSend
+            + MaybeSync,
         user_data: D,
     ) -> crate::error::Result<()>
     where

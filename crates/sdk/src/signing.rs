@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 use std::fmt::Display;
 
-use borsh::BorshDeserialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXLOWER;
 use itertools::Itertools;
@@ -61,7 +61,7 @@ use crate::wallet::{Wallet, WalletIo};
 use crate::{args, rpc, Namada};
 
 /// A structure holding the signing data to craft a transaction
-#[derive(Clone, PartialEq)]
+#[derive(Clone, BorshSerialize, BorshDeserialize, PartialEq)]
 pub struct SigningTxData {
     /// The address owning the transaction
     pub owner: Option<Address>,

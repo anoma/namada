@@ -520,7 +520,16 @@ impl<'de> serde::Deserialize<'de> for ExtendedSpendingKey {
 }
 
 /// Represents a source of funds for a transfer
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+#[derive(
+    Debug,
+    Clone,
+    Hash,
+    Eq,
+    PartialEq,
+    BorshSerialize,
+    BorshDeserialize,
+    BorshDeserializer,
+)]
 pub enum TransferSource {
     /// A transfer coming from a transparent address
     Address(Address),
