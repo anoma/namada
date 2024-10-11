@@ -1,5 +1,30 @@
 # CHANGELOG
 
+## v0.44.1
+
+Namada 0.44.1 is a patch release with various fixes, improvements and refactors.
+
+### BUG FIXES
+
+- Fixed the masp indexer client not being able to fetch the notes index from the
+  `namada-masp-indexer`. ([\#3860](https://github.com/anoma/namada/pull/3860))
+
+### IMPROVEMENTS
+
+- Refactored tx crate modules and slightly improved its API.
+  ([\#3835](https://github.com/anoma/namada/pull/3835))
+- Improved batch construction to reduce the size of the resulting tx.
+  ([\#3882](https://github.com/anoma/namada/pull/3882))
+- SDK query to get liveness information for the network and consensus validator
+  set. ([\#3899](https://github.com/anoma/namada/pull/3899))
+
+### TESTING
+
+- Added testing for batched tx events.
+  ([\#3857](https://github.com/anoma/namada/pull/3857))
+- Added test for gas payment with an IBC token.
+  ([\#3866](https://github.com/anoma/namada/pull/3866))
+
 ## v0.44.0
 
 Namada 0.44.0 is a minor release containing various fixes for shielded tokens, shielded sync, IBC and its interaction with shielded tokens and various other improvements.
