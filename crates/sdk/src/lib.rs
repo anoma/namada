@@ -854,6 +854,7 @@ pub mod testing {
     use ::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
     use borsh_ext::BorshSerializeExt;
     use governance::ProposalType;
+    use itertools::Itertools;
     use masp_primitives::transaction::components::sapling::builder::StoredBuildParams;
     use namada_account::{InitAccount, UpdateAccount};
     use namada_core::address::testing::{
@@ -898,7 +899,7 @@ pub mod testing {
         arb_withdraw,
     };
     use crate::tx::{
-        Authorization, Code, Commitment, Header, MaspBuilder, Section,
+        Authorization, Code, Commitment, Data, Header, MaspBuilder, Section,
         TxCommitments,
     };
 
@@ -968,7 +969,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        /// Generate an arbitrary uttf8 commitment
+        /// Generate an arbitrary utf8 commitment
         pub fn arb_utf8_commitment()(
             commitment in prop_oneof![
                 arb_hash().prop_map(Commitment::Hash),
@@ -1072,6 +1073,7 @@ pub mod testing {
                 chain_id,
                 expiration,
                 timestamp,
+                //FIXME: try to do this
                 //TODO: arbitrary number of commitments
                 batch: [TxCommitments{
                     data_hash,
@@ -1651,6 +1653,23 @@ pub mod testing {
                 tx.0.add_section(Section::Authorization(sig));
             }
             (tx.0, tx.1)
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary signed wrapped tx that has been tampered with
+        pub fn arb_tampered_tx()(tx1 in arb_signed_tx())(
+            tx2 in arb_signed_tx(),
+            mut tx in Just(tx1),
+        ) -> Tx {
+        //FIXME: essentially I need to compose this with another prop that generates either a section and I should try to add that section, remove a random section or swap it and check that the signature is always invalid
+            //FIXME: pick the section to tamper at random
+            //FIXME: esnure that the swapped sections are different
+            let idx = tx.0.sections.iter().find_position(|section| section.code_sec().is_some()).unwrap().0;
+            let code = tx2.0.get_section(tx2.0.first_commitments().unwrap().code_sechash()).unwrap().into_owned();
+            tx.0.sections[idx] = code;
+
+            tx.0
         }
     }
 }
