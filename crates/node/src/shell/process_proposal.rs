@@ -949,7 +949,7 @@ mod test_process_proposal {
     // FIXME: need a test in finalize bloc kfor malleability of an inner tx doen
     // by the wrapper signer (check both one that fails because of signature and
     // one that fails because of indirect inclusion in tx data), this does not
-    // need to be proptest
+    // need to be proptest. will probably need soe more wasm for tests
     fn test_wrapper_bad_signature() {
         let (shell, _recv, _, _) = test_utils::setup_at_height(3u64);
 
@@ -994,24 +994,29 @@ mod test_process_proposal {
         assert!(result.is_ok());
     }
 
-    /// Test that if the account submitting the tx is not known and the fee is
-    /// non-zero, [`process_proposal`] rejects that block
-    // FIXME: what's the putpose of this test? It's the same as the one that
-    // follows, unless we try to change the fees here to 0
+    /// Test that an implicit account does not need to reveal the pk for fee
+    /// payment
     #[test]
     fn test_wrapper_unknown_address() {
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
         let keypair = gen_keypair();
-        // reduce address balance to match the 100 token min fee
+        let address = Address::from(&keypair.ref_to());
         let balance_key = token::storage_key::balance_key(
             &shell.state.in_mem().native_token,
-            &Address::from(&keypair.ref_to()),
+            &address,
         );
         shell
             .state
-            .write(&balance_key, Amount::native_whole(99))
+            .write(&balance_key, Amount::native_whole(GAS_LIMIT))
             .unwrap();
-        let keypair = gen_keypair();
+        shell.commit();
+        // Verify that the public key associated with the fee payer has not been
+        // revealed
+        assert!(
+            namada_sdk::account::public_keys(&shell.state, &address)
+                .unwrap()
+                .is_empty()
+        );
         let mut outer_tx =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
@@ -1026,34 +1031,15 @@ mod test_process_proposal {
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
         outer_tx.sign_wrapper(keypair);
 
-        let response = {
-            let request = ProcessProposal {
-                txs: vec![outer_tx.to_bytes()],
-            };
-            if let Err(TestError::RejectProposal(resp)) =
-                shell.process_proposal(request)
-            {
-                if let [resp] = resp.as_slice() {
-                    resp.clone()
-                } else {
-                    panic!("Test failed")
-                }
-            } else {
-                panic!("Test failed")
-            }
+        let request = ProcessProposal {
+            txs: vec![outer_tx.to_bytes()],
         };
-        assert_eq!(response.result.code, u32::from(ResultCode::FeeError));
-        assert!(response.result.info.contains(
-            "Error trying to apply a transaction: Error while processing \
-             transaction's fees: The first transaction in the batch failed to \
-             pay fees via the MASP. Wasm run failed: Transaction runner \
-             error: Wasm validation error"
-        ));
+        let response = shell.process_proposal(request).unwrap();
+        assert_eq!(response[0].result.code, u32::from(ResultCode::Ok));
     }
 
-    /// Test that if the account submitting the tx does
-    /// not have sufficient balance to pay the fee,
-    /// [`process_proposal`] rejects the entire block
+    /// Test that if the account submitting the tx does not have sufficient
+    /// balance to pay the fee, [`process_proposal`] rejects the entire block
     #[test]
     fn test_wrapper_insufficient_balance_address() {
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
