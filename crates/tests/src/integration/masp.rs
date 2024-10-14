@@ -3861,31 +3861,34 @@ fn masp_batch() -> Result<()> {
     // sources
     let mut batch = vec![];
     for source in [ALBERT_KEY, BERTHA_KEY] {
-        run(
-            &node,
-            Bin::Client,
-            vec![
-                "shield",
-                "--source",
-                source,
-                "--target",
-                AA_PAYMENT_ADDRESS,
-                "--token",
-                NAM,
-                "--amount",
-                "1000",
-                "--gas-limit",
-                "300000",
-                "--gas-payer",
-                CHRISTEL_KEY,
-                "--output-folder-path",
-                tempdir.path().to_str().unwrap(),
-                "--dump-tx",
-                "--ledger-address",
-                validator_one_rpc,
-            ],
-        )?;
-        node.assert_success();
+        let captured = CapturedOutput::of(|| {
+            run(
+                &node,
+                Bin::Client,
+                vec![
+                    "shield",
+                    "--source",
+                    source,
+                    "--target",
+                    AA_PAYMENT_ADDRESS,
+                    "--token",
+                    NAM,
+                    "--amount",
+                    "1000",
+                    "--gas-limit",
+                    "300000",
+                    "--gas-payer",
+                    CHRISTEL_KEY,
+                    "--output-folder-path",
+                    tempdir.path().to_str().unwrap(),
+                    "--dump-tx",
+                    "--ledger-address",
+                    validator_one_rpc,
+                ],
+            )
+        });
+        assert!(captured.result.is_ok());
+
         let file_path = tempdir
             .path()
             .read_dir()
@@ -4093,31 +4096,33 @@ fn masp_atomic_batch() -> Result<()> {
     // sources
     let mut batch = vec![];
     for source in [ALBERT_KEY, BERTHA_KEY] {
-        run(
-            &node,
-            Bin::Client,
-            vec![
-                "shield",
-                "--source",
-                source,
-                "--target",
-                AA_PAYMENT_ADDRESS,
-                "--token",
-                NAM,
-                "--amount",
-                "1000",
-                "--gas-limit",
-                "300000",
-                "--gas-payer",
-                CHRISTEL_KEY,
-                "--output-folder-path",
-                tempdir.path().to_str().unwrap(),
-                "--dump-tx",
-                "--ledger-address",
-                validator_one_rpc,
-            ],
-        )?;
-        node.assert_success();
+        let captured = CapturedOutput::of(|| {
+            run(
+                &node,
+                Bin::Client,
+                vec![
+                    "shield",
+                    "--source",
+                    source,
+                    "--target",
+                    AA_PAYMENT_ADDRESS,
+                    "--token",
+                    NAM,
+                    "--amount",
+                    "1000",
+                    "--gas-limit",
+                    "300000",
+                    "--gas-payer",
+                    CHRISTEL_KEY,
+                    "--output-folder-path",
+                    tempdir.path().to_str().unwrap(),
+                    "--dump-tx",
+                    "--ledger-address",
+                    validator_one_rpc,
+                ],
+            )
+        });
+        assert!(captured.result.is_ok());
         let file_path = tempdir
             .path()
             .read_dir()
@@ -4322,31 +4327,33 @@ fn tricky_masp_txs() -> Result<()> {
     }
 
     // Generate masp tx to extract the section
-    run(
-        &node,
-        Bin::Client,
-        vec![
-            "shield",
-            "--source",
-            ALBERT,
-            "--target",
-            AA_PAYMENT_ADDRESS,
-            "--token",
-            NAM,
-            "--amount",
-            "1000",
-            "--gas-limit",
-            "300000",
-            "--gas-payer",
-            CHRISTEL_KEY,
-            "--output-folder-path",
-            tempdir.path().to_str().unwrap(),
-            "--dump-tx",
-            "--ledger-address",
-            validator_one_rpc,
-        ],
-    )?;
-    node.assert_success();
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "shield",
+                "--source",
+                ALBERT,
+                "--target",
+                AA_PAYMENT_ADDRESS,
+                "--token",
+                NAM,
+                "--amount",
+                "1000",
+                "--gas-limit",
+                "300000",
+                "--gas-payer",
+                CHRISTEL_KEY,
+                "--output-folder-path",
+                tempdir.path().to_str().unwrap(),
+                "--dump-tx",
+                "--ledger-address",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
     let file_path = tempdir
         .path()
         .read_dir()
@@ -4366,29 +4373,31 @@ fn tricky_masp_txs() -> Result<()> {
         .unwrap();
 
     // Generate first tx
-    run(
-        &node,
-        Bin::Client,
-        vec![
-            "transparent-transfer",
-            "--source",
-            ALBERT_KEY,
-            "--target",
-            CHRISTEL,
-            "--token",
-            NAM,
-            "--amount",
-            "1000",
-            "--gas-payer",
-            CHRISTEL_KEY,
-            "--output-folder-path",
-            tempdir.path().to_str().unwrap(),
-            "--dump-tx",
-            "--ledger-address",
-            validator_one_rpc,
-        ],
-    )?;
-    node.assert_success();
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "transparent-transfer",
+                "--source",
+                ALBERT_KEY,
+                "--target",
+                CHRISTEL,
+                "--token",
+                NAM,
+                "--amount",
+                "1000",
+                "--gas-payer",
+                CHRISTEL_KEY,
+                "--output-folder-path",
+                tempdir.path().to_str().unwrap(),
+                "--dump-tx",
+                "--ledger-address",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
     let file_path = tempdir
         .path()
         .read_dir()
@@ -4415,31 +4424,33 @@ fn tricky_masp_txs() -> Result<()> {
     tx0.sign_wrapper(christel_keypair());
 
     // Generate second tx
-    run(
-        &node,
-        Bin::Client,
-        vec![
-            "shield",
-            "--source",
-            BERTHA_KEY,
-            "--target",
-            AA_PAYMENT_ADDRESS,
-            "--token",
-            NAM,
-            "--amount",
-            "1000",
-            "--gas-limit",
-            "300000",
-            "--gas-payer",
-            CHRISTEL_KEY,
-            "--output-folder-path",
-            tempdir.path().to_str().unwrap(),
-            "--dump-tx",
-            "--ledger-address",
-            validator_one_rpc,
-        ],
-    )?;
-    node.assert_success();
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "shield",
+                "--source",
+                BERTHA_KEY,
+                "--target",
+                AA_PAYMENT_ADDRESS,
+                "--token",
+                NAM,
+                "--amount",
+                "1000",
+                "--gas-limit",
+                "300000",
+                "--gas-payer",
+                CHRISTEL_KEY,
+                "--output-folder-path",
+                tempdir.path().to_str().unwrap(),
+                "--dump-tx",
+                "--ledger-address",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
     let file_path = tempdir
         .path()
         .read_dir()
