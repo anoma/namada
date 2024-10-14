@@ -597,7 +597,7 @@ mod test_process_proposal {
     };
     use namada_sdk::key::*;
     use namada_sdk::state::StorageWrite;
-    use namada_sdk::testing::arb_tampered_tx;
+    use namada_sdk::testing::{arb_tampered_tx, arb_valid_signed_tx};
     use namada_sdk::token::{read_denom, Amount, DenominatedAmount};
     use namada_sdk::tx::data::Fee;
     use namada_sdk::tx::{Code, Data, Signed};
@@ -954,9 +954,18 @@ mod test_process_proposal {
         let (shell, _recv, _, _) = test_utils::setup_at_height(3u64);
 
         let mut runner = TestRunner::new(Config::default());
-        // The arbitrary tx generator outputs txs with possible wrong
-        // expirations/chain ids. This is fine for the sake of this test cause
-        // we check the signature before everything else
+        // Test that the strategy produces valid txs first
+        let result =
+            runner.run(&arb_valid_signed_tx(), |tx| match tx.validate_tx() {
+                Ok(Some(_)) => Ok(()),
+                _ => {
+                    Err(TestCaseError::fail("Unexpectedly produced invalid tx"))
+                }
+            });
+        assert!(result.is_ok());
+
+        // Then test invalid tx
+        let mut runner = TestRunner::new(Config::default());
         let result = runner.run(&arb_tampered_tx(), |tx| {
             let request = ProcessProposal {
                 txs: vec![tx.to_bytes()],
@@ -990,7 +999,6 @@ mod test_process_proposal {
                 }
             }
         });
-
         assert!(result.is_ok());
     }
 
