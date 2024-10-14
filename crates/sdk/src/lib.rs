@@ -1658,6 +1658,23 @@ pub mod testing {
         }
     }
 
+    prop_compose! {
+        /// Generate an arbitrary tx with a valid signature
+        pub fn arb_valid_signed_tx()
+        (
+            (mut tx, _data) in arb_memoed_tx(),
+            signer in arb_common_keypair(),
+        ) -> Tx {
+            // Sign the wrapper tx
+            let mut wrapper = tx.header.wrapper().unwrap();
+            wrapper.pk = signer.to_public();
+            tx.update_header(TxType::Wrapper(Box::new(wrapper)));
+            tx.sign_wrapper(signer);
+
+            tx
+        }
+    }
+
     // An enumeration representing different ways to tamper with a transaction
     #[derive(Debug, Clone)]
     enum TamperTx {
@@ -1667,9 +1684,12 @@ pub mod testing {
         SwapHeader,
     }
 
+    // FIXME: for the inners I can proptest by just changing the code section to
+    // that of theempty tx for tests
     prop_compose! {
         /// Generate an arbitrary signed wrapped tx that has been tampered with.
-        pub fn arb_tampered_tx()(tx1 in arb_signed_tx())(
+        pub fn arb_tampered_tx()
+        (tx1 in arb_valid_signed_tx())(
             tamper in prop_oneof![
                 Just(TamperTx::RemoveSection),
                 Just(TamperTx::AddExtraSection),
@@ -1682,23 +1702,23 @@ pub mod testing {
         ) -> Tx {
             match tamper {
                TamperTx::RemoveSection => {
-                    let to_remove = selector.select(&tx.0.sections).to_owned();
-                    tx.0.sections.retain(|section| section != &to_remove);
+                    let to_remove = selector.select(&tx.sections).to_owned();
+                    tx.sections.retain(|section| section != &to_remove);
 
-                    tx.0
+                    tx
                 },
                TamperTx::AddExtraSection => {
                     let to_add = selector.select(&tx2.0.sections).to_owned();
-                    tx.0.sections.push(to_add);
+                    tx.sections.push(to_add);
 
-                    tx.0
+                    tx
                 },
                TamperTx::SwapSection => {
-                    let mut to_remove = selector.select(&tx.0.sections).to_owned();
+                    let mut to_remove = selector.select(&tx.sections).to_owned();
                     let mut to_add = selector.select(&tx2.0.sections).to_owned();
 
                     // Try to pick different sections of the same type for the swap if possible
-                    for source in tx.0.sections.iter() {
+                    for source in tx.sections.iter() {
                         if let Some(target) = tx2.0.sections.iter().find(|section| {
                             std::mem::discriminant(*section) == std::mem::discriminant(&to_remove) && section.get_hash() != source.get_hash()
                         }) {
@@ -1708,18 +1728,18 @@ pub mod testing {
                         }
                     }
 
-                    tx.0.sections.retain(|section| section != &to_remove);
-                    tx.0.sections.push(to_add);
+                    tx.sections.retain(|section| section != &to_remove);
+                    tx.sections.push(to_add);
 
-                    tx.0
+                    tx
                 },
                TamperTx::SwapHeader => {
                     // Maintain the original wrapper signer
                     let mut new_wrapper = tx2.0.header.wrapper().unwrap();
-                    new_wrapper.pk =  tx.0.header.wrapper().unwrap().pk;
-                    tx.0.update_header(TxType::Wrapper(Box::new(new_wrapper)));
+                    new_wrapper.pk =  tx.header.wrapper().unwrap().pk;
+                    tx.update_header(TxType::Wrapper(Box::new(new_wrapper)));
 
-                    tx.0
+                    tx
                 },
             }
         }
