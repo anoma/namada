@@ -954,6 +954,9 @@ mod test_process_proposal {
         let (shell, _recv, _, _) = test_utils::setup_at_height(3u64);
 
         let mut runner = TestRunner::new(Config::default());
+        // The arbitrary tx generator outputs txs with possible wrong
+        // expirations/chain ids. This is fine for the sake of this test cause
+        // we check the signature before everything else
         let result = runner.run(&arb_tampered_tx(), |tx| {
             let request = ProcessProposal {
                 txs: vec![tx.to_bytes()],
@@ -989,60 +992,6 @@ mod test_process_proposal {
         });
 
         assert!(result.is_ok());
-
-        // FIXME: remove
-        // let keypair = gen_keypair();
-        // let mut outer_tx =
-        //     Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-        //         Fee {
-        //             amount_per_gas_unit: DenominatedAmount::native(
-        //                 Amount::from_uint(100, 0).expect("Test failed"),
-        //             ),
-        //             token: shell.state.in_mem().native_token.clone(),
-        //         },
-        //         keypair.ref_to(),
-        //         GAS_LIMIT.into(),
-        //     ))));
-        // outer_tx.header.chain_id = shell.chain_id.clone();
-        // outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned(),
-        // None)); outer_tx.set_data(Data::new("transaction
-        // data".as_bytes().to_owned()));
-        // outer_tx.sign_wrapper(keypair);
-        // let mut new_tx = outer_tx.clone();
-        // if let TxType::Wrapper(wrapper) = &mut new_tx.header.tx_type {
-        //     // we mount a malleability attack to try and remove the fee
-        //     wrapper.fee.amount_per_gas_unit =
-        //         DenominatedAmount::native(Default::default());
-        // } else {
-        //     panic!("Test failed")
-        // };
-        // let request = ProcessProposal {
-        //     txs: vec![new_tx.to_bytes()],
-        // };
-
-        // match shell.process_proposal(request) {
-        //     Ok(_) => panic!("Test failed"),
-        //     Err(TestError::RejectProposal(response)) => {
-        //         let response = if let [response] = response.as_slice() {
-        //             response.clone()
-        //         } else {
-        //             panic!("Test failed")
-        //         };
-        //         let expected_error = "WrapperTx signature verification \
-        //                               failed: The wrapper signature is \
-        //                               invalid.";
-        //         assert_eq!(
-        //             response.result.code,
-        //             u32::from(ResultCode::InvalidSig)
-        //         );
-        //         assert!(
-        //             response.result.info.contains(expected_error),
-        //             "Result info {} doesn't contain the expected error {}",
-        //             response.result.info,
-        //             expected_error
-        //         );
-        //     }
-        // }
     }
 
     /// Test that if the account submitting the tx is not known and the fee is
