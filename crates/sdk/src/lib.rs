@@ -857,7 +857,6 @@ pub mod testing {
     use ::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
     use borsh_ext::BorshSerializeExt;
     use governance::ProposalType;
-    use itertools::Itertools;
     use masp_primitives::transaction::components::sapling::builder::StoredBuildParams;
     use namada_account::{InitAccount, UpdateAccount};
     use namada_core::address::testing::{
@@ -1670,8 +1669,6 @@ pub mod testing {
 
     prop_compose! {
         /// Generate an arbitrary signed wrapped tx that has been tampered with.
-        //FIXME: wait how's this thing working in the test? It could produce rando mchain ids and expirations. Ah it's because we do the check on the signature before everything else
-        //FIXME: it's ok leave it like this for the moment cause we still assert the correct error message, but maybe leave a note in the test
         pub fn arb_tampered_tx()(tx1 in arb_signed_tx())(
             tamper in prop_oneof![
                 Just(TamperTx::RemoveSection),
@@ -1680,42 +1677,49 @@ pub mod testing {
                 Just(TamperTx::SwapHeader)
             ],
             tx2 in arb_signed_tx(),
-            //FIXME: need this?
+            selector in proptest::prelude::any::<proptest::prelude::prop::sample::Selector>(),
             mut tx in Just(tx1),
         ) -> Tx {
             match tamper {
                TamperTx::RemoveSection => {
-                    //FIXME: pick the section to tamper at random
-                            //FIXME: is it ok to pick any of the sections which are also in the header? yes but also change the commitment
-                    let idx = tx.0.sections.iter().find_position(|section| section.code_sec().is_some()).unwrap().0;
-                            tx.0.sections.remove(idx);
+                    let to_remove = selector.select(&tx.0.sections).to_owned();
+                    tx.0.sections.retain(|section| section != &to_remove);
 
                     tx.0
-
-                        },
+                },
                TamperTx::AddExtraSection => {
-                    //FIXME: pick the section to tamper at random
-                    let code = tx2.0.get_section(tx2.0.first_commitments().unwrap().code_sechash()).unwrap().into_owned();
-                    tx.0.sections.push( code);
+                    let to_add = selector.select(&tx2.0.sections).to_owned();
+                    tx.0.sections.push(to_add);
 
                     tx.0
-
-                        },
+                },
                TamperTx::SwapSection => {
+                    let mut to_remove = selector.select(&tx.0.sections).to_owned();
+                    let mut to_add = selector.select(&tx2.0.sections).to_owned();
 
-                    //FIXME: pick the section to tamper at random
-                    //FIXME: esnure that the swapped sections are different
-                    let idx = tx.0.sections.iter().find_position(|section| section.code_sec().is_some()).unwrap().0;
-                    let code = tx2.0.get_section(tx2.0.first_commitments().unwrap().code_sechash()).unwrap().into_owned();
-                    tx.0.sections[idx] = code;
+                    // Try to pick different sections of the same type for the swap if possible
+                    for source in tx.0.sections.iter() {
+                        if let Some(target) = tx2.0.sections.iter().find(|section| {
+                            std::mem::discriminant(*section) == std::mem::discriminant(&to_remove) && section.get_hash() != source.get_hash()
+                        }) {
+                            to_remove = source.to_owned();
+                            to_add = target.to_owned();
+                            break;
+                        }
+                    }
+
+                    tx.0.sections.retain(|section| section != &to_remove);
+                    tx.0.sections.push(to_add);
 
                     tx.0
-                        },
+                },
                TamperTx::SwapHeader => {
-                            //FIXME: should we leave the original pk? Yes
-                            tx.0.update_header(tx2.0.header.tx_type);
+                    // Maintain the original wrapper signer
+                    let mut new_wrapper = tx2.0.header.wrapper().unwrap();
+                    new_wrapper.pk =  tx.0.header.wrapper().unwrap().pk;
+                    tx.0.update_header(TxType::Wrapper(Box::new(new_wrapper)));
 
-                            tx.0
+                    tx.0
                 },
             }
         }
