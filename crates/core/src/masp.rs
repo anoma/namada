@@ -574,7 +574,15 @@ impl Display for TransferSource {
 }
 
 /// Represents the pre-image to a TransparentAddress
-#[derive(Debug, Clone, BorshDeserialize, BorshSerialize, BorshDeserializer)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    BorshDeserialize,
+    BorshSerialize,
+    BorshDeserializer,
+)]
 pub enum TAddrData {
     /// A transparent address within Namada
     Addr(Address),
@@ -778,6 +786,307 @@ impl FromStr for MaspValue {
 mod test {
     use super::*;
     use crate::address;
+
+    #[test]
+    fn test_extended_spending_key_serialize() {
+        let sk = ExtendedSpendingKey::from(
+            masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]),
+        );
+        let serialized = serde_json::to_string(&sk).unwrap();
+        let deserialized: ExtendedSpendingKey =
+            serde_json::from_str(&serialized).unwrap();
+        assert_eq!(sk, deserialized);
+    }
+
+    #[test]
+    fn test_transfer_source_display() {
+        let addr = address::testing::established_address_1();
+        assert_eq!(addr.to_string(), TransferSource::Address(addr).to_string());
+
+        let sk = ExtendedSpendingKey::from(
+            masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]),
+        );
+        assert_eq!(
+            sk.to_string(),
+            TransferSource::ExtendedSpendingKey(sk).to_string()
+        );
+    }
+
+    #[test]
+    fn test_transfer_source_address() {
+        let addr =
+            TransferSource::Address(address::testing::established_address_1())
+                .address();
+        assert_eq!(addr.unwrap(), address::testing::established_address_1());
+
+        let addr =
+            TransferSource::ExtendedSpendingKey(ExtendedSpendingKey::from(
+                masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]),
+            ))
+            .address();
+        assert!(addr.is_none());
+    }
+
+    #[test]
+    fn test_transfer_source_t_addr_data() {
+        let addr =
+            TransferSource::Address(address::testing::established_address_1())
+                .t_addr_data();
+        assert_eq!(
+            addr.unwrap(),
+            TAddrData::Addr(address::testing::established_address_1())
+        );
+
+        let addr =
+            TransferSource::ExtendedSpendingKey(ExtendedSpendingKey::from(
+                masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]),
+            ))
+            .address();
+        assert!(addr.is_none());
+    }
+
+    #[test]
+    fn test_transfer_source_effective_address() {
+        let source =
+            TransferSource::Address(address::testing::established_address_1());
+        assert_eq!(
+            source.effective_address(),
+            address::testing::established_address_1()
+        );
+
+        let sk = ExtendedSpendingKey::from(
+            masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]),
+        );
+        let source = TransferSource::ExtendedSpendingKey(sk);
+        assert_eq!(source.effective_address(), MASP);
+    }
+
+    #[test]
+    fn test_pa_hash() {
+        let sk = ExtendedSpendingKey::from(
+            masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]),
+        );
+        let (_diversifier, pa) = sk.0.default_address();
+        let pa = PaymentAddress::from(pa);
+
+        assert_eq!(pa.hash(), "F902054A142024BA72998F7AA6D5F7DB1700E489");
+    }
+
+    #[test]
+    fn test_taddrdata_address() {
+        let addr = TAddrData::Addr(address::testing::established_address_1())
+            .address();
+        assert_eq!(addr.unwrap(), address::testing::established_address_1());
+
+        let addr = TAddrData::Ibc(String::new()).address();
+        assert!(addr.is_none());
+    }
+
+    #[test]
+    fn test_taddrdata_ibc_receiver_address() {
+        let addr = TAddrData::Addr(address::testing::established_address_1())
+            .ibc_receiver_address();
+        assert!(addr.is_none());
+
+        let addr = TAddrData::Ibc("test".to_owned()).ibc_receiver_address();
+        assert_eq!(addr.unwrap(), "test");
+    }
+
+    #[test]
+    fn test_taddrdata_effective_address() {
+        let data = TAddrData::Addr(address::testing::established_address_1());
+        assert_eq!(
+            data.effective_address(),
+            address::testing::established_address_1()
+        );
+
+        let data = TAddrData::Ibc(String::new());
+        assert_eq!(data.effective_address(), IBC);
+    }
+
+    #[test]
+    fn test_transfer_target_effective_address() {
+        let target =
+            TransferTarget::Address(address::testing::established_address_1());
+        assert_eq!(
+            target.effective_address(),
+            address::testing::established_address_1()
+        );
+
+        let sk = ExtendedSpendingKey::from(
+            masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]),
+        );
+        let (_diversifier, pa) = sk.0.default_address();
+        let pa = PaymentAddress::from(pa);
+        let target = TransferTarget::PaymentAddress(pa);
+        assert_eq!(target.effective_address(), MASP);
+
+        let target = TransferTarget::Ibc(String::new());
+        assert_eq!(target.effective_address(), IBC);
+    }
+
+    #[test]
+    fn test_transfer_target_address() {
+        let target =
+            TransferTarget::Address(address::testing::established_address_1())
+                .address();
+        assert_eq!(target.unwrap(), address::testing::established_address_1());
+
+        let sk = ExtendedSpendingKey::from(
+            masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]),
+        );
+        let (_diversifier, pa) = sk.0.default_address();
+        let pa = PaymentAddress::from(pa);
+        let target = TransferTarget::PaymentAddress(pa).address();
+        assert!(target.is_none());
+
+        let target = TransferTarget::Ibc(String::new()).address();
+        assert!(target.is_none());
+    }
+
+    #[test]
+    fn test_transfer_target_t_addr_data() {
+        let target =
+            TransferTarget::Address(address::testing::established_address_1())
+                .t_addr_data();
+        assert_eq!(
+            target.unwrap(),
+            TAddrData::Addr(address::testing::established_address_1())
+        );
+
+        let sk = ExtendedSpendingKey::from(
+            masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]),
+        );
+        let (_diversifier, pa) = sk.0.default_address();
+        let pa = PaymentAddress::from(pa);
+        let target = TransferTarget::PaymentAddress(pa).t_addr_data();
+        assert!(target.is_none());
+
+        let target = TransferTarget::Ibc(String::new()).t_addr_data();
+        assert_eq!(target.unwrap(), TAddrData::Ibc(String::new()));
+    }
+
+    #[test]
+    fn test_transfer_target_display() {
+        let addr = address::testing::established_address_1();
+
+        let sk = ExtendedSpendingKey::from(
+            masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]),
+        );
+        let (_diversifier, pa) = sk.0.default_address();
+        let pa = PaymentAddress::from(pa);
+
+        const IBC_ADDR: &str = "noble18st0wqx84av8y6xdlss9d6m2nepyqwj6nfxxuv";
+
+        assert_eq!(addr.to_string(), TransferTarget::Address(addr).to_string());
+
+        assert_eq!(
+            pa.to_string(),
+            TransferTarget::PaymentAddress(pa).to_string()
+        );
+
+        assert_eq!(
+            IBC_ADDR.to_owned(),
+            TransferTarget::Ibc(IBC_ADDR.to_owned()).to_string()
+        );
+    }
+
+    #[test]
+    fn test_balance_owner_full_viewing_key() {
+        let sk = ExtendedSpendingKey::from(
+            masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]),
+        );
+        let vk = sk.to_viewing_key();
+        assert_eq!(
+            vk.clone(),
+            BalanceOwner::FullViewingKey(vk).full_viewing_key().unwrap()
+        );
+
+        let addr = address::testing::established_address_1();
+        assert!(BalanceOwner::Address(addr).full_viewing_key().is_none());
+    }
+
+    #[test]
+    fn test_balance_owner_display() {
+        let addr = address::testing::established_address_1();
+
+        let sk = ExtendedSpendingKey::from(
+            masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]),
+        );
+        let vk = sk.to_viewing_key();
+
+        assert_eq!(addr.to_string(), BalanceOwner::Address(addr).to_string());
+
+        assert_eq!(
+            vk.to_string(),
+            BalanceOwner::FullViewingKey(vk).to_string()
+        );
+    }
+
+    #[test]
+    fn test_balance_owner_borsh() {
+        let addr = address::testing::established_address_1();
+
+        let owner = BalanceOwner::Address(addr);
+        let serialized = owner.serialize_to_vec();
+        let deserialized =
+            BalanceOwner::try_from_slice(&serialized[..]).unwrap();
+        assert_eq!(owner, deserialized);
+
+        let sk = ExtendedSpendingKey::from(
+            masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]),
+        );
+        let vk = sk.to_viewing_key();
+
+        let owner = BalanceOwner::FullViewingKey(vk);
+        let serialized = owner.serialize_to_vec();
+        let deserialized =
+            BalanceOwner::try_from_slice(&serialized[..]).unwrap();
+        assert_eq!(owner, deserialized);
+    }
+
+    #[test]
+    fn test_transfer_target_borsh() {
+        let addr = address::testing::established_address_1();
+
+        let target = TransferTarget::Address(addr);
+        let serialized = target.serialize_to_vec();
+        let deserialized =
+            TransferTarget::try_from_slice(&serialized[..]).unwrap();
+        assert_eq!(target, deserialized);
+
+        let sk = ExtendedSpendingKey::from(
+            masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]),
+        );
+        let (_diversifier, pa) = sk.0.default_address();
+        let pa = PaymentAddress::from(pa);
+
+        let target = TransferTarget::PaymentAddress(pa);
+        let serialized = target.serialize_to_vec();
+        let deserialized =
+            TransferTarget::try_from_slice(&serialized[..]).unwrap();
+        assert_eq!(target, deserialized);
+
+        const IBC_ADDR: &str = "noble18st0wqx84av8y6xdlss9d6m2nepyqwj6nfxxuv";
+
+        let target = TransferTarget::Ibc(IBC_ADDR.to_owned());
+        let serialized = target.serialize_to_vec();
+        let deserialized =
+            TransferTarget::try_from_slice(&serialized[..]).unwrap();
+        assert_eq!(target, deserialized);
+    }
+
+    #[test]
+    fn test_masp_tx_id_display() {
+        let tx_id = MaspTxId::from(TxIdInner::from_bytes([
+            10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 12, 11,
+        ]));
+        assert_eq!(
+            tx_id.to_string(),
+            "0b0c00000000000000000000000000000000000000000000000000000000000a"
+        );
+    }
 
     #[test]
     fn test_masp_tx_id_basics() {
