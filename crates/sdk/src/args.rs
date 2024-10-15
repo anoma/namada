@@ -4,7 +4,7 @@ use std::fmt::Display;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration as StdDuration;
-
+use eyre::Context;
 use namada_core::address::Address;
 use namada_core::chain::ChainId;
 use namada_core::collections::HashMap;
@@ -22,9 +22,9 @@ use namada_governance::cli::onchain::{
 use namada_ibc::IbcShieldingData;
 use namada_tx::data::GasLimit;
 use namada_tx::Memo;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 use zeroize::Zeroizing;
-
+use namada_core::token::DenominatedAmount;
 use crate::eth_bridge::bridge_pool;
 use crate::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use crate::masp::utils::RetryStrategy;
@@ -448,6 +448,159 @@ impl TxUnshieldingTransfer {
         context: &impl Namada,
     ) -> crate::error::Result<(namada_tx::Tx, SigningTxData)> {
         tx::build_unshielding_transfer(context, self).await
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+/// A segment of a route between assets
+pub struct SwapRouteSeg {
+    /// Id of liquidity pool on Osmosis
+    #[serde(alias = "poolID")]
+    pub pool_id: String,
+    /// The output token denom on Osmosis
+    pub token_out_denom: String
+}
+
+impl FromStr for SwapRouteSeg {
+    type Err = eyre::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Some((pool_id, tod)) = s.split_once("/") {
+            Ok(Self{
+                pool_id: pool_id.to_string(),
+                token_out_denom: tod.to_string(),
+            })
+        } else {
+            eyre::bail!("Expected string of format pool_id/denom. Found something else.")
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+/// Slippage in an Osmosis swap
+pub enum Slippage {
+    /// A twap
+    Twap {
+        /// Slippage percent
+        slippage_percentage: u64,
+        /// TODO! Figure out what this is
+        window_seconds: u64,
+    },
+    /// Min amount of tokens to receive
+    MinOutputAmount(DenominatedAmount),
+}
+
+impl FromStr for Slippage {
+    type Err = eyre::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Some((disc, rest)) = s.split_once(":") {
+            match disc {
+                "twap" => {
+                    let Some((slip, ws)) = rest.split_once(',') else {
+                        eyre::bail!("Dumbass")
+                    };
+                    Ok(Self::Twap {
+                        slippage_percentage: u64::from_str(slip).context("")?,
+                        window_seconds: u64::from_str(ws).context("")?,
+                    })
+                }
+                "min_output_token" => {
+                    Ok(Self::MinOutputAmount(DenominatedAmount::from_str(rest).context("")?))
+                }
+                _ => eyre::bail!("Dumbass")
+            }
+        } else {
+            eyre::bail!("Dumbass")
+        }
+    }
+}
+
+/// An token swap on Osmosis
+#[derive(Debug, Clone)]
+pub struct TxOsmosisSwap<C: NamadaTypes = SdkTypes> {
+    /// The IBC transfer data
+    pub transfer: TxIbcTransfer<C>,
+    /// The token we wish to receive
+    pub output_denom: String,
+    /// Recipient address
+    pub recipient: C::Address,
+    /// An Osmosis channel connecting to Namada
+    pub osmosis_channel_id: ChannelId,
+    /// Slippage
+    pub slippage: Slippage,
+    /// The route for swapping assets
+    pub route: Vec<SwapRouteSeg>
+}
+
+impl TxOsmosisSwap<SdkTypes> {
+    /// Create an IBC transfer from the input arguments
+    pub fn assemble(self) -> TxIbcTransfer<SdkTypes> {
+        #[derive(Serialize)]
+        struct Memo {
+            wasm: Wasm,
+        }
+
+        #[derive(Serialize)]
+        struct Wasm {
+            contract: String,
+            msg: OsmosisSwap,
+        }
+
+        #[derive(Serialize)]
+        struct OsmosisSwap {
+            osmosis_swap: InnerSwap
+        }
+        #[derive(Serialize)]
+        struct InnerSwap {
+            output_denom: String,
+            slippage: Slippage,
+            receiver: String,
+            on_failed_delivery: String,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            next_memo: Option<String>,
+            #[serde(skip_serializing_if = "Vec::is_empty")]
+            route: Vec<SwapRouteSeg>,
+        }
+
+        #[allow(dead_code)]
+        fn serialize_slippage<S>(
+            val: &u64,
+            serializer: S,
+        ) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            serializer.serialize_str(&val.to_string())
+        }
+        let Self {
+            mut transfer,
+            output_denom,
+            recipient,
+            osmosis_channel_id,
+            slippage,
+            route,
+        } = self;
+        let next_memo = transfer.ibc_memo.take();
+        let memo = Memo {
+            wasm: Wasm {
+                contract: transfer.receiver.clone(),
+                msg: OsmosisSwap
+                {
+                    osmosis_swap: InnerSwap {
+                        output_denom: output_denom.to_string(),
+                        slippage,
+                        next_memo,
+                        receiver: format!("ibc:{}/{}", osmosis_channel_id, recipient),
+                        on_failed_delivery: "do_nothing".to_string(),
+                        route,
+                    }
+                },
+            },
+        };
+        transfer.ibc_memo = Some(serde_json::to_string(&memo).unwrap());
+        transfer
     }
 }
 
