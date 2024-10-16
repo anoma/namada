@@ -885,6 +885,7 @@ pub mod testing {
     };
     use namada_tx::data::{Fee, TxType, WrapperTx};
     use proptest::prelude::{Just, Strategy};
+    use proptest::sample::SizeRange;
     use proptest::{arbitrary, collection, option, prop_compose, prop_oneof};
     use token::testing::arb_transparent_transfer;
 
@@ -1060,14 +1061,35 @@ pub mod testing {
     }
 
     prop_compose! {
+        /// Generate an arbitrary tx commitments
+        pub fn arb_tx_commitment()(
+            code_hash in arb_hash(),
+            data_hash in arb_hash(),
+            memo_hash in arb_hash(),
+        ) -> TxCommitments {
+            TxCommitments {
+                data_hash,
+                code_hash,
+                memo_hash
+            }
+        }
+    }
+
+    /// Generate an arbitrary number of tx commitments
+    pub fn arb_tx_commitments(
+        number_of_cmts: impl Into<SizeRange>,
+    ) -> impl Strategy<Value = HashSet<TxCommitments>> {
+        collection::hash_set(arb_tx_commitment(), number_of_cmts)
+            .prop_map(|s| s.into_iter().collect())
+    }
+
+    prop_compose! {
         /// Generate an arbitrary header
         pub fn arb_header()(
             chain_id in arb_chain_id(),
             expiration in option::of(arb_date_time_utc()),
             timestamp in arb_date_time_utc(),
-            code_hash in arb_hash(),
-            data_hash in arb_hash(),
-            memo_hash in arb_hash(),
+            batch in arb_tx_commitments(1..10),
             atomic in proptest::bool::ANY,
             tx_type in arb_tx_type(),
         ) -> Header {
@@ -1075,13 +1097,7 @@ pub mod testing {
                 chain_id,
                 expiration,
                 timestamp,
-                //FIXME: try to do this
-                //TODO: arbitrary number of commitments
-                batch: [TxCommitments{
-                    data_hash,
-                    code_hash,
-                    memo_hash,
-                }].into(),
+                batch,
                 atomic,
                 tx_type,
             }
