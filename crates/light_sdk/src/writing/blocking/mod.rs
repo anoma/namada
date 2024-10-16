@@ -14,8 +14,7 @@ use tokio::runtime::Runtime;
 ///
 /// Checks that
 /// 1. The tx has been successfully included into the mempool of a validator
-/// 2. The tx with encrypted payload has been included on the blockchain
-/// 3. The decrypted payload of the tx has been included on the blockchain.
+/// 2. The tx has been included on the blockchain
 ///
 /// In the case of errors in any of those stages, an error message is returned
 pub fn broadcast_tx(tendermint_addr: &str, tx: Tx) -> Result<Response, Error> {
@@ -31,7 +30,7 @@ pub fn broadcast_tx(tendermint_addr: &str, tx: Tx) -> Result<Response, Error> {
     let rt = Runtime::new().unwrap();
 
     let wrapper_tx_hash = tx.header_hash().to_string();
-    // We use this to determine when the decrypted inner tx makes it
+    // We use this to determine when the inner tx makes it
     // on-chain
     let decrypted_tx_hash = tx.raw_header_hash().to_string();
 

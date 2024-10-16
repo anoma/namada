@@ -137,9 +137,8 @@ impl GasLimit {
     }
 }
 
-/// A transaction with an encrypted payload, an optional shielded pool
-/// unshielding tx for fee payment and some non-encrypted metadata for
-/// inclusion and / or verification purposes
+/// A wrapper transaction with some metadata for inclusion and / or verification
+/// purposes
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Debug,
