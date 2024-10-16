@@ -390,7 +390,7 @@ mod tests {
         // reserve block space for protocol txs
         let mut alloc = BsaInitialProtocolTxs::init(BLOCK_SIZE, BLOCK_GAS);
 
-        // allocate ~1/2 of the block space to encrypted txs
+        // allocate ~1/2 of the block space to wrapper txs
         assert!(alloc.try_alloc(&[0; 29]).is_ok());
 
         // reserve block space for normal txs
@@ -504,7 +504,7 @@ mod tests {
         // Fill the entire gas bin
         bins.normal_txs.gas.occupied = bins.normal_txs.gas.allotted;
 
-        // Make sure we can't dump any new wncrypted txs in the bin
+        // Make sure we can't dump any new wrapper txs in the bin
         assert_matches!(
             bins.try_alloc(BlockResources::new(b"arbitrary tx bytes", 1)),
             Err(AllocFailure::Rejected { .. })

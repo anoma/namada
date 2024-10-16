@@ -1357,9 +1357,8 @@ mod test_finalize_block {
                 WRAPPER_GAS_LIMIT.into(),
             ))));
         wrapper_tx.header.chain_id = shell.chain_id.clone();
-        wrapper_tx.set_data(Data::new(
-            "Encrypted transaction data".as_bytes().to_owned(),
-        ));
+        wrapper_tx
+            .set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper_tx.set_code(Code::new(tx_code, None));
         wrapper_tx.add_section(Section::Authorization(Authorization::new(
             wrapper_tx.sechashes(),
@@ -3478,9 +3477,8 @@ mod test_finalize_block {
                     0.into(),
                 ))));
             wrapper_tx.header.chain_id = shell.chain_id.clone();
-            wrapper_tx.set_data(Data::new(
-                "Encrypted transaction data".as_bytes().to_owned(),
-            ));
+            wrapper_tx
+                .set_data(Data::new("transaction data".as_bytes().to_owned()));
             wrapper_tx.add_code(TestWasms::TxNoOp.read_bytes(), None);
             wrapper_tx.sign_wrapper(keypair.clone());
             wrapper_tx
@@ -3514,7 +3512,7 @@ mod test_finalize_block {
 
         failing_wrapper
             .add_code(TestWasms::TxFail.read_bytes(), None)
-            .add_data("Encrypted transaction data");
+            .add_data("transaction data");
 
         let mut wrong_commitment_wrapper = failing_wrapper.clone();
         let tx_code = TestWasms::TxInvalidData.read_bytes();
@@ -3691,9 +3689,7 @@ mod test_finalize_block {
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
         wrapper.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
-        wrapper.set_data(Data::new(
-            "Encrypted transaction data".as_bytes().to_owned(),
-        ));
+        wrapper.set_data(Data::new("transaction data".as_bytes().to_owned()));
         wrapper.add_section(Section::Authorization(Authorization::new(
             wrapper.sechashes(),
             [(0, keypair)].into_iter().collect(),
