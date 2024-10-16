@@ -421,6 +421,7 @@ pub async fn aux_signing_data(
 
 /// Information about the post-fee balance of the tx's source. Used to correctly
 /// handle balance validation in the inner tx
+#[derive(Debug)]
 pub struct TxSourcePostBalance {
     /// The balance of the tx source after the tx has been applied
     pub post_balance: Amount,
@@ -833,7 +834,7 @@ fn proposal_type_to_ledger_vector(
     proposal_type: &ProposalType,
     tx: &Tx,
     output: &mut Vec<String>,
-) {
+) -> Result<(), Error> {
     match proposal_type {
         ProposalType::Default => {
             output.push("Proposal type : Default".to_string())
@@ -843,7 +844,9 @@ fn proposal_type_to_ledger_vector(
             let extra = tx
                 .get_section(hash)
                 .and_then(|x| Section::extra_data_sec(x.as_ref()))
-                .expect("unable to load vp code")
+                .ok_or_else(|| {
+                    Error::Other("unable to load vp code".to_string())
+                })?
                 .code
                 .hash();
             output
@@ -960,6 +963,7 @@ fn proposal_type_to_ledger_vector(
             }
         }
     }
+    Ok(())
 }
 
 // Find the MASP Builder that was used to construct the given Transaction.
@@ -1165,7 +1169,7 @@ pub async fn to_ledger_vector(
                 &init_proposal_data.r#type,
                 tx,
                 &mut tv.output,
-            );
+            )?;
             tv.output.extend(vec![
                 format!("Author : {}", init_proposal_data.author),
                 format!(
@@ -1187,7 +1191,7 @@ pub async fn to_ledger_vector(
                 &init_proposal_data.r#type,
                 tx,
                 &mut tv.output_expert,
-            );
+            )?;
             tv.output_expert.extend(vec![
                 format!("Author : {}", init_proposal_data.author),
                 format!(
@@ -2029,4 +2033,837 @@ pub async fn to_ledger_vector(
     format_outputs(&mut tv.output);
     format_outputs(&mut tv.output_expert);
     Ok(tv)
+}
+
+#[cfg(test)]
+mod test_signing {
+    use core::str::FromStr;
+    use std::collections::BTreeSet;
+    use std::sync::Arc;
+
+    use assert_matches::assert_matches;
+    use masp_primitives::consensus::BlockHeight;
+    use masp_primitives::transaction::components::sapling::builder::SaplingMetadata;
+    use namada_core::chain::ChainId;
+    use namada_core::hash::Hash;
+    use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
+    use namada_core::ibc::PGFIbcTarget;
+    use namada_core::masp::TxIdInner;
+    use namada_core::token::{Denomination, MaspDigitPos};
+    use namada_governance::storage::proposal::PGFInternalTarget;
+    use namada_io::client::EncodedResponseQuery;
+    use namada_tx::{Code, Data};
+    use namada_wallet::test_utils::TestWalletUtils;
+    use tendermint_rpc::SimpleRequest;
+    use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+    use tokio::sync::{Mutex, RwLockReadGuard, RwLockWriteGuard};
+
+    use super::*;
+    use crate::args::InputAmount;
+    use crate::masp::fs::FsShieldedUtils;
+    use crate::masp::{ShieldedContext, WalletMap};
+
+    fn arbitrary_args() -> args::Tx {
+        args::Tx {
+            dry_run: false,
+            dry_run_wrapper: false,
+            dump_tx: false,
+            output_folder: None,
+            force: false,
+            broadcast_only: false,
+            ledger_address: tendermint_rpc::Url::from_str(
+                "http://127.0.0.1:42",
+            )
+            .expect("Test failed"),
+            initialized_account_alias: None,
+            wallet_alias_force: false,
+            fee_amount: None,
+            wrapper_fee_payer: None,
+            fee_token: Address::Internal(InternalAddress::Governance),
+            gas_limit: namada_tx::data::GasLimit::from(2),
+            expiration: Default::default(),
+            chain_id: None,
+            signing_keys: vec![],
+            signatures: vec![],
+            tx_reveal_code_path: Default::default(),
+            password: Some(zeroize::Zeroizing::new("bingbong123".to_string())),
+            memo: None,
+            use_device: false,
+            device_transport: Default::default(),
+        }
+    }
+
+    pub struct TestNamadaImpl {
+        wallet: RwLock<Wallet<TestWalletUtils>>,
+        client: TestClient,
+        io: StdIo,
+    }
+
+    impl TestNamadaImpl {
+        fn new(
+            paths: Option<HashSet<String>>,
+        ) -> (Self, UnboundedSender<Option<EncodedResponseQuery>>) {
+            let (send, recv) = tokio::sync::mpsc::unbounded_channel();
+            (
+                Self {
+                    wallet: RwLock::new(Wallet::new(
+                        TestWalletUtils,
+                        Default::default(),
+                    )),
+                    client: TestClient {
+                        channel: Arc::new(Mutex::new(recv)),
+                        paths: paths.unwrap_or_default(),
+                    },
+                    io: StdIo,
+                },
+                send,
+            )
+        }
+    }
+    pub struct TestClient {
+        channel: Arc<Mutex<UnboundedReceiver<Option<EncodedResponseQuery>>>>,
+        paths: HashSet<String>,
+    }
+
+    #[cfg_attr(feature = "async-send", async_trait::async_trait)]
+    #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
+    impl Client for TestClient {
+        type Error = std::io::Error;
+
+        async fn request(
+            &self,
+            path: String,
+            _: Option<Vec<u8>>,
+            _: Option<namada_core::chain::BlockHeight>,
+            _: bool,
+        ) -> Result<EncodedResponseQuery, Self::Error> {
+            if !self.paths.contains(&path) {
+                return Err(std::io::Error::other("oh noes"));
+            }
+            match self.channel.lock().await.recv().await {
+                Some(Some(resp)) => Ok(resp),
+                _ => Err(std::io::Error::other("oh noes")),
+            }
+        }
+
+        async fn perform<R>(
+            &self,
+            _: R,
+        ) -> Result<R::Output, tendermint_rpc::Error>
+        where
+            R: SimpleRequest,
+        {
+            unimplemented!()
+        }
+    }
+
+    impl NamadaIo for TestNamadaImpl {
+        type Client = TestClient;
+        type Io = StdIo;
+
+        fn client(&self) -> &Self::Client {
+            &self.client
+        }
+
+        fn io(&self) -> &Self::Io {
+            &self.io
+        }
+    }
+    #[cfg_attr(feature = "async-send", async_trait::async_trait)]
+    #[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
+    #[rustversion::attr(
+        nightly,
+        allow(elided_named_lifetimes, reason = "Not actually named")
+    )]
+    impl Namada for TestNamadaImpl {
+        type ShieldedUtils = FsShieldedUtils;
+        type WalletUtils = TestWalletUtils;
+
+        async fn wallet_mut(
+            &self,
+        ) -> RwLockWriteGuard<'_, Wallet<Self::WalletUtils>> {
+            self.wallet.write().await
+        }
+
+        async fn wallet(
+            &self,
+        ) -> RwLockReadGuard<'_, Wallet<Self::WalletUtils>> {
+            self.wallet.read().await
+        }
+
+        fn wallet_lock(&self) -> &RwLock<Wallet<Self::WalletUtils>> {
+            &self.wallet
+        }
+
+        async fn shielded(
+            &self,
+        ) -> RwLockReadGuard<'_, ShieldedContext<Self::ShieldedUtils>> {
+            unimplemented!()
+        }
+
+        async fn shielded_mut(
+            &self,
+        ) -> RwLockWriteGuard<'_, ShieldedContext<Self::ShieldedUtils>>
+        {
+            unimplemented!()
+        }
+
+        fn native_token(&self) -> Address {
+            unimplemented!()
+        }
+    }
+
+    #[tokio::test]
+    async fn test_find_pk_failure() {
+        let (context, _) = TestNamadaImpl::new(None);
+        let secret_key = common::SecretKey::Ed25519(testing::gen_keypair::<
+            ed25519::SigScheme,
+        >());
+        let public_key = secret_key.to_public();
+        let addr = Address::Implicit(ImplicitAddress::from(&public_key));
+
+        let Error::Other(msg) =
+            find_pk(&context, &addr).await.expect_err("Test failed")
+        else {
+            panic!("Test failed")
+        };
+
+        assert_eq!(
+            msg,
+            format!(
+                "Unable to load the keypair from the wallet for the implicit \
+                 address {}. Failed with: No key matching {} found",
+                addr.encode(),
+                PublicKeyHash::from(&public_key),
+            ),
+        );
+
+        let addr = Address::Internal(InternalAddress::Governance);
+        let Error::Other(msg) =
+            find_pk(&context, &addr).await.expect_err("Test failed")
+        else {
+            panic!("Test failed")
+        };
+        assert_eq!(
+            msg,
+            format!("Internal address {} doesn't have any signing keys.", addr)
+        );
+    }
+
+    #[test]
+    fn test_find_key_by_pk_failure() {
+        let mut wallet =
+            Wallet::<TestWalletUtils>::new(TestWalletUtils, Default::default());
+        let args = arbitrary_args();
+        let secret_key = common::SecretKey::Ed25519(testing::gen_keypair::<
+            ed25519::SigScheme,
+        >());
+        let public_key = secret_key.to_public();
+        find_key_by_pk(&mut wallet, &args, &public_key)
+            .expect_err("Test failed");
+    }
+
+    #[tokio::test]
+    async fn test_tx_signers_failure() {
+        let args = arbitrary_args();
+        tx_signers(&TestNamadaImpl::new(None).0, &args, None)
+            .await
+            .expect_err("Test failed");
+    }
+
+    /// Test the unhappy flows in trying to validate
+    /// the fee token and amounts, both with and without
+    /// the force argument set.
+    #[tokio::test]
+    async fn test_validate_fee() {
+        let (context, client_handle) =
+            TestNamadaImpl::new(Some(HashSet::from([format!(
+                "/shell/value/{}",
+                parameter_storage::get_gas_cost_key()
+            )])));
+        let mut args = arbitrary_args();
+
+        // we should fail to validate the fee due to an unresponsive client
+        client_handle.send(None).expect("Test failed");
+        let Error::Query(crate::error::QueryError::NoResponse(msg)) =
+            validate_fee(&context, &args)
+                .await
+                .expect_err("Test failed")
+        else {
+            panic!("Test failed");
+        };
+        assert_eq!(msg, "oh noes");
+
+        // enabling force should return a default fee even though the
+        // client is unresponsive
+        client_handle.send(None).expect("Test failed");
+        args.force = true;
+        let fee = validate_fee(&context, &args).await.expect("Test failed");
+        assert_eq!(fee, DenominatedAmount::new(Amount::zero(), 0.into()));
+
+        // now validation should the minimum fee from the client instead of
+        // the args as force is false
+        args.force = false;
+        client_handle
+            .send(Some(EncodedResponseQuery {
+                data: BTreeMap::from([(
+                    args.fee_token.clone(),
+                    Amount::from(100),
+                )])
+                .serialize_to_vec(),
+                info: "".to_string(),
+                proof: None,
+                height: Default::default(),
+            }))
+            .expect("Test failed");
+        args.fee_amount = Some(InputAmount::Validated(DenominatedAmount::new(
+            Amount::from_u64(1),
+            0.into(),
+        )));
+        let fee = validate_fee(&context, &args).await.expect("Test failed");
+        assert_eq!(fee, DenominatedAmount::new(Amount::from(100), 0.into()));
+
+        // now validation should ignore the minimum fee from the client
+        // as force is true
+        args.force = true;
+        client_handle
+            .send(Some(EncodedResponseQuery {
+                data: BTreeMap::from([(
+                    args.fee_token.clone(),
+                    Amount::from(100),
+                )])
+                .serialize_to_vec(),
+                info: "".to_string(),
+                proof: None,
+                height: Default::default(),
+            }))
+            .expect("Test failed");
+        args.fee_amount = Some(InputAmount::Validated(DenominatedAmount::new(
+            Amount::from_u64(1),
+            0.into(),
+        )));
+        let fee = validate_fee(&context, &args).await.expect("Test failed");
+        assert_eq!(fee, DenominatedAmount::new(Amount::from(1), 0.into()));
+    }
+
+    /// Test that we correctly catch when a fee payer does not have
+    /// enough balahce to pay the minimum fees.
+    #[tokio::test]
+    async fn test_insufficient_funds_for_fee() {
+        let args = arbitrary_args();
+        // the minimum fee is set above the fee in the args.
+        let (context, client_handle) =
+            TestNamadaImpl::new(Some(HashSet::from([format!(
+                "/shell/value/{}",
+                parameter_storage::get_gas_cost_key()
+            )])));
+        client_handle
+            .send(Some(EncodedResponseQuery {
+                data: BTreeMap::from([(
+                    args.fee_token.clone(),
+                    Amount::from(100),
+                )])
+                .serialize_to_vec(),
+                info: "".to_string(),
+                proof: None,
+                height: Default::default(),
+            }))
+            .expect("Test failed");
+        let secret_key = common::SecretKey::Ed25519(testing::gen_keypair::<
+            ed25519::SigScheme,
+        >());
+        let public_key = secret_key.to_public();
+
+        assert_matches!(
+            validate_transparent_fee(&context, &args, &public_key).await,
+            Err(Error::Tx(TxSubmitError::BalanceTooLowForFees(_, _, _, _)))
+        );
+    }
+
+    /// Test that if the signing callback (usually the hardward wallet)
+    /// fails to sign the inner transaction (but fees are signed), the function
+    /// returns an error for not meeting the threshold of required signatures.
+    #[tokio::test]
+    async fn test_sign_tx_hw_failure() {
+        let wallet =
+            Wallet::<TestWalletUtils>::new(TestWalletUtils, Default::default());
+        let args = arbitrary_args();
+        let secret_key = common::SecretKey::Ed25519(testing::gen_keypair::<
+            ed25519::SigScheme,
+        >());
+        let public_key = secret_key.to_public();
+        let secret_key_fee =
+            common::SecretKey::Ed25519(testing::gen_keypair::<
+                ed25519::SigScheme,
+            >());
+        let public_key_fee = secret_key_fee.to_public();
+        let mut tx = Tx::new(ChainId::default(), None);
+        let signing_data = SigningTxData {
+            owner: None,
+            public_keys: vec![public_key.clone()],
+            threshold: 1,
+            account_public_keys_map: Some(Default::default()),
+            fee_payer: public_key_fee.clone(),
+        };
+
+        let Error::Tx(TxSubmitError::MissingSigningKeys(1, 0)) = sign_tx(
+            &RwLock::new(wallet),
+            &args,
+            &mut tx,
+            signing_data,
+            |tx, pk, _, _| {
+                let pkf = public_key_fee.clone();
+                async move {
+                    if pk == pkf.clone() {
+                        Ok(tx)
+                    } else {
+                        Err(Error::Other(
+                            "Uh oh, hardware wallet is borked".to_string(),
+                        ))
+                    }
+                }
+            },
+            (),
+        )
+        .await
+        .expect_err("Test failed") else {
+            panic!("Test failed");
+        };
+
+        // This should now work
+        let wallet =
+            Wallet::<TestWalletUtils>::new(TestWalletUtils, Default::default());
+        let signing_data = SigningTxData {
+            owner: None,
+            public_keys: vec![public_key.clone()],
+            threshold: 1,
+            account_public_keys_map: Some(Default::default()),
+            fee_payer: public_key.clone(),
+        };
+        sign_tx(
+            &RwLock::new(wallet),
+            &args,
+            &mut tx,
+            signing_data,
+            |tx, _, _, _| async { Ok(tx) },
+            (),
+        )
+        .await
+        .expect("Test failed");
+    }
+
+    /// Test the `to_ledger_vector` function correctly
+    /// extracts and validates the presence of a code section
+    #[tokio::test]
+    async fn test_to_ledger_vector_code_sections() {
+        let wallet =
+            Wallet::<TestWalletUtils>::new(TestWalletUtils, Default::default());
+        let mut tx = Tx::new(ChainId::default(), None);
+        // an empty tx should work correctly
+        to_ledger_vector(&wallet, &tx).await.expect("Test failed");
+
+        tx.push_default_inner_tx();
+        // should fail due to missing code section
+        let Error::Other(msg) = to_ledger_vector(&wallet, &tx)
+            .await
+            .expect_err("Test failed")
+        else {
+            panic!("Test failed")
+        };
+        assert_eq!(msg, "expected tx code section to be present".to_string());
+        tx.add_code(vec![1u8, 1, 1, 1], None);
+
+        // this tx should work correctly
+        to_ledger_vector(&wallet, &tx).await.expect("Test failed");
+
+        // making the commitment point to the wrong section type
+        // should cause the tx to fail
+        {
+            let mut tx_malformed = tx.clone();
+            let cmts = std::mem::take(&mut tx_malformed.header.batch);
+            let mut cmt = cmts.first().expect("Test failed").clone();
+            for section in tx_malformed.sections.iter_mut() {
+                if section.get_hash() == cmt.code_hash {
+                    *section = Section::Data(Data::new(vec![1u8; 4]));
+                    cmt.code_hash = section.get_hash();
+                }
+            }
+            tx_malformed.header.batch = HashSet::from([cmt]);
+
+            let Error::Other(msg) = to_ledger_vector(&wallet, &tx_malformed)
+                .await
+                .expect_err("Test failed")
+            else {
+                panic!("Test failed")
+            };
+            assert_eq!(msg, "expected section to have code tag")
+        }
+        // since the code for each possible tag is invalid, these should all
+        // fail
+        for tag in [
+            TX_INIT_ACCOUNT_WASM,
+            TX_BECOME_VALIDATOR_WASM,
+            TX_UNJAIL_VALIDATOR_WASM,
+            TX_DEACTIVATE_VALIDATOR_WASM,
+            TX_REACTIVATE_VALIDATOR_WASM,
+            TX_REDELEGATE_WASM,
+            TX_UPDATE_STEWARD_COMMISSION,
+            TX_RESIGN_STEWARD,
+            TX_BRIDGE_POOL_WASM,
+        ] {
+            let mut tx_malformed = tx.clone();
+            let cmts = std::mem::take(&mut tx_malformed.header.batch);
+            let mut cmt = cmts.first().expect("Test failed").clone();
+            for section in tx_malformed.sections.iter_mut() {
+                if section.get_hash() == cmt.code_hash {
+                    if let Section::Code(ref mut data) = section {
+                        data.tag = Some(tag.to_string());
+                        cmt.code_hash = section.get_hash();
+                    }
+                }
+            }
+            tx_malformed.header.batch = HashSet::from([cmt]);
+            let Error::Other(msg) = to_ledger_vector(&wallet, &tx_malformed)
+                .await
+                .expect_err("Test failed")
+            else {
+                panic!("Test failed")
+            };
+            assert_eq!(msg, "Invalid Data");
+        }
+    }
+
+    /// Test the `find_masp_builder` function that extracts
+    /// the masp builder and populates the asset data map.
+    #[test]
+    fn test_find_masp_builder() {
+        let mut tx = Tx::new(ChainId::default(), None);
+        let mut asset_types = Default::default();
+        let shielded_section_hash = MaspTxId::from(TxIdInner::from_bytes([
+            0, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ]));
+        // no masp builder present
+        assert_eq!(
+            find_masp_builder(
+                &tx,
+                Some(shielded_section_hash),
+                &mut asset_types
+            )
+            .expect("Test failed"),
+            None
+        );
+        assert!(asset_types.is_empty());
+
+        let assets = HashSet::from([
+            AssetData {
+                token: Address::Internal(InternalAddress::Governance),
+                denom: Denomination(1),
+                position: MaspDigitPos::Zero,
+                epoch: None,
+            },
+            AssetData {
+                token: Address::Internal(InternalAddress::ReplayProtection),
+                denom: Denomination(2),
+                position: MaspDigitPos::One,
+                epoch: None,
+            },
+        ]);
+        let masp_builder = MaspBuilder {
+            target: MaspTxId::from(TxIdInner::from_bytes([
+                0, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            ])),
+            asset_types: assets.clone(),
+            metadata: SaplingMetadata::empty(),
+            builder: masp_primitives::transaction::builder::Builder::new(
+                masp_primitives::consensus::TestNetwork,
+                BlockHeight::from_u32(1),
+            )
+            .map_builder(WalletMap),
+        };
+        tx.add_masp_builder(masp_builder);
+
+        // we pass in no shield section hash
+        assert_eq!(
+            find_masp_builder(&tx, None, &mut asset_types)
+                .expect("Test failed"),
+            None
+        );
+        assert!(asset_types.is_empty());
+
+        // we pass in a non-matching section hash
+        assert_eq!(
+            find_masp_builder(
+                &tx,
+                Some(MaspTxId::from(TxIdInner::from_bytes([
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                ]))),
+                &mut asset_types
+            )
+            .expect("Test failed"),
+            None
+        );
+        assert!(asset_types.is_empty());
+
+        // now we should find the builder
+        find_masp_builder(&tx, Some(shielded_section_hash), &mut asset_types)
+            .expect("Test failed")
+            .expect("Test failed");
+        assert_eq!(
+            asset_types
+                .values()
+                .cloned()
+                .collect::<HashSet<AssetData>>(),
+            assets,
+        );
+    }
+
+    /// Test that we strip decimal zeros and possibly
+    /// the decimal point before displaying on Ledger device
+    #[test]
+    fn test_to_ledger_decimal() {
+        assert_eq!(to_ledger_decimal("1.2"), "1.2".to_string(),);
+
+        assert_eq!(to_ledger_decimal("10"), "10".to_string(),);
+
+        assert_eq!(to_ledger_decimal("10.10"), "10.1".to_string(),);
+
+        assert_eq!(to_ledger_decimal("2.000"), "2".to_string(),);
+
+        assert_eq!(to_ledger_decimal("2."), "2".to_string(),)
+    }
+
+    /// Test the validation of the `proposal_type_to_ledger_vector` function.
+    #[test]
+    fn test_proposal_type_to_ledger_vector() {
+        let mut tx = Tx::new(ChainId::default(), None);
+        let mut output = vec![];
+        // default proposal should always pass
+        proposal_type_to_ledger_vector(
+            &ProposalType::Default,
+            &tx,
+            &mut output,
+        )
+        .expect("Test failed");
+        assert_eq!(output, vec!["Proposal type : Default".to_string()]);
+        output.clear();
+
+        // we should fail as the section hashes does not exist in the tx
+        let Error::Other(msg) = proposal_type_to_ledger_vector(
+            &ProposalType::DefaultWithWasm(Hash::default()),
+            &tx,
+            &mut output,
+        )
+        .expect_err("Test failed") else {
+            panic!("Test failed")
+        };
+        assert_eq!(msg, "unable to load vp code");
+        assert_eq!(output, vec!["Proposal type : Default".to_string()]);
+        output.clear();
+
+        // this should fail as the section hash points to the wrong kind of
+        // section
+        let wrong_sec_hash = tx
+            .add_section(Section::Code(Code::new(vec![1u8; 4], None)))
+            .get_hash();
+        let Error::Other(msg) = proposal_type_to_ledger_vector(
+            &ProposalType::DefaultWithWasm(wrong_sec_hash),
+            &tx,
+            &mut output,
+        )
+        .expect_err("Test failed") else {
+            panic!("Test failed")
+        };
+        assert_eq!(msg, "unable to load vp code");
+        assert_eq!(output, vec!["Proposal type : Default".to_string()]);
+        output.clear();
+
+        // this should succeed
+        let sec_hash = tx
+            .add_section(Section::ExtraData(Code::new(vec![1u8; 4], None)))
+            .get_hash();
+        proposal_type_to_ledger_vector(
+            &ProposalType::DefaultWithWasm(sec_hash),
+            &tx,
+            &mut output,
+        )
+        .expect("Test failed");
+        let hash =
+            HEXLOWER.encode(&Code::new(vec![1u8; 4], None).code.hash().0);
+        assert_eq!(
+            output,
+            vec![
+                "Proposal type : Default".to_string(),
+                format!("Proposal hash : {hash}",)
+            ]
+        );
+        output.clear();
+
+        // The actions should be sorted
+        let addr = Address::Internal(InternalAddress::Governance);
+        proposal_type_to_ledger_vector(
+            &ProposalType::PGFSteward(BTreeSet::from([
+                AddRemove::Remove(addr.clone()),
+                AddRemove::Add(addr.clone()),
+            ])),
+            &tx,
+            &mut output,
+        )
+        .expect("Test failed");
+        assert_eq!(
+            output,
+            vec![
+                "Proposal type : PGF Steward".to_string(),
+                format!("Add : {addr}"),
+                format!("Remove : {addr}"),
+            ]
+        );
+        output.clear();
+
+        // PGF payments
+        proposal_type_to_ledger_vector(
+            &ProposalType::PGFPayment(BTreeSet::from([PGFAction::Continuous(
+                AddRemove::Add(PGFTarget::Internal(PGFInternalTarget {
+                    target: addr.clone(),
+                    amount: Amount::zero(),
+                })),
+            )])),
+            &tx,
+            &mut output,
+        )
+        .expect("Test failed");
+        assert_eq!(
+            output,
+            vec![
+                "Proposal type : PGF Payment".to_string(),
+                "PGF Action : Add Continuous Payment".to_string(),
+                format!("Target: {addr}"),
+                "Amount: NAM 0".to_string(),
+            ],
+        );
+        output.clear();
+        proposal_type_to_ledger_vector(
+            &ProposalType::PGFPayment(BTreeSet::from([PGFAction::Continuous(
+                AddRemove::Remove(PGFTarget::Internal(PGFInternalTarget {
+                    target: addr.clone(),
+                    amount: Amount::zero(),
+                })),
+            )])),
+            &tx,
+            &mut output,
+        )
+        .expect("Test failed");
+        assert_eq!(
+            output,
+            vec![
+                "Proposal type : PGF Payment".to_string(),
+                "PGF Action : Remove Continuous Payment".to_string(),
+                format!("Target: {addr}"),
+                "Amount: NAM 0".to_string(),
+            ],
+        );
+        output.clear();
+
+        proposal_type_to_ledger_vector(
+            &ProposalType::PGFPayment(BTreeSet::from([PGFAction::Retro(
+                PGFTarget::Internal(PGFInternalTarget {
+                    target: addr.clone(),
+                    amount: Amount::zero(),
+                }),
+            )])),
+            &tx,
+            &mut output,
+        )
+        .expect("Test failed");
+        assert_eq!(
+            output,
+            vec![
+                "Proposal type : PGF Payment".to_string(),
+                "PGF Action : Retro Payment".to_string(),
+                format!("Target: {addr}"),
+                "Amount: NAM 0".to_string(),
+            ],
+        );
+        output.clear();
+
+        proposal_type_to_ledger_vector(
+            &ProposalType::PGFPayment(BTreeSet::from([PGFAction::Continuous(
+                AddRemove::Add(PGFTarget::Ibc(PGFIbcTarget {
+                    target: "bloop".to_string(),
+                    amount: Default::default(),
+                    port_id: PortId::transfer(),
+                    channel_id: ChannelId::new(16),
+                })),
+            )])),
+            &tx,
+            &mut output,
+        )
+        .expect("Test failed");
+        assert_eq!(
+            output,
+            vec![
+                "Proposal type : PGF Payment".to_string(),
+                "PGF Action : Add Continuous Payment".to_string(),
+                "Target: bloop".to_string(),
+                "Amount: NAM 0".to_string(),
+                "Port ID: transfer".to_string(),
+                "Channel ID: channel-16".to_string(),
+            ],
+        );
+        output.clear();
+
+        proposal_type_to_ledger_vector(
+            &ProposalType::PGFPayment(BTreeSet::from([PGFAction::Continuous(
+                AddRemove::Remove(PGFTarget::Ibc(PGFIbcTarget {
+                    target: "bloop".to_string(),
+                    amount: Default::default(),
+                    port_id: PortId::transfer(),
+                    channel_id: ChannelId::new(16),
+                })),
+            )])),
+            &tx,
+            &mut output,
+        )
+        .expect("Test failed");
+        assert_eq!(
+            output,
+            vec![
+                "Proposal type : PGF Payment".to_string(),
+                "PGF Action : Remove Continuous Payment".to_string(),
+                "Target: bloop".to_string(),
+                "Amount: NAM 0".to_string(),
+                "Port ID: transfer".to_string(),
+                "Channel ID: channel-16".to_string(),
+            ],
+        );
+        output.clear();
+
+        proposal_type_to_ledger_vector(
+            &ProposalType::PGFPayment(BTreeSet::from([PGFAction::Retro(
+                PGFTarget::Ibc(PGFIbcTarget {
+                    target: "bloop".to_string(),
+                    amount: Default::default(),
+                    port_id: PortId::transfer(),
+                    channel_id: ChannelId::new(16),
+                }),
+            )])),
+            &tx,
+            &mut output,
+        )
+        .expect("Test failed");
+        assert_eq!(
+            output,
+            vec![
+                "Proposal type : PGF Payment".to_string(),
+                "PGF Action : Retro Payment".to_string(),
+                "Target: bloop".to_string(),
+                "Amount: NAM 0".to_string(),
+                "Port ID: transfer".to_string(),
+                "Channel ID: channel-16".to_string(),
+            ],
+        );
+        output.clear();
+    }
 }
