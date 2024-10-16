@@ -597,7 +597,7 @@ mod test_process_proposal {
     };
     use namada_sdk::key::*;
     use namada_sdk::state::StorageWrite;
-    use namada_sdk::testing::{arb_tampered_tx, arb_valid_signed_tx};
+    use namada_sdk::testing::{arb_tampered_wrapper_tx, arb_valid_signed_tx};
     use namada_sdk::token::{read_denom, Amount, DenominatedAmount};
     use namada_sdk::tx::data::Fee;
     use namada_sdk::tx::{Code, Data, Signed};
@@ -946,10 +946,6 @@ mod test_process_proposal {
     /// Test that a block including a wrapper tx with invalid signature is
     /// rejected
     #[test]
-    // FIXME: need a test in finalize bloc kfor malleability of an inner tx doen
-    // by the wrapper signer (check both one that fails because of signature and
-    // one that fails because of indirect inclusion in tx data), this does not
-    // need to be proptest. will probably need soe more wasm for tests
     fn test_wrapper_bad_signature() {
         let (shell, _recv, _, _) = test_utils::setup_at_height(3u64);
 
@@ -966,7 +962,7 @@ mod test_process_proposal {
 
         // Then test invalid tx
         let mut runner = TestRunner::new(Config::default());
-        let result = runner.run(&arb_tampered_tx(), |tx| {
+        let result = runner.run(&arb_tampered_wrapper_tx(), |tx| {
             let request = ProcessProposal {
                 txs: vec![tx.to_bytes()],
             };

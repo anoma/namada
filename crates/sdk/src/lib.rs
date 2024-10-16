@@ -1659,7 +1659,7 @@ pub mod testing {
     }
 
     prop_compose! {
-        /// Generate an arbitrary tx with a valid signature
+        /// Generate an arbitrary tx with a valid wrapper signature
         pub fn arb_valid_signed_tx()
         (
             (mut tx, _data) in arb_memoed_tx(),
@@ -1675,6 +1675,24 @@ pub mod testing {
         }
     }
 
+    prop_compose! {
+        /// Generate an arbitrary tx with a valid raw signature
+        pub fn arb_valid_signed_inner_tx(signer: common::SecretKey)
+        (
+            (mut tx, _data) in arb_memoed_tx(),
+        ) -> Tx {
+            tx.update_header(TxType::Raw);
+            // Sign the inner tx
+            tx.sign_raw(
+                vec![signer.clone()],
+                vec![signer.ref_to()].into_iter().collect(),
+                None
+            );
+
+            tx
+        }
+    }
+
     // An enumeration representing different ways to tamper with a transaction
     #[derive(Debug, Clone)]
     enum TamperTx {
@@ -1684,11 +1702,9 @@ pub mod testing {
         SwapHeader,
     }
 
-    // FIXME: for the inners I can proptest by just changing the code section to
-    // that of theempty tx for tests
     prop_compose! {
         /// Generate an arbitrary signed wrapped tx that has been tampered with.
-        pub fn arb_tampered_tx()
+        pub fn arb_tampered_wrapper_tx()
         (tx1 in arb_valid_signed_tx())(
             tamper in prop_oneof![
                 Just(TamperTx::RemoveSection),
@@ -1738,6 +1754,62 @@ pub mod testing {
                     let mut new_wrapper = tx2.0.header.wrapper().unwrap();
                     new_wrapper.pk =  tx.header.wrapper().unwrap().pk;
                     tx.update_header(TxType::Wrapper(Box::new(new_wrapper)));
+
+                    tx
+                },
+            }
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary signed inner tx that has been tampered with.
+        pub fn arb_tampered_inner_tx(signer: common::SecretKey)
+        (tx1 in arb_valid_signed_inner_tx(signer.clone()))(
+            tamper in prop_oneof![
+                Just(TamperTx::RemoveSection),
+                Just(TamperTx::AddExtraSection),
+                Just(TamperTx::SwapSection),
+                Just(TamperTx::SwapHeader)
+            ],
+            tx2 in arb_valid_signed_inner_tx(signer.clone()),
+            selector in proptest::prelude::any::<proptest::prelude::prop::sample::Selector>(),
+            mut tx in Just(tx1),
+        ) -> Tx {
+            match tamper {
+               TamperTx::RemoveSection => {
+                    let to_remove = selector.select(&tx.sections).to_owned();
+                    tx.sections.retain(|section| section != &to_remove);
+
+                    tx
+                },
+               TamperTx::AddExtraSection => {
+                    let to_add = selector.select(&tx2.sections).to_owned();
+                    tx.sections.push(to_add);
+
+                    tx
+                },
+               TamperTx::SwapSection => {
+                    let mut to_remove = selector.select(&tx.sections).to_owned();
+                    let mut to_add = selector.select(&tx2.sections).to_owned();
+
+                    // Try to pick different sections of the same type for the swap if possible
+                    for source in tx.sections.iter() {
+                        if let Some(target) = tx2.sections.iter().find(|section| {
+                            std::mem::discriminant(*section) == std::mem::discriminant(&to_remove) && section.get_hash() != source.get_hash()
+                        }) {
+                            to_remove = source.to_owned();
+                            to_add = target.to_owned();
+                            break;
+                        }
+                    }
+
+                    tx.sections.retain(|section| section != &to_remove);
+                    tx.sections.push(to_add);
+
+                    tx
+                },
+               TamperTx::SwapHeader => {
+                    tx.header = tx2.header;
 
                     tx
                 },

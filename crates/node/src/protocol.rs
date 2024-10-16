@@ -1401,6 +1401,7 @@ fn merge_vp_results(
 #[cfg(test)]
 mod tests {
     use eyre::Result;
+    use namada_sdk::account::pks_handle;
     use namada_sdk::chain::BlockHeight;
     use namada_sdk::collections::HashMap;
     use namada_sdk::eth_bridge::protocol::transactions::votes::{
@@ -1413,11 +1414,18 @@ mod tests {
     use namada_sdk::ethereum_events::testing::DAI_ERC20_ETH_ADDRESS;
     use namada_sdk::ethereum_events::{EthereumEvent, TransferToNamada};
     use namada_sdk::keccak::keccak_hash;
+    use namada_sdk::key::RefTo;
+    use namada_sdk::testing::{
+        arb_tampered_inner_tx, arb_valid_signed_inner_tx,
+    };
     use namada_sdk::tx::{SignableEthMessage, Signed};
     use namada_sdk::voting_power::FractionalVotingPower;
     use namada_sdk::{address, key};
+    use namada_test_utils::TestWasms;
     use namada_vote_ext::bridge_pool_roots::BridgePoolRootVext;
     use namada_vote_ext::ethereum_events::EthereumEventsVext;
+    use namada_vp::state::StorageWrite;
+    use proptest::test_runner::{Config, TestCaseError, TestRunner};
 
     use super::*;
 
@@ -1629,5 +1637,85 @@ mod tests {
             &mut vp_cache,
         );
         assert!(matches!(result.unwrap_err(), Error::GasError(_)));
+    }
+
+    // Test that the host function for signature verification we expose allows
+    // the vps to detect a tx that has been tampered with FIXME: proptest
+    // macro?
+    #[test]
+    fn test_tampered_inner_tx_rejected() {
+        let (mut state, _validators) = test_utils::setup_default_storage();
+        let signing_key = key::testing::keypair_1();
+        let pk = signing_key.ref_to();
+        let addr = Address::from(&pk);
+
+        // Reveal the pk
+        pks_handle(&addr)
+            .insert(&mut state, 0_u8, pk.clone())
+            .unwrap();
+
+        // Allowlist the vp for the signature verification
+        let vp_code = TestWasms::VpVerifySignature.read_bytes();
+        // store the wasm code
+        let code_hash = Hash::sha256(&vp_code);
+        let key = namada_sdk::storage::Key::wasm_code(&code_hash);
+        let len_key = namada_sdk::storage::Key::wasm_code_len(&code_hash);
+        let code_len = vp_code.len() as u64;
+        state.write(&key, vp_code).unwrap();
+        state.write(&len_key, code_len).unwrap();
+
+        let (vp_cache, _) = wasm::compilation_cache::common::testing::cache();
+
+        let mut runner = TestRunner::new(Config::default());
+        // Test that the strategy produces valid txs first
+        let result =
+            runner.run(&arb_valid_signed_inner_tx(signing_key.clone()), |tx| {
+                match wasm::run::vp(
+                    code_hash,
+                    &tx.batch_ref_first_tx().unwrap(),
+                    &TxIndex::default(),
+                    &addr,
+                    &state,
+                    &RefCell::new(VpGasMeter::new_from_tx_meter(
+                        &TxGasMeter::new(u64::MAX),
+                    )),
+                    &Default::default(),
+                    &Default::default(),
+                    vp_cache.clone(),
+                ) {
+                    Ok(()) => Ok(()),
+                    Err(_) => Err(TestCaseError::fail(
+                        "Unexpectedly produced a tx with invalid signature",
+                    )),
+                }
+            });
+        assert!(result.is_ok());
+
+        // Then test tampered txs
+        let mut runner = TestRunner::new(Config::default());
+        let result = runner.run(&arb_tampered_inner_tx(signing_key), |tx| {
+            match wasm::run::vp(
+                code_hash,
+                &tx.batch_ref_first_tx().unwrap(),
+                &TxIndex::default(),
+                &addr,
+                &state,
+                &RefCell::new(VpGasMeter::new_from_tx_meter(&TxGasMeter::new(
+                    u64::MAX,
+                ))),
+                &Default::default(),
+                &Default::default(),
+                vp_cache.clone(),
+            ) {
+                // FIXME: this doesn't pass because at the moment we are not
+                // signing all the sections, so tampering with them does not
+                // necessarily invalidate the signature
+                Ok(()) => Err(TestCaseError::fail(
+                    "Unexpectedly produced a tx with a valid signature",
+                )),
+                Err(_) => Ok(()),
+            }
+        });
+        assert!(result.is_ok());
     }
 }
