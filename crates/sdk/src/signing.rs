@@ -2452,6 +2452,95 @@ mod test_signing {
         .expect("Test failed");
     }
 
+    #[tokio::test]
+    async fn test_make_transfer_endpoints() {
+        let tf = token::Transfer {
+            sources: BTreeMap::from([(
+                Account {
+                    owner: Address::Internal(InternalAddress::Governance),
+                    token: Address::Internal(InternalAddress::Governance),
+                },
+                DenominatedAmount::new(Amount::from_u64(1), 0.into()),
+            )]),
+            targets: BTreeMap::from([(
+                Account {
+                    owner: Address::Internal(InternalAddress::Pgf),
+                    token: Address::Internal(InternalAddress::Pgf),
+                },
+                DenominatedAmount::new(Amount::from_u64(2), 0.into()),
+            )]),
+            shielded_section_hash: None,
+        };
+        let tokens = HashMap::from([
+            (
+                Address::Internal(InternalAddress::Governance),
+                "SuperMoney".to_string(),
+            ),
+            (
+                Address::Internal(InternalAddress::Pgf),
+                "BloodMoney".to_string(),
+            ),
+        ]);
+
+        let mut output = vec![];
+        // test with token aliases
+        make_ledger_token_transfer_endpoints(
+            &tokens,
+            &mut output,
+            &tf,
+            None,
+            &Default::default(),
+        )
+        .await
+        .expect("Test failed");
+        let expected = vec![
+            format!(
+                "Sender : {}",
+                Address::Internal(InternalAddress::Governance)
+            ),
+            "Sending Amount : SUPERMONEY 1".to_string(),
+            format!(
+                "Destination : {}",
+                Address::Internal(InternalAddress::Pgf)
+            ),
+            "Receiving Amount : BLOODMONEY 2".to_string(),
+        ];
+        assert_eq!(output, expected);
+        output.clear();
+
+        // test without token aliases
+        make_ledger_token_transfer_endpoints(
+            &Default::default(),
+            &mut output,
+            &tf,
+            None,
+            &Default::default(),
+        )
+        .await
+        .expect("Test failed");
+        let expected = vec![
+            format!(
+                "Sender : {}",
+                Address::Internal(InternalAddress::Governance)
+            ),
+            format!(
+                "Sending Token : {}",
+                Address::Internal(InternalAddress::Governance)
+            ),
+            "Sending Amount : 1".to_string(),
+            format!(
+                "Destination : {}",
+                Address::Internal(InternalAddress::Pgf)
+            ),
+            format!(
+                "Receiving Token : {}",
+                Address::Internal(InternalAddress::Pgf)
+            ),
+            "Receiving Amount : 2".to_string(),
+        ];
+        assert_eq!(output, expected);
+    }
+
     /// Test the `to_ledger_vector` function correctly
     /// extracts and validates the presence of a code section
     #[tokio::test]
