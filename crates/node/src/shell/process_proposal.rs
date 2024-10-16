@@ -171,9 +171,7 @@ where
     /// Checks if the Tx can be deserialized from bytes. Checks the fees and
     /// signatures of the fee payer for a transaction if it is a wrapper tx.
     ///
-    /// Checks validity of a decrypted tx or that a tx marked un-decryptable
-    /// is in fact so. Also checks that decrypted txs were submitted in
-    /// correct order.
+    /// Checks validity of an inner tx.
     ///
     /// Error codes:
     ///   0: Ok
