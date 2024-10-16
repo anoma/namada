@@ -23,6 +23,7 @@ members = [
     "vp_infinite_host_gas",
     "vp_memory_limit",
     "vp_read_storage_key",
+    "vp_verify_signature"
 ]
 
 [workspace.package]
