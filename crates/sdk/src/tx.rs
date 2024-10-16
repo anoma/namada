@@ -265,7 +265,7 @@ pub async fn process_tx(
         let tx_hash = tx.header_hash().to_string();
         let cmts = tx.commitments().clone();
         let wrapper_hash = tx.wrapper_hash();
-        // We use this to determine when the decrypted inner tx makes it
+        // We use this to determine when the inner tx makes it
         // on-chain
         let to_broadcast = TxBroadcastData::Live { tx, tx_hash };
         if args.broadcast_only {
@@ -393,8 +393,7 @@ pub async fn broadcast_tx(
 ///
 /// Checks that
 /// 1. The tx has been successfully included into the mempool of a validator
-/// 2. The tx with encrypted payload has been included on the blockchain
-/// 3. The decrypted payload of the tx has been included on the blockchain.
+/// 2. The tx has been included on the blockchain
 ///
 /// In the case of errors in any of those stages, an error message is returned
 pub async fn submit_tx(

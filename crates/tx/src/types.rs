@@ -46,8 +46,6 @@ pub enum DecodeError {
     InvalidJSONDeserialization(String),
 }
 
-/// Errors relating to decrypting a wrapper tx and its
-/// encrypted payload from a Tx type
 #[allow(missing_docs)]
 #[derive(thiserror::Error, Debug, PartialEq)]
 pub enum TxError {
@@ -206,7 +204,7 @@ impl Tx {
         Section::Header(self.header.clone()).get_hash()
     }
 
-    /// Gets the hash of the decrypted transaction's header
+    /// Gets the hash of the raw transaction's header
     pub fn raw_header_hash(&self) -> namada_core::hash::Hash {
         let mut raw_header = self.header();
         raw_header.tx_type = TxType::Raw;
@@ -544,15 +542,9 @@ impl Tx {
 
     /// Determines the type of the input Tx
     ///
-    /// If it is a raw Tx, signed or not, the Tx is
-    /// returned unchanged inside an enum variant stating its type.
+    /// If it is a raw Tx, signed or not, we return `None`.
     ///
-    /// If it is a decrypted tx, signing it adds no security so we
-    /// extract the signed data without checking the signature (if it
-    /// is signed) or return as is. Either way, it is returned in
-    /// an enum variant stating its type.
-    ///
-    /// If it is a WrapperTx, we extract the signed data of
+    /// If it is a WrapperTx or ProtocolTx, we extract the signed data of
     /// the Tx and verify it is of the appropriate form. This means
     /// 1. The wrapper tx is indeed signed
     /// 2. The signature is valid
