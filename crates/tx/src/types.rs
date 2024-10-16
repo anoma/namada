@@ -223,6 +223,19 @@ impl Tx {
         hashes
     }
 
+    /// Get hashes of all the sections in the raw transaction that are relevant
+    /// for signing.
+    pub fn raw_sechashes(&self) -> Vec<namada_core::hash::Hash> {
+        let mut hashes = vec![self.raw_header_hash()];
+        for sec in &self.sections {
+            match sec {
+                Section::Authorization(_) | Section::MaspBuilder(_) => (),
+                _ => hashes.push(sec.get_hash()),
+            }
+        }
+        hashes
+    }
+
     /// Update the header whilst maintaining existing cross-references
     pub fn update_header(&mut self, tx_type: TxType) -> &mut Self {
         self.header.tx_type = tx_type;
@@ -510,7 +523,7 @@ impl Tx {
         public_keys_index_map: &AccountPublicKeysMap,
         signer: Option<Address>,
     ) -> Vec<SignatureIndex> {
-        let targets = vec![self.raw_header_hash()];
+        let targets = self.raw_sechashes();
         let mut signatures = Vec::new();
         let section = Authorization::new(
             targets,
@@ -716,8 +729,9 @@ impl Tx {
         account_public_keys_map: AccountPublicKeysMap,
         signer: Option<Address>,
     ) -> &mut Self {
-        // The inner tx signer signs the Raw version of the Header
-        let hashes = vec![self.raw_header_hash()];
+        // The inner tx signer signs the Raw version of the Header and the
+        // relevant sections
+        let hashes = self.raw_sechashes();
         self.protocol_filter();
 
         let secret_keys = if signer.is_some() {
@@ -741,7 +755,7 @@ impl Tx {
     ) -> &mut Self {
         self.protocol_filter();
         let mut pk_section = Authorization {
-            targets: vec![self.raw_header_hash()],
+            targets: self.raw_sechashes(),
             signatures: BTreeMap::new(),
             signer: Signer::PubKeys(vec![]),
         };

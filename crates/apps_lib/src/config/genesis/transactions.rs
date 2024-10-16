@@ -817,13 +817,13 @@ impl<T> Signed<T> {
             .expect("Failed to sign pre-genesis transaction.");
         }
 
-        let raw_header_hash = tx.raw_header_hash();
+        let hashes = tx.raw_sechashes();
         let sigs = tx
             .sections
             .into_iter()
             .find_map(|sec| {
                 if let Section::Authorization(signatures) = sec {
-                    if [raw_header_hash] == signatures.targets.as_slice() {
+                    if hashes == signatures.targets {
                         Some(signatures)
                     } else {
                         None
@@ -874,7 +874,7 @@ impl<T> Signed<T> {
         };
         signed_tx
             .verify_signatures(
-                &[signed_tx.raw_header_hash()],
+                &signed_tx.raw_sechashes(),
                 AccountPublicKeysMap::from_iter(public_keys.into_iter()),
                 &None,
                 threshold,

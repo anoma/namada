@@ -190,7 +190,7 @@ fn run(kinds: NonEmptyVec<TxKind>) {
             ),
         )));
         tx.add_section(tx::Section::Authorization(tx::Authorization::new(
-            vec![tx.raw_header_hash()],
+            tx.raw_sechashes(),
             [(0, signer.clone())].into_iter().collect(),
             None,
         )));

@@ -1949,7 +1949,7 @@ where
 
     let gas_meter = env.ctx.gas_meter();
     vp_host_fns::add_gas(gas_meter, gas)?;
-    let hashes: [Hash; 1] = decode(hash_list)?;
+    let hashes: Vec<Hash> = decode(hash_list)?;
 
     let (public_keys_map, gas) = env
         .memory

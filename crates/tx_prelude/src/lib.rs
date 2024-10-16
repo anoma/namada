@@ -446,7 +446,7 @@ pub fn verify_signatures_of_pks(
 
     // Serialize parameters
     let public_keys_map = public_keys_index_map.serialize_to_vec();
-    let targets = [tx.raw_header_hash()].serialize_to_vec();
+    let targets = tx.raw_sechashes().serialize_to_vec();
 
     let valid = unsafe {
         namada_tx_verify_tx_section_signature(

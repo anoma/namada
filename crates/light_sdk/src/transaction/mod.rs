@@ -47,7 +47,7 @@ pub(in crate::transaction) fn build_tx(
 }
 
 pub(in crate::transaction) fn get_sign_bytes(tx: &Tx) -> Vec<Hash> {
-    vec![tx.raw_header_hash()]
+    tx.raw_sechashes()
 }
 
 pub(in crate::transaction) fn get_wrapper_sign_bytes(tx: &Tx) -> Hash {
@@ -66,9 +66,8 @@ pub(in crate::transaction) fn attach_raw_signatures(
     signer: common::PublicKey,
     signature: common::Signature,
 ) -> Tx {
-    tx.protocol_filter();
     tx.add_section(Section::Authorization(Authorization {
-        targets: vec![tx.raw_header_hash()],
+        targets: tx.raw_sechashes(),
         signer: Signer::PubKeys(vec![signer]),
         signatures: [(0, signature)].into_iter().collect(),
     }));

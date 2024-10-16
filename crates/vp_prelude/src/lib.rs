@@ -93,7 +93,7 @@ fn verify_signatures(ctx: &Ctx, tx: &Tx, owner: &Address) -> VpResult {
 
     // Serialize parameters
     let public_keys_map = public_keys_index_map.serialize_to_vec();
-    let targets = [tx.raw_header_hash()].serialize_to_vec();
+    let targets = tx.raw_sechashes().serialize_to_vec();
     let signer = owner.serialize_to_vec();
 
     unsafe {
