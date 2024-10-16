@@ -2489,7 +2489,7 @@ mod shell_tests {
         )
     }
 
-    /// Mempool validation must reject already applied wrapper and decrypted
+    /// Mempool validation must reject already applied wrapper and inner
     /// transactions
     #[test]
     fn test_replay_attack() {

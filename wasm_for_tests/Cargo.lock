@@ -3974,6 +3974,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "vp_verify_signature"
+version = "0.41.0"
+dependencies = [
+ "getrandom",
+ "namada_vp_prelude",
+ "rlsf",
+]
+
+[[package]]
 name = "wasi"
 version = "0.11.0+wasi-snapshot-preview1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

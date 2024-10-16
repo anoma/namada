@@ -616,12 +616,9 @@ pub async fn dry_run_tx<N: Namada>(
     Ok(result)
 }
 
-/// Data needed for broadcasting a tx and
-/// monitoring its progress on chain
+/// Data needed for broadcasting a tx and monitoring its progress on chain.
 ///
-/// Txs may be either a dry run or else
-/// they should be encrypted and included
-/// in a wrapper.
+/// Txs may be either a dry run or else they should be included in a wrapper.
 #[derive(Debug, Clone)]
 pub enum TxBroadcastData {
     /// Dry run broadcast data
