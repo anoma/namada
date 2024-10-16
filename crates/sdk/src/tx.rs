@@ -2883,7 +2883,11 @@ async fn used_asset_types<P, K, N>(
 }
 
 /// Constructs the batched tx from the provided list. Returns also the data for
-/// signing
+/// signing.
+///
+/// Before submitting the batch consider calling
+/// `crate::signing::rework_batch_wrapper_signatures` to remove any possible
+/// redundant signature that might bloat your transaction.
 pub fn build_batch(
     mut txs: Vec<(Tx, SigningTxData)>,
 ) -> Result<(Tx, Vec<SigningTxData>)> {
