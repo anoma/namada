@@ -699,7 +699,6 @@ impl WriteLog {
         for (key, modification) in self.block_write_log.iter().chain(
             self.batch_write_log
                 .iter()
-                .rev()
                 .flat_map(|batch_log| batch_log.write_log.iter()),
         ) {
             if key.split_prefix(prefix).is_some() {
@@ -719,7 +718,6 @@ impl WriteLog {
         for (key, modification) in self.block_write_log.iter().chain(
             self.batch_write_log
                 .iter()
-                .rev()
                 .flat_map(|batch_log| batch_log.write_log.iter())
                 .chain(self.tx_write_log.write_log.iter()),
         ) {
