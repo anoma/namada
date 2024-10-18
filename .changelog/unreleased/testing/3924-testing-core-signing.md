@@ -1,2 +1,2 @@
-- Added tests in crates/core/signing.rs
+- Added tests in crates/sdk/signing.rs
   ([\#3924](https://github.com/anoma/namada/pull/3924))
