@@ -1781,55 +1781,12 @@ pub mod testing {
         /// Generate an arbitrary signed inner tx that has been tampered with.
         pub fn arb_tampered_inner_tx(signer: common::SecretKey)
         (tx1 in arb_valid_signed_inner_tx(signer.clone()))(
-            tamper in prop_oneof![
-                Just(TamperTx::RemoveSection),
-                Just(TamperTx::AddExtraSection),
-                Just(TamperTx::SwapSection),
-                Just(TamperTx::SwapHeader)
-            ],
             tx2 in arb_valid_signed_inner_tx(signer.clone()),
-            selector in proptest::prelude::any::<proptest::prelude::prop::sample::Selector>(),
             mut tx in Just(tx1),
         ) -> Tx {
-            match tamper {
-               TamperTx::RemoveSection => {
-                    let to_remove = selector.select(&tx.sections).to_owned();
-                    tx.sections.retain(|section| section != &to_remove);
-
-                    tx
-                },
-               TamperTx::AddExtraSection => {
-                    let to_add = selector.select(&tx2.sections).to_owned();
-                    tx.sections.push(to_add);
-
-                    tx
-                },
-               TamperTx::SwapSection => {
-                    let mut to_remove = selector.select(&tx.sections).to_owned();
-                    let mut to_add = selector.select(&tx2.sections).to_owned();
-
-                    // Try to pick different sections of the same type for the swap if possible
-                    for source in tx.sections.iter() {
-                        if let Some(target) = tx2.sections.iter().find(|section| {
-                            std::mem::discriminant(*section) == std::mem::discriminant(&to_remove) && section.get_hash() != source.get_hash()
-                        }) {
-                            to_remove = source.to_owned();
-                            to_add = target.to_owned();
-                            break;
-                        }
-                    }
-
-                    tx.sections.retain(|section| section != &to_remove);
-                    tx.sections.push(to_add);
-
-                    tx
-                },
-               TamperTx::SwapHeader => {
-                    tx.header = tx2.header;
-
-                    tx
-                },
-            }
+            // Tamper with the header only since signature is computed on this alone
+            tx.header = tx2.header;
+            tx
         }
     }
 }

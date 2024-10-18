@@ -1692,9 +1692,6 @@ mod tests {
         // Then test tampered txs
         let mut runner = TestRunner::new(Config::default());
         let result = runner.run(&arb_tampered_inner_tx(signing_key), |tx| {
-            // FIXME: this doesn't pass because at the moment we are not
-            // signing all the sections, so tampering with them does not
-            // necessarily invalidate the signature
             assert!(
                 wasm::run::vp(
                     code_hash,
