@@ -629,6 +629,35 @@ pub trait Namada: NamadaIo {
         .await
     }
 
+    /// Reworks the wrapper signatures of the given transaction using the given
+    /// signing data
+    async fn rework_batch_wrapper_signatures<D, F>(
+        &self,
+        tx: &mut Tx,
+        args: &args::Tx,
+        signing_data: SigningTxData,
+        with: impl Fn(Tx, common::PublicKey, HashSet<signing::Signable>, D) -> F
+        + MaybeSend
+        + MaybeSync,
+        user_data: D,
+    ) -> crate::error::Result<()>
+    where
+        D: Clone + MaybeSend + MaybeSync,
+        F: MaybeSend
+            + MaybeSync
+            + std::future::Future<Output = crate::error::Result<Tx>>,
+    {
+        signing::rework_batch_wrapper_signatures(
+            self.wallet_lock(),
+            args,
+            tx,
+            signing_data,
+            with,
+            user_data,
+        )
+        .await
+    }
+
     /// Process the given transaction using the given flags
     async fn submit(
         &self,
