@@ -1250,16 +1250,18 @@ where
                 }
 
                 // Max block gas
-                let block_gas_limit: Gas = Gas::from_whole_units(
-                    parameters::get_max_block_gas(&self.state).unwrap().into(),
-                    gas_scale,
-                )
-                .expect("Gas limit from parameter must not overflow");
+                let max_block_gas =
+                    parameters::get_max_block_gas(&self.state).unwrap();
+                let block_gas_limit: Gas =
+                    Gas::from_whole_units(max_block_gas.into(), gas_scale)
+                        .expect("Gas limit from parameter must not overflow");
                 if gas_meter.tx_gas_limit > block_gas_limit {
                     response.code = ResultCode::AllocationError.into();
-                    response.log = "{INVALID_MSG}: Wrapper transaction \
-                                    exceeds the maximum block gas limit"
-                        .to_string();
+                    response.log = format!(
+                        "{INVALID_MSG}: Wrapper transaction exceeds the \
+                         maximum block gas limit: {}",
+                        max_block_gas
+                    );
                     return response;
                 }
 

@@ -693,10 +693,11 @@ where
     // The fee payment is subject to a gas limit imposed by a protocol
     // parameter. Here we instantiate a custom gas meter for this step where the
     // gas limit is actually the lowest between the protocol parameter and the
-    // actual remaining gas of the transaction. The latter is because we only
-    // care about the masp execution, not any gas used before this step, which
-    // could prevent some transactions (e.g. batches consuming a lot of gas for
-    // their size) from being accepted
+    // actual remaining gas of the transaction. The latter is because we want to
+    // enforce that no tx exceeds its own gas limit, which could happen for
+    // some transactions (e.g. batches consuming a lot of gas for
+    // their size) if we were to take their gas limit instead of the remaining
+    // gas
     let max_gas_limit = state
         .read::<u64>(&parameters::storage::get_masp_fee_payment_gas_limit_key())
         .expect("Error reading the storage")
