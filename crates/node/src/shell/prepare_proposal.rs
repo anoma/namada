@@ -986,6 +986,48 @@ mod test_prepare_proposal {
         assert!(result.txs.is_empty());
     }
 
+    /// Check that a tx requiring more gas than available in the block is not
+    /// included
+    #[test]
+    fn test_exceeding_available_block_gas_tx() {
+        let (shell, _recv, _, _) = test_utils::setup();
+
+        let block_gas_limit =
+            namada_sdk::parameters::get_max_block_gas(&shell.state).unwrap();
+        let keypair = namada_apps_lib::wallet::defaults::albert_keypair();
+
+        let mut txs = vec![];
+        for _ in 0..2 {
+            let mut wrapper =
+                Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                    Fee {
+                        amount_per_gas_unit: DenominatedAmount::native(
+                            100.into(),
+                        ),
+                        token: shell.state.in_mem().native_token.clone(),
+                    },
+                    keypair.ref_to(),
+                    (block_gas_limit + 1).div_ceil(2).into(),
+                ))));
+            wrapper.header.chain_id = shell.chain_id.clone();
+            wrapper
+                .set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
+            wrapper
+                .set_data(Data::new("transaction data".as_bytes().to_owned()));
+            wrapper.sign_wrapper(keypair.clone());
+            txs.push(wrapper.to_bytes().into());
+        }
+
+        let req = RequestPrepareProposal {
+            txs,
+            max_tx_bytes: 0,
+            time: None,
+            ..Default::default()
+        };
+        let result = shell.prepare_proposal(req);
+        assert_eq!(result.txs.len(), 1);
+    }
+
     // Check that a wrapper requiring more gas than its limit is not included in
     // the block
     #[test]
