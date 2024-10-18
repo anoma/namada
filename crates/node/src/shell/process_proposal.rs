@@ -1493,7 +1493,53 @@ mod test_process_proposal {
             Err(TestError::RejectProposal(response)) => {
                 assert_eq!(
                     response[0].result.code,
-                    u32::from(ResultCode::TxGasLimit)
+                    u32::from(ResultCode::AllocationError)
+                );
+            }
+        }
+    }
+
+    /// Check that a tx requiring more gas than the available gas in the block
+    /// causes a block rejection
+    #[test]
+    fn test_exceeding_available_block_gas_tx() {
+        let (shell, _recv, _, _) = test_utils::setup();
+
+        let block_gas_limit =
+            parameters::get_max_block_gas(&shell.state).unwrap();
+        let keypair = namada_apps_lib::wallet::defaults::albert_keypair();
+
+        let mut txs = vec![];
+        for _ in 0..2 {
+            let mut wrapper =
+                Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                    Fee {
+                        amount_per_gas_unit: DenominatedAmount::native(
+                            100.into(),
+                        ),
+                        token: shell.state.in_mem().native_token.clone(),
+                    },
+                    keypair.ref_to(),
+                    (block_gas_limit + 1).div_ceil(2).into(),
+                ))));
+            wrapper.header.chain_id = shell.chain_id.clone();
+            wrapper
+                .set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
+            wrapper
+                .set_data(Data::new("transaction data".as_bytes().to_owned()));
+            wrapper.sign_wrapper(keypair.clone());
+            txs.push(wrapper.to_bytes());
+        }
+
+        // Run validation
+        let request = ProcessProposal { txs };
+        match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failed"),
+            Err(TestError::RejectProposal(response)) => {
+                assert_eq!(response[0].result.code, u32::from(ResultCode::Ok));
+                assert_eq!(
+                    response[1].result.code,
+                    u32::from(ResultCode::AllocationError)
                 );
             }
         }
