@@ -1151,49 +1151,137 @@ mod tests {
     }
 
     proptest! {
-        /// Test [`WriteLog::verifiers_changed_keys`] that:
-        /// 1. Every address from `verifiers_from_tx` is included in the
-        ///    verifiers set.
-        /// 2. Every address included in the first segment of changed storage
-        ///    keys is included in the verifiers set.
-        /// 3. Addresses of newly initialized accounts are not verifiers, so
-        ///    that anything can be written into an account's storage in the
-        ///    same tx in which it's initialized.
-        /// 4. The validity predicates of all the newly initialized accounts are
-        ///    included in the changed keys set.
         #[test]
         fn verifiers_changed_key_tx_all_key(
             (verifiers_from_tx, write_log) in arb_verifiers_changed_key_tx_all_key(),
         ) {
-            let write_log = WriteLog { tx_write_log: super::TxWriteLog { write_log, ..Default::default()} , ..WriteLog::default() };
+            verifiers_changed_key_tx_all_key_aux(verifiers_from_tx, write_log)
+        }
 
-            let (verifiers, changed_keys) = write_log.verifiers_and_changed_keys(&verifiers_from_tx);
+        #[test]
+        fn test_batched_txs(modifications in testing::arb_batched_txs()) {
+            test_batched_txs_aux(modifications)
+        }
+    }
 
-            println!("verifiers_from_tx {:#?}", verifiers_from_tx);
-            for verifier_from_tx in verifiers_from_tx {
-                // Test for 1.
-                assert!(verifiers.contains(&verifier_from_tx));
+    /// Test [`WriteLog::verifiers_changed_keys`] that:
+    /// 1. Every address from `verifiers_from_tx` is included in the verifiers
+    ///    set.
+    /// 2. Every address included in the first segment of changed storage keys
+    ///    is included in the verifiers set.
+    /// 3. Addresses of newly initialized accounts are not verifiers, so that
+    ///    anything can be written into an account's storage in the same tx in
+    ///    which it's initialized.
+    /// 4. The validity predicates of all the newly initialized accounts are
+    ///    included in the changed keys set.
+    fn verifiers_changed_key_tx_all_key_aux(
+        verifiers_from_tx: BTreeSet<Address>,
+        write_log: HashMap<storage::Key, StorageModification>,
+    ) {
+        let write_log = WriteLog {
+            tx_write_log: super::TxWriteLog {
+                write_log,
+                ..Default::default()
+            },
+            ..WriteLog::default()
+        };
+
+        let (verifiers, changed_keys) =
+            write_log.verifiers_and_changed_keys(&verifiers_from_tx);
+
+        println!("verifiers_from_tx {:#?}", verifiers_from_tx);
+        for verifier_from_tx in verifiers_from_tx {
+            // Test for 1.
+            assert!(verifiers.contains(&verifier_from_tx));
+        }
+
+        let (_changed_keys, initialized_accounts) =
+            write_log.get_partitioned_keys();
+        for key in changed_keys.iter() {
+            if let Some(addr_from_key) = key.fst_address() {
+                if !initialized_accounts.contains(addr_from_key) {
+                    // Test for 2.
+                    assert!(verifiers.contains(addr_from_key));
+                }
             }
+        }
 
-            let (_changed_keys, initialized_accounts) = write_log.get_partitioned_keys();
-            for key in changed_keys.iter() {
-                if let Some(addr_from_key) = key.fst_address() {
-                    if !initialized_accounts.contains(addr_from_key) {
-                        // Test for 2.
-                        assert!(verifiers.contains(addr_from_key));
-                    }
+        println!("verifiers {:#?}", verifiers);
+        println!("changed_keys {:#?}", changed_keys);
+        println!("initialized_accounts {:#?}", initialized_accounts);
+        for initialized_account in initialized_accounts {
+            // Test for 3.
+            assert!(!verifiers.contains(initialized_account));
+            // Test for 4.
+            let vp_key = storage::Key::validity_predicate(initialized_account);
+            assert!(changed_keys.contains(&vp_key));
+        }
+    }
+
+    /// Test that for a batched tx the result of reading modified keys from
+    /// write log matches the result of prefix iterators.
+    fn test_batched_txs_aux(
+        txs: Vec<HashMap<storage::Key, StorageModification>>,
+    ) {
+        let mut write_log = WriteLog::default();
+
+        for tx in txs {
+            // Write tx modifications
+            write_log.tx_write_log.write_log = tx;
+
+            // Collect all the keys in batch from previous txs
+            let keys: HashSet<storage::Key> = write_log
+                .batch_write_log
+                .iter()
+                .flat_map(|batch| batch.write_log.keys())
+                .cloned()
+                .collect();
+
+            // Iterate through all the modified keys to check prior state
+            for key in keys.clone() {
+                // Read the modification associated with this key from prior
+                // state
+                let (modification, _gas) = write_log.read_pre(&key).unwrap();
+                let modification = modification.unwrap();
+
+                // Prefix iter prior state for this key and assert that the
+                // values match
+                for (key_str, modification_from_iter) in
+                    write_log.iter_prefix_pre(&key)
+                {
+                    assert_eq!(key.to_string(), key_str);
+                    assert_eq!(modification, &modification_from_iter);
                 }
             }
 
-            println!("verifiers {:#?}", verifiers);
-            println!("changed_keys {:#?}", changed_keys);
-            println!("initialized_accounts {:#?}", initialized_accounts);
-            for initialized_account in initialized_accounts {
-                // Test for 3.
-                assert!(!verifiers.contains(initialized_account));
-                // Test for 4.
-                let vp_key = storage::Key::validity_predicate(initialized_account);
-                assert!(changed_keys.contains(&vp_key));
+            // And then commit them to batch
+            write_log.commit_tx_to_batch();
+
+            // Collect all the keys in batch and tx logs
+            let keys: HashSet<storage::Key> = write_log
+                .batch_write_log
+                .iter()
+                .flat_map(|batch| batch.write_log.keys())
+                .chain(write_log.tx_write_log.write_log.keys())
+                .cloned()
+                .collect();
+
+            // Iterate through all the modified keys again to check posterior
+            // state
+            for key in keys {
+                // Read the modification associated with this key from posterior
+                // state
+                let (modification, _gas) = write_log.read(&key).unwrap();
+                let modification = modification.unwrap();
+
+                // Prefix iter posterior state for this key and assert that the
+                // values match
+                for (key_str, modification_from_iter) in
+                    write_log.iter_prefix_post(&key)
+                {
+                    assert_eq!(key.to_string(), key_str);
+                    assert_eq!(modification, &modification_from_iter);
+                }
             }
         }
     }
@@ -1230,6 +1318,51 @@ pub mod testing {
             )
             .prop_map(|map| map.into_iter().collect())
         })
+    }
+
+    /// Generate modifications for batched txs where each `Vec` entry is
+    /// intended to be a single tx and each tx touches the same set of common
+    /// keys in addition to some other random keys.
+    pub fn arb_batched_txs()
+    -> impl Strategy<Value = Vec<HashMap<storage::Key, StorageModification>>>
+    + 'static {
+        const COMMON_KEYS_LEN: usize = 10;
+
+        let common_keys = collection::vec(arb_key(), COMMON_KEYS_LEN);
+        (
+            // Generate some keys to be modified by all txs
+            common_keys,
+            // Vec of txs
+            collection::vec(
+                // For each common key generate some modifications in each tx
+                (
+                    collection::vec(
+                        arb_storage_modification(false),
+                        COMMON_KEYS_LEN,
+                    ),
+                    // Then add some more random key modification to each tx
+                    collection::hash_map(
+                        arb_key(),
+                        arb_storage_modification(false),
+                        1..10,
+                    ),
+                ),
+                1..10,
+            ),
+        )
+            .prop_map(|(common_keys, modifications)| {
+                modifications
+                    .into_iter()
+                    .map(|(common_key_modifications, other_modifications)| {
+                        common_keys
+                            .clone()
+                            .into_iter()
+                            .zip(common_key_modifications)
+                            .chain(other_modifications)
+                            .collect::<HashMap<_, _>>()
+                    })
+                    .collect::<Vec<_>>()
+            })
     }
 
     /// Generate arbitrary verifiers from tx of [`BTreeSet<Address>`].
