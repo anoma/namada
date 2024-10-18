@@ -1230,19 +1230,36 @@ fn check_if_disposable_key_and<F: FnOnce(&PublicKeyHash, i64) -> bool>(
     callback(&key_hash, timestamp)
 }
 
+pub mod test_utils {
+    use rand_core::OsRng;
+
+    use crate::{LoadStoreError, Wallet, WalletIo, WalletStorage};
+
+    #[derive(Clone)]
+    pub struct TestWalletUtils;
+
+    impl WalletIo for TestWalletUtils {
+        type Rng = OsRng;
+    }
+
+    impl WalletStorage for TestWalletUtils {
+        fn save<U>(&self, _: &Wallet<U>) -> Result<(), LoadStoreError> {
+            unimplemented!()
+        }
+
+        fn load<U>(&self, _: &mut Wallet<U>) -> Result<(), LoadStoreError> {
+            unimplemented!()
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use namada_core::key::testing::{keypair_1, keypair_2, keypair_3};
     use rand_core::OsRng;
 
     use super::*;
-
-    #[derive(Clone)]
-    struct TestWalletUtils;
-
-    impl WalletIo for TestWalletUtils {
-        type Rng = OsRng;
-    }
+    use crate::test_utils::TestWalletUtils;
 
     #[test]
     fn test_disposable_key_alias_invalid() {
