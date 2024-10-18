@@ -440,15 +440,33 @@ where
                     }
                 };
                 let mut tx_gas_meter = TxGasMeter::new(gas_limit);
-                if tx_gas_meter.add_wrapper_gas(tx_bytes).is_err()
-                    || allocated_gas.is_err()
-                {
+                if tx_gas_meter.add_wrapper_gas(tx_bytes).is_err() {
                     return TxResult {
                         code: ResultCode::TxGasLimit.into(),
-                        info: "Wrapper transactions exceeds its gas limit"
+                        info: "Wrapper transaction exceeds its gas limit"
                             .to_string(),
                     };
                 }
+                if let Err(e) = allocated_gas {
+                    let info = match e {
+                        AllocFailure::Rejected { bin_resource_left } => {
+                            format!(
+                                "Wrapper transaction exceeds the remaining \
+                                 available gas in the block: {}",
+                                bin_resource_left
+                            )
+                        }
+                        AllocFailure::OverflowsBin { bin_resource } => format!(
+                            "Wrapper transaction exceeds the maximum block \
+                             gas limit: {}",
+                            bin_resource
+                        ),
+                    };
+                    return TxResult {
+                        code: ResultCode::AllocationError.into(),
+                        info,
+                    };
+                };
 
                 // ChainId check
                 if tx_chain_id != self.chain_id {
