@@ -763,56 +763,76 @@ mod tests {
 
     #[test]
     fn test_masp_inflation_playground() {
-        let denom = Uint::from(1_000_000); // token denomination (usually 6)
-        let total_tokens = 10_000_000_000_u64; // 10B naan
-        let mut total_tokens = Uint::from(total_tokens) * denom;
-        let locked_tokens_target = Uint::from(500_000) * denom; // Dependent on the token type
-        let init_locked_ratio = Dec::from_str("0.1").unwrap(); // Arbitrary amount to play around with
-        let init_locked_tokens = (init_locked_ratio
-            * Dec::try_from(locked_tokens_target).unwrap())
-        .to_uint()
-        .unwrap();
-        let epochs_per_year = 730_u64; // SE configuration
-        let max_reward_rate = Dec::from_str("0.01").unwrap(); // Pre-determined based on token type
-        let mut last_inflation_amount = Uint::zero();
-        let p_gain_nom = Dec::from_str("25000").unwrap(); // To be configured
-        let d_gain_nom = Dec::from_str("25000").unwrap(); // To be configured
+        // ---- Variables for you to configure ----------
+        let target_tokens_in_masp = Uint::from(500_000); // Dependent on the token type
+        let init_tokens_in_masp = Uint::from(50_000); // How many tokens are already in MASP when inflation turns on
+        let max_inflation_rate = Dec::from_str("0.01").unwrap(); // Max inflation rate for the incentivized asset
+        let p_gain_nom = Dec::from_str("25000").unwrap(); // To be configured - Brent can assist
+        let d_gain_nom = Dec::from_str("25000").unwrap(); // To be configured - Brent can assist
 
-        let mut locked_amount = init_locked_tokens;
-        let mut locked_tokens_last = init_locked_tokens;
+        println!(
+            "\nTarget tokens in MASP: {target_tokens_in_masp}\nInitial tokens \
+             in MASP when inflation turns on: {init_tokens_in_masp}\nMax \
+             inflation rate: {max_inflation_rate}\nProportional gain: \
+             {p_gain_nom}\nDerivative gain: {d_gain_nom}\n",
+        );
+
+        // This should be 6 for all IBC tokens, but double check for each token
+        // of interest
+        let denom = Uint::from(1_000_000); // token denomination (usually 6)
+
+        let target_tokens_in_masp = target_tokens_in_masp * denom;
+        let init_tokens_in_masp = init_tokens_in_masp * denom;
+
+        // ---- Already configured for Namada mainnet ----
+        let total_native_tokens = 1_000_000_000_u64; // 1B NAM
+        let epochs_per_year = 1460_u64; // ~ 6 hour epochs
+
+        // ---- Playground ----
+        let mut total_native_tokens = Uint::from(total_native_tokens) * denom;
+        let mut last_inflation_amount = Uint::zero();
+        let mut locked_amount = init_tokens_in_masp;
+        let mut locked_tokens_last = init_tokens_in_masp;
 
         let num_rounds = 10;
-        println!();
 
         for round in 0..num_rounds {
             let inflation = compute_inflation(
                 locked_amount,
-                total_tokens,
-                max_reward_rate,
+                total_native_tokens,
+                max_inflation_rate,
                 last_inflation_amount,
                 p_gain_nom,
                 d_gain_nom,
                 epochs_per_year,
-                Dec::try_from(locked_tokens_target).unwrap(),
+                Dec::try_from(target_tokens_in_masp).unwrap(),
                 Dec::try_from(locked_tokens_last).unwrap(),
             );
 
             let rate = Dec::try_from(inflation).unwrap()
                 * Dec::from(epochs_per_year)
-                / Dec::try_from(total_tokens).unwrap();
+                / Dec::try_from(total_native_tokens).unwrap();
 
+            let locked_amount_dec = Dec::try_from(locked_amount).unwrap()
+                / Dec::try_from(denom).unwrap();
+            let inflation_dec = Dec::try_from(inflation).unwrap()
+                / Dec::try_from(denom).unwrap();
             println!(
-                "Round {round}: Locked amount: {locked_amount}, inflation \
-                 rate: {rate} -- (raw infl: {inflation})",
+                "Round {round}: Locked amount: {locked_amount_dec}, inflation \
+                 rate: {rate} -- (raw infl: {inflation_dec})",
             );
             // dbg!(&controller);
 
             last_inflation_amount = inflation;
-            total_tokens += inflation;
+            total_native_tokens += inflation;
             locked_tokens_last = locked_amount;
 
-            let change_staked_tokens = Uint::from(2) * locked_tokens_target;
-            locked_amount += change_staked_tokens;
+            // Adjust this for the desired assumptions for how the amount of the
+            // asset in the MASP changes each iteration (epoch)
+            let change_masp_tokens = Uint::from(2) * target_tokens_in_masp;
+
+            locked_amount += change_masp_tokens;
         }
+        println!();
     }
 }
