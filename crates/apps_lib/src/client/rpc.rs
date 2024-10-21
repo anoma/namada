@@ -726,7 +726,7 @@ pub async fn query_protocol_parameters(
         masp_epoch_multiplier
     );
 
-    let key = param_storage::get_tx_allowlist_storage_key();
+    let key = param_storage::get_vp_allowlist_storage_key();
     let vp_allowlist: Vec<String> = query_storage_value(context.client(), &key)
         .await
         .expect("Parameter should be defined.");
