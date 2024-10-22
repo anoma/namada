@@ -680,7 +680,18 @@ fn validate_transparent_input<A: Authorization>(
                 tracing::debug!("{error}");
                 return Err(error);
             } else {
-                // Otherwise note the contribution to this transparent input
+                // Otherwise note the contribution to this transparent input.
+                // This branch represents the case of an asset not being part
+                // of the conversion tree: the asset can carry no epoch at all
+                // or any epoch (even a future one). Given the way we construct
+                // conversions it's not an issue if we later add it to the
+                // conversion tree: if the epoch preceeds the one at which we
+                // start computing rewards or is missing, then this asset will
+                // not be entitled. If it had instead been constructed with a
+                // future epoch that matches or follows the one at which we
+                // start giving out rewards, then it will be entitled (and
+                // there's no issue with that since it was clearly in the pool
+                // even before that time)
                 let amount =
                     token::Amount::from_masp_denominated(vin.value, *digit);
                 *bal_ref = bal_ref
