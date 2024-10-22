@@ -553,6 +553,9 @@ fn pos_rewards() -> Result<()> {
     let _res = captured
         .matches(r"Current annual staking rewards rate: 63.483")
         .expect("Test failed");
+    let _res = captured
+        .matches(r"PoS inflation rate: 0.066")
+        .expect("Test failed");
 
     Ok(())
 }

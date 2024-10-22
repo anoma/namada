@@ -40,13 +40,13 @@ use namada_ibc::storage::{
 use namada_io::{display_line, edisplay_line, Client, Io};
 use namada_parameters::{storage as params_storage, EpochDuration};
 use namada_proof_of_stake::parameters::PosParams;
+use namada_proof_of_stake::rewards::PosRewardsRates;
 use namada_proof_of_stake::types::{
     BondsAndUnbondsDetails, CommissionPair, LivenessInfo, ValidatorMetaData,
     WeightedValidator,
 };
 use namada_state::LastBlock;
 use namada_token::masp::MaspTokenRewardData;
-use namada_token::Dec;
 use namada_tx::data::{BatchedTxResult, DryRunResult, ResultCode, TxResult};
 use namada_tx::event::{Batch as BatchAttr, Code as CodeAttr};
 use serde::Serialize;
@@ -241,7 +241,7 @@ pub async fn get_effective_native_supply<C: Client + Sync>(
 /// Query the effective total supply of the native token
 pub async fn get_staking_rewards_rate<C: Client + Sync>(
     client: &C,
-) -> Result<Dec, error::Error> {
+) -> Result<PosRewardsRates, error::Error> {
     convert_response::<C, _>(
         RPC.vp().token().staking_rewards_rate(client).await,
     )

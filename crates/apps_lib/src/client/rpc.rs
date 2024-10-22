@@ -15,7 +15,6 @@ use namada_sdk::address::{Address, InternalAddress, MASP};
 use namada_sdk::chain::{BlockHeight, Epoch};
 use namada_sdk::collections::{HashMap, HashSet};
 use namada_sdk::control_flow::time::{Duration, Instant};
-use namada_sdk::dec::Dec;
 use namada_sdk::events::Event;
 use namada_sdk::governance::parameters::GovernanceParameters;
 use namada_sdk::governance::pgf::parameters::PgfParameters;
@@ -34,6 +33,7 @@ use namada_sdk::masp::MaspTokenRewardData;
 use namada_sdk::parameters::{
     storage as param_storage, EpochDuration, ProposalBytes,
 };
+use namada_sdk::proof_of_stake::rewards::PosRewardsRates;
 use namada_sdk::proof_of_stake::types::{
     CommissionPair, Slash, ValidatorMetaData, ValidatorState,
     ValidatorStateInfo, WeightedValidator,
@@ -1367,7 +1367,10 @@ pub async fn query_effective_native_supply<N: Namada>(context: &N) {
 
 /// Query the staking rewards rate estimate
 pub async fn query_staking_rewards_rate<N: Namada>(context: &N) {
-    let rewards_rate = unwrap_client_response::<N::Client, Dec>(
+    let PosRewardsRates {
+        staking_rewards_rate,
+        inflation_rate,
+    } = unwrap_client_response::<N::Client, PosRewardsRates>(
         RPC.vp()
             .token()
             .staking_rewards_rate(context.client())
@@ -1375,8 +1378,10 @@ pub async fn query_staking_rewards_rate<N: Namada>(context: &N) {
     );
     display_line!(
         context.io(),
-        "Current annual staking rewards rate: {}",
-        rewards_rate
+        "Current annual staking rewards rate: {}\nCurrent PoS inflation rate: \
+         {}",
+        staking_rewards_rate,
+        inflation_rate
     );
 }
 
