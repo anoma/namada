@@ -440,15 +440,33 @@ where
                     }
                 };
                 let mut tx_gas_meter = TxGasMeter::new(gas_limit);
-                if tx_gas_meter.add_wrapper_gas(tx_bytes).is_err()
-                    || allocated_gas.is_err()
-                {
+                if tx_gas_meter.add_wrapper_gas(tx_bytes).is_err() {
                     return TxResult {
                         code: ResultCode::TxGasLimit.into(),
-                        info: "Wrapper transactions exceeds its gas limit"
+                        info: "Wrapper transaction exceeds its gas limit"
                             .to_string(),
                     };
                 }
+                if let Err(e) = allocated_gas {
+                    let info = match e {
+                        AllocFailure::Rejected { bin_resource_left } => {
+                            format!(
+                                "Wrapper transaction exceeds the remaining \
+                                 available gas in the block: {}",
+                                bin_resource_left
+                            )
+                        }
+                        AllocFailure::OverflowsBin { bin_resource } => format!(
+                            "Wrapper transaction exceeds the maximum block \
+                             gas limit: {}",
+                            bin_resource
+                        ),
+                    };
+                    return TxResult {
+                        code: ResultCode::AllocationError.into(),
+                        info,
+                    };
+                };
 
                 // ChainId check
                 if tx_chain_id != self.chain_id {
@@ -1475,7 +1493,53 @@ mod test_process_proposal {
             Err(TestError::RejectProposal(response)) => {
                 assert_eq!(
                     response[0].result.code,
-                    u32::from(ResultCode::TxGasLimit)
+                    u32::from(ResultCode::AllocationError)
+                );
+            }
+        }
+    }
+
+    /// Check that a tx requiring more gas than the available gas in the block
+    /// causes a block rejection
+    #[test]
+    fn test_exceeding_available_block_gas_tx() {
+        let (shell, _recv, _, _) = test_utils::setup();
+
+        let block_gas_limit =
+            parameters::get_max_block_gas(&shell.state).unwrap();
+        let keypair = namada_apps_lib::wallet::defaults::albert_keypair();
+
+        let mut txs = vec![];
+        for _ in 0..2 {
+            let mut wrapper =
+                Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
+                    Fee {
+                        amount_per_gas_unit: DenominatedAmount::native(
+                            100.into(),
+                        ),
+                        token: shell.state.in_mem().native_token.clone(),
+                    },
+                    keypair.ref_to(),
+                    (block_gas_limit + 1).div_ceil(2).into(),
+                ))));
+            wrapper.header.chain_id = shell.chain_id.clone();
+            wrapper
+                .set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
+            wrapper
+                .set_data(Data::new("transaction data".as_bytes().to_owned()));
+            wrapper.sign_wrapper(keypair.clone());
+            txs.push(wrapper.to_bytes());
+        }
+
+        // Run validation
+        let request = ProcessProposal { txs };
+        match shell.process_proposal(request) {
+            Ok(_) => panic!("Test failed"),
+            Err(TestError::RejectProposal(response)) => {
+                assert_eq!(response[0].result.code, u32::from(ResultCode::Ok));
+                assert_eq!(
+                    response[1].result.code,
+                    u32::from(ResultCode::AllocationError)
                 );
             }
         }
