@@ -85,12 +85,17 @@ pub async fn query_and_print_masp_epoch(context: &impl Namada) -> MaspEpoch {
 /// Query and print some information to help discern when the next epoch will
 /// begin.
 pub async fn query_and_print_next_epoch_info(context: &impl Namada) {
+    query_block(context).await;
+
+    let current_epoch = query_epoch(context.client()).await.unwrap();
     let (this_epoch_first_height, epoch_duration) =
         rpc::query_next_epoch_info(context.client()).await.unwrap();
 
+    display_line!(context.io(), "Current epoch: {current_epoch}.\n");
     display_line!(
         context.io(),
-        "First block height of this current epoch: {this_epoch_first_height}."
+        "First block height of this epoch {current_epoch}: \
+         {this_epoch_first_height}."
     );
     display_line!(
         context.io(),
@@ -104,7 +109,8 @@ pub async fn query_and_print_next_epoch_info(context: &impl Namada) {
     );
     display_line!(
         context.io(),
-        "\nEarliest height at which the next epoch can begin is block {}.",
+        "\nEarliest height at which epoch {} can begin is block {}.",
+        current_epoch.next(),
         this_epoch_first_height.0 + epoch_duration.min_num_of_blocks
     );
 }
@@ -1367,6 +1373,7 @@ pub async fn query_effective_native_supply<N: Namada>(context: &N) {
 
 /// Query the staking rewards rate estimate
 pub async fn query_staking_rewards_rate<N: Namada>(context: &N) {
+    display_line!(context.io(), "Querying staking rewards rates...");
     let PosRewardsRates {
         staking_rewards_rate,
         inflation_rate,
