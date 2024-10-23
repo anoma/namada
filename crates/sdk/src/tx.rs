@@ -191,7 +191,17 @@ impl ProcessTxResponse {
 }
 
 /// Build and dump a transaction either to file or to screen
-pub fn dump_tx<IO: Io>(io: &IO, args: &args::Tx, tx: Tx) {
+pub fn dump_tx<IO: Io>(io: &IO, args: &args::Tx, mut tx: Tx) -> Result<()> {
+    if args.dump_tx {
+        tx.update_header(data::TxType::Raw);
+    };
+
+    if args.dump_wrapper_tx && tx.header.wrapper().is_none() {
+        return Err(Error::Other(
+            "Requested wrapper-dump on a tx which is not a wrapper".to_string(),
+        ));
+    }
+
     match args.output_folder.clone() {
         Some(path) => {
             let tx_path = path.join(format!(
@@ -215,6 +225,8 @@ pub fn dump_tx<IO: Io>(io: &IO, args: &args::Tx, tx: Tx) {
             display_line!(io, "{}", serialized_tx)
         }
     }
+
+    Ok(())
 }
 
 /// Prepare a transaction for signing and submission by adding a wrapper header
@@ -225,10 +237,10 @@ pub async fn prepare_tx(
     fee_amount: DenominatedAmount,
     fee_payer: common::PublicKey,
 ) -> Result<()> {
-    if !args.dry_run {
-        signing::wrap_tx(tx, args, fee_amount, fee_payer).await
-    } else {
+    if args.dry_run || args.dump_tx {
         Ok(())
+    } else {
+        signing::wrap_tx(tx, args, fee_amount, fee_payer).await
     }
 }
 
@@ -3720,25 +3732,13 @@ pub async fn build_custom(
         owner,
         disposable_signing_key,
     }: &args::TxCustom,
-) -> Result<(Tx, SigningTxData)> {
-    let default_signer = Some(owner.clone());
-    let signing_data = signing::aux_signing_data(
-        context,
-        tx_args,
-        Some(owner.clone()),
-        default_signer,
-        vec![],
-        *disposable_signing_key,
-    )
-    .await?;
-    let fee_amount = validate_fee(context, tx_args).await?;
-
+) -> Result<(Tx, Option<SigningTxData>)> {
     let mut tx = if let Some(serialized_tx) = serialized_tx {
         Tx::try_from_json_bytes(serialized_tx.as_ref()).map_err(|_| {
             Error::Other(
                 "Invalid tx deserialization. Please make sure you are passing \
                  a file in .tx format, typically produced from using the \
-                 `--dump-tx` flag."
+                 `--dump-tx` or `--dump-wrapper-tx` flag."
                     .to_string(),
             )
         })?
@@ -3760,8 +3760,63 @@ pub async fn build_custom(
         tx
     };
 
-    prepare_tx(tx_args, &mut tx, fee_amount, signing_data.fee_payer.clone())
+    // Wrap the tx only if it's not already. If the user passed the argument for
+    // the wrapper signatures we also assume the followings:
+    //    1. The tx loaded is of type Wrapper
+    //    2. The user also provided the offline signatures for the inner
+    //       transaction(s)
+    // The workflow is the following:
+    //    1. If no signatures were provide we generate a SigningTxData to sign
+    //       the tx
+    //    2. If only the inner sigs were provided we generate a SigningTxData
+    //       that will attach them and then sign the wrapper online
+    //    3. If the wrapper signature was provided then we also expect the inner
+    //       signature(s) to have been provided, in this case we attach all the
+    //       signatures here and return no SigningTxData
+    let signing_data = if let Some(wrapper_signature) =
+        &tx_args.wrapper_signature
+    {
+        // Attach the provided signatures to the tx without the need to produce
+        // any mroe signatures
+        let signatures = tx_args.signatures.iter().try_fold(
+            vec![],
+            |mut acc, bytes| -> Result<Vec<_>> {
+                let sig = SignatureIndex::try_from_json_bytes(bytes).map_err(
+                    |err| Error::Encode(EncodingError::Serde(err.to_string())),
+                )?;
+                acc.push(sig);
+                Ok(acc)
+            },
+        )?;
+        tx.add_signatures(signatures)
+            .add_section(Section::Authorization(
+                serde_json::from_slice(wrapper_signature).map_err(|err| {
+                    Error::Encode(EncodingError::Serde(err.to_string()))
+                })?,
+            ));
+        None
+    } else {
+        let default_signer = owner.clone();
+        let fee_amount = validate_fee(context, tx_args).await?;
+
+        let signing_data = signing::aux_signing_data(
+            context,
+            tx_args,
+            owner.clone(),
+            default_signer,
+            vec![],
+            *disposable_signing_key,
+        )
         .await?;
+        prepare_tx(
+            tx_args,
+            &mut tx,
+            fee_amount,
+            signing_data.fee_payer.clone(),
+        )
+        .await?;
+        Some(signing_data)
+    };
 
     Ok((tx, signing_data))
 }

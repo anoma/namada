@@ -3590,7 +3590,7 @@ fn identical_output_descriptions() -> Result<()> {
                 BERTHA_KEY,
                 "--output-folder-path",
                 tempdir.path().to_str().unwrap(),
-                "--dump-tx",
+                "--dump-wrapper-tx",
                 "--ledger-address",
                 validator_one_rpc,
             ],
@@ -3610,7 +3610,7 @@ fn identical_output_descriptions() -> Result<()> {
 
     // Create a batch that contains the same shielding tx twice
     let tx: namada_sdk::tx::Tx = serde_json::from_slice(&tx_bytes).unwrap();
-    // Inject some randomness in the cloned tx to chagne the hash
+    // Inject some randomness in the cloned tx to change the hash
     let mut tx_clone = tx.clone();
     let mut cmt = tx_clone.header.batch.first().unwrap().to_owned();
     let random_hash: Vec<_> = (0..namada_sdk::hash::HASH_LENGTH)
@@ -3881,7 +3881,7 @@ fn masp_batch() -> Result<()> {
                     CHRISTEL_KEY,
                     "--output-folder-path",
                     tempdir.path().to_str().unwrap(),
-                    "--dump-tx",
+                    "--dump-wrapper-tx",
                     "--ledger-address",
                     validator_one_rpc,
                 ],
@@ -4116,7 +4116,7 @@ fn masp_atomic_batch() -> Result<()> {
                     CHRISTEL_KEY,
                     "--output-folder-path",
                     tempdir.path().to_str().unwrap(),
-                    "--dump-tx",
+                    "--dump-wrapper-tx",
                     "--ledger-address",
                     validator_one_rpc,
                 ],
@@ -4391,7 +4391,7 @@ fn tricky_masp_txs() -> Result<()> {
                 CHRISTEL_KEY,
                 "--output-folder-path",
                 tempdir.path().to_str().unwrap(),
-                "--dump-tx",
+                "--dump-wrapper-tx",
                 "--ledger-address",
                 validator_one_rpc,
             ],
@@ -4444,7 +4444,7 @@ fn tricky_masp_txs() -> Result<()> {
                 CHRISTEL_KEY,
                 "--output-folder-path",
                 tempdir.path().to_str().unwrap(),
-                "--dump-tx",
+                "--dump-wrapper-tx",
                 "--ledger-address",
                 validator_one_rpc,
             ],

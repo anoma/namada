@@ -1569,8 +1569,9 @@ fn implicit_account_reveal_pk() -> Result<()> {
                 tx_args.iter().map(|arg| arg.as_ref()).collect(),
             )
         });
-        assert_matches!(captured.result, Ok(_));
+        assert!(captured.result.is_ok());
         assert!(captured.contains("Submitting a tx to reveal the public key"));
+        assert!(captured.contains(TX_APPLIED_SUCCESS));
 
         // 2d. Submit same tx again, this time the client shouldn't reveal
         // again.
@@ -1581,6 +1582,7 @@ fn implicit_account_reveal_pk() -> Result<()> {
                 tx_args.iter().map(|arg| arg.as_ref()).collect(),
             )
         });
+        assert!(captured.result.is_ok());
         assert!(!captured.contains("Submitting a tx to reveal the public key"));
         assert!(captured.result.is_ok());
         assert!(captured.contains(TX_APPLIED_SUCCESS));
@@ -1695,7 +1697,7 @@ fn offline_sign() -> Result<()> {
 
     let output_folder = tempfile::tempdir().unwrap();
 
-    // 2. Dump a transfer tx
+    // 2. Dump a wrapped transfer tx
     let captured = CapturedOutput::of(|| {
         run(
             &node,
@@ -1709,14 +1711,16 @@ fn offline_sign() -> Result<()> {
                 "--token",
                 NAM,
                 "--amount",
-                "10.1",
+                "100",
+                "--gas-limit",
+                "200000",
                 "--gas-price",
-                "0.00090",
-                "--signing-keys",
-                BERTHA_KEY,
+                "1",
+                "--gas-payer",
+                CHRISTEL_KEY,
                 "--node",
                 &validator_one_rpc,
-                "--dump-tx",
+                "--dump-wrapper-tx",
                 "--output-folder-path",
                 &output_folder.path().to_str().unwrap(),
             ]),
@@ -1724,17 +1728,18 @@ fn offline_sign() -> Result<()> {
     });
     assert!(captured.result.is_ok());
 
-    let offline_tx = find_file_with_ext(output_folder.path(), "tx")
+    let offline_tx = find_files_with_ext(output_folder.path(), "tx")
         .unwrap()
+        .first()
         .expect("Offline tx should be found.")
         .to_path_buf()
         .display()
         .to_string();
 
-    let bertha_address = find_address(&node, BERTHA).unwrap().to_string();
     let bertha_sk = find_keypair(&node, BERTHA_KEY).unwrap().to_string();
+    let christel_sk = find_keypair(&node, CHRISTEL_KEY).unwrap().to_string();
 
-    // 2. Dump a transfer tx
+    // 3. Sign the transaction offline
     let captured = CapturedOutput::of(|| {
         run(
             &node,
@@ -1744,10 +1749,10 @@ fn offline_sign() -> Result<()> {
                 "sign-offline",
                 "--data-path",
                 &offline_tx,
-                "--owner",
-                &bertha_address,
                 "--secret-keys",
                 &bertha_sk,
+                "--secret-key",
+                &christel_sk,
                 "--output-folder-path",
                 &output_folder.path().to_str().unwrap(),
             ]),
@@ -1755,34 +1760,91 @@ fn offline_sign() -> Result<()> {
     });
     assert!(captured.result.is_ok());
 
-    let offline_sig = find_file_with_ext(output_folder.path(), "sig")
-        .unwrap()
+    let sig_files = find_files_with_ext(output_folder.path(), "sig").unwrap();
+    assert_eq!(sig_files.len(), 2);
+
+    let offline_sig = sig_files
+        .iter()
+        .find(|path| {
+            path.file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .starts_with("offline_signature")
+        })
         .expect("Offline signature should be found.")
         .to_path_buf()
         .display()
         .to_string();
+    let offline_wrapper_sig = sig_files
+        .iter()
+        .find(|path| {
+            path.file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .starts_with("offline_wrapper_signature")
+        })
+        .expect("Offline wrapper signature should be found.")
+        .to_path_buf()
+        .display()
+        .to_string();
 
-    // 3. Offline sign a transfer tx
+    // 4. Submit the signed transaction
     let captured = CapturedOutput::of(|| {
         run(
             &node,
             Bin::Client,
             vec![
                 "tx",
-                "--owner",
-                BERTHA_KEY,
                 "--tx-path",
                 &offline_tx,
                 "--signatures",
                 &offline_sig,
+                "--gas-signature",
+                &offline_wrapper_sig,
                 "--node",
                 &validator_one_rpc,
-                "--gas-payer",
-                BERTHA_KEY,
             ],
         )
     });
     assert!(captured.result.is_ok());
+
+    // 5. Assert changed balances
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                ensure_hot_key(BERTHA),
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 1999900"));
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                ensure_hot_key(CHRISTEL_KEY),
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 1800000"));
 
     Ok(())
 }
@@ -2305,10 +2367,12 @@ fn make_migration_json() -> (Hash, tempfile::NamedTempFile) {
     (hash, file)
 }
 
-pub fn find_file_with_ext(
+pub fn find_files_with_ext(
     dir: &Path,
     extension: &str,
-) -> Result<Option<PathBuf>> {
+) -> Result<Vec<PathBuf>> {
+    let mut result = vec![];
+
     // Read the directory entries
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
@@ -2317,11 +2381,11 @@ pub fn find_file_with_ext(
         if path.is_file() {
             if let Some(file_extension) = path.extension() {
                 if file_extension == extension {
-                    return Ok(Some(path));
+                    result.push(path);
                 }
             }
         }
     }
 
-    Ok(None)
+    Ok(result)
 }

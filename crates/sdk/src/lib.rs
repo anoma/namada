@@ -128,6 +128,7 @@ pub trait Namada: NamadaIo {
             dry_run: false,
             dry_run_wrapper: false,
             dump_tx: false,
+            dump_wrapper_tx: false,
             output_folder: None,
             force: false,
             broadcast_only: false,
@@ -145,6 +146,7 @@ pub trait Namada: NamadaIo {
             chain_id: None,
             signing_keys: vec![],
             signatures: vec![],
+            wrapper_signature: None,
             tx_reveal_code_path: PathBuf::from(TX_REVEAL_PK),
             password: None,
             memo: None,
@@ -590,7 +592,7 @@ pub trait Namada: NamadaIo {
     }
 
     /// Make a TxCustom builder from the given minimum set of arguments
-    fn new_custom(&self, owner: Address) -> args::TxCustom {
+    fn new_custom(&self, owner: Option<Address>) -> args::TxCustom {
         args::TxCustom {
             owner,
             tx: self.tx_builder(),
@@ -706,6 +708,7 @@ where
                 dry_run: false,
                 dry_run_wrapper: false,
                 dump_tx: false,
+                dump_wrapper_tx: false,
                 output_folder: None,
                 force: false,
                 broadcast_only: false,
@@ -723,6 +726,7 @@ where
                 chain_id: None,
                 signing_keys: vec![],
                 signatures: vec![],
+                wrapper_signature: None,
                 tx_reveal_code_path: PathBuf::from(TX_REVEAL_PK),
                 password: None,
                 memo: None,

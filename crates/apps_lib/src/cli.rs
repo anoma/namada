@@ -3237,7 +3237,7 @@ pub mod cmds {
 
         fn def() -> App {
             App::new(Self::CMD)
-                .about(wrap!("Offlne sign a transaction."))
+                .about(wrap!("Offline sign a transaction."))
                 .add_args::<args::SignOffline<CliTypes>>()
         }
     }
@@ -3392,6 +3392,7 @@ pub mod args {
     pub const DRY_RUN_TX: ArgFlag = flag("dry-run");
     pub const DRY_RUN_WRAPPER_TX: ArgFlag = flag("dry-run-wrapper");
     pub const DUMP_TX: ArgFlag = flag("dump-tx");
+    pub const DUMP_WRAPPER_TX: ArgFlag = flag("dump-wrapper-tx");
     pub const DUMP_CONVERSION_TREE: ArgFlag = flag("dump-conversion-tree");
     pub const EPOCH: ArgOpt<Epoch> = arg_opt("epoch");
     pub const ERC20: Arg<EthAddress> = arg("erc20");
@@ -3421,16 +3422,6 @@ pub mod args {
         arg_opt("gas-spending-key");
     pub const FEE_TOKEN: ArgDefaultFromCtx<WalletAddrOrNativeToken> =
         arg_default_from_ctx("gas-token", DefaultFn(|| "".parse().unwrap()));
-    pub const FEE_PAYER: Arg<WalletAddress> = arg("fee-payer");
-    pub const FEE_AMOUNT: ArgDefault<token::DenominatedAmount> = arg_default(
-        "fee-amount",
-        DefaultFn(|| {
-            token::DenominatedAmount::new(
-                token::Amount::default(),
-                NATIVE_MAX_DECIMAL_PLACES.into(),
-            )
-        }),
-    );
     pub const GENESIS_BOND_SOURCE: ArgOpt<AddrOrPk> = arg_opt("source");
     pub const GENESIS_PATH: Arg<PathBuf> = arg("genesis-path");
     pub const GENESIS_TIME: Arg<DateTimeUtc> = arg("genesis-time");
@@ -3498,6 +3489,7 @@ pub mod args {
         DefaultFn(|| PortId::from_str("transfer").unwrap()),
     );
     pub const PRE_GENESIS: ArgFlag = flag("pre-genesis");
+    pub const PRIVATE_KEY_OPT: ArgOpt<WalletKeypair> = arg_opt("secret-key");
     pub const PRIVATE_KEYS: ArgMulti<WalletKeypair, GlobStar> =
         arg_multi("secret-keys");
     pub const PROPOSAL_PGF_STEWARD: ArgFlag = flag("pgf-stewards");
@@ -3596,6 +3588,7 @@ pub mod args {
     pub const WASM_DIR: ArgOpt<PathBuf> = arg_opt("wasm-dir");
     pub const WEBSITE_OPT: ArgOpt<String> = arg_opt("website");
     pub const WITH_INDEXER: ArgOpt<String> = arg_opt("with-indexer");
+    pub const WRAPPER_SIGNATURE_OPT: ArgOpt<PathBuf> = arg_opt("gas-signature");
     pub const TX_PATH: Arg<PathBuf> = arg("tx-path");
     pub const TX_PATH_OPT: ArgOpt<PathBuf> = TX_PATH.opt();
     pub const DEVICE_TRANSPORT: ArgDefault<DeviceTransport> = arg_default(
@@ -4495,7 +4488,9 @@ pub mod args {
                 serialized_tx: self.serialized_tx.map(|path| {
                     std::fs::read(path).expect("Expected a file at given path")
                 }),
-                owner: ctx.borrow_chain_or_exit().get(&self.owner),
+                owner: self
+                    .owner
+                    .map(|owner| ctx.borrow_chain_or_exit().get(&owner)),
                 disposable_signing_key: self.disposable_signing_key,
             })
         }
@@ -4507,7 +4502,7 @@ pub mod args {
             let code_path = CODE_PATH_OPT.parse(matches);
             let data_path = DATA_PATH_OPT.parse(matches);
             let serialized_tx = TX_PATH_OPT.parse(matches);
-            let owner = OWNER.parse(matches);
+            let owner = OWNER_OPT.parse(matches);
             let disposable_signing_key = DISPOSABLE_SIGNING_KEY.parse(matches);
             Self {
                 tx,
@@ -4525,7 +4520,11 @@ pub mod args {
                     CODE_PATH_OPT
                         .def()
                         .help(wrap!("The path to the transaction's WASM code."))
-                        .conflicts_with(TX_PATH_OPT.name),
+                        .requires(DATA_PATH_OPT.name)
+                        .conflicts_with_all([
+                            TX_PATH_OPT.name,
+                            WRAPPER_SIGNATURE_OPT.name,
+                        ]),
                 )
                 .arg(
                     DATA_PATH_OPT
@@ -4536,7 +4535,10 @@ pub mod args {
                              when it's executed."
                         ))
                         .requires(CODE_PATH_OPT.name)
-                        .conflicts_with(TX_PATH_OPT.name),
+                        .conflicts_with_all([
+                            TX_PATH_OPT.name,
+                            WRAPPER_SIGNATURE_OPT.name,
+                        ]),
                 )
                 .arg(
                     TX_PATH_OPT
@@ -4551,18 +4553,22 @@ pub mod args {
                             DATA_PATH_OPT.name,
                         ]),
                 )
-                .arg(OWNER.def().help(wrap!(
-                    "The address corresponding to the signatures or signing \
-                     keys."
+                .arg(OWNER_OPT.def().help(wrap!(
+                    "The optional address corresponding to the signatures or \
+                     signing keys."
                 )))
                 .arg(
                     DISPOSABLE_SIGNING_KEY
                         .def()
                         .help(wrap!(
                             "Generates an ephemeral, disposable keypair to \
-                             sign the wrapper transaction."
+                             sign the wrapper transaction. If --gas-signature \
+                             is provided then that will take precedence."
                         ))
-                        .conflicts_with(FEE_PAYER_OPT.name),
+                        .conflicts_with_all([
+                            FEE_PAYER_OPT.name,
+                            WRAPPER_SIGNATURE_OPT.name,
+                        ]),
                 )
         }
     }
@@ -6732,7 +6738,6 @@ pub mod args {
                 tx,
                 tx_data,
                 owner: ctx.borrow_chain_or_exit().get(&self.owner),
-                disposable_signing_key: self.disposable_signing_key,
             })
         }
     }
@@ -6742,12 +6747,10 @@ pub mod args {
             let tx = Tx::parse(matches);
             let tx_path = TX_PATH.parse(matches);
             let owner = OWNER.parse(matches);
-            let disposable_signing_key = DISPOSABLE_SIGNING_KEY.parse(matches);
             Self {
                 tx,
                 tx_data: tx_path,
                 owner,
-                disposable_signing_key,
             }
         }
 
@@ -6758,15 +6761,6 @@ pub mod args {
                 )))
                 .arg(
                     OWNER.def().help(wrap!("The address of the account owner")),
-                )
-                .arg(
-                    DISPOSABLE_SIGNING_KEY
-                        .def()
-                        .help(wrap!(
-                            "Generates an ephemeral, disposable keypair to \
-                             sign the wrapper transaction."
-                        ))
-                        .conflicts_with(FEE_PAYER_OPT.name),
                 )
         }
     }
@@ -7321,6 +7315,7 @@ pub mod args {
                 dry_run: self.dry_run,
                 dry_run_wrapper: self.dry_run_wrapper,
                 dump_tx: self.dump_tx,
+                dump_wrapper_tx: self.dump_wrapper_tx,
                 output_folder: self.output_folder,
                 force: self.force,
                 broadcast_only: self.broadcast_only,
@@ -7347,6 +7342,17 @@ pub mod args {
                         })
                     })
                     .collect::<Result<Vec<_>, _>>()?,
+                wrapper_signature: self
+                    .wrapper_signature
+                    .map(|path| {
+                        std::fs::read(path).map_err(|e| {
+                            std::io::Error::new(
+                                std::io::ErrorKind::InvalidInput,
+                                format!("Error reading signature file: {}", e),
+                            )
+                        })
+                    })
+                    .transpose()?,
                 tx_reveal_code_path: self.tx_reveal_code_path,
                 password: self.password,
                 expiration: self.expiration,
@@ -7382,7 +7388,14 @@ pub mod args {
             .arg(
                 DUMP_TX
                     .def()
-                    .help(wrap!("Dump transaction bytes to a file.")),
+                    .help(wrap!("Dump raw transaction bytes to a file."))
+                    .conflicts_with(DUMP_WRAPPER_TX.name),
+            )
+            .arg(
+                DUMP_WRAPPER_TX
+                    .def()
+                    .help(wrap!("Dump wrapper transaction bytes to a file."))
+                    .conflicts_with(DUMP_TX.name),
             )
             .arg(FORCE.def().help(wrap!(
                 "Submit the transaction even if it doesn't pass client checks."
@@ -7453,20 +7466,34 @@ pub mod args {
                          to be attached to a transaction. Requires to provide \
                          a gas payer."
                     ))
-                    .conflicts_with_all([SIGNING_KEYS.name])
-                    .requires(FEE_PAYER_OPT.name),
+                    .conflicts_with_all([SIGNING_KEYS.name]),
+            )
+            .arg(
+                WRAPPER_SIGNATURE_OPT
+                    .def()
+                    .help(wrap!(
+                        "The file path containing a serialized signature of \
+                         the entire transaction for gas payment."
+                    ))
+                    .requires(SIGNATURES.name)
+                    .conflicts_with(FEE_PAYER_OPT.name),
             )
             .arg(OUTPUT_FOLDER_PATH.def().help(wrap!(
                 "The output folder path where the artifact will be stored."
             )))
             .arg(CHAIN_ID_OPT.def().help(wrap!("The chain ID.")))
-            .arg(FEE_PAYER_OPT.def().help(wrap!(
-                "The implicit address of the gas payer. It defaults to the \
-                 address associated to the first key passed to \
-                 --signing-keys. If the specific transaction supports \
-                 --disposable-signing-key, then this one will overwrite this \
-                 argument."
-            )))
+            .arg(
+                FEE_PAYER_OPT
+                    .def()
+                    .help(wrap!(
+                        "The implicit address of the gas payer. It defaults \
+                         to the address associated to the first key passed to \
+                         --signing-keys. If the specific transaction supports \
+                         --disposable-signing-key, then this one will \
+                         overwrite this argument."
+                    ))
+                    .conflicts_with(WRAPPER_SIGNATURE_OPT.name),
+            )
             .arg(
                 USE_DEVICE
                     .def()
@@ -7496,6 +7523,7 @@ pub mod args {
             let dry_run = DRY_RUN_TX.parse(matches);
             let dry_run_wrapper = DRY_RUN_WRAPPER_TX.parse(matches);
             let dump_tx = DUMP_TX.parse(matches);
+            let dump_wrapper_tx = DUMP_WRAPPER_TX.parse(matches);
             let force = FORCE.parse(matches);
             let broadcast_only = BROADCAST_ONLY.parse(matches);
             let ledger_address = CONFIG_RPC_LEDGER_ADDRESS.parse(matches);
@@ -7503,12 +7531,12 @@ pub mod args {
             let fee_amount =
                 FEE_AMOUNT_OPT.parse(matches).map(InputAmount::Unvalidated);
             let fee_token = FEE_TOKEN.parse(matches);
-            let _wallet_alias_force = WALLET_ALIAS_FORCE.parse(matches);
             let gas_limit = GAS_LIMIT.parse(matches);
             let wallet_alias_force = WALLET_ALIAS_FORCE.parse(matches);
             let expiration = EXPIRATION_OPT.parse(matches);
             let signing_keys = SIGNING_KEYS.parse(matches);
             let signatures = SIGNATURES.parse(matches);
+            let wrapper_signature = WRAPPER_SIGNATURE_OPT.parse(matches);
             let tx_reveal_code_path = PathBuf::from(TX_REVEAL_PK);
             let chain_id = CHAIN_ID_OPT.parse(matches);
             let password = None;
@@ -7530,6 +7558,7 @@ pub mod args {
                 dry_run,
                 dry_run_wrapper,
                 dump_tx,
+                dump_wrapper_tx,
                 force,
                 broadcast_only,
                 ledger_address,
@@ -7541,6 +7570,7 @@ pub mod args {
                 expiration,
                 signing_keys,
                 signatures,
+                wrapper_signature,
                 tx_reveal_code_path,
                 password,
                 chain_id,
@@ -8175,7 +8205,8 @@ pub mod args {
     pub struct SignOffline<C: NamadaTypes = SdkTypes> {
         pub tx_path: PathBuf,
         pub secret_keys: Vec<C::Keypair>,
-        pub owner: C::Address,
+        pub owner: Option<C::Address>,
+        pub wrapper_signer: Option<C::Keypair>,
         pub output_folder_path: Option<PathBuf>,
     }
 
@@ -8183,13 +8214,15 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let tx_path = DATA_PATH.parse(matches);
             let secret_keys = PRIVATE_KEYS.parse(matches);
-            let owner = OWNER.parse(matches);
+            let owner = OWNER_OPT.parse(matches);
+            let wrapper_signer = PRIVATE_KEY_OPT.parse(matches);
             let output_folder_path = OUTPUT_FOLDER_PATH.parse(matches);
 
             Self {
                 tx_path,
                 secret_keys,
                 owner,
+                wrapper_signer,
                 output_folder_path,
             }
         }
@@ -8204,7 +8237,11 @@ pub mod args {
                 "The set of private keys to use to sign the transaction. The \
                  order matters."
             )))
-            .arg(OWNER.def().help(wrap!("The owner's address.")))
+            .arg(OWNER_OPT.def().help(wrap!("The optional owner's address.")))
+            .arg(PRIVATE_KEY_OPT.def().help(
+                "The optional signer of the wrapper transaction for gas \
+                 payment",
+            ))
             .arg(
                 OUTPUT_FOLDER_PATH
                     .def()
@@ -8229,7 +8266,10 @@ pub mod args {
                     .iter()
                     .map(|key| chain_ctx.get_cached(key))
                     .collect(),
-                owner: chain_ctx.get(&self.owner),
+                owner: self.owner.map(|owner| chain_ctx.get(&owner)),
+                wrapper_signer: self
+                    .wrapper_signer
+                    .map(|key| chain_ctx.get_cached(&key)),
                 output_folder_path: self.output_folder_path,
             })
         }
