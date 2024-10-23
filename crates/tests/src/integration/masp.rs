@@ -302,6 +302,41 @@ fn masp_incentives() -> Result<()> {
         node.next_masp_epoch();
 
         {
+            for _ in 0..10 {
+                node.next_masp_epoch();
+            }
+
+            run(
+                &node,
+                Bin::Client,
+                vec![
+                    "shielded-sync",
+                    "--viewing-keys",
+                    AA_VIEWING_KEY,
+                    AB_VIEWING_KEY,
+                    "--node",
+                    validator_one_rpc,
+                ],
+            )?;
+
+            run(
+                &node,
+                Bin::Client,
+                vec![
+                    "balance",
+                    "--owner",
+                    AA_VIEWING_KEY,
+                    "--token",
+                    NAM,
+                    "--node",
+                    validator_one_rpc,
+                ],
+            )?;
+
+            //panic!();
+        }
+
+        {
             // Send 1 BTC from Albert to PA
             let captured = CapturedOutput::of(|| {
                 run(
@@ -390,10 +425,10 @@ fn masp_incentives() -> Result<()> {
             ],
         )?;
 
-        panic!();
+        //panic!();
     }
 
-    // Assert BTC balance at MASP is 1
+    // Assert BTC balance at MASP is 2
     let captured = CapturedOutput::of(|| {
         run(
             &node,
@@ -410,7 +445,78 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("btc: 1"));
+    assert!(captured.contains("btc: 2"));
+
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "shielded-sync",
+                "--viewing-keys",
+                AA_VIEWING_KEY,
+                AB_VIEWING_KEY,
+                "--node",
+                validator_one_rpc,
+            ],
+        )?;
+
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "unshield",
+                "--source",
+                A_SPENDING_KEY,
+                "--target",
+                ALBERT,
+                "--token",
+                BTC,
+                "--amount",
+                "2",
+                "--signing-keys",
+                BERTHA_KEY,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok(), "{:#?}", captured.result);
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shielded-sync",
+            "--viewing-keys",
+            AA_VIEWING_KEY,
+            AB_VIEWING_KEY,
+            "--node",
+            validator_one_rpc,
+        ],
+    )?;
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                MASP,
+                "--token",
+                BTC,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("btc: 0"));
+
+    panic!("POOOOOOOOOOOOP");
+
+    ////////===========================
 
     // Assert NAM balance at VK(A) is 0
     let captured = CapturedOutput::of(|| {
