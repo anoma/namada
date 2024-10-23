@@ -197,7 +197,8 @@ where
                 // is unreachable, anyway. when would regular tokens
                 // ever not be denominated?
                 hints::cold();
-                token::NATIVE_MAX_DECIMAL_PLACES.into()
+                //token::NATIVE_MAX_DECIMAL_PLACES.into()
+                0u8.into()
             }
         }))
     })

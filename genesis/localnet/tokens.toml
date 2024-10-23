@@ -11,12 +11,12 @@ locked_amount_target = 10000
 
 [token.BTC]
 denom = 8
-
-[token.BTC.masp_params]
-max_reward_rate = "0.01"
-kd_gain_nom = "0.25"
-kp_gain_nom = "0.25"
-locked_amount_target = 10000
+#
+#[token.BTC.masp_params]
+#max_reward_rate = "0.01"
+#kd_gain_nom = "0.25"
+#kp_gain_nom = "0.25"
+#locked_amount_target = 10000
 
 [token.ETH]
 denom = 18

@@ -55,14 +55,14 @@ pub fn initialize_genesis(
     // Copy genesis files to test directory.
     let mut templates = templates::All::read_toml_files(&template_dir)
         .expect("Missing genesis files");
-    for (_, config) in templates.tokens.token.iter_mut() {
-        config.masp_params = Some(token::ShieldedParams {
-            max_reward_rate: Dec::from_str("0.1").unwrap(),
-            kp_gain_nom: Dec::from_str("0.1").unwrap(),
-            kd_gain_nom: Dec::from_str("0.1").unwrap(),
-            locked_amount_target: 1_000_000u64,
-        });
-    }
+    //for (_, config) in templates.tokens.token.iter_mut() {
+    //    config.masp_params = Some(token::ShieldedParams {
+    //        max_reward_rate: Dec::from_str("0.1").unwrap(),
+    //        kp_gain_nom: Dec::from_str("0.1").unwrap(),
+    //        kd_gain_nom: Dec::from_str("0.1").unwrap(),
+    //        locked_amount_target: 1_000_000u64,
+    //    });
+    //}
     let templates = update_genesis(templates);
     let genesis_path = test_dir.path().join("int-test-genesis-src");
     std::fs::create_dir(&genesis_path)

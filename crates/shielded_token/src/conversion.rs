@@ -277,6 +277,7 @@ where
     let token_map_key = masp_token_map_key();
     let token_map: namada_core::masp::TokenMap =
         storage.read(&token_map_key)?.unwrap_or_default();
+    println!("TOKEN MAP => {token_map:#?}");
     let mut masp_reward_keys: Vec<_> = token_map.values().cloned().collect();
     let mut masp_reward_denoms = BTreeMap::new();
     // Put the native rewards first because other inflation computations depend
@@ -361,6 +362,7 @@ where
                 token,
                 masp_epochs_per_year,
             )?;
+        println!("reward={reward:?} precision={precision:?}");
         masp_reward_denoms.insert(token.clone(), denom);
         // Dispense a transparent reward in parallel to the shielded rewards
         let addr_bal = TransToken::read_balance(storage, token, &masp_addr)?;
@@ -644,6 +646,8 @@ where
     let assets_hash =
         Hash::sha256(storage.conversion_state().assets.serialize_to_vec());
     storage.write(&masp_assets_hash_key(), assets_hash)?;
+
+    println!("CONVERSION STATE => {:#?}", storage.conversion_state().normed_inflation);
 
     Ok(())
 }

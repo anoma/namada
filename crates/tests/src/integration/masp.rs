@@ -21,6 +21,7 @@ use namada_sdk::{tx, DEFAULT_GAS_LIMIT};
 use test_log::test;
 
 use super::setup;
+use super::helpers;
 use crate::e2e::setup::constants::{
     AA_PAYMENT_ADDRESS, AA_VIEWING_KEY, AB_PAYMENT_ADDRESS, AB_VIEWING_KEY,
     AC_PAYMENT_ADDRESS, AC_VIEWING_KEY, ALBERT, ALBERT_KEY, A_SPENDING_KEY,
@@ -33,6 +34,8 @@ use crate::strings::TX_APPLIED_SUCCESS;
 /// for leaving their assets in the pool for varying periods of time.
 #[test]
 fn masp_incentives() -> Result<()> {
+    const BTC: &str = "tnam1qx46h2at4w46h2at4w46h2at4w46h2at4vdmum77";
+
     // This address doesn't matter for tests. But an argument is required.
     let validator_one_rpc = "http://127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
@@ -41,6 +44,51 @@ fn masp_incentives() -> Result<()> {
     // submitted within the same block. Necessary to ensure that conversion is
     // not invalidated.
     let (mut node, _services) = setup::setup()?;
+    {
+        let albert_addr: namada_sdk::address::Address = helpers::find_address(&node, ALBERT).unwrap();
+
+        token::credit_tokens(
+            &mut node.shell.lock().unwrap().state,
+            &BTC.parse().unwrap(),
+            &albert_addr,
+            token::Amount::from_uint(namada_sdk::uint::Uint::from_u64(1_000_000_000u64), 0).unwrap(),
+        )
+        .unwrap();
+    }
+    //{
+    //    for _ in 0..10 {
+    //        node.next_masp_epoch();
+    //    }
+
+    //    run(
+    //        &node,
+    //        Bin::Client,
+    //        vec![
+    //            "shielded-sync",
+    //            "--viewing-keys",
+    //            AA_VIEWING_KEY,
+    //            AB_VIEWING_KEY,
+    //            "--node",
+    //            validator_one_rpc,
+    //        ],
+    //    )?;
+
+    //    run(
+    //        &node,
+    //        Bin::Client,
+    //        vec![
+    //            "balance",
+    //            "--owner",
+    //            AA_VIEWING_KEY,
+    //            "--token",
+    //            NAM,
+    //            "--node",
+    //            validator_one_rpc,
+    //        ],
+    //    )?;
+
+    //    panic!();
+    //}
     // Wait till epoch boundary
     node.next_masp_epoch();
     // Send 1 BTC from Albert to PA
@@ -57,13 +105,13 @@ fn masp_incentives() -> Result<()> {
                 "--token",
                 BTC,
                 "--amount",
-                "1",
+                "1000000",
                 "--node",
                 validator_one_rpc,
             ],
         )
     });
-    assert!(captured.result.is_ok());
+    assert!(captured.result.is_ok(), "{:#?}", captured.result);
     assert!(captured.contains(TX_APPLIED_SUCCESS));
 
     // sync the shielded context
@@ -89,6 +137,249 @@ fn masp_incentives() -> Result<()> {
                 "balance",
                 "--owner",
                 AA_VIEWING_KEY,
+                "--token",
+                BTC,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains(&format!("{BTC}: 1000000")));
+
+    //{
+    //    for _ in 0..10 {
+    //        node.next_masp_epoch();
+    //    }
+
+    //    run(
+    //        &node,
+    //        Bin::Client,
+    //        vec![
+    //            "shielded-sync",
+    //            "--viewing-keys",
+    //            AA_VIEWING_KEY,
+    //            AB_VIEWING_KEY,
+    //            "--node",
+    //            validator_one_rpc,
+    //        ],
+    //    )?;
+
+    //    run(
+    //        &node,
+    //        Bin::Client,
+    //        vec![
+    //            "balance",
+    //            "--owner",
+    //            AA_VIEWING_KEY,
+    //            "--token",
+    //            NAM,
+    //            "--node",
+    //            validator_one_rpc,
+    //        ],
+    //    )?;
+
+    //    panic!();
+    //}
+
+    node.next_masp_epoch();
+
+    {
+        use std::str::FromStr;
+
+        use namada_sdk::address::InternalAddress;
+        use namada_sdk::address::Address;
+        use namada_core::masp;
+        use namada_sdk::dec::Dec;
+        use token::storage_key::balance_key;
+
+        pub type Denomination = u8;
+        pub type TokenAddress = Address;
+
+        pub type TokenMaxReward = &'static str;
+        pub type TokenTargetLockedAmount = u64;
+        pub type KpGain = &'static str;
+        pub type KdGain = &'static str;
+
+        let tokens = [(
+            6,
+            BTC.parse().unwrap(),
+            "0.01",
+            1_000_000,
+            "120000",
+            "120000",
+        )];
+
+        fn apply_tx<Ctx>(ctx: &mut Ctx, tokens: [(
+            Denomination,
+            TokenAddress,
+            TokenMaxReward,
+            TokenTargetLockedAmount,
+            KpGain,
+            KdGain,
+        ); 1]) -> namada_sdk::storage::Result<()>
+        where
+            Ctx: StorageRead + StorageWrite,
+        {
+            // Read the current MASP token map
+            let token_map_key = token::storage_key::masp_token_map_key();
+            let mut token_map = ctx
+                .read::<masp::TokenMap>(&token_map_key)?
+                .unwrap_or_default();
+
+            // Enable shielded set rewards for ibc tokens
+            for (denomination, token_address, max_reward, target_locked_amount, kp, kd) in
+                tokens
+            {
+                let tok_alias = "dinheirinho";
+
+                let shielded_token_last_inflation_key =
+                    token::storage_key::masp_last_inflation_key(&token_address);
+                let shielded_token_last_locked_amount_key =
+                    token::storage_key::masp_last_locked_amount_key(&token_address);
+                let shielded_token_max_rewards_key =
+                    token::storage_key::masp_max_reward_rate_key(&token_address);
+                let shielded_token_target_locked_amount_key =
+                    token::storage_key::masp_locked_amount_target_key(&token_address);
+                let shielded_token_kp_gain_key = token::storage_key::masp_kp_gain_key(&token_address);
+                let shielded_token_kd_gain_key = token::storage_key::masp_kd_gain_key(&token_address);
+
+                // Add the ibc token to the masp token map
+                token_map.insert(tok_alias.to_string(), token_address.clone());
+
+                // Read the current balance of the IBC token in MASP and set that as initial locked amount
+                let btc_balance_key = balance_key(
+                    &token_address,
+                    &Address::Internal(InternalAddress::Masp),
+                );
+                let current_btc_amount = ctx.read::<token::Amount>(&btc_balance_key)?.unwrap_or_default();
+                //assert!(current_btc_amount == token::Amount::from_uint(namada_sdk::uint::Uint::from_u64(1), denomination).unwrap(), "current_btc_amount = {current_btc_amount:?}");
+                ctx.write(&shielded_token_last_locked_amount_key, current_btc_amount)?;
+
+                // Initialize the remaining MASP inflation keys
+                ctx.write(&shielded_token_last_inflation_key, token::Amount::zero())?;
+
+                ctx.write(
+                    &shielded_token_max_rewards_key,
+                    Dec::from_str(max_reward).unwrap(),
+                )?;
+                ctx.write(
+                    &shielded_token_target_locked_amount_key,
+                    token::Amount::from_uint(target_locked_amount, denomination).unwrap(),
+                )?;
+                ctx.write(&shielded_token_kp_gain_key, Dec::from_str(kp).unwrap())?;
+                ctx.write(&shielded_token_kd_gain_key, Dec::from_str(kd).unwrap())?;
+            }
+
+            ctx.write(&token_map_key, token_map)?;
+
+            Ok(())
+        }
+
+        apply_tx(&mut node.shell.lock().unwrap().state, tokens).unwrap();
+        node.finalize_and_commit(None);
+
+        {
+            // Send 1 BTC from Albert to PA
+            let captured = CapturedOutput::of(|| {
+                run(
+                    &node,
+                    Bin::Client,
+                    vec![
+                        "shield",
+                        "--source",
+                        ALBERT,
+                        "--target",
+                        AA_PAYMENT_ADDRESS,
+                        "--token",
+                        BTC,
+                        "--amount",
+                        "1000000",
+                        "--node",
+                        validator_one_rpc,
+                    ],
+                )
+            });
+            assert!(captured.result.is_ok(), "{:#?}", captured.result);
+            assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+            // sync the shielded context
+            run(
+                &node,
+                Bin::Client,
+                vec![
+                    "shielded-sync",
+                    "--viewing-keys",
+                    AA_VIEWING_KEY,
+                    AB_VIEWING_KEY,
+                    "--node",
+                    validator_one_rpc,
+                ],
+            )?;
+
+            // Assert BTC balance at VK(A) is 1
+            let captured = CapturedOutput::of(|| {
+                run(
+                    &node,
+                    Bin::Client,
+                    vec![
+                        "balance",
+                        "--owner",
+                        AA_VIEWING_KEY,
+                        "--token",
+                        BTC,
+                        "--node",
+                        validator_one_rpc,
+                    ],
+                )
+            });
+            assert!(captured.result.is_ok());
+            assert!(captured.contains(&format!("{BTC}: 2000000")));
+        }
+
+        for _ in 0..10 {
+            node.next_masp_epoch();
+        }
+
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "shielded-sync",
+                "--viewing-keys",
+                AA_VIEWING_KEY,
+                AB_VIEWING_KEY,
+                "--node",
+                validator_one_rpc,
+            ],
+        )?;
+
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )?;
+
+        panic!();
+    }
+
+    // Assert BTC balance at MASP is 1
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                MASP,
                 "--token",
                 BTC,
                 "--node",
