@@ -34,8 +34,6 @@ use crate::strings::TX_APPLIED_SUCCESS;
 /// for leaving their assets in the pool for varying periods of time.
 #[test]
 fn masp_incentives() -> Result<()> {
-    const BTC: &str = "tnam1qx46h2at4w46h2at4w46h2at4w46h2at4vdmum77";
-
     // This address doesn't matter for tests. But an argument is required.
     let validator_one_rpc = "http://127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
@@ -46,10 +44,11 @@ fn masp_incentives() -> Result<()> {
     let (mut node, _services) = setup::setup()?;
     {
         let albert_addr: namada_sdk::address::Address = helpers::find_address(&node, ALBERT).unwrap();
+        let btc_addr: namada_sdk::address::Address = helpers::find_address(&node, BTC).unwrap();
 
         token::credit_tokens(
             &mut node.shell.lock().unwrap().state,
-            &BTC.parse().unwrap(),
+            &btc_addr,
             &albert_addr,
             token::Amount::from_uint(namada_sdk::uint::Uint::from_u64(1_000_000_000u64), 0).unwrap(),
         )
@@ -105,7 +104,7 @@ fn masp_incentives() -> Result<()> {
                 "--token",
                 BTC,
                 "--amount",
-                "1000000",
+                "1",
                 "--node",
                 validator_one_rpc,
             ],
@@ -145,7 +144,7 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains(&format!("{BTC}: 1000000")));
+    assert!(captured.contains(&format!("{}: 1", BTC.to_lowercase())));
 
     //{
     //    for _ in 0..10 {
@@ -201,9 +200,10 @@ fn masp_incentives() -> Result<()> {
         pub type KpGain = &'static str;
         pub type KdGain = &'static str;
 
+        let btc_addr: namada_sdk::address::Address = helpers::find_address(&node, BTC).unwrap();
         let tokens = [(
             6,
-            BTC.parse().unwrap(),
+            btc_addr,
             "0.01",
             1_000_000,
             "120000",
@@ -248,12 +248,19 @@ fn masp_incentives() -> Result<()> {
                 // Add the ibc token to the masp token map
                 token_map.insert(tok_alias.to_string(), token_address.clone());
 
+    //    config.masp_params = Some(token::ShieldedParams {
+    //        max_reward_rate: Dec::from_str("0.1").unwrap(),
+    //        kp_gain_nom: Dec::from_str("0.1").unwrap(),
+    //        kd_gain_nom: Dec::from_str("0.1").unwrap(),
+    //        locked_amount_target: 1_000_000u64,
+    //    });
+
                 // Read the current balance of the IBC token in MASP and set that as initial locked amount
-                let btc_balance_key = balance_key(
-                    &token_address,
-                    &Address::Internal(InternalAddress::Masp),
-                );
-                let current_btc_amount = ctx.read::<token::Amount>(&btc_balance_key)?.unwrap_or_default();
+               // let btc_balance_key = balance_key(
+               //     &token_address,
+               //     &Address::Internal(InternalAddress::Masp),
+               // );
+               // let current_btc_amount = ctx.read::<token::Amount>(&btc_balance_key)?.unwrap_or_default();
                 //assert!(current_btc_amount == token::Amount::from_uint(namada_sdk::uint::Uint::from_u64(1), denomination).unwrap(), "current_btc_amount = {current_btc_amount:?}");
                 //ctx.write(&shielded_token_last_locked_amount_key, current_btc_amount)?;
 
@@ -281,7 +288,7 @@ fn masp_incentives() -> Result<()> {
                     }),
                     ctx,
                     &token_address,
-                    &0.into(),
+                    &6.into(),
                 )?;
             }
 
@@ -292,6 +299,7 @@ fn masp_incentives() -> Result<()> {
 
         apply_tx(&mut node.shell.lock().unwrap().state, tokens).unwrap();
         node.finalize_and_commit(None);
+        node.next_masp_epoch();
 
         {
             // Send 1 BTC from Albert to PA
@@ -308,7 +316,7 @@ fn masp_incentives() -> Result<()> {
                         "--token",
                         BTC,
                         "--amount",
-                        "1000000",
+                        "1",
                         "--node",
                         validator_one_rpc,
                     ],
@@ -348,7 +356,7 @@ fn masp_incentives() -> Result<()> {
                 )
             });
             assert!(captured.result.is_ok());
-            assert!(captured.contains(&format!("{BTC}: 2000000")));
+            assert!(captured.contains(&format!("{}: 2", BTC.to_lowercase())));
         }
 
         for _ in 0..10 {
