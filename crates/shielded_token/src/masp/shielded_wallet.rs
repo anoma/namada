@@ -491,6 +491,30 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         Some(pre_asset_type)
     }
 
+    /// Bingbong
+    #[allow(async_fn_in_trait)]
+    async fn display_amount(
+        &mut self,
+        context: &impl NamadaIo,
+        amount: I128Sum,
+    ) {
+        for (asset_type, value) in amount.components() {
+            let asset_data = self
+                .decode_asset_type(context.client(), *asset_type)
+                .await
+                .ok_or_else(|| eyre!("unable to decode asset type",))
+                .unwrap();
+            display_line!(
+                context.io(),
+                "Asset type: {}, Denomination: {:?}, Epoch: {:?}, Value: {}",
+                asset_data.token,
+                asset_data.denom,
+                asset_data.epoch,
+                value
+            );
+        }
+    }
+
     /// Query the ledger for the conversion that is allowed for the given asset
     /// type and cache it.
     #[allow(async_fn_in_trait)]
@@ -756,6 +780,13 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                     Some(contr.clone())
                 };
                 // Use this note only if it brings us closer to our target
+                println!("\nCOLLECT UNSPENT NOTES");
+                self.display_amount(
+                    context,
+                    target.clone() - normed_val_acc.clone(),
+                )
+                .await;
+                println!("end coll unspent notes");
                 if let Some(change) = is_amount_required(
                     normed_val_acc.clone(),
                     target.clone(),
@@ -1006,6 +1037,13 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         };
         let mut changes = Changes::default();
 
+        println!("START: {}", line!());
+        self.display_amount(context, builder.value_balance()).await;
+        println!("\nCHANGES");
+        for (_, b) in &changes {
+            self.display_amount(context, b.clone()).await;
+        }
+
         for (MaspSourceTransferData { source, token }, amount) in &source_data {
             self.add_inputs(
                 context,
@@ -1020,6 +1058,13 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 *token == native_token,
             )
             .await?;
+        }
+
+        println!("ADDED INPUTS: {}", line!());
+        self.display_amount(context, builder.value_balance()).await;
+        println!("\nCHANGES");
+        for (_, b) in &changes {
+            self.display_amount(context, b.clone()).await;
         }
 
         for (
@@ -1042,6 +1087,13 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 &denoms,
             )
             .await?;
+        }
+
+        println!("ADDED OUTPUTS: {}", line!());
+        self.display_amount(context, builder.value_balance()).await;
+        println!("\nCHANGES");
+        for (_, b) in &changes {
+            self.display_amount(context, b.clone()).await;
         }
 
         // Collect the fees if needed
@@ -1069,7 +1121,18 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         }
 
         // Finally, add outputs representing the change from this payment.
-        Self::add_changes(&mut builder, changes)?;
+        println!("ADDED FEES: {}", line!());
+        self.display_amount(context, builder.value_balance()).await;
+        println!("\nCHANGES");
+        for (_, b) in &changes {
+            self.display_amount(context, b.clone()).await;
+        }
+
+        let res = Self::add_changes(&mut builder, changes);
+        println!("ADDED CHANGES: {}", line!());
+
+        self.display_amount(context, builder.value_balance()).await;
+        res?;
 
         let builder_clone = builder.clone().map_builder(WalletMap);
         // Build and return the constructed transaction
@@ -1225,6 +1288,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             amount
         };
 
+        println!("\nADD INPUTS -> added_amt");
         // If there are shielded inputs
         let added_amt = if let Some(sk) = spending_key {
             // Locate unspent notes that can help us meet the transaction
@@ -1241,6 +1305,8 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 )
                 .await
                 .map_err(|e| TransferErr::General(e.to_string()))?;
+
+            self.display_amount(context, added_amount.clone()).await;
             // Commit the notes found to our transaction
             for (diversifier, note, merkle_path) in unspent_notes {
                 builder
@@ -1306,7 +1372,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
 
             None
         };
-
+        println!();
         Ok(added_amt)
     }
 
