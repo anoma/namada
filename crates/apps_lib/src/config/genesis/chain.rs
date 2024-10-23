@@ -409,6 +409,7 @@ impl Finalized {
             liveness_threshold,
             rewards_gain_p,
             rewards_gain_d,
+            min_commission_rate,
         } = self.parameters.pos_params.clone();
 
         namada_sdk::proof_of_stake::parameters::PosParams {
@@ -429,6 +430,7 @@ impl Finalized {
                 liveness_threshold,
                 rewards_gain_p,
                 rewards_gain_d,
+                min_commission_rate,
             },
             max_proposal_period: self.parameters.gov_params.max_proposal_period,
         }
