@@ -281,10 +281,10 @@ fn masp_incentives() -> Result<()> {
 
                 token::write_params(
                     &Some(token::ShieldedParams {
-                        max_reward_rate: Dec::from_str("0.1").unwrap(),
-                        kp_gain_nom: Dec::from_str("0.1").unwrap(),
-                        kd_gain_nom: Dec::from_str("0.1").unwrap(),
-                        locked_amount_target: 1_000_000u64,
+                        max_reward_rate: Dec::from_str("120000").unwrap(),
+                        kp_gain_nom: Dec::from_str("120000").unwrap(),
+                        kd_gain_nom: Dec::from_str("120000").unwrap(),
+                        locked_amount_target: 1_000_000_000u64,
                     }),
                     ctx,
                     &token_address,
