@@ -113,7 +113,7 @@ expectrl = "0.7.0"
 eyre = "0.6.12"
 fd-lock = "3.0.12"
 flate2 = "1.0.22"
-flume = "0.11.0"
+flume = "0.11.1"
 fs_extra = "1.2.0"
 futures = "0.3"
 git2 = { version = "0.18.1", default-features = false }
