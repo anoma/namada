@@ -54,7 +54,7 @@ pub enum UnbondError {
     #[error("No bond could be found")]
     NoBondFound,
     #[error(
-        "Trying to withdraw more tokens ({0}) than the amount bonded ({0})"
+        "Trying to withdraw more tokens ({0}) than the amount bonded ({1})"
     )]
     UnbondAmountGreaterThanBond(String, String),
     #[error("No bonds found for the validator {0}")]

@@ -1,5 +1,6 @@
 //! PoS rewards distribution.
 
+use borsh::{BorshDeserialize, BorshSerialize};
 use namada_controller::PDController;
 use namada_core::address::{self, Address};
 use namada_core::arith::{self, checked};
@@ -96,6 +97,14 @@ pub struct PosRewards {
     pub proposer_coeff: Dec,
     pub signer_coeff: Dec,
     pub active_val_coeff: Dec,
+}
+
+/// Return values of the inflation asnd staking rewards rates
+#[derive(Debug, Copy, Clone, BorshSerialize, BorshDeserialize)]
+#[allow(missing_docs)]
+pub struct PosRewardsRates {
+    pub staking_rewards_rate: Dec,
+    pub inflation_rate: Dec,
 }
 
 /// Holds relevant PoS parameters and is used to calculate the coefficients for
@@ -661,7 +670,7 @@ where
 /// Compute an estimation of the most recent staking rewards rate.
 pub fn estimate_staking_reward_rate<S, Token, Parameters>(
     storage: &S,
-) -> Result<Dec>
+) -> Result<PosRewardsRates>
 where
     S: StorageRead,
     Parameters: parameters::Read<S>,
@@ -690,7 +699,10 @@ where
     let est_staking_reward_rate =
         checked!(est_inflation_rate / last_staked_ratio)?;
 
-    Ok(est_staking_reward_rate)
+    Ok(PosRewardsRates {
+        staking_rewards_rate: est_staking_reward_rate,
+        inflation_rate: est_inflation_rate,
+    })
 }
 
 #[cfg(test)]
@@ -961,7 +973,10 @@ mod tests {
                 total_native_tokens,
             );
 
-            let query_staking_rate = estimate_staking_reward_rate::<
+            let PosRewardsRates {
+                staking_rewards_rate: query_staking_rate,
+                inflation_rate: _query_inflation_rate,
+            } = estimate_staking_reward_rate::<
                 _,
                 namada_trans_token::Store<_>,
                 namada_parameters::Store<_>,

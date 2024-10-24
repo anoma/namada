@@ -15,7 +15,6 @@ use namada_sdk::address::{Address, InternalAddress, MASP};
 use namada_sdk::chain::{BlockHeight, Epoch};
 use namada_sdk::collections::{HashMap, HashSet};
 use namada_sdk::control_flow::time::{Duration, Instant};
-use namada_sdk::dec::Dec;
 use namada_sdk::events::Event;
 use namada_sdk::governance::parameters::GovernanceParameters;
 use namada_sdk::governance::pgf::parameters::PgfParameters;
@@ -34,6 +33,7 @@ use namada_sdk::masp::MaspTokenRewardData;
 use namada_sdk::parameters::{
     storage as param_storage, EpochDuration, ProposalBytes,
 };
+use namada_sdk::proof_of_stake::rewards::PosRewardsRates;
 use namada_sdk::proof_of_stake::types::{
     CommissionPair, Slash, ValidatorMetaData, ValidatorState,
     ValidatorStateInfo, WeightedValidator,
@@ -85,12 +85,17 @@ pub async fn query_and_print_masp_epoch(context: &impl Namada) -> MaspEpoch {
 /// Query and print some information to help discern when the next epoch will
 /// begin.
 pub async fn query_and_print_next_epoch_info(context: &impl Namada) {
+    query_block(context).await;
+
+    let current_epoch = query_epoch(context.client()).await.unwrap();
     let (this_epoch_first_height, epoch_duration) =
         rpc::query_next_epoch_info(context.client()).await.unwrap();
 
+    display_line!(context.io(), "Current epoch: {current_epoch}.\n");
     display_line!(
         context.io(),
-        "First block height of this current epoch: {this_epoch_first_height}."
+        "First block height of this epoch {current_epoch}: \
+         {this_epoch_first_height}."
     );
     display_line!(
         context.io(),
@@ -104,7 +109,8 @@ pub async fn query_and_print_next_epoch_info(context: &impl Namada) {
     );
     display_line!(
         context.io(),
-        "\nEarliest height at which the next epoch can begin is block {}.",
+        "\nEarliest height at which epoch {} can begin is block {}.",
+        current_epoch.next(),
         this_epoch_first_height.0 + epoch_duration.min_num_of_blocks
     );
 }
@@ -726,7 +732,7 @@ pub async fn query_protocol_parameters(
         masp_epoch_multiplier
     );
 
-    let key = param_storage::get_tx_allowlist_storage_key();
+    let key = param_storage::get_vp_allowlist_storage_key();
     let vp_allowlist: Vec<String> = query_storage_value(context.client(), &key)
         .await
         .expect("Parameter should be defined.");
@@ -1367,7 +1373,11 @@ pub async fn query_effective_native_supply<N: Namada>(context: &N) {
 
 /// Query the staking rewards rate estimate
 pub async fn query_staking_rewards_rate<N: Namada>(context: &N) {
-    let rewards_rate = unwrap_client_response::<N::Client, Dec>(
+    display_line!(context.io(), "Querying staking rewards rates...");
+    let PosRewardsRates {
+        staking_rewards_rate,
+        inflation_rate,
+    } = unwrap_client_response::<N::Client, PosRewardsRates>(
         RPC.vp()
             .token()
             .staking_rewards_rate(context.client())
@@ -1375,8 +1385,10 @@ pub async fn query_staking_rewards_rate<N: Namada>(context: &N) {
     );
     display_line!(
         context.io(),
-        "Current annual staking rewards rate: {}",
-        rewards_rate
+        "Current annual staking rewards rate: {}\nCurrent PoS inflation rate: \
+         {}",
+        staking_rewards_rate,
+        inflation_rate
     );
 }
 
