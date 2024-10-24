@@ -29,7 +29,8 @@ pub enum ProposalValidation {
     /// The proposal difference between end and activation epoch is invalid
     #[error(
         "Invalid proposal activation epoch: difference between proposal \
-         activation and end epoch must be at least {0}, but found {1}"
+         activation and end epoch must be at least {0}, but found {1}. The \
+         difference must also be greater than 0."
     )]
     InvalidEndActivationDifference(u64, u64),
     /// The proposal difference between end and activation epoch is invalid
