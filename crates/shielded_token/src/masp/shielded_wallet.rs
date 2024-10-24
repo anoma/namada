@@ -1073,7 +1073,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
 
         let builder_clone = builder.clone().map_builder(WalletMap);
         // Build and return the constructed transaction
-        #[cfg(not(feature = "testing"))]
+       #[cfg(not(feature = "testing"))]
         let prover = self.utils.local_tx_prover();
         #[cfg(feature = "testing")]
         let prover = testing::MockTxProver(std::sync::Mutex::new(OsRng));
@@ -1324,7 +1324,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         epoch: MaspEpoch,
         denoms: &HashMap<Address, Denomination>,
     ) -> Result<(), TransferErr> {
-        // Anotate the asset type in the value balance with its decoding in
+        // Annotate the asset type in the value balance with its decoding in
         // order to facilitate cross-epoch computations
         let value_balance = self
             .decode_sum(context.client(), builder.value_balance())

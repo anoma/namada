@@ -256,6 +256,7 @@ pub fn is_amount_required(
 ) -> Option<I128Sum> {
     let mut changes = None;
     let gap = dest.clone() - src;
+    println!("Something is wrong here: {:?}", normed_delta);
 
     for (asset_type, value) in gap.components() {
         if *value > 0 && normed_delta[asset_type] > 0 {

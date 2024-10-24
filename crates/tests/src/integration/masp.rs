@@ -146,40 +146,40 @@ fn masp_incentives() -> Result<()> {
     assert!(captured.result.is_ok());
     assert!(captured.contains(&format!("{}: 1", BTC.to_lowercase())));
 
-    //{
-    //    for _ in 0..10 {
-    //        node.next_masp_epoch();
-    //    }
-
-    //    run(
-    //        &node,
-    //        Bin::Client,
-    //        vec![
-    //            "shielded-sync",
-    //            "--viewing-keys",
-    //            AA_VIEWING_KEY,
-    //            AB_VIEWING_KEY,
-    //            "--node",
-    //            validator_one_rpc,
-    //        ],
-    //    )?;
-
-    //    run(
-    //        &node,
-    //        Bin::Client,
-    //        vec![
-    //            "balance",
-    //            "--owner",
-    //            AA_VIEWING_KEY,
-    //            "--token",
-    //            NAM,
-    //            "--node",
-    //            validator_one_rpc,
-    //        ],
-    //    )?;
-
-    //    panic!();
-    //}
+    {
+        for _ in 0..10 {
+            node.next_masp_epoch();
+        }
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "shielded-sync",
+                "--viewing-keys",
+                AA_VIEWING_KEY,
+                AB_VIEWING_KEY,
+                "--node",
+                validator_one_rpc,
+            ],
+        )?;
+        let captured = CapturedOutput::of(|| {
+            run(
+                &node,
+                Bin::Client,
+                vec![
+                    "balance",
+                    "--owner",
+                    AA_VIEWING_KEY,
+                    "--token",
+                    NAM,
+                    "--node",
+                    validator_one_rpc,
+                ],
+            )
+        });
+        assert!(captured.result.is_ok());
+        assert!(captured.contains("nam: 0"));
+    }
 
     node.next_masp_epoch();
 
@@ -202,7 +202,7 @@ fn masp_incentives() -> Result<()> {
 
         let btc_addr: namada_sdk::address::Address = helpers::find_address(&node, BTC).unwrap();
         let tokens = [(
-            6,
+            8,
             btc_addr,
             "0.01",
             1_000_000,
@@ -288,7 +288,7 @@ fn masp_incentives() -> Result<()> {
                     }),
                     ctx,
                     &token_address,
-                    &6.into(),
+                    &8.into(),
                 )?;
             }
 
@@ -319,7 +319,7 @@ fn masp_incentives() -> Result<()> {
                 ],
             )?;
 
-            run(
+            let captured = CapturedOutput::of(|| run(
                 &node,
                 Bin::Client,
                 vec![
@@ -331,13 +331,12 @@ fn masp_incentives() -> Result<()> {
                     "--node",
                     validator_one_rpc,
                 ],
-            )?;
-
-            //panic!();
+            ));
+            assert!(captured.result.is_ok());
+            assert!(captured.contains("nam: 0"));
         }
 
         {
-            // Send 1 BTC from Albert to PA
             let captured = CapturedOutput::of(|| {
                 run(
                     &node,
@@ -374,7 +373,7 @@ fn masp_incentives() -> Result<()> {
                 ],
             )?;
 
-            // Assert BTC balance at VK(A) is 1
+            // Assert BTC balance at VK(A) is 2
             let captured = CapturedOutput::of(|| {
                 run(
                     &node,
@@ -392,6 +391,24 @@ fn masp_incentives() -> Result<()> {
             });
             assert!(captured.result.is_ok());
             assert!(captured.contains(&format!("{}: 2", BTC.to_lowercase())));
+
+            let captured = CapturedOutput::of(|| run(
+                &node,
+                Bin::Client,
+                vec![
+                    "balance",
+                    "--owner",
+                    AA_VIEWING_KEY,
+                    "--token",
+                    NAM,
+                    "--node",
+                    validator_one_rpc,
+                ],
+            ));
+            assert!(captured.result.is_ok());
+            assert!(captured.contains("nam: 0"));
+
+
         }
 
         for _ in 0..10 {
@@ -411,7 +428,7 @@ fn masp_incentives() -> Result<()> {
             ],
         )?;
 
-        run(
+        let captured = CapturedOutput::of(|| run(
             &node,
             Bin::Client,
             vec![
@@ -423,9 +440,10 @@ fn masp_incentives() -> Result<()> {
                 "--node",
                 validator_one_rpc,
             ],
-        )?;
+        ));
+        assert!(captured.result.is_ok());
+        assert!(captured.contains("nam: 4"));
 
-        //panic!();
     }
 
     // Assert BTC balance at MASP is 2
@@ -473,7 +491,7 @@ fn masp_incentives() -> Result<()> {
                 "--token",
                 BTC,
                 "--amount",
-                "2",
+                "0.00000001",
                 "--signing-keys",
                 BERTHA_KEY,
                 "--node",
