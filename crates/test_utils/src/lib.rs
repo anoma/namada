@@ -39,6 +39,7 @@ pub enum TestWasms {
     VpInfiniteHostGas,
     VpMemoryLimit,
     VpReadStorageKey,
+    VpVerifySignature,
 }
 
 impl TestWasms {
@@ -69,6 +70,7 @@ impl TestWasms {
             TestWasms::VpInfiniteHostGas => "vp_infinite_host_gas.wasm",
             TestWasms::VpMemoryLimit => "vp_memory_limit.wasm",
             TestWasms::VpReadStorageKey => "vp_read_storage_key.wasm",
+            TestWasms::VpVerifySignature => "vp_verify_signature.wasm",
         };
         let cwd =
             env::current_dir().expect("Couldn't get current working directory");
