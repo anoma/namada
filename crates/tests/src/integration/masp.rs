@@ -420,7 +420,7 @@ fn masp_incentives() -> Result<()> {
             ],
         )
     });
-    assert!(captured.result.is_ok());
+    assert!(captured.result.is_ok(), "{:#?}", captured.result);
     assert!(captured.contains(TX_APPLIED_SUCCESS));
 
     // sync the shielded context
@@ -702,7 +702,7 @@ fn masp_incentives() -> Result<()> {
             ],
         )
     });
-    assert!(captured.result.is_ok());
+    assert!(captured.result.is_ok(), "{:#?}", captured.result);
     assert!(captured.contains(TX_APPLIED_SUCCESS));
 
     // Wait till epoch boundary

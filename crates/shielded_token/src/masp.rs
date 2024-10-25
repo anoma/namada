@@ -11,7 +11,6 @@ use std::collections::BTreeMap;
 use std::fmt::Debug;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use itertools::Itertools;
 use masp_primitives::asset_type::AssetType;
 #[cfg(feature = "mainnet")]
 use masp_primitives::consensus::MainNetwork as Network;
@@ -43,7 +42,6 @@ use namada_migrations::*;
 use namada_tx::IndexedTx;
 use rand_core::{CryptoRng, RngCore};
 pub use shielded_wallet::ShieldedWallet;
-use smooth_operator::checked;
 use thiserror::Error;
 
 pub use crate::masp::shielded_sync::dispatcher::{Dispatcher, DispatcherCache};
@@ -247,63 +245,45 @@ pub fn find_valid_diversifier<R: RngCore + CryptoRng>(
 }
 
 /// Determine if using the current note would actually bring us closer to our
-/// target. Returns the unused amounts (change) of delta if any
+/// target
 pub fn is_amount_required(
     src: I128Sum,
     dest: I128Sum,
     normed_delta: I128Sum,
-    opt_delta: Option<I128Sum>,
 ) -> Option<I128Sum> {
-    let mut changes = None;
-    let gap = dest.clone() - src;
-
+    println!("is_amount_required?");
+    println!("src={src:?}");
+    println!("dest={dest:?}");
+    println!("normed_delta={normed_delta:?}");
+    let gap = dest - src;
+    println!("gap={gap:?}");
     for (asset_type, value) in gap.components() {
         if *value > 0 && normed_delta[asset_type] > 0 {
-            #[allow(clippy::disallowed_methods)]
-            let signed_change_amt =
-                checked!(normed_delta[asset_type] - *value).unwrap_or_default();
-            let unsigned_change_amt = if signed_change_amt > 0 {
-                signed_change_amt
-            } else {
-                // Even if there's no change we still need to set the return
-                // value of this function to be Some so that the caller sees
-                // that this note should be used
-                0
-            };
+            let opt = Some((normed_delta - gap).components().fold(
+                I128Sum::zero(),
+                |mut accum_change, (asset_type, value)| {
+                    if *value <= 0 {
+                        return accum_change;
+                    }
 
-            let change_amt = I128Sum::from_nonnegative(
-                asset_type.to_owned(),
-                unsigned_change_amt,
-            )
-            .expect("Change is guaranteed to be non-negative");
-            changes = changes
-                .map(|prev| prev + change_amt.clone())
-                .or(Some(change_amt));
+                    accum_change = accum_change
+                        + I128Sum::from_nonnegative(
+                            asset_type.to_owned(),
+                            *value,
+                        )
+                        .expect("Change is guaranteed to be non-negative");
+
+                    accum_change
+                },
+            ));
+            println!("return={opt:?}");
+            println!();
+            return opt;
         }
     }
-
-    // Because of the way conversions are computed, we need an extra step here
-    // if the token is not the native one
-    if let Some(delta) = opt_delta {
-        // Only if this note is going to be used, handle the assets in delta
-        // (not normalized) that are not part of dest
-        changes = changes.map(|mut chngs| {
-            for (delta_asset_type, delta_amt) in delta.components() {
-                if !dest.asset_types().contains(delta_asset_type) {
-                    let rmng = I128Sum::from_nonnegative(
-                        delta_asset_type.to_owned(),
-                        *delta_amt,
-                    )
-                    .expect("Change is guaranteed to be non-negative");
-                    chngs += rmng;
-                }
-            }
-
-            chngs
-        });
-    }
-
-    changes
+    println!("return=None");
+    println!();
+    None
 }
 
 /// a masp change

@@ -3447,6 +3447,13 @@ async fn construct_shielded_parts<N: Namada>(
             .precompute_asset_types(context.client(), tokens)
             .await;
 
+        println!("GENERATING stx... ");
+        println!("data={data:?}");
+        println!("fee_data={fee_data:?}");
+        println!("expiration={expiration:?}");
+        println!("update_ctx={update_ctx:?}");
+        println!();
+
         shielded
             .gen_shielded_transfer(
                 context, data, fee_data, expiration, update_ctx,
