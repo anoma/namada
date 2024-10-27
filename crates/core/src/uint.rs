@@ -546,6 +546,8 @@ impl FromStr for I256 {
 }
 
 impl I256 {
+    const N_WORDS: usize = 4;
+    
     /// Compute the two's complement of a number.
     pub fn negate(&self) -> Option<Self> {
         let (uint, overflow) = self.0.negate();
@@ -614,33 +616,30 @@ impl I256 {
         Self(MAX_SIGNED_VALUE)
     }
 
-    /// Attempt to convert a MASP-denominated integer to an I256
-    /// using the given denomination.
+    /// Given a u128 and [`MaspDigitPos`], construct the corresponding
+    /// amount.
     pub fn from_masp_denominated(
-        value: impl Into<i128>,
+        val: i128,
         denom: MaspDigitPos,
-    ) -> Result<Self, AmountParseError> {
-        let value = value.into();
-        let is_negative = value < 0;
-        let value = value.unsigned_abs();
-        let mut result = [0u64; 4];
-        result[denom as usize] = u64::try_from(value)
-            .map_err(|_e| AmountParseError::PrecisionOverflow)?;
-        let result = Uint(result);
-        if result <= MAX_SIGNED_VALUE {
-            if is_negative {
-                let (inner, overflow) = result.negate();
-                if overflow {
-                    Err(AmountParseError::InvalidRange)
-                } else {
-                    Ok(Self(inner))
-                }
+    ) -> Result<Self, <i64 as TryFrom<u64>>::Error> {
+        let abs = val.unsigned_abs();
+        #[allow(clippy::cast_possible_truncation)]
+        let lo = abs as u64;
+        let hi = (abs >> 64) as u64;
+        let lo_pos = denom as usize;
+        #[allow(clippy::arithmetic_side_effects)]
+        let hi_pos = lo_pos + 1;
+        let mut raw = [0u64; Self::N_WORDS];
+        raw[lo_pos] = lo;
+        raw[hi_pos] = hi;
+        i64::try_from(raw[Self::N_WORDS - 1]).map(|_| {
+            let res = Self(Uint(raw));
+            if val.is_negative() {
+                res.checked_neg().unwrap()
             } else {
-                Ok(Self(result).canonical())
+                res
             }
-        } else {
-            Err(AmountParseError::InvalidRange)
-        }
+        })
     }
 
     /// Multiply by a decimal [`Dec`] with the result rounded up. Checks for
@@ -774,6 +773,23 @@ impl CheckedAdd for I256 {
 
     fn checked_add(self, rhs: Self) -> Option<Self::Output> {
         I256::checked_add(&self, rhs)
+    }
+}
+
+// NOTE: This is here only because MASP requires it for `ValueSum` subtraction
+impl CheckedSub for &I256 {
+    type Output = I256;
+
+    fn checked_sub(self, rhs: Self) -> Option<Self::Output> {
+        self.checked_sub(*rhs)
+    }
+}
+
+impl CheckedSub for I256 {
+    type Output = I256;
+
+    fn checked_sub(self, rhs: Self) -> Option<Self::Output> {
+        I256::checked_sub(&self, rhs)
     }
 }
 
