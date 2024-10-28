@@ -1017,9 +1017,7 @@ mod test_process_proposal {
         let mut outer_tx =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: DenominatedAmount::native(
-                        Amount::from_uint(1, 0).expect("Test failed"),
-                    ),
+                    amount_per_gas_unit: DenominatedAmount::native(100.into()),
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
@@ -1230,7 +1228,7 @@ mod test_process_proposal {
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: DenominatedAmount::native(1.into()),
+                    amount_per_gas_unit: DenominatedAmount::native(100.into()),
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
@@ -1333,7 +1331,7 @@ mod test_process_proposal {
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: DenominatedAmount::native(1.into()),
+                    amount_per_gas_unit: DenominatedAmount::native(100.into()),
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
@@ -1347,7 +1345,7 @@ mod test_process_proposal {
 
         new_wrapper.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount_per_gas_unit: DenominatedAmount::native(1.into()),
+                amount_per_gas_unit: DenominatedAmount::native(100.into()),
                 token: shell.state.in_mem().native_token.clone(),
             },
             keypair_2.ref_to(),

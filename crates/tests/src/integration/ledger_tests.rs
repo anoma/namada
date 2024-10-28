@@ -736,7 +736,7 @@ fn proposal_submission() -> Result<()> {
         "--data-path",
         valid_proposal_json_path.to_str().unwrap(),
         "--gas-limit",
-        "11000000",
+        "2200000",
         "--node",
         &validator_one_rpc,
     ]);
@@ -1474,7 +1474,7 @@ fn implicit_account_reveal_pk() -> Result<()> {
                 "--signing-keys",
                 source,
                 "--gas-limit",
-                "11000000",
+                "2200000",
                 "--node",
                 &validator_one_rpc,
             ]

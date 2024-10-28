@@ -693,8 +693,6 @@ fn masp_incentives() -> Result<()> {
                 CHRISTEL,
                 "--token",
                 NAM,
-                "--gas-limit",
-                "300000",
                 "--amount",
                 "1.451732",
                 "--signing-keys",
@@ -1193,7 +1191,7 @@ fn masp_txs_and_queries() -> Result<()> {
                 "--amount",
                 "20",
                 "--gas-limit",
-                "300000",
+                "60000",
                 "--gas-payer",
                 CHRISTEL_KEY,
                 "--node",
@@ -1530,7 +1528,7 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
         let mut tx = Tx::try_from_json_bytes(&bytes).unwrap();
         tx.add_wrapper(
             tx::data::wrapper::Fee {
-                amount_per_gas_unit: DenominatedAmount::native(1.into()),
+                amount_per_gas_unit: DenominatedAmount::native(100.into()),
                 token: native_token.clone(),
             },
             pk.clone(),
@@ -1672,7 +1670,7 @@ fn expired_masp_tx() -> Result<()> {
     tx.header.expiration = None;
     tx.add_wrapper(
         namada_sdk::tx::data::wrapper::Fee {
-            amount_per_gas_unit: DenominatedAmount::native(1.into()),
+            amount_per_gas_unit: DenominatedAmount::native(100.into()),
             token: native_token.clone(),
         },
         pk.clone(),
@@ -2652,7 +2650,7 @@ fn masp_fee_payment() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 240000"));
+    assert!(captured.contains("nam: 440000"));
     let captured = CapturedOutput::of(|| {
         run(
             &node,
@@ -2784,8 +2782,6 @@ fn masp_fee_payment_gas_limit() -> Result<()> {
                 NAM,
                 "--amount",
                 "1",
-                "--gas-limit",
-                "500000",
                 "--gas-price",
                 "1",
                 "--disposable-gas-payer",
@@ -2952,10 +2948,10 @@ fn masp_fee_payment_with_non_disposable() -> Result<()> {
                 NAM,
                 "--amount",
                 "1",
-                "--gas-limit",
-                "300000",
                 "--gas-price",
                 "1",
+                "--gas-limit",
+                "60000",
                 "--gas-payer",
                 ALBERT_KEY,
                 "--ledger-address",
@@ -2991,7 +2987,7 @@ fn masp_fee_payment_with_non_disposable() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1699999"));
+    assert!(captured.contains("nam: 1939999"));
 
     let captured = CapturedOutput::of(|| {
         run(
@@ -3169,7 +3165,7 @@ fn masp_fee_payment_with_custom_spending_key() -> Result<()> {
                 "--amount",
                 "9000",
                 "--gas-limit",
-                "300000",
+                "60000",
                 "--gas-price",
                 "1",
                 "--gas-spending-key",
@@ -3226,7 +3222,7 @@ fn masp_fee_payment_with_custom_spending_key() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1000"));
+    assert!(captured.contains("nam: 241000"));
 
     let captured = CapturedOutput::of(|| {
         run(
@@ -3439,10 +3435,10 @@ fn masp_fee_payment_with_different_token() -> Result<()> {
                 NAM,
                 "--amount",
                 "1",
+                "--gas-limit",
+                "60000",
                 "--gas-token",
                 BTC,
-                "--gas-limit",
-                "300000",
                 "--gas-price",
                 "1",
                 "--gas-spending-key",
@@ -3535,7 +3531,7 @@ fn masp_fee_payment_with_different_token() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("btc: 1000"));
+    assert!(captured.contains("btc: 241000"));
 
     Ok(())
 }
@@ -3584,8 +3580,6 @@ fn identical_output_descriptions() -> Result<()> {
                 NAM,
                 "--amount",
                 "1000",
-                "--gas-limit",
-                "300000",
                 "--gas-payer",
                 BERTHA_KEY,
                 "--output-folder-path",
@@ -3876,7 +3870,7 @@ fn masp_batch() -> Result<()> {
                     "--amount",
                     "1000",
                     "--gas-limit",
-                    "300000",
+                    "60000",
                     "--gas-payer",
                     CHRISTEL_KEY,
                     "--output-folder-path",
@@ -4111,7 +4105,7 @@ fn masp_atomic_batch() -> Result<()> {
                     "--amount",
                     "1000",
                     "--gas-limit",
-                    "300000",
+                    "60000",
                     "--gas-payer",
                     CHRISTEL_KEY,
                     "--output-folder-path",
@@ -4341,8 +4335,6 @@ fn tricky_masp_txs() -> Result<()> {
                 NAM,
                 "--amount",
                 "1000",
-                "--gas-limit",
-                "300000",
                 "--gas-payer",
                 CHRISTEL_KEY,
                 "--output-folder-path",
@@ -4438,8 +4430,6 @@ fn tricky_masp_txs() -> Result<()> {
                 NAM,
                 "--amount",
                 "1000",
-                "--gas-limit",
-                "300000",
                 "--gas-payer",
                 CHRISTEL_KEY,
                 "--output-folder-path",
