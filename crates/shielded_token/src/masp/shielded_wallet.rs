@@ -1,5 +1,4 @@
 //! The shielded wallet implementation
-use std::cmp::Ordering;
 use std::collections::{btree_map, BTreeMap, BTreeSet};
 
 use eyre::eyre;
@@ -51,7 +50,7 @@ use rand_core::{OsRng, SeedableRng};
 
 use crate::masp::utils::MaspClient;
 use crate::masp::{
-    cloned_pair, to_viewing_key, Changes,
+    cloned_pair, to_viewing_key,
     ContextSyncStatus, Conversions, MaspAmount, MaspDataLog, MaspFeeData,
     MaspSourceTransferData, MaspTargetTransferData, MaspTransferData,
     MaspTxReorderedData, NoteIndex, ShieldedSyncConfig, ShieldedTransfer,
@@ -657,13 +656,13 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         src: ValueSum::<Address, Change>,
         dest: ValueSum::<Address, Change>,
         delta: I128Sum,
-    ) -> Option<(ValueSum::<Address, Change>, ValueSum::<Address, Change>)> {
+    ) -> Option<ValueSum::<Address, Change>> {
         // If the delta causes any regression, then do not use it
         if !(delta >= I128Sum::zero()) {
             return None;
         }
-        let decoded_delta = self.decode_sum(client, delta).await;
         let gap = dest.clone() - src;
+        let (decoded_delta, _rem_delta) = self.decode_sum(client, delta).await;
         for ((_, asset_data), value) in decoded_delta.components() {
             // Check that this component of the delta helps close the gap
             if *value > 0 && gap.get(&asset_data.token).is_positive() {
@@ -679,17 +678,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                         amt,
                     );
                 }
-                // Compute how much change has to go back to sender
-                let mut change: ValueSum::<_, Change> = converted_delta.clone() - gap;
-                for (addr, value) in change.clone().components() {
-                    if value.is_negative() {
-                        change += ValueSum::from_pair(
-                            addr.clone(),
-                            value.negate()?,
-                        );
-                    }
-                }
-                return Some((converted_delta, change));
+                return Some(converted_delta);
             }
         }
         None
@@ -708,7 +697,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         sk: namada_core::masp::ExtendedSpendingKey,
         target: ValueSum::<Address, Change>,
         target_epoch: MaspEpoch,
-        changes: &mut Changes,
     ) -> Result<
         (
             I128Sum,
@@ -766,17 +754,12 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                     .await?;
 
                 // Use this note only if it brings us closer to our target
-                if let Some((namada_contr, namada_change)) = self.is_amount_required(
+                if let Some(namada_contr) = self.is_amount_required(
                     context.client(),
                     namada_acc.clone(),
                     target.clone(),
                     contr.clone(),
                 ).await {
-                    // Update the changes
-                    changes
-                        .entry(sk)
-                        .and_modify(|amt| *amt += &contr)
-                        .or_insert(contr.clone());
                     // Be sure to record the conversions used in computing
                     // accumulated value
                     masp_acc += contr;
@@ -888,17 +871,20 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         &mut self,
         client: &C,
         amt: I128Sum,
-    ) -> ValueSum<(AssetType, AssetData), i128> {
+    ) -> (ValueSum<(AssetType, AssetData), i128>, I128Sum) {
         let mut res = ValueSum::zero();
+        let mut rem = ValueSum::zero();
         for (asset_type, val) in amt.components() {
             // Decode the asset type
             if let Some(decoded) =
                 self.decode_asset_type(client, *asset_type).await
             {
                 res += ValueSum::from_pair((*asset_type, decoded), *val);
+            } else {
+                rem += ValueSum::from_pair(*asset_type, *val);
             }
         }
-        res
+        (res, rem)
     }
 
     /// Make shielded components to embed within a Transfer object. If no
@@ -1010,7 +996,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             // destination are shielded
             return Ok(None);
         };
-        let mut changes = Changes::default();
 
         for (MaspSourceTransferData { source, token }, amount) in &source_data {
             self.add_inputs(
@@ -1022,7 +1007,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 epoch,
                 &denoms,
                 &mut notes_tracker,
-                &mut changes,
             )
             .await?;
         }
@@ -1044,13 +1028,13 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 token,
                 amount,
                 epoch,
-                &denoms,
+                &mut denoms,
             )
             .await?;
         }
 
         // Collect the fees if needed
-        if let Some(MaspFeeData {
+        /*if let Some(MaspFeeData {
             sources,
             target,
             token,
@@ -1071,10 +1055,16 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 &mut changes,
             )
             .await?;
-        }
+        }*/
 
-        // Finally, add outputs representing the change from this payment.
-        Self::add_changes(&mut builder, changes)?;
+        // Final safety check on the value balance to verify that the
+        // transaction is balanced
+        if !builder.value_balance().is_zero() {
+            return Result::Err(TransferErr::Build {
+                error: builder::Error::InsufficientFunds(builder.value_balance()),
+                data: None,
+            });
+        }
 
         let builder_clone = builder.clone().map_builder(WalletMap);
         // Build and return the constructed transaction
@@ -1103,6 +1093,25 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             metadata,
             epoch,
         }))
+    }
+
+    /// Either get the denomination from the cache or query it
+    #[allow(async_fn_in_trait)]
+    async fn get_denom(
+        client: &(impl Client + Sync),
+        denoms: &mut HashMap<Address, Denomination>,
+        token: &Address,
+    ) -> Result<Denomination, TransferErr> {
+        if let Some(denom) = denoms.get(token) {
+            Ok(*denom)
+        } else if let Some(denom) = Self::query_denom(client, &token).await {
+            denoms.insert(token.clone(), denom);
+            Ok(denom)
+        } else {
+            Err(TransferErr::General(format!(
+                "denomination for token {token}"
+            )))
+        }
     }
 
     /// Group all the information for every source/token and target/token
@@ -1137,16 +1146,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 return Ok(None);
             }
 
-            let denom = if let Some(denom) = denoms.get(&token) {
-                *denom
-            } else if let Some(denom) = Self::query_denom(context.client(), &token).await {
-                denoms.insert(token.clone(), denom);
-                denom
-            } else {
-                return Err(TransferErr::General(format!(
-                    "denomination for token {token}"
-                )));
-            };
+            let denom = Self::get_denom(context.client(), &mut denoms, &token).await?;
             let amount = amount
                 .increase_precision(denom)
                 .map_err(|e| TransferErr::General(e.to_string()))?
@@ -1189,6 +1189,43 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         }))
     }
 
+    /// Computes added_amt - required_amt taking care of denominations and asset
+    /// decodings. Error out if required_amt is not less than added_amt.
+    #[allow(async_fn_in_trait)]
+    async fn compute_change(
+        &mut self,
+        client: &(impl Client + Sync),
+        added_amt: I128Sum,
+        mut required_amt: ValueSum<Address, Change>,
+    ) -> Result<I128Sum, TransferErr> {
+        // Compute the amount of change due to the sender.
+        let (decoded_amount, mut change) =
+            self.decode_sum(client, added_amt.clone()).await;
+        for ((asset_type, asset_data), value) in decoded_amount.components() {
+            // Get current component of the required amount
+            let req = asset_data.position.denominate(
+                &Amount::from(required_amt.get(&asset_data.token)),
+            );
+            // Compute how much this decoded component covers of the requirement
+            let covered = std::cmp::min(i128::from(req), *value);
+            // Record how far in excess of the requirement we are. This is change.
+            change += ValueSum::from_pair(*asset_type, value - covered);
+            // Denominate the cover and decrease the required amount accordingly
+            let covered = Change::from_masp_denominated(covered.into(), asset_data.position)
+                .map_err(|e| TransferErr::General(e.to_string()))?;
+            required_amt -= ValueSum::from_pair(asset_data.token.clone(), covered);
+        }
+        // Error out if the required amount was not covered by the added amount
+        if !required_amt.is_zero() {
+            // TODO: zero should be replaced by required_amt in the error
+            return Result::Err(TransferErr::Build {
+                error: builder::Error::InsufficientFunds(I128Sum::zero()),
+                data: None,
+            });
+        }
+        Ok(change)
+    }
+
     /// Add the necessary transaction inputs to the builder.
     #[allow(async_fn_in_trait)]
     #[allow(clippy::too_many_arguments)]
@@ -1202,7 +1239,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         epoch: MaspEpoch,
         denoms: &HashMap<Address, Denomination>,
         notes_tracker: &mut SpentNotesTracker,
-        changes: &mut Changes,
     ) -> Result<Option<I128Sum>, TransferErr> {
         // We want to fund our transaction solely from supplied spending key
         let spending_key = source.spending_key();
@@ -1231,23 +1267,45 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         // If there are shielded inputs
         let added_amt = if let Some(sk) = spending_key {
             // Make the target amount vectorial
-            let amount = ValueSum::<Address, Change>::from_pair(
+            let required_amt = ValueSum::<Address, Change>::from_pair(
                 token.clone(),
                 (*amount).into(),
             );
             // Locate unspent notes that can help us meet the transaction
             // amount
-            let (added_amount, unspent_notes, used_convs) = self
+            let (added_amt, unspent_notes, used_convs) = self
                 .collect_unspent_notes(
                     context,
                     notes_tracker,
                     sk,
-                    amount,
+                    required_amt.clone(),
                     epoch,
-                    changes,
                 )
                 .await
                 .map_err(|e| TransferErr::General(e.to_string()))?;
+
+            // Compute the change that needs to go back to the sender
+            let change = self.compute_change(
+                context.client(),
+                added_amt.clone(),
+                required_amt,
+            ).await?;
+            // Commit the computed change back to the sender.
+            for (asset_type, value) in change.components() {
+                builder
+                    .add_sapling_output(
+                        Some(MaspExtendedSpendingKey::from(sk).expsk.ovk),
+                        MaspExtendedSpendingKey::from(sk).default_address().1.into(),
+                        *asset_type,
+                        *value as u64,
+                        MemoBytes::empty(),
+                    )
+                    .map_err(|e| TransferErr::Build {
+                        error: builder::Error::SaplingBuild(e),
+                        data: None,
+                    })?;
+            }
+            
             // Commit the notes found to our transaction
             for (diversifier, note, merkle_path) in unspent_notes {
                 builder
@@ -1278,7 +1336,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 }
             }
 
-            Some(added_amount)
+            Some(added_amt)
         } else {
             // We add a dummy UTXO to our transaction, but only the source
             // of the parent Transfer object is used to
@@ -1327,13 +1385,17 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         token: Address,
         amount: Amount,
         epoch: MaspEpoch,
-        denoms: &HashMap<Address, Denomination>,
+        denoms: &mut HashMap<Address, Denomination>,
     ) -> Result<(), TransferErr> {
         // Anotate the asset type in the value balance with its decoding in
         // order to facilitate cross-epoch computations
-        let value_balance = self
+        let (value_balance, rem_balance) = self
             .decode_sum(context.client(), builder.value_balance())
             .await;
+        assert!(
+            rem_balance.is_zero(),
+            "no undecodable asset types should remain at this point",
+        );
 
         let payment_address = target.payment_address();
 
@@ -1342,9 +1404,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         // amount.
         let mut rem_amount = amount.raw_amount().0;
 
-        // Ok to unwrap cause we've already seen the token before, the
-        // denomination must be there
-        let denom = denoms.get(&token).unwrap();
+        let denom = Self::get_denom(context.client(), denoms, &token).await?;
         // Now handle the outputs of this transaction
         // Loop through the value balance components and see which
         // ones can be given to the receiver
@@ -1353,7 +1413,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             // Only asset types with the correct token can contribute. But
             // there must be a demonstrated need for it.
             if decoded.token == token
-                && &decoded.denom == denom
+                && decoded.denom == denom
                 && decoded.epoch.map_or(true, |vbal_epoch| vbal_epoch <= epoch)
                 && *rem_amount > 0
             {
@@ -1456,7 +1516,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
     ///    changes)
     /// 2. From new spend notes of the transaction's sources
     /// 3. From new spend notes of the optional gas spending keys
-    #[allow(clippy::too_many_arguments)]
+    /*#[allow(clippy::too_many_arguments)]
     #[allow(async_fn_in_trait)]
     async fn add_fees(
         &mut self,
@@ -1711,54 +1771,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         }
 
         Ok(())
-    }
-
-    /// Consumes the changes and adds them back to the original sources to
-    /// balance the transaction. This function has to be called after
-    /// `add_fees` because we might have some change coming from there too
-    #[allow(clippy::result_large_err)]
-    #[allow(async_fn_in_trait)]
-    fn add_changes(
-        builder: &mut Builder<Network>,
-        contrs: Changes,
-    ) -> Result<(), TransferErr> {
-        let mut value_balance = builder.value_balance();
-        for (sp, contr) in contrs.into_iter() {
-            for (asset_type, contr) in contr.components() {
-                if *contr > 0 && value_balance[&asset_type] > 0 {
-                    let change = std::cmp::min(*contr, value_balance[&asset_type]);
-                    value_balance -= I128Sum::from_pair(*asset_type, change);
-                    let change = u64::try_from(change)
-                        .map_err(|e| TransferErr::General(e.to_string()))?;
-                    let sk = MaspExtendedSpendingKey::from(sp.to_owned());
-                    // Send the change in this asset type back to the sender
-                    builder
-                        .add_sapling_output(
-                            Some(sk.expsk.ovk),
-                            sk.default_address().1,
-                            *asset_type,
-                            change,
-                            MemoBytes::empty(),
-                        )
-                        .map_err(|e| TransferErr::Build {
-                            error: builder::Error::SaplingBuild(e),
-                            data: None,
-                        })?;
-                }
-            }
-        }
-
-        // Final safety check on the value balance to verify that the
-        // transaction is balanced
-        if !value_balance.is_zero() {
-            return Result::Err(TransferErr::Build {
-                error: builder::Error::InsufficientFunds(value_balance),
-                data: None,
-            });
-        }
-
-        Ok(())
-    }
+    }*/
 
     /// Get the asset type with the given epoch, token, and denomination. If it
     /// does not exist in the protocol, then remove the timestamp. Make sure to
@@ -1828,7 +1841,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         amt: I128Sum,
     ) -> Result<DenominatedAmount, eyre::Error> {
         let mut amount = Amount::zero();
-        let value_sum = self.decode_sum(client, amt).await;
+        let (value_sum, rem_sum) = self.decode_sum(client, amt).await;
 
         for ((_, decoded), val) in value_sum.components() {
             let positioned_amt =
