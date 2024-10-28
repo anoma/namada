@@ -356,7 +356,7 @@ pub struct TxShieldedTransfer<C: NamadaTypes = SdkTypes> {
     /// Transfer-specific data
     pub data: Vec<TxShieldedTransferData<C>>,
     /// Optional additional keys for gas payment
-    pub gas_spending_keys: Vec<C::SpendingKey>,
+    pub gas_spending_key: Option<C::SpendingKey>,
     /// Generate an ephemeral signing key to be used only once to sign the
     /// wrapper tx
     pub disposable_signing_key: bool,
@@ -453,7 +453,7 @@ pub struct TxUnshieldingTransfer<C: NamadaTypes = SdkTypes> {
     /// Transfer-specific data
     pub data: Vec<TxUnshieldingTransferData<C>>,
     /// Optional additional keys for gas payment
-    pub gas_spending_keys: Vec<C::SpendingKey>,
+    pub gas_spending_key: Option<C::SpendingKey>,
     /// Generate an ephemeral signing key to be used only once to sign the
     /// wrapper tx
     pub disposable_signing_key: bool,
@@ -499,7 +499,7 @@ pub struct TxIbcTransfer<C: NamadaTypes = SdkTypes> {
     /// Memo for IBC transfer packet
     pub ibc_memo: Option<String>,
     /// Optional additional keys for gas payment
-    pub gas_spending_keys: Vec<C::SpendingKey>,
+    pub gas_spending_key: Option<C::SpendingKey>,
     /// Generate an ephemeral signing key to be used only once to sign the
     /// wrapper tx
     pub disposable_signing_key: bool,
@@ -593,10 +593,10 @@ impl<C: NamadaTypes> TxIbcTransfer<C> {
     /// Gas spending keys
     pub fn gas_spending_keys(
         self,
-        gas_spending_keys: Vec<C::SpendingKey>,
+        gas_spending_key: C::SpendingKey,
     ) -> Self {
         Self {
-            gas_spending_keys,
+            gas_spending_key: Some(gas_spending_key),
             ..self
         }
     }

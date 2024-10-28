@@ -2675,6 +2675,8 @@ fn masp_fee_payment() -> Result<()> {
                 "10000",
                 "--gas-price",
                 "1",
+                "--gas-spending-key",
+                A_SPENDING_KEY,
                 "--disposable-gas-payer",
                 "--ledger-address",
                 validator_one_rpc,
@@ -3013,6 +3015,8 @@ fn masp_fee_payment_with_non_disposable() -> Result<()> {
                 "1",
                 "--gas-payer",
                 ALBERT_KEY,
+                "--gas-spending-key",
+                A_SPENDING_KEY,
                 "--ledger-address",
                 validator_one_rpc,
             ],
@@ -3263,7 +3267,7 @@ fn masp_fee_payment_with_custom_spending_key() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 0"));
+    assert!(captured.contains("nam: 1000"));
 
     let captured = CapturedOutput::of(|| {
         run(
@@ -3281,7 +3285,7 @@ fn masp_fee_payment_with_custom_spending_key() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1000"));
+    assert!(captured.contains("nam: 0"));
 
     let captured = CapturedOutput::of(|| {
         run(
@@ -3572,7 +3576,7 @@ fn masp_fee_payment_with_different_token() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("btc: 0"));
+    assert!(captured.contains("btc: 1000"));
 
     let captured = CapturedOutput::of(|| {
         run(
@@ -3590,7 +3594,7 @@ fn masp_fee_payment_with_different_token() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("btc: 1000"));
+    assert!(captured.contains("btc: 0"));
 
     Ok(())
 }

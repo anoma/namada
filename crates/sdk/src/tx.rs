@@ -2608,7 +2608,7 @@ pub async fn build_ibc_transfer(
         &args.tx,
         fee_per_gas_unit,
         &signing_data.fee_payer,
-        args.gas_spending_keys.clone(),
+        args.gas_spending_key.clone(),
     )
     .await?;
     if let Some(fee_data) = &masp_fee_data {
@@ -3074,7 +3074,7 @@ pub async fn build_shielded_transfer<N: Namada>(
         &args.tx,
         fee_per_gas_unit,
         &signing_data.fee_payer,
-        args.gas_spending_keys.clone(),
+        args.gas_spending_key.clone(),
     )
     .await?;
     if let Some(fee_data) = &masp_fee_data {
@@ -3147,7 +3147,7 @@ async fn get_masp_fee_payment_amount<N: Namada>(
     args: &args::Tx<SdkTypes>,
     fee_amount: DenominatedAmount,
     fee_payer: &common::PublicKey,
-    gas_spending_keys: Vec<ExtendedSpendingKey>,
+    gas_spending_key: Option<ExtendedSpendingKey>,
 ) -> Result<Option<MaspFeeData>> {
     let fee_payer_address = Address::from(fee_payer);
     let balance_key = balance_key(&args.fee_token, &fee_payer_address);
@@ -3162,7 +3162,7 @@ async fn get_masp_fee_payment_amount<N: Namada>(
 
     Ok(match total_fee.checked_sub(balance) {
         Some(diff) if !diff.is_zero() => Some(MaspFeeData {
-            sources: gas_spending_keys,
+            source: gas_spending_key,
             target: fee_payer_address,
             token: args.fee_token.clone(),
             amount: DenominatedAmount::new(diff, fee_amount.denom()),
@@ -3362,7 +3362,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
         &args.tx,
         fee_per_gas_unit,
         &signing_data.fee_payer,
-        args.gas_spending_keys.clone(),
+        args.gas_spending_key.clone(),
     )
     .await?;
     if let Some(fee_data) = &masp_fee_data {
