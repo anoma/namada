@@ -173,12 +173,12 @@ pub trait Namada: NamadaIo {
     fn new_shielded_transfer(
         &self,
         data: Vec<args::TxShieldedTransferData>,
-        gas_spending_keys: Vec<ExtendedSpendingKey>,
+        gas_spending_key: Option<ExtendedSpendingKey>,
         disposable_signing_key: bool,
     ) -> args::TxShieldedTransfer {
         args::TxShieldedTransfer {
             data,
-            gas_spending_keys,
+            gas_spending_key,
             tx_code_path: PathBuf::from(TX_TRANSFER_WASM),
             disposable_signing_key,
             tx: self.tx_builder(),
@@ -206,13 +206,13 @@ pub trait Namada: NamadaIo {
         &self,
         source: ExtendedSpendingKey,
         data: Vec<args::TxUnshieldingTransferData>,
-        gas_spending_keys: Vec<ExtendedSpendingKey>,
+        gas_spending_key: Option<ExtendedSpendingKey>,
         disposable_signing_key: bool,
     ) -> args::TxUnshieldingTransfer {
         args::TxUnshieldingTransfer {
             source,
             data,
-            gas_spending_keys,
+            gas_spending_key,
             disposable_signing_key,
             tx_code_path: PathBuf::from(TX_TRANSFER_WASM),
             tx: self.tx_builder(),
@@ -318,7 +318,7 @@ pub trait Namada: NamadaIo {
             refund_target: None,
             ibc_shielding_data: None,
             ibc_memo: None,
-            gas_spending_keys: Default::default(),
+            gas_spending_key: Default::default(),
             tx: self.tx_builder(),
             tx_code_path: PathBuf::from(TX_IBC_WASM),
         }
