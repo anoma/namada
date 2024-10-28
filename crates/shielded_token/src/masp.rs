@@ -103,8 +103,8 @@ pub struct MaspSourceTransferData {
 }
 
 /// The data for a masp transfer relative to a given target
-#[derive(Hash, Eq, PartialEq)]
-struct MaspTargetTransferData {
+#[derive(Debug, Hash, Eq, PartialEq)]
+pub struct MaspTargetTransferData {
     source: TransferSource,
     target: TransferTarget,
     token: Address,
@@ -125,11 +125,6 @@ pub struct MaspTxReorderedData {
     target_data: HashMap<MaspTargetTransferData, token::Amount>,
     denoms: HashMap<Address, Denomination>,
 }
-
-/// Data about the unspent amounts for any given shielded source coming from the
-/// spent notes in their posses that have been added to the builder. Can be used
-/// to either pay fees or to return a change
-pub type Changes = HashMap<namada_core::masp::ExtendedSpendingKey, I128Sum>;
 
 /// Shielded pool data for a token
 #[allow(missing_docs)]
