@@ -36,7 +36,7 @@ use namada_core::masp::{
 use namada_core::task_env::TaskEnvironment;
 use namada_core::time::{DateTimeUtc, DurationSecs};
 use namada_core::token::{
-    Amount, Change, DenominatedAmount, Denomination, MaspDigitPos,
+    Amount, Change, Denomination, MaspDigitPos,
 };
 use namada_io::client::Client;
 use namada_io::{
@@ -990,7 +990,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             source_data,
             target_data,
             mut denoms,
-        }) = Self::reorder_data_for_masp_transfer(context, data).await?
+        }) = Self::reorder_data_for_masp_transfer(context, data, fee_data).await?
         else {
             // No shielded components are needed when neither source nor
             // destination are shielded
@@ -1032,30 +1032,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             )
             .await?;
         }
-
-        // Collect the fees if needed
-        /*if let Some(MaspFeeData {
-            sources,
-            target,
-            token,
-            amount,
-        }) = fee_data
-        {
-            self.add_fees(
-                context,
-                &mut builder,
-                &source_data,
-                sources,
-                &target,
-                &token,
-                &amount,
-                epoch,
-                &mut denoms,
-                &mut notes_tracker,
-                &mut changes,
-            )
-            .await?;
-        }*/
 
         // Final safety check on the value balance to verify that the
         // transaction is balanced
@@ -1124,6 +1100,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
     async fn reorder_data_for_masp_transfer(
         context: &impl NamadaIo,
         data: Vec<MaspTransferData>,
+        fee_data: Option<MaspFeeData>,
     ) -> Result<Option<MaspTxReorderedData>, TransferErr> {
         let mut source_data =
             HashMap::<MaspSourceTransferData, Amount>::new();
@@ -1131,6 +1108,26 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             HashMap::<MaspTargetTransferData, Amount>::new();
         let mut denoms = HashMap::new();
 
+        // If present, add the fee data to the rest of the transfer data
+        if let Some(fee_data) = fee_data {
+            let denom = Self::get_denom(context.client(), &mut denoms, &fee_data.token).await?;
+            let amount = fee_data
+                .amount
+                .increase_precision(denom)
+                .map_err(|e| TransferErr::General(e.to_string()))?
+                .amount();
+            if let Some(source) = fee_data.source {
+                source_data.insert(MaspSourceTransferData {
+                    source: TransferSource::ExtendedSpendingKey(source),
+                    token: fee_data.token.clone(),
+                }, amount);
+            }
+            target_data.insert(MaspTargetTransferData {
+                source: fee_data.source.map(|source| TransferSource::ExtendedSpendingKey(source)),
+                target: TransferTarget::Address(fee_data.target),
+                token: fee_data.token,
+            }, amount);
+        }
         for MaspTransferData {
             source,
             target,
@@ -1167,7 +1164,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             }
 
             let key = MaspTargetTransferData {
-                source,
+                source: Some(source),
                 target,
                 token,
             };
@@ -1380,7 +1377,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         &mut self,
         context: &impl NamadaIo,
         builder: &mut Builder<Network>,
-        source: TransferSource,
+        source: Option<TransferSource>,
         target: &TransferTarget,
         token: Address,
         amount: Amount,
@@ -1426,9 +1423,9 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 let contr = std::cmp::min(u128::from(*rem_amount), val) as u64;
                 // If we are sending to a shielded address, we need the outgoing
                 // viewing key in the following computations.
-                let ovk_opt = source
-                    .spending_key()
-                    .map(|x| MaspExtendedSpendingKey::from(x).expsk.ovk);
+                let ovk_opt = source.clone().and_then(|source|
+                    source.spending_key()
+                    .map(|x| MaspExtendedSpendingKey::from(x).expsk.ovk));
                 // Make transaction output tied to the current token,
                 // denomination, and epoch.
                 if let Some(pa) = payment_address {
@@ -1499,7 +1496,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             return Result::Err(TransferErr::Build {
                 error: builder::Error::InsufficientFunds(shortfall),
                 data: Some(MaspDataLog {
-                    source: Some(source),
+                    source,
                     token,
                     amount,
                 }),
@@ -1508,270 +1505,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
 
         Ok(())
     }
-
-    /// Add the necessary note to include a masp fee payment in the transaction.
-    /// Funds are gathered in the following order:
-    ///
-    /// 1. From the residual values of the already included spend notes (i.e.
-    ///    changes)
-    /// 2. From new spend notes of the transaction's sources
-    /// 3. From new spend notes of the optional gas spending keys
-    /*#[allow(clippy::too_many_arguments)]
-    #[allow(async_fn_in_trait)]
-    async fn add_fees(
-        &mut self,
-        context: &impl NamadaIo,
-        builder: &mut Builder<Network>,
-        source_data: &HashMap<MaspSourceTransferData, Amount>,
-        sources: Vec<namada_core::masp::ExtendedSpendingKey>,
-        target: &Address,
-        token: &Address,
-        amount: &DenominatedAmount,
-        epoch: MaspEpoch,
-        denoms: &mut HashMap<Address, Denomination>,
-        notes_tracker: &mut SpentNotesTracker,
-        changes: &mut Changes,
-    ) -> Result<(), TransferErr> {
-        let denom = if let Some(denom) = denoms.get(token) {
-            *denom
-        } else if let Some(denom) =
-            Self::query_denom(context.client(), token).await
-        {
-            denoms.insert(token.to_owned(), denom);
-            denom
-        } else {
-            return Err(TransferErr::General(format!(
-                "denomination for token {token}"
-            )));
-        };
-        let amount = amount
-            .increase_precision(denom)
-            .map_err(|e| TransferErr::General(e.to_string()))?
-            .amount();
-        let raw_amount = amount.raw_amount().0;
-        let (asset_types, _) = {
-            // Do the actual conversion to an asset type
-            let (asset_types, amount) = self
-                .convert_namada_amount_to_masp(
-                    context.client(),
-                    epoch,
-                    token,
-                    // Safe to unwrap
-                    denoms.get(token).unwrap().to_owned(),
-                    amount,
-                )
-                .await
-                .map_err(|e| TransferErr::General(e.to_string()))?;
-            // Make sure to save any decodings of the asset types used so
-            // that balance queries involving them are
-            // successful
-            let _ = self.save().await;
-            (asset_types, amount)
-        };
-
-        let mut fees = I128Sum::zero();
-        // Convert the shortfall into a I128Sum
-        for (asset_type, val) in asset_types.iter().zip(raw_amount) {
-            fees += I128Sum::from_nonnegative(*asset_type, val.into())
-                .map_err(|()| {
-                    TransferErr::General(
-                        "Fee amount is expected expected to be non-negative"
-                            .to_string(),
-                    )
-                })?;
-        }
-
-        // 1. Try to use the change to pay fees
-        let mut temp_changes = Changes::default();
-
-        for (sp, changes) in changes.iter() {
-            for (asset_type, change) in changes.components() {
-                for (_, fee_amt) in fees
-                    .clone()
-                    .components()
-                    .filter(|(axt, _)| *axt == asset_type)
-                {
-                    // Get the minimum between the available change and
-                    // the due fee
-                    let output_amt = I128Sum::from_nonnegative(
-                        asset_type.to_owned(),
-                        *change.min(fee_amt),
-                    )
-                    .map_err(|()| {
-                        TransferErr::General(
-                            "Fee amount is expected to be non-negative"
-                                .to_string(),
-                        )
-                    })?;
-                    // Safe to unwrap
-                    let denom = denoms.get(token).unwrap().to_owned();
-                    let denominated_output_amt = self
-                        .convert_masp_amount_to_namada(
-                            context.client(),
-                            denom,
-                            output_amt.clone(),
-                        )
-                        .await
-                        .map_err(|e| TransferErr::General(e.to_string()))?;
-                    let output_raw_amt = denominated_output_amt
-                        .increase_precision(denom)
-                        .map_err(|e| TransferErr::General(e.to_string()))?
-                        .amount();
-
-                    self.add_outputs(
-                        context,
-                        builder,
-                        TransferSource::ExtendedSpendingKey(sp.to_owned()),
-                        &TransferTarget::Address(target.clone()),
-                        token.clone(),
-                        output_raw_amt,
-                        epoch,
-                        denoms,
-                    )
-                    .await?;
-
-                    fees -= &output_amt;
-                    // Update the changes
-                    temp_changes
-                        .entry(*sp)
-                        .and_modify(|amt| *amt += &output_amt)
-                        .or_insert(output_amt);
-                }
-            }
-
-            if fees.is_zero() {
-                break;
-            }
-        }
-
-        // Decrease the changes by the amounts used for fee payment
-        for (sp, temp_changes) in temp_changes.iter() {
-            for (asset_type, temp_change) in temp_changes.components() {
-                let output_amt = I128Sum::from_nonnegative(
-                    asset_type.to_owned(),
-                    *temp_change,
-                )
-                .map_err(|()| {
-                    TransferErr::General(
-                        "Fee amount is expected expected to be non-negative"
-                            .to_string(),
-                    )
-                })?;
-
-                // Entry is guaranteed to be in the map
-                changes.entry(*sp).and_modify(|amt| *amt -= &output_amt);
-            }
-        }
-
-        if !fees.is_zero() {
-            // 2. Look for unused spent notes of the sources and the optional
-            //    gas spending keys (sources first)
-            for fee_source in
-                source_data.iter().map(|(src, _)| src.source.clone()).chain(
-                    sources
-                        .into_iter()
-                        .map(TransferSource::ExtendedSpendingKey),
-                )
-            {
-                for (asset_type, fee_amt) in fees.clone().components() {
-                    let input_amt = I128Sum::from_nonnegative(
-                        asset_type.to_owned(),
-                        *fee_amt,
-                    )
-                    .map_err(|()| {
-                        TransferErr::General(
-                            "Fee amount is expected expected to be \
-                             non-negative"
-                                .to_string(),
-                        )
-                    })?;
-                    // Safe to unwrap
-                    let denom = denoms.get(token).unwrap().to_owned();
-                    let denominated_fee = self
-                        .convert_masp_amount_to_namada(
-                            context.client(),
-                            denom,
-                            input_amt.clone(),
-                        )
-                        .await
-                        .map_err(|e| TransferErr::General(e.to_string()))?;
-                    let raw_fee = denominated_fee
-                        .increase_precision(denom)
-                        .map_err(|e| TransferErr::General(e.to_string()))?
-                        .amount();
-
-                    let Some(found_amt) = self
-                        .add_inputs(
-                            context,
-                            builder,
-                            &fee_source,
-                            token,
-                            &raw_fee,
-                            epoch,
-                            denoms,
-                            notes_tracker,
-                            changes,
-                        )
-                        .await
-                        .map_err(|e| TransferErr::General(e.to_string()))?
-                    else {
-                        continue;
-                    };
-                    // Pick the minimum between the due fee and the amount found
-                    let output_amt = match found_amt.partial_cmp(&input_amt) {
-                        None | Some(Ordering::Less) => found_amt,
-                        _ => input_amt.clone(),
-                    };
-                    // Safe to unwrap
-                    let denom = denoms.get(token).unwrap().to_owned();
-                    let denom_amt = self
-                        .convert_masp_amount_to_namada(
-                            context.client(),
-                            denom,
-                            output_amt.clone(),
-                        )
-                        .await
-                        .map_err(|e| TransferErr::General(e.to_string()))?;
-                    let raw_amt = denom_amt
-                        .increase_precision(denom)
-                        .map_err(|e| TransferErr::General(e.to_string()))?
-                        .amount();
-
-                    self.add_outputs(
-                        context,
-                        builder,
-                        fee_source.clone(),
-                        &TransferTarget::Address(target.clone()),
-                        token.clone(),
-                        raw_amt,
-                        epoch,
-                        denoms,
-                    )
-                    .await
-                    .map_err(|e| TransferErr::General(e.to_string()))?;
-
-                    fees -= &output_amt;
-                }
-
-                if fees.is_zero() {
-                    break;
-                }
-            }
-        }
-
-        if !fees.is_zero() {
-            return Result::Err(TransferErr::Build {
-                error: builder::Error::InsufficientFunds(fees),
-                data: Some(MaspDataLog {
-                    source: None,
-                    token: token.to_owned(),
-                    amount,
-                }),
-            });
-        }
-
-        Ok(())
-    }*/
 
     /// Get the asset type with the given epoch, token, and denomination. If it
     /// does not exist in the protocol, then remove the timestamp. Make sure to
@@ -1830,27 +1563,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 .expect("there must be exactly 4 denominations"),
             amount,
         ))
-    }
-
-    /// Convert MASP amount to Namada equivalent
-    #[allow(async_fn_in_trait)]
-    async fn convert_masp_amount_to_namada<C: Client + Sync>(
-        &mut self,
-        client: &C,
-        denom: Denomination,
-        amt: I128Sum,
-    ) -> Result<DenominatedAmount, eyre::Error> {
-        let mut amount = Amount::zero();
-        let (value_sum, rem_sum) = self.decode_sum(client, amt).await;
-
-        for ((_, decoded), val) in value_sum.components() {
-            let positioned_amt =
-                Amount::from_masp_denominated_i128(*val, decoded.position)
-                    .unwrap_or_default();
-            amount = checked!(amount + positioned_amt)?;
-        }
-
-        Ok(DenominatedAmount::new(amount, denom))
     }
 }
 
