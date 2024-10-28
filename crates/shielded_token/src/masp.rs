@@ -252,7 +252,7 @@ pub fn is_amount_required(
     src: I128Sum,
     dest: I128Sum,
     normed_delta: I128Sum,
-    opt_delta: Option<I128Sum>,
+    delta: I128Sum,
 ) -> Option<I128Sum> {
     let mut changes = None;
     let gap = dest.clone() - src;
@@ -282,26 +282,23 @@ pub fn is_amount_required(
         }
     }
 
-    // Because of the way conversions are computed, we need an extra step here
-    // if the token is not the native one
-    if let Some(delta) = opt_delta {
-        // Only if this note is going to be used, handle the assets in delta
-        // (not normalized) that are not part of dest
-        changes = changes.map(|mut chngs| {
-            for (delta_asset_type, delta_amt) in delta.components() {
-                if !dest.asset_types().contains(delta_asset_type) {
-                    let rmng = I128Sum::from_nonnegative(
-                        delta_asset_type.to_owned(),
-                        *delta_amt,
-                    )
-                    .expect("Change is guaranteed to be non-negative");
-                    chngs += rmng;
-                }
+    // Because of the way conversions are computed, we need an extra step here.
+    // Only if this note is going to be used, handle the assets in delta
+    // (not normalized) that are not part of dest
+    changes = changes.map(|mut chngs| {
+        for (delta_asset_type, delta_amt) in delta.components() {
+            if !dest.asset_types().contains(delta_asset_type) {
+                let rmng = I128Sum::from_nonnegative(
+                    delta_asset_type.to_owned(),
+                    *delta_amt,
+                )
+                .expect("Change is guaranteed to be non-negative");
+                chngs += rmng;
             }
+        }
 
-            chngs
-        });
-    }
+        chngs
+    });
 
     changes
 }

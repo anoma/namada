@@ -2369,6 +2369,90 @@ fn dynamic_assets() -> Result<()> {
     assert!(captured.result.is_ok());
     assert!(captured.contains("nam: 0.156705"));
 
+    // Try to spend (unshield) NAMs that can only come from rewards (no output
+    // notes) FIXME: also assert that the other balances of this viewing key
+    // are left untouched
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                BERTHA,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 2000000.507864"));
+
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "unshield",
+                "--source",
+                A_SPENDING_KEY,
+                "--target",
+                BERTHA,
+                "--token",
+                NAM,
+                "--amount",
+                "0.15",
+                "--gas-payer",
+                CHRISTEL_KEY,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 0.006705"));
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                BERTHA,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 2000000.657864"));
+
     Ok(())
 }
 

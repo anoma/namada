@@ -690,7 +690,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         context: &impl NamadaIo,
         spent_notes: &mut SpentNotesTracker,
         sk: namada_core::masp::ExtendedSpendingKey,
-        is_native_token: bool,
         target: I128Sum,
         target_epoch: MaspEpoch,
         changes: &mut Changes,
@@ -750,17 +749,12 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                     )
                     .await?;
 
-                let opt_delta = if is_native_token {
-                    None
-                } else {
-                    Some(contr.clone())
-                };
                 // Use this note only if it brings us closer to our target
                 if let Some(change) = is_amount_required(
                     normed_val_acc.clone(),
                     target.clone(),
                     normed_contr.clone(),
-                    opt_delta,
+                    contr.clone(),
                 ) {
                     // Be sure to record the conversions used in computing
                     // accumulated value
@@ -912,9 +906,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         let epoch = Self::query_masp_epoch(context.client())
             .await
             .map_err(|e| TransferErr::General(e.to_string()))?;
-        let native_token = Self::query_native_token(context.client())
-            .await
-            .map_err(|e| TransferErr::General(e.to_string()))?;
         // Try to get a seed from env var, if any.
         #[allow(unused_mut)]
         let mut rng = StdRng::from_rng(OsRng).unwrap();
@@ -1017,7 +1008,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 &denoms,
                 &mut notes_tracker,
                 &mut changes,
-                *token == native_token,
             )
             .await?;
         }
@@ -1195,7 +1185,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         denoms: &HashMap<Address, Denomination>,
         notes_tracker: &mut SpentNotesTracker,
         changes: &mut Changes,
-        is_native_token: bool,
     ) -> Result<Option<I128Sum>, TransferErr> {
         // We want to fund our transaction solely from supplied spending key
         let spending_key = source.spending_key();
@@ -1234,7 +1223,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                     context,
                     notes_tracker,
                     sk,
-                    is_native_token,
                     I128Sum::from_sum(masp_amount),
                     epoch,
                     changes,
@@ -1479,9 +1467,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 )));
             };
         }
-        let native_token = Self::query_native_token(context.client())
-            .await
-            .map_err(|e| TransferErr::General(e.to_string()))?;
         let raw_amount = amount.amount().raw_amount().0;
         let (asset_types, _) = {
             // Do the actual conversion to an asset type
@@ -1635,7 +1620,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                             denoms,
                             notes_tracker,
                             changes,
-                            *token == native_token,
                         )
                         .await
                         .map_err(|e| TransferErr::General(e.to_string()))?
