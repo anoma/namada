@@ -657,7 +657,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         src: ValueSum::<Address, Change>,
         dest: ValueSum::<Address, Change>,
         delta: I128Sum,
-    ) -> Option<ValueSum::<Address, Change>> {
+    ) -> Option<(ValueSum::<Address, Change>, ValueSum::<Address, Change>)> {
         // If the delta causes any regression, then do not use it
         if !(delta >= I128Sum::zero()) {
             return None;
@@ -679,7 +679,17 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                         amt,
                     );
                 }
-                return Some(converted_delta);
+                // Compute how much change has to go back to sender
+                let mut change: ValueSum::<_, Change> = converted_delta.clone() - gap;
+                for (addr, value) in change.clone().components() {
+                    if value.is_negative() {
+                        change += ValueSum::from_pair(
+                            addr.clone(),
+                            value.negate()?,
+                        );
+                    }
+                }
+                return Some((converted_delta, change));
             }
         }
         None
@@ -756,7 +766,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                     .await?;
 
                 // Use this note only if it brings us closer to our target
-                if let Some(namada_contr) = self.is_amount_required(
+                if let Some((namada_contr, namada_change)) = self.is_amount_required(
                     context.client(),
                     namada_acc.clone(),
                     target.clone(),
@@ -1107,9 +1117,9 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         data: Vec<MaspTransferData>,
     ) -> Result<Option<MaspTxReorderedData>, TransferErr> {
         let mut source_data =
-            HashMap::<MaspSourceTransferData, DenominatedAmount>::new();
+            HashMap::<MaspSourceTransferData, Amount>::new();
         let mut target_data =
-            HashMap::<MaspTargetTransferData, DenominatedAmount>::new();
+            HashMap::<MaspTargetTransferData, Amount>::new();
         let mut denoms = HashMap::new();
 
         for MaspTransferData {
@@ -1127,17 +1137,20 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 return Ok(None);
             }
 
-            if denoms.get(&token).is_none() {
-                if let Some(denom) =
-                    Self::query_denom(context.client(), &token).await
-                {
-                    denoms.insert(token.clone(), denom);
-                } else {
-                    return Err(TransferErr::General(format!(
-                        "denomination for token {token}"
-                    )));
-                };
-            }
+            let denom = if let Some(denom) = denoms.get(&token) {
+                *denom
+            } else if let Some(denom) = Self::query_denom(context.client(), &token).await {
+                denoms.insert(token.clone(), denom);
+                denom
+            } else {
+                return Err(TransferErr::General(format!(
+                    "denomination for token {token}"
+                )));
+            };
+            let amount = amount
+                .increase_precision(denom)
+                .map_err(|e| TransferErr::General(e.to_string()))?
+                .amount();
 
             let key = MaspSourceTransferData {
                 source: source.clone(),
@@ -1150,7 +1163,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 }
                 None => {
                     source_data.insert(key, amount);
-                }
+                },
             }
 
             let key = MaspTargetTransferData {
@@ -1185,7 +1198,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         builder: &mut Builder<Network>,
         source: &TransferSource,
         token: &Address,
-        amount: &DenominatedAmount,
+        amount: &Amount,
         epoch: MaspEpoch,
         denoms: &HashMap<Address, Denomination>,
         notes_tracker: &mut SpentNotesTracker,
@@ -1220,11 +1233,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             // Make the target amount vectorial
             let amount = ValueSum::<Address, Change>::from_pair(
                 token.clone(),
-                amount
-                    .increase_precision(*denom)
-                    .map_err(|e| TransferErr::General(e.to_string()))?
-                    .amount()
-                    .into(),
+                (*amount).into(),
             );
             // Locate unspent notes that can help us meet the transaction
             // amount
@@ -1284,7 +1293,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 .taddress();
 
             for (digit, asset_type) in transparent_asset_types {
-                let amount_part = digit.denominate(&amount.amount());
+                let amount_part = digit.denominate(amount);
                 // Skip adding an input if its value is 0
                 if amount_part != 0 {
                     builder
@@ -1316,7 +1325,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         source: TransferSource,
         target: &TransferTarget,
         token: Address,
-        amount: DenominatedAmount,
+        amount: Amount,
         epoch: MaspEpoch,
         denoms: &HashMap<Address, Denomination>,
     ) -> Result<(), TransferErr> {
@@ -1331,7 +1340,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         // This indicates how many more assets need to be sent to the
         // receiver in order to satisfy the requested transfer
         // amount.
-        let mut rem_amount = amount.amount().raw_amount().0;
+        let mut rem_amount = amount.raw_amount().0;
 
         // Ok to unwrap cause we've already seen the token before, the
         // denomination must be there
@@ -1410,7 +1419,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                         epoch,
                         &token,
                         denom.to_owned(),
-                        amount.amount(),
+                        amount,
                     )
                     .await
                     .map_err(|e| TransferErr::General(e.to_string()))?;
@@ -1453,7 +1462,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         &mut self,
         context: &impl NamadaIo,
         builder: &mut Builder<Network>,
-        source_data: &HashMap<MaspSourceTransferData, DenominatedAmount>,
+        source_data: &HashMap<MaspSourceTransferData, Amount>,
         sources: Vec<namada_core::masp::ExtendedSpendingKey>,
         target: &Address,
         token: &Address,
@@ -1463,18 +1472,23 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         notes_tracker: &mut SpentNotesTracker,
         changes: &mut Changes,
     ) -> Result<(), TransferErr> {
-        if denoms.get(token).is_none() {
-            if let Some(denom) =
-                Self::query_denom(context.client(), token).await
-            {
-                denoms.insert(token.to_owned(), denom);
-            } else {
-                return Err(TransferErr::General(format!(
-                    "denomination for token {token}"
-                )));
-            };
-        }
-        let raw_amount = amount.amount().raw_amount().0;
+        let denom = if let Some(denom) = denoms.get(token) {
+            *denom
+        } else if let Some(denom) =
+            Self::query_denom(context.client(), token).await
+        {
+            denoms.insert(token.to_owned(), denom);
+            denom
+        } else {
+            return Err(TransferErr::General(format!(
+                "denomination for token {token}"
+            )));
+        };
+        let amount = amount
+            .increase_precision(denom)
+            .map_err(|e| TransferErr::General(e.to_string()))?
+            .amount();
+        let raw_amount = amount.raw_amount().0;
         let (asset_types, _) = {
             // Do the actual conversion to an asset type
             let (asset_types, amount) = self
@@ -1484,7 +1498,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                     token,
                     // Safe to unwrap
                     denoms.get(token).unwrap().to_owned(),
-                    amount.amount(),
+                    amount,
                 )
                 .await
                 .map_err(|e| TransferErr::General(e.to_string()))?;
@@ -1529,15 +1543,20 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                                 .to_string(),
                         )
                     })?;
+                    // Safe to unwrap
+                    let denom = denoms.get(token).unwrap().to_owned();
                     let denominated_output_amt = self
                         .convert_masp_amount_to_namada(
                             context.client(),
-                            // Safe to unwrap
-                            denoms.get(token).unwrap().to_owned(),
+                            denom,
                             output_amt.clone(),
                         )
                         .await
                         .map_err(|e| TransferErr::General(e.to_string()))?;
+                    let output_raw_amt = denominated_output_amt
+                        .increase_precision(denom)
+                        .map_err(|e| TransferErr::General(e.to_string()))?
+                        .amount();
 
                     self.add_outputs(
                         context,
@@ -1545,7 +1564,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                         TransferSource::ExtendedSpendingKey(sp.to_owned()),
                         &TransferTarget::Address(target.clone()),
                         token.clone(),
-                        denominated_output_amt,
+                        output_raw_amt,
                         epoch,
                         denoms,
                     )
@@ -1606,15 +1625,20 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                                 .to_string(),
                         )
                     })?;
+                    // Safe to unwrap
+                    let denom = denoms.get(token).unwrap().to_owned();
                     let denominated_fee = self
                         .convert_masp_amount_to_namada(
                             context.client(),
-                            // Safe to unwrap
-                            denoms.get(token).unwrap().to_owned(),
+                            denom,
                             input_amt.clone(),
                         )
                         .await
                         .map_err(|e| TransferErr::General(e.to_string()))?;
+                    let raw_fee = denominated_fee
+                        .increase_precision(denom)
+                        .map_err(|e| TransferErr::General(e.to_string()))?
+                        .amount();
 
                     let Some(found_amt) = self
                         .add_inputs(
@@ -1622,7 +1646,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                             builder,
                             &fee_source,
                             token,
-                            &denominated_fee,
+                            &raw_fee,
                             epoch,
                             denoms,
                             notes_tracker,
@@ -1638,15 +1662,20 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                         None | Some(Ordering::Less) => found_amt,
                         _ => input_amt.clone(),
                     };
+                    // Safe to unwrap
+                    let denom = denoms.get(token).unwrap().to_owned();
                     let denom_amt = self
                         .convert_masp_amount_to_namada(
                             context.client(),
-                            // Safe to unwrap
-                            denoms.get(token).unwrap().to_owned(),
+                            denom,
                             output_amt.clone(),
                         )
                         .await
                         .map_err(|e| TransferErr::General(e.to_string()))?;
+                    let raw_amt = denom_amt
+                        .increase_precision(denom)
+                        .map_err(|e| TransferErr::General(e.to_string()))?
+                        .amount();
 
                     self.add_outputs(
                         context,
@@ -1654,7 +1683,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                         fee_source.clone(),
                         &TransferTarget::Address(target.clone()),
                         token.clone(),
-                        denom_amt,
+                        raw_amt,
                         epoch,
                         denoms,
                     )
@@ -1676,7 +1705,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 data: Some(MaspDataLog {
                     source: None,
                     token: token.to_owned(),
-                    amount: *amount,
+                    amount,
                 }),
             });
         }
