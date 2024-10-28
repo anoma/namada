@@ -2367,6 +2367,63 @@ fn dynamic_assets() -> Result<()> {
     assert!(captured.result.is_ok());
     assert!(captured.contains("nam: 0.156705"));
 
+    // Unshield the rewards
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "unshield",
+                "--source",
+                A_SPENDING_KEY,
+                "--target",
+                BERTHA,
+                "--token",
+                NAM,
+                "--amount",
+                "0.156705",
+                "--gas-payer",
+                BERTHA_KEY,
+                "--ledger-address",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+
+    // Unshield the principal
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "unshield",
+                "--source",
+                A_SPENDING_KEY,
+                "--target",
+                BERTHA,
+                "--token",
+                BTC,
+                "--amount",
+                "2",
+                "--gas-payer",
+                BERTHA_KEY,
+                "--ledger-address",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
     Ok(())
 }
 
