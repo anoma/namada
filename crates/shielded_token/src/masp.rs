@@ -116,13 +116,13 @@ struct MaspTargetTransferData {
 pub struct MaspDataLog {
     pub source: Option<TransferSource>,
     pub token: Address,
-    pub amount: token::DenominatedAmount,
+    pub amount: token::Amount,
 }
 
 #[allow(missing_docs)]
 pub struct MaspTxReorderedData {
-    source_data: HashMap<MaspSourceTransferData, token::DenominatedAmount>,
-    target_data: HashMap<MaspTargetTransferData, token::DenominatedAmount>,
+    source_data: HashMap<MaspSourceTransferData, token::Amount>,
+    target_data: HashMap<MaspTargetTransferData, token::Amount>,
     denoms: HashMap<Address, Denomination>,
 }
 
