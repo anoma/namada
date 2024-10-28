@@ -3,6 +3,7 @@ use std::cmp::Ordering;
 use std::collections::{btree_map, BTreeMap, BTreeSet};
 
 use eyre::eyre;
+use itertools::Itertools;
 use masp_primitives::asset_type::AssetType;
 #[cfg(feature = "mainnet")]
 use masp_primitives::consensus::MainNetwork as Network;
@@ -14,6 +15,7 @@ use masp_primitives::memo::MemoBytes;
 use masp_primitives::merkle_tree::{
     CommitmentTree, IncrementalWitness, MerklePath,
 };
+use masp_primitives::num_traits::Zero;
 use masp_primitives::sapling::{
     Diversifier, Node, Note, Nullifier, ViewingKey,
 };
@@ -51,7 +53,7 @@ use rand_core::{OsRng, SeedableRng};
 
 use crate::masp::utils::MaspClient;
 use crate::masp::{
-    cloned_pair, is_amount_required, to_viewing_key, Changes,
+    cloned_pair, /*is_amount_required*/ to_viewing_key, Changes,
     ContextSyncStatus, Conversions, MaspAmount, MaspDataLog, MaspFeeData,
     MaspSourceTransferData, MaspTargetTransferData, MaspTransferData,
     MaspTxReorderedData, NoteIndex, ShieldedSyncConfig, ShieldedTransfer,
@@ -121,6 +123,7 @@ impl<U: ShieldedUtils + Default> Default for ShieldedWallet<U> {
 }
 
 impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
+
     /// Try to load the last saved shielded context from the given context
     /// directory. If this fails, then leave the current context unchanged.
     pub async fn load(&mut self) -> std::io::Result<()> {
@@ -515,6 +518,77 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         }
     }
 
+    /// Determine if using the current note would actually bring us closer to our
+    /// target. Returns the unused amounts (change) of delta if any
+    async fn is_amount_required(
+        &mut self,
+        context: &impl NamadaIo,
+        src: I128Sum, // normed
+        dest: I128Sum, // target
+        normed_delta: I128Sum,
+        opt_delta: Option<I128Sum>,
+    ) -> Option<I128Sum> {
+        let mut changes = None;
+        let gap = dest.clone() - src;
+        for (asset_type, _) in normed_delta.components() {
+            if gap.get(asset_type).is_zero() {
+                return None;
+            }
+        }
+
+        for (asset_type, value) in gap.components() {
+            if *value > 0 && normed_delta[asset_type] > 0 {
+                println!("Added to changes");
+                let amydamy = I128Sum::from_nonnegative(*asset_type, *value).unwrap();
+                self.display_amount(context, amydamy).await;
+                println!();
+                #[allow(clippy::disallowed_methods)]
+                let signed_change_amt =
+                    checked!(normed_delta[asset_type] - *value).unwrap_or_default();
+                let unsigned_change_amt = if signed_change_amt > 0 {
+                    signed_change_amt
+                } else {
+                    // Even if there's no change we still need to set the return
+                    // value of this function to be Some so that the caller sees
+                    // that this note should be used
+                    0
+                };
+
+                let change_amt = I128Sum::from_nonnegative(
+                    asset_type.to_owned(),
+                    unsigned_change_amt,
+                )
+                    .expect("Change is guaranteed to be non-negative");
+                changes = changes
+                    .map(|prev| prev + change_amt.clone())
+                    .or(Some(change_amt));
+            }
+        }
+
+        // Because of the way conversions are computed, we need an extra step here
+        // if the token is not the native one
+        if let Some(delta) = opt_delta {
+            // Only if this note is going to be used, handle the assets in delta
+            // (not normalized) that are not part of dest
+            changes = changes.map(|mut chngs| {
+                for (delta_asset_type, delta_amt) in delta.components() {
+                    if !dest.asset_types().contains(delta_asset_type) {
+                        let rmng = I128Sum::from_nonnegative(
+                            delta_asset_type.to_owned(),
+                            *delta_amt,
+                        )
+                            .expect("Change is guaranteed to be non-negative");
+                        chngs += rmng;
+                    }
+                }
+
+                chngs
+            });
+        }
+
+        changes
+    }
+
     /// Query the ledger for the conversion that is allowed for the given asset
     /// type and cache it.
     #[allow(async_fn_in_trait)]
@@ -743,6 +817,17 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                     .get(vk)
                     .is_some_and(|set| set.contains(note_idx))
                 {
+                    let note = *self
+                        .note_map
+                        .get(note_idx)
+                        .ok_or_else(|| eyre!("Unable to get note {note_idx}"))?;
+
+                    // The amount contributed by this note before conversion
+                    let pre_contr =
+                        I128Sum::from_pair(note.asset_type, i128::from(note.value));
+                    println!("Skipping note as used");
+                    self.display_amount(context, pre_contr).await;
+                    println!();
                     continue;
                 }
                 // No more transaction inputs are required once we have met
@@ -753,6 +838,17 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 // Spent notes from the shielded context (i.e. from previous
                 // transactions) cannot contribute a new transaction's pool
                 if self.spents.contains(note_idx) {
+                    let note = *self
+                        .note_map
+                        .get(note_idx)
+                        .ok_or_else(|| eyre!("Unable to get note {note_idx}"))?;
+
+                    // The amount contributed by this note before conversion
+                    let pre_contr =
+                        I128Sum::from_pair(note.asset_type, i128::from(note.value));
+                    println!("Skipping note as spent");
+                    self.display_amount(context, pre_contr).await;
+                    println!();
                     continue;
                 }
                 // Get note, merkle path, diversifier associated with this ID
@@ -764,6 +860,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 // The amount contributed by this note before conversion
                 let pre_contr =
                     I128Sum::from_pair(note.asset_type, i128::from(note.value));
+
                 let (contr, normed_contr, proposed_convs) = self
                     .compute_exchanged_amount(
                         context.client(),
@@ -780,22 +877,38 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                     Some(contr.clone())
                 };
                 // Use this note only if it brings us closer to our target
-                println!("\nCOLLECT UNSPENT NOTES");
-                self.display_amount(
+                if let Some(change) = self.is_amount_required(
                     context,
-                    target.clone() - normed_val_acc.clone(),
-                )
-                .await;
-                println!("end coll unspent notes");
-                if let Some(change) = is_amount_required(
                     normed_val_acc.clone(),
                     target.clone(),
                     normed_contr.clone(),
                     opt_delta,
-                ) {
+                ).await {
+                    println!("\nCLOSING THE GAP");
+                    self.display_amount(
+                        context,
+                        target.clone() - normed_val_acc.clone(),
+                    )
+                    .await;
+                    println!();
+                    self.display_amount(
+                        context,
+                        target.clone(),
+                    )
+                    .await;
+                    self.display_amount(
+                        context,
+                        normed_val_acc.clone(),
+                    )
+                        .await;
+                    println!();
+                    println!("end coll unspent notes");
                     // Be sure to record the conversions used in computing
                     // accumulated value
+                    println!("CONTRIBUTION");
                     val_acc += contr;
+                    self.display_amount(context, val_acc.clone()).await;
+                    println!();
                     normed_val_acc += normed_contr;
 
                     // Update the changes
@@ -827,6 +940,14 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                             set.insert(*note_idx);
                         })
                         .or_insert([*note_idx].into_iter().collect());
+                } else {
+                    println!("\nTHE ABYSS OPENS UP BEFORE ME");
+                    self.display_amount(
+                        context,
+                        target.clone() - normed_val_acc.clone(),
+                    )
+                        .await;
+                    println!("end coll unspent notes");
                 }
             }
         }
@@ -1306,7 +1427,10 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 .await
                 .map_err(|e| TransferErr::General(e.to_string()))?;
 
+            // PRINT STATEMENT HERE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            println!("BEHOLD I AM THE UNSPENT: {}", line!());
             self.display_amount(context, added_amount.clone()).await;
+            println!();
             // Commit the notes found to our transaction
             for (diversifier, note, merkle_path) in unspent_notes {
                 builder
