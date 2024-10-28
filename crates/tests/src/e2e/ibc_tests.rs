@@ -1209,7 +1209,7 @@ fn transfer(
         "--port-id",
         &port_id,
         "--gas-limit",
-        "250000",
+        "60000",
         "--node",
         &rpc,
     ]);
@@ -1385,7 +1385,7 @@ fn propose_inflation(test: &Test) -> Result<Epoch> {
         "--data-path",
         proposal_json_path.to_str().unwrap(),
         "--gas-limit",
-        "10000000",
+        "2000000",
         "--node",
         &rpc,
     ]);
@@ -1498,7 +1498,7 @@ fn propose_gas_token(test: &Test) -> Result<Epoch> {
         "--data-path",
         proposal_json_path.to_str().unwrap(),
         "--gas-limit",
-        "10000000",
+        "2000000",
         "--node",
         &rpc,
     ]);

@@ -464,7 +464,7 @@ mod test_prepare_proposal {
         assert!(rsp.code != 0.into(), "{}", rsp.log);
     }
 
-    const GAS_LIMIT: u64 = 300_000;
+    const GAS_LIMIT: u64 = 50_000;
 
     /// Test that if a tx from the mempool is not a
     /// WrapperTx type, it is not included in the
@@ -811,7 +811,7 @@ mod test_prepare_proposal {
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: DenominatedAmount::native(1.into()),
+                    amount_per_gas_unit: DenominatedAmount::native(100.into()),
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
@@ -881,10 +881,11 @@ mod test_prepare_proposal {
         let mut wrapper =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
-                    amount_per_gas_unit: DenominatedAmount::native(1.into()),
+                    amount_per_gas_unit: DenominatedAmount::native(100.into()),
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
+                // FIXME: review all these gas limits in the tests
                 GAS_LIMIT.into(),
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
@@ -897,7 +898,7 @@ mod test_prepare_proposal {
 
         new_wrapper.update_header(TxType::Wrapper(Box::new(WrapperTx::new(
             Fee {
-                amount_per_gas_unit: DenominatedAmount::native(1.into()),
+                amount_per_gas_unit: DenominatedAmount::native(100.into()),
                 token: shell.state.in_mem().native_token.clone(),
             },
             keypair_2.ref_to(),
