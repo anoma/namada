@@ -134,6 +134,20 @@ impl VerifySigGadget {
         owner: &Address,
     ) -> VpResult {
         if !self.has_validated_sig {
+            //FIXME: change the api and do the check for this inner tx only
+            // First check that none of the memo sections of this batch have been tampered with
+            for cmt in &tx_data.header.batch {
+                if cmt.memo_hash != namada_core::hash::Hash::zero() {
+                    tx_data.get_section(&cmt.memo_hash).ok_or_else(|| {
+                        VpError::Erased(format!(
+                            "Memo section with hash {} is missing",
+                            cmt.memo_hash
+                        ))
+                    })?;
+                }
+            }
+
+            // Then check the signature
             verify_signatures(ctx, tx_data, owner)?;
             self.has_validated_sig = true;
         }
