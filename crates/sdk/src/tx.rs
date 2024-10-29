@@ -2620,7 +2620,7 @@ pub async fn build_ibc_transfer(
         &args.tx,
         fee_per_gas_unit,
         &signing_data.fee_payer,
-        args.gas_spending_key.clone(),
+        args.gas_spending_key,
     )
     .await?;
     if let Some(fee_data) = &masp_fee_data {
@@ -3086,7 +3086,7 @@ pub async fn build_shielded_transfer<N: Namada>(
         &args.tx,
         fee_per_gas_unit,
         &signing_data.fee_payer,
-        args.gas_spending_key.clone(),
+        args.gas_spending_key,
     )
     .await?;
     if let Some(fee_data) = &masp_fee_data {
@@ -3374,7 +3374,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
         &args.tx,
         fee_per_gas_unit,
         &signing_data.fee_payer,
-        args.gas_spending_key.clone(),
+        args.gas_spending_key,
     )
     .await?;
     if let Some(fee_data) = &masp_fee_data {

@@ -656,6 +656,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         delta: I128Sum,
     ) -> Option<ValueSum<Address, Change>> {
         // If the delta causes any regression, then do not use it
+        #[allow(clippy::neg_cmp_op_on_partial_ord)]
         if !(delta >= I128Sum::zero()) {
             return None;
         }
@@ -1083,7 +1084,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
     ) -> Result<Denomination, TransferErr> {
         if let Some(denom) = denoms.get(token) {
             Ok(*denom)
-        } else if let Some(denom) = Self::query_denom(client, &token).await {
+        } else if let Some(denom) = Self::query_denom(client, token).await {
             denoms.insert(token.clone(), denom);
             Ok(denom)
         } else {
@@ -1221,11 +1222,9 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             // change.
             change += ValueSum::from_pair(*asset_type, value - covered);
             // Denominate the cover and decrease the required amount accordingly
-            let covered = Change::from_masp_denominated(
-                covered.into(),
-                asset_data.position,
-            )
-            .map_err(|e| TransferErr::General(e.to_string()))?;
+            let covered =
+                Change::from_masp_denominated(covered, asset_data.position)
+                    .map_err(|e| TransferErr::General(e.to_string()))?;
             required_amt -=
                 ValueSum::from_pair(asset_data.token.clone(), covered);
         }
@@ -1311,10 +1310,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 builder
                     .add_sapling_output(
                         Some(MaspExtendedSpendingKey::from(sk).expsk.ovk),
-                        MaspExtendedSpendingKey::from(sk)
-                            .default_address()
-                            .1
-                            .into(),
+                        MaspExtendedSpendingKey::from(sk).default_address().1,
                         *asset_type,
                         *value as u64,
                         MemoBytes::empty(),
