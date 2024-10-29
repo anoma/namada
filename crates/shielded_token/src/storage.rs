@@ -1,5 +1,6 @@
 use namada_core::address::{self, Address};
 use namada_core::arith::checked;
+use namada_core::masp::TokenMap;
 use namada_core::token;
 use namada_core::token::Amount;
 use namada_core::uint::Uint;
@@ -76,4 +77,22 @@ where
     let total_rewards: token::Amount =
         storage.read(&total_rewards_key)?.unwrap_or_default();
     Ok(total_rewards)
+}
+
+/// Read the masp token map.
+pub fn read_token_map<S>(storage: &S) -> Result<TokenMap>
+where
+    S: StorageRead,
+{
+    let token_map_key = masp_token_map_key();
+    Ok(storage.read(&token_map_key)?.unwrap_or_default())
+}
+
+/// Write a new masp token map.
+pub fn write_token_map<S>(storage: &mut S, token_map: TokenMap) -> Result<()>
+where
+    S: StorageWrite,
+{
+    let token_map_key = masp_token_map_key();
+    storage.write(&token_map_key, token_map)
 }
