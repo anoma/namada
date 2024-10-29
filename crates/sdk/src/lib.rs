@@ -862,7 +862,7 @@ pub mod testing {
     use namada_core::address::testing::{
         arb_established_address, arb_non_internal_address,
     };
-    use namada_core::collections::HashMap;
+    use namada_core::collections::{HashMap, HashSet};
     use namada_core::eth_bridge_pool::PendingTransfer;
     use namada_core::hash::testing::arb_hash;
     use namada_core::key::testing::arb_common_keypair;

@@ -50,7 +50,7 @@ use rand_core::{OsRng, SeedableRng};
 
 use crate::masp::utils::MaspClient;
 use crate::masp::{
-    cloned_pair, to_viewing_key, ContextSyncStatus, Conversions, MaspAmount,
+    cloned_pair, ContextSyncStatus, Conversions, MaspAmount,
     MaspDataLogEntry, MaspFeeData, MaspSourceTransferData,
     MaspTargetTransferData, MaspTransferData, MaspTxReorderedData, NoteIndex,
     ShieldedSyncConfig, ShieldedTransfer, ShieldedUtils, SpentNotesTracker,
