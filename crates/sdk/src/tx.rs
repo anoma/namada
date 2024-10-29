@@ -20,7 +20,7 @@ use masp_primitives::transaction::components::transparent::fees::{
     InputView as TransparentInputView, OutputView as TransparentOutputView,
 };
 use masp_primitives::transaction::components::I128Sum;
-use masp_primitives::transaction::{builder, Transaction as MaspTransaction};
+use masp_primitives::transaction::Transaction as MaspTransaction;
 use masp_primitives::zip32::PseudoExtendedKey;
 use namada_account::{InitAccount, UpdateAccount};
 use namada_core::address::{Address, IBC, MASP};
