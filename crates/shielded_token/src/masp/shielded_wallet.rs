@@ -651,10 +651,10 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
     async fn is_amount_required(
         &mut self,
         client: &(impl Client + Sync),
-        src: ValueSum<Address, Change>,
-        dest: ValueSum<Address, Change>,
+        src: ValueSum<(MaspDigitPos, Address), Change>,
+        dest: ValueSum<(MaspDigitPos, Address), Change>,
         delta: I128Sum,
-    ) -> Option<ValueSum<Address, Change>> {
+    ) -> Option<ValueSum<(MaspDigitPos, Address), Change>> {
         // If the delta causes any regression, then do not use it
         #[allow(clippy::neg_cmp_op_on_partial_ord)]
         if !(delta >= I128Sum::zero()) {
@@ -664,17 +664,18 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         let (decoded_delta, _rem_delta) = self.decode_sum(client, delta).await;
         for ((_, asset_data), value) in decoded_delta.components() {
             // Check that this component of the delta helps close the gap
-            if *value > 0 && gap.get(&asset_data.token).is_positive() {
+            if *value > 0
+                && gap
+                    .get(&(asset_data.position, asset_data.token.clone()))
+                    .is_positive()
+            {
                 // Convert the delta into Namada amounts
                 let mut converted_delta = ValueSum::zero();
                 for ((_, asset_data), value) in decoded_delta.components() {
-                    let amt = Change::from_masp_denominated(
-                        *value,
-                        asset_data.position,
-                    )
-                    .ok()?;
-                    converted_delta +=
-                        ValueSum::from_pair(asset_data.token.clone(), amt);
+                    converted_delta += ValueSum::from_pair(
+                        (asset_data.position, asset_data.token.clone()),
+                        Change::from(*value),
+                    );
                 }
                 return Some(converted_delta);
             }
@@ -693,7 +694,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         context: &impl NamadaIo,
         spent_notes: &mut SpentNotesTracker,
         sk: namada_core::masp::ExtendedSpendingKey,
-        target: ValueSum<Address, Change>,
+        target: ValueSum<(MaspDigitPos, Address), Change>,
         target_epoch: MaspEpoch,
     ) -> Result<
         (
@@ -1206,18 +1207,20 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         &mut self,
         client: &(impl Client + Sync),
         added_amt: I128Sum,
-        mut required_amt: ValueSum<Address, Change>,
+        mut required_amt: ValueSum<(MaspDigitPos, Address), Change>,
     ) -> Result<I128Sum, TransferErr> {
         // Compute the amount of change due to the sender.
         let (decoded_amount, mut change) =
             self.decode_sum(client, added_amt.clone()).await;
         for ((asset_type, asset_data), value) in decoded_amount.components() {
             // Get current component of the required amount
-            let req = asset_data
-                .position
-                .denominate(&Amount::from(required_amt.get(&asset_data.token)));
+            let req = required_amt
+                .get(&(asset_data.position, asset_data.token.clone()));
             // Compute how much this decoded component covers of the requirement
-            let covered = std::cmp::min(i128::from(req), *value);
+            let covered = std::cmp::min(
+                i128::try_from(req).expect("Masp digit value overflow"),
+                *value,
+            );
             // Record how far in excess of the requirement we are. This is
             // change.
             change += ValueSum::from_pair(*asset_type, value - covered);
@@ -1225,8 +1228,10 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             let covered =
                 Change::from_masp_denominated(covered, asset_data.position)
                     .map_err(|e| TransferErr::General(e.to_string()))?;
-            required_amt -=
-                ValueSum::from_pair(asset_data.token.clone(), covered);
+            required_amt -= ValueSum::from_pair(
+                (asset_data.position, asset_data.token.clone()),
+                covered,
+            );
         }
         // Error out if the required amount was not covered by the added amount
         if !required_amt.is_zero() {
@@ -1279,11 +1284,34 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
 
         // If there are shielded inputs
         let added_amt = if let Some(sk) = spending_key {
-            // Make the target amount vectorial
-            let required_amt = ValueSum::<Address, Change>::from_pair(
-                token.clone(),
-                (*amount).into(),
-            );
+            // Compute the target amount to spend from the
+            // input token address and namada amount. We
+            // collect all words from the namada amount
+            // whose values are non-zero, and pair them
+            // with their corresponding masp digit position.
+            let required_amt = amount
+                .iter_words()
+                .enumerate()
+                .filter_map(|(masp_digit_pos, value)| {
+                    if value != 0 {
+                        Some((
+                            MaspDigitPos::from(masp_digit_pos),
+                            Change::from(value),
+                        ))
+                    } else {
+                        None
+                    }
+                })
+                .fold(
+                    ValueSum::zero(),
+                    |mut accum, (masp_digit_pos, value)| {
+                        accum += ValueSum::from_pair(
+                            (masp_digit_pos, token.clone()),
+                            value,
+                        );
+                        accum
+                    },
+                );
             // Locate unspent notes that can help us meet the transaction
             // amount
             let (added_amt, unspent_notes, used_convs) = self
