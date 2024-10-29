@@ -56,6 +56,11 @@ pub const NATIVE_SCALE: u64 = 1_000_000;
 pub type Change = I256;
 
 impl Amount {
+    /// Iterate over all words in this [`Amount`].
+    pub fn iter_words(self) -> impl Iterator<Item = u64> {
+        self.raw.0.into_iter()
+    }
+
     /// Convert a [`u64`] to an [`Amount`].
     pub const fn from_u64(x: u64) -> Self {
         Self {
