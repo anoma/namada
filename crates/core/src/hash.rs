@@ -175,7 +175,7 @@ impl Hash {
     }
 
     /// Return zeros
-    pub fn zero() -> Self {
+    pub const fn zero() -> Self {
         Self([0u8; HASH_LENGTH])
     }
 
