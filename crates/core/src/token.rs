@@ -910,6 +910,14 @@ pub enum MaspDigitPos {
     Three,
 }
 
+impl From<usize> for MaspDigitPos {
+    fn from(denom: usize) -> Self {
+        u8::try_from(denom)
+            .expect("Possible MASP denominations must be between 0 and 3")
+            .into()
+    }
+}
+
 impl From<u8> for MaspDigitPos {
     fn from(denom: u8) -> Self {
         match denom {
