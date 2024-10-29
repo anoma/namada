@@ -547,7 +547,7 @@ impl FromStr for I256 {
 
 impl I256 {
     const N_WORDS: usize = 4;
-    
+
     /// Compute the two's complement of a number.
     pub fn negate(&self) -> Option<Self> {
         let (uint, overflow) = self.0.negate();

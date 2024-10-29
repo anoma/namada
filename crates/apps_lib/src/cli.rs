@@ -4661,9 +4661,8 @@ pub mod args {
                 });
             }
 
-            let gas_spending_key = self
-                .gas_spending_key
-                .map(|key| chain_ctx.get_cached(&key));
+            let gas_spending_key =
+                self.gas_spending_key.map(|key| chain_ctx.get_cached(&key));
 
             Ok(TxShieldedTransfer::<SdkTypes> {
                 tx,
@@ -4825,9 +4824,8 @@ pub mod args {
                     amount: transfer_data.amount,
                 });
             }
-            let gas_spending_key = self
-                .gas_spending_key
-                .map(|key| chain_ctx.get_cached(&key));
+            let gas_spending_key =
+                self.gas_spending_key.map(|key| chain_ctx.get_cached(&key));
 
             Ok(TxUnshieldingTransfer::<SdkTypes> {
                 tx,
@@ -4909,9 +4907,8 @@ pub mod args {
         ) -> Result<TxIbcTransfer<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx)?;
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
-            let gas_spending_key = self
-                .gas_spending_key
-                .map(|key| chain_ctx.get_cached(&key));
+            let gas_spending_key =
+                self.gas_spending_key.map(|key| chain_ctx.get_cached(&key));
 
             Ok(TxIbcTransfer::<SdkTypes> {
                 tx,

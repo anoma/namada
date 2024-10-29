@@ -591,10 +591,7 @@ impl<C: NamadaTypes> TxIbcTransfer<C> {
     }
 
     /// Gas spending keys
-    pub fn gas_spending_keys(
-        self,
-        gas_spending_key: C::SpendingKey,
-    ) -> Self {
+    pub fn gas_spending_keys(self, gas_spending_key: C::SpendingKey) -> Self {
         Self {
             gas_spending_key: Some(gas_spending_key),
             ..self

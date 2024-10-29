@@ -35,9 +35,7 @@ use namada_core::masp::{
 };
 use namada_core::task_env::TaskEnvironment;
 use namada_core::time::{DateTimeUtc, DurationSecs};
-use namada_core::token::{
-    Amount, Change, Denomination, MaspDigitPos,
-};
+use namada_core::token::{Amount, Change, Denomination, MaspDigitPos};
 use namada_io::client::Client;
 use namada_io::{
     display_line, edisplay_line, Io, MaybeSend, MaybeSync, NamadaIo,
@@ -50,12 +48,11 @@ use rand_core::{OsRng, SeedableRng};
 
 use crate::masp::utils::MaspClient;
 use crate::masp::{
-    cloned_pair, to_viewing_key,
-    ContextSyncStatus, Conversions, MaspAmount, MaspDataLog, MaspFeeData,
-    MaspSourceTransferData, MaspTargetTransferData, MaspTransferData,
-    MaspTxReorderedData, NoteIndex, ShieldedSyncConfig, ShieldedTransfer,
-    ShieldedUtils, SpentNotesTracker, TransferErr, WalletMap, WitnessMap,
-    NETWORK,
+    cloned_pair, to_viewing_key, ContextSyncStatus, Conversions, MaspAmount,
+    MaspDataLog, MaspFeeData, MaspSourceTransferData, MaspTargetTransferData,
+    MaspTransferData, MaspTxReorderedData, NoteIndex, ShieldedSyncConfig,
+    ShieldedTransfer, ShieldedUtils, SpentNotesTracker, TransferErr, WalletMap,
+    WitnessMap, NETWORK,
 };
 #[cfg(any(test, feature = "testing"))]
 use crate::masp::{testing, ENV_VAR_MASP_TEST_SEED};
@@ -647,16 +644,17 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         }
     }
 
-    /// Determine if using the current note would actually bring us closer to our
-    /// target. Returns the contribution of the current note to the target if so.
+    /// Determine if using the current note would actually bring us closer to
+    /// our target. Returns the contribution of the current note to the
+    /// target if so.
     #[allow(async_fn_in_trait)]
     async fn is_amount_required(
         &mut self,
         client: &(impl Client + Sync),
-        src: ValueSum::<Address, Change>,
-        dest: ValueSum::<Address, Change>,
+        src: ValueSum<Address, Change>,
+        dest: ValueSum<Address, Change>,
         delta: I128Sum,
-    ) -> Option<ValueSum::<Address, Change>> {
+    ) -> Option<ValueSum<Address, Change>> {
         // If the delta causes any regression, then do not use it
         if !(delta >= I128Sum::zero()) {
             return None;
@@ -672,11 +670,10 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                     let amt = Change::from_masp_denominated(
                         *value,
                         asset_data.position,
-                    ).ok()?;
-                    converted_delta += ValueSum::from_pair(
-                        asset_data.token.clone(),
-                        amt,
-                    );
+                    )
+                    .ok()?;
+                    converted_delta +=
+                        ValueSum::from_pair(asset_data.token.clone(), amt);
                 }
                 return Some(converted_delta);
             }
@@ -695,7 +692,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         context: &impl NamadaIo,
         spent_notes: &mut SpentNotesTracker,
         sk: namada_core::masp::ExtendedSpendingKey,
-        target: ValueSum::<Address, Change>,
+        target: ValueSum<Address, Change>,
         target_epoch: MaspEpoch,
     ) -> Result<
         (
@@ -704,7 +701,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             Conversions,
         ),
         eyre::Error,
-        > {
+    > {
         let vk = &to_viewing_key(&sk.into()).vk;
         // TODO: we should try to use the smallest notes possible to fund the
         // transaction to allow people to fetch less often
@@ -754,12 +751,15 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                     .await?;
 
                 // Use this note only if it brings us closer to our target
-                if let Some(namada_contr) = self.is_amount_required(
-                    context.client(),
-                    namada_acc.clone(),
-                    target.clone(),
-                    contr.clone(),
-                ).await {
+                if let Some(namada_contr) = self
+                    .is_amount_required(
+                        context.client(),
+                        namada_acc.clone(),
+                        target.clone(),
+                        contr.clone(),
+                    )
+                    .await
+                {
                     // Be sure to record the conversions used in computing
                     // accumulated value
                     masp_acc += contr;
@@ -990,7 +990,8 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             source_data,
             target_data,
             mut denoms,
-        }) = Self::reorder_data_for_masp_transfer(context, data, fee_data).await?
+        }) = Self::reorder_data_for_masp_transfer(context, data, fee_data)
+            .await?
         else {
             // No shielded components are needed when neither source nor
             // destination are shielded
@@ -1037,7 +1038,9 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         // transaction is balanced
         if !builder.value_balance().is_zero() {
             return Result::Err(TransferErr::Build {
-                error: builder::Error::InsufficientFunds(builder.value_balance()),
+                error: builder::Error::InsufficientFunds(
+                    builder.value_balance(),
+                ),
                 data: None,
             });
         }
@@ -1102,31 +1105,39 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         data: Vec<MaspTransferData>,
         fee_data: Option<MaspFeeData>,
     ) -> Result<Option<MaspTxReorderedData>, TransferErr> {
-        let mut source_data =
-            HashMap::<MaspSourceTransferData, Amount>::new();
-        let mut target_data =
-            HashMap::<MaspTargetTransferData, Amount>::new();
+        let mut source_data = HashMap::<MaspSourceTransferData, Amount>::new();
+        let mut target_data = HashMap::<MaspTargetTransferData, Amount>::new();
         let mut denoms = HashMap::new();
 
         // If present, add the fee data to the rest of the transfer data
         if let Some(fee_data) = fee_data {
-            let denom = Self::get_denom(context.client(), &mut denoms, &fee_data.token).await?;
+            let denom =
+                Self::get_denom(context.client(), &mut denoms, &fee_data.token)
+                    .await?;
             let amount = fee_data
                 .amount
                 .increase_precision(denom)
                 .map_err(|e| TransferErr::General(e.to_string()))?
                 .amount();
             if let Some(source) = fee_data.source {
-                source_data.insert(MaspSourceTransferData {
-                    source: TransferSource::ExtendedSpendingKey(source),
-                    token: fee_data.token.clone(),
-                }, amount);
+                source_data.insert(
+                    MaspSourceTransferData {
+                        source: TransferSource::ExtendedSpendingKey(source),
+                        token: fee_data.token.clone(),
+                    },
+                    amount,
+                );
             }
-            target_data.insert(MaspTargetTransferData {
-                source: fee_data.source.map(|source| TransferSource::ExtendedSpendingKey(source)),
-                target: TransferTarget::Address(fee_data.target),
-                token: fee_data.token,
-            }, amount);
+            target_data.insert(
+                MaspTargetTransferData {
+                    source: fee_data.source.map(|source| {
+                        TransferSource::ExtendedSpendingKey(source)
+                    }),
+                    target: TransferTarget::Address(fee_data.target),
+                    token: fee_data.token,
+                },
+                amount,
+            );
         }
         for MaspTransferData {
             source,
@@ -1143,7 +1154,8 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 return Ok(None);
             }
 
-            let denom = Self::get_denom(context.client(), &mut denoms, &token).await?;
+            let denom =
+                Self::get_denom(context.client(), &mut denoms, &token).await?;
             let amount = amount
                 .increase_precision(denom)
                 .map_err(|e| TransferErr::General(e.to_string()))?
@@ -1160,7 +1172,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 }
                 None => {
                     source_data.insert(key, amount);
-                },
+                }
             }
 
             let key = MaspTargetTransferData {
@@ -1200,17 +1212,22 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             self.decode_sum(client, added_amt.clone()).await;
         for ((asset_type, asset_data), value) in decoded_amount.components() {
             // Get current component of the required amount
-            let req = asset_data.position.denominate(
-                &Amount::from(required_amt.get(&asset_data.token)),
-            );
+            let req = asset_data
+                .position
+                .denominate(&Amount::from(required_amt.get(&asset_data.token)));
             // Compute how much this decoded component covers of the requirement
             let covered = std::cmp::min(i128::from(req), *value);
-            // Record how far in excess of the requirement we are. This is change.
+            // Record how far in excess of the requirement we are. This is
+            // change.
             change += ValueSum::from_pair(*asset_type, value - covered);
             // Denominate the cover and decrease the required amount accordingly
-            let covered = Change::from_masp_denominated(covered.into(), asset_data.position)
-                .map_err(|e| TransferErr::General(e.to_string()))?;
-            required_amt -= ValueSum::from_pair(asset_data.token.clone(), covered);
+            let covered = Change::from_masp_denominated(
+                covered.into(),
+                asset_data.position,
+            )
+            .map_err(|e| TransferErr::General(e.to_string()))?;
+            required_amt -=
+                ValueSum::from_pair(asset_data.token.clone(), covered);
         }
         // Error out if the required amount was not covered by the added amount
         if !required_amt.is_zero() {
@@ -1282,17 +1299,22 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 .map_err(|e| TransferErr::General(e.to_string()))?;
 
             // Compute the change that needs to go back to the sender
-            let change = self.compute_change(
-                context.client(),
-                added_amt.clone(),
-                required_amt,
-            ).await?;
+            let change = self
+                .compute_change(
+                    context.client(),
+                    added_amt.clone(),
+                    required_amt,
+                )
+                .await?;
             // Commit the computed change back to the sender.
             for (asset_type, value) in change.components() {
                 builder
                     .add_sapling_output(
                         Some(MaspExtendedSpendingKey::from(sk).expsk.ovk),
-                        MaspExtendedSpendingKey::from(sk).default_address().1.into(),
+                        MaspExtendedSpendingKey::from(sk)
+                            .default_address()
+                            .1
+                            .into(),
                         *asset_type,
                         *value as u64,
                         MemoBytes::empty(),
@@ -1302,7 +1324,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                         data: None,
                     })?;
             }
-            
+
             // Commit the notes found to our transaction
             for (diversifier, note, merkle_path) in unspent_notes {
                 builder
@@ -1423,9 +1445,11 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 let contr = std::cmp::min(u128::from(*rem_amount), val) as u64;
                 // If we are sending to a shielded address, we need the outgoing
                 // viewing key in the following computations.
-                let ovk_opt = source.clone().and_then(|source|
-                    source.spending_key()
-                    .map(|x| MaspExtendedSpendingKey::from(x).expsk.ovk));
+                let ovk_opt = source.clone().and_then(|source| {
+                    source
+                        .spending_key()
+                        .map(|x| MaspExtendedSpendingKey::from(x).expsk.ovk)
+                });
                 // Make transaction output tied to the current token,
                 // denomination, and epoch.
                 if let Some(pa) = payment_address {
