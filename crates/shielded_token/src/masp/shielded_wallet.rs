@@ -1226,9 +1226,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             // change.
             change += ValueSum::from_pair(*asset_type, value - covered);
             // Denominate the cover and decrease the required amount accordingly
-            let covered =
-                Change::from_masp_denominated(covered, asset_data.position)
-                    .map_err(|e| TransferErr::General(e.to_string()))?;
+            let covered = Change::from(covered);
             required_amt -= ValueSum::from_pair(
                 (asset_data.position, asset_data.token.clone()),
                 covered,
