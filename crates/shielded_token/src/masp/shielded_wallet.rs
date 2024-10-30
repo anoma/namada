@@ -331,6 +331,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
                  0, this is a bug, please report it.",
                 asset_type
             );
+            eyre::bail!("Conversion asset threshold cannot be null");
         }
         // We should use an amount of the AllowedConversion that almost
         // cancels the original amount
