@@ -316,11 +316,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
         input: &mut I128Sum,
         output: &mut I128Sum,
     ) -> Result<(), eyre::Error> {
-        // we do not need to convert negative values
+        // We do not need to convert negative values
         if value <= 0 {
             return Ok(());
         }
-        // If conversion if possible, accumulate the exchanged amount
+        // If conversion is possible, accumulate the exchanged amount
         let conv: I128Sum = I128Sum::from_sum(conv.into());
         // The amount required of current asset to qualify for conversion
         let threshold = -conv[&asset_type];
