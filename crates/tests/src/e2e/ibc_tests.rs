@@ -122,6 +122,7 @@ fn ibc_transfers() -> Result<()> {
         None,
         None,
         false,
+        false,
     )?;
     wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
 
@@ -184,6 +185,7 @@ fn ibc_transfers() -> Result<()> {
         None,
         None,
         false,
+        false,
     )?;
     wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
 
@@ -224,7 +226,7 @@ fn ibc_transfers() -> Result<()> {
     )?;
     wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test_gaia)?;
     // Check the token on Namada
-    check_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 100)?;
+    check_shielded_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 100)?;
     check_gaia_balance(&test_gaia, GAIA_USER, GAIA_COIN, 800)?;
 
     // Shielded transfer 50 samoleans on Namada
@@ -238,8 +240,8 @@ fn ibc_transfers() -> Result<()> {
         ALBERT_KEY,
         &[],
     )?;
-    check_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 50)?;
-    check_balance(&test, AB_VIEWING_KEY, &ibc_denom_on_namada, 50)?;
+    check_shielded_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 50)?;
+    check_shielded_balance(&test, AB_VIEWING_KEY, &ibc_denom_on_namada, 50)?;
 
     // Unshielding transfer 10 samoleans from Namada to Gaia
     transfer(
@@ -255,9 +257,10 @@ fn ibc_transfers() -> Result<()> {
         None,
         None,
         false,
+        true,
     )?;
     wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
-    check_balance(&test, AB_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
+    check_shielded_balance(&test, AB_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
     check_gaia_balance(&test_gaia, GAIA_USER, GAIA_COIN, 810)?;
 
     // 4. Shielding transfer the received token back to a shielded account on
@@ -284,7 +287,7 @@ fn ibc_transfers() -> Result<()> {
     )?;
     wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test)?;
     // Check the token on Namada
-    check_balance(&test, AA_VIEWING_KEY, APFEL, 1)?;
+    check_shielded_balance(&test, AA_VIEWING_KEY, APFEL, 1)?;
 
     // 5. Refunding when transfer failure
 
@@ -302,6 +305,7 @@ fn ibc_transfers() -> Result<()> {
         None,
         None,
         None,
+        false,
         false,
     )?;
     wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
@@ -325,6 +329,7 @@ fn ibc_transfers() -> Result<()> {
         Some(Duration::new(10, 0)),
         None,
         None,
+        false,
         false,
     )?;
     // wait for the timeout
@@ -353,10 +358,11 @@ fn ibc_transfers() -> Result<()> {
         None,
         None,
         false,
+        true,
     )?;
     wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
     // Check the token has been refunded to the refund target
-    check_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
+    check_shielded_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
     check_balance(&test, IBC_REFUND_TARGET_ALIAS, &ibc_denom_on_namada, 10)?;
 
     // Stop Hermes for timeout test
@@ -378,6 +384,7 @@ fn ibc_transfers() -> Result<()> {
         None,
         None,
         false,
+        true,
     )?;
     // wait for the timeout
     sleep(10);
@@ -388,13 +395,13 @@ fn ibc_transfers() -> Result<()> {
 
     wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
     // Check the token has been refunded to the refund target
-    check_balance(&test, AA_VIEWING_KEY, APFEL, 0)?;
+    check_shielded_balance(&test, AA_VIEWING_KEY, APFEL, 0)?;
     check_balance(&test, IBC_REFUND_TARGET_ALIAS, APFEL, 1)?;
 
     // 6. Malformed shielded actions
 
     // Check initial balance
-    check_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
+    check_shielded_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
     check_gaia_balance(&test_gaia, GAIA_USER, GAIA_COIN, 810)?;
 
     // Missing memo
@@ -413,7 +420,7 @@ fn ibc_transfers() -> Result<()> {
     )?;
     wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
     // Check the balance didn't change
-    check_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
+    check_shielded_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
     check_gaia_balance(&test_gaia, GAIA_USER, GAIA_COIN, 810)?;
 
     // Wrong memo (different amount)
@@ -440,7 +447,7 @@ fn ibc_transfers() -> Result<()> {
     )?;
     wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test_gaia)?;
     // Check the balances didn't change
-    check_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
+    check_shielded_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
     check_gaia_balance(&test_gaia, GAIA_USER, GAIA_COIN, 810)?;
 
     Ok(())
@@ -694,7 +701,7 @@ fn ibc_token_inflation() -> Result<()> {
     }
 
     // Check the target balance is zero before the inflation
-    check_balance(&test, AA_VIEWING_KEY, NAM, 0)?;
+    check_shielded_balance(&test, AA_VIEWING_KEY, NAM, 0)?;
     // Shielding transfer 1 samoleans from Gaia to Namada
     let shielding_data_path = gen_ibc_shielding_data(
         &test,
@@ -841,6 +848,7 @@ fn ibc_rate_limit() -> Result<()> {
         None,
         None,
         false,
+        false,
     )?;
 
     // Transfer 1 NAM from Namada to Gaia again will fail
@@ -859,6 +867,7 @@ fn ibc_rate_limit() -> Result<()> {
         Some(
             "Transfer exceeding the per-epoch throughput limit is not allowed",
         ),
+        false,
         false,
     )?;
 
@@ -882,6 +891,7 @@ fn ibc_rate_limit() -> Result<()> {
         None,
         None,
         None,
+        false,
         false,
     )?;
 
@@ -1123,6 +1133,7 @@ fn try_invalid_transfers(
         // the IBC denom can't be parsed when using an invalid port
         Some(&format!("Invalid IBC denom: {nam_addr}")),
         false,
+        false,
     )?;
 
     // invalid channel
@@ -1138,6 +1149,7 @@ fn try_invalid_transfers(
         None,
         None,
         Some("IBC token transfer error: context error: `ICS04 Channel error"),
+        false,
         false,
     )?;
 
@@ -1194,6 +1206,7 @@ fn transfer(
     shielding_data_path: Option<PathBuf>,
     expected_err: Option<&str>,
     wait_reveal_pk: bool,
+    gen_refund_target: bool,
 ) -> Result<u32> {
     let rpc = get_actor_rpc(test, Who::Validator(0));
 
@@ -1241,7 +1254,7 @@ fn transfer(
         tx_args.push(&memo);
     }
 
-    if sender.as_ref().starts_with("zsk") {
+    if gen_refund_target {
         let mut cmd = run!(
             test,
             Bin::Wallet,
@@ -1705,9 +1718,32 @@ fn check_balance(
 ) -> Result<()> {
     let rpc = get_actor_rpc(test, Who::Validator(0));
 
-    if owner.as_ref().starts_with("zvk") {
-        shielded_sync(test, owner.as_ref())?;
-    }
+    let query_args = vec![
+        "balance",
+        "--owner",
+        owner.as_ref(),
+        "--token",
+        token.as_ref(),
+        "--node",
+        &rpc,
+    ];
+    let mut client = run!(test, Bin::Client, query_args, Some(40))?;
+    let expected =
+        format!("{}: {expected_amount}", token.as_ref().to_lowercase());
+    client.exp_string(&expected)?;
+    client.assert_success();
+    Ok(())
+}
+
+fn check_shielded_balance(
+    test: &Test,
+    owner: impl AsRef<str>,
+    token: impl AsRef<str>,
+    expected_amount: u64,
+) -> Result<()> {
+    let rpc = get_actor_rpc(test, Who::Validator(0));
+
+    shielded_sync(test, owner.as_ref())?;
 
     let query_args = vec![
         "balance",
