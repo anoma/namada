@@ -32,6 +32,175 @@ use crate::e2e::setup::constants::{
 };
 use crate::strings::TX_APPLIED_SUCCESS;
 
+/// Test interacting with masp amounts that span more than 64 bits.
+#[test]
+fn values_spanning_multiple_masp_digits() -> Result<()> {
+    // Dummy validator rpc address
+    const RPC: &str = "http://127.0.0.1:26567";
+
+    // We will mint tokens with this address
+    const TEST_TOKEN_ADDR: &str =
+        "tnam1q9382etwdaekg6tpwdkkzar0wd5ku6r0wvu5ukqd";
+    let test_token_addr: Address = TEST_TOKEN_ADDR.parse().unwrap();
+
+    const TEST_TOKEN_INITIAL_SUPPLY: &str = "6427858447239330000000";
+    const HALF_TEST_TOKEN_INITIAL_SUPPLY: &str = "3213929223619665000000";
+    let test_token_initial_supply = {
+        let supply: DenominatedAmount =
+            TEST_TOKEN_INITIAL_SUPPLY.parse().unwrap();
+        assert_eq!(supply.denom(), 0u8.into());
+        supply.amount()
+    };
+
+    // Download the shielded pool parameters before starting node
+    let _ = FsShieldedUtils::new(PathBuf::new());
+    // Boot up a mock node
+    let (node, _services) = setup::setup()?;
+
+    // Initialize the test token
+    token::write_denom(
+        &mut node.shell.lock().unwrap().state,
+        &test_token_addr,
+        0u8.into(),
+    )?;
+
+    // Give Bertha some test tokens
+    let bertha_addr = helpers::find_address(&node, BERTHA)?;
+    token::credit_tokens(
+        &mut node.shell.lock().unwrap().state,
+        &test_token_addr,
+        &bertha_addr,
+        test_token_initial_supply,
+    )?;
+
+    // Commit test token changes to a new block
+    node.finalize_and_commit(None);
+    assert_eq!(
+        token::read_total_supply(
+            &node.shell.lock().unwrap().state,
+            &test_token_addr,
+        )?,
+        test_token_initial_supply,
+    );
+
+    // Shield HALF_TEST_TOKEN_INITIAL_SUPPLY test tokens
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "shield",
+                "--source",
+                BERTHA,
+                "--target",
+                AA_PAYMENT_ADDRESS,
+                "--token",
+                TEST_TOKEN_ADDR,
+                "--amount",
+                HALF_TEST_TOKEN_INITIAL_SUPPLY,
+                "--node",
+                RPC,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok(), "{:?}", captured.result);
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    // Fetch the note we just created containing test tokens
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shielded-sync",
+            "--viewing-keys",
+            AA_VIEWING_KEY,
+            "--node",
+            RPC,
+        ],
+    )?;
+
+    // Check the test token balance corresponds 1:1 to what
+    // we shielded
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                TEST_TOKEN_ADDR,
+                "--node",
+                RPC,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok(), "{:?}", captured.result);
+    assert!(captured.contains(&format!(
+        "{TEST_TOKEN_ADDR}: {HALF_TEST_TOKEN_INITIAL_SUPPLY}"
+    )));
+
+    // Unshield the test tokens
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "unshield",
+                "--source",
+                A_SPENDING_KEY,
+                "--target",
+                BERTHA,
+                "--token",
+                TEST_TOKEN_ADDR,
+                "--amount",
+                HALF_TEST_TOKEN_INITIAL_SUPPLY,
+                "--signing-keys",
+                BERTHA_KEY,
+                "--node",
+                RPC,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok(), "{:?}", captured.result);
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    // Run shielded sync
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shielded-sync",
+            "--viewing-keys",
+            AA_VIEWING_KEY,
+            "--node",
+            RPC,
+        ],
+    )?;
+
+    // Check test token balance is null
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                TEST_TOKEN_ADDR,
+                "--node",
+                RPC,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok(), "{:?}", captured.result);
+    assert!(captured.contains(&format!("{TEST_TOKEN_ADDR}: 0")));
+
+    Ok(())
+}
+
 /// Enable masp rewards after some token had already been shielded.
 #[test]
 fn enable_rewards_after_shielding() -> Result<()> {
