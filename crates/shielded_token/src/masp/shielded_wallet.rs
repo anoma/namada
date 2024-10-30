@@ -652,10 +652,10 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
     async fn is_amount_required(
         &mut self,
         client: &(impl Client + Sync),
-        src: ValueSum<(MaspDigitPos, Address), Change>,
-        dest: ValueSum<(MaspDigitPos, Address), Change>,
+        src: ValueSum<(MaspDigitPos, Address), i128>,
+        dest: ValueSum<(MaspDigitPos, Address), i128>,
         delta: I128Sum,
-    ) -> Option<ValueSum<(MaspDigitPos, Address), Change>> {
+    ) -> Option<ValueSum<(MaspDigitPos, Address), i128>> {
         // If the delta causes any regression, then do not use it
         #[allow(clippy::neg_cmp_op_on_partial_ord)]
         if !(delta >= I128Sum::zero()) {
@@ -675,7 +675,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 for ((_, asset_data), value) in decoded_delta.components() {
                     converted_delta += ValueSum::from_pair(
                         (asset_data.position, asset_data.token.clone()),
-                        Change::from(*value),
+                        *value,
                     );
                 }
                 return Some(converted_delta);
@@ -695,7 +695,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         context: &impl NamadaIo,
         spent_notes: &mut SpentNotesTracker,
         sk: namada_core::masp::ExtendedSpendingKey,
-        target: ValueSum<(MaspDigitPos, Address), Change>,
+        target: ValueSum<(MaspDigitPos, Address), i128>,
         target_epoch: MaspEpoch,
     ) -> Result<
         (
@@ -1208,7 +1208,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         &mut self,
         client: &(impl Client + Sync),
         added_amt: I128Sum,
-        mut required_amt: ValueSum<(MaspDigitPos, Address), Change>,
+        mut required_amt: ValueSum<(MaspDigitPos, Address), i128>,
     ) -> Result<I128Sum, TransferErr> {
         // Compute the amount of change due to the sender.
         let (decoded_amount, mut change) =
@@ -1218,15 +1218,11 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             let req = required_amt
                 .get(&(asset_data.position, asset_data.token.clone()));
             // Compute how much this decoded component covers of the requirement
-            let covered = std::cmp::min(
-                i128::try_from(req).expect("Masp digit value overflow"),
-                *value,
-            );
+            let covered = std::cmp::min(req, *value);
             // Record how far in excess of the requirement we are. This is
             // change.
             change += ValueSum::from_pair(*asset_type, value - covered);
             // Denominate the cover and decrease the required amount accordingly
-            let covered = Change::from(covered);
             required_amt -= ValueSum::from_pair(
                 (asset_data.position, asset_data.token.clone()),
                 covered,
@@ -1290,13 +1286,10 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             // with their corresponding masp digit position.
             let required_amt = amount
                 .iter_words()
-                .enumerate()
-                .filter_map(|(masp_digit_pos, value)| {
+                .zip(MaspDigitPos::iter())
+                .filter_map(|(value, masp_digit_pos)| {
                     if value != 0 {
-                        Some((
-                            MaspDigitPos::from(masp_digit_pos),
-                            Change::from(value),
-                        ))
+                        Some((masp_digit_pos, i128::from(value)))
                     } else {
                         None
                     }

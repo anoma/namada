@@ -811,7 +811,7 @@ pub mod testing {
     prop_compose! {
         /// Generate an arbitrary MASP denomination
         pub fn arb_masp_digit_pos()(denom in 0..4u8) -> MaspDigitPos {
-            MaspDigitPos::from(denom)
+            MaspDigitPos::try_from(denom).unwrap()
         }
     }
 

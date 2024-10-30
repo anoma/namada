@@ -910,22 +910,16 @@ pub enum MaspDigitPos {
     Three,
 }
 
-impl From<usize> for MaspDigitPos {
-    fn from(denom: usize) -> Self {
-        u8::try_from(denom)
-            .expect("Possible MASP denominations must be between 0 and 3")
-            .into()
-    }
-}
+impl TryFrom<u8> for MaspDigitPos {
+    type Error = &'static str;
 
-impl From<u8> for MaspDigitPos {
-    fn from(denom: u8) -> Self {
+    fn try_from(denom: u8) -> Result<Self, Self::Error> {
         match denom {
-            0 => Self::Zero,
-            1 => Self::One,
-            2 => Self::Two,
-            3 => Self::Three,
-            _ => panic!("Possible MASP denominations must be between 0 and 3"),
+            0 => Ok(Self::Zero),
+            1 => Ok(Self::One),
+            2 => Ok(Self::Two),
+            3 => Ok(Self::Three),
+            _ => Err("Possible MASP denominations must be between 0 and 3"),
         }
     }
 }
@@ -933,8 +927,13 @@ impl From<u8> for MaspDigitPos {
 impl MaspDigitPos {
     /// Iterator over the possible denominations
     pub fn iter() -> impl Iterator<Item = MaspDigitPos> {
-        // 0, 1, 2, 3
-        (0u8..4).map(Self::from)
+        [
+            MaspDigitPos::Zero,
+            MaspDigitPos::One,
+            MaspDigitPos::Two,
+            MaspDigitPos::Three,
+        ]
+        .into_iter()
     }
 
     /// Get the corresponding u64 word from the input uint256.
