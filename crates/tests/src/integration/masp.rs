@@ -346,7 +346,7 @@ fn enable_rewards_after_shielding() -> Result<()> {
     // test tokens in the shielded pool
     token::write_params(
         &Some(token::ShieldedParams {
-            max_reward_rate: Dec::from_str("9999999999").unwrap(),
+            max_reward_rate: Dec::from_str("1.0").unwrap(),
             kp_gain_nom: Dec::from_str("9999999999").unwrap(),
             kd_gain_nom: Dec::from_str("9999999999").unwrap(),
             locked_amount_target: 999999999u64,
@@ -483,8 +483,9 @@ fn enable_rewards_after_shielding() -> Result<()> {
     }
 
     // Assert that we have minted NAM rewards
-    const EXPECTED_REWARDS: u128 = 6427858447239330;
-    const HALF_OF_EXPECTED_REWARDS: u128 = EXPECTED_REWARDS / 2;
+    const EXPECTED_REWARDS: u128 = 21;
+    const UNSHIELD_REWARDS_AMT: u128 = EXPECTED_REWARDS / 2;
+    const REMAINING_REWARDS_AMT: u128 = EXPECTED_REWARDS - UNSHIELD_REWARDS_AMT;
 
     let captured = CapturedOutput::of(|| {
         run(
@@ -518,7 +519,7 @@ fn enable_rewards_after_shielding() -> Result<()> {
                 "--token",
                 NAM,
                 "--amount",
-                &HALF_OF_EXPECTED_REWARDS.to_string(),
+                &UNSHIELD_REWARDS_AMT.to_string(),
                 "--signing-keys",
                 BERTHA_KEY,
                 "--node",
@@ -559,7 +560,7 @@ fn enable_rewards_after_shielding() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok(), "{:?}", captured.result);
-    assert!(captured.contains(&format!("nam: {HALF_OF_EXPECTED_REWARDS}")));
+    assert!(captured.contains(&format!("nam: {REMAINING_REWARDS_AMT}")));
 
     // Transfer the other half of the rewards
     let captured = CapturedOutput::of(|| {
@@ -575,7 +576,7 @@ fn enable_rewards_after_shielding() -> Result<()> {
                 "--token",
                 NAM,
                 "--amount",
-                &HALF_OF_EXPECTED_REWARDS.to_string(),
+                &REMAINING_REWARDS_AMT.to_string(),
                 "--signing-keys",
                 BERTHA_KEY,
                 "--node",
