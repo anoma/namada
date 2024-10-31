@@ -660,30 +660,39 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         if delta < I128Sum::zero() {
             return None;
         }
+
         let gap = dest.clone() - src;
+
+        // Decode the assets in delta; any undecodable assets
+        // will end up in `_rem_delta`
         let (decoded_delta, _rem_delta) = self.decode_sum(client, delta).await;
-        for ((_, asset_data), value) in decoded_delta.components() {
-            // Check that this component of the delta helps close the gap
-            if *value > 0
-                && gap
-                    .get(&(asset_data.position, asset_data.token.clone()))
-                    .is_positive()
-            {
-                // Convert the delta into Namada amounts
-                let converted_delta = decoded_delta.components().fold(
-                    ValueSum::zero(),
-                    |accum, ((_, asset_data), value)| {
-                        accum
-                            + ValueSum::from_pair(
-                                (asset_data.position, asset_data.token.clone()),
-                                *value,
-                            )
-                    },
-                );
-                return Some(converted_delta);
-            }
+
+        // Find any component in the delta that may help
+        // close the gap with dest
+        let any_component_closes_gap =
+            decoded_delta.components().any(|((_, asset_data), value)| {
+                *value > 0
+                    && gap
+                        .get(&(asset_data.position, asset_data.token.clone()))
+                        .is_positive()
+            });
+
+        if any_component_closes_gap {
+            // Convert the delta into Namada amounts
+            let converted_delta = decoded_delta.components().fold(
+                ValueSum::zero(),
+                |accum, ((_, asset_data), value)| {
+                    accum
+                        + ValueSum::from_pair(
+                            (asset_data.position, asset_data.token.clone()),
+                            *value,
+                        )
+                },
+            );
+            Some(converted_delta)
+        } else {
+            None
         }
-        None
     }
 
     /// Collect enough unspent notes in this context to exceed the given amount
