@@ -611,12 +611,12 @@ impl I256 {
         Self(self.0.canonical())
     }
 
-    /// the maximum I256 value
+    /// The maximum value of an [`I256`].
     pub fn maximum() -> Self {
         Self(MAX_SIGNED_VALUE)
     }
 
-    /// Given a u128 and [`MaspDigitPos`], construct the corresponding
+    /// Given an i128 and [`MaspDigitPos`], construct the corresponding
     /// amount.
     pub fn from_masp_denominated(
         val: i128,
