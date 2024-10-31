@@ -1105,7 +1105,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             Ok(denom)
         } else {
             Err(TransferErr::General(format!(
-                "denomination for token {token}"
+                "Could not find the denomination of token {token}"
             )))
         }
     }
