@@ -3810,6 +3810,8 @@ fn masp_fee_payment() -> Result<()> {
                 "20000",
                 "--gas-price",
                 "1",
+                "--gas-spending-key",
+                A_SPENDING_KEY,
                 "--disposable-gas-payer",
                 "--ledger-address",
                 validator_one_rpc,
@@ -4116,6 +4118,8 @@ fn masp_fee_payment_gas_limit() -> Result<()> {
                 "1",
                 "--gas-price",
                 "1",
+                "--gas-spending-key",
+                A_SPENDING_KEY,
                 "--disposable-gas-payer",
                 "--ledger-address",
                 validator_one_rpc,
@@ -4155,7 +4159,7 @@ fn masp_fee_payment_gas_limit() -> Result<()> {
     Ok(())
 }
 
-// Test masp fee payement with an unshield to a non-disposable address with
+// Test masp fee payment with an unshield to a non-disposable address with
 // already some funds on it.
 #[test]
 fn masp_fee_payment_with_non_disposable() -> Result<()> {
