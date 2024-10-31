@@ -657,8 +657,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         delta: I128Sum,
     ) -> Option<ValueSum<(MaspDigitPos, Address), i128>> {
         // If the delta causes any regression, then do not use it
-        #[allow(clippy::neg_cmp_op_on_partial_ord)]
-        if !(delta >= I128Sum::zero()) {
+        if delta < I128Sum::zero() {
             return None;
         }
         let gap = dest.clone() - src;
