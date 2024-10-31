@@ -652,8 +652,11 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
     async fn is_amount_required(
         &mut self,
         client: &(impl Client + Sync),
+        // NB: value accumulated thus far
         src: ValueSum<(MaspDigitPos, Address), i128>,
+        // NB: the target amount remaining
         dest: ValueSum<(MaspDigitPos, Address), i128>,
+        // NB: current contribution (from a note + rewards if any)
         delta: I128Sum,
     ) -> Option<ValueSum<(MaspDigitPos, Address), i128>> {
         // If the delta causes any regression, then do not use it
