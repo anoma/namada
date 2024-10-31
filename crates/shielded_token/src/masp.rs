@@ -116,7 +116,7 @@ pub struct MaspTargetTransferData {
 pub struct MaspDataLog {
     pub source: Option<TransferSource>,
     pub token: Address,
-    pub amount: token::Amount,
+    pub amount: token::DenominatedAmount,
 }
 
 #[allow(missing_docs)]
