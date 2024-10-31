@@ -3047,6 +3047,25 @@ fn dynamic_assets() -> Result<()> {
         vec!["shielded-sync", "--node", validator_one_rpc],
     )?;
 
+    // Assert that the NAM at VK(A) is now null
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 0"));
+
     // Unshield the principal
     let captured = CapturedOutput::of(|| {
         run(
@@ -3071,6 +3090,32 @@ fn dynamic_assets() -> Result<()> {
     });
     assert!(captured.result.is_ok());
     assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    // sync the shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--node", validator_one_rpc],
+    )?;
+
+    // Assert that the principal's balance is now null
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                BTC,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("btc: 0"));
 
     Ok(())
 }
