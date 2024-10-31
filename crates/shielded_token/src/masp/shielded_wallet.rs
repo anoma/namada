@@ -670,13 +670,16 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                     .is_positive()
             {
                 // Convert the delta into Namada amounts
-                let mut converted_delta = ValueSum::zero();
-                for ((_, asset_data), value) in decoded_delta.components() {
-                    converted_delta += ValueSum::from_pair(
-                        (asset_data.position, asset_data.token.clone()),
-                        *value,
-                    );
-                }
+                let converted_delta = decoded_delta.components().fold(
+                    ValueSum::zero(),
+                    |accum, ((_, asset_data), value)| {
+                        accum
+                            + ValueSum::from_pair(
+                                (asset_data.position, asset_data.token.clone()),
+                                *value,
+                            )
+                    },
+                );
                 return Some(converted_delta);
             }
         }
