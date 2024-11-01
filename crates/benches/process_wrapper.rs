@@ -1,6 +1,4 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-use namada_apps_lib::address;
-use namada_apps_lib::chain::BlockHeight;
 use namada_apps_lib::key::RefTo;
 use namada_apps_lib::state::TxIndex;
 use namada_apps_lib::time::DateTimeUtc;
@@ -8,17 +6,13 @@ use namada_apps_lib::token::{Amount, DenominatedAmount, Transfer};
 use namada_apps_lib::tx::data::{Fee, WrapperTx};
 use namada_apps_lib::tx::Authorization;
 use namada_apps_lib::wallet::defaults;
+use namada_apps_lib::{address, DEFAULT_GAS_LIMIT};
 use namada_node::bench_utils::{BenchShell, TX_TRANSFER_WASM};
 use namada_node::shell::process_proposal::ValidationMeta;
 
 fn process_tx(c: &mut Criterion) {
     let bench_shell = BenchShell::default();
-    let mut shell = bench_shell.write();
-
-    // Advance chain height to allow the inclusion of wrapper txs by the block
-    // space allocator
-    shell.state.in_mem_mut().last_block.as_mut().unwrap().height =
-        BlockHeight(2);
+    let shell = bench_shell.write();
 
     let mut batched_tx = shell.generate_tx(
         TX_TRANSFER_WASM,
@@ -41,10 +35,10 @@ fn process_tx(c: &mut Criterion) {
             WrapperTx::new(
                 Fee {
                     token: address::testing::nam(),
-                    amount_per_gas_unit: DenominatedAmount::native(1.into()),
+                    amount_per_gas_unit: DenominatedAmount::native(100.into()),
                 },
                 defaults::albert_keypair().ref_to(),
-                1_000_000.into(),
+                DEFAULT_GAS_LIMIT.into(),
             ),
         )));
     batched_tx
