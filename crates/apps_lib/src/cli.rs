@@ -2493,6 +2493,7 @@ pub mod cmds {
         ValidateGenesisTemplates(ValidateGenesisTemplates),
         SignGenesisTxs(SignGenesisTxs),
         ParseMigrationJson(MigrationJson),
+        DeriveIbcToken(DeriveIbcToken),
     }
 
     impl SubCmd for ClientUtils {
@@ -2527,6 +2528,8 @@ pub mod cmds {
                     SubCmd::parse(matches).map(Self::SignGenesisTxs);
                 let parse_migrations_json =
                     SubCmd::parse(matches).map(Self::ParseMigrationJson);
+                let derive_ibc_token =
+                    SubCmd::parse(matches).map(Self::DeriveIbcToken);
                 join_network
                     .or(validate_wasm)
                     .or(init_network)
@@ -2541,6 +2544,7 @@ pub mod cmds {
                     .or(genesis_tx)
                     .or(parse_migrations_json)
                     .or(sign_offline)
+                    .or(derive_ibc_token)
             })
         }
 
@@ -2561,6 +2565,7 @@ pub mod cmds {
                 .subcommand(ValidateGenesisTemplates::def())
                 .subcommand(SignGenesisTxs::def())
                 .subcommand(MigrationJson::def())
+                .subcommand(DeriveIbcToken::def())
                 .subcommand_required(true)
                 .arg_required_else_help(true)
         }
@@ -2604,6 +2609,29 @@ pub mod cmds {
                      standards."
                 ))
                 .add_args::<args::ValidateWasm>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct DeriveIbcToken(pub args::DeriveIbcToken);
+
+    impl SubCmd for DeriveIbcToken {
+        const CMD: &'static str = "derive-token-address";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::DeriveIbcToken::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(wrap!(
+                    "Derive the IBC token address on Namada from the denom \
+                     string, typically in the form of \
+                     'transfer/channel-<num>/<name>'."
+                ))
+                .add_args::<args::DeriveIbcToken>()
         }
     }
 
@@ -3441,6 +3469,7 @@ pub mod args {
     pub const HISTORIC: ArgFlag = flag("historic");
     pub const IBC_SHIELDING_DATA_PATH: ArgOpt<PathBuf> =
         arg_opt("ibc-shielding-data");
+    pub const IBC_DENOM: Arg<String> = arg("ibc-denom");
     pub const IBC_MEMO: ArgOpt<String> = arg_opt("ibc-memo");
     pub const INPUT_OPT: ArgOpt<PathBuf> = arg_opt("input");
     pub const LEDGER_ADDRESS_ABOUT: &str = textwrap_macros::fill!(
@@ -8305,6 +8334,25 @@ pub mod args {
                     .def()
                     .help(wrap!("The path to the wasm file to validate.")),
             )
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct DeriveIbcToken {
+        pub ibc_denom: String,
+    }
+
+    impl Args for DeriveIbcToken {
+        fn parse(matches: &ArgMatches) -> Self {
+            let ibc_denom: String = IBC_DENOM.parse(matches);
+            Self { ibc_denom }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(IBC_DENOM.def().help(wrap!(
+                "The IBC token string, in the format of \
+                 'transfer/channel-<num>/<name>"
+            )))
         }
     }
 

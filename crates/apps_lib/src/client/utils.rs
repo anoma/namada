@@ -14,6 +14,7 @@ use namada_sdk::address::Address;
 use namada_sdk::args::DeviceTransport;
 use namada_sdk::chain::ChainId;
 use namada_sdk::dec::Dec;
+use namada_sdk::ibc::trace::ibc_token;
 use namada_sdk::key::*;
 use namada_sdk::string_encoding::StringEncoded;
 use namada_sdk::token;
@@ -1163,4 +1164,12 @@ fn safe_exit(code: i32) -> ! {
 #[cfg(test)]
 fn safe_exit(code: i32) -> ! {
     panic!("Process exited unsuccessfully with error code: {}", code);
+}
+
+/// Derive the IBC token address on namada from the denom string
+pub fn derive_ibc_token_address(
+    args::DeriveIbcToken { ibc_denom }: args::DeriveIbcToken,
+) {
+    let token_address = ibc_token(&ibc_denom);
+    println!("{token_address}");
 }
