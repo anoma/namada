@@ -741,6 +741,50 @@ fn enable_rewards_after_shielding() -> Result<()> {
     token::write_token_map(&mut node.shell.lock().unwrap().state, token_map)?;
     node.finalize_and_commit(None);
 
+    // Skip a couple of masp epochs
+    for _ in 0..3 {
+        node.next_masp_epoch();
+    }
+
+    // We won't have any NAM rewards yet, because our
+    // test tokens weren't tagged with an epoch
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                TEST_TOKEN_ADDR,
+                "--node",
+                RPC,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok(), "{:?}", captured.result);
+    assert!(captured.contains(&format!("{TEST_TOKEN_ADDR}: 1000000")));
+
+    // Check that our NAM balance is null
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                RPC,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok(), "{:?}", captured.result);
+    assert!(captured.contains("nam: 0"));
+
     // Unshield and reshield some test tokens, such that they
     // are now tagged with a masp epoch
     let captured = CapturedOutput::of(|| {
@@ -799,7 +843,7 @@ fn enable_rewards_after_shielding() -> Result<()> {
     assert!(captured.result.is_ok(), "{:?}", captured.result);
     assert!(captured.contains(&format!("{TEST_TOKEN_ADDR}: 0")));
 
-    //
+    // Update the conversion state
     node.next_masp_epoch();
 
     // Reshield
@@ -856,6 +900,25 @@ fn enable_rewards_after_shielding() -> Result<()> {
     });
     assert!(captured.result.is_ok(), "{:?}", captured.result);
     assert!(captured.contains(&format!("{TEST_TOKEN_ADDR}: 1000000")));
+
+    // We won't have any rewards yet
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                RPC,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok(), "{:?}", captured.result);
+    assert!(captured.contains("nam: 0"));
 
     // Skip a couple of masp epochs
     for _ in 0..3 {
