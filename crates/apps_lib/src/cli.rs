@@ -2494,6 +2494,7 @@ pub mod cmds {
         SignGenesisTxs(SignGenesisTxs),
         ParseMigrationJson(MigrationJson),
         DeriveIbcToken(DeriveIbcToken),
+        PubKeyToAddr(PubKeyToAddr),
     }
 
     impl SubCmd for ClientUtils {
@@ -2530,6 +2531,8 @@ pub mod cmds {
                     SubCmd::parse(matches).map(Self::ParseMigrationJson);
                 let derive_ibc_token =
                     SubCmd::parse(matches).map(Self::DeriveIbcToken);
+                let pubkey_to_addr =
+                    SubCmd::parse(matches).map(Self::PubKeyToAddr);
                 join_network
                     .or(validate_wasm)
                     .or(init_network)
@@ -2545,6 +2548,7 @@ pub mod cmds {
                     .or(parse_migrations_json)
                     .or(sign_offline)
                     .or(derive_ibc_token)
+                    .or(pubkey_to_addr)
             })
         }
 
@@ -2566,6 +2570,7 @@ pub mod cmds {
                 .subcommand(SignGenesisTxs::def())
                 .subcommand(MigrationJson::def())
                 .subcommand(DeriveIbcToken::def())
+                .subcommand(PubKeyToAddr::def())
                 .subcommand_required(true)
                 .arg_required_else_help(true)
         }
@@ -2632,6 +2637,28 @@ pub mod cmds {
                      'transfer/channel-<num>/<name>'."
                 ))
                 .add_args::<args::DeriveIbcToken>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct PubKeyToAddr(pub args::PubKeyToAddr);
+
+    impl SubCmd for PubKeyToAddr {
+        const CMD: &'static str = "pubkey-to-address";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches
+                .subcommand_matches(Self::CMD)
+                .map(|matches| Self(args::PubKeyToAddr::parse(matches)))
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(wrap!(
+                    "Derive the implicit address (tnam) associated with a \
+                     given public key (tpknam)."
+                ))
+                .add_args::<args::PubKeyToAddr>()
         }
     }
 
@@ -8352,6 +8379,24 @@ pub mod args {
             app.arg(IBC_DENOM.def().help(wrap!(
                 "The IBC token string, in the format of \
                  'transfer/channel-<num>/<name>"
+            )))
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct PubKeyToAddr {
+        pub public_key: common::PublicKey,
+    }
+
+    impl Args for PubKeyToAddr {
+        fn parse(matches: &ArgMatches) -> Self {
+            let public_key: common::PublicKey = RAW_PUBLIC_KEY.parse(matches);
+            Self { public_key }
+        }
+
+        fn def(app: App) -> App {
+            app.arg(RAW_PUBLIC_KEY.def().help(wrap!(
+                "The raw public key to be converted into an implicit address"
             )))
         }
     }

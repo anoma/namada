@@ -888,6 +888,9 @@ impl CliApi {
                     ClientUtils::DeriveIbcToken(DeriveIbcToken(args)) => {
                         utils::derive_ibc_token_address(args);
                     }
+                    ClientUtils::PubKeyToAddr(PubKeyToAddr(args)) => {
+                        utils::pubkey_to_address(args);
+                    }
                 }
             }
         }
