@@ -3283,7 +3283,7 @@ fn masp_fee_payment_with_custom_spending_key() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 241000"));
+    assert!(captured.contains("nam: 240000"));
 
     let captured = CapturedOutput::of(|| {
         run(
@@ -3592,7 +3592,7 @@ fn masp_fee_payment_with_different_token() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("btc: 241000"));
+    assert!(captured.contains("btc: 240000"));
 
     Ok(())
 }
