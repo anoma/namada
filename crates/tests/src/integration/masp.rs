@@ -32,6 +32,386 @@ use crate::e2e::setup::constants::{
 };
 use crate::strings::TX_APPLIED_SUCCESS;
 
+/// Enable masp rewards before some token is shielded,
+/// but the max reward rate is null.
+#[test]
+fn init_null_rewards() -> Result<()> {
+    // Dummy validator rpc address
+    const RPC: &str = "http://127.0.0.1:26567";
+
+    // We will mint tokens with this address
+    const TEST_TOKEN_ADDR: &str =
+        "tnam1q9382etwdaekg6tpwdkkzar0wd5ku6r0wvu5ukqd";
+    let test_token_addr: Address = TEST_TOKEN_ADDR.parse().unwrap();
+
+    // Download the shielded pool parameters before starting node
+    let _ = FsShieldedUtils::new(PathBuf::new());
+    // Boot up a mock node
+    let (mut node, _services) = setup::setup()?;
+
+    // Initialize the test token
+    token::write_denom(
+        &mut node.shell.lock().unwrap().state,
+        &test_token_addr,
+        0u8.into(),
+    )?;
+
+    // Give Bertha some test tokens
+    let bertha_addr = helpers::find_address(&node, BERTHA)?;
+    token::credit_tokens(
+        &mut node.shell.lock().unwrap().state,
+        &test_token_addr,
+        &bertha_addr,
+        Amount::from_u64(1_000_000_000u64),
+    )?;
+
+    // Commit test token changes to a new block
+    node.finalize_and_commit(None);
+    assert_eq!(
+        token::read_total_supply(
+            &node.shell.lock().unwrap().state,
+            &test_token_addr,
+        )?,
+        Amount::from_u64(1_000_000_000u64),
+    );
+
+    // Initialize the token map with the test
+    // token, and set the test token's max
+    // reward rate to 0
+    token::write_params(
+        &Some(token::ShieldedParams {
+            max_reward_rate: Dec::from_str("0").unwrap(),
+            kp_gain_nom: Dec::from_str("0").unwrap(),
+            kd_gain_nom: Dec::from_str("0").unwrap(),
+            locked_amount_target: 0,
+        }),
+        &mut node.shell.lock().unwrap().state,
+        &test_token_addr,
+        &0u8.into(),
+    )?;
+    let mut token_map =
+        token::read_token_map(&node.shell.lock().unwrap().state)?;
+    token_map.insert("TEST".to_owned(), test_token_addr.clone());
+    token::write_token_map(&mut node.shell.lock().unwrap().state, token_map)?;
+    node.finalize_and_commit(None);
+
+    // Cross a new masp epoch, to allow the conversion
+    // state to update itself
+    node.next_masp_epoch();
+
+    // Shield test tokens
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "shield",
+                "--source",
+                BERTHA,
+                "--target",
+                AA_PAYMENT_ADDRESS,
+                "--token",
+                TEST_TOKEN_ADDR,
+                "--amount",
+                "1000000",
+                "--node",
+                RPC,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok(), "{:?}", captured.result);
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    // Fetch the latest test token notes
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shielded-sync",
+            "--viewing-keys",
+            AA_VIEWING_KEY,
+            "--node",
+            RPC,
+        ],
+    )?;
+
+    // Check that we have some shielded test tokens
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                TEST_TOKEN_ADDR,
+                "--node",
+                RPC,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok(), "{:?}", captured.result);
+    assert!(captured.contains(&format!("{TEST_TOKEN_ADDR}: 1000000")));
+
+    // Skip a couple of masp epochs
+    for _ in 0..3 {
+        node.next_masp_epoch();
+    }
+
+    // Assert that we have no NAM rewards
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                RPC,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok(), "{:?}", captured.result);
+    assert!(captured.contains("nam: 0"));
+
+    // Now, let us increase the max reward rate
+    token::write_params(
+        &Some(token::ShieldedParams {
+            max_reward_rate: Dec::from_str("1.0").unwrap(),
+            kp_gain_nom: Dec::from_str("9999999999").unwrap(),
+            kd_gain_nom: Dec::from_str("9999999999").unwrap(),
+            locked_amount_target: 999999999u64,
+        }),
+        &mut node.shell.lock().unwrap().state,
+        &test_token_addr,
+        &0u8.into(),
+    )?;
+    node.finalize_and_commit(None);
+
+    // We shouldn't have any NAM rewards yet, not
+    // until we cross another masp epoch
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                RPC,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok(), "{:?}", captured.result);
+    assert!(captured.contains("nam: 0"));
+
+    // Skip to the next masp epoch
+    node.next_masp_epoch();
+
+    // Assert that we have minted NAM rewards
+    const EXPECTED_REWARDS: u128 = 7;
+    const UNSHIELD_REWARDS_AMT: u128 = EXPECTED_REWARDS / 2;
+    const REMAINING_REWARDS_AMT: u128 = EXPECTED_REWARDS - UNSHIELD_REWARDS_AMT;
+
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                RPC,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok(), "{:?}", captured.result);
+    assert!(captured.contains(&format!("nam: {EXPECTED_REWARDS}")));
+
+    // Unshield half of the rewards
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "unshield",
+                "--source",
+                A_SPENDING_KEY,
+                "--target",
+                BERTHA,
+                "--token",
+                NAM,
+                "--amount",
+                &UNSHIELD_REWARDS_AMT.to_string(),
+                "--signing-keys",
+                BERTHA_KEY,
+                "--node",
+                RPC,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok(), "{:?}", captured.result);
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    // Fetch latest shielded state
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shielded-sync",
+            "--viewing-keys",
+            AA_VIEWING_KEY,
+            "--node",
+            RPC,
+        ],
+    )?;
+
+    // Check that we now have half of the rewards
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                RPC,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok(), "{:?}", captured.result);
+    assert!(captured.contains(&format!("nam: {REMAINING_REWARDS_AMT}")));
+
+    // Transfer the other half of the rewards
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "transfer",
+                "--source",
+                A_SPENDING_KEY,
+                "--target",
+                AB_PAYMENT_ADDRESS,
+                "--token",
+                NAM,
+                "--amount",
+                &REMAINING_REWARDS_AMT.to_string(),
+                "--signing-keys",
+                BERTHA_KEY,
+                "--node",
+                RPC,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok(), "{:?}", captured.result);
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    // Fetch latest shielded state
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shielded-sync",
+            "--viewing-keys",
+            AA_VIEWING_KEY,
+            "--node",
+            RPC,
+        ],
+    )?;
+
+    // Check that we now a null NAM balance
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                RPC,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok(), "{:?}", captured.result);
+    assert!(captured.contains("nam: 0"));
+
+    // Unshield half of our test tokens
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "unshield",
+                "--source",
+                A_SPENDING_KEY,
+                "--target",
+                BERTHA,
+                "--token",
+                TEST_TOKEN_ADDR,
+                "--amount",
+                "500000",
+                "--signing-keys",
+                BERTHA_KEY,
+                "--node",
+                RPC,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok(), "{:?}", captured.result);
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    // Fetch latest shielded state
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shielded-sync",
+            "--viewing-keys",
+            AA_VIEWING_KEY,
+            "--node",
+            RPC,
+        ],
+    )?;
+
+    // Check test token balance
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                TEST_TOKEN_ADDR,
+                "--node",
+                RPC,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok(), "{:?}", captured.result);
+    assert!(captured.contains(&format!("{TEST_TOKEN_ADDR}: 500000")));
+
+    Ok(())
+}
+
 /// Test interacting with masp amounts that span more than 64 bits.
 #[test]
 fn values_spanning_multiple_masp_digits() -> Result<()> {
