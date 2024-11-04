@@ -1169,13 +1169,13 @@ dependencies = [
 
 [[package]]
 name = "config"
-version = "0.14.0"
-source = "git+https://github.com/mehcode/config-rs.git?rev=e3c1d0b452639478662a44f15ef6d5b6d969bf9b#e3c1d0b452639478662a44f15ef6d5b6d969bf9b"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68578f196d2a33ff61b27fae256c3164f65e36382648e30666dde05b8cc9dfdf"
 dependencies = [
  "async-trait",
  "convert_case",
  "json5",
- "lazy_static",
  "nom",
  "pathdiff",
  "ron",
