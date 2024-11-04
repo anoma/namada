@@ -5401,6 +5401,7 @@ dependencies = [
  "sha2 0.9.9",
  "smooth-operator",
  "tempfile",
+ "tendermint-rpc",
  "test-log",
  "thiserror",
  "tokio",
