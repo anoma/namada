@@ -599,7 +599,6 @@ pub trait Namada: NamadaIo {
             code_path: None,
             data_path: None,
             serialized_tx: None,
-            disposable_signing_key: false,
         }
     }
 

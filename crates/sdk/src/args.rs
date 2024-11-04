@@ -164,9 +164,6 @@ pub struct TxCustom<C: NamadaTypes = SdkTypes> {
     pub serialized_tx: Option<C::Data>,
     /// The optional address that correspond to the signatures/signing-keys
     pub owner: Option<C::Address>,
-    /// Generate an ephemeral signing key to be used only once to sign the
-    /// wrapper tx
-    pub disposable_signing_key: bool,
 }
 
 impl<C: NamadaTypes> TxBuilder<C> for TxCustom<C> {
@@ -209,15 +206,6 @@ impl<C: NamadaTypes> TxCustom<C> {
     /// The address that correspond to the signatures/signing-keys
     pub fn owner(self, owner: Option<C::Address>) -> Self {
         Self { owner, ..self }
-    }
-
-    /// The flag to request an ephemeral signing key to be used only once to
-    /// sign the wrapper tx
-    pub fn disposable_signing_key(self, disposable_signing_key: bool) -> Self {
-        Self {
-            disposable_signing_key,
-            ..self
-        }
     }
 }
 
