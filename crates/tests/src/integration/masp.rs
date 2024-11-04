@@ -1348,6 +1348,25 @@ fn masp_incentives() -> Result<()> {
     assert!(captured.result.is_ok());
     assert!(captured.contains("nam: 0"));
 
+    // Assert the rewards estimate is also zero
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "estimate-rewards",
+                "--key",
+                AA_VIEWING_KEY,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(
+        captured.contains("Estimated nam rewards for the next MASP epoch: 0")
+    );
+
     // Wait till epoch boundary
     node.next_masp_epoch();
 
@@ -1396,6 +1415,27 @@ fn masp_incentives() -> Result<()> {
 
     assert!(captured.result.is_ok());
     assert!(captured.contains("nam: 0.063"));
+
+    // Assert the rewards estimate is a number higher than the actual rewards
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "estimate-rewards",
+                "--key",
+                AA_VIEWING_KEY,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    // note that 0.126 = 2 * 0.063 which is expected
+    assert!(
+        captured
+            .contains("Estimated nam rewards for the next MASP epoch: 0.126")
+    );
 
     // Assert NAM balance at MASP pool is exclusively the
     // rewards from the shielded BTC

@@ -11,6 +11,7 @@ use masp_primitives::sapling::Node;
 use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada_core::masp::{BalanceOwner, MaspEpoch};
+use namada_core::token::Amount;
 use namada_sdk::address::{Address, InternalAddress, MASP};
 use namada_sdk::chain::{BlockHeight, Epoch};
 use namada_sdk::collections::{HashMap, HashSet};
@@ -357,6 +358,29 @@ pub async fn query_proposal_by_id<C: Client + Sync>(
     proposal_id: u64,
 ) -> Result<Option<StorageProposal>, error::Error> {
     namada_sdk::rpc::query_proposal_by_id(client, proposal_id).await
+}
+
+/// Estimate MASP rewards for next MASP epoch
+pub async fn query_rewards_estimate(
+    context: &impl Namada,
+    args: args::QueryRewardsEstimate,
+) {
+    let mut shielded = context.shielded_mut().await;
+    let _ = shielded.load().await;
+    // Save the update state so that future fetches can be short-circuited
+    let _ = shielded.save().await;
+    let rewards_estimate = shielded
+        .estimate_next_epoch_rewards(context, &args.owner.as_viewing_key())
+        .await
+        .unwrap()
+        .unsigned_abs();
+    let rewards_estimate =
+        DenominatedAmount::new(Amount::from_u128(rewards_estimate), 6.into());
+    display_line!(
+        context.io(),
+        "Estimated nam rewards for the next MASP epoch: {}",
+        rewards_estimate
+    );
 }
 
 /// Query token shielded balance(s)

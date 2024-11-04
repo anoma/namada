@@ -273,6 +273,7 @@ pub mod cmds {
                 .subcommand(QueryMaspRewardTokens::def().display_order(5))
                 .subcommand(QueryBlock::def().display_order(5))
                 .subcommand(QueryBalance::def().display_order(5))
+                .subcommand(QueryRewardsEstimate::def().display_order(5))
                 .subcommand(QueryBonds::def().display_order(5))
                 .subcommand(QueryBondedStake::def().display_order(5))
                 .subcommand(QuerySlashes::def().display_order(5))
@@ -356,6 +357,8 @@ pub mod cmds {
                 Self::parse_with_ctx(matches, QueryMaspRewardTokens);
             let query_block = Self::parse_with_ctx(matches, QueryBlock);
             let query_balance = Self::parse_with_ctx(matches, QueryBalance);
+            let query_rewards_estimate =
+                Self::parse_with_ctx(matches, QueryRewardsEstimate);
             let query_bonds = Self::parse_with_ctx(matches, QueryBonds);
             let query_bonded_stake =
                 Self::parse_with_ctx(matches, QueryBondedStake);
@@ -427,6 +430,7 @@ pub mod cmds {
                 .or(query_masp_reward_tokens)
                 .or(query_block)
                 .or(query_balance)
+                .or(query_rewards_estimate)
                 .or(query_bonds)
                 .or(query_bonded_stake)
                 .or(query_slashes)
@@ -523,6 +527,7 @@ pub mod cmds {
         QueryMaspRewardTokens(QueryMaspRewardTokens),
         QueryBlock(QueryBlock),
         QueryBalance(QueryBalance),
+        QueryRewardsEstimate(QueryRewardsEstimate),
         QueryBonds(QueryBonds),
         QueryBondedStake(QueryBondedStake),
         QueryCommissionRate(QueryCommissionRate),
@@ -1872,6 +1877,31 @@ pub mod cmds {
             App::new(Self::CMD)
                 .about(wrap!("Query the token balance of some account."))
                 .add_args::<args::QueryBalance<args::CliTypes>>()
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct QueryRewardsEstimate(
+        pub args::QueryRewardsEstimate<args::CliTypes>,
+    );
+
+    impl SubCmd for QueryRewardsEstimate {
+        const CMD: &'static str = "estimate-rewards";
+
+        fn parse(matches: &ArgMatches) -> Option<Self> {
+            matches.subcommand_matches(Self::CMD).map(|matches| {
+                QueryRewardsEstimate(args::QueryRewardsEstimate::parse(matches))
+            })
+        }
+
+        fn def() -> App {
+            App::new(Self::CMD)
+                .about(wrap!(
+                    "Estimate the amount of MASP rewards accumulated by the \
+                     next MASP epoch. Please run shielded-sync first for best \
+                     results."
+                ))
+                .add_args::<args::QueryRewardsEstimate<args::CliTypes>>()
         }
     }
 
@@ -6315,6 +6345,41 @@ pub mod args {
                     "The block height at which to query the balance. \
                      (Optional)"
                 )))
+        }
+    }
+
+    impl CliToSdk<QueryRewardsEstimate<SdkTypes>>
+        for QueryRewardsEstimate<CliTypes>
+    {
+        type Error = std::convert::Infallible;
+
+        fn to_sdk(
+            self,
+            ctx: &mut Context,
+        ) -> Result<QueryRewardsEstimate<SdkTypes>, Self::Error> {
+            let query = self.query.to_sdk(ctx)?;
+            let chain_ctx = ctx.borrow_mut_chain_or_exit();
+
+            Ok(QueryRewardsEstimate::<SdkTypes> {
+                query,
+                owner: chain_ctx.get_cached(&self.owner),
+            })
+        }
+    }
+
+    impl Args for QueryRewardsEstimate<CliTypes> {
+        fn parse(matches: &ArgMatches) -> Self {
+            let query = Query::parse(matches);
+            let owner = VIEWING_KEY.parse(matches);
+            Self { query, owner }
+        }
+
+        fn def(app: App) -> App {
+            app.add_args::<Query<CliTypes>>().arg(
+                VIEWING_KEY
+                    .def()
+                    .help(wrap!("The viewing key whose rewards to estimate.")),
+            )
         }
     }
 
