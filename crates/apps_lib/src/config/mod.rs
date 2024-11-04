@@ -287,7 +287,9 @@ impl Config {
             .add_source(defaults)
             .add_source(config::File::with_name(file_name))
             .add_source(
-                config::Environment::with_prefix("NAMADA").separator("__"),
+                config::Environment::with_prefix("NAMADA")
+                    .prefix_separator("_")
+                    .separator("__"),
             );
 
         let config = builder.build().map_err(Error::ReadError)?;
