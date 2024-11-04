@@ -3730,7 +3730,6 @@ pub async fn build_custom(
         data_path,
         serialized_tx,
         owner,
-        disposable_signing_key,
     }: &args::TxCustom,
 ) -> Result<(Tx, Option<SigningTxData>)> {
     let mut tx = if let Some(serialized_tx) = serialized_tx {
@@ -3805,7 +3804,7 @@ pub async fn build_custom(
             owner.clone(),
             default_signer,
             vec![],
-            *disposable_signing_key,
+            false,
         )
         .await?;
         prepare_tx(
