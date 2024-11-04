@@ -885,7 +885,6 @@ mod test_prepare_proposal {
                     token: shell.state.in_mem().native_token.clone(),
                 },
                 keypair.ref_to(),
-                // FIXME: review all these gas limits in the tests
                 GAS_LIMIT.into(),
             ))));
         wrapper.header.chain_id = shell.chain_id.clone();
