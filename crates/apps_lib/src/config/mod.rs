@@ -856,11 +856,38 @@ namespace = "cometbft"
 
 #[cfg(test)]
 mod tests {
-    use super::DEFAULT_COMETBFT_CONFIG;
+    use std::env;
+
+    use namada_sdk::chain::ChainId;
+    use tempfile::tempdir;
+
+    use super::{Config, DEFAULT_COMETBFT_CONFIG};
+    use crate::config::TendermintMode;
     use crate::tendermint_config::TendermintConfig;
 
     #[test]
     fn test_default_cometbft_config() {
         assert!(TendermintConfig::parse_toml(DEFAULT_COMETBFT_CONFIG).is_ok());
+    }
+
+    /// Check that a key-val set from an env var gets applied to a loaded config
+    #[test]
+    fn test_config_env_var() {
+        let base_dir = tempdir().unwrap();
+        let chain_id = ChainId("ChainyMcChainFace".to_owned());
+
+        Config::generate(
+            base_dir.path(),
+            &chain_id,
+            TendermintMode::Full,
+            true,
+        )
+        .unwrap();
+
+        let moniker = "moniker_from_env";
+        env::set_var("NAMADA_LEDGER__COMETBFT__MONIKER", moniker);
+        let config = Config::load(&base_dir, &chain_id, None);
+
+        assert_eq!(config.ledger.cometbft.moniker.as_ref(), moniker);
     }
 }
