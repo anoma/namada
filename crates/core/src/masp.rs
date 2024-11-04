@@ -195,11 +195,9 @@ impl AssetData {
 
     /// Give this pre-asset type the given epoch if already has an epoch. Return
     /// the replaced value.
-    pub fn redate(&mut self, to: MaspEpoch) -> Option<MaspEpoch> {
+    pub fn redate(&mut self, to: MaspEpoch) {
         if self.epoch.is_some() {
-            self.epoch.replace(to)
-        } else {
-            None
+            self.epoch = Some(to);
         }
     }
 
@@ -1121,14 +1119,12 @@ mod test {
         assert!(data.epoch.is_none());
 
         let epoch_0 = MaspEpoch::new(3);
-        let old = data.redate(epoch_0);
-        assert!(old.is_none());
+        data.redate(epoch_0);
         assert!(data.epoch.is_none());
         data.epoch = Some(epoch_0);
 
         let epoch_1 = MaspEpoch::new(5);
-        let old = data.redate(epoch_1);
-        assert_eq!(old, Some(epoch_0));
+        data.redate(epoch_1);
         assert_eq!(data.epoch, Some(epoch_1));
     }
 

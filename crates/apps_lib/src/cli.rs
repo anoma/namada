@@ -4661,16 +4661,13 @@ pub mod args {
                 });
             }
 
-            let gas_spending_keys = self
-                .gas_spending_keys
-                .iter()
-                .map(|key| chain_ctx.get_cached(key))
-                .collect();
+            let gas_spending_key =
+                self.gas_spending_key.map(|key| chain_ctx.get_cached(&key));
 
             Ok(TxShieldedTransfer::<SdkTypes> {
                 tx,
                 data,
-                gas_spending_keys,
+                gas_spending_key,
                 disposable_signing_key: self.disposable_signing_key,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
@@ -4691,16 +4688,13 @@ pub mod args {
                 token,
                 amount,
             }];
-            let mut gas_spending_keys = vec![];
-            if let Some(key) = GAS_SPENDING_KEY.parse(matches) {
-                gas_spending_keys.push(key);
-            }
+            let gas_spending_key = GAS_SPENDING_KEY.parse(matches);
             let disposable_gas_payer = DISPOSABLE_SIGNING_KEY.parse(matches);
 
             Self {
                 tx,
                 data,
-                gas_spending_keys,
+                gas_spending_key,
                 disposable_signing_key: disposable_gas_payer,
                 tx_code_path,
             }
@@ -4830,16 +4824,13 @@ pub mod args {
                     amount: transfer_data.amount,
                 });
             }
-            let gas_spending_keys = self
-                .gas_spending_keys
-                .iter()
-                .map(|key| chain_ctx.get_cached(key))
-                .collect();
+            let gas_spending_key =
+                self.gas_spending_key.map(|key| chain_ctx.get_cached(&key));
 
             Ok(TxUnshieldingTransfer::<SdkTypes> {
                 tx,
                 data,
-                gas_spending_keys,
+                gas_spending_key,
                 disposable_signing_key: self.disposable_signing_key,
                 source: chain_ctx.get_cached(&self.source),
                 tx_code_path: self.tx_code_path.to_path_buf(),
@@ -4860,17 +4851,14 @@ pub mod args {
                 token,
                 amount,
             }];
-            let mut gas_spending_keys = vec![];
-            if let Some(key) = GAS_SPENDING_KEY.parse(matches) {
-                gas_spending_keys.push(key);
-            }
+            let gas_spending_key = GAS_SPENDING_KEY.parse(matches);
             let disposable_signing_key = DISPOSABLE_SIGNING_KEY.parse(matches);
 
             Self {
                 tx,
                 source,
                 data,
-                gas_spending_keys,
+                gas_spending_key,
                 disposable_signing_key,
                 tx_code_path,
             }
@@ -4919,11 +4907,8 @@ pub mod args {
         ) -> Result<TxIbcTransfer<SdkTypes>, Self::Error> {
             let tx = self.tx.to_sdk(ctx)?;
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
-            let gas_spending_keys = self
-                .gas_spending_keys
-                .iter()
-                .map(|key| chain_ctx.get_cached(key))
-                .collect();
+            let gas_spending_key =
+                self.gas_spending_key.map(|key| chain_ctx.get_cached(&key));
 
             Ok(TxIbcTransfer::<SdkTypes> {
                 tx,
@@ -4938,7 +4923,7 @@ pub mod args {
                 refund_target: chain_ctx.get_opt(&self.refund_target),
                 ibc_shielding_data: self.ibc_shielding_data,
                 ibc_memo: self.ibc_memo,
-                gas_spending_keys,
+                gas_spending_key,
                 disposable_signing_key: self.disposable_signing_key,
                 tx_code_path: self.tx_code_path.to_path_buf(),
             })
@@ -4965,10 +4950,7 @@ pub mod args {
                         .expect("Failed to decode IBC shielding data")
                 });
             let ibc_memo = IBC_MEMO.parse(matches);
-            let mut gas_spending_keys = vec![];
-            if let Some(key) = GAS_SPENDING_KEY.parse(matches) {
-                gas_spending_keys.push(key);
-            }
+            let gas_spending_key = GAS_SPENDING_KEY.parse(matches);
             let disposable_signing_key = DISPOSABLE_SIGNING_KEY.parse(matches);
             let tx_code_path = PathBuf::from(TX_IBC_WASM);
             Self {
@@ -4984,7 +4966,7 @@ pub mod args {
                 refund_target,
                 ibc_shielding_data,
                 ibc_memo,
-                gas_spending_keys,
+                gas_spending_key,
                 disposable_signing_key,
                 tx_code_path,
             }
