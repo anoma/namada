@@ -4491,7 +4491,6 @@ pub mod args {
                 owner: self
                     .owner
                     .map(|owner| ctx.borrow_chain_or_exit().get(&owner)),
-                disposable_signing_key: self.disposable_signing_key,
             })
         }
     }
@@ -4503,14 +4502,12 @@ pub mod args {
             let data_path = DATA_PATH_OPT.parse(matches);
             let serialized_tx = TX_PATH_OPT.parse(matches);
             let owner = OWNER_OPT.parse(matches);
-            let disposable_signing_key = DISPOSABLE_SIGNING_KEY.parse(matches);
             Self {
                 tx,
                 code_path,
                 data_path,
                 serialized_tx,
                 owner,
-                disposable_signing_key,
             }
         }
 
@@ -4557,19 +4554,6 @@ pub mod args {
                     "The optional address corresponding to the signatures or \
                      signing keys."
                 )))
-                .arg(
-                    DISPOSABLE_SIGNING_KEY
-                        .def()
-                        .help(wrap!(
-                            "Generates an ephemeral, disposable keypair to \
-                             sign the wrapper transaction. If --gas-signature \
-                             is provided then that will take precedence."
-                        ))
-                        .conflicts_with_all([
-                            FEE_PAYER_OPT.name,
-                            WRAPPER_SIGNATURE_OPT.name,
-                        ]),
-                )
         }
     }
 
