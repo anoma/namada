@@ -71,7 +71,7 @@ all-crates := $(foreach crate,$(crates), -p $(crate))
 
 
 build:
-	$(cargo) build $(jobs) --workspace --exclude namada_benchmarks --exclude namada_fuzz
+	make build-release
 
 build-test:
 	$(cargo) +$(nightly) build --tests $(jobs)
