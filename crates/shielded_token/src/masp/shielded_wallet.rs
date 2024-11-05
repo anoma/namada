@@ -724,7 +724,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                     Conversions::new(),
                 )
                 .await?
-                .2;
+                .1;
 
             // re-date the all the latest conversions up one epoch
             let mut estimated_conversions = Conversions::new();
@@ -743,7 +743,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 asset.redate_to_next_epoch();
                 let decoded_conv = self
                     .decode_sum(context.client(), conv.clone().into())
-                    .await;
+                    .await.0;
                 let mut est_conv = I128Sum::zero();
                 for ((_, asset_data), val) in decoded_conv.components() {
                     let mut new_asset = asset_data.clone();
@@ -775,6 +775,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             Ok(self
                 .decode_sum(context.client(), rewards)
                 .await
+                .0
                 .components()
                 .filter(|((_, data), _)| {
                     // this should always be true, but we check it anyway
