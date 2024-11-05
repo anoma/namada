@@ -93,7 +93,7 @@ clap_complete_nushell = "4.5"
 clru = {git = "https://github.com/marmeladema/clru-rs.git", rev = "71ca566"}
 color-eyre = "0.6.2"
 concat-idents = "1.1.2"
-config = { git = "https://github.com/mehcode/config-rs.git", rev = "e3c1d0b452639478662a44f15ef6d5b6d969bf9b" }
+config = "0.14.1"
 data-encoding = "2.3.2"
 derivation-path = "0.2.0"
 derivative = "2.2.0"
