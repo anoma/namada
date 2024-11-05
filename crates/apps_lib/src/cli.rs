@@ -4759,8 +4759,8 @@ pub mod args {
                         .help(wrap!("The amount to transfer in decimal.")),
                 )
                 .arg(GAS_SPENDING_KEY.def().help(wrap!(
-                    "The optional spending key that will be used in addition \
-                     to the source for gas payment."
+                    "The optional spending key that will be used for gas \
+                     payment."
                 )))
                 .arg(
                     DISPOSABLE_SIGNING_KEY
@@ -4769,6 +4769,7 @@ pub mod args {
                             "Generates an ephemeral, disposable keypair to \
                              sign the wrapper transaction."
                         ))
+                        .requires(GAS_SPENDING_KEY.name)
                         .conflicts_with(FEE_PAYER_OPT.name),
                 )
         }
@@ -4923,8 +4924,8 @@ pub mod args {
                         .help(wrap!("The amount to transfer in decimal.")),
                 )
                 .arg(GAS_SPENDING_KEY.def().help(wrap!(
-                    "The optional spending key that will be used in addition \
-                     to the source for gas payment."
+                    "The optional spending key that will be used for gas \
+                     payment."
                 )))
                 .arg(
                     DISPOSABLE_SIGNING_KEY
@@ -4933,6 +4934,7 @@ pub mod args {
                             "Generates an ephemeral, disposable keypair to \
                              sign the wrapper transaction."
                         ))
+                        .requires(GAS_SPENDING_KEY.name)
                         .conflicts_with(FEE_PAYER_OPT.name),
                 )
         }
@@ -5054,9 +5056,8 @@ pub mod args {
                         .help(wrap!("The memo for IBC transfer packet.")),
                 )
                 .arg(GAS_SPENDING_KEY.def().help(wrap!(
-                    "The optional spending key that will be used in addition \
-                     to the source for gas payment (if this is a shielded \
-                     action)."
+                    "The optional spending key that will be used for gas \
+                     payment (if this is a shielded action)."
                 )))
                 .arg(
                     DISPOSABLE_SIGNING_KEY
@@ -5065,6 +5066,7 @@ pub mod args {
                             "Generates an ephemeral, disposable keypair to \
                              sign the wrapper transaction."
                         ))
+                        .requires(GAS_SPENDING_KEY.name)
                         .conflicts_with(FEE_PAYER_OPT.name),
                 )
         }
