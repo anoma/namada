@@ -1552,7 +1552,9 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 data: Some(MaspDataLog {
                     source,
                     token,
-                    amount,
+                    amount: namada_core::token::DenominatedAmount::new(
+                        amount, denom,
+                    ),
                 }),
             });
         }
