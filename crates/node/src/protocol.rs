@@ -561,60 +561,63 @@ where
             } else {
                 // See if the first inner transaction of the batch pays the fees
                 // with a masp unshield
-                if let Ok(Some(valid_batched_tx_result)) =
-                    try_masp_fee_payment(shell_params, tx, tx_index)
-                {
-                    #[cfg(not(fuzzing))]
-                    let balance = token::read_balance(
-                        shell_params.state,
-                        &wrapper.fee.token,
-                        &wrapper.fee_payer(),
-                    )
-                    .expect("Could not read balance key from storage");
-                    #[cfg(fuzzing)]
-                    let balance = Amount::max().checked_div_u64(2).unwrap();
+                match try_masp_fee_payment(shell_params, tx, tx_index) {
+                    Ok(valid_batched_tx_result) => {
+                        #[cfg(not(fuzzing))]
+                        let balance = token::read_balance(
+                            shell_params.state,
+                            &wrapper.fee.token,
+                            &wrapper.fee_payer(),
+                        )
+                        .expect("Could not read balance key from storage");
+                        #[cfg(fuzzing)]
+                        let balance = Amount::max().checked_div_u64(2).unwrap();
 
-                    let post_bal = match balance.checked_sub(fees) {
-                        Some(post_bal) => {
-                            // This cannot fail given the checked_sub check here
-                            // above
-                            fee_token_transfer(
-                                shell_params.state,
-                                &wrapper.fee.token,
-                                &wrapper.fee_payer(),
-                                block_proposer,
-                                fees,
-                            )?;
+                        let post_bal = match balance.checked_sub(fees) {
+                            Some(post_bal) => {
+                                // This cannot fail given the checked_sub check
+                                // here above
+                                fee_token_transfer(
+                                    shell_params.state,
+                                    &wrapper.fee.token,
+                                    &wrapper.fee_payer(),
+                                    block_proposer,
+                                    fees,
+                                )?;
 
-                            post_bal
-                        }
-                        None => {
-                            // This shouldn't happen as it should be prevented
-                            // from process_proposal.
-                            tracing::error!(
-                                "Transfer of tx fee cannot be applied to due \
-                                 to insufficient funds. This shouldn't happen."
-                            );
-                            return Err(Error::FeeError(
-                                "Insufficient funds for fee payment"
-                                    .to_string(),
-                            ));
-                        }
-                    };
+                                post_bal
+                            }
+                            None => {
+                                // This shouldn't happen as it should be
+                                // prevented
+                                // from process_proposal.
+                                tracing::error!(
+                                    "Transfer of tx fee cannot be applied to \
+                                     due to insufficient funds. This \
+                                     shouldn't happen."
+                                );
+                                return Err(Error::FeeError(
+                                    "Insufficient funds for fee payment"
+                                        .to_string(),
+                                ));
+                            }
+                        };
 
-                    // Batched tx result must be returned (and considered) only
-                    // if fee payment was successful
-                    (post_bal, Some(valid_batched_tx_result))
-                } else {
-                    // This shouldn't happen as it should be prevented by
-                    // process_proposal.
-                    tracing::error!(
-                        "Transfer of tx fee cannot be applied to due to \
-                         insufficient funds. This shouldn't happen."
-                    );
-                    return Err(Error::FeeError(
-                        "Insufficient funds for fee payment".to_string(),
-                    ));
+                        // Batched tx result must be returned (and considered)
+                        // only if fee payment was
+                        // successful
+                        (post_bal, Some(valid_batched_tx_result))
+                    }
+                    Err(e) => {
+                        // This shouldn't happen as it should be prevented by
+                        // process_proposal.
+                        tracing::error!(
+                            "Transfer of tx fee cannot be applied because of \
+                             {}. This shouldn't happen.",
+                            e
+                        );
+                        return Err(e);
+                    }
                 }
             };
 
@@ -675,7 +678,7 @@ fn try_masp_fee_payment<S, D, H, CA>(
     }: &mut ShellParams<'_, S, D, H, CA>,
     tx: &Tx,
     tx_index: &TxIndex,
-) -> Result<Option<MaspTxResult>>
+) -> Result<MaspTxResult>
 where
     S: 'static
         + State<D = D, H = H>
@@ -730,24 +733,28 @@ where
                 // free masp operations. We can commit only after the entire fee
                 // payment has been deemed valid. Also, do not commit to batch
                 // cause we might need to discard the effects of this valid
-                // unshield (e.g. if it unshield an amount which is not enough
+                // unshield (e.g. if it unshields an amount which is not enough
                 // to pay the fees)
                 let is_masp_transfer = is_masp_transfer(&result.changed_keys);
 
                 // Ensure that the transaction is actually a masp one, otherwise
                 // reject
                 if is_masp_transfer && result.is_accepted() {
-                    get_optional_masp_ref(
+                    let masp_section_ref = get_optional_masp_ref(
                         *state,
                         first_tx.cmt,
                         Either::Left(true),
                     )?
-                    .map(|masp_section_ref| {
-                        MaspTxResult {
-                            tx_result: result,
-                            masp_section_ref,
-                        }
-                    })
+                    .ok_or_else(|| {
+                        Error::FeeError(
+                            "Missing expected masp section reference"
+                                .to_string(),
+                        )
+                    })?;
+                    MaspTxResult {
+                        tx_result: result,
+                        masp_section_ref,
+                    }
                 } else {
                     state.write_log_mut().drop_tx();
 
@@ -763,21 +770,15 @@ where
                     }
                     tracing::error!(error_msg);
 
-                    None
+                    return Err(Error::FeeError(error_msg));
                 }
             }
             Err(e) => {
                 state.write_log_mut().drop_tx();
-                tracing::error!(
-                    "{MASP_FEE_PAYMENT_ERROR} Wasm run failed: {}",
-                    e
-                );
-                if let Error::GasError(_) = e {
-                    // Propagate only if it is a gas error
-                    return Err(e);
-                }
-
-                None
+                let error_msg =
+                    format!("{MASP_FEE_PAYMENT_ERROR} Wasm run failed: {}", e);
+                tracing::error!(error_msg);
+                return Err(Error::FeeError(error_msg));
             }
         }
     };
@@ -886,35 +887,28 @@ where
                 |_| {
                     // See if the first inner transaction of the batch pays
                     // the fees with a masp unshield
-                    if let Ok(valid_batched_tx_result @ Some(_)) =
-                        try_masp_fee_payment(
-                            shell_params,
-                            tx,
-                            &TxIndex::default(),
-                        )
-                    {
-                        let balance = token::read_balance(
-                            shell_params.state,
-                            &wrapper.fee.token,
-                            &wrapper.fee_payer(),
-                        )
-                        .map_err(Error::Error)?;
+                    let valid_batched_tx_result = try_masp_fee_payment(
+                        shell_params,
+                        tx,
+                        &TxIndex::default(),
+                    )?;
+                    let balance = token::read_balance(
+                        shell_params.state,
+                        &wrapper.fee.token,
+                        &wrapper.fee_payer(),
+                    )
+                    .map_err(Error::Error)?;
 
-                        checked!(balance - fees).map_or_else(
-                            |_| {
-                                Err(Error::FeeError(
-                                    "Masp fee payment unshielded an \
-                                     insufficient amount"
-                                        .to_string(),
-                                ))
-                            },
-                            |_| Ok(valid_batched_tx_result),
-                        )
-                    } else {
-                        Err(Error::FeeError(
-                            "Failed masp fee payment".to_string(),
-                        ))
-                    }
+                    checked!(balance - fees).map_or_else(
+                        |_| {
+                            Err(Error::FeeError(
+                                "Masp fee payment unshielded an insufficient \
+                                 amount"
+                                    .to_string(),
+                            ))
+                        },
+                        |_| Ok(Some(valid_batched_tx_result)),
+                    )
                 },
                 |_| Ok(None),
             )
