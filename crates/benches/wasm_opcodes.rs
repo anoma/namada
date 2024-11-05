@@ -553,8 +553,26 @@ fn bench_functions() -> Vec<WatBuilder> {
                     ),
                     instruction,
                 },
-                GetLocal(_) | GetGlobal(_) | CurrentMemory(_) | I32Const(_)
-                | I64Const(_) | F32Const(_) | F64Const(_) => WatBuilder {
+                GetLocal(var) => WatBuilder {
+                    wat: format!(
+                        r#"
+                        local.get {var}
+                        drop
+                        "#
+                    ),
+                    instruction,
+                },
+                GetGlobal(var) => WatBuilder {
+                    wat: format!(
+                        r#"
+                        global.get {var}
+                        drop
+                        "#
+                    ),
+                    instruction,
+                },
+                CurrentMemory(_) | I32Const(_) | I64Const(_) | F32Const(_)
+                | F64Const(_) => WatBuilder {
                     wat: format!(
                         r#"
                         {instruction}
@@ -563,11 +581,20 @@ fn bench_functions() -> Vec<WatBuilder> {
                     ),
                     instruction,
                 },
-                SetLocal(_) | SetGlobal(_) => WatBuilder {
+                SetLocal(var) => WatBuilder {
                     wat: format!(
                         r#"
                         i32.const 10
-                        {instruction}
+                        local.set {var}
+                        "#
+                    ),
+                    instruction,
+                },
+                SetGlobal(var) => WatBuilder {
+                    wat: format!(
+                        r#"
+                        i32.const 10
+                        global.set {var}
                         "#
                     ),
                     instruction,
