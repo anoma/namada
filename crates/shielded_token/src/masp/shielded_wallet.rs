@@ -743,7 +743,8 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 asset.redate_to_next_epoch();
                 let decoded_conv = self
                     .decode_sum(context.client(), conv.clone().into())
-                    .await.0;
+                    .await
+                    .0;
                 let mut est_conv = I128Sum::zero();
                 for ((_, asset_data), val) in decoded_conv.components() {
                     let mut new_asset = asset_data.clone();
