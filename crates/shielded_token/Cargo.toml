@@ -71,7 +71,6 @@ serde_json.workspace = true
 sha2.workspace = true
 smooth-operator.workspace = true
 tempfile.workspace = true
-tendermint-rpc.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 typed-builder.workspace = true
@@ -94,5 +93,6 @@ masp_proofs = { workspace = true, features = ["download-params"] }
 proptest.workspace = true
 rand_core.workspace = true
 rayon.workspace = true
+tendermint-rpc.workspace = true
 test-log.workspace = true
 tokio.workspace = true
