@@ -28,7 +28,7 @@ use crate::e2e::setup::constants::{
     AA_PAYMENT_ADDRESS, AA_VIEWING_KEY, AB_PAYMENT_ADDRESS, AB_VIEWING_KEY,
     AC_PAYMENT_ADDRESS, AC_VIEWING_KEY, ALBERT, ALBERT_KEY, A_SPENDING_KEY,
     BB_PAYMENT_ADDRESS, BERTHA, BERTHA_KEY, BTC, B_SPENDING_KEY, CHRISTEL,
-    CHRISTEL_KEY, ETH, MASP, NAM,
+    CHRISTEL_KEY, C_SPENDING_KEY, ETH, MASP, NAM,
 };
 use crate::strings::TX_APPLIED_SUCCESS;
 
@@ -696,6 +696,8 @@ fn values_spanning_multiple_masp_digits() -> Result<()> {
 
     // Assert that we have minted NAM rewards
     const EXPECTED_REWARDS: u128 = 6427858447239330;
+    const UNSHIELD_REWARDS_AMT: u128 = EXPECTED_REWARDS / 2;
+    const REMAINING_REWARDS_AMT: u128 = EXPECTED_REWARDS - UNSHIELD_REWARDS_AMT;
 
     let captured = CapturedOutput::of(|| {
         run(
@@ -714,6 +716,185 @@ fn values_spanning_multiple_masp_digits() -> Result<()> {
     });
     assert!(captured.result.is_ok(), "{:?}", captured.result);
     assert!(captured.contains(&format!("nam: {EXPECTED_REWARDS}")));
+
+    // Unshield half of the rewards. Pay for gas transparently
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "unshield",
+                "--source",
+                A_SPENDING_KEY,
+                "--target",
+                BERTHA,
+                "--token",
+                NAM,
+                "--amount",
+                &UNSHIELD_REWARDS_AMT.to_string(),
+                "--signing-keys",
+                BERTHA_KEY,
+                "--node",
+                RPC,
+                "--gas-limit",
+                "65000",
+            ],
+        )
+    });
+    assert!(captured.result.is_ok(), "{:?}", captured.result);
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    // Fetch latest shielded state
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shielded-sync",
+            "--viewing-keys",
+            AA_VIEWING_KEY,
+            "--node",
+            RPC,
+        ],
+    )?;
+
+    // Check that we now have half of the rewards
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                RPC,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok(), "{:?}", captured.result);
+    assert!(captured.contains(&format!("nam: {REMAINING_REWARDS_AMT}")));
+
+    // Shield 1 NAM to cover fees
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "shield",
+                "--source",
+                BERTHA_KEY,
+                "--target",
+                AC_PAYMENT_ADDRESS,
+                "--token",
+                NAM,
+                "--amount",
+                "1",
+                "--gas-payer",
+                BERTHA_KEY,
+                "--node",
+                RPC,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok(), "{:?}", captured.result);
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    // Fetch latest shielded state
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shielded-sync",
+            "--viewing-keys",
+            AA_VIEWING_KEY,
+            AC_VIEWING_KEY,
+            "--node",
+            RPC,
+        ],
+    )?;
+
+    // Check the shielded NAM balance
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AC_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                RPC,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok(), "{:?}", captured.result);
+    assert!(captured.contains("nam: 1"));
+
+    // Unshield the other half of the rewards. Pay for gas using
+    // a spending key
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "unshield",
+                "--source",
+                A_SPENDING_KEY,
+                "--target",
+                BERTHA,
+                "--token",
+                NAM,
+                "--amount",
+                &REMAINING_REWARDS_AMT.to_string(),
+                "--node",
+                RPC,
+                "--disposable-gas-payer",
+                "--gas-spending-key",
+                C_SPENDING_KEY,
+                "--gas-limit",
+                "65000",
+            ],
+        )
+    });
+    assert!(captured.result.is_ok(), "{:?}", captured.result);
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    // Fetch latest shielded state
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shielded-sync",
+            "--viewing-keys",
+            AA_VIEWING_KEY,
+            AC_VIEWING_KEY,
+            "--node",
+            RPC,
+        ],
+    )?;
+
+    // Check that we now have a null NAM balance
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                RPC,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok(), "{:?}", captured.result);
+    assert!(captured.contains("nam: 0"));
 
     Ok(())
 }
