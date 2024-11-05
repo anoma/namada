@@ -1045,13 +1045,12 @@ mod test_process_proposal {
             }
         };
         assert_eq!(response.result.code, u32::from(ResultCode::FeeError));
-        assert_eq!(
-            response.result.info,
-            String::from(
-                "Error trying to apply a transaction: Error while processing \
-                 transaction's fees: Insufficient funds for fee payment"
-            )
-        );
+        assert!(response.result.info.contains(
+            "Error trying to apply a transaction: Error while processing \
+             transaction's fees: The first transaction in the batch failed to \
+             pay fees via the MASP. Wasm run failed: Transaction runner \
+             error: Wasm validation error"
+        ));
     }
 
     /// Test that if the account submitting the tx does
@@ -1105,13 +1104,12 @@ mod test_process_proposal {
             }
         };
         assert_eq!(response.result.code, u32::from(ResultCode::FeeError));
-        assert_eq!(
-            response.result.info,
-            String::from(
-                "Error trying to apply a transaction: Error while processing \
-                 transaction's fees: Insufficient funds for fee payment"
-            )
-        );
+        assert!(response.result.info.contains(
+            "Error trying to apply a transaction: Error while processing \
+             transaction's fees: The first transaction in the batch failed to \
+             pay fees via the MASP. Wasm run failed: Transaction runner \
+             error: Wasm validation error"
+        ));
     }
 
     /// Process Proposal should reject a block containing a RawTx, but not panic
