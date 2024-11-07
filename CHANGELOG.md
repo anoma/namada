@@ -1,5 +1,77 @@
 # CHANGELOG
 
+## v0.45.0
+
+Namada 0.45.0 is a minor release with various bug-fixes and improvements.
+
+### BUG FIXES
+
+- Fixed the masp indexer client not being able to fetch the notes index from the
+  `namada-masp-indexer`. ([\#3860](https://github.com/anoma/namada/pull/3860))
+- Fix prefix iterators for batched transactions in the write log.
+  ([\#3926](https://github.com/anoma/namada/pull/3926))
+- Update `flume` to `v0.11.1`. This fixes some crashes
+  when it is compiled to wasm and runs under a web browser.
+  ([\#3947](https://github.com/anoma/namada/pull/3947))
+- Fix a variety of MASP rewards related client bugs. Moreover, add
+  regression tests that cover the expected behavior. The client logic
+  that made MASP fee payments possible was also dramatically simplified,
+  making this code easier to maintain in the foreseeable future.
+  ([\#3959](https://github.com/anoma/namada/pull/3959))
+- Fix the prefix separator for config key-vals set from env var to a
+  single underscore between the "NAMADA" prefix and the rest of the path.
+  ([\#3971](https://github.com/anoma/namada/pull/3971))
+- Enforce gas spending key usage with disposable gas payers.
+  ([\#3979](https://github.com/anoma/namada/pull/3979))
+
+### FEATURES
+
+- Added the possibility to selectively dump a wrapper
+  transaction and produce an offline signature for gas payment.
+  ([\#3900](https://github.com/anoma/namada/pull/3900))
+
+### IMPROVEMENTS
+
+- Refactored tx crate modules and slightly improved its API.
+  ([\#3835](https://github.com/anoma/namada/pull/3835))
+- Improved batch construction to reduce the size of the resulting tx.
+  ([\#3882](https://github.com/anoma/namada/pull/3882))
+- SDK query to get liveness information for the network and consensus validator
+  set. ([\#3899](https://github.com/anoma/namada/pull/3899))
+- Improved the mesagges related to gas errors in
+  `process_proposal` and mempool validation. Added more tests.
+  ([\#3928](https://github.com/anoma/namada/pull/3928))
+- Fixes display of tx allowlist in query-protocol-parameters.
+  Improves some error messages. Improves two standard client queries.
+  ([\#3940](https://github.com/anoma/namada/pull/3940))
+- Adjust the gfas parameters such that the price in NAM of the simplest tx is
+  reduced to 0.5 NAM. ([\#3956](https://github.com/anoma/namada/pull/3956))
+- Add new useful client utilities.
+  ([\#3968](https://github.com/anoma/namada/pull/3968))
+- Removed the `disposable-gas-payer` cli argument for custom transactions.
+  ([\#3969](https://github.com/anoma/namada/pull/3969))
+- Streamlined the error propagation of masp fee payment. Improved the logs
+  provided to the user. ([\#3983](https://github.com/anoma/namada/pull/3983))
+
+### MISCELLANEOUS
+
+- The `make build` recipe now builds in release. Use `make build-debug` for a
+  dev build. ([\#3971](https://github.com/anoma/namada/pull/3971))
+
+### TESTING
+
+- Added more unit and integration tests for the MASP, including tests with
+  transaction batches. ([\#3840](https://github.com/anoma/namada/pull/3840))
+- Added testing for batched tx events.
+  ([\#3857](https://github.com/anoma/namada/pull/3857))
+- Added test for gas payment with an IBC token.
+  ([\#3866](https://github.com/anoma/namada/pull/3866))
+- Added tests in crates/sdk/signing.rs
+  ([\#3924](https://github.com/anoma/namada/pull/3924))
+- Increase the default masp fee payment gas limit to 65000 in genesis
+  localnet files. Moreover, add additional test cases for MASP fee unshields.
+  ([\#3982](https://github.com/anoma/namada/pull/3982))
+
 ## v0.44.1
 
 Namada 0.44.1 is a patch release with various fixes, improvements and refactors.
