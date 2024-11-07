@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## v0.45.1
+
+Namada 0.45.1 is a patch releases that fixes an issue with release packaging.
+
 ## v0.45.0
 
 Namada 0.45.0 is a minor release with various bug-fixes and improvements.

@@ -62,7 +62,7 @@ keywords = ["blockchain", "privacy", "crypto", "protocol", "network"]
 license = "GPL-3.0"
 readme = "README.md"
 repository = "https://github.com/anoma/namada"
-version = "0.45.0"
+version = "0.45.1"
 
 [workspace.dependencies]
 arbitrary = {version = "1.3", features = ["derive"]}
