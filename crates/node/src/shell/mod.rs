@@ -1492,7 +1492,7 @@ where
         Ok(amount_per_gas_unit) if amount_per_gas_unit < minimum_gas_price => {
             // The fees do not match the minimum required
             return Err(Error::TxApply(protocol::Error::FeeError(format!(
-                "Fee amount {:?} do not match the minimum required amount \
+                "Fee amount {:?} does not match the minimum required amount \
                  {:?} for token {}",
                 wrapper.fee.amount_per_gas_unit,
                 minimum_gas_price,

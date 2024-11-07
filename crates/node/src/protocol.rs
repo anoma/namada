@@ -468,7 +468,7 @@ where
     };
 
     // Commit tx to the block write log even in case of subsequent errors (if
-    // the fee payment failed instead, than the previous two functions must
+    // the fee payment failed instead, then the previous two functions must
     // have propagated an error)
     shell_params
         .state
@@ -901,11 +901,12 @@ where
 
                     checked!(balance - fees).map_or_else(
                         |_| {
-                            Err(Error::FeeError(
+                            Err(Error::FeeError(format!(
                                 "Masp fee payment unshielded an insufficient \
-                                 amount"
-                                    .to_string(),
-                            ))
+                                 amount: Unshielded {balance} {}, required \
+                                 {fees}",
+                                wrapper.fee.token
+                            )))
                         },
                         |_| Ok(Some(valid_batched_tx_result)),
                     )
@@ -1351,7 +1352,7 @@ where
                     ))?;
                 gas_meter
                     .borrow()
-                    .check_vps_limit(vps_gas.clone())
+                    .check_vps_limit(vps_gas)
                     .map_err(|err| Error::GasError(err.to_string()))?;
 
                 Ok((result, vps_gas))
@@ -1383,7 +1384,7 @@ fn merge_vp_results(
         .checked_add(b_gas)
         .ok_or(Error::GasError(gas::Error::GasOverflow.to_string()))?;
     tx_gas_meter
-        .check_vps_limit(vps_gas.clone())
+        .check_vps_limit(vps_gas)
         .map_err(|err| Error::GasError(err.to_string()))?;
 
     Ok((

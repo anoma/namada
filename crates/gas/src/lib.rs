@@ -33,8 +33,8 @@ use thiserror::Error;
 #[allow(missing_docs)]
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum Error {
-    #[error("Transaction gas limit exceeded")]
-    TransactionGasExceededError,
+    #[error("Transaction gas limit exceeded maximum of {0}")]
+    TransactionGasExceededError(u64),
     #[error("Block gas limit exceeded")]
     BlockGasExceeded,
     #[error("Overflow during gas operations")]
@@ -220,6 +220,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 // This type should not implement the Copy trait to prevent charging gas more
 // than once
 #[derive(
+    Copy,
     Clone,
     Debug,
     Default,
@@ -386,8 +387,9 @@ pub trait GasMetering {
             .get_tx_consumed_gas()
             .checked_add(vps_gas)
             .ok_or(Error::GasOverflow)?;
-        if total > self.get_gas_limit() {
-            return Err(Error::TransactionGasExceededError);
+        let gas_limit = self.get_gas_limit();
+        if total > gas_limit {
+            return Err(Error::TransactionGasExceededError(gas_limit.into()));
         }
 
         Ok(())
@@ -432,7 +434,9 @@ impl GasMetering for TxGasMeter {
             })?;
 
         if self.transaction_gas > self.tx_gas_limit {
-            return Err(Error::TransactionGasExceededError);
+            return Err(Error::TransactionGasExceededError(
+                self.tx_gas_limit.into(),
+            ));
         }
 
         Ok(())
@@ -441,7 +445,7 @@ impl GasMetering for TxGasMeter {
     /// Get the entire gas used by the transaction up until this point
     fn get_tx_consumed_gas(&self) -> Gas {
         if !self.gas_overflow {
-            self.transaction_gas.clone()
+            self.transaction_gas
         } else {
             hints::cold();
             u64::MAX.into()
@@ -449,7 +453,7 @@ impl GasMetering for TxGasMeter {
     }
 
     fn get_gas_limit(&self) -> Gas {
-        self.tx_gas_limit.clone()
+        self.tx_gas_limit
     }
 }
 
@@ -487,7 +491,7 @@ impl TxGasMeter {
     /// Get the amount of gas still available to the transaction
     pub fn get_available_gas(&self) -> Gas {
         self.tx_gas_limit
-            .checked_sub(self.transaction_gas.clone())
+            .checked_sub(self.transaction_gas)
             .unwrap_or_default()
     }
 }
@@ -508,11 +512,13 @@ impl GasMetering for VpGasMeter {
 
         let current_total = self
             .initial_gas
-            .checked_add(self.current_gas.clone())
+            .checked_add(self.current_gas)
             .ok_or(Error::GasOverflow)?;
 
         if current_total > self.tx_gas_limit {
-            return Err(Error::TransactionGasExceededError);
+            return Err(Error::TransactionGasExceededError(
+                self.tx_gas_limit.into(),
+            ));
         }
 
         Ok(())
@@ -521,7 +527,7 @@ impl GasMetering for VpGasMeter {
     /// Get the gas consumed by the tx alone before the vps were executed
     fn get_tx_consumed_gas(&self) -> Gas {
         if !self.gas_overflow {
-            self.initial_gas.clone()
+            self.initial_gas
         } else {
             hints::cold();
             u64::MAX.into()
@@ -529,7 +535,7 @@ impl GasMetering for VpGasMeter {
     }
 
     fn get_gas_limit(&self) -> Gas {
-        self.tx_gas_limit.clone()
+        self.tx_gas_limit
     }
 }
 
@@ -538,15 +544,15 @@ impl VpGasMeter {
     pub fn new_from_tx_meter(tx_gas_meter: &TxGasMeter) -> Self {
         Self {
             gas_overflow: false,
-            tx_gas_limit: tx_gas_meter.tx_gas_limit.clone(),
-            initial_gas: tx_gas_meter.transaction_gas.clone(),
+            tx_gas_limit: tx_gas_meter.tx_gas_limit,
+            initial_gas: tx_gas_meter.transaction_gas,
             current_gas: Gas::default(),
         }
     }
 
     /// Get the gas consumed by the VP alone
     pub fn get_vp_consumed_gas(&self) -> Gas {
-        self.current_gas.clone()
+        self.current_gas
     }
 }
 
@@ -601,7 +607,7 @@ mod tests {
             meter
                 .consume(TX_GAS_LIMIT.into())
                 .expect_err("unexpectedly succeeded"),
-            Error::TransactionGasExceededError
+            Error::TransactionGasExceededError(_)
         );
     }
 
@@ -624,7 +630,7 @@ mod tests {
             meter
                 .consume((TX_GAS_LIMIT + 1).into())
                 .expect_err("unexpectedly succeeded"),
-            Error::TransactionGasExceededError
+            Error::TransactionGasExceededError(_)
         );
     }
 }
