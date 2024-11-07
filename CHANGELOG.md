@@ -93,7 +93,6 @@ Namada 0.44.1 is a patch release with various fixes, improvements and refactors.
   ([\#3882](https://github.com/anoma/namada/pull/3882))
 - SDK query to get liveness information for the network and consensus validator
   set. ([\#3899](https://github.com/anoma/namada/pull/3899))
-- Refactor: unify handling of `process_proposal` outcomes in `finalize_block`. ([#3938](https://github.com/anoma/namada/pull/3938))
 
 ### TESTING
 
