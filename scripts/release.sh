@@ -22,20 +22,24 @@ git clean -fxd
 
 # update the main workspace crate versions (1 commit)
 HASH_BEFORE=$(git rev-parse HEAD)
-cargo release --execute $VERSION
+cargo release version --execute $VERSION
+git commit -am "Namada $VERSION"
 HASH_AFTER=$(git rev-parse HEAD)
 
-# update the wasm workspace crate versions (2 fixups)
+# update the wasm workspace crate versions (1 fixup)
 cd $REPO_ROOT/wasm
+cargo release version --execute $VERSION
 cargo update -w
 git add Cargo.lock
+git add Cargo.toml
 git commit --fixup=$HASH_AFTER
-cargo release --execute $VERSION
 
-# update the wasm_for_tests workspace crate version, and rebuild them (3 fixups)
+# update the wasm_for_tests workspace crate version, and rebuild them (1 fixup)
 cd $REPO_ROOT/wasm_for_tests
+cargo release version --execute $VERSION
 cargo update -w
 git add Cargo.lock
+git add Cargo.toml
 git commit --fixup=$HASH_AFTER
 
 # update the changelog (1 fixup)
