@@ -624,12 +624,11 @@ where
             // If [`process_proposal`] rejected a Tx, emit an event here and
             // move on to next tx
             if result_code != ResultCode::Ok {
-                let base_event: Event;
-                match result_code {
+                let base_event: Event = match result_code {
                     // If [`process_proposal`] rejected a Tx due to invalid signature,
                     // emit an event here and move on to next tx.
                     ResultCode::InvalidSig => {
-                        base_event = match tx.header().tx_type {
+                        match tx.header().tx_type {
                             TxType::Wrapper(_) | TxType::Protocol(_) => {
                                 new_tx_event(&tx, height.0)
                             }
@@ -642,13 +641,13 @@ where
                                 );
                                 continue;
                             }
-                        };
+                        }
                     }
 
                     _ => {
-                        base_event = new_tx_event(&tx, height.0)
+                        new_tx_event(&tx, height.0)
                     }
-                }
+                };
                 response.events.emit(
                     base_event
                         .with(Code(result_code))
