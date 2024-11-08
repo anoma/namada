@@ -1,0 +1,1 @@
+- Added more info to gas failure errors. ([\#4004](https://github.com/anoma/namada/pull/4004))
