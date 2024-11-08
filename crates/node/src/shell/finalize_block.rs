@@ -625,28 +625,24 @@ where
             // move on to next tx
             if result_code != ResultCode::Ok {
                 let base_event: Event = match result_code {
-                    // If [`process_proposal`] rejected a Tx due to invalid signature,
-                    // emit an event here and move on to next tx.
-                    ResultCode::InvalidSig => {
-                        match tx.header().tx_type {
-                            TxType::Wrapper(_) | TxType::Protocol(_) => {
-                                new_tx_event(&tx, height.0)
-                            }
-                            _ => {
-                                tracing::error!(
-                                    "Internal logic error: FinalizeBlock received a \
-                                     tx with an invalid signature error code that \
-                                     could not be deserialized to a WrapperTx / \
-                                     ProtocolTx type"
-                                );
-                                continue;
-                            }
+                    // If [`process_proposal`] rejected a Tx due to invalid
+                    // signature, emit an event here and
+                    // move on to next tx
+                    ResultCode::InvalidSig => match tx.header().tx_type {
+                        TxType::Wrapper(_) | TxType::Protocol(_) => {
+                            new_tx_event(&tx, height.0)
                         }
-                    }
-
-                    _ => {
-                        new_tx_event(&tx, height.0)
-                    }
+                        _ => {
+                            tracing::error!(
+                                "Internal logic error: FinalizeBlock received \
+                                 a tx with an invalid signature error code \
+                                 that could not be deserialized to a \
+                                 WrapperTx / ProtocolTx type"
+                            );
+                            continue;
+                        }
+                    },
+                    _ => new_tx_event(&tx, height.0),
                 };
                 response.events.emit(
                     base_event
