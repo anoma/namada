@@ -42,8 +42,8 @@ use rand::Rng;
 use tempfile::{tempdir, tempdir_in, TempDir};
 
 use crate::e2e::helpers::{
-    find_gaia_address, generate_bin_command, make_hermes_config,
-    update_gaia_config,
+    find_cosmos_address, generate_bin_command, make_hermes_config,
+    update_cosmos_config,
 };
 
 /// For `color_eyre::install`, which fails if called more than once in the same
@@ -574,7 +574,7 @@ pub fn network(
         join_network.assert_success();
 
         // Increment the default port, because the default from
-        // `DEFAULT_COMETBFT_CONFIG` 26657 is being used by gaia.
+        // `DEFAULT_COMETBFT_CONFIG` 26657 is being used by Cosmos
         let mut config = Config::load(base_dir, &net.chain_id, None);
 
         // For validators the arg is the index of a validator. We usually only
@@ -1256,10 +1256,10 @@ pub fn setup_hermes(test_a: &Test, test_b: &Test) -> Result<()> {
     for test in [test_a, test_b] {
         let chain_id = test.net.chain_id.as_str();
         let chain_dir = test.test_dir.as_ref().join(chain_id);
-        let key_file_path = if chain_id == constants::GAIA_CHAIN_ID {
-            chain_dir.join(format!("{}_seed.json", constants::GAIA_RELAYER))
-        } else {
-            wallet::wallet_file(chain_dir)
+        let key_file_path = match CosmosChainType::chain_type(chain_id) {
+            Ok(_) => chain_dir
+                .join(format!("{}_seed.json", constants::COSMOS_RELAYER)),
+            Err(_) => wallet::wallet_file(chain_dir),
         };
         let args = [
             "keys",
@@ -1339,12 +1339,50 @@ where
     Ok(cmd_process)
 }
 
-pub fn setup_gaia() -> Result<Test> {
+#[derive(Clone, Copy, Debug)]
+pub enum CosmosChainType {
+    Gaia,
+    CosmWasm,
+}
+
+impl CosmosChainType {
+    pub fn chain_id(&self) -> &str {
+        match self {
+            Self::Gaia => constants::GAIA_CHAIN_ID,
+            Self::CosmWasm => constants::COSMWASM_CHAIN_ID,
+        }
+    }
+
+    pub fn command_path(&self) -> &str {
+        match self {
+            Self::Gaia => "gaiad",
+            Self::CosmWasm => "wasmd",
+        }
+    }
+
+    pub fn chain_type(chain_id: &str) -> Result<Self> {
+        match chain_id {
+            constants::GAIA_CHAIN_ID => Ok(Self::Gaia),
+            constants::COSMWASM_CHAIN_ID => Ok(Self::CosmWasm),
+            _ => Err(eyre!(format!("Unexpected Cosmos chain ID: {chain_id}"))),
+        }
+    }
+
+    pub fn account_prefix(&self) -> &str {
+        match self {
+            Self::Gaia => "cosmos",
+            Self::CosmWasm => "wasm",
+        }
+    }
+}
+
+pub fn setup_cosmos(chain_type: CosmosChainType) -> Result<Test> {
     let working_dir = working_dir();
     let test_dir = TestDir::new();
-    let gaia_dir = test_dir.as_ref().join(constants::GAIA_CHAIN_ID);
+    let chain_id = chain_type.chain_id();
+    let cosmos_dir = test_dir.as_ref().join(chain_id);
     let net = Network {
-        chain_id: ChainId(constants::GAIA_CHAIN_ID.to_string()),
+        chain_id: ChainId(chain_id.to_string()),
     };
     let test = Test {
         working_dir,
@@ -1354,22 +1392,17 @@ pub fn setup_gaia() -> Result<Test> {
     };
 
     // initialize
-    let args = [
-        "--chain-id",
-        constants::GAIA_CHAIN_ID,
-        "init",
-        constants::GAIA_CHAIN_ID,
-    ];
-    let mut gaia = run_gaia_cmd(&test, args, Some(10))?;
-    gaia.assert_success();
+    let args = ["--chain-id", chain_id, "init", chain_id];
+    let mut cosmos = run_cosmos_cmd(&test, args, Some(10))?;
+    cosmos.assert_success();
 
     for role in [
-        constants::GAIA_USER,
-        constants::GAIA_RELAYER,
-        constants::GAIA_VALIDATOR,
+        constants::COSMOS_USER,
+        constants::COSMOS_RELAYER,
+        constants::COSMOS_VALIDATOR,
     ] {
         let key_file =
-            format!("{}/{role}_seed.json", gaia_dir.to_string_lossy());
+            format!("{}/{role}_seed.json", cosmos_dir.to_string_lossy());
         let args = [
             "keys",
             "add",
@@ -1379,66 +1412,66 @@ pub fn setup_gaia() -> Result<Test> {
             "--output",
             "json",
         ];
-        let mut gaia = run_gaia_cmd(&test, args, Some(10))?;
-        let result = gaia.exp_string("\n")?;
+        let mut cosmos = run_cosmos_cmd(&test, args, Some(10))?;
+        let result = cosmos.exp_string("\n")?;
         let mut file = File::create(key_file).unwrap();
         file.write_all(result.as_bytes()).map_err(|e| {
-            eyre!(format!("Writing a Gaia key file failed: {}", e))
+            eyre!(format!("Writing a Cosmos key file failed: {}", e))
         })?;
     }
 
     // Add tokens to a user account
-    let account = find_gaia_address(&test, constants::GAIA_USER)?;
+    let account = find_cosmos_address(&test, constants::COSMOS_USER)?;
     let args = [
         "genesis",
         "add-genesis-account",
         &account,
         "100000000stake,1000samoleans",
     ];
-    let mut gaia = run_gaia_cmd(&test, args, Some(10))?;
-    gaia.assert_success();
+    let mut cosmos = run_cosmos_cmd(&test, args, Some(10))?;
+    cosmos.assert_success();
 
     // Add the stake token to the relayer
-    let account = find_gaia_address(&test, constants::GAIA_RELAYER)?;
+    let account = find_cosmos_address(&test, constants::COSMOS_RELAYER)?;
     let args = ["genesis", "add-genesis-account", &account, "10000stake"];
-    let mut gaia = run_gaia_cmd(&test, args, Some(10))?;
-    gaia.assert_success();
+    let mut cosmos = run_cosmos_cmd(&test, args, Some(10))?;
+    cosmos.assert_success();
 
     // Add the stake token to the validator
-    let validator = find_gaia_address(&test, constants::GAIA_VALIDATOR)?;
+    let validator = find_cosmos_address(&test, constants::COSMOS_VALIDATOR)?;
     let args = [
         "genesis",
         "add-genesis-account",
         &validator,
         "200000000000stake",
     ];
-    let mut gaia = run_gaia_cmd(&test, args, Some(10))?;
-    gaia.assert_success();
+    let mut cosmos = run_cosmos_cmd(&test, args, Some(10))?;
+    cosmos.assert_success();
 
     // stake
     let args = [
         "genesis",
         "gentx",
-        constants::GAIA_VALIDATOR,
+        constants::COSMOS_VALIDATOR,
         "100000000000stake",
         "--keyring-backend",
         "test",
         "--chain-id",
-        constants::GAIA_CHAIN_ID,
+        chain_id,
     ];
-    let mut gaia = run_gaia_cmd(&test, args, Some(10))?;
-    gaia.assert_success();
+    let mut cosmos = run_cosmos_cmd(&test, args, Some(10))?;
+    cosmos.assert_success();
 
     let args = ["genesis", "collect-gentxs"];
-    let mut gaia = run_gaia_cmd(&test, args, Some(10))?;
-    gaia.assert_success();
+    let mut cosmos = run_cosmos_cmd(&test, args, Some(10))?;
+    cosmos.assert_success();
 
-    update_gaia_config(&test)?;
+    update_cosmos_config(&test)?;
 
     Ok(test)
 }
 
-pub fn run_gaia_cmd<I, S>(
+pub fn run_cosmos_cmd<I, S>(
     test: &Test,
     args: I,
     timeout_sec: Option<u64>,
@@ -1447,9 +1480,11 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
-    let mut run_cmd = Command::new("gaiad");
-    let gaia_dir = test.test_dir.as_ref().join("gaia");
-    run_cmd.args(["--home", &gaia_dir.to_string_lossy()]);
+    let chain_id = test.net.chain_id.as_str();
+    let chain_type = CosmosChainType::chain_type(chain_id)?;
+    let mut run_cmd = Command::new(chain_type.command_path());
+    let cosmos_dir = test.test_dir.as_ref().join(chain_id);
+    run_cmd.args(["--home", &cosmos_dir.to_string_lossy()]);
     run_cmd.args(args);
 
     let args: String =
@@ -1460,7 +1495,7 @@ where
     let session = Session::spawn(run_cmd).map_err(|e| {
         eyre!(
             "\n\n{}: {}\n{}: {}",
-            "Failed to run Gaia".underline().red(),
+            "Failed to run Cosmos command".underline().red(),
             cmd_str,
             "Error".underline().red(),
             e
@@ -1472,7 +1507,7 @@ where
         let log_dir = test.get_base_dir(Who::NonValidator).join("logs");
         std::fs::create_dir_all(&log_dir)?;
         log_dir.join(format!(
-            "{}-gaia-{}.log",
+            "{}-cosmos-{}.log",
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
@@ -1551,13 +1586,14 @@ pub mod constants {
     pub const APFEL: &str = "Apfel";
     pub const KARTOFFEL: &str = "Kartoffel";
 
-    // Gaia
-    pub const GAIA_RPC: &str = "127.0.0.1:26657";
+    // Gaia or CosmWasm
     pub const GAIA_CHAIN_ID: &str = "gaia";
-    pub const GAIA_USER: &str = "user";
-    pub const GAIA_RELAYER: &str = "relayer";
-    pub const GAIA_VALIDATOR: &str = "validator";
-    pub const GAIA_COIN: &str = "samoleans";
+    pub const COSMWASM_CHAIN_ID: &str = "cosmwasm";
+    pub const COSMOS_RPC: &str = "127.0.0.1:26657";
+    pub const COSMOS_USER: &str = "user";
+    pub const COSMOS_RELAYER: &str = "relayer";
+    pub const COSMOS_VALIDATOR: &str = "validator";
+    pub const COSMOS_COIN: &str = "samoleans";
 }
 
 /// Copy WASM files from the `wasm` directory to every node's chain dir.

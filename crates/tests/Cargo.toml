@@ -36,6 +36,7 @@ namada_vp = {path = "../vp"}
 namada_vp_prelude = {path = "../vp_prelude"}
 namada_vm = {path = "../vm", features = ["testing"]}
 
+base64.workspace = true
 concat-idents.workspace = true
 derivative.workspace = true
 hyper = {version = "0.14.20", features = ["full"]}

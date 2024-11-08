@@ -30,10 +30,10 @@ use namada_sdk::wallet::Wallet;
 use toml::Value;
 
 use super::setup::{
-    self, ensure_hot_key, run_gaia_cmd, sleep, NamadaBgCmd, NamadaCmd, Test,
+    self, ensure_hot_key, run_cosmos_cmd, sleep, NamadaBgCmd, NamadaCmd, Test,
     ENV_VAR_DEBUG, ENV_VAR_USE_PREBUILT_BINARIES,
 };
-use crate::e2e::setup::{constants, Bin, Who, APPS_PACKAGE};
+use crate::e2e::setup::{Bin, CosmosChainType, Who, APPS_PACKAGE};
 use crate::strings::{LEDGER_STARTED, TX_APPLIED_SUCCESS};
 use crate::{run, run_as};
 
@@ -503,10 +503,11 @@ pub fn make_hermes_config(test_a: &Test, test_b: &Test) -> Result<()> {
 
     let chains = vec![
         make_hermes_chain_config(test_a),
-        if test_b.net.chain_id.to_string() == constants::GAIA_CHAIN_ID {
-            make_hermes_chain_config_for_gaia(test_b)
-        } else {
-            make_hermes_chain_config(test_b)
+        match CosmosChainType::chain_type(test_b.net.chain_id.as_str()) {
+            Ok(chain_type) => {
+                make_hermes_chain_config_for_cosmos(chain_type, test_b)
+            }
+            Err(_) => make_hermes_chain_config(test_b),
         },
     ];
 
@@ -578,20 +579,26 @@ fn make_hermes_chain_config(test: &Test) -> Value {
     Value::Table(chain)
 }
 
-fn make_hermes_chain_config_for_gaia(test: &Test) -> Value {
+fn make_hermes_chain_config_for_cosmos(
+    chain_type: CosmosChainType,
+    test: &Test,
+) -> Value {
     let mut table = toml::map::Map::new();
     table.insert("mode".to_owned(), Value::String("push".to_owned()));
-    let url = format!("ws://{}/websocket", setup::constants::GAIA_RPC);
+    let url = format!("ws://{}/websocket", setup::constants::COSMOS_RPC);
     table.insert("url".to_owned(), Value::String(url));
     table.insert("batch_delay".to_owned(), Value::String("500ms".to_owned()));
     let event_source = Value::Table(table);
 
     let mut chain = toml::map::Map::new();
-    chain.insert("id".to_owned(), Value::String("gaia".to_string()));
+    chain.insert(
+        "id".to_owned(),
+        Value::String(test.net.chain_id.to_string()),
+    );
     chain.insert("type".to_owned(), Value::String("CosmosSdk".to_owned()));
     chain.insert(
         "rpc_addr".to_owned(),
-        Value::String(format!("http://{}", setup::constants::GAIA_RPC)),
+        Value::String(format!("http://{}", setup::constants::COSMOS_RPC)),
     );
     chain.insert(
         "grpc_addr".to_owned(),
@@ -600,11 +607,11 @@ fn make_hermes_chain_config_for_gaia(test: &Test) -> Value {
     chain.insert("event_source".to_owned(), event_source);
     chain.insert(
         "account_prefix".to_owned(),
-        Value::String("cosmos".to_owned()),
+        Value::String(chain_type.account_prefix().to_string()),
     );
     chain.insert(
         "key_name".to_owned(),
-        Value::String(setup::constants::GAIA_RELAYER.to_string()),
+        Value::String(setup::constants::COSMOS_RELAYER.to_string()),
     );
     let key_dir = test.test_dir.as_ref().join("hermes/keys");
     chain.insert(
@@ -621,13 +628,14 @@ fn make_hermes_chain_config_for_gaia(test: &Test) -> Value {
     Value::Table(chain)
 }
 
-pub fn update_gaia_config(test: &Test) -> Result<()> {
-    let config_path = test.test_dir.as_ref().join("gaia/config/config.toml");
+pub fn update_cosmos_config(test: &Test) -> Result<()> {
+    let cosmos_dir = test.test_dir.as_ref().join(test.net.chain_id.as_str());
+    let config_path = cosmos_dir.join("config/config.toml");
     let s = std::fs::read_to_string(&config_path)
-        .expect("Reading Gaia config failed");
+        .expect("Reading Cosmos config failed");
     let mut values = s
         .parse::<toml::Value>()
-        .expect("Parsing Gaia config failed");
+        .expect("Parsing Cosmos config failed");
     if let Some(consensus) = values.get_mut("consensus") {
         if let Some(timeout_commit) = consensus.get_mut("timeout_commit") {
             *timeout_commit = "1s".into();
@@ -641,15 +649,15 @@ pub fn update_gaia_config(test: &Test) -> Result<()> {
         .truncate(true)
         .open(&config_path)?;
     file.write_all(values.to_string().as_bytes()).map_err(|e| {
-        eyre!(format!("Writing a Gaia config file failed: {}", e))
+        eyre!(format!("Writing a Cosmos config file failed: {}", e))
     })?;
 
-    let app_path = test.test_dir.as_ref().join("gaia/config/app.toml");
+    let app_path = cosmos_dir.join("config/app.toml");
     let s = std::fs::read_to_string(&app_path)
-        .expect("Reading Gaia app.toml failed");
+        .expect("Reading Cosmos app.toml failed");
     let mut values = s
         .parse::<toml::Value>()
-        .expect("Parsing Gaia app.toml failed");
+        .expect("Parsing Cosmos app.toml failed");
     if let Some(mininum_gas_prices) = values.get_mut("minimum-gas-prices") {
         *mininum_gas_prices = "0.0001stake".into();
     }
@@ -657,14 +665,15 @@ pub fn update_gaia_config(test: &Test) -> Result<()> {
         .write(true)
         .truncate(true)
         .open(&app_path)?;
-    file.write_all(values.to_string().as_bytes())
-        .map_err(|e| eyre!(format!("Writing a Gaia app.toml failed: {}", e)))?;
+    file.write_all(values.to_string().as_bytes()).map_err(|e| {
+        eyre!(format!("Writing a Cosmos app.toml failed: {}", e))
+    })?;
 
-    let genesis_path = test.test_dir.as_ref().join("gaia/config/genesis.json");
+    let genesis_path = cosmos_dir.join("config/genesis.json");
     let s = std::fs::read_to_string(&genesis_path)
-        .expect("Reading Gaia genesis.json failed");
+        .expect("Reading Cosmos genesis.json failed");
     let mut genesis: serde_json::Value =
-        serde_json::from_str(&s).expect("Decoding Gaia genesis.json failed");
+        serde_json::from_str(&s).expect("Decoding Cosmos genesis.json failed");
     // gas
     if let Some(min_base_gas_price) =
         genesis.pointer_mut("/app_state/feemarket/params/min_base_gas_price")
@@ -696,12 +705,12 @@ pub fn update_gaia_config(test: &Test) -> Result<()> {
         .open(&genesis_path)?;
     let writer = std::io::BufWriter::new(file);
     serde_json::to_writer_pretty(writer, &genesis)
-        .expect("Writing Gaia genesis.toml failed");
+        .expect("Writing Cosmos genesis.toml failed");
 
     Ok(())
 }
 
-pub fn find_gaia_address(
+pub fn find_cosmos_address(
     test: &Test,
     alias: impl AsRef<str>,
 ) -> Result<String> {
@@ -713,16 +722,18 @@ pub fn find_gaia_address(
         alias.as_ref(),
         "-a",
     ];
-    let mut gaia = run_gaia_cmd(test, args, Some(40))?;
-    let (_, matched) = gaia.exp_regex("cosmos.*")?;
+    let mut cosmos = run_cosmos_cmd(test, args, Some(40))?;
+    let chain_type = CosmosChainType::chain_type(test.net.chain_id.as_str())?;
+    let regex = format!("{}.*", chain_type.account_prefix());
+    let (_, matched) = cosmos.exp_regex(&regex)?;
 
     Ok(matched.trim().to_string())
 }
 
-pub fn get_gaia_gov_address(test: &Test) -> Result<String> {
+pub fn get_cosmos_gov_address(test: &Test) -> Result<String> {
     let args = ["query", "auth", "module-account", "gov"];
-    let mut gaia = run_gaia_cmd(test, args, Some(40))?;
-    let (_, matched) = gaia.exp_regex("cosmos[a-z0-9]+")?;
+    let mut cosmos = run_cosmos_cmd(test, args, Some(40))?;
+    let (_, matched) = cosmos.exp_regex("cosmos[a-z0-9]+")?;
 
     Ok(matched.trim().to_string())
 }
