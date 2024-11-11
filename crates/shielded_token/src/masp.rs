@@ -8,7 +8,7 @@ pub mod shielded_wallet;
 mod test_utils;
 
 use std::collections::BTreeMap;
-use std::fmt::Debug;
+use std::fmt::{self, Debug};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use masp_primitives::asset_type::AssetType;
@@ -110,13 +110,52 @@ pub struct MaspTargetTransferData {
     token: Address,
 }
 
-/// Data to log masp transactions' errors
-#[allow(missing_docs)]
+/// Data to log the error of a single masp transaction
+#[derive(Debug)]
+pub struct MaspDataLogEntry {
+    /// Token to be spent.
+    pub token: Address,
+    /// How many tokens are missing.
+    pub shortfall: token::DenominatedAmount,
+}
+
+impl fmt::Display for MaspDataLogEntry {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self { token, shortfall } = self;
+        write!(f, "{shortfall} {token} missing")
+    }
+}
+
+/// Data to log the error of a batch of masp transactions
 #[derive(Debug)]
 pub struct MaspDataLog {
-    pub source: Option<TransferSource>,
-    pub token: Address,
-    pub amount: token::DenominatedAmount,
+    /// The error batch
+    pub batch: Vec<MaspDataLogEntry>,
+}
+
+impl From<Vec<MaspDataLogEntry>> for MaspDataLog {
+    #[inline]
+    fn from(batch: Vec<MaspDataLogEntry>) -> Self {
+        Self { batch }
+    }
+}
+
+impl fmt::Display for MaspDataLog {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self { batch } = self;
+
+        if let Some(err) = batch.first() {
+            write!(f, "{err}")?;
+        } else {
+            return Ok(());
+        }
+
+        for err in &batch[1..] {
+            write!(f, ", {err}")?;
+        }
+
+        Ok(())
+    }
 }
 
 #[allow(missing_docs)]
@@ -143,14 +182,15 @@ pub struct MaspTokenRewardData {
 #[derive(Error, Debug)]
 pub enum TransferErr {
     /// Build error for masp errors
-    #[error("{error}")]
+    #[error("Transaction builder error: {error}")]
     Build {
-        /// The error
+        /// Builder error returned from the masp library
         error: builder::Error<std::convert::Infallible>,
-        /// The optional associated transfer data for logging purposes
-        data: Option<MaspDataLog>,
     },
-    /// errors
+    /// Insufficient funds error
+    #[error("Insufficient funds: {0}")]
+    InsufficientFunds(MaspDataLog),
+    /// Generic error
     #[error("{0}")]
     General(String),
 }

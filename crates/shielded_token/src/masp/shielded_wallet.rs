@@ -35,7 +35,9 @@ use namada_core::masp::{
 };
 use namada_core::task_env::TaskEnvironment;
 use namada_core::time::{DateTimeUtc, DurationSecs};
-use namada_core::token::{Amount, Change, Denomination, MaspDigitPos};
+use namada_core::token::{
+    Amount, Change, DenominatedAmount, Denomination, MaspDigitPos,
+};
 use namada_io::client::Client;
 use namada_io::{
     display_line, edisplay_line, Io, MaybeSend, MaybeSync, NamadaIo,
@@ -49,10 +51,10 @@ use rand_core::{OsRng, SeedableRng};
 use crate::masp::utils::MaspClient;
 use crate::masp::{
     cloned_pair, to_viewing_key, ContextSyncStatus, Conversions, MaspAmount,
-    MaspDataLog, MaspFeeData, MaspSourceTransferData, MaspTargetTransferData,
-    MaspTransferData, MaspTxReorderedData, NoteIndex, ShieldedSyncConfig,
-    ShieldedTransfer, ShieldedUtils, SpentNotesTracker, TransferErr, WalletMap,
-    WitnessMap, NETWORK,
+    MaspDataLogEntry, MaspFeeData, MaspSourceTransferData,
+    MaspTargetTransferData, MaspTransferData, MaspTxReorderedData, NoteIndex,
+    ShieldedSyncConfig, ShieldedTransfer, ShieldedUtils, SpentNotesTracker,
+    TransferErr, WalletMap, WitnessMap, NETWORK,
 };
 #[cfg(any(test, feature = "testing"))]
 use crate::masp::{testing, ENV_VAR_MASP_TEST_SEED};
@@ -1023,7 +1025,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 token,
                 amount,
                 epoch,
-                &denoms,
+                &mut denoms,
                 &mut notes_tracker,
             )
             .await?;
@@ -1053,13 +1055,48 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
 
         // Final safety check on the value balance to verify that the
         // transaction is balanced
-        if !builder.value_balance().is_zero() {
-            return Result::Err(TransferErr::Build {
-                error: builder::Error::InsufficientFunds(
-                    builder.value_balance(),
-                ),
-                data: None,
-            });
+        let value_balance = builder.value_balance();
+        if !value_balance.is_zero() {
+            let mut batch: Vec<MaspDataLogEntry> = vec![];
+
+            for (asset_type, value) in value_balance.components() {
+                let AssetData {
+                    token,
+                    denom,
+                    position,
+                    ..
+                } = self
+                    .decode_asset_type(context.client(), *asset_type)
+                    .await
+                    .expect(
+                        "Every asset type in the builder must have a known \
+                         pre-image",
+                    );
+
+                let denominated = DenominatedAmount::new(
+                    Amount::from_masp_denominated_i128(*value, position)
+                        .ok_or_else(|| {
+                            TransferErr::General(
+                                "Masp digit overflow".to_owned(),
+                            )
+                        })?,
+                    denom,
+                );
+
+                if let Some(entry) =
+                    batch.iter_mut().find(|entry| entry.token == token)
+                {
+                    checked!(entry.shortfall += denominated)
+                        .map_err(|e| TransferErr::General(e.to_string()))?;
+                } else {
+                    batch.push(MaspDataLogEntry {
+                        token,
+                        shortfall: denominated,
+                    });
+                }
+            }
+
+            return Err(TransferErr::InsufficientFunds(batch.into()));
         }
 
         let builder_clone = builder.clone().map_builder(WalletMap);
@@ -1075,7 +1112,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 &mut rng,
                 &mut RngBuildParams::new(OsRng),
             )
-            .map_err(|error| TransferErr::Build { error, data: None })?;
+            .map_err(|error| TransferErr::Build { error })?;
 
         if update_ctx {
             self.pre_cache_transaction(&masp_tx)
@@ -1223,6 +1260,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         client: &(impl Client + Sync),
         added_amt: I128Sum,
         mut required_amt: ValueSum<(MaspDigitPos, Address), i128>,
+        denoms: &mut HashMap<Address, Denomination>,
     ) -> Result<I128Sum, TransferErr> {
         // Compute the amount of change due to the sender.
         let (decoded_amount, mut change) =
@@ -1244,11 +1282,35 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         }
         // Error out if the required amount was not covered by the added amount
         if !required_amt.is_zero() {
-            // TODO: zero should be replaced by required_amt in the error
-            return Result::Err(TransferErr::Build {
-                error: builder::Error::InsufficientFunds(I128Sum::zero()),
-                data: None,
-            });
+            let mut batch: Vec<MaspDataLogEntry> = vec![];
+
+            for ((position, token), value) in required_amt.components() {
+                let denom = Self::get_denom(client, denoms, token).await?;
+
+                let denominated = DenominatedAmount::new(
+                    Amount::from_masp_denominated_i128(*value, *position)
+                        .ok_or_else(|| {
+                            TransferErr::General(
+                                "Masp digit overflow".to_owned(),
+                            )
+                        })?,
+                    denom,
+                );
+
+                if let Some(entry) =
+                    batch.iter_mut().find(|entry| entry.token == *token)
+                {
+                    checked!(entry.shortfall += denominated)
+                        .map_err(|e| TransferErr::General(e.to_string()))?;
+                } else {
+                    batch.push(MaspDataLogEntry {
+                        token: token.clone(),
+                        shortfall: denominated,
+                    });
+                }
+            }
+
+            return Err(TransferErr::InsufficientFunds(batch.into()));
         }
         Ok(change)
     }
@@ -1264,7 +1326,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         token: &Address,
         amount: &Amount,
         epoch: MaspEpoch,
-        denoms: &HashMap<Address, Denomination>,
+        denoms: &mut HashMap<Address, Denomination>,
         notes_tracker: &mut SpentNotesTracker,
     ) -> Result<Option<I128Sum>, TransferErr> {
         // We want to fund our transaction solely from supplied spending key
@@ -1337,6 +1399,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                     context.client(),
                     added_amt.clone(),
                     required_amt,
+                    denoms,
                 )
                 .await?;
             // Commit the computed change back to the sender.
@@ -1351,7 +1414,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                     )
                     .map_err(|e| TransferErr::Build {
                         error: builder::Error::SaplingBuild(e),
-                        data: None,
                     })?;
             }
 
@@ -1366,7 +1428,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                     )
                     .map_err(|e| TransferErr::Build {
                         error: builder::Error::SaplingBuild(e),
-                        data: None,
                     })?;
             }
             // Commit the conversion notes used during summation
@@ -1380,7 +1441,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                         )
                         .map_err(|e| TransferErr::Build {
                             error: builder::Error::SaplingBuild(e),
-                            data: None,
                         })?;
                 }
             }
@@ -1394,7 +1454,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 .t_addr_data()
                 .ok_or_else(|| {
                     TransferErr::General(
-                        "source address should be transparent".into(),
+                        "Source address should be transparent".into(),
                     )
                 })?
                 .taddress();
@@ -1411,7 +1471,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                         })
                         .map_err(|e| TransferErr::Build {
                             error: builder::Error::TransparentBuild(e),
-                            data: None,
                         })?;
                 }
             }
@@ -1494,7 +1553,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                         )
                         .map_err(|e| TransferErr::Build {
                             error: builder::Error::SaplingBuild(e),
-                            data: None,
                         })?;
                 } else if let Some(t_addr_data) = target.t_addr_data() {
                     // If there is a transparent output
@@ -1506,11 +1564,10 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                         )
                         .map_err(|e| TransferErr::Build {
                             error: builder::Error::TransparentBuild(e),
-                            data: None,
                         })?;
                 } else {
                     return Result::Err(TransferErr::General(
-                        "transaction target must be a payment address or \
+                        "Transaction target must be a payment address or \
                          Namada address or IBC address"
                             .to_string(),
                     ));
@@ -1522,41 +1579,16 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
 
         // Nothing must remain to be included in output
         if rem_amount != [0; 4] {
-            let (asset_types, _) = {
-                // Do the actual conversion to an asset type
-                let amount = self
-                    .convert_namada_amount_to_masp(
-                        context.client(),
-                        epoch,
-                        &token,
-                        denom.to_owned(),
-                        amount,
-                    )
-                    .await
-                    .map_err(|e| TransferErr::General(e.to_string()))?;
-                // Make sure to save any decodings of the asset types used so
-                // that balance queries involving them are
-                // successful
-                let _ = self.save().await;
-                amount
-            };
-
-            // Convert the shortfall into a I128Sum
-            let mut shortfall = I128Sum::zero();
-            for (asset_type, val) in asset_types.iter().zip(rem_amount) {
-                shortfall += I128Sum::from_pair(*asset_type, val.into());
-            }
-            // Return an insufficient funds error
-            return Result::Err(TransferErr::Build {
-                error: builder::Error::InsufficientFunds(shortfall),
-                data: Some(MaspDataLog {
-                    source,
+            return Result::Err(TransferErr::InsufficientFunds(
+                vec![MaspDataLogEntry {
                     token,
-                    amount: namada_core::token::DenominatedAmount::new(
-                        amount, denom,
+                    shortfall: DenominatedAmount::new(
+                        namada_core::uint::Uint(rem_amount).into(),
+                        denom,
                     ),
-                }),
-            });
+                }]
+                .into(),
+            ));
         }
 
         Ok(())
