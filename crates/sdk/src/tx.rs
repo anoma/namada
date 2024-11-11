@@ -17,7 +17,7 @@ use masp_primitives::transaction::components::transparent::fees::{
     InputView as TransparentInputView, OutputView as TransparentOutputView,
 };
 use masp_primitives::transaction::components::I128Sum;
-use masp_primitives::transaction::{builder, Transaction as MaspTransaction};
+use masp_primitives::transaction::Transaction as MaspTransaction;
 use namada_account::{InitAccount, UpdateAccount};
 use namada_core::address::{Address, IBC, MASP};
 use namada_core::arith::checked;
@@ -61,10 +61,7 @@ use namada_proof_of_stake::parameters::{
 use namada_proof_of_stake::types::{CommissionPair, ValidatorState};
 use namada_token as token;
 use namada_token::masp::shielded_wallet::ShieldedApi;
-use namada_token::masp::TransferErr::Build;
-use namada_token::masp::{
-    MaspDataLog, MaspFeeData, MaspTransferData, ShieldedTransfer,
-};
+use namada_token::masp::{MaspFeeData, MaspTransferData, ShieldedTransfer};
 use namada_token::storage_key::balance_key;
 use namada_token::DenominatedAmount;
 use namada_tx::data::pgf::UpdateStewardCommission;
@@ -3469,37 +3466,11 @@ async fn construct_shielded_parts<N: Namada>(
     let shielded_parts = match stx_result {
         Ok(Some(stx)) => stx,
         Ok(None) => return Ok(None),
-        Err(Build {
-            error: builder::Error::InsufficientFunds(_),
-            data,
-        }) => {
-            if let Some(MaspDataLog {
-                source,
-                token,
-                amount,
-            }) = data
-            {
-                if let Some(source) = source {
-                    return Err(TxSubmitError::NegativeBalanceAfterTransfer(
-                        Box::new(source.effective_address()),
-                        amount.to_string(),
-                        Box::new(token.clone()),
-                    )
-                    .into());
-                }
-                return Err(TxSubmitError::MaspError(format!(
-                    "Insufficient funds: Could not collect enough funds to \
-                     pay for fees: token {token}, amount: {amount}"
-                ))
-                .into());
-            }
-            return Err(TxSubmitError::MaspError(
-                "Insufficient funds".to_string(),
-            )
-            .into());
-        }
         Err(err) => {
-            return Err(TxSubmitError::MaspError(err.to_string()).into());
+            return Err(TxSubmitError::MaspError(format!(
+                "Failed to construct MASP transaction shielded parts: {err}"
+            ))
+            .into());
         }
     };
 
