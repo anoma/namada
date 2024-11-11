@@ -479,11 +479,11 @@ fn ibc_nft_transfers() -> Result<()> {
     let _bg_wasmd = cosmwasm.background();
 
     setup_hermes(&test, &test_cosmwasm)?;
-    let port_id_namada: PortId = "nft_transfer".parse().unwrap();
+    let port_id_namada: PortId = "nft-transfer".parse().unwrap();
 
     let (cw721_contract, ics721_contract) =
         initialize_nft_contracts(&test_cosmwasm)?;
-    let minter_addr = find_cosmos_address(&test, COSMOS_USER)?;
+    let minter_addr = find_cosmos_address(&test_cosmwasm, COSMOS_USER)?;
     mint_nft(&test_cosmwasm, &cw721_contract, &minter_addr, NFT_ID)?;
 
     let port_id_cosmwasm =
@@ -501,6 +501,27 @@ fn ibc_nft_transfers() -> Result<()> {
 
     // 1. Transparent transfers
     // CosmWasm to Namada
+    let namada_receiver = find_address(&test, ALBERT)?.to_string();
+    nft_transfer_from_cosmos(
+        &test_cosmwasm,
+        COSMOS_USER,
+        &namada_receiver,
+        NFT_ID,
+        &cw721_contract,
+        &ics721_contract,
+        &channel_id_cosmwasm,
+        None,
+    )?;
+    wait_for_packet_relay(
+        &port_id_cosmwasm,
+        &channel_id_cosmwasm,
+        &test_cosmwasm,
+    )?;
+
+    let ibc_trace_on_namada = format!(
+        "{port_id_namada}/{channel_id_namada}/{cw721_contract}/{NFT_ID}"
+    );
+    check_balance(&test, &namada_receiver, ibc_trace_on_namada, 1)?;
 
     // Namada to CosmWasm
 
@@ -2080,14 +2101,16 @@ fn initialize_nft_contracts(test: &Test) -> Result<(String, String)> {
     // Check the CW721 contract
     let args = vec!["query", "wasm", "list-contract-by-code", "1"];
     let mut cosmos = run_cosmos_cmd(test, args, Some(40))?;
-    let (_unread, matched) = cosmos.exp_regex(r"wasm.*")?;
-    let cw721_contract = matched.to_string();
+    let (_unread, matched) = cosmos.exp_regex("wasm.*")?;
+    let cw721_contract = matched.trim().to_string();
+    cosmos.exp_eof()?;
 
     // Check the ICS721 contract
     let args = vec!["query", "wasm", "list-contract-by-code", "2"];
     let mut cosmos = run_cosmos_cmd(test, args, Some(40))?;
-    let (_unread, matched) = cosmos.exp_regex(r"wasm.*")?;
-    let ics721_contract = matched.to_string();
+    let (_unread, matched) = cosmos.exp_regex("wasm.*")?;
+    let ics721_contract = matched.trim().to_string();
+    cosmos.exp_eof()?;
 
     Ok((cw721_contract, ics721_contract))
 }
@@ -2096,8 +2119,9 @@ fn get_cosmwasm_port_id(test: &Test, ics721_contract: &str) -> Result<PortId> {
     // Get the port ID
     let args = vec!["query", "wasm", "contract", ics721_contract];
     let mut cosmos = run_cosmos_cmd(test, args, Some(40))?;
-    let (_unread, matched) = cosmos.exp_regex(r"ibc_port_id: wasm\..*")?;
+    let (_unread, matched) = cosmos.exp_regex("ibc_port_id: wasm.*")?;
     let port_id = matched.trim().split(' ').last().expect("invalid output");
+    cosmos.exp_eof()?;
     port_id
         .parse()
         .map_err(|e| eyre!("Parsing the port ID failed: {}", e))
@@ -2115,7 +2139,7 @@ fn mint_nft(
     let json = serde_json::json!({
         "mint": {
             "token_id": token_id,
-            "owner": minter_addr,
+            "owner": minter_addr
         }
     })
     .to_string();
@@ -2155,12 +2179,9 @@ fn nft_transfer_from_cosmos(
     token_id: impl AsRef<str>,
     cw721_contract: impl AsRef<str>,
     ics721_contract: impl AsRef<str>,
-    port_id: &PortId,
     channel_id: &ChannelId,
-    memo_path: Option<PathBuf>,
     timeout_height: Option<u64>,
 ) -> Result<()> {
-    let port_id = port_id.to_string();
     let channel_id = channel_id.to_string();
     let timeout_height = timeout_height.unwrap_or(100000);
     let rpc = format!("tcp://{COSMOS_RPC}");
@@ -2180,7 +2201,8 @@ fn nft_transfer_from_cosmos(
         "send_nft": {
             "contract": ics721_contract.as_ref(),
             "token_id": token_id.as_ref(),
-            "msg": encoded_msg},
+            "msg": encoded_msg
+        },
     })
     .to_string();
 

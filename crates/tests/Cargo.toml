@@ -36,7 +36,6 @@ namada_vp = {path = "../vp"}
 namada_vp_prelude = {path = "../vp_prelude"}
 namada_vm = {path = "../vm", features = ["testing"]}
 
-base64.workspace = true
 concat-idents.workspace = true
 derivative.workspace = true
 hyper = {version = "0.14.20", features = ["full"]}
@@ -65,6 +64,7 @@ namada_vm_env = {path = "../vm_env"}
 
 assert_cmd.workspace = true
 assert_matches.workspace = true
+base64.workspace = true
 borsh.workspace = true
 borsh-ext.workspace = true
 color-eyre.workspace = true
