@@ -3785,6 +3785,46 @@ dependencies = [
 ]
 
 [[package]]
+name = "tx_proposal_phase2"
+version = "0.46.0"
+dependencies = [
+ "getrandom",
+ "namada_proof_of_stake",
+ "namada_tx_prelude",
+ "rlsf",
+]
+
+[[package]]
+name = "tx_proposal_phase3"
+version = "0.46.0"
+dependencies = [
+ "getrandom",
+ "namada_proof_of_stake",
+ "namada_tx_prelude",
+ "rlsf",
+]
+
+[[package]]
+name = "tx_proposal_phase4"
+version = "0.46.0"
+dependencies = [
+ "getrandom",
+ "namada_proof_of_stake",
+ "namada_tx_prelude",
+ "rlsf",
+]
+
+[[package]]
+name = "tx_proposal_phase5"
+version = "0.46.0"
+dependencies = [
+ "getrandom",
+ "namada_proof_of_stake",
+ "namada_tx_prelude",
+ "rlsf",
+]
+
+[[package]]
 name = "tx_proposal_token_gas"
 version = "0.46.0"
 dependencies = [

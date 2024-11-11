@@ -10,6 +10,7 @@
 //! `NAMADA_E2E_KEEP_TEMP=true`.
 #![allow(clippy::type_complexity)]
 
+use std::collections::BTreeSet;
 use std::env;
 use std::fmt::Display;
 use std::path::PathBuf;
@@ -27,11 +28,15 @@ use namada_apps_lib::config::genesis::templates::TokenBalances;
 use namada_apps_lib::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps_lib::config::{self, ethereum_bridge};
 use namada_apps_lib::tendermint_config::net::Address as TendermintAddress;
-use namada_apps_lib::wallet::{self, Alias};
+use namada_apps_lib::wallet::{self, defaults, Alias};
 use namada_core::chain::ChainId;
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_sdk::address::Address;
 use namada_sdk::chain::{ChainIdPrefix, Epoch};
+use namada_sdk::dec::Dec;
+use namada_sdk::governance::cli::onchain::StewardsUpdate;
+use namada_sdk::ibc::core::host::types::identifiers::PortId;
+use namada_sdk::ibc::trace::ibc_token;
 use namada_sdk::time::DateTimeUtc;
 use namada_sdk::token;
 use namada_test_utils::TestWasms;
@@ -46,12 +51,14 @@ use super::helpers::{
 };
 use super::setup::{set_ethereum_bridge_mode, working_dir, NamadaCmd};
 use crate::e2e::helpers::{
-    epoch_sleep, find_address, find_bonded_stake, get_actor_rpc, get_epoch,
-    is_debug_mode, parse_reached_epoch,
+    check_balance, epoch_sleep, find_address, find_balance, find_bonded_stake,
+    find_cosmos_address, get_actor_rpc, get_epoch, is_debug_mode,
+    parse_reached_epoch, shielded_sync,
 };
+use crate::e2e::ibc_tests;
 use crate::e2e::setup::{
     self, allow_duplicate_ips, apply_use_device, default_port_offset, sleep,
-    speculos_app_elf, speculos_path, Bin, Who,
+    speculos_app_elf, speculos_path, Bin, CosmosChainType, Who,
 };
 use crate::strings::{
     LEDGER_SHUTDOWN, LEDGER_STARTED, NON_VALIDATOR_NODE, TX_APPLIED_SUCCESS,
@@ -1527,7 +1534,11 @@ pub fn prepare_proposal_data(
     source: Address,
     data: impl serde::Serialize,
     start_epoch: u64,
+    voting_end_offset: Option<u64>,
+    activation_offset: Option<u64>,
 ) -> PathBuf {
+    let voting_end_offset = voting_end_offset.unwrap_or(12);
+    let activation_offset = activation_offset.unwrap_or(6);
     let valid_proposal_json = json!({
         "proposal": {
             "content": {
@@ -1543,8 +1554,8 @@ pub fn prepare_proposal_data(
             },
             "author": source,
             "voting_start_epoch": start_epoch,
-            "voting_end_epoch": start_epoch + 12_u64,
-            "activation_epoch": start_epoch + 12u64 + 6_u64,
+            "voting_end_epoch": start_epoch + voting_end_offset,
+            "activation_epoch": start_epoch + voting_end_offset + activation_offset,
         },
         "data": data
     });
@@ -2075,6 +2086,8 @@ fn proposal_change_shielded_reward() -> Result<()> {
         albert,
         TestWasms::TxProposalMaspRewards.read_bytes(),
         12,
+        None,
+        None,
     );
     let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
 
@@ -2807,4 +2820,602 @@ fn test_genesis_manipulation() -> Result<()> {
     }
 
     Ok(())
+}
+
+#[test]
+fn test_mainnet_phases() -> Result<()> {
+    // Use minimum offsets for faster proposals
+    const VOTING_END_OFFSET: u64 = 1;
+    const ACTIVATION_OFFSET: u64 = 1;
+
+    let (ledger, gaia, test, test_gaia) = ibc_tests::run_namada_cosmos(
+        CosmosChainType::Gaia,
+        |genesis, base_dir| {
+            let mut genesis =
+                setup::set_validators(1, genesis, base_dir, |_| 0u16, vec![]);
+
+            // an epoch per 1 minute
+            genesis.parameters.parameters.epochs_per_year =
+                epochs_per_year_from_min_duration(60);
+
+            // speed-up gov proposals
+            genesis.parameters.gov_params.min_proposal_voting_period = 1;
+            genesis.parameters.gov_params.min_proposal_grace_epochs = 1;
+
+            // Disabled until Phase 2: staking rewards and PGF
+            genesis.parameters.pos_params.max_inflation_rate = Dec::zero();
+            genesis.parameters.pos_params.target_staked_ratio = Dec::zero();
+            genesis.parameters.pos_params.rewards_gain_p = Dec::zero();
+            genesis.parameters.pos_params.rewards_gain_d = Dec::zero();
+
+            genesis.parameters.pgf_params.stewards_inflation_rate = Dec::zero();
+            genesis.parameters.pgf_params.pgf_inflation_rate = Dec::zero();
+
+            genesis.parameters.pgf_params.stewards = BTreeSet::default();
+
+            // Disabled until Phase 4: shielding rewards
+            genesis.tokens.token.retain(|alias, config| {
+                // Zero-out rewards
+                let params = config.masp_params.as_mut().unwrap();
+                params.kd_gain_nom = Dec::zero();
+                params.kp_gain_nom = Dec::zero();
+                params.max_reward_rate = Dec::zero();
+                params.locked_amount_target = 0;
+
+                // Remove tokens other than NAM
+                alias == &Alias::from("nam")
+            });
+            genesis.balances.token.retain(|alias, _config| {
+                // Remove token balances other than NAM
+                alias == &Alias::from("nam")
+            });
+
+            // Disabled until Phase 5: NAM transfers
+            genesis.parameters.parameters.is_native_token_transferable = false;
+
+            genesis
+        },
+        Some(1_000_000),
+    )
+    .unwrap();
+    let _bg_ledger = ledger.background();
+    let _bg_gaia = gaia.background();
+
+    setup::setup_hermes(&test, &test_gaia)?;
+    let port_id_namada: PortId = "transfer".parse().unwrap();
+    let port_id_gaia: PortId = "transfer".parse().unwrap();
+    let (channel_id_namada, channel_id_gaia) =
+        ibc_tests::create_channel_with_hermes(
+            &test,
+            &test_gaia,
+            &port_id_namada,
+            &port_id_gaia,
+        )?;
+
+    // Start relaying
+    let hermes = ibc_tests::run_hermes(&test)?;
+    let _bg_hermes = hermes.background();
+
+    let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
+
+    let mut proposal_id: u64 = 0;
+
+    // Submit and activate a proposal to have 1 PGF steward
+    {
+        let steward = defaults::albert_address();
+        let pgf_stewards = StewardsUpdate {
+            add: Some(steward.clone()),
+            remove: vec![],
+        };
+        let next_epoch = get_epoch(&test, &validator_one_rpc)?.next();
+        let valid_proposal_json_path = prepare_proposal_data(
+            test.test_dir.path(),
+            defaults::albert_address(),
+            pgf_stewards,
+            next_epoch.0,
+            Some(VOTING_END_OFFSET),
+            Some(ACTIVATION_OFFSET),
+        );
+        let submit_proposal_args = apply_use_device(vec![
+            "init-proposal",
+            "--pgf-stewards",
+            "--data-path",
+            valid_proposal_json_path.to_str().unwrap(),
+            "--ledger-address",
+            &validator_one_rpc,
+        ]);
+        let mut client =
+            run!(test, Bin::Client, submit_proposal_args, Some(40))?;
+        client.exp_string(TX_APPLIED_SUCCESS)?;
+        client.assert_success();
+
+        // Start the voting epoch
+        let proposal_id_str = proposal_id.to_string();
+        let _epoch = epoch_sleep(&test, &validator_one_rpc, 120)?;
+        let submit_proposal_vote = apply_use_device(vec![
+            "vote-proposal",
+            "--proposal-id",
+            &proposal_id_str,
+            "--vote",
+            "yay",
+            "--address",
+            "validator-0",
+            "--node",
+            &validator_one_rpc,
+        ]);
+
+        let mut client =
+            run!(test, Bin::Client, submit_proposal_vote, Some(40))?;
+        client.exp_string(TX_APPLIED_SUCCESS)?;
+        client.assert_success();
+
+        proposal_id += 1;
+    }
+
+    let mut submit_proposal = |tx: TestWasms| -> Result<Epoch> {
+        let next_epoch = get_epoch(&test, &validator_one_rpc)?.next();
+        let activation_epoch =
+            next_epoch + VOTING_END_OFFSET + ACTIVATION_OFFSET;
+
+        let valid_proposal_json_path = prepare_proposal_data(
+            test.test_dir.path(),
+            defaults::albert_address(),
+            tx.read_bytes(),
+            next_epoch.0,
+            Some(VOTING_END_OFFSET),
+            Some(ACTIVATION_OFFSET),
+        );
+
+        let submit_proposal_args = apply_use_device(vec![
+            "init-proposal",
+            "--data-path",
+            valid_proposal_json_path.to_str().unwrap(),
+            "--gas-limit",
+            "2200000",
+            "--node",
+            &validator_one_rpc,
+        ]);
+        let mut client =
+            run!(test, Bin::Client, submit_proposal_args, Some(40))?;
+        client.exp_string(TX_APPLIED_SUCCESS)?;
+        client.assert_success();
+
+        // Start the voting epoch
+        let _epoch = epoch_sleep(&test, &validator_one_rpc, 120)?;
+
+        let proposal_id_str = proposal_id.to_string();
+        let submit_proposal_vote = apply_use_device(vec![
+            "vote-proposal",
+            "--proposal-id",
+            &proposal_id_str,
+            "--vote",
+            "yay",
+            "--address",
+            "validator-0",
+            "--node",
+            &validator_one_rpc,
+        ]);
+
+        let mut client =
+            run!(test, Bin::Client, submit_proposal_vote, Some(40))?;
+        client.exp_string(TX_APPLIED_SUCCESS)?;
+        client.assert_success();
+
+        proposal_id += 1;
+
+        Ok(activation_epoch)
+    };
+
+    let namada_ibc_receiver = find_address(&test, ALBERT)?.to_string();
+    let ibc_denom_on_namada =
+        format!("{port_id_namada}/{channel_id_namada}/{COSMOS_COIN}");
+    let gaia_token = ibc_token(&ibc_denom_on_namada).to_string();
+    let gaia_receiver = find_cosmos_address(&test_gaia, COSMOS_USER)?;
+
+    // IBC transfers shouldn't be allowed before phase 3
+    ibc_tests::transfer_from_cosmos(
+        &test_gaia,
+        COSMOS_USER,
+        &namada_ibc_receiver,
+        COSMOS_COIN,
+        1,
+        &port_id_gaia,
+        &channel_id_gaia,
+        None,
+        None,
+    )?;
+    let _ = ibc_tests::wait_for_packet_relay(
+        &port_id_gaia,
+        &channel_id_gaia,
+        &test,
+    );
+    // The tokens should NOT have been transferred to transparent address
+    check_balance(&test, ALBERT, &gaia_token, 0)?;
+
+    ibc_tests::clear_packet(&port_id_gaia, &channel_id_gaia, &test)?;
+
+    // Should not be able transfer NAM before phase 5
+    let tx_args = apply_use_device(vec![
+        "transparent-transfer",
+        "--source",
+        BERTHA,
+        "--target",
+        ALBERT,
+        "--token",
+        NAM,
+        "--amount",
+        "1",
+        "--node",
+        &validator_one_rpc,
+    ]);
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string(TX_REJECTED)?;
+
+    // Submit a delegation to the first genesis validator
+    let tx_args = apply_use_device(vec![
+        "bond",
+        "--validator",
+        "validator-0",
+        "--source",
+        BERTHA,
+        "--amount",
+        "5000.0",
+        "--signing-keys",
+        BERTHA_KEY,
+        "--node",
+        &validator_one_rpc,
+    ]);
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
+    client.assert_success();
+
+    let tx_args = apply_use_device(vec![
+        "unbond",
+        "--validator",
+        "validator-0",
+        "--source",
+        BERTHA,
+        "--amount",
+        "1600.",
+        "--signing-keys",
+        BERTHA_KEY,
+        "--node",
+        &validator_one_rpc,
+    ]);
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    let expected = "Amount 1600.000000 withdrawable starting from epoch ";
+    let (_unread, matched) = client.exp_regex(&format!("{expected}.*\n"))?;
+    let epoch_raw = matched.trim().split_once(expected).unwrap().1;
+    let delegation_withdrawable_epoch = Epoch::from_str(epoch_raw).unwrap();
+    client.assert_success();
+
+    let mut current_epoch = get_epoch(&test, &validator_one_rpc)?;
+    while current_epoch < delegation_withdrawable_epoch {
+        current_epoch = epoch_sleep(&test, &validator_one_rpc, 120)?;
+    }
+
+    // Submit a withdrawal of the delegation
+    let tx_args = apply_use_device(vec![
+        "withdraw",
+        "--validator",
+        "validator-0",
+        "--source",
+        BERTHA,
+        "--signing-keys",
+        BERTHA_KEY,
+        "--node",
+        &validator_one_rpc,
+    ]);
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
+    client.assert_success();
+
+    // Propose phase 2 - staking party 🥳
+    let activation_epoch = submit_proposal(TestWasms::TxProposalPhase2)?;
+
+    // Wait for phase 2 proposal activation
+    let mut current_epoch = get_epoch(&test, &validator_one_rpc)?;
+    while current_epoch < activation_epoch {
+        // There should be no staking rewards before phase 2
+        let staking_rewards =
+            query_staking_rewards(&test, "validator-0", &validator_one_rpc)?;
+        assert_eq!(staking_rewards, token::Amount::zero());
+
+        // There should be no tokens in PGF address
+        let balance = find_balance(
+            &test,
+            Who::Validator(0),
+            NAM,
+            PGF_ADDRESS,
+            None,
+            None,
+        )?;
+        assert_eq!(balance, token::Amount::zero());
+
+        current_epoch = epoch_sleep(&test, &validator_one_rpc, 120)?;
+    }
+
+    // Check staking rewards activation
+    let staking_rewards =
+        query_staking_rewards(&test, "validator-0", &validator_one_rpc)?;
+    assert_ne!(staking_rewards, token::Amount::zero());
+
+    // There should be some balance now in PGF address
+    let balance =
+        find_balance(&test, Who::Validator(0), NAM, PGF_ADDRESS, None, None)?;
+    assert_ne!(balance, token::Amount::zero());
+
+    // Propose phase 3 - shielding party 🥳
+    let activation_epoch = submit_proposal(TestWasms::TxProposalPhase3)?;
+
+    // IBC transfers shouldn't be allowed before phase 3
+    ibc_tests::transfer_from_cosmos(
+        &test_gaia,
+        COSMOS_USER,
+        &namada_ibc_receiver,
+        COSMOS_COIN,
+        1,
+        &port_id_gaia,
+        &channel_id_gaia,
+        None,
+        None,
+    )?;
+
+    // // IBC shielding shouldn't be allowed before phase 3
+    let shielding_data_path = ibc_tests::gen_ibc_shielding_data(
+        &test,
+        AA_PAYMENT_ADDRESS,
+        COSMOS_COIN,
+        1,
+        &port_id_namada,
+        &channel_id_namada,
+    )?;
+    ibc_tests::transfer_from_cosmos(
+        &test_gaia,
+        COSMOS_USER,
+        AA_PAYMENT_ADDRESS,
+        COSMOS_COIN,
+        1,
+        &port_id_gaia,
+        &channel_id_gaia,
+        Some(shielding_data_path),
+        None,
+    )?;
+    let _ = ibc_tests::wait_for_packet_relay(
+        &port_id_gaia,
+        &channel_id_gaia,
+        &test,
+    );
+
+    // Fetch note for the shielding transfer target
+    shielded_sync(&test, AA_VIEWING_KEY)?;
+
+    // Wait for phase 3 proposal activation
+    let mut current_epoch = get_epoch(&test, &validator_one_rpc)?;
+    while current_epoch < activation_epoch {
+        // The tokens should NOT have been transferred to transparent address
+        check_balance(&test, ALBERT, &gaia_token, 0)?;
+        // The tokens should NOT have been transferred to shielded address
+        check_balance(&test, AA_VIEWING_KEY, &gaia_token, 0)?;
+
+        current_epoch = epoch_sleep(&test, &validator_one_rpc, 120)?;
+
+        // Clear the pending packets before activation
+        if current_epoch.next() == activation_epoch {
+            ibc_tests::clear_packet(
+                &port_id_namada,
+                &channel_id_namada,
+                &test,
+            )?;
+            ibc_tests::clear_packet(&port_id_gaia, &channel_id_gaia, &test)?;
+        }
+    }
+
+    // Make sure we've entered a new MASP epoch before shielding to get rewards
+    epoch_sleep(&test, &validator_one_rpc, 120)?;
+    epoch_sleep(&test, &validator_one_rpc, 120)?;
+
+    // IBC transfers should be allowed now
+    ibc_tests::transfer_from_cosmos(
+        &test_gaia,
+        COSMOS_USER,
+        &namada_ibc_receiver,
+        COSMOS_COIN,
+        1,
+        &port_id_gaia,
+        &channel_id_gaia,
+        None,
+        None,
+    )?;
+    ibc_tests::wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test)?;
+
+    // The transparent tokens should have been transferred
+    let trans_balance = find_balance(
+        &test,
+        Who::Validator(0),
+        &gaia_token,
+        ALBERT,
+        Some(0),
+        Some(&ibc_denom_on_namada),
+    )?;
+    assert_ne!(trans_balance, token::Amount::zero());
+
+    // IBC shielding should be allowed now
+    // Shield a larger amount of IBC token from gaia to obtain rewards once
+    // activated
+    let shielding_data_path = ibc_tests::gen_ibc_shielding_data(
+        &test,
+        AA_PAYMENT_ADDRESS,
+        COSMOS_COIN,
+        500_000,
+        &port_id_namada,
+        &channel_id_namada,
+    )?;
+    ibc_tests::transfer_from_cosmos(
+        &test_gaia,
+        COSMOS_USER,
+        AA_PAYMENT_ADDRESS,
+        COSMOS_COIN,
+        500_000,
+        &port_id_gaia,
+        &channel_id_gaia,
+        Some(shielding_data_path),
+        None,
+    )?;
+    ibc_tests::wait_for_packet_relay(
+        &port_id_gaia,
+        &channel_id_gaia,
+        &test_gaia,
+    )?;
+
+    shielded_sync(&test, AA_VIEWING_KEY)?;
+    // The shielding tokens should have been transferred
+    let balance = find_balance(
+        &test,
+        Who::Validator(0),
+        &gaia_token,
+        AA_VIEWING_KEY,
+        Some(0),
+        Some(&ibc_denom_on_namada),
+    )?;
+    assert_eq!(balance, token::Amount::from_u64(500_000));
+
+    // Send the tokens back to gaia
+    ibc_tests::transfer(
+        &test,
+        ALBERT,
+        &gaia_receiver,
+        &ibc_denom_on_namada,
+        u64::from_str(&trans_balance.to_string()).unwrap(),
+        Some(ALBERT_KEY),
+        &port_id_namada,
+        &channel_id_namada,
+        None,
+        None,
+        None,
+    )?;
+    ibc_tests::wait_for_packet_relay(
+        &port_id_namada,
+        &channel_id_namada,
+        &test,
+    )?;
+    ibc_tests::check_cosmos_balance(
+        &test_gaia,
+        COSMOS_USER,
+        COSMOS_COIN,
+        500_000,
+    )?;
+
+    // Propose phase 4 - shielding rewards party 🥳
+    let activation_epoch = submit_proposal(TestWasms::TxProposalPhase4)?;
+
+    let last_rewards = find_balance(
+        &test,
+        Who::Validator(0),
+        NAM,
+        AA_VIEWING_KEY,
+        None,
+        None,
+    )?;
+
+    // Wait for phase 4 proposal activation
+    let mut current_epoch = get_epoch(&test, &validator_one_rpc)?;
+    while current_epoch < activation_epoch {
+        // There should be no shielding rewards before phase 4
+        shielded_sync(&test, AA_VIEWING_KEY)?;
+        let current_rewards = find_balance(
+            &test,
+            Who::Validator(0),
+            NAM,
+            AA_VIEWING_KEY,
+            None,
+            None,
+        )?;
+        assert_eq!(last_rewards, current_rewards);
+
+        current_epoch = epoch_sleep(&test, &validator_one_rpc, 120)?;
+    }
+
+    // Make sure we've entered a new MASP epoch before shielding to get rewards
+    epoch_sleep(&test, &validator_one_rpc, 120)?;
+
+    // There should be some shielding rewards now
+    shielded_sync(&test, AA_VIEWING_KEY)?;
+    let current_rewards = find_balance(
+        &test,
+        Who::Validator(0),
+        NAM,
+        AA_VIEWING_KEY,
+        None,
+        None,
+    )?;
+    assert!(current_rewards > last_rewards);
+
+    // Propose phase 5 - NAM party 🥳
+    let activation_epoch = submit_proposal(TestWasms::TxProposalPhase5)?;
+
+    // Wait for phase 5 proposal activation
+    let mut current_epoch = get_epoch(&test, &validator_one_rpc)?;
+    while current_epoch < activation_epoch {
+        // Should not be able transfer NAM before phase 5
+        let tx_args = apply_use_device(vec![
+            "transparent-transfer",
+            "--source",
+            BERTHA,
+            "--target",
+            ALBERT,
+            "--token",
+            NAM,
+            "--amount",
+            "1",
+            "--node",
+            &validator_one_rpc,
+        ]);
+        let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+        client.exp_string(TX_REJECTED)?;
+
+        current_epoch = epoch_sleep(&test, &validator_one_rpc, 120)?;
+    }
+
+    // Should be able transfer NAM now
+    let tx_args = apply_use_device(vec![
+        "transparent-transfer",
+        "--source",
+        BERTHA,
+        "--target",
+        ALBERT,
+        "--token",
+        NAM,
+        "--amount",
+        "1",
+        "--node",
+        &validator_one_rpc,
+    ]);
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
+    client.assert_success();
+
+    Ok(())
+}
+
+fn query_staking_rewards(
+    test: &Test,
+    validator: &str,
+    rpc: &str,
+) -> Result<token::Amount> {
+    // Query the current rewards for the validator self-bond and see that it
+    // grows
+    let tx_args = vec!["rewards", "--validator", validator, "--node", &rpc];
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    let (_, res) = client
+        .exp_regex(r"Current rewards available for claim: [0-9\.]+ NAM")
+        .unwrap();
+
+    let words = res.split(' ').collect::<Vec<_>>();
+    let res = words[words.len() - 2];
+    Ok(token::Amount::from_str(
+        res.split(' ').last().unwrap(),
+        NATIVE_MAX_DECIMAL_PLACES,
+    )
+    .unwrap())
 }

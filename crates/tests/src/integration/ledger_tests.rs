@@ -734,6 +734,8 @@ fn proposal_submission() -> Result<()> {
         albert.clone(),
         TestWasms::TxProposalCode.read_bytes(),
         12,
+        None,
+        None,
     );
 
     let submit_proposal_args = apply_use_device(vec![
@@ -1112,8 +1114,14 @@ fn pgf_governance_proposal() -> Result<()> {
         remove: vec![],
     };
 
-    let valid_proposal_json_path =
-        prepare_proposal_data(node.test_dir.path(), albert, pgf_stewards, 12);
+    let valid_proposal_json_path = prepare_proposal_data(
+        node.test_dir.path(),
+        albert,
+        pgf_stewards,
+        12,
+        None,
+        None,
+    );
     let submit_proposal_args = apply_use_device(vec![
         "init-proposal",
         "--pgf-stewards",
@@ -1324,8 +1332,14 @@ fn pgf_governance_proposal() -> Result<()> {
             target: christel,
         })],
     };
-    let valid_proposal_json_path =
-        prepare_proposal_data(node.test_dir.path(), albert, pgf_funding, 36);
+    let valid_proposal_json_path = prepare_proposal_data(
+        node.test_dir.path(),
+        albert,
+        pgf_funding,
+        36,
+        None,
+        None,
+    );
 
     let submit_proposal_args = apply_use_device(vec![
         "init-proposal",
@@ -1471,6 +1485,8 @@ fn implicit_account_reveal_pk() -> Result<()> {
                 author,
                 TestWasms::TxProposalCode.read_bytes(),
                 12,
+                None,
+                None,
             );
             vec![
                 "init-proposal",

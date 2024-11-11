@@ -9,15 +9,14 @@ use std::str::FromStr;
 use std::time::{Duration, Instant};
 use std::{env, time};
 
-use borsh::BorshDeserialize;
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
-use data_encoding::HEXLOWER;
 use escargot::CargoBuild;
 use eyre::eyre;
 use namada_apps_lib::cli::context::ENV_VAR_CHAIN_ID;
 use namada_apps_lib::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps_lib::config::{Config, TendermintMode};
+use namada_apps_lib::wallet;
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_sdk::address::Address;
 use namada_sdk::chain::Epoch;
@@ -128,38 +127,30 @@ pub fn find_address(test: &Test, alias: impl AsRef<str>) -> Result<Address> {
     Ok(address)
 }
 
-/// Find the balance of specific token for an account.
-#[allow(dead_code)]
+/// Find balance of specific token for an account.
 pub fn find_balance(
     test: &Test,
     node: Who,
-    token: &Address,
-    owner: &Address,
+    token: &str,
+    owner: &str,
+    denom: Option<u8>,
+    balance_pattern: Option<&str>,
 ) -> Result<token::Amount> {
-    let ledger_address = get_actor_rpc(test, node);
-    let balance_key = token::storage_key::balance_key(token, owner);
-    let mut bytes = run!(
-        test,
-        Bin::Client,
-        &[
-            "query-bytes",
-            "--storage-key",
-            &balance_key.to_string(),
-            "--ledger-address",
-            &ledger_address,
-        ],
-        Some(10)
-    )?;
-    let (_, matched) = bytes.exp_regex("Found data: 0x.*")?;
+    let rpc = get_actor_rpc(test, node);
+    let query_args = vec![
+        "balance", "--owner", &owner, "--token", &token, "--node", &rpc,
+    ];
+    let mut client = run!(test, Bin::Client, query_args, Some(40))?;
+    let token = wallet::Alias::from(token).to_string();
+    let balance_pattern = balance_pattern.unwrap_or(&token);
+    let (_unread, matched) =
+        client.exp_regex(&format!(r"{balance_pattern}: [0-9.]+"))?;
     let data_str = strip_trailing_newline(&matched)
         .trim()
         .rsplit_once(' ')
         .unwrap()
-        .1[2..]
-        .to_string();
-    let amount =
-        token::Amount::try_from_slice(&HEXLOWER.decode(data_str.as_bytes())?)?;
-    bytes.assert_success();
+        .1;
+    let amount = token::Amount::from_str(data_str, denom.unwrap_or(6)).unwrap();
     Ok(amount)
 }
 
@@ -737,4 +728,47 @@ pub fn get_cosmos_gov_address(test: &Test) -> Result<String> {
     let (_, matched) = cosmos.exp_regex("cosmos[a-z0-9]+")?;
 
     Ok(matched.trim().to_string())
+}
+
+pub fn check_balance(
+    test: &Test,
+    owner: impl AsRef<str>,
+    token: impl AsRef<str>,
+    expected_amount: u64,
+) -> Result<()> {
+    let rpc = get_actor_rpc(test, Who::Validator(0));
+
+    if owner.as_ref().starts_with("zvk") {
+        shielded_sync(test, owner.as_ref())?;
+    }
+
+    let query_args = vec![
+        "balance",
+        "--owner",
+        owner.as_ref(),
+        "--token",
+        token.as_ref(),
+        "--node",
+        &rpc,
+    ];
+    let mut client = run!(test, Bin::Client, query_args, Some(40))?;
+    let expected =
+        format!("{}: {expected_amount}", token.as_ref().to_lowercase());
+    client.exp_string(&expected)?;
+    client.assert_success();
+    Ok(())
+}
+
+pub fn shielded_sync(test: &Test, viewing_key: impl AsRef<str>) -> Result<()> {
+    let rpc = get_actor_rpc(test, Who::Validator(0));
+    let tx_args = vec![
+        "shielded-sync",
+        "--viewing-keys",
+        viewing_key.as_ref(),
+        "--node",
+        &rpc,
+    ];
+    let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
+    client.assert_success();
+    Ok(())
 }

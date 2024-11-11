@@ -45,9 +45,11 @@ use prost::Message;
 use setup::constants::*;
 use sha2::{Digest, Sha256};
 
+use super::helpers::check_balance;
 use crate::e2e::helpers::{
     epoch_sleep, epochs_per_year_from_min_duration, find_address,
     find_cosmos_address, get_actor_rpc, get_cosmos_gov_address, get_epoch,
+    shielded_sync,
 };
 use crate::e2e::ledger_tests::{
     start_namada_ledger_node_wait_wasm, write_json_file,
@@ -100,7 +102,7 @@ fn ibc_transfers() -> Result<()> {
             setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
         };
     let (ledger, gaia, test, test_gaia) =
-        run_namada_cosmos(CosmosChainType::Gaia, update_genesis)?;
+        run_namada_cosmos(CosmosChainType::Gaia, update_genesis, None)?;
     let _bg_ledger = ledger.background();
     let _bg_gaia = gaia.background();
 
@@ -473,7 +475,7 @@ fn ibc_nft_transfers() -> Result<()> {
             setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
         };
     let (ledger, cosmwasm, test, test_cosmwasm) =
-        run_namada_cosmos(CosmosChainType::CosmWasm, update_genesis)?;
+        run_namada_cosmos(CosmosChainType::CosmWasm, update_genesis, None)?;
     let _bg_ledger = ledger.background();
     let _bg_wasmd = cosmwasm.background();
 
@@ -607,7 +609,7 @@ fn pgf_over_ibc() -> Result<()> {
             setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
         };
     let (ledger, gaia, test, test_gaia) =
-        run_namada_cosmos(CosmosChainType::Gaia, update_genesis)?;
+        run_namada_cosmos(CosmosChainType::Gaia, update_genesis, None)?;
     let _bg_ledger = ledger.background();
     let _bg_gaia = gaia.background();
 
@@ -704,7 +706,7 @@ fn fee_payment_with_ibc_token() -> Result<()> {
             setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
         };
     let (ledger, gaia, test, test_gaia) =
-        run_namada_cosmos(CosmosChainType::Gaia, update_genesis)?;
+        run_namada_cosmos(CosmosChainType::Gaia, update_genesis, None)?;
     let _bg_ledger = ledger.background();
     let _bg_gaia = gaia.background();
 
@@ -810,7 +812,7 @@ fn ibc_token_inflation() -> Result<()> {
             setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
         };
     let (ledger, gaia, test, test_gaia) =
-        run_namada_cosmos(CosmosChainType::Gaia, update_genesis)?;
+        run_namada_cosmos(CosmosChainType::Gaia, update_genesis, None)?;
     let _bg_ledger = ledger.background();
     let _bg_gaia = gaia.background();
 
@@ -900,7 +902,7 @@ fn ibc_upgrade_client() -> Result<()> {
             setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
         };
     let (ledger, gaia, test, test_gaia) =
-        run_namada_cosmos(CosmosChainType::Gaia, update_genesis)?;
+        run_namada_cosmos(CosmosChainType::Gaia, update_genesis, None)?;
     let _bg_ledger = ledger.background();
     let _bg_gaia = gaia.background();
 
@@ -971,7 +973,7 @@ fn ibc_rate_limit() -> Result<()> {
         setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
     };
     let (ledger, gaia, test, test_gaia) =
-        run_namada_cosmos(CosmosChainType::Gaia, update_genesis)?;
+        run_namada_cosmos(CosmosChainType::Gaia, update_genesis, None)?;
     let _bg_ledger = ledger.background();
     let _bg_gaia = gaia.background();
 
@@ -1088,12 +1090,13 @@ fn ibc_rate_limit() -> Result<()> {
     Ok(())
 }
 
-fn run_namada_cosmos(
+pub fn run_namada_cosmos(
     chain_type: CosmosChainType,
     mut update_genesis: impl FnMut(
         templates::All<templates::Unvalidated>,
         &Path,
     ) -> templates::All<templates::Unvalidated>,
+    cosmos_user_balance: Option<u64>,
 ) -> Result<(NamadaCmd, NamadaCmd, Test, Test)> {
     let test = setup::network(&mut update_genesis, None)?;
 
@@ -1108,14 +1111,14 @@ fn run_namada_cosmos(
     let ledger = start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?;
 
     // Cosmos
-    let test_cosmos = setup_cosmos(chain_type)?;
+    let test_cosmos = setup_cosmos(chain_type, cosmos_user_balance)?;
     let cosmos = run_cosmos(&test_cosmos)?;
     sleep(5);
 
     Ok((ledger, cosmos, test, test_cosmos))
 }
 
-fn create_channel_with_hermes(
+pub fn create_channel_with_hermes(
     test_a: &Test,
     test_b: &Test,
     port_id_a: &PortId,
@@ -1167,7 +1170,7 @@ fn get_channel_ids_from_hermes_output(
     Ok((channel_id_a, channel_id_b))
 }
 
-fn run_hermes(test: &Test) -> Result<NamadaCmd> {
+pub fn run_hermes(test: &Test) -> Result<NamadaCmd> {
     let args = ["start"];
     let mut hermes = run_hermes_cmd(test, args, Some(40))?;
     hermes.exp_string("Hermes has started")?;
@@ -1195,7 +1198,7 @@ fn run_cosmos(test: &Test) -> Result<NamadaCmd> {
     Ok(cosmos)
 }
 
-fn wait_for_packet_relay(
+pub fn wait_for_packet_relay(
     port_id: &PortId,
     channel_id: &ChannelId,
     test: &Test,
@@ -1234,7 +1237,7 @@ fn wait_for_packet_relay(
     Err(eyre!("Pending packet is still left"))
 }
 
-fn clear_packet(
+pub fn clear_packet(
     port_id: &PortId,
     channel_id: &ChannelId,
     test: &Test,
@@ -1384,7 +1387,7 @@ fn transfer_on_chain(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn transfer(
+pub fn transfer(
     test: &Test,
     sender: impl AsRef<str>,
     receiver: impl AsRef<str>,
@@ -1797,7 +1800,7 @@ fn submit_votes(test: &Test) -> Result<()> {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn transfer_from_cosmos(
+pub fn transfer_from_cosmos(
     test: &Test,
     sender: impl AsRef<str>,
     receiver: impl AsRef<str>,
@@ -1898,35 +1901,6 @@ fn query_height(test: &Test) -> Result<Height> {
     Ok(Height::new(0, status.sync_info.latest_block_height.into()).unwrap())
 }
 
-fn check_balance(
-    test: &Test,
-    owner: impl AsRef<str>,
-    token: impl AsRef<str>,
-    expected_amount: u64,
-) -> Result<()> {
-    let rpc = get_actor_rpc(test, Who::Validator(0));
-
-    if owner.as_ref().starts_with("zvk") {
-        shielded_sync(test, owner.as_ref())?;
-    }
-
-    let query_args = vec![
-        "balance",
-        "--owner",
-        owner.as_ref(),
-        "--token",
-        token.as_ref(),
-        "--node",
-        &rpc,
-    ];
-    let mut client = run!(test, Bin::Client, query_args, Some(40))?;
-    let expected =
-        format!("{}: {expected_amount}", token.as_ref().to_lowercase());
-    client.exp_string(&expected)?;
-    client.assert_success();
-    Ok(())
-}
-
 fn get_gaia_denom_hash(denom: impl AsRef<str>) -> String {
     let mut hasher = Sha256::new();
     hasher.update(denom.as_ref());
@@ -1934,7 +1908,7 @@ fn get_gaia_denom_hash(denom: impl AsRef<str>) -> String {
     format!("ibc/{hash:X}")
 }
 
-fn check_cosmos_balance(
+pub fn check_cosmos_balance(
     test: &Test,
     owner: impl AsRef<str>,
     denom: impl AsRef<str>,
@@ -1987,23 +1961,9 @@ fn check_inflated_balance(
     Ok(())
 }
 
-fn shielded_sync(test: &Test, viewing_key: impl AsRef<str>) -> Result<()> {
-    let rpc = get_actor_rpc(test, Who::Validator(0));
-    let tx_args = vec![
-        "shielded-sync",
-        "--viewing-keys",
-        viewing_key.as_ref(),
-        "--node",
-        &rpc,
-    ];
-    let mut client = run!(test, Bin::Client, tx_args, Some(120))?;
-    client.assert_success();
-    Ok(())
-}
-
 /// Get IBC shielding data for the following IBC transfer from the destination
 /// chain
-fn gen_ibc_shielding_data(
+pub fn gen_ibc_shielding_data(
     dst_test: &Test,
     receiver: impl AsRef<str>,
     token: impl AsRef<str>,
