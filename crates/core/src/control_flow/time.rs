@@ -29,8 +29,11 @@ pub trait SleepStrategy {
     /// Calculate a duration from a sleep strategy state.
     fn backoff(&self, state: &Self::State) -> Duration;
 
-    /// Update the state of the sleep strategy.
+    /// Move to the next state of the sleep strategy.
     fn next_state(&self, state: &mut Self::State);
+
+    /// Move to the previous state of the sleep strategy.
+    fn prev_state(&self, state: &mut Self::State);
 
     /// Map a function to the duration returned from a
     /// sleep strategy.
@@ -73,6 +76,11 @@ where
     fn next_state(&self, state: &mut S::State) {
         self.strategy.next_state(state)
     }
+
+    #[inline]
+    fn prev_state(&self, state: &mut S::State) {
+        self.strategy.prev_state(state)
+    }
 }
 
 /// Constant sleep strategy.
@@ -91,6 +99,10 @@ impl SleepStrategy for Constant {
     }
 
     fn next_state(&self, _: &mut ()) {
+        // NOOP
+    }
+
+    fn prev_state(&self, _: &mut ()) {
         // NOOP
     }
 }
@@ -114,7 +126,11 @@ impl SleepStrategy for LinearBackoff {
     }
 
     fn next_state(&self, state: &mut Duration) {
-        *state += self.delta;
+        *state = state.saturating_add(self.delta);
+    }
+
+    fn prev_state(&self, state: &mut Duration) {
+        *state = state.saturating_sub(self.delta);
     }
 }
 
@@ -143,6 +159,10 @@ where
 
     fn next_state(&self, state: &mut Self::State) {
         *state = state.saturating_add(1);
+    }
+
+    fn prev_state(&self, state: &mut Self::State) {
+        *state = state.saturating_sub(1);
     }
 }
 
