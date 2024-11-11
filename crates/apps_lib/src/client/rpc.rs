@@ -367,8 +367,6 @@ pub async fn query_rewards_estimate(
 ) {
     let mut shielded = context.shielded_mut().await;
     let _ = shielded.load().await;
-    // Save the update state so that future fetches can be short-circuited
-    let _ = shielded.save().await;
     let rewards_estimate = shielded
         .estimate_next_epoch_rewards(context, &args.owner.as_viewing_key())
         .await
