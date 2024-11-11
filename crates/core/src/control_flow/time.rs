@@ -256,7 +256,17 @@ impl<S: SleepStrategy> Sleep<S> {
     /// Update the sleep strategy state, and sleep for the given backoff.
     async fn sleep_update(&self, state: &mut S::State) {
         self.strategy.next_state(state);
-        sleep(self.strategy.backoff(state)).await;
+        self.sleep_with_current_backoff(state).await;
+    }
+
+    /// Sleep for a [`Duration`] equivalent to the value of
+    /// the current backoff.
+    pub fn sleep_with_current_backoff(
+        &self,
+        state: &S::State,
+    ) -> impl Future<Output = ()> + 'static {
+        let backoff_duration = self.strategy.backoff(state);
+        sleep(backoff_duration)
     }
 
     /// Run a future as many times as `iter_times`
