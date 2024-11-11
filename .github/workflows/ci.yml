@@ -4,12 +4,12 @@ on:
   push:
     branches:
       - main
-      - 'maint-[0-9]+.[0-9]+.[0-9]+'
+      - 'maint-[0-9]+.[0-9]+'
   # Run in PRs with conflicts (https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request)
   pull_request_target:
     branches:
       - main
-      - 'maint-[0-9]+.[0-9]+.[0-9]+'
+      - 'maint-[0-9]+.[0-9]+'
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
