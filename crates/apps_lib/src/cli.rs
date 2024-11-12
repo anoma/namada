@@ -3386,6 +3386,8 @@ pub mod args {
         }),
     );
     pub const BIRTHDAY: ArgOpt<BlockHeight> = arg_opt("birthday");
+    pub const BLOCK_BATCH: ArgDefault<usize> =
+        arg_default("block-batch", DefaultFn(|| 10));
     pub const BLOCK_HEIGHT: Arg<BlockHeight> = arg("block-height");
     pub const BLOCK_HEIGHT_OPT: ArgOpt<BlockHeight> = arg_opt("height");
     pub const BLOCK_HEIGHT_TO_OPT: ArgOpt<BlockHeight> = arg_opt("to-height");
@@ -6803,6 +6805,7 @@ pub mod args {
                 Some(times) => RetryStrategy::Times(times),
                 None => RetryStrategy::Forever,
             };
+            let block_batch_size = BLOCK_BATCH.parse(matches);
             Self {
                 ledger_address,
                 last_query_height,
@@ -6812,6 +6815,7 @@ pub mod args {
                 wait_for_last_query_height,
                 max_concurrent_fetches,
                 retry_strategy,
+                block_batch_size,
             }
         }
 
@@ -6849,6 +6853,10 @@ pub mod args {
                     "Maximum number of times to retry fetching. If no \
                      argument is provided, defaults to retrying forever."
                 )))
+                .arg(BLOCK_BATCH.def().help(wrap!(
+                    "Number of blocks fetched per concurrent fetch job. The \
+                     default is 10."
+                )))
         }
     }
 
@@ -6862,6 +6870,7 @@ pub mod args {
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
 
             Ok(ShieldedSync {
+                block_batch_size: self.block_batch_size,
                 max_concurrent_fetches: self.max_concurrent_fetches,
                 wait_for_last_query_height: self.wait_for_last_query_height,
                 ledger_address: chain_ctx.get(&self.ledger_address),

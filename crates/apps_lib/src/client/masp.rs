@@ -84,6 +84,7 @@ pub async fn syncing<
                 .shutdown_signal(install_shutdown_signal(false))
                 .wait_for_last_query_height(args.wait_for_last_query_height)
                 .retry_strategy(args.retry_strategy)
+                .block_batch_size(args.block_batch_size)
                 .build();
 
             let env = MaspLocalTaskEnv::new(500)
