@@ -702,7 +702,6 @@ where
         }
 
         if self.config.retry_strategy.may_retry() {
-            self.config.fetched_tracker.message(format!("{error}"));
             true
         } else {
             // NB: store last encountered error
