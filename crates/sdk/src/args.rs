@@ -2158,6 +2158,8 @@ pub struct ShieldedSync<C: NamadaTypes = SdkTypes> {
     /// Maximum number of fetch jobs that will ever
     /// execute concurrently during the shielded sync.
     pub max_concurrent_fetches: usize,
+    /// Number of blocks fetched per concurrent fetch job.
+    pub block_batch_size: usize,
     /// Maximum number of times to retry fetching. If `None`
     /// is provided, defaults to "forever".
     pub retry_strategy: RetryStrategy,
