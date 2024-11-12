@@ -141,6 +141,7 @@ pub async fn syncing<
         dispatch_client!(LedgerMaspClient::new(
             client,
             args.max_concurrent_fetches,
+            Duration::from_millis(5),
         ))?
     };
 
