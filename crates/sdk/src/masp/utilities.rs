@@ -1,7 +1,7 @@
 //! Helper functions and types
 
 use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use borsh::BorshDeserialize;
 use masp_primitives::merkle_tree::{CommitmentTree, IncrementalWitness};
@@ -9,6 +9,9 @@ use masp_primitives::sapling::Node;
 use masp_primitives::transaction::Transaction as MaspTx;
 use namada_core::chain::BlockHeight;
 use namada_core::collections::HashMap;
+use namada_core::control_flow::time::{
+    Duration, LinearBackoff, Sleep, SleepStrategy,
+};
 use namada_core::storage::TxIndex;
 use namada_events::extend::IndexedMaspData;
 use namada_io::Client;
@@ -24,6 +27,8 @@ use crate::masp::{extract_masp_tx, get_indexed_masp_events_at_height};
 struct LedgerMaspClientInner<C> {
     client: C,
     semaphore: Semaphore,
+    backoff: RwLock<Duration>,
+    sleep: Sleep<LinearBackoff>,
 }
 
 /// An inefficient MASP client which simply uses a
@@ -43,36 +48,39 @@ impl<C> Clone for LedgerMaspClient<C> {
 impl<C> LedgerMaspClient<C> {
     /// Create a new [`MaspClient`] given an rpc client.
     #[inline(always)]
-    pub fn new(client: C, max_concurrent_fetches: usize) -> Self {
+    pub fn new(
+        client: C,
+        max_concurrent_fetches: usize,
+        linear_backoff_delta: Duration,
+    ) -> Self {
         Self {
             inner: Arc::new(LedgerMaspClientInner {
                 client,
                 semaphore: Semaphore::new(max_concurrent_fetches),
+                backoff: RwLock::new(Duration::from_secs(0)),
+                sleep: Sleep {
+                    strategy: LinearBackoff {
+                        delta: linear_backoff_delta,
+                    },
+                },
             }),
         }
     }
 }
 
-impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
-    type Error = Error;
-
-    async fn last_block_height(&self) -> Result<Option<BlockHeight>, Error> {
-        let maybe_block = crate::rpc::query_block(&self.inner.client).await?;
-        Ok(maybe_block.map(|b| b.height))
-    }
-
-    async fn fetch_shielded_transfers(
+impl<C: Client + Send + Sync> LedgerMaspClient<C> {
+    async fn fetch_shielded_transfers_inner(
         &self,
         from: BlockHeight,
         to: BlockHeight,
     ) -> Result<Vec<IndexedNoteEntry>, Error> {
+        let _permit = self.inner.semaphore.acquire().await.unwrap();
+
         // Fetch all the transactions we do not have yet
         let mut txs = vec![];
 
         for height in from.0..=to.0 {
             let maybe_txs_results = async {
-                let _permit = self.inner.semaphore.acquire().await.unwrap();
-
                 get_indexed_masp_events_at_height(
                     &self.inner.client,
                     height.into(),
@@ -86,8 +94,6 @@ impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
             };
 
             let block = {
-                let _permit = self.inner.semaphore.acquire().await.unwrap();
-
                 // Query the actual block to get the txs bytes. If we only need
                 // one tx it might be slightly better to query
                 // the /tx endpoint to reduce the amount of data
@@ -126,6 +132,43 @@ impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
         }
 
         Ok(txs)
+    }
+}
+
+impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
+    type Error = Error;
+
+    async fn last_block_height(&self) -> Result<Option<BlockHeight>, Error> {
+        let maybe_block = crate::rpc::query_block(&self.inner.client).await?;
+        Ok(maybe_block.map(|b| b.height))
+    }
+
+    async fn fetch_shielded_transfers(
+        &self,
+        from: BlockHeight,
+        to: BlockHeight,
+    ) -> Result<Vec<IndexedNoteEntry>, Error> {
+        const ZERO: Duration = Duration::from_secs(0);
+        let current_backoff = { *self.inner.backoff.read().unwrap() };
+
+        if current_backoff > ZERO {
+            self.inner
+                .sleep
+                .sleep_with_current_backoff(&current_backoff)
+                .await;
+        }
+
+        let result = self.fetch_shielded_transfers_inner(from, to).await;
+
+        if result.is_err() {
+            let mut backoff = self.inner.backoff.write().unwrap();
+            self.inner.sleep.strategy.next_state(&mut *backoff);
+        } else if current_backoff > ZERO {
+            let mut backoff = self.inner.backoff.write().unwrap();
+            self.inner.sleep.strategy.prev_state(&mut *backoff);
+        }
+
+        result
     }
 
     #[inline(always)]

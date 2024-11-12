@@ -1192,6 +1192,7 @@ impl BenchShieldedCtx {
                     wait_for_last_query_height: false,
                     max_concurrent_fetches: 100,
                     retry_strategy: RetryStrategy::Forever,
+                    block_batch_size: 10,
                 },
                 &StdIo,
             ))
