@@ -66,13 +66,13 @@ impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
         from: BlockHeight,
         to: BlockHeight,
     ) -> Result<Vec<IndexedNoteEntry>, Error> {
+        let _permit = self.inner.semaphore.acquire().await.unwrap();
+
         // Fetch all the transactions we do not have yet
         let mut txs = vec![];
 
         for height in from.0..=to.0 {
             let maybe_txs_results = async {
-                let _permit = self.inner.semaphore.acquire().await.unwrap();
-
                 get_indexed_masp_events_at_height(
                     &self.inner.client,
                     height.into(),
@@ -86,8 +86,6 @@ impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
             };
 
             let block = {
-                let _permit = self.inner.semaphore.acquire().await.unwrap();
-
                 // Query the actual block to get the txs bytes. If we only need
                 // one tx it might be slightly better to query
                 // the /tx endpoint to reduce the amount of data
