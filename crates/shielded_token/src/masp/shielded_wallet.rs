@@ -352,8 +352,9 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
     /// Updates the internal state with the data of the newly generated
     /// transaction. More specifically invalidate the spent notes, but do not
     /// cache the newly produced output descriptions and therefore the merkle
-    /// tree
-    async fn pre_cache_transaction(
+    /// tree (this is because we don't know the exact position in the tree where
+    /// the new notes will be appended)
+    pub async fn pre_cache_transaction(
         &mut self,
         masp_tx: &Transaction,
     ) -> Result<(), eyre::Error> {
@@ -1114,6 +1115,11 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             )
             .map_err(|error| TransferErr::Build { error })?;
 
+        // FIXME: this one has to be done only after receiving an ok from the
+        // node FIXME: but it's a method on the shielded wallet so I
+        // need to have it FIXME: write a test for this thing. Also a
+        // test fro the query to the balance with a speculative context
+        // FIXME: maybe I can remove this update_ctx arg
         if update_ctx {
             self.pre_cache_transaction(&masp_tx)
                 .await
