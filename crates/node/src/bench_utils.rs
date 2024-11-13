@@ -1223,7 +1223,6 @@ impl BenchShieldedCtx {
                         vec![masp_transfer_data],
                         None,
                         expiration,
-                        true,
                     )
                     .await
             })

@@ -280,10 +280,10 @@ pub type WitnessMap = HashMap<usize, IncrementalWitness<Node>>;
 #[derive(BorshSerialize, BorshDeserialize, Debug)]
 /// The possible sync states of the shielded context
 pub enum ContextSyncStatus {
-    /// The context contains only data that has been confirmed by the protocol
+    /// The context contains data that has been confirmed by the protocol
     Confirmed,
-    /// The context contains that that has not yet been confirmed by the
-    /// protocol and could end up being invalid
+    /// The context possibly contains that that has not yet been confirmed by
+    /// the protocol and could be incomplete or invalid
     Speculative,
 }
 
