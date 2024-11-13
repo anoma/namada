@@ -25,6 +25,12 @@ use namada_sdk::chain::Epoch;
 use namada_sdk::governance::cli::onchain::PgfFunding;
 use namada_sdk::governance::pgf::ADDRESS as PGF_ADDRESS;
 use namada_sdk::governance::storage::proposal::{PGFIbcTarget, PGFTarget};
+use namada_sdk::ibc::apps::nft_transfer::types::{
+    PORT_ID_STR as NFT_PORT_ID, VERSION as NFT_CHANNEL_VERSION,
+};
+use namada_sdk::ibc::apps::transfer::types::{
+    PORT_ID_STR as FT_PORT_ID, VERSION as FT_CHANNEL_VERSION,
+};
 use namada_sdk::ibc::clients::tendermint::client_state::ClientState as TmClientState;
 use namada_sdk::ibc::core::client::types::Height;
 use namada_sdk::ibc::core::host::types::identifiers::{
@@ -99,8 +105,8 @@ fn ibc_transfers() -> Result<()> {
     let _bg_gaia = gaia.background();
 
     setup_hermes(&test, &test_gaia)?;
-    let port_id_namada = "transfer".parse().unwrap();
-    let port_id_gaia = "transfer".parse().unwrap();
+    let port_id_namada = FT_PORT_ID.parse().unwrap();
+    let port_id_gaia = FT_PORT_ID.parse().unwrap();
     let (channel_id_namada, channel_id_gaia) = create_channel_with_hermes(
         &test,
         &test_gaia,
@@ -479,7 +485,7 @@ fn ibc_nft_transfers() -> Result<()> {
     let _bg_wasmd = cosmwasm.background();
 
     setup_hermes(&test, &test_cosmwasm)?;
-    let port_id_namada: PortId = "nft-transfer".parse().unwrap();
+    let port_id_namada: PortId = NFT_PORT_ID.parse().unwrap();
 
     let (cw721_contract, ics721_contract) =
         initialize_nft_contracts(&test_cosmwasm)?;
@@ -495,9 +501,9 @@ fn ibc_nft_transfers() -> Result<()> {
         &port_id_cosmwasm,
     )?;
 
-    // Start relaying
-    let hermes = run_hermes(&test)?;
-    let _bg_hermes = hermes.background();
+    let nft = format!("{cw721_contract}/{NFT_ID}");
+    let ibc_trace_on_namada =
+        format!("{port_id_namada}/{channel_id_namada}/{nft}");
 
     // 1. Transparent transfers
     // CosmWasm to Namada
@@ -511,26 +517,85 @@ fn ibc_nft_transfers() -> Result<()> {
         &ics721_contract,
         &channel_id_cosmwasm,
         None,
+        None,
     )?;
-    wait_for_packet_relay(
-        &port_id_cosmwasm,
-        &channel_id_cosmwasm,
-        &test_cosmwasm,
-    )?;
-
-    let ibc_trace_on_namada = format!(
-        "{port_id_namada}/{channel_id_namada}/{cw721_contract}/{NFT_ID}"
-    );
-    check_balance(&test, &namada_receiver, ibc_trace_on_namada, 1)?;
+    clear_packet(&port_id_cosmwasm, &channel_id_cosmwasm, &test_cosmwasm)?;
+    check_balance(&test, &namada_receiver, &ibc_trace_on_namada, 1)?;
 
     // Namada to CosmWasm
+    transfer(
+        &test,
+        ALBERT,
+        &minter_addr,
+        &ibc_trace_on_namada,
+        1,
+        Some(ALBERT_KEY),
+        &port_id_namada,
+        &channel_id_namada,
+        None,
+        None,
+        None,
+        false,
+    )?;
+    clear_packet(&port_id_namada, &channel_id_namada, &test)?;
+    check_balance(&test, &namada_receiver, &ibc_trace_on_namada, 0)?;
 
     // 2. Shielding/Unshielding transfers
     // Shielding transfer
+    let shielding_data_path = gen_ibc_shielding_data(
+        &test,
+        AA_PAYMENT_ADDRESS,
+        nft,
+        1,
+        &port_id_namada,
+        &channel_id_namada,
+    )?;
+    nft_transfer_from_cosmos(
+        &test_cosmwasm,
+        COSMOS_USER,
+        AA_PAYMENT_ADDRESS,
+        NFT_ID,
+        &cw721_contract,
+        &ics721_contract,
+        &channel_id_cosmwasm,
+        Some(shielding_data_path),
+        None,
+    )?;
+    clear_packet(&port_id_cosmwasm, &channel_id_cosmwasm, &test_cosmwasm)?;
+    check_balance(&test, AA_VIEWING_KEY, &ibc_trace_on_namada, 1)?;
 
     // Shielded transfer on Namada
+    transfer_on_chain(
+        &test,
+        "transfer",
+        A_SPENDING_KEY,
+        AB_PAYMENT_ADDRESS,
+        &ibc_trace_on_namada,
+        1,
+        ALBERT_KEY,
+        &[],
+    )?;
+    check_balance(&test, AA_VIEWING_KEY, &ibc_trace_on_namada, 0)?;
+    check_balance(&test, AB_VIEWING_KEY, &ibc_trace_on_namada, 1)?;
 
     // Unshielding transfer
+    transfer(
+        &test,
+        B_SPENDING_KEY,
+        &minter_addr,
+        &ibc_trace_on_namada,
+        1,
+        Some(BERTHA_KEY),
+        &port_id_namada,
+        &channel_id_namada,
+        None,
+        None,
+        None,
+        false,
+    )?;
+    clear_packet(&port_id_namada, &channel_id_namada, &test)?;
+    check_balance(&test, AB_VIEWING_KEY, &ibc_trace_on_namada, 0)?;
+
     Ok(())
 }
 
@@ -556,8 +621,8 @@ fn pgf_over_ibc() -> Result<()> {
     let _bg_gaia = gaia.background();
 
     setup_hermes(&test, &test_gaia)?;
-    let port_id_namada = "transfer".parse().unwrap();
-    let port_id_gaia: PortId = "transfer".parse().unwrap();
+    let port_id_namada = FT_PORT_ID.parse().unwrap();
+    let port_id_gaia: PortId = FT_PORT_ID.parse().unwrap();
     let (channel_id_namada, channel_id_gaia) = create_channel_with_hermes(
         &test,
         &test_gaia,
@@ -672,8 +737,8 @@ fn fee_payment_with_ibc_token() -> Result<()> {
 
     // Create an IBC channel while waiting the grace epoch
     setup_hermes(&test, &test_gaia)?;
-    let port_id_gaia = "transfer".parse().unwrap();
-    let port_id_namada = "transfer".parse().unwrap();
+    let port_id_gaia = FT_PORT_ID.parse().unwrap();
+    let port_id_namada = FT_PORT_ID.parse().unwrap();
     let (channel_id_namada, channel_id_gaia) = create_channel_with_hermes(
         &test,
         &test_gaia,
@@ -778,8 +843,8 @@ fn ibc_token_inflation() -> Result<()> {
 
     // Create an IBC channel while waiting the grace epoch
     setup_hermes(&test, &test_gaia)?;
-    let port_id_namada = "transfer".parse().unwrap();
-    let port_id_gaia = "transfer".parse().unwrap();
+    let port_id_namada = FT_PORT_ID.parse().unwrap();
+    let port_id_gaia = FT_PORT_ID.parse().unwrap();
     let (channel_id_namada, channel_id_gaia) = create_channel_with_hermes(
         &test,
         &test_gaia,
@@ -849,8 +914,8 @@ fn ibc_upgrade_client() -> Result<()> {
     let _bg_gaia = gaia.background();
 
     setup_hermes(&test, &test_gaia)?;
-    let port_id_namada = "transfer".parse().unwrap();
-    let port_id_gaia: PortId = "transfer".parse().unwrap();
+    let port_id_namada = FT_PORT_ID.parse().unwrap();
+    let port_id_gaia: PortId = FT_PORT_ID.parse().unwrap();
     create_channel_with_hermes(
         &test,
         &test_gaia,
@@ -920,8 +985,8 @@ fn ibc_rate_limit() -> Result<()> {
     let _bg_gaia = gaia.background();
 
     setup_hermes(&test, &test_gaia)?;
-    let port_id_namada = "transfer".parse().unwrap();
-    let port_id_gaia: PortId = "transfer".parse().unwrap();
+    let port_id_namada = FT_PORT_ID.parse().unwrap();
+    let port_id_gaia: PortId = FT_PORT_ID.parse().unwrap();
     let (channel_id_namada, channel_id_gaia) = create_channel_with_hermes(
         &test,
         &test_gaia,
@@ -1068,6 +1133,13 @@ fn create_channel_with_hermes(
     port_id_a: &PortId,
     port_id_b: &PortId,
 ) -> Result<(ChannelId, ChannelId)> {
+    let channel_version = if port_id_a.as_str() == NFT_PORT_ID
+        || port_id_b.as_str() == NFT_PORT_ID
+    {
+        NFT_CHANNEL_VERSION
+    } else {
+        FT_CHANNEL_VERSION
+    };
     let args = [
         "create",
         "channel",
@@ -1079,6 +1151,8 @@ fn create_channel_with_hermes(
         port_id_a.as_str(),
         "--b-port",
         port_id_b.as_str(),
+        "--channel-version",
+        channel_version,
         "--new-client-connection",
         "--yes",
     ];
@@ -1170,6 +1244,27 @@ fn wait_for_packet_relay(
         }
     }
     Err(eyre!("Pending packet is still left"))
+}
+
+fn clear_packet(
+    port_id: &PortId,
+    channel_id: &ChannelId,
+    test: &Test,
+) -> Result<()> {
+    let args = [
+        "clear",
+        "packets",
+        "--chain",
+        test.net.chain_id.as_str(),
+        "--port",
+        port_id.as_str(),
+        "--channel",
+        channel_id.as_str(),
+    ];
+    let mut hermes = run_hermes_cmd(test, args, Some(40))?;
+    hermes.assert_success();
+
+    Ok(())
 }
 
 fn upgrade_client(
@@ -1966,7 +2061,7 @@ fn gen_ibc_shielding_data(
 fn initialize_nft_contracts(test: &Test) -> Result<(String, String)> {
     let working_dir = working_dir();
     let rpc = format!("tcp://{COSMOS_RPC}");
-    let minter_addr = find_cosmos_address(&test, COSMOS_USER)?;
+    let minter_addr = find_cosmos_address(test, COSMOS_USER)?;
 
     // Store cw721 contract
     let cw721_wasm_path =
@@ -2172,6 +2267,7 @@ fn mint_nft(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn nft_transfer_from_cosmos(
     test: &Test,
     sender: impl AsRef<str>,
@@ -2180,20 +2276,34 @@ fn nft_transfer_from_cosmos(
     cw721_contract: impl AsRef<str>,
     ics721_contract: impl AsRef<str>,
     channel_id: &ChannelId,
+    memo_path: Option<PathBuf>,
     timeout_height: Option<u64>,
 ) -> Result<()> {
     let channel_id = channel_id.to_string();
     let timeout_height = timeout_height.unwrap_or(100000);
     let rpc = format!("tcp://{COSMOS_RPC}");
 
+    let receiver = match PaymentAddress::from_str(receiver.as_ref()) {
+        Ok(_) => MASP.to_string(),
+        Err(_) => receiver.as_ref().to_string(),
+    };
+
+    let memo = memo_path
+        .as_ref()
+        .map(|path| {
+            std::fs::read_to_string(path).expect("Reading memo file failed")
+        })
+        .unwrap_or_default();
+
     let msg = serde_json::json!({
-        "receiver": receiver.as_ref(),
+        "receiver": receiver,
         "channel_id": channel_id,
         "timeout": {
             "block": {
                 "revision": 0,
                 "height": timeout_height
-                }}
+                }},
+        "memo": memo
     })
     .to_string();
     let encoded_msg = base64::encode(&msg);

@@ -619,6 +619,7 @@ fn make_hermes_chain_config_for_cosmos(
         Value::String(key_dir.to_string_lossy().to_string()),
     );
     chain.insert("store_prefix".to_owned(), Value::String("ibc".to_owned()));
+    chain.insert("max_gas".to_owned(), Value::Integer(500_000));
     chain.insert("gas_multiplier".to_owned(), Value::Float(1.3));
     let mut table = toml::map::Map::new();
     table.insert("price".to_owned(), Value::Float(0.001));
