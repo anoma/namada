@@ -330,11 +330,17 @@ pub async fn query_proposal(context: &impl Namada, args: args::QueryProposal) {
             edisplay_line!(context.io(), "No proposal found with id: {}", id);
         }
     } else {
-        let last_proposal_id_key = governance_storage::get_counter_key();
-        let last_proposal_id: u64 =
-            query_storage_value(context.client(), &last_proposal_id_key)
+        let counter_key = governance_storage::get_counter_key();
+        let next_proposal_id: u64 =
+            query_storage_value(context.client(), &counter_key)
                 .await
                 .unwrap();
+
+        if next_proposal_id == 0 {
+            display_line!(context.io(), "No proposals found.");
+            return;
+        }
+        let last_proposal_id = next_proposal_id.checked_sub(1).unwrap();
 
         let from_id = if last_proposal_id > 10 {
             last_proposal_id - 10
@@ -342,9 +348,7 @@ pub async fn query_proposal(context: &impl Namada, args: args::QueryProposal) {
             0
         };
 
-        display_line!(context.io(), "id: {}", last_proposal_id);
-
-        for id in from_id..last_proposal_id {
+        for id in from_id..=last_proposal_id {
             let proposal = query_proposal_by_id(context.client(), id)
                 .await
                 .unwrap()
