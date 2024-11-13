@@ -1114,9 +1114,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             )
             .map_err(|error| TransferErr::Build { error })?;
 
-        // FIXME: write a test for this thing. Also a
-        // test fro the query to the balance with a speculative context
-
         Ok(Some(ShieldedTransfer {
             builder: builder_clone,
             masp_tx,
