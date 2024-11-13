@@ -6032,3 +6032,279 @@ fn tricky_masp_txs() -> Result<()> {
 
     Ok(())
 }
+
+// Test generation of transactions and querying balance with the speculative
+// context
+#[test]
+fn speculative_context() -> Result<()> {
+    // This address doesn't matter for tests. But an argument is required.
+    let validator_one_rpc = "http://127.0.0.1:26567";
+    // Download the shielded pool parameters before starting node
+    let _ = FsShieldedUtils::new(PathBuf::new());
+    let (mut node, _services) = setup::setup()?;
+    _ = node.next_masp_epoch();
+
+    // Add the relevant viewing keys to the wallet otherwise the shielded
+    // context won't precache the masp data
+    run(
+        &node,
+        Bin::Wallet,
+        vec![
+            "add",
+            "--alias",
+            "alias_a",
+            "--value",
+            AA_VIEWING_KEY,
+            "--unsafe-dont-encrypt",
+        ],
+    )?;
+
+    // 1. Shield some tokens in two steps two generate two different output
+    //    notes
+    for _ in 0..2 {
+        let captured = CapturedOutput::of(|| {
+            run(
+                &node,
+                Bin::Client,
+                vec![
+                    "shield",
+                    "--source",
+                    ALBERT,
+                    "--target",
+                    AA_PAYMENT_ADDRESS,
+                    "--token",
+                    NAM,
+                    "--amount",
+                    "100",
+                    "--node",
+                    validator_one_rpc,
+                ],
+            )
+        });
+        assert!(captured.result.is_ok());
+        assert!(captured.contains(TX_APPLIED_SUCCESS));
+    }
+
+    // 2. Sync the shielded context and check the balance
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shielded-sync",
+            "--viewing-keys",
+            AA_VIEWING_KEY,
+            "--node",
+            validator_one_rpc,
+        ],
+    )?;
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 200"));
+
+    // 3. Spend an amount of tokens which is less than the amount of every
+    //    single note
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "transfer",
+                "--source",
+                A_SPENDING_KEY,
+                "--target",
+                AB_PAYMENT_ADDRESS,
+                "--token",
+                NAM,
+                "--amount",
+                "90",
+                "--gas-payer",
+                ALBERT_KEY,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    // 4. Check the balance without calling shielded-sync to check the response
+    //    of the speculative context
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    // The speculative context invalidates the entire note spent so we expect to
+    // see the balance coming only from the second unspent note
+    assert!(captured.contains("nam: 100"));
+
+    // 5. Try to spend some amount from the remaining note with a tx that will
+    //    fail
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "transfer",
+                "--source",
+                A_SPENDING_KEY,
+                "--target",
+                AB_PAYMENT_ADDRESS,
+                "--token",
+                NAM,
+                "--amount",
+                "90",
+                "--gas-payer",
+                ALBERT_KEY,
+                // Force failure with low gas limit
+                "--gas-limit",
+                "10000",
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("Gas error: Transaction gas limit exceeded"));
+
+    // 6. Check that the speculative context was not updated
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 100"));
+
+    // 7. Try to spend some amount from the remaining note
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "transfer",
+                "--source",
+                A_SPENDING_KEY,
+                "--target",
+                AB_PAYMENT_ADDRESS,
+                "--token",
+                NAM,
+                "--amount",
+                "90",
+                "--gas-payer",
+                ALBERT_KEY,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    // 8. Check the balance without calling shielded-sync to check the response
+    //    of the speculative context
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    // The speculative context invalidates the entire note spent so we expect to
+    // see an empty balance
+    assert!(captured.contains("nam: 0"));
+
+    // 9. Finally, sync the shielded context and check the confirmed balances
+    run(
+        &node,
+        Bin::Client,
+        vec![
+            "shielded-sync",
+            "--viewing-keys",
+            AA_VIEWING_KEY,
+            AB_VIEWING_KEY,
+            "--node",
+            validator_one_rpc,
+        ],
+    )?;
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 20"));
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AB_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 180"));
+
+    Ok(())
+}
