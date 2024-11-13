@@ -15,8 +15,9 @@ use thiserror::Error;
 use crate::lazy_map::NestedSubKey;
 use crate::storage::{
     consensus_validator_set_handle, get_last_reward_claim_epoch,
-    read_last_pos_inflation_amount, read_last_staked_ratio, read_pos_params,
-    read_total_stake, read_validator_stake, rewards_accumulator_handle,
+    read_last_pos_inflation_amount, read_last_staked_ratio,
+    read_owned_pos_params, read_pos_params, read_total_stake,
+    read_validator_stake, rewards_accumulator_handle,
     validator_commission_rate_handle, validator_rewards_products_handle,
     validator_state_handle, write_last_pos_inflation_amount,
     write_last_staked_ratio,
@@ -690,6 +691,15 @@ where
     let last_inflation_amount =
         Dec::try_from(last_inflation_amount).into_storage_result()?;
 
+    // Check if inflation is on
+    let params = read_owned_pos_params(storage)?;
+    if params.max_inflation_rate == Dec::zero() {
+        return Ok(PosRewardsRates {
+            staking_rewards_rate: Dec::zero(),
+            inflation_rate: Dec::zero(),
+        });
+    }
+
     // Estimate annual inflation rate
     let est_inflation_rate = checked!(
         last_inflation_amount * epochs_per_year / total_native_tokens
@@ -697,7 +707,7 @@ where
 
     // Estimate annual staking rewards rate
     let est_staking_reward_rate =
-        checked!(est_inflation_rate / last_staked_ratio)?;
+        checked!(est_inflation_rate / last_staked_ratio).unwrap_or(Dec::zero());
 
     Ok(PosRewardsRates {
         staking_rewards_rate: est_staking_reward_rate,

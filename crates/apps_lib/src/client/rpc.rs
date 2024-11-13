@@ -1403,7 +1403,6 @@ pub async fn query_effective_native_supply<N: Namada>(context: &N) {
 
 /// Query the staking rewards rate estimate
 pub async fn query_staking_rewards_rate<N: Namada>(context: &N) {
-    display_line!(context.io(), "Querying staking rewards rates...");
     let PosRewardsRates {
         staking_rewards_rate,
         inflation_rate,
@@ -1413,13 +1412,20 @@ pub async fn query_staking_rewards_rate<N: Namada>(context: &N) {
             .staking_rewards_rate(context.client())
             .await,
     );
-    display_line!(
-        context.io(),
-        "Current annual staking rewards rate: {}\nCurrent PoS inflation rate: \
-         {}",
-        staking_rewards_rate,
-        inflation_rate
-    );
+    if staking_rewards_rate.is_zero() && inflation_rate.is_zero() {
+        display_line!(
+            context.io(),
+            "PoS inflation and rewards are not currently enabled."
+        );
+    } else {
+        display_line!(
+            context.io(),
+            "Current annual staking rewards rate: {}\nCurrent PoS inflation \
+             rate: {}",
+            staking_rewards_rate,
+            inflation_rate
+        );
+    }
 }
 
 /// Query a validator's state information
