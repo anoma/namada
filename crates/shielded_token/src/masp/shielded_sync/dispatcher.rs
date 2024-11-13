@@ -400,7 +400,11 @@ where
         }
 
         for (indexed_tx, stx_batch) in self.cache.fetched.take() {
-            if self.client.capabilities().needs_witness_map_update()
+            let needs_witness_map_update =
+                self.client.capabilities().needs_witness_map_update();
+            self.ctx
+                .save_shielded_spends(&stx_batch, needs_witness_map_update);
+            if needs_witness_map_update
                 && Some(&indexed_tx) > last_witnessed_tx.as_ref()
             {
                 self.ctx.update_witness_map(indexed_tx, &stx_batch)?;
@@ -429,7 +433,6 @@ where
                     self.config.applied_tracker.increment_by(1);
                 }
             }
-            self.ctx.save_shielded_spends(&stx_batch);
             std::mem::swap(&mut vk_heights, &mut self.ctx.vk_heights);
         }
 
