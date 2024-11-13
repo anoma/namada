@@ -921,7 +921,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         data: Vec<MaspTransferData>,
         fee_data: Option<MaspFeeData>,
         expiration: Option<DateTimeUtc>,
-        update_ctx: bool,
     ) -> Result<Option<ShieldedTransfer>, TransferErr> {
         // Determine epoch in which to submit potential shielded transaction
         let epoch = Self::query_masp_epoch(context.client())
@@ -1115,16 +1114,8 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             )
             .map_err(|error| TransferErr::Build { error })?;
 
-        // FIXME: this one has to be done only after receiving an ok from the
-        // node FIXME: but it's a method on the shielded wallet so I
-        // need to have it FIXME: write a test for this thing. Also a
+        // FIXME: write a test for this thing. Also a
         // test fro the query to the balance with a speculative context
-        // FIXME: maybe I can remove this update_ctx arg
-        if update_ctx {
-            self.pre_cache_transaction(&masp_tx)
-                .await
-                .map_err(|e| TransferErr::General(e.to_string()))?;
-        }
 
         Ok(Some(ShieldedTransfer {
             builder: builder_clone,
