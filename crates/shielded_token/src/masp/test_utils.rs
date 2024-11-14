@@ -1,24 +1,46 @@
 use core::str::FromStr;
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use borsh::BorshDeserialize;
-use masp_primitives::merkle_tree::{CommitmentTree, IncrementalWitness};
-use masp_primitives::sapling::{Node, ViewingKey};
+use eyre::eyre;
+use masp_primitives::asset_type::AssetType;
+use masp_primitives::merkle_tree::{
+    CommitmentTree, IncrementalWitness, MerklePath,
+};
+use masp_primitives::sapling::{Node, Note, Rseed, ViewingKey};
+use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::ExtendedFullViewingKey;
+use namada_core::address::Address;
+use namada_core::borsh::BorshSerializeExt;
 use namada_core::chain::BlockHeight;
 use namada_core::collections::HashMap;
-use namada_core::masp::ExtendedViewingKey;
+use namada_core::masp::{
+    AssetData, ExtendedViewingKey, MaspEpoch, PaymentAddress,
+};
+use namada_core::time::DurationSecs;
+use namada_core::token::{Denomination, MaspDigitPos};
+use namada_io::client::EncodedResponseQuery;
+use namada_io::{Client, MaybeSend, MaybeSync, NamadaIo, NullIo};
 use namada_tx::IndexedTx;
 use namada_wallet::DatedKeypair;
 use thiserror::Error;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
+use tokio::sync::Mutex;
 
+use crate::masp::shielded_wallet::ShieldedQueries;
 use crate::masp::utils::{
     IndexedNoteEntry, MaspClient, MaspClientCapabilities,
 };
+use crate::masp::ShieldedUtils;
+use crate::ShieldedWallet;
 
 /// A viewing key derived from A_SPENDING_KEY
 pub const AA_VIEWING_KEY: &str = "zvknam1qqqqqqqqqqqqqq9v0sls5r5de7njx8ehu49pqgmqr9ygelg87l5x8y4s9r0pjlvu6x74w9gjpw856zcu826qesdre628y6tjc26uhgj6d9zqur9l5u3p99d9ggc74ald6s8y3sdtka74qmheyqvdrasqpwyv2fsmxlz57lj4grm2pthzj3sflxc0jx0edrakx3vdcngrfjmru8ywkguru8mxss2uuqxdlglaz6undx5h8w7g70t2es850g48xzdkqay5qs0yw06rtxcpjdve6";
+
+// A payment address derived from A_SPENDING_KEY
+pub const AA_PAYMENT_ADDRESS: &str = "znam1ky620tz7z658cralqt693qpvk42wvth468zp38nqvq2apmex5rfut3dfqm2asrsqv0tc7saqje7";
 
 pub fn dated_arbitrary_vk() -> DatedKeypair<ViewingKey> {
     arbitrary_vk().into()
@@ -30,6 +52,10 @@ pub fn arbitrary_vk() -> ViewingKey {
     )
     .fvk
     .vk
+}
+
+pub fn arbitrary_pa() -> PaymentAddress {
+    FromStr::from_str(AA_PAYMENT_ADDRESS).expect("Test failed")
 }
 
 /// A serialized transaction that will work for testing.
@@ -412,5 +438,243 @@ impl MaspClient for TestingMaspClient {
         _: BlockHeight,
     ) -> Result<HashMap<usize, IncrementalWitness<Node>>, Self::Error> {
         unimplemented!("Witness map fetching is not implemented by this client")
+    }
+}
+
+/// A shielded context for testing
+#[derive(Debug)]
+pub struct TestingContext<U: ShieldedUtils + MaybeSend + MaybeSync> {
+    wallet: ShieldedWallet<U>,
+}
+
+impl<U: ShieldedUtils + MaybeSend + MaybeSync> TestingContext<U> {
+    pub fn new(wallet: ShieldedWallet<U>) -> Self {
+        Self { wallet }
+    }
+
+    pub fn add_asset_type(&mut self, asset_data: AssetData) {
+        self.asset_types
+            .insert(asset_data.encode().unwrap(), asset_data);
+    }
+
+    /// Add a note to a given viewing key
+    pub fn add_note(&mut self, note: Note, vk: ViewingKey) {
+        let next_note_idx = self
+            .wallet
+            .note_map
+            .keys()
+            .max()
+            .map(|ix| ix + 1)
+            .unwrap_or_default();
+        self.wallet.note_map.insert(next_note_idx, note);
+        let avail_notes = self.wallet.pos_map.entry(vk).or_default();
+        avail_notes.insert(next_note_idx);
+    }
+
+    pub fn spend_note(&mut self, note: &Note) {
+        let idx = self
+            .wallet
+            .note_map
+            .iter()
+            .find(|(_, v)| *v == note)
+            .map(|(idx, _)| idx)
+            .expect("Could find the note to spend in the note map");
+        self.wallet.spents.insert(*idx);
+    }
+}
+
+impl<U: ShieldedUtils + MaybeSend + MaybeSync> std::ops::Deref
+    for TestingContext<U>
+{
+    type Target = ShieldedWallet<U>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.wallet
+    }
+}
+
+impl<U: ShieldedUtils + MaybeSend + MaybeSync> std::ops::DerefMut
+    for TestingContext<U>
+{
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.wallet
+    }
+}
+
+impl<U: ShieldedUtils + MaybeSync + MaybeSend> ShieldedQueries<U>
+    for TestingContext<U>
+{
+    async fn query_native_token<C: Client + MaybeSync>(
+        _: &C,
+    ) -> Result<Address, eyre::Error> {
+        Ok(Address::Established([0u8; 20].into()))
+    }
+
+    async fn query_denom<C: Client + Sync>(
+        client: &C,
+        token: &Address,
+    ) -> Option<Denomination> {
+        Some(
+            if *token
+                == Self::query_native_token(client).await.expect("Infallible")
+            {
+                Denomination(6)
+            } else {
+                Denomination(0)
+            },
+        )
+    }
+
+    async fn query_conversion<C: Client + Sync>(
+        client: &C,
+        asset_type: AssetType,
+    ) -> Option<ConversionResp> {
+        let resp = client
+            .request(asset_type.to_string(), None, None, false)
+            .await
+            .ok()?;
+        BorshDeserialize::try_from_slice(&resp.data).unwrap()
+    }
+
+    async fn query_block<C: Client + Sync>(
+        _: &C,
+    ) -> Result<Option<u64>, eyre::Error> {
+        unimplemented!()
+    }
+
+    async fn query_max_block_time_estimate<C: Client + Sync>(
+        _: &C,
+    ) -> Result<DurationSecs, eyre::Error> {
+        unimplemented!()
+    }
+
+    async fn query_masp_epoch<C: Client + MaybeSync>(
+        client: &C,
+    ) -> Result<MaspEpoch, eyre::Error> {
+        let resp = client
+            .request("".to_string(), None, None, false)
+            .await
+            .map_err(|e| eyre!("{}", e))?;
+        BorshDeserialize::try_from_slice(&resp.data).map_err(|e| eyre!("{}", e))
+    }
+}
+
+pub type ConversionResp = (
+    Address,
+    Denomination,
+    MaspDigitPos,
+    MaspEpoch,
+    I128Sum,
+    MerklePath<Node>,
+);
+
+/// A mock client for making "queries" on behalf
+/// of a `TestingContext`
+pub struct MockClient {
+    channel: Arc<Mutex<UnboundedReceiver<Vec<u8>>>>,
+    pub conversions: HashMap<AssetType, ConversionResp>,
+}
+
+impl MockClient {
+    pub fn new() -> (UnboundedSender<Vec<u8>>, Self) {
+        let (send, recv) = tokio::sync::mpsc::unbounded_channel();
+        (
+            send,
+            Self {
+                channel: Arc::new(Mutex::new(recv)),
+                conversions: Default::default(),
+            },
+        )
+    }
+}
+
+#[cfg(test)]
+#[cfg_attr(feature = "async-send", async_trait::async_trait)]
+#[cfg_attr(not(feature = "async-send"), async_trait::async_trait(?Send))]
+impl Client for MockClient {
+    type Error = eyre::Error;
+
+    async fn request(
+        &self,
+        req: String,
+        _: Option<Vec<u8>>,
+        _: Option<BlockHeight>,
+        _: bool,
+    ) -> Result<EncodedResponseQuery, Self::Error> {
+        let resp = if let Ok(asset_type) = AssetType::from_str(&req) {
+            self.conversions.get(&asset_type).serialize_to_vec()
+        } else {
+            let mut locked = self.channel.lock().await;
+            locked
+                .recv()
+                .await
+                .ok_or_else(|| eyre!("Client did not respond"))?
+        };
+        Ok(EncodedResponseQuery {
+            data: resp,
+            info: "".to_string(),
+            proof: None,
+            height: Default::default(),
+        })
+    }
+
+    async fn perform<R>(
+        &self,
+        _: R,
+    ) -> Result<R::Output, tendermint_rpc::error::Error>
+    where
+        R: tendermint_rpc::request::SimpleRequest,
+    {
+        unimplemented!()
+    }
+}
+
+pub struct MockNamadaIo {
+    client: MockClient,
+    io: NullIo,
+}
+
+impl MockNamadaIo {
+    pub fn new() -> (UnboundedSender<Vec<u8>>, Self) {
+        let (send, client) = MockClient::new();
+        (send, Self { client, io: NullIo })
+    }
+
+    pub fn add_conversions(
+        &mut self,
+        asset_data: AssetData,
+        conv: ConversionResp,
+    ) {
+        self.client
+            .conversions
+            .insert(asset_data.encode().unwrap(), conv);
+    }
+}
+
+impl NamadaIo for MockNamadaIo {
+    type Client = MockClient;
+    type Io = NullIo;
+
+    fn client(&self) -> &Self::Client {
+        &self.client
+    }
+
+    fn io(&self) -> &Self::Io {
+        &self.io
+    }
+}
+
+pub fn create_note(
+    asset_data: AssetData,
+    value: u64,
+    pa: PaymentAddress,
+) -> Note {
+    let payment_addr: masp_primitives::sapling::PaymentAddress = pa.into();
+    Note {
+        value,
+        g_d: payment_addr.g_d().unwrap(),
+        pk_d: *payment_addr.pk_d(),
+        asset_type: asset_data.encode().unwrap(),
+        rseed: Rseed::AfterZip212([0; 32]),
     }
 }
