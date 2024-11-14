@@ -144,6 +144,11 @@ impl MaspEpoch {
         Some(Self(self.0.checked_sub(1)?))
     }
 
+    /// Change to the next masp epoch.
+    pub fn next(&self) -> Option<Self> {
+        Some(Self(self.0.checked_add(1)?))
+    }
+
     /// Initialize a new masp epoch from the provided one
     #[cfg(any(test, feature = "testing"))]
     pub const fn new(epoch: u64) -> Self {
@@ -198,6 +203,15 @@ impl AssetData {
     pub fn redate(&mut self, to: MaspEpoch) {
         if self.epoch.is_some() {
             self.epoch = Some(to);
+        }
+    }
+
+    /// Update the MaspEpoch to the next one
+    pub fn redate_to_next_epoch(&mut self) {
+        if let Some(ep) = self.epoch.as_mut() {
+            if let Some(next) = ep.next() {
+                *ep = next;
+            }
         }
     }
 

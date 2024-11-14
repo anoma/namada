@@ -22,6 +22,7 @@ multicore = ["dep:rayon"]
 testing = [
   "multicore",
   "namada_core/testing",
+  "namada_tx/testing",
   "masp_primitives/test-dependencies",
   "proptest",
   "std"
@@ -92,5 +93,6 @@ masp_proofs = { workspace = true, features = ["download-params"] }
 proptest.workspace = true
 rand_core.workspace = true
 rayon.workspace = true
+tendermint-rpc.workspace = true
 test-log.workspace = true
 tokio.workspace = true
