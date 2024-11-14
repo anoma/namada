@@ -47,7 +47,9 @@ use namada_sdk::rpc::{
 };
 use namada_sdk::storage::BlockResults;
 use namada_sdk::tendermint_rpc::endpoint::status;
-use namada_sdk::token::{DenominatedAmount, MaspDigitPos};
+use namada_sdk::token::{
+    DenominatedAmount, MaspDigitPos, NATIVE_MAX_DECIMAL_PLACES,
+};
 use namada_sdk::tx::display_batch_resp;
 use namada_sdk::wallet::AddressVpType;
 use namada_sdk::{error, state as storage, token, Namada};
@@ -372,11 +374,13 @@ pub async fn query_rewards_estimate(
         .await
         .unwrap()
         .unsigned_abs();
-    let rewards_estimate =
-        DenominatedAmount::new(Amount::from_u128(rewards_estimate), 6.into());
+    let rewards_estimate = DenominatedAmount::new(
+        Amount::from_u128(rewards_estimate),
+        NATIVE_MAX_DECIMAL_PLACES.into(),
+    );
     display_line!(
         context.io(),
-        "Estimated nam rewards for the next MASP epoch: {}",
+        "Estimated native token rewards for the next MASP epoch: {}",
         rewards_estimate
     );
 }

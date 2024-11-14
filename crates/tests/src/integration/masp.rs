@@ -1364,7 +1364,9 @@ fn masp_incentives() -> Result<()> {
     });
     assert!(captured.result.is_ok());
     assert!(
-        captured.contains("Estimated nam rewards for the next MASP epoch: 0")
+        captured.contains(
+            "Estimated native token rewards for the next MASP epoch: 0"
+        )
     );
 
     // Wait till epoch boundary
@@ -1432,10 +1434,9 @@ fn masp_incentives() -> Result<()> {
     });
     assert!(captured.result.is_ok());
     // note that 0.126 = 2 * 0.063 which is expected
-    assert!(
-        captured
-            .contains("Estimated nam rewards for the next MASP epoch: 0.126")
-    );
+    assert!(captured.contains(
+        "Estimated native token rewards for the next MASP epoch: 0.126"
+    ));
 
     // Assert NAM balance at MASP pool is exclusively the
     // rewards from the shielded BTC
