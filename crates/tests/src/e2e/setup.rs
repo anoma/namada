@@ -72,6 +72,9 @@ pub const ENV_VAR_SPECULOS_PATH: &str = "NAMADA_SPECULOS_PATH";
 /// Env. var to set a path to ledger-namada wallet ELF file for `speculos`
 pub const ENV_VAR_SPECULOS_APP_ELF: &str = "NAMADA_SPECULOS_APP_ELF";
 
+/// Env. var to set a directory for CosmWasm NFT contracts
+pub const ENV_VAR_COSMWASM_CONTRACT_DIR: &str = "NAMADA_COSMWASM_CONTRACT_DIR";
+
 /// An E2E test network.
 #[derive(Debug, Clone)]
 pub struct Network {

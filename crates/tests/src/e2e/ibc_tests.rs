@@ -55,7 +55,7 @@ use crate::e2e::ledger_tests::{
 use crate::e2e::setup::{
     self, apply_use_device, run_cosmos_cmd, run_hermes_cmd,
     set_ethereum_bridge_mode, setup_cosmos, setup_hermes, sleep, working_dir,
-    Bin, CosmosChainType, NamadaCmd, Test, Who,
+    Bin, CosmosChainType, NamadaCmd, Test, Who, ENV_VAR_COSMWASM_CONTRACT_DIR,
 };
 use crate::strings::TX_APPLIED_SUCCESS;
 use crate::{run, run_as};
@@ -2059,13 +2059,16 @@ fn gen_ibc_shielding_data(
 }
 
 fn initialize_nft_contracts(test: &Test) -> Result<(String, String)> {
-    let working_dir = working_dir();
+    let contract_dir = match std::env::var(ENV_VAR_COSMWASM_CONTRACT_DIR) {
+        Ok(dir) => PathBuf::from(dir),
+        Err(_) => working_dir(),
+    };
     let rpc = format!("tcp://{COSMOS_RPC}");
     let minter_addr = find_cosmos_address(test, COSMOS_USER)?;
 
     // Store cw721 contract
     let cw721_wasm_path =
-        working_dir.join(CW721_WASM).to_string_lossy().to_string();
+        contract_dir.join(CW721_WASM).to_string_lossy().to_string();
     let args = vec![
         "tx",
         "wasm",
@@ -2093,7 +2096,7 @@ fn initialize_nft_contracts(test: &Test) -> Result<(String, String)> {
 
     // Store ics721 contract
     let ics721_wasm_path =
-        working_dir.join(ICS721_WASM).to_string_lossy().to_string();
+        contract_dir.join(ICS721_WASM).to_string_lossy().to_string();
     let args = vec![
         "tx",
         "wasm",
