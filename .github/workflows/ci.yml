@@ -582,10 +582,6 @@ jobs:
           curl -o hermes.zip -LO https://github.com/heliaxdev/hermes/releases/download/v${HERMES_VERSION}/hermes-v${HERMES_VERSION}-x86_64-unknown-linux-gnu.zip
           unzip hermes.zip
           mv hermes /usr/local/bin
-      - name: Download CosmWasm contracts
-        run: |
-          curl -LO https://github.com/public-awesome/cw-nfts/releases/download/v0.18.0/cw721_base.wasm
-          curl -LO https://github.com/public-awesome/cw-ics721/releases/download/v0.1.13/ics721_base.wasm
       - name: Change permissions
         run: |
           chmod +x target/release/namada
