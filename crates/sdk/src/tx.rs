@@ -2142,7 +2142,8 @@ pub async fn build_vote_proposal(
                 context.io(),
                 "NB: voter address {} is a validator, and validators can only \
                  vote on proposals within the first 2/3 of the voting period. \
-                 The voting period specifically for validators has ended.",
+                 Either the voting period has not started, or the voting \
+                 period specifically for validators has ended.",
                 voter_address
             );
         }
