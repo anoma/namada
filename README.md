@@ -71,7 +71,7 @@ To change the log level, set `NAMADA_LOG` environment variable to one of:
 * `debug`
 * `trace`
 
-The default is set to `info` for all the modules, expect for CometBFT ABCI, which has a lot of `debug` logging.
+The default is set to `info` for all the modules, except for CometBFT ABCI, which has a lot of `debug` logging.
 
 For more fine-grained logging levels settings, please refer to the [tracing subscriber docs](https://docs.rs/tracing-subscriber/0.2.18/tracing_subscriber/struct.EnvFilter.html#directives) for more information.
 
