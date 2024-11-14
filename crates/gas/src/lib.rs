@@ -33,8 +33,8 @@ use thiserror::Error;
 #[allow(missing_docs)]
 #[derive(Error, Debug, Clone, PartialEq, Eq)]
 pub enum Error {
-    #[error("Transaction gas limit exceeded")]
-    TransactionGasExceededError,
+    #[error("Transaction gas limit exceeded maximum of {0}")]
+    TransactionGasExceededError(u64),
     #[error("Block gas limit exceeded")]
     BlockGasExceeded,
     #[error("Overflow during gas operations")]
@@ -386,8 +386,9 @@ pub trait GasMetering {
             .get_tx_consumed_gas()
             .checked_add(vps_gas)
             .ok_or(Error::GasOverflow)?;
-        if total > self.get_gas_limit() {
-            return Err(Error::TransactionGasExceededError);
+        let gas_limit = self.get_gas_limit();
+        if total > gas_limit {
+            return Err(Error::TransactionGasExceededError(gas_limit.into()));
         }
 
         Ok(())
@@ -432,7 +433,9 @@ impl GasMetering for TxGasMeter {
             })?;
 
         if self.transaction_gas > self.tx_gas_limit {
-            return Err(Error::TransactionGasExceededError);
+            return Err(Error::TransactionGasExceededError(
+                self.tx_gas_limit.clone().into(),
+            ));
         }
 
         Ok(())
@@ -512,7 +515,9 @@ impl GasMetering for VpGasMeter {
             .ok_or(Error::GasOverflow)?;
 
         if current_total > self.tx_gas_limit {
-            return Err(Error::TransactionGasExceededError);
+            return Err(Error::TransactionGasExceededError(
+                self.tx_gas_limit.clone().into(),
+            ));
         }
 
         Ok(())
@@ -601,7 +606,7 @@ mod tests {
             meter
                 .consume(TX_GAS_LIMIT.into())
                 .expect_err("unexpectedly succeeded"),
-            Error::TransactionGasExceededError
+            Error::TransactionGasExceededError(_)
         );
     }
 
@@ -624,7 +629,7 @@ mod tests {
             meter
                 .consume((TX_GAS_LIMIT + 1).into())
                 .expect_err("unexpectedly succeeded"),
-            Error::TransactionGasExceededError
+            Error::TransactionGasExceededError(_)
         );
     }
 }
