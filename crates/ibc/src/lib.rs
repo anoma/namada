@@ -740,11 +740,14 @@ where
         let message = decode_message::<Transfer>(tx_data)?;
         match message {
             IbcMessage::Transfer(msg) => {
-                let token_transfer_ctx = TokenTransferContext::new(
+                let mut token_transfer_ctx = TokenTransferContext::new(
                     self.ctx.inner.clone(),
                     verifiers.clone(),
                 );
                 self.insert_verifiers()?;
+                if msg.transfer.is_some() {
+                    token_transfer_ctx.enable_shielded_transfer();
+                }
                 send_transfer_validate(
                     &self.ctx,
                     &token_transfer_ctx,
@@ -753,8 +756,11 @@ where
                 .map_err(Error::TokenTransfer)
             }
             IbcMessage::NftTransfer(msg) => {
-                let nft_transfer_ctx =
+                let mut nft_transfer_ctx =
                     NftTransferContext::<_, Token>::new(self.ctx.inner.clone());
+                if msg.transfer.is_some() {
+                    nft_transfer_ctx.enable_shielded_transfer();
+                }
                 send_nft_transfer_validate(
                     &self.ctx,
                     &nft_transfer_ctx,
