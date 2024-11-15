@@ -6,6 +6,7 @@ use namada_core::chain::Epoch;
 use namada_core::dec::Dec;
 use thiserror::Error;
 
+use crate::parameters::MAX_VALIDATOR_METADATA_LEN;
 use crate::types::ValidatorState;
 use crate::{rewards, Error};
 
@@ -163,6 +164,16 @@ pub enum MetadataError {
 pub enum ConsensusKeyChangeError {
     #[error("The consensus key is required to be an Ed25519 key")]
     MustBeEd25519,
+}
+
+#[allow(missing_docs)]
+#[derive(Error, Debug)]
+pub enum ValidatorMetaDataError {
+    #[error(
+        "The {0} metadata is too long, must be within \
+         {MAX_VALIDATOR_METADATA_LEN} characters"
+    )]
+    FieldTooLong(&'static str),
 }
 
 impl From<BecomeValidatorError> for Error {
