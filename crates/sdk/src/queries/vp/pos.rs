@@ -22,13 +22,10 @@ use namada_proof_of_stake::storage::{
     read_below_capacity_validator_set_addresses_with_stake,
     read_consensus_validator_set_addresses,
     read_consensus_validator_set_addresses_with_stake, read_pos_params,
-    read_total_active_stake, read_total_stake, read_validator_avatar,
-    read_validator_description, read_validator_discord_handle,
-    read_validator_email, read_validator_last_slash_epoch,
-    read_validator_max_commission_rate_change, read_validator_name,
-    read_validator_stake, read_validator_website, unbond_handle,
-    validator_commission_rate_handle, validator_incoming_redelegations_handle,
-    validator_slashes_handle,
+    read_total_active_stake, read_total_stake, read_validator_last_slash_epoch,
+    read_validator_max_commission_rate_change, read_validator_metadata,
+    read_validator_stake, unbond_handle, validator_commission_rate_handle,
+    validator_incoming_redelegations_handle, validator_slashes_handle,
 };
 pub use namada_proof_of_stake::types::ValidatorStateInfo;
 use namada_proof_of_stake::types::{
@@ -325,25 +322,7 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let email = read_validator_email(ctx.state, &validator)?;
-    let description = read_validator_description(ctx.state, &validator)?;
-    let website = read_validator_website(ctx.state, &validator)?;
-    let discord_handle = read_validator_discord_handle(ctx.state, &validator)?;
-    let avatar = read_validator_avatar(ctx.state, &validator)?;
-    let name = read_validator_name(ctx.state, &validator)?;
-
-    // Email is the only required field for a validator in storage
-    match email {
-        Some(email) => Ok(Some(ValidatorMetaData {
-            email,
-            description,
-            website,
-            discord_handle,
-            avatar,
-            name,
-        })),
-        _ => Ok(None),
-    }
+    read_validator_metadata(ctx.state, &validator)
 }
 
 /// Get the validator state
