@@ -1053,14 +1053,18 @@ pub async fn submit_vote_proposal<N: Namada>(
 where
     <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
-    let (mut tx_builder, signing_data) = args.build(namada).await?;
+    let submit_vote_proposal_data = args.build(namada).await?;
 
     if args.tx.dump_tx || args.tx.dump_wrapper_tx {
-        tx::dump_tx(namada.io(), &args.tx, tx_builder)?;
+        tx::dump_tx(namada.io(), &args.tx, submit_vote_proposal_data.0)?;
     } else {
-        sign(namada, &mut tx_builder, &args.tx, signing_data).await?;
-
-        namada.submit(tx_builder, &args.tx).await?;
+        batch_opt_reveal_pk_and_submit(
+            namada,
+            &args.tx,
+            &[&args.voter_address],
+            submit_vote_proposal_data,
+        )
+        .await?;
     }
 
     Ok(())
