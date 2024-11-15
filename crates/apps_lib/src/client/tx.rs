@@ -846,20 +846,8 @@ pub async fn submit_shielded_transfer(
         pre_cache_masp_data(namada, &masp_section).await;
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
-        match namada.submit(tx, &args.tx).await? {
-            ProcessTxResponse::Applied(resp) => {
-                if let Some(InnerTxResult::Success(_)) =
-                    resp.batch_result().first().map(|(_, res)| res)
-                {
-                    pre_cache_masp_data(namada, &masp_section).await;
-                }
-            }
-            ProcessTxResponse::Broadcast(_) => {
-                pre_cache_masp_data(namada, &masp_section).await;
-            }
-            // Do not pre-cache when dry-running
-            ProcessTxResponse::DryRun(_) => {}
-        }
+        let res = namada.submit(tx, &args.tx).await?;
+        pre_cache_masp_data_on_tx_result(namada, &res, &masp_section).await;
     }
     Ok(())
 }
@@ -940,20 +928,8 @@ pub async fn submit_unshielding_transfer(
         pre_cache_masp_data(namada, &masp_section).await;
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
-        match namada.submit(tx, &args.tx).await? {
-            ProcessTxResponse::Applied(resp) => {
-                if let Some(InnerTxResult::Success(_)) =
-                    resp.batch_result().first().map(|(_, res)| res)
-                {
-                    pre_cache_masp_data(namada, &masp_section).await;
-                }
-            }
-            ProcessTxResponse::Broadcast(_) => {
-                pre_cache_masp_data(namada, &masp_section).await;
-            }
-            // Do not pre-cache when dry-running
-            ProcessTxResponse::DryRun(_) => {}
-        }
+        let res = namada.submit(tx, &args.tx).await?;
+        pre_cache_masp_data_on_tx_result(namada, &res, &masp_section).await;
     }
     Ok(())
 }
@@ -984,23 +960,7 @@ where
         .await?;
 
         if let Some(masp_section) = opt_masp_section {
-            match res {
-                ProcessTxResponse::Applied(resp) => {
-                    if let Some(InnerTxResult::Success(_)) =
-                        // If we have the masp data in an ibc transfer it
-                        // means we are unshielding, so there's no reveal pk
-                        // tx in the batch which contains only the ibc tx
-                        resp.batch_result().first().map(|(_, res)| res)
-                    {
-                        pre_cache_masp_data(namada, &masp_section).await;
-                    }
-                }
-                ProcessTxResponse::Broadcast(_) => {
-                    pre_cache_masp_data(namada, &masp_section).await;
-                }
-                // Do not pre-cache when dry-running
-                ProcessTxResponse::DryRun(_) => {}
-            }
+            pre_cache_masp_data_on_tx_result(namada, &res, &masp_section).await;
         }
     }
     // NOTE that the tx could fail when its submission epoch doesn't match
@@ -1563,5 +1523,30 @@ async fn pre_cache_masp_data(namada: &impl Namada, masp_tx: &MaspTransaction) {
     {
         // Just display the error but do not propagate it
         edisplay_line!(namada.io(), "Failed to pre-cache masp data: {}.", e);
+    }
+}
+
+// Check the result of a transaction and pre-cache the masp data accordingly
+async fn pre_cache_masp_data_on_tx_result(
+    namada: &impl Namada,
+    tx_result: &ProcessTxResponse,
+    masp_tx: &MaspTransaction,
+) {
+    match tx_result {
+        ProcessTxResponse::Applied(resp) => {
+            if let Some(InnerTxResult::Success(_)) =
+                // If we have the masp data in an ibc transfer it
+                // means we are unshielding, so there's no reveal pk
+                // tx in the batch which contains only the ibc tx
+                resp.batch_result().first().map(|(_, res)| res)
+            {
+                pre_cache_masp_data(namada, masp_tx).await;
+            }
+        }
+        ProcessTxResponse::Broadcast(_) => {
+            pre_cache_masp_data(namada, masp_tx).await;
+        }
+        // Do not pre-cache when dry-running
+        ProcessTxResponse::DryRun(_) => {}
     }
 }
