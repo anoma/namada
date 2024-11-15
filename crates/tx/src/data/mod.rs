@@ -7,7 +7,7 @@ pub mod pgf;
 pub mod pos;
 /// transaction protocols made by validators
 pub mod protocol;
-/// wrapper txs with encrypted payloads
+/// wrapper txs
 pub mod wrapper;
 
 use std::collections::{BTreeMap, BTreeSet};

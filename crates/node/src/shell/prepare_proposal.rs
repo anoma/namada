@@ -56,7 +56,7 @@ where
             let (alloc, mut txs) =
                 self.build_protocol_tx_with_normal_txs(alloc, &mut req.txs);
 
-            // add encrypted txs
+            // add wrapper txs
             let tm_raw_hash_string =
                 tm_raw_hash_to_string(req.proposer_address);
             let block_proposer =
@@ -100,7 +100,7 @@ where
         self.state.read_only().into()
     }
 
-    /// Builds a batch of encrypted transactions, retrieved from
+    /// Builds a batch of wrapper  transactions, retrieved from
     /// CometBFT's mempool.
     fn build_normal_txs(
         &self,
@@ -763,7 +763,7 @@ mod test_prepare_proposal {
         assert_eq!(signed_eth_ev_vote_extension, rsp_ext.0);
     }
 
-    /// Test that if the unsigned wrapper tx hash is known (replay attack), the
+    /// Test that if the wrapper tx hash is known (replay attack), the
     /// transaction is not included in the block
     #[test]
     fn test_wrapper_tx_hash() {
@@ -830,7 +830,7 @@ mod test_prepare_proposal {
         assert_eq!(received_txs.len(), 1);
     }
 
-    /// Test that if the unsigned inner tx hash is known (replay attack), the
+    /// Test that if the inner tx hash is known (replay attack), the
     /// transaction is not included in the block
     #[test]
     fn test_inner_tx_hash() {
@@ -870,7 +870,7 @@ mod test_prepare_proposal {
         assert_eq!(received_txs.len(), 0);
     }
 
-    /// Test that if two identical decrypted txs are proposed for this block,
+    /// Test that if two identical inner txs are proposed for this block,
     /// both get accepted
     #[test]
     fn test_inner_tx_hash_same_block() {

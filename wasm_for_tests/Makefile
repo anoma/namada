@@ -26,6 +26,7 @@ wasms += vp_infinite_guest_gas
 wasms += vp_infinite_host_gas
 wasms += vp_memory_limit
 wasms += vp_read_storage_key
+wasms += vp_verify_signature
 
 
 # Build all wasms in release mode
