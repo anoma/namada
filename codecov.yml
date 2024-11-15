@@ -43,3 +43,4 @@ ignore:
   - crates/apps_lib/src/wasm_loader
   - crates/node/src/bench_utils
   - crates/node/src/shell/testing
+  - crates/light_sdk
