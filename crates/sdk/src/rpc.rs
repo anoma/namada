@@ -658,8 +658,8 @@ pub enum InnerTxResult<'a> {
     Success(&'a BatchedTxResult),
     /// Some VPs rejected the tx
     VpsRejected(&'a BatchedTxResult),
-    /// Transaction failed in some other way
-    OtherFailure,
+    /// Transaction failed in some other way specified in the associated message
+    OtherFailure(String),
 }
 
 impl TryFrom<Event> for TxResponse {
@@ -720,7 +720,7 @@ impl TxResponse {
                             InnerTxResult::VpsRejected(res)
                         }
                     }
-                    Err(_) => InnerTxResult::OtherFailure,
+                    Err(msg) => InnerTxResult::OtherFailure(msg.to_owned()),
                 };
                 result.insert(inner_hash.to_owned(), value);
             }

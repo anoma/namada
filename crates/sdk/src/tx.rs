@@ -435,16 +435,28 @@ pub async fn submit_tx(
 
 /// Display a result of a tx batch.
 pub fn display_batch_resp(context: &impl Namada, resp: &TxResponse) {
-    for (inner_hash, result) in resp.batch_result() {
+    // Wrapper-level logs
+    display_line!(
+        context.io(),
+        "Wrapper transaction {} was applied at height {}, consuming {} gas \
+         units.",
+        resp.hash,
+        resp.height,
+        resp.gas_used
+    );
+    let batch_results = resp.batch_result();
+    if !batch_results.is_empty() {
+        display_line!(context.io(), "Batch results:");
+    }
+
+    // Batch-level logs
+    for (inner_hash, result) in batch_results {
         match result {
             InnerTxResult::Success(_) => {
                 display_line!(
                     context.io(),
-                    "Transaction {} was successfully applied at height {}, \
-                     consuming {} gas units.",
+                    "Transaction {} was successfully applied.",
                     inner_hash,
-                    resp.height,
-                    resp.gas_used
                 );
             }
             InnerTxResult::VpsRejected(inner) => {
@@ -467,12 +479,12 @@ pub fn display_batch_resp(context: &impl Namada, resp: &TxResponse) {
                     serde_json::to_string_pretty(&changed_keys).unwrap(),
                 );
             }
-            InnerTxResult::OtherFailure => {
+            InnerTxResult::OtherFailure(msg) => {
                 edisplay_line!(
                     context.io(),
                     "Transaction {} failed.\nDetails: {}",
                     inner_hash,
-                    serde_json::to_string_pretty(&resp).unwrap()
+                    msg
                 );
             }
         }
