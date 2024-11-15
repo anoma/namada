@@ -14,7 +14,7 @@ use namada_tx::BatchedTxRef;
 use namada_vp_env::{Error, Result, VpEnv};
 use thiserror::Error;
 
-use crate::storage::read_owned_pos_params;
+use crate::storage::{read_owned_pos_params, read_validator_metadata};
 use crate::storage_key::is_params_key;
 use crate::types::BondId;
 use crate::{storage_key, token};
@@ -296,6 +296,23 @@ where
                     // Other actions are not relevant to PoS VP
                     continue;
                 }
+            }
+        }
+
+        // Validate new and changed validator metadata
+        for validator in became_validator.iter().chain(&changed_metadata) {
+            let metadata = read_validator_metadata(&ctx.post(), validator)?;
+            let Some(metadata) = metadata else {
+                return Err(Error::new_alloc(format!(
+                    "Missing validator {validator} metadata"
+                )));
+            };
+            let errors = metadata.validate();
+            if !errors.is_empty() {
+                return Err(Error::new_alloc(format!(
+                    "Metadata of the validator with address {validator} are \
+                     invalid: {errors:#?}",
+                )));
             }
         }
 
