@@ -38,7 +38,7 @@ pub struct BuildingProtocolTxBatch<Mode> {
 /// [`crate::shell::block_alloc::states`].
 pub enum WithNormalTxs {}
 
-/// Allow block proposals to include encrypted txs.
+/// Allow block proposals to include wrapper txs.
 ///
 /// For more info, read the module docs of
 /// [`crate::shell::block_alloc::states`].

@@ -1,0 +1,17 @@
+[package]
+name = "vp_verify_signature"
+description = "Wasm vp used for testing."
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+namada_vp_prelude.workspace = true
+rlsf.workspace = true
+getrandom.workspace = true
+
+[lib]
+crate-type = ["cdylib"]

@@ -171,9 +171,7 @@ where
     /// Checks if the Tx can be deserialized from bytes. Checks the fees and
     /// signatures of the fee payer for a transaction if it is a wrapper tx.
     ///
-    /// Checks validity of a decrypted tx or that a tx marked un-decryptable
-    /// is in fact so. Also checks that decrypted txs were submitted in
-    /// correct order.
+    /// Checks validity of an inner tx.
     ///
     /// Error codes:
     ///   0: Ok
@@ -597,12 +595,15 @@ mod test_process_proposal {
     };
     use namada_sdk::key::*;
     use namada_sdk::state::StorageWrite;
+    use namada_sdk::testing::{arb_tampered_wrapper_tx, arb_valid_signed_tx};
     use namada_sdk::token::{read_denom, Amount, DenominatedAmount};
     use namada_sdk::tx::data::Fee;
     use namada_sdk::tx::{Code, Data, Signed};
     use namada_vote_ext::{
         bridge_pool_roots, ethereum_events, validator_set_update,
     };
+    use proptest::test_runner::{Config, TestCaseError, TestRunner};
+    use proptest::{prop_assert, prop_assert_eq};
 
     use super::*;
     use crate::shell::test_utils::{
@@ -943,77 +944,81 @@ mod test_process_proposal {
     /// Test that a block including a wrapper tx with invalid signature is
     /// rejected
     #[test]
-    fn test_wrapper_bad_signature_rejected() {
+    fn test_wrapper_bad_signature() {
         let (shell, _recv, _, _) = test_utils::setup_at_height(3u64);
-        let keypair = gen_keypair();
-        let mut outer_tx =
-            Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
-                Fee {
-                    amount_per_gas_unit: DenominatedAmount::native(
-                        Amount::from_uint(100, 0).expect("Test failed"),
-                    ),
-                    token: shell.state.in_mem().native_token.clone(),
-                },
-                keypair.ref_to(),
-                GAS_LIMIT.into(),
-            ))));
-        outer_tx.header.chain_id = shell.chain_id.clone();
-        outer_tx.set_code(Code::new("wasm_code".as_bytes().to_owned(), None));
-        outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
-        outer_tx.sign_wrapper(keypair);
-        let mut new_tx = outer_tx.clone();
-        if let TxType::Wrapper(wrapper) = &mut new_tx.header.tx_type {
-            // we mount a malleability attack to try and remove the fee
-            wrapper.fee.amount_per_gas_unit =
-                DenominatedAmount::native(Default::default());
-        } else {
-            panic!("Test failed")
-        };
-        let request = ProcessProposal {
-            txs: vec![new_tx.to_bytes()],
-        };
 
-        match shell.process_proposal(request) {
-            Ok(_) => panic!("Test failed"),
-            Err(TestError::RejectProposal(response)) => {
-                let response = if let [response] = response.as_slice() {
-                    response.clone()
-                } else {
-                    panic!("Test failed")
-                };
-                let expected_error = "WrapperTx signature verification \
-                                      failed: The wrapper signature is \
-                                      invalid.";
-                assert_eq!(
-                    response.result.code,
-                    u32::from(ResultCode::InvalidSig)
-                );
-                assert!(
-                    response.result.info.contains(expected_error),
-                    "Result info {} doesn't contain the expected error {}",
-                    response.result.info,
-                    expected_error
-                );
+        let mut runner = TestRunner::new(Config::default());
+        // Test that the strategy produces valid txs first
+        let result =
+            runner.run(&arb_valid_signed_tx(), |tx| match tx.validate_tx() {
+                Ok(Some(_)) => Ok(()),
+                _ => {
+                    Err(TestCaseError::fail("Unexpectedly produced invalid tx"))
+                }
+            });
+        assert!(result.is_ok());
+
+        // Then test invalid tx
+        let mut runner = TestRunner::new(Config::default());
+        let result = runner.run(&arb_tampered_wrapper_tx(), |tx| {
+            let request = ProcessProposal {
+                txs: vec![tx.to_bytes()],
+            };
+
+            match shell.process_proposal(request) {
+                Ok(_) => Err(TestCaseError::fail(
+                    "Tampered transaction was mistakenly accepted",
+                )),
+                Err(TestError::RejectProposal(response)) => {
+                    let response = if let [response] = response.as_slice() {
+                        response.clone()
+                    } else {
+                        return Err(TestCaseError::fail("Missing tx result"));
+                    };
+                    let expected_error = "WrapperTx signature verification \
+                                          failed: The wrapper signature is \
+                                          invalid.";
+                    prop_assert_eq!(
+                        response.result.code,
+                        u32::from(ResultCode::InvalidSig)
+                    );
+                    prop_assert!(
+                        response.result.info.contains(expected_error),
+                        "Result info {} doesn't contain the expected error {}",
+                        response.result.info,
+                        expected_error
+                    );
+
+                    Ok(())
+                }
             }
-        }
+        });
+        assert!(result.is_ok());
     }
 
-    /// Test that if the account submitting the tx is not known and the fee is
-    /// non-zero, [`process_proposal`] rejects that block
+    /// Test that an implicit account does not need to reveal the pk for fee
+    /// payment
     #[test]
     fn test_wrapper_unknown_address() {
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
         let keypair = gen_keypair();
-        // reduce address balance to match the 100 token min fee
+        let address = Address::from(&keypair.ref_to());
         let balance_key = token::storage_key::balance_key(
             &shell.state.in_mem().native_token,
-            &Address::from(&keypair.ref_to()),
+            &address,
         );
         shell
             .state
-            .write(&balance_key, Amount::native_whole(99))
+            .write(&balance_key, Amount::native_whole(GAS_LIMIT))
             .unwrap();
-        let keypair = gen_keypair();
+        shell.commit();
+        // Verify that the public key associated with the fee payer has not been
+        // revealed
+        assert!(
+            namada_sdk::account::public_keys(&shell.state, &address)
+                .unwrap()
+                .is_empty()
+        );
         let mut outer_tx =
             Tx::from_type(TxType::Wrapper(Box::new(WrapperTx::new(
                 Fee {
@@ -1028,34 +1033,15 @@ mod test_process_proposal {
         outer_tx.set_data(Data::new("transaction data".as_bytes().to_owned()));
         outer_tx.sign_wrapper(keypair);
 
-        let response = {
-            let request = ProcessProposal {
-                txs: vec![outer_tx.to_bytes()],
-            };
-            if let Err(TestError::RejectProposal(resp)) =
-                shell.process_proposal(request)
-            {
-                if let [resp] = resp.as_slice() {
-                    resp.clone()
-                } else {
-                    panic!("Test failed")
-                }
-            } else {
-                panic!("Test failed")
-            }
+        let request = ProcessProposal {
+            txs: vec![outer_tx.to_bytes()],
         };
-        assert_eq!(response.result.code, u32::from(ResultCode::FeeError));
-        assert!(response.result.info.contains(
-            "Error trying to apply a transaction: Error while processing \
-             transaction's fees: The first transaction in the batch failed to \
-             pay fees via the MASP. Wasm run failed: Transaction runner \
-             error: Wasm validation error"
-        ));
+        let response = shell.process_proposal(request).unwrap();
+        assert_eq!(response[0].result.code, u32::from(ResultCode::Ok));
     }
 
-    /// Test that if the account submitting the tx does
-    /// not have sufficient balance to pay the fee,
-    /// [`process_proposal`] rejects the entire block
+    /// Test that if the account submitting the tx does not have sufficient
+    /// balance to pay the fee, [`process_proposal`] rejects the entire block
     #[test]
     fn test_wrapper_insufficient_balance_address() {
         let (mut shell, _recv, _, _) = test_utils::setup_at_height(3u64);
@@ -1149,7 +1135,7 @@ mod test_process_proposal {
         );
     }
 
-    /// Test that if the unsigned wrapper tx hash is known (replay attack), the
+    /// Test that if the uwrapper tx hash is known (replay attack), the
     /// block is rejected
     #[test]
     fn test_wrapper_tx_hash() {
@@ -1261,7 +1247,7 @@ mod test_process_proposal {
         }
     }
 
-    /// Test that if the unsigned inner tx hash is known (replay attack), the
+    /// Test that if the inner tx hash is known (replay attack), the
     /// block is rejected
     #[test]
     fn test_inner_tx_hash() {
