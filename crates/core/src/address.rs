@@ -680,6 +680,27 @@ pub mod tests {
         assert_eq!(encoded_address, expect);
     }
 
+    #[test]
+    fn test_address_is_account_bitszn() {
+        let addr_str = "tnam1q8wldcr49mhm92a69fmf847d8rn49e6gcql2s4ya"; // bitszn validator address
+        let addr = Address::decode(addr_str);
+        if let Ok(addr) = addr {
+            match addr {
+                Address::Established(_) => {
+                    println!("{addr_str} is an established address");
+                }
+                Address::Implicit(_) => {
+                    println!("{addr_str} is an implicit address");
+                }
+                Address::Internal(a) => {
+                    println!("{addr_str} is an internal address: {a}");
+                }
+            }
+        } else {
+            println!("The bech32m address {addr_str} is invalid");
+        }
+    }
+
     proptest! {
         #[test]
         /// Check that all the address types are of the same length
