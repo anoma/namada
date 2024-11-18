@@ -397,7 +397,13 @@ where
         is_full_commit: bool,
         batch: &mut D::WriteBatch,
     ) -> Result<()> {
-        if let Some(prev_height) = self.in_mem.block.height.prev_height() {
+        if let Some(prev_height) = self
+            .in_mem
+            .block
+            .height
+            .prev_height()
+            .and_then(|h| h.prev_height())
+        {
             for st in StoreType::iter().filter(|st| st.is_stored_every_block())
             {
                 match st {

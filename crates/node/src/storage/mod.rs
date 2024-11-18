@@ -579,6 +579,8 @@ mod tests {
             let key = make_key(i);
             current_state.insert(key, true);
         }
+        // NoDiff subtree can be restored for the last 2 blocks
+        let prev_last_height = last_height.prev_height().unwrap();
         for (height, key, write_type) in blocks_write_type {
             if key != client_counter_key() {
                 continue;
@@ -589,7 +591,7 @@ mod tests {
             let tree = match state
                 .get_merkle_tree(height, Some(StoreType::NoDiff))
             {
-                Ok(tree) if height == last_height => {
+                Ok(tree) if height >= prev_last_height => {
                     // Check if the rebuilt tree's root is the same as the saved
                     // one
                     assert_eq!(tree.root().0, roots.get(&height).unwrap().0);
@@ -604,7 +606,7 @@ mod tests {
             match write_type {
                 0 => {
                     // data was not updated
-                    if height == last_height {
+                    if height >= prev_last_height {
                         if *current_state.get(&key).unwrap() {
                             assert!(tree.has_key(&merkle_key)?);
                         } else {
@@ -614,14 +616,14 @@ mod tests {
                 }
                 1 | 3 => {
                     // data was deleted
-                    if height == last_height {
+                    if height >= prev_last_height {
                         assert!(!tree.has_key(&merkle_key)?);
                     }
                     current_state.insert(key, false);
                 }
                 _ => {
                     // data was updated
-                    if height == last_height {
+                    if height >= prev_last_height {
                         assert!(tree.has_key(&merkle_key)?);
                     }
                     current_state.insert(key, true);
@@ -753,8 +755,10 @@ mod tests {
             state.get_merkle_tree(6.into(), Some(StoreType::BridgePool));
         assert!(result.is_err(), "The bridge pool tree should be pruned");
 
+        let result = state.get_merkle_tree(10.into(), Some(StoreType::NoDiff));
+        assert!(result.is_err(), "The tree at Height 10 should be pruned");
         let result = state.get_merkle_tree(11.into(), Some(StoreType::NoDiff));
-        assert!(result.is_err(), "The tree at Height 11 should be pruned");
+        assert!(result.is_ok(), "The tree at Height 11 should be restored");
     }
 
     /// Test the prefix iterator with RocksDB.
