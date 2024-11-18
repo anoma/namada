@@ -76,6 +76,7 @@ mod tests {
     use namada_sdk::{
         address, decode, encode, parameters, storage, token, validation,
     };
+    use namada_vp::state::MerkleTree;
     use proptest::collection::vec;
     use proptest::prelude::*;
     use proptest::test_runner::Config;
@@ -533,7 +534,8 @@ mod tests {
             }
         }
         // save the last root
-        roots.insert(state.in_mem().block.height, state.in_mem().merkle_root());
+        let last_height = state.in_mem().block.height;
+        roots.insert(last_height, state.in_mem().merkle_root());
         state.commit_block_from_batch(batch)?;
 
         let mut current_state = HashMap::new();
@@ -584,27 +586,44 @@ mod tests {
             let merkle_key =
                 Key::from(NO_DIFF_KEY_PREFIX.to_string().to_db_key())
                     .join(&key);
-            let tree =
-                state.get_merkle_tree(height, Some(StoreType::NoDiff))?;
-            // Check if the rebuilt tree's root is the same as the saved one
-            assert_eq!(tree.root().0, roots.get(&height).unwrap().0);
+            let tree = match state
+                .get_merkle_tree(height, Some(StoreType::NoDiff))
+            {
+                Ok(tree) if height == last_height => {
+                    // Check if the rebuilt tree's root is the same as the saved
+                    // one
+                    assert_eq!(tree.root().0, roots.get(&height).unwrap().0);
+                    tree
+                }
+                Ok(_) => panic!("The tree at the height should be pruned"),
+                // expected error because of no merkle subtree store
+                // set an empty merkle tree as a dummy
+                Err(_) => MerkleTree::<PersistentStorageHasher>::default(),
+            };
+            // Check the NoDiff subtree at the last height
             match write_type {
                 0 => {
                     // data was not updated
-                    if *current_state.get(&key).unwrap() {
-                        assert!(tree.has_key(&merkle_key)?);
-                    } else {
-                        assert!(!tree.has_key(&merkle_key)?);
+                    if height == last_height {
+                        if *current_state.get(&key).unwrap() {
+                            assert!(tree.has_key(&merkle_key)?);
+                        } else {
+                            assert!(!tree.has_key(&merkle_key)?);
+                        }
                     }
                 }
                 1 | 3 => {
                     // data was deleted
-                    assert!(!tree.has_key(&merkle_key)?);
+                    if height == last_height {
+                        assert!(!tree.has_key(&merkle_key)?);
+                    }
                     current_state.insert(key, false);
                 }
                 _ => {
                     // data was updated
-                    assert!(tree.has_key(&merkle_key)?);
+                    if height == last_height {
+                        assert!(tree.has_key(&merkle_key)?);
+                    }
                     current_state.insert(key, true);
                 }
             }
@@ -733,6 +752,9 @@ mod tests {
         let result =
             state.get_merkle_tree(6.into(), Some(StoreType::BridgePool));
         assert!(result.is_err(), "The bridge pool tree should be pruned");
+
+        let result = state.get_merkle_tree(11.into(), Some(StoreType::NoDiff));
+        assert!(result.is_err(), "The tree at Height 11 should be pruned");
     }
 
     /// Test the prefix iterator with RocksDB.
