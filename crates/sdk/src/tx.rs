@@ -438,7 +438,7 @@ pub fn display_batch_resp(context: &impl Namada, resp: &TxResponse) {
     // Wrapper-level logs
     display_line!(
         context.io(),
-        "Wrapper transaction {} was applied at height {}, consuming {} gas \
+        "Transaction batch {} was applied at height {}, consuming {} gas \
          units.",
         resp.hash,
         resp.height,
