@@ -5,6 +5,7 @@ use std::io;
 
 use borsh::BorshDeserialize;
 use data_encoding::HEXLOWER;
+use either::Either;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
@@ -1803,67 +1804,64 @@ pub async fn query_find_validator<N: Namada>(
     context: &N,
     args: args::QueryFindValidator,
 ) {
-    let args::QueryFindValidator {
-        query: _,
-        tm_addr,
-        mut validator_addr,
-    } = args;
-    if let Some(tm_addr) = tm_addr {
-        if tm_addr.len() != 40 {
-            edisplay_line!(
-                context.io(),
-                "Expected 40 characters in Tendermint address, got {}",
-                tm_addr.len()
-            );
-            cli::safe_exit(1);
-        }
-        let tm_addr = tm_addr.to_ascii_uppercase();
-        let validator = unwrap_client_response::<N::Client, _>(
-            RPC.vp()
-                .pos()
-                .validator_by_tm_addr(context.client(), &tm_addr)
-                .await,
-        );
-        match validator {
-            Some(address) => {
-                display_line!(
+    let args::QueryFindValidator { query: _, addr } = args;
+    let validator_addr = match addr {
+        Either::Left(comet_addr) => {
+            // Retrieve the native address from the Comet one
+            if comet_addr.len() != 40 {
+                edisplay_line!(
                     context.io(),
-                    "Found validator address \"{address}\"."
+                    "Expected 40 characters in Tendermint address, got {}",
+                    comet_addr.len()
                 );
-                if validator_addr.is_none() {
-                    validator_addr = Some(address);
+                cli::safe_exit(1);
+            }
+            let tm_addr = comet_addr.to_ascii_uppercase();
+            let validator = unwrap_client_response::<N::Client, _>(
+                RPC.vp()
+                    .pos()
+                    .validator_by_tm_addr(context.client(), &tm_addr)
+                    .await,
+            );
+            match validator {
+                Some(address) => {
+                    display_line!(
+                        context.io(),
+                        "Found validator address \"{address}\"."
+                    );
+                    address
+                }
+                None => {
+                    edisplay_line!(
+                        context.io(),
+                        "No validator with Tendermint address {tm_addr} found."
+                    );
+                    cli::safe_exit(1);
                 }
             }
-            None => {
-                display_line!(
-                    context.io(),
-                    "No validator with Tendermint address {tm_addr} found."
-                )
-            }
         }
-    }
-    if let Some(validator_addr) = validator_addr {
-        if let Some(consensus_key) = unwrap_client_response::<N::Client, _>(
-            RPC.vp()
-                .pos()
-                .consensus_key(context.client(), &validator_addr)
-                .await,
-        ) {
-            let pkh: PublicKeyHash = (&consensus_key).into();
-            display_line!(context.io(), "Consensus key: {consensus_key}");
-            display_line!(
-                context.io(),
-                "Tendermint key: {}",
-                tm_consensus_key_raw_hash(&consensus_key)
-            );
-            display_line!(context.io(), "Consensus key hash: {}", pkh);
-        } else {
-            display_line!(
-                context.io(),
-                "Consensus key for validator {validator_addr} could not be \
-                 found."
-            )
-        }
+        Either::Right(validator_addr) => validator_addr,
+    };
+
+    if let Some(consensus_key) = unwrap_client_response::<N::Client, _>(
+        RPC.vp()
+            .pos()
+            .consensus_key(context.client(), &validator_addr)
+            .await,
+    ) {
+        let pkh: PublicKeyHash = (&consensus_key).into();
+        display_line!(context.io(), "Consensus key: {consensus_key}");
+        display_line!(
+            context.io(),
+            "Tendermint key: {}",
+            tm_consensus_key_raw_hash(&consensus_key)
+        );
+        display_line!(context.io(), "Consensus key hash: {}", pkh);
+    } else {
+        display_line!(
+            context.io(),
+            "Consensus key for validator {validator_addr} could not be found."
+        )
     }
 }
 
