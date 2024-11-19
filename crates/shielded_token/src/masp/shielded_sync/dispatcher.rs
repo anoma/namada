@@ -557,7 +557,7 @@ where
 
         self.config
             .scanned_tracker
-            .set_upper_limit(self.cache.fetched.len() as u64);
+            .set_upper_limit(self.cache.fetched.shielded_outputs() as u64);
         self.config.applied_tracker.set_upper_limit(
             self.cache.trial_decrypted.successful_decryptions() as u64,
         );
@@ -667,9 +667,9 @@ where
                 self.cache.fetched.extend(tx_batch);
 
                 self.config.fetched_tracker.increment_by(to.0 - from.0 + 1);
-                self.config
-                    .scanned_tracker
-                    .set_upper_limit(self.cache.fetched.len() as u64);
+                self.config.scanned_tracker.set_upper_limit(
+                    self.cache.fetched.shielded_outputs() as u64,
+                );
             }
             Message::FetchTxs(Err(TaskError {
                 error,

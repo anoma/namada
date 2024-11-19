@@ -134,9 +134,16 @@ impl Fetched {
         self.txs.is_empty()
     }
 
-    /// Check the length of the fetched cache
-    pub fn len(&self) -> usize {
-        self.txs.len()
+    /// Return the number of shielded outputs in the cache
+    pub fn shielded_outputs(&self) -> usize {
+        self.txs
+            .values()
+            .map(|shielded| {
+                shielded
+                    .sapling_bundle()
+                    .map_or(0, |x| x.shielded_outputs.len())
+            })
+            .sum::<usize>()
     }
 }
 
