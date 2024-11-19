@@ -7245,7 +7245,6 @@ pub mod args {
             let query = Query::parse(matches);
             let tm_addr = TM_ADDRESS_OPT.parse(matches);
             let validator_addr = VALIDATOR_OPT.parse(matches);
-            // FIXME: maybe I can panic here if both are none
             // FIXME: so to recap, these args are optional but at least one of
             // them must be provided and both of them should never be provided
             // cause it doesn't make sense FIXME: so probably we
@@ -7271,18 +7270,19 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Query<CliTypes>>()
-                // FIXME: here, I believe the issue is that both args are
-                // optional. Is teh validator really optional though? yes
-                // FIXME: pobably these two should confclit with each other
                 .arg(
-                    TM_ADDRESS_OPT.def().help(wrap!(
-                        "The address of the validator in Tendermint."
-                    )),
+                    TM_ADDRESS_OPT
+                        .def()
+                        .help(wrap!(
+                            "The address of the validator in Tendermint."
+                        ))
+                        .conflicts_with(VALIDATOR_OPT.name),
                 )
                 .arg(
                     VALIDATOR_OPT
                         .def()
-                        .help(wrap!("The native address of the validator.")),
+                        .help(wrap!("The native address of the validator."))
+                        .conflicts_with(TM_ADDRESS_OPT.name),
                 )
         }
     }
