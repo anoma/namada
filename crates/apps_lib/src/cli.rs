@@ -1319,6 +1319,7 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about(wrap!("Send a transaction with custom WASM code."))
+                .arg_required_else_help(true)
                 .add_args::<args::TxCustom<args::CliTypes>>()
         }
     }
@@ -1470,6 +1471,7 @@ pub mod cmds {
                     "Send a signed transaction to create a new established \
                      account."
                 ))
+                .arg_required_else_help(true)
                 .add_args::<args::TxInitAccount<args::CliTypes>>()
         }
     }
@@ -2167,6 +2169,7 @@ pub mod cmds {
                     "Find a PoS validator and its consensus key by its native \
                      address or Tendermint address."
                 ))
+                .arg_required_else_help(true)
                 .add_args::<args::QueryFindValidator<args::CliTypes>>()
         }
     }
@@ -3328,6 +3331,7 @@ pub mod args {
     use std::str::FromStr;
 
     use data_encoding::HEXUPPER;
+    use either::Either;
     use namada_core::masp::{MaspEpoch, PaymentAddress};
     use namada_sdk::address::{Address, EstablishedAddress};
     pub use namada_sdk::args::*;
@@ -3605,7 +3609,7 @@ pub mod args {
     pub const TEMPLATES_PATH: Arg<PathBuf> = arg("templates-path");
     pub const TIMEOUT_HEIGHT: ArgOpt<u64> = arg_opt("timeout-height");
     pub const TIMEOUT_SEC_OFFSET: ArgOpt<u64> = arg_opt("timeout-sec-offset");
-    pub const TM_ADDRESS: ArgOpt<String> = arg_opt("tm-address");
+    pub const TM_ADDRESS_OPT: ArgOpt<String> = arg_opt("tm-address");
     pub const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
     pub const TOKEN_STR_OPT: ArgOpt<String> = TOKEN_STR.opt();
     pub const TOKEN: Arg<WalletAddress> = arg("token");
@@ -7241,26 +7245,34 @@ pub mod args {
     impl Args for QueryFindValidator<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
-            let tm_addr = TM_ADDRESS.parse(matches);
+            let tm_addr = TM_ADDRESS_OPT.parse(matches);
             let validator_addr = VALIDATOR_OPT.parse(matches);
-            Self {
-                query,
-                tm_addr,
-                validator_addr,
-            }
+
+            let addr = match (tm_addr, validator_addr) {
+                (Some(tm_addr), None) => Either::Left(tm_addr),
+                (None, Some(validator_addr)) => Either::Right(validator_addr),
+                _ => unreachable!(
+                    "Wrong arguments supplied, CLI should prevent this"
+                ),
+            };
+            Self { query, addr }
         }
 
         fn def(app: App) -> App {
             app.add_args::<Query<CliTypes>>()
                 .arg(
-                    TM_ADDRESS.def().help(wrap!(
-                        "The address of the validator in Tendermint."
-                    )),
+                    TM_ADDRESS_OPT
+                        .def()
+                        .help(wrap!(
+                            "The address of the validator in Tendermint."
+                        ))
+                        .conflicts_with(VALIDATOR_OPT.name),
                 )
                 .arg(
                     VALIDATOR_OPT
                         .def()
-                        .help(wrap!("The native address of the validator.")),
+                        .help(wrap!("The native address of the validator."))
+                        .conflicts_with(TM_ADDRESS_OPT.name),
                 )
         }
     }
@@ -7274,10 +7286,9 @@ pub mod args {
         ) -> Result<QueryFindValidator<SdkTypes>, Self::Error> {
             Ok(QueryFindValidator::<SdkTypes> {
                 query: self.query.to_sdk(ctx)?,
-                tm_addr: self.tm_addr,
-                validator_addr: self
-                    .validator_addr
-                    .map(|x| ctx.borrow_chain_or_exit().get(&x)),
+                addr: self.addr.map_right(|validator_addr| {
+                    ctx.borrow_chain_or_exit().get(&validator_addr)
+                }),
             })
         }
     }
