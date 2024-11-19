@@ -3975,7 +3975,7 @@ dependencies = [
 
 [[package]]
 name = "vp_verify_signature"
-version = "0.41.0"
+version = "0.45.1"
 dependencies = [
  "getrandom",
  "namada_vp_prelude",

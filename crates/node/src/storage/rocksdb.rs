@@ -1410,7 +1410,8 @@ impl DB for RocksDB {
                 format!("{key_prefix}/{MERKLE_TREE_ROOT_KEY_SEGMENT}");
             match self.read_value(block_cf, root_key)? {
                 Some(root) => merkle_tree_stores.set_root(st, root),
-                None => return Ok(None),
+                None if store_type.is_some() => return Ok(None),
+                _ => continue,
             }
 
             let store_key =
@@ -1419,7 +1420,8 @@ impl DB for RocksDB {
                 Some(bytes) => {
                     merkle_tree_stores.set_store(st.decode_store(bytes)?)
                 }
-                None => return Ok(None),
+                None if store_type.is_some() => return Ok(None),
+                _ => continue,
             }
         }
         Ok(Some(merkle_tree_stores))
@@ -1659,10 +1661,17 @@ impl DB for RocksDB {
         &mut self,
         batch: &mut Self::WriteBatch,
         store_type: &StoreType,
-        epoch: Epoch,
+        pruned_target: Either<BlockHeight, Epoch>,
     ) -> Result<()> {
         let block_cf = self.get_column_family(BLOCK_CF)?;
-        let key_prefix = tree_key_prefix_with_epoch(store_type, epoch);
+        let key_prefix = match pruned_target {
+            Either::Left(height) => {
+                tree_key_prefix_with_height(store_type, height)
+            }
+            Either::Right(epoch) => {
+                tree_key_prefix_with_epoch(store_type, epoch)
+            }
+        };
         let root_key = format!("{key_prefix}/{MERKLE_TREE_ROOT_KEY_SEGMENT}");
         batch.0.delete_cf(block_cf, root_key);
         let store_key = format!("{key_prefix}/{MERKLE_TREE_STORE_KEY_SEGMENT}");

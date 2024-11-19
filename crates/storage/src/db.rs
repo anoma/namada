@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 use std::num::TryFromIntError;
 
+use itertools::Either;
 use namada_core::address::EstablishedAddressGen;
 use namada_core::chain::{BlockHeader, BlockHeight, Epoch, Epochs};
 use namada_core::hash::{Error as HashError, Hash};
@@ -169,7 +170,7 @@ pub trait DB: Debug {
 
     /// Read the merkle tree stores with the given epoch. If a store_type is
     /// given, it reads only the specified tree. Otherwise, it reads all
-    /// trees.
+    /// trees, but some subtrees could be empty if the stores aren't saved.
     fn read_merkle_tree_stores(
         &self,
         epoch: Epoch,
@@ -258,7 +259,7 @@ pub trait DB: Debug {
         &mut self,
         batch: &mut Self::WriteBatch,
         store_type: &StoreType,
-        pruned_epoch: Epoch,
+        pruned_target: Either<BlockHeight, Epoch>,
     ) -> Result<()>;
 
     /// Read the signed nonce of Bridge Pool

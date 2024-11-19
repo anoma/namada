@@ -1,6 +1,7 @@
 use std::cmp::Ordering;
 use std::ops::{Deref, DerefMut};
 
+use itertools::Either;
 use namada_core::address::Address;
 use namada_core::arith::checked;
 use namada_core::borsh::BorshSerializeExt;
@@ -393,12 +394,41 @@ where
     // commit.
     fn prune_merkle_tree_stores(
         &mut self,
+        is_full_commit: bool,
         batch: &mut D::WriteBatch,
     ) -> Result<()> {
+        if let Some(prev_height) = self
+            .in_mem
+            .block
+            .height
+            .prev_height()
+            .and_then(|h| h.prev_height())
+        {
+            for st in StoreType::iter().filter(|st| st.is_stored_every_block())
+            {
+                match st {
+                    StoreType::Base => continue,
+                    _ => self.0.db.prune_merkle_tree_store(
+                        batch,
+                        st,
+                        Either::Left(prev_height),
+                    )?,
+                }
+            }
+        }
+
+        if !is_full_commit {
+            return Ok(());
+        }
+
         // Prune non-provable stores at the previous epoch
         if let Some(prev_epoch) = self.in_mem.block.epoch.prev() {
             for st in StoreType::iter_non_provable() {
-                self.0.db.prune_merkle_tree_store(batch, st, prev_epoch)?;
+                self.0.db.prune_merkle_tree_store(
+                    batch,
+                    st,
+                    Either::Right(prev_epoch),
+                )?;
             }
         }
         // Prune provable stores
@@ -411,7 +441,11 @@ where
                 self.db.prune_merkle_tree_store(
                     batch,
                     st,
-                    oldest_epoch.prev().unwrap(),
+                    Either::Right(
+                        oldest_epoch
+                            .prev()
+                            .expect("the previous epoch should exist"),
+                    ),
                 )?;
             }
 
@@ -425,7 +459,7 @@ where
                 self.db.prune_merkle_tree_store(
                     batch,
                     &StoreType::BridgePool,
-                    epoch,
+                    Either::Right(epoch),
                 )?;
             }
         }
@@ -637,10 +671,8 @@ where
             time: header.time,
         });
         self.in_mem.last_epoch = self.in_mem.block.epoch;
-        if is_full_commit {
-            // prune old merkle tree stores
-            self.prune_merkle_tree_stores(&mut batch)?;
-        }
+        // prune old merkle tree stores
+        self.prune_merkle_tree_stores(is_full_commit, &mut batch)?;
         // If there's a previous block, prune non-persisted diffs from it
         if let Some(height) = self.in_mem.block.height.prev_height() {
             self.db.prune_non_persisted_diffs(&mut batch, height)?;
@@ -996,15 +1028,14 @@ where
                 None => BlockHeight(1),
             },
         };
+        // Try to read all subtrees, but some subtrees would be stale or empty.
+        // They will be rebuild later. That's why the tree isn't validated here.
         let stores = self
             .db
             .read_merkle_tree_stores(epoch, start_height, store_type)?
             .ok_or(StateError::NoMerkleTree { height })?;
+        let mut tree = MerkleTree::<H>::new_partial(stores);
         let prefix = store_type.and_then(|st| st.provable_prefix());
-        let mut tree = match store_type {
-            Some(_) => MerkleTree::<H>::new_partial(stores),
-            None => MerkleTree::<H>::new(stores).expect("invalid stores"),
-        };
         // Restore the tree state with diffs
         let mut target_height = start_height;
         while target_height < height {
