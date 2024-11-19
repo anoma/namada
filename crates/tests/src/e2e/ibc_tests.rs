@@ -120,7 +120,6 @@ fn ibc_transfers() -> Result<()> {
         None,
         None,
         None,
-        false,
     )?;
     wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
 
@@ -182,7 +181,6 @@ fn ibc_transfers() -> Result<()> {
         None,
         None,
         None,
-        false,
     )?;
     wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
 
@@ -252,7 +250,6 @@ fn ibc_transfers() -> Result<()> {
         None,
         None,
         None,
-        false,
     )?;
     wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
     check_balance(&test, AB_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
@@ -299,7 +296,6 @@ fn ibc_transfers() -> Result<()> {
         None,
         None,
         None,
-        false,
     )?;
     wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
     // The balance should not be changed
@@ -322,7 +318,6 @@ fn ibc_transfers() -> Result<()> {
         Some(Duration::new(10, 0)),
         None,
         None,
-        false,
     )?;
     // wait for the timeout
     sleep(10);
@@ -349,7 +344,6 @@ fn ibc_transfers() -> Result<()> {
         None,
         None,
         None,
-        false,
     )?;
     wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
     // Check the token has been refunded to the refund target
@@ -374,7 +368,6 @@ fn ibc_transfers() -> Result<()> {
         Some(Duration::new(10, 0)),
         None,
         None,
-        false,
     )?;
     // wait for the timeout
     sleep(10);
@@ -834,7 +827,6 @@ fn ibc_rate_limit() -> Result<()> {
         None,
         None,
         None,
-        false,
     )?;
 
     // Transfer 1 NAM from Namada to Gaia again will fail
@@ -853,7 +845,6 @@ fn ibc_rate_limit() -> Result<()> {
         Some(
             "Transfer exceeding the per-epoch throughput limit is not allowed",
         ),
-        false,
     )?;
 
     // wait for the next epoch
@@ -876,7 +867,6 @@ fn ibc_rate_limit() -> Result<()> {
         None,
         None,
         None,
-        false,
     )?;
 
     // wait for the next epoch
@@ -1116,7 +1106,6 @@ fn try_invalid_transfers(
         None,
         // the IBC denom can't be parsed when using an invalid port
         Some(&format!("Invalid IBC denom: {nam_addr}")),
-        false,
     )?;
 
     // invalid channel
@@ -1132,7 +1121,6 @@ fn try_invalid_transfers(
         None,
         None,
         Some("IBC token transfer error: context error: `ICS04 Channel error"),
-        false,
     )?;
 
     Ok(())
@@ -1187,8 +1175,6 @@ fn transfer(
     timeout_sec: Option<Duration>,
     shielding_data_path: Option<PathBuf>,
     expected_err: Option<&str>,
-    // FIXME: seems like this is always false, we can remove it?
-    wait_reveal_pk: bool,
 ) -> Result<u32> {
     let rpc = get_actor_rpc(test, Who::Validator(0));
 
@@ -1263,10 +1249,6 @@ fn transfer(
         None => {
             let height = check_tx_height(test, &mut client)?;
             client.exp_string(TX_APPLIED_SUCCESS)?;
-            // FIXME: do we need this?
-            if wait_reveal_pk {
-                client.exp_string(TX_APPLIED_SUCCESS)?;
-            }
 
             Ok(height)
         }
