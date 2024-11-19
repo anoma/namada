@@ -1187,6 +1187,7 @@ fn transfer(
     timeout_sec: Option<Duration>,
     shielding_data_path: Option<PathBuf>,
     expected_err: Option<&str>,
+    // FIXME: seems like this is always false, we can remove it?
     wait_reveal_pk: bool,
 ) -> Result<u32> {
     let rpc = get_actor_rpc(test, Who::Validator(0));
@@ -1260,11 +1261,14 @@ fn transfer(
             Ok(0)
         }
         None => {
+            let height = check_tx_height(test, &mut client)?;
             client.exp_string(TX_APPLIED_SUCCESS)?;
+            // FIXME: do we need this?
             if wait_reveal_pk {
                 client.exp_string(TX_APPLIED_SUCCESS)?;
             }
-            check_tx_height(test, &mut client)
+
+            Ok(height)
         }
     }
 }
