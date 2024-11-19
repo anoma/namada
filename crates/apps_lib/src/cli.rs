@@ -2179,6 +2179,8 @@ pub mod cmds {
     #[derive(Clone, Debug)]
     pub struct QueryFindValidator(pub args::QueryFindValidator<args::CliTypes>);
 
+    // FIXME: check that all the namadac subcommand (and maybe the wallet and
+    // node too) print information when nothing is provided
     impl SubCmd for QueryFindValidator {
         const CMD: &'static str = "find-validator";
 
@@ -3635,7 +3637,7 @@ pub mod args {
     pub const TEMPLATES_PATH: Arg<PathBuf> = arg("templates-path");
     pub const TIMEOUT_HEIGHT: ArgOpt<u64> = arg_opt("timeout-height");
     pub const TIMEOUT_SEC_OFFSET: ArgOpt<u64> = arg_opt("timeout-sec-offset");
-    pub const TM_ADDRESS: ArgOpt<String> = arg_opt("tm-address");
+    pub const TM_ADDRESS_OPT: ArgOpt<String> = arg_opt("tm-address");
     pub const TOKEN_OPT: ArgOpt<WalletAddress> = TOKEN.opt();
     pub const TOKEN_STR_OPT: ArgOpt<String> = TOKEN_STR.opt();
     pub const TOKEN: Arg<WalletAddress> = arg("token");
@@ -7306,8 +7308,25 @@ pub mod args {
     impl Args for QueryFindValidator<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
-            let tm_addr = TM_ADDRESS.parse(matches);
+            let tm_addr = TM_ADDRESS_OPT.parse(matches);
             let validator_addr = VALIDATOR_OPT.parse(matches);
+            // FIXME: maybe I can panic here if both are none
+            // FIXME: so to recap, these args are optional but at least one of
+            // them must be provided and both of them should never be provided
+            // cause it doesn't make sense FIXME: so probably we
+            // should just change the fields of the struct to a single one which
+            // is an Either. If both are provided which one shoudl take
+            // precedence? Maybe we can reject if both are provided, or we can
+            // just accept both and state th precedence in the help message? Use
+            // the same precedence we are using right now, so VALIDATOR opr over
+            // TM_AD
+            if tm_addr.is_none() && validator_addr.is_none() {
+                eprintln!(
+                    "Missing argument: please specify one of --{} or --{}",
+                    TM_ADDRESS_OPT.name, VALIDATOR_OPT.name
+                );
+                safe_exit(1)
+            }
             Self {
                 query,
                 tm_addr,
@@ -7317,8 +7336,11 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<Query<CliTypes>>()
+                // FIXME: here, I believe the issue is that both args are
+                // optional. Is teh validator really optional though? yes
+                // FIXME: pobably these two should confclit with each other
                 .arg(
-                    TM_ADDRESS.def().help(wrap!(
+                    TM_ADDRESS_OPT.def().help(wrap!(
                         "The address of the validator in Tendermint."
                     )),
                 )
