@@ -1324,6 +1324,7 @@ pub mod cmds {
         fn def() -> App {
             App::new(Self::CMD)
                 .about(wrap!("Send a transaction with custom WASM code."))
+                .arg_required_else_help(true)
                 .add_args::<args::TxCustom<args::CliTypes>>()
         }
     }
@@ -1475,6 +1476,7 @@ pub mod cmds {
                     "Send a signed transaction to create a new established \
                      account."
                 ))
+                .arg_required_else_help(true)
                 .add_args::<args::TxInitAccount<args::CliTypes>>()
         }
     }
@@ -2179,8 +2181,6 @@ pub mod cmds {
     #[derive(Clone, Debug)]
     pub struct QueryFindValidator(pub args::QueryFindValidator<args::CliTypes>);
 
-    // FIXME: check that all the namadac subcommand (and maybe the wallet and
-    // node too) print information when nothing is provided
     impl SubCmd for QueryFindValidator {
         const CMD: &'static str = "find-validator";
 
@@ -2199,6 +2199,7 @@ pub mod cmds {
                     "Find a PoS validator and its consensus key by its native \
                      address or Tendermint address."
                 ))
+                .arg_required_else_help(true)
                 .add_args::<args::QueryFindValidator<args::CliTypes>>()
         }
     }
@@ -7313,19 +7314,11 @@ pub mod args {
             let validator_addr = VALIDATOR_OPT.parse(matches);
 
             let addr = match (tm_addr, validator_addr) {
-                (Some(_), Some(_)) => unreachable!(
-                    "Cli should prevent the presence of both --{} and --{}",
-                    TM_ADDRESS_OPT.name, VALIDATOR_OPT.name
-                ),
                 (Some(tm_addr), None) => Either::Left(tm_addr),
                 (None, Some(validator_addr)) => Either::Right(validator_addr),
-                (None, None) => {
-                    eprintln!(
-                        "Missing argument: please specify one of --{} or --{}",
-                        TM_ADDRESS_OPT.name, VALIDATOR_OPT.name
-                    );
-                    safe_exit(1)
-                }
+                _ => unreachable!(
+                    "Wrong arguments supplied, CLI should prevent this"
+                ),
             };
             Self { query, addr }
         }
