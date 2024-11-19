@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration as StdDuration;
 
+use either::Either;
 use namada_core::address::Address;
 use namada_core::chain::{BlockHeight, ChainId, Epoch};
 use namada_core::collections::HashMap;
@@ -2242,10 +2243,8 @@ pub struct QueryStakingRewardsRate<C: NamadaTypes = SdkTypes> {
 pub struct QueryFindValidator<C: NamadaTypes = SdkTypes> {
     /// Common query args
     pub query: Query<C>,
-    /// Tendermint address
-    pub tm_addr: Option<String>,
-    /// Native validator address
-    pub validator_addr: Option<C::Address>,
+    /// Validator address, either Comet or native
+    pub addr: Either<String, C::Address>,
 }
 
 /// Query the raw bytes of given storage key

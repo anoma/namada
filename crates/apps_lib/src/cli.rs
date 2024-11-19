@@ -3330,6 +3330,7 @@ pub mod args {
     use std::str::FromStr;
 
     use data_encoding::HEXUPPER;
+    use either::Either;
     use namada_core::masp::{MaspEpoch, PaymentAddress};
     use namada_sdk::address::{Address, EstablishedAddress};
     pub use namada_sdk::args::*;
@@ -7245,27 +7246,23 @@ pub mod args {
             let query = Query::parse(matches);
             let tm_addr = TM_ADDRESS_OPT.parse(matches);
             let validator_addr = VALIDATOR_OPT.parse(matches);
-            // FIXME: so to recap, these args are optional but at least one of
-            // them must be provided and both of them should never be provided
-            // cause it doesn't make sense FIXME: so probably we
-            // should just change the fields of the struct to a single one which
-            // is an Either. If both are provided which one shoudl take
-            // precedence? Maybe we can reject if both are provided, or we can
-            // just accept both and state th precedence in the help message? Use
-            // the same precedence we are using right now, so VALIDATOR opr over
-            // TM_AD
-            if tm_addr.is_none() && validator_addr.is_none() {
-                eprintln!(
-                    "Missing argument: please specify one of --{} or --{}",
+
+            let addr = match (tm_addr, validator_addr) {
+                (Some(_), Some(_)) => unreachable!(
+                    "Cli should prevent the presence of both --{} and --{}",
                     TM_ADDRESS_OPT.name, VALIDATOR_OPT.name
-                );
-                safe_exit(1)
-            }
-            Self {
-                query,
-                tm_addr,
-                validator_addr,
-            }
+                ),
+                (Some(tm_addr), None) => Either::Left(tm_addr),
+                (None, Some(validator_addr)) => Either::Right(validator_addr),
+                (None, None) => {
+                    eprintln!(
+                        "Missing argument: please specify one of --{} or --{}",
+                        TM_ADDRESS_OPT.name, VALIDATOR_OPT.name
+                    );
+                    safe_exit(1)
+                }
+            };
+            Self { query, addr }
         }
 
         fn def(app: App) -> App {
@@ -7296,10 +7293,9 @@ pub mod args {
         ) -> Result<QueryFindValidator<SdkTypes>, Self::Error> {
             Ok(QueryFindValidator::<SdkTypes> {
                 query: self.query.to_sdk(ctx)?,
-                tm_addr: self.tm_addr,
-                validator_addr: self
-                    .validator_addr
-                    .map(|x| ctx.borrow_chain_or_exit().get(&x)),
+                addr: self.addr.map_right(|validator_addr| {
+                    ctx.borrow_chain_or_exit().get(&validator_addr)
+                }),
             })
         }
     }
