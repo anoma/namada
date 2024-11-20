@@ -110,7 +110,7 @@ use trace::{
 
 use crate::storage::{
     channel_counter_key, client_counter_key, connection_counter_key,
-    deposit_prefix, withdraw_prefix,
+    deposit_prefix, nft_class_key, nft_metadata_key, withdraw_prefix,
 };
 
 /// The event type defined in ibc-rs for receiving a token
@@ -277,7 +277,9 @@ where
                 )?;
             }
             Some(IbcMessage::NftTransfer(msg)) => {
-                let ibc_transfer = IbcTransferInfo::try_from(msg.message)?;
+                // Need to set NFT data because the message doesn't include them
+                let message = retrieve_nft_data(storage, msg.message)?;
+                let ibc_transfer = IbcTransferInfo::try_from(message)?;
                 let receiver = ibc_transfer.receiver.clone();
                 let addr = TAddrData::Ibc(receiver.clone());
                 accum.decoder.insert(ibc_taddr(receiver), addr);
@@ -740,11 +742,14 @@ where
         let message = decode_message::<Transfer>(tx_data)?;
         match message {
             IbcMessage::Transfer(msg) => {
-                let token_transfer_ctx = TokenTransferContext::new(
+                let mut token_transfer_ctx = TokenTransferContext::new(
                     self.ctx.inner.clone(),
                     verifiers.clone(),
                 );
                 self.insert_verifiers()?;
+                if msg.transfer.is_some() {
+                    token_transfer_ctx.enable_shielded_transfer();
+                }
                 send_transfer_validate(
                     &self.ctx,
                     &token_transfer_ctx,
@@ -753,8 +758,11 @@ where
                 .map_err(Error::TokenTransfer)
             }
             IbcMessage::NftTransfer(msg) => {
-                let nft_transfer_ctx =
+                let mut nft_transfer_ctx =
                     NftTransferContext::<_, Token>::new(self.ctx.inner.clone());
+                if msg.transfer.is_some() {
+                    nft_transfer_ctx.enable_shielded_transfer();
+                }
                 send_nft_transfer_validate(
                     &self.ctx,
                     &nft_transfer_ctx,
@@ -976,6 +984,47 @@ pub fn received_ibc_token(
     )?;
     trace::convert_to_address(ibc_trace)
         .map_err(|e| Error::Trace(format!("Invalid base token: {e}")))
+}
+
+fn retrieve_nft_data<S: StorageRead>(
+    storage: &S,
+    message: IbcMsgNftTransfer,
+) -> Result<IbcMsgNftTransfer, StorageError> {
+    let mut message = message;
+    let class_id = &message.packet_data.class_id;
+    let nft_class_key = nft_class_key(class_id);
+    let nft_class: NftClass =
+        storage.read(&nft_class_key)?.ok_or_else(|| {
+            StorageError::new_alloc(format!(
+                "No NFT class: class_id {class_id}",
+            ))
+        })?;
+    message.packet_data.class_uri = nft_class.class_uri;
+    message.packet_data.class_data = nft_class.class_data;
+
+    let mut token_uris = Vec::new();
+    let mut token_data = Vec::new();
+    for token_id in &message.packet_data.token_ids.as_ref() {
+        let nft_metadata_key = nft_metadata_key(class_id, token_id);
+        let nft_metadata: NftMetadata =
+            storage.read(&nft_metadata_key)?.ok_or_else(|| {
+                StorageError::new_alloc(format!(
+                    "No NFT metadata: class_id {class_id}, token_id {token_id}",
+                ))
+            })?;
+        // Set the URI and the data if both exists
+        if let (Some(uri), Some(data)) =
+            (nft_metadata.token_uri, nft_metadata.token_data)
+        {
+            token_uris.push(uri);
+            token_data.push(data);
+        }
+    }
+    if !token_uris.is_empty() {
+        message.packet_data.token_uris = Some(token_uris);
+        message.packet_data.token_data = Some(token_data);
+    }
+    Ok(message)
 }
 
 /// Initialize storage in the genesis block.
