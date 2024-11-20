@@ -24,6 +24,7 @@ use namada_node::shell::SnapshotSync;
 use namada_node::storage::DbSnapshot;
 use namada_sdk::account::AccountPublicKeysMap;
 use namada_sdk::collections::HashMap;
+use namada_sdk::error::TxSubmitError;
 use namada_sdk::migrations;
 use namada_sdk::queries::RPC;
 use namada_sdk::token::{self, DenominatedAmount};
@@ -2350,6 +2351,217 @@ fn scheduled_migration() -> Result<()> {
         let locked = node.shell.lock().unwrap();
         assert!(locked.scheduled_migration.is_none());
     }
+    Ok(())
+}
+
+/// Test that a raw transaction can be wrapped and signed by someone else who
+/// can pay for the gas fees for this tx.
+///
+/// 1. Create a new account
+/// 2. Credit the new account with some tokens to reveal its PK and have tiny
+///    amount left
+/// 3. Reveal the PK of the new account
+/// 4. Check that the new account doesn't have sufficient balance to submit a
+///    transfer tx
+/// 5. Dump a raw tx of a transfer from the new account
+/// 6. Sign the raw transaction
+/// 7. Wrap the raw transaction by another account and submit it
+#[test]
+fn wrap_tx_by_elsewho() -> Result<()> {
+    let (node, _services) = setup::setup()?;
+
+    // 1. Create a new account
+    let key_alias = "new-account";
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Wallet,
+            apply_use_device(vec![
+                "gen",
+                "--alias",
+                key_alias,
+                "--unsafe-dont-encrypt",
+            ]),
+        )
+    });
+    assert!(captured.result.is_ok());
+
+    // 2. Credit the new account with some tokens to reveal its PK and have tiny
+    //    amount left
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            apply_use_device(vec![
+                "transparent-transfer",
+                "--source",
+                ALBERT,
+                "--target",
+                key_alias,
+                "--token",
+                NAM,
+                "--amount",
+                // transfer enough to cover reveal-pk gas fees (0.5) and to
+                // have only 0.000001 left after
+                "0.500001",
+            ]),
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    // 3. Reveal the PK of the new account
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            apply_use_device(vec!["reveal-pk", "--public-key", key_alias]),
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    // Assert that there's only the smallest possible non-zero amount left
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec!["balance", "--owner", key_alias, "--token", NAM],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 0.000001"));
+
+    // 4. Check that the new account doesn't have sufficient balance to submit a
+    //    transfer tx
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            apply_use_device(vec![
+                "transparent-transfer",
+                "--source",
+                key_alias,
+                "--target",
+                ALBERT,
+                "--token",
+                NAM,
+                "--amount",
+                "0.000001",
+            ]),
+        )
+    });
+    assert!(captured.result.is_err());
+    assert_matches!(
+        captured
+            .result
+            .unwrap_err()
+            .downcast_ref::<namada_sdk::error::Error>()
+            .unwrap(),
+        namada_sdk::error::Error::Tx(TxSubmitError::BalanceTooLowForFees(
+            _,
+            _,
+            _,
+            _
+        ))
+    );
+
+    // 5. Dump a raw tx of a transfer from the new account
+    let output_folder = node.test_dir.path();
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            apply_use_device(vec![
+                "transparent-transfer",
+                "--source",
+                key_alias,
+                "--target",
+                ALBERT,
+                "--token",
+                NAM,
+                "--amount",
+                "0.000001",
+                "--gas-payer",
+                CHRISTEL_KEY,
+                "--dump-tx",
+                "--output-folder-path",
+                &output_folder.to_str().unwrap(),
+            ]),
+        )
+    });
+    assert!(captured.result.is_ok());
+
+    let tx = find_files_with_ext(output_folder, "tx")
+        .unwrap()
+        .first()
+        .expect("Offline tx should be found.")
+        .to_path_buf()
+        .display()
+        .to_string();
+
+    // 6. Sign the raw transaction
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            apply_use_device(vec![
+                "utils",
+                "sign-offline",
+                "--data-path",
+                &tx,
+                "--secret-keys",
+                &key_alias,
+                "--output-folder-path",
+                &output_folder.to_str().unwrap(),
+            ]),
+        )
+    });
+    assert!(captured.result.is_ok());
+
+    let sig_files = find_files_with_ext(output_folder, "sig").unwrap();
+    assert_eq!(sig_files.len(), 1);
+    let offline_sig = sig_files.first().unwrap().to_str().unwrap();
+
+    // 7. Wrap the raw transaction by another account and submit it
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            apply_use_device(vec![
+                "tx",
+                "--tx-path",
+                &tx,
+                "--signatures",
+                &offline_sig,
+                "--gas-payer",
+                CHRISTEL_KEY,
+            ]),
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    // Assert changed balances
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec!["balance", "--owner", ALBERT, "--token", NAM],
+        )
+    });
+    assert!(captured.contains("nam: 1979999.5\n"));
+
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec!["balance", "--owner", key_alias, "--token", NAM],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 0\n"));
+
     Ok(())
 }
 
