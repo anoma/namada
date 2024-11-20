@@ -9,9 +9,7 @@ use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use color_eyre::eyre::Result;
 use data_encoding::HEXLOWER;
-use namada_apps_lib::wallet::defaults::{
-    self, get_unencrypted_keypair, is_use_device,
-};
+use namada_apps_lib::wallet::defaults::{self, is_use_device};
 use namada_core::chain::Epoch;
 use namada_core::dec::Dec;
 use namada_core::hash::Hash;
@@ -32,14 +30,14 @@ use namada_test_utils::TestWasms;
 use test_log::test;
 
 use crate::e2e::ledger_tests::prepare_proposal_data;
+use crate::e2e::setup::apply_use_device;
 use crate::e2e::setup::constants::{
     ALBERT, ALBERT_KEY, APFEL, BERTHA, BERTHA_KEY, BTC, CHRISTEL, CHRISTEL_KEY,
     DAEWON, DOT, ESTER, ETH, GOVERNANCE_ADDRESS, KARTOFFEL, NAM, PGF_ADDRESS,
     SCHNITZEL,
 };
-use crate::e2e::setup::{apply_use_device, ensure_hot_key};
 use crate::integration::helpers::{
-    find_address, find_keypair, prepare_steward_commission_update_data,
+    find_address, make_temp_account, prepare_steward_commission_update_data,
 };
 use crate::integration::setup;
 use crate::strings::{
@@ -551,10 +549,10 @@ fn pos_rewards() -> Result<()> {
     });
     assert_matches!(captured.result, Ok(_));
     let _res = captured
-        .matches(r"Current annual staking rewards rate: 63.483")
+        .matches(r"Current annual staking rewards rate: 65.705255877354")
         .expect("Test failed");
     let _res = captured
-        .matches(r"PoS inflation rate: 0.066")
+        .matches(r"PoS inflation rate: 0.066593164444")
         .expect("Test failed");
 
     Ok(())
@@ -985,20 +983,20 @@ fn inflation() -> Result<()> {
     })?;
 
     let pos_inflation = [
-        114400000.785983,
-        114400001.632333,
-        114400002.53905,
-        114400003.506134,
-        114400004.533585,
+        118400000.813463,
+        118400001.689407,
+        118400002.627832,
+        118400003.628738,
+        118400004.692125,
     ];
     let steward_inflation = [
-        1980000.36276,
-        1980000.72552,
-        1980001.08828,
-        1980001.45104,
-        1980001.8138,
+        1980000.375443,
+        1980000.750886,
+        1980001.126329,
+        1980001.501772,
+        1980001.877215,
     ];
-    let pgf_inflation = [0.399038, 0.792006, 1.200066, 1.623217, 2.06146];
+    let pgf_inflation = [0.41299, 0.819698, 1.242026, 1.679974, 2.133543];
 
     for epoch in 0..5 {
         node.next_epoch();
@@ -1283,7 +1281,7 @@ fn pgf_governance_proposal() -> Result<()> {
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, query_balance_args));
     assert_matches!(captured.result, Ok(_));
-    assert!(captured.contains("nam: 13.785266"));
+    assert!(captured.contains("nam: 14.267253"));
 
     let query_total_supply_args = vec![
         "total-supply",
@@ -1296,7 +1294,7 @@ fn pgf_governance_proposal() -> Result<()> {
         CapturedOutput::of(|| run(&node, Bin::Client, query_total_supply_args));
     assert_matches!(captured.result, Ok(_));
     assert!(captured.contains(
-        "token tnam1q9kn74xfzytqkqyycfrhycr8ajam8ny935cge0z5: 114400023.904507"
+        "token tnam1q9kn74xfzytqkqyycfrhycr8ajam8ny935cge0z5: 118400024.740301"
     ));
 
     let query_native_supply_args =
@@ -1305,7 +1303,7 @@ fn pgf_governance_proposal() -> Result<()> {
         run(&node, Bin::Client, query_native_supply_args)
     });
     assert_matches!(captured.result, Ok(_));
-    assert!(captured.contains("nam: 114400010.119241"));
+    assert!(captured.contains("nam: 118400010.473048"));
 
     // 8. Submit proposal funding
     let albert = defaults::albert_address();
@@ -1695,8 +1693,15 @@ fn change_validator_metadata() -> Result<()> {
 fn offline_sign() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
     let validator_one_rpc = "http://127.0.0.1:26567";
+
     // 1. start the ledger node
     let (node, _services) = setup::setup()?;
+
+    // Initialize accounts we can access the secret keys of
+    let (bradley_alias, _bradley_key) =
+        make_temp_account(&node, validator_one_rpc, "Bradley", NAM, 500_000)?;
+    let (cooper_alias, _cooper_key) =
+        make_temp_account(&node, validator_one_rpc, "Cooper", NAM, 500_000)?;
 
     let output_folder = tempfile::tempdir().unwrap();
 
@@ -1708,7 +1713,7 @@ fn offline_sign() -> Result<()> {
             apply_use_device(vec![
                 "transparent-transfer",
                 "--source",
-                BERTHA,
+                bradley_alias.as_ref(),
                 "--target",
                 ALBERT,
                 "--token",
@@ -1720,7 +1725,7 @@ fn offline_sign() -> Result<()> {
                 "--gas-price",
                 "1",
                 "--gas-payer",
-                CHRISTEL_KEY,
+                cooper_alias.as_ref(),
                 "--node",
                 &validator_one_rpc,
                 "--dump-wrapper-tx",
@@ -1739,26 +1744,23 @@ fn offline_sign() -> Result<()> {
         .display()
         .to_string();
 
-    let bertha_sk = find_keypair(&node, BERTHA_KEY).unwrap().to_string();
-    let christel_sk = find_keypair(&node, CHRISTEL_KEY).unwrap().to_string();
-
     // 3. Sign the transaction offline
     let captured = CapturedOutput::of(|| {
         run(
             &node,
             Bin::Client,
-            apply_use_device(vec![
+            vec![
                 "utils",
                 "sign-offline",
                 "--data-path",
                 &offline_tx,
                 "--secret-keys",
-                &bertha_sk,
+                &bradley_alias.as_ref(),
                 "--secret-key",
-                &christel_sk,
+                &cooper_alias.as_ref(),
                 "--output-folder-path",
                 &output_folder.path().to_str().unwrap(),
-            ]),
+            ],
         )
     });
     assert!(captured.result.is_ok());
@@ -1821,7 +1823,7 @@ fn offline_sign() -> Result<()> {
             vec![
                 "balance",
                 "--owner",
-                ensure_hot_key(BERTHA),
+                bradley_alias.as_ref(),
                 "--token",
                 NAM,
                 "--node",
@@ -1830,7 +1832,7 @@ fn offline_sign() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1999900"));
+    assert!(captured.contains("nam: 499900"));
     let captured = CapturedOutput::of(|| {
         run(
             &node,
@@ -1838,7 +1840,7 @@ fn offline_sign() -> Result<()> {
             vec![
                 "balance",
                 "--owner",
-                ensure_hot_key(CHRISTEL_KEY),
+                cooper_alias.as_ref(),
                 "--token",
                 NAM,
                 "--node",
@@ -1847,7 +1849,7 @@ fn offline_sign() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1800000"));
+    assert!(captured.contains("nam: 300000"));
 
     Ok(())
 }
@@ -1862,6 +1864,10 @@ fn enforce_fee_payment() -> Result<()> {
     // 1. start the ledger node
     let (node, _services) = setup::setup()?;
 
+    // Initialize accounts we can access the secret keys of
+    let (adam_alias, adam_key) =
+        make_temp_account(&node, validator_one_rpc, "Adam", NAM, 2_000_000)?;
+
     let tempdir = tempfile::tempdir().unwrap();
     let mut txs_bytes = vec![];
 
@@ -1872,7 +1878,7 @@ fn enforce_fee_payment() -> Result<()> {
             vec![
                 "balance",
                 "--owner",
-                ensure_hot_key(ALBERT_KEY),
+                adam_alias.as_ref(),
                 "--token",
                 NAM,
                 "--node",
@@ -1889,7 +1895,7 @@ fn enforce_fee_payment() -> Result<()> {
         apply_use_device(vec![
             "transparent-transfer",
             "--source",
-            ensure_hot_key(ALBERT_KEY),
+            adam_alias.as_ref(),
             "--target",
             BERTHA,
             "--token",
@@ -1925,7 +1931,7 @@ fn enforce_fee_payment() -> Result<()> {
         apply_use_device(vec![
             "transparent-transfer",
             "--source",
-            ensure_hot_key(ALBERT_KEY),
+            adam_alias.as_ref(),
             "--target",
             CHRISTEL,
             "--token",
@@ -1933,7 +1939,7 @@ fn enforce_fee_payment() -> Result<()> {
             "--amount",
             "50",
             "--gas-payer",
-            ensure_hot_key(ALBERT_KEY),
+            adam_alias.as_ref(),
             "--output-folder-path",
             tempdir.path().to_str().unwrap(),
             "--dump-tx",
@@ -1953,9 +1959,7 @@ fn enforce_fee_payment() -> Result<()> {
     txs_bytes.push(std::fs::read(&file_path).unwrap());
     std::fs::remove_file(&file_path).unwrap();
 
-    let sk = get_unencrypted_keypair(
-        &ensure_hot_key("albert-key").to_ascii_lowercase(),
-    );
+    let sk = adam_key;
     let pk = sk.to_public();
 
     let native_token = node
@@ -2020,7 +2024,7 @@ fn enforce_fee_payment() -> Result<()> {
             vec![
                 "balance",
                 "--owner",
-                ensure_hot_key(ALBERT_KEY),
+                adam_alias.as_ref(),
                 "--token",
                 NAM,
                 "--node",
@@ -2093,7 +2097,7 @@ fn apply_snapshot() -> Result<()> {
     for _ in 0..3 {
         node.next_epoch();
     }
-    let tx_args = vec![
+    let tx_args = apply_use_device(vec![
         "transparent-transfer",
         "--source",
         BERTHA,
@@ -2108,7 +2112,7 @@ fn apply_snapshot() -> Result<()> {
         "--node",
         &validator_one_rpc,
         "--force",
-    ];
+    ]);
 
     let captured = CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
     assert_matches!(captured.result, Ok(_));

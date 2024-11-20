@@ -827,11 +827,10 @@ mod test {
                 .address();
         assert_eq!(addr.unwrap(), address::testing::established_address_1());
 
-        let addr =
-            TransferSource::ExtendedSpendingKey(
-                masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]).into(),
-            )
-            .address();
+        let addr = TransferSource::ExtendedSpendingKey(
+            masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]).into(),
+        )
+        .address();
         assert!(addr.is_none());
     }
 
@@ -845,11 +844,10 @@ mod test {
             TAddrData::Addr(address::testing::established_address_1())
         );
 
-        let addr =
-            TransferSource::ExtendedSpendingKey(
-                masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]).into(),
-            )
-            .address();
+        let addr = TransferSource::ExtendedSpendingKey(
+            masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]).into(),
+        )
+        .address();
         assert!(addr.is_none());
     }
 

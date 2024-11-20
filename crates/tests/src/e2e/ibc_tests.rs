@@ -212,7 +212,8 @@ fn ibc_transfers() -> Result<()> {
         &port_id_namada,
         &channel_id_namada,
     )?;
-    let masp_receiver = find_payment_address(&test, AA_PAYMENT_ADDRESS)?.to_string();
+    let masp_receiver =
+        find_payment_address(&test, AA_PAYMENT_ADDRESS)?.to_string();
     transfer_from_gaia(
         &test_gaia,
         GAIA_USER,
@@ -273,7 +274,8 @@ fn ibc_transfers() -> Result<()> {
         &port_id_namada,
         &channel_id_namada,
     )?;
-    let masp_receiver = find_payment_address(&test, AA_PAYMENT_ADDRESS)?.to_string();
+    let masp_receiver =
+        find_payment_address(&test, AA_PAYMENT_ADDRESS)?.to_string();
     transfer_from_gaia(
         &test_gaia,
         GAIA_USER,
@@ -405,7 +407,8 @@ fn ibc_transfers() -> Result<()> {
     check_gaia_balance(&test_gaia, GAIA_USER, GAIA_COIN, 810)?;
 
     // Missing memo
-    let masp_receiver = find_payment_address(&test, AA_PAYMENT_ADDRESS)?.to_string();
+    let masp_receiver =
+        find_payment_address(&test, AA_PAYMENT_ADDRESS)?.to_string();
     transfer_from_gaia(
         &test_gaia,
         GAIA_USER,
@@ -432,7 +435,8 @@ fn ibc_transfers() -> Result<()> {
         &port_id_namada,
         &channel_id_namada,
     )?;
-    let masp_receiver = find_payment_address(&test, AA_PAYMENT_ADDRESS)?.to_string();
+    let masp_receiver =
+        find_payment_address(&test, AA_PAYMENT_ADDRESS)?.to_string();
     transfer_from_gaia(
         &test_gaia,
         GAIA_USER,
@@ -711,7 +715,8 @@ fn ibc_token_inflation() -> Result<()> {
         &port_id_namada,
         &channel_id_namada,
     )?;
-    let masp_receiver = find_payment_address(&test, AA_PAYMENT_ADDRESS)?.to_string();
+    let masp_receiver =
+        find_payment_address(&test, AA_PAYMENT_ADDRESS)?.to_string();
     transfer_from_gaia(
         &test_gaia,
         GAIA_USER,

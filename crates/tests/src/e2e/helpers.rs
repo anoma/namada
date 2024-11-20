@@ -31,8 +31,8 @@ use namada_sdk::wallet::Wallet;
 use toml::Value;
 
 use super::setup::{
-    self, ensure_hot_key, run_gaia_cmd, sleep, NamadaBgCmd, NamadaCmd, Test,
-    ENV_VAR_DEBUG, ENV_VAR_USE_PREBUILT_BINARIES,
+    self, run_gaia_cmd, sleep, NamadaBgCmd, NamadaCmd, Test, ENV_VAR_DEBUG,
+    ENV_VAR_USE_PREBUILT_BINARIES,
 };
 use crate::e2e::setup::{constants, Bin, Who, APPS_PACKAGE};
 use crate::strings::{LEDGER_STARTED, TX_APPLIED_SUCCESS};
@@ -130,7 +130,10 @@ pub fn find_address(test: &Test, alias: impl AsRef<str>) -> Result<Address> {
 }
 
 /// Find the address of an account by its alias from the wallet
-pub fn find_payment_address(test: &Test, alias: impl AsRef<str>) -> Result<PaymentAddress> {
+pub fn find_payment_address(
+    test: &Test,
+    alias: impl AsRef<str>,
+) -> Result<PaymentAddress> {
     let mut find = run!(
         test,
         Bin::Wallet,
@@ -587,9 +590,7 @@ fn make_hermes_chain_config(test: &Test) -> Value {
     chain.insert("account_prefix".to_owned(), Value::String("".to_owned()));
     chain.insert(
         "key_name".to_owned(),
-        Value::String(
-            ensure_hot_key(setup::constants::CHRISTEL_KEY).to_owned(),
-        ),
+        Value::String(constants::FRANK_KEY.to_owned()),
     );
     chain.insert("store_prefix".to_owned(), Value::String("ibc".to_owned()));
     let mut table = toml::map::Map::new();

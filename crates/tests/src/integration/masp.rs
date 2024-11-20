@@ -3,10 +3,10 @@ use std::str::FromStr;
 
 use color_eyre::eyre::Result;
 use color_eyre::owo_colors::OwoColorize;
-use namada_core::address::Address;
 use namada_apps_lib::wallet::defaults::{
     get_unencrypted_keypair, is_use_device,
 };
+use namada_core::address::Address;
 use namada_core::dec::Dec;
 use namada_core::masp::{MaspTxId, TokenMap};
 use namada_node::shell::testing::client::run;
@@ -24,13 +24,13 @@ use namada_sdk::{tx, DEFAULT_GAS_LIMIT};
 use test_log::test;
 
 use super::{helpers, setup};
+use crate::e2e::setup::apply_use_device;
 use crate::e2e::setup::constants::{
     AA_PAYMENT_ADDRESS, AA_VIEWING_KEY, AB_PAYMENT_ADDRESS, AB_VIEWING_KEY,
     AC_PAYMENT_ADDRESS, AC_VIEWING_KEY, ALBERT, ALBERT_KEY, A_SPENDING_KEY,
     BB_PAYMENT_ADDRESS, BERTHA, BERTHA_KEY, BTC, B_SPENDING_KEY, CHRISTEL,
     CHRISTEL_KEY, C_SPENDING_KEY, ETH, FRANK_KEY, MASP, NAM,
 };
-use crate::e2e::setup::{apply_use_device, ensure_hot_key};
 use crate::integration::helpers::make_temp_account;
 use crate::strings::TX_APPLIED_SUCCESS;
 
@@ -106,7 +106,7 @@ fn init_null_rewards() -> Result<()> {
         run(
             &node,
             Bin::Client,
-            vec![
+            apply_use_device(vec![
                 "shield",
                 "--source",
                 BERTHA,
@@ -118,7 +118,7 @@ fn init_null_rewards() -> Result<()> {
                 "1000000",
                 "--node",
                 RPC,
-            ],
+            ]),
         )
     });
     assert!(captured.result.is_ok(), "{:?}", captured.result);
@@ -245,7 +245,7 @@ fn init_null_rewards() -> Result<()> {
         run(
             &node,
             Bin::Client,
-            vec![
+            apply_use_device(vec![
                 "unshield",
                 "--source",
                 A_SPENDING_KEY,
@@ -259,7 +259,7 @@ fn init_null_rewards() -> Result<()> {
                 BERTHA_KEY,
                 "--node",
                 RPC,
-            ],
+            ]),
         )
     });
     assert!(captured.result.is_ok(), "{:?}", captured.result);
@@ -302,7 +302,7 @@ fn init_null_rewards() -> Result<()> {
         run(
             &node,
             Bin::Client,
-            vec![
+            apply_use_device(vec![
                 "transfer",
                 "--source",
                 A_SPENDING_KEY,
@@ -316,7 +316,7 @@ fn init_null_rewards() -> Result<()> {
                 BERTHA_KEY,
                 "--node",
                 RPC,
-            ],
+            ]),
         )
     });
     assert!(captured.result.is_ok(), "{:?}", captured.result);
@@ -359,7 +359,7 @@ fn init_null_rewards() -> Result<()> {
         run(
             &node,
             Bin::Client,
-            vec![
+            apply_use_device(vec![
                 "unshield",
                 "--source",
                 A_SPENDING_KEY,
@@ -373,7 +373,7 @@ fn init_null_rewards() -> Result<()> {
                 BERTHA_KEY,
                 "--node",
                 RPC,
-            ],
+            ]),
         )
     });
     assert!(captured.result.is_ok(), "{:?}", captured.result);
@@ -470,7 +470,7 @@ fn values_spanning_multiple_masp_digits() -> Result<()> {
         run(
             &node,
             Bin::Client,
-            vec![
+            apply_use_device(vec![
                 "shield",
                 "--source",
                 BERTHA,
@@ -482,7 +482,7 @@ fn values_spanning_multiple_masp_digits() -> Result<()> {
                 HALF_TEST_TOKEN_INITIAL_SUPPLY,
                 "--node",
                 RPC,
-            ],
+            ]),
         )
     });
     assert!(captured.result.is_ok(), "{:?}", captured.result);
@@ -552,7 +552,7 @@ fn values_spanning_multiple_masp_digits() -> Result<()> {
         run(
             &node,
             Bin::Client,
-            vec![
+            apply_use_device(vec![
                 "unshield",
                 "--source",
                 A_SPENDING_KEY,
@@ -566,7 +566,7 @@ fn values_spanning_multiple_masp_digits() -> Result<()> {
                 BERTHA_KEY,
                 "--node",
                 RPC,
-            ],
+            ]),
         )
     });
     assert!(captured.result.is_ok(), "{:?}", captured.result);
@@ -639,7 +639,7 @@ fn values_spanning_multiple_masp_digits() -> Result<()> {
         run(
             &node,
             Bin::Client,
-            vec![
+            apply_use_device(vec![
                 "shield",
                 "--source",
                 BERTHA,
@@ -651,7 +651,7 @@ fn values_spanning_multiple_masp_digits() -> Result<()> {
                 HALF_TEST_TOKEN_INITIAL_SUPPLY,
                 "--node",
                 RPC,
-            ],
+            ]),
         )
     });
     assert!(captured.result.is_ok(), "{:?}", captured.result);
@@ -724,7 +724,7 @@ fn values_spanning_multiple_masp_digits() -> Result<()> {
         run(
             &node,
             Bin::Client,
-            vec![
+            apply_use_device(vec![
                 "unshield",
                 "--source",
                 A_SPENDING_KEY,
@@ -740,7 +740,7 @@ fn values_spanning_multiple_masp_digits() -> Result<()> {
                 RPC,
                 "--gas-limit",
                 "65000",
-            ],
+            ]),
         )
     });
     assert!(captured.result.is_ok(), "{:?}", captured.result);
@@ -783,7 +783,7 @@ fn values_spanning_multiple_masp_digits() -> Result<()> {
         run(
             &node,
             Bin::Client,
-            vec![
+            apply_use_device(vec![
                 "shield",
                 "--source",
                 BERTHA_KEY,
@@ -797,7 +797,7 @@ fn values_spanning_multiple_masp_digits() -> Result<()> {
                 BERTHA_KEY,
                 "--node",
                 RPC,
-            ],
+            ]),
         )
     });
     assert!(captured.result.is_ok(), "{:?}", captured.result);
@@ -842,7 +842,7 @@ fn values_spanning_multiple_masp_digits() -> Result<()> {
         run(
             &node,
             Bin::Client,
-            vec![
+            apply_use_device(vec![
                 "unshield",
                 "--source",
                 A_SPENDING_KEY,
@@ -859,7 +859,7 @@ fn values_spanning_multiple_masp_digits() -> Result<()> {
                 C_SPENDING_KEY,
                 "--gas-limit",
                 "65000",
-            ],
+            ]),
         )
     });
     assert!(captured.result.is_ok(), "{:?}", captured.result);
@@ -948,7 +948,7 @@ fn enable_rewards_after_shielding() -> Result<()> {
         run(
             &node,
             Bin::Client,
-            vec![
+            apply_use_device(vec![
                 "shield",
                 "--source",
                 BERTHA,
@@ -960,7 +960,7 @@ fn enable_rewards_after_shielding() -> Result<()> {
                 "1000000",
                 "--node",
                 RPC,
-            ],
+            ]),
         )
     });
     assert!(captured.result.is_ok(), "{:?}", captured.result);
@@ -1111,7 +1111,7 @@ fn enable_rewards_after_shielding() -> Result<()> {
         run(
             &node,
             Bin::Client,
-            vec![
+            apply_use_device(vec![
                 "unshield",
                 "--source",
                 A_SPENDING_KEY,
@@ -1125,7 +1125,7 @@ fn enable_rewards_after_shielding() -> Result<()> {
                 BERTHA_KEY,
                 "--node",
                 RPC,
-            ],
+            ]),
         )
     });
     assert!(captured.result.is_ok(), "{:?}", captured.result);
@@ -1171,7 +1171,7 @@ fn enable_rewards_after_shielding() -> Result<()> {
         run(
             &node,
             Bin::Client,
-            vec![
+            apply_use_device(vec![
                 "shield",
                 "--source",
                 BERTHA,
@@ -1183,7 +1183,7 @@ fn enable_rewards_after_shielding() -> Result<()> {
                 "1000000",
                 "--node",
                 RPC,
-            ],
+            ]),
         )
     });
     assert!(captured.result.is_ok(), "{:?}", captured.result);
@@ -1273,7 +1273,7 @@ fn enable_rewards_after_shielding() -> Result<()> {
         run(
             &node,
             Bin::Client,
-            vec![
+            apply_use_device(vec![
                 "unshield",
                 "--source",
                 A_SPENDING_KEY,
@@ -1287,7 +1287,7 @@ fn enable_rewards_after_shielding() -> Result<()> {
                 BERTHA_KEY,
                 "--node",
                 RPC,
-            ],
+            ]),
         )
     });
     assert!(captured.result.is_ok(), "{:?}", captured.result);
@@ -1330,7 +1330,7 @@ fn enable_rewards_after_shielding() -> Result<()> {
         run(
             &node,
             Bin::Client,
-            vec![
+            apply_use_device(vec![
                 "transfer",
                 "--source",
                 A_SPENDING_KEY,
@@ -1344,7 +1344,7 @@ fn enable_rewards_after_shielding() -> Result<()> {
                 BERTHA_KEY,
                 "--node",
                 RPC,
-            ],
+            ]),
         )
     });
     assert!(captured.result.is_ok(), "{:?}", captured.result);
@@ -1387,7 +1387,7 @@ fn enable_rewards_after_shielding() -> Result<()> {
         run(
             &node,
             Bin::Client,
-            vec![
+            apply_use_device(vec![
                 "unshield",
                 "--source",
                 A_SPENDING_KEY,
@@ -1401,7 +1401,7 @@ fn enable_rewards_after_shielding() -> Result<()> {
                 BERTHA_KEY,
                 "--node",
                 RPC,
-            ],
+            ]),
         )
     });
     assert!(captured.result.is_ok(), "{:?}", captured.result);
@@ -2714,6 +2714,10 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
     let (mut node, _services) = setup::setup()?;
     _ = node.next_epoch();
 
+    // Initialize accounts we can access the secret keys of
+    let (cooper_alias, cooper_key) =
+        make_temp_account(&node, validator_one_rpc, "Cooper", NAM, 500_000)?;
+
     // 1. Shield tokens
     _ = node.next_epoch();
     let captured = CapturedOutput::of(|| {
@@ -2847,7 +2851,7 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
                 "--amount",
                 "50",
                 "--gas-payer",
-                CHRISTEL_KEY,
+                cooper_alias.as_ref(),
                 "--output-folder-path",
                 tempdir.path().to_str().unwrap(),
                 "--dump-tx",
@@ -2884,7 +2888,7 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
                 "--amount",
                 "50",
                 "--gas-payer",
-                CHRISTEL_KEY,
+                cooper_alias.as_ref(),
                 "--output-folder-path",
                 tempdir.path().to_str().unwrap(),
                 "--dump-tx",
@@ -2906,9 +2910,7 @@ fn multiple_unfetched_txs_same_block() -> Result<()> {
     txs_bytes.push(std::fs::read(&file_path).unwrap());
     std::fs::remove_file(&file_path).unwrap();
 
-    let sk = get_unencrypted_keypair(
-        &ensure_hot_key(CHRISTEL_KEY).to_ascii_lowercase(),
-    );
+    let sk = cooper_key;
     let pk = sk.to_public();
 
     let native_token = node
@@ -2953,6 +2955,10 @@ fn expired_masp_tx() -> Result<()> {
     let _ = FsShieldedUtils::new(PathBuf::new());
     let (mut node, _services) = setup::setup()?;
     _ = node.next_epoch();
+
+    // Initialize accounts we can access the secret keys of
+    let (cooper_alias, cooper_key) =
+        make_temp_account(&node, validator_one_rpc, "Cooper", NAM, 500_000)?;
 
     // 1. Shield tokens
     _ = node.next_epoch();
@@ -3000,7 +3006,7 @@ fn expired_masp_tx() -> Result<()> {
                 "--amount",
                 "50",
                 "--gas-payer",
-                CHRISTEL_KEY,
+                cooper_alias.as_ref(),
                 // We want to create an expired masp tx. Doing so will also set
                 // the expiration field of the header which can
                 // be a problem because this would lead to the
@@ -3034,9 +3040,7 @@ fn expired_masp_tx() -> Result<()> {
     let tx_bytes = std::fs::read(&file_path).unwrap();
     std::fs::remove_file(&file_path).unwrap();
 
-    let sk = get_unencrypted_keypair(
-        &ensure_hot_key(CHRISTEL_KEY).to_ascii_lowercase(),
-    );
+    let sk = cooper_key;
     let pk = sk.to_public();
 
     let native_token = node
@@ -3294,7 +3298,7 @@ fn dynamic_assets() -> Result<()> {
     });
     assert!(captured.result.is_ok());
     assert!(captured.contains(TX_APPLIED_SUCCESS));
-    
+
     // sync the shielded context
     run(
         &node,
@@ -3430,7 +3434,7 @@ fn dynamic_assets() -> Result<()> {
     });
     assert!(captured.result.is_ok());
     assert!(captured.contains(TX_APPLIED_SUCCESS));
-    
+
     // sync the shielded context
     run(
         &node,
@@ -3759,7 +3763,7 @@ fn dynamic_assets() -> Result<()> {
         run(
             &node,
             Bin::Client,
-            vec![
+            apply_use_device(vec![
                 "unshield",
                 "--source",
                 A_SPENDING_KEY,
@@ -3773,7 +3777,7 @@ fn dynamic_assets() -> Result<()> {
                 BERTHA_KEY,
                 "--ledger-address",
                 validator_one_rpc,
-            ],
+            ]),
         )
     });
     assert!(captured.result.is_ok());
@@ -3810,7 +3814,7 @@ fn dynamic_assets() -> Result<()> {
         run(
             &node,
             Bin::Client,
-            vec![
+            apply_use_device(vec![
                 "unshield",
                 "--source",
                 A_SPENDING_KEY,
@@ -3824,7 +3828,7 @@ fn dynamic_assets() -> Result<()> {
                 BERTHA_KEY,
                 "--ledger-address",
                 validator_one_rpc,
-            ],
+            ]),
         )
     });
     assert!(captured.result.is_ok());
@@ -3898,7 +3902,7 @@ fn masp_fee_payment() -> Result<()> {
     });
     assert!(captured.result.is_ok());
     assert!(captured.contains(TX_APPLIED_SUCCESS));
-    
+
     _ = node.next_masp_epoch();
     // sync shielded context
     run(
@@ -3983,7 +3987,7 @@ fn masp_fee_payment() -> Result<()> {
         run(
             &node,
             Bin::Client,
-            vec![
+            apply_use_device(vec![
                 "transparent-transfer",
                 "--source",
                 ALBERT_KEY,
@@ -3997,7 +4001,7 @@ fn masp_fee_payment() -> Result<()> {
                 CHRISTEL_KEY,
                 "--ledger-address",
                 validator_one_rpc,
-            ],
+            ]),
         )
     });
     assert!(captured.result.is_ok());
@@ -4027,7 +4031,7 @@ fn masp_fee_payment() -> Result<()> {
         run(
             &node,
             Bin::Client,
-            vec![
+            apply_use_device(vec![
                 "transparent-transfer",
                 "--source",
                 BERTHA_KEY,
@@ -4043,7 +4047,7 @@ fn masp_fee_payment() -> Result<()> {
                 validator_one_rpc,
                 // Force to skip check in client
                 "--force",
-            ],
+            ]),
         )
     });
     assert!(captured.result.is_err());
@@ -4093,7 +4097,7 @@ fn masp_fee_payment() -> Result<()> {
     });
     assert!(captured.result.is_ok());
     assert!(captured.contains(TX_APPLIED_SUCCESS));
-    
+
     // sync shielded context
     run(
         &node,
@@ -4902,6 +4906,12 @@ fn identical_output_descriptions() -> Result<()> {
     _ = node.next_masp_epoch();
     let tempdir = tempfile::tempdir().unwrap();
 
+    // Initialize accounts we can access the secret keys of
+    let (adam_alias, adam_key) =
+        make_temp_account(&node, validator_one_rpc, "Adam", NAM, 500_000)?;
+    let (bradley_alias, bradley_key) =
+        make_temp_account(&node, validator_one_rpc, "Bradley", NAM, 500_000)?;
+
     // Generate a tx to shield some tokens
     let captured = CapturedOutput::of(|| {
         run(
@@ -4910,7 +4920,7 @@ fn identical_output_descriptions() -> Result<()> {
             apply_use_device(vec![
                 "shield",
                 "--source",
-                ensure_hot_key(ALBERT_KEY),
+                adam_alias.as_ref(),
                 "--target",
                 AA_PAYMENT_ADDRESS,
                 "--token",
@@ -4918,7 +4928,7 @@ fn identical_output_descriptions() -> Result<()> {
                 "--amount",
                 "1000",
                 "--gas-payer",
-                ensure_hot_key(ALBERT_KEY),
+                bradley_alias.as_ref(),
                 "--output-folder-path",
                 tempdir.path().to_str().unwrap(),
                 "--dump-wrapper-tx",
@@ -4928,7 +4938,7 @@ fn identical_output_descriptions() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    
+
     let file_path = tempdir
         .path()
         .read_dir()
@@ -4952,15 +4962,12 @@ fn identical_output_descriptions() -> Result<()> {
     tx_clone.header.batch.clear();
     tx_clone.header.batch.insert(cmt);
 
-    let keypair = get_unencrypted_keypair(
-        &ensure_hot_key(ALBERT_KEY).to_ascii_lowercase(),
-    );
     let signing_data = SigningTxData {
         owner: None,
-        public_keys: vec![keypair.to_public()],
+        public_keys: vec![adam_key.to_public()],
         threshold: 1,
         account_public_keys_map: None,
-        fee_payer: keypair.to_public(),
+        fee_payer: adam_key.to_public(),
         shielded_hash: None,
     };
 
@@ -4971,13 +4978,13 @@ fn identical_output_descriptions() -> Result<()> {
     .unwrap();
 
     batched_tx.sign_raw(
-        vec![keypair.clone()],
+        vec![adam_key.clone()],
         AccountPublicKeysMap::from_iter(
-            vec![(keypair.to_public())].into_iter(),
+            vec![(adam_key.to_public())].into_iter(),
         ),
         None,
     );
-    batched_tx.sign_wrapper(keypair);
+    batched_tx.sign_wrapper(bradley_key);
 
     let wrapper_hash = batched_tx.wrapper_hash();
     let inner_cmts = batched_tx.commitments();
@@ -5059,7 +5066,7 @@ fn identical_output_descriptions() -> Result<()> {
             vec![
                 "balance",
                 "--owner",
-                ALBERT_KEY,
+                adam_alias.as_ref(),
                 "--token",
                 NAM,
                 "--node",
@@ -5068,7 +5075,7 @@ fn identical_output_descriptions() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(captured.contains("nam: 1998000"));
+    assert!(captured.contains("nam: 498000"));
 
     let captured = CapturedOutput::of(|| {
         run(
@@ -5277,14 +5284,20 @@ fn masp_batch() -> Result<()> {
     for (tx0, tx1) in [(tx0.clone(), tx1.clone()), (tx1, tx0)] {
         let (mut batched_tx, _signing_data) =
             namada_sdk::tx::build_batch(vec![
-                (tx0.clone(), SigningTxData {
-                    shielded_hash: get_shielded_hash(&tx0),
-                    ..signing_data.clone()
-                }),
-                (tx1.clone(), SigningTxData {
-                    shielded_hash: get_shielded_hash(&tx1),
-                    ..signing_data.clone()
-                }),
+                (
+                    tx0.clone(),
+                    SigningTxData {
+                        shielded_hash: get_shielded_hash(&tx0),
+                        ..signing_data.clone()
+                    },
+                ),
+                (
+                    tx1.clone(),
+                    SigningTxData {
+                        shielded_hash: get_shielded_hash(&tx1),
+                        ..signing_data.clone()
+                    },
+                ),
             ])
             .unwrap();
         batched_tx.header.atomic = false;
@@ -5526,14 +5539,20 @@ fn masp_atomic_batch() -> Result<()> {
     for (tx0, tx1) in [(tx0.clone(), tx1.clone()), (tx1, tx0)] {
         let (mut batched_tx, _signing_data) =
             namada_sdk::tx::build_batch(vec![
-                (tx0.clone(), SigningTxData {
-                    shielded_hash: get_shielded_hash(&tx0),
-                    ..signing_data.clone()
-                }),
-                (tx1.clone(), SigningTxData {
-                    shielded_hash: get_shielded_hash(&tx1),
-                    ..signing_data.clone()
-                }),
+                (
+                    tx0.clone(),
+                    SigningTxData {
+                        shielded_hash: get_shielded_hash(&tx0),
+                        ..signing_data.clone()
+                    },
+                ),
+                (
+                    tx1.clone(),
+                    SigningTxData {
+                        shielded_hash: get_shielded_hash(&tx1),
+                        ..signing_data.clone()
+                    },
+                ),
             ])
             .unwrap();
         batched_tx.header.atomic = true;
