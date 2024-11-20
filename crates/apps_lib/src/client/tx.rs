@@ -1153,12 +1153,19 @@ pub async fn submit_reveal_pk<N: Namada>(
 where
     <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
-    let tx_data =
-        submit_reveal_aux(namada, &args.tx, &(&args.public_key).into()).await?;
+    if args.tx.dump_tx || args.tx.dump_wrapper_tx {
+        let tx_data =
+            tx::build_reveal_pk(namada, &args.tx, &args.public_key).await?;
+        tx::dump_tx(namada.io(), &args.tx, tx_data.0.clone())?;
+    } else {
+        let tx_data =
+            submit_reveal_aux(namada, &args.tx, &(&args.public_key).into())
+                .await?;
 
-    if let Some((mut tx, signing_data)) = tx_data {
-        sign(namada, &mut tx, &args.tx, signing_data).await?;
-        namada.submit(tx, &args.tx).await?;
+        if let Some((mut tx, signing_data)) = tx_data {
+            sign(namada, &mut tx, &args.tx, signing_data).await?;
+            namada.submit(tx, &args.tx).await?;
+        }
     }
 
     Ok(())
