@@ -7557,26 +7557,14 @@ pub mod args {
                     ))
                     .conflicts_with_all([EXPIRATION_OPT.name]),
             )
-            .arg(
-                SIGNING_KEYS
-                    .def()
-                    .help(wrap!(
-                        "Sign the transaction with the key for the given \
-                         public key, public key hash or alias from your \
-                         wallet."
-                    ))
-                    .conflicts_with_all([SIGNATURES.name]),
-            )
-            .arg(
-                SIGNATURES
-                    .def()
-                    .help(wrap!(
-                        "List of file paths containing a serialized signature \
-                         to be attached to a transaction. Requires to provide \
-                         a gas payer."
-                    ))
-                    .conflicts_with_all([SIGNING_KEYS.name]),
-            )
+            .arg(SIGNING_KEYS.def().help(wrap!(
+                "Sign the transaction with the key for the given public key, \
+                 public key hash or alias from your wallet."
+            )))
+            .arg(SIGNATURES.def().help(wrap!(
+                "List of file paths containing a serialized signature to be \
+                 attached to a transaction. Requires to provide a gas payer."
+            )))
             .arg(
                 WRAPPER_SIGNATURE_OPT
                     .def()
