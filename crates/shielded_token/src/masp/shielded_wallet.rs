@@ -50,11 +50,11 @@ use rand_core::{OsRng, SeedableRng};
 
 use crate::masp::utils::MaspClient;
 use crate::masp::{
-    cloned_pair, ContextSyncStatus, Conversions, MaspAmount,
-    MaspDataLogEntry, MaspFeeData, MaspSourceTransferData,
-    MaspTargetTransferData, MaspTransferData, MaspTxReorderedData, NoteIndex,
-    ShieldedSyncConfig, ShieldedTransfer, ShieldedUtils, SpentNotesTracker,
-    TransferErr, WalletMap, WitnessMap, NETWORK,
+    cloned_pair, ContextSyncStatus, Conversions, MaspAmount, MaspDataLogEntry,
+    MaspFeeData, MaspSourceTransferData, MaspTargetTransferData,
+    MaspTransferData, MaspTxReorderedData, NoteIndex, ShieldedSyncConfig,
+    ShieldedTransfer, ShieldedUtils, SpentNotesTracker, TransferErr, WalletMap,
+    WitnessMap, NETWORK,
 };
 #[cfg(any(test, feature = "testing"))]
 use crate::masp::{testing, ENV_VAR_MASP_TEST_SEED};
@@ -1628,9 +1628,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 // If we are sending to a shielded address, we need the outgoing
                 // viewing key in the following computations.
                 let ovk_opt = source.clone().and_then(|source| {
-                    source
-                        .spending_key()
-                        .map(|x| x.to_viewing_key().fvk.ovk)
+                    source.spending_key().map(|x| x.to_viewing_key().fvk.ovk)
                 });
                 // Make transaction output tied to the current token,
                 // denomination, and epoch.

@@ -89,18 +89,6 @@ pub fn apply_use_device(mut tx_args: Vec<&str>) -> Vec<&str> {
     tx_args
 }
 
-/// Replace the given key with a key that is stored unencrypted in the wallet.
-/// This is useful for IBC tests where a keypair needs to be added to the Hermes
-/// keyring or where IBC messages unsupported by the hardware wallet need to be
-/// signed
-pub fn ensure_hot_key(key: &str) -> &str {
-    if is_use_device() {
-        constants::FRANK_KEY
-    } else {
-        key
-    }
-}
-
 /// Default functions for offsetting ports when
 /// adding multiple validators to a network
 pub fn default_port_offset(ix: u8) -> u16 {

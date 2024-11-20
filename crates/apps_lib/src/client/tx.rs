@@ -4,10 +4,13 @@ use std::io::Write;
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use color_eyre::owo_colors::OwoColorize;
+<<<<<<< HEAD
 use namada_core::masp::MaspTransaction;
 <<<<<<< HEAD
 use namada_sdk::address::{Address, ImplicitAddress, MASP};
 =======
+=======
+>>>>>>> e59aaf6ea (Adjust integration tests to work with both hardware and localnet genesis files.)
 use ledger_namada_rs::{BIP44Path, KeyResponse, NamadaApp, NamadaKeys};
 use masp_primitives::sapling::redjubjub::PrivateKey;
 use masp_primitives::sapling::{redjubjub, ProofGenerationKey};
@@ -20,6 +23,7 @@ use masp_primitives::transaction::components::sapling::fees::InputView;
 use masp_primitives::zip32::{
     ExtendedFullViewingKey, ExtendedKey, PseudoExtendedKey,
 };
+use namada_core::masp::MaspTransaction;
 use namada_sdk::address::{Address, ImplicitAddress};
 >>>>>>> 44c5f039a (Implemented MASP signing using the hardware wallet.)
 use namada_sdk::args::TxBecomeValidator;
@@ -1193,7 +1197,7 @@ pub async fn submit_shielded_transfer(
          to date, make sure to run `namadac shielded-sync` before running \
          this command.",
     );
-    
+
     let sources = args
         .data
         .iter_mut()
@@ -1327,7 +1331,7 @@ pub async fn submit_unshielding_transfer(
          to date, make sure to run `namadac shielded-sync` before running \
          this command.",
     );
-    
+
     let sources = std::iter::once(&mut args.source)
         .chain(args.gas_spending_key.iter_mut());
     let shielded_hw_keys =

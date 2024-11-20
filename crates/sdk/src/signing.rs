@@ -295,8 +295,9 @@ where
 
     // Then try to sign the raw header using the hardware wallet
     for pubkey in &signing_data.public_keys {
-        if !used_pubkeys.contains(pubkey) &&
-            (*pubkey != signing_data.fee_payer || args.wrapper_signature.is_some())
+        if !used_pubkeys.contains(pubkey)
+            && (*pubkey != signing_data.fee_payer
+                || args.wrapper_signature.is_some())
         {
             if let Ok(ntx) = sign(
                 tx.clone(),
@@ -337,7 +338,7 @@ where
                     Signable::FeeRawHeader,
                     user_data,
                 )
-                    .await?;
+                .await?;
                 if signing_data.public_keys.contains(&signing_data.fee_payer) {
                     used_pubkeys.insert(signing_data.fee_payer.clone());
                 }

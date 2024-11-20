@@ -47,11 +47,15 @@ pub fn run(
                     NamadaClient::WithoutContext(Box::new((sub_cmd, global)))
                 }
             };
-            rt.block_on(CliApi::handle_client_command(
+            let result = rt.block_on(CliApi::handle_client_command(
                 Some(node.clone()),
                 cmd,
                 TestingIo,
-            ))
+            ));
+            if let Err(err) = &result {
+                TestingIo.eprintln(format!("{}", err));
+            }
+            result
         }
         Bin::Wallet => {
             args.insert(0, "wallet");

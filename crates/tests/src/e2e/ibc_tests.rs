@@ -47,7 +47,7 @@ use sha2::{Digest, Sha256};
 
 use crate::e2e::helpers::{
     epoch_sleep, epochs_per_year_from_min_duration, find_address,
-    find_payment_address, get_actor_rpc, find_cosmos_address,
+    find_cosmos_address, find_payment_address, get_actor_rpc,
     get_cosmos_gov_address, get_epoch,
 };
 use crate::e2e::ledger_tests::{
@@ -234,7 +234,8 @@ fn ibc_transfers() -> Result<()> {
         &port_id_namada,
         &channel_id_namada,
     )?;
-    let masp_receiver = find_payment_address(&test, AA_PAYMENT_ADDRESS)?.to_string();
+    let masp_receiver =
+        find_payment_address(&test, AA_PAYMENT_ADDRESS)?.to_string();
     transfer_from_cosmos(
         &test_gaia,
         COSMOS_USER,
@@ -294,7 +295,8 @@ fn ibc_transfers() -> Result<()> {
         &port_id_namada,
         &channel_id_namada,
     )?;
-    let masp_receiver = find_payment_address(&test, AA_PAYMENT_ADDRESS)?.to_string();
+    let masp_receiver =
+        find_payment_address(&test, AA_PAYMENT_ADDRESS)?.to_string();
     transfer_from_cosmos(
         &test_gaia,
         COSMOS_USER,
@@ -422,7 +424,8 @@ fn ibc_transfers() -> Result<()> {
     check_cosmos_balance(&test_gaia, COSMOS_USER, COSMOS_COIN, 810)?;
 
     // Missing memo
-    let masp_receiver = find_payment_address(&test, AA_PAYMENT_ADDRESS)?.to_string();
+    let masp_receiver =
+        find_payment_address(&test, AA_PAYMENT_ADDRESS)?.to_string();
     transfer_from_cosmos(
         &test_gaia,
         COSMOS_USER,
@@ -449,7 +452,8 @@ fn ibc_transfers() -> Result<()> {
         &port_id_namada,
         &channel_id_namada,
     )?;
-    let masp_receiver = find_payment_address(&test, AA_PAYMENT_ADDRESS)?.to_string();
+    let masp_receiver =
+        find_payment_address(&test, AA_PAYMENT_ADDRESS)?.to_string();
     transfer_from_cosmos(
         &test_gaia,
         COSMOS_USER,
@@ -555,7 +559,8 @@ fn ibc_nft_transfers() -> Result<()> {
         &port_id_namada,
         &channel_id_namada,
     )?;
-    let masp_receiver = find_payment_address(&test, AA_PAYMENT_ADDRESS)?.to_string();
+    let masp_receiver =
+        find_payment_address(&test, AA_PAYMENT_ADDRESS)?.to_string();
     nft_transfer_from_cosmos(
         &test_cosmwasm,
         COSMOS_USER,
@@ -878,7 +883,8 @@ fn ibc_token_inflation() -> Result<()> {
         &port_id_namada,
         &channel_id_namada,
     )?;
-    let masp_receiver = find_payment_address(&test, AA_PAYMENT_ADDRESS)?.to_string();
+    let masp_receiver =
+        find_payment_address(&test, AA_PAYMENT_ADDRESS)?.to_string();
     transfer_from_cosmos(
         &test_gaia,
         COSMOS_USER,
@@ -1614,7 +1620,7 @@ fn propose_inflation(test: &Test) -> Result<Epoch> {
         "--data-path",
         proposal_json_path.to_str().unwrap(),
         "--gas-limit",
-        "2000000",
+        "3000000",
         "--node",
         &rpc,
     ]);
