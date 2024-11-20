@@ -31,5 +31,6 @@
     "e2e::wallet_tests::wallet_unencrypted_key_cmds": 1,
     "e2e::ledger_tests::masp_txs_and_queries": 82,
     "e2e::ledger_tests::test_genesis_chain_id_change": 35,
-    "e2e::ledger_tests::test_genesis_manipulation": 103
+    "e2e::ledger_tests::test_genesis_manipulation": 103,
+    "e2e::ledger_tests::test_governance_voting": 150
 }
