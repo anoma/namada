@@ -170,11 +170,15 @@ pub async fn tx_signers(
     args: &args::Tx<SdkTypes>,
     default: Option<Address>,
 ) -> Result<Vec<common::PublicKey>, Error> {
-    let signer = if !&args.signing_keys.is_empty() {
+    let signer = if !args.signing_keys.is_empty() {
         return Ok(args.signing_keys.clone());
-    } else {
+    } else if args.signatures.is_empty() {
         // Otherwise use the signer determined by the caller
         default
+    } else {
+        // If explicit signature(s) are provided signing keys are not required
+        // anymore
+        return Ok(vec![]);
     };
 
     // Now actually fetch the signing key and apply it
