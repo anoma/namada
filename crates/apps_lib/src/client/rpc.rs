@@ -331,11 +331,17 @@ pub async fn query_proposal(context: &impl Namada, args: args::QueryProposal) {
             edisplay_line!(context.io(), "No proposal found with id: {}", id);
         }
     } else {
-        let last_proposal_id_key = governance_storage::get_counter_key();
-        let last_proposal_id: u64 =
-            query_storage_value(context.client(), &last_proposal_id_key)
+        let counter_key = governance_storage::get_counter_key();
+        let next_proposal_id: u64 =
+            query_storage_value(context.client(), &counter_key)
                 .await
                 .unwrap();
+
+        if next_proposal_id == 0 {
+            display_line!(context.io(), "No proposals found.");
+            return;
+        }
+        let last_proposal_id = next_proposal_id.checked_sub(1).unwrap();
 
         let from_id = if last_proposal_id > 10 {
             last_proposal_id - 10
@@ -343,9 +349,7 @@ pub async fn query_proposal(context: &impl Namada, args: args::QueryProposal) {
             0
         };
 
-        display_line!(context.io(), "id: {}", last_proposal_id);
-
-        for id in from_id..last_proposal_id {
+        for id in from_id..=last_proposal_id {
             let proposal = query_proposal_by_id(context.client(), id)
                 .await
                 .unwrap()
@@ -1400,7 +1404,6 @@ pub async fn query_effective_native_supply<N: Namada>(context: &N) {
 
 /// Query the staking rewards rate estimate
 pub async fn query_staking_rewards_rate<N: Namada>(context: &N) {
-    display_line!(context.io(), "Querying staking rewards rates...");
     let PosRewardsRates {
         staking_rewards_rate,
         inflation_rate,
@@ -1410,13 +1413,20 @@ pub async fn query_staking_rewards_rate<N: Namada>(context: &N) {
             .staking_rewards_rate(context.client())
             .await,
     );
-    display_line!(
-        context.io(),
-        "Current annual staking rewards rate: {}\nCurrent PoS inflation rate: \
-         {}",
-        staking_rewards_rate,
-        inflation_rate
-    );
+    if staking_rewards_rate.is_zero() && inflation_rate.is_zero() {
+        display_line!(
+            context.io(),
+            "PoS inflation and rewards are not currently enabled."
+        );
+    } else {
+        display_line!(
+            context.io(),
+            "Current annual staking rewards rate: {}\nCurrent PoS inflation \
+             rate: {}",
+            staking_rewards_rate,
+            inflation_rate
+        );
+    }
 }
 
 /// Query a validator's state information
