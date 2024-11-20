@@ -3479,9 +3479,7 @@ async fn construct_shielded_parts<N: Namada>(
             .await;
 
         shielded
-            .gen_shielded_transfer(
-                context, data, fee_data, expiration, bparams,
-            )
+            .gen_shielded_transfer(context, data, fee_data, expiration, bparams)
             .await
     };
 

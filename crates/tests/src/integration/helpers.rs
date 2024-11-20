@@ -7,6 +7,7 @@ use namada_node::shell::testing::client::run;
 use namada_node::shell::testing::node::MockNode;
 use namada_node::shell::testing::utils::{Bin, CapturedOutput};
 use namada_sdk::key::common;
+
 use crate::e2e::setup::constants::{FRANK, FRANK_KEY};
 use crate::strings::TX_APPLIED_SUCCESS;
 
@@ -112,8 +113,7 @@ pub fn make_temp_account(
         "--node",
         ledger_address,
     ];
-    let captured =
-        CapturedOutput::of(|| run(node, Bin::Client, reveal_args));
+    let captured = CapturedOutput::of(|| run(node, Bin::Client, reveal_args));
     assert!(captured.result.is_ok());
     assert!(captured.contains(TX_APPLIED_SUCCESS));
     // c. Send some funds to the implicit account.
@@ -133,8 +133,7 @@ pub fn make_temp_account(
         "--node",
         ledger_address,
     ];
-    let captured =
-        CapturedOutput::of(|| run(node, Bin::Client, credit_args));
+    let captured = CapturedOutput::of(|| run(node, Bin::Client, credit_args));
     assert!(captured.result.is_ok());
     assert!(captured.contains(TX_APPLIED_SUCCESS));
     // d. Obtain the key pair associated with the new address
