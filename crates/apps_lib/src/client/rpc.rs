@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::io;
 
 use borsh::BorshDeserialize;
+use color_eyre::owo_colors::OwoColorize;
 use data_encoding::HEXLOWER;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
@@ -364,6 +365,15 @@ async fn query_shielded_balance(
     context: &impl Namada,
     args: args::QueryBalance,
 ) {
+    display_line!(
+        context.io(),
+        "{}: {}\n",
+        "WARNING".bold().underline().yellow(),
+        "the resulting balance could be outdated, make sure to run `namadac \
+         shielded-sync` before querying the balance to get the most recent \
+         value."
+    );
+
     let args::QueryBalance {
         // Token owner (needs to be a viewing key)
         owner,
