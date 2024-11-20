@@ -3,6 +3,7 @@ use std::io::Write;
 
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
+use color_eyre::owo_colors::OwoColorize;
 use ledger_namada_rs::{BIP44Path, NamadaApp};
 use namada_core::masp::MaspTransaction;
 use namada_sdk::address::{Address, ImplicitAddress};
@@ -830,6 +831,15 @@ pub async fn submit_shielded_transfer(
     namada: &impl Namada,
     args: args::TxShieldedTransfer,
 ) -> Result<(), error::Error> {
+    display_line!(
+        namada.io(),
+        "{}: {}\n",
+        "WARNING".bold().underline().yellow(),
+        "some information might be leaked if your shielded wallet is not up \
+         to date, make sure to run `namadac shielded-sync` before running \
+         this command.",
+    );
+
     let (mut tx, signing_data) = args.clone().build(namada).await?;
 
     let masp_section = tx
@@ -912,6 +922,15 @@ pub async fn submit_unshielding_transfer(
     namada: &impl Namada,
     args: args::TxUnshieldingTransfer,
 ) -> Result<(), error::Error> {
+    display_line!(
+        namada.io(),
+        "{}: {}\n",
+        "WARNING".bold().underline().yellow(),
+        "some information might be leaked if your shielded wallet is not up \
+         to date, make sure to run `namadac shielded-sync` before running \
+         this command.",
+    );
+
     let (mut tx, signing_data) = args.clone().build(namada).await?;
 
     let masp_section = tx
