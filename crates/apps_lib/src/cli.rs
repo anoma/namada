@@ -5997,11 +5997,12 @@ pub mod args {
         }
 
         fn def(app: App) -> App {
-            app.add_args::<Query<CliTypes>>().arg(
-                PROPOSAL_ID_OPT
-                    .def()
-                    .help(wrap!("The proposal identifier.")),
-            )
+            app.add_args::<Query<CliTypes>>()
+                .arg(PROPOSAL_ID_OPT.def().help(wrap!(
+                    "The ID number of the proposal. This argument is \
+                     optional. If not provided, then the most recent 10 \
+                     proposals will be displayed."
+                )))
         }
     }
 
