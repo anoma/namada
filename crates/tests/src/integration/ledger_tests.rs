@@ -2534,7 +2534,7 @@ fn wrap_tx_by_elsewho() -> Result<()> {
                 &tx,
                 "--signatures",
                 &offline_sig,
-                "--signing-keys",
+                "--gas-payer",
                 CHRISTEL_KEY,
             ]),
         )
