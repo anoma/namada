@@ -835,7 +835,7 @@ pub async fn submit_shielded_transfer(
         namada.io(),
         "{}: {}\n",
         "WARNING".bold().underline().yellow(),
-        "some information might be leaked if your shielded wallet is not up \
+        "Some information might be leaked if your shielded wallet is not up \
          to date, make sure to run `namadac shielded-sync` before running \
          this command.",
     );
@@ -926,7 +926,7 @@ pub async fn submit_unshielding_transfer(
         namada.io(),
         "{}: {}\n",
         "WARNING".bold().underline().yellow(),
-        "some information might be leaked if your shielded wallet is not up \
+        "Some information might be leaked if your shielded wallet is not up \
          to date, make sure to run `namadac shielded-sync` before running \
          this command.",
     );

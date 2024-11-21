@@ -369,7 +369,7 @@ async fn query_shielded_balance(
         context.io(),
         "{}: {}\n",
         "WARNING".bold().underline().yellow(),
-        "the resulting balance could be outdated, make sure to run `namadac \
+        "The resulting balance could be outdated, make sure to run `namadac \
          shielded-sync` before querying the balance to get the most recent \
          value."
     );
