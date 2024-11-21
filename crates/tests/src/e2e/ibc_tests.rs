@@ -528,7 +528,6 @@ fn ibc_nft_transfers() -> Result<()> {
         None,
         None,
         None,
-        false,
     )?;
     clear_packet(&port_id_namada, &channel_id_namada, &test)?;
     check_balance(&test, &namada_receiver, &ibc_trace_on_namada, 0)?;
@@ -584,7 +583,6 @@ fn ibc_nft_transfers() -> Result<()> {
         None,
         None,
         None,
-        false,
     )?;
     clear_packet(&port_id_namada, &channel_id_namada, &test)?;
     check_balance(&test, AB_VIEWING_KEY, &ibc_trace_on_namada, 0)?;
