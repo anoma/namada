@@ -6,7 +6,7 @@ use borsh_ext::BorshSerializeExt;
 use color_eyre::owo_colors::OwoColorize;
 use ledger_namada_rs::{BIP44Path, NamadaApp};
 use namada_core::masp::MaspTransaction;
-use namada_sdk::address::{Address, ImplicitAddress};
+use namada_sdk::address::{Address, ImplicitAddress, MASP};
 use namada_sdk::args::TxBecomeValidator;
 use namada_sdk::collections::HashSet;
 use namada_sdk::governance::cli::onchain::{
@@ -887,32 +887,42 @@ pub async fn submit_shielding_transfer(
         )
         .await?;
 
+        // FIXME: maybe better and if let here since we are only interested in
+        // one case
         match result {
-                ProcessTxResponse::Applied(resp) if
-                    // If a transaction is rejected by a VP
-                    matches!(
-                        resp.batch_result().get(&compute_inner_tx_hash(
-                            wrapper_hash.as_ref(),
-                            either::Left(&cmt_hash)
-                        )),
-                        Some(InnerTxResult::VpsRejected(_))
-                    ) =>
+            ProcessTxResponse::Applied(resp) => {
+                if let Some(InnerTxResult::VpsRejected(result)) =
+                    resp.batch_result().get(&compute_inner_tx_hash(
+                        wrapper_hash.as_ref(),
+                        either::Left(&cmt_hash),
+                    ))
                 {
-                    let submission_masp_epoch = rpc::query_and_print_masp_epoch(namada).await;
-                    // And its submission epoch doesn't match construction epoch
-                    if tx_epoch != submission_masp_epoch {
-                        // Then we probably straddled an epoch boundary. Let's retry...
-                        edisplay_line!(namada.io(),
-                            "Shielding transaction rejected and this may be due to the \
-                            epoch changing. Attempting to resubmit transaction.",
-                        );
-                        continue;
+                    let rejected_vps = &result.vps_result.rejected_vps;
+                    // If a transaction is rejected by the MASP VP only
+                    if rejected_vps.len() == 1 && rejected_vps.contains(&MASP) {
+                        let submission_masp_epoch =
+                            rpc::query_and_print_masp_epoch(namada).await;
+                        // And its submission epoch doesn't match construction
+                        // epoch
+                        if tx_epoch != submission_masp_epoch {
+                            // Then we probably straddled an epoch boundary.
+                            // Let's retry...
+                            edisplay_line!(
+                                namada.io(),
+                                "Shielding transaction rejected and this may \
+                                 be due to the epoch changing. Attempting to \
+                                 resubmit transaction.",
+                            );
+                            continue;
+                        }
                     }
-                },
-                // Otherwise either the transaction was successful or it will not
-                // benefit from resubmission
-                _ => break,
+                }
+                break;
             }
+            // Otherwise either the transaction was successful or it will not
+            // benefit from resubmission
+            _ => break,
+        }
     }
     Ok(())
 }
