@@ -20,7 +20,6 @@ use namada_sdk::collections::HashSet;
 use namada_sdk::dec::Dec;
 use namada_sdk::key::common::PublicKey;
 use namada_sdk::key::{common, ed25519, RefTo, SerializeWithBorsh, SigScheme};
-use namada_sdk::proof_of_stake::parameters::MAX_VALIDATOR_METADATA_LEN;
 use namada_sdk::proof_of_stake::types::ValidatorMetaData;
 use namada_sdk::signing::{sign_tx, SigningTxData};
 use namada_sdk::string_encoding::StringEncoded;
@@ -1385,59 +1384,13 @@ pub fn validate_validator_account(
 
     // Check that the validator metadata is not too large
     let metadata = &signed_tx.data.metadata;
-    if metadata.email.len() as u64 > MAX_VALIDATOR_METADATA_LEN {
+    let errors = metadata.validate();
+    if !errors.is_empty() {
         panic!(
-            "The email metadata of the validator with address {} is too long, \
-             must be within {MAX_VALIDATOR_METADATA_LEN} characters",
+            "Metadata of the validator with address {} are invalid: \
+             {errors:#?}",
             signed_tx.data.address
         );
-    }
-    if let Some(description) = metadata.description.as_ref() {
-        if description.len() as u64 > MAX_VALIDATOR_METADATA_LEN {
-            panic!(
-                "The description metadata of the validator with address {} is \
-                 too long, must be within {MAX_VALIDATOR_METADATA_LEN} \
-                 characters",
-                signed_tx.data.address
-            );
-        }
-    }
-    if let Some(website) = metadata.website.as_ref() {
-        if website.len() as u64 > MAX_VALIDATOR_METADATA_LEN {
-            panic!(
-                "The website metadata of the validator with address {} is too \
-                 long, must be within {MAX_VALIDATOR_METADATA_LEN} characters",
-                signed_tx.data.address
-            );
-        }
-    }
-    if let Some(discord_handle) = metadata.discord_handle.as_ref() {
-        if discord_handle.len() as u64 > MAX_VALIDATOR_METADATA_LEN {
-            panic!(
-                "The discord handle metadata of the validator with address {} \
-                 is too long, must be within {MAX_VALIDATOR_METADATA_LEN} \
-                 characters",
-                signed_tx.data.address
-            );
-        }
-    }
-    if let Some(avatar) = metadata.avatar.as_ref() {
-        if avatar.len() as u64 > MAX_VALIDATOR_METADATA_LEN {
-            panic!(
-                "The avatar metadata of the validator with address {} is too \
-                 long, must be within {MAX_VALIDATOR_METADATA_LEN} characters",
-                signed_tx.data.address
-            );
-        }
-    }
-    if let Some(name) = metadata.name.as_ref() {
-        if name.len() as u64 > MAX_VALIDATOR_METADATA_LEN {
-            panic!(
-                "The name metadata of the validator with address {} is too \
-                 long, must be within {MAX_VALIDATOR_METADATA_LEN} characters",
-                signed_tx.data.address
-            );
-        }
     }
 
     // Check signature

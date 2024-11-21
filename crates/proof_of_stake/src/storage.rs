@@ -963,6 +963,35 @@ where
     Ok(())
 }
 
+/// Read validator's metadata.
+pub fn read_validator_metadata<S>(
+    storage: &S,
+    validator: &Address,
+) -> Result<Option<ValidatorMetaData>>
+where
+    S: StorageRead,
+{
+    let email = read_validator_email(storage, validator)?;
+    let description = read_validator_description(storage, validator)?;
+    let website = read_validator_website(storage, validator)?;
+    let discord_handle = read_validator_discord_handle(storage, validator)?;
+    let avatar = read_validator_avatar(storage, validator)?;
+    let name = read_validator_name(storage, validator)?;
+
+    // Email is the only required field for a validator in storage
+    match email {
+        Some(email) => Ok(Some(ValidatorMetaData {
+            email,
+            description,
+            website,
+            discord_handle,
+            avatar,
+            name,
+        })),
+        None => Ok(None),
+    }
+}
+
 /// Get the last epoch in which rewards were claimed from storage, if any
 pub fn get_last_reward_claim_epoch<S>(
     storage: &S,
