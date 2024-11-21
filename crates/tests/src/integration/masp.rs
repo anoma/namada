@@ -2145,6 +2145,8 @@ fn masp_incentives() -> Result<()> {
                 NAM,
                 "--amount",
                 "1.451732",
+                "--gas-limit",
+                "60000",
                 "--signing-keys",
                 BERTHA_KEY,
                 "--node",
