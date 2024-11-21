@@ -2145,6 +2145,8 @@ fn masp_incentives() -> Result<()> {
                 NAM,
                 "--amount",
                 "1.451732",
+                "--gas-limit",
+                "60000",
                 "--signing-keys",
                 BERTHA_KEY,
                 "--node",
@@ -5166,13 +5168,7 @@ fn identical_output_descriptions() -> Result<()> {
     let tx: namada_sdk::tx::Tx = serde_json::from_slice(&tx_bytes).unwrap();
     // Inject some randomness in the cloned tx to change the hash
     let mut tx_clone = tx.clone();
-    let mut cmt = tx_clone.header.batch.first().unwrap().to_owned();
-    let random_hash: Vec<_> = (0..namada_sdk::hash::HASH_LENGTH)
-        .map(|_| rand::random::<u8>())
-        .collect();
-    cmt.memo_hash = namada_sdk::hash::Hash(random_hash.try_into().unwrap());
-    tx_clone.header.batch.clear();
-    tx_clone.header.batch.insert(cmt);
+    tx_clone.add_memo(&[1, 2, 3]);
 
     let signing_data = SigningTxData {
         owner: None,

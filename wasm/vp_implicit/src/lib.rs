@@ -69,6 +69,7 @@ fn validate_tx(
                     || source == addr,
                     ctx,
                     &tx,
+                    cmt,
                     &addr,
                 )?,
                 PosAction::Bond(Bond {
@@ -85,6 +86,7 @@ fn validate_tx(
                         || source == addr,
                         ctx,
                         &tx,
+                        cmt,
                         &addr,
                     )?
                 }
@@ -100,10 +102,17 @@ fn validate_tx(
                 || source == addr,
                 ctx,
                 &tx,
+                cmt,
                 &addr,
             )?,
             Action::Masp(MaspAction::MaspAuthorizer(source)) => gadget
-                .verify_signatures_when(|| source == addr, ctx, &tx, &addr)?,
+                .verify_signatures_when(
+                    || source == addr,
+                    ctx,
+                    &tx,
+                    cmt,
+                    &addr,
+                )?,
             Action::Masp(MaspAction::MaspSectionRef(_)) => (),
             Action::IbcShielding => (),
         }
@@ -164,6 +173,7 @@ fn validate_tx(
                         || change.is_negative(),
                         ctx,
                         &tx,
+                        cmt,
                         &addr,
                     )?;
                     let sign = if change.non_negative() { "" } else { "-" };
@@ -193,12 +203,13 @@ fn validate_tx(
                 || minter_addr == &addr,
                 ctx,
                 &tx,
+                cmt,
                 &addr,
             ),
             KeyType::Masp | KeyType::Ibc => Ok(()),
             KeyType::Unknown => {
                 // Unknown changes require a valid signature
-                gadget.verify_signatures(ctx, &tx, &addr)
+                gadget.verify_signatures(ctx, &tx, cmt, &addr)
             }
         };
         validate_change().inspect_err(|reason| {
@@ -1037,6 +1048,178 @@ mod tests {
             .map(|a| a.downcast_ref::<String>().cloned().unwrap())
             .unwrap()
             .contains("InvalidSectionSignature")
+        );
+    }
+
+    // Test malleability attacks on memo sections
+    #[test]
+    fn test_tampered_memo_section() {
+        // Initialize a tx environment
+        let mut tx_env = TestTxEnv::default();
+
+        let secret_key = key::testing::keypair_1();
+        let public_key = secret_key.ref_to();
+        let vp_owner: Address = (&public_key).into();
+        let target = address::testing::established_address_2();
+        let token = address::testing::nam();
+        let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
+
+        tx_env.init_parameters(None, None, None);
+
+        // Spawn the accounts to be able to modify their storage
+        tx_env.spawn_accounts([&vp_owner, &target, &token]);
+        tx_env.init_account_storage(&vp_owner, vec![public_key.clone()], 1);
+
+        // Credit the tokens to the VP owner before running the transaction to
+        // be able to transfer from it
+        tx_env.credit_tokens(&vp_owner, &token, amount);
+        // write the denomination of NAM into storage
+        token::write_denom(
+            &mut tx_env.state,
+            &token,
+            token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        )
+        .unwrap();
+
+        let amount = token::DenominatedAmount::new(
+            amount,
+            token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        );
+        // Initialize VP environment from a transaction
+        vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
+            // Apply transfer in a transaction
+            tx_host_env::token::transfer(
+                tx::ctx(),
+                address,
+                &target,
+                &token,
+                amount.amount(),
+            )
+            .unwrap();
+        });
+        let mut vp_env = vp_host_env::take();
+        let pks_map = AccountPublicKeysMap::from_iter(vec![public_key]);
+
+        let mut tx = vp_env.batched_tx.tx.clone();
+        tx.set_data(Data::new(vec![]));
+        tx.set_code(Code::new(vec![], None));
+        let (_, memo_hash) = tx.add_memo(&[1, 2, 3]);
+        tx.push_default_inner_tx();
+        tx.set_data(Data::new(vec![]));
+        tx.set_code(Code::new(vec![], None));
+        tx.add_memo(&[1, 2, 3]);
+        tx.add_section(Section::Authorization(Authorization::new(
+            vec![tx.raw_header_hash()],
+            pks_map.index_secret_keys(vec![secret_key]),
+            None,
+        )));
+
+        // Tamper with the first memo section
+        let memo_section = tx
+            .sections
+            .iter_mut()
+            .find(|sec| sec.get_hash() == memo_hash)
+            .unwrap();
+        let mut bytes = memo_section.extra_data().unwrap();
+        *bytes.last_mut().unwrap() = 4;
+        *memo_section = Section::ExtraData(Code::new(bytes, None));
+
+        let signed_tx = tx.clone().batch_first_tx();
+        vp_env.batched_tx = signed_tx.clone();
+        let keys_changed: BTreeSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        let verifiers: BTreeSet<Address> = BTreeSet::default();
+        vp_host_env::set(vp_env);
+
+        // 1. Tampared memo section of the current inner tx causes tx rejection
+        //    when validating the signature
+        let err = validate_tx(
+            &CTX,
+            signed_tx.clone(),
+            vp_owner.clone(),
+            keys_changed,
+            verifiers,
+        )
+        .unwrap_err();
+        if let VpError::Erased(msg) = err {
+            assert_eq!(
+                msg,
+                format!("Memo section with hash {} is missing", memo_hash)
+            );
+        } else {
+            panic!("Got wrong error message");
+        }
+
+        // 2. If signature is not checked, a tampered memo section should not
+        //    cause rejection
+        assert!(
+            validate_tx(
+                &CTX,
+                signed_tx,
+                vp_owner.clone(),
+                Default::default(),
+                Default::default(),
+            )
+            .is_ok()
+        );
+
+        // 3. If the memo section of another inner tx has been tampered with the
+        //    current inner tx does not get rejected
+        let mut tx_env = TestTxEnv::default();
+        let vp_owner = address::testing::established_address_1();
+        let keypair = key::testing::keypair_1();
+        let public_key = keypair.ref_to();
+        let target = address::testing::established_address_2();
+        let token = address::testing::nam();
+        let amount = token::Amount::from_uint(10_098_123, 0).unwrap();
+
+        // Spawn the accounts to be able to modify their storage
+        tx_env.spawn_accounts([&vp_owner, &target, &token]);
+        tx_env.init_account_storage(&vp_owner, vec![public_key.clone()], 1);
+
+        // Credit the tokens to the VP owner before running the transaction to
+        // be able to transfer from it
+        tx_env.credit_tokens(&vp_owner, &token, amount);
+        // write the denomination of NAM into storage
+        token::write_denom(
+            &mut tx_env.state,
+            &token,
+            token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        )
+        .unwrap();
+
+        let amount = token::DenominatedAmount::new(
+            amount,
+            token::NATIVE_MAX_DECIMAL_PLACES.into(),
+        );
+
+        // Initialize VP environment from a transaction that requires a
+        // signature check
+        vp_host_env::init_from_tx(vp_owner.clone(), tx_env, |address| {
+            // Apply transfer in a transaction
+            tx_host_env::token::transfer(
+                tx::ctx(),
+                address,
+                &target,
+                &token,
+                amount.amount(),
+            )
+            .unwrap();
+        });
+        let mut vp_env = vp_host_env::take();
+        let second_inner_tx = tx.header.batch.get_index(1).unwrap().clone();
+        let signed_tx = tx.batch_tx(second_inner_tx);
+        vp_env.batched_tx = signed_tx.clone();
+        vp_host_env::set(vp_env);
+        assert!(
+            validate_tx(
+                &CTX,
+                signed_tx,
+                vp_owner,
+                Default::default(),
+                Default::default(),
+            )
+            .is_ok()
         );
     }
 }

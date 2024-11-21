@@ -1245,11 +1245,18 @@ pub mod testing {
     }
 
     prop_compose! {
-        /// Generate an arbitrary transaction with maybe a memo
+        /// Generate an arbitrary transaction with maybe a valid memo
         pub fn arb_memoed_tx()(
             (mut tx, tx_data) in arb_tx(),
             memo in option::of(arb_utf8_code()),
         ) -> (Tx, TxData) {
+            // Clean up any previous memo commitments
+            let mut batch: Vec<_> = tx.header.batch.iter().cloned().collect();
+            for inner_tx in batch.iter_mut() {
+                inner_tx.memo_hash = Default::default();
+            }
+            tx.header.batch = batch.into_iter().collect();
+
             if let Some(memo) = memo {
                 let sechash = tx
                     .add_section(Section::ExtraData(memo))

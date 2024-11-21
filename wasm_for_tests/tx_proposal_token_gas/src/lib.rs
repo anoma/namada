@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
-use namada_tx_prelude::{
-    parameters_storage::get_gas_cost_key, token::Amount, *,
-};
+use namada_tx_prelude::parameters_storage::get_gas_cost_key;
+use namada_tx_prelude::token::Amount;
+use namada_tx_prelude::*;
 
 #[transaction]
 fn apply_tx(ctx: &mut Ctx, _tx_data: BatchedTx) -> TxResult {
