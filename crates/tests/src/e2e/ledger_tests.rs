@@ -1898,6 +1898,235 @@ fn test_invalid_validator_txs() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn test_governance_voting() -> Result<()> {
+    let pipeline_len = 2;
+    let unbonding_len = 2;
+    let test = setup::network(
+        |mut genesis, base_dir: &_| {
+            genesis.parameters.pos_params.pipeline_len = pipeline_len;
+            genesis.parameters.pos_params.unbonding_len = unbonding_len;
+            let mut genesis = setup::set_validators(
+                2,
+                genesis,
+                base_dir,
+                default_port_offset,
+                vec![],
+            );
+            genesis.transactions.bond = Some({
+                let wallet = get_pregenesis_wallet(base_dir);
+                let validator_1_address = wallet
+                    .find_address("validator-1")
+                    .expect("Failed to find validator-1 address");
+                let mut bonds = genesis.transactions.bond.unwrap();
+                bonds
+                    .retain(|bond| bond.data.validator != *validator_1_address);
+                bonds
+            });
+            genesis
+        },
+        None,
+    )?;
+
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        Who::Validator(0),
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+
+    // 1. Run the ledger node
+    let _bg_validator_0 =
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
+            .background();
+
+    let _bg_validator_1 =
+        start_namada_ledger_node_wait_wasm(&test, Some(1), Some(40))?
+            .background();
+
+    let validator_0_rpc = get_actor_rpc(&test, Who::Validator(0));
+
+    // 1.1 Delegate some token
+    let tx_args = apply_use_device(vec![
+        "bond",
+        "--validator",
+        "validator-0",
+        "--source",
+        BERTHA,
+        "--amount",
+        "900",
+        "--node",
+        &validator_0_rpc,
+    ]);
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
+    client.assert_success();
+
+    let albert = find_address(&test, ALBERT)?;
+    let valid_proposal_json_path = prepare_proposal_data(
+        test.test_dir.path(),
+        albert,
+        TestWasms::TxNoOp.read_bytes(),
+        3,
+    );
+    let validator_one_rpc = get_actor_rpc(&test, Who::Validator(0));
+
+    let submit_proposal_args = apply_use_device(vec![
+        "init-proposal",
+        "--data-path",
+        valid_proposal_json_path.to_str().unwrap(),
+        "--gas-limit",
+        "10000000",
+        "--node",
+        &validator_one_rpc,
+    ]);
+    let mut client = run!(test, Bin::Client, submit_proposal_args, Some(40))?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
+    client.assert_success();
+
+    let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+    while epoch.0 <= 4 {
+        sleep(10);
+        epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+    }
+
+    let submit_proposal_vote = vec![
+        "vote-proposal",
+        "--proposal-id",
+        "0",
+        "--vote",
+        "yay",
+        "--address",
+        BERTHA,
+        "--node",
+        &validator_one_rpc,
+    ];
+    let mut client = run!(test, Bin::Client, submit_proposal_vote, Some(40))?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
+    client.assert_success();
+
+    let tx_args = apply_use_device(vec![
+        "bond",
+        "--validator",
+        "validator-0",
+        "--source",
+        BERTHA,
+        "--amount",
+        "900",
+        "--node",
+        &validator_0_rpc,
+    ]);
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
+    client.assert_success();
+
+    let tx_args = apply_use_device(vec![
+        "bond",
+        "--validator",
+        "validator-1",
+        "--source",
+        BERTHA,
+        "--amount",
+        "500",
+        "--node",
+        &validator_0_rpc,
+    ]);
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
+    client.assert_success();
+
+    let tx_args = apply_use_device(vec![
+        "bond",
+        "--validator",
+        "validator-1",
+        "--source",
+        CHRISTEL,
+        "--amount",
+        "300",
+        "--node",
+        &validator_0_rpc,
+    ]);
+    let mut client = run!(test, Bin::Client, tx_args, Some(40))?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
+    client.assert_success();
+
+    let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+    while epoch.0 <= 10 {
+        sleep(10);
+        epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+    }
+
+    let submit_proposal_vote = vec![
+        "vote-proposal",
+        "--proposal-id",
+        "0",
+        "--vote",
+        "nay",
+        "--address",
+        BERTHA,
+        "--node",
+        &validator_one_rpc,
+    ];
+
+    let mut client = run_as!(
+        test,
+        Who::Validator(0),
+        Bin::Client,
+        submit_proposal_vote,
+        Some(15)
+    )?;
+    client.exp_string(TX_APPLIED_SUCCESS)?;
+    client.assert_success();
+
+    let submit_proposal_vote = vec![
+        "vote-proposal",
+        "--proposal-id",
+        "0",
+        "--vote",
+        "yay",
+        "--address",
+        CHRISTEL,
+        "--node",
+        &validator_one_rpc,
+    ];
+
+    let mut client = run_as!(
+        test,
+        Who::Validator(0),
+        Bin::Client,
+        submit_proposal_vote,
+        Some(15)
+    )?;
+    client.exp_string(TX_REJECTED)?;
+    client.assert_success();
+
+    let mut epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+    while epoch.0 <= 21 {
+        sleep(10);
+        epoch = get_epoch(&test, &validator_one_rpc).unwrap();
+    }
+
+    let query_proposal = vec![
+        "query-proposal-result",
+        "--proposal-id",
+        "0",
+        "--node",
+        &validator_one_rpc,
+    ];
+
+    let mut client = run!(test, Bin::Client, query_proposal, Some(15))?;
+    client.exp_string("Proposal Id: 0")?;
+    client.exp_string(
+        " Rejected with 0.000000 yay votes, 2300.000000 nay votes and \
+         0.000000 abstain votes, total voting power: 102600.000000, threshold \
+         (fraction) of total voting power needed to tally: 41040.00000",
+    )?;
+    client.assert_success();
+
+    Ok(())
+}
+
 /// Test change of consensus key of a validator from consensus set.
 ///
 /// 1. Run 2 genesis validator nodes.
