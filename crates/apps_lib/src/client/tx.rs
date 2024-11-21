@@ -3,7 +3,9 @@ use std::io::Write;
 
 use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
+use color_eyre::owo_colors::OwoColorize;
 use ledger_namada_rs::{BIP44Path, NamadaApp};
+use namada_core::masp::MaspTransaction;
 use namada_sdk::address::{Address, ImplicitAddress};
 use namada_sdk::args::TxBecomeValidator;
 use namada_sdk::collections::HashSet;
@@ -829,13 +831,33 @@ pub async fn submit_shielded_transfer(
     namada: &impl Namada,
     args: args::TxShieldedTransfer,
 ) -> Result<(), error::Error> {
+    display_line!(
+        namada.io(),
+        "{}: {}\n",
+        "WARNING".bold().underline().yellow(),
+        "Some information might be leaked if your shielded wallet is not up \
+         to date, make sure to run `namadac shielded-sync` before running \
+         this command.",
+    );
+
     let (mut tx, signing_data) = args.clone().build(namada).await?;
 
+    let masp_section = tx
+        .sections
+        .iter()
+        .find_map(|section| section.masp_tx())
+        .ok_or_else(|| {
+            error::Error::Other(
+                "Missing MASP section in shielded transaction".to_string(),
+            )
+        })?;
     if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, tx)?;
+        pre_cache_masp_data(namada, &masp_section).await;
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
-        namada.submit(tx, &args.tx).await?;
+        let res = namada.submit(tx, &args.tx).await?;
+        pre_cache_masp_data_on_tx_result(namada, &res, &masp_section).await;
     }
     Ok(())
 }
@@ -900,13 +922,33 @@ pub async fn submit_unshielding_transfer(
     namada: &impl Namada,
     args: args::TxUnshieldingTransfer,
 ) -> Result<(), error::Error> {
+    display_line!(
+        namada.io(),
+        "{}: {}\n",
+        "WARNING".bold().underline().yellow(),
+        "Some information might be leaked if your shielded wallet is not up \
+         to date, make sure to run `namadac shielded-sync` before running \
+         this command.",
+    );
+
     let (mut tx, signing_data) = args.clone().build(namada).await?;
 
+    let masp_section = tx
+        .sections
+        .iter()
+        .find_map(|section| section.masp_tx())
+        .ok_or_else(|| {
+            error::Error::Other(
+                "Missing MASP section in shielded transaction".to_string(),
+            )
+        })?;
     if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, tx)?;
+        pre_cache_masp_data(namada, &masp_section).await;
     } else {
         sign(namada, &mut tx, &args.tx, signing_data).await?;
-        namada.submit(tx, &args.tx).await?;
+        let res = namada.submit(tx, &args.tx).await?;
+        pre_cache_masp_data_on_tx_result(namada, &res, &masp_section).await;
     }
     Ok(())
 }
@@ -920,16 +962,25 @@ where
 {
     let (tx, signing_data, _) = args.build(namada).await?;
 
+    let opt_masp_section =
+        tx.sections.iter().find_map(|section| section.masp_tx());
     if args.tx.dump_tx || args.tx.dump_wrapper_tx {
         tx::dump_tx(namada.io(), &args.tx, tx)?;
+        if let Some(masp_section) = opt_masp_section {
+            pre_cache_masp_data(namada, &masp_section).await;
+        }
     } else {
-        batch_opt_reveal_pk_and_submit(
+        let res = batch_opt_reveal_pk_and_submit(
             namada,
             &args.tx,
             &[&args.source.effective_address()],
             (tx, signing_data),
         )
         .await?;
+
+        if let Some(masp_section) = opt_masp_section {
+            pre_cache_masp_data_on_tx_result(namada, &res, &masp_section).await;
+        }
     }
     // NOTE that the tx could fail when its submission epoch doesn't match
     // construction epoch
@@ -1481,4 +1532,43 @@ pub async fn gen_ibc_shielding_transfer(
         eprintln!("No shielded transfer for this IBC transfer.")
     }
     Ok(())
+}
+
+// Pre-cache the data for the provided MASP transaction. Log an error on
+// failure.
+async fn pre_cache_masp_data(namada: &impl Namada, masp_tx: &MaspTransaction) {
+    if let Err(e) = namada
+        .shielded_mut()
+        .await
+        .pre_cache_transaction(masp_tx)
+        .await
+    {
+        // Just display the error but do not propagate it
+        edisplay_line!(namada.io(), "Failed to pre-cache masp data: {}.", e);
+    }
+}
+
+// Check the result of a transaction and pre-cache the masp data accordingly
+async fn pre_cache_masp_data_on_tx_result(
+    namada: &impl Namada,
+    tx_result: &ProcessTxResponse,
+    masp_tx: &MaspTransaction,
+) {
+    match tx_result {
+        ProcessTxResponse::Applied(resp) => {
+            if let Some(InnerTxResult::Success(_)) =
+                // If we have the masp data in an ibc transfer it
+                // means we are unshielding, so there's no reveal pk
+                // tx in the batch which contains only the ibc tx
+                resp.batch_result().first().map(|(_, res)| res)
+            {
+                pre_cache_masp_data(namada, masp_tx).await;
+            }
+        }
+        ProcessTxResponse::Broadcast(_) => {
+            pre_cache_masp_data(namada, masp_tx).await;
+        }
+        // Do not pre-cache when dry-running
+        ProcessTxResponse::DryRun(_) => {}
+    }
 }
