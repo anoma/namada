@@ -52,7 +52,7 @@ use namada_vm_env::vp::*;
 use namada_vm_env::{read_from_buffer, read_key_val_bytes_from_buffer};
 pub use namada_vp_env::{collection_validation, VpEnv};
 pub use sha2::{Digest, Sha256, Sha384, Sha512};
-use tx::BatchedTxRef;
+use tx::{BatchedTxRef, TxCommitments};
 pub use {
     namada_account as account, namada_parameters as parameters,
     namada_proof_of_stake as proof_of_stake, namada_token as token,
@@ -131,9 +131,22 @@ impl VerifySigGadget {
         &mut self,
         ctx: &Ctx,
         tx_data: &Tx,
+        cmt: &TxCommitments,
         owner: &Address,
     ) -> VpResult {
         if !self.has_validated_sig {
+            // First check that the memo section of this inner tx has not been
+            // tampered with
+            if cmt.memo_hash != namada_core::hash::Hash::zero() {
+                tx_data.get_section(&cmt.memo_hash).ok_or_else(|| {
+                    VpError::Erased(format!(
+                        "Memo section with hash {} is missing",
+                        cmt.memo_hash
+                    ))
+                })?;
+            }
+
+            // Then check the signature
             verify_signatures(ctx, tx_data, owner)?;
             self.has_validated_sig = true;
         }
@@ -149,10 +162,11 @@ impl VerifySigGadget {
         predicate: F,
         ctx: &Ctx,
         tx_data: &Tx,
+        cmt: &TxCommitments,
         owner: &Address,
     ) -> VpResult {
         if predicate() {
-            self.verify_signatures(ctx, tx_data, owner)?;
+            self.verify_signatures(ctx, tx_data, cmt, owner)?;
         }
         Ok(())
     }
