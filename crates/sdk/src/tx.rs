@@ -2648,7 +2648,6 @@ pub async fn build_ibc_transfer(
         context,
         masp_transfer_data,
         masp_fee_data,
-        !(args.tx.dry_run || args.tx.dry_run_wrapper),
         args.tx.expiration.to_datetime(),
     )
     .await?;
@@ -3113,7 +3112,6 @@ pub async fn build_shielded_transfer<N: Namada>(
         context,
         transfer_data,
         masp_fee_data,
-        !(args.tx.dry_run || args.tx.dry_run_wrapper),
         args.tx.expiration.to_datetime(),
     )
     .await?
@@ -3280,7 +3278,6 @@ pub async fn build_shielding_transfer<N: Namada>(
         context,
         transfer_data,
         None,
-        !(args.tx.dry_run || args.tx.dry_run_wrapper),
         args.tx.expiration.to_datetime(),
     )
     .await?
@@ -3402,7 +3399,6 @@ pub async fn build_unshielding_transfer<N: Namada>(
         context,
         transfer_data,
         masp_fee_data,
-        !(args.tx.dry_run || args.tx.dry_run_wrapper),
         args.tx.expiration.to_datetime(),
     )
     .await?
@@ -3455,7 +3451,6 @@ async fn construct_shielded_parts<N: Namada>(
     context: &N,
     data: Vec<MaspTransferData>,
     fee_data: Option<MaspFeeData>,
-    update_ctx: bool,
     expiration: Option<DateTimeUtc>,
 ) -> Result<Option<(ShieldedTransfer, HashSet<AssetData>)>> {
     // Precompute asset types to increase chances of success in decoding
@@ -3469,9 +3464,7 @@ async fn construct_shielded_parts<N: Namada>(
             .await;
 
         shielded
-            .gen_shielded_transfer(
-                context, data, fee_data, expiration, update_ctx,
-            )
+            .gen_shielded_transfer(context, data, fee_data, expiration)
             .await
     };
 
@@ -3852,7 +3845,6 @@ pub async fn gen_ibc_shielding_transfer<N: Namada>(
                 // Fees are paid from the transparent balance of the relayer
                 None,
                 args.expiration.to_datetime(),
-                true,
             )
             .await
             .map_err(|err| TxSubmitError::MaspError(err.to_string()))?
