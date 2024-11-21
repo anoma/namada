@@ -457,6 +457,7 @@ impl ArgFromContext for Address {
                         let base_token = ctx
                             .wallet
                             .find_address(&base_denom)
+                            .filter(|addr| **addr == ctx.native_token)
                             .map(|addr| addr.to_string())
                             .unwrap_or(base_denom);
                         let ibc_denom = format!("{trace_path}/{base_token}");
