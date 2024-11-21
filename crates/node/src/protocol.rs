@@ -1669,22 +1669,25 @@ mod tests {
         // Test that the strategy produces valid txs first
         let result =
             runner.run(&arb_valid_signed_inner_tx(signing_key.clone()), |tx| {
-                assert!(
-                    wasm::run::vp(
-                        code_hash,
-                        &tx.batch_ref_first_tx().unwrap(),
-                        &TxIndex::default(),
-                        &addr,
-                        &state,
-                        &RefCell::new(VpGasMeter::new_from_tx_meter(
-                            &TxGasMeter::new(u64::MAX),
-                        )),
-                        &Default::default(),
-                        &Default::default(),
-                        vp_cache.clone(),
-                    )
-                    .is_ok()
-                );
+                for cmt in tx.commitments() {
+                    let batched_tx = BatchedTxRef { tx: &tx, cmt };
+                    assert!(
+                        wasm::run::vp(
+                            code_hash,
+                            &batched_tx,
+                            &TxIndex::default(),
+                            &addr,
+                            &state,
+                            &RefCell::new(VpGasMeter::new_from_tx_meter(
+                                &TxGasMeter::new(u64::MAX),
+                            )),
+                            &Default::default(),
+                            &Default::default(),
+                            vp_cache.clone(),
+                        )
+                        .is_ok()
+                    );
+                }
                 Ok(())
             });
         assert!(result.is_ok());
@@ -1692,22 +1695,25 @@ mod tests {
         // Then test tampered txs
         let mut runner = TestRunner::new(Config::default());
         let result = runner.run(&arb_tampered_inner_tx(signing_key), |tx| {
-            assert!(
-                wasm::run::vp(
-                    code_hash,
-                    &tx.batch_ref_first_tx().unwrap(),
-                    &TxIndex::default(),
-                    &addr,
-                    &state,
-                    &RefCell::new(VpGasMeter::new_from_tx_meter(
-                        &TxGasMeter::new(u64::MAX,)
-                    )),
-                    &Default::default(),
-                    &Default::default(),
-                    vp_cache.clone(),
-                )
-                .is_err()
-            );
+            for cmt in tx.commitments() {
+                let batched_tx = BatchedTxRef { tx: &tx, cmt };
+                assert!(
+                    wasm::run::vp(
+                        code_hash,
+                        &batched_tx,
+                        &TxIndex::default(),
+                        &addr,
+                        &state,
+                        &RefCell::new(VpGasMeter::new_from_tx_meter(
+                            &TxGasMeter::new(u64::MAX,)
+                        )),
+                        &Default::default(),
+                        &Default::default(),
+                        vp_cache.clone(),
+                    )
+                    .is_err()
+                );
+            }
             Ok(())
         });
         assert!(result.is_ok());
