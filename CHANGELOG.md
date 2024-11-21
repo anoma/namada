@@ -1,5 +1,68 @@
 # CHANGELOG
 
+## v0.46.0
+
+Namada 0.46.0 is a minor release containing important bug-fixes and various improvements.
+
+### BUG FIXES
+
+- Added validation of the transaction's memo in the validity predicates to catch
+  any possible tamperings. ([\#3960](https://github.com/anoma/namada/pull/3960))
+- fix unshielding NFT transfer via IBC
+  ([\#4025](https://github.com/anoma/namada/issues/4025))
+- Validate validator metadata from on-chain validator creation and metadata
+  changes. ([\#4036](https://github.com/anoma/namada/pull/4036))
+- CLI: Allow to wrap a raw tx signed by someone else.
+  ([\#4055](https://github.com/anoma/namada/pull/4055))
+- Use the base denom in the given IBC token as it is
+  ([\#4060](https://github.com/anoma/namada/issues/4060))
+- fix the cli command 'namada client reveal_pk' to respect the
+  '--dump-tx' and '--dump-wrapper-tx' flags when present. this
+  allows offline accounts to reveal their public keys to the network
+  ([\#4061](https://github.com/anoma/namada/pull/4061))
+
+### DOCS
+
+- Fixed broken link to CometBFT installation instructions in README.md
+  to ensure users can properly access the installation guide.
+  ([#4006](https://github.com/anoma/namada/issues/4006))
+
+### FEATURES
+
+- Adds a cli command to estimate the amount of MASP rewards that will be accumulated by the next epoch.
+  This is done by applying the latest set of conversions for each asset again.
+  ([\#3974](https://github.com/anoma/namada/pull/3974))
+
+### IMPROVEMENTS
+
+- Improve MASP insufficient balance errors.
+  ([\#4003](https://github.com/anoma/namada/pull/4003))
+- Added more info to gas failure errors. ([\#4004](https://github.com/anoma/namada/pull/4004))
+- Improve the shielded sync's ledger client performance and user experience.
+  ([\#4016](https://github.com/anoma/namada/pull/4016))
+- Avoid updating merkle paths of spent notes. This should optimize
+  the synchronous path of the shielded sync on the ledger client.
+  ([\#4018](https://github.com/anoma/namada/pull/4018))
+- The speculative shielded context now avoids updating its
+  state if the transaction failed. Added a test for it.
+  ([\#4019](https://github.com/anoma/namada/pull/4019))
+- Some small fixups learned from the dry-run: namadac
+  staking-rewards-rate, namadac query-proposal, log.
+  ([\#4021](https://github.com/anoma/namada/pull/4021))
+- Improved the display of transactions' results.
+  ([\#4039](https://github.com/anoma/namada/pull/4039))
+- Prune old Merkle tree snapshots which are saved every block
+  ([\#4043](https://github.com/anoma/namada/issues/4043))
+- Client now prints help messages on missing arguments.
+  ([\#4047](https://github.com/anoma/namada/pull/4047))
+
+### TESTING
+
+- Added property testing for malleability attacks on transactions.
+  ([\#3925](https://github.com/anoma/namada/pull/3925))
+- Add IBC E2E tests for NFT transfers
+  ([\#4025](https://github.com/anoma/namada/issues/4025))
+
 ## v0.45.1
 
 Namada 0.45.1 is a patch releases that fixes an issue with release packaging.
