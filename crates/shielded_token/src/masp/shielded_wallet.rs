@@ -250,7 +250,11 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
     }
 
     #[allow(missing_docs)]
-    pub fn save_shielded_spends(&mut self, transaction: &Transaction) {
+    pub fn save_shielded_spends(
+        &mut self,
+        transaction: &Transaction,
+        update_witness_map: bool,
+    ) {
         for ss in transaction
             .sapling_bundle()
             .map_or(&vec![], |x| &x.shielded_spends)
@@ -259,6 +263,9 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
             // note is rendered unusable
             if let Some(note_pos) = self.nf_map.get(&ss.nullifier) {
                 self.spents.insert(*note_pos);
+                if update_witness_map {
+                    self.witness_map.swap_remove(note_pos);
+                }
             }
         }
     }
@@ -355,7 +362,7 @@ impl<U: ShieldedUtils + MaybeSend + MaybeSync> ShieldedWallet<U> {
         &mut self,
         masp_tx: &Transaction,
     ) -> Result<(), eyre::Error> {
-        self.save_shielded_spends(masp_tx);
+        self.save_shielded_spends(masp_tx, false);
 
         // Save the speculative state for future usage
         self.sync_status = ContextSyncStatus::Speculative;
