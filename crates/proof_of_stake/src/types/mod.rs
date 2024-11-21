@@ -21,8 +21,8 @@ pub use rev_order::ReverseOrdTokenAmount;
 use serde::{Deserialize, Serialize};
 
 use crate::lazy_map::NestedMap;
-use crate::parameters::PosParams;
-use crate::{Epoch, KeySeg, LazyMap, LazySet, LazyVec};
+use crate::parameters::{PosParams, MAX_VALIDATOR_METADATA_LEN};
+use crate::{Epoch, KeySeg, LazyMap, LazySet, LazyVec, ValidatorMetaDataError};
 
 /// Stored positions of validators in validator sets
 pub type ValidatorSetPositions = crate::epoched::NestedEpoched<
@@ -417,6 +417,46 @@ pub struct ValidatorMetaData {
     pub avatar: Option<String>,
     /// Validator's name
     pub name: Option<String>,
+}
+
+impl ValidatorMetaData {
+    /// Validator validator metadata. Returns an empty vec only if all fields
+    /// are valid.
+    pub fn validate(&self) -> Vec<ValidatorMetaDataError> {
+        let mut errors = vec![];
+        if self.email.len() as u64 > MAX_VALIDATOR_METADATA_LEN {
+            errors.push(ValidatorMetaDataError::FieldTooLong("email"));
+        }
+        if let Some(description) = self.description.as_ref() {
+            if description.len() as u64 > MAX_VALIDATOR_METADATA_LEN {
+                errors
+                    .push(ValidatorMetaDataError::FieldTooLong("description"));
+            }
+        }
+        if let Some(website) = self.website.as_ref() {
+            if website.len() as u64 > MAX_VALIDATOR_METADATA_LEN {
+                errors.push(ValidatorMetaDataError::FieldTooLong("website"));
+            }
+        }
+        if let Some(discord_handle) = self.discord_handle.as_ref() {
+            if discord_handle.len() as u64 > MAX_VALIDATOR_METADATA_LEN {
+                errors.push(ValidatorMetaDataError::FieldTooLong(
+                    "discord handle",
+                ));
+            }
+        }
+        if let Some(avatar) = self.avatar.as_ref() {
+            if avatar.len() as u64 > MAX_VALIDATOR_METADATA_LEN {
+                errors.push(ValidatorMetaDataError::FieldTooLong("avatar"));
+            }
+        }
+        if let Some(name) = self.name.as_ref() {
+            if name.len() as u64 > MAX_VALIDATOR_METADATA_LEN {
+                errors.push(ValidatorMetaDataError::FieldTooLong("name"));
+            }
+        }
+        errors
+    }
 }
 
 #[cfg(any(test, feature = "testing"))]

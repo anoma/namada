@@ -26,6 +26,7 @@ use namada_sdk::account::AccountPublicKeysMap;
 use namada_sdk::collections::HashMap;
 use namada_sdk::error::TxSubmitError;
 use namada_sdk::migrations;
+use namada_sdk::proof_of_stake::parameters::MAX_VALIDATOR_METADATA_LEN;
 use namada_sdk::queries::RPC;
 use namada_sdk::token::{self, DenominatedAmount};
 use namada_sdk::tx::{self, Tx, TX_TRANSFER_WASM, VP_USER_WASM};
@@ -2561,6 +2562,95 @@ fn wrap_tx_by_elsewho() -> Result<()> {
     });
     assert!(captured.result.is_ok());
     assert!(captured.contains("nam: 0\n"));
+
+    Ok(())
+}
+
+/// Test for PoS validator metadata validation.
+///
+/// 1. Run the ledger node.
+/// 2. Submit a valid metadata change tx.
+/// 3. Check that the metadata has changed.
+/// 4. Submit an invalid metadata change tx.
+/// 5. Check that the metadata has not changed.
+/// 6. Submit a tx to become validator with invalid metadata.
+#[test]
+fn pos_validator_metadata_validation() -> Result<()> {
+    // 1. Run the ledger node.
+    let (node, _services) = setup::setup()?;
+
+    // 2. Submit a valid metadata change tx.
+    let valid_desc: String = "0123456789".repeat(50);
+    assert_eq!(valid_desc.len() as u64, MAX_VALIDATOR_METADATA_LEN);
+    let tx_args = apply_use_device(vec![
+        "change-metadata",
+        "--validator",
+        "validator-0-validator",
+        "--description",
+        &valid_desc,
+    ]);
+    let captured = CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
+    println!("{:?}", captured.result);
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+
+    // 3. Check that the metadata has changed.
+    let query_args = apply_use_device(vec![
+        "validator-metadata",
+        "--validator",
+        "validator-0-validator",
+    ]);
+    let captured =
+        CapturedOutput::of(|| run(&node, Bin::Client, query_args.clone()));
+    println!("{:?}", captured.result);
+    assert!(captured.contains(&valid_desc));
+
+    // 4. Submit an invalid metadata change tx.
+    let invalid_desc: String = format!("N{valid_desc}");
+    assert!(invalid_desc.len() as u64 > MAX_VALIDATOR_METADATA_LEN);
+    let tx_args = apply_use_device(vec![
+        "change-metadata",
+        "--validator",
+        "validator-0-validator",
+        "--description",
+        &invalid_desc,
+        "--force",
+    ]);
+    let captured = CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
+    println!("{:?}", captured.result);
+    assert_matches!(captured.result, Ok(_));
+    assert!(captured.contains(TX_REJECTED));
+
+    // 5. Check that the metadata has not changed.
+    let captured = CapturedOutput::of(|| run(&node, Bin::Client, query_args));
+    println!("{:?}", captured.result);
+    assert!(captured.contains(&valid_desc));
+
+    // 6. Submit a tx to become validator with invalid metadata.
+    let new_validator = "new-validator";
+    let tx_args = apply_use_device(vec![
+        "init-validator",
+        "--alias",
+        new_validator,
+        "--name",
+        new_validator,
+        "--account-keys",
+        "bertha-key",
+        "--commission-rate",
+        "0.05",
+        "--max-commission-rate-change",
+        "0.01",
+        "--email",
+        "null@null.net",
+        "--signing-keys",
+        "bertha-key",
+        "--description",
+        &invalid_desc,
+        "--unsafe-dont-encrypt",
+    ]);
+    let captured = CapturedOutput::of(|| run(&node, Bin::Client, tx_args));
+    assert_matches!(captured.result, Err(_));
+    assert!(captured.contains(TX_REJECTED));
 
     Ok(())
 }
