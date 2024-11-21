@@ -64,6 +64,7 @@ namada_vm_env = {path = "../vm_env"}
 
 assert_cmd.workspace = true
 assert_matches.workspace = true
+base64.workspace = true
 borsh.workspace = true
 borsh-ext.workspace = true
 color-eyre.workspace = true

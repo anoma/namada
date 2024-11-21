@@ -593,6 +593,7 @@ jobs:
         id: e2e
         run: python3 .github/workflows/scripts/schedule-e2e.py
         env:
+          NAMADA_COSMWASM_CONTRACT_DIR: "/cosmwasm_contracts"
           NAMADA_E2E_USE_PREBUILT_BINARIES: "true"
           NAMADA_E2E_KEEP_TEMP: "true"
           NAMADA_TM_STDOUT: "false"
