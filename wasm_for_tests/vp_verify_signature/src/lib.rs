@@ -9,5 +9,5 @@ fn validate_tx(
     _verifiers: BTreeSet<Address>,
 ) -> VpResult {
     let mut gadget = VerifySigGadget::new();
-    gadget.verify_signatures(ctx, &tx_data.tx, &addr)
+    gadget.verify_signatures(ctx, &tx_data.tx, &tx_data.cmt, &addr)
 }
