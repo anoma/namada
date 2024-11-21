@@ -18,4 +18,6 @@ accepted = [
     "Zlib",
     "BSL-1.0",
     "SSLeay-standalone",
+    "LicenseRef-scancode-public-domain",
+    "LicenseRef-scancode-unknown-license-reference",
 ]
