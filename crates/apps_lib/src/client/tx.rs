@@ -639,11 +639,10 @@ pub async fn submit_become_validator(
             .is_applied_and_valid(wrapper_hash.as_ref(), &cmt)
             .is_none()
         {
-            display_line!(
-                namada.io(),
+            return Err(error::Error::Tx(error::TxSubmitError::Other(
                 "Transaction failed. No key or addresses have been saved."
-            );
-            safe_exit(1)
+                    .to_string(),
+            )));
         }
 
         // add validator address and keys to the wallet
