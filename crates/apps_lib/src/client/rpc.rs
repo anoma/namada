@@ -748,102 +748,147 @@ pub async fn query_protocol_parameters(
         query_storage_value(context.client(), &key)
             .await
             .expect("Parameter should be defined.");
+    let key = param_storage::get_masp_epoch_multiplier_key();
+    let masp_epoch_multiplier: u64 =
+        query_storage_value(context.client(), &key)
+            .await
+            .expect("Parameter should be defined.");
+    let key = param_storage::get_implicit_vp_key();
+    let implicit_vp_code_hash: Hash =
+        query_storage_value(context.client(), &key)
+            .await
+            .expect("Parameter should be defined.");
+    let key = param_storage::get_vp_allowlist_storage_key();
+    let vp_allowlist: Vec<String> = query_storage_value(context.client(), &key)
+        .await
+        .expect("Parameter should be defined.");
+    let key = param_storage::get_tx_allowlist_storage_key();
+    let tx_allowlist: Vec<String> = query_storage_value(context.client(), &key)
+        .await
+        .expect("Parameter should be defined.");
+    let key = param_storage::get_max_proposal_bytes_key();
+    let max_proposal_bytes: ProposalBytes =
+        query_storage_value(context.client(), &key)
+            .await
+            .expect("Parameter should be defined.");
+    let key = param_storage::get_max_tx_bytes_key();
+    let max_tx_bytes: u32 = query_storage_value(context.client(), &key)
+        .await
+        .expect("Parameter should be defined.");
+    let key = param_storage::get_max_block_gas_key();
+    let max_block_gas: u64 = query_storage_value(context.client(), &key)
+        .await
+        .expect("Parameter should be defined.");
+    let key = param_storage::get_masp_fee_payment_gas_limit_key();
+    let masp_fee_payment_gas_limit: u64 =
+        query_storage_value(context.client(), &key)
+            .await
+            .expect("Parameter should be defined.");
+    let key = param_storage::get_gas_cost_key();
+    let minimum_gas_price: BTreeMap<Address, token::Amount> =
+        query_storage_value(context.client(), &key)
+            .await
+            .expect("Parameter should be defined.");
+    let key = param_storage::get_gas_scale_key();
+    let gas_scale: u64 = query_storage_value(context.client(), &key)
+        .await
+        .expect("Parameter should be defined.");
+    let key = param_storage::get_native_token_transferable_key();
+    let is_native_token_transferable: bool =
+        query_storage_value(context.client(), &key)
+            .await
+            .expect("Parameter should be defined.");
+    let key = param_storage::get_epochs_per_year_key();
+    let epochs_per_year: u64 = query_storage_value(context.client(), &key)
+        .await
+        .expect("Parameter should be defined.");
+
+    // Reconstruct the Parameters type to ensure we retrieved all of them
+    let parameters = namada_core::parameters::Parameters {
+        max_tx_bytes,
+        epoch_duration,
+        max_proposal_bytes,
+        max_block_gas,
+        vp_allowlist,
+        tx_allowlist,
+        implicit_vp_code_hash: Some(implicit_vp_code_hash),
+        epochs_per_year,
+        masp_epoch_multiplier,
+        masp_fee_payment_gas_limit,
+        gas_scale,
+        minimum_gas_price,
+        is_native_token_transferable,
+    };
+    // Deconstruct the type to ensure we display all the fields
+    let namada_core::parameters::Parameters {
+        max_tx_bytes,
+        epoch_duration,
+        max_proposal_bytes,
+        max_block_gas,
+        vp_allowlist,
+        tx_allowlist,
+        implicit_vp_code_hash,
+        epochs_per_year,
+        masp_epoch_multiplier,
+        masp_fee_payment_gas_limit,
+        gas_scale,
+        minimum_gas_price,
+        is_native_token_transferable,
+    } = parameters;
+
     display_line!(
         context.io(),
         "{:4}Min. epoch duration: {} seconds",
         "",
         epoch_duration.min_duration
     );
+    display_line!(context.io(), "{:4}Epochs per year: {}", "", epochs_per_year);
     display_line!(
         context.io(),
         "{:4}Min. number of blocks: {}",
         "",
         epoch_duration.min_num_of_blocks
     );
-
-    let key = param_storage::get_masp_epoch_multiplier_key();
-    let masp_epoch_multiplier: u64 =
-        query_storage_value(context.client(), &key)
-            .await
-            .expect("Parameter should be defined.");
     display_line!(
         context.io(),
         "{:4}Masp epoch multiplier: {:?}",
         "",
         masp_epoch_multiplier
     );
-
-    let key = param_storage::get_implicit_vp_key();
-    let implicit_vp: Hash = query_storage_value(context.client(), &key)
-        .await
-        .expect("Parameter should be defined.");
-    display_line!(context.io(), "{:4}Implicit VP: {}", "", implicit_vp);
-
-    let key = param_storage::get_vp_allowlist_storage_key();
-    let vp_allowlist: Vec<String> = query_storage_value(context.client(), &key)
-        .await
-        .expect("Parameter should be defined.");
+    display_line!(
+        context.io(),
+        "{:4}Implicit VP: {}",
+        "",
+        implicit_vp_code_hash.expect("The implicit vp should be set")
+    );
     display_line!(context.io(), "{:4}VP allowlist: {:?}", "", vp_allowlist);
-
-    let key = param_storage::get_tx_allowlist_storage_key();
-    let tx_allowlist: Vec<String> = query_storage_value(context.client(), &key)
-        .await
-        .expect("Parameter should be defined.");
     display_line!(
         context.io(),
         "{:4}Transactions allowlist: {:?}",
         "",
         tx_allowlist
     );
-
-    let key = param_storage::get_max_proposal_bytes_key();
-    let max_proposal_bytes: ProposalBytes =
-        query_storage_value(context.client(), &key)
-            .await
-            .expect("Parameter should be defined.");
     display_line!(
         context.io(),
         "{:4}Max. proposal bytes: {:?}",
         "",
         max_proposal_bytes.get()
     );
-
-    let key = param_storage::get_max_tx_bytes_key();
-    let max_tx_bytes: u32 = query_storage_value(context.client(), &key)
-        .await
-        .expect("Parameter should be defined.");
     display_line!(context.io(), "{:4}Max tx bytes: {:?}", "", max_tx_bytes);
-
-    let key = param_storage::get_max_block_gas_key();
-    let max_block_gas: u64 = query_storage_value(context.client(), &key)
-        .await
-        .expect("Parameter should be defined.");
     display_line!(
         context.io(),
         "{:4}Max. block gas: {:?} gas units",
         "",
         max_block_gas
     );
-
-    let key = param_storage::get_masp_fee_payment_gas_limit_key();
-    let masp_fee_payment_gas_limit: u64 =
-        query_storage_value(context.client(), &key)
-            .await
-            .expect("Parameter should be defined.");
     display_line!(
         context.io(),
         "{:4}Masp fee payment gas limit: {:?} gas units",
         "",
         masp_fee_payment_gas_limit
     );
-
-    let key = param_storage::get_gas_cost_key();
-    let gas_cost_table: BTreeMap<Address, token::Amount> =
-        query_storage_value(context.client(), &key)
-            .await
-            .expect("Parameter should be defined.");
     display_line!(context.io(), "{:4}Minimum gas costs:", "");
-    for (token, gas_cost) in gas_cost_table {
+    for (token, gas_cost) in minimum_gas_price {
         let denom = rpc::query_denom(context.client(), &token)
             .await
             .expect("Token should have denom");
@@ -856,12 +901,13 @@ pub async fn query_protocol_parameters(
             den_amt
         );
     }
-
-    let key = param_storage::get_gas_scale_key();
-    let gas_scale: u64 = query_storage_value(context.client(), &key)
-        .await
-        .expect("Parameter should be defined.");
     display_line!(context.io(), "{:4}Gas scale: {:?}", "", gas_scale);
+    display_line!(
+        context.io(),
+        "{:4}Is native token transferable: {:?}",
+        "",
+        is_native_token_transferable
+    );
 
     display_line!(context.io(), "\nProof of Stake parameters");
     let PosParams {
