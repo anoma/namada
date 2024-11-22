@@ -857,7 +857,7 @@ pub async fn query_protocol_parameters(
     );
     display_line!(
         context.io(),
-        "{:4}Implicit VP: {}",
+        "{:4}Implicit VP hash: {}",
         "",
         implicit_vp_code_hash.expect("The implicit vp should be set")
     );
