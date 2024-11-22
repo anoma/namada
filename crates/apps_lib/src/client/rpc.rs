@@ -773,6 +773,12 @@ pub async fn query_protocol_parameters(
         masp_epoch_multiplier
     );
 
+    let key = param_storage::get_implicit_vp_key();
+    let implicit_vp: Hash = query_storage_value(context.client(), &key)
+        .await
+        .expect("Parameter should be defined.");
+    display_line!(context.io(), "{:4}Implicit VP: {}", "", implicit_vp);
+
     let key = param_storage::get_vp_allowlist_storage_key();
     let vp_allowlist: Vec<String> = query_storage_value(context.client(), &key)
         .await
