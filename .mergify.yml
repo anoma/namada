@@ -13,7 +13,7 @@ queue_rules:
       - &id001
         or:
           - base = main
-          - base = maint-0.45
+          - base = maint-0.46
     merge_conditions: []
     merge_method: merge
     autosquash: true
@@ -24,12 +24,12 @@ queue_rules:
       - base = main
     merge_method: merge
 
-  - name: duplicated backport-0.45-queue from automatic merge to main or backport
+  - name: duplicated backport-0.46-queue from automatic merge to main or backport
       branch
     batch_size: 3
     queue_conditions:
       - "#approved-reviews-by >= 1"
-      - base = maint-0.45
+      - base = maint-0.46
       - label = "merge"
       - label != "do-not-merge"
       - "#approved-reviews-by >= 1"
@@ -37,11 +37,11 @@ queue_rules:
     merge_conditions: []
     merge_method: merge
     autosquash: true
-  - name: backport-0.45-queue
+  - name: backport-0.46-queue
     batch_size: 3
     queue_conditions:
       - "#approved-reviews-by >= 1"
-      - base = maint-0.45
+      - base = maint-0.46
     merge_method: merge
 
 
@@ -59,13 +59,13 @@ pull_request_rules:
           Sorry about that, but you can requeue the PR by using `@mergifyio requeue`
           if you think this was a mistake.
 
-  - name: backport PR to 0.45 lane
+  - name: backport PR to 0.46 lane
     conditions:
-      - label = backport-45
+      - label = backport-46
     actions:
       backport:
         branches:
-          - "maint-0.45"
+          - "maint-0.46"
   - name: refactored queue action rule
     conditions: []
     actions:
