@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# A helper to merge e.g. a PR from draft to an RC branch where any neccessary
-# conflicts resolutions are expected to have been trained with rerere.
+# A helper to merge e.g. a PR from draft to an RC branch where any necessary
+# conflict resolutions are expected to have been trained with rerere.
 #
 # It merges PRs from "origin" remote which should be set to "git@github.com:anoma/namada.git".
 # Make sure to fetch latest before running with e.g. `git fetch origin`.
