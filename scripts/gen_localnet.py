@@ -483,7 +483,7 @@ def full_nodes_object(s):
 def load_json(s):
     try:
         return json.loads(s)
-    except json.decode.JSONDecodeError:
+    except json.JSONDecodeError:
         # assume we're dealing with a file path
         with open(s, "r") as f:
             return json.load(f)
