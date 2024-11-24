@@ -26,7 +26,7 @@ cargo release version --execute $VERSION
 git commit -am "Namada $VERSION"
 HASH_AFTER=$(git rev-parse HEAD)
 
-# update the wasm workspace crate versions (1 fixup)
+# update the wasm workspace crate versions (1 commit)
 cd $REPO_ROOT/wasm
 cargo release version --execute $VERSION
 cargo update -w
