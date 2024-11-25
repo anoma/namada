@@ -1,7 +1,7 @@
 # Fuzz testing
 
 - Uses [cargo-fuzz](https://rust-fuzz.github.io/book/cargo-fuzz.html) which depends on LLVM libFuzzer
-- When ran, a target generates arbitrary input setup for the test. This can be structured data with derived or manually implemented [`trait Arbitrary`](https://crates.io/crates/arbitrary)
+- When run, a target generates arbitrary input setup for the test. This can be structured data with derived or manually implemented [`trait Arbitrary`](https://crates.io/crates/arbitrary)
 - To ensure that the fuzzer explored all interesting branches fuzz testing is used together with code coverage reports
 
 ## How to run
@@ -12,7 +12,7 @@
 - Run e.g. `make fuzz-txs-mempool` (uses nightly)
 - If there is any crash, the fuzzer has found an issue. Read the stack trace for details. It will also print instructions on how to re-run the same case.
 - When there are no panics you'll see it printing statistics. E.g. `cov: 26771 ft: 111572 corp: 2688/1423Kb lim: 2369 exec/s: 39 rss: 647Mb L: 2232/2335 MS: 5`
-- The important stat you'll want to look watch is the very first one - `cov` - "Total number of code blocks or edges covered by executing the current corpus." (more details at <https://llvm.org/docs/LibFuzzer.html#output>)
+- The important stat you'll want to watch is the very first one - `cov` - "Total number of code blocks or edges covered by executing the current corpus." (more details at <https://llvm.org/docs/LibFuzzer.html#output>)
 - After the number in `cov` seems to have settled and is no longer increasing, the fuzzer has most likely explored all possible branches. We're going to check that next with coverage.
 - To generate raw coverage data, run e.g. `cargo +$(cat rust-nightly-version) fuzz coverage txs_mempool --dev`. This will create `fuzz/coverage/txs_mempool/coverage.profdata` (the path gets printed at the end).
 - To turn the raw coverage data into a report:
