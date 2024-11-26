@@ -896,8 +896,20 @@ pub async fn submit_shielding_transfer(
                 ))
             {
                 let rejected_vps = &result.vps_result.rejected_vps;
-                // If the transaction is rejected by the MASP VP only
-                if rejected_vps.len() == 1 && rejected_vps.contains(&MASP) {
+                let vps_errors = &result.vps_result.errors;
+                // If the transaction is rejected by the MASP VP only and
+                // because of an asset's epoch issue
+                if rejected_vps.len() == 1
+                    && (vps_errors.contains(&(
+                        MASP,
+                        "Native VP error: epoch is missing from asset type"
+                            .to_string(),
+                    )) || vps_errors.contains(&(
+                        MASP,
+                        "Native VP error: Unable to decode asset type"
+                            .to_string(),
+                    )))
+                {
                     let submission_masp_epoch =
                         rpc::query_and_print_masp_epoch(namada).await;
                     // And its submission epoch doesn't match construction
