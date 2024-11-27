@@ -139,8 +139,22 @@ impl<C: Client + Send + Sync> MaspClient for LedgerMaspClient<C> {
     type Error = Error;
 
     async fn last_block_height(&self) -> Result<Option<BlockHeight>, Error> {
-        let maybe_block = crate::rpc::query_block(&self.inner.client).await?;
-        Ok(maybe_block.map(|b| b.height))
+        let cometbft_height = self
+            .inner
+            .client
+            .latest_commit()
+            .await
+            .map_err(|e| Error::Other(e.to_string()))?
+            .signed_header
+            .commit
+            .height
+            .value();
+
+        Ok(if cometbft_height != 0 {
+            Some(BlockHeight(cometbft_height))
+        } else {
+            None
+        })
     }
 
     async fn fetch_shielded_transfers(
