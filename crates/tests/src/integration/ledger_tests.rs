@@ -972,17 +972,20 @@ fn inflation() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
     let validator_one_rpc = "http://127.0.0.1:26567";
     // 1. start the ledger node
-    let (mut node, _services) = setup::initialize_genesis(|mut genesis| {
-        genesis.parameters.pos_params.max_inflation_rate =
-            Dec::from_str("0.1").unwrap();
-        genesis.parameters.pgf_params.stewards_inflation_rate =
-            Dec::from_str("0.1").unwrap();
-        genesis.parameters.pgf_params.pgf_inflation_rate =
-            Dec::from_str("0.1").unwrap();
-        genesis.parameters.pgf_params.stewards =
-            BTreeSet::from_iter([defaults::albert_address()]);
-        genesis
-    })?;
+    let (mut node, _services) = setup::initialize_genesis(
+        |mut genesis| {
+            genesis.parameters.pos_params.max_inflation_rate =
+                Dec::from_str("0.1").unwrap();
+            genesis.parameters.pgf_params.stewards_inflation_rate =
+                Dec::from_str("0.1").unwrap();
+            genesis.parameters.pgf_params.pgf_inflation_rate =
+                Dec::from_str("0.1").unwrap();
+            genesis.parameters.pgf_params.stewards =
+                BTreeSet::from_iter([defaults::albert_address()]);
+            genesis
+        },
+        None,
+    )?;
 
     let pos_inflation = [
         114400000.785983,
@@ -1376,13 +1379,16 @@ fn pgf_steward_change_commission() -> Result<()> {
     // This address doesn't matter for tests. But an argument is required.
     let validator_one_rpc = "http://127.0.0.1:26567";
     // 1. start the ledger node
-    let (node, _services) = setup::initialize_genesis(|mut genesis| {
-        genesis.parameters.pgf_params.stewards_inflation_rate =
-            Dec::from_str("0.1").unwrap();
-        genesis.parameters.pgf_params.stewards =
-            BTreeSet::from_iter([defaults::albert_address()]);
-        genesis
-    })?;
+    let (node, _services) = setup::initialize_genesis(
+        |mut genesis| {
+            genesis.parameters.pgf_params.stewards_inflation_rate =
+                Dec::from_str("0.1").unwrap();
+            genesis.parameters.pgf_params.stewards =
+                BTreeSet::from_iter([defaults::albert_address()]);
+            genesis
+        },
+        None,
+    )?;
 
     // Query pgf stewards
     let query_pgf = vec!["query-pgf", "--node", &validator_one_rpc];

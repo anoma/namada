@@ -31,11 +31,11 @@ use namada_sdk::wallet::alias::Alias;
 use crate::e2e::setup::copy_wasm_to_chain_dir;
 
 /// Env. var for keeping temporary files created by the integration tests
-const ENV_VAR_KEEP_TEMP: &str = "NAMADA_INT_KEEP_TEMP";
+pub const ENV_VAR_KEEP_TEMP: &str = "NAMADA_INT_KEEP_TEMP";
 
 /// Setup a network with a single genesis validator node.
 pub fn setup() -> Result<(MockNode, MockServicesController)> {
-    initialize_genesis(|genesis| genesis)
+    initialize_genesis(|genesis| genesis, None)
 }
 
 /// Setup folders with genesis, configs, wasm, etc.
@@ -43,6 +43,7 @@ pub fn initialize_genesis(
     mut update_genesis: impl FnMut(
         templates::All<templates::Unvalidated>,
     ) -> templates::All<templates::Unvalidated>,
+    chain_prefix: Option<&str>,
 ) -> Result<(MockNode, MockServicesController)> {
     let working_dir = std::fs::canonicalize("../..").unwrap();
     let keep_temp = match std::env::var(ENV_VAR_KEEP_TEMP) {
@@ -75,7 +76,9 @@ pub fn initialize_genesis(
     let templates = load_and_validate(&genesis_path)
         .expect("Missing or invalid genesis files");
     let genesis_time = Default::default();
-    let chain_id_prefix = ChainIdPrefix::from_str("integration-test").unwrap();
+    let chain_id_prefix =
+        ChainIdPrefix::from_str(chain_prefix.unwrap_or("integration-test"))
+            .unwrap();
     let genesis = config::genesis::chain::finalize(
         templates,
         chain_id_prefix.clone(),
@@ -143,7 +146,7 @@ pub fn initialize_genesis(
 
 /// Add the address from the finalized genesis to the wallet.
 /// Additionally add the validator keys to the wallet.
-fn finalize_wallet(
+pub fn finalize_wallet(
     template_dir: &Path,
     global_args: &args::Global,
     genesis: Finalized,
