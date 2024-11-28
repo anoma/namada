@@ -2,6 +2,20 @@ merge_queue:
   max_parallel_checks: 3
 
 queue_rules:
+  - name: duplicated main-queue from automatic merge to main or backport branch
+    batch_size: 3
+    queue_conditions:
+      - "#approved-reviews-by >= 1"
+      - base = main
+      - label = "merge"
+      - label != "do-not-merge"
+      - &id001
+        or:
+          - base = main
+          - base = maint-0.46
+    merge_conditions: []
+    merge_method: merge
+    autosquash: true
   - name: main-queue
     batch_size: 3
     queue_conditions:
@@ -9,6 +23,18 @@ queue_rules:
       - base = main
     merge_method: merge
 
+  - name: duplicated backport-0.46-queue from automatic merge to main or backport
+      branch
+    batch_size: 3
+    queue_conditions:
+      - "#approved-reviews-by >= 1"
+      - base = maint-0.46
+      - label = "merge"
+      - label != "do-not-merge"
+      - *id001
+    merge_conditions: []
+    merge_method: merge
+    autosquash: true
   - name: backport-0.46-queue
     batch_size: 3
     queue_conditions:
@@ -16,23 +42,12 @@ queue_rules:
       - base = maint-0.46
     merge_method: merge
 
-pull_request_rules:
-  - name: automatic merge to main or backport branch
-    conditions:
-        - label = "merge"
-        - label != "do-not-merge"
-        - "#approved-reviews-by >= 1"
-        - or:
-          - base = main
-          - base = maint-0.46
-    actions:
-      queue:
-        autosquash: true   
 
+pull_request_rules:
   - name: notify when a PR is removed from the queue
     conditions:
-    - queue-dequeue-reason != none
-    - queue-dequeue-reason != pr-merged
+      - queue-dequeue-reason != none
+      - queue-dequeue-reason != pr-merged
     actions:
       comment:
         message: >
@@ -49,3 +64,7 @@ pull_request_rules:
       backport:
         branches:
           - "maint-0.46"
+  - name: automatic merge to main or backport branch
+    conditions: []
+    actions:
+      queue:
