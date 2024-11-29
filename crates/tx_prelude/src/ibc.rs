@@ -6,6 +6,7 @@ use std::rc::Rc;
 
 use namada_core::address::Address;
 use namada_core::token::Amount;
+use namada_ibc::context::pfm_mod::PfmTransferModule;
 pub use namada_ibc::event::{IbcEvent, IbcEventType};
 pub use namada_ibc::storage::{
     burn_tokens, client_state_key, is_ibc_key, mint_limit_key, mint_tokens,
@@ -19,7 +20,7 @@ pub use namada_ibc::{
 };
 use namada_tx_env::TxEnv;
 
-use crate::{token, Ctx, Result};
+use crate::{parameters, token, Ctx, Result};
 
 /// IBC actions to handle an IBC message. The `verifiers` inserted into the set
 /// must be inserted into the tx context with `Ctx::insert_verifier` after tx
@@ -30,7 +31,10 @@ pub fn ibc_actions(
     let ctx = Rc::new(RefCell::new(ctx.clone()));
     let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
     let mut actions = IbcActions::new(ctx.clone(), verifiers.clone());
-    let module = TransferModule::new(ctx.clone(), verifiers);
+    let module = PfmTransferModule::<_, parameters::Store<Ctx>>::wrap(
+        ctx.clone(),
+        verifiers,
+    );
     actions.add_transfer_module(module);
     let module = NftTransferModule::<Ctx, token::Store<Ctx>>::new(ctx);
     actions.add_transfer_module(module);
