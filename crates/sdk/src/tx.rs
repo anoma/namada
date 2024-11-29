@@ -2078,14 +2078,20 @@ pub async fn build_default_proposal(
                 .add_extra_section(proposal_to_vec(proposal.proposal)?, None);
             init_proposal_data.content = extra_section_hash;
 
-            if let Some(init_proposal_code) = proposal.data {
-                let (_, extra_section_hash) =
-                    tx_builder.add_extra_section(init_proposal_code, None);
-                init_proposal_data.r#type =
-                    ProposalType::DefaultWithWasm(extra_section_hash);
-            };
+            if matches!(
+                init_proposal_data.r#type,
+                ProposalType::DefaultWithWasm(_)
+            ) {
+                if let Some(init_proposal_code) = proposal.data {
+                    let (_, extra_section_hash) =
+                        tx_builder.add_extra_section(init_proposal_code, None);
+                    init_proposal_data.r#type =
+                        ProposalType::DefaultWithWasm(extra_section_hash);
+                };
+            }
             Ok(())
         };
+
     build(
         context,
         tx,
