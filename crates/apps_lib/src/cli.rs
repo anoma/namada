@@ -7573,7 +7573,6 @@ pub mod args {
                         "The file path containing a serialized signature of \
                          the entire transaction for gas payment."
                     ))
-                    .requires(SIGNATURES.name)
                     .conflicts_with(FEE_PAYER_OPT.name),
             )
             .arg(OUTPUT_FOLDER_PATH.def().help(wrap!(

@@ -1099,6 +1099,7 @@ pub async fn sign_offline(
         if tx.header.wrapper().is_some() {
             // Wrapper signature must be computed over the raw signatures too
             tx.add_signatures(signatures);
+            tx.protocol_filter();
             let wrapper_signature = Authorization::new(
                 tx.sechashes(),
                 [(0, wrapper_signer)].into_iter().collect(),
@@ -1124,10 +1125,10 @@ pub async fn sign_offline(
 
             println!("Wrapper signature serialized at {}", signature_path);
         } else {
-            println!(
-                "A gas payer was provided but the transaction is not a \
-                 wrapper: skipping the wrapper signature"
+            eprintln!(
+                "A gas payer was provided but the transaction is not a wrapper"
             );
+            safe_exit(1);
         }
     }
 }

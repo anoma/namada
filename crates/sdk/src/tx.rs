@@ -3751,8 +3751,15 @@ pub async fn build_custom(
     let signing_data = if let Some(wrapper_signature) =
         &tx_args.wrapper_signature
     {
+        if tx.header.wrapper().is_none() {
+            return Err(Error::Other(
+                "A wrapper signature was provided but the transaction is not \
+                 a wrapper"
+                    .to_string(),
+            ));
+        }
         // Attach the provided signatures to the tx without the need to produce
-        // any mroe signatures
+        // any more signatures
         let signatures = tx_args.signatures.iter().try_fold(
             vec![],
             |mut acc, bytes| -> Result<Vec<_>> {
