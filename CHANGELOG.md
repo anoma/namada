@@ -1,5 +1,30 @@
 # CHANGELOG
 
+## libs-v0.46.1
+
+Namada 0.46.1 is a libaries patch release containing couple improvements and a bug fix in preparetion for a stable apps release.
+
+### BUG FIXES
+
+- Only write a dummy validator to CometBFT's genesis if the number of validators
+  present is lower than 2. ([\#4116](https://github.com/anoma/namada/pull/4116))
+
+### IMPROVEMENTS
+
+- Improved the client's retry logic on failed shielding transactions
+  to avoid resubmissions on rejections other than the MASP vp ones.
+  ([\#4071](https://github.com/anoma/namada/pull/4071))
+- Updated the `query-protocol-parameters` command to display some missing
+  parameters. ([\#4083](https://github.com/anoma/namada/pull/4083))
+
+### MISCELLANEOUS
+
+- Starting from the next release the Namada binary apps (`namada`, `namadan`,
+  `namadac` and `namadaw`) will be versioned separately from the libaries
+  (everything else including the wasm). The libraries releases will have their
+  tag prefixed with "lib-" and will continue with the current versioning scheme.
+  ([\#4117](https://github.com/anoma/namada/pull/4117))
+
 ## v0.46.0
 
 Namada 0.46.0 is a minor release containing important bug-fixes and various improvements.
