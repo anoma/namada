@@ -370,14 +370,16 @@ async fn write_tm_genesis(
     // validator unless we insert a dummy. If cometbft thinks a node is the
     // only validator, it won't start state sync. These validators are
     // overwritten after init chain is called.
-    const DUMMY_VALIDATOR: [u8; 32] = [
-        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
-        20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
-    ];
-    genesis.validators.push(Info::new(
-        PublicKey::from_raw_ed25519(&DUMMY_VALIDATOR).unwrap(),
-        10u32.into(),
-    ));
+    if genesis.validators.len() < 2 {
+        const DUMMY_VALIDATOR: [u8; 32] = [
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+            19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
+        ];
+        genesis.validators.push(Info::new(
+            PublicKey::from_raw_ed25519(&DUMMY_VALIDATOR).unwrap(),
+            10u32.into(),
+        ));
+    }
     const EVIDENCE_AND_PROTOBUF_OVERHEAD: u64 = 10 * 1024 * 1024;
     let size = block::Size {
         // maximum size of a serialized Tendermint block.
