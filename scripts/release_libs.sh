@@ -22,7 +22,7 @@ git clean -fxd
 
 # update the main workspace crate versions (1 commit)
 HASH_BEFORE=$(git rev-parse HEAD)
-cargo release version --execute $VERSION
+cargo release version --exclude namada_apps --execute $VERSION
 git commit -am "Namada libs $VERSION"
 HASH_AFTER=$(git rev-parse HEAD)
 
