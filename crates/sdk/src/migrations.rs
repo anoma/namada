@@ -380,7 +380,7 @@ where
         Ok(scheduled_migration)
     }
 
-    fn load(&self) -> eyre::Result<DbChanges<D>> {
+    pub fn load(&self) -> eyre::Result<DbChanges<D>> {
         let update_json = self.validate()?;
         serde_json::from_str(&update_json)
             .map_err(|_| eyre!("Could not parse the updates file as json"))
@@ -493,21 +493,10 @@ impl Display for UpdateStatus {
 
 /// Check if a scheduled migration should take place at this block height.
 /// If so, apply it to the DB.
-pub fn commit<D: DB>(
-    db: &D,
-    height: BlockHeight,
-    migration: &mut Option<ScheduledMigration<D::Migrator>>,
-) where
+pub fn commit<D: DB>(db: &D, migration: impl IntoIterator<Item = D::Migrator>)
+where
     D::Migrator: DeserializeOwned,
 {
-    let maybe_migration = migration;
-    let migration = match maybe_migration.as_ref() {
-        Some(migration) if height == migration.height => {
-            maybe_migration.take().unwrap().load().unwrap()
-        }
-        _ => return,
-    };
-
     tracing::info!(
         "A migration is scheduled to take place at this block height. \
          Starting..."

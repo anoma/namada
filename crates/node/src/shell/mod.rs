@@ -781,16 +781,31 @@ where
     /// hash.
     pub fn commit(&mut self) -> shim::Response {
         self.bump_last_processed_eth_block();
+        let committed_height = self.state.in_mem().get_last_block_height();
+
+        let migration = match self.scheduled_migration.as_ref() {
+            Some(migration) if committed_height == migration.height => Some(
+                self.scheduled_migration
+                    .take()
+                    .unwrap()
+                    .load()
+                    .expect("The scheduled migration is not valid."),
+            ),
+            _ => None,
+        };
 
         self.state
             .commit_block()
             .expect("Encountered a storage error while committing a block");
-        let committed_height = self.state.in_mem().get_last_block_height();
-        migrations::commit(
-            self.state.db(),
-            committed_height,
-            &mut self.scheduled_migration,
-        );
+
+        if let Some(migration) = migration {
+            migrations::commit(self.state.db(), migration);
+            self.state.commit_block().expect(
+                "Encountered a storage error while persisting changes \
+                 post-migration",
+            );
+        }
+
         let merkle_root = self.state.in_mem().merkle_root();
 
         tracing::info!(
