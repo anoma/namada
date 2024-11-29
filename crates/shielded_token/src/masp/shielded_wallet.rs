@@ -472,6 +472,11 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
     ) -> Option<AssetData> {
         // Try to find the decoding in the cache
         if let decoded @ Some(_) = self.asset_types.get(&asset_type) {
+            tracing::debug!(
+                "Asset type: {}, found cached data: {:#?}",
+                asset_type,
+                decoded
+            );
             return decoded.cloned();
         }
         // Query for the ID of the last accepted transaction
@@ -1701,6 +1706,10 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         if self.decode_asset_type(client, asset_type).await.is_none() {
             // If we fail to decode the epoched asset type, then remove the
             // epoch
+            tracing::debug!(
+                "Failed to decode epoched asset type, undating it: {:#?}",
+                decoded
+            );
             decoded.undate();
             asset_type = decoded
                 .encode()
