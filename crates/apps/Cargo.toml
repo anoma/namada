@@ -11,7 +11,7 @@ keywords.workspace = true
 license.workspace = true
 readme.workspace = true
 repository.workspace = true
-version = "0.46.0"
+version = "1.0.0"
 
 # Namada CLI that aggregates some common commands for the node and the client
 [[bin]]
