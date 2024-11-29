@@ -27,7 +27,6 @@ use namada_core::token::{
 use namada_core::{storage, token};
 use namada_gas::event::GasUsed as GasUsedAttr;
 use namada_gas::WholeGas;
-use namada_governance::cli::onchain::PgfFunding;
 use namada_governance::parameters::GovernanceParameters;
 use namada_governance::pgf::parameters::PgfParameters;
 use namada_governance::pgf::storage::steward::StewardDetail;
