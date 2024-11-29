@@ -143,6 +143,8 @@ pub enum Error {
     ChainId(IdentifierError),
     #[error("Verifier insertion error: {0}")]
     Verifier(StorageError),
+    #[error("Storage read/write error: {0}")]
+    Storage(StorageError),
     #[error("IBC error: {0}")]
     Other(String),
 }
@@ -690,7 +692,9 @@ where
                 // Extract MASP tx from the memo in the packet if needed
                 let masp_tx = match &*envelope {
                     MsgEnvelope::Packet(PacketMsg::Recv(msg))
-                        if self.is_receiving_success(msg)? =>
+                        if self
+                            .is_receiving_success(msg)?
+                            .is_some_and(|ack_succ| ack_succ) =>
                     {
                         extract_masp_tx_from_packet(&msg.packet)
                     }
@@ -713,8 +717,8 @@ where
     pub fn is_receiving_success(
         &self,
         msg: &IbcMsgRecvPacket,
-    ) -> Result<bool, Error> {
-        let packet_ack = self
+    ) -> Result<Option<bool>, Error> {
+        let Some(packet_ack) = self
             .ctx
             .inner
             .borrow()
@@ -723,11 +727,14 @@ where
                 &msg.packet.chan_id_on_b,
                 msg.packet.seq_on_a,
             )
-            .map_err(|e| Error::Context(Box::new(e)))?;
+            .map_err(|e| Error::Context(Box::new(e)))?
+        else {
+            return Ok(None);
+        };
         let success_ack_commitment = compute_ack_commitment(
             &AcknowledgementStatus::success(ack_success_b64()).into(),
         );
-        Ok(packet_ack == success_ack_commitment)
+        Ok(Some(packet_ack == success_ack_commitment))
     }
 
     /// Validate according to the message in IBC VP
