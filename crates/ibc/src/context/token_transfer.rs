@@ -25,8 +25,8 @@ pub struct TokenTransferContext<C>
 where
     C: IbcCommonContext,
 {
-    inner: Rc<RefCell<C>>,
-    verifiers: Rc<RefCell<BTreeSet<Address>>>,
+    pub(crate) inner: Rc<RefCell<C>>,
+    pub(crate) verifiers: Rc<RefCell<BTreeSet<Address>>>,
     is_shielded: bool,
 }
 
@@ -47,7 +47,7 @@ where
     }
 
     /// Insert a verifier address whose VP will verify the tx.
-    fn insert_verifier(&mut self, addr: &Address) {
+    pub(crate) fn insert_verifier(&mut self, addr: &Address) {
         self.verifiers.borrow_mut().insert(addr.clone());
     }
 
