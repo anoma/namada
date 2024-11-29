@@ -283,9 +283,28 @@ pub async fn submit_custom<N: Namada>(
 where
     <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
-    let (tx, signing_data) = args.build(namada).await?;
+    let (mut tx, signing_data) = args.build(namada).await?;
 
-    if args.tx.dump_tx || args.tx.dump_wrapper_tx {
+    if args.tx.dump_tx {
+        return tx::dump_tx(namada.io(), &args.tx, tx);
+    }
+    if args.tx.dump_wrapper_tx {
+        // Attach the provided inner signatures to the tx (if any)
+        let signatures = args.tx.signatures.iter().try_fold(
+            vec![],
+            |mut acc, bytes| -> Result<Vec<_>, error::Error> {
+                let sig = tx::SignatureIndex::try_from_json_bytes(bytes)
+                    .map_err(|err| {
+                        error::Error::Encode(error::EncodingError::Serde(
+                            err.to_string(),
+                        ))
+                    })?;
+                acc.push(sig);
+                Ok(acc)
+            },
+        )?;
+        tx.add_signatures(signatures);
+
         return tx::dump_tx(namada.io(), &args.tx, tx);
     }
 
