@@ -15,7 +15,7 @@ if [ "$REPO_ROOT" != "$PWD" ]; then
 fi
 
 VERSION="$1"
-TAG_NAME="v$1"
+TAG_NAME="libs-v$1" # prefixed to distinguish from bins release
 
 # start from a clean build
 git clean -fxd
@@ -23,7 +23,7 @@ git clean -fxd
 # update the main workspace crate versions (1 commit)
 HASH_BEFORE=$(git rev-parse HEAD)
 cargo release version --execute $VERSION
-git commit -am "Namada $VERSION"
+git commit -am "Namada libs $VERSION"
 HASH_AFTER=$(git rev-parse HEAD)
 
 # update the wasm workspace crate versions (1 fixup)
