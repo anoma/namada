@@ -34,7 +34,7 @@ use zeroize::Zeroizing;
 pub use self::derivation_path::{DerivationPath, DerivationPathError};
 pub use self::keys::{
     DatedKeypair, DatedSpendingKey, DatedViewingKey, DecryptionError,
-    StoredKeypair,
+    StoreSpendingKey, StoredKeypair,
 };
 pub use self::store::{ConfirmationResponse, ValidatorData, ValidatorKeys};
 use crate::store::{derive_hd_secret_key, derive_hd_spending_key};
@@ -520,7 +520,7 @@ impl<U> Wallet<U> {
     /// Get all known viewing keys by their alias
     pub fn get_spending_keys(
         &self,
-    ) -> HashMap<String, &StoredKeypair<ExtendedSpendingKey>> {
+    ) -> HashMap<String, &StoredKeypair<StoreSpendingKey>> {
         self.store
             .get_spending_keys()
             .iter()
@@ -905,7 +905,7 @@ impl<U: WalletIo> Wallet<U> {
             .ok_or_else(|| {
             FindKeyError::KeyNotFound(alias_pkh_or_pk.as_ref().to_string())
         })?;
-        Self::decrypt_stored_key::<_>(
+        Self::decrypt_stored_key::<_, _>(
             &mut self.decrypted_key_cache,
             stored_key,
             alias_pkh_or_pk.into(),
@@ -967,7 +967,7 @@ impl<U: WalletIo> Wallet<U> {
             .ok_or_else(|| {
                 FindKeyError::KeyNotFound(alias.as_ref().to_string())
             })?;
-        Self::decrypt_stored_key::<_>(
+        Self::decrypt_stored_key::<_, _>(
             &mut self.decrypted_spendkey_cache,
             stored_spendkey,
             alias.into(),
@@ -1049,13 +1049,14 @@ impl<U: WalletIo> Wallet<U> {
     /// supplied, then interactively prompt for password and if successfully
     /// decrypted, store it in a cache.
     fn decrypt_stored_key<
-        T: FromStr + Display + BorshSerialize + BorshDeserialize + Clone,
+        V: Clone,
+        T: FromStr + Display + BorshSerialize + BorshDeserialize + Clone + Into<V>,
     >(
-        decrypted_key_cache: &mut HashMap<Alias, T>,
+        decrypted_key_cache: &mut HashMap<Alias, V>,
         stored_key: &StoredKeypair<T>,
         alias: Alias,
         password: Option<Zeroizing<String>>,
-    ) -> Result<T, FindKeyError>
+    ) -> Result<V, FindKeyError>
     where
         <T as std::str::FromStr>::Err: Display,
     {
@@ -1084,13 +1085,13 @@ impl<U: WalletIo> Wallet<U> {
                 }
                 .map_err(FindKeyError::KeyDecryptionError)?;
 
-                decrypted_key_cache.insert(alias.clone(), key);
+                decrypted_key_cache.insert(alias.clone(), key.into());
                 decrypted_key_cache
                     .get(&alias)
                     .cloned()
                     .ok_or_else(|| FindKeyError::KeyNotFound(alias.to_string()))
             }
-            StoredKeypair::Raw(raw) => Ok(raw.clone()),
+            StoredKeypair::Raw(raw) => Ok(raw.clone().into()),
         }
     }
 
