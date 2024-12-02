@@ -32,7 +32,7 @@ where
     C: IbcCommonContext + Debug,
     Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>,
 {
-    PacketForwardMiddleware::next(PfmTransferModule {
+    PacketForwardMiddleware::wrap(PfmTransferModule {
         transfer_module: TransferModule::new(ctx, verifiers),
         _phantom: PhantomData,
     })
