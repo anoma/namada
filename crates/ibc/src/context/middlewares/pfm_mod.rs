@@ -225,7 +225,23 @@ where
         packet: &Packet,
         relayer: &Signer,
     ) -> (ModuleExtras, Option<Acknowledgement>) {
-        self.transfer_module.on_recv_packet_execute(packet, relayer)
+        let Ok(packet_data) =
+            serde_json::from_slice::<PacketData>(&packet.data)
+        else {
+            return self
+                .transfer_module
+                .on_recv_packet_execute(packet, relayer);
+        };
+
+        if crate::is_packet_forward(&packet_data) {
+            self.transfer_module.ctx.enable_parse_addr_as_governance();
+            let ret =
+                self.transfer_module.on_recv_packet_execute(packet, relayer);
+            self.transfer_module.ctx.disable_parse_addr_as_governance();
+            ret
+        } else {
+            self.transfer_module.on_recv_packet_execute(packet, relayer)
+        }
     }
 
     fn on_acknowledgement_packet_validate(

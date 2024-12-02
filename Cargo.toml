@@ -119,10 +119,10 @@ fs_extra = "1.2.0"
 futures = "0.3"
 git2 = { version = "0.18.1", default-features = false }
 # branch tiago/optional-ack
-ibc = { git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "aa229566e6bb688cc2626dab276c3849abc0c583", features = ["serde"] }
-ibc-derive = { git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "aa229566e6bb688cc2626dab276c3849abc0c583" }
-ibc-middleware-packet-forward = { git = "https://github.com/heliaxdev/ibc-middleware", tag = "pfm/v0.6.0", features = ["borsh"] }
-ibc-testkit = { git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "aa229566e6bb688cc2626dab276c3849abc0c583", default-features = false }
+ibc = { git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "38489943c4e75206eaffeeeec6153c039c2499d1", features = ["serde"] }
+ibc-derive = { git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "38489943c4e75206eaffeeeec6153c039c2499d1" }
+ibc-middleware-packet-forward = { git = "https://github.com/heliaxdev/ibc-middleware", tag = "pfm/v0.8.0", features = ["borsh"] }
+ibc-testkit = { git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "38489943c4e75206eaffeeeec6153c039c2499d1", default-features = false }
 ics23 = "0.12.0"
 usize-set = { version = "0.10.3", features = ["serialize-borsh", "serialize-serde"] }
 indexmap = { git = "https://github.com/heliaxdev/indexmap", tag = "2.2.4-heliax-1", features = ["borsh-schema", "serde"] }
