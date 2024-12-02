@@ -80,6 +80,7 @@ use ibc::core::host::types::identifiers::{ChannelId, PortId, Sequence};
 use ibc::core::router::types::error::RouterError;
 use ibc::primitives::proto::Any;
 pub use ibc::*;
+use ibc_middleware_packet_forward::PacketMetadata;
 use masp_primitives::transaction::Transaction as MaspTransaction;
 pub use msg::*;
 use namada_core::address::{self, Address};
@@ -793,6 +794,10 @@ where
     }
 }
 
+fn is_packet_forward(data: &PacketData) -> bool {
+    serde_json::from_str::<PacketMetadata>(data.memo.as_ref()).is_ok()
+}
+
 // Extract the involved namada address from the packet (either sender or
 // receiver) to trigger its vp. Returns None if an address could not be found
 fn get_envelope_verifier(
@@ -802,9 +807,14 @@ fn get_envelope_verifier(
         MsgEnvelope::Packet(PacketMsg::Recv(msg)) => {
             match msg.packet.port_id_on_b.as_str() {
                 FT_PORT_ID_STR => {
-                    serde_json::from_slice::<PacketData>(&msg.packet.data)
-                        .ok()
-                        .map(|packet_data| packet_data.receiver)
+                    let packet_data =
+                        serde_json::from_slice::<PacketData>(&msg.packet.data)
+                            .ok()?;
+                    if is_packet_forward(&packet_data) {
+                        None
+                    } else {
+                        Some(packet_data.receiver)
+                    }
                 }
                 NFT_PORT_ID_STR => {
                     serde_json::from_slice::<NftPacketData>(&msg.packet.data)
