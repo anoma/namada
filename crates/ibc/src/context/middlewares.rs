@@ -1,5 +1,8 @@
 //! Middleware entry points on Namada.
 
+pub mod pfm_mod;
+// mod crossroads_mod;
+
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::fmt::Debug;
@@ -9,7 +12,7 @@ use std::rc::Rc;
 use ibc_middleware_packet_forward::PacketForwardMiddleware;
 use namada_core::address::Address;
 
-use crate::context::pfm_mod::PfmTransferModule;
+use self::pfm_mod::PfmTransferModule;
 use crate::context::transfer_mod::TransferModule;
 use crate::{IbcCommonContext, IbcStorageContext};
 
