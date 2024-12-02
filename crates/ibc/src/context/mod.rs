@@ -6,7 +6,6 @@ pub mod execution;
 pub mod middlewares;
 pub mod nft_transfer;
 pub mod nft_transfer_mod;
-pub mod pfm_mod;
 pub mod router;
 pub mod storage;
 pub mod token_transfer;
