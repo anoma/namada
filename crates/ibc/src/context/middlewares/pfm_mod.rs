@@ -24,10 +24,10 @@ use ibc::core::host::types::identifiers::{
     ChannelId, ConnectionId, PortId, Sequence,
 };
 use ibc::core::router::module::Module;
-use ibc::core::router::types::module::{ModuleExtras, ModuleId};
+use ibc::core::router::types::module::ModuleExtras;
 use ibc::primitives::Signer;
 use ibc_middleware_packet_forward::{
-    InFlightPacket, InFlightPacketKey, PacketForwardMiddleware, PfmContext,
+    InFlightPacket, InFlightPacketKey, PfmContext,
 };
 use namada_core::address::{IBC as IBC_ADDRESS, MULTITOKEN};
 use namada_state::{StorageRead, StorageWrite};
@@ -35,10 +35,7 @@ use namada_state::{StorageRead, StorageWrite};
 use crate::context::transfer_mod::TransferModule;
 use crate::context::IbcContext;
 use crate::storage::inflight_packet_key;
-use crate::{
-    Error, IbcCommonContext, IbcStorageContext, ModuleWrapper,
-    TokenTransferContext,
-};
+use crate::{Error, IbcCommonContext, IbcStorageContext, TokenTransferContext};
 
 /// A wrapper around an IBC transfer module necessary to
 /// build execution contexts. This allows us to implement
@@ -470,26 +467,5 @@ where
         let mut ctx = self.transfer_module.ctx.inner.borrow_mut();
         let key = inflight_packet_key(key);
         ctx.storage_mut().delete(&key).map_err(Error::Storage)
-    }
-}
-
-impl<T> ModuleWrapper for PacketForwardMiddleware<T>
-where
-    T: Module + PfmContext,
-{
-    fn as_module(&self) -> &dyn Module {
-        self
-    }
-
-    fn as_module_mut(&mut self) -> &mut dyn Module {
-        self
-    }
-
-    fn module_id(&self) -> ModuleId {
-        ModuleId::new(ibc::apps::transfer::types::MODULE_ID_STR.to_string())
-    }
-
-    fn port_id(&self) -> PortId {
-        PortId::transfer()
     }
 }

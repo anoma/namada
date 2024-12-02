@@ -9,7 +9,10 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
-use ibc_middleware_packet_forward::PacketForwardMiddleware;
+use ibc::core::host::types::identifiers::PortId;
+use ibc::core::router::module::Module;
+use ibc::core::router::types::module::ModuleId;
+use ibc_middleware_packet_forward::{PacketForwardMiddleware, PfmContext};
 use namada_core::address::Address;
 
 use self::pfm_mod::PfmTransferModule;
@@ -33,4 +36,26 @@ where
         transfer_module: TransferModule::new(ctx, verifiers),
         _phantom: PhantomData,
     })
+}
+
+impl<C, Params> crate::ModuleWrapper for TransferMiddlewares<C, Params>
+where
+    C: IbcCommonContext + Debug,
+    PfmTransferModule<C, Params>: PfmContext,
+{
+    fn as_module(&self) -> &dyn Module {
+        self
+    }
+
+    fn as_module_mut(&mut self) -> &mut dyn Module {
+        self
+    }
+
+    fn module_id(&self) -> ModuleId {
+        ModuleId::new(ibc::apps::transfer::types::MODULE_ID_STR.to_string())
+    }
+
+    fn port_id(&self) -> PortId {
+        PortId::transfer()
+    }
 }
