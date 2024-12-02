@@ -12,6 +12,7 @@ use ibc::apps::transfer::types::{Memo, PrefixedCoin, PrefixedDenom};
 use ibc::core::channel::types::error::ChannelError;
 use ibc::core::handler::types::error::ContextError;
 use ibc::core::host::types::identifiers::{ChannelId, PortId};
+use ibc::core::primitives::Signer;
 use namada_core::address::{Address, InternalAddress, MASP};
 use namada_core::token::Amount;
 use namada_core::uint::Uint;
@@ -28,6 +29,7 @@ where
     pub(crate) inner: Rc<RefCell<C>>,
     pub(crate) verifiers: Rc<RefCell<BTreeSet<Address>>>,
     is_shielded: bool,
+    parse_addr_as_governance: bool,
 }
 
 impl<C> TokenTransferContext<C>
@@ -43,12 +45,23 @@ where
             inner,
             verifiers,
             is_shielded: false,
+            parse_addr_as_governance: false,
         }
     }
 
     /// Insert a verifier address whose VP will verify the tx.
     pub(crate) fn insert_verifier(&mut self, addr: &Address) {
         self.verifiers.borrow_mut().insert(addr.clone());
+    }
+
+    /// Enable parsing ibc signers as the governance address
+    pub fn enable_parse_addr_as_governance(&mut self) {
+        self.parse_addr_as_governance = true;
+    }
+
+    /// Disable parsing ibc signers as the governance address
+    pub fn disable_parse_addr_as_governance(&mut self) {
+        self.parse_addr_as_governance = false;
     }
 
     /// Set to enable a shielded transfer
@@ -178,6 +191,24 @@ where
     C: IbcCommonContext,
 {
     type AccountId = Address;
+
+    fn sender_account_from_signer(
+        &self,
+        signer: &Signer,
+    ) -> Option<Self::AccountId> {
+        Address::decode(signer.as_ref()).ok()
+    }
+
+    fn receiver_account_from_signer(
+        &self,
+        signer: &Signer,
+    ) -> Option<Self::AccountId> {
+        if self.parse_addr_as_governance {
+            Some(namada_core::address::GOV)
+        } else {
+            Address::try_from(signer).ok()
+        }
+    }
 
     fn get_port(&self) -> Result<PortId, TokenTransferError> {
         Ok(PortId::transfer())

@@ -2560,7 +2560,7 @@ dependencies = [
 [[package]]
 name = "ibc"
 version = "0.54.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=aa229566e6bb688cc2626dab276c3849abc0c583#aa229566e6bb688cc2626dab276c3849abc0c583"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38489943c4e75206eaffeeeec6153c039c2499d1#38489943c4e75206eaffeeeec6153c039c2499d1"
 dependencies = [
  "ibc-apps",
  "ibc-clients",
@@ -2573,7 +2573,7 @@ dependencies = [
 [[package]]
 name = "ibc-app-nft-transfer"
 version = "0.54.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=aa229566e6bb688cc2626dab276c3849abc0c583#aa229566e6bb688cc2626dab276c3849abc0c583"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38489943c4e75206eaffeeeec6153c039c2499d1#38489943c4e75206eaffeeeec6153c039c2499d1"
 dependencies = [
  "ibc-app-nft-transfer-types",
  "ibc-core",
@@ -2583,7 +2583,7 @@ dependencies = [
 [[package]]
 name = "ibc-app-nft-transfer-types"
 version = "0.54.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=aa229566e6bb688cc2626dab276c3849abc0c583#aa229566e6bb688cc2626dab276c3849abc0c583"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38489943c4e75206eaffeeeec6153c039c2499d1#38489943c4e75206eaffeeeec6153c039c2499d1"
 dependencies = [
  "base64 0.22.1",
  "borsh",
@@ -2604,7 +2604,7 @@ dependencies = [
 [[package]]
 name = "ibc-app-transfer"
 version = "0.54.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=aa229566e6bb688cc2626dab276c3849abc0c583#aa229566e6bb688cc2626dab276c3849abc0c583"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38489943c4e75206eaffeeeec6153c039c2499d1#38489943c4e75206eaffeeeec6153c039c2499d1"
 dependencies = [
  "ibc-app-transfer-types",
  "ibc-core",
@@ -2614,7 +2614,7 @@ dependencies = [
 [[package]]
 name = "ibc-app-transfer-types"
 version = "0.54.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=aa229566e6bb688cc2626dab276c3849abc0c583#aa229566e6bb688cc2626dab276c3849abc0c583"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38489943c4e75206eaffeeeec6153c039c2499d1#38489943c4e75206eaffeeeec6153c039c2499d1"
 dependencies = [
  "borsh",
  "derive_more",
@@ -2632,7 +2632,7 @@ dependencies = [
 [[package]]
 name = "ibc-apps"
 version = "0.54.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=aa229566e6bb688cc2626dab276c3849abc0c583#aa229566e6bb688cc2626dab276c3849abc0c583"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38489943c4e75206eaffeeeec6153c039c2499d1#38489943c4e75206eaffeeeec6153c039c2499d1"
 dependencies = [
  "ibc-app-nft-transfer",
  "ibc-app-transfer",
@@ -2641,7 +2641,7 @@ dependencies = [
 [[package]]
 name = "ibc-client-tendermint"
 version = "0.54.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=aa229566e6bb688cc2626dab276c3849abc0c583#aa229566e6bb688cc2626dab276c3849abc0c583"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38489943c4e75206eaffeeeec6153c039c2499d1#38489943c4e75206eaffeeeec6153c039c2499d1"
 dependencies = [
  "derive_more",
  "ibc-client-tendermint-types",
@@ -2658,7 +2658,7 @@ dependencies = [
 [[package]]
 name = "ibc-client-tendermint-types"
 version = "0.54.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=aa229566e6bb688cc2626dab276c3849abc0c583#aa229566e6bb688cc2626dab276c3849abc0c583"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38489943c4e75206eaffeeeec6153c039c2499d1#38489943c4e75206eaffeeeec6153c039c2499d1"
 dependencies = [
  "displaydoc",
  "ibc-core-client-types",
@@ -2675,7 +2675,7 @@ dependencies = [
 [[package]]
 name = "ibc-client-wasm-types"
 version = "0.54.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=aa229566e6bb688cc2626dab276c3849abc0c583#aa229566e6bb688cc2626dab276c3849abc0c583"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38489943c4e75206eaffeeeec6153c039c2499d1#38489943c4e75206eaffeeeec6153c039c2499d1"
 dependencies = [
  "base64 0.22.1",
  "displaydoc",
@@ -2689,7 +2689,7 @@ dependencies = [
 [[package]]
 name = "ibc-clients"
 version = "0.54.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=aa229566e6bb688cc2626dab276c3849abc0c583#aa229566e6bb688cc2626dab276c3849abc0c583"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38489943c4e75206eaffeeeec6153c039c2499d1#38489943c4e75206eaffeeeec6153c039c2499d1"
 dependencies = [
  "ibc-client-tendermint",
  "ibc-client-wasm-types",
@@ -2698,7 +2698,7 @@ dependencies = [
 [[package]]
 name = "ibc-core"
 version = "0.54.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=aa229566e6bb688cc2626dab276c3849abc0c583#aa229566e6bb688cc2626dab276c3849abc0c583"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38489943c4e75206eaffeeeec6153c039c2499d1#38489943c4e75206eaffeeeec6153c039c2499d1"
 dependencies = [
  "ibc-core-channel",
  "ibc-core-client",
@@ -2714,7 +2714,7 @@ dependencies = [
 [[package]]
 name = "ibc-core-channel"
 version = "0.54.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=aa229566e6bb688cc2626dab276c3849abc0c583#aa229566e6bb688cc2626dab276c3849abc0c583"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38489943c4e75206eaffeeeec6153c039c2499d1#38489943c4e75206eaffeeeec6153c039c2499d1"
 dependencies = [
  "ibc-core-channel-types",
  "ibc-core-client",
@@ -2729,7 +2729,7 @@ dependencies = [
 [[package]]
 name = "ibc-core-channel-types"
 version = "0.54.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=aa229566e6bb688cc2626dab276c3849abc0c583#aa229566e6bb688cc2626dab276c3849abc0c583"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38489943c4e75206eaffeeeec6153c039c2499d1#38489943c4e75206eaffeeeec6153c039c2499d1"
 dependencies = [
  "borsh",
  "derive_more",
@@ -2752,7 +2752,7 @@ dependencies = [
 [[package]]
 name = "ibc-core-client"
 version = "0.54.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=aa229566e6bb688cc2626dab276c3849abc0c583#aa229566e6bb688cc2626dab276c3849abc0c583"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38489943c4e75206eaffeeeec6153c039c2499d1#38489943c4e75206eaffeeeec6153c039c2499d1"
 dependencies = [
  "ibc-core-client-context",
  "ibc-core-client-types",
@@ -2765,7 +2765,7 @@ dependencies = [
 [[package]]
 name = "ibc-core-client-context"
 version = "0.54.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=aa229566e6bb688cc2626dab276c3849abc0c583#aa229566e6bb688cc2626dab276c3849abc0c583"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38489943c4e75206eaffeeeec6153c039c2499d1#38489943c4e75206eaffeeeec6153c039c2499d1"
 dependencies = [
  "derive_more",
  "displaydoc",
@@ -2781,7 +2781,7 @@ dependencies = [
 [[package]]
 name = "ibc-core-client-types"
 version = "0.54.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=aa229566e6bb688cc2626dab276c3849abc0c583#aa229566e6bb688cc2626dab276c3849abc0c583"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38489943c4e75206eaffeeeec6153c039c2499d1#38489943c4e75206eaffeeeec6153c039c2499d1"
 dependencies = [
  "borsh",
  "derive_more",
@@ -2801,7 +2801,7 @@ dependencies = [
 [[package]]
 name = "ibc-core-commitment-types"
 version = "0.54.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=aa229566e6bb688cc2626dab276c3849abc0c583#aa229566e6bb688cc2626dab276c3849abc0c583"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38489943c4e75206eaffeeeec6153c039c2499d1#38489943c4e75206eaffeeeec6153c039c2499d1"
 dependencies = [
  "borsh",
  "derive_more",
@@ -2820,7 +2820,7 @@ dependencies = [
 [[package]]
 name = "ibc-core-connection"
 version = "0.54.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=aa229566e6bb688cc2626dab276c3849abc0c583#aa229566e6bb688cc2626dab276c3849abc0c583"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38489943c4e75206eaffeeeec6153c039c2499d1#38489943c4e75206eaffeeeec6153c039c2499d1"
 dependencies = [
  "ibc-client-wasm-types",
  "ibc-core-client",
@@ -2834,7 +2834,7 @@ dependencies = [
 [[package]]
 name = "ibc-core-connection-types"
 version = "0.54.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=aa229566e6bb688cc2626dab276c3849abc0c583#aa229566e6bb688cc2626dab276c3849abc0c583"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38489943c4e75206eaffeeeec6153c039c2499d1#38489943c4e75206eaffeeeec6153c039c2499d1"
 dependencies = [
  "borsh",
  "derive_more",
@@ -2855,7 +2855,7 @@ dependencies = [
 [[package]]
 name = "ibc-core-handler"
 version = "0.54.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=aa229566e6bb688cc2626dab276c3849abc0c583#aa229566e6bb688cc2626dab276c3849abc0c583"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38489943c4e75206eaffeeeec6153c039c2499d1#38489943c4e75206eaffeeeec6153c039c2499d1"
 dependencies = [
  "ibc-core-channel",
  "ibc-core-client",
@@ -2870,7 +2870,7 @@ dependencies = [
 [[package]]
 name = "ibc-core-handler-types"
 version = "0.54.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=aa229566e6bb688cc2626dab276c3849abc0c583#aa229566e6bb688cc2626dab276c3849abc0c583"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38489943c4e75206eaffeeeec6153c039c2499d1#38489943c4e75206eaffeeeec6153c039c2499d1"
 dependencies = [
  "borsh",
  "derive_more",
@@ -2894,7 +2894,7 @@ dependencies = [
 [[package]]
 name = "ibc-core-host"
 version = "0.54.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=aa229566e6bb688cc2626dab276c3849abc0c583#aa229566e6bb688cc2626dab276c3849abc0c583"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38489943c4e75206eaffeeeec6153c039c2499d1#38489943c4e75206eaffeeeec6153c039c2499d1"
 dependencies = [
  "derive_more",
  "displaydoc",
@@ -2912,7 +2912,7 @@ dependencies = [
 [[package]]
 name = "ibc-core-host-cosmos"
 version = "0.54.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=aa229566e6bb688cc2626dab276c3849abc0c583#aa229566e6bb688cc2626dab276c3849abc0c583"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38489943c4e75206eaffeeeec6153c039c2499d1#38489943c4e75206eaffeeeec6153c039c2499d1"
 dependencies = [
  "derive_more",
  "displaydoc",
@@ -2935,7 +2935,7 @@ dependencies = [
 [[package]]
 name = "ibc-core-host-types"
 version = "0.54.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=aa229566e6bb688cc2626dab276c3849abc0c583#aa229566e6bb688cc2626dab276c3849abc0c583"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38489943c4e75206eaffeeeec6153c039c2499d1#38489943c4e75206eaffeeeec6153c039c2499d1"
 dependencies = [
  "borsh",
  "derive_more",
@@ -2950,7 +2950,7 @@ dependencies = [
 [[package]]
 name = "ibc-core-router"
 version = "0.54.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=aa229566e6bb688cc2626dab276c3849abc0c583#aa229566e6bb688cc2626dab276c3849abc0c583"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38489943c4e75206eaffeeeec6153c039c2499d1#38489943c4e75206eaffeeeec6153c039c2499d1"
 dependencies = [
  "derive_more",
  "displaydoc",
@@ -2964,7 +2964,7 @@ dependencies = [
 [[package]]
 name = "ibc-core-router-types"
 version = "0.54.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=aa229566e6bb688cc2626dab276c3849abc0c583#aa229566e6bb688cc2626dab276c3849abc0c583"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38489943c4e75206eaffeeeec6153c039c2499d1#38489943c4e75206eaffeeeec6153c039c2499d1"
 dependencies = [
  "borsh",
  "derive_more",
@@ -2983,7 +2983,7 @@ dependencies = [
 [[package]]
 name = "ibc-derive"
 version = "0.8.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=aa229566e6bb688cc2626dab276c3849abc0c583#aa229566e6bb688cc2626dab276c3849abc0c583"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38489943c4e75206eaffeeeec6153c039c2499d1#38489943c4e75206eaffeeeec6153c039c2499d1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2992,8 +2992,8 @@ dependencies = [
 
 [[package]]
 name = "ibc-middleware-packet-forward"
-version = "0.6.0"
-source = "git+https://github.com/heliaxdev/ibc-middleware?tag=pfm/v0.6.0#ca824cfbe550c529d30bf27a97026dd0a058cfdf"
+version = "0.8.0"
+source = "git+https://github.com/heliaxdev/ibc-middleware?tag=pfm/v0.8.0#9c4a410063df8562c726c76009ff08b4e5a1894a"
 dependencies = [
  "borsh",
  "dur",
@@ -3012,7 +3012,7 @@ dependencies = [
 [[package]]
 name = "ibc-primitives"
 version = "0.54.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=aa229566e6bb688cc2626dab276c3849abc0c583#aa229566e6bb688cc2626dab276c3849abc0c583"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38489943c4e75206eaffeeeec6153c039c2499d1#38489943c4e75206eaffeeeec6153c039c2499d1"
 dependencies = [
  "borsh",
  "derive_more",
@@ -3052,7 +3052,7 @@ dependencies = [
 [[package]]
 name = "ibc-query"
 version = "0.54.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=aa229566e6bb688cc2626dab276c3849abc0c583#aa229566e6bb688cc2626dab276c3849abc0c583"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38489943c4e75206eaffeeeec6153c039c2499d1#38489943c4e75206eaffeeeec6153c039c2499d1"
 dependencies = [
  "displaydoc",
  "ibc",
@@ -3063,7 +3063,7 @@ dependencies = [
 [[package]]
 name = "ibc-testkit"
 version = "0.54.0"
-source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=aa229566e6bb688cc2626dab276c3849abc0c583#aa229566e6bb688cc2626dab276c3849abc0c583"
+source = "git+https://github.com/heliaxdev/cosmos-ibc-rs?rev=38489943c4e75206eaffeeeec6153c039c2499d1#38489943c4e75206eaffeeeec6153c039c2499d1"
 dependencies = [
  "basecoin-store",
  "derive_more",
