@@ -575,6 +575,7 @@ impl<U: WalletIo> Wallet<U> {
         alias: String,
         alias_force: bool,
         birthday: Option<BlockHeight>,
+        ledger_zip32: bool,
         derivation_path: DerivationPath,
         mnemonic_passphrase: Option<(Mnemonic, Zeroizing<String>)>,
         prompt_bip39_passphrase: bool,
@@ -593,21 +594,27 @@ impl<U: WalletIo> Wallet<U> {
                 (mnemonic, passphrase)
             };
         let seed = Seed::new(&mnemonic, &passphrase);
-        // Path to obtain the ZIP32 seed
-        let zip32_seed_path =
-            DerivationPath::default_for_transparent_scheme(SchemeType::Ed25519);
-        // Obtain the ZIP32 seed using SLIP10
-        let seed = derive_hd_secret_key(
-            SchemeType::Ed25519,
-            seed.as_bytes(),
-            zip32_seed_path,
-        )
-        .try_to_sk::<ed25519::SecretKey>()
-        .expect("Expected Ed25519 key")
-        .0
-        .to_bytes();
+        let seed = if ledger_zip32 {
+            // Path to obtain the ZIP32 seed
+            let zip32_seed_path =
+                DerivationPath::default_for_transparent_scheme(
+                    SchemeType::Ed25519,
+                );
+            // Obtain the ZIP32 seed using SLIP10
+            &derive_hd_secret_key(
+                SchemeType::Ed25519,
+                seed.as_bytes(),
+                zip32_seed_path,
+            )
+            .try_to_sk::<ed25519::SecretKey>()
+            .expect("Expected Ed25519 key")
+            .0
+            .to_bytes()[..]
+        } else {
+            seed.as_bytes()
+        };
         // Now ZIP32 derive the extended spending key from the new seed
-        let spend_key = derive_hd_spending_key(&seed, derivation_path.clone());
+        let spend_key = derive_hd_spending_key(seed, derivation_path.clone());
 
         self.insert_spending_key(
             alias,
