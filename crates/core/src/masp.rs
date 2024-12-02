@@ -539,7 +539,7 @@ pub enum TransferSource {
     /// A transfer coming from a transparent address
     Address(Address),
     /// A transfer coming from a shielded address
-    ExtendedSpendingKey(PseudoExtendedKey),
+    ExtendedKey(PseudoExtendedKey),
 }
 
 impl TransferSource {
@@ -549,14 +549,14 @@ impl TransferSource {
             Self::Address(x) => x.clone(),
             // An ExtendedSpendingKey for a source effectively means that
             // assets will be drawn from the MASP
-            Self::ExtendedSpendingKey(_) => MASP,
+            Self::ExtendedKey(_) => MASP,
         }
     }
 
     /// Get the contained ExtendedSpendingKey contained, if any
     pub fn spending_key(&self) -> Option<PseudoExtendedKey> {
         match self {
-            Self::ExtendedSpendingKey(x) => Some(*x),
+            Self::ExtendedKey(x) => Some(*x),
             _ => None,
         }
     }
@@ -564,7 +564,7 @@ impl TransferSource {
     /// Get the contained ExtendedSpendingKey contained, if any
     pub fn spending_key_mut(&mut self) -> Option<&mut PseudoExtendedKey> {
         match self {
-            Self::ExtendedSpendingKey(x) => Some(x),
+            Self::ExtendedKey(x) => Some(x),
             _ => None,
         }
     }
@@ -590,7 +590,7 @@ impl Display for TransferSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Address(x) => x.fmt(f),
-            Self::ExtendedSpendingKey(x) => {
+            Self::ExtendedKey(x) => {
                 ExtendedViewingKey::from(x.to_viewing_key()).fmt(f)
             }
         }
@@ -829,8 +829,8 @@ mod test {
 
         let sk = masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]);
         assert_eq!(
-            ExtendedSpendingKey::from(sk).to_string(),
-            TransferSource::ExtendedSpendingKey(sk.into()).to_string()
+            ExtendedViewingKey::from(sk.to_viewing_key()).to_string(),
+            TransferSource::ExtendedKey(sk.into()).to_string()
         );
     }
 
@@ -841,7 +841,7 @@ mod test {
                 .address();
         assert_eq!(addr.unwrap(), address::testing::established_address_1());
 
-        let addr = TransferSource::ExtendedSpendingKey(
+        let addr = TransferSource::ExtendedKey(
             masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]).into(),
         )
         .address();
@@ -858,7 +858,7 @@ mod test {
             TAddrData::Addr(address::testing::established_address_1())
         );
 
-        let addr = TransferSource::ExtendedSpendingKey(
+        let addr = TransferSource::ExtendedKey(
             masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]).into(),
         )
         .address();
@@ -875,7 +875,7 @@ mod test {
         );
 
         let sk = masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]);
-        let source = TransferSource::ExtendedSpendingKey(sk.into());
+        let source = TransferSource::ExtendedKey(sk.into());
         assert_eq!(source.effective_address(), MASP);
     }
 
