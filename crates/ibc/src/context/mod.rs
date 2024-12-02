@@ -3,6 +3,7 @@
 pub mod client;
 pub mod common;
 pub mod execution;
+pub mod middlewares;
 pub mod nft_transfer;
 pub mod nft_transfer_mod;
 pub mod pfm_mod;

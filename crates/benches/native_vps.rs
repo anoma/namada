@@ -24,7 +24,7 @@ use namada_apps_lib::governance::pgf::storage::steward::StewardDetail;
 use namada_apps_lib::governance::storage::proposal::ProposalType;
 use namada_apps_lib::governance::storage::vote::ProposalVote;
 use namada_apps_lib::governance::{InitProposalData, VoteProposalData};
-use namada_apps_lib::ibc::context::pfm_mod::PfmTransferModule;
+use namada_apps_lib::ibc::context::middlewares::create_transfer_middlewares;
 use namada_apps_lib::ibc::core::channel::types::channel::Order;
 use namada_apps_lib::ibc::core::channel::types::msgs::MsgChannelOpenInit;
 use namada_apps_lib::ibc::core::channel::types::Version as ChannelVersion;
@@ -1724,7 +1724,7 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
             );
         actions.set_validation_params(ibc.validation_params().unwrap());
 
-        let module = PfmTransferModule::<_, parameters::Store<_>>::wrap(
+        let module = create_transfer_middlewares::<_, parameters::Store<_>>(
             ctx.clone(),
             verifiers,
         );
@@ -1788,7 +1788,7 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
             );
         actions.set_validation_params(ibc.validation_params().unwrap());
 
-        let module = PfmTransferModule::<_, parameters::Store<_>>::wrap(
+        let module = create_transfer_middlewares::<_, parameters::Store<_>>(
             ctx.clone(),
             verifiers,
         );
