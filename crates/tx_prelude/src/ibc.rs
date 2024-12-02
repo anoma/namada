@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use namada_core::address::Address;
 use namada_core::token::Amount;
-use namada_ibc::context::pfm_mod::PfmTransferModule;
+use namada_ibc::context::middlewares::create_transfer_middlewares;
 pub use namada_ibc::event::{IbcEvent, IbcEventType};
 pub use namada_ibc::storage::{
     burn_tokens, client_state_key, is_ibc_key, mint_limit_key, mint_tokens,
@@ -31,7 +31,7 @@ pub fn ibc_actions(
     let ctx = Rc::new(RefCell::new(ctx.clone()));
     let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
     let mut actions = IbcActions::new(ctx.clone(), verifiers.clone());
-    let module = PfmTransferModule::<_, parameters::Store<Ctx>>::wrap(
+    let module = create_transfer_middlewares::<_, parameters::Store<Ctx>>(
         ctx.clone(),
         verifiers,
     );

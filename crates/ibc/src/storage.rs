@@ -13,6 +13,7 @@ use ibc::core::host::types::path::{
     ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath, UpgradeClientStatePath,
     UpgradeConsensusStatePath,
 };
+use ibc_middleware_packet_forward::InFlightPacketKey;
 use namada_core::address::{Address, InternalAddress};
 use namada_core::storage::{DbKeySeg, Key, KeySeg};
 use namada_core::token::Amount;
@@ -646,4 +647,24 @@ pub fn withdraw_key(token: &Address) -> Key {
         // Set as String to avoid checking the token address
         .push(&token.to_string().to_db_key())
         .expect("Cannot obtain a storage key")
+}
+
+/// Get a middleware key prefix.
+pub fn middlewares_prefix() -> Key {
+    const MIDDLEWARES_SUBKEY: &str = "middleware";
+
+    let key: Key = namada_core::address::IBC.to_db_key().into();
+    key.with_segment(MIDDLEWARES_SUBKEY.to_string())
+}
+
+/// Get the Namada storage key associated with the provided
+/// [`InFlightPacketKey`].
+pub fn inflight_packet_key(inflight_packet_key: &InFlightPacketKey) -> Key {
+    const PFM_SUBKEY: &str = "pfm";
+
+    middlewares_prefix()
+        .with_segment(PFM_SUBKEY.to_string())
+        .with_segment(inflight_packet_key.port.to_string())
+        .with_segment(inflight_packet_key.channel.to_string())
+        .with_segment(inflight_packet_key.sequence.to_string())
 }

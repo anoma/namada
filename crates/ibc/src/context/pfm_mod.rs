@@ -1,11 +1,8 @@
 //! Implementation of Packet Forward Middleware on top of the ICS-20
 //! [`TransferModule`].
 
-use std::cell::RefCell;
-use std::collections::BTreeSet;
 use std::fmt::{Debug, Formatter};
 use std::marker::PhantomData;
-use std::rc::Rc;
 
 use ibc::apps::transfer::context::TokenTransferExecutionContext;
 use ibc::apps::transfer::handler::{
@@ -32,31 +29,16 @@ use ibc::primitives::Signer;
 use ibc_middleware_packet_forward::{
     InFlightPacket, InFlightPacketKey, PacketForwardMiddleware, PfmContext,
 };
-use namada_core::address::{Address, IBC as IBC_ADDRESS, MULTITOKEN};
-use namada_core::storage::{self, KeySeg};
+use namada_core::address::{IBC as IBC_ADDRESS, MULTITOKEN};
 use namada_state::{StorageRead, StorageWrite};
 
 use crate::context::transfer_mod::TransferModule;
 use crate::context::IbcContext;
+use crate::storage::inflight_packet_key;
 use crate::{
     Error, IbcCommonContext, IbcStorageContext, ModuleWrapper,
     TokenTransferContext,
 };
-
-const MIDDLEWARES_SUBKEY: &str = "middleware";
-const PFM_SUBKEY: &str = "pfm";
-
-/// Get the Namada storage key associated to the provided `InFlightPacketKey`.
-pub fn get_inflight_packet_key(
-    inflight_packet_key: &InFlightPacketKey,
-) -> storage::Key {
-    let key: storage::Key = IBC_ADDRESS.to_db_key().into();
-    key.with_segment(MIDDLEWARES_SUBKEY.to_string())
-        .with_segment(PFM_SUBKEY.to_string())
-        .with_segment(inflight_packet_key.port.to_string())
-        .with_segment(inflight_packet_key.channel.to_string())
-        .with_segment(inflight_packet_key.sequence.to_string())
-}
 
 /// A wrapper around an IBC transfer module necessary to
 /// build execution contexts. This allows us to implement
@@ -69,22 +51,6 @@ where
     pub transfer_module: TransferModule<C>,
     #[allow(missing_docs)]
     pub _phantom: PhantomData<Params>,
-}
-
-impl<C, Params> PfmTransferModule<C, Params>
-where
-    C: IbcCommonContext + Debug,
-{
-    /// Create a new [`PfmTransferModule`]
-    pub fn wrap(
-        ctx: Rc<RefCell<C>>,
-        verifiers: Rc<RefCell<BTreeSet<Address>>>,
-    ) -> PacketForwardMiddleware<Self> {
-        PacketForwardMiddleware::next(Self {
-            transfer_module: TransferModule::new(ctx, verifiers),
-            _phantom: Default::default(),
-        })
-    }
 }
 
 impl<C: IbcCommonContext + Debug, Params> Debug
@@ -477,7 +443,7 @@ where
     ) -> Result<(), Self::Error> {
         tracing::debug!(?key, ?inflight_packet, "PFM store_inflight_packet");
         let mut ctx = self.transfer_module.ctx.inner.borrow_mut();
-        let key = get_inflight_packet_key(&key);
+        let key = inflight_packet_key(&key);
         ctx.storage_mut()
             .write(&key, inflight_packet)
             .map_err(Error::Storage)
@@ -488,7 +454,7 @@ where
         key: &InFlightPacketKey,
     ) -> Result<Option<InFlightPacket>, Self::Error> {
         let mut ctx = self.transfer_module.ctx.inner.borrow_mut();
-        let key = get_inflight_packet_key(key);
+        let key = inflight_packet_key(key);
         let packet = ctx.storage_mut().read(&key).map_err(Error::Storage);
 
         tracing::debug!(?key, ?packet, "PFM retrieve_inflight_packet");
@@ -502,7 +468,7 @@ where
     ) -> Result<(), Self::Error> {
         tracing::debug!(?key, "PFM delete_inflight_packet");
         let mut ctx = self.transfer_module.ctx.inner.borrow_mut();
-        let key = get_inflight_packet_key(key);
+        let key = inflight_packet_key(key);
         ctx.storage_mut().delete(&key).map_err(Error::Storage)
     }
 }
