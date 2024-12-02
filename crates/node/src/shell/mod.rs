@@ -788,7 +788,7 @@ where
                 self.scheduled_migration
                     .take()
                     .unwrap()
-                    .load()
+                    .load_and_validate()
                     .expect("The scheduled migration is not valid."),
             ),
             _ => None,

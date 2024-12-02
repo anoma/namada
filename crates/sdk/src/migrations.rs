@@ -376,26 +376,22 @@ where
             hash,
             phantom: Default::default(),
         };
-        scheduled_migration.validate()?;
+        scheduled_migration.load_and_validate()?;
         Ok(scheduled_migration)
     }
 
-    pub fn load(&self) -> eyre::Result<DbChanges<D>> {
-        let update_json = self.validate()?;
-        serde_json::from_str(&update_json)
+    pub fn load_and_validate(&self) -> eyre::Result<DbChanges<D>> {
+        let update_json = self.load_bytes_and_validate()?;
+        serde_json::from_slice(&update_json)
             .map_err(|_| eyre!("Could not parse the updates file as json"))
     }
 
-    fn validate(&self) -> eyre::Result<String> {
-        let update_json =
-            std::fs::read_to_string(&self.path).map_err(|_| {
-                eyre!(
-                    "Could not find or read updates file at the specified \
-                     path."
-                )
-            })?;
+    fn load_bytes_and_validate(&self) -> eyre::Result<Vec<u8>> {
+        let update_json = std::fs::read(&self.path).map_err(|_| {
+            eyre!("Could not find or read updates file at the specified path.")
+        })?;
         // validate contents against provided hash
-        if Hash::sha256(update_json.as_bytes()) != self.hash {
+        if Hash::sha256(&update_json) != self.hash {
             Err(eyre!(
                 "Provided hash did not match the contents at the specified \
                  path."
