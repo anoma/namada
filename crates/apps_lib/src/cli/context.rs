@@ -716,14 +716,14 @@ impl ArgFromMutContext for TransferSource {
             .map(Self::Address)
             .or_else(|_| {
                 ExtendedSpendingKey::arg_from_mut_ctx(ctx, raw).map(|x| {
-                    Self::ExtendedSpendingKey(PseudoExtendedKey::from(
+                    Self::ExtendedKey(PseudoExtendedKey::from(
                         MaspExtendedSpendingKey::from(x),
                     ))
                 })
             })
             .or_else(|_| {
                 ExtendedViewingKey::arg_from_mut_ctx(ctx, raw).map(|x| {
-                    Self::ExtendedSpendingKey(PseudoExtendedKey::from(
+                    Self::ExtendedKey(PseudoExtendedKey::from(
                         MaspExtendedViewingKey::from(x),
                     ))
                 })

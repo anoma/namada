@@ -2567,7 +2567,7 @@ pub async fn build_ibc_transfer(
     )
     .await?;
     let (fee_per_gas_unit, updated_balance) =
-        if let TransferSource::ExtendedSpendingKey(_) = args.source {
+        if let TransferSource::ExtendedKey(_) = args.source {
             // MASP fee payment
             (validate_fee(context, &args.tx).await?, None)
         } else {
@@ -3084,7 +3084,7 @@ pub async fn build_shielded_transfer<N: Namada>(
                 .await?;
 
         transfer_data.push(MaspTransferData {
-            source: TransferSource::ExtendedSpendingKey(source.to_owned()),
+            source: TransferSource::ExtendedKey(source.to_owned()),
             target: TransferTarget::PaymentAddress(target.to_owned()),
             token: token.to_owned(),
             amount: validated_amount,
@@ -3370,7 +3370,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
                 .await?;
 
         transfer_data.push(MaspTransferData {
-            source: TransferSource::ExtendedSpendingKey(args.source),
+            source: TransferSource::ExtendedKey(args.source),
             target: TransferTarget::Address(target.to_owned()),
             token: token.to_owned(),
             amount: validated_amount,
@@ -4039,10 +4039,10 @@ async fn get_refund_target(
             )))
         }
         (
-            TransferSource::ExtendedSpendingKey(_),
+            TransferSource::ExtendedKey(_),
             Some(TransferTarget::Address(addr)),
         ) => Ok(Some(addr.clone())),
-        (TransferSource::ExtendedSpendingKey(_), None) => {
+        (TransferSource::ExtendedKey(_), None) => {
             // Generate a new transparent address if it doesn't exist
             let mut rng = OsRng;
             let mut wallet = context.wallet_mut().await;

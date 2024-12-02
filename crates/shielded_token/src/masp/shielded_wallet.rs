@@ -1274,7 +1274,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             if let Some(source) = fee_data.source {
                 source_data.insert(
                     MaspSourceTransferData {
-                        source: TransferSource::ExtendedSpendingKey(source),
+                        source: TransferSource::ExtendedKey(source),
                         token: fee_data.token.clone(),
                     },
                     amount,
@@ -1282,9 +1282,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             }
             target_data.insert(
                 MaspTargetTransferData {
-                    source: fee_data.source.map(|source| {
-                        TransferSource::ExtendedSpendingKey(source)
-                    }),
+                    source: fee_data.source.map(TransferSource::ExtendedKey),
                     target: TransferTarget::Address(fee_data.target),
                     token: fee_data.token,
                 },
