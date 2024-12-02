@@ -553,7 +553,7 @@ impl TransferSource {
         }
     }
 
-    /// Get the contained ExtendedSpendingKey contained, if any
+    /// Get the contained extended key, if any
     pub fn spending_key(&self) -> Option<PseudoExtendedKey> {
         match self {
             Self::ExtendedKey(x) => Some(*x),
@@ -561,7 +561,7 @@ impl TransferSource {
         }
     }
 
-    /// Get the contained ExtendedSpendingKey contained, if any
+    /// Get the contained extended key, if any
     pub fn spending_key_mut(&mut self) -> Option<&mut PseudoExtendedKey> {
         match self {
             Self::ExtendedKey(x) => Some(x),
@@ -569,7 +569,7 @@ impl TransferSource {
         }
     }
 
-    /// Get the contained Address, if any
+    /// Get the contained transparent address, if any
     pub fn address(&self) -> Option<Address> {
         match self {
             Self::Address(x) => Some(x.clone()),
