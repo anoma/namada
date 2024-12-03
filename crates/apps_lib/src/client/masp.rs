@@ -82,6 +82,7 @@ pub async fn syncing<
                 .scanned_tracker(scanned_bar)
                 .applied_tracker(applied_bar)
                 .shutdown_signal(install_shutdown_signal(false))
+                //FIXME: used here
                 .wait_for_last_query_height(args.wait_for_last_query_height)
                 .retry_strategy(args.retry_strategy)
                 .block_batch_size(args.block_batch_size)

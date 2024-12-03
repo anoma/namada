@@ -2808,3 +2808,120 @@ fn test_genesis_manipulation() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_indexer() -> Result<()> {
+    // Lengthen epoch to ensure that a transaction can be constructed and
+    // submitted within the same block. Necessary to ensure that conversion is
+    // not invalidated.
+    let test = setup::network(
+        |mut genesis, base_dir| {
+            genesis.parameters.parameters.epochs_per_year =
+                epochs_per_year_from_min_duration(40);
+            genesis.parameters.parameters.masp_epoch_multiplier = 1;
+            genesis.parameters.parameters.min_num_of_blocks = 1;
+            setup::set_validators(
+                1,
+                genesis,
+                base_dir,
+                default_port_offset,
+                vec![],
+            )
+        },
+        None,
+    )?;
+    // Run all cmds on the first validator
+    let who = Who::Validator(0);
+    set_ethereum_bridge_mode(
+        &test,
+        &test.net.chain_id,
+        who,
+        ethereum_bridge::ledger::Mode::Off,
+        None,
+    );
+
+    // 1. Run the ledger node
+    let _bg_ledger =
+        start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?
+            .background();
+
+    let rpc_address = get_actor_rpc(&test, who);
+    // println!("RPC ADDRESS: {}", rpc_address);
+    wait_for_block_height(&test, &rpc_address, 5, 30)?;
+
+    // add necessary viewing keys to shielded context
+    let mut sync = run_as!(
+        test,
+        who,
+        Bin::Client,
+        vec![
+            "shielded-sync",
+            "--viewing-keys",
+            AA_VIEWING_KEY,
+            "--with-indexer",
+            "http://127.0.0.1:5000/api/v1",
+        ],
+        Some(50),
+    )?;
+    sync.assert_success();
+
+    let mut iter = 1;
+    loop {
+        let epoch = get_epoch(&test, &rpc_address)?;
+        println!("ITERATION: {iter}, EPOCH: {}", epoch);
+        let tx_args = vec![
+            "shield",
+            "--source",
+            ALBERT,
+            "--target",
+            AA_PAYMENT_ADDRESS,
+            "--token",
+            NAM,
+            "--amount",
+            "1",
+            "--gas-payer",
+            CHRISTEL_KEY,
+        ];
+        let mut client =
+        //FIXME: back to timeout 80
+            run_as!(test, Who::Validator(0), Bin::Client, tx_args, Some(40))?;
+        match client.exp_string("epoch is missing from asset type") {
+            Ok(_) => panic!("Found the error I want"),
+            Err(_) => (),
+        }
+        client.assert_success();
+        let after_tx_height = get_height(&test, &rpc_address)?;
+
+        // sleep(5);
+
+        //FIXME: seems like we have no issues with the balance queries in here, only in antithesis
+        //FIXME: does the shieled sync ommand also query the conversion tree? No it does not
+        let mut sync = run_as!(
+            test,
+            who,
+            Bin::Client,
+            vec![
+                "shielded-sync",
+                "--to-height",
+                &after_tx_height.to_string(),
+                //FIXME: check that myabe this option is not geting overriden if we provide a block height in the future compared to the height that the indexer is up to
+                "--wait-for-last-query-height",
+                "--with-indexer",
+                "http://127.0.0.1:5000/api/v1",
+            ],
+            Some(50),
+        )?;
+        sync.assert_success();
+        // let mut query = run_as!(
+        //     test,
+        //     Who::Validator(0),
+        //     Bin::Client,
+        //     &["balance", "--owner", AA_VIEWING_KEY, "--token", "nam"],
+        //     Some(20),
+        // )?;
+        // query.exp_regex(&format!("nam: {}", iter))?;
+        iter += 1;
+    }
+
+    Ok(())
+}

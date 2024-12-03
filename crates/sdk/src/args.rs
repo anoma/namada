@@ -2154,6 +2154,7 @@ pub struct ShieldedSync<C: NamadaTypes = SdkTypes> {
     /// The ledger address
     pub ledger_address: C::ConfigRpcTendermintAddress,
     /// Height to sync up to. Defaults to most recent
+    //FIXME: check this
     pub last_query_height: Option<BlockHeight>,
     /// Spending keys used to determine note ownership
     pub spending_keys: Vec<C::DatedSpendingKey>,
@@ -2165,6 +2166,7 @@ pub struct ShieldedSync<C: NamadaTypes = SdkTypes> {
     /// using data retrieved from the given indexer
     pub with_indexer: Option<C::MaspIndexerAddress>,
     /// Wait for the last query height.
+    //FIXME: lookup usage of this
     pub wait_for_last_query_height: bool,
     /// Maximum number of fetch jobs that will ever
     /// execute concurrently during the shielded sync.

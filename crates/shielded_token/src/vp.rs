@@ -647,6 +647,8 @@ fn validate_transparent_input<A: Authorization>(
         .entry(vin.address)
         .or_insert(ValueSum::zero());
 
+    eprintln!("MASP VP CONVERSION STATE: {:#?}", conversion_state); //FIXME: remove
+    eprintln!("MASP VP ASSET TYPE: {}", vin.asset_type); //FIXME: remove
     match conversion_state.assets.get(&vin.asset_type) {
         // Note how the asset's epoch must be equal to the present: users
         // must never be allowed to backdate transparent inputs to a
@@ -665,9 +667,16 @@ fn validate_transparent_input<A: Authorization>(
         }
         // Maybe the asset type has no attached epoch
         None if changed_balances.tokens.contains_key(&vin.asset_type) => {
+            //FIXME: asset type is somposed of epoch, token, denom and masp digit
+            //FIXME: epoch and token are correct, so issue might be with denom or masp digit. Denom never changes so it's trange that't he problem, the culprit could be the masp digit
+            //FIXME: actually, maybe also the nonce of the asset type? That's computed by the masp library, should be ok
             let (token, denom, digit) =
                 &changed_balances.tokens[&vin.asset_type];
-            // Determine what the asset type would be if it were epoched
+            eprintln!(
+                "MASP VP TOKEN: {}, DENOM: {:#?}, DIGIT: {:#?}",
+                token, denom, digit
+            ); //FIXME: remove
+               // Determine what the asset type would be if it were epoched
             let epoched_asset_type =
                 encode_asset_type(token.clone(), *denom, *digit, Some(epoch))
                     .wrap_err("unable to create asset type")?;
@@ -675,6 +684,7 @@ fn validate_transparent_input<A: Authorization>(
                 // If such an epoched asset type is available in the
                 // conversion tree, then we must reject the unepoched
                 // variant
+                //FIXME: error here, we somehow removed the epoch from the nam asset type, or we attached a future epoch
                 let error =
                     Error::new_const("epoch is missing from asset type");
                 tracing::debug!("{error}");
@@ -988,15 +998,13 @@ mod shielded_token_tests {
             );
 
             // We don't care about the specific error so long as it fails
-            assert!(
-                MaspVp::validate_tx(
-                    &ctx,
-                    &tx.batch_ref_tx(&cmt),
-                    &keys_changed,
-                    &verifiers
-                )
-                .is_err()
-            );
+            assert!(MaspVp::validate_tx(
+                &ctx,
+                &tx.batch_ref_tx(&cmt),
+                &keys_changed,
+                &verifiers
+            )
+            .is_err());
         }
     }
 

@@ -1029,7 +1029,8 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         let epoch = Self::query_masp_epoch(context.client())
             .await
             .map_err(|e| TransferErr::General(e.to_string()))?;
-        // Try to get a seed from env var, if any.
+        eprintln!("MASP EPOCH IN GEN SHIELDED TRANSFER: {}", epoch); //FIXME: remove
+                                                                     // Try to get a seed from env var, if any.
         #[allow(unused_mut)]
         let mut rng = StdRng::from_rng(OsRng).unwrap();
         #[cfg(feature = "testing")]
@@ -1442,6 +1443,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 denom: *denom,
                 position: digit,
             };
+            //FIXME: here we redact the epoch on the asset
             let asset_type = self
                 .get_asset_type(context.client(), &mut pre_asset_type)
                 .await
@@ -1703,10 +1705,18 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         let mut asset_type = decoded
             .encode()
             .map_err(|_| eyre!("unable to create asset type"))?;
+        eprintln!("ASSET DATA: {:#?}", decoded); //FIXME: remove
+        eprintln!("ASSET TYPE: {}", asset_type); //FIXME: remove
         if self.decode_asset_type(client, asset_type).await.is_none() {
+            //FIXME: here we redact the epoch
+            //FIXME: but it seems likewe don't end up here
             // If we fail to decode the epoched asset type, then remove the
             // epoch
             tracing::debug!(
+                "Failed to decode epoched asset type, undating it: {:#?}",
+                decoded
+            );
+            eprintln!(
                 "Failed to decode epoched asset type, undating it: {:#?}",
                 decoded
             );

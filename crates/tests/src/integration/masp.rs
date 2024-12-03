@@ -30,6 +30,7 @@ use crate::e2e::setup::constants::{
     BB_PAYMENT_ADDRESS, BERTHA, BERTHA_KEY, BTC, B_SPENDING_KEY, CHRISTEL,
     CHRISTEL_KEY, C_SPENDING_KEY, ETH, MASP, NAM,
 };
+use crate::e2e::setup::sleep;
 use crate::strings::TX_APPLIED_SUCCESS;
 
 /// Enable masp rewards before some token is shielded,
@@ -1544,11 +1545,8 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(
-        captured.contains(
-            "Estimated native token rewards for the next MASP epoch: 0"
-        )
-    );
+    assert!(captured
+        .contains("Estimated native token rewards for the next MASP epoch: 0"));
 
     // Wait till epoch boundary
     node.next_masp_epoch();
@@ -3165,12 +3163,10 @@ fn expired_masp_tx() -> Result<()> {
                 .as_ref()
                 .expect("Result is supposed to be Ok");
 
-            assert!(
-                inner_tx_result
-                    .vps_result
-                    .rejected_vps
-                    .contains(&namada_sdk::address::MASP)
-            );
+            assert!(inner_tx_result
+                .vps_result
+                .rejected_vps
+                .contains(&namada_sdk::address::MASP));
             assert!(inner_tx_result.vps_result.errors.contains(&(
                 namada_sdk::address::MASP,
                 "Native VP error: MASP transaction is expired".to_string()
@@ -6342,6 +6338,85 @@ fn speculative_context() -> Result<()> {
     });
     assert!(captured.result.is_ok());
     assert!(captured.contains("nam: 180"));
+
+    Ok(())
+}
+
+#[test]
+fn indexer_test() -> Result<()> {
+    // This address doesn't matter for tests. But an argument is required.
+    let validator_one_rpc = "http://127.0.0.1:26567";
+    // Download the shielded pool parameters before starting node
+    let _ = FsShieldedUtils::new(PathBuf::new());
+    let (mut node, _services) = setup::setup()?;
+    _ = node.next_masp_epoch();
+
+    // Sleep to attach indexer
+    sleep(15);
+
+    // Add the relevant viewing keys to the wallet otherwise the shielded
+    // context won't precache the masp data
+    run(
+        &node,
+        Bin::Wallet,
+        vec![
+            "add",
+            "--alias",
+            "alias_a",
+            "--value",
+            AA_VIEWING_KEY,
+            "--unsafe-dont-encrypt",
+        ],
+    )?;
+
+    // Shield some tokens
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "shield",
+                "--source",
+                ALBERT,
+                "--target",
+                AA_PAYMENT_ADDRESS,
+                "--token",
+                NAM,
+                "--amount",
+                "1",
+                "--gas-payer",
+                CHRISTEL_KEY,
+                "--ledger-address",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+    _ = node.next_masp_epoch();
+    // sync shielded context
+    run(
+        &node,
+        Bin::Client,
+        vec!["shielded-sync", "--with-indexer", "http://127.0.0.1:5000"],
+    )?;
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "balance",
+                "--owner",
+                AA_VIEWING_KEY,
+                "--token",
+                NAM,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(captured.contains("nam: 1"));
 
     Ok(())
 }

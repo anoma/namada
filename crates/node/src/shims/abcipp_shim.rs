@@ -102,6 +102,9 @@ impl AbcippShim {
         hash_tx(bytes.as_slice())
     }
 
+    //FIXME: actually it seems like we process one request at a time here, so there should be no way to query the state while we are in the middle of finalize block
+    //FIXME: ah but wait! The changes to the state are not committed until commit phase of ABCI, so the issue could still happen if we go thourgh finalize block, then anser the query for the epoch, commit the block and finally query the conversions! This can actually be a bigger problem! what if we decide to discard the changes brought by finalize block? The state is fine but what happens to InMem????
+    //FIXME: actually I don't think we are supposed to abort finalize block. I think only thing could happen is that we crash at the end of finalize block before committing the storage changes. In this case we should be ok, when we restart wee reload the old state, since we haven't gone through commit we have not dumped the in memory either
     /// Run the shell's blocking loop that receives messages from the
     /// [`AbciService`].
     pub fn run(mut self) {

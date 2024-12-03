@@ -207,6 +207,12 @@ where
             self.in_mem.update_epoch_blocks_delay = None;
 
             // Begin a new epoch
+            //FIXME: here we update the epoch in memory
+            //FIXME: wait but we update the block.epoch, what is that the query instead? We query last_epoch!
+            //FIXME: ok so the bug can happen because at the end of finalize block we have the new conversions and the new block epoch but we have not updated the last_epoch yet which is the one we use to construct masp transactions (and in general the one we query), which gets updated only in the commit phase!
+            //FIXME: this also means that testing this thing is quite hard, modifying finalize block is useless, it should perfectly time the query request to be inserted in between finalzie block and commit
+            //FIXME: ah no but wait this cannot be the bug, we commit the epoch later, for the bug to be there we'd need to commit the epoch before the conversions!
+            //FIXME: unless the updated conversion with the old epoch is still a bug, need to check this
             self.in_mem.block.epoch = self.in_mem.block.epoch.next();
             let EpochDuration {
                 min_num_of_blocks,
@@ -654,6 +660,9 @@ where
             next_epoch_min_start_time: self.in_mem.next_epoch_min_start_time,
             update_epoch_blocks_delay: self.in_mem.update_epoch_blocks_delay,
             address_gen: &self.in_mem.address_gen,
+            //FIXME: conversion state committed here to storage but it's already available for querying before that
+            //FIXME: wait are we sure that we need to wait after the commit call to see the changes to the state instead? Pretty sure yes, cause before commit they only live in the write log and we don't query the write log
+            //FIXME: but do we query the epoch from storage or from memory? Cause if we query it from memory then the bug cannot occur since at the end of finalize block both the epoch and the conversions would be updated
             conversion_state: &self.in_mem.conversion_state,
             ethereum_height: self.in_mem.ethereum_height.as_ref(),
             eth_events_queue: &self.in_mem.eth_events_queue,
@@ -670,6 +679,7 @@ where
             height: self.in_mem.block.height,
             time: header.time,
         });
+        //FIXME: wait do we update the epoch here?
         self.in_mem.last_epoch = self.in_mem.block.epoch;
         // prune old merkle tree stores
         self.prune_merkle_tree_stores(is_full_commit, &mut batch)?;

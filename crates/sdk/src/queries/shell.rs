@@ -246,6 +246,11 @@ where
 {
     // Conversion values are constructed on request
     if let Some(asset) =
+        //FIXME: is it possible that we query this thing while we are busy updating the conversions?
+        //FIXME: since this lives in memory, could we have a data race? it's not a data race per se, but we could first query the epoch the same block it gets update and get the new value. Shortly after we query conversions because the asset is new and we don't have it in cache. But there's a chance the node is still busy updating the conversions, so we don't find it and we end up unepoching the asset
+        //FIXME: double check if the usage of InMem is safe. Technically for writes it should be cause only the protocol (single thread) can update it. There might be cases in which the protocol is updating the InMem and a client is querying it: this could be a problem but I have to check how the node processes incoming rpc calls, is there a lock to the Shell?
+        //FIXME: actually I don't believe this is possible as I'm not sure if the application responds to queries while it's busy in another comet call
+        //FIXME: actually we can recieve concurrent requests! https://cosmos-network.gitbooks.io/cosmos-academy/content/cosmos-for-developers/tendermint/abci-protocol.html
         ctx.state.in_mem().conversion_state.assets.get(&asset_type)
     {
         Ok(Some((

@@ -902,6 +902,8 @@ pub async fn submit_shielding_transfer(
                 if rejected_vps.len() == 1
                     && (vps_errors.contains(&(
                         MASP,
+                        //FIXME: this error here
+                        //FIXME: ah wait but do we print the wron message in case of a wrong epoch? Do we print a missing epoch error?
                         "Native VP error: epoch is missing from asset type"
                             .to_string(),
                     )) || vps_errors.contains(&(

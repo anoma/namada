@@ -509,14 +509,16 @@ where
             }
 
             // Query for the last produced block height
+            //FIXME: is there a chance the indexer updates the last block height but not yet the data contained in it?
             let last_block_height = match self
                 .client
                 .last_block_height()
                 .await
-                .wrap_err("Failed to fetch last  block height")
+                .wrap_err("Failed to fetch last block height")
             {
                 Ok(Some(last_block_height)) => last_block_height,
                 Ok(None) => {
+                    //FIXME: here
                     return if self.config.wait_for_last_query_height {
                         ControlFlow::Continue(())
                     } else {
@@ -528,6 +530,7 @@ where
                 Err(err) => return ControlFlow::Break(Err(err)),
             };
 
+            //FIXME: here
             if self.config.wait_for_last_query_height
                 && Some(last_block_height) < last_query_height
             {
