@@ -283,9 +283,27 @@ pub async fn submit_custom<N: Namada>(
 where
     <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
-    let (tx, signing_data) = args.build(namada).await?;
+    let (mut tx, signing_data) = args.build(namada).await?;
 
-    if args.tx.dump_tx || args.tx.dump_wrapper_tx {
+    if args.tx.dump_tx {
+        return tx::dump_tx(namada.io(), &args.tx, tx);
+    }
+    if args.tx.dump_wrapper_tx {
+        // Attach the provided inner signatures to the tx (if any)
+        let signatures = args
+            .tx
+            .signatures
+            .iter()
+            .map(|bytes| {
+                tx::SignatureIndex::try_from_json_bytes(bytes).map_err(|err| {
+                    error::Error::Encode(error::EncodingError::Serde(
+                        err.to_string(),
+                    ))
+                })
+            })
+            .collect::<error::Result<Vec<_>>>()?;
+        tx.add_signatures(signatures);
+
         return tx::dump_tx(namada.io(), &args.tx, tx);
     }
 
@@ -1134,82 +1152,6 @@ where
             submit_vote_proposal_data,
         )
         .await?;
-    }
-
-    Ok(())
-}
-
-pub async fn sign_tx<N: Namada>(
-    namada: &N,
-    args::SignTx {
-        tx: tx_args,
-        tx_data,
-        owner,
-    }: args::SignTx,
-) -> Result<(), error::Error>
-where
-    <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
-{
-    let tx = if let Ok(transaction) = Tx::try_from_json_bytes(tx_data.as_ref())
-    {
-        transaction
-    } else {
-        edisplay_line!(namada.io(), "Couldn't decode the transaction.");
-        return Err(error::Error::Other(
-            "Couldn't decode the transaction.".to_string(),
-        ));
-    };
-
-    let default_signer = Some(owner.clone());
-    let signing_data = aux_signing_data(
-        namada,
-        &tx_args,
-        Some(owner.clone()),
-        default_signer,
-        false,
-    )
-    .await?;
-
-    let mut wallet = namada.wallet_mut().await;
-
-    let mut secret_keys = vec![];
-    for public_key in &signing_data.public_keys {
-        let secret_key =
-            signing::find_key_by_pk(&mut wallet, &tx_args, public_key)?;
-        secret_keys.push(secret_key);
-    }
-
-    if let Some(account_public_keys_map) = signing_data.account_public_keys_map
-    {
-        let signatures = tx.compute_section_signature(
-            &secret_keys,
-            &account_public_keys_map,
-            Some(owner),
-        );
-
-        for signature in &signatures {
-            let filename = format!(
-                "offline_signature_{}_{}.tx",
-                tx.raw_header_hash(),
-                signature.pubkey,
-            );
-            let output_path = match &tx_args.output_folder {
-                Some(path) => path.join(filename),
-                None => filename.into(),
-            };
-            let signature_path = File::create(&output_path)
-                .expect("Should be able to create signature file.");
-            signature.to_writer_json(signature_path).expect(
-                "Signature should be serializable and the file writeable.",
-            );
-
-            display_line!(
-                namada.io(),
-                "Signature for {} serialized at {}",
-                signature.pubkey,
-                output_path.display()
-            );
-        }
     }
 
     Ok(())
