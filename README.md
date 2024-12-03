@@ -16,7 +16,7 @@ the form of native protocol tokens. A multi-asset shielded transfer
 wallet is provided in order to facilitate safe and private user
 interaction with the protocol.
 
-* Blogpost: [Introducing Namada: Interchain Asset-agnostic Privacy](https://blog.namada.net/introducing-namada-interchain-asset-agnostic-privacy/)
+* Blogpost: [Introducing Namada: Interchain Asset-agnostic Privacy](https://namada.net/blog/introducing-namada-multichain-asset-agnostic-data-protection)
 
 ## 📓 Docs
 
@@ -38,10 +38,10 @@ make install
 
 After installation, the main `namada` executable will be available on path.
 
-To find how to use it, check out the [User Guide section of the docs](https://docs.namada.net/user-guide/index.html).
+To find how to use it, check out the [User Guide section of the docs](https://docs.namada.net/users).
 
 For more detailed instructions and more install options, see the [Install
-section](https://docs.namada.net/user-guide/install/index.html) of the User
+section](https://docs.namada.net/introduction/install) of the User
 Guide.
 
 ## ⚙️ Development
