@@ -391,7 +391,6 @@ pub mod cmds {
             let query_metadata = Self::parse_with_ctx(matches, QueryMetaData);
             let add_to_eth_bridge_pool =
                 Self::parse_with_ctx(matches, AddToEthBridgePool);
-            let sign_tx = Self::parse_with_ctx(matches, SignTx);
             let shielded_sync = Self::parse_with_ctx(matches, ShieldedSync);
             let gen_ibc_shielding =
                 Self::parse_with_ctx(matches, GenIbcShieldingTransfer);
@@ -451,7 +450,6 @@ pub mod cmds {
                 .or(query_native_supply)
                 .or(query_staking_rewards_rate)
                 .or(query_account)
-                .or(sign_tx)
                 .or(shielded_sync)
                 .or(gen_ibc_shielding)
                 .or(utils)
@@ -546,7 +544,6 @@ pub mod cmds {
         QueryPgf(QueryPgf),
         QueryValidatorState(QueryValidatorState),
         QueryRewards(QueryRewards),
-        SignTx(SignTx),
         ShieldedSync(ShieldedSync),
         GenIbcShieldingTransfer(GenIbcShieldingTransfer),
     }
@@ -7573,7 +7570,6 @@ pub mod args {
                         "The file path containing a serialized signature of \
                          the entire transaction for gas payment."
                     ))
-                    .requires(SIGNATURES.name)
                     .conflicts_with(FEE_PAYER_OPT.name),
             )
             .arg(OUTPUT_FOLDER_PATH.def().help(wrap!(
