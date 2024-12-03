@@ -1379,7 +1379,10 @@ impl CosmosChainType {
     }
 }
 
-pub fn setup_cosmos(chain_type: CosmosChainType) -> Result<Test> {
+pub fn setup_cosmos(
+    chain_type: CosmosChainType,
+    user_balance: Option<u64>,
+) -> Result<Test> {
     let working_dir = working_dir();
     let test_dir = TestDir::new();
     let chain_id = chain_type.chain_id();
@@ -1425,12 +1428,9 @@ pub fn setup_cosmos(chain_type: CosmosChainType) -> Result<Test> {
 
     // Add tokens to a user account
     let account = find_cosmos_address(&test, constants::COSMOS_USER)?;
-    let args = [
-        "genesis",
-        "add-genesis-account",
-        &account,
-        "100000000stake,1000samoleans",
-    ];
+    let user_balance = user_balance.unwrap_or(1000);
+    let genesis_balance = format!("100000000stake,{user_balance}samoleans");
+    let args = ["genesis", "add-genesis-account", &account, &genesis_balance];
     let mut cosmos = run_cosmos_cmd(&test, args, Some(10))?;
     cosmos.assert_success();
 
