@@ -80,6 +80,7 @@ use ibc::core::host::types::identifiers::{ChannelId, PortId, Sequence};
 use ibc::core::router::types::error::RouterError;
 use ibc::primitives::proto::Any;
 pub use ibc::*;
+use ibc_middleware_packet_forward::PacketMetadata;
 use masp_primitives::transaction::Transaction as MaspTransaction;
 pub use msg::*;
 use namada_core::address::{self, Address};
@@ -143,6 +144,8 @@ pub enum Error {
     ChainId(IdentifierError),
     #[error("Verifier insertion error: {0}")]
     Verifier(StorageError),
+    #[error("Storage read/write error: {0}")]
+    Storage(StorageError),
     #[error("IBC error: {0}")]
     Other(String),
 }
@@ -690,7 +693,9 @@ where
                 // Extract MASP tx from the memo in the packet if needed
                 let masp_tx = match &*envelope {
                     MsgEnvelope::Packet(PacketMsg::Recv(msg))
-                        if self.is_receiving_success(msg)? =>
+                        if self
+                            .is_receiving_success(msg)?
+                            .is_some_and(|ack_succ| ack_succ) =>
                     {
                         extract_masp_tx_from_packet(&msg.packet)
                     }
@@ -713,8 +718,8 @@ where
     pub fn is_receiving_success(
         &self,
         msg: &IbcMsgRecvPacket,
-    ) -> Result<bool, Error> {
-        let packet_ack = self
+    ) -> Result<Option<bool>, Error> {
+        let Some(packet_ack) = self
             .ctx
             .inner
             .borrow()
@@ -723,11 +728,14 @@ where
                 &msg.packet.chan_id_on_b,
                 msg.packet.seq_on_a,
             )
-            .map_err(|e| Error::Context(Box::new(e)))?;
+            .map_err(|e| Error::Context(Box::new(e)))?
+        else {
+            return Ok(None);
+        };
         let success_ack_commitment = compute_ack_commitment(
             &AcknowledgementStatus::success(ack_success_b64()).into(),
         );
-        Ok(packet_ack == success_ack_commitment)
+        Ok(Some(packet_ack == success_ack_commitment))
     }
 
     /// Validate according to the message in IBC VP
@@ -786,6 +794,10 @@ where
     }
 }
 
+fn is_packet_forward(data: &PacketData) -> bool {
+    serde_json::from_str::<PacketMetadata>(data.memo.as_ref()).is_ok()
+}
+
 // Extract the involved namada address from the packet (either sender or
 // receiver) to trigger its vp. Returns None if an address could not be found
 fn get_envelope_verifier(
@@ -795,9 +807,14 @@ fn get_envelope_verifier(
         MsgEnvelope::Packet(PacketMsg::Recv(msg)) => {
             match msg.packet.port_id_on_b.as_str() {
                 FT_PORT_ID_STR => {
-                    serde_json::from_slice::<PacketData>(&msg.packet.data)
-                        .ok()
-                        .map(|packet_data| packet_data.receiver)
+                    let packet_data =
+                        serde_json::from_slice::<PacketData>(&msg.packet.data)
+                            .ok()?;
+                    if is_packet_forward(&packet_data) {
+                        None
+                    } else {
+                        Some(packet_data.receiver)
+                    }
                 }
                 NFT_PORT_ID_STR => {
                     serde_json::from_slice::<NftPacketData>(&msg.packet.data)

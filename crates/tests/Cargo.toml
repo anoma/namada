@@ -38,7 +38,9 @@ namada_vm = {path = "../vm", features = ["testing"]}
 
 concat-idents.workspace = true
 derivative.workspace = true
+dur.workspace = true
 hyper = {version = "0.14.20", features = ["full"]}
+ibc-middleware-packet-forward.workspace = true
 ibc-testkit.workspace = true
 ics23.workspace = true
 itertools.workspace = true
