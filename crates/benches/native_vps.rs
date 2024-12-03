@@ -23,6 +23,7 @@ use namada_apps_lib::governance::pgf::storage::steward::StewardDetail;
 use namada_apps_lib::governance::storage::proposal::ProposalType;
 use namada_apps_lib::governance::storage::vote::ProposalVote;
 use namada_apps_lib::governance::{InitProposalData, VoteProposalData};
+use namada_apps_lib::ibc::context::pfm_mod::PfmTransferModule;
 use namada_apps_lib::ibc::core::channel::types::channel::Order;
 use namada_apps_lib::ibc::core::channel::types::msgs::MsgChannelOpenInit;
 use namada_apps_lib::ibc::core::channel::types::Version as ChannelVersion;
@@ -34,9 +35,7 @@ use namada_apps_lib::ibc::core::host::types::identifiers::{
     ClientId, ConnectionId, PortId,
 };
 use namada_apps_lib::ibc::primitives::ToProto;
-use namada_apps_lib::ibc::{
-    IbcActions, NftTransferModule, TransferModule, COMMITMENT_PREFIX,
-};
+use namada_apps_lib::ibc::{IbcActions, NftTransferModule, COMMITMENT_PREFIX};
 use namada_apps_lib::masp_primitives::merkle_tree::CommitmentTree;
 use namada_apps_lib::masp_primitives::transaction::Transaction;
 use namada_apps_lib::masp_proofs::sapling::SaplingVerificationContextInner;
@@ -1718,7 +1717,10 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
             );
         actions.set_validation_params(ibc.validation_params().unwrap());
 
-        let module = TransferModule::new(ctx.clone(), verifiers);
+        let module = PfmTransferModule::<_, parameters::Store<_>>::wrap(
+            ctx.clone(),
+            verifiers,
+        );
         actions.add_transfer_module(module);
         let module = NftTransferModule::<_, token::Store<()>>::new(ctx);
         actions.add_transfer_module(module);
@@ -1779,7 +1781,10 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
             );
         actions.set_validation_params(ibc.validation_params().unwrap());
 
-        let module = TransferModule::new(ctx.clone(), verifiers);
+        let module = PfmTransferModule::<_, parameters::Store<_>>::wrap(
+            ctx.clone(),
+            verifiers,
+        );
         actions.add_transfer_module(module);
         let module = NftTransferModule::<_, token::Store<()>>::new(ctx);
         actions.add_transfer_module(module);
