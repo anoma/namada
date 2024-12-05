@@ -3,6 +3,7 @@ use std::io::Read;
 use color_eyre::eyre::Result;
 use namada_sdk::io::{display_line, Io, NamadaIo};
 use namada_sdk::masp::ShieldedContext;
+use namada_sdk::wallet::DatedViewingKey;
 use namada_sdk::{Namada, NamadaImpl};
 
 use crate::cli;
@@ -349,8 +350,16 @@ impl CliApi {
                             chain_ctx
                                 .wallet
                                 .get_viewing_keys()
-                                .values()
-                                .copied(),
+                                .into_iter()
+                                .map(|(k, v)| {
+                                    DatedViewingKey::new(
+                                        v,
+                                        chain_ctx
+                                            .wallet
+                                            .find_birthday(k)
+                                            .copied(),
+                                    )
+                                }),
                         );
 
                         crate::client::masp::syncing(

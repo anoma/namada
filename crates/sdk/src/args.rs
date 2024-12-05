@@ -6,6 +6,8 @@ use std::str::FromStr;
 use std::time::Duration as StdDuration;
 
 use either::Either;
+use masp_primitives::transaction::components::sapling::builder::BuildParams;
+use masp_primitives::zip32::PseudoExtendedKey;
 use namada_core::address::Address;
 use namada_core::chain::{BlockHeight, ChainId, Epoch};
 use namada_core::collections::HashMap;
@@ -122,7 +124,7 @@ impl NamadaTypes for SdkTypes {
     type MaspIndexerAddress = String;
     type PaymentAddress = namada_core::masp::PaymentAddress;
     type PublicKey = namada_core::key::common::PublicKey;
-    type SpendingKey = namada_core::masp::ExtendedSpendingKey;
+    type SpendingKey = PseudoExtendedKey;
     type TendermintAddress = tendermint_rpc::Url;
     type TransferSource = namada_core::masp::TransferSource;
     type TransferTarget = namada_core::masp::TransferTarget;
@@ -370,8 +372,9 @@ impl TxShieldedTransfer {
     pub async fn build(
         &mut self,
         context: &impl Namada,
+        bparams: &mut impl BuildParams,
     ) -> crate::error::Result<(namada_tx::Tx, SigningTxData)> {
-        tx::build_shielded_transfer(context, self).await
+        tx::build_shielded_transfer(context, self, bparams).await
     }
 }
 
@@ -416,8 +419,9 @@ impl TxShieldingTransfer {
     pub async fn build(
         &mut self,
         context: &impl Namada,
+        bparams: &mut impl BuildParams,
     ) -> crate::error::Result<(namada_tx::Tx, SigningTxData, MaspEpoch)> {
-        tx::build_shielding_transfer(context, self).await
+        tx::build_shielding_transfer(context, self, bparams).await
     }
 }
 
@@ -455,8 +459,9 @@ impl TxUnshieldingTransfer {
     pub async fn build(
         &mut self,
         context: &impl Namada,
+        bparams: &mut impl BuildParams,
     ) -> crate::error::Result<(namada_tx::Tx, SigningTxData)> {
-        tx::build_unshielding_transfer(context, self).await
+        tx::build_unshielding_transfer(context, self, bparams).await
     }
 }
 
@@ -601,9 +606,10 @@ impl TxIbcTransfer {
     pub async fn build(
         &self,
         context: &impl Namada,
+        bparams: &mut impl BuildParams,
     ) -> crate::error::Result<(namada_tx::Tx, SigningTxData, Option<MaspEpoch>)>
     {
-        tx::build_ibc_transfer(context, self).await
+        tx::build_ibc_transfer(context, self, bparams).await
     }
 }
 
@@ -2554,6 +2560,8 @@ pub struct KeyDerive {
     pub alias_force: bool,
     /// Don't encrypt the keypair
     pub unsafe_dont_encrypt: bool,
+    /// Use the modified ZIP 32 algorithm supported by Ledger devices
+    pub ledger_zip32: bool,
     /// BIP44 / ZIP32 derivation path
     pub derivation_path: String,
     /// Allow non-compliant derivation path
