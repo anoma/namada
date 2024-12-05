@@ -184,13 +184,14 @@ fn payment_addresses_list(
 }
 
 /// Derives a masp spending key from the mnemonic code in the wallet.
-fn shielded_key_derive(
+async fn shielded_key_derive(
     ctx: Context,
     io: &impl Io,
     args::KeyDerive {
         alias,
         alias_force,
         unsafe_dont_encrypt,
+        ledger_zip32,
         derivation_path,
         allow_non_compliant,
         prompt_bip39_passphrase,
@@ -220,6 +221,7 @@ fn shielded_key_derive(
                 alias,
                 alias_force,
                 birthday,
+                ledger_zip32,
                 derivation_path,
                 None,
                 prompt_bip39_passphrase,
@@ -232,7 +234,10 @@ fn shielded_key_derive(
             })
             .0
     } else {
-        display_line!(io, "Not implemented.");
+        display_line!(
+            io,
+            "Shielded key derivation using hardware wallet not implemented."
+        );
         display_line!(io, "No changes are persisted. Exiting.");
         cli::safe_exit(1)
     };
@@ -367,7 +372,13 @@ fn shielded_key_address_add(
     let (alias, typ) = match masp_value {
         MaspValue::FullViewingKey(viewing_key) => {
             let alias = wallet
-                .insert_viewing_key(alias, viewing_key, birthday, alias_force)
+                .insert_viewing_key(
+                    alias,
+                    viewing_key,
+                    birthday,
+                    alias_force,
+                    None,
+                )
                 .unwrap_or_else(|| {
                     edisplay_line!(io, "Viewing key not added");
                     cli::safe_exit(1);
@@ -638,7 +649,7 @@ async fn key_derive(
     if !args_key_derive.shielded {
         transparent_key_and_address_derive(ctx, io, args_key_derive).await
     } else {
-        shielded_key_derive(ctx, io, args_key_derive)
+        shielded_key_derive(ctx, io, args_key_derive).await
     }
 }
 

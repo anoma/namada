@@ -10,6 +10,9 @@ use borsh::BorshSerialize;
 use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::transaction::builder::Builder;
+use masp_primitives::transaction::components::sapling::builder::{
+    BuildParams, RngBuildParams,
+};
 use masp_primitives::transaction::components::sapling::fees::{
     ConvertView, InputView as SaplingInputView, OutputView as SaplingOutputView,
 };
@@ -18,6 +21,7 @@ use masp_primitives::transaction::components::transparent::fees::{
 };
 use masp_primitives::transaction::components::I128Sum;
 use masp_primitives::transaction::Transaction as MaspTransaction;
+use masp_primitives::zip32::PseudoExtendedKey;
 use namada_account::{InitAccount, UpdateAccount};
 use namada_core::address::{Address, IBC, MASP};
 use namada_core::arith::checked;
@@ -38,9 +42,7 @@ use namada_core::ibc::core::client::types::Height as IbcHeight;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use namada_core::ibc::primitives::Timestamp as IbcTimestamp;
 use namada_core::key::{self, *};
-use namada_core::masp::{
-    AssetData, ExtendedSpendingKey, MaspEpoch, TransferSource, TransferTarget,
-};
+use namada_core::masp::{AssetData, MaspEpoch, TransferSource, TransferTarget};
 use namada_core::storage;
 use namada_core::time::DateTimeUtc;
 use namada_governance::cli::onchain::{
@@ -2547,6 +2549,7 @@ pub async fn build_pgf_stewards_proposal(
 pub async fn build_ibc_transfer(
     context: &impl Namada,
     args: &args::TxIbcTransfer,
+    bparams: &mut impl BuildParams,
 ) -> Result<(Tx, SigningTxData, Option<MaspEpoch>)> {
     if args.ibc_shielding_data.is_some() && args.ibc_memo.is_some() {
         return Err(Error::Other(
@@ -2560,7 +2563,7 @@ pub async fn build_ibc_transfer(
         get_refund_target(context, &args.source, &args.refund_target).await?;
 
     let source = args.source.effective_address();
-    let signing_data = signing::aux_signing_data(
+    let mut signing_data = signing::aux_signing_data(
         context,
         &args.tx,
         Some(source.clone()),
@@ -2570,7 +2573,7 @@ pub async fn build_ibc_transfer(
     )
     .await?;
     let (fee_per_gas_unit, updated_balance) =
-        if let TransferSource::ExtendedSpendingKey(_) = args.source {
+        if let TransferSource::ExtendedKey(_) = args.source {
             // MASP fee payment
             (validate_fee(context, &args.tx).await?, None)
         } else {
@@ -2655,6 +2658,7 @@ pub async fn build_ibc_transfer(
         masp_transfer_data,
         masp_fee_data,
         args.tx.expiration.to_datetime(),
+        bparams,
     )
     .await?;
     let shielded_tx_epoch = shielded_parts.as_ref().map(|trans| trans.0.epoch);
@@ -2705,6 +2709,7 @@ pub async fn build_ibc_transfer(
             let masp_tx_hash =
                 tx.add_masp_tx_section(shielded_transfer.masp_tx.clone()).1;
             transfer.shielded_section_hash = Some(masp_tx_hash);
+            signing_data.shielded_hash = Some(masp_tx_hash);
             tx.add_masp_builder(MaspBuilder {
                 asset_types,
                 metadata: shielded_transfer.metadata,
@@ -3056,8 +3061,9 @@ pub async fn build_transparent_transfer<N: Namada>(
 pub async fn build_shielded_transfer<N: Namada>(
     context: &N,
     args: &mut args::TxShieldedTransfer,
+    bparams: &mut impl BuildParams,
 ) -> Result<(Tx, SigningTxData)> {
-    let signing_data = signing::aux_signing_data(
+    let mut signing_data = signing::aux_signing_data(
         context,
         &args.tx,
         Some(MASP),
@@ -3084,7 +3090,7 @@ pub async fn build_shielded_transfer<N: Namada>(
                 .await?;
 
         transfer_data.push(MaspTransferData {
-            source: TransferSource::ExtendedSpendingKey(source.to_owned()),
+            source: TransferSource::ExtendedKey(source.to_owned()),
             target: TransferTarget::PaymentAddress(target.to_owned()),
             token: token.to_owned(),
             amount: validated_amount,
@@ -3119,6 +3125,7 @@ pub async fn build_shielded_transfer<N: Namada>(
         transfer_data,
         masp_fee_data,
         args.tx.expiration.to_datetime(),
+        bparams,
     )
     .await?
     .expect("Shielded transfer must have shielded parts");
@@ -3148,6 +3155,7 @@ pub async fn build_shielded_transfer<N: Namada>(
         });
 
         data.shielded_section_hash = Some(section_hash);
+        signing_data.shielded_hash = Some(section_hash);
         tracing::debug!("Transfer data {data:?}");
         Ok(())
     };
@@ -3172,7 +3180,7 @@ async fn get_masp_fee_payment_amount<N: Namada>(
     args: &args::Tx<SdkTypes>,
     fee_amount: DenominatedAmount,
     fee_payer: &common::PublicKey,
-    gas_spending_key: Option<ExtendedSpendingKey>,
+    gas_spending_key: Option<PseudoExtendedKey>,
 ) -> Result<Option<MaspFeeData>> {
     let fee_payer_address = Address::from(fee_payer);
     let balance_key = balance_key(&args.fee_token, &fee_payer_address);
@@ -3200,6 +3208,7 @@ async fn get_masp_fee_payment_amount<N: Namada>(
 pub async fn build_shielding_transfer<N: Namada>(
     context: &N,
     args: &mut args::TxShieldingTransfer,
+    bparams: &mut impl BuildParams,
 ) -> Result<(Tx, SigningTxData, MaspEpoch)> {
     let source = if args.data.len() == 1 {
         // If only one transfer take its source as the signer
@@ -3211,7 +3220,7 @@ pub async fn build_shielding_transfer<N: Namada>(
         // argument
         None
     };
-    let signing_data = signing::aux_signing_data(
+    let mut signing_data = signing::aux_signing_data(
         context,
         &args.tx,
         source.clone(),
@@ -3285,6 +3294,7 @@ pub async fn build_shielding_transfer<N: Namada>(
         transfer_data,
         None,
         args.tx.expiration.to_datetime(),
+        bparams,
     )
     .await?
     .expect("Shielding transfer must have shielded parts");
@@ -3315,6 +3325,7 @@ pub async fn build_shielding_transfer<N: Namada>(
         });
 
         data.shielded_section_hash = Some(shielded_section_hash);
+        signing_data.shielded_hash = Some(shielded_section_hash);
         tracing::debug!("Transfer data {data:?}");
         Ok(())
     };
@@ -3336,8 +3347,9 @@ pub async fn build_shielding_transfer<N: Namada>(
 pub async fn build_unshielding_transfer<N: Namada>(
     context: &N,
     args: &mut args::TxUnshieldingTransfer,
+    bparams: &mut impl BuildParams,
 ) -> Result<(Tx, SigningTxData)> {
-    let signing_data = signing::aux_signing_data(
+    let mut signing_data = signing::aux_signing_data(
         context,
         &args.tx,
         Some(MASP),
@@ -3364,7 +3376,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
                 .await?;
 
         transfer_data.push(MaspTransferData {
-            source: TransferSource::ExtendedSpendingKey(args.source),
+            source: TransferSource::ExtendedKey(args.source),
             target: TransferTarget::Address(target.to_owned()),
             token: token.to_owned(),
             amount: validated_amount,
@@ -3406,6 +3418,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
         transfer_data,
         masp_fee_data,
         args.tx.expiration.to_datetime(),
+        bparams,
     )
     .await?
     .expect("Shielding transfer must have shielded parts");
@@ -3435,6 +3448,7 @@ pub async fn build_unshielding_transfer<N: Namada>(
         });
 
         data.shielded_section_hash = Some(shielded_section_hash);
+        signing_data.shielded_hash = Some(shielded_section_hash);
         tracing::debug!("Transfer data {data:?}");
         Ok(())
     };
@@ -3458,6 +3472,7 @@ async fn construct_shielded_parts<N: Namada>(
     data: Vec<MaspTransferData>,
     fee_data: Option<MaspFeeData>,
     expiration: Option<DateTimeUtc>,
+    bparams: &mut impl BuildParams,
 ) -> Result<Option<(ShieldedTransfer, HashSet<AssetData>)>> {
     // Precompute asset types to increase chances of success in decoding
     let token_map = context.wallet().await.get_addresses();
@@ -3470,7 +3485,7 @@ async fn construct_shielded_parts<N: Namada>(
             .await;
 
         shielded
-            .gen_shielded_transfer(context, data, fee_data, expiration)
+            .gen_shielded_transfer(context, data, fee_data, expiration, bparams)
             .await
     };
 
@@ -3858,6 +3873,7 @@ pub async fn gen_ibc_shielding_transfer<N: Namada>(
                 // Fees are paid from the transparent balance of the relayer
                 None,
                 args.expiration.to_datetime(),
+                &mut RngBuildParams::new(OsRng),
             )
             .await
             .map_err(|err| TxSubmitError::MaspError(err.to_string()))?
@@ -4029,10 +4045,10 @@ async fn get_refund_target(
             )))
         }
         (
-            TransferSource::ExtendedSpendingKey(_),
+            TransferSource::ExtendedKey(_),
             Some(TransferTarget::Address(addr)),
         ) => Ok(Some(addr.clone())),
-        (TransferSource::ExtendedSpendingKey(_), None) => {
+        (TransferSource::ExtendedKey(_), None) => {
             // Generate a new transparent address if it doesn't exist
             let mut rng = OsRng;
             let mut wallet = context.wallet_mut().await;
