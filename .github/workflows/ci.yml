@@ -35,6 +35,7 @@ env:
   AWS_REGION: us-west-2
   NIGHTLY: nightly-2024-09-08
   NAMADA_MASP_PARAMS_DIR: /masp/.masp-params
+  LEDGER_APP_VERSION: "1.0.5"
 
 jobs:
   changelog:
@@ -653,10 +654,7 @@ jobs:
 
   test-ledger-app:
     timeout-minutes: 30
-    runs-on: [ubuntu-latest]
-
-    env:
-      RUSTC_WRAPPER: ""
+    runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
 
     steps:
       - name: Checkout repo
@@ -667,9 +665,13 @@ jobs:
         if: ${{ github.event_name == 'pull_request_target' }}
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+      - name: Configure AWS 
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE }}
       - name: Checkout ledger-namada
         run: |
-          LEDGER_APP_VERSION="1.0.5"
           echo "Using Namada Ledger App version: v${LEDGER_APP_VERSION}"
           git clone 'https://github.com/Zondax/ledger-namada' ../ledger-namada
           cd ../ledger-namada
@@ -677,10 +679,6 @@ jobs:
           git submodule update --init --recursive
           sudo update-alternatives --install /usr/bin/python python /usr/bin/python3 10
           make deps
-      - name: Install rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
       - name: Generate test vectors
         run: |
           # The path where the Ledger app test suite will locate test vectors
