@@ -30,6 +30,7 @@ use zeroize::Zeroizing;
 
 use crate::eth_bridge::bridge_pool;
 use crate::ibc::core::host::types::identifiers::{ChannelId, PortId};
+use crate::rpc::query_osmosis_pool_routes;
 use crate::signing::SigningTxData;
 use crate::wallet::{DatedSpendingKey, DatedViewingKey};
 use crate::{rpc, tx, Namada};
@@ -509,13 +510,15 @@ pub struct TxOsmosisSwap<C: NamadaTypes = SdkTypes> {
     pub slippage_percent: u64,
     /// TODO! Figure out what this is
     pub window_seconds: u64,
+    /// A recovery address (on Osmosis) in case of failure
+    pub local_recovery_addr: String,
     /// The route to take through Osmosis pools
     pub route: Option<Vec<OsmosisPoolHop>>,
 }
 
 impl TxOsmosisSwap<SdkTypes> {
     /// Create an IBC transfer from the input arguments
-    pub fn assemble(self) -> TxIbcTransfer<SdkTypes> {
+    pub async fn assemble(self, ctx: &impl Namada) -> TxIbcTransfer<SdkTypes> {
         #[derive(Serialize)]
         struct MemoFromNamada {
             namada: NamadaContext,
@@ -549,7 +552,7 @@ impl TxOsmosisSwap<SdkTypes> {
             receiver: String,
             #[serde(skip_serializing_if = "Option::is_none")]
             next_memo: Option<String>,
-            on_failed_delivery: String,
+            on_failed_delivery: LocalRecoveryAddr,
             #[serde(skip_serializing_if = "Option::is_none")]
             route: Option<Vec<OsmosisPoolHop>>,
         }
@@ -564,6 +567,11 @@ impl TxOsmosisSwap<SdkTypes> {
             #[serde(serialize_with = "serialize_slippage")]
             slippage_percentage: u64,
             window_seconds: u64,
+        }
+
+        #[derive(Serialize)]
+        struct LocalRecoveryAddr {
+            local_recovery_addr: String,
         }
 
         fn serialize_slippage<S>(
@@ -582,6 +590,7 @@ impl TxOsmosisSwap<SdkTypes> {
             recipient,
             slippage_percent,
             window_seconds,
+            local_recovery_addr,
             route,
         } = self;
 
@@ -591,6 +600,20 @@ impl TxOsmosisSwap<SdkTypes> {
             })
             .unwrap()
         });
+        let route = if route.is_none() {
+            query_osmosis_pool_routes(
+                ctx,
+                &transfer.token,
+                transfer.amount,
+                transfer.channel_id.clone(),
+                &output_denom,
+            )
+            .await
+            .unwrap()
+            .pop()
+        } else {
+            route
+        };
 
         let memo = Memo {
             wasm: Wasm {
@@ -606,7 +629,9 @@ impl TxOsmosisSwap<SdkTypes> {
                         },
                         next_memo,
                         receiver: recipient.to_string(),
-                        on_failed_delivery: "do_nothing".to_string(),
+                        on_failed_delivery: LocalRecoveryAddr {
+                            local_recovery_addr,
+                        },
                         route,
                     },
                 },

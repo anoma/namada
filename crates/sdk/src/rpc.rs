@@ -2,6 +2,7 @@
 
 #![allow(clippy::result_large_err)]
 
+use core::str::FromStr;
 use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::ControlFlow;
@@ -16,6 +17,9 @@ use namada_core::arith::checked;
 use namada_core::chain::{BlockHeight, Epoch};
 use namada_core::collections::{HashMap, HashSet};
 use namada_core::hash::Hash;
+use namada_core::ibc::apps::nft_transfer::types::TracePrefix;
+use namada_core::ibc::apps::transfer::types::PrefixedDenom;
+use namada_core::ibc::core::host::types::identifiers::ChannelId;
 use namada_core::ibc::IbcTokenHash;
 use namada_core::key::common;
 use namada_core::masp::MaspEpoch;
@@ -34,9 +38,11 @@ use namada_governance::storage::proposal::StorageProposal;
 use namada_governance::utils::{
     compute_proposal_result, ProposalResult, ProposalVotes, Vote,
 };
+use namada_ibc::core::host::types::identifiers::PortId;
 use namada_ibc::storage::{
     ibc_trace_key, ibc_trace_key_prefix, is_ibc_trace_key,
 };
+use namada_ibc::trace::calc_hash;
 use namada_io::{display_line, edisplay_line, Client, Io};
 use namada_parameters::{storage as params_storage, EpochDuration};
 use namada_proof_of_stake::parameters::PosParams;
@@ -49,9 +55,9 @@ use namada_state::LastBlock;
 use namada_token::masp::MaspTokenRewardData;
 use namada_tx::data::{BatchedTxResult, DryRunResult, ResultCode, TxResult};
 use namada_tx::event::{Batch as BatchAttr, Code as CodeAttr};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-use crate::args::InputAmount;
+use crate::args::{InputAmount, OsmosisPoolHop};
 use crate::control_flow::time;
 use crate::error::{EncodingError, Error, QueryError, TxSubmitError};
 use crate::events::{extend, Event};
@@ -63,6 +69,7 @@ use crate::queries::RPC;
 use crate::tendermint::block::Height;
 use crate::tendermint::merkle::proof::ProofOps;
 use crate::tendermint_rpc::query::Query;
+use crate::tx::get_ibc_src_port_channel;
 use crate::{error, Namada, Tx};
 
 /// Query an estimate of the maximum block time.
@@ -1487,4 +1494,98 @@ pub async fn query_ibc_denom<N: Namada>(
     }
 
     token.as_ref().to_string()
+}
+
+/// Query a route of Osmosis liquidity pools
+/// for swapping betwixt token and output_denom
+/// assets.
+pub async fn query_osmosis_pool_routes(
+    ctx: &impl Namada,
+    token: &Address,
+    amount: InputAmount,
+    channel_id: ChannelId,
+    output_denom: &str,
+) -> Result<Vec<Vec<OsmosisPoolHop>>, Error> {
+    #[derive(Serialize, Deserialize)]
+    struct Response {
+        route: Vec<Route>,
+    }
+    #[derive(Serialize, Deserialize)]
+    struct PoolHop {
+        id: u64,
+        token_out_denom: String,
+    }
+    impl From<PoolHop> for OsmosisPoolHop {
+        fn from(value: PoolHop) -> Self {
+            Self {
+                pool_id: value.id.to_string(),
+                token_out_denom: value.token_out_denom,
+            }
+        }
+    }
+    #[derive(Serialize, Deserialize)]
+    struct Route {
+        pools: Vec<PoolHop>,
+    }
+
+    let denom = query_ibc_denom(ctx, token.to_string(), None).await;
+    let amount = validate_amount(ctx, amount, token, false).await?;
+    let PrefixedDenom {
+        mut trace_path,
+        base_denom,
+    } = PrefixedDenom::from_str(&denom).map_err(|_| {
+        Error::Other(format!("Could not decode ibc address {}", token))
+    })?;
+    let osmosis_prefix =
+        TracePrefix::new(PortId::transfer(), channel_id.clone());
+
+    if trace_path.starts_with(&osmosis_prefix) {
+        trace_path.remove_prefix(&osmosis_prefix);
+    } else {
+        let channel =
+            get_ibc_src_port_channel(ctx, &PortId::transfer(), &channel_id)
+                .await?
+                .1;
+        trace_path.add_prefix(TracePrefix::new(PortId::transfer(), channel));
+    }
+
+    let token_in = if trace_path.is_empty() {
+        base_denom.to_string()
+    } else {
+        format!(
+            "ibc%2F{}",
+            calc_hash(
+                PrefixedDenom {
+                    trace_path,
+                    base_denom
+                }
+                .to_string()
+            )
+        )
+    };
+    let url = format!(
+        "https://sqs.osmosis.zone/router/quote?tokenIn={}{}&tokenOutDenom={}&humanDenoms=false",
+        amount.redenominate(0),
+        token_in,
+        output_denom.replace("/", "%2F"),
+    );
+    let resp = reqwest::get(url)
+        .await
+        .map_err(|e| Error::Other(e.to_string()))?;
+    let resp: Response = if resp.status().is_success() {
+        resp.json().await.map_err(|e| Error::Other(e.to_string()))?
+    } else {
+        return Err(Error::Other(
+            resp.text()
+                .await
+                .map_err(|e| Error::Other(e.to_string()))?
+                .to_string(),
+        ));
+    };
+
+    Ok(resp
+        .route
+        .into_iter()
+        .map(|r| r.pools.into_iter().map(OsmosisPoolHop::from).collect())
+        .collect())
 }

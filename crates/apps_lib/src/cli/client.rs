@@ -121,8 +121,11 @@ impl CliApi {
                             C::from_tendermint_address(&ledger_address)
                         });
                         client.wait_until_node_is_synced(&io).await?;
-                        let args = args.to_sdk(&mut ctx)?.assemble();
+
+                        let args = args.to_sdk(&mut ctx)?;
                         let namada = ctx.to_sdk(client, io);
+                        let args = args.assemble(&namada).await;
+
                         tx::submit_ibc_transfer(&namada, args).await?;
                     }
                     Sub::TxUpdateAccount(TxUpdateAccount(args)) => {

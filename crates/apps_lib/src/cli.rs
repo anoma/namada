@@ -3579,6 +3579,7 @@ pub mod args {
     pub const LIST_FIND_ADDRESSES_ONLY: ArgFlag = flag("addr");
     pub const LIST_FIND_KEYS_ONLY: ArgFlag = flag("keys");
     pub const LOCALHOST: ArgFlag = flag("localhost");
+    pub const LOCAL_RECOVERY_ADDR: Arg<String> = arg("local-recovery-addr");
     pub const MASP_EPOCH: ArgOpt<MaspEpoch> = arg_opt("masp-epoch");
     pub const MAX_COMMISSION_RATE_CHANGE: Arg<Dec> =
         arg("max-commission-rate-change");
@@ -5154,6 +5155,7 @@ pub mod args {
                 recipient,
                 slippage_percent: self.slippage_percent,
                 window_seconds: self.window_seconds,
+                local_recovery_addr: self.local_recovery_addr,
                 route: self.route,
             })
         }
@@ -5172,6 +5174,7 @@ pub mod args {
                 )
             }
             let window_seconds = WINDOW_SECONDS.parse(matches);
+            let local_recovery_addr = LOCAL_RECOVERY_ADDR.parse(matches);
             let route = match OSMOSIS_POOL_HOP.parse(matches) {
                 r if r.is_empty() => None,
                 r => Some(r),
@@ -5182,14 +5185,13 @@ pub mod args {
                 recipient,
                 slippage_percent,
                 window_seconds,
+                local_recovery_addr,
                 route,
             }
         }
 
         // TODO:
         // - fix window_seconds help str
-        // - add osmo1... address to recover funds in case of ibc failures
-        //   during packet forwarding
         fn def(app: App) -> App {
             app.add_args::<TxIbcTransfer<CliTypes>>()
                 .arg(OSMOSIS_POOL_HOP.def().help(wrap!(
@@ -5209,6 +5211,10 @@ pub mod args {
                 )))
                 .arg(WINDOW_SECONDS.def().help(wrap!(
                     "A mysterious thing that should be set to 10s."
+                )))
+                .arg(LOCAL_RECOVERY_ADDR.def().help(wrap!(
+                    "An address on Osmosis from which to recover funds in \
+                     case of failure."
                 )))
                 .mut_arg(RECEIVER.name, |arg| {
                     arg.long("swap-contract").help(wrap!(
