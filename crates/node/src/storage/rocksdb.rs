@@ -62,7 +62,6 @@ use namada_sdk::eth_bridge::storage::bridge_pool;
 use namada_sdk::eth_bridge::storage::proof::BridgePoolRootProof;
 use namada_sdk::gas::Gas;
 use namada_sdk::hash::Hash;
-use namada_sdk::migrations::{DBUpdateVisitor, DbUpdateType};
 use namada_sdk::state::merkle_tree::{
     tree_key_prefix_with_epoch, tree_key_prefix_with_height,
 };
@@ -72,8 +71,9 @@ use namada_sdk::state::{
     StoreType, DB,
 };
 use namada_sdk::storage::{
-    BlockHeader, BlockHeight, DbColFam, Epoch, Key, KeySeg, BLOCK_CF, DIFFS_CF,
-    REPLAY_PROTECTION_CF, ROLLBACK_CF, STATE_CF, SUBSPACE_CF,
+    BlockHeader, BlockHeight, DBUpdateVisitor, DbColFam, Epoch, Key, KeySeg,
+    BLOCK_CF, DIFFS_CF, REPLAY_PROTECTION_CF, ROLLBACK_CF, STATE_CF,
+    SUBSPACE_CF,
 };
 use namada_sdk::{decode, encode, ethereum_events};
 use rayon::prelude::*;
@@ -85,7 +85,6 @@ use rocksdb::{
 };
 
 use crate::config::utils::num_of_threads;
-use crate::storage;
 
 // TODO the DB schema will probably need some kind of versioning
 
@@ -1077,7 +1076,7 @@ impl DbSnapshot {
 
 impl DB for RocksDB {
     type Cache = rocksdb::Cache;
-    type Migrator = DbUpdateType;
+    type Migrator = RocksDBUpdateVisitor;
     type RestoreSource<'a> = (&'a rocksdb::Cache, &'a mut std::fs::File);
     type WriteBatch = RocksDBWriteBatch;
 
@@ -1817,100 +1816,65 @@ impl DB for RocksDB {
         Ok(())
     }
 
-    #[inline]
-    fn apply_migration_to_batch(
-        &self,
-        updates: impl IntoIterator<Item = DbUpdateType>,
-    ) -> Result<RocksDBWriteBatch> {
-        let mut db_visitor = storage::RocksDBUpdateVisitor::new(self);
-        for change in updates.into_iter() {
-            match change.update(&mut db_visitor) {
-                Ok(status) => {
-                    tracing::info!("{}", status);
-                }
-                Err(e) => {
-                    let error = format!(
-                        "Attempt to write to key/pattern <{}> failed:\n{}.",
-                        change.pattern(),
-                        e
-                    );
-                    tracing::error!(error);
-                    return Err(Error::DBError(error));
-                }
-            }
-        }
-        Ok(db_visitor.take_batch())
+    fn migrator() -> Self::Migrator {
+        RocksDBUpdateVisitor::default()
     }
 }
 
 /// A struct that can visit a set of updates,
 /// registering them all in the batch
-pub struct RocksDBUpdateVisitor<'db> {
-    db: &'db RocksDB,
+#[derive(Default)]
+pub struct RocksDBUpdateVisitor {
     batch: RocksDBWriteBatch,
 }
 
-impl<'db> RocksDBUpdateVisitor<'db> {
-    pub fn new(db: &'db RocksDB) -> Self {
-        Self {
-            db,
-            batch: Default::default(),
-        }
-    }
+impl DBUpdateVisitor for RocksDBUpdateVisitor {
+    type DB = RocksDB;
 
-    pub fn take_batch(self) -> RocksDBWriteBatch {
-        self.batch
-    }
-}
-
-impl<'db> DBUpdateVisitor for RocksDBUpdateVisitor<'db> {
-    fn read(&self, key: &Key, cf: &DbColFam) -> Option<Vec<u8>> {
+    fn read(&self, db: &Self::DB, key: &Key, cf: &DbColFam) -> Option<Vec<u8>> {
         match cf {
-            DbColFam::SUBSPACE => self
-                .db
+            DbColFam::SUBSPACE => db
                 .read_subspace_val(key)
                 .expect("Failed to read from storage"),
             _ => {
                 let cf_str = cf.to_str();
-                let cf = self
-                    .db
+                let cf = db
                     .get_column_family(cf_str)
                     .expect("Failed to read column family from storage");
-                self.db
-                    .read_value_bytes(cf, key.to_string())
+                db.read_value_bytes(cf, key.to_string())
                     .expect("Failed to get key from storage")
             }
         }
     }
 
-    fn write(&mut self, key: &Key, cf: &DbColFam, value: impl AsRef<[u8]>) {
-        self.db
-            .overwrite_entry(&mut self.batch, cf, key, value)
+    fn write(
+        &mut self,
+        db: &Self::DB,
+        key: &Key,
+        cf: &DbColFam,
+        value: impl AsRef<[u8]>,
+    ) {
+        db.overwrite_entry(&mut self.batch, cf, key, value)
             .expect("Failed to overwrite a key in storage")
     }
 
-    fn delete(&mut self, key: &Key, cf: &DbColFam) {
-        let state_cf = self.db.get_column_family(STATE_CF).unwrap();
-        let last_height: BlockHeight = self
-            .db
-            .read_value(state_cf, BLOCK_HEIGHT_KEY)
-            .unwrap()
-            .unwrap();
+    fn delete(&mut self, db: &Self::DB, key: &Key, cf: &DbColFam) {
+        let state_cf = db.get_column_family(STATE_CF).unwrap();
+        let last_height: BlockHeight =
+            db.read_value(state_cf, BLOCK_HEIGHT_KEY).unwrap().unwrap();
         match cf {
             DbColFam::SUBSPACE => {
-                self.db
-                    .batch_delete_subspace_val(
-                        &mut self.batch,
-                        last_height,
-                        key,
-                        true,
-                    )
-                    .expect("Failed to delete key from storage");
+                db.batch_delete_subspace_val(
+                    &mut self.batch,
+                    last_height,
+                    key,
+                    true,
+                )
+                .expect("Failed to delete key from storage");
             }
             _ => {
                 let cf_str = cf.to_str();
-                let cf = self
-                    .db
+                let cf = db
                     .get_column_family(cf_str)
                     .expect("Failed to get read column family from storage");
                 self.batch.0.delete_cf(cf, key.to_string());
@@ -1918,11 +1882,18 @@ impl<'db> DBUpdateVisitor for RocksDBUpdateVisitor<'db> {
         };
     }
 
-    fn get_pattern(&self, pattern: Regex) -> Vec<(String, Vec<u8>)> {
-        self.db
-            .iter_pattern(None, pattern)
+    fn get_pattern(
+        &self,
+        db: &Self::DB,
+        pattern: Regex,
+    ) -> Vec<(String, Vec<u8>)> {
+        db.iter_pattern(None, pattern)
             .map(|(k, v, _)| (k, v))
             .collect()
+    }
+
+    fn commit(self, db: &Self::DB) -> Result<()> {
+        db.exec_batch(self.batch)
     }
 }
 

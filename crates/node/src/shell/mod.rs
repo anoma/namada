@@ -378,7 +378,7 @@ where
     /// Log of events emitted by `FinalizeBlock` ABCI calls.
     event_log: EventLog,
     /// A migration that can be scheduled at a given block height
-    pub scheduled_migration: Option<ScheduledMigration<D::Migrator>>,
+    pub scheduled_migration: Option<ScheduledMigration>,
     /// When set, indicates after how many blocks a new snapshot
     /// will be taken (counting from the first block)
     pub blocks_between_snapshots: Option<NonZeroU64>,
@@ -477,7 +477,7 @@ where
         broadcast_sender: UnboundedSender<Vec<u8>>,
         eth_oracle: Option<EthereumOracleChannels>,
         db_cache: Option<&D::Cache>,
-        scheduled_migration: Option<ScheduledMigration<D::Migrator>>,
+        scheduled_migration: Option<ScheduledMigration>,
         vp_wasm_compilation_cache: u64,
         tx_wasm_compilation_cache: u64,
     ) -> Self {
@@ -781,10 +781,10 @@ where
     /// hash.
     pub fn commit(&mut self) -> shim::Response {
         self.bump_last_processed_eth_block();
-        let committed_height = self.state.in_mem().get_last_block_height();
+        let height_to_commit = self.state.in_mem().block.height;
 
         let migration = match self.scheduled_migration.as_ref() {
-            Some(migration) if committed_height == migration.height => Some(
+            Some(migration) if height_to_commit == migration.height => Some(
                 self.scheduled_migration
                     .take()
                     .unwrap()
@@ -799,7 +799,7 @@ where
             .expect("Encountered a storage error while committing a block");
 
         if let Some(migration) = migration {
-            migrations::commit(self.state.db(), migration);
+            migrations::commit(&mut self.state, migration);
             self.state.commit_block().expect(
                 "Encountered a storage error while persisting changes \
                  post-migration",
@@ -809,7 +809,7 @@ where
         let merkle_root = self.state.in_mem().merkle_root();
 
         tracing::info!(
-            "Committed block hash: {merkle_root}, height: {committed_height}",
+            "Committed block hash: {merkle_root}, height: {height_to_commit}",
         );
 
         self.broadcast_queued_txs();

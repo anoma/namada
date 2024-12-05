@@ -24,6 +24,7 @@ use crate::db::{
     BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, Error, Result, DB,
 };
 use crate::types::{KVBytes, PatternIterator, PrefixIterator};
+use crate::DBUpdateVisitor;
 
 const SUBSPACE_CF: &str = "subspace";
 
@@ -644,6 +645,10 @@ impl DB for MockDB {
     ) -> Result<()> {
         unimplemented!()
     }
+
+    fn migrator() -> Self::Migrator {
+        unimplemented!("Migration isn't implemented in MockDB")
+    }
 }
 
 impl<'iter> DBIter<'iter> for MockDB {
@@ -822,3 +827,42 @@ impl Iterator for MockPatternIterator {
 }
 
 impl DBWriteBatch for MockDBWriteBatch {}
+
+impl DBUpdateVisitor for () {
+    type DB = crate::mockdb::MockDB;
+
+    fn read(
+        &self,
+        _db: &Self::DB,
+        _key: &Key,
+        _cf: &DbColFam,
+    ) -> Option<Vec<u8>> {
+        unimplemented!()
+    }
+
+    fn write(
+        &mut self,
+        _db: &Self::DB,
+        _key: &Key,
+        _cf: &DbColFam,
+        _value: impl AsRef<[u8]>,
+    ) {
+        unimplemented!()
+    }
+
+    fn delete(&mut self, _db: &Self::DB, _key: &Key, _cf: &DbColFam) {
+        unimplemented!()
+    }
+
+    fn get_pattern(
+        &self,
+        _db: &Self::DB,
+        _pattern: Regex,
+    ) -> Vec<(String, Vec<u8>)> {
+        unimplemented!()
+    }
+
+    fn commit(self, _db: &Self::DB) -> Result<()> {
+        unimplemented!()
+    }
+}

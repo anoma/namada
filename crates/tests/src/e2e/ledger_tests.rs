@@ -385,22 +385,31 @@ fn test_db_migration() -> Result<()> {
     let migrations_json_path = working_dir()
         .join("examples")
         .join("migration_example.json");
+    let migration_hash = namada_core::hash::Hash::sha256(
+        std::fs::read(&migrations_json_path).unwrap(),
+    )
+    .to_string();
     // 2. Update the db
-    let mut session = run_as!(
+    let mut ledger = run_as!(
         test,
         Who::Validator(0),
         Bin::Node,
         &[
             "ledger",
-            "update-db",
+            "run",
             "--path",
             migrations_json_path.to_string_lossy().as_ref(),
-            "--block-height",
+            "--height",
             "6",
+            "--hash",
+            &migration_hash
         ],
         Some(30),
     )?;
-    session.assert_success();
+
+    ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
+    ledger.interrupt()?;
+    ledger.exp_eof()?;
 
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
