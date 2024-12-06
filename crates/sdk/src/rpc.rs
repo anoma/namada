@@ -42,7 +42,7 @@ use namada_ibc::core::host::types::identifiers::PortId;
 use namada_ibc::storage::{
     ibc_trace_key, ibc_trace_key_prefix, is_ibc_trace_key,
 };
-use namada_ibc::trace::calc_hash;
+use namada_ibc::trace::calc_ibc_token_hash;
 use namada_io::{display_line, edisplay_line, Client, Io};
 use namada_parameters::{storage as params_storage, EpochDuration};
 use namada_proof_of_stake::parameters::PosParams;
@@ -1505,16 +1505,14 @@ pub async fn query_osmosis_pool_routes(
     amount: InputAmount,
     channel_id: ChannelId,
     output_denom: &str,
+    osmosis_sqs_server_url: &str,
 ) -> Result<Vec<Vec<OsmosisPoolHop>>, Error> {
-    #[derive(Serialize, Deserialize)]
-    struct Response {
-        route: Vec<Route>,
-    }
-    #[derive(Serialize, Deserialize)]
+    #[derive(Deserialize)]
     struct PoolHop {
         id: u64,
         token_out_denom: String,
     }
+
     impl From<PoolHop> for OsmosisPoolHop {
         fn from(value: PoolHop) -> Self {
             Self {
@@ -1523,68 +1521,105 @@ pub async fn query_osmosis_pool_routes(
             }
         }
     }
-    #[derive(Serialize, Deserialize)]
+
+    #[derive(Deserialize)]
     struct Route {
         pools: Vec<PoolHop>,
     }
 
-    let denom = query_ibc_denom(ctx, token.to_string(), None).await;
-    let amount = validate_amount(ctx, amount, token, false).await?;
-    let PrefixedDenom {
-        mut trace_path,
-        base_denom,
-    } = PrefixedDenom::from_str(&denom).map_err(|_| {
-        Error::Other(format!("Could not decode ibc address {}", token))
-    })?;
-    let osmosis_prefix =
-        TracePrefix::new(PortId::transfer(), channel_id.clone());
-
-    if trace_path.starts_with(&osmosis_prefix) {
-        trace_path.remove_prefix(&osmosis_prefix);
-    } else {
-        let channel =
-            get_ibc_src_port_channel(ctx, &PortId::transfer(), &channel_id)
-                .await?
-                .1;
-        trace_path.add_prefix(TracePrefix::new(PortId::transfer(), channel));
+    #[derive(Deserialize)]
+    struct ResponseOk {
+        route: Vec<Route>,
     }
 
-    let token_in = if trace_path.is_empty() {
-        base_denom.to_string()
-    } else {
-        format!(
-            "ibc%2F{}",
-            calc_hash(
-                PrefixedDenom {
-                    trace_path,
-                    base_denom
-                }
-                .to_string()
+    #[derive(Deserialize)]
+    struct ResponseErr {
+        message: String,
+    }
+
+    let coin = {
+        let denom = query_ibc_denom(ctx, token.to_string(), None).await;
+        let amount = validate_amount(ctx, amount, token, false).await?;
+
+        let PrefixedDenom {
+            mut trace_path,
+            base_denom,
+        } = PrefixedDenom::from_str(&denom).map_err(|_| {
+            Error::Other(format!(
+                "Could not decode {token} as an IBC token address"
+            ))
+        })?;
+
+        let prefix_on_namada =
+            TracePrefix::new(PortId::transfer(), channel_id.clone());
+
+        if trace_path.starts_with(&prefix_on_namada) {
+            // we received an asset from osmosis, so the asset we
+            // send back won't have our `transfer/channel` prefix
+            trace_path.remove_prefix(&prefix_on_namada);
+        } else {
+            // in this case, osmosis will prefix the asset it receives
+            // with the channel to namada
+            let channel =
+                get_ibc_src_port_channel(ctx, &PortId::transfer(), &channel_id)
+                    .await?
+                    .1;
+            trace_path
+                .add_prefix(TracePrefix::new(PortId::transfer(), channel));
+        }
+
+        let amount = amount.redenominate(0);
+
+        let token_denom = if trace_path.is_empty() {
+            base_denom.to_string()
+        } else {
+            format!(
+                "ibc/{}",
+                calc_ibc_token_hash(
+                    PrefixedDenom {
+                        trace_path,
+                        base_denom
+                    }
+                    .to_string()
+                )
             )
-        )
-    };
-    let url = format!(
-        "https://sqs.osmosis.zone/router/quote?tokenIn={}{}&tokenOutDenom={}&humanDenoms=false",
-        amount.redenominate(0),
-        token_in,
-        output_denom.replace("/", "%2F"),
-    );
-    let resp = reqwest::get(url)
-        .await
-        .map_err(|e| Error::Other(e.to_string()))?;
-    let resp: Response = if resp.status().is_success() {
-        resp.json().await.map_err(|e| Error::Other(e.to_string()))?
-    } else {
-        return Err(Error::Other(
-            resp.text()
-                .await
-                .map_err(|e| Error::Other(e.to_string()))?
-                .to_string(),
-        ));
+        };
+
+        format!("{amount}{token_denom}")
     };
 
-    Ok(resp
-        .route
+    let client = reqwest::Client::new();
+    let response = client
+        .get(format!("{osmosis_sqs_server_url}/router/quote"))
+        .query(&[
+            ("tokenIn", coin.as_str()),
+            ("tokenOutDenom", output_denom),
+            ("humanDenoms", "false"),
+        ])
+        .send()
+        .await
+        .map_err(|err| {
+            Error::Other(format!("Failed to query Osmosis SQS: {err}",))
+        })?;
+
+    if !response.status().is_success() {
+        let ResponseErr { message } = response.json().await.map_err(|err| {
+            Error::Other(format!(
+                "Failed to read failure response from HTTP request body: {err}"
+            ))
+        })?;
+        return Err(Error::Other(format!(
+            "Invalid Osmosis SQS query: {message}"
+        )));
+    }
+
+    let ResponseOk { route } = response.json().await.map_err(|err| {
+        Error::Other(format!(
+            "Failed to read success response from HTTP request body: {err}"
+        ))
+    })?;
+
+    Ok(route
         .into_iter()
         .map(|r| r.pools.into_iter().map(OsmosisPoolHop::from).collect())
         .collect())
