@@ -316,11 +316,13 @@ where
         let chain_id = self.ctx.get_chain_id()?;
         let proof_specs =
             namada_state::ics23_specs::ibc_proof_specs::<<S as StateRead>::H>();
-        let withdrawable_epoch_offset = PoS::withdrawable_epoch_offset(&self.ctx.pre())?;
+        let withdrawable_epoch_offset =
+            PoS::withdrawable_epoch_offset(&self.ctx.pre())?;
         let epoch_duration =
             ParamsPre::epoch_duration_parameter(&self.ctx.pre())?;
-        let unbonding_period_secs =
-            checked!(withdrawable_epoch_offset * epoch_duration.min_duration.0)?;
+        let unbonding_period_secs = checked!(
+            withdrawable_epoch_offset * epoch_duration.min_duration.0
+        )?;
         Ok(ValidationParams {
             chain_id: IbcChainId::from_str(chain_id.as_str())
                 .map_err(ActionError::ChainId)?,
