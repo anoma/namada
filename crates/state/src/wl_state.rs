@@ -680,6 +680,13 @@ where
         self.db.exec_batch(batch)?;
         Ok(())
     }
+
+    /// Update the merkle tree written for the committed last block
+    pub fn update_last_block_merkle_tree(&self) -> Result<()> {
+        self.db
+            .update_last_block_merkle_tree(self.in_mem.block.tree.stores())?;
+        Ok(())
+    }
 }
 
 impl<D, H> WlState<D, H>

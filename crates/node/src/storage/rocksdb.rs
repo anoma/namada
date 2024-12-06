@@ -1819,6 +1819,51 @@ impl DB for RocksDB {
     fn migrator() -> Self::Migrator {
         RocksDBUpdateVisitor::default()
     }
+
+    fn update_last_block_merkle_tree(
+        &self,
+        merkle_tree_stores: namada_vp::state::MerkleTreeStoresWrite<'_>,
+    ) -> Result<()> {
+        let state_cf = self.get_column_family(STATE_CF)?;
+        let block_cf = self.get_column_family(BLOCK_CF)?;
+
+        // Read the last block's height
+        let height: BlockHeight =
+            self.read_value(state_cf, BLOCK_HEIGHT_KEY)?.unwrap();
+
+        // Read the last block's epoch
+        let prefix = height.raw();
+        let epoch_key = format!("{prefix}/{EPOCH_KEY_SEGMENT}");
+        let epoch = self.read_value(block_cf, epoch_key)?.unwrap();
+
+        let mut batch = RocksDBWriteBatch::default();
+        for st in StoreType::iter() {
+            if st.is_stored_every_block() {
+                let key_prefix = if st.is_stored_every_block() {
+                    tree_key_prefix_with_height(st, height)
+                } else {
+                    tree_key_prefix_with_epoch(st, epoch)
+                };
+                let root_key =
+                    format!("{key_prefix}/{MERKLE_TREE_ROOT_KEY_SEGMENT}");
+                self.add_value_to_batch(
+                    block_cf,
+                    root_key,
+                    merkle_tree_stores.root(st),
+                    &mut batch,
+                );
+                let store_key =
+                    format!("{key_prefix}/{MERKLE_TREE_STORE_KEY_SEGMENT}");
+                self.add_value_bytes_to_batch(
+                    block_cf,
+                    store_key,
+                    merkle_tree_stores.store(st).encode(),
+                    &mut batch,
+                );
+            }
+        }
+        self.exec_batch(batch)
+    }
 }
 
 /// A struct that can visit a set of updates,

@@ -298,6 +298,12 @@ pub trait DB: Debug {
 
     /// Get an instance of DB migrator
     fn migrator() -> Self::Migrator;
+
+    /// Update the merkle tree written for the committed last block
+    fn update_last_block_merkle_tree(
+        &self,
+        merkle_tree_stores: MerkleTreeStoresWrite<'_>,
+    ) -> Result<()>;
 }
 
 /// A CRUD DB access

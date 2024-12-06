@@ -800,10 +800,9 @@ where
 
         if let Some(migration) = migration {
             migrations::commit(&mut self.state, migration);
-            self.state.commit_block().expect(
-                "Encountered a storage error while persisting changes \
-                 post-migration",
-            );
+            self.state
+                .update_last_block_merkle_tree()
+                .expect("Must update merkle tree after migration");
         }
 
         let merkle_root = self.state.in_mem().merkle_root();
