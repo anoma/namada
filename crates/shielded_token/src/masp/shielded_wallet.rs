@@ -769,7 +769,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                     }
                 };
             }
-            // FIXME: can improve these sequence of calls?
             // Extract the rewards for the previous epoch
             let prev_exchanged_balance = self
                 .compute_exchanged_amount(
@@ -786,70 +785,53 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 .compute_exchanged_amount(
                     context.client(),
                     context.io(),
-                    balance.clone(),
+                    balance,
                     current_epoch,
                     Conversions::new(),
                 )
                 .await?
                 .0;
 
-            // Account for possible rewards to non-native tokens affecting the
-            // rewards themselves
-
-            // Make sure to update nam rewards to the previous epoch
-            let prev_exchanged_balance = self
-                .compute_exchanged_amount(
-                    context.client(),
-                    context.io(),
-                    prev_exchanged_balance,
-                    prev_epoch,
-                    Conversions::new(),
-                )
-                .await?
-                .0;
-            // Make sure to udpate nam rewards to the current epoch
-            let current_exchanged_balance = self
-                .compute_exchanged_amount(
-                    context.client(),
-                    context.io(),
-                    current_exchanged_balance,
-                    current_epoch,
-                    Conversions::new(),
-                )
-                .await?
-                .0;
-
-            // From the previous balance and the current one filter out only the
-            // nam token at epoch 0 (i.e. rewards)
+            // Extract only the native token balance at the latest epoch (i.e.
+            // rewards)
             let mut prev_native_balance = ValueSum::<AssetType, i128>::zero();
             let mut current_native_balance =
                 ValueSum::<AssetType, i128>::zero();
             for position in MaspDigitPos::iter() {
-                let prev_native_asset = AssetData {
+                let current_native_asset = AssetData {
                     token: native_token.clone(),
                     denom: native_token_denom,
                     position,
-                    epoch: Some(prev_epoch),
+                    epoch: Some(current_epoch),
                 };
-                prev_native_balance += prev_exchanged_balance.project(
-                    prev_native_asset
-                        .encode()
-                        .map_err(|_| eyre!("unable to create asset type"))?,
-                );
-                let mut current_native_asset = prev_native_asset.clone();
-                current_native_asset.redate_to_next_epoch();
-                current_native_balance += current_exchanged_balance.project(
+                let current_native_asset_type =
                     current_native_asset
                         .encode()
-                        .map_err(|_| eyre!("unable to create asset type"))?,
-                );
+                        .map_err(|_| eyre!("unable to create asset type"))?;
+                current_native_balance += current_exchanged_balance
+                    .project(current_native_asset_type);
+                // For the previous balance also post-date the asset to the
+                // current epoch two allow for the two rewards to be compared
+                let mut prev_native_asset = current_native_asset.clone();
+                prev_native_asset.redate(prev_epoch);
+                if let Some((_, amt)) =
+                    prev_exchanged_balance
+                        .project(prev_native_asset.encode().map_err(|_| {
+                            eyre!("unable to create asset type")
+                        })?)
+                        .into_components()
+                        .last()
+                {
+                    prev_native_balance +=
+                        ValueSum::from_pair(current_native_asset_type, amt);
+                }
             }
 
             let rewards = current_native_balance - prev_native_balance;
             let decoded_rewards =
                 self.decode_sum(context.client(), rewards).await.0;
 
-            decoded_rewards.components().try_fold(
+            decoded_rewards.into_components().try_fold(
                 0i128,
                 |acc,
 
@@ -867,13 +849,13 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 )| {
                     // Sanity checks, the rewards must be given in the native
                     // asset at the current epoch
-                    if token != &native_token {
+                    if token != native_token {
                         return Err(eyre!(
                             "Found reward asset other than the native token"
                         ));
                     }
                     match epoch {
-                        Some(ep) if ep == &current_epoch => (),
+                        Some(ep) if ep == current_epoch => (),
                         _ => {
                             return Err(eyre!(
                                 "Found reward asset with an epoch different \
@@ -882,7 +864,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                         }
                     }
 
-                    Ok(acc + *amt)
+                    Ok(acc + amt)
                 },
             )
         } else {
