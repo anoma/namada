@@ -32,6 +32,7 @@ namada_events = { path = "../events", default-features = false }
 namada_gas = { path = "../gas" }
 namada_macros = {path = "../macros"}
 namada_migrations = {path = "../migrations", optional = true}
+namada_proof_of_stake = { path = "../proof_of_stake" }
 namada_state = { path = "../state" }
 namada_systems = { path = "../systems" }
 namada_tx = { path = "../tx" }

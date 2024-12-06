@@ -2074,6 +2074,7 @@ dependencies = [
  "namada_events",
  "namada_gas",
  "namada_macros",
+ "namada_proof_of_stake",
  "namada_state",
  "namada_systems",
  "namada_tx",
