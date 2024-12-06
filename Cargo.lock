@@ -1063,8 +1063,9 @@ checksum = "98cc8fbded0c607b7ba9dd60cd98df59af97e84d24e49c8557331cfc26d301ce"
 
 [[package]]
 name = "clru"
-version = "0.5.0"
-source = "git+https://github.com/marmeladema/clru-rs.git?rev=71ca566#71ca566915f21f3c308091ca7756a91b0f8b5afc"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cbd0f76e066e64fdc5631e3bb46381254deab9ef1158292f27c8c57e3bf3fe59"
 
 [[package]]
 name = "cobs"
