@@ -294,6 +294,7 @@ pub trait DB: Debug {
         cf: &DbColFam,
         key: &Key,
         new_value: impl AsRef<[u8]>,
+        persist_diffs: bool,
     ) -> Result<()>;
 
     /// Get an instance of DB migrator
@@ -321,10 +322,17 @@ pub trait DBUpdateVisitor {
         key: &Key,
         cf: &DbColFam,
         value: impl AsRef<[u8]>,
+        persist_diffs: bool,
     );
 
     /// Delete key-val
-    fn delete(&mut self, db: &Self::DB, key: &Key, cf: &DbColFam);
+    fn delete(
+        &mut self,
+        db: &Self::DB,
+        key: &Key,
+        cf: &DbColFam,
+        persist_diffs: bool,
+    );
 
     /// Get key-vals matching the pattern
     fn get_pattern(

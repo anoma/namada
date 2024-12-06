@@ -642,6 +642,7 @@ impl DB for MockDB {
         _cf: &DbColFam,
         _key: &Key,
         _new_value: impl AsRef<[u8]>,
+        _persist_diffs: bool,
     ) -> Result<()> {
         unimplemented!()
     }
@@ -878,11 +879,18 @@ impl DBUpdateVisitor for () {
         _key: &Key,
         _cf: &DbColFam,
         _value: impl AsRef<[u8]>,
+        _persist_diffs: bool,
     ) {
         unimplemented!()
     }
 
-    fn delete(&mut self, _db: &Self::DB, _key: &Key, _cf: &DbColFam) {
+    fn delete(
+        &mut self,
+        _db: &Self::DB,
+        _key: &Key,
+        _cf: &DbColFam,
+        _persist_diffs: bool,
+    ) {
         unimplemented!()
     }
 

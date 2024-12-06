@@ -1788,6 +1788,7 @@ impl DB for RocksDB {
         cf: &DbColFam,
         key: &Key,
         new_value: impl AsRef<[u8]>,
+        persist_diffs: bool,
     ) -> Result<()> {
         self.insert_entry(batch, cf, key, new_value.as_ref())?;
         let state_cf = self.get_column_family(STATE_CF)?;
@@ -1798,7 +1799,7 @@ impl DB for RocksDB {
             })?;
 
         // If the CF is subspace, additionally update the diffs
-        if cf == &DbColFam::SUBSPACE {
+        if persist_diffs && cf == &DbColFam::SUBSPACE {
             let diffs_cf = self.get_column_family(DIFFS_CF)?;
             let diffs_key = Key::from(last_height.to_db_key())
                 .with_segment("new".to_owned())
@@ -1898,12 +1899,19 @@ impl DBUpdateVisitor for RocksDBUpdateVisitor {
         key: &Key,
         cf: &DbColFam,
         value: impl AsRef<[u8]>,
+        persist_diffs: bool,
     ) {
-        db.overwrite_entry(&mut self.batch, cf, key, value)
+        db.overwrite_entry(&mut self.batch, cf, key, value, persist_diffs)
             .expect("Failed to overwrite a key in storage")
     }
 
-    fn delete(&mut self, db: &Self::DB, key: &Key, cf: &DbColFam) {
+    fn delete(
+        &mut self,
+        db: &Self::DB,
+        key: &Key,
+        cf: &DbColFam,
+        persist_diffs: bool,
+    ) {
         let state_cf = db.get_column_family(STATE_CF).unwrap();
         let last_height: BlockHeight =
             db.read_value(state_cf, BLOCK_HEIGHT_KEY).unwrap().unwrap();
@@ -1913,7 +1921,7 @@ impl DBUpdateVisitor for RocksDBUpdateVisitor {
                     &mut self.batch,
                     last_height,
                     key,
-                    true,
+                    persist_diffs,
                 )
                 .expect("Failed to delete key from storage");
             }

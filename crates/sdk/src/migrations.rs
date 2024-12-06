@@ -290,9 +290,9 @@ impl DbUpdateType {
                     })?;
                 }
                 let value = value.bytes();
+                let persist_diffs = (state.diff_key_filter)(key);
                 if let DbColFam::SUBSPACE = cf {
                     // Update the merkle tree
-                    let persist_diffs = (state.diff_key_filter)(key);
                     let merk_key = if !persist_diffs {
                         let prefix = storage::Key::from(
                             NO_DIFF_KEY_PREFIX.to_string().to_db_key(),
@@ -304,14 +304,14 @@ impl DbUpdateType {
                     state.in_mem_mut().block.tree.update(merk_key, value)?;
                 }
 
-                migrator.write(state.db(), key, cf, value);
+                migrator.write(state.db(), key, cf, value, persist_diffs);
                 Ok(UpdateStatus::Add(vec![(key.to_string(), deserialized)]))
             }
             Self::Delete(key, cf) => {
-                migrator.delete(state.db(), key, cf);
+                let persist_diffs = (state.diff_key_filter)(key);
+                migrator.delete(state.db(), key, cf, persist_diffs);
                 if let DbColFam::SUBSPACE = cf {
                     // Update the merkle tree
-                    let persist_diffs = (state.diff_key_filter)(key);
                     let merk_key = if !persist_diffs {
                         let prefix = storage::Key::from(
                             NO_DIFF_KEY_PREFIX.to_string().to_db_key(),
@@ -349,9 +349,9 @@ impl DbUpdateType {
                     }
                     let key = storage::Key::from_str(&key).unwrap();
                     let value = value.bytes();
+                    let persist_diffs = (state.diff_key_filter)(&key);
                     if let DbColFam::SUBSPACE = cf {
                         // Update the merkle tree
-                        let persist_diffs = (state.diff_key_filter)(&key);
                         let merk_key = if !persist_diffs {
                             let prefix = storage::Key::from(
                                 NO_DIFF_KEY_PREFIX.to_string().to_db_key(),
@@ -366,7 +366,7 @@ impl DbUpdateType {
                             .tree
                             .update(merk_key, value)?;
                     }
-                    migrator.write(state.db(), &key, cf, value);
+                    migrator.write(state.db(), &key, cf, value, persist_diffs);
                 }
                 Ok::<_, eyre::Error>(UpdateStatus::Add(pairs))
             }
@@ -378,10 +378,9 @@ impl DbUpdateType {
                         .into_iter()
                         .map(|(raw_key, _)| {
                             let key = storage::Key::from_str(&raw_key).unwrap();
+                            let persist_diffs = (state.diff_key_filter)(&key);
                             if let DbColFam::SUBSPACE = cf {
                                 // Update the merkle tree
-                                let persist_diffs =
-                                    (state.diff_key_filter)(&key);
                                 let merk_key = if !persist_diffs {
                                     let prefix = storage::Key::from(
                                         NO_DIFF_KEY_PREFIX
@@ -399,7 +398,12 @@ impl DbUpdateType {
                                     .delete(merk_key)?;
                             }
 
-                            migrator.delete(state.db(), &key, cf);
+                            migrator.delete(
+                                state.db(),
+                                &key,
+                                cf,
+                                persist_diffs,
+                            );
                             Ok(raw_key)
                         })
                         .collect::<eyre::Result<Vec<_>>>()?,
