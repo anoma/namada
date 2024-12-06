@@ -713,9 +713,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         }
     }
 
-    // FIXME: check the help message of this command and verify that it states
-    // rewards only for the next epoch FIXME: maybe also change the name of
-    // the command?
     /// We estimate the next epoch rewards accumulated by the assets owned by
     /// the provided viewing key. This is done by assuming the same rewards
     /// rate on each asset as in the latest masp epoch.
