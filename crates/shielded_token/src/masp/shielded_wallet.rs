@@ -793,9 +793,10 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 .await?
                 .0;
 
-            // Account for possible rewards to the native token affecting the
-            // rewards themselves Make sure to convert nam rewards
-            // to the previous epoch
+            // Account for possible rewards to non-native tokens affecting the
+            // rewards themselves
+
+            // Make sure to update nam rewards to the previous epoch
             let prev_exchanged_balance = self
                 .compute_exchanged_amount(
                     context.client(),
@@ -806,7 +807,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 )
                 .await?
                 .0;
-            // Make sure to convert nam rewards to the current epoch
+            // Make sure to udpate nam rewards to the current epoch
             let current_exchanged_balance = self
                 .compute_exchanged_amount(
                     context.client(),
@@ -847,42 +848,43 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             let rewards = current_native_balance - prev_native_balance;
             let decoded_rewards =
                 self.decode_sum(context.client(), rewards).await.0;
-            let mut reward_amt = 0;
 
-            // FIXME: could iterate here instead?
-            for (
-                (
-                    _,
-                    AssetData {
-                        token,
-                        denom: _,
-                        position: _,
-                        epoch,
-                    },
-                ),
-                amt,
-            ) in decoded_rewards.components()
-            {
-                // Sanity checks, the rewards must be given in the native asset
-                // at the current epoch
-                if token != &native_token {
-                    return Err(eyre!(
-                        "Found reward asset other than the native token"
-                    ));
-                }
-                match epoch {
-                    Some(ep) if ep == &current_epoch => (),
-                    _ => {
+            decoded_rewards.components().try_fold(
+                0i128,
+                |acc,
+
+                 (
+                    (
+                        _,
+                        AssetData {
+                            token,
+                            denom: _,
+                            position: _,
+                            epoch,
+                        },
+                    ),
+                    amt,
+                )| {
+                    // Sanity checks, the rewards must be given in the native
+                    // asset at the current epoch
+                    if token != &native_token {
                         return Err(eyre!(
-                            "Found reward asset with an epoch different than \
-                             the current one"
+                            "Found reward asset other than the native token"
                         ));
                     }
-                }
+                    match epoch {
+                        Some(ep) if ep == &current_epoch => (),
+                        _ => {
+                            return Err(eyre!(
+                                "Found reward asset with an epoch different \
+                                 than the current one"
+                            ));
+                        }
+                    }
 
-                reward_amt += *amt;
-            }
-            Ok(reward_amt)
+                    Ok(acc + *amt)
+                },
+            )
         } else {
             Ok(0)
         }
