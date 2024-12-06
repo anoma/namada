@@ -30,6 +30,7 @@ use zeroize::Zeroizing;
 
 use crate::eth_bridge::bridge_pool;
 use crate::ibc::core::host::types::identifiers::{ChannelId, PortId};
+use crate::ibc::{NamadaMemo, NamadaMemoData};
 use crate::rpc::query_osmosis_pool_routes;
 use crate::signing::SigningTxData;
 use crate::wallet::{DatedSpendingKey, DatedViewingKey};
@@ -520,16 +521,6 @@ impl TxOsmosisSwap<SdkTypes> {
     /// Create an IBC transfer from the input arguments
     pub async fn assemble(self, ctx: &impl Namada) -> TxIbcTransfer<SdkTypes> {
         #[derive(Serialize)]
-        struct MemoFromNamada {
-            namada: NamadaContext,
-        }
-
-        #[derive(Serialize)]
-        struct NamadaContext {
-            memo: String,
-        }
-
-        #[derive(Serialize)]
         struct Memo {
             wasm: Wasm,
         }
@@ -597,8 +588,8 @@ impl TxOsmosisSwap<SdkTypes> {
         } = self;
 
         let next_memo = transfer.ibc_memo.take().map(|memo| {
-            serde_json::to_string(&MemoFromNamada {
-                namada: NamadaContext { memo },
+            serde_json::to_string(&NamadaMemo {
+                namada: NamadaMemoData::Memo(memo),
             })
             .unwrap()
         });
