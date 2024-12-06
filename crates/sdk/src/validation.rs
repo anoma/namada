@@ -34,6 +34,7 @@ pub type IbcVp<'a, S, CA> = ibc::vp::Ibc<
     ParamsIbcPseudoStore<'a, S, CA>,
     GovPreStore<'a, S, CA>,
     TokenStoreForIbcExec<'a, S, CA>,
+    PosPreStore<'a, S, CA>,
     token::Transfer,
 >;
 

@@ -18,11 +18,10 @@ use namada_core::arith::checked;
 use namada_core::collections::HashSet;
 use namada_core::storage::Key;
 use namada_gas::{IBC_ACTION_EXECUTE_GAS, IBC_ACTION_VALIDATE_GAS};
-use namada_proof_of_stake::storage::read_owned_pos_params;
 use namada_state::write_log::StorageModification;
 use namada_state::{Error, Result, StateRead};
 use namada_systems::trans_token::{self as token, Amount};
-use namada_systems::{governance, parameters};
+use namada_systems::{governance, parameters, proof_of_stake};
 use namada_tx::BatchedTxRef;
 use namada_vp::native_vp::{Ctx, CtxPreStorageRead, NativeVp, VpEvaluator};
 use namada_vp::VpEnv;
@@ -78,6 +77,7 @@ pub struct Ibc<
     ParamsPseudo,
     Gov,
     Token,
+    PoS,
     Transfer,
 > where
     S: 'static + StateRead,
@@ -85,8 +85,15 @@ pub struct Ibc<
     /// Context to interact with the host structures.
     pub ctx: Ctx<'ctx, S, CA, EVAL>,
     /// Generic types for DI
-    pub _marker:
-        PhantomData<(Params, ParamsPre, ParamsPseudo, Gov, Token, Transfer)>,
+    pub _marker: PhantomData<(
+        Params,
+        ParamsPre,
+        ParamsPseudo,
+        Gov,
+        Token,
+        PoS,
+        Transfer,
+    )>,
 }
 
 impl<
@@ -100,6 +107,7 @@ impl<
     ParamsPseudo,
     Gov,
     Token,
+    PoS,
     Transfer,
 > NativeVp<'view>
     for Ibc<
@@ -112,6 +120,7 @@ impl<
         ParamsPseudo,
         Gov,
         Token,
+        PoS,
         Transfer,
     >
 where
@@ -127,6 +136,7 @@ where
     Token: token::Keys
         + token::Write<PseudoExecutionStorage<'view, 'ctx, S, CA, EVAL>>
         + Debug,
+    PoS: proof_of_stake::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
     Transfer: BorshDeserialize,
 {
     fn validate_tx(
@@ -179,8 +189,22 @@ impl<
     ParamsPseudo,
     Gov,
     Token,
+    PoS,
     Transfer,
-> Ibc<'ctx, S, CA, EVAL, Params, ParamsPre, ParamsPseudo, Gov, Token, Transfer>
+>
+    Ibc<
+        'ctx,
+        S,
+        CA,
+        EVAL,
+        Params,
+        ParamsPre,
+        ParamsPseudo,
+        Gov,
+        Token,
+        PoS,
+        Transfer,
+    >
 where
     S: 'static + StateRead,
     EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL> + Debug,
@@ -193,6 +217,7 @@ where
     Token: token::Keys
         + token::Write<PseudoExecutionStorage<'view, 'ctx, S, CA, EVAL>>
         + Debug,
+    PoS: proof_of_stake::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
     Transfer: BorshDeserialize,
 {
     /// Instantiate IBC VP
@@ -291,13 +316,11 @@ where
         let chain_id = self.ctx.get_chain_id()?;
         let proof_specs =
             namada_state::ics23_specs::ibc_proof_specs::<<S as StateRead>::H>();
-        let pos_params = read_owned_pos_params(&self.ctx.pre())?;
+        let withdrawable_epoch_offset = PoS::withdrawable_epoch_offset(&self.ctx.pre())?;
         let epoch_duration =
             ParamsPre::epoch_duration_parameter(&self.ctx.pre())?;
-        let unbonding_period_secs = checked!(
-            pos_params.withdrawable_epoch_offset()
-                * epoch_duration.min_duration.0
-        )?;
+        let unbonding_period_secs =
+            checked!(withdrawable_epoch_offset * epoch_duration.min_duration.0)?;
         Ok(ValidationParams {
             chain_id: IbcChainId::from_str(chain_id.as_str())
                 .map_err(ActionError::ChainId)?,
@@ -579,6 +602,9 @@ mod tests {
         >,
         namada_token::Store<
             PseudoExecutionStorage<'ctx, 'ctx, TestState, VpCache<CA>, Eval>,
+        >,
+        namada_proof_of_stake::Store<
+            CtxPreStorageRead<'ctx, 'ctx, TestState, VpCache<CA>, Eval>,
         >,
         Transfer,
     >;

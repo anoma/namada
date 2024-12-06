@@ -23,6 +23,9 @@ pub trait Read<S> {
     /// Read PoS pipeline length parameter
     fn pipeline_len(storage: &S) -> Result<u64>;
 
+    /// Get the epoch offset from which an unbonded bond can withdrawn
+    fn withdrawable_epoch_offset(storage: &S) -> Result<u64>;
+
     /// Read total active stake
     fn total_active_stake<Gov>(
         storage: &S,
