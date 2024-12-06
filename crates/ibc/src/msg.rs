@@ -16,6 +16,26 @@ use ibc::core::host::types::identifiers::PortId;
 use ibc::primitives::proto::Protobuf;
 use masp_primitives::transaction::Transaction as MaspTransaction;
 use namada_core::borsh::BorshSerializeExt;
+use serde::{Deserialize, Serialize};
+
+/// Memo data serialized as a JSON object included
+/// in IBC packets.
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct NamadaMemo {
+    /// The inner memo data.
+    pub namada: NamadaMemoData,
+}
+
+/// Data included in a Namada memo.
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NamadaMemoData {
+    /// Generic message sent over IBC.
+    Memo(String),
+    /// Borsh encoded shielding transfer sent over IBC.
+    ShieldingTransfer(Vec<u8>),
+}
 
 /// The different variants of an Ibc message
 #[derive(Debug, Clone)]
@@ -154,8 +174,23 @@ pub fn extract_masp_tx_from_envelope(
 pub fn decode_ibc_shielding_data(
     s: impl AsRef<str>,
 ) -> Option<IbcShieldingData> {
-    let bytes = HEXUPPER.decode(s.as_ref().as_bytes()).ok()?;
-    IbcShieldingData::try_from_slice(&bytes).ok()
+    let sref = s.as_ref();
+
+    serde_json::from_str(sref).map_or_else(
+        |_| {
+            let bytes = HEXUPPER.decode(sref.as_bytes()).ok()?;
+            IbcShieldingData::try_from_slice(&bytes).ok()
+        },
+        |NamadaMemo { namada: memo_data }| match memo_data {
+            NamadaMemoData::Memo(memo) => {
+                let bytes = HEXUPPER.decode(memo.as_bytes()).ok()?;
+                IbcShieldingData::try_from_slice(&bytes).ok()
+            }
+            NamadaMemoData::ShieldingTransfer(bytes) => {
+                IbcShieldingData::try_from_slice(&bytes).ok()
+            }
+        },
+    )
 }
 
 /// Extract MASP transaction from IBC packet memo
