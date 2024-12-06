@@ -579,6 +579,8 @@ impl TxOsmosisSwap<SdkTypes> {
             serializer.serialize_str(&val.to_string())
         }
 
+        const OSMOSIS_SQS_SERVER: &str = "https://sqs.osmosis.zone";
+
         let Self {
             mut transfer,
             output_denom,
@@ -602,6 +604,7 @@ impl TxOsmosisSwap<SdkTypes> {
                 transfer.amount,
                 transfer.channel_id.clone(),
                 &output_denom,
+                OSMOSIS_SQS_SERVER,
             )
             .await
             .unwrap()
