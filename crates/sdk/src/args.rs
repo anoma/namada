@@ -28,6 +28,7 @@ use namada_tx::Memo;
 use serde::{Deserialize, Serialize, Serializer};
 use zeroize::Zeroizing;
 
+use crate::error::Error;
 use crate::eth_bridge::bridge_pool;
 use crate::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use crate::ibc::{NamadaMemo, NamadaMemoData};
@@ -503,15 +504,16 @@ impl FromStr for OsmosisPoolHop {
 pub struct TxOsmosisSwap<C: NamadaTypes = SdkTypes> {
     /// The IBC transfer data
     pub transfer: TxIbcTransfer<C>,
-    /// The token we wish to receive
+    /// The token we wish to receive (on Osmosis)
     pub output_denom: String,
-    /// Recipient address
+    /// Address of the recipient on Namada
     pub recipient: C::Address,
-    /// Slippage percent
+    /// The maximum percentage difference allowed between the estimated and
+    /// actual trade price
     pub slippage_percent: u64,
-    /// TODO! Figure out what this is
+    /// The time period (in seconds) over which the average price is calculated
     pub window_seconds: u64,
-    /// A recovery address (on Osmosis) in case of failure
+    /// Recovery address (on Osmosis) in case of failure
     pub local_recovery_addr: String,
     /// The route to take through Osmosis pools
     pub route: Option<Vec<OsmosisPoolHop>>,
@@ -519,7 +521,10 @@ pub struct TxOsmosisSwap<C: NamadaTypes = SdkTypes> {
 
 impl TxOsmosisSwap<SdkTypes> {
     /// Create an IBC transfer from the input arguments
-    pub async fn assemble(self, ctx: &impl Namada) -> TxIbcTransfer<SdkTypes> {
+    pub async fn into_ibc_transfer(
+        self,
+        ctx: &impl Namada,
+    ) -> crate::error::Result<TxIbcTransfer<SdkTypes>> {
         #[derive(Serialize)]
         struct Memo {
             wasm: Wasm,
@@ -538,14 +543,13 @@ impl TxOsmosisSwap<SdkTypes> {
 
         #[derive(Serialize)]
         struct OsmosisSwap {
+            receiver: String,
             output_denom: String,
             slippage: Slippage,
-            receiver: String,
+            on_failed_delivery: LocalRecoveryAddr,
+            route: Vec<OsmosisPoolHop>,
             #[serde(skip_serializing_if = "Option::is_none")]
             next_memo: Option<String>,
-            on_failed_delivery: LocalRecoveryAddr,
-            #[serde(skip_serializing_if = "Option::is_none")]
-            route: Option<Vec<OsmosisPoolHop>>,
         }
 
         #[derive(Serialize)]
@@ -587,13 +591,25 @@ impl TxOsmosisSwap<SdkTypes> {
             route,
         } = self;
 
+        // validate `local_recovery_addr`
+        if !bech32::decode(&local_recovery_addr)
+            .is_ok_and(|(hrp, _, _)| hrp == "osmo")
+        {
+            return Err(Error::Other(format!(
+                "Invalid Osmosis address {local_recovery_addr:?}"
+            )));
+        }
+
         let next_memo = transfer.ibc_memo.take().map(|memo| {
             serde_json::to_string(&NamadaMemo {
                 namada: NamadaMemoData::Memo(memo),
             })
             .unwrap()
         });
-        let route = if route.is_none() {
+
+        let route = if let Some(route) = route {
+            route
+        } else {
             query_osmosis_pool_routes(
                 ctx,
                 &transfer.token,
@@ -602,11 +618,15 @@ impl TxOsmosisSwap<SdkTypes> {
                 &output_denom,
                 OSMOSIS_SQS_SERVER,
             )
-            .await
-            .unwrap()
+            .await?
             .pop()
-        } else {
-            route
+            .ok_or_else(|| {
+                Error::Other(format!(
+                    "No route found to swap {:?} of Namada's {} with Osmosis' \
+                     {}",
+                    transfer.amount, transfer.token, output_denom
+                ))
+            })?
         };
 
         let memo = Memo {
@@ -633,7 +653,7 @@ impl TxOsmosisSwap<SdkTypes> {
         };
 
         transfer.ibc_memo = Some(serde_json::to_string(&memo).unwrap());
-        transfer
+        Ok(transfer)
     }
 }
 

@@ -5204,13 +5204,16 @@ pub mod args {
                     "The IBC denomination (on Osmosis) of the desired asset."
                 )))
                 .arg(TARGET.def().help(wrap!(
-                    "The address that shall receive the swapped tokens."
+                    "The Namada address that shall receive the swapped tokens."
                 )))
                 .arg(SLIPPAGE.def().help(wrap!(
-                    "The slippage percentage as an integer between 0 and 100."
+                    "The slippage percentage as an integer between 0 and 100. \
+                     Represents the maximum acceptable deviation from the \
+                     expected price during a trade."
                 )))
                 .arg(WINDOW_SECONDS.def().help(wrap!(
-                    "A mysterious thing that should be set to 10s."
+                    "The time period (in seconds) over which the average \
+                     price is calculated."
                 )))
                 .arg(LOCAL_RECOVERY_ADDR.def().help(wrap!(
                     "An address on Osmosis from which to recover funds in \

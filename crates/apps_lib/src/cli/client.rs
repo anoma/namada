@@ -124,7 +124,7 @@ impl CliApi {
 
                         let args = args.to_sdk(&mut ctx)?;
                         let namada = ctx.to_sdk(client, io);
-                        let args = args.assemble(&namada).await;
+                        let args = args.into_ibc_transfer(&namada).await?;
 
                         tx::submit_ibc_transfer(&namada, args).await?;
                     }
