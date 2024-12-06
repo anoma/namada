@@ -273,7 +273,9 @@ pub mod cmds {
                 .subcommand(QueryMaspRewardTokens::def().display_order(5))
                 .subcommand(QueryBlock::def().display_order(5))
                 .subcommand(QueryBalance::def().display_order(5))
-                .subcommand(QueryRewardsEstimate::def().display_order(5))
+                .subcommand(
+                    QueryShieldingRewardsEstimate::def().display_order(5),
+                )
                 .subcommand(QueryBonds::def().display_order(5))
                 .subcommand(QueryBondedStake::def().display_order(5))
                 .subcommand(QuerySlashes::def().display_order(5))
@@ -358,7 +360,7 @@ pub mod cmds {
             let query_block = Self::parse_with_ctx(matches, QueryBlock);
             let query_balance = Self::parse_with_ctx(matches, QueryBalance);
             let query_rewards_estimate =
-                Self::parse_with_ctx(matches, QueryRewardsEstimate);
+                Self::parse_with_ctx(matches, QueryShieldingRewardsEstimate);
             let query_bonds = Self::parse_with_ctx(matches, QueryBonds);
             let query_bonded_stake =
                 Self::parse_with_ctx(matches, QueryBondedStake);
@@ -525,7 +527,7 @@ pub mod cmds {
         QueryMaspRewardTokens(QueryMaspRewardTokens),
         QueryBlock(QueryBlock),
         QueryBalance(QueryBalance),
-        QueryRewardsEstimate(QueryRewardsEstimate),
+        QueryShieldingRewardsEstimate(QueryShieldingRewardsEstimate),
         QueryBonds(QueryBonds),
         QueryBondedStake(QueryBondedStake),
         QueryCommissionRate(QueryCommissionRate),
@@ -1880,27 +1882,29 @@ pub mod cmds {
     }
 
     #[derive(Clone, Debug)]
-    pub struct QueryRewardsEstimate(
-        pub args::QueryRewardsEstimate<args::CliTypes>,
+    pub struct QueryShieldingRewardsEstimate(
+        pub args::QueryShieldingRewardsEstimate<args::CliTypes>,
     );
 
-    impl SubCmd for QueryRewardsEstimate {
-        const CMD: &'static str = "estimate-rewards";
+    impl SubCmd for QueryShieldingRewardsEstimate {
+        const CMD: &'static str = "estimate-shielding-rewards";
 
         fn parse(matches: &ArgMatches) -> Option<Self> {
             matches.subcommand_matches(Self::CMD).map(|matches| {
-                QueryRewardsEstimate(args::QueryRewardsEstimate::parse(matches))
+                QueryShieldingRewardsEstimate(
+                    args::QueryShieldingRewardsEstimate::parse(matches),
+                )
             })
         }
 
         fn def() -> App {
             App::new(Self::CMD)
                 .about(wrap!(
-                    "Estimate the amount of MASP rewards accumulated by the \
+                    "Estimate the amount of MASP rewards for the \
                      next MASP epoch. Please run shielded-sync first for best \
                      results."
                 ))
-                .add_args::<args::QueryRewardsEstimate<args::CliTypes>>()
+                .add_args::<args::QueryShieldingRewardsEstimate<args::CliTypes>>()
         }
     }
 
@@ -6355,26 +6359,27 @@ pub mod args {
         }
     }
 
-    impl CliToSdk<QueryRewardsEstimate<SdkTypes>>
-        for QueryRewardsEstimate<CliTypes>
+    impl CliToSdk<QueryShieldingRewardsEstimate<SdkTypes>>
+        for QueryShieldingRewardsEstimate<CliTypes>
     {
         type Error = std::convert::Infallible;
 
         fn to_sdk(
             self,
             ctx: &mut Context,
-        ) -> Result<QueryRewardsEstimate<SdkTypes>, Self::Error> {
+        ) -> Result<QueryShieldingRewardsEstimate<SdkTypes>, Self::Error>
+        {
             let query = self.query.to_sdk(ctx)?;
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
 
-            Ok(QueryRewardsEstimate::<SdkTypes> {
+            Ok(QueryShieldingRewardsEstimate::<SdkTypes> {
                 query,
                 owner: chain_ctx.get_cached(&self.owner),
             })
         }
     }
 
-    impl Args for QueryRewardsEstimate<CliTypes> {
+    impl Args for QueryShieldingRewardsEstimate<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let query = Query::parse(matches);
             let owner = VIEWING_KEY.parse(matches);
