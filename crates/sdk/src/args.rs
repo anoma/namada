@@ -579,7 +579,7 @@ impl TxOsmosisSwap<SdkTypes> {
             serializer.serialize_str(&val.to_string())
         }
 
-        const OSMOSIS_SQS_SERVER: &str = "https://sqs.osmosis.zone";
+        const OSMOSIS_SQS_SERVER: &str = "https://sqsprod.osmosis.zone";
 
         let Self {
             mut transfer,
