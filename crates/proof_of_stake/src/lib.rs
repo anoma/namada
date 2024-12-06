@@ -140,11 +140,6 @@ where
         Ok(params.pipeline_len)
     }
 
-    fn unbonding_len(storage: &S) -> Result<u64> {
-        let params = storage::read_owned_pos_params(storage)?;
-        Ok(params.unbonding_len)
-    }
-
     fn total_active_stake<Gov>(
         storage: &S,
         epoch: Epoch,

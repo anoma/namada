@@ -23,9 +23,6 @@ pub trait Read<S> {
     /// Read PoS pipeline length parameter
     fn pipeline_len(storage: &S) -> Result<u64>;
 
-    /// Read PoS unbonding length parameter
-    fn unbonding_len(storage: &S) -> Result<u64>;
-
     /// Read total active stake
     fn total_active_stake<Gov>(
         storage: &S,
