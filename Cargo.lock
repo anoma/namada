@@ -5321,6 +5321,7 @@ dependencies = [
  "arbitrary",
  "assert_matches",
  "async-trait",
+ "bech32 0.8.1",
  "bimap",
  "borsh",
  "borsh-ext",

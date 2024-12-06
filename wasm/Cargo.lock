@@ -3927,6 +3927,7 @@ name = "namada_sdk"
 version = "0.46.0"
 dependencies = [
  "async-trait",
+ "bech32 0.8.1",
  "bimap",
  "borsh",
  "borsh-ext",
