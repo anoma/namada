@@ -33,8 +33,6 @@ pub struct NamadaMemo {
 pub enum NamadaMemoData {
     /// Generic message sent over IBC.
     Memo(String),
-    /// Borsh encoded shielding transfer sent over IBC.
-    ShieldingTransfer(Vec<u8>),
 }
 
 /// The different variants of an Ibc message
@@ -184,9 +182,6 @@ pub fn decode_ibc_shielding_data(
         |NamadaMemo { namada: memo_data }| match memo_data {
             NamadaMemoData::Memo(memo) => {
                 let bytes = HEXUPPER.decode(memo.as_bytes()).ok()?;
-                IbcShieldingData::try_from_slice(&bytes).ok()
-            }
-            NamadaMemoData::ShieldingTransfer(bytes) => {
                 IbcShieldingData::try_from_slice(&bytes).ok()
             }
         },
