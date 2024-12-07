@@ -21,11 +21,15 @@ use namada_core::key::*;
 use namada_core::masp::{
     AssetData, ExtendedViewingKey, MaspTxId, PaymentAddress,
 };
+use namada_core::time::DateTimeUtc;
 use namada_core::token::{Amount, DenominatedAmount};
 use namada_governance::storage::proposal::{
     InitProposalData, ProposalType, VoteProposalData,
 };
 use namada_governance::storage::vote::ProposalVote;
+use namada_ibc::core::channel::types::timeout::{
+    TimeoutHeight, TimeoutTimestamp,
+};
 use namada_ibc::{MsgNftTransfer, MsgTransfer};
 use namada_io::*;
 use namada_parameters::storage as parameter_storage;
@@ -1002,6 +1006,44 @@ fn find_masp_builder<'a>(
     Ok(None)
 }
 
+// Format the date-time for the Ledger device
+fn format_timestamp(datetime: DateTimeUtc) -> String {
+    let mut datetime = datetime.0.to_string();
+    let mut secfrac_width = None;
+    for (i, ch) in datetime.char_indices() {
+        if ch == '.' {
+            secfrac_width = Some(0);
+        } else if let Some(ref mut secfrac_width) = &mut secfrac_width {
+            if ch.is_ascii_digit() {
+                *secfrac_width += 1;
+            } else {
+                let trailing = "0".repeat(9 - *secfrac_width);
+                datetime.insert_str(i, &trailing);
+                break;
+            }
+        }
+    }
+    datetime
+}
+
+// Format the timeout timestamp for the Ledger device
+fn format_timeout_timestamp(timestamp: &TimeoutTimestamp) -> String {
+    match timestamp {
+        TimeoutTimestamp::Never => "no timestamp".to_string(),
+        TimeoutTimestamp::At(timestamp) => {
+            timestamp.into_tm_time().to_rfc3339()
+        }
+    }
+}
+
+// Format the timeout height for the Ledger device
+fn format_timeout_height(height: &TimeoutHeight) -> String {
+    match height {
+        TimeoutHeight::Never => "no timeout".to_string(),
+        TimeoutHeight::At(height) => height.to_string(),
+    }
+}
+
 /// Converts the given transaction to the form that is displayed on the Ledger
 /// device
 pub async fn to_ledger_vector(
@@ -1391,11 +1433,15 @@ pub async fn to_ledger_vector(
                     ),
                     format!(
                         "Timeout height : {}",
-                        transfer.message.timeout_height_on_b
+                        format_timeout_height(
+                            &transfer.message.timeout_height_on_b
+                        )
                     ),
                     format!(
                         "Timeout timestamp : {}",
-                        transfer.message.timeout_timestamp_on_b,
+                        format_timeout_timestamp(
+                            &transfer.message.timeout_timestamp_on_b
+                        ),
                     ),
                 ]);
                 tv.output_expert.extend(vec![
@@ -1420,11 +1466,15 @@ pub async fn to_ledger_vector(
                 tv.output_expert.extend(vec![
                     format!(
                         "Timeout height : {}",
-                        transfer.message.timeout_height_on_b
+                        format_timeout_height(
+                            &transfer.message.timeout_height_on_b
+                        )
                     ),
                     format!(
                         "Timeout timestamp : {}",
-                        transfer.message.timeout_timestamp_on_b,
+                        format_timeout_timestamp(
+                            &transfer.message.timeout_timestamp_on_b
+                        ),
                     ),
                 ]);
                 if let Some(transfer) = transfer.transfer {
@@ -1513,11 +1563,15 @@ pub async fn to_ledger_vector(
                 tv.output.extend(vec![
                     format!(
                         "Timeout height : {}",
-                        transfer.message.timeout_height_on_b
+                        format_timeout_height(
+                            &transfer.message.timeout_height_on_b
+                        )
                     ),
                     format!(
                         "Timeout timestamp : {}",
-                        transfer.message.timeout_timestamp_on_b,
+                        format_timeout_timestamp(
+                            &transfer.message.timeout_timestamp_on_b
+                        ),
                     ),
                 ]);
                 tv.output_expert.extend(vec![
@@ -1581,11 +1635,15 @@ pub async fn to_ledger_vector(
                 tv.output_expert.extend(vec![
                     format!(
                         "Timeout height : {}",
-                        transfer.message.timeout_height_on_b
+                        format_timeout_height(
+                            &transfer.message.timeout_height_on_b
+                        )
                     ),
                     format!(
                         "Timeout timestamp : {}",
-                        transfer.message.timeout_timestamp_on_b,
+                        format_timeout_timestamp(
+                            &transfer.message.timeout_timestamp_on_b
+                        ),
                     ),
                 ]);
                 if let Some(transfer) = transfer.transfer {
@@ -2022,7 +2080,10 @@ pub async fn to_ledger_vector(
             let fee_amount_per_gas_unit =
                 to_ledger_decimal(&wrapper.fee.amount_per_gas_unit.to_string());
             tv.output_expert.extend(vec![
-                format!("Timestamp : {}", tx.header.timestamp.0),
+                format!(
+                    "Timestamp : {}",
+                    format_timestamp(tx.header.timestamp)
+                ),
                 format!("Pubkey : {}", wrapper.pk),
                 format!("Gas limit : {}", u64::from(wrapper.gas_limit)),
             ]);
