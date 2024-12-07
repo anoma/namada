@@ -207,7 +207,7 @@ tracing-appender = "0.2.2"
 tracing-log = "0.2.0"
 tracing-subscriber = {version = "0.3.7", default-features = false, features = ["env-filter", "fmt"]}
 typed-builder = "0.19.1"
-wasmparser = "0.107.0"
+warp = "0.3.6"
 wasm-instrument = {version = "0.4.0", features = ["sign_ext"]}
 wasmer = "4.3.5"
 wasmer-cache = "4.3.5"
@@ -215,6 +215,7 @@ wasmer-compiler = "4.3.5"
 wasmer-compiler-singlepass = "4.3.5"
 wasmer-types = "4.3.5"
 wasmer-vm = "4.3.5"
+wasmparser = "0.107.0"
 wasmtimer = "0.2.0"
 winapi = "0.3.9"
 xorf = { version = "0.11.0", features = ["serde"] }
