@@ -549,7 +549,7 @@ impl TxOsmosisSwap<SdkTypes> {
             on_failed_delivery: LocalRecoveryAddr,
             route: Vec<OsmosisPoolHop>,
             #[serde(skip_serializing_if = "Option::is_none")]
-            next_memo: Option<String>,
+            next_memo: Option<serde_json::Map<String, serde_json::Value>>,
         }
 
         #[derive(Serialize)]
@@ -600,11 +600,14 @@ impl TxOsmosisSwap<SdkTypes> {
             )));
         }
 
-        let next_memo = transfer.ibc_memo.take().map(|memo| {
-            serde_json::to_string(&NamadaMemo {
+        let next_memo =  transfer.ibc_memo.take().map(|memo| {
+            match serde_json::to_value(&NamadaMemo {
                 namada: NamadaMemoData::Memo(memo),
             })
-            .unwrap()
+            .unwrap() {
+                serde_json::Value::Object(x) => x,
+                _ => panic!("Ibc Memo is not valid json.")
+            }
         });
 
         let route = if let Some(route) = route {
