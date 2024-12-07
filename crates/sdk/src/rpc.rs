@@ -30,7 +30,9 @@ use namada_gas::WholeGas;
 use namada_governance::parameters::GovernanceParameters;
 use namada_governance::pgf::parameters::PgfParameters;
 use namada_governance::pgf::storage::steward::StewardDetail;
-use namada_governance::storage::proposal::StorageProposal;
+use namada_governance::storage::proposal::{
+    StoragePgfFunding, StorageProposal,
+};
 use namada_governance::utils::{
     compute_proposal_result, ProposalResult, ProposalVotes, Vote,
 };
@@ -303,6 +305,15 @@ pub async fn query_pgf_stewards<C: namada_io::Client + Sync>(
 ) -> Result<Vec<StewardDetail>, error::Error> {
     convert_response::<C, Vec<StewardDetail>>(
         RPC.vp().pgf().stewards(client).await,
+    )
+}
+
+/// Get the set of pgf fundings
+pub async fn query_pgf_fundings<C: namada_io::Client + Sync>(
+    client: &C,
+) -> Result<Vec<StoragePgfFunding>, error::Error> {
+    convert_response::<C, Vec<StoragePgfFunding>>(
+        RPC.vp().pgf().funding(client).await,
     )
 }
 
