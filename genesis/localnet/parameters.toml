@@ -17,7 +17,7 @@ implicit_vp = "vp_implicit"
 # Expected number of epochs per year (also sets the min duration of an epoch in seconds)
 epochs_per_year = 31_536_000
 # The multiplier for masp epochs
-masp_epoch_multiplier = 2
+masp_epoch_multiplier = 1
 # Max gas for block
 max_block_gas = 3_000_000
 # Masp fee payment gas limit
@@ -46,7 +46,7 @@ block_proposer_reward = "0.125"
 # Reward for voting on a block.
 block_vote_reward = "0.1"
 # Maximum inflation rate per annum (10%)
-max_inflation_rate = "0.1"
+max_inflation_rate = "1.0"
 # Targeted ratio of staked tokens to total tokens in the supply
 target_staked_ratio = "0.6667"
 # Portion of a validator's stake that should be slashed on a duplicate
