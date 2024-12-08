@@ -371,7 +371,7 @@ pub async fn query_proposal_by_id<C: Client + Sync>(
 /// Estimate MASP rewards for next MASP epoch
 pub async fn query_rewards_estimate(
     context: &impl Namada,
-    args: args::QueryRewardsEstimate,
+    args: args::QueryShieldingRewardsEstimate,
 ) {
     let mut shielded = context.shielded_mut().await;
     let _ = shielded.load().await;

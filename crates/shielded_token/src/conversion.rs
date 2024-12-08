@@ -410,10 +410,7 @@ where
                         );
                         normed_inflation
                     });
-                // The conversion is computed such that if consecutive
-                // conversions are added together, the
-                // intermediate native tokens cancel/
-                // telescope out
+                // The conversion is computed such that if consecutive conversions are added together, the intermediate native tokens cancel/telescope out
                 let cur_conv = MaspAmount::from_pair(
                     old_asset,
                     i128::try_from(normed_inflation)
@@ -465,8 +462,7 @@ where
                 }
             } else {
                 // Express the inflation reward in real terms, that is, with
-                // respect to the native asset in the zeroth
-                // epoch
+                // respect to the native asset in the zeroth epoch
                 let reward_uint = Uint::from(reward);
                 let ref_inflation_uint = Uint::from(ref_inflation);
                 let inflation_uint = Uint::from(normed_inflation);
