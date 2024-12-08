@@ -200,8 +200,7 @@ toml = "0.5.8"
 tonic = "0.8.3"
 tonic-build = "0.11.0"
 tower = "0.4"
-# branch yuji/tendermint-0.38
-tower-abci = { git = "https://github.com/heliaxdev/tower-abci", rev = "30d2a8cdf8321b599ae13ba74f4c78217a64ce58" }
+tower-abci = "0.16.0"
 tracing = "0.1.30"
 tracing-appender = "0.2.2"
 tracing-log = "0.2.0"
