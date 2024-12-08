@@ -108,7 +108,7 @@ where
     Ok(())
 }
 
-/// Clear the public keys account subtorage space
+/// Clear the public keys account substorage space
 pub fn clear_public_keys<S>(storage: &mut S, owner: &Address) -> Result<()>
 where
     S: StorageWrite + StorageRead,
