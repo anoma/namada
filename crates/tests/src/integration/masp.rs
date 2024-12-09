@@ -4195,12 +4195,15 @@ fn masp_fee_payment_gas_limit() -> Result<()> {
     let validator_one_rpc = "http://127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
-    let (mut node, _services) = setup::initialize_genesis(|mut genesis| {
-        // Set an insufficient gas limit for masp fee payment to force all
-        // transactions to fail
-        genesis.parameters.parameters.masp_fee_payment_gas_limit = 10_000;
-        genesis
-    })?;
+    let (mut node, _services) = setup::initialize_genesis(
+        |mut genesis| {
+            // Set an insufficient gas limit for masp fee payment to force all
+            // transactions to fail
+            genesis.parameters.parameters.masp_fee_payment_gas_limit = 10_000;
+            genesis
+        },
+        None,
+    )?;
     _ = node.next_masp_epoch();
 
     // Shield some tokens
@@ -4679,14 +4682,17 @@ fn masp_fee_payment_with_different_token() -> Result<()> {
     let validator_one_rpc = "http://127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
-    let (mut node, _services) = setup::initialize_genesis(|mut genesis| {
-        // Whitelist BTC for gas payment
-        genesis.parameters.parameters.minimum_gas_price.insert(
-            "btc".into(),
-            DenominatedAmount::new(1.into(), token::Denomination(6)),
-        );
-        genesis
-    })?;
+    let (mut node, _services) = setup::initialize_genesis(
+        |mut genesis| {
+            // Whitelist BTC for gas payment
+            genesis.parameters.parameters.minimum_gas_price.insert(
+                "btc".into(),
+                DenominatedAmount::new(1.into(), token::Denomination(6)),
+            );
+            genesis
+        },
+        None,
+    )?;
     _ = node.next_masp_epoch();
 
     // Shield some tokens
