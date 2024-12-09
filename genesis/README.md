@@ -24,8 +24,6 @@ The [tokens.toml file](tokens.toml) contains tokens with their aliases and valid
 
 The [balances.toml file](balances.toml) contains token balances associated with the public keys.
 
-TODO: add shielded balances
-
 ## Parameters
 
 The [parameters.toml file](parameters.toml) contains the general chain parameters, PoS and governance parameters.
