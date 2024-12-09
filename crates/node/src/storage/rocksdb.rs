@@ -1824,6 +1824,7 @@ impl DB for RocksDB {
     fn update_last_block_merkle_tree(
         &self,
         merkle_tree_stores: namada_vp::state::MerkleTreeStoresWrite<'_>,
+        is_full_commit: bool,
     ) -> Result<()> {
         let state_cf = self.get_column_family(STATE_CF)?;
         let block_cf = self.get_column_family(BLOCK_CF)?;
@@ -1839,7 +1840,7 @@ impl DB for RocksDB {
 
         let mut batch = RocksDBWriteBatch::default();
         for st in StoreType::iter() {
-            if st.is_stored_every_block() {
+            if st.is_stored_every_block() || is_full_commit {
                 let key_prefix = if st.is_stored_every_block() {
                     tree_key_prefix_with_height(st, height)
                 } else {

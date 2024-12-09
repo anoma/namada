@@ -304,6 +304,7 @@ pub trait DB: Debug {
     fn update_last_block_merkle_tree(
         &self,
         merkle_tree_stores: MerkleTreeStoresWrite<'_>,
+        is_full_commit: bool,
     ) -> Result<()>;
 }
 

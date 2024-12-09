@@ -616,8 +616,7 @@ where
         mut batch: D::WriteBatch,
     ) -> Result<()> {
         // All states are written only when the first height or a new epoch
-        let is_full_commit = self.in_mem.block.height.0 == 1
-            || self.in_mem.last_epoch != self.in_mem.block.epoch;
+        let is_full_commit = self.is_full_commit();
 
         // For convenience in tests, fill-in a header if it's missing.
         // Normally, the header is added in `FinalizeBlock`.
@@ -681,10 +680,19 @@ where
         Ok(())
     }
 
+    /// A full commit is executed only at the first height or one a new epoch.
+    pub fn is_full_commit(&self) -> bool {
+        self.in_mem.block.height.0 == 1
+            || self.in_mem.last_epoch != self.in_mem.block.epoch
+    }
+
     /// Update the merkle tree written for the committed last block
     pub fn update_last_block_merkle_tree(&self) -> Result<()> {
-        self.db
-            .update_last_block_merkle_tree(self.in_mem.block.tree.stores())?;
+        let is_full_commit = self.is_full_commit();
+        self.db.update_last_block_merkle_tree(
+            self.in_mem.block.tree.stores(),
+            is_full_commit,
+        )?;
         Ok(())
     }
 }

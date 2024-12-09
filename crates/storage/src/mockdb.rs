@@ -654,6 +654,7 @@ impl DB for MockDB {
     fn update_last_block_merkle_tree(
         &self,
         merkle_tree_stores: MerkleTreeStoresWrite<'_>,
+        is_full_commit: bool,
     ) -> Result<()> {
         // Read the last block's height
         let height: BlockHeight = self.read_value(BLOCK_HEIGHT_KEY)?.unwrap();
@@ -664,7 +665,7 @@ impl DB for MockDB {
         let epoch: Epoch = self.read_value(epoch_key)?.unwrap();
 
         for st in StoreType::iter() {
-            if st.is_stored_every_block() {
+            if st.is_stored_every_block() || is_full_commit {
                 let key_prefix = if st.is_stored_every_block() {
                     tree_key_prefix_with_height(st, height)
                 } else {
