@@ -13,5 +13,5 @@ This example is run as follows:
 cargo run --example generate-txs -- <vectors.json> <debugs.txt>
 ```
 where `<vectors.json>` is the path where the JSON test vectors will be stored
-and `<debugs.txt>` is where rust `Debug` representations oof this data will be
+and `<debugs.txt>` is where rust `Debug` representations of this data will be
 stored.
