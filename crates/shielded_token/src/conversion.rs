@@ -410,7 +410,9 @@ where
                         );
                         normed_inflation
                     });
-                // The conversion is computed such that if consecutive conversions are added together, the intermediate native tokens cancel/telescope out
+                // The conversion is computed such that if consecutive
+                // conversions are added together, the intermediate native
+                // tokens cancel/telescope out
                 let cur_conv = MaspAmount::from_pair(
                     old_asset,
                     i128::try_from(normed_inflation)

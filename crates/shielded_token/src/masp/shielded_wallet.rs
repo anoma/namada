@@ -557,9 +557,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 .decode_asset_type(client, asset_type)
                 .await
                 .map(|mut pre_asset_type| {
-                    eprintln!("ASSET DATA: {:#?}", pre_asset_type); //FIXME: remove
                     pre_asset_type.redate(target_epoch);
-                    eprintln!("TARGET ASSET DATA: {:#?}", pre_asset_type); //FIXME: remove
                     pre_asset_type
                         .encode()
                         .map_err(|_| eyre!("unable to create asset type",))
@@ -576,16 +574,16 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             .await;
             self.query_allowed_conversion(client, asset_type, &mut conversions)
                 .await;
-            eprintln!("CONVERSIONS: {:#?}", conversions); //FIXME: remove
             if let (Some((conv, _wit, usage)), false) =
                 (conversions.get_mut(&asset_type), at_target_asset_type)
             {
-                //FIXME: this branch might be useless
                 display_line!(
                     io,
                     "converting current asset type to latest asset type..."
                 );
-                // Not at the target asset type, not at the latest asset type. Apply conversion to get from current asset type to the latest asset type.
+                // Not at the target asset type, not at the latest asset type.
+                // Apply conversion to get from current asset type to the latest
+                // asset type.
                 self.apply_conversion(
                     io,
                     conv.clone(),
@@ -600,13 +598,13 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 conversions.get_mut(&target_asset_type),
                 at_target_asset_type,
             ) {
-                eprintln!("HERE"); //FIXME: remove
-                                   //FIXME: we fail here cause we look for a conversion for the target asset type which indeed exist. But it doesn't exist for epoch 0, so we must be using a wron conversion here or something
                 display_line!(
                     io,
                     "converting latest asset type to target asset type..."
                 );
-                // Not at the target asset type, yet at the latest asset type. Apply inverse conversion to get from latest asset type to the target asset type.
+                // Not at the target asset type, yet at the latest asset type.
+                // Apply inverse conversion to get from latest asset type to the
+                // target asset type.
                 self.apply_conversion(
                     io,
                     conv.clone(),
@@ -718,7 +716,8 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
     async fn estimate_next_epoch_rewards(
         &mut self,
         context: &impl NamadaIo,
-        //FIXME: change this to take the balance instead so that we can do estimates in the UI
+        // FIXME: change this to take the balance instead so that we can do
+        // estimates in the UI
         vk: &ViewingKey,
     ) -> Result<i128, eyre::Error> {
         let native_token = Self::query_native_token(context.client()).await?;
@@ -738,12 +737,14 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             .ok_or_else(|| eyre!("Underflowed MASP epochs"))?;
         let next_epoch = match current_epoch.next() {
             Some(prev) => prev,
-            // We are currently at MaspEpoch(0) and there are no conversions yet at this point
+            // We are currently at MaspEpoch(0) and there are no conversions yet
+            // at this point
             None => return Ok(0),
         };
         // get the raw balance of the notes associated with this key
         if let Some(balance) = self.compute_shielded_balance(vk).await? {
-            // Get the current amount including conversions, this serves as the reference point to estimate future rewards
+            // Get the current amount including conversions, this serves as the
+            // reference point to estimate future rewards
             let (current_exchanged_balance, mut conversions) = self
                 .compute_exchanged_amount(
                     context.client(),
@@ -754,7 +755,9 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 )
                 .await?;
 
-            // Query missing conversions first, i.e. those for assets that carry the current epoch. There are no conversions for these yet so we need to see if there are conversions for the previous epoch
+            // Query missing conversions first, i.e. those for assets that carry
+            // the current epoch. There are no conversions for these yet so we
+            // need to see if there are conversions for the previous epoch
             let mut estimated_next_epoch_conversions = Conversions::new();
             for (asset_type, _) in balance.components() {
                 let mut asset = match self
@@ -811,11 +814,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 );
             }
 
-            eprintln!(
-                "ESTIMATED CONV: {:#?}",
-                estimated_next_epoch_conversions
-            ); //FIXME: remove
-
             // Get the estimated future balance based on the new conversions
             let next_exchanged_balance = self
                 .compute_exchanged_amount(
@@ -828,17 +826,15 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 .await?
                 .0;
 
-            eprintln!("CURRENT BALANCE: {:#?}", current_exchanged_balance); //FIXME :remove
-            eprintln!("NEXT BALANCE: {:#?}", next_exchanged_balance); //FIXME :remove
-                                                                      // Extract only the native token balance for rewards. Depending on
-                                                                      // rewards being enabled for the native token or not, we'll find the
-                                                                      // balance we look for at either epoch 0 or the current epoch. If
-                                                                      // rewards are not enabled for the native token we might have
-                                                                      // balances at any epochs in between these two but these would be
-                                                                      // guaranteed to be the same in both the exchanged amounts we've
-                                                                      // computed here above, meaning they are irrelevant for the
-                                                                      // estimation of the next epoch rewards since they would cancel out
-                                                                      // anyway
+            // Extract only the native token balance for rewards. Depending on
+            // rewards being enabled for the native token or not, we'll find the
+            // balance we look for at either epoch 0 or the current epoch. If
+            // rewards are not enabled for the native token we might have
+            // balances at any epochs in between these two but these would be
+            // guaranteed to be the same in both the exchanged amounts we've
+            // computed here above, meaning they are irrelevant for the
+            // estimation of the next epoch rewards since they would cancel out
+            // anyway
             let mut current_native_balance =
                 ValueSum::<AssetType, i128>::zero();
             let mut next_native_balance = ValueSum::<AssetType, i128>::zero();
@@ -882,8 +878,6 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                     }
                 }
             }
-            eprintln!("CURRENT NATIVE BALANCE: {:#?}", current_native_balance); //FIXME :remove
-            eprintln!("NEXT NATIVE BALANCE: {:#?}", next_native_balance); //FIXME :remove
 
             let rewards = next_native_balance - current_native_balance;
             let decoded_rewards =
@@ -922,9 +916,11 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                         }
                     }
 
-                    //FIXME: I'm not sure we can just add i128s like this. We should take care of the MaspDigitPos?
-                    //FIXME: see if there's a functio nfor that
-                    //FIXME: isn't it better to return a denominated amount instead?
+                    // FIXME: I'm not sure we can just add i128s like this. We
+                    // should take care of the MaspDigitPos?
+                    // FIXME: see if there's a functio nfor that
+                    // FIXME: isn't it better to return a denominated amount
+                    // instead?
                     Ok(acc + amt)
                 },
             )
@@ -2024,7 +2020,8 @@ mod test_shielded_wallet {
     }
 
     #[tokio::test]
-    // Test that the estimated rewards are 0 when no conversions are available to the current epoch
+    // Test that the estimated rewards are 0 when no conversions are available
+    // to the current epoch
     async fn test_estimate_rewards_no_conversions_last_epoch() {
         let (channel, mut context) = MockNamadaIo::new();
         // the response to the current masp epoch query
@@ -2388,6 +2385,7 @@ mod test_shielded_wallet {
         /// to be applied to the same note.
         //FIXME: also add conversions for native token
         //FIXME: also shield native token
+        //FIXME: I don't think we need old conversions, just the native token
         #[test]
         fn test_ests_with_mult_incentivized_assets(
            principal1 in 1u64..10_000,
@@ -2414,6 +2412,13 @@ mod test_shielded_wallet {
                     )
                     .await
                     .expect("Test failed");
+                let native_token_denom =
+                    TestingContext::<FsShieldedUtils>::query_denom(
+                        context.client(),
+                        &native_token
+                    )
+                    .await
+                    .expect("Test failed");
 
                 // we use a random addresses as our tokens
                 let tok1 = Address::Internal(InternalAddress::Pgf);
@@ -2422,7 +2427,7 @@ mod test_shielded_wallet {
                 // add asset type decodings
                 wallet.add_asset_type(AssetData {
                     token: native_token.clone(),
-                    denom: 0.into(),
+                    denom: native_token_denom,
                     position: MaspDigitPos::Zero,
                     epoch: Some(MaspEpoch::new(0)),
                 });
@@ -2463,7 +2468,7 @@ mod test_shielded_wallet {
                 conv += I128Sum::from_pair(
                     AssetData {
                         token: native_token.clone(),
-                        denom: 0.into(),
+                        denom: native_token_denom,
                         position: MaspDigitPos::Zero,
                         epoch: Some(MaspEpoch::new(0)),
                     }
@@ -2514,7 +2519,7 @@ mod test_shielded_wallet {
                 conv += I128Sum::from_pair(
                     AssetData {
                         token: native_token.clone(),
-                        denom: 0.into(),
+                        denom: native_token_denom,
                         position: MaspDigitPos::Zero,
                         epoch: Some(MaspEpoch::new(0)),
                     }
@@ -2564,7 +2569,7 @@ mod test_shielded_wallet {
                 conv +=  I128Sum::from_pair(
                     AssetData {
                         token: native_token.clone(),
-                        denom: 0.into(),
+                        denom: native_token_denom,
                         position: MaspDigitPos::Zero,
                         epoch: Some(MaspEpoch::new(0)),
                     }
@@ -2623,16 +2628,10 @@ mod test_shielded_wallet {
                     .expect("Test failed");
                 let principal1 = i128::from(principal1);
                 let principal2 = i128::from(principal2);
-                // reward from epoch 1->2 + reward from epoch 2->3 + reward from
-                // epoch 2->3
-                let expected_tok1_rewards =
-                    principal1 * tok1_reward_rate + principal1 + principal1;
-                // reward from epoch 2->3 + reward from epoch 2->3
-                let expected_tok2_rewards =
-                    principal2 * tok2_reward_rate + principal2 * tok2_reward_rate;
                 assert_eq!(
                     rewards_est,
-                    expected_tok1_rewards + expected_tok2_rewards
+                    // tok1 reward from epoch 2->3 + tok2 reward from epoch 2->3
+                    principal1 + principal2 * tok2_reward_rate
                 );
             });
         }
