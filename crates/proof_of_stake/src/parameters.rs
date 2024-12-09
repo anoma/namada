@@ -80,6 +80,8 @@ pub struct OwnedPosParams {
     pub rewards_gain_p: Dec,
     /// PoS gain d (read only)
     pub rewards_gain_d: Dec,
+    /// Minimum validator commission rate
+    pub min_commission_rate: Dec,
 }
 
 impl Default for OwnedPosParams {
@@ -108,6 +110,7 @@ impl Default for OwnedPosParams {
             liveness_threshold: Dec::new(9, 1).expect("Test failed"),
             rewards_gain_p: Dec::from_str("0.25").expect("Test failed"),
             rewards_gain_d: Dec::from_str("0.25").expect("Test failed"),
+            min_commission_rate: Dec::from_str("0.05").expect("Test failed"),
         }
     }
 }
