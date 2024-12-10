@@ -600,13 +600,14 @@ impl TxOsmosisSwap<SdkTypes> {
             )));
         }
 
-        let next_memo =  transfer.ibc_memo.take().map(|memo| {
+        let next_memo = transfer.ibc_memo.take().map(|memo| {
             match serde_json::to_value(&NamadaMemo {
                 namada: NamadaMemoData::Memo(memo),
             })
-            .unwrap() {
+            .unwrap()
+            {
                 serde_json::Value::Object(x) => x,
-                _ => panic!("Ibc Memo is not valid json.")
+                _ => panic!("Ibc Memo is not valid json."),
             }
         });
 
