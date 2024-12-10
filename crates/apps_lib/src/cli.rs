@@ -3589,7 +3589,8 @@ pub mod args {
     pub const MAX_ETH_GAS: ArgOpt<u64> = arg_opt("max_eth-gas");
     pub const MEMO_OPT: ArgOpt<String> = arg_opt("memo");
     pub const MIGRATION_PATH: ArgOpt<PathBuf> = arg_opt("migration-path");
-    pub const MINIMUM_AMOUNT: ArgOpt<token::DenominatedAmount> = arg_opt("minimum-amount");
+    pub const MINIMUM_AMOUNT: ArgOpt<token::DenominatedAmount> =
+        arg_opt("minimum-amount");
     pub const MODE: ArgOpt<String> = arg_opt("mode");
     pub const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
     pub const NAMADA_START_TIME: ArgOpt<DateTimeUtc> = arg_opt("time");
@@ -3609,7 +3610,8 @@ pub mod args {
     pub const PATH: Arg<PathBuf> = arg("path");
     pub const PATH_OPT: ArgOpt<PathBuf> = arg_opt("path");
     pub const PAYMENT_ADDRESS_TARGET: Arg<WalletPaymentAddr> = arg("target");
-    pub const PAYMENT_ADDRESS_TARGET_OPT: ArgOpt<WalletPaymentAddr> = arg_opt("target-pa");
+    pub const PAYMENT_ADDRESS_TARGET_OPT: ArgOpt<WalletPaymentAddr> =
+        arg_opt("target-pa");
     pub const PORT_ID: ArgDefault<PortId> = arg_default(
         "port-id",
         DefaultFn(|| PortId::from_str("transfer").unwrap()),
@@ -5155,7 +5157,7 @@ pub mod args {
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
             let recipient = match self.recipient {
                 Either::Left(r) => Either::Left(chain_ctx.get(&r)),
-                Either::Right(r) => Either::Right(chain_ctx.get(&r))
+                Either::Right(r) => Either::Right(chain_ctx.get(&r)),
             };
             let overflow = self.overflow.map(|r| chain_ctx.get(&r));
             Ok(TxOsmosisSwap {
@@ -5175,14 +5177,15 @@ pub mod args {
             let transfer = TxIbcTransfer::parse(matches);
             let output_denom = OUTPUT_DENOM.parse(matches);
             let maybe_traans_recipient = TARGET_OPT.parse(matches);
-            let maybe_shielded_recipient = PAYMENT_ADDRESS_TARGET_OPT.parse(matches);
+            let maybe_shielded_recipient =
+                PAYMENT_ADDRESS_TARGET_OPT.parse(matches);
             let maybe_overflow = OVERFLOW_OPT.parse(matches);
             let slippage_percent = SLIPPAGE.parse(matches);
             if let Some(percent) = slippage_percent {
                 if percent > 100 {
                     panic!(
-                        "The slippage percent must be an integer between 0 and \
-                     100."
+                        "The slippage percent must be an integer between 0 \
+                         and 100."
                     )
                 }
             }
@@ -5190,10 +5193,23 @@ pub mod args {
             let minimum_amount = MINIMUM_AMOUNT.parse(matches);
             let slippage = minimum_amount
                 .map(|d| Slippage::MinimumAmount(d.redenominate(0).amount()))
-                .or_else(|| Some(Slippage::Twap {
-                    slippage_percent: slippage_percent.expect("If a minimum amount was not provided, slippage-percent and window-seconds must be specified.").to_string(),
-                    window_seconds: window_seconds.expect("If a minimum amount was not provided, slippage-percent and window-seconds must be specified."),
-                })).unwrap();
+                .or_else(|| {
+                    Some(Slippage::Twap {
+                        slippage_percent: slippage_percent
+                            .expect(
+                                "If a minimum amount was not provided, \
+                                 slippage-percent and window-seconds must be \
+                                 specified.",
+                            )
+                            .to_string(),
+                        window_seconds: window_seconds.expect(
+                            "If a minimum amount was not provided, \
+                             slippage-percent and window-seconds must be \
+                             specified.",
+                        ),
+                    })
+                })
+                .unwrap();
             let local_recovery_addr = LOCAL_RECOVERY_ADDR.parse(matches);
             let route = match OSMOSIS_POOL_HOP.parse(matches) {
                 r if r.is_empty() => None,
@@ -5226,43 +5242,46 @@ pub mod args {
                     "The IBC denomination (on Osmosis) of the desired asset."
                 )))
                 .arg(TARGET_OPT.def().help(wrap!(
-                    "The transparent Namada address that shall receive the swapped tokens."
+                    "The transparent Namada address that shall receive the \
+                     swapped tokens."
                 )))
-                .arg(PAYMENT_ADDRESS_TARGET_OPT.def()
+                .arg(
+                    PAYMENT_ADDRESS_TARGET_OPT
+                        .def()
                         .requires(OVERFLOW_OPT.name)
                         .requires(MINIMUM_AMOUNT.name)
                         .conflicts_with(SLIPPAGE.name)
                         .conflicts_with(WINDOW_SECONDS.name)
                         .help(wrap!(
-                    "The shielded Namada address that shall receive the minimum amount of swapped tokens."
-                )))
+                            "The shielded Namada address that shall receive \
+                             the minimum amount of swapped tokens."
+                        )),
+                )
                 .arg(OVERFLOW_OPT.def().help(wrap!(
-                    "The transparent address that receives the amount of target asset exceeding the \
-                    minimum amount. If used in conjunction with shielding, this address should not \
-                    be linkable to any of your transparent accounts."
+                    "The transparent address that receives the amount of \
+                     target asset exceeding the minimum amount. If used in \
+                     conjunction with shielding, this address should not be \
+                     linkable to any of your transparent accounts."
                 )))
-                .arg(SLIPPAGE
-                    .def()
-                    .requires(WINDOW_SECONDS.name)
-                    .help(wrap!(
+                .arg(SLIPPAGE.def().requires(WINDOW_SECONDS.name).help(wrap!(
                     "The slippage percentage as an integer between 0 and 100. \
                      Represents the maximum acceptable deviation from the \
                      expected price during a trade."
                 )))
-                .arg(WINDOW_SECONDS
-                    .def()
-                    .requires(SLIPPAGE.name)
-                    .help(wrap!(
+                .arg(WINDOW_SECONDS.def().requires(SLIPPAGE.name).help(wrap!(
                     "The time period (in seconds) over which the average \
                      price is calculated."
                 )))
-                .arg(MINIMUM_AMOUNT
-                    .def()
-                    .conflicts_with(SLIPPAGE.name)
-                    .conflicts_with(WINDOW_SECONDS.name)
-                    .help(wrap!(
-                    "The minimum amount of target asset that the trade should produce."
-                )))
+                .arg(
+                    MINIMUM_AMOUNT
+                        .def()
+                        .conflicts_with(SLIPPAGE.name)
+                        .conflicts_with(WINDOW_SECONDS.name)
+                        .help(wrap!(
+                            "The minimum amount of target asset that the \
+                             trade should produce."
+                        )),
+                )
                 .arg(LOCAL_RECOVERY_ADDR.def().help(wrap!(
                     "An address on Osmosis from which to recover funds in \
                      case of failure."
@@ -5274,7 +5293,10 @@ pub mod args {
                 )
                 .group(
                     ArgGroup::new("boop")
-                        .args([TARGET_OPT.name, PAYMENT_ADDRESS_TARGET_OPT.name])
+                        .args([
+                            TARGET_OPT.name,
+                            PAYMENT_ADDRESS_TARGET_OPT.name,
+                        ])
                         .required(true),
                 )
                 .mut_arg(RECEIVER.name, |arg| {

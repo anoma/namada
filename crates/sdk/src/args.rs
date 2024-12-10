@@ -17,6 +17,7 @@ use namada_core::keccak::KeccakHash;
 use namada_core::key::{common, SchemeType};
 use namada_core::masp::{MaspEpoch, PaymentAddress};
 use namada_core::time::DateTimeUtc;
+use namada_core::token::Amount;
 use namada_core::{storage, token};
 use namada_governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal,
@@ -27,7 +28,7 @@ use namada_tx::data::GasLimit;
 use namada_tx::Memo;
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
-use namada_core::token::Amount;
+
 use crate::error::Error;
 use crate::eth_bridge::bridge_pool;
 use crate::ibc::core::host::types::identifiers::{ChannelId, PortId};
@@ -510,9 +511,10 @@ pub enum Slippage {
         /// The maximum percentage difference allowed between the estimated and
         /// actual trade price
         slippage_percent: String,
-        /// The time period (in seconds) over which the average price is calculated
+        /// The time period (in seconds) over which the average price is
+        /// calculated
         window_seconds: u64,
-    }
+    },
 }
 
 /// An token swap on Osmosis
