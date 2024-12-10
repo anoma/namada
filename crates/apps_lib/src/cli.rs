@@ -3427,6 +3427,7 @@ pub mod args {
     use crate::wrap;
 
     pub const ADDRESS: Arg<WalletAddress> = arg("address");
+    pub const ADDRESS_OPT: ArgOpt<WalletAddress> = arg_opt("address");
     pub const ADD_PERSISTENT_PEERS: ArgFlag = flag("add-persistent-peers");
     pub const ALIAS_OPT: ArgOpt<String> = ALIAS.opt();
     pub const ALIAS: Arg<String> = arg("alias");
@@ -3602,11 +3603,13 @@ pub mod args {
         arg_opt("output-folder-path");
     pub const OSMOSIS_POOL_HOP: ArgMulti<OsmosisPoolHop, GlobStar> =
         arg_multi("pool-hop");
+    pub const OVERFLOW_OPT: ArgOpt<WalletAddress> = arg_opt("overflow-addr");
     pub const OWNER: Arg<WalletAddress> = arg("owner");
     pub const OWNER_OPT: ArgOpt<WalletAddress> = OWNER.opt();
     pub const PATH: Arg<PathBuf> = arg("path");
     pub const PATH_OPT: ArgOpt<PathBuf> = arg_opt("path");
     pub const PAYMENT_ADDRESS_TARGET: Arg<WalletPaymentAddr> = arg("target");
+    pub const PAYMENT_ADDRESS_TARGET_OPT: ArgOpt<WalletPaymentAddr> = arg_opt("target-pa");
     pub const PORT_ID: ArgDefault<PortId> = arg_default(
         "port-id",
         DefaultFn(|| PortId::from_str("transfer").unwrap()),
@@ -3668,6 +3671,7 @@ pub mod args {
     pub const STORAGE_KEY: Arg<storage::Key> = arg("storage-key");
     pub const SUSPEND_ACTION: ArgFlag = flag("suspend");
     pub const TARGET: Arg<WalletAddress> = arg("target");
+    pub const TARGET_OPT: ArgOpt<WalletAddress> = arg_opt("target");
     pub const TEMPLATES_PATH: Arg<PathBuf> = arg("templates-path");
     pub const TIMEOUT_HEIGHT: ArgOpt<u64> = arg_opt("timeout-height");
     pub const TIMEOUT_SEC_OFFSET: ArgOpt<u64> = arg_opt("timeout-sec-offset");
@@ -5149,11 +5153,16 @@ pub mod args {
             ctx: &mut Context,
         ) -> Result<TxOsmosisSwap<SdkTypes>, Self::Error> {
             let chain_ctx = ctx.borrow_mut_chain_or_exit();
-            let recipient = chain_ctx.get(&self.recipient);
+            let recipient = match self.recipient {
+                Either::Left(r) => Either::Left(chain_ctx.get(&r)),
+                Either::Right(r) => Either::Right(chain_ctx.get(&r))
+            };
+            let overflow = self.overflow.map(|r| chain_ctx.get(&r));
             Ok(TxOsmosisSwap {
                 transfer: self.transfer.to_sdk(ctx)?,
                 output_denom: self.output_denom,
                 recipient,
+                overflow,
                 slippage: self.slippage,
                 local_recovery_addr: self.local_recovery_addr,
                 route: self.route,
@@ -5165,7 +5174,9 @@ pub mod args {
         fn parse(matches: &ArgMatches) -> Self {
             let transfer = TxIbcTransfer::parse(matches);
             let output_denom = OUTPUT_DENOM.parse(matches);
-            let recipient = TARGET.parse(matches);
+            let maybe_traans_recipient = TARGET_OPT.parse(matches);
+            let maybe_shielded_recipient = PAYMENT_ADDRESS_TARGET_OPT.parse(matches);
+            let maybe_overflow = OVERFLOW_OPT.parse(matches);
             let slippage_percent = SLIPPAGE.parse(matches);
             if let Some(percent) = slippage_percent {
                 if percent > 100 {
@@ -5191,7 +5202,12 @@ pub mod args {
             Self {
                 transfer,
                 output_denom,
-                recipient,
+                recipient: if let Some(target) = maybe_traans_recipient {
+                    Either::Left(target)
+                } else {
+                    Either::Right(maybe_shielded_recipient.unwrap())
+                },
+                overflow: maybe_overflow,
                 slippage,
                 local_recovery_addr,
                 route,
@@ -5209,8 +5225,21 @@ pub mod args {
                 .arg(OUTPUT_DENOM.def().help(wrap!(
                     "The IBC denomination (on Osmosis) of the desired asset."
                 )))
-                .arg(TARGET.def().help(wrap!(
-                    "The Namada address that shall receive the swapped tokens."
+                .arg(TARGET_OPT.def().help(wrap!(
+                    "The transparent Namada address that shall receive the swapped tokens."
+                )))
+                .arg(PAYMENT_ADDRESS_TARGET_OPT.def()
+                        .requires(OVERFLOW_OPT.name)
+                        .requires(MINIMUM_AMOUNT.name)
+                        .conflicts_with(SLIPPAGE.name)
+                        .conflicts_with(WINDOW_SECONDS.name)
+                        .help(wrap!(
+                    "The shielded Namada address that shall receive the minimum amount of swapped tokens."
+                )))
+                .arg(OVERFLOW_OPT.def().help(wrap!(
+                    "The transparent address that receives the amount of target asset exceeding the \
+                    minimum amount. If used in conjunction with shielding, this address should not \
+                    be linkable to any of your transparent accounts."
                 )))
                 .arg(SLIPPAGE
                     .def()
@@ -5241,6 +5270,11 @@ pub mod args {
                 .group(
                     ArgGroup::new("slippage")
                         .args([SLIPPAGE.name, MINIMUM_AMOUNT.name])
+                        .required(true),
+                )
+                .group(
+                    ArgGroup::new("boop")
+                        .args([TARGET_OPT.name, PAYMENT_ADDRESS_TARGET_OPT.name])
                         .required(true),
                 )
                 .mut_arg(RECEIVER.name, |arg| {
