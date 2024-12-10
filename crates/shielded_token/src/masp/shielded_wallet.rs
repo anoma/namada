@@ -2342,7 +2342,7 @@ mod test_shielded_wallet {
                     });
                 }
 
-                 // add conversions for the native tokens
+                 // add conversions for the native token
                 let mut conv = I128Sum::from_pair(
                     AssetData {
                         token: native_token.clone(),
@@ -2422,8 +2422,6 @@ mod test_shielded_wallet {
         /// A more complicated test that checks asset estimations when multiple
         /// different incentivized assets are present and multiple conversions need
         /// to be applied to the same note.
-        //FIXME: also add conversions for native token
-        //FIXME: also shield native token
         #[test]
         fn test_ests_with_mult_incentivized_assets(
            principal1 in 1u64..10_000,
@@ -2463,12 +2461,14 @@ mod test_shielded_wallet {
                 let tok2 = Address::Internal(InternalAddress::ReplayProtection);
 
                 // add asset type decodings
-                wallet.add_asset_type(AssetData {
-                    token: native_token.clone(),
-                    denom: native_token_denom,
-                    position: MaspDigitPos::Zero,
-                    epoch: Some(MaspEpoch::new(0)),
-                });
+                for epoch in 0..5 {
+                    wallet.add_asset_type(AssetData {
+                        token: native_token.clone(),
+                        denom: native_token_denom,
+                        position: MaspDigitPos::Zero,
+                        epoch: Some(MaspEpoch::new(epoch)),
+                    });
+                }
 
                 for tok in [&tok1, &tok2] {
                     for epoch in 0..5 {
@@ -2480,6 +2480,80 @@ mod test_shielded_wallet {
                         });
                     }
                 }
+
+                // add empty conversions for the native token
+                for epoch in 0..2 {
+                    let mut conv = I128Sum::from_pair(
+                        AssetData {
+                            token: native_token.clone(),
+                            denom: native_token_denom,
+                            position: MaspDigitPos::Zero,
+                            epoch: Some(MaspEpoch::new(epoch)),
+                        }.encode().unwrap(),
+                        -1,
+                    );
+                    conv += I128Sum::from_pair(
+                        AssetData {
+                            token: native_token.clone(),
+                            denom: native_token_denom,
+                            position: MaspDigitPos::Zero,
+                            epoch: Some(MaspEpoch::new(epoch + 1)),
+                        }.encode().unwrap(),
+                        1,
+                    );
+                    context.add_conversions(
+                        AssetData {
+                            token: native_token.clone(),
+                            denom: native_token_denom,
+                            position: MaspDigitPos::Zero,
+                            epoch: Some(MaspEpoch::new(epoch)),
+                        },
+                        (
+                            native_token.clone(),
+                            native_token_denom,
+                            MaspDigitPos::Zero,
+                            MaspEpoch::new(epoch),
+                            conv,
+                            MerklePath::from_path(vec![], 0),
+                        )
+                    );
+                }
+                // add native conversion from epoch 2 -> 3
+                 let mut conv = I128Sum::from_pair(
+                        AssetData {
+                            token: native_token.clone(),
+                            denom: native_token_denom,
+                            position: MaspDigitPos::Zero,
+                            epoch: Some(MaspEpoch::new(2)),
+                        }.encode().unwrap(),
+                        -1,
+                    );
+                    conv += I128Sum::from_pair(
+                        AssetData {
+                            token: native_token.clone(),
+                            denom: native_token_denom,
+                            position: MaspDigitPos::Zero,
+                            epoch: Some(MaspEpoch::new(3)),
+                        }.encode().unwrap(),
+                        2,
+                    );
+                    context.add_conversions(
+                        AssetData {
+                            token: native_token.clone(),
+                            denom: native_token_denom,
+                            position: MaspDigitPos::Zero,
+                            epoch: Some(MaspEpoch::new(2)),
+                        },
+                        (
+                            native_token.clone(),
+                            native_token_denom,
+                            MaspDigitPos::Zero,
+                            MaspEpoch::new(2),
+                            conv,
+                            MerklePath::from_path(vec![], 0),
+                        )
+                    );
+
                 // add conversions from epoch 1 -> 2 for tok1
                 let mut conv = I128Sum::from_pair(
                     AssetData {
@@ -2604,7 +2678,7 @@ mod test_shielded_wallet {
                         .unwrap(),
                     1,
                 );
-                conv +=  I128Sum::from_pair(
+                conv += I128Sum::from_pair(
                     AssetData {
                         token: native_token.clone(),
                         denom: native_token_denom,
@@ -2664,12 +2738,13 @@ mod test_shielded_wallet {
                     .estimate_next_epoch_rewards(&context, &vk)
                     .await
                     .expect("Test failed");
-                let principal1 = i128::from(principal1);
-                let principal2 = i128::from(principal2);
+                // The native token balances at epoch 3 and four are given by the shielded amounts times the rewards times the conversion for the native asset
+                let native_balance_at_3 = (i128::from(principal1) * (tok1_reward_rate + 1) + i128::from(principal2) * tok2_reward_rate) * 2;
+                let estimated_native_balance_at_4= (i128::from(principal1) * (tok1_reward_rate + 2) + 2 * i128::from(principal2) * tok2_reward_rate) * 4;
                 assert_eq!(
                     rewards_est,
-                    // tok1 reward from epoch 2->3 + tok2 reward from epoch 2->3
-                    principal1 + principal2 * tok2_reward_rate
+                    // The estimated rewards are jsut the difference between the two native token balances
+                    estimated_native_balance_at_4 - native_balance_at_3
                 );
             });
         }
