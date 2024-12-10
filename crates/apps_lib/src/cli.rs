@@ -3588,6 +3588,7 @@ pub mod args {
     pub const MAX_ETH_GAS: ArgOpt<u64> = arg_opt("max_eth-gas");
     pub const MEMO_OPT: ArgOpt<String> = arg_opt("memo");
     pub const MIGRATION_PATH: ArgOpt<PathBuf> = arg_opt("migration-path");
+    pub const MINIMUM_AMOUNT: ArgOpt<token::DenominatedAmount> = arg_opt("minimum-amount");
     pub const MODE: ArgOpt<String> = arg_opt("mode");
     pub const NET_ADDRESS: Arg<SocketAddr> = arg("net-address");
     pub const NAMADA_START_TIME: ArgOpt<DateTimeUtc> = arg_opt("time");
@@ -3653,7 +3654,7 @@ pub mod args {
     pub const SHIELDED: ArgFlag = flag("shielded");
     pub const SHOW_IBC_TOKENS: ArgFlag = flag("show-ibc-tokens");
     pub const SIGNER: ArgOpt<WalletAddress> = arg_opt("signer");
-    pub const SLIPPAGE: Arg<u64> = arg("slippage-percentage");
+    pub const SLIPPAGE: ArgOpt<u64> = arg_opt("slippage-percentage");
     pub const SIGNING_KEYS: ArgMulti<WalletPublicKey, GlobStar> =
         arg_multi("signing-keys");
     pub const SIGNATURES: ArgMulti<PathBuf, GlobStar> = arg_multi("signatures");
@@ -3710,7 +3711,7 @@ pub mod args {
     pub const WASM_CHECKSUMS_PATH: Arg<PathBuf> = arg("wasm-checksums-path");
     pub const WASM_DIR: ArgOpt<PathBuf> = arg_opt("wasm-dir");
     pub const WEBSITE_OPT: ArgOpt<String> = arg_opt("website");
-    pub const WINDOW_SECONDS: Arg<u64> = arg("window-seconds");
+    pub const WINDOW_SECONDS: ArgOpt<u64> = arg_opt("window-seconds");
     pub const WITH_INDEXER: ArgOpt<String> = arg_opt("with-indexer");
     pub const WRAPPER_SIGNATURE_OPT: ArgOpt<PathBuf> = arg_opt("gas-signature");
     pub const TX_PATH: Arg<PathBuf> = arg("tx-path");
@@ -5153,8 +5154,7 @@ pub mod args {
                 transfer: self.transfer.to_sdk(ctx)?,
                 output_denom: self.output_denom,
                 recipient,
-                slippage_percent: self.slippage_percent,
-                window_seconds: self.window_seconds,
+                slippage: self.slippage,
                 local_recovery_addr: self.local_recovery_addr,
                 route: self.route,
             })
@@ -5167,13 +5167,22 @@ pub mod args {
             let output_denom = OUTPUT_DENOM.parse(matches);
             let recipient = TARGET.parse(matches);
             let slippage_percent = SLIPPAGE.parse(matches);
-            if slippage_percent > 100 {
-                panic!(
-                    "The slippage percent must be an integer between 0 and \
+            if let Some(percent) = slippage_percent {
+                if percent > 100 {
+                    panic!(
+                        "The slippage percent must be an integer between 0 and \
                      100."
-                )
+                    )
+                }
             }
             let window_seconds = WINDOW_SECONDS.parse(matches);
+            let minimum_amount = MINIMUM_AMOUNT.parse(matches);
+            let slippage = minimum_amount
+                .map(|d| Slippage::MinimumAmount(d.redenominate(0).amount()))
+                .or_else(|| Some(Slippage::Twap {
+                    slippage_percent: slippage_percent.expect("If a minimum amount was not provided, slippage-percent and window-seconds must be specified.").to_string(),
+                    window_seconds: window_seconds.expect("If a minimum amount was not provided, slippage-percent and window-seconds must be specified."),
+                })).unwrap();
             let local_recovery_addr = LOCAL_RECOVERY_ADDR.parse(matches);
             let route = match OSMOSIS_POOL_HOP.parse(matches) {
                 r if r.is_empty() => None,
@@ -5183,15 +5192,12 @@ pub mod args {
                 transfer,
                 output_denom,
                 recipient,
-                slippage_percent,
-                window_seconds,
+                slippage,
                 local_recovery_addr,
                 route,
             }
         }
 
-        // TODO:
-        // - fix window_seconds help str
         fn def(app: App) -> App {
             app.add_args::<TxIbcTransfer<CliTypes>>()
                 .arg(OSMOSIS_POOL_HOP.def().help(wrap!(
@@ -5206,19 +5212,37 @@ pub mod args {
                 .arg(TARGET.def().help(wrap!(
                     "The Namada address that shall receive the swapped tokens."
                 )))
-                .arg(SLIPPAGE.def().help(wrap!(
+                .arg(SLIPPAGE
+                    .def()
+                    .requires(WINDOW_SECONDS.name)
+                    .help(wrap!(
                     "The slippage percentage as an integer between 0 and 100. \
                      Represents the maximum acceptable deviation from the \
                      expected price during a trade."
                 )))
-                .arg(WINDOW_SECONDS.def().help(wrap!(
+                .arg(WINDOW_SECONDS
+                    .def()
+                    .requires(SLIPPAGE.name)
+                    .help(wrap!(
                     "The time period (in seconds) over which the average \
                      price is calculated."
+                )))
+                .arg(MINIMUM_AMOUNT
+                    .def()
+                    .conflicts_with(SLIPPAGE.name)
+                    .conflicts_with(WINDOW_SECONDS.name)
+                    .help(wrap!(
+                    "The minimum amount of target asset that the trade should produce."
                 )))
                 .arg(LOCAL_RECOVERY_ADDR.def().help(wrap!(
                     "An address on Osmosis from which to recover funds in \
                      case of failure."
                 )))
+                .group(
+                    ArgGroup::new("slippage")
+                        .args([SLIPPAGE.name, MINIMUM_AMOUNT.name])
+                        .required(true),
+                )
                 .mut_arg(RECEIVER.name, |arg| {
                     arg.long("swap-contract").help(wrap!(
                         "The address of the Osmosis contract performing the \

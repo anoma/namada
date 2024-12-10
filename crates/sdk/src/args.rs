@@ -25,9 +25,9 @@ use namada_ibc::IbcShieldingData;
 use namada_token::masp::utils::RetryStrategy;
 use namada_tx::data::GasLimit;
 use namada_tx::Memo;
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
-
+use namada_core::token::Amount;
 use crate::error::Error;
 use crate::eth_bridge::bridge_pool;
 use crate::ibc::core::host::types::identifiers::{ChannelId, PortId};
@@ -499,6 +499,22 @@ impl FromStr for OsmosisPoolHop {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+/// Constraints on the  osmosis swap
+pub enum Slippage {
+    /// Specifies the minimum amount to be received
+    MinimumAmount(Amount),
+    /// A time-weighted average price
+    Twap {
+        /// The maximum percentage difference allowed between the estimated and
+        /// actual trade price
+        slippage_percent: String,
+        /// The time period (in seconds) over which the average price is calculated
+        window_seconds: u64,
+    }
+}
+
 /// An token swap on Osmosis
 #[derive(Debug, Clone)]
 pub struct TxOsmosisSwap<C: NamadaTypes = SdkTypes> {
@@ -508,11 +524,8 @@ pub struct TxOsmosisSwap<C: NamadaTypes = SdkTypes> {
     pub output_denom: String,
     /// Address of the recipient on Namada
     pub recipient: C::Address,
-    /// The maximum percentage difference allowed between the estimated and
-    /// actual trade price
-    pub slippage_percent: u64,
-    /// The time period (in seconds) over which the average price is calculated
-    pub window_seconds: u64,
+    ///  Constraints on the  osmosis swap
+    pub slippage: Slippage,
     /// Recovery address (on Osmosis) in case of failure
     pub local_recovery_addr: String,
     /// The route to take through Osmosis pools
@@ -553,30 +566,8 @@ impl TxOsmosisSwap<SdkTypes> {
         }
 
         #[derive(Serialize)]
-        struct Slippage {
-            twap: Twap,
-        }
-
-        #[derive(Serialize)]
-        struct Twap {
-            #[serde(serialize_with = "serialize_slippage")]
-            slippage_percentage: u64,
-            window_seconds: u64,
-        }
-
-        #[derive(Serialize)]
         struct LocalRecoveryAddr {
             local_recovery_addr: String,
-        }
-
-        fn serialize_slippage<S>(
-            val: &u64,
-            serializer: S,
-        ) -> Result<S::Ok, S::Error>
-        where
-            S: Serializer,
-        {
-            serializer.serialize_str(&val.to_string())
         }
 
         const OSMOSIS_SQS_SERVER: &str = "https://sqsprod.osmosis.zone";
@@ -585,8 +576,7 @@ impl TxOsmosisSwap<SdkTypes> {
             mut transfer,
             output_denom,
             recipient,
-            slippage_percent,
-            window_seconds,
+            slippage,
             local_recovery_addr,
             route,
         } = self;
@@ -639,12 +629,7 @@ impl TxOsmosisSwap<SdkTypes> {
                 msg: Message {
                     osmosis_swap: OsmosisSwap {
                         output_denom: output_denom.to_string(),
-                        slippage: Slippage {
-                            twap: Twap {
-                                slippage_percentage: slippage_percent,
-                                window_seconds,
-                            },
-                        },
+                        slippage,
                         next_memo,
                         receiver: recipient.to_string(),
                         on_failed_delivery: LocalRecoveryAddr {
