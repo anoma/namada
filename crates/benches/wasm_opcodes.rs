@@ -3,11 +3,11 @@
 //!      we expect the function call itself to represent the majority of the
 //!      cost
 //!    - All instruction (expect the empty function call) must be repeated a
-//!      certain amount of time because the default iteratrions of criterion
+//!      certain amount of time because the default iterations of criterion
 //!      don't apply in this case
 //!    - Some operations require some other instructions to run correctly, in
 //!      this case we need to subtract these costs
-//!    - From all operations we must subtract the cost of the empy function call
+//!    - From all operations we must subtract the cost of the empty function call
 
 use std::fmt::Display;
 
@@ -20,7 +20,7 @@ use wasm_instrument::parity_wasm::elements::{
 use wasmer::{imports, Instance, Module, Store};
 
 // Don't reduce this value too much or it will be impossible to see the
-// differences in execution times between the diffent instructions
+// differences in execution times between the different instructions
 const ITERATIONS: u64 = 10_000;
 const ENTRY_POINT: &str = "op";
 
