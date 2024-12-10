@@ -12,16 +12,18 @@ use std::rc::Rc;
 use ibc::core::host::types::identifiers::PortId;
 use ibc::core::router::module::Module;
 use ibc::core::router::types::module::ModuleId;
-use ibc_middleware_packet_forward::{PacketForwardMiddleware, PfmContext};
+use ibc_middleware_overflow_receive::OverflowReceiveMiddleware;
+use ibc_middleware_packet_forward::PacketForwardMiddleware;
 use namada_core::address::Address;
 
 use self::pfm_mod::PfmTransferModule;
+use self::shielded_recv::ShieldedRecvModule;
 use crate::context::transfer_mod::TransferModule;
 use crate::{IbcCommonContext, IbcStorageContext};
 
 /// The stack of middlewares of the transfer module.
 pub type TransferMiddlewares<C, Params> =
-    PacketForwardMiddleware<PfmTransferModule<C, Params>>;
+    OverflowReceiveMiddleware<ShieldedRecvModule<C, Params>>;
 
 /// Create a new instance of [`TransferMiddlewares`]
 pub fn create_transfer_middlewares<C, Params>(
@@ -32,16 +34,18 @@ where
     C: IbcCommonContext + Debug,
     Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>,
 {
-    PacketForwardMiddleware::wrap(PfmTransferModule {
-        transfer_module: TransferModule::new(ctx, verifiers),
-        _phantom: PhantomData,
+    OverflowReceiveMiddleware::wrap(ShieldedRecvModule {
+        next: PacketForwardMiddleware::wrap(PfmTransferModule {
+            transfer_module: TransferModule::new(ctx, verifiers),
+            _phantom: PhantomData,
+        }),
     })
 }
 
 impl<C, Params> crate::ModuleWrapper for TransferMiddlewares<C, Params>
 where
     C: IbcCommonContext + Debug,
-    PfmTransferModule<C, Params>: PfmContext,
+    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>,
 {
     fn as_module(&self) -> &dyn Module {
         self
