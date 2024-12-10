@@ -13,8 +13,11 @@ use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
 
 use ibc::apps::transfer::context::TokenTransferExecutionContext;
+use ibc::apps::transfer::types::packet::PacketData;
 use ibc::apps::transfer::types::{Amount, Coin, PrefixedDenom};
-use ibc::core::channel::types::acknowledgement::Acknowledgement;
+use ibc::core::channel::types::acknowledgement::{
+    Acknowledgement, AcknowledgementStatus, StatusValue as AckStatusValue,
+};
 use ibc::core::channel::types::channel::{Counterparty, Order};
 use ibc::core::channel::types::error::{ChannelError, PacketError};
 use ibc::core::channel::types::packet::Packet;
@@ -27,7 +30,7 @@ use ibc_middleware_module::MiddlewareModule;
 use ibc_middleware_module_macros::from_middleware;
 use ibc_middleware_overflow_receive::OverflowRecvContext;
 use ibc_middleware_packet_forward::PacketForwardMiddleware;
-use namada_core::address::Address;
+use namada_core::address::{Address, MASP};
 use namada_core::token;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -94,6 +97,35 @@ where
 
     fn next_middleware_mut(&mut self) -> &mut Self::NextMiddleware {
         &mut self.next
+    }
+
+    fn middleware_on_recv_packet_execute(
+        &mut self,
+        packet: &Packet,
+        relayer: &Signer,
+    ) -> (ModuleExtras, Option<Acknowledgement>) {
+        let Ok(data) = serde_json::from_slice::<PacketData>(&packet.data)
+        else {
+            // NB: this isn't an ICS-20 packet
+            return self.next.on_recv_packet_execute(packet, relayer);
+        };
+        if serde_json::from_str::<PacketMetadata>(data.memo.as_ref()).is_err() {
+            // NB: this isn't a shielded recv packet
+            return self.next.on_recv_packet_execute(packet, relayer);
+        }
+
+        if data.receiver.as_ref() != MASP.to_string() {
+            let ack = AcknowledgementStatus::error(
+                AckStatusValue::new(format!(
+                    "Shielded receive error: Address {:?} is not the MASP",
+                    data.receiver.as_ref()
+                ))
+                .expect("Ack is not empty"),
+            );
+            return (ModuleExtras::empty(), Some(ack.into()));
+        }
+
+        self.next.on_recv_packet_execute(packet, relayer)
     }
 }
 
