@@ -15,8 +15,10 @@ use std::rc::Rc;
 use ibc::apps::transfer::context::TokenTransferExecutionContext;
 use ibc::apps::transfer::types::{Amount, Coin, PrefixedDenom};
 use ibc::core::channel::types::acknowledgement::Acknowledgement;
-use ibc::core::channel::types::channel::Counterparty;
+use ibc::core::channel::types::channel::{Counterparty, Order};
+use ibc::core::channel::types::error::{ChannelError, PacketError};
 use ibc::core::channel::types::packet::Packet;
+use ibc::core::channel::types::Version;
 use ibc::core::host::types::identifiers::{ChannelId, ConnectionId, PortId};
 use ibc::core::router::module::Module;
 use ibc::core::router::types::module::ModuleExtras;
@@ -30,9 +32,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::context::middlewares::pfm_mod::PfmTransferModule;
-use crate::core::channel::types::channel::Order;
-use crate::core::channel::types::error::{ChannelError, PacketError};
-use crate::core::channel::types::Version;
 use crate::{Error, IbcCommonContext, IbcStorageContext, TokenTransferContext};
 
 /// A middleware for handling IBC pockets received
