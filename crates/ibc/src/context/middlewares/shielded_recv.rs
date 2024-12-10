@@ -14,7 +14,7 @@ use std::rc::Rc;
 
 use ibc::apps::transfer::context::TokenTransferExecutionContext;
 use ibc::apps::transfer::types::packet::PacketData;
-use ibc::apps::transfer::types::{Amount, Coin, PrefixedDenom};
+use ibc::apps::transfer::types::{Coin, PrefixedDenom};
 use ibc::core::channel::types::acknowledgement::{
     Acknowledgement, AcknowledgementStatus, StatusValue as AckStatusValue,
 };
@@ -32,10 +32,10 @@ use ibc_middleware_overflow_receive::OverflowRecvContext;
 use ibc_middleware_packet_forward::PacketForwardMiddleware;
 use namada_core::address::{Address, MASP};
 use namada_core::token;
-use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::context::middlewares::pfm_mod::PfmTransferModule;
+use crate::msg::{NamadaMemo, OsmosisSwapMemoData};
 use crate::{Error, IbcCommonContext, IbcStorageContext, TokenTransferContext};
 
 /// A middleware for handling IBC pockets received
@@ -109,7 +109,11 @@ where
             // NB: this isn't an ICS-20 packet
             return self.next.on_recv_packet_execute(packet, relayer);
         };
-        if serde_json::from_str::<PacketMetadata>(data.memo.as_ref()).is_err() {
+        if serde_json::from_str::<NamadaMemo<OsmosisSwapMemoData>>(
+            data.memo.as_ref(),
+        )
+        .is_err()
+        {
             // NB: this isn't a shielded recv packet
             return self.next.on_recv_packet_execute(packet, relayer);
         }
@@ -129,52 +133,38 @@ where
     }
 }
 
-#[derive(Serialize, Deserialize)]
-/// The overflow address and amount to deposit therein
-pub struct ShieldedRecvMetadata {
-    overflow_receiver: Signer,
-    target_amount: Amount,
-}
-
-/// Metadata of a shielded recv packet.
-#[derive(Serialize, Deserialize)]
-pub struct PacketMetadata {
-    shielded_recv: ShieldedRecvMetadata,
-}
-
-impl PacketMetadata {
-    /// Create a new [`PacketMetadata`] instance.
-    pub fn new(receiver: Address, amount: token::Amount) -> Self {
-        Self {
-            shielded_recv: ShieldedRecvMetadata {
-                overflow_receiver: receiver.to_string().into(),
-                target_amount: amount.into(),
-            },
-        }
-    }
-}
-
-impl ibc_middleware_overflow_receive::PacketMetadata for PacketMetadata {
-    type AccountId = Signer;
-    type Amount = Amount;
+impl ibc_middleware_overflow_receive::PacketMetadata
+    for NamadaMemo<OsmosisSwapMemoData>
+{
+    type AccountId = Address;
+    type Amount = token::Amount;
 
     fn is_overflow_receive_msg(msg: &Map<String, Value>) -> bool {
-        msg.contains_key("shielded_recv")
+        msg.get("namada").map_or(false, |maybe_namada_obj| {
+            maybe_namada_obj
+                .as_object()
+                .map_or(false, |namada| namada.contains_key("osmosis_swap"))
+        })
     }
 
     fn strip_middleware_msg(
         mut json_obj_memo: Map<String, Value>,
     ) -> Map<String, Value> {
-        json_obj_memo.remove("shielded_recv");
+        if let Some(namada) = json_obj_memo
+            .get_mut("namada")
+            .and_then(|n| n.as_object_mut())
+        {
+            namada.remove("osmosis_swap");
+        }
         json_obj_memo
     }
 
-    fn overflow_receiver(&self) -> &Signer {
-        &self.shielded_recv.overflow_receiver
+    fn overflow_receiver(&self) -> &Address {
+        &self.namada.overflow_receiver
     }
 
-    fn target_amount(&self) -> &Amount {
-        &self.shielded_recv.target_amount
+    fn target_amount(&self) -> &token::Amount {
+        &self.namada.shielded_amount
     }
 }
 
@@ -184,27 +174,25 @@ where
     Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>,
 {
     type Error = Error;
-    type PacketMetadata = PacketMetadata;
+    type PacketMetadata = NamadaMemo<OsmosisSwapMemoData>;
 
     fn mint_coins_execute(
         &mut self,
-        receiver: &Signer,
+        receiver: &Address,
         coin: &Coin<PrefixedDenom>,
     ) -> Result<(), Self::Error> {
         let ctx = self.get_ctx();
         let verifiers = self.get_verifiers();
         let mut token_transfer_context =
             TokenTransferContext::new(ctx, verifiers);
-        let receiver = Address::decode(receiver)
-            .map_err(|e| Error::Other(e.to_string()))?;
         token_transfer_context
-            .mint_coins_execute(&receiver, coin)
+            .mint_coins_execute(receiver, coin)
             .map_err(Error::TokenTransfer)
     }
 
     fn unescrow_coins_execute(
         &mut self,
-        receiver: &Signer,
+        receiver: &Address,
         port: &PortId,
         channel: &ChannelId,
         coin: &Coin<PrefixedDenom>,
@@ -213,10 +201,8 @@ where
         let verifiers = self.get_verifiers();
         let mut token_transfer_context =
             TokenTransferContext::new(ctx, verifiers);
-        let receiver = Address::decode(receiver)
-            .map_err(|e| Error::Other(e.to_string()))?;
         token_transfer_context
-            .unescrow_coins_execute(&receiver, port, channel, coin)
+            .unescrow_coins_execute(receiver, port, channel, coin)
             .map_err(Error::TokenTransfer)
     }
 }

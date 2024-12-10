@@ -254,9 +254,7 @@ pub fn decode_ibc_shielding_data(
     serde_json::from_str(sref).map_or_else(
         |_| sref.parse().ok(),
         |NamadaMemo { namada: memo_data }| match memo_data {
-            NamadaMemoData::Memo(memo) => {
-                memo.parse().ok()
-            }
+            NamadaMemoData::Memo(memo) => memo.parse().ok(),
             NamadaMemoData::OsmosisSwap { shielding_data, .. } => {
                 Some(shielding_data.raw)
             }
