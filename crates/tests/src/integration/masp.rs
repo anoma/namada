@@ -1539,7 +1539,7 @@ fn masp_incentives() -> Result<()> {
             &node,
             Bin::Client,
             vec![
-                "estimate-rewards",
+                "estimate-shielding-rewards",
                 "--key",
                 AA_VIEWING_KEY,
                 "--node",
@@ -1548,11 +1548,8 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    assert!(
-        captured.contains(
-            "Estimated native token rewards for the next MASP epoch: 0"
-        )
-    );
+    assert!(captured
+        .contains("Estimated native token rewards for the next MASP epoch: 0"));
 
     // Wait till epoch boundary
     node.next_masp_epoch();
@@ -1603,13 +1600,13 @@ fn masp_incentives() -> Result<()> {
     assert!(captured.result.is_ok());
     assert!(captured.contains("nam: 0.063"));
 
-    // Assert the rewards estimate is a number higher than the actual rewards
+    // Assert the rewards estimate matches the actual rewards
     let captured = CapturedOutput::of(|| {
         run(
             &node,
             Bin::Client,
             vec![
-                "estimate-rewards",
+                "estimate-shielding-rewards",
                 "--key",
                 AA_VIEWING_KEY,
                 "--node",
@@ -1618,9 +1615,8 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    // note that 0.126 = 2 * 0.063 which is expected
     assert!(captured.contains(
-        "Estimated native token rewards for the next MASP epoch: 0.126"
+        "Estimated native token rewards for the next MASP epoch: 0.063"
     ));
 
     // Assert NAM balance at MASP pool is exclusively the
@@ -3143,12 +3139,10 @@ fn expired_masp_tx() -> Result<()> {
                 .as_ref()
                 .expect("Result is supposed to be Ok");
 
-            assert!(
-                inner_tx_result
-                    .vps_result
-                    .rejected_vps
-                    .contains(&namada_sdk::address::MASP)
-            );
+            assert!(inner_tx_result
+                .vps_result
+                .rejected_vps
+                .contains(&namada_sdk::address::MASP));
             assert!(inner_tx_result.vps_result.errors.contains(&(
                 namada_sdk::address::MASP,
                 "Native VP error: MASP transaction is expired".to_string()
