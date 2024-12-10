@@ -1,7 +1,7 @@
 //! Middleware entry points on Namada.
 
 pub mod pfm_mod;
-// mod crossroads_mod;
+pub mod shielded_recv;
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;

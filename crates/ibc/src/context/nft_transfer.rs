@@ -27,7 +27,7 @@ pub struct NftTransferContext<C, Token>
 where
     C: IbcCommonContext,
 {
-    inner: Rc<RefCell<C>>,
+    pub(crate) inner: Rc<RefCell<C>>,
     is_shielded: bool,
     _marker: PhantomData<Token>,
 }
