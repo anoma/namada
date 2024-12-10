@@ -1450,9 +1450,6 @@ fn masp_incentives() -> Result<()> {
     let validator_one_rpc = "http://127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
-    // Lengthen epoch to ensure that a transaction can be constructed and
-    // submitted within the same block. Necessary to ensure that conversion is
-    // not invalidated.
     let (mut node, _services) = setup::setup()?;
     // Wait till epoch boundary
     node.next_masp_epoch();
@@ -1539,7 +1536,7 @@ fn masp_incentives() -> Result<()> {
             &node,
             Bin::Client,
             vec![
-                "estimate-rewards",
+                "estimate-shielding-rewards",
                 "--key",
                 AA_VIEWING_KEY,
                 "--node",
@@ -1603,13 +1600,13 @@ fn masp_incentives() -> Result<()> {
     assert!(captured.result.is_ok());
     assert!(captured.contains("nam: 0.063"));
 
-    // Assert the rewards estimate is a number higher than the actual rewards
+    // Assert the rewards estimate matches the actual rewards
     let captured = CapturedOutput::of(|| {
         run(
             &node,
             Bin::Client,
             vec![
-                "estimate-rewards",
+                "estimate-shielding-rewards",
                 "--key",
                 AA_VIEWING_KEY,
                 "--node",
@@ -1618,9 +1615,8 @@ fn masp_incentives() -> Result<()> {
         )
     });
     assert!(captured.result.is_ok());
-    // note that 0.126 = 2 * 0.063 which is expected
     assert!(captured.contains(
-        "Estimated native token rewards for the next MASP epoch: 0.126"
+        "Estimated native token rewards for the next MASP epoch: 0.063"
     ));
 
     // Assert NAM balance at MASP pool is exclusively the
@@ -3277,9 +3273,6 @@ fn dynamic_assets() -> Result<()> {
     let validator_one_rpc = "http://127.0.0.1:26567";
     // Download the shielded pool parameters before starting node
     let _ = FsShieldedUtils::new(PathBuf::new());
-    // Lengthen epoch to ensure that a transaction can be constructed and
-    // submitted within the same block. Necessary to ensure that conversion is
-    // not invalidated.
     let (mut node, _services) = setup::setup()?;
     let btc = BTC.to_lowercase();
     let nam = NAM.to_lowercase();

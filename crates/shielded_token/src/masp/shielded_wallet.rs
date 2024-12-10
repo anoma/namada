@@ -479,7 +479,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             );
             return decoded.cloned();
         }
-        // Query for the ID of the last accepted transaction
+        // Query for the conversion for the given asset type
         let (token, denom, position, ep, _conv, _path): (
             Address,
             Denomination,
@@ -734,7 +734,8 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         let current_epoch = Self::query_masp_epoch(context.client()).await?;
         let previous_epoch = current_epoch
             .prev()
-            .ok_or_else(|| eyre!("Underflowed MASP epochs"))?;
+            // We are curently at MaspEpoch(0), there's no previous epoch
+            .unwrap_or_else(MaspEpoch::zero);
         let next_epoch = match current_epoch.next() {
             Some(prev) => prev,
             // We are currently at MaspEpoch(0) and there are no conversions yet
@@ -801,9 +802,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             let mut est_conv = I128Sum::zero();
             for ((_, asset_data), val) in decoded_conv.components() {
                 let mut new_asset = asset_data.clone();
-                if new_asset.epoch != Some(MaspEpoch::zero()) {
-                    new_asset.redate_to_next_epoch();
-                }
+                new_asset.redate_to_next_epoch();
                 est_conv += ValueSum::from_pair(new_asset.encode()?, *val)
             }
             estimated_next_epoch_conversions.insert(

@@ -545,7 +545,6 @@ where
         .values_mut()
         .enumerate()
         .collect();
-    // ceil(assets.len() / num_threads)
 
     #[allow(clippy::arithmetic_side_effects)]
     let notes_per_thread_max = (assets.len() + num_threads - 1) / num_threads;
