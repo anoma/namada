@@ -5192,10 +5192,10 @@ pub mod args {
             let window_seconds = WINDOW_SECONDS.parse(matches);
             let minimum_amount = MINIMUM_AMOUNT.parse(matches);
             let slippage = minimum_amount
-                .map(|d| Slippage::MinimumAmount(d.redenominate(0).amount()))
+                .map(|d| Slippage::MinOutputAmount(d.redenominate(0).amount()))
                 .or_else(|| {
                     Some(Slippage::Twap {
-                        slippage_percent: slippage_percent
+                        slippage_percentage: slippage_percent
                             .expect(
                                 "If a minimum amount was not provided, \
                                  slippage-percent and window-seconds must be \
@@ -5249,9 +5249,6 @@ pub mod args {
                     PAYMENT_ADDRESS_TARGET_OPT
                         .def()
                         .requires(OVERFLOW_OPT.name)
-                        .requires(MINIMUM_AMOUNT.name)
-                        .conflicts_with(SLIPPAGE.name)
-                        .conflicts_with(WINDOW_SECONDS.name)
                         .help(wrap!(
                             "The shielded Namada address that shall receive \
                              the minimum amount of swapped tokens."
@@ -5292,7 +5289,7 @@ pub mod args {
                         .required(true),
                 )
                 .group(
-                    ArgGroup::new("boop")
+                    ArgGroup::new("transfer-target")
                         .args([
                             TARGET_OPT.name,
                             PAYMENT_ADDRESS_TARGET_OPT.name,
