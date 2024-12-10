@@ -1597,7 +1597,7 @@ dependencies = [
 [[package]]
 name = "ibc-middleware-module"
 version = "0.1.0"
-source = "git+https://github.com/heliaxdev/ibc-middleware?tag=orm/v0.3.0#5abf47bd04ad53e5856b14e021edd5c0c8411f02"
+source = "git+https://github.com/heliaxdev/ibc-middleware?tag=orm/v0.4.0#8d341de14ff5e2a637699796cffbf0fbbaee001f"
 dependencies = [
  "ibc-core-channel-types",
  "ibc-core-host-types",
@@ -1630,7 +1630,7 @@ dependencies = [
 [[package]]
 name = "ibc-middleware-module-macros"
 version = "0.1.0"
-source = "git+https://github.com/heliaxdev/ibc-middleware?tag=orm/v0.3.0#5abf47bd04ad53e5856b14e021edd5c0c8411f02"
+source = "git+https://github.com/heliaxdev/ibc-middleware?tag=orm/v0.4.0#8d341de14ff5e2a637699796cffbf0fbbaee001f"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1647,16 +1647,16 @@ dependencies = [
 
 [[package]]
 name = "ibc-middleware-overflow-receive"
-version = "0.3.0"
-source = "git+https://github.com/heliaxdev/ibc-middleware?tag=orm/v0.3.0#5abf47bd04ad53e5856b14e021edd5c0c8411f02"
+version = "0.4.0"
+source = "git+https://github.com/heliaxdev/ibc-middleware?tag=orm/v0.4.0#8d341de14ff5e2a637699796cffbf0fbbaee001f"
 dependencies = [
  "ibc-app-transfer-types",
  "ibc-core-channel-types",
  "ibc-core-host-types",
  "ibc-core-router",
  "ibc-core-router-types",
- "ibc-middleware-module 0.1.0 (git+https://github.com/heliaxdev/ibc-middleware?tag=orm/v0.3.0)",
- "ibc-middleware-module-macros 0.1.0 (git+https://github.com/heliaxdev/ibc-middleware?tag=orm/v0.3.0)",
+ "ibc-middleware-module 0.1.0 (git+https://github.com/heliaxdev/ibc-middleware?tag=orm/v0.4.0)",
+ "ibc-middleware-module-macros 0.1.0 (git+https://github.com/heliaxdev/ibc-middleware?tag=orm/v0.4.0)",
  "ibc-primitives",
  "serde",
  "serde_json",
