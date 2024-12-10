@@ -393,6 +393,18 @@ impl Debug for Address {
     }
 }
 
+impl From<&Address> for Signer {
+    fn from(address: &Address) -> Signer {
+        address.to_string().into()
+    }
+}
+
+impl From<Address> for Signer {
+    fn from(address: Address) -> Signer {
+        (&address).into()
+    }
+}
+
 impl TryFrom<&Signer> for Address {
     type Error = DecodeError;
 
