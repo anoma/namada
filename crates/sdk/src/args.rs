@@ -6,7 +6,7 @@ use std::str::FromStr;
 use std::time::Duration as StdDuration;
 
 use either::Either;
-use namada_core::address::Address;
+use namada_core::address::{Address, MASP};
 use namada_core::chain::{BlockHeight, ChainId, Epoch};
 use namada_core::collections::HashMap;
 use namada_core::dec::Dec;
@@ -633,7 +633,7 @@ impl TxOsmosisSwap<SdkTypes> {
                         next_memo,
                         receiver: match recipient {
                             Either::Left(r) => r.to_string(),
-                            Either::Right(r) => r.to_string(),
+                            Either::Right(_) => MASP.to_string(),
                         },
                         on_failed_delivery: LocalRecoveryAddr {
                             local_recovery_addr,
