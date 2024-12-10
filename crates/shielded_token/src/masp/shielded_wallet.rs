@@ -709,16 +709,16 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         }
     }
 
-    /// We estimate the next epoch rewards accumulated by the assets owned by
-    /// the provided viewing key. This is done by assuming the same rewards
-    /// rate on each asset as in the latest masp epoch.
+    /// We estimate the next epoch rewards accumulated by the assets included in
+    /// the provided raw balance, i.e. a balance based only on the available
+    /// notes, without accounting for any conversions. The estimation is done by
+    /// assuming the same rewards rate on each asset as in the latest masp
+    /// epoch.
     #[allow(async_fn_in_trait)]
     async fn estimate_next_epoch_rewards(
         &mut self,
         context: &impl NamadaIo,
-        // FIXME: change this to take the balance instead so that we can do
-        // estimates in the UI
-        vk: &ViewingKey,
+        raw_balance: &I128Sum,
     ) -> Result<i128, eyre::Error> {
         let native_token = Self::query_native_token(context.client()).await?;
         let native_token_denom =
@@ -741,192 +741,186 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             // at this point
             None => return Ok(0),
         };
-        // get the raw balance of the notes associated with this key
-        if let Some(balance) = self.compute_shielded_balance(vk).await? {
-            // Get the current amount including conversions, this serves as the
-            // reference point to estimate future rewards
-            let (current_exchanged_balance, mut conversions) = self
-                .compute_exchanged_amount(
-                    context.client(),
-                    context.io(),
-                    balance.clone(),
-                    current_epoch,
-                    Conversions::new(),
-                )
-                .await?;
+        // Get the current amount including conversions, this serves as the
+        // reference point to estimate future rewards
+        let (current_exchanged_balance, mut conversions) = self
+            .compute_exchanged_amount(
+                context.client(),
+                context.io(),
+                raw_balance.to_owned(),
+                current_epoch,
+                Conversions::new(),
+            )
+            .await?;
 
-            // Query missing conversions first, i.e. those for assets that carry
-            // the current epoch. There are no conversions for these yet so we
-            // need to see if there are conversions for the previous epoch
-            let mut estimated_next_epoch_conversions = Conversions::new();
-            for (asset_type, _) in balance.components() {
-                let mut asset = match self
-                    .decode_asset_type(context.client(), *asset_type)
-                    .await
-                {
-                    Some(
-                        data @ AssetData {
-                            epoch: Some(ep), ..
-                        },
-                    ) if ep == current_epoch => data,
-                    _ => continue,
-                };
-                asset.redate(previous_epoch);
-                let redated_asset_type = asset.encode()?;
+        // Query missing conversions first, i.e. those for assets that carry
+        // the current epoch. There are no conversions for these yet so we
+        // need to see if there are conversions for the previous epoch
+        for (asset_type, _) in raw_balance.components() {
+            let mut asset = match self
+                .decode_asset_type(context.client(), *asset_type)
+                .await
+            {
+                Some(
+                    data @ AssetData {
+                        epoch: Some(ep), ..
+                    },
+                ) if ep == current_epoch => data,
+                _ => continue,
+            };
+            asset.redate(previous_epoch);
+            let redated_asset_type = asset.encode()?;
 
-                self.query_allowed_conversion(
-                    context.client(),
-                    redated_asset_type,
-                    &mut conversions,
-                )
-                .await;
-            }
+            self.query_allowed_conversion(
+                context.client(),
+                redated_asset_type,
+                &mut conversions,
+            )
+            .await;
+        }
 
-            // re-date the all the latest conversions up one epoch
-            for (asset_type, (conv, wit, _)) in &conversions {
-                let mut asset = match self
-                    .decode_asset_type(context.client(), *asset_type)
-                    .await
-                {
-                    Some(
-                        data @ AssetData {
-                            epoch: Some(ep), ..
-                        },
-                    ) if ep == previous_epoch => data,
-                    _ => continue,
-                };
-                asset.redate_to_next_epoch();
-                let decoded_conv = self
-                    .decode_sum(context.client(), conv.clone().into())
-                    .await
-                    .0;
-                let mut est_conv = I128Sum::zero();
-                for ((_, asset_data), val) in decoded_conv.components() {
-                    let mut new_asset = asset_data.clone();
-                    if new_asset.epoch != Some(MaspEpoch::zero()) {
-                        new_asset.redate_to_next_epoch();
-                    }
-                    est_conv += ValueSum::from_pair(new_asset.encode()?, *val)
-                }
-                estimated_next_epoch_conversions.insert(
-                    asset.encode().unwrap(),
-                    (AllowedConversion::from(est_conv), wit.clone(), 0),
-                );
-            }
-
-            // Get the estimated future balance based on the new conversions
-            let next_exchanged_balance = self
-                .compute_exchanged_amount(
-                    context.client(),
-                    context.io(),
-                    current_exchanged_balance.clone(),
-                    next_epoch,
-                    estimated_next_epoch_conversions,
-                )
-                .await?
+        let mut estimated_next_epoch_conversions = Conversions::new();
+        // re-date the all the latest conversions up one epoch
+        for (asset_type, (conv, wit, _)) in &conversions {
+            let mut asset = match self
+                .decode_asset_type(context.client(), *asset_type)
+                .await
+            {
+                Some(
+                    data @ AssetData {
+                        epoch: Some(ep), ..
+                    },
+                ) if ep == previous_epoch => data,
+                _ => continue,
+            };
+            asset.redate_to_next_epoch();
+            let decoded_conv = self
+                .decode_sum(context.client(), conv.clone().into())
+                .await
                 .0;
+            let mut est_conv = I128Sum::zero();
+            for ((_, asset_data), val) in decoded_conv.components() {
+                let mut new_asset = asset_data.clone();
+                if new_asset.epoch != Some(MaspEpoch::zero()) {
+                    new_asset.redate_to_next_epoch();
+                }
+                est_conv += ValueSum::from_pair(new_asset.encode()?, *val)
+            }
+            estimated_next_epoch_conversions.insert(
+                asset.encode().unwrap(),
+                (AllowedConversion::from(est_conv), wit.clone(), 0),
+            );
+        }
 
-            // Extract only the native token balance for rewards. Depending on
-            // rewards being enabled for the native token or not, we'll find the
-            // balance we look for at either epoch 0 or the current epoch. If
-            // rewards are not enabled for the native token we might have
-            // balances at any epochs in between these two but these would be
-            // guaranteed to be the same in both the exchanged amounts we've
-            // computed here above, meaning they are irrelevant for the
-            // estimation of the next epoch rewards since they would cancel out
-            // anyway
-            let mut current_native_balance =
-                ValueSum::<AssetType, i128>::zero();
-            let mut next_native_balance = ValueSum::<AssetType, i128>::zero();
-            for epoch in [epoch_zero, current_epoch, next_epoch] {
-                for position in MaspDigitPos::iter() {
-                    let native_asset_epoch0 = AssetData {
-                        token: native_token.clone(),
-                        denom: native_token_denom,
-                        position,
-                        epoch: Some(epoch_zero),
-                    };
-                    let native_asset_epoch0_type = native_asset_epoch0
-                        .encode()
-                        .map_err(|_| eyre!("unable to create asset type"))?;
-                    let native_asset = AssetData {
-                        token: native_token.clone(),
-                        denom: native_token_denom,
-                        position,
-                        epoch: Some(epoch),
-                    };
-                    let native_asset_type = native_asset
-                        .encode()
-                        .map_err(|_| eyre!("unable to create asset type"))?;
+        // Get the estimated future balance based on the new conversions
+        let next_exchanged_balance = self
+            .compute_exchanged_amount(
+                context.client(),
+                context.io(),
+                current_exchanged_balance.clone(),
+                next_epoch,
+                estimated_next_epoch_conversions,
+            )
+            .await?
+            .0;
 
-                    // Pre-date all the assets to MaspEpoch(0) for comparison
-                    if let Some((_, amt)) = current_exchanged_balance
-                        .project(native_asset_type)
-                        .into_components()
-                        .last()
-                    {
-                        current_native_balance +=
-                            ValueSum::from_pair(native_asset_epoch0_type, amt);
-                    }
-                    if let Some((_, amt)) = next_exchanged_balance
-                        .project(native_asset_type)
-                        .into_components()
-                        .last()
-                    {
-                        next_native_balance +=
-                            ValueSum::from_pair(native_asset_epoch0_type, amt);
-                    }
+        // Extract only the native token balance for rewards. Depending on
+        // rewards being enabled for the native token or not, we'll find the
+        // balance we look for at either epoch 0 or the current epoch. If
+        // rewards are not enabled for the native token we might have
+        // balances at any epochs in between these two but these would be
+        // guaranteed to be the same in both the exchanged amounts we've
+        // computed here above, meaning they are irrelevant for the
+        // estimation of the next epoch rewards since they would cancel out
+        // anyway
+        let mut current_native_balance = ValueSum::<AssetType, i128>::zero();
+        let mut next_native_balance = ValueSum::<AssetType, i128>::zero();
+        for epoch in [epoch_zero, current_epoch, next_epoch] {
+            for position in MaspDigitPos::iter() {
+                let native_asset_epoch0 = AssetData {
+                    token: native_token.clone(),
+                    denom: native_token_denom,
+                    position,
+                    epoch: Some(epoch_zero),
+                };
+                let native_asset_epoch0_type = native_asset_epoch0
+                    .encode()
+                    .map_err(|_| eyre!("unable to create asset type"))?;
+                let native_asset = AssetData {
+                    token: native_token.clone(),
+                    denom: native_token_denom,
+                    position,
+                    epoch: Some(epoch),
+                };
+                let native_asset_type = native_asset
+                    .encode()
+                    .map_err(|_| eyre!("unable to create asset type"))?;
+
+                // Pre-date all the assets to MaspEpoch(0) for comparison
+                if let Some((_, amt)) = current_exchanged_balance
+                    .project(native_asset_type)
+                    .into_components()
+                    .last()
+                {
+                    current_native_balance +=
+                        ValueSum::from_pair(native_asset_epoch0_type, amt);
+                }
+                if let Some((_, amt)) = next_exchanged_balance
+                    .project(native_asset_type)
+                    .into_components()
+                    .last()
+                {
+                    next_native_balance +=
+                        ValueSum::from_pair(native_asset_epoch0_type, amt);
                 }
             }
+        }
 
-            let rewards = next_native_balance - current_native_balance;
-            let decoded_rewards =
-                self.decode_sum(context.client(), rewards).await.0;
+        let rewards = next_native_balance - current_native_balance;
+        let decoded_rewards =
+            self.decode_sum(context.client(), rewards).await.0;
 
-            decoded_rewards.into_components().try_fold(
-                0i128,
-                |acc,
+        decoded_rewards.into_components().try_fold(
+            0i128,
+            |acc,
 
-                 (
-                    (
-                        _,
-                        AssetData {
-                            token,
-                            denom: _,
-                            position: _,
-                            epoch,
-                        },
-                    ),
-                    amt,
-                )| {
-                    // Sanity checks, the rewards must be given in the native
-                    // asset at masp epoch 0
-                    if token != native_token {
+             (
+                (
+                    _,
+                    AssetData {
+                        token,
+                        denom: _,
+                        position: _,
+                        epoch,
+                    },
+                ),
+                amt,
+            )| {
+                // Sanity checks, the rewards must be given in the native
+                // asset at masp epoch 0
+                if token != native_token {
+                    return Err(eyre!(
+                        "Found reward asset other than the native token"
+                    ));
+                }
+                match epoch {
+                    Some(ep) if ep == epoch_zero => (),
+                    _ => {
                         return Err(eyre!(
-                            "Found reward asset other than the native token"
+                            "Found reward asset with an epoch different than \
+                             the current one"
                         ));
                     }
-                    match epoch {
-                        Some(ep) if ep == epoch_zero => (),
-                        _ => {
-                            return Err(eyre!(
-                                "Found reward asset with an epoch different \
-                                 than the current one"
-                            ));
-                        }
-                    }
+                }
 
-                    // FIXME: I'm not sure we can just add i128s like this. We
-                    // should take care of the MaspDigitPos?
-                    // FIXME: see if there's a functio nfor that
-                    // FIXME: isn't it better to return a denominated amount
-                    // instead?
-                    Ok(acc + amt)
-                },
-            )
-        } else {
-            Ok(0)
-        }
+                // FIXME: I'm not sure we can just add i128s like this. We
+                // should take care of the MaspDigitPos?
+                // FIXME: see if there's a functio nfor that
+                // FIXME: isn't it better to return a denominated amount
+                // instead?
+                Ok(acc + amt)
+            },
+        )
     }
 
     /// Collect enough unspent notes in this context to exceed the given amount
@@ -2012,8 +2006,13 @@ mod test_shielded_wallet {
         };
         wallet.add_asset_type(asset_data.clone());
         wallet.add_note(create_note(asset_data.clone(), 10, pa), vk);
+        let balance = wallet
+            .compute_shielded_balance(&vk)
+            .await
+            .unwrap()
+            .unwrap_or_else(ValueSum::zero);
         let rewards_est = wallet
-            .estimate_next_epoch_rewards(&context, &vk)
+            .estimate_next_epoch_rewards(&context, &balance)
             .await
             .expect("Test failed");
         assert_eq!(rewards_est, 0);
@@ -2097,8 +2096,13 @@ mod test_shielded_wallet {
         };
         wallet.add_asset_type(asset_data.clone());
         wallet.add_note(create_note(asset_data.clone(), 10, pa), vk);
+        let balance = wallet
+            .compute_shielded_balance(&vk)
+            .await
+            .unwrap()
+            .unwrap_or_else(ValueSum::zero);
         let rewards_est = wallet
-            .estimate_next_epoch_rewards(&context, &vk)
+            .estimate_next_epoch_rewards(&context, &balance)
             .await
             .expect("Test failed");
         assert_eq!(rewards_est, 0);
@@ -2275,7 +2279,12 @@ mod test_shielded_wallet {
                     create_note(asset_data, rewardless, pa),
                     vk,
                 );
-                let rewards_est = wallet.estimate_next_epoch_rewards(&context, &vk).await.expect("Test failed");
+                let balance = wallet
+                    .compute_shielded_balance(&vk)
+                    .await
+                    .unwrap()
+                    .unwrap_or_else(ValueSum::zero);
+                let rewards_est = wallet.estimate_next_epoch_rewards(&context, &balance).await.expect("Test failed");
                 assert_eq!(rewards_est, (1 + i128::from(shield_at_previous_epoch)) * reward_rate * i128::from(principal));
             });
         }
@@ -2410,7 +2419,12 @@ mod test_shielded_wallet {
                     );
                 }
 
-                let rewards_est = wallet.estimate_next_epoch_rewards(&context, &vk).await.expect("Test failed");
+                let balance = wallet
+                    .compute_shielded_balance(&vk)
+                    .await
+                    .unwrap()
+                    .unwrap_or_else(ValueSum::zero);
+                let rewards_est = wallet.estimate_next_epoch_rewards(&context, &balance).await.expect("Test failed");
                 if shield_at_previous_epoch {
                     assert_eq!(rewards_est, (2 + reward_rate) * reward_rate * i128::from(principal));
                 } else {
@@ -2734,11 +2748,16 @@ mod test_shielded_wallet {
                     vk,
                 );
 
+                let balance = wallet
+                    .compute_shielded_balance(&vk)
+                    .await
+                    .unwrap()
+                    .unwrap_or_else(ValueSum::zero);
                 let rewards_est = wallet
-                    .estimate_next_epoch_rewards(&context, &vk)
+                    .estimate_next_epoch_rewards(&context, &balance)
                     .await
                     .expect("Test failed");
-                // The native token balances at epoch 3 and four are given by the shielded amounts times the rewards times the conversion for the native asset
+                // The native token balances at epoch 3 and 4 are given by the shielded amounts times the rewards times the conversion for the native asset
                 let native_balance_at_3 = (i128::from(principal1) * (tok1_reward_rate + 1) + i128::from(principal2) * tok2_reward_rate) * 2;
                 let estimated_native_balance_at_4= (i128::from(principal1) * (tok1_reward_rate + 2) + 2 * i128::from(principal2) * tok2_reward_rate) * 4;
                 assert_eq!(

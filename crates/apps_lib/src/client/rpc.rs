@@ -407,11 +407,42 @@ pub async fn query_rewards_estimate(
 ) {
     let mut shielded = context.shielded_mut().await;
     let _ = shielded.load().await;
-    let rewards_estimate = shielded
-        .estimate_next_epoch_rewards(context, &args.owner.as_viewing_key())
+    let raw_balance = match shielded
+        .compute_shielded_balance(&args.owner.as_viewing_key())
         .await
-        .unwrap()
-        .unsigned_abs();
+    {
+        Ok(balance) => balance,
+        Err(e) => {
+            edisplay_line!(
+                context.io(),
+                "Failed to query shielded balance: {}",
+                e
+            );
+            cli::safe_exit(1);
+        }
+    };
+
+    let rewards_estimate = match raw_balance {
+        Some(balance) => {
+            match shielded
+                .estimate_next_epoch_rewards(context, &balance)
+                .await
+            {
+                Ok(estimate) => estimate.unsigned_abs(),
+                Err(e) => {
+                    edisplay_line!(
+                        context.io(),
+                        "Failed to estimate rewards for the next MASP epoch: \
+                         {}",
+                        e
+                    );
+                    cli::safe_exit(1);
+                }
+            }
+        }
+        None => 0,
+    };
+
     let rewards_estimate = DenominatedAmount::new(
         Amount::from_u128(rewards_estimate),
         NATIVE_MAX_DECIMAL_PLACES.into(),
