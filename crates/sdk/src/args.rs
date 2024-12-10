@@ -518,7 +518,9 @@ pub struct TxOsmosisSwap<C: NamadaTypes = SdkTypes> {
     /// The token we wish to receive (on Osmosis)
     pub output_denom: String,
     /// Address of the recipient on Namada
-    pub recipient: C::Address,
+    pub recipient: Either<C::Address, C::PaymentAddress>,
+    /// Address to receive funds exceeding the minimum amount
+    pub overflow: Option<C::Address>,
     ///  Constraints on the  osmosis swap
     pub slippage: Slippage,
     /// Recovery address (on Osmosis) in case of failure
@@ -574,6 +576,7 @@ impl TxOsmosisSwap<SdkTypes> {
             slippage,
             local_recovery_addr,
             route,
+            overflow,
         } = self;
 
         // validate `local_recovery_addr`
@@ -626,7 +629,10 @@ impl TxOsmosisSwap<SdkTypes> {
                         output_denom: output_denom.to_string(),
                         slippage,
                         next_memo,
-                        receiver: recipient.to_string(),
+                        receiver: match recipient {
+                            Either::Left(r) => r.to_string(),
+                            Either::Right(r) => r.to_string(),
+                        },
                         on_failed_delivery: LocalRecoveryAddr {
                             local_recovery_addr,
                         },
