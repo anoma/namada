@@ -123,7 +123,7 @@ ibc = { git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "38489943c4e75
 ibc-derive = { git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "38489943c4e75206eaffeeeec6153c039c2499d1" }
 ibc-middleware-module = { git = "https://github.com/heliaxdev/ibc-middleware", tag = "module/v0.1.0" }
 ibc-middleware-module-macros = { git = "https://github.com/heliaxdev/ibc-middleware", tag = "module-macros/v0.1.0" }
-ibc-middleware-overflow-receive = { git = "https://github.com/heliaxdev/ibc-middleware", tag = "orm/v0.3.0" }
+ibc-middleware-overflow-receive = { git = "https://github.com/heliaxdev/ibc-middleware", tag = "orm/v0.4.0" }
 ibc-middleware-packet-forward = { git = "https://github.com/heliaxdev/ibc-middleware", tag = "pfm/v0.9.0", features = ["borsh"] }
 ibc-testkit = { git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "38489943c4e75206eaffeeeec6153c039c2499d1", default-features = false }
 ics23 = "0.12.0"

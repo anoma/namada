@@ -155,6 +155,9 @@ impl PacketMetadata {
 }
 
 impl ibc_middleware_overflow_receive::PacketMetadata for PacketMetadata {
+    type AccountId = Signer;
+    type Amount = Amount;
+
     fn is_overflow_receive_msg(msg: &Map<String, Value>) -> bool {
         msg.contains_key("shielded_recv")
     }
