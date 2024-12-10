@@ -2106,18 +2106,20 @@ mod test_shielded_wallet {
 
     proptest! {
         /// In this test, we have a single incentivized token
-        /// shielded at MaspEpoch(1) and at MaspEpoch(2), both owned by the shielded wallet.
-        /// The amount of owned token, for every note, is the parameter `principal`.
+        /// shielded at MaspEpoch(2), owned by the shielded wallet.
+        /// The amount of owned token is the parameter `principal`.
         ///
         /// We add a conversion from MaspEpoch(1) to MaspEpoch(2)
         /// which issues `reward_rate` nam tokens for the first of our
         /// incentivized token.
         ///
+        /// Optionally, the test also shields the same `principal` amount at
+        /// MaspEpoch(1).
+        ///
         /// We test that estimating the rewards for MaspEpoch(3)
-        /// applies the same conversions as the last epoch, yielding
-        /// a total reward estimation of 2 * principal * reward_rate. The asset
-        /// shielded at epoch 2 does not have conversions produced yet but we
-        /// still expect the reward estimation logic to use the conversion at
+        /// applies the same conversions as the last epoch
+        /// The asset shielded at epoch 2 does not have conversions produced yet
+        /// but we still expect the reward estimation logic to use the conversion at
         /// the previous epoch and output a correct value.
         ///
         /// Furthermore, we own `rewardless` amount of a token that
@@ -2131,6 +2133,7 @@ mod test_shielded_wallet {
             principal in 1u64 .. 100_000,
             reward_rate in 1i128 .. 1_000,
             rewardless in 1u64 .. 100_000,
+            shield_at_previous_epoch in proptest::bool::ANY
         ) {
             // #[tokio::test] doesn't work with the proptest! macro
             tokio::runtime::Runtime::new().unwrap().block_on(async {
@@ -2230,12 +2233,27 @@ mod test_shielded_wallet {
                 );
                 let vk = arbitrary_vk();
                 let pa = arbitrary_pa();
-                for epoch in [1, 2] {
+                let asset_data = AssetData {
+                    token: incentivized_token.clone(),
+                    denom: 0.into(),
+                    position: MaspDigitPos::Zero,
+                    epoch: Some(MaspEpoch::new(2)),
+                };
+
+                wallet.add_note(
+                    create_note(asset_data, principal, pa),
+                    vk,
+                );
+
+                // If this flag is clear we test that the estimation logic can
+                // hanlde rewards for assets coming only from the current epoch,
+                // i.e. assets for which there are no conversions yet.
+                if shield_at_previous_epoch {
                     let asset_data = AssetData {
                         token: incentivized_token.clone(),
                         denom: 0.into(),
                         position: MaspDigitPos::Zero,
-                        epoch: Some(MaspEpoch::new(epoch)),
+                        epoch: Some(MaspEpoch::new(1)),
                     };
 
                     wallet.add_note(
@@ -2258,22 +2276,22 @@ mod test_shielded_wallet {
                     vk,
                 );
                 let rewards_est = wallet.estimate_next_epoch_rewards(&context, &vk).await.expect("Test failed");
-                assert_eq!(rewards_est, 2 * reward_rate * i128::from(principal));
+                assert_eq!(rewards_est, (1 + i128::from(shield_at_previous_epoch)) * reward_rate * i128::from(principal));
             });
         }
 
-        //FIXME: I also need tests where we shield only at the current epoch to check that we look for the previous conversion
-        //FIXME: can I just add another bool to the proptest to decide if we want to shield before the current poech? Probably yes
         /// In this test, we have a single incentivized token, the native one,
-        /// shielded at MaspEpoch(1) and at MaspEpoch(2), both owned by the shielded wallet.
-        /// The amount of owned token, for every note, is the parameter `principal`.
+        /// shielded at MaspEpoch(2), owned by the shielded wallet.
+        /// The amount of owned token is the parameter `principal`.
         ///
         /// We add a conversion from MaspEpoch(1) to MaspEpoch(2)
         /// which issues `reward_rate` nam tokens for our incentivized token.
         ///
+        /// Optionally, the test also shields the same `principal` amount at
+        /// MaspEpoch(1).
+        ///
         /// We test that estimating the rewards for MaspEpoch(3)
-        /// applies the same conversions as the last epoch, yielding
-        /// a total reward estimation of (2 + reward_rate) * principal * reward_rate. The asset
+        /// applies the same conversions as the last epoch. The asset
         /// shielded at epoch 2 does not have conversions produced yet but we
         /// still expect the reward estimation logic to use the conversion at
         /// the previous epoch and output a correct value.
@@ -2287,6 +2305,7 @@ mod test_shielded_wallet {
             // does not exceed 64 bits
             principal in 1u64 .. 100_000,
             reward_rate in 1i128 .. 1_000,
+            shield_at_previous_epoch in proptest::bool::ANY
         ) {
             // #[tokio::test] doesn't work with the proptest! macro
             tokio::runtime::Runtime::new().unwrap().block_on(async {
@@ -2360,7 +2379,7 @@ mod test_shielded_wallet {
                 );
                 let vk = arbitrary_vk();
                 let pa = arbitrary_pa();
-                for epoch in [0, 1, 2] {
+                for epoch in [0, 2] {
                     let asset_data = AssetData {
                         token: native_token.clone(),
                         denom: native_token_denom,
@@ -2374,18 +2393,37 @@ mod test_shielded_wallet {
                     );
                 }
 
+                // If this flag is clear we test that the estimation logic can
+                // hanlde rewards for the native asset coming only from the current epoch,
+                // i.e. for which there are no conversions yet.
+                if shield_at_previous_epoch {
+                    let asset_data = AssetData {
+                        token: native_token.clone(),
+                        denom: native_token_denom,
+                        position: MaspDigitPos::Zero,
+                        epoch: Some(MaspEpoch::new(1)),
+                    };
+
+                    wallet.add_note(
+                        create_note(asset_data, principal, pa),
+                        vk,
+                    );
+                }
+
                 let rewards_est = wallet.estimate_next_epoch_rewards(&context, &vk).await.expect("Test failed");
-                assert_eq!(rewards_est, (2 + reward_rate) * reward_rate * i128::from(principal));
+                if shield_at_previous_epoch {
+                    assert_eq!(rewards_est, (2 + reward_rate) * reward_rate * i128::from(principal));
+                } else {
+                    assert_eq!(rewards_est, i128::from(principal) * reward_rate);
+                }
             });
         }
-
 
         /// A more complicated test that checks asset estimations when multiple
         /// different incentivized assets are present and multiple conversions need
         /// to be applied to the same note.
         //FIXME: also add conversions for native token
         //FIXME: also shield native token
-        //FIXME: I don't think we need old conversions, just the native token
         #[test]
         fn test_ests_with_mult_incentivized_assets(
            principal1 in 1u64..10_000,
