@@ -28,6 +28,7 @@ use ibc_middleware_module_macros::from_middleware;
 use ibc_middleware_overflow_receive::OverflowRecvContext;
 use ibc_middleware_packet_forward::PacketForwardMiddleware;
 use namada_core::address::Address;
+use namada_core::token;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
@@ -103,10 +104,22 @@ pub struct ShieldedRecvMetadata {
     target_amount: Amount,
 }
 
+/// Metadata of a shielded recv packet.
 #[derive(Serialize, Deserialize)]
-#[allow(missing_docs)]
 pub struct PacketMetadata {
-    pub shielded_recv: ShieldedRecvMetadata,
+    shielded_recv: ShieldedRecvMetadata,
+}
+
+impl PacketMetadata {
+    /// Create a new [`PacketMetadata`] instance.
+    pub fn new(receiver: Address, amount: token::Amount) -> Self {
+        Self {
+            shielded_recv: ShieldedRecvMetadata {
+                overflow_receiver: receiver.to_string().into(),
+                target_amount: amount.into(),
+            },
+        }
+    }
 }
 
 impl ibc_middleware_overflow_receive::PacketMetadata for PacketMetadata {
