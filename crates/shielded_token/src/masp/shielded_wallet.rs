@@ -1,7 +1,7 @@
 //! The shielded wallet implementation
 use std::collections::{btree_map, BTreeMap, BTreeSet};
 
-use eyre::eyre;
+use eyre::{eyre, Context};
 use masp_primitives::asset_type::AssetType;
 #[cfg(feature = "mainnet")]
 use masp_primitives::consensus::MainNetwork as Network;
@@ -719,7 +719,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         &mut self,
         context: &impl NamadaIo,
         raw_balance: &I128Sum,
-    ) -> Result<i128, eyre::Error> {
+    ) -> Result<DenominatedAmount, eyre::Error> {
         let native_token = Self::query_native_token(context.client()).await?;
         let native_token_denom =
             Self::query_denom(context.client(), &native_token)
@@ -739,7 +739,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             Some(prev) => prev,
             // We are currently at MaspEpoch(0) and there are no conversions yet
             // at this point
-            None => return Ok(0),
+            None => return Ok(DenominatedAmount::native(Amount::zero())),
         };
         // Get the current amount including conversions, this serves as the
         // reference point to estimate future rewards
@@ -880,47 +880,50 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         let decoded_rewards =
             self.decode_sum(context.client(), rewards).await.0;
 
-        decoded_rewards.into_components().try_fold(
-            0i128,
-            |acc,
+        decoded_rewards
+            .into_components()
+            .try_fold(
+                Amount::zero(),
+                |acc,
 
-             (
-                (
-                    _,
-                    AssetData {
-                        token,
-                        denom: _,
-                        position: _,
-                        epoch,
-                    },
-                ),
-                amt,
-            )| {
-                // Sanity checks, the rewards must be given in the native
-                // asset at masp epoch 0
-                if token != native_token {
-                    return Err(eyre!(
-                        "Found reward asset other than the native token"
-                    ));
-                }
-                match epoch {
-                    Some(ep) if ep == epoch_zero => (),
-                    _ => {
+                 (
+                    (
+                        _,
+                        AssetData {
+                            token,
+                            denom: _,
+                            position,
+                            epoch,
+                        },
+                    ),
+                    amt,
+                )| {
+                    // Sanity checks, the rewards must be given in the native
+                    // asset at masp epoch 0
+                    if token != native_token {
                         return Err(eyre!(
-                            "Found reward asset with an epoch different than \
-                             the current one"
+                            "Found reward asset other than the native token"
                         ));
                     }
-                }
+                    match epoch {
+                        Some(ep) if ep == epoch_zero => (),
+                        _ => {
+                            return Err(eyre!(
+                                "Found reward asset with an epoch different \
+                                 than the current one"
+                            ));
+                        }
+                    }
 
-                // FIXME: I'm not sure we can just add i128s like this. We
-                // should take care of the MaspDigitPos?
-                // FIXME: see if there's a functio nfor that
-                // FIXME: isn't it better to return a denominated amount
-                // instead?
-                Ok(acc + amt)
-            },
-        )
+                    let amt = Amount::from_masp_denominated_i128(amt, position)
+                        .ok_or_else(|| {
+                            eyre!("Could not convert MASP reward to amount")
+                        })?;
+                    checked!(acc + amt)
+                        .wrap_err("Overflow in MASP reward computation")
+                },
+            )
+            .map(DenominatedAmount::native)
     }
 
     /// Collect enough unspent notes in this context to exceed the given amount
@@ -2015,7 +2018,7 @@ mod test_shielded_wallet {
             .estimate_next_epoch_rewards(&context, &balance)
             .await
             .expect("Test failed");
-        assert_eq!(rewards_est, 0);
+        assert_eq!(rewards_est, DenominatedAmount::native(0.into()));
     }
 
     #[tokio::test]
@@ -2105,7 +2108,7 @@ mod test_shielded_wallet {
             .estimate_next_epoch_rewards(&context, &balance)
             .await
             .expect("Test failed");
-        assert_eq!(rewards_est, 0);
+        assert_eq!(rewards_est, DenominatedAmount::native(0.into()));
     }
 
     proptest! {
@@ -2284,8 +2287,16 @@ mod test_shielded_wallet {
                     .await
                     .unwrap()
                     .unwrap_or_else(ValueSum::zero);
-                let rewards_est = wallet.estimate_next_epoch_rewards(&context, &balance).await.expect("Test failed");
-                assert_eq!(rewards_est, (1 + i128::from(shield_at_previous_epoch)) * reward_rate * i128::from(principal));
+                let rewards_est = wallet.estimate_next_epoch_rewards(&context, &balance)
+                    .await.expect("Test failed");
+                assert_eq!(
+                    rewards_est,
+                    DenominatedAmount::native(
+                        Amount::from_masp_denominated_i128(
+                            (1 + i128::from(shield_at_previous_epoch)) * reward_rate * i128::from(principal),
+                            MaspDigitPos::Zero
+                        ).unwrap()
+                    ));
             });
         }
 
@@ -2426,9 +2437,25 @@ mod test_shielded_wallet {
                     .unwrap_or_else(ValueSum::zero);
                 let rewards_est = wallet.estimate_next_epoch_rewards(&context, &balance).await.expect("Test failed");
                 if shield_at_previous_epoch {
-                    assert_eq!(rewards_est, (2 + reward_rate) * reward_rate * i128::from(principal));
+                    assert_eq!(
+                        rewards_est,
+                        DenominatedAmount::native(
+                            Amount::from_masp_denominated_i128(
+                                (2 + reward_rate) * reward_rate * i128::from(principal),
+                                MaspDigitPos::Zero
+                            ).unwrap()
+                        )
+                    );
                 } else {
-                    assert_eq!(rewards_est, i128::from(principal) * reward_rate);
+                    assert_eq!(
+                        rewards_est,
+                        DenominatedAmount::native(
+                            Amount::from_masp_denominated_i128(
+                                i128::from(principal) * reward_rate,
+                                MaspDigitPos::Zero
+                            ).unwrap()
+                        )
+                    );
                 }
             });
         }
@@ -2763,7 +2790,12 @@ mod test_shielded_wallet {
                 assert_eq!(
                     rewards_est,
                     // The estimated rewards are jsut the difference between the two native token balances
-                    estimated_native_balance_at_4 - native_balance_at_3
+                    DenominatedAmount::native(
+                        Amount::from_masp_denominated_i128(
+                            estimated_native_balance_at_4 - native_balance_at_3,
+                             MaspDigitPos::Zero
+                        ).unwrap()
+                    )
                 );
             });
         }
