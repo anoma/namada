@@ -49,7 +49,6 @@ namada_vp = { path = "../vp" }
 masp_primitives.workspace = true
 masp_proofs = { workspace = true, features = ["benchmarks", "multicore"] }
 borsh.workspace = true
-borsh-ext.workspace = true
 criterion = { version = "0.5", features = ["html_reports"] }
 lazy_static.workspace= true
 prost.workspace = true

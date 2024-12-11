@@ -4,11 +4,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::marker::PhantomData;
 use std::path::Path;
 
-use borsh::{BorshDeserialize, BorshSerialize};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
 use namada_sdk::address::Address;
+use namada_sdk::borsh::{BorshDeserialize, BorshSerialize};
 use namada_sdk::dec::Dec;
 use namada_sdk::eth_bridge::storage::parameters::{
     Contracts, Erc20WhitelistEntry, MinimumConfirmations,

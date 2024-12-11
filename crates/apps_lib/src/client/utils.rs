@@ -3,7 +3,6 @@ use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use borsh_ext::BorshSerializeExt;
 use color_eyre::owo_colors::OwoColorize;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
@@ -12,6 +11,7 @@ use itertools::Either;
 use namada_sdk::account::AccountPublicKeysMap;
 use namada_sdk::address::{Address, ImplicitAddress};
 use namada_sdk::args::DeviceTransport;
+use namada_sdk::borsh::BorshSerializeExt;
 use namada_sdk::chain::ChainId;
 use namada_sdk::dec::Dec;
 use namada_sdk::ibc::trace::ibc_token;

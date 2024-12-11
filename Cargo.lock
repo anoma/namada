@@ -733,14 +733,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "borsh-ext"
-version = "1.2.0"
-source = "git+https://github.com/heliaxdev/borsh-ext?tag=v1.2.0#a62fee3e847e512cad9ac0f1fd5a900e5db9ba37"
-dependencies = [
- "borsh",
-]
-
-[[package]]
 name = "bs58"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4756,7 +4748,6 @@ dependencies = [
  "base64 0.13.1",
  "bit-set",
  "borsh",
- "borsh-ext",
  "clap",
  "color-eyre",
  "config",
@@ -4814,7 +4805,6 @@ name = "namada_benchmarks"
 version = "0.46.1"
 dependencies = [
  "borsh",
- "borsh-ext",
  "criterion",
  "lazy_static",
  "masp_primitives",
@@ -4850,7 +4840,6 @@ dependencies = [
  "assert_matches",
  "bech32 0.8.1",
  "borsh",
- "borsh-ext",
  "chrono",
  "data-encoding",
  "ed25519-consensus",
@@ -5110,7 +5099,6 @@ name = "namada_light_sdk"
 version = "0.46.1"
 dependencies = [
  "borsh",
- "borsh-ext",
  "namada_sdk",
  "prost 0.13.2",
  "serde_json",
@@ -5168,7 +5156,6 @@ dependencies = [
  "base64 0.13.1",
  "blake2b-rs",
  "borsh",
- "borsh-ext",
  "byte-unit",
  "bytes",
  "clap",
@@ -5293,7 +5280,6 @@ dependencies = [
  "async-trait",
  "bimap",
  "borsh",
- "borsh-ext",
  "circular-queue",
  "clap",
  "data-encoding",
@@ -5491,7 +5477,6 @@ dependencies = [
  "assert_matches",
  "base64 0.13.1",
  "borsh",
- "borsh-ext",
  "color-eyre",
  "concat-idents",
  "data-encoding",
@@ -5764,7 +5749,6 @@ dependencies = [
  "base58",
  "bimap",
  "borsh",
- "borsh-ext",
  "data-encoding",
  "derivation-path",
  "fd-lock",

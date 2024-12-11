@@ -40,7 +40,6 @@ namada_wallet = { path = "../wallet", features = ["std"]}
 async-trait.workspace = true
 base64.workspace = true
 borsh.workspace = true
-borsh-ext.workspace = true
 clap.workspace = true
 color-eyre.workspace = true
 config.workspace = true
