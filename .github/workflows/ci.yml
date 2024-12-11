@@ -656,8 +656,6 @@ jobs:
   test-ledger-app:
     timeout-minutes: 30
     runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
-    container: 
-      image: ghcr.io/heliaxdev/namada-ci:namada-main
 
     steps:
       - name: Checkout repo
