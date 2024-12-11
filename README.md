@@ -5,18 +5,16 @@
 
 ## Overview
 
-[Namada](http://namada.net) is a Proof-of-Stake L1 for interchain asset-agnostic privacy. Namada uses CometBFT
+[Namada](http://namada.net) is a Proof-of-Stake L1 for multichain asset-agnostic data protection. Namada uses CometBFT
 consensus and enables multi-asset shielded transfers for any native
-or non-native asset. Namada features full IBC protocol support,
-a natively integrated Ethereum bridge, a modern proof-of-stake
-system with automatic reward compounding and cubic slashing, and a
-stake-weighted governance signalling mechanism. Users of shielded
-transfers are rewarded for their contributions to the privacy set in
+or non-native asset. Namada features full IBC protocol support, a modern proof-of-stake
+system with cubic slashing, and a
+stake-weighted on-chain governance mechanism. Users of Namada's MASP (Multi-Asset Shielded Pool) are rewarded for their contributions to the shielded set in
 the form of native protocol tokens. A multi-asset shielded transfer
-wallet is provided in order to facilitate safe and private user
+wallet is provided in order to facilitate safe user
 interaction with the protocol.
 
-* Blogpost: [Introducing Namada: Interchain Asset-agnostic Privacy](https://namada.net/blog/introducing-namada-multichain-asset-agnostic-data-protection)
+* Blogpost: [Introducing Namada: Multichain Asset-agnostic Data Protection](https://namada.net/blog/introducing-namada-multichain-asset-agnostic-data-protection)
 
 ## 📓 Docs
 
