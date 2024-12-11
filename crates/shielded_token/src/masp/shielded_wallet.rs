@@ -732,16 +732,15 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 })?;
         let epoch_zero = MaspEpoch::zero();
         let current_epoch = Self::query_masp_epoch(context.client()).await?;
-        let previous_epoch = current_epoch
-            .prev()
-            // We are curently at MaspEpoch(0), there's no previous epoch
-            .unwrap_or_else(MaspEpoch::zero);
-        let next_epoch = match current_epoch.next() {
+        let previous_epoch = match current_epoch.prev() {
             Some(prev) => prev,
             // We are currently at MaspEpoch(0) and there are no conversions yet
             // at this point
             None => return Ok(DenominatedAmount::native(Amount::zero())),
         };
+        let next_epoch = current_epoch
+            .next()
+            .ok_or_else(|| eyre!("Overflowed MASP epoch"))?;
         // Get the current amount including conversions, this serves as the
         // reference point to estimate future rewards
         let (current_exchanged_balance, mut conversions) = self
