@@ -1,6 +1,10 @@
 //! Cryptographic keys for digital signatures support for the wallet.
 
+<<<<<<< HEAD
 use std::fmt::Display;
+=======
+use std::fmt::{Display, Error, Formatter};
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 use std::marker::PhantomData;
 use std::str::FromStr;
 
@@ -24,6 +28,58 @@ pub type DatedViewingKey = DatedKeypair<ExtendedViewingKey>;
 /// Type alias for a spending key with a birthday.
 pub type DatedSpendingKey = DatedKeypair<ExtendedSpendingKey>;
 
+<<<<<<< HEAD
+=======
+/// Extended spending key with Borsh serialization compatible with
+/// DatedSpendingKey. This is necessary to facilitate reading the old Store
+/// format.
+#[derive(Clone, Debug)]
+pub struct StoreSpendingKey(ExtendedSpendingKey);
+
+impl FromStr for StoreSpendingKey {
+    type Err = <ExtendedSpendingKey as FromStr>::Err;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        ExtendedSpendingKey::from_str(s).map(Self)
+    }
+}
+
+impl Display for StoreSpendingKey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
+        self.0.fmt(f)
+    }
+}
+
+impl BorshDeserialize for StoreSpendingKey {
+    fn deserialize_reader<R: std::io::Read>(
+        reader: &mut R,
+    ) -> std::io::Result<Self> {
+        DatedSpendingKey::deserialize_reader(reader).map(|x| Self(x.key))
+    }
+}
+
+impl BorshSerialize for StoreSpendingKey {
+    fn serialize<W: std::io::Write>(
+        &self,
+        writer: &mut W,
+    ) -> std::io::Result<()> {
+        BorshSerialize::serialize(&DatedSpendingKey::new(self.0, None), writer)
+    }
+}
+
+impl From<ExtendedSpendingKey> for StoreSpendingKey {
+    fn from(key: ExtendedSpendingKey) -> Self {
+        Self(key)
+    }
+}
+
+impl From<StoreSpendingKey> for ExtendedSpendingKey {
+    fn from(key: StoreSpendingKey) -> Self {
+        key.0
+    }
+}
+
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 /// A keypair stored in a wallet
 #[derive(Debug)]
 pub enum StoredKeypair<T: BorshSerialize + BorshDeserialize + Display + FromStr>
@@ -371,6 +427,17 @@ impl<T: BorshSerialize + BorshDeserialize> EncryptedKeypair<T> {
         T::try_from_slice(&decrypted_data)
             .map_err(|_| DecryptionError::DeserializingError)
     }
+<<<<<<< HEAD
+=======
+
+    /// Change the type held by this encrypted key pair. This is only safe when
+    /// the new and old types have the same Borsh serialization.
+    pub fn map<U: BorshSerialize + BorshDeserialize>(
+        self,
+    ) -> EncryptedKeypair<U> {
+        EncryptedKeypair(self.0, PhantomData)
+    }
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 }
 
 /// Keypair encryption salt

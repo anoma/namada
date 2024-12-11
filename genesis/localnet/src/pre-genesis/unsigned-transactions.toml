@@ -28,6 +28,15 @@ vp = "vp_user"
 threshold = 1
 public_keys = ["tpknam1qqwfpuvn8x7yqtquejhppef4vddv9ghusec2rkaxav38amamxaxpgj9cs79"]
 
+<<<<<<< HEAD
+=======
+# Frank
+[[established_account]]
+vp = "vp_user"
+threshold = 1
+public_keys = ["tpknam1qz0vuxgzsz5lu7peghyr4yx5tuexecm27hdgglkpe444v6nmy6d8yuxhn0r"]
+
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 ##########################################################################################
 
 # Albert bonds to `validator-0`

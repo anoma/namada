@@ -3,6 +3,10 @@ use std::io::Read;
 use color_eyre::eyre::Result;
 use namada_sdk::io::{display_line, Io, NamadaIo};
 use namada_sdk::masp::ShieldedContext;
+<<<<<<< HEAD
+=======
+use namada_sdk::wallet::DatedViewingKey;
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 use namada_sdk::{Namada, NamadaImpl};
 
 use crate::cli;
@@ -349,8 +353,21 @@ impl CliApi {
                             chain_ctx
                                 .wallet
                                 .get_viewing_keys()
+<<<<<<< HEAD
                                 .values()
                                 .copied(),
+=======
+                                .into_iter()
+                                .map(|(k, v)| {
+                                    DatedViewingKey::new(
+                                        v,
+                                        chain_ctx
+                                            .wallet
+                                            .find_birthday(k)
+                                            .copied(),
+                                    )
+                                }),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
                         );
 
                         crate::client::masp::syncing(

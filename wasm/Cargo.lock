@@ -3449,7 +3449,11 @@ dependencies = [
 [[package]]
 name = "masp_note_encryption"
 version = "1.0.0"
+<<<<<<< HEAD
 source = "git+https://github.com/anoma/masp?rev=12ed8b060b295c06502a2ff8468e4a941cb7cca4#12ed8b060b295c06502a2ff8468e4a941cb7cca4"
+=======
+source = "git+https://github.com/anoma/masp?rev=0d0da3507a6f9ad135f00fd8201dc54c2f1d9efe#0d0da3507a6f9ad135f00fd8201dc54c2f1d9efe"
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 dependencies = [
  "borsh",
  "chacha20",
@@ -3462,7 +3466,11 @@ dependencies = [
 [[package]]
 name = "masp_primitives"
 version = "1.0.0"
+<<<<<<< HEAD
 source = "git+https://github.com/anoma/masp?rev=12ed8b060b295c06502a2ff8468e4a941cb7cca4#12ed8b060b295c06502a2ff8468e4a941cb7cca4"
+=======
+source = "git+https://github.com/anoma/masp?rev=0d0da3507a6f9ad135f00fd8201dc54c2f1d9efe#0d0da3507a6f9ad135f00fd8201dc54c2f1d9efe"
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 dependencies = [
  "aes",
  "bip0039",
@@ -3494,7 +3502,11 @@ dependencies = [
 [[package]]
 name = "masp_proofs"
 version = "1.0.0"
+<<<<<<< HEAD
 source = "git+https://github.com/anoma/masp?rev=12ed8b060b295c06502a2ff8468e4a941cb7cca4#12ed8b060b295c06502a2ff8468e4a941cb7cca4"
+=======
+source = "git+https://github.com/anoma/masp?rev=0d0da3507a6f9ad135f00fd8201dc54c2f1d9efe#0d0da3507a6f9ad135f00fd8201dc54c2f1d9efe"
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 dependencies = [
  "bellman",
  "blake2b_simd",

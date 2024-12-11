@@ -18,6 +18,10 @@ use eyre::eyre;
 use namada_apps_lib::cli::context::ENV_VAR_CHAIN_ID;
 use namada_apps_lib::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps_lib::config::{Config, TendermintMode};
+<<<<<<< HEAD
+=======
+use namada_core::masp::PaymentAddress;
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
 use namada_sdk::address::Address;
 use namada_sdk::chain::Epoch;
@@ -30,10 +34,17 @@ use namada_sdk::wallet::Wallet;
 use toml::Value;
 
 use super::setup::{
+<<<<<<< HEAD
     self, ensure_hot_key, run_cosmos_cmd, sleep, NamadaBgCmd, NamadaCmd, Test,
     ENV_VAR_DEBUG, ENV_VAR_USE_PREBUILT_BINARIES,
 };
 use crate::e2e::setup::{Bin, CosmosChainType, Who, APPS_PACKAGE};
+=======
+    self, run_cosmos_cmd, sleep, NamadaBgCmd, NamadaCmd, Test, ENV_VAR_DEBUG,
+    ENV_VAR_USE_PREBUILT_BINARIES,
+};
+use crate::e2e::setup::{constants, Bin, CosmosChainType, Who, APPS_PACKAGE};
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 use crate::strings::{LEDGER_STARTED, TX_APPLIED_SUCCESS};
 use crate::{run, run_as};
 
@@ -128,6 +139,37 @@ pub fn find_address(test: &Test, alias: impl AsRef<str>) -> Result<Address> {
     Ok(address)
 }
 
+<<<<<<< HEAD
+=======
+/// Find the address of an account by its alias from the wallet
+pub fn find_payment_address(
+    test: &Test,
+    alias: impl AsRef<str>,
+) -> Result<PaymentAddress> {
+    let mut find = run!(
+        test,
+        Bin::Wallet,
+        &["find", "--addr", "--alias", alias.as_ref()],
+        Some(10)
+    )?;
+    find.exp_string("Found payment address:")?;
+    let (unread, matched) = find.exp_regex("\".*\": .*")?;
+    let address_str = strip_trailing_newline(&matched)
+        .trim()
+        .rsplit_once(' ')
+        .unwrap()
+        .1;
+    let address = PaymentAddress::from_str(address_str).map_err(|e| {
+        eyre!(format!(
+            "Address: {} parsed from {}, Error: {}\n\nOutput: {}",
+            address_str, matched, e, unread
+        ))
+    })?;
+    println!("Found {}", address);
+    Ok(address)
+}
+
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 /// Find the balance of specific token for an account.
 #[allow(dead_code)]
 pub fn find_balance(
@@ -562,9 +604,13 @@ fn make_hermes_chain_config(test: &Test) -> Value {
     chain.insert("account_prefix".to_owned(), Value::String("".to_owned()));
     chain.insert(
         "key_name".to_owned(),
+<<<<<<< HEAD
         Value::String(
             ensure_hot_key(setup::constants::CHRISTEL_KEY).to_owned(),
         ),
+=======
+        Value::String(constants::FRANK_KEY.to_owned()),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     );
     chain.insert("store_prefix".to_owned(), Value::String("ibc".to_owned()));
     let mut table = toml::map::Map::new();

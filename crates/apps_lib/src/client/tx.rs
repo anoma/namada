@@ -5,10 +5,24 @@ use borsh::BorshDeserialize;
 use borsh_ext::BorshSerializeExt;
 use color_eyre::owo_colors::OwoColorize;
 use ledger_namada_rs::{BIP44Path, NamadaApp};
+<<<<<<< HEAD
 use namada_core::masp::MaspTransaction;
 use namada_sdk::address::{Address, ImplicitAddress, MASP};
 use namada_sdk::args::TxBecomeValidator;
 use namada_sdk::collections::HashSet;
+=======
+use masp_primitives::sapling::redjubjub;
+use masp_primitives::transaction::components::sapling;
+use masp_primitives::transaction::components::sapling::builder::{
+    BuildParams, RngBuildParams,
+};
+use masp_primitives::transaction::components::sapling::fees::InputView;
+use masp_primitives::zip32::{ExtendedFullViewingKey, PseudoExtendedKey};
+use namada_core::masp::MaspTransaction;
+use namada_sdk::address::{Address, ImplicitAddress, MASP};
+use namada_sdk::args::TxBecomeValidator;
+use namada_sdk::collections::HashMap;
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 use namada_sdk::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal,
 };
@@ -21,7 +35,11 @@ use namada_sdk::tx::data::compute_inner_tx_hash;
 use namada_sdk::tx::{CompressedAuthorization, Section, Signer, Tx};
 use namada_sdk::wallet::alias::{validator_address, validator_consensus_key};
 use namada_sdk::wallet::{Wallet, WalletIo};
+<<<<<<< HEAD
 use namada_sdk::{error, signing, tx, Namada};
+=======
+use namada_sdk::{error, signing, tx, ExtendedViewingKey, Namada};
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 use rand::rngs::OsRng;
 use tokio::sync::RwLock;
 
@@ -36,6 +54,25 @@ use crate::wallet::{
     gen_validator_keys, read_and_confirm_encryption_password, WalletTransport,
 };
 
+<<<<<<< HEAD
+=======
+// Maximum number of spend description randomness parameters that can be
+// generated on the hardware wallet. It is hard to compute the exact required
+// number because a given MASP source could be distributed amongst several
+// notes.
+const MAX_HW_SPEND: usize = 15;
+// Maximum number of convert description randomness parameters that can be
+// generated on the hardware wallet. It is hard to compute the exact required
+// number because the number of conversions that are used depends on the
+// protocol's current state.
+const MAX_HW_CONVERT: usize = 15;
+// Maximum number of output description randomness parameters that can be
+// generated on the hardware wallet. It is hard to compute the exact required
+// number because the number of outputs depends on the number of dummy outputs
+// introduced.
+const MAX_HW_OUTPUT: usize = 15;
+
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 /// Wrapper around `signing::aux_signing_data` that stores the optional
 /// disposable address to the wallet
 pub async fn aux_signing_data(
@@ -78,7 +115,11 @@ pub async fn aux_signing_data(
 pub async fn with_hardware_wallet<'a, U, T>(
     mut tx: Tx,
     pubkey: common::PublicKey,
+<<<<<<< HEAD
     parts: HashSet<signing::Signable>,
+=======
+    parts: signing::Signable,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     (wallet, app): (&RwLock<Wallet<U>>, &NamadaApp<T>),
 ) -> Result<Tx, error::Error>
 where
@@ -125,7 +166,13 @@ where
         .await
         .map_err(|err| error::Error::Other(err.to_string()))?;
     // Sign the raw header if that is requested
+<<<<<<< HEAD
     if parts.contains(&signing::Signable::RawHeader) {
+=======
+    if parts == signing::Signable::RawHeader
+        || parts == signing::Signable::FeeRawHeader
+    {
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         let pubkey = common::PublicKey::try_from_slice(&response.pubkey)
             .expect("unable to parse public key from Ledger");
         let signature =
@@ -143,7 +190,11 @@ where
         tx.add_section(Section::Authorization(compressed.expand(&tx)));
     }
     // Sign the fee header if that is requested
+<<<<<<< HEAD
     if parts.contains(&signing::Signable::FeeHeader) {
+=======
+    if parts == signing::Signable::FeeRawHeader {
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         let pubkey = common::PublicKey::try_from_slice(&response.pubkey)
             .expect("unable to parse public key from Ledger");
         let signature =
@@ -844,9 +895,193 @@ pub async fn submit_transparent_transfer(
     Ok(())
 }
 
+<<<<<<< HEAD
 pub async fn submit_shielded_transfer(
     namada: &impl Namada,
     args: args::TxShieldedTransfer,
+=======
+// A mapper that replaces authorization signatures with those in a built-in map
+struct MapSaplingSigAuth(
+    HashMap<usize, <sapling::Authorized as sapling::Authorization>::AuthSig>,
+);
+
+impl sapling::MapAuth<sapling::Authorized, sapling::Authorized>
+    for MapSaplingSigAuth
+{
+    fn map_proof(
+        &self,
+        p: <sapling::Authorized as sapling::Authorization>::Proof,
+        _pos: usize,
+    ) -> <sapling::Authorized as sapling::Authorization>::Proof {
+        p
+    }
+
+    fn map_auth_sig(
+        &self,
+        s: <sapling::Authorized as sapling::Authorization>::AuthSig,
+        pos: usize,
+    ) -> <sapling::Authorized as sapling::Authorization>::AuthSig {
+        self.0.get(&pos).cloned().unwrap_or(s)
+    }
+
+    fn map_authorization(&self, a: sapling::Authorized) -> sapling::Authorized {
+        a
+    }
+}
+
+// Identify the viewing keys in the given transaction for which we do not
+// possess spending keys in the software wallet, and augment them with a proof
+// generation key from the hardware wallet. Returns a mapping from viewing keys
+// to corresponding ZIP 32 paths in the hardware wallet. This function errors
+// out if any ZIP 32 path that it handles maps to a different viewing key than
+// it does on the software client.
+async fn augment_masp_hardware_keys(
+    namada: &impl Namada,
+    args: &args::Tx,
+    _sources: impl Iterator<Item = &mut PseudoExtendedKey>,
+) -> Result<HashMap<String, ExtendedViewingKey>, error::Error> {
+    // Construct the build parameters that parameterized the Transaction
+    // authorizations
+    if args.use_device {
+        display_line!(
+            namada.io(),
+            "Shielded transaction signing with hardware wallet not \
+             implemented."
+        );
+        display_line!(namada.io(), "No changes are persisted. Exiting.");
+        safe_exit(1)
+    } else {
+        Ok(HashMap::new())
+    }
+}
+
+// If the hardware wallet is beig used, use it to generate the random build
+// parameters for the spend, convert, and output descriptions.
+async fn generate_masp_build_params(
+    namada: &impl Namada,
+    _spend_len: usize,
+    _convert_len: usize,
+    _output_len: usize,
+    args: &args::Tx,
+) -> Result<Box<dyn BuildParams>, error::Error> {
+    // Construct the build parameters that parameterized the Transaction
+    // authorizations
+    if args.use_device {
+        display_line!(
+            namada.io(),
+            "Generating randomness parameters using the hardware wallet not \
+             implemented."
+        );
+        display_line!(namada.io(), "No changes are persisted. Exiting.");
+        safe_exit(1)
+    } else {
+        Ok(Box::new(RngBuildParams::new(OsRng)))
+    }
+}
+
+// Sign the given transaction's MASP component using signatures produced by the
+// hardware wallet. This function takes the list of spending keys that are
+// hosted on the hardware wallet.
+async fn masp_sign(
+    tx: &mut Tx,
+    args: &args::Tx,
+    signing_data: &SigningTxData,
+    shielded_hw_keys: HashMap<String, ExtendedViewingKey>,
+) -> Result<(), error::Error> {
+    // Get the MASP section that is the target of our signing
+    if let Some(shielded_hash) = signing_data.shielded_hash {
+        let mut masp_tx = tx
+            .get_masp_section(&shielded_hash)
+            .expect("Expected to find the indicated MASP Transaction")
+            .clone();
+
+        let masp_builder = tx
+            .get_masp_builder(&shielded_hash)
+            .expect("Expected to find the indicated MASP Builder");
+
+        // Reverse the spend metadata to enable looking up construction
+        // material
+        let sapling_inputs = masp_builder.builder.sapling_inputs();
+        let mut descriptor_map = vec![0; sapling_inputs.len()];
+        for i in 0.. {
+            if let Some(pos) = masp_builder.metadata.spend_index(i) {
+                descriptor_map[pos] = i;
+            } else {
+                break;
+            };
+        }
+        // Sign the MASP Transaction using each relevant key in the
+        // hardware wallet
+        let mut app = None;
+        for (path, vk) in shielded_hw_keys {
+            // Initialize the Ledger app interface if it is uninitialized
+            let app = app.get_or_insert_with(|| {
+                NamadaApp::new(WalletTransport::from_arg(args.device_transport))
+            });
+            // Sign the MASP Transaction using the current viewing key
+            let path = BIP44Path {
+                path: path.to_string(),
+            };
+            app.sign_masp_spends(&path, &tx.serialize_to_vec())
+                .await
+                .map_err(|err| error::Error::Other(err.to_string()))?;
+            // Now prepare a new list of authorizations based on hardware
+            // wallet responses
+            let mut authorizations = HashMap::new();
+            for (tx_pos, builder_pos) in descriptor_map.iter().enumerate() {
+                // Read the next spend authorization signature from the
+                // hardware wallet
+                let response = app
+                    .get_spend_signature()
+                    .await
+                    .map_err(|err| error::Error::Other(err.to_string()))?;
+                let signature = redjubjub::Signature::try_from_slice(
+                    &[response.rbar, response.sbar].concat(),
+                )
+                .map_err(|err| {
+                    error::Error::Other(format!(
+                        "Unexpected spend authorization key in response from \
+                         the hardware wallet: {}.",
+                        err,
+                    ))
+                })?;
+                if *sapling_inputs[*builder_pos].key()
+                    == ExtendedFullViewingKey::from(vk)
+                {
+                    // If this descriptor was produced by the current
+                    // viewing key (which comes from the hardware wallet),
+                    // then use the authorization from the hardware wallet
+                    authorizations.insert(tx_pos, signature);
+                }
+            }
+            // Finally, patch the MASP Transaction with the fetched spend
+            // authorization signature
+            masp_tx = (*masp_tx)
+                .clone()
+                .map_authorization::<masp_primitives::transaction::Authorized>(
+                    (),
+                    MapSaplingSigAuth(authorizations),
+                )
+                .freeze()
+                .map_err(|err| {
+                    error::Error::Other(format!(
+                        "Unable to apply hardware walleet sourced \
+                         authorization signatures to the transaction being \
+                         constructed: {}.",
+                        err,
+                    ))
+                })?;
+        }
+        tx.remove_masp_section(&shielded_hash);
+        tx.add_section(Section::MaspTx(masp_tx));
+    }
+    Ok(())
+}
+
+pub async fn submit_shielded_transfer(
+    namada: &impl Namada,
+    mut args: args::TxShieldedTransfer,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 ) -> Result<(), error::Error> {
     display_line!(
         namada.io(),
@@ -857,7 +1092,28 @@ pub async fn submit_shielded_transfer(
          this command.",
     );
 
+<<<<<<< HEAD
     let (mut tx, signing_data) = args.clone().build(namada).await?;
+=======
+    let sources = args
+        .data
+        .iter_mut()
+        .map(|x| &mut x.source)
+        .chain(args.gas_spending_key.iter_mut());
+    let shielded_hw_keys =
+        augment_masp_hardware_keys(namada, &args.tx, sources).await?;
+    let mut bparams = generate_masp_build_params(
+        namada,
+        MAX_HW_SPEND,
+        MAX_HW_CONVERT,
+        MAX_HW_OUTPUT,
+        &args.tx,
+    )
+    .await?;
+    let (mut tx, signing_data) =
+        args.clone().build(namada, &mut bparams).await?;
+    masp_sign(&mut tx, &args.tx, &signing_data, shielded_hw_keys).await?;
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 
     let masp_section = tx
         .sections
@@ -885,7 +1141,20 @@ pub async fn submit_shielding_transfer(
 ) -> Result<(), error::Error> {
     // Repeat once if the tx fails on a crossover of an epoch
     for _ in 0..2 {
+<<<<<<< HEAD
         let (tx, signing_data, tx_epoch) = args.clone().build(namada).await?;
+=======
+        let mut bparams = generate_masp_build_params(
+            namada,
+            MAX_HW_SPEND,
+            MAX_HW_CONVERT,
+            MAX_HW_OUTPUT,
+            &args.tx,
+        )
+        .await?;
+        let (tx, signing_data, tx_epoch) =
+            args.clone().build(namada, &mut bparams).await?;
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 
         if args.tx.dump_tx || args.tx.dump_wrapper_tx {
             tx::dump_tx(namada.io(), &args.tx, tx)?;
@@ -956,7 +1225,11 @@ pub async fn submit_shielding_transfer(
 
 pub async fn submit_unshielding_transfer(
     namada: &impl Namada,
+<<<<<<< HEAD
     args: args::TxUnshieldingTransfer,
+=======
+    mut args: args::TxUnshieldingTransfer,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 ) -> Result<(), error::Error> {
     display_line!(
         namada.io(),
@@ -967,7 +1240,25 @@ pub async fn submit_unshielding_transfer(
          this command.",
     );
 
+<<<<<<< HEAD
     let (mut tx, signing_data) = args.clone().build(namada).await?;
+=======
+    let sources = std::iter::once(&mut args.source)
+        .chain(args.gas_spending_key.iter_mut());
+    let shielded_hw_keys =
+        augment_masp_hardware_keys(namada, &args.tx, sources).await?;
+    let mut bparams = generate_masp_build_params(
+        namada,
+        MAX_HW_SPEND,
+        MAX_HW_CONVERT,
+        MAX_HW_OUTPUT,
+        &args.tx,
+    )
+    .await?;
+    let (mut tx, signing_data) =
+        args.clone().build(namada, &mut bparams).await?;
+    masp_sign(&mut tx, &args.tx, &signing_data, shielded_hw_keys).await?;
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 
     let masp_section = tx
         .sections
@@ -991,12 +1282,36 @@ pub async fn submit_unshielding_transfer(
 
 pub async fn submit_ibc_transfer<N: Namada>(
     namada: &N,
+<<<<<<< HEAD
     args: args::TxIbcTransfer,
+=======
+    mut args: args::TxIbcTransfer,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 ) -> Result<(), error::Error>
 where
     <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
 {
+<<<<<<< HEAD
     let (tx, signing_data, _) = args.build(namada).await?;
+=======
+    let sources = args
+        .source
+        .spending_key_mut()
+        .into_iter()
+        .chain(args.gas_spending_key.iter_mut());
+    let shielded_hw_keys =
+        augment_masp_hardware_keys(namada, &args.tx, sources).await?;
+    let mut bparams = generate_masp_build_params(
+        namada,
+        MAX_HW_SPEND,
+        MAX_HW_CONVERT,
+        MAX_HW_OUTPUT,
+        &args.tx,
+    )
+    .await?;
+    let (mut tx, signing_data, _) = args.build(namada, &mut bparams).await?;
+    masp_sign(&mut tx, &args.tx, &signing_data, shielded_hw_keys).await?;
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 
     let opt_masp_section =
         tx.sections.iter().find_map(|section| section.masp_tx());

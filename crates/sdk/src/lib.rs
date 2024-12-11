@@ -45,8 +45,13 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use args::{DeviceTransport, InputAmount, SdkTypes};
+<<<<<<< HEAD
 use namada_core::address::Address;
 use namada_core::collections::HashSet;
+=======
+use masp_primitives::zip32::PseudoExtendedKey;
+use namada_core::address::Address;
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 use namada_core::dec::Dec;
 use namada_core::ethereum_events::EthAddress;
 use namada_core::ibc::core::host::types::identifiers::{ChannelId, PortId};
@@ -173,7 +178,11 @@ pub trait Namada: NamadaIo {
     fn new_shielded_transfer(
         &self,
         data: Vec<args::TxShieldedTransferData>,
+<<<<<<< HEAD
         gas_spending_key: Option<ExtendedSpendingKey>,
+=======
+        gas_spending_key: Option<PseudoExtendedKey>,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         disposable_signing_key: bool,
     ) -> args::TxShieldedTransfer {
         args::TxShieldedTransfer {
@@ -204,9 +213,15 @@ pub trait Namada: NamadaIo {
     /// arguments
     fn new_unshielding_transfer(
         &self,
+<<<<<<< HEAD
         source: ExtendedSpendingKey,
         data: Vec<args::TxUnshieldingTransferData>,
         gas_spending_key: Option<ExtendedSpendingKey>,
+=======
+        source: PseudoExtendedKey,
+        data: Vec<args::TxUnshieldingTransferData>,
+        gas_spending_key: Option<PseudoExtendedKey>,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         disposable_signing_key: bool,
     ) -> args::TxUnshieldingTransfer {
         args::TxUnshieldingTransfer {
@@ -608,7 +623,11 @@ pub trait Namada: NamadaIo {
         tx: &mut Tx,
         args: &args::Tx,
         signing_data: SigningTxData,
+<<<<<<< HEAD
         with: impl Fn(Tx, common::PublicKey, HashSet<signing::Signable>, D) -> F
+=======
+        with: impl Fn(Tx, common::PublicKey, signing::Signable, D) -> F
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         + MaybeSend
         + MaybeSync,
         user_data: D,
@@ -862,7 +881,11 @@ pub mod testing {
     use namada_core::address::testing::{
         arb_established_address, arb_non_internal_address,
     };
+<<<<<<< HEAD
     use namada_core::collections::HashMap;
+=======
+    use namada_core::collections::{HashMap, HashSet};
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     use namada_core::eth_bridge_pool::PendingTransfer;
     use namada_core::hash::testing::arb_hash;
     use namada_core::key::testing::arb_common_keypair;
@@ -1085,11 +1108,19 @@ pub mod testing {
 
     prop_compose! {
         /// Generate an arbitrary header
+<<<<<<< HEAD
         pub fn arb_header()(
             chain_id in arb_chain_id(),
             expiration in option::of(arb_date_time_utc()),
             timestamp in arb_date_time_utc(),
             batch in arb_tx_commitments(1..10),
+=======
+        pub fn arb_header(cmt_count: impl Into<SizeRange>,)(
+            chain_id in arb_chain_id(),
+            expiration in option::of(arb_date_time_utc()),
+            timestamp in arb_date_time_utc(),
+            batch in arb_tx_commitments(cmt_count),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             atomic in proptest::bool::ANY,
             tx_type in arb_tx_type(),
         ) -> Header {
@@ -1123,7 +1154,11 @@ pub mod testing {
     prop_compose! {
         /// Generate an arbitrary masp transfer transaction
         pub fn arb_transfer_tx()(
+<<<<<<< HEAD
             mut header in arb_header(),
+=======
+            mut header in arb_header(0),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             wrapper in arb_wrapper_tx(),
             code_hash in arb_hash(),
             (transfer, aux) in arb_transfer(),
@@ -1156,7 +1191,11 @@ pub mod testing {
     prop_compose! {
         /// Generate an arbitrary bond transaction
         pub fn arb_bond_tx()(
+<<<<<<< HEAD
             mut header in arb_header(),
+=======
+            mut header in arb_header(0),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             wrapper in arb_wrapper_tx(),
             bond in arb_bond(),
             code_hash in arb_hash(),
@@ -1172,7 +1211,11 @@ pub mod testing {
     prop_compose! {
         /// Generate an arbitrary bond transaction
         pub fn arb_unbond_tx()(
+<<<<<<< HEAD
             mut header in arb_header(),
+=======
+            mut header in arb_header(0),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             wrapper in arb_wrapper_tx(),
             unbond in arb_bond(),
             code_hash in arb_hash(),
@@ -1188,7 +1231,11 @@ pub mod testing {
     prop_compose! {
         /// Generate an arbitrary account initialization transaction
         pub fn arb_init_account_tx()(
+<<<<<<< HEAD
             mut header in arb_header(),
+=======
+            mut header in arb_header(0),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             wrapper in arb_wrapper_tx(),
             mut init_account in arb_init_account(),
             extra_data in arb_code(),
@@ -1207,7 +1254,11 @@ pub mod testing {
     prop_compose! {
         /// Generate an arbitrary account initialization transaction
         pub fn arb_become_validator_tx()(
+<<<<<<< HEAD
             mut header in arb_header(),
+=======
+            mut header in arb_header(0),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             wrapper in arb_wrapper_tx(),
             become_validator in arb_become_validator(),
             code_hash in arb_hash(),
@@ -1223,7 +1274,11 @@ pub mod testing {
     prop_compose! {
         /// Generate an arbitrary proposal initialization transaction
         pub fn arb_init_proposal_tx()(
+<<<<<<< HEAD
             mut header in arb_header(),
+=======
+            mut header in arb_header(0),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             wrapper in arb_wrapper_tx(),
             mut init_proposal in arb_init_proposal(),
             content_extra_data in arb_code(),
@@ -1272,7 +1327,11 @@ pub mod testing {
     prop_compose! {
         /// Generate an arbitrary vote proposal transaction
         pub fn arb_vote_proposal_tx()(
+<<<<<<< HEAD
             mut header in arb_header(),
+=======
+            mut header in arb_header(0),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             wrapper in arb_wrapper_tx(),
             vote_proposal in arb_vote_proposal(),
             code_hash in arb_hash(),
@@ -1288,7 +1347,11 @@ pub mod testing {
     prop_compose! {
         /// Generate an arbitrary reveal public key transaction
         pub fn arb_reveal_pk_tx()(
+<<<<<<< HEAD
             mut header in arb_header(),
+=======
+            mut header in arb_header(0),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             wrapper in arb_wrapper_tx(),
             pk in arb_common_pk(),
             code_hash in arb_hash(),
@@ -1304,7 +1367,11 @@ pub mod testing {
     prop_compose! {
         /// Generate an arbitrary account initialization transaction
         pub fn arb_update_account_tx()(
+<<<<<<< HEAD
             mut header in arb_header(),
+=======
+            mut header in arb_header(0),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             wrapper in arb_wrapper_tx(),
             mut update_account in arb_update_account(),
             extra_data in arb_code(),
@@ -1325,7 +1392,11 @@ pub mod testing {
     prop_compose! {
         /// Generate an arbitrary reveal public key transaction
         pub fn arb_withdraw_tx()(
+<<<<<<< HEAD
             mut header in arb_header(),
+=======
+            mut header in arb_header(0),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             wrapper in arb_wrapper_tx(),
             withdraw in arb_withdraw(),
             code_hash in arb_hash(),
@@ -1341,7 +1412,11 @@ pub mod testing {
     prop_compose! {
         /// Generate an arbitrary claim rewards transaction
         pub fn arb_claim_rewards_tx()(
+<<<<<<< HEAD
             mut header in arb_header(),
+=======
+            mut header in arb_header(0),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             wrapper in arb_wrapper_tx(),
             claim_rewards in arb_withdraw(),
             code_hash in arb_hash(),
@@ -1357,7 +1432,11 @@ pub mod testing {
     prop_compose! {
         /// Generate an arbitrary commission change transaction
         pub fn arb_commission_change_tx()(
+<<<<<<< HEAD
             mut header in arb_header(),
+=======
+            mut header in arb_header(0),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             wrapper in arb_wrapper_tx(),
             commission_change in arb_commission_change(),
             code_hash in arb_hash(),
@@ -1373,7 +1452,11 @@ pub mod testing {
     prop_compose! {
         /// Generate an arbitrary commission change transaction
         pub fn arb_metadata_change_tx()(
+<<<<<<< HEAD
             mut header in arb_header(),
+=======
+            mut header in arb_header(0),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             wrapper in arb_wrapper_tx(),
             metadata_change in arb_metadata_change(),
             code_hash in arb_hash(),
@@ -1389,7 +1472,11 @@ pub mod testing {
     prop_compose! {
         /// Generate an arbitrary unjail validator transaction
         pub fn arb_unjail_validator_tx()(
+<<<<<<< HEAD
             mut header in arb_header(),
+=======
+            mut header in arb_header(0),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             wrapper in arb_wrapper_tx(),
             address in arb_non_internal_address(),
             code_hash in arb_hash(),
@@ -1405,7 +1492,11 @@ pub mod testing {
     prop_compose! {
         /// Generate an arbitrary deactivate validator transaction
         pub fn arb_deactivate_validator_tx()(
+<<<<<<< HEAD
             mut header in arb_header(),
+=======
+            mut header in arb_header(0),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             wrapper in arb_wrapper_tx(),
             address in arb_non_internal_address(),
             code_hash in arb_hash(),
@@ -1421,7 +1512,11 @@ pub mod testing {
     prop_compose! {
         /// Generate an arbitrary reactivate validator transaction
         pub fn arb_reactivate_validator_tx()(
+<<<<<<< HEAD
             mut header in arb_header(),
+=======
+            mut header in arb_header(0),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             wrapper in arb_wrapper_tx(),
             address in arb_non_internal_address(),
             code_hash in arb_hash(),
@@ -1437,7 +1532,11 @@ pub mod testing {
     prop_compose! {
         /// Generate an arbitrary consensus key change transaction
         pub fn arb_consensus_key_change_tx()(
+<<<<<<< HEAD
             mut header in arb_header(),
+=======
+            mut header in arb_header(0),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             wrapper in arb_wrapper_tx(),
             consensus_key_change in arb_consensus_key_change(),
             code_hash in arb_hash(),
@@ -1453,7 +1552,11 @@ pub mod testing {
     prop_compose! {
         /// Generate an arbitrary redelegation transaction
         pub fn arb_redelegation_tx()(
+<<<<<<< HEAD
             mut header in arb_header(),
+=======
+            mut header in arb_header(0),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             wrapper in arb_wrapper_tx(),
             redelegation in arb_redelegation(),
             code_hash in arb_hash(),
@@ -1469,7 +1572,11 @@ pub mod testing {
     prop_compose! {
         /// Generate an arbitrary redelegation transaction
         pub fn arb_update_steward_commission_tx()(
+<<<<<<< HEAD
             mut header in arb_header(),
+=======
+            mut header in arb_header(0),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             wrapper in arb_wrapper_tx(),
             update_steward_commission in arb_update_steward_commission(),
             code_hash in arb_hash(),
@@ -1485,7 +1592,11 @@ pub mod testing {
     prop_compose! {
         /// Generate an arbitrary redelegation transaction
         pub fn arb_resign_steward_tx()(
+<<<<<<< HEAD
             mut header in arb_header(),
+=======
+            mut header in arb_header(0),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             wrapper in arb_wrapper_tx(),
             steward in arb_non_internal_address(),
             code_hash in arb_hash(),
@@ -1501,7 +1612,11 @@ pub mod testing {
     prop_compose! {
         /// Generate an arbitrary pending transfer transaction
         pub fn arb_pending_transfer_tx()(
+<<<<<<< HEAD
             mut header in arb_header(),
+=======
+            mut header in arb_header(0),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             wrapper in arb_wrapper_tx(),
             pending_transfer in arb_pending_transfer(),
             code_hash in arb_hash(),
@@ -1534,7 +1649,11 @@ pub mod testing {
     prop_compose! {
         /// Generate an arbitrary IBC any transaction
         pub fn arb_ibc_msg_transfer_tx()(
+<<<<<<< HEAD
             mut header in arb_header(),
+=======
+            mut header in arb_header(0),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             wrapper in arb_wrapper_tx(),
             (msg_transfer, aux) in arb_msg_transfer(),
             code_hash in arb_hash(),
@@ -1584,7 +1703,11 @@ pub mod testing {
     prop_compose! {
         /// Generate an arbitrary IBC any transaction
         pub fn arb_ibc_msg_nft_transfer_tx()(
+<<<<<<< HEAD
             mut header in arb_header(),
+=======
+            mut header in arb_header(0),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             wrapper in arb_wrapper_tx(),
             (msg_transfer, aux) in arb_msg_nft_transfer(),
             code_hash in arb_hash(),

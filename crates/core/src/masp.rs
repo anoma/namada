@@ -13,6 +13,10 @@ use masp_primitives::transaction::TransparentAddress;
 pub use masp_primitives::transaction::{
     Transaction as MaspTransaction, TxId as TxIdInner,
 };
+<<<<<<< HEAD
+=======
+use masp_primitives::zip32::{ExtendedKey, PseudoExtendedKey};
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
@@ -69,7 +73,11 @@ pub struct MaspTxId(
         serialize_with = "serialize_txid",
         deserialize_with = "deserialize_txid"
     )]
+<<<<<<< HEAD
     TxIdInner,
+=======
+    pub TxIdInner,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 );
 
 impl From<TxIdInner> for MaspTxId {
@@ -532,12 +540,20 @@ impl<'de> serde::Deserialize<'de> for ExtendedSpendingKey {
 }
 
 /// Represents a source of funds for a transfer
+<<<<<<< HEAD
+=======
+#[allow(clippy::large_enum_variant)]
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub enum TransferSource {
     /// A transfer coming from a transparent address
     Address(Address),
     /// A transfer coming from a shielded address
+<<<<<<< HEAD
     ExtendedSpendingKey(ExtendedSpendingKey),
+=======
+    ExtendedKey(PseudoExtendedKey),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 }
 
 impl TransferSource {
@@ -547,6 +563,7 @@ impl TransferSource {
             Self::Address(x) => x.clone(),
             // An ExtendedSpendingKey for a source effectively means that
             // assets will be drawn from the MASP
+<<<<<<< HEAD
             Self::ExtendedSpendingKey(_) => MASP,
         }
     }
@@ -555,11 +572,33 @@ impl TransferSource {
     pub fn spending_key(&self) -> Option<ExtendedSpendingKey> {
         match self {
             Self::ExtendedSpendingKey(x) => Some(*x),
+=======
+            Self::ExtendedKey(_) => MASP,
+        }
+    }
+
+    /// Get the contained extended key, if any
+    pub fn spending_key(&self) -> Option<PseudoExtendedKey> {
+        match self {
+            Self::ExtendedKey(x) => Some(*x),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             _ => None,
         }
     }
 
+<<<<<<< HEAD
     /// Get the contained Address, if any
+=======
+    /// Get the contained extended key, if any
+    pub fn spending_key_mut(&mut self) -> Option<&mut PseudoExtendedKey> {
+        match self {
+            Self::ExtendedKey(x) => Some(x),
+            _ => None,
+        }
+    }
+
+    /// Get the contained transparent address, if any
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     pub fn address(&self) -> Option<Address> {
         match self {
             Self::Address(x) => Some(x.clone()),
@@ -580,7 +619,13 @@ impl Display for TransferSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Address(x) => x.fmt(f),
+<<<<<<< HEAD
             Self::ExtendedSpendingKey(x) => x.fmt(f),
+=======
+            Self::ExtendedKey(x) => {
+                ExtendedViewingKey::from(x.to_viewing_key()).fmt(f)
+            }
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         }
     }
 }
@@ -815,12 +860,19 @@ mod test {
         let addr = address::testing::established_address_1();
         assert_eq!(addr.to_string(), TransferSource::Address(addr).to_string());
 
+<<<<<<< HEAD
         let sk = ExtendedSpendingKey::from(
             masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]),
         );
         assert_eq!(
             sk.to_string(),
             TransferSource::ExtendedSpendingKey(sk).to_string()
+=======
+        let sk = masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]);
+        assert_eq!(
+            ExtendedViewingKey::from(sk.to_viewing_key()).to_string(),
+            TransferSource::ExtendedKey(sk.into()).to_string()
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         );
     }
 
@@ -831,11 +883,18 @@ mod test {
                 .address();
         assert_eq!(addr.unwrap(), address::testing::established_address_1());
 
+<<<<<<< HEAD
         let addr =
             TransferSource::ExtendedSpendingKey(ExtendedSpendingKey::from(
                 masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]),
             ))
             .address();
+=======
+        let addr = TransferSource::ExtendedKey(
+            masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]).into(),
+        )
+        .address();
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         assert!(addr.is_none());
     }
 
@@ -849,11 +908,18 @@ mod test {
             TAddrData::Addr(address::testing::established_address_1())
         );
 
+<<<<<<< HEAD
         let addr =
             TransferSource::ExtendedSpendingKey(ExtendedSpendingKey::from(
                 masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]),
             ))
             .address();
+=======
+        let addr = TransferSource::ExtendedKey(
+            masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]).into(),
+        )
+        .address();
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         assert!(addr.is_none());
     }
 
@@ -866,10 +932,15 @@ mod test {
             address::testing::established_address_1()
         );
 
+<<<<<<< HEAD
         let sk = ExtendedSpendingKey::from(
             masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]),
         );
         let source = TransferSource::ExtendedSpendingKey(sk);
+=======
+        let sk = masp_primitives::zip32::ExtendedSpendingKey::master(&[0_u8]);
+        let source = TransferSource::ExtendedKey(sk.into());
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         assert_eq!(source.effective_address(), MASP);
     }
 

@@ -773,6 +773,10 @@ impl<T> Signed<T> {
             public_keys: pks.clone(),
             threshold,
             fee_payer: genesis_fee_payer_pk(),
+<<<<<<< HEAD
+=======
+            shielded_hash: None,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         };
 
         let mut tx = self.data.tx_to_sign();
@@ -794,7 +798,11 @@ impl<T> Signed<T> {
             async fn software_wallet_sign(
                 tx: Tx,
                 pubkey: common::PublicKey,
+<<<<<<< HEAD
                 _parts: HashSet<namada_sdk::signing::Signable>,
+=======
+                _parts: namada_sdk::signing::Signable,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
                 _user: (),
             ) -> Result<Tx, namada_sdk::error::Error> {
                 if pubkey == genesis_fee_payer_pk() {

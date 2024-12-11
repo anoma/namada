@@ -17,13 +17,21 @@ use masp_primitives::sapling::{
     Diversifier, Node, Note, Nullifier, ViewingKey,
 };
 use masp_primitives::transaction::builder::Builder;
+<<<<<<< HEAD
 use masp_primitives::transaction::components::sapling::builder::RngBuildParams;
+=======
+use masp_primitives::transaction::components::sapling::builder::BuildParams;
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 use masp_primitives::transaction::components::{
     I128Sum, TxOut, U64Sum, ValueSum,
 };
 use masp_primitives::transaction::fees::fixed::FeeRule;
 use masp_primitives::transaction::{builder, Transaction};
+<<<<<<< HEAD
 use masp_primitives::zip32::ExtendedSpendingKey as MaspExtendedSpendingKey;
+=======
+use masp_primitives::zip32::{ExtendedKey, PseudoExtendedKey};
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 use namada_core::address::Address;
 use namada_core::arith::checked;
 use namada_core::borsh::{BorshDeserialize, BorshSerialize};
@@ -50,11 +58,19 @@ use rand_core::{OsRng, SeedableRng};
 
 use crate::masp::utils::MaspClient;
 use crate::masp::{
+<<<<<<< HEAD
     cloned_pair, to_viewing_key, ContextSyncStatus, Conversions, MaspAmount,
     MaspDataLogEntry, MaspFeeData, MaspSourceTransferData,
     MaspTargetTransferData, MaspTransferData, MaspTxReorderedData, NoteIndex,
     ShieldedSyncConfig, ShieldedTransfer, ShieldedUtils, SpentNotesTracker,
     TransferErr, WalletMap, WitnessMap, NETWORK,
+=======
+    cloned_pair, ContextSyncStatus, Conversions, MaspAmount, MaspDataLogEntry,
+    MaspFeeData, MaspSourceTransferData, MaspTargetTransferData,
+    MaspTransferData, MaspTxReorderedData, NoteIndex, ShieldedSyncConfig,
+    ShieldedTransfer, ShieldedUtils, SpentNotesTracker, TransferErr, WalletMap,
+    WitnessMap, NETWORK,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 };
 #[cfg(any(test, feature = "testing"))]
 use crate::masp::{testing, ENV_VAR_MASP_TEST_SEED};
@@ -814,7 +830,11 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         &mut self,
         context: &impl NamadaIo,
         spent_notes: &mut SpentNotesTracker,
+<<<<<<< HEAD
         sk: namada_core::masp::ExtendedSpendingKey,
+=======
+        sk: PseudoExtendedKey,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         target: ValueSum<(MaspDigitPos, Address), i128>,
         target_epoch: MaspEpoch,
     ) -> Result<
@@ -825,7 +845,11 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         ),
         eyre::Error,
     > {
+<<<<<<< HEAD
         let vk = &to_viewing_key(&sk.into()).vk;
+=======
+        let vk = &sk.to_viewing_key().fvk.vk;
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         // TODO: we should try to use the smallest notes possible to fund the
         // transaction to allow people to fetch less often
         // Establish connection with which to do exchange rate queries
@@ -1024,6 +1048,10 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         data: Vec<MaspTransferData>,
         fee_data: Option<MaspFeeData>,
         expiration: Option<DateTimeUtc>,
+<<<<<<< HEAD
+=======
+        bparams: &mut impl BuildParams,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     ) -> Result<Option<ShieldedTransfer>, TransferErr> {
         // Determine epoch in which to submit potential shielded transaction
         let epoch = Self::query_masp_epoch(context.client())
@@ -1093,7 +1121,11 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 u32::MAX - 20
             }
         };
+<<<<<<< HEAD
         let mut builder = Builder::<Network, _>::new(
+=======
+        let mut builder = Builder::<Network, PseudoExtendedKey>::new(
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             NETWORK,
             // NOTE: this is going to add 20 more blocks to the actual
             // expiration but there's no other exposed function that we could
@@ -1213,7 +1245,11 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 &prover,
                 &FeeRule::non_standard(U64Sum::zero()),
                 &mut rng,
+<<<<<<< HEAD
                 &mut RngBuildParams::new(OsRng),
+=======
+                bparams,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             )
             .map_err(|error| TransferErr::Build { error })?;
 
@@ -1273,7 +1309,11 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             if let Some(source) = fee_data.source {
                 source_data.insert(
                     MaspSourceTransferData {
+<<<<<<< HEAD
                         source: TransferSource::ExtendedSpendingKey(source),
+=======
+                        source: TransferSource::ExtendedKey(source),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
                         token: fee_data.token.clone(),
                     },
                     amount,
@@ -1281,9 +1321,13 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             }
             target_data.insert(
                 MaspTargetTransferData {
+<<<<<<< HEAD
                     source: fee_data.source.map(|source| {
                         TransferSource::ExtendedSpendingKey(source)
                     }),
+=======
+                    source: fee_data.source.map(TransferSource::ExtendedKey),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
                     target: TransferTarget::Address(fee_data.target),
                     token: fee_data.token,
                 },
@@ -1418,7 +1462,11 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
     async fn add_inputs(
         &mut self,
         context: &impl NamadaIo,
+<<<<<<< HEAD
         builder: &mut Builder<Network>,
+=======
+        builder: &mut Builder<Network, PseudoExtendedKey>,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         source: &TransferSource,
         token: &Address,
         amount: &Amount,
@@ -1503,8 +1551,13 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             for (asset_type, value) in change.components() {
                 builder
                     .add_sapling_output(
+<<<<<<< HEAD
                         Some(MaspExtendedSpendingKey::from(sk).expsk.ovk),
                         MaspExtendedSpendingKey::from(sk).default_address().1,
+=======
+                        Some(sk.to_viewing_key().fvk.ovk),
+                        sk.to_viewing_key().default_address().1,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
                         *asset_type,
                         *value as u64,
                         MemoBytes::empty(),
@@ -1517,12 +1570,16 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
             // Commit the notes found to our transaction
             for (diversifier, note, merkle_path) in unspent_notes {
                 builder
+<<<<<<< HEAD
                     .add_sapling_spend(
                         sk.into(),
                         diversifier,
                         note,
                         merkle_path,
                     )
+=======
+                    .add_sapling_spend(sk, diversifier, note, merkle_path)
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
                     .map_err(|e| TransferErr::Build {
                         error: builder::Error::SaplingBuild(e),
                     })?;
@@ -1584,7 +1641,11 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
     async fn add_outputs(
         &mut self,
         context: &impl NamadaIo,
+<<<<<<< HEAD
         builder: &mut Builder<Network>,
+=======
+        builder: &mut Builder<Network, PseudoExtendedKey>,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         source: Option<TransferSource>,
         target: &TransferTarget,
         token: Address,
@@ -1632,9 +1693,13 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 // If we are sending to a shielded address, we need the outgoing
                 // viewing key in the following computations.
                 let ovk_opt = source.clone().and_then(|source| {
+<<<<<<< HEAD
                     source
                         .spending_key()
                         .map(|x| MaspExtendedSpendingKey::from(x).expsk.ovk)
+=======
+                    source.spending_key().map(|x| x.to_viewing_key().fvk.ovk)
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
                 });
                 // Make transaction output tied to the current token,
                 // denomination, and epoch.

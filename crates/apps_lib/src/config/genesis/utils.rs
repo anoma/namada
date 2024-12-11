@@ -2,7 +2,10 @@ use std::path::Path;
 
 use eyre::Context;
 use ledger_namada_rs::NamadaApp;
+<<<<<<< HEAD
 use namada_sdk::collections::HashSet;
+=======
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 use namada_sdk::key::common;
 use namada_sdk::tx::Tx;
 use namada_sdk::wallet::Wallet;
@@ -52,14 +55,22 @@ pub fn write_toml<T: Serialize>(
 pub(super) async fn with_hardware_wallet<'a, T>(
     tx: Tx,
     pubkey: common::PublicKey,
+<<<<<<< HEAD
     parts: HashSet<signing::Signable>,
+=======
+    parts: signing::Signable,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     (wallet, app): (&RwLock<Wallet<CliWalletUtils>>, &NamadaApp<T>),
 ) -> Result<Tx, error::Error>
 where
     T: ledger_transport::Exchange + Send + Sync,
     <T as ledger_transport::Exchange>::Error: std::error::Error,
 {
+<<<<<<< HEAD
     if parts.contains(&signing::Signable::FeeHeader) {
+=======
+    if parts == signing::Signable::FeeRawHeader {
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         Ok(tx)
     } else {
         crate::client::tx::with_hardware_wallet(

@@ -8,6 +8,12 @@ use namada_node::shell::testing::node::MockNode;
 use namada_node::shell::testing::utils::{Bin, CapturedOutput};
 use namada_sdk::key::common;
 
+<<<<<<< HEAD
+=======
+use crate::e2e::setup::constants::{FRANK, FRANK_KEY};
+use crate::strings::TX_APPLIED_SUCCESS;
+
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 /// Query the wallet to get an address from a given alias.
 pub fn find_address(
     node: &MockNode,
@@ -78,6 +84,69 @@ pub fn find_keypair(
     })
 }
 
+<<<<<<< HEAD
+=======
+// Make a temporary account with the given balance and return its key. This
+// function is useful because the integration tests can no longer assume that
+// the secret keys are accessible.
+pub fn make_temp_account(
+    node: &MockNode,
+    ledger_address: &str,
+    key_alias: impl AsRef<str>,
+    token: impl AsRef<str>,
+    amount: u64,
+) -> eyre::Result<(impl AsRef<str>, common::SecretKey)> {
+    // a. Generate a new key for an implicit account.
+    run(
+        node,
+        Bin::Wallet,
+        vec![
+            "gen",
+            "--alias",
+            key_alias.as_ref(),
+            "--unsafe-dont-encrypt",
+            "--raw",
+        ],
+    )?;
+    // b. Reveal the public key associated with an address
+    let reveal_args = vec![
+        "reveal-pk",
+        "--public-key",
+        key_alias.as_ref(),
+        "--gas-payer",
+        FRANK_KEY,
+        "--node",
+        ledger_address,
+    ];
+    let captured = CapturedOutput::of(|| run(node, Bin::Client, reveal_args));
+    assert!(captured.result.is_ok());
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+    // c. Send some funds to the implicit account.
+    let amount = amount.to_string();
+    let credit_args = vec![
+        "transparent-transfer",
+        "--source",
+        FRANK,
+        "--target",
+        key_alias.as_ref(),
+        "--token",
+        token.as_ref(),
+        "--amount",
+        &amount,
+        "--signing-keys",
+        FRANK_KEY,
+        "--node",
+        ledger_address,
+    ];
+    let captured = CapturedOutput::of(|| run(node, Bin::Client, credit_args));
+    assert!(captured.result.is_ok());
+    assert!(captured.contains(TX_APPLIED_SUCCESS));
+    // d. Obtain the key pair associated with the new address
+    let keypair = find_keypair(node, key_alias.as_ref())?;
+    Ok((key_alias, keypair))
+}
+
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 fn strip_trailing_newline(input: &str) -> &str {
     input
         .strip_suffix("\r\n")

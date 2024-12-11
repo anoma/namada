@@ -89,6 +89,7 @@ pub fn apply_use_device(mut tx_args: Vec<&str>) -> Vec<&str> {
     tx_args
 }
 
+<<<<<<< HEAD
 /// Replace the given key with a key that is stored unencrypted in the wallet.
 /// This is useful for IBC tests where a keypair needs to be added to the Hermes
 /// keyring or where IBC messages unsupported by the hardware wallet need to be
@@ -101,6 +102,8 @@ pub fn ensure_hot_key(key: &str) -> &str {
     }
 }
 
+=======
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 /// Default functions for offsetting ports when
 /// adding multiple validators to a network
 pub fn default_port_offset(ix: u8) -> u16 {
@@ -1555,6 +1558,7 @@ pub mod constants {
     pub const FRANK_KEY: &str = "Frank-key";
 
     // Shielded spending and viewing keys and payment addresses
+<<<<<<< HEAD
     pub const A_SPENDING_KEY: &str = "zsknam1qdrk9kd8qqqqpqy3pxzxu2kexydl7ug22s3808htl604emmz9qlde9cl9mx6euhvh3cpl9w7guustfzjxsyaeqtefhden6q8776t9cr9vkqztj7u0mgs5k9nz945sypev9ppptn5d85as3ccsnu3q6g3acqp2gpsrwe6naqg3stqp43uk9x2cj79gcxuum8a7jayjqlv4ptcfnunqkqzsj6m2r3sn8ft0tyqqpv28nghe4ag68eccaqx7v5f65he95g5uwq2wr4yuqc06jgc7";
     pub const B_SPENDING_KEY: &str = "zsknam1qdml0zguqqqqpqx8elavks722m0cjelgh3r044cfregyw049jze9lwha2cfqdqnekecnttdvygd6s784kch2v3wjs45g5z0n36hpqv5ruy8jjfu5mz2snl8ljyz79h3szmyf43zve79l6hwnlfk94r422tfwr2f62vvgkeqvc4z2dgrvqy033ymq5ylz3gmf6wdzhsdmzm0h9uv9374x755rzgvmcxhxntu6v63acqktv6zk390e9pd6vr0pzqaq6auu59kwpnw0haczfyju8";
     // A payment address derived from A_SPENDING_KEY
@@ -1572,6 +1576,25 @@ pub mod constants {
     pub const AC_VIEWING_KEY: &str = "zvknam1qdy5g4udqqqqpqrfdzej0s45m8s6nprder4udwqm3ql8wx34e8f46dv8cwnmcjp40lr4vutffut7ed5x6egd6etcdh9sxh3j9fe5dshhrn3nq4yfp78gt8ve59y4vnu45xlt93vtrzsxtwlxjjgu2p496lc3ye8m83qplsqfl6flgjz7wz9wwu9kxd4rth4clw6ug4drxln96y96nf8fmvgm5eddm93azuzlkjj0dpw343ukwcfuvkdhd772539cskgggcqsaaf0j7cfyd3jr";
     // A viewing key derived from C_VIEWING_KEY
     pub const AC_PAYMENT_ADDRESS: &str = "znam1xv4ml6fp3zqjhw20xj3srd75cq8tyejdst0xweq60c70732ty2chd2v39tllpzf4uf6s66vfm6w";
+=======
+    pub const A_SPENDING_KEY: &str = "albert-svk";
+    pub const B_SPENDING_KEY: &str = "bertha-svk";
+    // A payment address derived from A_SPENDING_KEY
+    pub const AA_PAYMENT_ADDRESS: &str = "albert-pa";
+    // A payment address derived from B_SPENDING_KEY
+    pub const AB_PAYMENT_ADDRESS: &str = "bertha-pa-a";
+    // A viewing key derived from B_SPENDING_KEY
+    pub const AB_VIEWING_KEY: &str = "bertha-svk";
+    // A payment address derived from B_VIEWING_KEY
+    pub const BB_PAYMENT_ADDRESS: &str = "bertha-pa-b";
+    // A viewing key derived from A_SPENDING_KEY
+    pub const AA_VIEWING_KEY: &str = "albert-svk";
+    pub const C_SPENDING_KEY: &str = "christel-svk";
+    // A viewing key derived from C_SPENDING_KEY
+    pub const AC_VIEWING_KEY: &str = "christel-svk";
+    // A viewing key derived from C_VIEWING_KEY
+    pub const AC_PAYMENT_ADDRESS: &str = "christel-pa";
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 
     //  Native VP aliases
     pub const GOVERNANCE_ADDRESS: &str = "governance";

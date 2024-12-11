@@ -47,7 +47,12 @@ use sha2::{Digest, Sha256};
 
 use crate::e2e::helpers::{
     epoch_sleep, epochs_per_year_from_min_duration, find_address,
+<<<<<<< HEAD
     find_cosmos_address, get_actor_rpc, get_cosmos_gov_address, get_epoch,
+=======
+    find_cosmos_address, find_payment_address, get_actor_rpc,
+    get_cosmos_gov_address, get_epoch,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 };
 use crate::e2e::ledger_tests::{
     start_namada_ledger_node_wait_wasm, write_json_file,
@@ -134,6 +139,10 @@ fn ibc_transfers() -> Result<()> {
         None,
         None,
         None,
+<<<<<<< HEAD
+=======
+        false,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     )?;
     wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
 
@@ -205,6 +214,10 @@ fn ibc_transfers() -> Result<()> {
         None,
         None,
         None,
+<<<<<<< HEAD
+=======
+        false,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     )?;
     wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
 
@@ -231,10 +244,19 @@ fn ibc_transfers() -> Result<()> {
         &port_id_namada,
         &channel_id_namada,
     )?;
+<<<<<<< HEAD
     transfer_from_cosmos(
         &test_gaia,
         COSMOS_USER,
         AA_PAYMENT_ADDRESS,
+=======
+    let masp_receiver =
+        find_payment_address(&test, AA_PAYMENT_ADDRESS)?.to_string();
+    transfer_from_cosmos(
+        &test_gaia,
+        COSMOS_USER,
+        masp_receiver.clone(),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         COSMOS_COIN,
         100,
         &port_id_gaia,
@@ -244,7 +266,11 @@ fn ibc_transfers() -> Result<()> {
     )?;
     wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test_gaia)?;
     // Check the token on Namada
+<<<<<<< HEAD
     check_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 100)?;
+=======
+    check_shielded_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 100)?;
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     check_cosmos_balance(&test_gaia, COSMOS_USER, COSMOS_COIN, 800)?;
 
     // Shielded transfer 50 samoleans on Namada
@@ -258,8 +284,13 @@ fn ibc_transfers() -> Result<()> {
         ALBERT_KEY,
         &[],
     )?;
+<<<<<<< HEAD
     check_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 50)?;
     check_balance(&test, AB_VIEWING_KEY, &ibc_denom_on_namada, 50)?;
+=======
+    check_shielded_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 50)?;
+    check_shielded_balance(&test, AB_VIEWING_KEY, &ibc_denom_on_namada, 50)?;
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 
     // Unshielding transfer 10 samoleans from Namada to Gaia
     transfer(
@@ -274,9 +305,16 @@ fn ibc_transfers() -> Result<()> {
         None,
         None,
         None,
+<<<<<<< HEAD
     )?;
     wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
     check_balance(&test, AB_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
+=======
+        true,
+    )?;
+    wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
+    check_shielded_balance(&test, AB_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     check_cosmos_balance(&test_gaia, COSMOS_USER, COSMOS_COIN, 810)?;
 
     // 4. Shielding transfer the received token back to a shielded account on
@@ -289,10 +327,19 @@ fn ibc_transfers() -> Result<()> {
         &port_id_namada,
         &channel_id_namada,
     )?;
+<<<<<<< HEAD
     transfer_from_cosmos(
         &test_gaia,
         COSMOS_USER,
         AA_PAYMENT_ADDRESS,
+=======
+    let masp_receiver =
+        find_payment_address(&test, AA_PAYMENT_ADDRESS)?.to_string();
+    transfer_from_cosmos(
+        &test_gaia,
+        COSMOS_USER,
+        masp_receiver,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         get_gaia_denom_hash(&ibc_denom_on_gaia),
         1_000_000,
         &port_id_gaia,
@@ -302,7 +349,11 @@ fn ibc_transfers() -> Result<()> {
     )?;
     wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test)?;
     // Check the token on Namada
+<<<<<<< HEAD
     check_balance(&test, AA_VIEWING_KEY, APFEL, 1)?;
+=======
+    check_shielded_balance(&test, AA_VIEWING_KEY, APFEL, 1)?;
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 
     // 5. Refunding when transfer failure
 
@@ -320,6 +371,10 @@ fn ibc_transfers() -> Result<()> {
         None,
         None,
         None,
+<<<<<<< HEAD
+=======
+        false,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     )?;
     wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
     // The balance should not be changed
@@ -342,6 +397,10 @@ fn ibc_transfers() -> Result<()> {
         Some(Duration::new(10, 0)),
         None,
         None,
+<<<<<<< HEAD
+=======
+        false,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     )?;
     // wait for the timeout
     sleep(10);
@@ -368,10 +427,18 @@ fn ibc_transfers() -> Result<()> {
         None,
         None,
         None,
+<<<<<<< HEAD
     )?;
     wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
     // Check the token has been refunded to the refund target
     check_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
+=======
+        true,
+    )?;
+    wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
+    // Check the token has been refunded to the refund target
+    check_shielded_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     check_balance(&test, IBC_REFUND_TARGET_ALIAS, &ibc_denom_on_namada, 10)?;
 
     // Stop Hermes for timeout test
@@ -392,6 +459,10 @@ fn ibc_transfers() -> Result<()> {
         Some(Duration::new(10, 0)),
         None,
         None,
+<<<<<<< HEAD
+=======
+        true,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     )?;
     // wait for the timeout
     sleep(10);
@@ -402,12 +473,17 @@ fn ibc_transfers() -> Result<()> {
 
     wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
     // Check the token has been refunded to the refund target
+<<<<<<< HEAD
     check_balance(&test, AA_VIEWING_KEY, APFEL, 0)?;
+=======
+    check_shielded_balance(&test, AA_VIEWING_KEY, APFEL, 0)?;
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     check_balance(&test, IBC_REFUND_TARGET_ALIAS, APFEL, 1)?;
 
     // 6. Malformed shielded actions
 
     // Check initial balance
+<<<<<<< HEAD
     check_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
     check_cosmos_balance(&test_gaia, COSMOS_USER, COSMOS_COIN, 810)?;
 
@@ -416,6 +492,18 @@ fn ibc_transfers() -> Result<()> {
         &test_gaia,
         COSMOS_USER,
         AA_PAYMENT_ADDRESS,
+=======
+    check_shielded_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
+    check_cosmos_balance(&test_gaia, COSMOS_USER, COSMOS_COIN, 810)?;
+
+    // Missing memo
+    let masp_receiver =
+        find_payment_address(&test, AA_PAYMENT_ADDRESS)?.to_string();
+    transfer_from_cosmos(
+        &test_gaia,
+        COSMOS_USER,
+        masp_receiver,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         COSMOS_COIN,
         100,
         &port_id_gaia,
@@ -426,7 +514,11 @@ fn ibc_transfers() -> Result<()> {
     )?;
     wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
     // Check the balance didn't change
+<<<<<<< HEAD
     check_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
+=======
+    check_shielded_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     check_cosmos_balance(&test_gaia, COSMOS_USER, COSMOS_COIN, 810)?;
 
     // Wrong memo (different amount)
@@ -438,10 +530,19 @@ fn ibc_transfers() -> Result<()> {
         &port_id_namada,
         &channel_id_namada,
     )?;
+<<<<<<< HEAD
     transfer_from_cosmos(
         &test_gaia,
         COSMOS_USER,
         AA_PAYMENT_ADDRESS,
+=======
+    let masp_receiver =
+        find_payment_address(&test, AA_PAYMENT_ADDRESS)?.to_string();
+    transfer_from_cosmos(
+        &test_gaia,
+        COSMOS_USER,
+        masp_receiver,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         COSMOS_COIN,
         101,
         &port_id_gaia,
@@ -452,7 +553,11 @@ fn ibc_transfers() -> Result<()> {
     )?;
     wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test_gaia)?;
     // Check the balances didn't change
+<<<<<<< HEAD
     check_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
+=======
+    check_shielded_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     check_cosmos_balance(&test_gaia, COSMOS_USER, COSMOS_COIN, 810)?;
 
     Ok(())
@@ -528,6 +633,10 @@ fn ibc_nft_transfers() -> Result<()> {
         None,
         None,
         None,
+<<<<<<< HEAD
+=======
+        false,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     )?;
     clear_packet(&port_id_namada, &channel_id_namada, &test)?;
     check_balance(&test, &namada_receiver, &ibc_trace_on_namada, 0)?;
@@ -542,10 +651,19 @@ fn ibc_nft_transfers() -> Result<()> {
         &port_id_namada,
         &channel_id_namada,
     )?;
+<<<<<<< HEAD
     nft_transfer_from_cosmos(
         &test_cosmwasm,
         COSMOS_USER,
         AA_PAYMENT_ADDRESS,
+=======
+    let masp_receiver =
+        find_payment_address(&test, AA_PAYMENT_ADDRESS)?.to_string();
+    nft_transfer_from_cosmos(
+        &test_cosmwasm,
+        COSMOS_USER,
+        masp_receiver,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         NFT_ID,
         &cw721_contract,
         &ics721_contract,
@@ -554,7 +672,11 @@ fn ibc_nft_transfers() -> Result<()> {
         None,
     )?;
     clear_packet(&port_id_cosmwasm, &channel_id_cosmwasm, &test_cosmwasm)?;
+<<<<<<< HEAD
     check_balance(&test, AA_VIEWING_KEY, &ibc_trace_on_namada, 1)?;
+=======
+    check_shielded_balance(&test, AA_VIEWING_KEY, &ibc_trace_on_namada, 1)?;
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 
     // Shielded transfer on Namada
     transfer_on_chain(
@@ -567,8 +689,13 @@ fn ibc_nft_transfers() -> Result<()> {
         ALBERT_KEY,
         &[],
     )?;
+<<<<<<< HEAD
     check_balance(&test, AA_VIEWING_KEY, &ibc_trace_on_namada, 0)?;
     check_balance(&test, AB_VIEWING_KEY, &ibc_trace_on_namada, 1)?;
+=======
+    check_shielded_balance(&test, AA_VIEWING_KEY, &ibc_trace_on_namada, 0)?;
+    check_shielded_balance(&test, AB_VIEWING_KEY, &ibc_trace_on_namada, 1)?;
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 
     // Unshielding transfer
     transfer(
@@ -583,9 +710,16 @@ fn ibc_nft_transfers() -> Result<()> {
         None,
         None,
         None,
+<<<<<<< HEAD
     )?;
     clear_packet(&port_id_namada, &channel_id_namada, &test)?;
     check_balance(&test, AB_VIEWING_KEY, &ibc_trace_on_namada, 0)?;
+=======
+        true,
+    )?;
+    clear_packet(&port_id_namada, &channel_id_namada, &test)?;
+    check_shielded_balance(&test, AB_VIEWING_KEY, &ibc_trace_on_namada, 0)?;
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 
     Ok(())
 }
@@ -853,7 +987,11 @@ fn ibc_token_inflation() -> Result<()> {
     }
 
     // Check the target balance is zero before the inflation
+<<<<<<< HEAD
     check_balance(&test, AA_VIEWING_KEY, NAM, 0)?;
+=======
+    check_shielded_balance(&test, AA_VIEWING_KEY, NAM, 0)?;
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     // Shielding transfer 1 samoleans from Gaia to Namada
     let shielding_data_path = gen_ibc_shielding_data(
         &test,
@@ -863,10 +1001,19 @@ fn ibc_token_inflation() -> Result<()> {
         &port_id_namada,
         &channel_id_namada,
     )?;
+<<<<<<< HEAD
     transfer_from_cosmos(
         &test_gaia,
         COSMOS_USER,
         AA_PAYMENT_ADDRESS,
+=======
+    let masp_receiver =
+        find_payment_address(&test, AA_PAYMENT_ADDRESS)?.to_string();
+    transfer_from_cosmos(
+        &test_gaia,
+        COSMOS_USER,
+        masp_receiver,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         COSMOS_COIN,
         1,
         &port_id_gaia,
@@ -1011,6 +1158,10 @@ fn ibc_rate_limit() -> Result<()> {
         None,
         None,
         None,
+<<<<<<< HEAD
+=======
+        false,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     )?;
 
     // Transfer 1 NAM from Namada to Gaia again will fail
@@ -1029,6 +1180,10 @@ fn ibc_rate_limit() -> Result<()> {
         Some(
             "Transfer exceeding the per-epoch throughput limit is not allowed",
         ),
+<<<<<<< HEAD
+=======
+        false,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     )?;
 
     // wait for the next epoch
@@ -1051,6 +1206,10 @@ fn ibc_rate_limit() -> Result<()> {
         None,
         None,
         None,
+<<<<<<< HEAD
+=======
+        false,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     )?;
 
     // wait for the next epoch
@@ -1327,6 +1486,10 @@ fn try_invalid_transfers(
         None,
         // the IBC denom can't be parsed when using an invalid port
         Some(&format!("Invalid IBC denom: {nam_addr}")),
+<<<<<<< HEAD
+=======
+        false,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     )?;
 
     // invalid channel
@@ -1342,6 +1505,10 @@ fn try_invalid_transfers(
         None,
         None,
         Some("IBC token transfer error: context error: `ICS04 Channel error"),
+<<<<<<< HEAD
+=======
+        false,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     )?;
 
     Ok(())
@@ -1396,6 +1563,10 @@ fn transfer(
     timeout_sec: Option<Duration>,
     shielding_data_path: Option<PathBuf>,
     expected_err: Option<&str>,
+<<<<<<< HEAD
+=======
+    gen_refund_target: bool,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 ) -> Result<u32> {
     let rpc = get_actor_rpc(test, Who::Validator(0));
 
@@ -1443,7 +1614,11 @@ fn transfer(
         tx_args.push(&memo);
     }
 
+<<<<<<< HEAD
     if sender.as_ref().starts_with("zsk") {
+=======
+    if gen_refund_target {
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         let mut cmd = run!(
             test,
             Bin::Wallet,
@@ -1592,7 +1767,11 @@ fn propose_inflation(test: &Test) -> Result<Epoch> {
         "--data-path",
         proposal_json_path.to_str().unwrap(),
         "--gas-limit",
+<<<<<<< HEAD
         "2000000",
+=======
+        "3000000",
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         "--node",
         &rpc,
     ]);
@@ -1906,9 +2085,38 @@ fn check_balance(
 ) -> Result<()> {
     let rpc = get_actor_rpc(test, Who::Validator(0));
 
+<<<<<<< HEAD
     if owner.as_ref().starts_with("zvk") {
         shielded_sync(test, owner.as_ref())?;
     }
+=======
+    let query_args = vec![
+        "balance",
+        "--owner",
+        owner.as_ref(),
+        "--token",
+        token.as_ref(),
+        "--node",
+        &rpc,
+    ];
+    let mut client = run!(test, Bin::Client, query_args, Some(40))?;
+    let expected =
+        format!("{}: {expected_amount}", token.as_ref().to_lowercase());
+    client.exp_string(&expected)?;
+    client.assert_success();
+    Ok(())
+}
+
+fn check_shielded_balance(
+    test: &Test,
+    owner: impl AsRef<str>,
+    token: impl AsRef<str>,
+    expected_amount: u64,
+) -> Result<()> {
+    let rpc = get_actor_rpc(test, Who::Validator(0));
+
+    shielded_sync(test, owner.as_ref())?;
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 
     let query_args = vec![
         "balance",

@@ -34,7 +34,11 @@ use zeroize::Zeroizing;
 pub use self::derivation_path::{DerivationPath, DerivationPathError};
 pub use self::keys::{
     DatedKeypair, DatedSpendingKey, DatedViewingKey, DecryptionError,
+<<<<<<< HEAD
     StoredKeypair,
+=======
+    StoreSpendingKey, StoredKeypair,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 };
 pub use self::store::{ConfirmationResponse, ValidatorData, ValidatorKeys};
 use crate::store::{derive_hd_secret_key, derive_hd_spending_key};
@@ -274,7 +278,11 @@ pub struct Wallet<U> {
     utils: U,
     store: Store,
     decrypted_key_cache: HashMap<Alias, common::SecretKey>,
+<<<<<<< HEAD
     decrypted_spendkey_cache: HashMap<Alias, DatedSpendingKey>,
+=======
+    decrypted_spendkey_cache: HashMap<Alias, ExtendedSpendingKey>,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 }
 
 impl<U> From<Wallet<U>> for Store {
@@ -436,12 +444,27 @@ impl<U> Wallet<U> {
     pub fn find_viewing_key(
         &self,
         alias: impl AsRef<str>,
+<<<<<<< HEAD
     ) -> Result<&DatedViewingKey, FindKeyError> {
+=======
+    ) -> Result<&ExtendedViewingKey, FindKeyError> {
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         self.store.find_viewing_key(alias.as_ref()).ok_or_else(|| {
             FindKeyError::KeyNotFound(alias.as_ref().to_string())
         })
     }
 
+<<<<<<< HEAD
+=======
+    /// Find the birthday of the given alias
+    pub fn find_birthday(
+        &self,
+        alias: impl AsRef<str>,
+    ) -> Option<&BlockHeight> {
+        self.store.find_birthday(alias.as_ref())
+    }
+
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     /// Find the payment address with the given alias in the wallet and return
     /// it
     pub fn find_payment_addr(
@@ -501,7 +524,11 @@ impl<U> Wallet<U> {
     }
 
     /// Get all known viewing keys by their alias
+<<<<<<< HEAD
     pub fn get_viewing_keys(&self) -> HashMap<String, DatedViewingKey> {
+=======
+    pub fn get_viewing_keys(&self) -> HashMap<String, ExtendedViewingKey> {
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         self.store
             .get_viewing_keys()
             .iter()
@@ -512,7 +539,11 @@ impl<U> Wallet<U> {
     /// Get all known viewing keys by their alias
     pub fn get_spending_keys(
         &self,
+<<<<<<< HEAD
     ) -> HashMap<String, &StoredKeypair<DatedSpendingKey>> {
+=======
+    ) -> HashMap<String, &StoredKeypair<StoreSpendingKey>> {
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         self.store
             .get_spending_keys()
             .iter()
@@ -567,6 +598,10 @@ impl<U: WalletIo> Wallet<U> {
         alias: String,
         alias_force: bool,
         birthday: Option<BlockHeight>,
+<<<<<<< HEAD
+=======
+        ledger_zip32: bool,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         derivation_path: DerivationPath,
         mnemonic_passphrase: Option<(Mnemonic, Zeroizing<String>)>,
         prompt_bip39_passphrase: bool,
@@ -585,8 +620,32 @@ impl<U: WalletIo> Wallet<U> {
                 (mnemonic, passphrase)
             };
         let seed = Seed::new(&mnemonic, &passphrase);
+<<<<<<< HEAD
         let spend_key =
             derive_hd_spending_key(seed.as_bytes(), derivation_path.clone());
+=======
+        let seed = if ledger_zip32 {
+            // Path to obtain the ZIP32 seed
+            let zip32_seed_path =
+                DerivationPath::default_for_transparent_scheme(
+                    SchemeType::Ed25519,
+                );
+            // Obtain the ZIP32 seed using SLIP10
+            &derive_hd_secret_key(
+                SchemeType::Ed25519,
+                seed.as_bytes(),
+                zip32_seed_path,
+            )
+            .try_to_sk::<ed25519::SecretKey>()
+            .expect("Expected Ed25519 key")
+            .0
+            .to_bytes()[..]
+        } else {
+            seed.as_bytes()
+        };
+        // Now ZIP32 derive the extended spending key from the new seed
+        let spend_key = derive_hd_spending_key(seed, derivation_path.clone());
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 
         self.insert_spending_key(
             alias,
@@ -599,6 +658,19 @@ impl<U: WalletIo> Wallet<U> {
         .map(|alias| (alias, spend_key))
     }
 
+<<<<<<< HEAD
+=======
+    /// Find a derivation path by viewing key
+    pub fn find_path_by_viewing_key(
+        &self,
+        vk: &ExtendedViewingKey,
+    ) -> Result<DerivationPath, FindKeyError> {
+        self.store
+            .find_path_by_viewing_key(vk)
+            .ok_or_else(|| FindKeyError::KeyNotFound(vk.to_string()))
+    }
+
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     /// Restore a keypair from the user mnemonic code (read from stdin) using
     /// a given BIP44 derivation path and derive an implicit address from its
     /// public part and insert them into the store with the provided alias,
@@ -874,7 +946,11 @@ impl<U: WalletIo> Wallet<U> {
             .ok_or_else(|| {
             FindKeyError::KeyNotFound(alias_pkh_or_pk.as_ref().to_string())
         })?;
+<<<<<<< HEAD
         Self::decrypt_stored_key::<_>(
+=======
+        Self::decrypt_stored_key::<_, _>(
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             &mut self.decrypted_key_cache,
             stored_key,
             alias_pkh_or_pk.into(),
@@ -921,7 +997,11 @@ impl<U: WalletIo> Wallet<U> {
         &mut self,
         alias: impl AsRef<str>,
         password: Option<Zeroizing<String>>,
+<<<<<<< HEAD
     ) -> Result<DatedSpendingKey, FindKeyError> {
+=======
+    ) -> Result<ExtendedSpendingKey, FindKeyError> {
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         // Try cache first
         if let Some(cached_key) = self
             .decrypted_spendkey_cache
@@ -936,7 +1016,11 @@ impl<U: WalletIo> Wallet<U> {
             .ok_or_else(|| {
                 FindKeyError::KeyNotFound(alias.as_ref().to_string())
             })?;
+<<<<<<< HEAD
         Self::decrypt_stored_key::<_>(
+=======
+        Self::decrypt_stored_key::<_, _>(
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             &mut self.decrypted_spendkey_cache,
             stored_spendkey,
             alias.into(),
@@ -1018,6 +1102,7 @@ impl<U: WalletIo> Wallet<U> {
     /// supplied, then interactively prompt for password and if successfully
     /// decrypted, store it in a cache.
     fn decrypt_stored_key<
+<<<<<<< HEAD
         T: FromStr + Display + BorshSerialize + BorshDeserialize + Clone,
     >(
         decrypted_key_cache: &mut HashMap<Alias, T>,
@@ -1025,6 +1110,16 @@ impl<U: WalletIo> Wallet<U> {
         alias: Alias,
         password: Option<Zeroizing<String>>,
     ) -> Result<T, FindKeyError>
+=======
+        V: Clone,
+        T: FromStr + Display + BorshSerialize + BorshDeserialize + Clone + Into<V>,
+    >(
+        decrypted_key_cache: &mut HashMap<Alias, V>,
+        stored_key: &StoredKeypair<T>,
+        alias: Alias,
+        password: Option<Zeroizing<String>>,
+    ) -> Result<V, FindKeyError>
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     where
         <T as std::str::FromStr>::Err: Display,
     {
@@ -1053,13 +1148,21 @@ impl<U: WalletIo> Wallet<U> {
                 }
                 .map_err(FindKeyError::KeyDecryptionError)?;
 
+<<<<<<< HEAD
                 decrypted_key_cache.insert(alias.clone(), key);
+=======
+                decrypted_key_cache.insert(alias.clone(), key.into());
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
                 decrypted_key_cache
                     .get(&alias)
                     .cloned()
                     .ok_or_else(|| FindKeyError::KeyNotFound(alias.to_string()))
             }
+<<<<<<< HEAD
             StoredKeypair::Raw(raw) => Ok(raw.clone()),
+=======
+            StoredKeypair::Raw(raw) => Ok(raw.clone().into()),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         }
     }
 
@@ -1137,12 +1240,20 @@ impl<U: WalletIo> Wallet<U> {
         view_key: ExtendedViewingKey,
         birthday: Option<BlockHeight>,
         force_alias: bool,
+<<<<<<< HEAD
+=======
+        path: Option<DerivationPath>,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     ) -> Option<String> {
         self.store
             .insert_viewing_key::<U>(
                 alias.into(),
                 view_key,
                 birthday,
+<<<<<<< HEAD
+=======
+                path,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
                 force_alias,
             )
             .map(Into::into)
@@ -1169,10 +1280,15 @@ impl<U: WalletIo> Wallet<U> {
             )
             .inspect(|alias| {
                 // Cache the newly added key
+<<<<<<< HEAD
                 self.decrypted_spendkey_cache.insert(
                     alias.clone(),
                     DatedKeypair::new(spend_key, birthday),
                 );
+=======
+                self.decrypted_spendkey_cache
+                    .insert(alias.clone(), spend_key);
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             })
             .map(Into::into)
     }

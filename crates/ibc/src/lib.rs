@@ -1284,8 +1284,13 @@ pub mod testing {
 
     prop_compose! {
         /// Generate an arbitrary IBC token ID vector
+<<<<<<< HEAD
         pub fn arb_ibc_token_ids()(token_ids in collection::vec(arb_ibc_token_id(), 1..10)) -> TokenIds {
             TokenIds(token_ids)
+=======
+        pub fn arb_ibc_token_ids()(token_ids in collection::vec(arb_ibc_token_id().prop_map(|x| x.to_string()), 1..10)) -> TokenIds {
+            TokenIds::try_from(token_ids).expect("generated invalid IBC token ID vector")
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         }
     }
 

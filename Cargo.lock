@@ -4264,7 +4264,11 @@ dependencies = [
 [[package]]
 name = "ledger-namada-rs"
 version = "0.0.1"
+<<<<<<< HEAD
 source = "git+https://github.com/Zondax/ledger-namada?tag=v0.0.24#ca9da5e0129f676934809f58acffbd855d280664"
+=======
+source = "git+https://github.com/Zondax/ledger-namada?tag=v1.0.5#731d66fdbae54f10b854d0d985e4fe9b94cd6e84"
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 dependencies = [
  "bincode",
  "byteorder",
@@ -4494,7 +4498,11 @@ dependencies = [
 [[package]]
 name = "masp_note_encryption"
 version = "1.0.0"
+<<<<<<< HEAD
 source = "git+https://github.com/anoma/masp?rev=12ed8b060b295c06502a2ff8468e4a941cb7cca4#12ed8b060b295c06502a2ff8468e4a941cb7cca4"
+=======
+source = "git+https://github.com/anoma/masp?rev=0d0da3507a6f9ad135f00fd8201dc54c2f1d9efe#0d0da3507a6f9ad135f00fd8201dc54c2f1d9efe"
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 dependencies = [
  "arbitrary",
  "borsh",
@@ -4508,7 +4516,11 @@ dependencies = [
 [[package]]
 name = "masp_primitives"
 version = "1.0.0"
+<<<<<<< HEAD
 source = "git+https://github.com/anoma/masp?rev=12ed8b060b295c06502a2ff8468e4a941cb7cca4#12ed8b060b295c06502a2ff8468e4a941cb7cca4"
+=======
+source = "git+https://github.com/anoma/masp?rev=0d0da3507a6f9ad135f00fd8201dc54c2f1d9efe#0d0da3507a6f9ad135f00fd8201dc54c2f1d9efe"
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 dependencies = [
  "aes",
  "arbitrary",
@@ -4541,7 +4553,11 @@ dependencies = [
 [[package]]
 name = "masp_proofs"
 version = "1.0.0"
+<<<<<<< HEAD
 source = "git+https://github.com/anoma/masp?rev=12ed8b060b295c06502a2ff8468e4a941cb7cca4#12ed8b060b295c06502a2ff8468e4a941cb7cca4"
+=======
+source = "git+https://github.com/anoma/masp?rev=0d0da3507a6f9ad135f00fd8201dc54c2f1d9efe#0d0da3507a6f9ad135f00fd8201dc54c2f1d9efe"
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 dependencies = [
  "bellman",
  "blake2b_simd",
@@ -4731,7 +4747,11 @@ dependencies = [
 
 [[package]]
 name = "namada_apps"
+<<<<<<< HEAD
 version = "0.46.0"
+=======
+version = "1.0.0"
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 dependencies = [
  "clap_complete",
  "clap_complete_nushell",

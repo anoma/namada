@@ -14,6 +14,10 @@ use std::sync::{Arc, Once, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
+<<<<<<< HEAD
+=======
+use masp_primitives::transaction::components::sapling::builder::RngBuildParams;
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use masp_proofs::prover::LocalTxProver;
@@ -105,7 +109,11 @@ pub use namada_sdk::tx::{
     TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL as TX_VOTE_PROPOSAL_WASM,
     TX_WITHDRAW_WASM, VP_USER_WASM,
 };
+<<<<<<< HEAD
 use namada_sdk::wallet::Wallet;
+=======
+use namada_sdk::wallet::{DatedSpendingKey, Wallet};
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 use namada_sdk::{
     parameters, proof_of_stake, tendermint, Namada, NamadaImpl, PaymentAddress,
     TransferSource, TransferTarget,
@@ -1135,7 +1143,10 @@ impl Default for BenchShieldedCtx {
                         .wallet
                         .find_viewing_key(viewing_alias)
                         .unwrap()
+<<<<<<< HEAD
                         .key
+=======
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
                         .to_string(),
                 );
             let viewing_key = ExtendedFullViewingKey::from(
@@ -1178,6 +1189,13 @@ impl BenchShieldedCtx {
             .wallet
             .find_spending_key(ALBERT_SPENDING_KEY, None)
             .unwrap();
+<<<<<<< HEAD
+=======
+        let spending_key = DatedSpendingKey::new(
+            spending_key,
+            self.wallet.find_birthday(ALBERT_SPENDING_KEY).copied(),
+        );
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         self.shielded = async_runtime
             .block_on(namada_apps_lib::client::masp::syncing(
                 self.shielded,
@@ -1223,6 +1241,10 @@ impl BenchShieldedCtx {
                         vec![masp_transfer_data],
                         None,
                         expiration,
+<<<<<<< HEAD
+=======
+                        &mut RngBuildParams::new(OsRng),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
                     )
                     .await
             })

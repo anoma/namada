@@ -22,8 +22,12 @@ use zeroize::Zeroizing;
 use super::alias::{self, Alias};
 use super::derivation_path::DerivationPath;
 use super::pre_genesis;
+<<<<<<< HEAD
 use crate::keys::{DatedKeypair, DatedSpendingKey, DatedViewingKey};
 use crate::{StoredKeypair, WalletIo};
+=======
+use crate::{StoreSpendingKey, StoredKeypair, WalletIo};
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 
 /// Actions that can be taken when there is an alias conflict
 pub enum ConfirmationResponse {
@@ -63,10 +67,19 @@ pub struct ValidatorData {
 /// A Storage area for keys and addresses
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Store {
+<<<<<<< HEAD
     /// Known viewing keys
     view_keys: BTreeMap<Alias, DatedViewingKey>,
     /// Known spending keys
     spend_keys: BTreeMap<Alias, StoredKeypair<DatedSpendingKey>>,
+=======
+    /// Known birthdays
+    birthdays: BTreeMap<Alias, BlockHeight>,
+    /// Known viewing keys
+    view_keys: BTreeMap<Alias, ExtendedViewingKey>,
+    /// Known spending keys
+    spend_keys: BTreeMap<Alias, StoredKeypair<StoreSpendingKey>>,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     /// Payment address book
     payment_addrs: BiBTreeMap<Alias, PaymentAddress>,
     /// Cryptographic keypairs
@@ -135,7 +148,11 @@ impl Store {
     pub fn find_spending_key(
         &self,
         alias: impl AsRef<str>,
+<<<<<<< HEAD
     ) -> Option<&StoredKeypair<DatedSpendingKey>> {
+=======
+    ) -> Option<&StoredKeypair<StoreSpendingKey>> {
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         self.spend_keys.get(&alias.into())
     }
 
@@ -143,10 +160,25 @@ impl Store {
     pub fn find_viewing_key(
         &self,
         alias: impl AsRef<str>,
+<<<<<<< HEAD
     ) -> Option<&DatedViewingKey> {
         self.view_keys.get(&alias.into())
     }
 
+=======
+    ) -> Option<&ExtendedViewingKey> {
+        self.view_keys.get(&alias.into())
+    }
+
+    /// Find the birthday of the given alias
+    pub fn find_birthday(
+        &self,
+        alias: impl AsRef<str>,
+    ) -> Option<&BlockHeight> {
+        self.birthdays.get(&alias.into())
+    }
+
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     /// Find the payment address with the given alias and return it
     pub fn find_payment_addr(
         &self,
@@ -194,6 +226,22 @@ impl Store {
         self.derivation_paths.get(self.pkhs.get(pkh)?).cloned()
     }
 
+<<<<<<< HEAD
+=======
+    /// Find a derivation path by viewing key
+    pub fn find_path_by_viewing_key(
+        &self,
+        viewing_key: &ExtendedViewingKey,
+    ) -> Option<DerivationPath> {
+        for (alias, vk) in &self.view_keys {
+            if *viewing_key == *vk {
+                return self.derivation_paths.get(alias).cloned();
+            }
+        }
+        None
+    }
+
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     /// Find the public key by a public key hash.
     pub fn find_public_key_by_pkh(
         &self,
@@ -254,14 +302,22 @@ impl Store {
     }
 
     /// Get all known viewing keys by their alias.
+<<<<<<< HEAD
     pub fn get_viewing_keys(&self) -> &BTreeMap<Alias, DatedViewingKey> {
+=======
+    pub fn get_viewing_keys(&self) -> &BTreeMap<Alias, ExtendedViewingKey> {
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         &self.view_keys
     }
 
     /// Get all known spending keys by their alias.
     pub fn get_spending_keys(
         &self,
+<<<<<<< HEAD
     ) -> &BTreeMap<Alias, StoredKeypair<DatedSpendingKey>> {
+=======
+    ) -> &BTreeMap<Alias, StoredKeypair<StoreSpendingKey>> {
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         &self.spend_keys
     }
 
@@ -400,6 +456,7 @@ impl Store {
         self.remove_alias(&alias);
 
         let (spendkey_to_store, _raw_spendkey) =
+<<<<<<< HEAD
             StoredKeypair::new(DatedKeypair::new(spendkey, birthday), password);
         self.spend_keys.insert(alias.clone(), spendkey_to_store);
         // Simultaneously add the derived viewing key to ease balance viewing
@@ -408,6 +465,16 @@ impl Store {
             birthday,
         );
         self.view_keys.insert(alias.clone(), viewkey);
+=======
+            StoredKeypair::new(spendkey.into(), password);
+        self.spend_keys.insert(alias.clone(), spendkey_to_store);
+        // Simultaneously add the derived viewing key to ease balance viewing
+        birthday.map(|x| self.birthdays.insert(alias.clone(), x));
+        self.view_keys.insert(
+            alias.clone(),
+            zip32::ExtendedFullViewingKey::from(&spendkey.into()).into(),
+        );
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         path.map(|p| self.derivation_paths.insert(alias.clone(), p));
         Some(alias)
     }
@@ -418,6 +485,10 @@ impl Store {
         alias: Alias,
         viewkey: ExtendedViewingKey,
         birthday: Option<BlockHeight>,
+<<<<<<< HEAD
+=======
+        path: Option<DerivationPath>,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         force: bool,
     ) -> Option<Alias> {
         // abort if the alias is reserved
@@ -435,15 +506,25 @@ impl Store {
                 ConfirmationResponse::Replace => {}
                 ConfirmationResponse::Reselect(new_alias) => {
                     return self.insert_viewing_key::<U>(
+<<<<<<< HEAD
                         new_alias, viewkey, birthday, false,
+=======
+                        new_alias, viewkey, birthday, path, false,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
                     );
                 }
                 ConfirmationResponse::Skip => return None,
             }
         }
         self.remove_alias(&alias);
+<<<<<<< HEAD
         self.view_keys
             .insert(alias.clone(), DatedKeypair::new(viewkey, birthday));
+=======
+        birthday.map(|x| self.birthdays.insert(alias.clone(), x));
+        self.view_keys.insert(alias.clone(), viewkey);
+        path.map(|p| self.derivation_paths.insert(alias.clone(), p));
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         Some(alias)
     }
 
@@ -585,6 +666,10 @@ impl Store {
             || self.pkhs.values().contains(alias)
             || self.public_keys.contains_key(alias)
             || self.derivation_paths.contains_key(alias)
+<<<<<<< HEAD
+=======
+            || self.birthdays.contains_key(alias)
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     }
 
     /// Completely remove the given alias from all maps in the wallet
@@ -597,12 +682,20 @@ impl Store {
         self.pkhs.retain(|_key, val| val != alias);
         self.public_keys.remove(alias);
         self.derivation_paths.remove(alias);
+<<<<<<< HEAD
+=======
+        self.birthdays.remove(alias);
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     }
 
     /// Extend this store from another store (typically pre-genesis).
     /// Note that this method ignores `validator_data` if any.
     pub fn extend(&mut self, store: Store) {
         let Self {
+<<<<<<< HEAD
+=======
+            birthdays,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             view_keys,
             spend_keys,
             payment_addrs,
@@ -614,6 +707,10 @@ impl Store {
             validator_data: _,
             address_vp_types,
         } = self;
+<<<<<<< HEAD
+=======
+        birthdays.extend(store.birthdays);
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         view_keys.extend(store.view_keys);
         spend_keys.extend(store.spend_keys);
         payment_addrs.extend(store.payment_addrs);
@@ -707,7 +804,17 @@ impl Store {
 
     /// Decode a Store from the given bytes
     pub fn decode(data: Vec<u8>) -> Result<Self, toml::de::Error> {
+<<<<<<< HEAD
         toml::from_slice(&data)
+=======
+        // First try to decode Store from current version (with separate
+        // birthdays)
+        toml::from_slice(&data).or_else(
+            // Otherwise try to decode Store from older version (with
+            // integrated birthdays)
+            |_| toml::from_slice::<StoreV0>(&data).map(Into::into),
+        )
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     }
 
     /// Encode a store into a string of bytes
@@ -807,6 +914,80 @@ impl<'de> Deserialize<'de> for AddressVpType {
     }
 }
 
+<<<<<<< HEAD
+=======
+// A Storage area for keys and addresses. This is a deprecated format but it
+// is required for compatability purposes.
+#[derive(Serialize, Deserialize, Debug, Default)]
+pub struct StoreV0 {
+    /// Known viewing keys
+    view_keys: BTreeMap<Alias, crate::DatedViewingKey>,
+    /// Known spending keys
+    spend_keys: BTreeMap<Alias, StoredKeypair<crate::DatedSpendingKey>>,
+    /// Payment address book
+    payment_addrs: BiBTreeMap<Alias, PaymentAddress>,
+    /// Cryptographic keypairs
+    secret_keys: BTreeMap<Alias, StoredKeypair<common::SecretKey>>,
+    /// Known public keys
+    public_keys: BTreeMap<Alias, common::PublicKey>,
+    /// Known derivation paths
+    derivation_paths: BTreeMap<Alias, DerivationPath>,
+    /// Namada address book
+    addresses: BiBTreeMap<Alias, Address>,
+    /// Known mappings of public key hashes to their aliases in the `keys`
+    /// field. Used for look-up by a public key.
+    pkhs: BTreeMap<PublicKeyHash, Alias>,
+    /// Special keys if the wallet belongs to a validator
+    pub(crate) validator_data: Option<ValidatorData>,
+    /// Namada address vp type
+    address_vp_types: BTreeMap<AddressVpType, HashSet<Address>>,
+}
+
+impl From<StoreV0> for Store {
+    fn from(store: StoreV0) -> Self {
+        let mut to = Store {
+            payment_addrs: store.payment_addrs,
+            secret_keys: store.secret_keys,
+            public_keys: store.public_keys,
+            derivation_paths: store.derivation_paths,
+            addresses: store.addresses,
+            pkhs: store.pkhs,
+            validator_data: store.validator_data,
+            address_vp_types: store.address_vp_types,
+            ..Store::default()
+        };
+        for (alias, key) in store.view_keys {
+            // Extract the birthday into the birthdays map
+            to.birthdays.insert(alias.clone(), key.birthday);
+            // Extrat the key into the viewing keys map
+            to.view_keys.insert(alias, key.key);
+        }
+        for (alias, key) in store.spend_keys {
+            match key {
+                StoredKeypair::Raw(key) => {
+                    // Extract the birthday into the birthdays map
+                    to.birthdays.insert(alias.clone(), key.birthday);
+                    // Extract the key into the spending keys map
+                    to.spend_keys
+                        .insert(alias, StoredKeypair::Raw(key.key.into()));
+                }
+                StoredKeypair::Encrypted(key) => {
+                    // This map is fine because DatedSpendingKey has the same
+                    // Borsh serialization as StoreSpendingKey
+                    to.spend_keys.insert(
+                        alias,
+                        StoredKeypair::Encrypted(key.map::<StoreSpendingKey>()),
+                    );
+                    // Here we assume the birthday for the current alias is
+                    // already given in a viewing key with the same alias.
+                }
+            }
+        }
+        to
+    }
+}
+
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 #[cfg(test)]
 mod test_wallet {
     use base58::FromBase58;

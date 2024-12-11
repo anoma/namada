@@ -35,6 +35,10 @@ env:
   AWS_REGION: us-west-2
   NIGHTLY: nightly-2024-09-08
   NAMADA_MASP_PARAMS_DIR: /masp/.masp-params
+<<<<<<< HEAD
+=======
+  LEDGER_APP_VERSION: "1.0.6-ci-patch"
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 
 jobs:
   changelog:
@@ -652,10 +656,19 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
   test-ledger-app:
     timeout-minutes: 30
     runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
+=======
+  test-ledger-app:
+    timeout-minutes: 30
+    runs-on: [ubuntu-latest]
+
+    env:
+      RUSTC_WRAPPER: ""
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 
     steps:
       - name: Checkout repo
@@ -666,11 +679,14 @@ jobs:
         if: ${{ github.event_name == 'pull_request_target' }}
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+<<<<<<< HEAD
       - name: Configure AWS 
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-region: ${{ env.AWS_REGION }}
           role-to-assume: ${{ secrets.AWS_ROLE }}
+=======
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
       - name: Checkout ledger-namada
         run: |
           echo "Using Namada Ledger App version: v${LEDGER_APP_VERSION}"
@@ -680,6 +696,13 @@ jobs:
           git submodule update --init --recursive
           sudo update-alternatives --install /usr/bin/python python /usr/bin/python3 10
           make deps
+<<<<<<< HEAD
+=======
+      - name: Install rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
       - name: Generate test vectors
         run: |
           # The path where the Ledger app test suite will locate test vectors
@@ -692,7 +715,10 @@ jobs:
           cd ../ledger-namada
           make cpp_test
 
+<<<<<<< HEAD
 >>>>>>> b2e33f943 (Revert "ci/test-ledger-app: skip unnecessary steps")
+=======
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
   test-e2e-with-device-automation:
     runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
     container: 

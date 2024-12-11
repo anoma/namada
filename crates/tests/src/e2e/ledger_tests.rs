@@ -27,6 +27,10 @@ use namada_apps_lib::config::genesis::templates::TokenBalances;
 use namada_apps_lib::config::utils::convert_tm_addr_to_socket_addr;
 use namada_apps_lib::config::{self, ethereum_bridge};
 use namada_apps_lib::tendermint_config::net::Address as TendermintAddress;
+<<<<<<< HEAD
+=======
+use namada_apps_lib::wallet::defaults::is_use_device;
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 use namada_apps_lib::wallet::{self, Alias};
 use namada_core::chain::ChainId;
 use namada_core::token::NATIVE_MAX_DECIMAL_PLACES;
@@ -2508,7 +2512,11 @@ fn masp_txs_and_queries() -> Result<()> {
     let txs_args = vec![
         // 2. Shield 20 BTC from Albert to PA(A)
         (
+<<<<<<< HEAD
             vec![
+=======
+            apply_use_device(vec![
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
                 "shield",
                 "--source",
                 ALBERT,
@@ -2518,12 +2526,20 @@ fn masp_txs_and_queries() -> Result<()> {
                 BTC,
                 "--amount",
                 "20",
+<<<<<<< HEAD
             ],
+=======
+            ]),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             TX_APPLIED_SUCCESS,
         ),
         // 3. Transfer 7 BTC from SK(A) to PA(B)
         (
+<<<<<<< HEAD
             vec![
+=======
+            apply_use_device(vec![
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
                 "transfer",
                 "--source",
                 A_SPENDING_KEY,
@@ -2535,7 +2551,11 @@ fn masp_txs_and_queries() -> Result<()> {
                 "7",
                 "--gas-payer",
                 CHRISTEL_KEY,
+<<<<<<< HEAD
             ],
+=======
+            ]),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             TX_APPLIED_SUCCESS,
         ),
         // 4. Assert BTC balance at VK(A) is 13
@@ -2545,7 +2565,11 @@ fn masp_txs_and_queries() -> Result<()> {
         ),
         // 5. Unshield 5 BTC from SK(B) to Bertha
         (
+<<<<<<< HEAD
             vec![
+=======
+            apply_use_device(vec![
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
                 "unshield",
                 "--source",
                 B_SPENDING_KEY,
@@ -2557,7 +2581,11 @@ fn masp_txs_and_queries() -> Result<()> {
                 "5",
                 "--gas-payer",
                 CHRISTEL_KEY,
+<<<<<<< HEAD
             ],
+=======
+            ]),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             TX_APPLIED_SUCCESS,
         ),
         // 6. Assert BTC balance at VK(B) is 2
@@ -2578,6 +2606,12 @@ fn masp_txs_and_queries() -> Result<()> {
         )?;
         sync.assert_success();
         for &dry_run in &[true, false] {
+<<<<<<< HEAD
+=======
+            if dry_run && is_use_device() {
+                continue;
+            }
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             let tx_args = if dry_run
                 && (tx_args[0] == "transfer"
                     || tx_args[0] == "shield"

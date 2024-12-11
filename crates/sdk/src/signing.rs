@@ -21,11 +21,21 @@ use namada_core::key::*;
 use namada_core::masp::{
     AssetData, ExtendedViewingKey, MaspTxId, PaymentAddress,
 };
+<<<<<<< HEAD
+=======
+use namada_core::time::DateTimeUtc;
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 use namada_core::token::{Amount, DenominatedAmount};
 use namada_governance::storage::proposal::{
     InitProposalData, ProposalType, VoteProposalData,
 };
 use namada_governance::storage::vote::ProposalVote;
+<<<<<<< HEAD
+=======
+use namada_ibc::core::channel::types::timeout::{
+    TimeoutHeight, TimeoutTimestamp,
+};
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 use namada_ibc::{MsgNftTransfer, MsgTransfer};
 use namada_io::*;
 use namada_parameters::storage as parameter_storage;
@@ -73,6 +83,11 @@ pub struct SigningTxData {
     pub account_public_keys_map: Option<AccountPublicKeysMap>,
     /// The public key of the fee payer
     pub fee_payer: common::PublicKey,
+<<<<<<< HEAD
+=======
+    /// ID of the Transaction needing signing
+    pub shielded_hash: Option<MaspTxId>,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 }
 
 impl PartialEq for SigningTxData {
@@ -194,11 +209,20 @@ pub async fn tx_signers(
     }
 }
 
+<<<<<<< HEAD
 /// The different parts of a transaction that can be signed
 #[derive(Eq, Hash, PartialEq)]
 pub enum Signable {
     /// Fee header
     FeeHeader,
+=======
+/// The different parts of a transaction that can be signed. Note that it's
+/// impossible to sign the fee header without signing the raw header.
+#[derive(Eq, Hash, PartialEq)]
+pub enum Signable {
+    /// Fee and raw header
+    FeeRawHeader,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     /// Raw header
     RawHeader,
 }
@@ -207,7 +231,11 @@ pub enum Signable {
 pub async fn default_sign(
     _tx: Tx,
     pubkey: common::PublicKey,
+<<<<<<< HEAD
     _parts: HashSet<Signable>,
+=======
+    _parts: Signable,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     _user: (),
 ) -> Result<Tx, Error> {
     Err(Error::Other(format!(
@@ -232,7 +260,11 @@ pub async fn sign_tx<'a, D, F, U>(
     args: &args::Tx,
     tx: &mut Tx,
     signing_data: SigningTxData,
+<<<<<<< HEAD
     sign: impl Fn(Tx, common::PublicKey, HashSet<Signable>, D) -> F,
+=======
+    sign: impl Fn(Tx, common::PublicKey, Signable, D) -> F,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     user_data: D,
 ) -> Result<(), Error>
 where
@@ -288,11 +320,22 @@ where
 
     // Then try to sign the raw header using the hardware wallet
     for pubkey in &signing_data.public_keys {
+<<<<<<< HEAD
         if !used_pubkeys.contains(pubkey) && *pubkey != signing_data.fee_payer {
             if let Ok(ntx) = sign(
                 tx.clone(),
                 pubkey.clone(),
                 HashSet::from([Signable::RawHeader]),
+=======
+        if !used_pubkeys.contains(pubkey)
+            && (*pubkey != signing_data.fee_payer
+                || args.wrapper_signature.is_some())
+        {
+            if let Ok(ntx) = sign(
+                tx.clone(),
+                pubkey.clone(),
+                Signable::RawHeader,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
                 user_data.clone(),
             )
             .await
@@ -321,6 +364,7 @@ where
             Ok(fee_payer_keypair) => {
                 tx.sign_wrapper(fee_payer_keypair);
             }
+<<<<<<< HEAD
             // The case where the fee payer also signs the inner transaction
             Err(_)
                 if signing_data
@@ -337,10 +381,13 @@ where
                 used_pubkeys.insert(signing_data.fee_payer.clone());
             }
             // The case where the fee payer does not sign the inner transaction
+=======
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             Err(_) => {
                 *tx = sign(
                     tx.clone(),
                     signing_data.fee_payer.clone(),
+<<<<<<< HEAD
                     HashSet::from([Signable::FeeHeader]),
                     user_data,
                 )
@@ -348,6 +395,23 @@ where
             }
         }
     }
+=======
+                    Signable::FeeRawHeader,
+                    user_data,
+                )
+                .await?;
+                if signing_data.public_keys.contains(&signing_data.fee_payer) {
+                    used_pubkeys.insert(signing_data.fee_payer.clone());
+                }
+            }
+        }
+    }
+    // Remove redundant sections now that the signing process is complete.
+    // Though this call might be redundant in circumstances, it is placed here
+    // as a safeguard to prevent the transmission of private data to the
+    // network.
+    tx.protocol_filter();
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     // Then make sure that the number of public keys used exceeds the threshold
     let used_pubkeys_len = used_pubkeys
         .len()
@@ -429,6 +493,10 @@ pub async fn aux_signing_data(
         threshold,
         account_public_keys_map,
         fee_payer,
+<<<<<<< HEAD
+=======
+        shielded_hash: None,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     })
 }
 
@@ -1003,6 +1071,47 @@ fn find_masp_builder<'a>(
     Ok(None)
 }
 
+<<<<<<< HEAD
+=======
+// Format the date-time for the Ledger device
+fn format_timestamp(datetime: DateTimeUtc) -> String {
+    let mut datetime = datetime.0.to_string();
+    let mut secfrac_width = None;
+    for (i, ch) in datetime.char_indices() {
+        if ch == '.' {
+            secfrac_width = Some(0);
+        } else if let Some(ref mut secfrac_width) = &mut secfrac_width {
+            if ch.is_ascii_digit() {
+                *secfrac_width += 1;
+            } else {
+                let trailing = "0".repeat(9 - *secfrac_width);
+                datetime.insert_str(i, &trailing);
+                break;
+            }
+        }
+    }
+    datetime
+}
+
+// Format the timeout timestamp for the Ledger device
+fn format_timeout_timestamp(timestamp: &TimeoutTimestamp) -> String {
+    match timestamp {
+        TimeoutTimestamp::Never => "no timestamp".to_string(),
+        TimeoutTimestamp::At(timestamp) => {
+            timestamp.into_tm_time().to_rfc3339()
+        }
+    }
+}
+
+// Format the timeout height for the Ledger device
+fn format_timeout_height(height: &TimeoutHeight) -> String {
+    match height {
+        TimeoutHeight::Never => "no timeout".to_string(),
+        TimeoutHeight::At(height) => height.to_string(),
+    }
+}
+
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 /// Converts the given transaction to the form that is displayed on the Ledger
 /// device
 pub async fn to_ledger_vector(
@@ -1392,11 +1501,23 @@ pub async fn to_ledger_vector(
                     ),
                     format!(
                         "Timeout height : {}",
+<<<<<<< HEAD
                         transfer.message.timeout_height_on_b
                     ),
                     format!(
                         "Timeout timestamp : {}",
                         transfer.message.timeout_timestamp_on_b,
+=======
+                        format_timeout_height(
+                            &transfer.message.timeout_height_on_b
+                        )
+                    ),
+                    format!(
+                        "Timeout timestamp : {}",
+                        format_timeout_timestamp(
+                            &transfer.message.timeout_timestamp_on_b
+                        ),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
                     ),
                 ]);
                 tv.output_expert.extend(vec![
@@ -1421,11 +1542,23 @@ pub async fn to_ledger_vector(
                 tv.output_expert.extend(vec![
                     format!(
                         "Timeout height : {}",
+<<<<<<< HEAD
                         transfer.message.timeout_height_on_b
                     ),
                     format!(
                         "Timeout timestamp : {}",
                         transfer.message.timeout_timestamp_on_b,
+=======
+                        format_timeout_height(
+                            &transfer.message.timeout_height_on_b
+                        )
+                    ),
+                    format!(
+                        "Timeout timestamp : {}",
+                        format_timeout_timestamp(
+                            &transfer.message.timeout_timestamp_on_b
+                        ),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
                     ),
                 ]);
                 if let Some(transfer) = transfer.transfer {
@@ -1514,11 +1647,23 @@ pub async fn to_ledger_vector(
                 tv.output.extend(vec![
                     format!(
                         "Timeout height : {}",
+<<<<<<< HEAD
                         transfer.message.timeout_height_on_b
                     ),
                     format!(
                         "Timeout timestamp : {}",
                         transfer.message.timeout_timestamp_on_b,
+=======
+                        format_timeout_height(
+                            &transfer.message.timeout_height_on_b
+                        )
+                    ),
+                    format!(
+                        "Timeout timestamp : {}",
+                        format_timeout_timestamp(
+                            &transfer.message.timeout_timestamp_on_b
+                        ),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
                     ),
                 ]);
                 tv.output_expert.extend(vec![
@@ -1582,11 +1727,23 @@ pub async fn to_ledger_vector(
                 tv.output_expert.extend(vec![
                     format!(
                         "Timeout height : {}",
+<<<<<<< HEAD
                         transfer.message.timeout_height_on_b
                     ),
                     format!(
                         "Timeout timestamp : {}",
                         transfer.message.timeout_timestamp_on_b,
+=======
+                        format_timeout_height(
+                            &transfer.message.timeout_height_on_b
+                        )
+                    ),
+                    format!(
+                        "Timeout timestamp : {}",
+                        format_timeout_timestamp(
+                            &transfer.message.timeout_timestamp_on_b
+                        ),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
                     ),
                 ]);
                 if let Some(transfer) = transfer.transfer {
@@ -2023,7 +2180,14 @@ pub async fn to_ledger_vector(
             let fee_amount_per_gas_unit =
                 to_ledger_decimal(&wrapper.fee.amount_per_gas_unit.to_string());
             tv.output_expert.extend(vec![
+<<<<<<< HEAD
                 format!("Timestamp : {}", tx.header.timestamp.0),
+=======
+                format!(
+                    "Timestamp : {}",
+                    format_timestamp(tx.header.timestamp)
+                ),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
                 format!("Pubkey : {}", wrapper.pk),
                 format!("Gas limit : {}", u64::from(wrapper.gas_limit)),
             ]);
@@ -2419,6 +2583,10 @@ mod test_signing {
             threshold: 1,
             account_public_keys_map: Some(Default::default()),
             fee_payer: public_key_fee.clone(),
+<<<<<<< HEAD
+=======
+            shielded_hash: None,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         };
 
         let Error::Tx(TxSubmitError::MissingSigningKeys(1, 0)) = sign_tx(
@@ -2454,6 +2622,10 @@ mod test_signing {
             threshold: 1,
             account_public_keys_map: Some(Default::default()),
             fee_payer: public_key.clone(),
+<<<<<<< HEAD
+=======
+            shielded_hash: None,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         };
         sign_tx(
             &RwLock::new(wallet),

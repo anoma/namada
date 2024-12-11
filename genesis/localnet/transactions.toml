@@ -56,6 +56,14 @@ tpknam1qpg2tsrplvhu3fd7z7tq5ztc2ne3s7e2ahjl2a2cddufrzdyr752g666ytj = "signam1qpk
 [[established_account]]
 vp = "vp_user"
 threshold = 1
+<<<<<<< HEAD
+=======
+public_keys = ["tpknam1qz0vuxgzsz5lu7peghyr4yx5tuexecm27hdgglkpe444v6nmy6d8yuxhn0r"]
+
+[[established_account]]
+vp = "vp_user"
+threshold = 1
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 public_keys = ["tpknam1qqwfpuvn8x7yqtquejhppef4vddv9ghusec2rkaxav38amamxaxpgj9cs79"]
 
 [[established_account]]

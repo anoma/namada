@@ -4,9 +4,16 @@
 pub use dev::{
     addresses, albert_address, albert_keypair, bertha_address, bertha_keypair,
     christel_address, christel_keypair, daewon_address, daewon_keypair,
+<<<<<<< HEAD
     derive_template_dir, ester_address, ester_keypair, get_unencrypted_keypair,
     is_use_device, keys, tokens, validator_account_keypair, validator_address,
     validator_keypair, validator_keys,
+=======
+    derive_template_dir, ester_address, ester_keypair, frank_keypair,
+    get_unencrypted_keypair, is_use_device, keys, tokens,
+    validator_account_keypair, validator_address, validator_keypair,
+    validator_keys,
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 };
 
 #[cfg(any(test, feature = "testing", feature = "benches"))]
@@ -46,6 +53,10 @@ mod dev {
             ("albert".into(), albert_keypair()),
             ("bertha".into(), bertha_keypair()),
             ("christel".into(), christel_keypair()),
+<<<<<<< HEAD
+=======
+            ("frank".into(), frank_keypair()),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             ("daewon".into(), daewon_keypair()),
             ("ester".into(), ester_keypair()),
             ("validator".into(), validator_keypair()),
@@ -175,6 +186,14 @@ mod dev {
         get_unencrypted_keypair("ester")
     }
 
+<<<<<<< HEAD
+=======
+    /// Get frank's keypair from the pre-genesis wallet.
+    pub fn frank_keypair() -> common::SecretKey {
+        get_unencrypted_keypair("frank-key")
+    }
+
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
     /// Get the validator consensus keypair from the wallet.
     pub fn validator_keypair() -> common::SecretKey {
         VALIDATOR_WALLET.consensus_key.clone()

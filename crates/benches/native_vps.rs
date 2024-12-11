@@ -10,6 +10,10 @@ use masp_primitives::sapling::Node;
 use masp_primitives::transaction::sighash::{signature_hash, SignableInput};
 use masp_primitives::transaction::txid::TxIdDigester;
 use masp_primitives::transaction::TransactionData;
+<<<<<<< HEAD
+=======
+use masp_primitives::zip32::ExtendedSpendingKey;
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 use masp_proofs::group::GroupEncoding;
 use masp_proofs::sapling::BatchValidator;
 use namada_apps_lib::address::{self, Address, InternalAddress};
@@ -410,7 +414,13 @@ fn prepare_ibc_tx_and_ctx(bench_name: &str) -> (BenchShieldedCtx, BatchedTx) {
             shielded_ctx.shell.write().commit_block();
             shielded_ctx.generate_shielded_action(
                 Amount::native_whole(10),
+<<<<<<< HEAD
                 TransferSource::ExtendedSpendingKey(albert_spending_key.key),
+=======
+                TransferSource::ExtendedKey(
+                    ExtendedSpendingKey::from(albert_spending_key).into(),
+                ),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
                 defaults::bertha_address().to_string(),
             )
         }
@@ -602,12 +612,24 @@ fn setup_storage_for_masp_verification(
         ),
         "unshielding" => shielded_ctx.generate_masp_tx(
             amount,
+<<<<<<< HEAD
             TransferSource::ExtendedSpendingKey(albert_spending_key.key),
+=======
+            TransferSource::ExtendedKey(
+                ExtendedSpendingKey::from(albert_spending_key).into(),
+            ),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             TransferTarget::Address(defaults::albert_address()),
         ),
         "shielded" => shielded_ctx.generate_masp_tx(
             amount,
+<<<<<<< HEAD
             TransferSource::ExtendedSpendingKey(albert_spending_key.key),
+=======
+            TransferSource::ExtendedKey(
+                ExtendedSpendingKey::from(albert_spending_key).into(),
+            ),
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
             TransferTarget::PaymentAddress(bertha_payment_addr),
         ),
         _ => panic!("Unexpected bench test"),

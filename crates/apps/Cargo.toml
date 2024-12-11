@@ -11,7 +11,11 @@ keywords.workspace = true
 license.workspace = true
 readme.workspace = true
 repository.workspace = true
+<<<<<<< HEAD
 version = "0.46.0"
+=======
+version = "1.0.0"
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
 
 # Namada CLI that aggregates some common commands for the node and the client
 [[bin]]

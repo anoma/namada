@@ -47,11 +47,23 @@ pub fn run(
                     NamadaClient::WithoutContext(Box::new((sub_cmd, global)))
                 }
             };
+<<<<<<< HEAD
             rt.block_on(CliApi::handle_client_command(
                 Some(node.clone()),
                 cmd,
                 TestingIo,
             ))
+=======
+            let result = rt.block_on(CliApi::handle_client_command(
+                Some(node.clone()),
+                cmd,
+                TestingIo,
+            ));
+            if let Err(err) = &result {
+                TestingIo.eprintln(format!("{}", err));
+            }
+            result
+>>>>>>> 52d0ebbd7c (Revert "ci: minors")
         }
         Bin::Wallet => {
             args.insert(0, "wallet");
