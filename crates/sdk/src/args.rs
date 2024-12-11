@@ -675,10 +675,7 @@ impl TxOsmosisSwap<SdkTypes> {
                             namada_core::masp::TransferTarget::PaymentAddress(
                                 payment_addr,
                             ),
-                        // FIXME
-                        token: "this must be a `transfer/channel-X/...` trace \
-                                path corresponding to the IBC denom on osmosis"
-                            .to_owned(),
+                        token: output_denom.clone(),
                         amount: InputAmount::Validated(
                             token::DenominatedAmount::new(
                                 amount_to_shield,
@@ -723,7 +720,7 @@ impl TxOsmosisSwap<SdkTypes> {
                 contract: transfer.receiver.clone(),
                 msg: Message {
                     osmosis_swap: OsmosisSwap {
-                        output_denom: output_denom.to_string(),
+                        output_denom,
                         slippage,
                         next_memo,
                         receiver,

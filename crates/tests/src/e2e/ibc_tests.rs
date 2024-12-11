@@ -64,6 +64,7 @@ use crate::e2e::setup::{
 use crate::ibc::primitives::Signer;
 use crate::strings::TX_APPLIED_SUCCESS;
 use crate::{run, run_as};
+use crate::ibc::IbcShieldingData;
 
 const IBC_REFUND_TARGET_ALIAS: &str = "ibc-refund-target";
 const IBC_CLINET_ID: &str = "07-tendermint-0";
@@ -1266,6 +1267,7 @@ fn ibc_pfm_happy_flows() -> Result<()> {
         &port_id_namada,
         &channel_id_namada_2,
         None,
+        None,
     );
     transfer_from_cosmos(
         &test_gaia_1,
@@ -1312,6 +1314,7 @@ fn ibc_pfm_happy_flows() -> Result<()> {
         find_cosmos_address(&test_gaia_1, COSMOS_USER)?.into(),
         &port_id_namada,
         &channel_id_namada_1,
+        None,
         None,
     );
     transfer_from_cosmos(
@@ -1386,6 +1389,7 @@ fn ibc_pfm_happy_flows() -> Result<()> {
         &port_id_namada,
         &channel_id_namada_2,
         None,
+        None,
     );
 
     transfer_from_cosmos(
@@ -1436,6 +1440,7 @@ fn ibc_pfm_happy_flows() -> Result<()> {
         &port_id_namada,
         &channel_id_namada_1,
         None,
+        None,
     );
     transfer_from_cosmos(
         &test_gaia_2,
@@ -1472,6 +1477,7 @@ fn ibc_pfm_happy_flows() -> Result<()> {
 
     Ok(())
 }
+
 /// Test the flows of ibc pfm where the packet cannot be
 /// completed and refunds must be issued.
 ///
@@ -1560,6 +1566,7 @@ fn ibc_pfm_unhappy_flows() -> Result<()> {
         &port_id_namada,
         &channel_id_namada_2,
         None,
+        None,
     );
     transfer_from_cosmos(
         &test_gaia_1,
@@ -1595,6 +1602,7 @@ fn ibc_pfm_unhappy_flows() -> Result<()> {
         &port_id_namada,
         &channel_id_namada_2,
         Some(Duration::new(1, 0)),
+        None,
     );
     // Stop Hermes for timeout test
     let mut hermes_2 = bg_hermes_2.foreground();
@@ -1677,6 +1685,7 @@ fn ibc_pfm_unhappy_flows() -> Result<()> {
         &port_id_namada,
         &channel_id_namada_2,
         None,
+        None,
     );
     transfer_from_cosmos(
         &test_gaia_1,
@@ -1717,6 +1726,7 @@ fn ibc_pfm_unhappy_flows() -> Result<()> {
         &port_id_namada,
         &channel_id_namada_2,
         Some(Duration::new(1, 0)),
+        None,
     );
     // Stop Hermes for timeout test
     let mut hermes_2 = bg_hermes_2.foreground();
@@ -1770,6 +1780,7 @@ fn ibc_pfm_unhappy_flows() -> Result<()> {
         &port_id_namada,
         &channel_id_namada_1,
         None,
+        None,
     );
     transfer_from_cosmos(
         &test_gaia_2,
@@ -1807,6 +1818,7 @@ fn ibc_pfm_unhappy_flows() -> Result<()> {
         "Hodor".to_string().into(),
         &port_id_namada,
         &channel_id_namada_2,
+        None,
         None,
     );
     transfer_from_cosmos(
@@ -1853,6 +1865,7 @@ fn ibc_pfm_unhappy_flows() -> Result<()> {
         &port_id_namada,
         &channel_id_namada_2,
         Some(Duration::new(1, 0)),
+        None,
     );
     // Stop Hermes for timeout test
     let mut hermes_2 = bg_hermes_2.foreground();
@@ -1903,6 +1916,84 @@ fn ibc_pfm_unhappy_flows() -> Result<()> {
         ),
         10,
     )?;
+    Ok(())
+}
+
+#[test]
+fn ibc_overflow_middleware_happy_flow() -> Result<()> {
+    let update_genesis =
+        |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
+            genesis.parameters.parameters.epochs_per_year =
+                epochs_per_year_from_min_duration(1800);
+            genesis.parameters.ibc_params.default_mint_limit =
+                Amount::max_signed();
+            genesis
+                .parameters
+                .ibc_params
+                .default_per_epoch_throughput_limit = Amount::max_signed();
+            setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
+        };
+    let (ledger, gaia, test, test_gaia) =
+        run_namada_cosmos(CosmosChainType::Gaia(None), update_genesis)?;
+    let _bg_ledger = ledger.background();
+    let _bg_gaia = gaia.background();
+    sleep(5);
+
+    let hermes_dir = setup_hermes(&test, &test_gaia)?;
+    let port_id_namada = FT_PORT_ID.parse().unwrap();
+    let port_id_gaia = FT_PORT_ID.parse().unwrap();
+    let (channel_id_namada, channel_id_gaia) = create_channel_with_hermes(
+        &hermes_dir,
+        &test,
+        &test_gaia,
+        &port_id_namada,
+        &port_id_gaia,
+    )?;
+
+    // Start relaying
+    let hermes = run_hermes(&hermes_dir)?;
+    let _bg_hermes = hermes.background();
+
+    // 1. Create a shielding transfer to a shielded account on
+    //    Namada
+    let nam_addr = find_address(&test, NAM)?;
+    let albert_addr = find_address(&test, ALBERT)?;
+    let ibc_denom_on_gaia = format!("transfer/{channel_id_gaia}/{nam_addr}");
+    let memo_path = gen_ibc_shielding_data(
+        &test,
+        AA_PAYMENT_ADDRESS,
+        &ibc_denom_on_gaia,
+        1,
+        &port_id_namada,
+        &channel_id_namada,
+    )?;
+    let memo = packet_forward_memo(
+        MASP.to_string().into(),
+        &PortId::transfer(),
+        &channel_id_namada,
+        None,
+        Some(shielded_recv_memo(
+            &memo_path,
+            Amount::from_u64(1),
+            albert_addr,
+        )),
+    );
+    transfer_from_cosmos(
+        &test_gaia,
+        COSMOS_USER,
+        AA_PAYMENT_ADDRESS,
+        get_gaia_denom_hash(&ibc_denom_on_gaia),
+        2,
+        &port_id_gaia,
+        &channel_id_gaia,
+        Some(Either::Right(memo)),
+        None,
+    )?;
+    wait_for_packet_relay(&hermes_dir, &port_id_gaia, &channel_id_gaia, &test)?;
+    // Check the token on Namada
+    check_balance(&test, AA_VIEWING_KEY, NAM, 1)?;
+    check_balance(&test, ALBERT, NAM, 1)?;
+
     Ok(())
 }
 
@@ -3201,6 +3292,7 @@ fn packet_forward_memo(
     port_id: &PortId,
     channel_id: &ChannelId,
     timeout: Option<Duration>,
+    next: Option<serde_json::Map<String, serde_json::Value>>,
 ) -> String {
     serde_json::to_string(&ibc_middleware_packet_forward::PacketMetadata {
         forward: ForwardMetadata {
@@ -3213,8 +3305,35 @@ fn packet_forward_memo(
                 )
             }),
             retries: Some(0),
-            next: None,
+            next,
         },
     })
     .expect("Test failed")
+}
+
+
+fn shielded_recv_memo(
+    masp_transfer_path: &Path,
+    shielded_amount: Amount,
+    overflow_receiver: namada_core::address::Address,
+) -> serde_json::Map<String, serde_json::Value> {
+    use namada_core::string_encoding::StringEncoded;
+    use namada_sdk::ibc::NamadaMemo;
+    use namada_sdk::ibc::NamadaMemoData;
+
+    let transfer = std::fs::read_to_string(masp_transfer_path).expect("Test failed");
+    let tx = StringEncoded::new(IbcShieldingData::from_str(&transfer).expect("Test failed"));
+    let data = NamadaMemoData::OsmosisSwap {
+        shielding_data:  tx,
+        shielded_amount,
+        overflow_receiver,
+    };
+
+    if let serde_json::Value::Object(memo) = serde_json::to_value(&NamadaMemo {
+        namada: data,
+    }).expect("Test failed") {
+        memo
+    } else {
+        panic!("Test failed. Could not serialize `NamadaMemo` to a json object.")
+    }
 }
