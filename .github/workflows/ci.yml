@@ -651,6 +651,50 @@ jobs:
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
 
+<<<<<<< HEAD
+=======
+  test-ledger-app:
+    timeout-minutes: 30
+    runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
+    container: 
+      image: ghcr.io/heliaxdev/namada-ci:namada-main
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        if: ${{ github.event_name != 'pull_request_target' }}
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        if: ${{ github.event_name == 'pull_request_target' }}
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Configure AWS 
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_ROLE }}
+      - name: Checkout ledger-namada
+        run: |
+          echo "Using Namada Ledger App version: v${LEDGER_APP_VERSION}"
+          git clone 'https://github.com/heliaxdev/ledger-namada' ../ledger-namada
+          cd ../ledger-namada
+          git checkout "v$LEDGER_APP_VERSION"
+          git submodule update --init --recursive
+          sudo update-alternatives --install /usr/bin/python python /usr/bin/python3 10
+          make deps
+      - name: Generate test vectors
+        run: |
+          # The path where the Ledger app test suite will locate test vectors
+          TESTVEC_PATH="../ledger-namada/tests/testvectors.json"
+          TESTDBG_PATH="../ledger-namada/tests/testdebugs.txt"
+          sudo apt-get install -y protobuf-compiler
+          cargo run --example generate-txs -- $TESTVEC_PATH $TESTDBG_PATH
+      - name: Check test vectors
+        run: |
+          cd ../ledger-namada
+          make cpp_test
+
+>>>>>>> b2e33f943 (Revert "ci/test-ledger-app: skip unnecessary steps")
   test-e2e-with-device-automation:
     runs-on: [self-hosted, 4vcpu-8ram-ubuntu22-namada-x86]
     container: 
