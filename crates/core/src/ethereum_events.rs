@@ -5,7 +5,6 @@ use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
 use ethabi::ethereum_types::{H160, U256 as ethUint};
 use ethabi::Token;
 use eyre::{eyre, Context};
@@ -15,6 +14,7 @@ use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 
 use crate::address::Address;
+use crate::borsh::BorshSerializeExt;
 use crate::eth_abi::Encode;
 use crate::ethereum_structs::Erc20Transfer;
 use crate::hash::Hash;

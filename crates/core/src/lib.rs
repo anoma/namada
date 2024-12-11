@@ -18,6 +18,7 @@
 )]
 
 pub mod arith;
+pub mod borsh;
 pub mod bytes;
 #[cfg(any(test, feature = "control_flow"))]
 pub mod control_flow;
@@ -40,11 +41,6 @@ pub mod tendermint {
 pub mod tendermint_proto {
     pub use tendermint_proto::google; // 💩
     pub use tendermint_proto::v0_37::*;
-}
-/// Borsh binary encoding (re-exported) from official crate with custom ext.
-pub mod borsh {
-    pub use borsh::*;
-    pub use borsh_ext::*;
 }
 
 #[allow(missing_docs)]
@@ -88,10 +84,9 @@ pub mod uint;
 pub mod validity_predicate;
 pub mod voting_power;
 
-use borsh_ext::BorshSerializeExt;
 use thiserror::Error;
 
-use crate::borsh::{BorshDeserialize, BorshSerialize};
+use crate::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]

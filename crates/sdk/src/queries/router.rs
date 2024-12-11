@@ -856,11 +856,11 @@ macro_rules! router {
 /// ```
 #[cfg(test)]
 mod test_rpc_handlers {
-    use borsh_ext::BorshSerializeExt;
     use namada_core::chain::Epoch;
     use namada_core::token;
     use namada_state::{DBIter, StorageHasher, DB};
 
+    use crate::borsh::BorshSerializeExt;
     use crate::queries::{
         EncodedResponseQuery, RequestCtx, RequestQuery, ResponseQuery,
     };

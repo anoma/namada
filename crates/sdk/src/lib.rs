@@ -854,8 +854,6 @@ where
 /// Tests and strategies for transactions
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
-    use ::borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-    use borsh_ext::BorshSerializeExt;
     use governance::ProposalType;
     use masp_primitives::transaction::components::sapling::builder::StoredBuildParams;
     use namada_account::{InitAccount, UpdateAccount};
@@ -891,6 +889,9 @@ pub mod testing {
 
     use super::*;
     use crate::account::tests::{arb_init_account, arb_update_account};
+    use crate::borsh::{
+        BorshDeserialize, BorshSchema, BorshSerialize, BorshSerializeExt,
+    };
     use crate::chain::ChainId;
     use crate::eth_bridge_pool::testing::arb_pending_transfer;
     use crate::key::testing::arb_common_pk;

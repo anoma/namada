@@ -55,8 +55,8 @@ fn new_blake2b() -> Blake2b {
 #[allow(clippy::arithmetic_side_effects, clippy::cast_sign_loss)]
 #[cfg(test)]
 mod tests {
-    use borsh::BorshDeserialize;
     use itertools::Itertools;
+    use namada_sdk::borsh::BorshDeserialize;
     use namada_sdk::chain::{BlockHeight, ChainId};
     use namada_sdk::collections::HashMap;
     use namada_sdk::eth_bridge::storage::bridge_pool;

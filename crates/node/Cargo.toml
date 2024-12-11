@@ -56,7 +56,6 @@ async-trait.workspace = true
 base64.workspace = true
 blake2b-rs.workspace = true
 borsh.workspace = true
-borsh-ext.workspace = true
 byte-unit.workspace = true
 bytes = "1.1.0"
 clap = { workspace = true, optional = true }

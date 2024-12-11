@@ -7,7 +7,6 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use borsh::BorshSerialize;
-use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::transaction::builder::Builder;
 use masp_primitives::transaction::components::sapling::builder::{
@@ -79,6 +78,7 @@ use crate::args::{
     SdkTypes, TxShieldedTransferData, TxShieldingTransferData,
     TxTransparentTransferData, TxUnshieldingTransferData,
 };
+use crate::borsh::BorshSerializeExt;
 use crate::control_flow::time;
 use crate::error::{EncodingError, Error, QueryError, Result, TxSubmitError};
 use crate::rpc::{

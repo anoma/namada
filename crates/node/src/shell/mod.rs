@@ -31,10 +31,9 @@ use std::path::{Path, PathBuf};
 #[allow(unused_imports)]
 use std::rc::Rc;
 
-use borsh::BorshDeserialize;
-use borsh_ext::BorshSerializeExt;
 use namada_apps_lib::wallet::{self, ValidatorData, ValidatorKeys};
 use namada_sdk::address::Address;
+use namada_sdk::borsh::{BorshDeserialize, BorshSerializeExt};
 use namada_sdk::chain::{BlockHeight, ChainId};
 use namada_sdk::eth_bridge::protocol::validation::bridge_pool_roots::validate_bp_roots_vext;
 use namada_sdk::eth_bridge::protocol::validation::ethereum_events::validate_eth_events_vext;

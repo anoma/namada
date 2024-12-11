@@ -22,7 +22,6 @@ namada-eth-bridge = ["namada_sdk/namada-eth-bridge"]
 namada_sdk = { path = "../sdk" }
 
 borsh.workspace = true
-borsh-ext.workspace = true
 prost.workspace = true
 tendermint-config.workspace = true
 tendermint-rpc = { workspace = true, features = ["http-client"] }

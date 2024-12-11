@@ -8,7 +8,6 @@ use std::io::{Read, Write};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXLOWER;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
@@ -22,6 +21,7 @@ use super::{
     ParsePublicKeyError, ParseSecretKeyError, ParseSignatureError, RefTo,
     SchemeType, SigScheme as SigSchemeTrait, SignableBytes, VerifySigError,
 };
+use crate::borsh::BorshSerializeExt;
 use crate::key::StorageHasher;
 
 const PUBLIC_KEY_LENGTH: usize = 32;
