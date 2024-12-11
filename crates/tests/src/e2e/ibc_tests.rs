@@ -62,9 +62,9 @@ use crate::e2e::setup::{
     ENV_VAR_COSMWASM_CONTRACT_DIR,
 };
 use crate::ibc::primitives::Signer;
+use crate::ibc::IbcShieldingData;
 use crate::strings::TX_APPLIED_SUCCESS;
 use crate::{run, run_as};
-use crate::ibc::IbcShieldingData;
 
 const IBC_REFUND_TARGET_ALIAS: &str = "ibc-refund-target";
 const IBC_CLINET_ID: &str = "07-tendermint-0";
@@ -1954,8 +1954,7 @@ fn ibc_overflow_middleware_happy_flow() -> Result<()> {
     let hermes = run_hermes(&hermes_dir)?;
     let _bg_hermes = hermes.background();
 
-    // 1. Create a shielding transfer to a shielded account on
-    //    Namada
+    // 1. Create a shielding transfer to a shielded account on Namada
     let nam_addr = find_address(&test, NAM)?;
     let albert_addr = find_address(&test, ALBERT)?;
     let ibc_denom_on_gaia = format!("transfer/{channel_id_gaia}/{nam_addr}");
@@ -1990,6 +1989,7 @@ fn ibc_overflow_middleware_happy_flow() -> Result<()> {
         None,
     )?;
     wait_for_packet_relay(&hermes_dir, &port_id_gaia, &channel_id_gaia, &test)?;
+
     // Check the token on Namada
     check_balance(&test, AA_VIEWING_KEY, NAM, 1)?;
     check_balance(&test, ALBERT, NAM, 1)?;
@@ -3311,29 +3311,32 @@ fn packet_forward_memo(
     .expect("Test failed")
 }
 
-
 fn shielded_recv_memo(
     masp_transfer_path: &Path,
     shielded_amount: Amount,
     overflow_receiver: namada_core::address::Address,
 ) -> serde_json::Map<String, serde_json::Value> {
     use namada_core::string_encoding::StringEncoded;
-    use namada_sdk::ibc::NamadaMemo;
-    use namada_sdk::ibc::NamadaMemoData;
+    use namada_sdk::ibc::{NamadaMemo, NamadaMemoData};
 
-    let transfer = std::fs::read_to_string(masp_transfer_path).expect("Test failed");
-    let tx = StringEncoded::new(IbcShieldingData::from_str(&transfer).expect("Test failed"));
+    let transfer =
+        std::fs::read_to_string(masp_transfer_path).expect("Test failed");
+    let tx = StringEncoded::new(
+        IbcShieldingData::from_str(&transfer).expect("Test failed"),
+    );
     let data = NamadaMemoData::OsmosisSwap {
-        shielding_data:  tx,
+        shielding_data: tx,
         shielded_amount,
         overflow_receiver,
     };
 
-    if let serde_json::Value::Object(memo) = serde_json::to_value(&NamadaMemo {
-        namada: data,
-    }).expect("Test failed") {
+    if let serde_json::Value::Object(memo) =
+        serde_json::to_value(&NamadaMemo { namada: data }).expect("Test failed")
+    {
         memo
     } else {
-        panic!("Test failed. Could not serialize `NamadaMemo` to a json object.")
+        panic!(
+            "Test failed. Could not serialize `NamadaMemo` to a json object."
+        )
     }
 }
