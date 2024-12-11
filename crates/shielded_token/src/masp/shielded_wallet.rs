@@ -781,9 +781,9 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
 
         let mut estimated_next_epoch_conversions = Conversions::new();
         // re-date the all the latest conversions up one epoch
-        for (asset_type, (conv, wit, _)) in &conversions {
+        for (asset_type, (conv, wit, _)) in conversions {
             let mut asset = match self
-                .decode_asset_type(context.client(), *asset_type)
+                .decode_asset_type(context.client(), asset_type)
                 .await
             {
                 Some(
@@ -799,10 +799,19 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 .await
                 .0;
             let mut est_conv = I128Sum::zero();
-            for ((_, asset_data), val) in decoded_conv.components() {
-                let mut new_asset = asset_data.clone();
-                new_asset.redate_to_next_epoch();
-                est_conv += ValueSum::from_pair(new_asset.encode()?, *val)
+            for ((_, mut asset_data), val) in decoded_conv.into_components() {
+                // We must upconvert the components of the conversion unless
+                // this conversion is for a non-native token and the component
+                // itself is the native token. In this case we should avoid
+                // upconverting it since conversions for non-native tokens must
+                // always refer to a specific epoch (MaspEpoch(0)) native token
+                if asset.token == native_token
+                    || asset_data.token != native_token
+                {
+                    asset_data.redate_to_next_epoch();
+                }
+
+                est_conv += ValueSum::from_pair(asset_data.encode()?, val)
             }
             estimated_next_epoch_conversions.insert(
                 asset.encode().unwrap(),
