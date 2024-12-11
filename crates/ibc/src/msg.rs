@@ -25,6 +25,14 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct OsmosisSwapMemoData {
+    /// The inner memo data.
+    pub osmosis_swap: OsmosisSwapMemoDataInner,
+}
+
+/// Osmosis swap inner memo data.
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct OsmosisSwapMemoDataInner {
     /// Shielding transfer data. Hex encodes the borsh serialized MASP
     /// transfer.
     pub shielding_data: StringEncoded<IbcShieldingData>,
@@ -39,9 +47,12 @@ pub struct OsmosisSwapMemoData {
 impl From<OsmosisSwapMemoData> for NamadaMemo<NamadaMemoData> {
     fn from(
         OsmosisSwapMemoData {
-            shielding_data,
-            shielded_amount,
-            overflow_receiver,
+            osmosis_swap:
+                OsmosisSwapMemoDataInner {
+                    shielding_data,
+                    shielded_amount,
+                    overflow_receiver,
+                },
         }: OsmosisSwapMemoData,
     ) -> Self {
         Self {

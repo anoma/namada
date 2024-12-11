@@ -150,21 +150,27 @@ impl ibc_middleware_overflow_receive::PacketMetadata
     fn strip_middleware_msg(
         mut json_obj_memo: Map<String, Value>,
     ) -> Map<String, Value> {
-        if let Some(namada) = json_obj_memo
+        let namada_obj = json_obj_memo
             .get_mut("namada")
-            .and_then(|n| n.as_object_mut())
-        {
-            namada.remove("osmosis_swap");
-        }
+            .unwrap()
+            .as_object_mut()
+            .unwrap();
+
+        let mut osmosis_swap = namada_obj.remove("osmosis_swap").unwrap();
+        let osmosis_swap_obj = osmosis_swap.as_object_mut().unwrap();
+
+        let shielding_data = osmosis_swap_obj.remove("shielding_data").unwrap();
+        namada_obj.insert("memo".to_owned(), shielding_data);
+
         json_obj_memo
     }
 
     fn overflow_receiver(&self) -> &Address {
-        &self.namada.overflow_receiver
+        &self.namada.osmosis_swap.overflow_receiver
     }
 
     fn target_amount(&self) -> &token::Amount {
-        &self.namada.shielded_amount
+        &self.namada.osmosis_swap.shielded_amount
     }
 }
 
