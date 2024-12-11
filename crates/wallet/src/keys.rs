@@ -4,9 +4,8 @@ use std::fmt::Display;
 use std::marker::PhantomData;
 use std::str::FromStr;
 
-use borsh::{BorshDeserialize, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXLOWER;
+use namada_core::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
 use namada_core::chain::BlockHeight;
 use namada_core::masp::{ExtendedSpendingKey, ExtendedViewingKey};
 use orion::{aead, kdf};

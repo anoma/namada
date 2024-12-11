@@ -577,14 +577,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "borsh-ext"
-version = "1.2.0"
-source = "git+https://github.com/heliaxdev/borsh-ext?tag=v1.2.0#a62fee3e847e512cad9ac0f1fd5a900e5db9ba37"
-dependencies = [
- "borsh",
-]
-
-[[package]]
 name = "bs58"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3651,7 +3643,6 @@ version = "0.46.1"
 dependencies = [
  "bech32 0.8.1",
  "borsh",
- "borsh-ext",
  "chrono",
  "data-encoding",
  "ed25519-consensus",
@@ -3892,7 +3883,6 @@ dependencies = [
  "async-trait",
  "bimap",
  "borsh",
- "borsh-ext",
  "circular-queue",
  "clap",
  "data-encoding",
@@ -4287,7 +4277,6 @@ version = "0.46.1"
 dependencies = [
  "bimap",
  "borsh",
- "borsh-ext",
  "data-encoding",
  "derivation-path",
  "fd-lock",

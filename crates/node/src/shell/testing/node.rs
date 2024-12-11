@@ -39,7 +39,7 @@ use namada_sdk::tendermint_proto::google::protobuf::Timestamp;
 use namada_sdk::time::DateTimeUtc;
 use namada_sdk::tx::data::ResultCode;
 use namada_sdk::tx::event::{Batch as BatchAttr, Code as CodeAttr};
-use namada_sdk::{ethereum_structs, governance};
+use namada_sdk::{borsh, ethereum_structs, governance};
 use regex::Regex;
 use tokio::sync::mpsc;
 

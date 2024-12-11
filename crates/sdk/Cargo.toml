@@ -93,7 +93,6 @@ arbitrary = { workspace = true, optional = true }
 async-trait.workspace = true
 bimap.workspace = true
 borsh.workspace = true
-borsh-ext.workspace = true
 circular-queue.workspace = true
 clap = { version = "4.3", default-features = false, features = ["std"] }
 data-encoding.workspace = true

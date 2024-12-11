@@ -4,7 +4,6 @@ use std::borrow::Cow;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
 use namada_core::address::Address;
 use namada_core::arith::checked;
 use namada_core::chain::{BlockHeight, Epoch};
@@ -42,6 +41,7 @@ use namada_vote_ext::validator_set_update::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::borsh::BorshSerializeExt;
 use crate::eth_bridge::ethers::abi::AbiDecode;
 use crate::governance;
 use crate::queries::{EncodedResponseQuery, RequestCtx, RequestQuery};

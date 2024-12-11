@@ -5,8 +5,6 @@ use std::env;
 use std::fmt::Debug;
 use std::net::SocketAddr;
 
-use borsh::{BorshDeserialize, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
 use itertools::{Either, Itertools};
 use ledger_namada_rs::NamadaApp;
 use namada_macros::BorshDeserializer;
@@ -15,6 +13,7 @@ use namada_migrations::*;
 use namada_sdk::account::AccountPublicKeysMap;
 use namada_sdk::address::{Address, EstablishedAddress};
 use namada_sdk::args::{DeviceTransport, Tx as TxArgs};
+use namada_sdk::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
 use namada_sdk::chain::ChainId;
 use namada_sdk::collections::HashSet;
 use namada_sdk::dec::Dec;

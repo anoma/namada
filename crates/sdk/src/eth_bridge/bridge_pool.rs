@@ -6,7 +6,6 @@ use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::sync::Arc;
 
-use borsh_ext::BorshSerializeExt;
 use ethbridge_bridge_contract::Bridge;
 use ethers::providers::Middleware;
 use futures::future::FutureExt;
@@ -30,6 +29,7 @@ use owo_colors::OwoColorize;
 use serde::Serialize;
 
 use super::{block_on_eth_sync, eth_sync_or_exit, BlockOnEthSync};
+use crate::borsh::BorshSerializeExt;
 use crate::control_flow::time::{Duration, Instant};
 use crate::error::{
     EncodingError, Error, EthereumBridgeError, QueryError, TxSubmitError,

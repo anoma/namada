@@ -9,7 +9,6 @@ use std::io::{ErrorKind, Read, Write};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXLOWER;
 use ethabi::Token;
 use k256::ecdsa::RecoveryId;
@@ -27,6 +26,7 @@ use super::{
     ParsePublicKeyError, ParseSecretKeyError, ParseSignatureError, RefTo,
     SchemeType, SigScheme as SigSchemeTrait, SignableBytes, VerifySigError,
 };
+use crate::borsh::BorshSerializeExt;
 use crate::eth_abi::Encode;
 use crate::ethereum_events::EthAddress;
 use crate::key::StorageHasher;

@@ -1,13 +1,12 @@
 use std::fs::File;
 use std::io::Write;
 
-use borsh::BorshDeserialize;
-use borsh_ext::BorshSerializeExt;
 use color_eyre::owo_colors::OwoColorize;
 use ledger_namada_rs::{BIP44Path, NamadaApp};
 use namada_core::masp::MaspTransaction;
 use namada_sdk::address::{Address, ImplicitAddress, MASP};
 use namada_sdk::args::TxBecomeValidator;
+use namada_sdk::borsh::{BorshDeserialize, BorshSerializeExt};
 use namada_sdk::collections::HashSet;
 use namada_sdk::governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal,

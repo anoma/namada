@@ -6,7 +6,6 @@ use std::collections::BTreeMap;
 use std::fmt::Display;
 
 use borsh::BorshDeserialize;
-use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXLOWER;
 use itertools::Itertools;
 use masp_primitives::asset_type::AssetType;
@@ -40,6 +39,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
 use crate::args::SdkTypes;
+use crate::borsh::BorshSerializeExt;
 use crate::error::{EncodingError, Error, TxSubmitError};
 use crate::eth_bridge_pool::PendingTransfer;
 use crate::governance::storage::proposal::{AddRemove, PGFAction, PGFTarget};

@@ -6,7 +6,6 @@ use std::str::FromStr;
 
 use assert_matches::assert_matches;
 use borsh::BorshDeserialize;
-use borsh_ext::BorshSerializeExt;
 use color_eyre::eyre::Result;
 use data_encoding::HEXLOWER;
 use namada_apps_lib::wallet::defaults::{
@@ -23,6 +22,7 @@ use namada_node::shell::testing::utils::{Bin, CapturedOutput};
 use namada_node::shell::SnapshotSync;
 use namada_node::storage::DbSnapshot;
 use namada_sdk::account::AccountPublicKeysMap;
+use namada_sdk::borsh::BorshSerializeExt;
 use namada_sdk::collections::HashMap;
 use namada_sdk::error::TxSubmitError;
 use namada_sdk::migrations;

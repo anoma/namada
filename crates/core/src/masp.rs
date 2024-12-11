@@ -6,7 +6,6 @@ use std::num::ParseIntError;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::sapling::ViewingKey;
 use masp_primitives::transaction::TransparentAddress;
@@ -21,6 +20,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
 
 use crate::address::{Address, DecodeError, HASH_HEX_LEN, IBC, MASP};
+use crate::borsh::BorshSerializeExt;
 use crate::chain::Epoch;
 use crate::impl_display_and_from_str_via_format;
 use crate::string_encoding::{
