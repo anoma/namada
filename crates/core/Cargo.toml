@@ -47,7 +47,6 @@ arbitrary = { workspace = true, optional = true }
 arse-merkle-tree.workspace = true
 bech32.workspace = true
 borsh.workspace = true
-borsh-ext.workspace = true
 chrono.workspace = true
 data-encoding.workspace = true
 ed25519-consensus.workspace = true

@@ -4,10 +4,10 @@ mod test_bridge_pool_vp {
     use std::path::PathBuf;
 
     use borsh::BorshDeserialize;
-    use borsh_ext::BorshSerializeExt;
     use namada_apps_lib::wallet::defaults::{albert_address, bertha_address};
     use namada_apps_lib::wasm_loader;
     use namada_sdk::address::testing::{nam, wnam};
+    use namada_sdk::borsh::BorshSerializeExt;
     use namada_sdk::chain::ChainId;
     use namada_sdk::eth_bridge::storage::bridge_pool::BRIDGE_POOL_ADDRESS;
     use namada_sdk::eth_bridge::{

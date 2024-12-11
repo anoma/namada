@@ -10,12 +10,12 @@ use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
-use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
 use namada_sdk::address::{Address, EstablishedAddress};
+use namada_sdk::borsh::{BorshDeserialize, BorshSerialize};
 use namada_sdk::collections::HashMap;
 use namada_sdk::eth_bridge::EthereumBridgeParams;
 use namada_sdk::governance::parameters::GovernanceParameters;
@@ -672,8 +672,8 @@ pub fn make_dev_genesis(
 
 #[cfg(test)]
 pub mod tests {
-    use borsh_ext::BorshSerializeExt;
     use namada_sdk::address::testing::gen_established_address;
+    use namada_sdk::borsh::BorshSerializeExt;
     use namada_sdk::key::*;
     use rand::prelude::ThreadRng;
     use rand::thread_rng;

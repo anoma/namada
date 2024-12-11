@@ -51,12 +51,11 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Mutex;
 
-use borsh::{BorshDeserialize, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXLOWER;
 use itertools::Either;
 use namada_replay_protection as replay_protection;
 use namada_sdk::arith::checked;
+use namada_sdk::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
 use namada_sdk::collections::HashSet;
 use namada_sdk::eth_bridge::storage::bridge_pool;
 use namada_sdk::eth_bridge::storage::proof::BridgePoolRootProof;

@@ -2,8 +2,6 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::str::FromStr;
 
-use borsh::{BorshDeserialize, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
 use eyre::eyre;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
@@ -11,6 +9,7 @@ use namada_migrations::*;
 use namada_sdk::address::{
     Address, EstablishedAddress, EstablishedAddressGen, InternalAddress,
 };
+use namada_sdk::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
 use namada_sdk::chain::{ChainId, ChainIdPrefix};
 use namada_sdk::eth_bridge::EthereumBridgeParams;
 use namada_sdk::governance::pgf::parameters::PgfParameters;

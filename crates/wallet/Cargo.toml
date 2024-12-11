@@ -26,7 +26,6 @@ namada_migrations = {path = "../migrations", optional = true }
 
 bimap.workspace = true
 borsh.workspace = true
-borsh-ext.workspace = true
 itertools.workspace = true
 derivation-path.workspace = true
 data-encoding.workspace = true

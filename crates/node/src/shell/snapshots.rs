@@ -1,8 +1,7 @@
 use std::io::Write;
 
-use borsh::BorshDeserialize;
-use borsh_ext::BorshSerializeExt;
 use namada_sdk::arith::checked;
+use namada_sdk::borsh::{BorshDeserialize, BorshSerializeExt};
 use namada_sdk::hash::{Hash, Sha256Hasher};
 use namada_sdk::state::{BlockHeight, StorageRead};
 
