@@ -14,6 +14,7 @@ use std::sync::{Arc, Once, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use borsh_ext::BorshSerializeExt;
+use masp_primitives::transaction::components::sapling::builder::RngBuildParams;
 use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::ExtendedFullViewingKey;
 use masp_proofs::prover::LocalTxProver;
@@ -105,7 +106,7 @@ pub use namada_sdk::tx::{
     TX_UPDATE_STEWARD_COMMISSION, TX_VOTE_PROPOSAL as TX_VOTE_PROPOSAL_WASM,
     TX_WITHDRAW_WASM, VP_USER_WASM,
 };
-use namada_sdk::wallet::Wallet;
+use namada_sdk::wallet::{DatedSpendingKey, Wallet};
 use namada_sdk::{
     parameters, proof_of_stake, tendermint, Namada, NamadaImpl, PaymentAddress,
     TransferSource, TransferTarget,
@@ -1135,7 +1136,6 @@ impl Default for BenchShieldedCtx {
                         .wallet
                         .find_viewing_key(viewing_alias)
                         .unwrap()
-                        .key
                         .to_string(),
                 );
             let viewing_key = ExtendedFullViewingKey::from(
@@ -1178,6 +1178,10 @@ impl BenchShieldedCtx {
             .wallet
             .find_spending_key(ALBERT_SPENDING_KEY, None)
             .unwrap();
+        let spending_key = DatedSpendingKey::new(
+            spending_key,
+            self.wallet.find_birthday(ALBERT_SPENDING_KEY).copied(),
+        );
         self.shielded = async_runtime
             .block_on(namada_apps_lib::client::masp::syncing(
                 self.shielded,
@@ -1223,6 +1227,7 @@ impl BenchShieldedCtx {
                         vec![masp_transfer_data],
                         None,
                         expiration,
+                        &mut RngBuildParams::new(OsRng),
                     )
                     .await
             })

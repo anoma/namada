@@ -773,6 +773,7 @@ impl<T> Signed<T> {
             public_keys: pks.clone(),
             threshold,
             fee_payer: genesis_fee_payer_pk(),
+            shielded_hash: None,
         };
 
         let mut tx = self.data.tx_to_sign();
@@ -794,7 +795,7 @@ impl<T> Signed<T> {
             async fn software_wallet_sign(
                 tx: Tx,
                 pubkey: common::PublicKey,
-                _parts: HashSet<namada_sdk::signing::Signable>,
+                _parts: namada_sdk::signing::Signable,
                 _user: (),
             ) -> Result<Tx, namada_sdk::error::Error> {
                 if pubkey == genesis_fee_payer_pk() {
