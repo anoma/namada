@@ -141,6 +141,7 @@ fn ibc_transfers() -> Result<()> {
         None,
         None,
         None,
+        None,
         false,
     )?;
     wait_for_packet_relay(
@@ -215,6 +216,7 @@ fn ibc_transfers() -> Result<()> {
         Some(ALBERT_KEY),
         &port_id_namada,
         &channel_id_namada,
+        None,
         None,
         None,
         None,
@@ -300,6 +302,7 @@ fn ibc_transfers() -> Result<()> {
         None,
         None,
         None,
+        None,
         true,
     )?;
     wait_for_packet_relay(
@@ -354,6 +357,7 @@ fn ibc_transfers() -> Result<()> {
         None,
         None,
         None,
+        None,
         false,
     )?;
     wait_for_packet_relay(
@@ -380,6 +384,7 @@ fn ibc_transfers() -> Result<()> {
         &port_id_namada,
         &channel_id_namada,
         Some(Duration::new(10, 0)),
+        None,
         None,
         None,
         false,
@@ -414,6 +419,7 @@ fn ibc_transfers() -> Result<()> {
         None,
         None,
         None,
+        None,
         true,
     )?;
     wait_for_packet_relay(
@@ -442,6 +448,7 @@ fn ibc_transfers() -> Result<()> {
         &port_id_namada,
         &channel_id_namada,
         Some(Duration::new(10, 0)),
+        None,
         None,
         None,
         true,
@@ -606,6 +613,7 @@ fn ibc_nft_transfers() -> Result<()> {
         None,
         None,
         None,
+        None,
         false,
     )?;
     clear_packet(&hermes_dir, &port_id_namada, &channel_id_namada, &test)?;
@@ -666,6 +674,7 @@ fn ibc_nft_transfers() -> Result<()> {
         Some(BERTHA_KEY),
         &port_id_namada,
         &channel_id_namada,
+        None,
         None,
         None,
         None,
@@ -1111,6 +1120,7 @@ fn ibc_rate_limit() -> Result<()> {
         None,
         None,
         None,
+        None,
         false,
     )?;
 
@@ -1130,6 +1140,7 @@ fn ibc_rate_limit() -> Result<()> {
         Some(
             "Transfer exceeding the per-epoch throughput limit is not allowed",
         ),
+        None,
         false,
     )?;
 
@@ -1150,6 +1161,7 @@ fn ibc_rate_limit() -> Result<()> {
         Some(ALBERT_KEY),
         &port_id_namada,
         &channel_id_namada,
+        None,
         None,
         None,
         None,
@@ -1361,6 +1373,7 @@ fn ibc_pfm_happy_flows() -> Result<()> {
         Some(BERTHA_KEY),
         &port_id_namada,
         &channel_id_namada_1,
+        None,
         None,
         None,
         None,
@@ -1660,6 +1673,7 @@ fn ibc_pfm_unhappy_flows() -> Result<()> {
         None,
         None,
         None,
+        None,
         false,
     )?;
 
@@ -1919,8 +1933,11 @@ fn ibc_pfm_unhappy_flows() -> Result<()> {
     Ok(())
 }
 
+/// Test that we are able to use the shielded receive
+/// middleware to shield funds specified in the memo
+/// message.
 #[test]
-fn ibc_overflow_middleware_happy_flow() -> Result<()> {
+fn ibc_shielded_recv_middleware_happy_flow() -> Result<()> {
     let update_genesis =
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
             genesis.parameters.parameters.epochs_per_year =
@@ -1954,15 +1971,30 @@ fn ibc_overflow_middleware_happy_flow() -> Result<()> {
     let hermes = run_hermes(&hermes_dir)?;
     let _bg_hermes = hermes.background();
 
-    // 1. Create a shielding transfer to a shielded account on Namada
+    // 1. Shield 10 NAM to AA_PAYMENT_ADDRESS
+    transfer_on_chain(
+        &test,
+        "shield",
+        ALBERT,
+        AA_PAYMENT_ADDRESS,
+        NAM,
+        10,
+        ALBERT_KEY,
+        &[],
+    )?;
+    check_shielded_balance(&test, AA_VIEWING_KEY, NAM, 10)?;
+
+    // 2. Unshield from A_SPENDING_KEY to B_SPENDING_KEY,
+    // using the packet forward and shielded receive
+    // middlewares
     let nam_addr = find_address(&test, NAM)?;
-    let albert_addr = find_address(&test, ALBERT)?;
+    let overflow_addr = "tnam1qrqzqa0l0rzzrlr20n487l6n865t8ndv6uhseulq";
     let ibc_denom_on_gaia = format!("transfer/{channel_id_gaia}/{nam_addr}");
     let memo_path = gen_ibc_shielding_data(
         &test,
-        AA_PAYMENT_ADDRESS,
+        AB_PAYMENT_ADDRESS,
         &ibc_denom_on_gaia,
-        1,
+        8,
         &port_id_namada,
         &channel_id_namada,
     )?;
@@ -1973,26 +2005,30 @@ fn ibc_overflow_middleware_happy_flow() -> Result<()> {
         None,
         Some(shielded_recv_memo(
             &memo_path,
-            Amount::from_u64(1),
-            albert_addr,
+            Amount::native_whole(8),
+            overflow_addr.parse().unwrap(),
         )),
     );
-    transfer_from_cosmos(
-        &test_gaia,
-        COSMOS_USER,
-        AA_PAYMENT_ADDRESS,
-        get_gaia_denom_hash(&ibc_denom_on_gaia),
-        2,
-        &port_id_gaia,
-        &channel_id_gaia,
-        Some(Either::Right(memo)),
+    transfer(
+        &test,
+        A_SPENDING_KEY,
+        "PacketForwardMiddleware",
+        NAM,
+        10,
+        Some(ALBERT_KEY),
+        &PortId::transfer(),
+        &channel_id_namada,
         None,
+        None,
+        None,
+        Some(&memo),
+        true,
     )?;
     wait_for_packet_relay(&hermes_dir, &port_id_gaia, &channel_id_gaia, &test)?;
 
     // Check the token on Namada
-    check_balance(&test, AA_VIEWING_KEY, NAM, 1)?;
-    check_balance(&test, ALBERT, NAM, 1)?;
+    check_balance(&test, AB_VIEWING_KEY, NAM, 8)?;
+    check_balance(&test, overflow_addr, NAM, 2)?;
 
     Ok(())
 }
@@ -2235,6 +2271,7 @@ fn try_invalid_transfers(
         None,
         // the IBC denom can't be parsed when using an invalid port
         Some(&format!("Invalid IBC denom: {nam_addr}")),
+        None,
         false,
     )?;
 
@@ -2251,6 +2288,7 @@ fn try_invalid_transfers(
         None,
         None,
         Some("IBC token transfer error: context error: `ICS04 Channel error"),
+        None,
         false,
     )?;
 
@@ -2306,6 +2344,7 @@ fn transfer(
     timeout_sec: Option<Duration>,
     shielding_data_path: Option<PathBuf>,
     expected_err: Option<&str>,
+    ibc_memo: Option<&str>,
     gen_refund_target: bool,
 ) -> Result<u32> {
     let rpc = get_actor_rpc(test, Who::Validator(0));
@@ -2332,6 +2371,10 @@ fn transfer(
         "--node",
         &rpc,
     ]);
+
+    if let Some(ibc_memo) = ibc_memo {
+        tx_args.extend_from_slice(&["--ibc-memo", ibc_memo]);
+    }
 
     if let Some(signer) = signer {
         tx_args.extend_from_slice(&["--signing-keys", signer]);
