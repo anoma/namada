@@ -6,7 +6,6 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXUPPER;
 use eyre::eyre;
 use namada_core::chain::BlockHeight;
@@ -18,6 +17,8 @@ use namada_storage::{DbColFam, DbMigration, DB};
 use regex::Regex;
 use serde::de::{DeserializeOwned, Error, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+use crate::borsh::BorshSerializeExt;
 
 /// The maximum number of character printed per value.
 const PRINTLN_CUTOFF: usize = 300;

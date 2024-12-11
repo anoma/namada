@@ -22,10 +22,10 @@ mod tests {
     use std::collections::BTreeSet;
     use std::panic;
 
-    use borsh_ext::BorshSerializeExt;
     use itertools::Itertools;
     use namada_core::chain::testing::get_dummy_header;
     use namada_sdk::account::pks_handle;
+    use namada_sdk::borsh::BorshSerializeExt;
     use namada_sdk::hash::Hash;
     use namada_sdk::ibc::context::nft_transfer_mod::testing::DummyNftTransferModule;
     use namada_sdk::ibc::context::transfer_mod::testing::DummyTransferModule;

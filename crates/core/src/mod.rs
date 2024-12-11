@@ -24,10 +24,9 @@ pub mod uint;
 pub mod validity_predicate;
 pub mod voting_power;
 
-use borsh_ext::BorshSerializeExt;
 use thiserror::Error;
 
-use crate::borsh::{BorshDeserialize, BorshSerialize};
+use crate::borsh::{BorshDeserialize, BorshSerialize, BorshSerializeExt};
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]

@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use borsh_ext::BorshSerializeExt;
+use namada_sdk::borsh::BorshSerializeExt;
 use namada_sdk::key::*;
 use serde_json::json;
 use sha2::{Digest, Sha256};

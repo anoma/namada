@@ -3,7 +3,6 @@ use std::fmt::{self, Display};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
 use data_encoding::{HEXLOWER, HEXUPPER};
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
@@ -19,6 +18,7 @@ use super::{
     ParseSignatureError, RefTo, SchemeType, SigScheme as SigSchemeTrait,
     VerifySigError,
 };
+use crate::borsh::BorshSerializeExt;
 use crate::ethereum_events::EthAddress;
 use crate::key::{SignableBytes, StorageHasher};
 use crate::{impl_display_and_from_str_via_format, string_encoding};

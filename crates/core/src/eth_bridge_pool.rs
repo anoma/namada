@@ -4,7 +4,6 @@
 use std::borrow::Cow;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
 use ethabi::token::Token;
 use namada_macros::{BorshDeserializer, StorageKeys};
 #[cfg(feature = "migrations")]
@@ -16,6 +15,7 @@ use super::keccak::KeccakHash;
 use super::storage::{self, KeySeg};
 use crate as namada_core; // This is needed for `StorageKeys` macro
 use crate::address::Address;
+use crate::borsh::BorshSerializeExt;
 use crate::eth_abi::Encode;
 use crate::ethereum_events::{
     EthAddress, TransferToEthereum as TransferToEthereumEvent,

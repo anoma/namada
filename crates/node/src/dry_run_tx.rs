@@ -109,8 +109,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use borsh::BorshDeserialize;
-    use borsh_ext::BorshSerializeExt;
+    use namada_sdk::borsh::{BorshDeserialize, BorshSerializeExt};
     use namada_sdk::chain::BlockHeight;
     use namada_sdk::events::log::EventLog;
     use namada_sdk::hash::Hash;
