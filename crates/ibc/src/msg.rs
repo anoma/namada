@@ -21,6 +21,19 @@ use namada_core::borsh::BorshSerializeExt;
 use namada_core::string_encoding::StringEncoded;
 use serde::{Deserialize, Serialize};
 
+trait Sealed {}
+
+/// Marker trait that denotes whether an IBC memo is valid
+/// in Namada.
+#[allow(private_bounds)]
+pub trait ValidNamadaMemo: Sealed {}
+
+impl Sealed for NamadaMemo<NamadaMemoData> {}
+impl ValidNamadaMemo for NamadaMemo<NamadaMemoData> {}
+
+impl Sealed for NamadaMemo<OsmosisSwapMemoData> {}
+impl ValidNamadaMemo for NamadaMemo<OsmosisSwapMemoData> {}
+
 /// Osmosis swap memo data.
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -42,6 +55,12 @@ pub struct OsmosisSwapMemoDataInner {
     /// The receiver of the difference between the transferred tokens and
     /// the minimum output amount.
     pub overflow_receiver: namada_core::address::Address,
+}
+
+impl From<NamadaMemo<OsmosisSwapMemoData>> for NamadaMemo<NamadaMemoData> {
+    fn from(memo: NamadaMemo<OsmosisSwapMemoData>) -> Self {
+        memo.namada.into()
+    }
 }
 
 impl From<OsmosisSwapMemoData> for NamadaMemo<NamadaMemoData> {
