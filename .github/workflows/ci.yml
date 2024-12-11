@@ -679,12 +679,14 @@ jobs:
           cd ../ledger-namada
           git checkout "v$LEDGER_APP_VERSION"
           git submodule update --init --recursive
+          sudo update-alternatives --install /usr/bin/python python /usr/bin/python3 10
           make deps
       - name: Generate test vectors
         run: |
           # The path where the Ledger app test suite will locate test vectors
           TESTVEC_PATH="../ledger-namada/tests/testvectors.json"
           TESTDBG_PATH="../ledger-namada/tests/testdebugs.txt"
+          sudo apt-get install -y protobuf-compiler
           cargo run --example generate-txs -- $TESTVEC_PATH $TESTDBG_PATH
       - name: Check test vectors
         run: |
