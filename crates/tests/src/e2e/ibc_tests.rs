@@ -1933,7 +1933,7 @@ fn ibc_pfm_unhappy_flows() -> Result<()> {
     Ok(())
 }
 
-/// Test that we are able to use the shielded receive
+/// Test that we are able to use the shielded-receive
 /// middleware to shield funds specified in the memo
 /// message.
 #[test]
@@ -2027,8 +2027,95 @@ fn ibc_shielded_recv_middleware_happy_flow() -> Result<()> {
     wait_for_packet_relay(&hermes_dir, &port_id_gaia, &channel_id_gaia, &test)?;
 
     // Check the token on Namada
-    check_balance(&test, AB_VIEWING_KEY, NAM, 8)?;
+    check_shielded_balance(&test, AA_VIEWING_KEY, NAM, 0)?;
+    check_shielded_balance(&test, AB_VIEWING_KEY, NAM, 8)?;
     check_balance(&test, overflow_addr, NAM, 2)?;
+
+    Ok(())
+}
+
+/// Test that if the received amount underflows the minimum
+/// amount, we error out and refund assets.
+#[test]
+fn ibc_shielded_recv_middleware_unhappy_flow() -> Result<()> {
+    let update_genesis =
+        |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
+            genesis.parameters.parameters.epochs_per_year =
+                epochs_per_year_from_min_duration(1800);
+            genesis.parameters.ibc_params.default_mint_limit =
+                Amount::max_signed();
+            genesis
+                .parameters
+                .ibc_params
+                .default_per_epoch_throughput_limit = Amount::max_signed();
+            setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
+        };
+    let (ledger, gaia, test, test_gaia) =
+        run_namada_cosmos(CosmosChainType::Gaia(None), update_genesis)?;
+    let _bg_ledger = ledger.background();
+    let _bg_gaia = gaia.background();
+    sleep(5);
+
+    let hermes_dir = setup_hermes(&test, &test_gaia)?;
+    let port_id_namada = FT_PORT_ID.parse().unwrap();
+    let port_id_gaia = FT_PORT_ID.parse().unwrap();
+    let (channel_id_namada, channel_id_gaia) = create_channel_with_hermes(
+        &hermes_dir,
+        &test,
+        &test_gaia,
+        &port_id_namada,
+        &port_id_gaia,
+    )?;
+
+    // Start relaying
+    let hermes = run_hermes(&hermes_dir)?;
+    let _bg_hermes = hermes.background();
+
+    let nam_addr = find_address(&test, NAM)?;
+    let overflow_addr = "tnam1qrqzqa0l0rzzrlr20n487l6n865t8ndv6uhseulq";
+    let ibc_denom_on_gaia = format!("transfer/{channel_id_gaia}/{nam_addr}");
+    check_balance(&test, ALBERT, NAM, 2_000_000)?;
+
+    let memo_path = gen_ibc_shielding_data(
+        &test,
+        AB_PAYMENT_ADDRESS,
+        &ibc_denom_on_gaia,
+        8,
+        &port_id_namada,
+        &channel_id_namada,
+    )?;
+    let memo = packet_forward_memo(
+        MASP.to_string().into(),
+        &PortId::transfer(),
+        &channel_id_namada,
+        None,
+        Some(shielded_recv_memo(
+            &memo_path,
+            Amount::native_whole(8),
+            overflow_addr.parse().unwrap(),
+        )),
+    );
+    transfer(
+        &test,
+        ALBERT,
+        "PacketForwardMiddleware",
+        NAM,
+        7,
+        Some(ALBERT_KEY),
+        &PortId::transfer(),
+        &channel_id_namada,
+        None,
+        None,
+        None,
+        Some(&memo),
+        false,
+    )?;
+    wait_for_packet_relay(&hermes_dir, &port_id_gaia, &channel_id_gaia, &test)?;
+
+    // Check the token on Namada
+    check_balance(&test, ALBERT, NAM, 2_000_000)?;
+    check_shielded_balance(&test, AB_VIEWING_KEY, NAM, 0)?;
+    check_balance(&test, overflow_addr, NAM, 0)?;
 
     Ok(())
 }
