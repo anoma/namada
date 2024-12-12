@@ -803,7 +803,8 @@ where
         shim::Response::Commit(
             response::Commit {
                 // NB: by passing 0, we forbid CometBFT from deleting
-                // data pertaining to past blocks
+                // data pertaining to past blocks. If a snapshot is taken, this
+                // `retain_height` will be overwritten
                 retain_height: tendermint::block::Height::from(0_u32),
                 // NB: current application hash
                 data: merkle_root.0.to_vec().into(),

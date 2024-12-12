@@ -41,7 +41,8 @@ pub struct AbcippShim {
         Req,
         tokio::sync::oneshot::Sender<Result<Resp, BoxError>>,
     )>,
-    snapshot_task: Option<std::thread::JoinHandle<Result<(), DbError>>>,
+    snapshot_task:
+        Option<std::thread::JoinHandle<Result<BlockHeight, DbError>>>,
     snapshots_to_keep: u64,
 }
 
@@ -163,8 +164,14 @@ impl AbcippShim {
                     }
                 }
                 Req::Commit => match self.service.call(Request::Commit) {
-                    Ok(Response::Commit(res, take_snapshot)) => {
-                        self.update_snapshot_task(take_snapshot);
+                    Ok(Response::Commit(mut res, take_snapshot)) => {
+                        if let Some(height) =
+                            self.update_snapshot_task(take_snapshot)
+                        {
+                            res.retain_height = height
+                                .try_into()
+                                .expect("Invalid block height");
+                        }
                         Ok(Resp::Commit(res))
                     }
                     Ok(resp) => Err(Error::ConvertResp(resp)),
@@ -188,22 +195,31 @@ impl AbcippShim {
         }
     }
 
-    fn update_snapshot_task(&mut self, take_snapshot: TakeSnapshot) {
+    fn update_snapshot_task(
+        &mut self,
+        take_snapshot: TakeSnapshot,
+    ) -> Option<BlockHeight> {
         let snapshot_taken =
             self.snapshot_task.as_ref().map(|t| t.is_finished());
-        match snapshot_taken {
+        let taken_height = match snapshot_taken {
             Some(true) => {
                 let task = self.snapshot_task.take().unwrap();
                 match task.join() {
-                    Ok(Err(e)) => tracing::error!(
-                        "Failed to create snapshot with error: {:?}",
-                        e
-                    ),
-                    Err(e) => tracing::error!(
-                        "Failed to join thread creating snapshot: {:?}",
-                        e
-                    ),
-                    _ => {}
+                    Ok(Ok(height)) => Some(height),
+                    Ok(Err(e)) => {
+                        tracing::error!(
+                            "Failed to create snapshot with error: {:?}",
+                            e
+                        );
+                        None
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            "Failed to join thread creating snapshot: {:?}",
+                            e
+                        );
+                        None
+                    }
                 }
             }
             Some(false) => {
@@ -215,13 +231,13 @@ impl AbcippShim {
                     "Previous snapshot task was still running when a new \
                      snapshot was scheduled"
                 );
-                return;
+                return None;
             }
-            _ => {}
-        }
+            _ => None,
+        };
 
         let TakeSnapshot::Yes(db_path, height) = take_snapshot else {
-            return;
+            return taken_height;
         };
         let base_dir = self.service.base_dir.clone();
 
@@ -238,7 +254,8 @@ impl AbcippShim {
                 .map_err(|e| DbError::DBError(e.to_string()))?;
             snapshot
                 .package()
-                .map_err(|e| DbError::DBError(e.to_string()))
+                .map_err(|e| DbError::DBError(e.to_string()))?;
+            Ok(height)
         });
 
         // it's important that the thread is
@@ -250,6 +267,8 @@ impl AbcippShim {
         } else {
             self.snapshot_task.replace(snapshot_task);
         }
+
+        taken_height
     }
 
     // Retrieve the cached result of process proposal for the given block or
