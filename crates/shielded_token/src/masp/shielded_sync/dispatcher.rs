@@ -1389,7 +1389,7 @@ mod dispatcher_tests {
             })
             .await;
     }
-    /// Test the the birthdays of keys are properly reflected in the key
+    /// Test the birthdays of keys are properly reflected in the key
     /// sync heights when starting shielded sync.
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_key_birthdays() {
