@@ -161,7 +161,7 @@ pub enum ProcessTxResponse {
 }
 
 impl ProcessTxResponse {
-    /// Returns a `TxResult` if the transaction applied and was it accepted by
+    /// Returns a `TxResult` if the transaction was applied and accepted by
     /// all VPs. Note that this always returns false for dry-run transactions.
     pub fn is_applied_and_valid(
         &self,
@@ -435,16 +435,58 @@ pub async fn submit_tx(
 /// Display a result of a tx batch.
 pub fn display_batch_resp(context: &impl Namada, resp: &TxResponse) {
     // Wrapper-level logs
-    display_line!(
-        context.io(),
-        "Transaction batch {} was applied at height {}, consuming {} gas \
-         units.",
-        resp.hash,
-        resp.height,
-        resp.gas_used
-    );
+    let wrapper_success = if let ResultCode::Ok = resp.code {
+        // FIXME: this is not enough thoug, the wrapper could still be ok but
+        // one of the inners could have gone out of gas
+        display_line!(
+            context.io(),
+            "Transaction batch {} was applied at height {}, consuming {} gas \
+             units.",
+            resp.hash,
+            resp.height,
+            resp.gas_used,
+        );
+        true
+    } else {
+        let err = match resp.code {
+            ResultCode::Ok => unreachable!(),
+            ResultCode::WasmRuntimeError => "wasm runtime",
+            ResultCode::InvalidTx => "invalid transaction",
+            ResultCode::InvalidSig => "invalid signature",
+            ResultCode::AllocationError => "allocation",
+            ResultCode::ReplayTx => "transaction replay",
+            ResultCode::InvalidChainId => "invalid chain ID",
+            ResultCode::ExpiredTx => "transaction expired",
+            ResultCode::TxGasLimit => "gas limit",
+            ResultCode::FeeError => "fee",
+            ResultCode::InvalidVoteExtension => "invalid vote extension",
+            ResultCode::TooLarge => "transaction too large",
+            ResultCode::TxNotAllowlisted => "transaction not allowlisted",
+        };
+        let err_msg = if resp.info.is_empty() {
+            err.to_string()
+        } else {
+            format!("{err}, {}", resp.info)
+        };
+        display_line!(
+            context.io(),
+            "Transaction batch {} failed at height {} with error: {}.",
+            resp.hash,
+            resp.height,
+            err_msg
+        );
+        false
+    };
     let batch_results = resp.batch_result();
     if !batch_results.is_empty() {
+        if !wrapper_success {
+            display_line!(
+                context.io(),
+                "Since the batch in its entirety failed, none of the \
+                 transactions listed below have been committed. Their results \
+                 are provided for completeness.",
+            );
+        }
         display_line!(context.io(), "Batch results:");
     }
 
