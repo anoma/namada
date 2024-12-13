@@ -435,16 +435,12 @@ pub async fn submit_tx(
 /// Display a result of a tx batch.
 pub fn display_batch_resp(context: &impl Namada, resp: &TxResponse) {
     // Wrapper-level logs
-    let wrapper_success = if let ResultCode::Ok = resp.code {
-        // FIXME: this is not enough thoug, the wrapper could still be ok but
-        // one of the inners could have gone out of gas
+    let wrapper_successful = if let ResultCode::Ok = resp.code {
         display_line!(
             context.io(),
-            "Transaction batch {} was applied at height {}, consuming {} gas \
-             units.",
+            "Transaction batch {} was applied at height {}.",
             resp.hash,
             resp.height,
-            resp.gas_used,
         );
         true
     } else {
@@ -479,7 +475,7 @@ pub fn display_batch_resp(context: &impl Namada, resp: &TxResponse) {
     };
     let batch_results = resp.batch_result();
     if !batch_results.is_empty() {
-        if !wrapper_success {
+        if !wrapper_successful {
             display_line!(
                 context.io(),
                 "Since the batch in its entirety failed, none of the \
@@ -491,6 +487,7 @@ pub fn display_batch_resp(context: &impl Namada, resp: &TxResponse) {
     }
 
     // Batch-level logs
+    let mut all_inners_successful = true;
     for (inner_hash, result) in batch_results {
         match result {
             InnerTxResult::Success(_) => {
@@ -519,6 +516,7 @@ pub fn display_batch_resp(context: &impl Namada, resp: &TxResponse) {
                         .unwrap(),
                     serde_json::to_string_pretty(&changed_keys).unwrap(),
                 );
+                all_inners_successful = false;
             }
             InnerTxResult::OtherFailure(msg) => {
                 edisplay_line!(
@@ -527,8 +525,22 @@ pub fn display_batch_resp(context: &impl Namada, resp: &TxResponse) {
                     inner_hash,
                     msg
                 );
+                all_inners_successful = false;
             }
         }
+    }
+
+    // Display the gas used only if the entire batch was successful. In all the
+    // other cases the gas consumed is misleading since most likely the inner
+    // transactions did not have the chance to run until completion. This could
+    // trick the user into setting wrong gas limit values when trying to
+    // resubmit the tx
+    if wrapper_successful && all_inners_successful {
+        edisplay_line!(
+            context.io(),
+            "The batch consumed {} gas units.",
+            resp.gas_used,
+        );
     }
 
     tracing::debug!(
