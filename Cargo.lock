@@ -3937,15 +3937,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce23b50ad8242c51a442f3ff322d56b02f08852c77e4c0b4d3fd684abc89c683"
 
 [[package]]
-name = "index-set"
-version = "0.8.0"
-source = "git+https://github.com/heliaxdev/index-set?tag=v0.8.1#b0d928f83cf0d465ccda299d131e8df2859b5184"
-dependencies = [
- "borsh",
- "serde",
-]
-
-[[package]]
 name = "indexmap"
 version = "1.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4849,7 +4840,6 @@ dependencies = [
  "ibc",
  "ics23",
  "impl-num-traits",
- "index-set",
  "indexmap 2.2.4",
  "k256",
  "lazy_static",
@@ -4882,6 +4872,7 @@ dependencies = [
  "toml 0.5.11",
  "tracing",
  "uint",
+ "usize-set",
  "wasmtimer",
  "zeroize",
 ]
@@ -9143,6 +9134,16 @@ dependencies = [
  "form_urlencoded",
  "idna",
  "percent-encoding",
+ "serde",
+]
+
+[[package]]
+name = "usize-set"
+version = "0.10.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12fbfdf92a2a7f550e532818381f9e8367cac2115671edb024120836f33985e9"
+dependencies = [
+ "borsh",
  "serde",
 ]
 

@@ -122,7 +122,7 @@ ibc = { git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "38bd2a32f3511
 ibc-derive = { git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "38bd2a32f35117d4d9165a3c68c64ccd87ad56dd" }
 ibc-testkit = { git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "38bd2a32f35117d4d9165a3c68c64ccd87ad56dd", default-features = false }
 ics23 = "0.12.0"
-index-set = { git = "https://github.com/heliaxdev/index-set", tag = "v0.8.1", features = ["serialize-borsh", "serialize-serde"] }
+usize-set = { version = "0.10.3", features = ["serialize-borsh", "serialize-serde"] }
 indexmap = { git = "https://github.com/heliaxdev/indexmap", tag = "2.2.4-heliax-1", features = ["borsh-schema", "serde"] }
 init-once = "0.6.0"
 itertools = "0.12.1"
