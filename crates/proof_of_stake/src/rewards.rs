@@ -913,11 +913,11 @@ mod tests {
         gov_params.init_storage(&mut storage).unwrap();
         write_pos_params(&mut storage, &OwnedPosParams::default()).unwrap();
 
-        let epochs_per_year = 365_u64;
+        let epochs_per_year = 1460_u64;
         let epy_key = get_epochs_per_year_key();
         storage.write(&epy_key, epochs_per_year).unwrap();
 
-        let init_locked_ratio = Dec::from_str("0.1").unwrap();
+        let init_locked_ratio = Dec::from_str("0.16").unwrap();
         let mut last_locked_ratio = init_locked_ratio;
 
         let total_native_tokens = 1_000_000_000_u64;
@@ -937,12 +937,12 @@ mod tests {
             total_native_tokens,
         );
 
-        let max_reward_rate = Dec::from_str("0.1").unwrap();
-        let target_ratio = Dec::from_str("0.66666666").unwrap();
-        let p_gain_nom = Dec::from_str("0.25").unwrap();
-        let d_gain_nom = Dec::from_str("0.25").unwrap();
+        let max_reward_rate = Dec::from_str("0.05").unwrap();
+        let target_ratio = Dec::from_str("0.4").unwrap();
+        let p_gain_nom = Dec::from_str("0.5").unwrap();
+        let d_gain_nom = Dec::from_str("0.5").unwrap();
 
-        let staking_growth = Dec::from_str("0.04").unwrap();
+        let staking_growth = Dec::from_str("0.01").unwrap();
         // let mut do_add = true;
 
         let num_rounds = 50;
@@ -970,7 +970,7 @@ mod tests {
 
             println!(
                 "Round {round}: Locked ratio: {locked_ratio}, inflation rate: \
-                 {inflation_rate}, staking rate: {staking_rate}",
+                 {inflation_rate}, staking APY: {staking_rate}",
             );
 
             last_inflation_amount = inflation;
@@ -1014,10 +1014,20 @@ mod tests {
             let change_staked_tokens =
                 token::Amount::try_from(staking_growth * tot_tokens).unwrap();
 
-            locked_amount = std::cmp::min(
-                total_native_tokens,
-                locked_amount + change_staked_tokens,
-            );
+            let target_amount = token::Amount::try_from(
+                tot_tokens * (target_ratio + Dec::from_str("0.02").unwrap()),
+            )
+            .unwrap();
+            let new_amount = {
+                let new = locked_amount + change_staked_tokens;
+                if new > target_amount {
+                    target_amount
+                } else {
+                    new
+                }
+            };
+
+            locked_amount = std::cmp::min(total_native_tokens, new_amount);
 
             // if locked_ratio > Dec::from_str("0.8").unwrap()
             //     && locked_ratio - controller.locked_ratio_last >= Dec::zero()
