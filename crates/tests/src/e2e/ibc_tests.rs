@@ -1894,13 +1894,13 @@ fn transfer_from_cosmos(
 
 fn check_tx_height(test: &Test, client: &mut NamadaCmd) -> Result<u32> {
     let (_unread, matched) = client.exp_regex(r"height .*")?;
-    // Expecting e.g. "height 1337, consuming x gas units."
+    // Expecting e.g. "height 1337."
     let height_str = matched
         .trim()
         .split_once(' ')
         .unwrap()
         .1
-        .split_once(',')
+        .split_once('.')
         .unwrap()
         .0;
     let height: u32 = height_str.parse().unwrap();
