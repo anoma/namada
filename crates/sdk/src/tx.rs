@@ -161,7 +161,7 @@ pub enum ProcessTxResponse {
 }
 
 impl ProcessTxResponse {
-    /// Returns a `TxResult` if the transaction applied and was it accepted by
+    /// Returns a `TxResult` if the transaction was applied and accepted by
     /// all VPs. Note that this always returns false for dry-run transactions.
     pub fn is_applied_and_valid(
         &self,
@@ -435,20 +435,59 @@ pub async fn submit_tx(
 /// Display a result of a tx batch.
 pub fn display_batch_resp(context: &impl Namada, resp: &TxResponse) {
     // Wrapper-level logs
-    display_line!(
-        context.io(),
-        "Transaction batch {} was applied at height {}, consuming {} gas \
-         units.",
-        resp.hash,
-        resp.height,
-        resp.gas_used
-    );
+    let wrapper_successful = if let ResultCode::Ok = resp.code {
+        display_line!(
+            context.io(),
+            "Transaction batch {} was applied at height {}.",
+            resp.hash,
+            resp.height,
+        );
+        true
+    } else {
+        let err = match resp.code {
+            ResultCode::Ok => unreachable!(),
+            ResultCode::WasmRuntimeError => "wasm runtime",
+            ResultCode::InvalidTx => "invalid transaction",
+            ResultCode::InvalidSig => "invalid signature",
+            ResultCode::AllocationError => "allocation",
+            ResultCode::ReplayTx => "transaction replay",
+            ResultCode::InvalidChainId => "invalid chain ID",
+            ResultCode::ExpiredTx => "transaction expired",
+            ResultCode::TxGasLimit => "gas limit",
+            ResultCode::FeeError => "fee",
+            ResultCode::InvalidVoteExtension => "invalid vote extension",
+            ResultCode::TooLarge => "transaction too large",
+            ResultCode::TxNotAllowlisted => "transaction not allowlisted",
+        };
+        let err_msg = if resp.info.is_empty() {
+            err.to_string()
+        } else {
+            format!("{err}, {}", resp.info)
+        };
+        display_line!(
+            context.io(),
+            "Transaction batch {} failed at height {} with error: {}.",
+            resp.hash,
+            resp.height,
+            err_msg
+        );
+        false
+    };
     let batch_results = resp.batch_result();
     if !batch_results.is_empty() {
+        if !wrapper_successful {
+            display_line!(
+                context.io(),
+                "Since the batch in its entirety failed, none of the \
+                 transactions listed below have been committed. Their results \
+                 are provided for completeness.",
+            );
+        }
         display_line!(context.io(), "Batch results:");
     }
 
     // Batch-level logs
+    let mut all_inners_successful = true;
     for (inner_hash, result) in batch_results {
         match result {
             InnerTxResult::Success(_) => {
@@ -477,6 +516,7 @@ pub fn display_batch_resp(context: &impl Namada, resp: &TxResponse) {
                         .unwrap(),
                     serde_json::to_string_pretty(&changed_keys).unwrap(),
                 );
+                all_inners_successful = false;
             }
             InnerTxResult::OtherFailure(msg) => {
                 edisplay_line!(
@@ -485,8 +525,22 @@ pub fn display_batch_resp(context: &impl Namada, resp: &TxResponse) {
                     inner_hash,
                     msg
                 );
+                all_inners_successful = false;
             }
         }
+    }
+
+    // Display the gas used only if the entire batch was successful. In all the
+    // other cases the gas consumed is misleading since most likely the inner
+    // transactions did not have the chance to run until completion. This could
+    // trick the user into setting wrong gas limit values when trying to
+    // resubmit the tx
+    if wrapper_successful && all_inners_successful {
+        edisplay_line!(
+            context.io(),
+            "The batch consumed {} gas units.",
+            resp.gas_used,
+        );
     }
 
     tracing::debug!(
