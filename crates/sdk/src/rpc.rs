@@ -577,21 +577,22 @@ pub async fn dry_run_tx<N: Namada>(
             .await,
     )?
     .data;
-    let result_str = format!("Transaction consumed {} gas", result.1);
 
-    let mut cmt_result_str = String::new();
+    display_line!(context.io(), "Dry-run result:");
+    let mut all_inners_successful = true;
     for (inner_hash, cmt_result) in result.0.iter() {
         match cmt_result {
             Ok(result) => {
                 if result.is_accepted() {
-                    cmt_result_str.push_str(&format!(
-                        "Inner transaction {inner_hash} was successfully \
-                         applied",
-                    ));
+                    display_line!(
+                        context.io(),
+                        "Transaction {inner_hash} was successfully applied",
+                    );
                 } else {
-                    cmt_result_str.push_str(&format!(
-                        "Inner transaction {} was rejected by VPs: \
-                         {}\nErrors: {}\nChanged keys: {}",
+                    display_line!(
+                        context.io(),
+                        "Transaction {} was rejected by VPs: {}\nErrors: \
+                         {}\nChanged keys: {}",
                         inner_hash,
                         serde_json::to_string_pretty(
                             &result.vps_result.rejected_vps
@@ -601,18 +602,33 @@ pub async fn dry_run_tx<N: Namada>(
                             .unwrap(),
                         serde_json::to_string_pretty(&result.changed_keys)
                             .unwrap(),
-                    ))
+                    );
+                    all_inners_successful = false;
                 }
             }
-            Err(msg) => cmt_result_str.push_str(&format!(
-                "Inner transaction {inner_hash} failed with error: {msg}"
-            )),
+            Err(msg) => {
+                display_line!(
+                    context.io(),
+                    "Transaction {inner_hash} failed.\nDetails: {msg}"
+                );
+                all_inners_successful = false;
+            }
         }
     }
-    display_line!(
-        context.io(),
-        "Dry-run result: {result_str}. {cmt_result_str}"
-    );
+
+    // Display the gas used only if the entire batch was successful. In all the
+    // other cases the gas consumed is misleading since most likely the inner
+    // transactions did not have the chance to run until completion. This could
+    // trick the user into setting wrong gas limit values when trying to
+    // resubmit the tx
+    if all_inners_successful {
+        display_line!(
+            context.io(),
+            "The batch consumed {} gas units.",
+            result.1
+        );
+    }
+
     Ok(result)
 }
 
