@@ -8,12 +8,13 @@ use std::str::FromStr;
 use arse_merkle_tree::InternalKey;
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use data_encoding::BASE32HEX_NOPAD;
-use index_set::vec::VecIndexSet;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
 use namada_migrations::*;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use usize_set::vec::VecIndexSet;
+use usize_set::IndexSet;
 
 use super::key::common;
 use crate::address::{self, Address, PARAMETERS};
