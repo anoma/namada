@@ -1857,6 +1857,131 @@ mod test_shielded_wallet {
         assert!(wallet.compute_shielded_balance(&vk).await.is_err())
     }
 
+    // Test that `compute_exchanged_amount` can perform inverse conversions to
+    // match the desired epoch
+    #[tokio::test]
+    async fn test_inverse_conversions() {
+        let (channel, mut context) = MockNamadaIo::new();
+        // the response to the current masp epoch query
+        channel
+            .send(MaspEpoch::new(5).serialize_to_vec())
+            .expect("Test failed");
+        let temp_dir = tempdir().unwrap();
+        let mut wallet = TestingContext::new(FsShieldedUtils::new(
+            temp_dir.path().to_path_buf(),
+        ));
+        let native_token =
+            TestingContext::<FsShieldedUtils>::query_native_token(
+                context.client(),
+            )
+            .await
+            .expect("Test failed");
+        let native_token_denom =
+            TestingContext::<FsShieldedUtils>::query_denom(
+                context.client(),
+                &native_token,
+            )
+            .await
+            .expect("Test failed");
+
+        for epoch in 0..=5 {
+            wallet.add_asset_type(AssetData {
+                token: native_token.clone(),
+                denom: native_token_denom,
+                position: MaspDigitPos::Zero,
+                epoch: Some(MaspEpoch::new(epoch)),
+            });
+        }
+
+        for epoch in 0..5 {
+            let mut conv = I128Sum::from_pair(
+                AssetData {
+                    token: native_token.clone(),
+                    denom: native_token_denom,
+                    position: MaspDigitPos::Zero,
+                    epoch: Some(MaspEpoch::new(epoch)),
+                }
+                .encode()
+                .unwrap(),
+                -1,
+            );
+            conv += I128Sum::from_pair(
+                AssetData {
+                    token: native_token.clone(),
+                    denom: native_token_denom,
+                    position: MaspDigitPos::Zero,
+                    epoch: Some(MaspEpoch::new(epoch + 1)),
+                }
+                .encode()
+                .unwrap(),
+                2,
+            );
+            context.add_conversions(
+                AssetData {
+                    token: native_token.clone(),
+                    denom: native_token_denom,
+                    position: MaspDigitPos::Zero,
+                    epoch: Some(MaspEpoch::new(epoch)),
+                },
+                (
+                    native_token.clone(),
+                    native_token_denom,
+                    MaspDigitPos::Zero,
+                    MaspEpoch::new(epoch),
+                    conv,
+                    MerklePath::from_path(vec![], 0),
+                ),
+            );
+        }
+
+        let vk = arbitrary_vk();
+        let pa = arbitrary_pa();
+        // Shield at epoch 5
+        let asset_data = AssetData {
+            token: native_token.clone(),
+            denom: native_token_denom,
+            position: MaspDigitPos::Zero,
+            epoch: Some(MaspEpoch::new(5)),
+        };
+        wallet.add_asset_type(asset_data.clone());
+        wallet.add_note(create_note(asset_data.clone(), 10, pa), vk);
+        let balance = wallet
+            .compute_shielded_balance(&vk)
+            .await
+            .unwrap()
+            .unwrap_or_else(ValueSum::zero);
+        // TODO: would be nice to check even earlier epochs but for that we need
+        // to construct conversions properly, just like the protocol does, i.e.
+        // with conversions for non-consecutive epochs
+
+        // Query the balance with conversions at epoch 4
+        let amount = wallet
+            .compute_exchanged_amount(
+                context.client(),
+                context.io(),
+                balance,
+                MaspEpoch::new(4),
+                Conversions::new(),
+            )
+            .await
+            .unwrap()
+            .0;
+        assert_eq!(
+            amount,
+            I128Sum::from_pair(
+                AssetData {
+                    token: native_token.clone(),
+                    denom: native_token_denom,
+                    position: MaspDigitPos::Zero,
+                    epoch: Some(MaspEpoch::new(4)),
+                }
+                .encode()
+                .unwrap(),
+                5
+            )
+        );
+    }
+
     #[tokio::test]
     async fn test_estimate_rewards_no_conversions() {
         let (channel, context) = MockNamadaIo::new();
@@ -1890,7 +2015,101 @@ mod test_shielded_wallet {
             .estimate_next_epoch_rewards(&context, &vk)
             .await
             .expect("Test failed");
+<<<<<<< HEAD
         assert_eq!(rewards_est, 0);
+=======
+        assert_eq!(rewards_est, DenominatedAmount::native(0.into()));
+    }
+
+    #[tokio::test]
+    // Test that the estimated rewards are 0 when no conversions are available
+    // to the current epoch
+    async fn test_estimate_rewards_no_conversions_last_epoch() {
+        let (channel, mut context) = MockNamadaIo::new();
+        // the response to the current masp epoch query
+        channel
+            .send(MaspEpoch::new(2).serialize_to_vec())
+            .expect("Test failed");
+        let temp_dir = tempdir().unwrap();
+        let mut wallet = TestingContext::new(FsShieldedUtils::new(
+            temp_dir.path().to_path_buf(),
+        ));
+
+        let native_token =
+            TestingContext::<FsShieldedUtils>::query_native_token(
+                context.client(),
+            )
+            .await
+            .expect("Test failed");
+        let native_token_denom =
+            TestingContext::<FsShieldedUtils>::query_denom(
+                context.client(),
+                &native_token,
+            )
+            .await
+            .expect("Test failed");
+
+        // add an old conversion for the incentivized tokens
+        let mut conv = I128Sum::from_pair(
+            AssetData {
+                token: native_token.clone(),
+                denom: native_token_denom,
+                position: MaspDigitPos::Zero,
+                epoch: Some(MaspEpoch::new(0)),
+            }
+            .encode()
+            .unwrap(),
+            -1,
+        );
+        conv += I128Sum::from_pair(
+            AssetData {
+                token: native_token.clone(),
+                denom: native_token_denom,
+                position: MaspDigitPos::Zero,
+                epoch: Some(MaspEpoch::new(1)),
+            }
+            .encode()
+            .unwrap(),
+            1,
+        );
+        context.add_conversions(
+            AssetData {
+                token: native_token.clone(),
+                denom: native_token_denom,
+                position: MaspDigitPos::Zero,
+                epoch: Some(MaspEpoch::new(0)),
+            },
+            (
+                native_token.clone(),
+                native_token_denom,
+                MaspDigitPos::Zero,
+                MaspEpoch::new(0),
+                conv,
+                MerklePath::from_path(vec![], 0),
+            ),
+        );
+
+        let vk = arbitrary_vk();
+        let pa = arbitrary_pa();
+        let asset_data = AssetData {
+            token: native_token.clone(),
+            denom: native_token_denom,
+            position: MaspDigitPos::Zero,
+            epoch: Some(MaspEpoch::new(2)),
+        };
+        wallet.add_asset_type(asset_data.clone());
+        wallet.add_note(create_note(asset_data.clone(), 10, pa), vk);
+        let balance = wallet
+            .compute_shielded_balance(&vk)
+            .await
+            .unwrap()
+            .unwrap_or_else(ValueSum::zero);
+        let rewards_est = wallet
+            .estimate_next_epoch_rewards(&context, &balance)
+            .await
+            .expect("Test failed");
+        assert_eq!(rewards_est, DenominatedAmount::native(0.into()));
+>>>>>>> 294e44c4d (Test MASP inverse conversions)
     }
 
     proptest! {
