@@ -56,7 +56,7 @@ eyre.workspace = true
 ibc.workspace = true
 ics23.workspace = true
 impl-num-traits = "0.1.2"
-index-set.workspace = true
+usize-set.workspace = true
 indexmap.workspace = true
 k256.workspace = true
 lazy_static = { workspace = true, optional = true }
