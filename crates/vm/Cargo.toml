@@ -13,7 +13,9 @@ repository.workspace = true
 version.workspace = true
 
 [features]
-default = ["wasm-runtime"]
+default = ["wasm-runtime", "wasm-jit"]
+wasm-jit = ["wasmer/sys-default"]
+wasm-interpret = ["wasmer/wasmi"]
 wasm-runtime = [
   "parity-wasm",
   "rayon",
@@ -49,7 +51,7 @@ tempfile = { version = "3.2.0", optional = true }
 thiserror.workspace = true
 tracing.workspace = true
 wasm-instrument = { workspace = true, optional = true }
-wasmer = { workspace = true, optional = true }
+wasmer = { workspace = true, optional = true, default-features = false }
 wasmer-cache = { workspace = true, optional = true }
 wasmer-compiler-singlepass = { workspace = true, optional = true }
 wasmer-vm = { workspace = true, optional = true }
