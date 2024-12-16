@@ -929,6 +929,7 @@ pub async fn query_protocol_parameters(
                 liveness_threshold,
                 rewards_gain_p,
                 rewards_gain_d,
+                min_commission_rate,
             },
         max_proposal_period: _,
     } = query_pos_parameters(context.client()).await;
@@ -1027,6 +1028,12 @@ pub async fn query_protocol_parameters(
         "{:4}Votes per raw native token: {}",
         "",
         tm_votes_per_token
+    );
+    display_line!(
+        context.io(),
+        "{:4}Minimum allowable validator commission rate: {}",
+        "",
+        min_commission_rate
     );
 }
 
