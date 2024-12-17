@@ -683,7 +683,7 @@ pub mod tests {
     proptest! {
         #[test]
         /// Check that all the address types are of the same length
-        /// `ADDRESS_LEN` when bech32m encoded, and that that decoding them
+        /// `ADDRESS_LEN` when bech32m encoded, and that decoding them
         /// yields back the same value.
         fn test_encoded_address_length(address in testing::arb_address()) {
             let encoded: String = address.encode();
