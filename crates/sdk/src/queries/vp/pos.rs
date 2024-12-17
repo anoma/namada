@@ -103,7 +103,7 @@ router! {POS,
     ( "bond" / [source: Address] / [validator: Address] / [epoch: opt Epoch] )
         -> token::Amount = bond,
 
-    ( "rewards" / [validator: Address] / [source: opt Address] )
+    ( "rewards" / [validator: Address] / [source: opt Address] / [epoch: opt Epoch] )
         -> token::Amount = rewards,
 
     ( "bond_with_slashing" / [source: Address] / [validator: Address] / [epoch: opt Epoch] )
@@ -588,17 +588,19 @@ fn rewards<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     validator: Address,
     source: Option<Address>,
+    epoch: Option<Epoch>,
 ) -> namada_storage::Result<token::Amount>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let current_epoch = ctx.state.in_mem().last_epoch;
+    let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
+
     query_reward_tokens::<_, governance::Store<_>>(
         ctx.state,
         source.as_ref(),
         &validator,
-        current_epoch,
+        epoch,
     )
 }
 
@@ -861,11 +863,9 @@ mod test {
         };
         let result = POS.handle(ctx, &request);
         assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("Invalid Tendermint address")
-        )
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid Tendermint address"))
     }
 }
