@@ -2003,7 +2003,7 @@ fn ibc_shielded_recv_middleware_happy_flow() -> Result<()> {
         &PortId::transfer(),
         &channel_id_namada,
         None,
-        Some(shielded_recv_memo(
+        Some(shielded_recv_memo_value(
             &memo_path,
             Amount::native_whole(8),
             overflow_addr.parse().unwrap(),
@@ -2089,7 +2089,7 @@ fn ibc_shielded_recv_middleware_unhappy_flow() -> Result<()> {
         &PortId::transfer(),
         &channel_id_namada,
         None,
-        Some(shielded_recv_memo(
+        Some(shielded_recv_memo_value(
             &memo_path,
             Amount::native_whole(8),
             overflow_addr.parse().unwrap(),
@@ -3424,24 +3424,44 @@ fn packet_forward_memo(
     timeout: Option<Duration>,
     next: Option<serde_json::Map<String, serde_json::Value>>,
 ) -> String {
-    serde_json::to_string(&ibc_middleware_packet_forward::PacketMetadata {
-        forward: ForwardMetadata {
-            receiver,
-            port: port_id.clone(),
-            channel: channel_id.clone(),
-            timeout: timeout.map(|t| {
-                ibc_middleware_packet_forward::Duration::from_dur(
-                    dur::Duration::from_std(t),
-                )
-            }),
-            retries: Some(0),
-            next,
-        },
-    })
+    serde_json::to_string(&serde_json::Value::Object(
+        packet_forward_memo_value(receiver, port_id, channel_id, timeout, next),
+    ))
     .expect("Test failed")
 }
 
-fn shielded_recv_memo(
+fn packet_forward_memo_value(
+    receiver: Signer,
+    port_id: &PortId,
+    channel_id: &ChannelId,
+    timeout: Option<Duration>,
+    next: Option<serde_json::Map<String, serde_json::Value>>,
+) -> serde_json::Map<String, serde_json::Value> {
+    let value =
+        serde_json::to_value(&ibc_middleware_packet_forward::PacketMetadata {
+            forward: ForwardMetadata {
+                receiver,
+                port: port_id.clone(),
+                channel: channel_id.clone(),
+                timeout: timeout.map(|t| {
+                    ibc_middleware_packet_forward::Duration::from_dur(
+                        dur::Duration::from_std(t),
+                    )
+                }),
+                retries: Some(0),
+                next,
+            },
+        })
+        .expect("Test failed");
+
+    if let serde_json::Value::Object(memo) = value {
+        memo
+    } else {
+        unreachable!()
+    }
+}
+
+fn shielded_recv_memo_value(
     masp_transfer_path: &Path,
     shielded_amount: Amount,
     overflow_receiver: namada_core::address::Address,
@@ -3460,13 +3480,12 @@ fn shielded_recv_memo(
         overflow_receiver,
     };
 
-    if let serde_json::Value::Object(memo) =
-        serde_json::to_value(&NamadaMemo { namada: data }).expect("Test failed")
-    {
+    let value = serde_json::to_value(&NamadaMemo { namada: data })
+        .expect("Test failed");
+
+    if let serde_json::Value::Object(memo) = value {
         memo
     } else {
-        panic!(
-            "Test failed. Could not serialize `NamadaMemo` to a json object."
-        )
+        unreachable!()
     }
 }
