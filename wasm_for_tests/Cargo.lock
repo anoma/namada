@@ -803,8 +803,9 @@ dependencies = [
 
 [[package]]
 name = "ethbridge-structs"
-version = "0.24.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.24.0#d66708bb8a734111988b9eaf08c7473bd7020c00"
+version = "0.24.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c7b3e89a2332887bf096cd589ac5781a6664b4fb0881506aa99b2be32e8e086"
 dependencies = [
  "ethabi",
 ]
