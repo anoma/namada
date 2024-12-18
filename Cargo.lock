@@ -2214,8 +2214,9 @@ dependencies = [
 
 [[package]]
 name = "ethbridge-bridge-contract"
-version = "0.24.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.24.0#d66708bb8a734111988b9eaf08c7473bd7020c00"
+version = "0.24.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ccec11776e279f18dcef377c95932ac7e558358477870c972e3b5eba0f1cc661"
 dependencies = [
  "ethbridge-bridge-events",
  "ethbridge-structs",
@@ -2225,8 +2226,9 @@ dependencies = [
 
 [[package]]
 name = "ethbridge-bridge-events"
-version = "0.24.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.24.0#d66708bb8a734111988b9eaf08c7473bd7020c00"
+version = "0.24.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f862616190f541d733357e234d65ba73fec0ddacd62e91abb26a0258048a6bb1"
 dependencies = [
  "ethabi",
  "ethbridge-structs",
@@ -2236,8 +2238,9 @@ dependencies = [
 
 [[package]]
 name = "ethbridge-events"
-version = "0.24.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.24.0#d66708bb8a734111988b9eaf08c7473bd7020c00"
+version = "0.24.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0de4045821e3fadfc5fa239825bc1c1f05fe8c4b149c09dfb2e6aa9d09d6780e"
 dependencies = [
  "ethbridge-bridge-events",
  "ethers",
@@ -2245,8 +2248,9 @@ dependencies = [
 
 [[package]]
 name = "ethbridge-structs"
-version = "0.24.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.24.0#d66708bb8a734111988b9eaf08c7473bd7020c00"
+version = "0.24.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c7b3e89a2332887bf096cd589ac5781a6664b4fb0881506aa99b2be32e8e086"
 dependencies = [
  "ethabi",
  "ethers",
