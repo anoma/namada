@@ -2139,12 +2139,17 @@ fn run_namada_cosmos(
 
     let ledger = start_namada_ledger_node_wait_wasm(&test, Some(0), Some(40))?;
 
-    // Cosmos
-    let test_cosmos = setup_cosmos(chain_type)?;
-    let cosmos = run_cosmos(&test_cosmos, true)?;
-    sleep(5);
+    let (cosmos, test_cosmos) = setup_and_boot_cosmos(chain_type)?;
 
     Ok((ledger, cosmos, test, test_cosmos))
+}
+
+fn setup_and_boot_cosmos(
+    chain_type: CosmosChainType,
+) -> Result<(NamadaCmd, Test)> {
+    let test_cosmos = setup_cosmos(chain_type)?;
+    let cosmos = run_cosmos(&test_cosmos, true)?;
+    Ok((cosmos, test_cosmos))
 }
 
 fn create_channel_with_hermes(
@@ -3486,4 +3491,18 @@ fn shielded_recv_memo_value(
     } else {
         unreachable!()
     }
+}
+
+/// Basic Osmosis test that checks if the chain has been set up correctly.
+#[test]
+fn osmosis_basic() -> Result<()> {
+    let (osmosis, test_osmosis) =
+        setup_and_boot_cosmos(CosmosChainType::Osmosis)?;
+
+    let _bg_osmosis = osmosis.background();
+    sleep(5);
+
+    check_cosmos_balance(&test_osmosis, COSMOS_USER, COSMOS_COIN, 1_000)?;
+
+    Ok(())
 }

@@ -1341,9 +1341,46 @@ where
 pub enum CosmosChainType {
     Gaia(Option<u64>),
     CosmWasm,
+    Osmosis,
 }
 
 impl CosmosChainType {
+    fn genesis_cmd_args<'a>(&self, mut args: Vec<&'a str>) -> Vec<&'a str> {
+        if !matches!(self, CosmosChainType::Osmosis) {
+            args.insert(0, "genesis");
+        }
+        args
+    }
+
+    fn add_genesis_account_args<'a>(
+        &self,
+        account: &'a str,
+        coins: &'a str,
+    ) -> Vec<&'a str> {
+        self.genesis_cmd_args(vec!["add-genesis-account", account, coins])
+    }
+
+    fn gentx_args<'a>(
+        &self,
+        account: &'a str,
+        coins: &'a str,
+        chain_id: &'a str,
+    ) -> Vec<&'a str> {
+        self.genesis_cmd_args(vec![
+            "gentx",
+            account,
+            coins,
+            "--keyring-backend",
+            "test",
+            "--chain-id",
+            chain_id,
+        ])
+    }
+
+    fn collect_gentxs_args<'a>(&self) -> Vec<&'a str> {
+        self.genesis_cmd_args(vec!["collect-gentxs"])
+    }
+
     pub fn chain_id(&self) -> String {
         match self {
             Self::Gaia(Some(suffix)) => {
@@ -1351,6 +1388,7 @@ impl CosmosChainType {
             }
             Self::Gaia(_) => constants::GAIA_CHAIN_ID.to_string(),
             Self::CosmWasm => constants::COSMWASM_CHAIN_ID.to_string(),
+            Self::Osmosis => constants::OSMOSIS_CHAIN_ID.to_string(),
         }
     }
 
@@ -1358,12 +1396,16 @@ impl CosmosChainType {
         match self {
             Self::Gaia(_) => "gaiad",
             Self::CosmWasm => "wasmd",
+            Self::Osmosis => "osmosisd",
         }
     }
 
     pub fn chain_type(chain_id: &str) -> Result<Self> {
         if chain_id == constants::COSMWASM_CHAIN_ID {
             return Ok(Self::CosmWasm);
+        }
+        if chain_id == constants::OSMOSIS_CHAIN_ID {
+            return Ok(Self::Osmosis);
         }
         match chain_id.strip_prefix(constants::GAIA_CHAIN_ID) {
             Some("") => Ok(Self::Gaia(None)),
@@ -1380,6 +1422,7 @@ impl CosmosChainType {
         match self {
             Self::Gaia(_) => "cosmos",
             Self::CosmWasm => "wasm",
+            Self::Osmosis => "osmo",
         }
     }
 
@@ -1399,8 +1442,9 @@ impl CosmosChainType {
         // NB: ensure none of these ever conflict
         match self {
             Self::CosmWasm => 0,
-            Self::Gaia(None) => 1,
-            Self::Gaia(Some(off)) => 2 + *off,
+            Self::Osmosis => 1,
+            Self::Gaia(None) => 2,
+            Self::Gaia(Some(off)) => 3 + *off,
         }
     }
 }
@@ -1451,47 +1495,34 @@ pub fn setup_cosmos(chain_type: CosmosChainType) -> Result<Test> {
 
     // Add tokens to a user account
     let account = find_cosmos_address(&test, constants::COSMOS_USER)?;
-    let args = [
-        "genesis",
-        "add-genesis-account",
-        &account,
-        "100000000stake,1000samoleans",
-    ];
+    let args = chain_type
+        .add_genesis_account_args(&account, "100000000stake,1000samoleans");
     let mut cosmos = run_cosmos_cmd(&test, args, Some(10))?;
     cosmos.assert_success();
 
     // Add the stake token to the relayer
     let account = find_cosmos_address(&test, constants::COSMOS_RELAYER)?;
-    let args = ["genesis", "add-genesis-account", &account, "10000stake"];
+    let args = chain_type.add_genesis_account_args(&account, "10000stake");
     let mut cosmos = run_cosmos_cmd(&test, args, Some(10))?;
     cosmos.assert_success();
 
     // Add the stake token to the validator
     let validator = find_cosmos_address(&test, constants::COSMOS_VALIDATOR)?;
-    let args = [
-        "genesis",
-        "add-genesis-account",
-        &validator,
-        "200000000000stake",
-    ];
+    let args =
+        chain_type.add_genesis_account_args(&validator, "200000000000stake");
     let mut cosmos = run_cosmos_cmd(&test, args, Some(10))?;
     cosmos.assert_success();
 
     // stake
-    let args = [
-        "genesis",
-        "gentx",
+    let args = chain_type.gentx_args(
         constants::COSMOS_VALIDATOR,
         "100000000000stake",
-        "--keyring-backend",
-        "test",
-        "--chain-id",
         &chain_id,
-    ];
+    );
     let mut cosmos = run_cosmos_cmd(&test, args, Some(10))?;
     cosmos.assert_success();
 
-    let args = ["genesis", "collect-gentxs"];
+    let args = chain_type.collect_gentxs_args();
     let mut cosmos = run_cosmos_cmd(&test, args, Some(10))?;
     cosmos.assert_success();
 
@@ -1615,8 +1646,9 @@ pub mod constants {
     pub const APFEL: &str = "Apfel";
     pub const KARTOFFEL: &str = "Kartoffel";
 
-    // Gaia or CosmWasm
+    // Gaia or CosmWasm or Osmosis
     pub const GAIA_CHAIN_ID: &str = "gaia";
+    pub const OSMOSIS_CHAIN_ID: &str = "osmosis";
     pub const COSMWASM_CHAIN_ID: &str = "cosmwasm";
     pub const COSMOS_USER: &str = "user";
     pub const COSMOS_RELAYER: &str = "relayer";
