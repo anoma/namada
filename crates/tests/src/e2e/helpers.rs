@@ -608,8 +608,10 @@ fn make_hermes_chain_config_for_cosmos(
 ) -> Value {
     let mut table = toml::map::Map::new();
     table.insert("mode".to_owned(), Value::String("push".to_owned()));
-    let offset = chain_type.get_offset();
-    let url = format!("ws://127.0.0.1:6416{}/websocket", offset);
+    let url = format!(
+        "ws://127.0.0.1:{}/websocket",
+        chain_type.get_rpc_port_number()
+    );
     table.insert("url".to_owned(), Value::String(url));
     table.insert("batch_delay".to_owned(), Value::String("500ms".to_owned()));
     let event_source = Value::Table(table);
@@ -623,11 +625,17 @@ fn make_hermes_chain_config_for_cosmos(
 
     chain.insert(
         "rpc_addr".to_owned(),
-        Value::String(format!("http://127.0.0.1:6416{}", offset)),
+        Value::String(format!(
+            "http://127.0.0.1:{}",
+            chain_type.get_rpc_port_number()
+        )),
     );
     chain.insert(
         "grpc_addr".to_owned(),
-        Value::String(format!("http://127.0.0.1:{}", offset + 9090)),
+        Value::String(format!(
+            "http://127.0.0.1:{}",
+            chain_type.get_grpc_port_number()
+        )),
     );
 
     chain.insert("event_source".to_owned(), event_source);
@@ -672,9 +680,8 @@ pub fn update_cosmos_config(test: &Test) -> Result<()> {
             *timeout_propose = "1s".into();
         }
     }
-    let offset = CosmosChainType::chain_type(test.net.chain_id.as_str())
-        .unwrap()
-        .get_offset();
+    let chain_type =
+        CosmosChainType::chain_type(test.net.chain_id.as_str()).unwrap();
     let p2p = values
         .get_mut("p2p")
         .expect("Test failed")
@@ -683,7 +690,8 @@ pub fn update_cosmos_config(test: &Test) -> Result<()> {
     let Some(laddr) = p2p.get_mut("laddr") else {
         panic!("Test failed")
     };
-    *laddr = format!("tcp://0.0.0.0:266{}{}", offset, offset).into();
+    *laddr =
+        format!("tcp://0.0.0.0:{}", chain_type.get_p2p_port_number()).into();
     let rpc = values
         .get_mut("rpc")
         .expect("Test failed")
@@ -692,7 +700,8 @@ pub fn update_cosmos_config(test: &Test) -> Result<()> {
     let Some(laddr) = rpc.get_mut("laddr") else {
         panic!("Test failed")
     };
-    *laddr = format!("tcp://0.0.0.0:6416{offset}").into();
+    *laddr =
+        format!("tcp://0.0.0.0:{}", chain_type.get_rpc_port_number()).into();
 
     let mut file = OpenOptions::new()
         .write(true)
@@ -761,10 +770,9 @@ pub fn update_cosmos_config(test: &Test) -> Result<()> {
 }
 
 pub fn get_cosmos_rpc_address(test: &Test) -> String {
-    let offset = CosmosChainType::chain_type(test.net.chain_id.as_str())
-        .unwrap()
-        .get_offset();
-    format!("127.0.0.1:6416{offset}")
+    let chain_type =
+        CosmosChainType::chain_type(test.net.chain_id.as_str()).unwrap();
+    format!("127.0.0.1:{}", chain_type.get_rpc_port_number())
 }
 
 pub fn find_cosmos_address(

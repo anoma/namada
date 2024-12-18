@@ -1383,10 +1383,24 @@ impl CosmosChainType {
         }
     }
 
-    pub fn get_offset(&self) -> u64 {
+    pub fn get_p2p_port_number(&self) -> u64 {
+        10_000 + self.get_offset()
+    }
+
+    pub fn get_rpc_port_number(&self) -> u64 {
+        20_000 + self.get_offset()
+    }
+
+    pub fn get_grpc_port_number(&self) -> u64 {
+        30_000 + self.get_offset()
+    }
+
+    fn get_offset(&self) -> u64 {
+        // NB: ensure none of these ever conflict
         match self {
-            Self::Gaia(Some(off)) => *off,
-            _ => 0,
+            Self::CosmWasm => 0,
+            Self::Gaia(None) => 1,
+            Self::Gaia(Some(off)) => 2 + *off,
         }
     }
 }
@@ -1604,7 +1618,6 @@ pub mod constants {
     // Gaia or CosmWasm
     pub const GAIA_CHAIN_ID: &str = "gaia";
     pub const COSMWASM_CHAIN_ID: &str = "cosmwasm";
-    pub const COSMOS_RPC: &str = "127.0.0.1:64160";
     pub const COSMOS_USER: &str = "user";
     pub const COSMOS_RELAYER: &str = "relayer";
     pub const COSMOS_VALIDATOR: &str = "validator";

@@ -2218,7 +2218,7 @@ fn run_cosmos(test: &Test, kill: bool) -> Result<NamadaCmd> {
             .output()
             .unwrap();
     }
-    let port_arg = format!("0.0.0.0:{}", 9090 + chain_type.get_offset());
+    let port_arg = format!("0.0.0.0:{}", chain_type.get_grpc_port_number());
     let args = ["start", "--pruning", "nothing", "--grpc.address", &port_arg];
     let cosmos = run_cosmos_cmd(test, args, Some(40))?;
     Ok(cosmos)
@@ -2853,10 +2853,9 @@ fn transfer_from_cosmos(
     let port_id = port_id.to_string();
     let channel_id = channel_id.to_string();
     let amount = format!("{}{}", amount, token.as_ref());
-    let offset = CosmosChainType::chain_type(test.net.chain_id.as_str())
-        .unwrap()
-        .get_offset();
-    let rpc = format!("tcp://127.0.0.1:6416{offset}");
+    let chain_type =
+        CosmosChainType::chain_type(test.net.chain_id.as_str()).unwrap();
+    let rpc = format!("tcp://127.0.0.1:{}", chain_type.get_rpc_port_number());
     // If the receiver is a pyament address we want to mask it to the more
     // general MASP internal address to improve on privacy
     let receiver = match PaymentAddress::from_str(receiver.as_ref()) {
@@ -3015,10 +3014,9 @@ fn check_cosmos_balance(
     expected_amount: u64,
 ) -> Result<()> {
     let addr = find_cosmos_address(test, owner)?;
-    let offset = CosmosChainType::chain_type(test.net.chain_id.as_str())
-        .unwrap()
-        .get_offset();
-    let rpc = format!("tcp://127.0.0.1:6416{offset}");
+    let chain_type =
+        CosmosChainType::chain_type(test.net.chain_id.as_str()).unwrap();
+    let rpc = format!("tcp://127.0.0.1:{}", chain_type.get_rpc_port_number());
     let args = ["query", "bank", "balances", &addr, "--node", &rpc];
     let mut cosmos = run_cosmos_cmd(test, args, Some(40))?;
     cosmos.exp_string(&format!("amount: \"{expected_amount}\""))?;
