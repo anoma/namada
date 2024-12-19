@@ -125,12 +125,12 @@ impl NamadaTypes for SdkTypes {
     type Address = Address;
     type BalanceOwner = namada_core::masp::BalanceOwner;
     type BlockHeight = namada_core::chain::BlockHeight;
-    type Epoch = namada_core::chain::Epoch;
     type BpConversionTable = HashMap<Address, BpConversionTableEntry>;
     type ConfigRpcTendermintAddress = tendermint_rpc::Url;
     type Data = Vec<u8>;
     type DatedSpendingKey = DatedSpendingKey;
     type DatedViewingKey = DatedViewingKey;
+    type Epoch = namada_core::chain::Epoch;
     type EthereumAddress = ();
     type Keypair = namada_core::key::common::SecretKey;
     type MaspIndexerAddress = String;

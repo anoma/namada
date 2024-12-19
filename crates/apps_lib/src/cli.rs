@@ -7569,12 +7569,12 @@ pub mod args {
         type Address = WalletAddress;
         type BalanceOwner = WalletBalanceOwner;
         type BlockHeight = BlockHeight;
-        type Epoch = Epoch;
         type BpConversionTable = PathBuf;
         type ConfigRpcTendermintAddress = ConfigRpcAddress;
         type Data = PathBuf;
         type DatedSpendingKey = WalletDatedSpendingKey;
         type DatedViewingKey = WalletDatedViewingKey;
+        type Epoch = Epoch;
         type EthereumAddress = String;
         type Keypair = WalletKeypair;
         type MaspIndexerAddress = String;
