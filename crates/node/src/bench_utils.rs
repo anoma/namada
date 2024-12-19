@@ -12,8 +12,6 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::{Arc, Once, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-use borsh::{BorshDeserialize, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
 use masp_primitives::transaction::components::sapling::builder::RngBuildParams;
 use masp_primitives::transaction::Transaction;
 use masp_primitives::zip32::ExtendedFullViewingKey;
@@ -24,6 +22,9 @@ use namada_apps_lib::cli::Context;
 use namada_apps_lib::wallet::{defaults, CliWalletUtils};
 use namada_sdk::address::{self, Address, InternalAddress, MASP};
 use namada_sdk::args::ShieldedSync;
+use namada_sdk::borsh::{
+    self, BorshDeserialize, BorshSerialize, BorshSerializeExt,
+};
 use namada_sdk::chain::testing::get_dummy_header;
 use namada_sdk::chain::{BlockHeight, ChainId, Epoch};
 use namada_sdk::events::extend::{

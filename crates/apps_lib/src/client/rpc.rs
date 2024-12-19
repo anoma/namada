@@ -3,7 +3,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::io;
 
-use borsh::BorshDeserialize;
 use color_eyre::owo_colors::OwoColorize;
 use data_encoding::HEXLOWER;
 use either::Either;
@@ -15,6 +14,7 @@ use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada_core::masp::{BalanceOwner, MaspEpoch};
 use namada_core::token::Amount;
 use namada_sdk::address::{Address, InternalAddress, MASP};
+use namada_sdk::borsh::BorshDeserialize;
 use namada_sdk::chain::{BlockHeight, Epoch};
 use namada_sdk::collections::{HashMap, HashSet};
 use namada_sdk::control_flow::time::{Duration, Instant};

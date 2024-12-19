@@ -9,7 +9,6 @@ use std::hash::Hash;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
-use borsh_ext::BorshSerializeExt;
 use data_encoding::HEXUPPER;
 use namada_macros::BorshDeserializer;
 #[cfg(feature = "migrations")]
@@ -21,6 +20,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::address;
+use crate::borsh::BorshSerializeExt;
 use crate::hash::{KeccakHasher, Sha256Hasher, StorageHasher};
 use crate::keccak::{keccak_hash, KeccakHash};
 

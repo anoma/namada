@@ -90,7 +90,7 @@ circular-queue = "0.2.6"
 clap = "4.5"
 clap_complete = "4.5"
 clap_complete_nushell = "4.5"
-clru = {git = "https://github.com/marmeladema/clru-rs.git", rev = "71ca566"}
+clru = "0.6.2"
 color-eyre = "0.6.2"
 concat-idents = "1.1.2"
 config = "0.14.1"
@@ -104,10 +104,10 @@ ed25519-consensus = "2.1.0"
 either = "1.12.0"
 escargot = "0.5.7"
 ethabi = "18.0.0"
-ethbridge-bridge-contract = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.24.0"}
-ethbridge-bridge-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.24.0"}
-ethbridge-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.24.0"}
-ethbridge-structs = { git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.24.0" }
+ethbridge-bridge-contract = "0.24.1"
+ethbridge-bridge-events = "0.24.1"
+ethbridge-events = "0.24.1"
+ethbridge-structs = "0.24.1"
 ethers = "2.0.0"
 expectrl = "0.7.0"
 eyre = "0.6.12"
@@ -122,7 +122,7 @@ ibc = { git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "38bd2a32f3511
 ibc-derive = { git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "38bd2a32f35117d4d9165a3c68c64ccd87ad56dd" }
 ibc-testkit = { git = "https://github.com/heliaxdev/cosmos-ibc-rs", rev = "38bd2a32f35117d4d9165a3c68c64ccd87ad56dd", default-features = false }
 ics23 = "0.12.0"
-index-set = { git = "https://github.com/heliaxdev/index-set", tag = "v0.8.1", features = ["serialize-borsh", "serialize-serde"] }
+usize-set = { version = "0.10.3", features = ["serialize-borsh", "serialize-serde"] }
 indexmap = { git = "https://github.com/heliaxdev/indexmap", tag = "2.2.4-heliax-1", features = ["borsh-schema", "serde"] }
 init-once = "0.6.0"
 itertools = "0.12.1"
@@ -179,7 +179,7 @@ sha2 = "0.9.3"
 sha2-const = "0.1.2"
 signal-hook = "0.3.9"
 slip10_ed25519 = "0.1.3"
-smooth-operator = {git = "https://github.com/heliaxdev/smooth-operator", tag = "v0.7.0"}
+smooth-operator = "0.7.2"
 # sysinfo with disabled multithread feature
 sysinfo = {version = "0.27.8", default-features = false}
 tar = "0.4.37"
@@ -200,8 +200,7 @@ toml = "0.5.8"
 tonic = "0.8.3"
 tonic-build = "0.11.0"
 tower = "0.4"
-# branch yuji/tendermint-0.38
-tower-abci = { git = "https://github.com/heliaxdev/tower-abci", rev = "30d2a8cdf8321b599ae13ba74f4c78217a64ce58" }
+tower-abci = "0.16.0"
 tracing = "0.1.30"
 tracing-appender = "0.2.2"
 tracing-log = "0.2.0"

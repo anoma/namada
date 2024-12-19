@@ -641,10 +641,10 @@ impl InternalAddress {
 
 #[cfg(test)]
 pub mod tests {
-    use borsh_ext::BorshSerializeExt;
     use proptest::prelude::*;
 
     use super::*;
+    use crate::borsh::BorshSerializeExt;
 
     /// Run `cargo test gen_established_address -- --nocapture` to generate a
     /// new established address.

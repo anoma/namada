@@ -370,14 +370,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "borsh-ext"
-version = "1.2.0"
-source = "git+https://github.com/heliaxdev/borsh-ext?tag=v1.2.0#a62fee3e847e512cad9ac0f1fd5a900e5db9ba37"
-dependencies = [
- "borsh",
-]
-
-[[package]]
 name = "bumpalo"
 version = "3.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -483,8 +475,9 @@ dependencies = [
 
 [[package]]
 name = "clru"
-version = "0.5.0"
-source = "git+https://github.com/marmeladema/clru-rs.git?rev=71ca566#71ca566915f21f3c308091ca7756a91b0f8b5afc"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cbd0f76e066e64fdc5631e3bb46381254deab9ef1158292f27c8c57e3bf3fe59"
 
 [[package]]
 name = "const-default"
@@ -810,8 +803,9 @@ dependencies = [
 
 [[package]]
 name = "ethbridge-structs"
-version = "0.24.0"
-source = "git+https://github.com/heliaxdev/ethbridge-rs?tag=v0.24.0#d66708bb8a734111988b9eaf08c7473bd7020c00"
+version = "0.24.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c7b3e89a2332887bf096cd589ac5781a6664b4fb0881506aa99b2be32e8e086"
 dependencies = [
  "ethabi",
 ]
@@ -1659,15 +1653,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce23b50ad8242c51a442f3ff322d56b02f08852c77e4c0b4d3fd684abc89c683"
 
 [[package]]
-name = "index-set"
-version = "0.8.0"
-source = "git+https://github.com/heliaxdev/index-set?tag=v0.8.1#b0d928f83cf0d465ccda299d131e8df2859b5184"
-dependencies = [
- "borsh",
- "serde",
-]
-
-[[package]]
 name = "indexmap"
 version = "2.2.4"
 source = "git+https://github.com/heliaxdev/indexmap?tag=2.2.4-heliax-1#b5b5b547bd6ab04bbb16e060326a50ddaeb6c909"
@@ -1974,7 +1959,6 @@ version = "0.46.1"
 dependencies = [
  "bech32",
  "borsh",
- "borsh-ext",
  "chrono",
  "data-encoding",
  "ed25519-consensus",
@@ -1984,7 +1968,6 @@ dependencies = [
  "ibc",
  "ics23",
  "impl-num-traits",
- "index-set",
  "indexmap 2.2.4",
  "k256",
  "masp_primitives",
@@ -2009,6 +1992,7 @@ dependencies = [
  "tiny-keccak",
  "tracing",
  "uint",
+ "usize-set",
  "zeroize",
 ]
 
@@ -3325,16 +3309,18 @@ dependencies = [
 
 [[package]]
 name = "smooth-operator"
-version = "0.7.0"
-source = "git+https://github.com/heliaxdev/smooth-operator?tag=v0.7.0#0e182707f5e5bb9c6e0efa2d235dc9efd715d0a1"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9b6dece39b9b4d19edc6399498b056d1511135b70b5adf7822affdedf5715598"
 dependencies = [
  "smooth-operator-impl",
 ]
 
 [[package]]
 name = "smooth-operator-impl"
-version = "0.7.0"
-source = "git+https://github.com/heliaxdev/smooth-operator?tag=v0.7.0#0e182707f5e5bb9c6e0efa2d235dc9efd715d0a1"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "867851a695e22b0d1fc85f2f84dba29fef7e5d571f12fb23253e0b213bf190f7"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3900,6 +3886,16 @@ checksum = "fc1de2c688dc15305988b563c3854064043356019f97a4b46276fe734c4f07ea"
 dependencies = [
  "crypto-common",
  "subtle",
+]
+
+[[package]]
+name = "usize-set"
+version = "0.10.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12fbfdf92a2a7f550e532818381f9e8367cac2115671edb024120836f33985e9"
+dependencies = [
+ "borsh",
+ "serde",
 ]
 
 [[package]]

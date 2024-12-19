@@ -3,7 +3,6 @@ use std::collections::BTreeMap;
 pub(super) mod eth_bridge;
 
 use borsh::BorshDeserialize;
-use borsh_ext::BorshSerializeExt;
 use masp_primitives::asset_type::AssetType;
 use masp_primitives::merkle_tree::MerklePath;
 use masp_primitives::sapling::Node;
@@ -27,6 +26,7 @@ use namada_token::storage_key::masp_token_map_key;
 use namada_tx::data::DryRunResult;
 
 use self::eth_bridge::{EthBridge, ETH_BRIDGE};
+use crate::borsh::BorshSerializeExt;
 use crate::events::log::dumb_queries;
 use crate::events::Event;
 use crate::ibc::core::host::types::identifiers::{
