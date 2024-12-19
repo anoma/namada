@@ -140,9 +140,9 @@ where
         Ok(params.pipeline_len)
     }
 
-    fn withdrawable_epoch_offset(storage: &S) -> Result<u64> {
+    fn unbonding_len(storage: &S) -> Result<u64> {
         let params = storage::read_owned_pos_params(storage)?;
-        Ok(params.withdrawable_epoch_offset())
+        Ok(params.unbonding_len)
     }
 
     fn total_active_stake<Gov>(
