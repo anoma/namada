@@ -606,8 +606,9 @@ where
     match epoch {
         None => Ok(reward_tokens),
         Some(epoch) => {
-            // When querying by epoch, since query_reward_tokens includes rewards_counter not
-            // based on epoch, we need to subtract it and instead add the rewards_counter from
+            // When querying by epoch, since query_reward_tokens includes
+            // rewards_counter not based on epoch, we need to
+            // subtract it and instead add the rewards_counter from
             // the height of the epoch we are querying.
             let source = source.unwrap_or_else(|| validator.clone());
             let rewards_counter_last_epoch =
@@ -649,8 +650,9 @@ where
     // Shortcut: avoid costly lookup of non-existent storage key in history
     // by first checking to see if it currently exists in memory before
     // querying by height.
-    // TODO: this might not be valid if rewards have been claimed in the current epoch?
-    //       (because the rewards_counter would be removed from storage until the next epoch)
+    // TODO: this might not be valid if rewards have been claimed in the current
+    // epoch? (because the rewards_counter would be removed from
+    // storage until the next epoch)
     if !ctx.state.has_key(&storage_key)? {
         return Ok(token::Amount::from(0));
     }
@@ -929,9 +931,11 @@ mod test {
         };
         let result = POS.handle(ctx, &request);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid Tendermint address"))
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid Tendermint address")
+        )
     }
 }
