@@ -1931,7 +1931,7 @@ pub async fn query_and_print_rewards<N: Namada>(
         context.io(),
         "{}: {} NAM",
         epoch
-            .map(|e| format!("Rewards for epoch {}", e))
+            .map(|e| format!("Rewards at epoch {}", e))
             .unwrap_or_else(
                 || "Current rewards available for claim".to_string()
             ),
