@@ -740,7 +740,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         };
         let next_epoch = current_epoch
             .next()
-            .ok_or_else(|| eyre!("Overflowed MASP epoch"))?;
+            .ok_or_else(|| eyre!("The final MASP epoch is already afoot."))?;
         // Get the current amount, this serves as the reference point to
         // estimate future rewards
         let current_exchanged_balance = self
@@ -800,10 +800,12 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                 .0;
             let mut est_conv = I128Sum::zero();
             for ((_, mut asset_data), val) in decoded_conv.into_components() {
-                // We must upconvert the components of the conversion unless
-                // this conversion is for a non-native token and the component
-                // itself is the native token. In this case we should avoid
-                // upconverting it since conversions for non-native tokens must
+                // We must upconvert the components of the conversion if
+                // this conversion is for the native token or the component
+                // itself is not the native token. If instead the conversion
+                // component is the native token and it is for a non-native
+                // token, then we should avoid upconverting it
+                // since conversions for non-native tokens must
                 // always refer to a specific epoch (MaspEpoch(0)) native token
                 if asset.token == native_token
                     || asset_data.token != native_token
@@ -836,9 +838,9 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
         // rewards being enabled for the native token or not, we'll find the
         // balance we look for at either epoch 0 or the current epoch. If
         // rewards are not enabled for the native token we might have
-        // balances at any epochs in between these two but these would be
+        // balances at any epochs in between these two. These would be
         // guaranteed to be the same in both the exchanged amounts we've
-        // computed here above, meaning they are irrelevant for the
+        // computed here above. This means they are irrelevant for the
         // estimation of the next epoch rewards since they would cancel out
         // anyway
         let mut current_native_balance = ValueSum::<AssetType, i128>::zero();
@@ -918,7 +920,7 @@ pub trait ShieldedApi<U: ShieldedUtils + MaybeSend + MaybeSync>:
                         _ => {
                             return Err(eyre!(
                                 "Found reward asset with an epoch different \
-                                 than the current one"
+                                 than the 0th"
                             ));
                         }
                     }
@@ -2260,7 +2262,8 @@ mod test_shielded_wallet {
                     vk,
                 );
 
-                // If this flag is clear we test that the estimation logic can
+                // If this flag is set we also shield at the previous MaspEpoch(1),
+                // otherwise we test that the estimation logic can
                 // handle rewards for assets coming only from the current epoch,
                 // i.e. assets for which there are no conversions yet.
                 if shield_at_previous_epoch {
@@ -2301,6 +2304,9 @@ mod test_shielded_wallet {
                     rewards_est,
                     DenominatedAmount::native(
                         Amount::from_masp_denominated_i128(
+                            // The expected rewards are just principal * reward_rate
+                            // but if we also shielded at the previous epoch then we
+                            // expect double the rewards
                             (1 + i128::from(shield_at_previous_epoch)) * reward_rate * i128::from(principal),
                             MaspDigitPos::Zero
                         ).unwrap()
@@ -2575,9 +2581,10 @@ mod test_shielded_wallet {
                     );
                 }
 
-                // If this flag is clear we test that the estimation logic can
-                // handle rewards for the native asset coming only from the current epoch,
-                // i.e. for which there are no conversions yet.
+                // If this flag is set we also shield at the previous MaspEpoch(1),
+                // otherwise we test that the estimation logic can
+                // handle rewards for assets coming only from the current epoch,
+                // i.e. assets for which there are no conversions yet.
                 if shield_at_previous_epoch {
                     let asset_data = AssetData {
                         token: native_token.clone(),
@@ -2603,6 +2610,11 @@ mod test_shielded_wallet {
                         rewards_est,
                         DenominatedAmount::native(
                             Amount::from_masp_denominated_i128(
+                                // The expected rewards are just principal * reward_rate
+                                // but if we also shielded at the previous epoch then we
+                                // expect double the rewards and, on top of that, we
+                                // need to account for the compounding of rewards
+                                // given to the native token, hence the (2 + reward_rate)
                                 (2 + reward_rate) * reward_rate * i128::from(principal),
                                 MaspDigitPos::Zero
                             ).unwrap()
