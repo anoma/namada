@@ -1,1 +1,1 @@
-1.10.4-namada-beta18-test2
+1.10.4-namada-beta18-test3
