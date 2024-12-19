@@ -104,10 +104,10 @@ ed25519-consensus = "2.1.0"
 either = "1.12.0"
 escargot = "0.5.7"
 ethabi = "18.0.0"
-ethbridge-bridge-contract = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.24.0"}
-ethbridge-bridge-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.24.0"}
-ethbridge-events = {git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.24.0"}
-ethbridge-structs = { git = "https://github.com/heliaxdev/ethbridge-rs", tag = "v0.24.0" }
+ethbridge-bridge-contract = "0.24.1"
+ethbridge-bridge-events = "0.24.1"
+ethbridge-events = "0.24.1"
+ethbridge-structs = "0.24.1"
 ethers = "2.0.0"
 expectrl = "0.7.0"
 eyre = "0.6.12"
