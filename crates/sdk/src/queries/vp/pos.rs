@@ -13,6 +13,7 @@ use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::queries::{
     find_delegation_validators, find_delegations,
 };
+use namada_proof_of_stake::rewards::read_rewards_counter;
 use namada_proof_of_stake::slashing::{
     find_all_enqueued_slashes, find_all_slashes,
 };
@@ -34,9 +35,9 @@ use namada_proof_of_stake::types::{
     WeightedValidator,
 };
 use namada_proof_of_stake::{bond_amount, query_reward_tokens};
-use namada_state::{DBIter, KeySeg, StorageHasher, DB};
+use namada_state::{DBIter, KeySeg, StorageHasher, StorageRead, DB};
 use namada_storage::collections::lazy_map;
-use namada_storage::OptionExt;
+use namada_storage::{OptionExt, ResultExt};
 
 use crate::governance;
 use crate::queries::types::RequestCtx;
@@ -594,14 +595,68 @@ where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let epoch = epoch.unwrap_or(ctx.state.in_mem().last_epoch);
-
-    query_reward_tokens::<_, governance::Store<_>>(
+    let reward_tokens = query_reward_tokens::<_, governance::Store<_>>(
         ctx.state,
         source.as_ref(),
         &validator,
-        epoch,
-    )
+        epoch.unwrap_or(ctx.state.in_mem().last_epoch),
+    )?;
+
+    match epoch {
+        None => Ok(reward_tokens),
+        Some(epoch) => {
+            // When querying by epoch, since query_reward_tokens includes rewards_counter not
+            // based on epoch, we need to subtract it and instead add the rewards_counter from
+            // the height of the epoch we are querying.
+            let source = source.unwrap_or_else(|| validator.clone());
+            let rewards_counter_last_epoch =
+                read_rewards_counter(ctx.state, &source, &validator)?;
+
+            let rewards_counter_at_epoch = {
+                // Choose the height at the end of the epoch in order to maximize the chance of
+                // finding the storage without it being pruned.
+                let height = if epoch == ctx.state.in_mem().last_epoch {
+                    ctx.state.in_mem().get_last_block_height()
+                } else {
+                    ctx.state
+                        .get_epoch_start_height(
+                            epoch.checked_add(1).unwrap_or_default(),
+                        )?
+                        .ok_or(namada_storage::Error::new_const(
+                            "Epoch not found",
+                        ))?
+                        .checked_sub(1)
+                        .unwrap_or_default()
+                };
+
+                let storage_key =
+                    namada_proof_of_stake::storage_key::rewards_counter_key(
+                        &source, &validator,
+                    );
+
+                let storage_value = ctx
+                    .state
+                    .db_read_with_height(&storage_key, height)
+                    .into_storage_result()?;
+
+                storage_value
+                    .0
+                    .map(|bytes| {
+                        token::Amount::try_from_slice(&bytes)
+                            .into_storage_result()
+                    })
+                    .transpose()?
+                    .unwrap_or_default()
+            };
+
+            // Add before subtracting because Amounts are unsigned
+            checked!(
+                reward_tokens + rewards_counter_at_epoch
+                    - rewards_counter_last_epoch
+            )
+            .into_storage_result()
+        }
+    }
 }
 
 fn bonds_and_unbonds<D, H, V, T>(
