@@ -14,8 +14,6 @@ use namada_merkle_tree::{
     StoreType,
 };
 use regex::Regex;
-use serde::de::DeserializeOwned;
-use serde::Serialize;
 use thiserror::Error;
 
 use crate::conversion_state::ConversionState;
@@ -124,9 +122,8 @@ pub trait DB: Debug {
     /// A handle for batch writes
     type WriteBatch: DBWriteBatch;
 
-    /// A type that can apply a key-value
-    /// change to DB.
-    type Migrator: DbMigration + DeserializeOwned;
+    /// A type placeholder for DB migration implementation.
+    type Migrator: DBUpdateVisitor<DB = Self>;
 
     /// Source data to restore a database.
     type RestoreSource<'a>;
@@ -297,16 +294,56 @@ pub trait DB: Debug {
         cf: &DbColFam,
         key: &Key,
         new_value: impl AsRef<[u8]>,
+        persist_diffs: bool,
     ) -> Result<()>;
 
-    /// Apply a series of key-value changes
-    /// to the DB.
-    fn apply_migration_to_batch(
+    /// Get an instance of DB migrator
+    fn migrator() -> Self::Migrator;
+
+    /// Update the merkle tree written for the committed last block
+    fn update_last_block_merkle_tree(
         &self,
-        _updates: impl IntoIterator<Item = Self::Migrator>,
-    ) -> Result<Self::WriteBatch> {
-        unimplemented!()
-    }
+        merkle_tree_stores: MerkleTreeStoresWrite<'_>,
+        is_full_commit: bool,
+    ) -> Result<()>;
+}
+
+/// A CRUD DB access
+pub trait DBUpdateVisitor {
+    /// The DB type
+    type DB;
+
+    /// Try to read key's value from a DB column
+    fn read(&self, db: &Self::DB, key: &Key, cf: &DbColFam) -> Option<Vec<u8>>;
+
+    /// Write key's value to a DB column
+    fn write(
+        &mut self,
+        db: &Self::DB,
+        key: &Key,
+        cf: &DbColFam,
+        value: impl AsRef<[u8]>,
+        persist_diffs: bool,
+    );
+
+    /// Delete key-val
+    fn delete(
+        &mut self,
+        db: &Self::DB,
+        key: &Key,
+        cf: &DbColFam,
+        persist_diffs: bool,
+    );
+
+    /// Get key-vals matching the pattern
+    fn get_pattern(
+        &self,
+        db: &Self::DB,
+        pattern: Regex,
+    ) -> Vec<(String, Vec<u8>)>;
+
+    /// Commit the changes
+    fn commit(self, db: &Self::DB) -> Result<()>;
 }
 
 /// A database prefix iterator.
@@ -359,8 +396,3 @@ pub trait DBIter<'iter> {
 
 /// Atomic batch write.
 pub trait DBWriteBatch {}
-
-/// A type that can apply a key-value change to a DB
-pub trait DbMigration: Debug + Clone + Serialize {}
-
-impl DbMigration for () {}
