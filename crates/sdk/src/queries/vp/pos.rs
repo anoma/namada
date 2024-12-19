@@ -654,7 +654,7 @@ where
     // epoch? (because the rewards_counter would be removed from
     // storage until the next epoch)
     if !ctx.state.has_key(&storage_key)? {
-        return Ok(token::Amount::from(0));
+        return Ok(token::Amount::zero());
     }
 
     let query = RequestQuery {
@@ -666,7 +666,7 @@ where
 
     let value = shell::storage_value(ctx, &query, storage_key)?;
     if value.data.is_empty() {
-        Ok(token::Amount::from(0))
+        Ok(token::Amount::zero())
     } else {
         token::Amount::try_from_slice(&value.data).into_storage_result()
     }
