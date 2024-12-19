@@ -15,6 +15,8 @@ use std::path::{Path, PathBuf};
 
 use color_eyre::eyre::Result;
 use eyre::eyre;
+use ibc_middleware_packet_forward::ForwardMetadata;
+use itertools::Either;
 use namada_apps_lib::client::rpc::query_storage_value_bytes;
 use namada_apps_lib::config::ethereum_bridge;
 use namada_apps_lib::config::genesis::templates;
@@ -48,7 +50,7 @@ use sha2::{Digest, Sha256};
 use crate::e2e::helpers::{
     epoch_sleep, epochs_per_year_from_min_duration, find_address,
     find_cosmos_address, find_payment_address, get_actor_rpc,
-    get_cosmos_gov_address, get_epoch,
+    get_cosmos_gov_address, get_cosmos_rpc_address, get_epoch,
 };
 use crate::e2e::ledger_tests::{
     start_namada_ledger_node_wait_wasm, write_json_file,
@@ -56,8 +58,10 @@ use crate::e2e::ledger_tests::{
 use crate::e2e::setup::{
     self, apply_use_device, run_cosmos_cmd, run_hermes_cmd,
     set_ethereum_bridge_mode, setup_cosmos, setup_hermes, sleep, working_dir,
-    Bin, CosmosChainType, NamadaCmd, Test, Who, ENV_VAR_COSMWASM_CONTRACT_DIR,
+    Bin, CosmosChainType, NamadaCmd, Test, TestDir, Who,
+    ENV_VAR_COSMWASM_CONTRACT_DIR,
 };
+use crate::ibc::primitives::Signer;
 use crate::strings::TX_APPLIED_SUCCESS;
 use crate::{run, run_as};
 
@@ -101,14 +105,15 @@ fn ibc_transfers() -> Result<()> {
             setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
         };
     let (ledger, gaia, test, test_gaia) =
-        run_namada_cosmos(CosmosChainType::Gaia, update_genesis)?;
+        run_namada_cosmos(CosmosChainType::Gaia(None), update_genesis)?;
     let _bg_ledger = ledger.background();
     let _bg_gaia = gaia.background();
 
-    setup_hermes(&test, &test_gaia)?;
+    let hermes_dir = setup_hermes(&test, &test_gaia)?;
     let port_id_namada = FT_PORT_ID.parse().unwrap();
     let port_id_gaia = FT_PORT_ID.parse().unwrap();
     let (channel_id_namada, channel_id_gaia) = create_channel_with_hermes(
+        &hermes_dir,
         &test,
         &test_gaia,
         &port_id_namada,
@@ -116,7 +121,7 @@ fn ibc_transfers() -> Result<()> {
     )?;
 
     // Start relaying
-    let hermes = run_hermes(&test)?;
+    let hermes = run_hermes(&hermes_dir)?;
     let bg_hermes = hermes.background();
 
     // 1. Transparent transfers
@@ -137,7 +142,12 @@ fn ibc_transfers() -> Result<()> {
         None,
         false,
     )?;
-    wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
+    wait_for_packet_relay(
+        &hermes_dir,
+        &port_id_namada,
+        &channel_id_namada,
+        &test,
+    )?;
 
     check_balance(&test, ALBERT, APFEL, 999_998)?;
     let token_addr = find_address(&test, APFEL)?;
@@ -163,7 +173,7 @@ fn ibc_transfers() -> Result<()> {
         None,
         None,
     )?;
-    wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test)?;
+    wait_for_packet_relay(&hermes_dir, &port_id_gaia, &channel_id_gaia, &test)?;
 
     // Check the balances
     check_balance(&test, ALBERT, APFEL, 999_999)?;
@@ -186,7 +196,7 @@ fn ibc_transfers() -> Result<()> {
         None,
         None,
     )?;
-    wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test)?;
+    wait_for_packet_relay(&hermes_dir, &port_id_gaia, &channel_id_gaia, &test)?;
 
     // Check the token on Namada
     let ibc_denom_on_namada =
@@ -209,7 +219,12 @@ fn ibc_transfers() -> Result<()> {
         None,
         false,
     )?;
-    wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
+    wait_for_packet_relay(
+        &hermes_dir,
+        &port_id_namada,
+        &channel_id_namada,
+        &test,
+    )?;
 
     // Check the balances
     check_balance(&test, ALBERT, &ibc_denom_on_namada, 100)?;
@@ -244,10 +259,15 @@ fn ibc_transfers() -> Result<()> {
         100,
         &port_id_gaia,
         &channel_id_gaia,
-        Some(shielding_data_path),
+        Some(Either::Left(shielding_data_path)),
         None,
     )?;
-    wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test_gaia)?;
+    wait_for_packet_relay(
+        &hermes_dir,
+        &port_id_gaia,
+        &channel_id_gaia,
+        &test_gaia,
+    )?;
     // Check the token on Namada
     check_shielded_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 100)?;
     check_cosmos_balance(&test_gaia, COSMOS_USER, COSMOS_COIN, 800)?;
@@ -281,7 +301,12 @@ fn ibc_transfers() -> Result<()> {
         None,
         true,
     )?;
-    wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
+    wait_for_packet_relay(
+        &hermes_dir,
+        &port_id_namada,
+        &channel_id_namada,
+        &test,
+    )?;
     check_shielded_balance(&test, AB_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
     check_cosmos_balance(&test_gaia, COSMOS_USER, COSMOS_COIN, 810)?;
 
@@ -305,10 +330,10 @@ fn ibc_transfers() -> Result<()> {
         1_000_000,
         &port_id_gaia,
         &channel_id_gaia,
-        Some(memo_path),
+        Some(Either::Left(memo_path)),
         None,
     )?;
-    wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test)?;
+    wait_for_packet_relay(&hermes_dir, &port_id_gaia, &channel_id_gaia, &test)?;
     // Check the token on Namada
     check_shielded_balance(&test, AA_VIEWING_KEY, APFEL, 1)?;
 
@@ -330,7 +355,12 @@ fn ibc_transfers() -> Result<()> {
         None,
         false,
     )?;
-    wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
+    wait_for_packet_relay(
+        &hermes_dir,
+        &port_id_namada,
+        &channel_id_namada,
+        &test,
+    )?;
     // The balance should not be changed
     check_balance(&test, ALBERT, APFEL, 999_999)?;
 
@@ -357,10 +387,15 @@ fn ibc_transfers() -> Result<()> {
     sleep(10);
 
     // Restart relaying
-    let hermes = run_hermes(&test)?;
+    let hermes = run_hermes(&hermes_dir)?;
     let bg_hermes = hermes.background();
 
-    wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
+    wait_for_packet_relay(
+        &hermes_dir,
+        &port_id_namada,
+        &channel_id_namada,
+        &test,
+    )?;
     // The balance should not be changed
     check_balance(&test, ALBERT, &ibc_denom_on_namada, 100)?;
 
@@ -380,7 +415,12 @@ fn ibc_transfers() -> Result<()> {
         None,
         true,
     )?;
-    wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
+    wait_for_packet_relay(
+        &hermes_dir,
+        &port_id_namada,
+        &channel_id_namada,
+        &test,
+    )?;
     // Check the token has been refunded to the refund target
     check_shielded_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
     check_balance(&test, IBC_REFUND_TARGET_ALIAS, &ibc_denom_on_namada, 10)?;
@@ -409,10 +449,15 @@ fn ibc_transfers() -> Result<()> {
     sleep(10);
 
     // Restart relaying
-    let hermes = run_hermes(&test)?;
+    let hermes = run_hermes(&hermes_dir)?;
     let _bg_hermes = hermes.background();
 
-    wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
+    wait_for_packet_relay(
+        &hermes_dir,
+        &port_id_namada,
+        &channel_id_namada,
+        &test,
+    )?;
     // Check the token has been refunded to the refund target
     check_shielded_balance(&test, AA_VIEWING_KEY, APFEL, 0)?;
     check_balance(&test, IBC_REFUND_TARGET_ALIAS, APFEL, 1)?;
@@ -438,7 +483,12 @@ fn ibc_transfers() -> Result<()> {
         // MASP VP shall reject it, make it timeout
         Some(Duration::new(10, 0)),
     )?;
-    wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
+    wait_for_packet_relay(
+        &hermes_dir,
+        &port_id_namada,
+        &channel_id_namada,
+        &test,
+    )?;
     // Check the balance didn't change
     check_shielded_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
     check_cosmos_balance(&test_gaia, COSMOS_USER, COSMOS_COIN, 810)?;
@@ -462,11 +512,16 @@ fn ibc_transfers() -> Result<()> {
         101,
         &port_id_gaia,
         &channel_id_gaia,
-        Some(shielding_data_path),
+        Some(Either::Left(shielding_data_path)),
         // MASP VP shall reject it, make it timeout
         Some(Duration::new(10, 0)),
     )?;
-    wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test_gaia)?;
+    wait_for_packet_relay(
+        &hermes_dir,
+        &port_id_gaia,
+        &channel_id_gaia,
+        &test_gaia,
+    )?;
     // Check the balances didn't change
     check_shielded_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
     check_cosmos_balance(&test_gaia, COSMOS_USER, COSMOS_COIN, 810)?;
@@ -493,7 +548,7 @@ fn ibc_nft_transfers() -> Result<()> {
     let _bg_ledger = ledger.background();
     let _bg_wasmd = cosmwasm.background();
 
-    setup_hermes(&test, &test_cosmwasm)?;
+    let hermes_dir = setup_hermes(&test, &test_cosmwasm)?;
     let port_id_namada: PortId = NFT_PORT_ID.parse().unwrap();
 
     let (cw721_contract, ics721_contract) =
@@ -504,6 +559,7 @@ fn ibc_nft_transfers() -> Result<()> {
     let port_id_cosmwasm =
         get_cosmwasm_port_id(&test_cosmwasm, &ics721_contract)?;
     let (channel_id_namada, channel_id_cosmwasm) = create_channel_with_hermes(
+        &hermes_dir,
         &test,
         &test_cosmwasm,
         &port_id_namada,
@@ -528,7 +584,12 @@ fn ibc_nft_transfers() -> Result<()> {
         None,
         None,
     )?;
-    clear_packet(&port_id_cosmwasm, &channel_id_cosmwasm, &test_cosmwasm)?;
+    clear_packet(
+        &hermes_dir,
+        &port_id_cosmwasm,
+        &channel_id_cosmwasm,
+        &test_cosmwasm,
+    )?;
     check_balance(&test, &namada_receiver, &ibc_trace_on_namada, 1)?;
 
     // Namada to CosmWasm
@@ -546,7 +607,7 @@ fn ibc_nft_transfers() -> Result<()> {
         None,
         false,
     )?;
-    clear_packet(&port_id_namada, &channel_id_namada, &test)?;
+    clear_packet(&hermes_dir, &port_id_namada, &channel_id_namada, &test)?;
     check_balance(&test, &namada_receiver, &ibc_trace_on_namada, 0)?;
 
     // 2. Shielding/Unshielding transfers
@@ -572,7 +633,12 @@ fn ibc_nft_transfers() -> Result<()> {
         Some(shielding_data_path),
         None,
     )?;
-    clear_packet(&port_id_cosmwasm, &channel_id_cosmwasm, &test_cosmwasm)?;
+    clear_packet(
+        &hermes_dir,
+        &port_id_cosmwasm,
+        &channel_id_cosmwasm,
+        &test_cosmwasm,
+    )?;
     check_shielded_balance(&test, AA_VIEWING_KEY, &ibc_trace_on_namada, 1)?;
 
     // Shielded transfer on Namada
@@ -604,7 +670,7 @@ fn ibc_nft_transfers() -> Result<()> {
         None,
         true,
     )?;
-    clear_packet(&port_id_namada, &channel_id_namada, &test)?;
+    clear_packet(&hermes_dir, &port_id_namada, &channel_id_namada, &test)?;
     check_shielded_balance(&test, AB_VIEWING_KEY, &ibc_trace_on_namada, 0)?;
 
     Ok(())
@@ -627,14 +693,15 @@ fn pgf_over_ibc() -> Result<()> {
             setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
         };
     let (ledger, gaia, test, test_gaia) =
-        run_namada_cosmos(CosmosChainType::Gaia, update_genesis)?;
+        run_namada_cosmos(CosmosChainType::Gaia(None), update_genesis)?;
     let _bg_ledger = ledger.background();
     let _bg_gaia = gaia.background();
 
-    setup_hermes(&test, &test_gaia)?;
+    let hermes_dir = setup_hermes(&test, &test_gaia)?;
     let port_id_namada = FT_PORT_ID.parse().unwrap();
     let port_id_gaia: PortId = FT_PORT_ID.parse().unwrap();
     let (channel_id_namada, channel_id_gaia) = create_channel_with_hermes(
+        &hermes_dir,
         &test,
         &test_gaia,
         &port_id_namada,
@@ -642,7 +709,7 @@ fn pgf_over_ibc() -> Result<()> {
     )?;
 
     // Start relaying
-    let hermes = run_hermes(&test)?;
+    let hermes = run_hermes(&hermes_dir)?;
     let _bg_hermes = hermes.background();
 
     // Transfer to PGF account
@@ -688,7 +755,12 @@ fn pgf_over_ibc() -> Result<()> {
     while epoch < grace_epoch {
         epoch = epoch_sleep(&test, &rpc, 120)?;
     }
-    wait_for_packet_relay(&port_id_namada, &channel_id_namada, &test)?;
+    wait_for_packet_relay(
+        &hermes_dir,
+        &port_id_namada,
+        &channel_id_namada,
+        &test,
+    )?;
 
     // Check balances after funding over IBC
     let token_addr = find_address(&test, NAM)?;
@@ -724,7 +796,7 @@ fn fee_payment_with_ibc_token() -> Result<()> {
             setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
         };
     let (ledger, gaia, test, test_gaia) =
-        run_namada_cosmos(CosmosChainType::Gaia, update_genesis)?;
+        run_namada_cosmos(CosmosChainType::Gaia(None), update_genesis)?;
     let _bg_ledger = ledger.background();
     let _bg_gaia = gaia.background();
 
@@ -747,10 +819,11 @@ fn fee_payment_with_ibc_token() -> Result<()> {
     submit_votes(&test)?;
 
     // Create an IBC channel while waiting the grace epoch
-    setup_hermes(&test, &test_gaia)?;
+    let hermes_dir = setup_hermes(&test, &test_gaia)?;
     let port_id_gaia = FT_PORT_ID.parse().unwrap();
     let port_id_namada = FT_PORT_ID.parse().unwrap();
     let (channel_id_namada, channel_id_gaia) = create_channel_with_hermes(
+        &hermes_dir,
         &test,
         &test_gaia,
         &port_id_namada,
@@ -759,7 +832,7 @@ fn fee_payment_with_ibc_token() -> Result<()> {
     let ibc_token_on_namada =
         format!("{port_id_namada}/{channel_id_namada}/{COSMOS_COIN}");
     // Start relaying
-    let hermes = run_hermes(&test)?;
+    let hermes = run_hermes(&hermes_dir)?;
     let _bg_hermes = hermes.background();
 
     // wait for the grace
@@ -781,7 +854,7 @@ fn fee_payment_with_ibc_token() -> Result<()> {
         None,
         None,
     )?;
-    wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test)?;
+    wait_for_packet_relay(&hermes_dir, &port_id_gaia, &channel_id_gaia, &test)?;
 
     // Check the token on Namada
     check_balance(&test, ALBERT_KEY, &ibc_token_on_namada, 250)?;
@@ -830,7 +903,7 @@ fn ibc_token_inflation() -> Result<()> {
             setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
         };
     let (ledger, gaia, test, test_gaia) =
-        run_namada_cosmos(CosmosChainType::Gaia, update_genesis)?;
+        run_namada_cosmos(CosmosChainType::Gaia(None), update_genesis)?;
     let _bg_ledger = ledger.background();
     let _bg_gaia = gaia.background();
 
@@ -853,17 +926,18 @@ fn ibc_token_inflation() -> Result<()> {
     submit_votes(&test)?;
 
     // Create an IBC channel while waiting the grace epoch
-    setup_hermes(&test, &test_gaia)?;
+    let hermes_dir = setup_hermes(&test, &test_gaia)?;
     let port_id_namada = FT_PORT_ID.parse().unwrap();
     let port_id_gaia = FT_PORT_ID.parse().unwrap();
     let (channel_id_namada, channel_id_gaia) = create_channel_with_hermes(
+        &hermes_dir,
         &test,
         &test_gaia,
         &port_id_namada,
         &port_id_gaia,
     )?;
     // Start relaying
-    let hermes = run_hermes(&test)?;
+    let hermes = run_hermes(&hermes_dir)?;
     let _bg_hermes = hermes.background();
 
     // wait for the grace
@@ -893,10 +967,10 @@ fn ibc_token_inflation() -> Result<()> {
         1,
         &port_id_gaia,
         &channel_id_gaia,
-        Some(shielding_data_path),
+        Some(Either::Left(shielding_data_path)),
         None,
     )?;
-    wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test)?;
+    wait_for_packet_relay(&hermes_dir, &port_id_gaia, &channel_id_gaia, &test)?;
 
     // wait the next masp epoch to dispense the reward
     let mut epoch = get_epoch(&test, &rpc).unwrap();
@@ -922,14 +996,16 @@ fn ibc_upgrade_client() -> Result<()> {
             setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
         };
     let (ledger, gaia, test, test_gaia) =
-        run_namada_cosmos(CosmosChainType::Gaia, update_genesis)?;
+        run_namada_cosmos(CosmosChainType::Gaia(None), update_genesis)?;
     let _bg_ledger = ledger.background();
     let _bg_gaia = gaia.background();
+    sleep(5);
 
-    setup_hermes(&test, &test_gaia)?;
+    let hermes_dir = setup_hermes(&test, &test_gaia)?;
     let port_id_namada = FT_PORT_ID.parse().unwrap();
     let port_id_gaia: PortId = FT_PORT_ID.parse().unwrap();
     create_channel_with_hermes(
+        &hermes_dir,
         &test,
         &test_gaia,
         &port_id_namada,
@@ -954,7 +1030,7 @@ fn ibc_upgrade_client() -> Result<()> {
     }
 
     // Upgrade the IBC client of Gaia on Namada with Hermes
-    upgrade_client(&test, test.net.chain_id.to_string(), upgrade_height)?;
+    upgrade_client(&hermes_dir, test.net.chain_id.to_string(), upgrade_height)?;
 
     // Check the upgraded client
     let upgraded_client_state =
@@ -993,14 +1069,15 @@ fn ibc_rate_limit() -> Result<()> {
         setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
     };
     let (ledger, gaia, test, test_gaia) =
-        run_namada_cosmos(CosmosChainType::Gaia, update_genesis)?;
+        run_namada_cosmos(CosmosChainType::Gaia(None), update_genesis)?;
     let _bg_ledger = ledger.background();
     let _bg_gaia = gaia.background();
 
-    setup_hermes(&test, &test_gaia)?;
+    let hermes_dir = setup_hermes(&test, &test_gaia)?;
     let port_id_namada = FT_PORT_ID.parse().unwrap();
     let port_id_gaia: PortId = FT_PORT_ID.parse().unwrap();
     let (channel_id_namada, channel_id_gaia) = create_channel_with_hermes(
+        &hermes_dir,
         &test,
         &test_gaia,
         &port_id_namada,
@@ -1008,7 +1085,7 @@ fn ibc_rate_limit() -> Result<()> {
     )?;
 
     // Start relaying
-    let hermes = run_hermes(&test)?;
+    let hermes = run_hermes(&hermes_dir)?;
     let _bg_hermes = hermes.background();
 
     // wait for the next epoch
@@ -1100,7 +1177,7 @@ fn ibc_rate_limit() -> Result<()> {
         None,
         Some(Duration::new(10, 0)),
     )?;
-    wait_for_packet_relay(&port_id_gaia, &channel_id_gaia, &test)?;
+    wait_for_packet_relay(&hermes_dir, &port_id_gaia, &channel_id_gaia, &test)?;
 
     // Check if Namada hasn't receive it
     let ibc_denom =
@@ -1110,6 +1187,722 @@ fn ibc_rate_limit() -> Result<()> {
     let token_addr = ibc_token(ibc_denom).to_string();
     check_balance(&test, ALBERT, token_addr, 0)?;
 
+    Ok(())
+}
+
+/// Test the happy flows of ibc pfm
+///
+/// Setup: Two instances of Gaia and one
+/// Namada instance.
+///
+/// 1. Test sending a transfer from first cosmos chain to the second via the PFM
+///    module on Namada (henceforth denoted "via PFM")
+/// 2. Test sending the above transfer back to first cosmos chain via PFM
+/// 3. Send wrapped NAM from first cosmos chain to the second via PFM
+/// 4. Reverse the transaction in the step above
+#[test]
+fn ibc_pfm_happy_flows() -> Result<()> {
+    let update_genesis =
+        |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
+            genesis.parameters.parameters.epochs_per_year =
+                epochs_per_year_from_min_duration(1800);
+            genesis.parameters.ibc_params.default_mint_limit =
+                Amount::max_signed();
+            genesis
+                .parameters
+                .ibc_params
+                .default_per_epoch_throughput_limit = Amount::max_signed();
+            setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
+        };
+    let (ledger, gaia_1, test, test_gaia_1) =
+        run_namada_cosmos(CosmosChainType::Gaia(Some(1)), update_genesis)?;
+
+    // set up a second cosmos network
+    let test_gaia_2 = setup_cosmos(CosmosChainType::Gaia(Some(2)))?;
+    let gaia_2 = run_cosmos(&test_gaia_2, false)?;
+    sleep(5);
+
+    let _bg_ledger = ledger.background();
+    let _bg_gaia_1 = gaia_1.background();
+    let _bg_gaia_2 = gaia_2.background();
+    let hermes_gaia1_namada = setup_hermes(&test, &test_gaia_1)?;
+    let hermes_namada_gaia2 = setup_hermes(&test, &test_gaia_2)?;
+    sleep(5);
+    // create hermes relayers for connections between both cosmos chains and
+    // namada
+    let port_id_namada = FT_PORT_ID.parse().unwrap();
+    let port_id_gaia_1 = FT_PORT_ID.parse().unwrap();
+    let port_id_gaia_2 = FT_PORT_ID.parse().unwrap();
+
+    let (channel_id_gaia_1, channel_id_namada_1) = create_channel_with_hermes(
+        &hermes_gaia1_namada,
+        &test_gaia_1,
+        &test,
+        &port_id_namada,
+        &port_id_gaia_1,
+    )?;
+    let (channel_id_gaia_2, channel_id_namada_2) = create_channel_with_hermes(
+        &hermes_namada_gaia2,
+        &test_gaia_2,
+        &test,
+        &port_id_namada,
+        &port_id_gaia_2,
+    )?;
+
+    // Start relaying
+    let hermes_1 = run_hermes(&hermes_gaia1_namada)?;
+    let hermes_2 = run_hermes(&hermes_namada_gaia2)?;
+    let _bg_hermes_1 = hermes_1.background();
+    let _bg_hermes_2 = hermes_2.background();
+
+    // ------------------- Step 1. -------------------
+
+    // Bertha is our most trusted intermediary in all things
+    let namada_receiver = find_address(&test, BERTHA)?.to_string();
+    // this will cause the ibc packet to be forwarded to the second
+    // cosmos chain.
+    let pfm_memo = packet_forward_memo(
+        find_cosmos_address(&test_gaia_2, COSMOS_USER)?.into(),
+        &port_id_namada,
+        &channel_id_namada_2,
+        None,
+    );
+    transfer_from_cosmos(
+        &test_gaia_1,
+        COSMOS_USER,
+        &namada_receiver,
+        "samoleans",
+        10,
+        &port_id_gaia_1,
+        &channel_id_gaia_1,
+        Some(Either::Right(pfm_memo)),
+        None,
+    )?;
+    wait_for_packet_relay(
+        &hermes_gaia1_namada,
+        &port_id_namada,
+        &channel_id_namada_1,
+        &test,
+    )?;
+    wait_for_packet_relay(
+        &hermes_namada_gaia2,
+        &port_id_gaia_2,
+        &channel_id_gaia_2,
+        &test_gaia_2,
+    )?;
+    // Check the samoleans have been received on the second cosmos chain
+    check_cosmos_balance(
+        &test_gaia_2,
+        COSMOS_USER,
+        format!(
+            "transfer/{channel_id_gaia_2}/transfer/{channel_id_namada_1}/\
+             samoleans"
+        ),
+        10,
+    )?;
+
+    // Check the samoleans have been sent from the first cosmos chain
+    check_cosmos_balance(&test_gaia_1, COSMOS_USER, "samoleans", 1000 - 10)?;
+
+    // ------------------- Step 2. -------------------
+
+    // this will cause the ibc packet to be forwarded to the first
+    // cosmos chain.
+    let pfm_memo = packet_forward_memo(
+        find_cosmos_address(&test_gaia_1, COSMOS_USER)?.into(),
+        &port_id_namada,
+        &channel_id_namada_1,
+        None,
+    );
+    transfer_from_cosmos(
+        &test_gaia_2,
+        COSMOS_USER,
+        &namada_receiver,
+        format!(
+            "transfer/{channel_id_gaia_2}/transfer/{channel_id_namada_1}/\
+             samoleans"
+        ),
+        10,
+        &port_id_gaia_1,
+        &channel_id_gaia_1,
+        Some(Either::Right(pfm_memo)),
+        None,
+    )?;
+
+    wait_for_packet_relay(
+        &hermes_namada_gaia2,
+        &port_id_namada,
+        &channel_id_namada_2,
+        &test,
+    )?;
+    wait_for_packet_relay(
+        &hermes_gaia1_namada,
+        &port_id_gaia_1,
+        &channel_id_gaia_1,
+        &test_gaia_1,
+    )?;
+
+    // Check the samoleans have been received on the fist cosmos chain
+    check_cosmos_balance(&test_gaia_1, COSMOS_USER, "samoleans", 1000)?;
+
+    // ------------------- Step 3. -------------------
+    let nam_addr = find_address(&test, NAM)?;
+    // we first send some NAM to the first cosmos chain.
+    let gaia_receiver = find_cosmos_address(&test_gaia_1, COSMOS_USER)?;
+    transfer(
+        &test,
+        BERTHA,
+        gaia_receiver,
+        NAM,
+        20,
+        Some(BERTHA_KEY),
+        &port_id_namada,
+        &channel_id_namada_1,
+        None,
+        None,
+        None,
+        false,
+    )?;
+
+    wait_for_packet_relay(
+        &hermes_gaia1_namada,
+        &port_id_gaia_1,
+        &channel_id_gaia_1,
+        &test_gaia_1,
+    )?;
+
+    // Check the NAM have been sent to the first cosmos chain
+    check_cosmos_balance(
+        &test_gaia_1,
+        COSMOS_USER,
+        format!("transfer/{channel_id_gaia_1}/{nam_addr}"),
+        20_000_000,
+    )?;
+
+    // this will cause the ibc packet to be forwarded to the second
+    // cosmos chain.
+    let pfm_memo = packet_forward_memo(
+        find_cosmos_address(&test_gaia_2, COSMOS_USER)?.into(),
+        &port_id_namada,
+        &channel_id_namada_2,
+        None,
+    );
+
+    transfer_from_cosmos(
+        &test_gaia_1,
+        COSMOS_USER,
+        &namada_receiver,
+        format!("transfer/{channel_id_gaia_1}/{nam_addr}"),
+        10_000_000,
+        &port_id_gaia_1,
+        &channel_id_gaia_1,
+        Some(Either::Right(pfm_memo)),
+        None,
+    )?;
+    wait_for_packet_relay(
+        &hermes_gaia1_namada,
+        &port_id_namada,
+        &channel_id_namada_1,
+        &test,
+    )?;
+    wait_for_packet_relay(
+        &hermes_namada_gaia2,
+        &port_id_gaia_2,
+        &channel_id_gaia_2,
+        &test_gaia_2,
+    )?;
+    // Check the NAM have been received on the second cosmos chain
+    check_cosmos_balance(
+        &test_gaia_2,
+        COSMOS_USER,
+        format!("transfer/{channel_id_gaia_2}/{nam_addr}"),
+        10_000_000,
+    )?;
+
+    // Check the NAM have been sent from the first cosmos chain
+    check_cosmos_balance(
+        &test_gaia_1,
+        COSMOS_USER,
+        format!("transfer/{channel_id_gaia_1}/{nam_addr}"),
+        20_000_000 - 10_000_000,
+    )?;
+
+    // ------------------- Step 4. -------------------
+
+    // this will cause the ibc packet to be forwarded to the first
+    // cosmos chain.
+    let pfm_memo = packet_forward_memo(
+        find_cosmos_address(&test_gaia_1, COSMOS_USER)?.into(),
+        &port_id_namada,
+        &channel_id_namada_1,
+        None,
+    );
+    transfer_from_cosmos(
+        &test_gaia_2,
+        COSMOS_USER,
+        &namada_receiver,
+        format!("transfer/{channel_id_gaia_2}/{nam_addr}"),
+        10_000_000,
+        &port_id_gaia_1,
+        &channel_id_gaia_1,
+        Some(Either::Right(pfm_memo)),
+        None,
+    )?;
+
+    wait_for_packet_relay(
+        &hermes_namada_gaia2,
+        &port_id_namada,
+        &channel_id_namada_2,
+        &test,
+    )?;
+    wait_for_packet_relay(
+        &hermes_gaia1_namada,
+        &port_id_gaia_1,
+        &channel_id_gaia_1,
+        &test_gaia_1,
+    )?;
+
+    // Check the NAM have been received on the first cosmos chain
+    check_cosmos_balance(
+        &test_gaia_1,
+        COSMOS_USER,
+        format!("transfer/{channel_id_gaia_1}/{nam_addr}"),
+        20_000_000,
+    )?;
+
+    Ok(())
+}
+/// Test the flows of ibc pfm where the packet cannot be
+/// completed and refunds must be issued.
+///
+/// Setup: Two instances of Gaia and one
+/// Namada instance.
+///
+/// 1. Test sending a transfer from first cosmos chain to the second via the PFM
+///    module on Namada (henceforth denoted "via PFM"), failing on the second
+///    cosmos chain due to an error.
+/// 2. Same as above except that the failure occurs due to a time-out on the
+///    second cosmos chain.
+/// 3. Same as the first except that wrapped NAM is sent from the first cosmos
+///    chain
+/// 4. Same as above except that the failure occurs due to a time-out on the
+///    second cosmos chain.
+/// 5. Test sending assets from the second cosmos network to the first and then
+///    failing to send it back to the second due to an error
+/// 6. Same as above except that the failure occurs due to a time-out on the
+///    second cosmos chain.
+#[test]
+fn ibc_pfm_unhappy_flows() -> Result<()> {
+    let update_genesis =
+        |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
+            genesis.parameters.parameters.epochs_per_year =
+                epochs_per_year_from_min_duration(1800);
+            genesis.parameters.ibc_params.default_mint_limit =
+                Amount::max_signed();
+            genesis
+                .parameters
+                .ibc_params
+                .default_per_epoch_throughput_limit = Amount::max_signed();
+            setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
+        };
+    let (ledger, gaia_1, test, test_gaia_1) =
+        run_namada_cosmos(CosmosChainType::Gaia(Some(1)), update_genesis)?;
+
+    // set up a second cosmos network
+    let test_gaia_2 = setup_cosmos(CosmosChainType::Gaia(Some(2)))?;
+    let gaia_2 = run_cosmos(&test_gaia_2, false)?;
+    sleep(5);
+
+    let _bg_ledger = ledger.background();
+    let _bg_gaia_1 = gaia_1.background();
+    let _bg_gaia_2 = gaia_2.background();
+    let hermes_gaia1_namada = setup_hermes(&test, &test_gaia_1)?;
+    let hermes_namada_gaia2 = setup_hermes(&test, &test_gaia_2)?;
+    sleep(5);
+    // create hermes relayers for connections between both cosmos chains and
+    // namada
+    let port_id_namada = FT_PORT_ID.parse().unwrap();
+    let port_id_gaia_1 = FT_PORT_ID.parse().unwrap();
+    let port_id_gaia_2 = FT_PORT_ID.parse().unwrap();
+
+    let (channel_id_gaia_1, channel_id_namada_1) = create_channel_with_hermes(
+        &hermes_gaia1_namada,
+        &test_gaia_1,
+        &test,
+        &port_id_namada,
+        &port_id_gaia_1,
+    )?;
+    let (channel_id_gaia_2, channel_id_namada_2) = create_channel_with_hermes(
+        &hermes_namada_gaia2,
+        &test_gaia_2,
+        &test,
+        &port_id_namada,
+        &port_id_gaia_2,
+    )?;
+
+    // Start relaying
+    let hermes_1 = run_hermes(&hermes_gaia1_namada)?;
+    let hermes_2 = run_hermes(&hermes_namada_gaia2)?;
+    let _bg_hermes_1 = hermes_1.background();
+    let bg_hermes_2 = hermes_2.background();
+
+    // ------------------- Step 1. -------------------
+
+    // Bertha is our most trusted intermediary in all things
+    let namada_receiver = find_address(&test, BERTHA)?.to_string();
+    // this will cause the ibc packet to be forwarded to the second
+    // cosmos chain.
+    let pfm_memo = packet_forward_memo(
+        // NB: since the receiver is invalid, the ICS-20
+        // transfer will fail, and the first cosmos chain
+        // will receive an ack error
+        "Hodor".to_string().into(),
+        &port_id_namada,
+        &channel_id_namada_2,
+        None,
+    );
+    transfer_from_cosmos(
+        &test_gaia_1,
+        COSMOS_USER,
+        &namada_receiver,
+        "samoleans",
+        10,
+        &port_id_gaia_1,
+        &channel_id_gaia_1,
+        Some(Either::Right(pfm_memo)),
+        None,
+    )?;
+    wait_for_packet_relay(
+        &hermes_gaia1_namada,
+        &port_id_namada,
+        &channel_id_namada_1,
+        &test,
+    )?;
+    wait_for_packet_relay(
+        &hermes_namada_gaia2,
+        &port_id_gaia_2,
+        &channel_id_gaia_2,
+        &test_gaia_2,
+    )?;
+
+    // Check the samoleans have been refunded on the first chain
+    check_cosmos_balance(&test_gaia_1, COSMOS_USER, "samoleans", 1000)?;
+
+    // ------------------- Step 2. -------------------
+
+    let pfm_memo = packet_forward_memo(
+        find_cosmos_address(&test_gaia_1, COSMOS_USER)?.into(),
+        &port_id_namada,
+        &channel_id_namada_2,
+        Some(Duration::new(1, 0)),
+    );
+    // Stop Hermes for timeout test
+    let mut hermes_2 = bg_hermes_2.foreground();
+    hermes_2.interrupt()?;
+
+    transfer_from_cosmos(
+        &test_gaia_1,
+        COSMOS_USER,
+        &namada_receiver,
+        "samoleans",
+        10,
+        &port_id_gaia_1,
+        &channel_id_gaia_1,
+        Some(Either::Right(pfm_memo)),
+        None,
+    )?;
+
+    // wait for the timeout
+    sleep(10);
+
+    // Restart relaying
+    let hermes_2 = run_hermes(&hermes_namada_gaia2)?;
+    let bg_hermes_2 = hermes_2.background();
+
+    wait_for_packet_relay(
+        &hermes_gaia1_namada,
+        &port_id_namada,
+        &channel_id_namada_1,
+        &test,
+    )?;
+    wait_for_packet_relay(
+        &hermes_namada_gaia2,
+        &port_id_gaia_2,
+        &channel_id_gaia_2,
+        &test_gaia_2,
+    )?;
+
+    // Check the samoleans have been refunded on the first chain
+    check_cosmos_balance(&test_gaia_1, COSMOS_USER, "samoleans", 1000)?;
+
+    // ------------------- Step 3. -------------------
+
+    let nam_addr = find_address(&test, NAM)?;
+    // we first send some NAM to the first cosmos chain.
+    let gaia_receiver = find_cosmos_address(&test_gaia_1, COSMOS_USER)?;
+    transfer(
+        &test,
+        BERTHA,
+        gaia_receiver,
+        NAM,
+        20,
+        Some(BERTHA_KEY),
+        &port_id_namada,
+        &channel_id_namada_1,
+        None,
+        None,
+        None,
+        false,
+    )?;
+
+    wait_for_packet_relay(
+        &hermes_gaia1_namada,
+        &port_id_gaia_1,
+        &channel_id_gaia_1,
+        &test_gaia_1,
+    )?;
+
+    // Check the NAM have been sent to the first cosmos chain
+    check_cosmos_balance(
+        &test_gaia_1,
+        COSMOS_USER,
+        format!("transfer/{channel_id_gaia_1}/{nam_addr}"),
+        20_000_000,
+    )?;
+
+    // this will cause the ibc packet to be forwarded to the second
+    // cosmos chain.
+    let pfm_memo = packet_forward_memo(
+        "Hodor".to_string().into(),
+        &port_id_namada,
+        &channel_id_namada_2,
+        None,
+    );
+    transfer_from_cosmos(
+        &test_gaia_1,
+        COSMOS_USER,
+        &namada_receiver,
+        format!("transfer/{channel_id_gaia_1}/{nam_addr}"),
+        10_000_000,
+        &port_id_gaia_1,
+        &channel_id_gaia_1,
+        Some(Either::Right(pfm_memo)),
+        None,
+    )?;
+    wait_for_packet_relay(
+        &hermes_gaia1_namada,
+        &port_id_namada,
+        &channel_id_namada_1,
+        &test,
+    )?;
+    wait_for_packet_relay(
+        &hermes_namada_gaia2,
+        &port_id_gaia_2,
+        &channel_id_gaia_2,
+        &test_gaia_2,
+    )?;
+
+    // Check the NAM have been refunded on the first chain
+    check_cosmos_balance(
+        &test_gaia_1,
+        COSMOS_USER,
+        format!("transfer/{channel_id_gaia_1}/{nam_addr}"),
+        20_000_000,
+    )?;
+
+    // ------------------- Step 4. -------------------
+
+    let pfm_memo = packet_forward_memo(
+        find_cosmos_address(&test_gaia_2, COSMOS_USER)?.into(),
+        &port_id_namada,
+        &channel_id_namada_2,
+        Some(Duration::new(1, 0)),
+    );
+    // Stop Hermes for timeout test
+    let mut hermes_2 = bg_hermes_2.foreground();
+    hermes_2.interrupt()?;
+
+    transfer_from_cosmos(
+        &test_gaia_1,
+        COSMOS_USER,
+        &namada_receiver,
+        format!("transfer/{channel_id_gaia_1}/{nam_addr}"),
+        10_000_000,
+        &port_id_gaia_1,
+        &channel_id_gaia_1,
+        Some(Either::Right(pfm_memo)),
+        None,
+    )?;
+
+    // wait for the timeout
+    sleep(10);
+
+    // Restart relaying
+    let hermes_2 = run_hermes(&hermes_namada_gaia2)?;
+    let bg_hermes_2 = hermes_2.background();
+
+    wait_for_packet_relay(
+        &hermes_gaia1_namada,
+        &port_id_namada,
+        &channel_id_namada_1,
+        &test,
+    )?;
+    wait_for_packet_relay(
+        &hermes_namada_gaia2,
+        &port_id_gaia_2,
+        &channel_id_gaia_2,
+        &test_gaia_2,
+    )?;
+
+    // Check the NAM have been refunded on the first chain
+    check_cosmos_balance(
+        &test_gaia_1,
+        COSMOS_USER,
+        format!("transfer/{channel_id_gaia_1}/{nam_addr}"),
+        20_000_000,
+    )?;
+
+    // ------------------- Step 5. -------------------
+
+    // we first send some samoleans to the first cosmos chain from the second.
+    let pfm_memo = packet_forward_memo(
+        find_cosmos_address(&test_gaia_1, COSMOS_USER)?.into(),
+        &port_id_namada,
+        &channel_id_namada_1,
+        None,
+    );
+    transfer_from_cosmos(
+        &test_gaia_2,
+        COSMOS_USER,
+        &namada_receiver,
+        "samoleans",
+        10,
+        &port_id_gaia_2,
+        &channel_id_gaia_2,
+        Some(Either::Right(pfm_memo)),
+        None,
+    )?;
+
+    wait_for_packet_relay(
+        &hermes_gaia1_namada,
+        &port_id_gaia_1,
+        &channel_id_gaia_1,
+        &test_gaia_1,
+    )?;
+
+    // Check the non-native samoleans have been sent to the first cosmos chain
+    check_cosmos_balance(
+        &test_gaia_1,
+        COSMOS_USER,
+        format!(
+            "transfer/{channel_id_gaia_1}/transfer/{channel_id_namada_2}/\
+             samoleans"
+        ),
+        10,
+    )?;
+
+    // this will cause the ibc packet to be forwarded to the second
+    // cosmos chain.
+    let pfm_memo = packet_forward_memo(
+        "Hodor".to_string().into(),
+        &port_id_namada,
+        &channel_id_namada_2,
+        None,
+    );
+    transfer_from_cosmos(
+        &test_gaia_1,
+        COSMOS_USER,
+        &namada_receiver,
+        format!(
+            "transfer/{channel_id_gaia_1}/transfer/{channel_id_namada_2}/\
+             samoleans"
+        ),
+        10,
+        &port_id_gaia_1,
+        &channel_id_gaia_1,
+        Some(Either::Right(pfm_memo)),
+        None,
+    )?;
+    wait_for_packet_relay(
+        &hermes_gaia1_namada,
+        &port_id_namada,
+        &channel_id_namada_1,
+        &test,
+    )?;
+    wait_for_packet_relay(
+        &hermes_namada_gaia2,
+        &port_id_gaia_2,
+        &channel_id_gaia_2,
+        &test_gaia_2,
+    )?;
+
+    // Check the non-native samoleans have been refunded on the first chain
+    check_cosmos_balance(
+        &test_gaia_1,
+        COSMOS_USER,
+        format!(
+            "transfer/{channel_id_gaia_1}/transfer/{channel_id_namada_2}/\
+             samoleans"
+        ),
+        10,
+    )?;
+
+    // ------------------- Step 6. -------------------
+    let pfm_memo = packet_forward_memo(
+        find_cosmos_address(&test_gaia_2, COSMOS_USER)?.into(),
+        &port_id_namada,
+        &channel_id_namada_2,
+        Some(Duration::new(1, 0)),
+    );
+    // Stop Hermes for timeout test
+    let mut hermes_2 = bg_hermes_2.foreground();
+    hermes_2.interrupt()?;
+
+    transfer_from_cosmos(
+        &test_gaia_1,
+        COSMOS_USER,
+        &namada_receiver,
+        format!(
+            "transfer/{channel_id_gaia_1}/transfer/{channel_id_namada_2}/\
+             samoleans"
+        ),
+        10,
+        &port_id_gaia_1,
+        &channel_id_gaia_1,
+        Some(Either::Right(pfm_memo)),
+        None,
+    )?;
+
+    // wait for the timeout
+    sleep(10);
+
+    // Restart relaying
+    let hermes_2 = run_hermes(&hermes_namada_gaia2)?;
+    let _bg_hermes_2 = hermes_2.background();
+
+    wait_for_packet_relay(
+        &hermes_gaia1_namada,
+        &port_id_namada,
+        &channel_id_namada_1,
+        &test,
+    )?;
+    wait_for_packet_relay(
+        &hermes_namada_gaia2,
+        &port_id_gaia_2,
+        &channel_id_gaia_2,
+        &test_gaia_2,
+    )?;
+
+    // Check the non-native samoleans have been refunded on the first chain
+    check_cosmos_balance(
+        &test_gaia_1,
+        COSMOS_USER,
+        format!(
+            "transfer/{channel_id_gaia_1}/transfer/{channel_id_namada_2}/\
+             samoleans"
+        ),
+        10,
+    )?;
     Ok(())
 }
 
@@ -1134,13 +1927,14 @@ fn run_namada_cosmos(
 
     // Cosmos
     let test_cosmos = setup_cosmos(chain_type)?;
-    let cosmos = run_cosmos(&test_cosmos)?;
+    let cosmos = run_cosmos(&test_cosmos, true)?;
     sleep(5);
 
     Ok((ledger, cosmos, test, test_cosmos))
 }
 
 fn create_channel_with_hermes(
+    hermes_dir: &TestDir,
     test_a: &Test,
     test_b: &Test,
     port_id_a: &PortId,
@@ -1170,7 +1964,7 @@ fn create_channel_with_hermes(
         "--yes",
     ];
 
-    let mut hermes = run_hermes_cmd(test_a, args, Some(240))?;
+    let mut hermes = run_hermes_cmd(hermes_dir, args, Some(240))?;
     let (channel_id_a, channel_id_b) =
         get_channel_ids_from_hermes_output(&mut hermes)?;
     hermes.assert_success();
@@ -1192,35 +1986,32 @@ fn get_channel_ids_from_hermes_output(
     Ok((channel_id_a, channel_id_b))
 }
 
-fn run_hermes(test: &Test) -> Result<NamadaCmd> {
+fn run_hermes(hermes_dir: &TestDir) -> Result<NamadaCmd> {
     let args = ["start"];
-    let mut hermes = run_hermes_cmd(test, args, Some(40))?;
+    let mut hermes = run_hermes_cmd(hermes_dir, args, Some(40))?;
     hermes.exp_string("Hermes has started")?;
     Ok(hermes)
 }
 
-fn run_cosmos(test: &Test) -> Result<NamadaCmd> {
+fn run_cosmos(test: &Test, kill: bool) -> Result<NamadaCmd> {
     let chain_type = CosmosChainType::chain_type(test.net.chain_id.as_str())?;
     let cmd_path = chain_type.command_path();
     // cosmos process is sometimes left lingering causing subsequent runs to
     // fail
-    std::process::Command::new("pkill")
-        .args(["-9", cmd_path])
-        .output()
-        .unwrap();
-
-    let args = [
-        "start",
-        "--pruning",
-        "nothing",
-        "--grpc.address",
-        "0.0.0.0:9090",
-    ];
+    if kill {
+        std::process::Command::new("pkill")
+            .args(["-9", cmd_path])
+            .output()
+            .unwrap();
+    }
+    let port_arg = format!("0.0.0.0:{}", 9090 + chain_type.get_offset());
+    let args = ["start", "--pruning", "nothing", "--grpc.address", &port_arg];
     let cosmos = run_cosmos_cmd(test, args, Some(40))?;
     Ok(cosmos)
 }
 
 fn wait_for_packet_relay(
+    hermes_dir: &TestDir,
     port_id: &PortId,
     channel_id: &ChannelId,
     test: &Test,
@@ -1239,7 +2030,7 @@ fn wait_for_packet_relay(
     ];
     for _ in 0..10 {
         sleep(10);
-        let mut hermes = run_hermes_cmd(test, args, Some(40))?;
+        let mut hermes = run_hermes_cmd(hermes_dir, args, Some(40))?;
         // Check no pending packet
         if hermes
             .exp_string(
@@ -1260,6 +2051,7 @@ fn wait_for_packet_relay(
 }
 
 fn clear_packet(
+    hermes_dir: &TestDir,
     port_id: &PortId,
     channel_id: &ChannelId,
     test: &Test,
@@ -1274,14 +2066,14 @@ fn clear_packet(
         "--channel",
         channel_id.as_str(),
     ];
-    let mut hermes = run_hermes_cmd(test, args, Some(40))?;
+    let mut hermes = run_hermes_cmd(hermes_dir, args, Some(40))?;
     hermes.assert_success();
 
     Ok(())
 }
 
 fn upgrade_client(
-    test: &Test,
+    hermes_dir: &TestDir,
     host_chain_id: impl AsRef<str>,
     upgrade_height: u64,
 ) -> Result<()> {
@@ -1295,7 +2087,7 @@ fn upgrade_client(
         "--upgrade-height",
         &upgrade_height.to_string(),
     ];
-    let mut hermes = run_hermes_cmd(test, args, Some(120))?;
+    let mut hermes = run_hermes_cmd(hermes_dir, args, Some(120))?;
     hermes.exp_string("upgraded-chain")?;
     hermes.assert_success();
 
@@ -1674,7 +2466,7 @@ fn propose_upgrade_client(
     let proposal_json_path = test_gaia.test_dir.path().join("proposal.json");
     write_json_file(proposal_json_path.as_path(), proposal_json);
 
-    let rpc = format!("tcp://{COSMOS_RPC}");
+    let rpc = format!("tcp://{}", get_cosmos_rpc_address(test_gaia));
     let submit_proposal_args = vec![
         "tx",
         "gov",
@@ -1744,7 +2536,8 @@ fn propose_gas_token(test: &Test) -> Result<Epoch> {
 }
 
 fn wait_for_pass(test: &Test) -> Result<()> {
-    let args = ["query", "gov", "proposal", "1"];
+    let rpc = format!("tcp://{}", get_cosmos_rpc_address(test));
+    let args = ["query", "gov", "proposal", "1", "--node", &rpc];
     for _ in 0..10 {
         sleep(5);
         let mut gaia = run_cosmos_cmd(test, args, Some(40))?;
@@ -1757,7 +2550,7 @@ fn wait_for_pass(test: &Test) -> Result<()> {
 }
 
 fn vote_on_gaia(test: &Test) -> Result<()> {
-    let rpc = format!("tcp://{COSMOS_RPC}");
+    let rpc = format!("tcp://{}", get_cosmos_rpc_address(test));
     let args = vec![
         "tx",
         "gov",
@@ -1833,13 +2626,16 @@ fn transfer_from_cosmos(
     amount: u64,
     port_id: &PortId,
     channel_id: &ChannelId,
-    memo_path: Option<PathBuf>,
+    memo: Option<Either<PathBuf, String>>,
     timeout_sec: Option<Duration>,
 ) -> Result<()> {
     let port_id = port_id.to_string();
     let channel_id = channel_id.to_string();
     let amount = format!("{}{}", amount, token.as_ref());
-    let rpc = format!("tcp://{COSMOS_RPC}");
+    let offset = CosmosChainType::chain_type(test.net.chain_id.as_str())
+        .unwrap()
+        .get_offset();
+    let rpc = format!("tcp://127.0.0.1:6416{offset}");
     // If the receiver is a pyament address we want to mask it to the more
     // general MASP internal address to improve on privacy
     let receiver = match PaymentAddress::from_str(receiver.as_ref()) {
@@ -1867,13 +2663,16 @@ fn transfer_from_cosmos(
         "--yes",
     ];
 
-    let memo = memo_path
-        .as_ref()
-        .map(|path| {
-            std::fs::read_to_string(path).expect("Reading memo file failed")
+    let is_memo = memo.is_some();
+    let memo = memo
+        .map(|m| match m {
+            Either::Left(path) => {
+                std::fs::read_to_string(path).expect("Reading memo file failed")
+            }
+            Either::Right(memo) => memo,
         })
         .unwrap_or_default();
-    if memo_path.is_some() {
+    if is_memo {
         args.push("--memo");
         args.push(&memo);
     }
@@ -1914,7 +2713,10 @@ fn check_tx_height(test: &Test, client: &mut NamadaCmd) -> Result<u32> {
 }
 
 fn query_height(test: &Test) -> Result<Height> {
-    let rpc = get_actor_rpc(test, Who::Validator(0));
+    let rpc = match CosmosChainType::chain_type(test.net.chain_id.as_str()) {
+        Ok(_) => format!("http://{}", get_cosmos_rpc_address(test)),
+        Err(_) => get_actor_rpc(test, Who::Validator(0)),
+    };
     let tendermint_url = Url::from_str(&rpc).unwrap();
     let client = HttpClient::new(tendermint_url).unwrap();
 
@@ -1992,14 +2794,11 @@ fn check_cosmos_balance(
     expected_amount: u64,
 ) -> Result<()> {
     let addr = find_cosmos_address(test, owner)?;
-    let args = [
-        "query",
-        "bank",
-        "balances",
-        &addr,
-        "--node",
-        &format!("tcp://{COSMOS_RPC}"),
-    ];
+    let offset = CosmosChainType::chain_type(test.net.chain_id.as_str())
+        .unwrap()
+        .get_offset();
+    let rpc = format!("tcp://127.0.0.1:6416{offset}");
+    let args = ["query", "bank", "balances", &addr, "--node", &rpc];
     let mut cosmos = run_cosmos_cmd(test, args, Some(40))?;
     cosmos.exp_string(&format!("amount: \"{expected_amount}\""))?;
     let expected_denom = if denom.as_ref().contains('/') {
@@ -2098,9 +2897,9 @@ fn initialize_nft_contracts(test: &Test) -> Result<(String, String)> {
         Ok(dir) => PathBuf::from(dir),
         Err(_) => working_dir(),
     };
-    let rpc = format!("tcp://{COSMOS_RPC}");
+    let rpc = format!("tcp://{}", get_cosmos_rpc_address(test));
     let minter_addr = find_cosmos_address(test, COSMOS_USER)?;
-
+    sleep(5);
     // Store cw721 contract
     let cw721_wasm_path =
         contract_dir.join(CW721_WASM).to_string_lossy().to_string();
@@ -2127,7 +2926,7 @@ fn initialize_nft_contracts(test: &Test) -> Result<(String, String)> {
     ];
     let mut cosmos = run_cosmos_cmd(test, args, Some(40))?;
     cosmos.exp_eof()?;
-    sleep(1);
+    sleep(5);
 
     // Store ics721 contract
     let ics721_wasm_path =
@@ -2156,10 +2955,6 @@ fn initialize_nft_contracts(test: &Test) -> Result<(String, String)> {
     let mut cosmos = run_cosmos_cmd(test, args, Some(40))?;
     cosmos.exp_eof()?;
     sleep(1);
-
-    let args = vec!["query", "wasm", "list-code"];
-    let mut cosmos = run_cosmos_cmd(test, args, Some(40))?;
-    cosmos.assert_success();
 
     // Instantiate cw721 contract
     let json = serde_json::json!({
@@ -2229,17 +3024,32 @@ fn initialize_nft_contracts(test: &Test) -> Result<(String, String)> {
     ];
     let mut cosmos = run_cosmos_cmd(test, args, Some(40))?;
     cosmos.exp_eof()?;
+
     sleep(1);
 
     // Check the CW721 contract
-    let args = vec!["query", "wasm", "list-contract-by-code", "1"];
+    let args = vec![
+        "query",
+        "wasm",
+        "list-contract-by-code",
+        "1",
+        "--node",
+        &rpc,
+    ];
     let mut cosmos = run_cosmos_cmd(test, args, Some(40))?;
     let (_unread, matched) = cosmos.exp_regex("wasm.*")?;
     let cw721_contract = matched.trim().to_string();
     cosmos.exp_eof()?;
 
     // Check the ICS721 contract
-    let args = vec!["query", "wasm", "list-contract-by-code", "2"];
+    let args = vec![
+        "query",
+        "wasm",
+        "list-contract-by-code",
+        "2",
+        "--node",
+        &rpc,
+    ];
     let mut cosmos = run_cosmos_cmd(test, args, Some(40))?;
     let (_unread, matched) = cosmos.exp_regex("wasm.*")?;
     let ics721_contract = matched.trim().to_string();
@@ -2249,8 +3059,10 @@ fn initialize_nft_contracts(test: &Test) -> Result<(String, String)> {
 }
 
 fn get_cosmwasm_port_id(test: &Test, ics721_contract: &str) -> Result<PortId> {
+    let rpc = format!("tcp://{}", get_cosmos_rpc_address(test));
     // Get the port ID
-    let args = vec!["query", "wasm", "contract", ics721_contract];
+    let args =
+        vec!["query", "wasm", "contract", ics721_contract, "--node", &rpc];
     let mut cosmos = run_cosmos_cmd(test, args, Some(40))?;
     let (_unread, matched) = cosmos.exp_regex("ibc_port_id: wasm.*")?;
     let port_id = matched.trim().split(' ').last().expect("invalid output");
@@ -2266,7 +3078,7 @@ fn mint_nft(
     minter_addr: &str,
     token_id: &str,
 ) -> Result<()> {
-    let rpc = format!("tcp://{COSMOS_RPC}");
+    let rpc = format!("tcp://{}", get_cosmos_rpc_address(test));
 
     // Mint an NFT
     let json = serde_json::json!({
@@ -2319,7 +3131,7 @@ fn nft_transfer_from_cosmos(
 ) -> Result<()> {
     let channel_id = channel_id.to_string();
     let timeout_height = timeout_height.unwrap_or(100000);
-    let rpc = format!("tcp://{COSMOS_RPC}");
+    let rpc = format!("tcp://{}", get_cosmos_rpc_address(test));
 
     let receiver = match PaymentAddress::from_str(receiver.as_ref()) {
         Ok(_) => MASP.to_string(),
@@ -2381,4 +3193,28 @@ fn nft_transfer_from_cosmos(
     sleep(1);
 
     Ok(())
+}
+
+/// Create a packet forward memo and serialize it
+fn packet_forward_memo(
+    receiver: Signer,
+    port_id: &PortId,
+    channel_id: &ChannelId,
+    timeout: Option<Duration>,
+) -> String {
+    serde_json::to_string(&ibc_middleware_packet_forward::PacketMetadata {
+        forward: ForwardMetadata {
+            receiver,
+            port: port_id.clone(),
+            channel: channel_id.clone(),
+            timeout: timeout.map(|t| {
+                ibc_middleware_packet_forward::Duration::from_dur(
+                    dur::Duration::from_std(t),
+                )
+            }),
+            retries: Some(0),
+            next: None,
+        },
+    })
+    .expect("Test failed")
 }
