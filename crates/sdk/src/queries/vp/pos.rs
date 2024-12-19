@@ -41,6 +41,7 @@ use namada_storage::{OptionExt, ResultExt};
 
 use crate::governance;
 use crate::queries::types::RequestCtx;
+use crate::queries::{shell, RequestQuery};
 
 // PoS validity predicate queries
 router! {POS,
@@ -612,42 +613,8 @@ where
             let rewards_counter_last_epoch =
                 read_rewards_counter(ctx.state, &source, &validator)?;
 
-            let rewards_counter_at_epoch = {
-                // Choose the height at the end of the epoch in order to maximize the chance of
-                // finding the storage without it being pruned.
-                let height = if epoch == ctx.state.in_mem().last_epoch {
-                    ctx.state.in_mem().get_last_block_height()
-                } else {
-                    ctx.state
-                        .get_epoch_start_height(
-                            epoch.checked_add(1).unwrap_or_default(),
-                        )?
-                        .ok_or(namada_storage::Error::new_const(
-                            "Epoch not found",
-                        ))?
-                        .checked_sub(1)
-                        .unwrap_or_default()
-                };
-
-                let storage_key =
-                    namada_proof_of_stake::storage_key::rewards_counter_key(
-                        &source, &validator,
-                    );
-
-                let storage_value = ctx
-                    .state
-                    .db_read_with_height(&storage_key, height)
-                    .into_storage_result()?;
-
-                storage_value
-                    .0
-                    .map(|bytes| {
-                        token::Amount::try_from_slice(&bytes)
-                            .into_storage_result()
-                    })
-                    .transpose()?
-                    .unwrap_or_default()
-            };
+            let rewards_counter_at_epoch =
+                get_rewards_counter_at_epoch(ctx, &source, &validator, epoch)?;
 
             // Add before subtracting because Amounts are unsigned
             checked!(
@@ -656,6 +623,50 @@ where
             )
             .into_storage_result()
         }
+    }
+}
+
+fn get_rewards_counter_at_epoch<D, H, V, T>(
+    ctx: RequestCtx<'_, D, H, V, T>,
+    source: &Address,
+    validator: &Address,
+    epoch: Epoch,
+) -> namada_storage::Result<token::Amount>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    // Do this first so that we return an error if an invalid epoch is requested
+    let queried_height = ctx
+        .state
+        .get_epoch_start_height(epoch)?
+        .ok_or(namada_storage::Error::new_const("Epoch not found"))?;
+
+    let storage_key = namada_proof_of_stake::storage_key::rewards_counter_key(
+        source, validator,
+    );
+
+    // Shortcut: avoid costly lookup of non-existent storage key in history
+    // by first checking to see if it currently exists in memory before
+    // querying by height.
+    // TODO: this might not be valid if rewards have been claimed in the current epoch?
+    //       (because the rewards_counter would be removed from storage until the next epoch)
+    if !ctx.state.has_key(&storage_key)? {
+        return Ok(token::Amount::from(0));
+    }
+
+    let query = RequestQuery {
+        height: queried_height.try_into().into_storage_result()?,
+        prove: false,
+        data: Default::default(),
+        path: Default::default(),
+    };
+
+    let value = shell::storage_value(ctx, &query, storage_key)?;
+    if value.data.is_empty() {
+        Ok(token::Amount::from(0))
+    } else {
+        token::Amount::try_from_slice(&value.data).into_storage_result()
     }
 }
 
