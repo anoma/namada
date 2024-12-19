@@ -497,9 +497,10 @@ impl MockNode {
                 .collect()
         };
         // build finalize block abci request
+        let merkle_root = locked.state.in_mem().merkle_root().0;
         let req = FinalizeBlock {
             header: BlockHeader {
-                hash: Hash([0; 32]),
+                hash: Hash(merkle_root),
                 #[allow(clippy::disallowed_methods)]
                 time: header_time.unwrap_or_else(DateTimeUtc::now),
                 next_validators_hash: Hash([0; 32]),
@@ -548,7 +549,7 @@ impl MockNode {
             height,
             block::Response {
                 block_id: tendermint::block::Id {
-                    hash: tendermint::Hash::None,
+                    hash: tendermint::Hash::Sha256(merkle_root),
                     part_set_header: tendermint::block::parts::Header::default(
                     ),
                 },
@@ -778,6 +779,331 @@ impl MockNode {
         }
         self.clear_results();
     }
+
+    pub fn start_rpc_server(
+        self,
+        rt: &tokio::runtime::Runtime,
+        port: u16,
+    ) -> tokio::task::JoinHandle<()> {
+        let routes = {
+            use std::str::FromStr;
+
+            use tendermint::node;
+            use tendermint::node::info::ProtocolVersionInfo;
+            use tendermint_rpc::endpoint::{abci_query, status};
+            use tendermint_rpc::Method;
+            use warp::Filter;
+
+            warp::post().and(warp::any().map(move|| (self.clone(), port))).and(warp::body::json()).then(
+                |(self_clone, port) :(MockNode, u16), request: RpcRequestWrapper<serde_json::Value>| async move {
+                    dbg!(&request);
+
+                    match request.method {
+                        Method::Status => {
+                            let chain_id = self_clone
+                                .shell
+                                .lock()
+                                .unwrap()
+                                .chain_id
+                                .to_string();
+
+                            let response = status::Response {
+                                node_info: node::Info {
+                                    protocol_version: ProtocolVersionInfo {
+                                        p2p: 0,
+                                        block: self_clone.block_height().0,
+                                        app: 0,
+                                    },
+                                    id: node::Id::new([0_u8; 20]),
+                                    listen_addr: node::info::ListenAddress::new(
+                                        format!("tcp:127.0.0.1:{}", port - 1),
+                                    ),
+                                    network: tendermint::chain::Id::try_from(
+                                        chain_id,
+                                    )
+                                    .unwrap(),
+                                    version: serde_json::from_str::<
+                                        tendermint::Version,
+                                    >(
+                                        "\"0.37.11\""
+                                    )
+                                    .unwrap(),
+                                    channels: serde_json::from_str::<
+                                        tendermint::channel::Channels,
+                                    >(
+                                        "\"01234\""
+                                    )
+                                    .unwrap(),
+                                    moniker: tendermint::Moniker::from_str(
+                                        "whatever",
+                                    )
+                                    .unwrap(),
+                                    other: node::info::OtherInfo {
+                                        tx_index: node::info::TxIndexStatus::On,
+                                        rpc_address: format!(
+                                            "tcp:127.0.0.1:{port}"
+                                        ),
+                                    },
+                                },
+                                sync_info: status::SyncInfo {
+                                    earliest_block_hash: tendermint::Hash::None,
+                                    earliest_app_hash: tendermint::AppHash::try_from(vec![]).unwrap(),
+                                    earliest_block_height: tendermint::block::Height::from(1_u32),
+                                    earliest_block_time: tendermint::Time::now(),
+                                    latest_block_hash: tendermint::Hash::None,
+                                    latest_app_hash: tendermint::AppHash::try_from(vec![]).unwrap(),
+                                    latest_block_height: tendermint::block::Height::from(1_u32),
+                                    latest_block_time: tendermint::Time::now(),
+                                    catching_up: false,
+                                },
+                                validator_info: tendermint::validator::Info {
+                                    address: tendermint::account::Id::try_from(vec![0; tendermint::account::LENGTH]).unwrap(),
+                                    pub_key: {
+                                        let json_string = "{\"type\":\"tendermint/PubKeyEd25519\",\"value\":\"RblzMO4is5L1hZz6wo4kPbptzOyue6LTk4+lPhD1FRk=\"}";
+                                        let pub_key: tendermint::PublicKey = serde_json::from_str(json_string).unwrap();
+                                        pub_key
+                                    },
+                                    power: tendermint::vote::Power::from(1_u32),
+                                    name: None,
+                                    proposer_priority: tendermint::validator::ProposerPriority::from(1_i64),
+                                },
+                            };
+
+                            let response = RpcResponseWrapper {
+                                jsonrpc: request.jsonrpc,
+                                id: request.id,
+                                result: Some(response),
+                                error: None,
+                            };
+                            serde_json::to_string(&response).unwrap()
+                        }
+                        Method::Commit => {
+                            use tendermint_rpc::endpoint::commit;
+                            use tendermint::block::signed_header::SignedHeader;
+                            use tendermint::block;
+
+                            let commit::Request {
+                                height,
+                            } = serde_json::from_value(request.params).unwrap();
+
+                            let BlockHeight(last_height) = self_clone
+                                .shell
+                                .lock()
+                                .unwrap().state.in_mem().get_last_block_height();
+                            let chain_id = self_clone
+                                .shell
+                                .lock()
+                                .unwrap()
+                                .chain_id
+                                .to_string();
+
+                            let (canonical, height) = match height {
+                                Some(height) => {
+                                    let height = u64::from(height);
+                                    (
+                                        // Height is canonical only if there's another block committed after it
+                                        height < last_height, height)
+                                },
+                                None => (false, last_height),
+                            };
+
+                            let height= block::Height::try_from(height).unwrap();
+                            let response = commit::Response {
+                                signed_header: SignedHeader::new(
+                                    block::Header {
+                                        version: block::header::Version {
+                                            block: 0,
+                                            app: 0,
+                                        },
+                                        chain_id: tendermint::chain::Id::try_from(
+                                            chain_id,
+                                        )
+                                        .unwrap(),
+                                        height,
+                                        time: tendermint::Time::now(),
+                                        last_block_id: None,
+                                        last_commit_hash: None,
+                                        data_hash: None,
+                                        validators_hash: tendermint::Hash::None,
+                                        next_validators_hash: tendermint::Hash::None,
+                                        consensus_hash: tendermint::Hash::None,
+                                        app_hash: tendermint::AppHash::try_from(vec![]).unwrap(),
+                                        last_results_hash: None,
+                                        evidence_hash: None,
+                                        proposer_address: tendermint::account::Id::try_from(vec![0; tendermint::account::LENGTH]).unwrap(),
+                                    },
+                                    block::Commit {
+                                        height,
+                                        round: 0_u16.into(),
+                                        block_id: block::Id{
+                                            hash: tendermint::Hash::None,
+                                            part_set_header: block::parts::Header::new(
+                                                 0,
+                                                tendermint::Hash::None,
+                                            ).unwrap(),
+                                        },
+                                        signatures: vec![],
+                                    }).unwrap(),
+                                canonical,
+                            };
+
+                            let response = RpcResponseWrapper {
+                                jsonrpc: request.jsonrpc,
+                                id: request.id,
+                                result: Some(response),
+                                error: None,
+                            };
+                            serde_json::to_string(&response).unwrap()
+                        }
+                        Method::Validators => {
+                            use tendermint_rpc::endpoint::validators;
+                            use tendermint::block;
+                            use tendermint::validator;
+                            use tendermint::vote;
+
+                            let params: validators::Request = serde_json::from_value(request.params).unwrap();
+
+                            let BlockHeight(last_height) = self_clone
+                                .shell
+                                .lock()
+                                .unwrap().state.in_mem().get_last_block_height();
+                            let height = match params.height {
+                                Some(height) => u64::from(height),
+                                None => last_height,
+                            };
+
+                            let block_height= block::Height::try_from(height).unwrap();
+                            let response = validators::Response::new(
+                                block_height,
+                                vec![
+                                    validator::Info {
+                                        address: tendermint::account::Id::try_from(vec![0; tendermint::account::LENGTH]).unwrap(),
+                                        pub_key: {
+                                            let json_string = "{\"type\":\"tendermint/PubKeyEd25519\",\"value\":\"RblzMO4is5L1hZz6wo4kPbptzOyue6LTk4+lPhD1FRk=\"}";
+                                            let pub_key: tendermint::PublicKey = serde_json::from_str(json_string).unwrap();
+                                            pub_key
+                                        },
+                                        power: vote::Power::from(1_u32),
+                                        name: None,
+                                        proposer_priority: validator::ProposerPriority::from(1_i64)
+                                    }
+                                ],
+                                1,
+                            );
+
+                            let response = RpcResponseWrapper {
+                                jsonrpc: request.jsonrpc,
+                                id: request.id,
+                                result: Some(response),
+                                error: None,
+                            };
+                            serde_json::to_string(&response).unwrap()
+                        }
+                        Method::AbciQuery => {
+                            let abci_query::Request {
+                                path,
+                                data,
+                                height,
+                                prove,
+                            } = serde_json::from_value(request.params).unwrap();
+                            let query_request = tendermint::abci::request::Query {
+                                data: data.into(),
+                                path: path.unwrap(),
+                                height: height.unwrap_or_else(|| tendermint::block::Height::from(0_u32)),
+                                prove,
+                            };
+                            let tendermint::abci::response::Query {
+                                code,
+                                log,
+                                info,
+                                index,
+                                key,
+                                value,
+                                proof,
+                                height,
+                                codespace,
+                            } = self_clone
+                                .shell
+                                .lock()
+                                .unwrap()
+                                .query(query_request);
+
+                            let response = abci_query::Response {
+                                response: abci_query::AbciQuery {
+                                    code,
+                                    log,
+                                    info,
+                                    index,
+                                    key: key.into(),
+                                    value: value.into(),
+                                    proof,
+                                    height,
+                                    codespace,
+                                }
+                            };
+                            let response = RpcResponseWrapper {
+                                jsonrpc: request.jsonrpc,
+                                id: request.id,
+                                result: Some(response),
+                                error: None,
+                            };
+                            serde_json::to_string(&response).unwrap()
+                        }
+                        _ => {
+                            dbg!(request.method);
+                            format!(
+                                "Unsupported method {:?}",
+                                request.method
+                            )
+                        }
+                    }
+                },
+            )
+        };
+
+        // Spawn the server into a runtime
+        rt.spawn(async move {
+            warp::serve(routes).bind(([127, 0, 0, 1], port)).await
+        })
+    }
+}
+
+/// JSON-RPC request wrapper (i.e. message envelope)
+///
+/// Copied from `tendermint_rpc::request::Wrapper` because its fields there are
+/// private.
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+pub struct RpcRequestWrapper<R> {
+    /// JSON-RPC version
+    jsonrpc: tendermint_rpc::Version,
+
+    /// Identifier included in request
+    id: tendermint_rpc::Id,
+
+    /// Request method
+    method: tendermint_rpc::Method,
+
+    /// Request parameters (i.e. request object)
+    params: R,
+}
+
+/// JSON-RPC response wrapper (i.e. message envelope)
+///
+/// Copied from `tendermint_rpc::response::Wrapper` because its fields there are
+/// private.
+#[derive(Debug, serde::Deserialize, serde::Serialize, Clone)]
+pub struct RpcResponseWrapper<R> {
+    /// JSON-RPC version
+    jsonrpc: tendermint_rpc::Version,
+
+    /// Identifier included in request
+    id: tendermint_rpc::Id,
+
+    /// Results of request (if successful)
+    result: Option<R>,
+
+    /// Error message if unsuccessful
+    error: Option<tendermint_rpc::ResponseError>,
 }
 
 #[async_trait::async_trait(?Send)]

@@ -24,6 +24,7 @@ testing = [
   "clap",
   "lazy_static",
   "rand",
+  "serde",
 ]
 benches = [
   "namada_apps_lib/benches",
@@ -85,6 +86,7 @@ rayon.workspace = true
 regex.workspace = true
 rlimit.workspace = true
 rocksdb.workspace = true
+serde = {workspace = true, optional = true}
 serde_json = {workspace = true, features = ["raw_value"]}
 sha2.workspace = true
 smooth-operator.workspace = true
@@ -98,7 +100,7 @@ tower-abci.workspace = true
 tower.workspace = true
 tracing-subscriber = { workspace = true, optional = true, features = ["std", "json", "ansi", "tracing-log"]}
 tracing.workspace = true
-warp = "0.3.2"
+warp.workspace = true
 zstd.workspace = true
 
 [dev-dependencies]
@@ -111,6 +113,7 @@ clap.workspace = true
 lazy_static.workspace= true
 proptest.workspace = true
 rand = { workspace = true, features = ["std"] }
+serde.workspace = true
 test-log.workspace = true
 tokio-test.workspace = true
 
