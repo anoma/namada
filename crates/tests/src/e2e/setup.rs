@@ -844,6 +844,22 @@ pub fn working_dir() -> PathBuf {
     working_dir
 }
 
+/// Return the path to all test fixture.
+pub fn fixtures_dir() -> PathBuf {
+    let mut dir = working_dir();
+    dir.push("crates");
+    dir.push("tests");
+    dir.push("fixtures");
+    dir
+}
+
+/// Return the path to all osmosis fixture.
+pub fn osmosis_fixtures_dir() -> PathBuf {
+    let mut dir = fixtures_dir();
+    dir.push("osmosis_data");
+    dir
+}
+
 /// A command under test
 pub struct NamadaCmd {
     pub session: Session<UnixProcess, LogStream<PtyStream, File>>,
@@ -1257,10 +1273,6 @@ pub fn setup_hermes(test_a: &Test, test_b: &Test) -> Result<TestDir> {
         let args = [
             "keys",
             "add",
-            // TODO: this overwrite is required because hermes keys are pulled
-            // from the namada chain dir... however, ideally we would store the
-            // `wallet.toml` file under hermes' own dir
-            "--overwrite",
             "--chain",
             chain_id,
             "--key-file",
@@ -1529,6 +1541,67 @@ pub fn setup_cosmos(chain_type: CosmosChainType) -> Result<Test> {
     update_cosmos_config(&test)?;
 
     Ok(test)
+}
+
+pub fn run_cosmos_cmd_homeless<I, S>(
+    test: &Test,
+    args: I,
+    timeout_sec: Option<u64>,
+) -> Result<NamadaCmd>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    let chain_id = test.net.chain_id.as_str();
+    let chain_type = CosmosChainType::chain_type(chain_id)?;
+    let mut run_cmd = Command::new(chain_type.command_path());
+    run_cmd.args(args);
+
+    let args: String =
+        run_cmd.get_args().map(|s| s.to_string_lossy()).join(" ");
+    let cmd_str =
+        format!("{} {}", run_cmd.get_program().to_string_lossy(), args);
+
+    let session = Session::spawn(run_cmd).map_err(|e| {
+        eyre!(
+            "\n\n{}: {}\n{}: {}",
+            "Failed to run Cosmos command".underline().red(),
+            cmd_str,
+            "Error".underline().red(),
+            e
+        )
+    })?;
+
+    let log_path = {
+        let mut rng = rand::thread_rng();
+        let log_dir = test.get_base_dir(Who::NonValidator).join("logs");
+        std::fs::create_dir_all(&log_dir)?;
+        log_dir.join(format!(
+            "{}-cosmos-{}.log",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_micros(),
+            rng.gen::<u64>()
+        ))
+    };
+    let logger = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&log_path)?;
+    let mut session = expectrl::session::log(session, logger).unwrap();
+
+    session.set_expect_timeout(timeout_sec.map(std::time::Duration::from_secs));
+
+    let cmd_process = NamadaCmd {
+        session,
+        cmd_str,
+        log_path,
+    };
+
+    println!("{}:\n{}", "> Running".underline().green(), &cmd_process);
+
+    Ok(cmd_process)
 }
 
 pub fn run_cosmos_cmd<I, S>(

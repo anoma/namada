@@ -535,12 +535,12 @@ pub fn make_hermes_config(
     config.insert("telemetry".to_owned(), Value::Table(telemetry));
 
     let chains = vec![
-        make_hermes_chain_config(test_a),
+        make_hermes_chain_config(hermes_dir, test_a),
         match CosmosChainType::chain_type(test_b.net.chain_id.as_str()) {
             Ok(chain_type) => make_hermes_chain_config_for_cosmos(
                 hermes_dir, chain_type, test_b,
             ),
-            Err(_) => make_hermes_chain_config(test_b),
+            Err(_) => make_hermes_chain_config(hermes_dir, test_b),
         },
     ];
 
@@ -558,7 +558,7 @@ pub fn make_hermes_config(
     Ok(())
 }
 
-fn make_hermes_chain_config(test: &Test) -> Value {
+fn make_hermes_chain_config(hermes_dir: &TestDir, test: &Test) -> Value {
     let chain_id = test.net.chain_id.as_str();
     let rpc_addr = get_actor_rpc(test, Who::Validator(0));
     let rpc_addr = rpc_addr.strip_prefix("http://").unwrap();
@@ -597,6 +597,13 @@ fn make_hermes_chain_config(test: &Test) -> Value {
     chain.insert("gas_price".to_owned(), Value::Table(table));
 
     chain.insert("max_block_time".to_owned(), Value::String("60s".to_owned()));
+
+    let hermes_dir: &Path = hermes_dir.as_ref();
+    let key_dir = hermes_dir.join("hermes/keys");
+    chain.insert(
+        "key_store_folder".to_owned(),
+        Value::String(key_dir.to_string_lossy().to_string()),
+    );
 
     Value::Table(chain)
 }

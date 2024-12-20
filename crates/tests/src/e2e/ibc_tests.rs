@@ -56,10 +56,10 @@ use crate::e2e::ledger_tests::{
     start_namada_ledger_node_wait_wasm, write_json_file,
 };
 use crate::e2e::setup::{
-    self, apply_use_device, run_cosmos_cmd, run_hermes_cmd,
-    set_ethereum_bridge_mode, setup_cosmos, setup_hermes, sleep, working_dir,
-    Bin, CosmosChainType, NamadaCmd, Test, TestDir, Who,
-    ENV_VAR_COSMWASM_CONTRACT_DIR,
+    self, apply_use_device, osmosis_fixtures_dir, run_cosmos_cmd,
+    run_cosmos_cmd_homeless, run_hermes_cmd, set_ethereum_bridge_mode,
+    setup_cosmos, setup_hermes, sleep, working_dir, Bin, CosmosChainType,
+    NamadaCmd, Test, TestDir, Who, ENV_VAR_COSMWASM_CONTRACT_DIR,
 };
 use crate::ibc::primitives::Signer;
 use crate::ibc::IbcShieldingData;
@@ -3506,3 +3506,368 @@ fn osmosis_basic() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn osmosis_bingbong() -> Result<()> {
+    // Set up a big Cosmos party
+    let update_genesis =
+        |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
+            genesis.parameters.parameters.epochs_per_year =
+                epochs_per_year_from_min_duration(1800);
+            genesis.parameters.ibc_params.default_mint_limit =
+                Amount::max_signed();
+            genesis
+                .parameters
+                .ibc_params
+                .default_per_epoch_throughput_limit = Amount::max_signed();
+            setup::set_validators(1, genesis, base_dir, |_| 0, vec![])
+        };
+    let (namada, gaia, test_namada, test_gaia) =
+        run_namada_cosmos(CosmosChainType::Gaia(Some(1)), update_genesis)?;
+
+    let (osmosis, test_osmosis) =
+        setup_and_boot_cosmos(CosmosChainType::Osmosis)?;
+
+    let _bg_osmosis = osmosis.background();
+    let _bg_ledger = namada.background();
+    let _bg_gaia = gaia.background();
+
+    // The MC of the party
+    let osmosis_jones = find_cosmos_address(&test_osmosis, COSMOS_USER)?;
+
+    // Everyone shall take a 5 second nap, partied too hard
+    // (big up MC Osmosis Jones)
+    sleep(5);
+
+    // Create hermes relayers with the following config:
+    // =================================================
+    //
+    // namada -- osmosis -- gaia
+    //  \_____________________/
+    //
+    let [
+        (
+            hermes_gaia_namada,
+            channel_from_gaia_to_namada,
+            channel_from_namada_to_gaia,
+        ),
+        (
+            hermes_gaia_osmosis,
+            channel_from_gaia_to_osmosis,
+            channel_from_osmosis_to_gaia,
+        ),
+        (
+            hermes_namada_osmosis,
+            channel_from_namada_to_osmosis,
+            channel_from_osmosis_to_namada,
+        ),
+    ] = std::thread::scope(
+        |s| -> Result<[(TestDir, ChannelId, ChannelId); 3]> {
+            // Set up initial hermes configs
+            let t1 = s.spawn(|| setup_hermes(&test_gaia, &test_namada));
+            let t2 = s.spawn(|| setup_hermes(&test_gaia, &test_osmosis));
+            let t3 = s.spawn(|| setup_hermes(&test_namada, &test_osmosis));
+            let hermes_gaia_namada = t1.join().map_err(|_| {
+                eyre!("failed to join thread hermes_gaia_namada")
+            })??;
+            let hermes_gaia_osmosis = t2.join().map_err(|_| {
+                eyre!("failed to join thread hermes_gaia_osmosis")
+            })??;
+            let hermes_namada_osmosis = t3.join().map_err(|_| {
+                eyre!("failed to join thread hermes_namada_osmosis")
+            })??;
+
+            // Set up channels
+            let t1 = s.spawn(|| {
+                create_channel_with_hermes(
+                    &hermes_gaia_namada,
+                    &test_gaia,
+                    &test_namada,
+                    &PortId::transfer(),
+                    &PortId::transfer(),
+                )
+            });
+            let t2 = s.spawn(|| {
+                create_channel_with_hermes(
+                    &hermes_gaia_osmosis,
+                    &test_gaia,
+                    &test_osmosis,
+                    &PortId::transfer(),
+                    &PortId::transfer(),
+                )
+            });
+            let t3 = s.spawn(|| {
+                create_channel_with_hermes(
+                    &hermes_namada_osmosis,
+                    &test_namada,
+                    &test_osmosis,
+                    &PortId::transfer(),
+                    &PortId::transfer(),
+                )
+            });
+            let (channel_from_gaia_to_namada, channel_from_namada_to_gaia) =
+                t1.join().map_err(|_| {
+                    eyre!("failed to join thread chan_gaia_namada")
+                })??;
+            let (channel_from_gaia_to_osmosis, channel_from_osmosis_to_gaia) =
+                t2.join().map_err(|_| {
+                    eyre!("failed to join thread chan_gaia_osmosis")
+                })??;
+            let (
+                channel_from_namada_to_osmosis,
+                channel_from_osmosis_to_namada,
+            ) = t3.join().map_err(|_| {
+                eyre!("failed to join thread chan_namada_osmosis")
+            })??;
+
+            Result::Ok([
+                (
+                    hermes_gaia_namada,
+                    channel_from_gaia_to_namada,
+                    channel_from_namada_to_gaia,
+                ),
+                (
+                    hermes_gaia_osmosis,
+                    channel_from_gaia_to_osmosis,
+                    channel_from_osmosis_to_gaia,
+                ),
+                (
+                    hermes_namada_osmosis,
+                    channel_from_namada_to_osmosis,
+                    channel_from_osmosis_to_namada,
+                ),
+            ])
+        },
+    )?;
+
+    // Start relaying
+    let hermes_1 = run_hermes(&hermes_gaia_namada)?;
+    let hermes_2 = run_hermes(&hermes_gaia_osmosis)?;
+    let hermes_3 = run_hermes(&hermes_namada_osmosis)?;
+    let _bg_hermes_1 = hermes_1.background();
+    let _bg_hermes_2 = hermes_2.background();
+    let _bg_hermes_3 = hermes_3.background();
+
+    // Transfer assets to Osmosis, in order to create pools
+    let rpc_namada = get_actor_rpc(&test_namada, Who::Validator(0));
+    let rpc_gaia = format!("tcp://{}", get_cosmos_rpc_address(&test_gaia));
+
+    // Transfer NAM from Namada
+    transfer(
+        &test,
+        ALBERT,
+        &osmosis_jones,
+        NAM,
+        500,
+        Some(ALBERT_KEY),
+        &PortId::transfer(),
+        &channel_from_namada_to_osmosis,
+        None,
+        None,
+        None,
+        None,
+        false,
+    )?;
+    // Transfer Samoleans from Gaia
+    transfer_from_cosmos(
+        &test_osmosis,
+        COSMOS_USER,
+        &osmosis_jones,
+        COSMOS_COIN,
+        500,
+        &PortId::transfer(),
+        &channel_from_gaia_to_osmosis,
+        None,
+        None,
+    )?;
+
+    // Check balance of transferred assets on Osmosis
+    let nam_token_addr = find_address(&test, NAM)?;
+    check_cosmos_balance(
+        &test_osmosis,
+        COSMOS_USER,
+        &get_gaia_denom_hash(&format!("transfer/{channel_from_osmosis_to_namada}/{nam_token_addr}")),
+        500_000_000,
+    )?;
+    check_cosmos_balance(
+        &test_osmosis,
+        COSMOS_USER,
+        &get_gaia_denom_hash(&format!("transfer/{channel_from_osmosis_to_gaia}/{COSMOS_COIN}")),
+        500,
+    )?;
+
+    // Set up contracts on Osmosis
+    let rpc_osmosis = format!("tcp://{}", get_cosmos_rpc_address(&test_osmosis));
+
+    const CROSSCHAIN_REGISTRY_CODE_ID: &str = "1";
+    const SWAPROUTER_CODE_ID: &str = "2";
+    const CROSSCHAIN_SWAPS_CODE_ID: &str = "3";
+
+    const CROSSCHAIN_REGISTRY_SHA256_HASH: &str =
+        "72a4edfebadbe25593ea06de790592b9a85ea80c2e5183e5c46113dc5208b962";
+    const SWAPROUTER_CODE_SHA256_HASH: &str =
+        "01dd680a41099846dafb80935df2e03a60cc4d910cb258f7a014e98d3e70c3b7";
+    const CROSSCHAIN_SWAPS_SHA256_HASH: &str =
+        "0107bae644b60f03be67bd135d488d05c4ade0b5ba15f9ab1dc2f70197c968b4";
+
+    // Deploy each contract's wasm bytecode
+    for wasm in [
+        "crosschain_registry.wasm",
+        "swaprouter.wasm",
+        "crosschain_swaps.wasm",
+    ] {
+        let wasm_path = osmosis_fixtures_dir().join("wasm_bytecode").join(wasm);
+        let wasm_path_str = wasm_path.to_string_lossy();
+        let args = cosmos_common_args(
+            "250000",
+            None,
+            test_osmosis.net.chain_id.as_str(),
+            &rpc_osmosis,
+            vec!["tx", "wasm", "store", &wasm_path_str],
+        );
+        let mut osmosis_cmd = run_cosmos_cmd(&test_osmosis, args, Some(40))?;
+        osmosis_cmd.assert_success();
+    }
+
+    // Instantiate `crosschain_registry.wasm`
+    let json = format!(r#"{{"owner":"{osmosis_jones}"}}"#);
+    let crosschain_registry_addr = build_contract_addr(
+        &test_osmosis,
+        CROSSCHAIN_REGISTRY_SHA256_HASH,
+        &osmosis_jones,
+        &json,
+    )?;
+    let args = cosmos_common_args(
+        "250000",
+        Some("0.01stake"),
+        test_osmosis.net.chain_id.as_str(),
+        &rpc_osmosis,
+        vec![
+            "tx",
+            "wasm",
+            "instantiate2",
+            CROSSCHAIN_REGISTRY_CODE_ID,
+            &json,
+            CONTRACT_SALT_HEX,
+            "--label",
+            "CrosschainRegistry",
+            "--no-admin",
+            "--hex",
+        ],
+    );
+    let mut osmosis_cmd = run_cosmos_cmd(&test_osmosis, args, Some(40))?;
+    osmosis_cmd.assert_success();
+
+    // Instantiate `swaprouter.wasm`
+    let json = format!(r#"{{"owner":"{osmosis_jones}"}}"#);
+    let swaprouter_addr = build_contract_addr(
+        &test_osmosis,
+        SWAPROUTER_CODE_SHA256_HASH,
+        &osmosis_jones,
+        &json,
+    )?;
+    let args = cosmos_common_args(
+        "250000",
+        Some("0.01stake"),
+        test_osmosis.net.chain_id.as_str(),
+        &rpc_osmosis,
+        vec![
+            "tx",
+            "wasm",
+            "instantiate2",
+            SWAPROUTER_CODE_ID,
+            &json,
+            CONTRACT_SALT_HEX,
+            "--label",
+            "SwapRouter",
+            "--no-admin",
+            "--hex",
+        ],
+    );
+    let mut osmosis_cmd = run_cosmos_cmd(&test_osmosis, args, Some(40))?;
+    osmosis_cmd.assert_success();
+
+    // Instantiate `swaprouter.wasm`
+    let _crosschain_swaps_addr = build_contract_addr(
+        &test_osmosis,
+        CROSSCHAIN_SWAPS_SHA256_HASH,
+        &osmosis_jones,
+        &json,
+    )?;
+    let json = format!(
+        r#"{{"governor":"{osmosis_jones}","swap_contract":"{swaprouter_addr}","registry_contract":"{crosschain_registry_addr}"}}"#
+    );
+    let args = cosmos_common_args(
+        "250000",
+        Some("0.01stake"),
+        test_osmosis.net.chain_id.as_str(),
+        &rpc_osmosis,
+        vec![
+            "tx",
+            "wasm",
+            "instantiate2",
+            CROSSCHAIN_SWAPS_CODE_ID,
+            &json,
+            CONTRACT_SALT_HEX,
+            "--label",
+            "CrosschainSwaps",
+            "--no-admin",
+            "--hex",
+        ],
+    );
+    let mut osmosis_cmd = run_cosmos_cmd(&test_osmosis, args, Some(40))?;
+    osmosis_cmd.assert_success();
+
+    Ok(())
+}
+
+fn cosmos_common_args<'a>(
+    gas: &'a str,
+    gas_price: Option<&'a str>,
+    chain_id: &'a str,
+    rpc: &'a str,
+    mut args: Vec<&'a str>,
+) -> Vec<&'a str> {
+    args.extend_from_slice(&[
+        "--from",
+        COSMOS_USER,
+        "--gas",
+        gas,
+        "--gas-prices",
+        gas_price.unwrap_or("0.001stake"),
+        "--node",
+        rpc,
+        "--keyring-backend",
+        "test",
+        "--chain-id",
+        chain_id,
+        "--yes",
+    ]);
+    args
+}
+
+fn build_contract_addr(
+    test: &Test,
+    wasm_bytecode_hash: &str,
+    creator_addr: &str,
+    json_encoded_init_args: &str,
+) -> Result<String> {
+    let args = [
+        "query",
+        "wasm",
+        "build-address",
+        wasm_bytecode_hash,
+        creator_addr,
+        CONTRACT_SALT_HEX,
+        json_encoded_init_args,
+        "--hex",
+    ];
+    let mut cosmos = run_cosmos_cmd_homeless(test, args, Some(40))?;
+    let chain_type = CosmosChainType::chain_type(test.net.chain_id.as_str())?;
+    let regex = format!("{}.*", chain_type.account_prefix());
+    let (_, matched) = cosmos.exp_regex(&regex)?;
+
+    Ok(matched.trim().to_string())
+}
+
+const CONTRACT_SALT_HEX: &str = "01020304";
