@@ -261,7 +261,7 @@ where
         &mut self,
         packet: &Packet,
         _relayer: &Signer,
-    ) -> (ModuleExtras, Acknowledgement) {
+    ) -> (ModuleExtras, Option<Acknowledgement>) {
         on_recv_packet_execute(&mut self.ctx, packet)
     }
 
@@ -482,10 +482,10 @@ pub mod testing {
             &mut self,
             _packet: &Packet,
             _relayer: &Signer,
-        ) -> (ModuleExtras, Acknowledgement) {
+        ) -> (ModuleExtras, Option<Acknowledgement>) {
             (
                 ModuleExtras::empty(),
-                AcknowledgementStatus::success(ack_success_b64()).into(),
+                Some(AcknowledgementStatus::success(ack_success_b64()).into()),
             )
         }
 
