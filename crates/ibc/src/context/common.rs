@@ -43,7 +43,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         match self.storage().read_bytes(&key)? {
             Some(value) => Any::decode(&value[..])
                 .map_err(|e| ClientError::Other {
-                    description: e.to_string(),
+                    description: format!("client_state {e}"),
                 })?
                 .try_into()
                 .map_err(ContextError::from),
@@ -77,7 +77,7 @@ pub trait IbcCommonContext: IbcStorageContext {
         match self.storage().read_bytes(&key)? {
             Some(value) => Any::decode(&value[..])
                 .map_err(|e| ClientError::Other {
-                    description: e.to_string(),
+                    description: format!("consensus_state {e}"),
                 })?
                 .try_into()
                 .map_err(ContextError::from),
@@ -120,7 +120,7 @@ pub trait IbcCommonContext: IbcStorageContext {
     ) -> Result<AnyConsensusState> {
         Any::decode(&consensus_state[..])
             .map_err(|e| ClientError::Other {
-                description: e.to_string(),
+                description: format!("decode_consensus_state_value {e}"),
             })?
             .try_into()
             .map_err(ContextError::from)
@@ -138,7 +138,7 @@ pub trait IbcCommonContext: IbcStorageContext {
             let key = Key::parse(key).expect("the key should be parsable");
             let height = storage::consensus_height(&key).map_err(|e| {
                 ClientError::Other {
-                    description: e.to_string(),
+                    description: format!("consensus state heights: {e}"),
                 }
             })?;
             heights.push(height);

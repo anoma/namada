@@ -10,7 +10,7 @@ use color_eyre::eyre::{Report, Result};
 use data_encoding::HEXUPPER;
 use itertools::Either;
 use lazy_static::lazy_static;
-use namada_sdk::address::Address;
+use namada_sdk::address::{self, Address};
 use namada_sdk::chain::{BlockHeader, BlockHeight, Epoch};
 use namada_sdk::collections::HashMap;
 use namada_sdk::control_flow::time::Duration;
@@ -21,8 +21,9 @@ use namada_sdk::events::log::dumb_queries;
 use namada_sdk::events::Event;
 use namada_sdk::hash::Hash;
 use namada_sdk::io::Client;
-use namada_sdk::key::tm_consensus_key_raw_hash;
+use namada_sdk::key::{tm_consensus_key_raw_hash, PublicKeyHash};
 use namada_sdk::proof_of_stake::storage::{
+    get_consensus_key, read_consensus_validator_set_addresses,
     read_consensus_validator_set_addresses_with_stake, read_pos_params,
     validator_consensus_key_handle,
 };
@@ -39,7 +40,7 @@ use namada_sdk::tendermint_proto::google::protobuf::Timestamp;
 use namada_sdk::time::DateTimeUtc;
 use namada_sdk::tx::data::ResultCode;
 use namada_sdk::tx::event::{Batch as BatchAttr, Code as CodeAttr};
-use namada_sdk::{ethereum_structs, governance};
+use namada_sdk::{ethereum_structs, governance, tendermint_proto};
 use regex::Regex;
 use tokio::sync::mpsc;
 
@@ -50,7 +51,7 @@ use crate::ethereum_oracle::{
     control, last_processed_block, try_process_eth_events,
 };
 use crate::shell::testing::utils::TestDir;
-use crate::shell::{EthereumOracleChannels, Shell};
+use crate::shell::{key_to_tendermint, EthereumOracleChannels, Shell};
 use crate::shims::abcipp_shim_types::shim::request::{
     FinalizeBlock, ProcessedTx,
 };
@@ -730,6 +731,166 @@ impl MockNode {
         locked.commit();
     }
 
+    /// TODO
+    fn handle_broadcast_tx_sync(
+        &self,
+        tx: Vec<u8>,
+    ) -> tendermint_rpc::endpoint::broadcast::tx_sync::Response {
+        let (proposer_address, votes) = self.prepare_request();
+
+        #[allow(clippy::disallowed_methods)]
+        let time = DateTimeUtc::now();
+        let req = RequestProcessProposal {
+            txs: vec![tx.clone().into()],
+            proposer_address: proposer_address.clone().into(),
+            time: Some(Timestamp {
+                seconds: time.0.timestamp(),
+                nanos: time.0.timestamp_subsec_nanos() as i32,
+            }),
+            ..Default::default()
+        };
+        let mut locked = self.shell.lock().unwrap();
+        let height =
+            locked.state.in_mem().get_last_block_height().next_height();
+        println!("Executing tx in block height {height}");
+        let (result, tx_results) = locked.process_proposal(req);
+
+        let mut errors: Vec<_> = tx_results
+            .iter()
+            .map(|e| {
+                if e.code == 0 {
+                    NodeResults::Ok
+                } else {
+                    NodeResults::Rejected(e.clone())
+                }
+            })
+            .collect();
+        if result != tendermint::abci::response::ProcessProposal::Accept {
+            self.tx_result_codes.lock().unwrap().append(&mut errors);
+            panic!("Tx rejected in ProcessProposal")
+        }
+
+        // process proposal succeeded, now run finalize block
+
+        let time = {
+            #[allow(clippy::disallowed_methods)]
+            let time = DateTimeUtc::now();
+            // Set the block time in the past to avoid non-deterministically
+            // starting new epochs
+            let dur = namada_sdk::time::Duration::minutes(10);
+            time - dur
+        };
+        let req = FinalizeBlock {
+            header: BlockHeader {
+                hash: Hash([0; 32]),
+                #[allow(clippy::disallowed_methods)]
+                time,
+                next_validators_hash: Hash([0; 32]),
+            },
+            block_hash: Hash([0; 32]),
+            byzantine_validators: vec![],
+            txs: [tx.clone()]
+                .into_iter()
+                .zip(tx_results)
+                .map(|(tx, result)| ProcessedTx {
+                    tx: tx.into(),
+                    result,
+                })
+                .collect(),
+            proposer_address,
+            height: height.try_into().unwrap(),
+            decided_last_commit: tendermint::abci::types::CommitInfo {
+                round: 0u8.into(),
+                votes,
+            },
+        };
+
+        // process the results
+        let resp = locked.finalize_block(req).unwrap();
+        let mut error_codes = resp
+            .events
+            .iter()
+            .map(|e| {
+                let code = e
+                    .read_attribute_opt::<CodeAttr>()
+                    .unwrap()
+                    .unwrap_or_default();
+                if code == ResultCode::Ok {
+                    NodeResults::Ok
+                } else {
+                    NodeResults::Failed(code)
+                }
+            })
+            .collect::<Vec<_>>();
+        let mut txs_results = resp
+            .events
+            .into_iter()
+            .filter_map(|e| e.read_attribute_opt::<BatchAttr<'_>>().unwrap())
+            .collect::<Vec<_>>();
+        self.tx_result_codes
+            .lock()
+            .unwrap()
+            .append(&mut error_codes);
+
+        assert_eq!(txs_results.len(), 1);
+        let (Hash(hash), fst_res) =
+            txs_results.get(0).unwrap().iter().next().unwrap();
+        let tx_res = tendermint_rpc::endpoint::broadcast::tx_sync::Response {
+            codespace: "".to_string(),
+            code: match fst_res {
+                Ok(res) if res.is_accepted() => tendermint::abci::Code::Ok,
+                _ => tendermint::abci::Code::Err(1_u32.try_into().unwrap()),
+            },
+            data: bytes::Bytes::from(""),
+            log: "".to_string(),
+            hash: tendermint::Hash::Sha256(hash.clone()),
+        };
+
+        self.tx_results.lock().unwrap().append(&mut txs_results);
+        self.blocks.lock().unwrap().insert(
+            height,
+            block::Response {
+                block_id: tendermint::block::Id {
+                    hash: tendermint::Hash::None,
+                    part_set_header: tendermint::block::parts::Header::default(
+                    ),
+                },
+                block: tendermint::block::Block::new(
+                    tendermint::block::Header {
+                        version: tendermint::block::header::Version {
+                            block: 0,
+                            app: 0,
+                        },
+                        chain_id: locked
+                            .chain_id
+                            .to_string()
+                            .try_into()
+                            .unwrap(),
+                        height: 1u32.into(),
+                        time: tendermint::Time::now(),
+                        last_block_id: None,
+                        last_commit_hash: None,
+                        data_hash: None,
+                        validators_hash: tendermint::Hash::None,
+                        next_validators_hash: tendermint::Hash::None,
+                        consensus_hash: tendermint::Hash::None,
+                        app_hash: tendermint::AppHash::default(),
+                        last_results_hash: None,
+                        evidence_hash: None,
+                        proposer_address: tendermint::account::Id::new(
+                            [0u8; 20],
+                        ),
+                    },
+                    vec![tx],
+                    tendermint::evidence::List::default(),
+                    None,
+                ),
+            },
+        );
+        locked.commit();
+        tx_res
+    }
+
     // Check that applying a tx succeeded.
     fn success(&self) -> bool {
         let tx_result_codes = self.tx_result_codes.lock().unwrap();
@@ -800,12 +961,40 @@ impl MockNode {
 
                     match request.method {
                         Method::Status => {
-                            let chain_id = self_clone
+                            let (chain_id, BlockHeight(last_height), last_time, validator_pk) = {
+                                let guard = self_clone
                                 .shell
                                 .lock()
-                                .unwrap()
-                                .chain_id
-                                .to_string();
+                                .unwrap();
+                                let last_block = guard.state.in_mem().last_block.as_ref().unwrap();
+                                let last_epoch = guard.state.in_mem().last_epoch;
+                                let validators = read_consensus_validator_set_addresses(&guard.state, last_epoch).unwrap();
+                                assert_eq!(validators.len(), 1);
+                                let validator = validators.first().unwrap();
+                                let consensus_key = get_consensus_key::<_, governance::Store<_>>(
+                                    &guard.state,
+                                    &validator, last_epoch)
+                                    .unwrap()
+                                    .unwrap();
+
+                                (guard.chain_id.to_string(),
+                                last_block.height,
+                                last_block.time,
+                                consensus_key)
+                            };
+
+                            let validator_tm_pk = tendermint_proto::crypto::PublicKey {
+                                sum: Some(key_to_tendermint(&validator_pk).unwrap())
+                            };
+                            let validator_address = <[u8;address::HASH_LEN]>::from( PublicKeyHash::from(&validator_pk));
+
+                            let validator_info= tendermint::validator::Info {
+                                address: tendermint::account::Id::new(validator_address),
+                                pub_key: tendermint::PublicKey::try_from(validator_tm_pk).unwrap(),
+                                power: tendermint::vote::Power::from(1_u32),
+                                name: None,
+                                proposer_priority: tendermint::validator::ProposerPriority::from(1_i64),
+                            };
 
                             let response = status::Response {
                                 node_info: node::Info {
@@ -852,21 +1041,11 @@ impl MockNode {
                                     earliest_block_time: tendermint::Time::now(),
                                     latest_block_hash: tendermint::Hash::None,
                                     latest_app_hash: tendermint::AppHash::try_from(vec![]).unwrap(),
-                                    latest_block_height: tendermint::block::Height::from(1_u32),
-                                    latest_block_time: tendermint::Time::now(),
+                                    latest_block_height: tendermint::block::Height::try_from(last_height).unwrap(),
+                                    latest_block_time: tendermint::Time::try_from(last_time).unwrap(),
                                     catching_up: false,
                                 },
-                                validator_info: tendermint::validator::Info {
-                                    address: tendermint::account::Id::try_from(vec![0; tendermint::account::LENGTH]).unwrap(),
-                                    pub_key: {
-                                        let json_string = "{\"type\":\"tendermint/PubKeyEd25519\",\"value\":\"RblzMO4is5L1hZz6wo4kPbptzOyue6LTk4+lPhD1FRk=\"}";
-                                        let pub_key: tendermint::PublicKey = serde_json::from_str(json_string).unwrap();
-                                        pub_key
-                                    },
-                                    power: tendermint::vote::Power::from(1_u32),
-                                    name: None,
-                                    proposer_priority: tendermint::validator::ProposerPriority::from(1_i64),
-                                },
+                                validator_info,
                             };
 
                             let response = RpcResponseWrapper {
@@ -886,16 +1065,28 @@ impl MockNode {
                                 height,
                             } = serde_json::from_value(request.params).unwrap();
 
-                            let BlockHeight(last_height) = self_clone
+                            let (BlockHeight(last_height), chain_id, merkle_root, validator_pk) = {
+                                let guard =
+                                self_clone
                                 .shell
-                                .lock()
-                                .unwrap().state.in_mem().get_last_block_height();
-                            let chain_id = self_clone
-                                .shell
-                                .lock()
-                                .unwrap()
-                                .chain_id
-                                .to_string();
+                                .lock().unwrap();
+                                let last_epoch = guard.state.in_mem().last_epoch;
+                                let validators = read_consensus_validator_set_addresses(&guard.state, last_epoch).unwrap();
+                                assert_eq!(validators.len(), 1);
+                                let validator = validators.first().unwrap();
+                                let consensus_key = get_consensus_key::<_, governance::Store<_>>(
+                                    &guard.state,
+                                    &validator, last_epoch)
+                                    .unwrap()
+                                    .unwrap();
+
+                                (guard.state.in_mem().get_last_block_height(),
+                                guard
+                                    .chain_id
+                                    .to_string(),
+                                guard.state.in_mem().merkle_root().0,
+                                consensus_key)
+                            };
 
                             let (canonical, height) = match height {
                                 Some(height) => {
@@ -906,10 +1097,16 @@ impl MockNode {
                                 },
                                 None => (false, last_height),
                             };
-
+                            let validator_address = <[u8;address::HASH_LEN]>::from( PublicKeyHash::from(&validator_pk));
                             let height= block::Height::try_from(height).unwrap();
-                            let response = commit::Response {
-                                signed_header: SignedHeader::new(
+
+                                let vote_power= tendermint::vote::Power::from(1_u32);
+                            let validators = tendermint::validator::Set::new(
+                                todo!(),
+                                None,
+                            );
+
+                            let header = 
                                     block::Header {
                                         version: block::header::Version {
                                             block: 0,
@@ -924,19 +1121,26 @@ impl MockNode {
                                         last_block_id: None,
                                         last_commit_hash: None,
                                         data_hash: None,
-                                        validators_hash: tendermint::Hash::None,
-                                        next_validators_hash: tendermint::Hash::None,
+                                        // TODO how to derive the hash?
+                                        validators_hash: tendermint::Hash::from_str("66E9EA666684BAFEE0CF25D118AB2FFD17DC642F50373E5D75A8424EE023152F").unwrap(),
+                                        next_validators_hash: tendermint::Hash::from_str("66E9EA666684BAFEE0CF25D118AB2FFD17DC642F50373E5D75A8424EE023152F").unwrap(),
                                         consensus_hash: tendermint::Hash::None,
-                                        app_hash: tendermint::AppHash::try_from(vec![]).unwrap(),
+                                        // Try to fill this in
+                                        app_hash: tendermint::AppHash::try_from(merkle_root.to_vec()).unwrap(),
                                         last_results_hash: None,
                                         evidence_hash: None,
-                                        proposer_address: tendermint::account::Id::try_from(vec![0; tendermint::account::LENGTH]).unwrap(),
-                                    },
+                                        proposer_address: tendermint::account::Id::new(validator_address),
+                                    };
+                            // The header hash included in Commit must match for tendermint-light-client verification
+                            let header_hash = header.hash_with::<tendermint::crypto::default::Sha256>();
+                            let response = commit::Response {
+                                signed_header: SignedHeader::new(
+                                    header,
                                     block::Commit {
                                         height,
                                         round: 0_u16.into(),
                                         block_id: block::Id{
-                                            hash: tendermint::Hash::None,
+                                            hash: header_hash,
                                             part_set_header: block::parts::Header::new(
                                                  0,
                                                 tendermint::Hash::None,
@@ -963,31 +1167,46 @@ impl MockNode {
 
                             let params: validators::Request = serde_json::from_value(request.params).unwrap();
 
-                            let BlockHeight(last_height) = self_clone
+                            let (BlockHeight(last_height), validator_pk) = {
+                                let guard = self_clone
                                 .shell
                                 .lock()
-                                .unwrap().state.in_mem().get_last_block_height();
+                                .unwrap();
+                                let last_block = guard.state.in_mem().last_block.as_ref().unwrap();
+                                let last_epoch = guard.state.in_mem().last_epoch;
+                                let validators = read_consensus_validator_set_addresses(&guard.state, last_epoch).unwrap();
+                                assert_eq!(validators.len(), 1);
+                                let validator = validators.first().unwrap();
+                                let consensus_key = get_consensus_key::<_, governance::Store<_>>(
+                                    &guard.state,
+                                    &validator, last_epoch)
+                                    .unwrap()
+                                    .unwrap();
+                                (last_block.height,
+                                    consensus_key
+                                )
+                            };
                             let height = match params.height {
                                 Some(height) => u64::from(height),
                                 None => last_height,
                             };
 
+                            let validator_tm_pk = tendermint_proto::crypto::PublicKey {
+                                sum: Some(key_to_tendermint(&validator_pk).unwrap())
+                            };
+                            let validator_address = <[u8;address::HASH_LEN]>::from( PublicKeyHash::from(&validator_pk));
+                            let validator_info= tendermint::validator::Info {
+                                address: tendermint::account::Id::new(validator_address),
+                                pub_key: tendermint::PublicKey::try_from(validator_tm_pk).unwrap(),
+                                power: tendermint::vote::Power::from(1_u32),
+                                name: None,
+                                proposer_priority: tendermint::validator::ProposerPriority::from(1_i64),
+                            };
+
                             let block_height= block::Height::try_from(height).unwrap();
                             let response = validators::Response::new(
                                 block_height,
-                                vec![
-                                    validator::Info {
-                                        address: tendermint::account::Id::try_from(vec![0; tendermint::account::LENGTH]).unwrap(),
-                                        pub_key: {
-                                            let json_string = "{\"type\":\"tendermint/PubKeyEd25519\",\"value\":\"RblzMO4is5L1hZz6wo4kPbptzOyue6LTk4+lPhD1FRk=\"}";
-                                            let pub_key: tendermint::PublicKey = serde_json::from_str(json_string).unwrap();
-                                            pub_key
-                                        },
-                                        power: vote::Power::from(1_u32),
-                                        name: None,
-                                        proposer_priority: validator::ProposerPriority::from(1_i64)
-                                    }
-                                ],
+                                vec![validator_info],
                                 1,
                             );
 
@@ -1027,6 +1246,9 @@ impl MockNode {
                                 .lock()
                                 .unwrap()
                                 .query(query_request);
+                            if prove {
+                            dbg!(&proof.is_some());
+                            }
 
                             let response = abci_query::Response {
                                 response: abci_query::AbciQuery {
@@ -1041,6 +1263,21 @@ impl MockNode {
                                     codespace,
                                 }
                             };
+                            let response = RpcResponseWrapper {
+                                jsonrpc: request.jsonrpc,
+                                id: request.id,
+                                result: Some(response),
+                                error: None,
+                            };
+                            serde_json::to_string(&response).unwrap()
+                        }
+                        Method::BroadcastTxSync => {
+                            use tendermint_rpc::endpoint::broadcast::tx_sync;
+                            let tx_sync::Request{tx} =
+                                serde_json::from_value(request.params).unwrap();
+                                dbg!(&tx.len());
+
+                            let response = self_clone.handle_broadcast_tx_sync(tx);
                             let response = RpcResponseWrapper {
                                 jsonrpc: request.jsonrpc,
                                 id: request.id,

@@ -74,11 +74,14 @@ expectrl.workspace = true
 eyre.workspace = true
 flate2.workspace = true
 fs_extra.workspace = true
+# hermes = { git = "https://github.com/heliaxdev/hermes", package = "ibc-relayer-cli", branch = "namada-0.45" }
+hermes = { path = "../../../hermes/crates/relayer-cli", package = "ibc-relayer-cli" }
 once_cell.workspace = true
 proptest-state-machine.workspace = true
 rand.workspace = true
 tar.workspace = true
 tendermint-light-client.workspace = true
+tendermint-testgen.workspace = true
 test-log.workspace = true
 toml.workspace = true
 

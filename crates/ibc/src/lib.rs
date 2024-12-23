@@ -737,14 +737,14 @@ where
         // needed in actual txs to addresses whose VPs should be triggered
         let verifiers = Rc::new(RefCell::new(BTreeSet::<Address>::new()));
 
-        let message = decode_message::<Transfer>(tx_data)?;
+        let message = decode_message::<Transfer>(tx_data).unwrap();
         match message {
             IbcMessage::Transfer(msg) => {
                 let token_transfer_ctx = TokenTransferContext::new(
                     self.ctx.inner.clone(),
                     verifiers.clone(),
                 );
-                self.insert_verifiers()?;
+                self.insert_verifiers().unwrap();
                 send_transfer_validate(
                     &self.ctx,
                     &token_transfer_ctx,
@@ -763,6 +763,7 @@ where
                 .map_err(Error::NftTransfer)
             }
             IbcMessage::Envelope(envelope) => {
+                dbg!(&envelope);
                 validate(&self.ctx, &self.router, *envelope)
                     .map_err(|e| Error::Context(Box::new(e)))
             }

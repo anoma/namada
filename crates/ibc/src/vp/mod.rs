@@ -163,16 +163,16 @@ where
             .ok_or(VpError::NoTxData)?;
 
         // Pseudo execution and compare them
-        self.validate_state(&tx_data, keys_changed)?;
+        self.validate_state(&tx_data, keys_changed).unwrap();
 
         // Validate the state according to the given IBC message
-        self.validate_with_msg(&tx_data)?;
+        self.validate_with_msg(&tx_data).unwrap();
 
         // Validate the denom store if a denom key has been changed
-        self.validate_trace(keys_changed)?;
+        self.validate_trace(keys_changed).unwrap();
 
         // Check the limits
-        self.check_limits(keys_changed)?;
+        self.check_limits(keys_changed).unwrap();
 
         Ok(())
     }

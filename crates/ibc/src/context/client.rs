@@ -219,9 +219,10 @@ impl TryFrom<Vec<u8>> for AnyConsensusState {
     type Error = ClientError;
 
     fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
+        dbg!(&bytes);
         Any::decode(&bytes[..])
-            .map_err(|e| ClientError::Other {
-                description: e.to_string(),
+            .map_err(|e: prost::DecodeError| ClientError::Other {
+                description: format!("decode AnyConsensusState {e}"),
             })?
             .try_into()
     }

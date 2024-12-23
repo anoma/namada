@@ -368,6 +368,12 @@ impl<PK: PublicKey> From<&PK> for PublicKeyHash {
     }
 }
 
+impl From<PublicKeyHash> for [u8; address::HASH_LEN] {
+    fn from(PublicKeyHash(value): PublicKeyHash) -> Self {
+        value
+    }
+}
+
 /// Derive Tendermint raw hash from the public key
 pub trait PublicKeyTmRawHash {
     /// Derive Tendermint raw hash from the public key
