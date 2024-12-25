@@ -46,7 +46,7 @@ pub fn is_pks_key(key: &storage::Key) -> Option<&Address> {
     }
 }
 
-/// Check if the given storage key is a threshol key.
+/// Check if the given storage key is a threshold key.
 pub fn is_threshold_key(key: &storage::Key) -> Option<&Address> {
     match &key.segments[..] {
         [DbKeySeg::AddressSeg(owner), DbKeySeg::StringSeg(prefix)]
