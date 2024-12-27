@@ -208,7 +208,7 @@ impl DateTimeUtc {
     }
 
     /// Returns the number of seconds in between two `DateTimeUtc` instances.
-    /// Ass
+    /// Assumes that `self` is later than `earlier`.
     #[allow(clippy::arithmetic_side_effects)]
     pub fn time_diff(&self, earlier: DateTimeUtc) -> DurationSecs {
         (self.0 - earlier.0)
