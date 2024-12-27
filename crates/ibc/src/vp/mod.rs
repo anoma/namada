@@ -316,11 +316,11 @@ where
         let chain_id = self.ctx.get_chain_id()?;
         let proof_specs =
             namada_state::ics23_specs::ibc_proof_specs::<<S as StateRead>::H>();
-        let pipeline_len = PoS::pipeline_len(&self.ctx.pre())?;
+        let unbonding_len = PoS::unbonding_len(&self.ctx.pre())?;
         let epoch_duration =
             ParamsPre::epoch_duration_parameter(&self.ctx.pre())?;
         let unbonding_period_secs =
-            checked!(pipeline_len * epoch_duration.min_duration.0)?;
+            checked!(unbonding_len * epoch_duration.min_duration.0)?;
         Ok(ValidationParams {
             chain_id: IbcChainId::from_str(chain_id.as_str())
                 .map_err(ActionError::ChainId)?,
