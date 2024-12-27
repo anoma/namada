@@ -28,7 +28,7 @@ use crate::ProposalVote;
 pub const ADDRESS: Address = Address::Internal(InternalAddress::Governance);
 
 /// The maximum number of item in a pgf proposal
-pub const MAX_PGF_ACTIONS: usize = 20;
+pub const MAX_PGF_ACTIONS: usize = 1000;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
@@ -505,8 +505,9 @@ where
 
                 if !is_total_fundings_valid {
                     return Err(Error::new_alloc(format!(
-                        "Maximum number of funding actions \
-                         ({MAX_PGF_ACTIONS}) exceeded ({})",
+                        "Maximum number of funding targets \
+                         ({MAX_PGF_ACTIONS}) exceeded by the provided amount \
+                         of ({})",
                         fundings.len()
                     )));
                 }
