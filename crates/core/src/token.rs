@@ -528,6 +528,15 @@ impl DenominatedAmount {
             .ok_or(AmountParseError::PrecisionOverflow)
     }
 
+    /// Create a new [`DenominatedAmount`] with the same underlying
+    /// amout but a new denomination.
+    pub fn redenominate(self, new_denom: u8) -> Self {
+        Self {
+            amount: self.amount,
+            denom: new_denom.into(),
+        }
+    }
+
     /// Multiply this number by 10^denom and return the computed integer if
     /// possible. Otherwise error out.
     pub fn scale(

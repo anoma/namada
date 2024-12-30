@@ -3936,7 +3936,7 @@ pub async fn gen_ibc_shielding_transfer<N: Namada>(
     Ok(shielded_transfer.map(|st| st.masp_tx))
 }
 
-async fn get_ibc_src_port_channel(
+pub(crate) async fn get_ibc_src_port_channel(
     context: &impl Namada,
     dest_port_id: &PortId,
     dest_channel_id: &ChannelId,
