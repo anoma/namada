@@ -1607,10 +1607,10 @@ pub struct QueryBalance<C: NamadaTypes = SdkTypes> {
     pub height: Option<C::BlockHeight>,
 }
 
-/// Get an estimate for the MASP rewards accumulated by the next
+/// Get an estimate for the MASP rewards for the next
 /// MASP epoch.
 #[derive(Clone, Debug)]
-pub struct QueryRewardsEstimate<C: NamadaTypes = SdkTypes> {
+pub struct QueryShieldingRewardsEstimate<C: NamadaTypes = SdkTypes> {
     /// Common query args
     pub query: Query<C>,
     /// Viewing key

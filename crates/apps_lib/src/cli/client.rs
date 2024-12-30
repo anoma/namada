@@ -560,7 +560,9 @@ impl CliApi {
                         let namada = ctx.to_sdk(client, io);
                         rpc::query_balance(&namada, args).await;
                     }
-                    Sub::QueryRewardsEstimate(QueryRewardsEstimate(args)) => {
+                    Sub::QueryShieldingRewardsEstimate(
+                        QueryShieldingRewardsEstimate(args),
+                    ) => {
                         let chain_ctx = ctx.borrow_mut_chain_or_exit();
                         let ledger_address =
                             chain_ctx.get(&args.query.ledger_address);

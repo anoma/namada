@@ -50,9 +50,7 @@ use namada_sdk::rpc::{
 use namada_sdk::storage::BlockResults;
 use namada_sdk::tendermint_rpc::endpoint::status;
 use namada_sdk::time::DateTimeUtc;
-use namada_sdk::token::{
-    DenominatedAmount, MaspDigitPos, NATIVE_MAX_DECIMAL_PLACES,
-};
+use namada_sdk::token::{DenominatedAmount, MaspDigitPos};
 use namada_sdk::tx::display_batch_resp;
 use namada_sdk::wallet::AddressVpType;
 use namada_sdk::{error, state as storage, token, Namada};
@@ -403,19 +401,46 @@ pub async fn query_proposal_by_id<C: Client + Sync>(
 /// Estimate MASP rewards for next MASP epoch
 pub async fn query_rewards_estimate(
     context: &impl Namada,
-    args: args::QueryRewardsEstimate,
+    args: args::QueryShieldingRewardsEstimate,
 ) {
     let mut shielded = context.shielded_mut().await;
     let _ = shielded.load().await;
-    let rewards_estimate = shielded
-        .estimate_next_epoch_rewards(context, &args.owner.as_viewing_key())
+    let raw_balance = match shielded
+        .compute_shielded_balance(&args.owner.as_viewing_key())
         .await
-        .unwrap()
-        .unsigned_abs();
-    let rewards_estimate = DenominatedAmount::new(
-        Amount::from_u128(rewards_estimate),
-        NATIVE_MAX_DECIMAL_PLACES.into(),
-    );
+    {
+        Ok(balance) => balance,
+        Err(e) => {
+            edisplay_line!(
+                context.io(),
+                "Failed to query shielded balance: {}",
+                e
+            );
+            cli::safe_exit(1);
+        }
+    };
+
+    let rewards_estimate = match raw_balance {
+        Some(balance) => {
+            match shielded
+                .estimate_next_epoch_rewards(context, &balance)
+                .await
+            {
+                Ok(estimate) => estimate,
+                Err(e) => {
+                    edisplay_line!(
+                        context.io(),
+                        "Failed to estimate rewards for the next MASP epoch: \
+                         {}",
+                        e
+                    );
+                    cli::safe_exit(1);
+                }
+            }
+        }
+        None => DenominatedAmount::native(Amount::zero()),
+    };
+
     display_line!(
         context.io(),
         "Estimated native token rewards for the next MASP epoch: {}",
