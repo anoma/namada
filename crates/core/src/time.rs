@@ -206,6 +206,16 @@ impl DateTimeUtc {
     pub fn next_second(&self) -> Self {
         *self + DurationSecs(1)
     }
+
+    /// Returns the number of seconds in between two `DateTimeUtc` instances.
+    /// Assumes that `self` is later than `earlier`.
+    #[allow(clippy::arithmetic_side_effects)]
+    pub fn time_diff(&self, earlier: DateTimeUtc) -> DurationSecs {
+        (self.0 - earlier.0)
+            .to_std()
+            .map(DurationSecs::from)
+            .unwrap_or(DurationSecs(0))
+    }
 }
 
 impl FromStr for DateTimeUtc {
