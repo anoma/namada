@@ -2166,6 +2166,7 @@ fn create_channel_with_hermes(
     } else {
         FT_CHANNEL_VERSION
     };
+
     let args = [
         "create",
         "channel",
@@ -3544,7 +3545,6 @@ fn osmosis_bingbong() -> Result<()> {
     //
     // namada -- osmosis -- gaia
     //  \_____________________/
-    //
     let [
         (
             hermes_gaia_namada,
@@ -3563,10 +3563,14 @@ fn osmosis_bingbong() -> Result<()> {
         ),
     ] = std::thread::scope(
         |s| -> Result<[(TestDir, ChannelId, ChannelId); 3]> {
+            let t_gaia = &test_gaia;
+            let t_osmo = &test_osmosis;
+            let t_nam = &test_namada;
+
             // Set up initial hermes configs
-            let t1 = s.spawn(|| setup_hermes(&test_gaia, &test_namada));
-            let t2 = s.spawn(|| setup_hermes(&test_gaia, &test_osmosis));
-            let t3 = s.spawn(|| setup_hermes(&test_namada, &test_osmosis));
+            let t1 = s.spawn(|| setup_hermes(t_gaia, t_nam));
+            let t2 = s.spawn(|| setup_hermes(t_gaia, t_osmo));
+            let t3 = s.spawn(|| setup_hermes(t_nam, t_osmo));
             let hermes_gaia_namada = t1.join().map_err(|_| {
                 eyre!("failed to join thread hermes_gaia_namada")
             })??;
@@ -3578,44 +3582,50 @@ fn osmosis_bingbong() -> Result<()> {
             })??;
 
             // Set up channels
-            let t1 = s.spawn(|| {
+            let t1 = s.spawn(move || {
                 create_channel_with_hermes(
                     &hermes_gaia_namada,
-                    &test_gaia,
-                    &test_namada,
+                    t_gaia,
+                    t_nam,
                     &PortId::transfer(),
                     &PortId::transfer(),
-                )
+                ).map(|r| (r, hermes_gaia_namada))
             });
-            let t2 = s.spawn(|| {
+            let t2 = s.spawn(move || {
+                // Osmosis currently uses an older version of the Cosmos SDK
+                // that will error if txs are sent too close together. See
+                // https://github.com/cosmos/cosmos-sdk/issues/13621
+                std::thread::sleep(Duration::from_secs(5));
                 create_channel_with_hermes(
                     &hermes_gaia_osmosis,
-                    &test_gaia,
-                    &test_osmosis,
+                    t_gaia,
+                    t_osmo,
                     &PortId::transfer(),
                     &PortId::transfer(),
-                )
+                ).map(|r| (r, hermes_gaia_osmosis))
             });
-            let t3 = s.spawn(|| {
+            let t3 = s.spawn(move || {
                 create_channel_with_hermes(
                     &hermes_namada_osmosis,
-                    &test_namada,
-                    &test_osmosis,
+                    t_nam,
+                    t_osmo,
                     &PortId::transfer(),
                     &PortId::transfer(),
-                )
+                ).map(|r| (r, hermes_namada_osmosis))
             });
-            let (channel_from_gaia_to_namada, channel_from_namada_to_gaia) =
+            let ((channel_from_gaia_to_namada, channel_from_namada_to_gaia), hermes_gaia_namada) =
                 t1.join().map_err(|_| {
                     eyre!("failed to join thread chan_gaia_namada")
                 })??;
-            let (channel_from_gaia_to_osmosis, channel_from_osmosis_to_gaia) =
+            let ((channel_from_gaia_to_osmosis, channel_from_osmosis_to_gaia), hermes_gaia_osmosis) =
                 t2.join().map_err(|_| {
                     eyre!("failed to join thread chan_gaia_osmosis")
                 })??;
-            let (
+            let ((
                 channel_from_namada_to_osmosis,
                 channel_from_osmosis_to_namada,
+            ),
+                hermes_namada_osmosis
             ) = t3.join().map_err(|_| {
                 eyre!("failed to join thread chan_namada_osmosis")
             })??;
@@ -3654,7 +3664,7 @@ fn osmosis_bingbong() -> Result<()> {
 
     // Transfer NAM from Namada
     transfer(
-        &test,
+        &test_namada,
         ALBERT,
         &osmosis_jones,
         NAM,
@@ -3670,7 +3680,7 @@ fn osmosis_bingbong() -> Result<()> {
     )?;
     // Transfer Samoleans from Gaia
     transfer_from_cosmos(
-        &test_osmosis,
+        &test_gaia,
         COSMOS_USER,
         &osmosis_jones,
         COSMOS_COIN,
@@ -3681,18 +3691,22 @@ fn osmosis_bingbong() -> Result<()> {
         None,
     )?;
 
+    // Related to the issue above. In general, it takes osmosis some time
+    // to update state. Thus calls to it should be spaced out accordingly.
+    std::thread::sleep(Duration::from_secs(5));
     // Check balance of transferred assets on Osmosis
-    let nam_token_addr = find_address(&test, NAM)?;
+    let nam_token_addr = find_address(&test_namada, NAM)?;
     check_cosmos_balance(
         &test_osmosis,
         COSMOS_USER,
-        &get_gaia_denom_hash(&format!("transfer/{channel_from_osmosis_to_namada}/{nam_token_addr}")),
+        &format!("transfer/{channel_from_osmosis_to_namada}/{nam_token_addr}"),
         500_000_000,
     )?;
+
     check_cosmos_balance(
         &test_osmosis,
         COSMOS_USER,
-        &get_gaia_denom_hash(&format!("transfer/{channel_from_osmosis_to_gaia}/{COSMOS_COIN}")),
+        &format!("transfer/{channel_from_osmosis_to_gaia}/{COSMOS_COIN}"),
         500,
     )?;
 
@@ -3718,8 +3732,9 @@ fn osmosis_bingbong() -> Result<()> {
     ] {
         let wasm_path = osmosis_fixtures_dir().join("wasm_bytecode").join(wasm);
         let wasm_path_str = wasm_path.to_string_lossy();
+        std::thread::sleep(Duration::from_secs(5));
         let args = cosmos_common_args(
-            "250000",
+            "2500000",
             None,
             test_osmosis.net.chain_id.as_str(),
             &rpc_osmosis,
@@ -3731,6 +3746,7 @@ fn osmosis_bingbong() -> Result<()> {
 
     // Instantiate `crosschain_registry.wasm`
     let json = format!(r#"{{"owner":"{osmosis_jones}"}}"#);
+    std::thread::sleep(Duration::from_secs(10));
     let crosschain_registry_addr = build_contract_addr(
         &test_osmosis,
         CROSSCHAIN_REGISTRY_SHA256_HASH,
@@ -3738,7 +3754,7 @@ fn osmosis_bingbong() -> Result<()> {
         &json,
     )?;
     let args = cosmos_common_args(
-        "250000",
+        "2500000",
         Some("0.01stake"),
         test_osmosis.net.chain_id.as_str(),
         &rpc_osmosis,
@@ -3834,7 +3850,7 @@ fn cosmos_common_args<'a>(
         "--gas",
         gas,
         "--gas-prices",
-        gas_price.unwrap_or("0.001stake"),
+        gas_price.unwrap_or("0.01stake"),
         "--node",
         rpc,
         "--keyring-backend",
@@ -3852,7 +3868,10 @@ fn build_contract_addr(
     creator_addr: &str,
     json_encoded_init_args: &str,
 ) -> Result<String> {
+    let osmosis_home = test.test_dir.as_ref().join("osmosis");
     let args = [
+        "--home",
+        osmosis_home.to_str().unwrap(),
         "query",
         "wasm",
         "build-address",
@@ -3863,11 +3882,11 @@ fn build_contract_addr(
         "--hex",
     ];
     let mut cosmos = run_cosmos_cmd_homeless(test, args, Some(40))?;
-    let chain_type = CosmosChainType::chain_type(test.net.chain_id.as_str())?;
-    let regex = format!("{}.*", chain_type.account_prefix());
+    let regex = format!("address: .*\n");
     let (_, matched) = cosmos.exp_regex(&regex)?;
-
-    Ok(matched.trim().to_string())
+    let mut parts = matched.split(':');
+    parts.next().unwrap();
+    Ok(parts.next().unwrap().trim().to_string())
 }
 
 const CONTRACT_SALT_HEX: &str = "01020304";

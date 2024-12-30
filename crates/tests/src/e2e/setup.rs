@@ -1514,7 +1514,7 @@ pub fn setup_cosmos(chain_type: CosmosChainType) -> Result<Test> {
 
     // Add the stake token to the relayer
     let account = find_cosmos_address(&test, constants::COSMOS_RELAYER)?;
-    let args = chain_type.add_genesis_account_args(&account, "10000stake");
+    let args = chain_type.add_genesis_account_args(&account, "1000000stake");
     let mut cosmos = run_cosmos_cmd(&test, args, Some(10))?;
     cosmos.assert_success();
 

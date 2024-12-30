@@ -535,7 +535,12 @@ pub fn make_hermes_config(
     config.insert("telemetry".to_owned(), Value::Table(telemetry));
 
     let chains = vec![
-        make_hermes_chain_config(hermes_dir, test_a),
+        match CosmosChainType::chain_type(test_a.net.chain_id.as_str()) {
+            Ok(chain_type) => make_hermes_chain_config_for_cosmos(
+                hermes_dir, chain_type, test_a,
+            ),
+            Err(_) => make_hermes_chain_config(hermes_dir, test_a),
+        },
         match CosmosChainType::chain_type(test_b.net.chain_id.as_str()) {
             Ok(chain_type) => make_hermes_chain_config_for_cosmos(
                 hermes_dir, chain_type, test_b,
@@ -664,7 +669,11 @@ fn make_hermes_chain_config_for_cosmos(
     chain.insert("max_gas".to_owned(), Value::Integer(500_000));
     chain.insert("gas_multiplier".to_owned(), Value::Float(1.3));
     let mut table = toml::map::Map::new();
-    table.insert("price".to_owned(), Value::Float(0.001));
+    if let CosmosChainType::Osmosis = chain_type {
+        table.insert("price".to_owned(), Value::Float(0.01));
+    } else {
+        table.insert("price".to_owned(), Value::Float(0.001));
+    }
     table.insert("denom".to_owned(), Value::String("stake".to_string()));
     chain.insert("gas_price".to_owned(), Value::Table(table));
 
@@ -772,6 +781,27 @@ pub fn update_cosmos_config(test: &Test) -> Result<()> {
     let writer = std::io::BufWriter::new(file);
     serde_json::to_writer_pretty(writer, &genesis)
         .expect("Writing Cosmos genesis.toml failed");
+
+    if matches!(chain_type, CosmosChainType::Osmosis) {
+        let client_path = cosmos_dir.join("config/client.toml");
+        let s = std::fs::read_to_string(&client_path)
+            .expect("Reading Osmosis client config failed");
+        let mut values = s
+            .parse::<toml::Value>()
+            .expect("Parsing Osmosis client config failed");
+        let Some(laddr) = values.get_mut("node") else {
+            panic!("Test failed")
+        };
+        *laddr =
+            format!("tcp://0.0.0.0:{}", chain_type.get_rpc_port_number()).into();
+        let mut file = OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .open(&client_path)?;
+        file.write_all(values.to_string().as_bytes()).map_err(|e| {
+            eyre!(format!("Writing a  Osmosis client config file failed: {}", e))
+        })?;
+    }
 
     Ok(())
 }
