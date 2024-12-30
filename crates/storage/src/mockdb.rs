@@ -15,7 +15,7 @@ use namada_core::{decode, encode, ethereum_events};
 use namada_gas::Gas;
 use namada_merkle_tree::{
     tree_key_prefix_with_epoch, tree_key_prefix_with_height,
-    MerkleTreeStoresRead, StoreType,
+    MerkleTreeStoresRead, MerkleTreeStoresWrite, StoreType,
 };
 use namada_replay_protection as replay_protection;
 use regex::Regex;
@@ -24,6 +24,7 @@ use crate::db::{
     BlockStateRead, BlockStateWrite, DBIter, DBWriteBatch, Error, Result, DB,
 };
 use crate::types::{KVBytes, PatternIterator, PrefixIterator};
+use crate::DBUpdateVisitor;
 
 const SUBSPACE_CF: &str = "subspace";
 
@@ -641,8 +642,46 @@ impl DB for MockDB {
         _cf: &DbColFam,
         _key: &Key,
         _new_value: impl AsRef<[u8]>,
+        _persist_diffs: bool,
     ) -> Result<()> {
         unimplemented!()
+    }
+
+    fn migrator() -> Self::Migrator {
+        unimplemented!("Migration isn't implemented in MockDB")
+    }
+
+    fn update_last_block_merkle_tree(
+        &self,
+        merkle_tree_stores: MerkleTreeStoresWrite<'_>,
+        is_full_commit: bool,
+    ) -> Result<()> {
+        // Read the last block's height
+        let height: BlockHeight = self.read_value(BLOCK_HEIGHT_KEY)?.unwrap();
+
+        // Read the last block's epoch
+        let prefix = height.raw();
+        let epoch_key = format!("{prefix}/{EPOCH_KEY_SEGMENT}");
+        let epoch: Epoch = self.read_value(epoch_key)?.unwrap();
+
+        for st in StoreType::iter() {
+            if st.is_stored_every_block() || is_full_commit {
+                let key_prefix = if st.is_stored_every_block() {
+                    tree_key_prefix_with_height(st, height)
+                } else {
+                    tree_key_prefix_with_epoch(st, epoch)
+                };
+                let root_key =
+                    format!("{key_prefix}/{MERKLE_TREE_ROOT_KEY_SEGMENT}");
+                self.write_value(root_key, merkle_tree_stores.root(st));
+                let store_key =
+                    format!("{key_prefix}/{MERKLE_TREE_STORE_KEY_SEGMENT}");
+                self.0
+                    .borrow_mut()
+                    .insert(store_key, merkle_tree_stores.store(st).encode());
+            }
+        }
+        Ok(())
     }
 }
 
@@ -822,3 +861,49 @@ impl Iterator for MockPatternIterator {
 }
 
 impl DBWriteBatch for MockDBWriteBatch {}
+
+impl DBUpdateVisitor for () {
+    type DB = crate::mockdb::MockDB;
+
+    fn read(
+        &self,
+        _db: &Self::DB,
+        _key: &Key,
+        _cf: &DbColFam,
+    ) -> Option<Vec<u8>> {
+        unimplemented!()
+    }
+
+    fn write(
+        &mut self,
+        _db: &Self::DB,
+        _key: &Key,
+        _cf: &DbColFam,
+        _value: impl AsRef<[u8]>,
+        _persist_diffs: bool,
+    ) {
+        unimplemented!()
+    }
+
+    fn delete(
+        &mut self,
+        _db: &Self::DB,
+        _key: &Key,
+        _cf: &DbColFam,
+        _persist_diffs: bool,
+    ) {
+        unimplemented!()
+    }
+
+    fn get_pattern(
+        &self,
+        _db: &Self::DB,
+        _pattern: Regex,
+    ) -> Vec<(String, Vec<u8>)> {
+        unimplemented!()
+    }
+
+    fn commit(self, _db: &Self::DB) -> Result<()> {
+        unimplemented!()
+    }
+}
