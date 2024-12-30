@@ -1688,6 +1688,28 @@ fn masp_incentives() -> Result<()> {
     assert!(captured.result.is_ok());
     assert!(captured.contains("nam: 0.18887"));
 
+    // Assert the rewards estimate are 0 since we haven't shielded any more
+    // tokens
+    let captured = CapturedOutput::of(|| {
+        run(
+            &node,
+            Bin::Client,
+            vec![
+                "estimate-shielding-rewards",
+                "--key",
+                AA_VIEWING_KEY,
+                "--node",
+                validator_one_rpc,
+            ],
+        )
+    });
+    assert!(captured.result.is_ok());
+    assert!(
+        captured.contains(
+            "Estimated native token rewards for the next MASP epoch: 0"
+        )
+    );
+
     // Assert NAM balance at MASP pool is exclusively the
     // rewards from the shielded BTC
     let captured = CapturedOutput::of(|| {
