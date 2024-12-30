@@ -576,14 +576,11 @@ pub trait IbcCommonContext: IbcStorageContext {
         port_id: &PortId,
         channel_id: &ChannelId,
         sequence: Sequence,
-    ) -> Result<AcknowledgementCommitment> {
+    ) -> Result<Option<AcknowledgementCommitment>> {
         let key = storage::ack_key(port_id, channel_id, sequence);
         match self.storage().read_bytes(&key)? {
-            Some(value) => Ok(value.into()),
-            None => {
-                Err(PacketError::PacketAcknowledgementNotFound { sequence }
-                    .into())
-            }
+            Some(value) => Ok(Some(value.into())),
+            None => Ok(None),
         }
     }
 
