@@ -49,6 +49,7 @@ use namada_sdk::rpc::{
 };
 use namada_sdk::storage::BlockResults;
 use namada_sdk::tendermint_rpc::endpoint::status;
+use namada_sdk::time::DateTimeUtc;
 use namada_sdk::token::{
     DenominatedAmount, MaspDigitPos, NATIVE_MAX_DECIMAL_PLACES,
 };
@@ -90,17 +91,30 @@ pub async fn query_and_print_masp_epoch(context: &impl Namada) -> MaspEpoch {
 /// Query and print some information to help discern when the next epoch will
 /// begin.
 pub async fn query_and_print_next_epoch_info(context: &impl Namada) {
-    query_block(context).await;
+    println!();
+    let current_time = query_block(context).await.unwrap();
 
     let current_epoch = query_epoch(context.client()).await.unwrap();
     let (this_epoch_first_height, epoch_duration) =
         rpc::query_next_epoch_info(context.client()).await.unwrap();
 
-    display_line!(context.io(), "Current epoch: {current_epoch}.\n");
+    let this_epoch_first_height_header =
+        rpc::query_block_header(context.client(), this_epoch_first_height)
+            .await
+            .unwrap()
+            .unwrap();
+
+    let first_block_time = this_epoch_first_height_header.time;
+    let next_epoch_time = first_block_time + epoch_duration.min_duration;
+
+    let seconds_left = next_epoch_time.time_diff(current_time).0;
+    let time_remaining_str = convert_to_hours(seconds_left);
+
+    display_line!(context.io(), "\nCurrent epoch: {current_epoch}.");
     display_line!(
         context.io(),
-        "First block height of this epoch {current_epoch}: \
-         {this_epoch_first_height}."
+        "First block height of epoch {current_epoch}: \
+         {this_epoch_first_height}.\n"
     );
     display_line!(
         context.io(),
@@ -109,15 +123,31 @@ pub async fn query_and_print_next_epoch_info(context: &impl Namada) {
     );
     display_line!(
         context.io(),
-        "Minimum amount of time for an epoch: {} seconds.",
-        epoch_duration.min_duration
+        "Minimum amount of time for an epoch: {}.",
+        convert_to_hours(epoch_duration.min_duration.0)
     );
     display_line!(
         context.io(),
-        "\nEarliest height at which epoch {} can begin is block {}.",
+        "\nNext epoch ({}) begins in {} or at block height {}, whichever \
+         occurs later.\n",
         current_epoch.next(),
+        time_remaining_str,
         this_epoch_first_height.0 + epoch_duration.min_num_of_blocks
     );
+}
+
+fn convert_to_hours(seconds: u64) -> String {
+    let hours = seconds / 3600;
+    let minutes = (seconds - 3600 * hours) / 60;
+    let seconds_unit = seconds - 3600 * hours - 60 * minutes;
+
+    if hours > 0 {
+        format!("{}h-{}m-{}s", hours, minutes, seconds_unit)
+    } else if minutes > 0 {
+        format!("{}m-{}s", minutes, seconds_unit)
+    } else {
+        format!("{}s", seconds_unit)
+    }
 }
 
 /// Query and print node's status.
@@ -138,7 +168,7 @@ pub async fn query_and_print_status(
 }
 
 /// Query the last committed block
-pub async fn query_block(context: &impl Namada) {
+pub async fn query_block(context: &impl Namada) -> Option<DateTimeUtc> {
     let block = namada_sdk::rpc::query_block(context.client())
         .await
         .unwrap();
@@ -150,9 +180,11 @@ pub async fn query_block(context: &impl Namada) {
                 block.height,
                 block.time
             );
+            Some(block.time)
         }
         None => {
             display_line!(context.io(), "No block has been committed yet.");
+            None
         }
     }
 }

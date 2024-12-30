@@ -47,7 +47,7 @@ use namada_proof_of_stake::types::{
     BondsAndUnbondsDetails, CommissionPair, LivenessInfo, ValidatorMetaData,
     WeightedValidator,
 };
-use namada_state::LastBlock;
+use namada_state::{BlockHeader, LastBlock};
 use namada_token::masp::MaspTokenRewardData;
 use namada_tx::data::{BatchedTxResult, DryRunResult, ResultCode, TxResult};
 use namada_tx::event::{Batch as BatchAttr, Code as CodeAttr};
@@ -151,6 +151,14 @@ pub async fn query_epoch<C: namada_io::Client + Sync>(
     client: &C,
 ) -> Result<Epoch, error::Error> {
     convert_response::<C, _>(RPC.shell().epoch(client).await)
+}
+
+/// Query the epoch of the last committed block
+pub async fn query_block_header<C: namada_io::Client + Sync>(
+    client: &C,
+    height: BlockHeight,
+) -> Result<Option<BlockHeader>, error::Error> {
+    convert_response::<C, _>(RPC.shell().block_header(client, &height).await)
 }
 
 /// Query the masp epoch of the last committed block
