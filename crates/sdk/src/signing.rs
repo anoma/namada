@@ -83,22 +83,42 @@ pub struct SigningTxData {
 
 impl PartialEq for SigningTxData {
     fn eq(&self, other: &Self) -> bool {
-        if !(self.owner == other.owner
-            && self.threshold == other.threshold
-            && self.account_public_keys_map == other.account_public_keys_map
-            && self.fee_payer == other.fee_payer)
+        // Deconstruct the two instances to ensure we don't forget any new
+        // field
+        let SigningTxData {
+            owner,
+            public_keys,
+            threshold,
+            account_public_keys_map,
+            fee_payer,
+            shielded_hash,
+        } = self;
+        let SigningTxData {
+            owner: other_owner,
+            public_keys: other_public_keys,
+            threshold: other_threshold,
+            account_public_keys_map: other_account_public_keys_map,
+            fee_payer: other_fee_payer,
+            shielded_hash: other_shielded_hash,
+        } = other;
+
+        if !(owner == other_owner
+            && threshold == other_threshold
+            && account_public_keys_map == other_account_public_keys_map
+            && fee_payer == other_fee_payer
+            && shielded_hash == other_shielded_hash)
         {
             return false;
         }
 
         // Check equivalence of the public keys ignoring the specific ordering
-        if self.public_keys.len() != other.public_keys.len() {
+        if public_keys.len() != other_public_keys.len() {
             return false;
         }
 
-        self.public_keys
+        public_keys
             .iter()
-            .all(|pubkey| other.public_keys.contains(pubkey))
+            .all(|pubkey| other_public_keys.contains(pubkey))
     }
 }
 
