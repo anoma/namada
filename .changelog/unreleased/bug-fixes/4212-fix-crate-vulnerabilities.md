@@ -1,0 +1,1 @@
+- Fix crate vulnerabilities RUSTSEC-2024-0344, RUSTSEC-2024-0357 and RUSTSEC-2024-0376. Also updated yanked crates critical-section and futures-util.
