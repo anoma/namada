@@ -74,6 +74,14 @@ The default is set to `info` for all the modules, except for CometBFT ABCI, whic
 For more fine-grained logging levels settings, please refer to the [tracing subscriber docs](https://docs.rs/tracing-subscriber/0.2.18/tracing_subscriber/struct.EnvFilter.html#directives) for more information.
 
 To switch on logging in tests that use `#[test]` macro from `test_log::test`, use `RUST_LOG` with e.g. `RUST_LOG=info cargo test -- --nocapture`.
+**Example Usage:**
+```bash
+# Set log level to debug
+export NAMADA_LOG=debug
+namada node run
+
+# Check logs of the running Namada node
+tail -f ~/.namada/logs/namada.log
 
 ## How to contribute
 
