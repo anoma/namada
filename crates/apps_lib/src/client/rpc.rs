@@ -1482,9 +1482,7 @@ pub async fn query_rewards<C: Client + Sync>(
     source: &Option<Address>,
     validator: &Address,
 ) -> token::Amount {
-    unwrap_client_response::<C, token::Amount>(
-        RPC.vp().pos().rewards(client, validator, source).await,
-    )
+    unwrap_sdk_result(rpc::query_rewards(client, source, validator).await)
 }
 
 /// Query token total supply.
