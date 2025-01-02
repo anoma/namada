@@ -43,15 +43,20 @@ use crate::{Error, IbcCommonContext, IbcStorageContext, TokenTransferContext};
 pub struct PfmTransferModule<C, Params>
 where
     C: IbcCommonContext + Debug,
+    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>
+        + Debug,
 {
     /// The main module
-    pub transfer_module: TransferModule<C>,
+    pub transfer_module: TransferModule<C, Params>,
     #[allow(missing_docs)]
     pub _phantom: PhantomData<Params>,
 }
 
-impl<C: IbcCommonContext + Debug, Params> Debug
-    for PfmTransferModule<C, Params>
+impl<C, Params> Debug for PfmTransferModule<C, Params>
+where
+    C: IbcCommonContext + Debug,
+    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>
+        + Debug,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct(stringify!(PfmTransferModule))
@@ -63,6 +68,8 @@ impl<C: IbcCommonContext + Debug, Params> Debug
 impl<C, Params> Module for PfmTransferModule<C, Params>
 where
     C: IbcCommonContext + Debug,
+    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>
+        + Debug,
 {
     fn on_chan_open_init_validate(
         &self,
@@ -292,7 +299,8 @@ where
 impl<C, Params> PfmContext for PfmTransferModule<C, Params>
 where
     C: IbcCommonContext + Debug,
-    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>,
+    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>
+        + Debug,
 {
     type Error = crate::Error;
 

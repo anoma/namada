@@ -30,7 +30,8 @@ pub fn create_transfer_middlewares<C, Params>(
 ) -> TransferMiddlewares<C, Params>
 where
     C: IbcCommonContext + Debug,
-    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>,
+    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>
+        + Debug,
 {
     PacketForwardMiddleware::wrap(PfmTransferModule {
         transfer_module: TransferModule::new(ctx, verifiers),
@@ -42,6 +43,8 @@ impl<C, Params> crate::ModuleWrapper for TransferMiddlewares<C, Params>
 where
     C: IbcCommonContext + Debug,
     PfmTransferModule<C, Params>: PfmContext,
+    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>
+        + Debug,
 {
     fn as_module(&self) -> &dyn Module {
         self

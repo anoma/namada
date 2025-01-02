@@ -15,6 +15,7 @@ use ibc::core::host::types::path::{
 };
 use ibc_middleware_packet_forward::InFlightPacketKey;
 use namada_core::address::{Address, InternalAddress};
+use namada_core::masp::MaspEpoch;
 use namada_core::storage::{DbKeySeg, Key, KeySeg};
 use namada_core::token::Amount;
 use namada_events::EmitEvents;
@@ -39,6 +40,7 @@ const MINT: &str = "mint";
 const THROUGHPUT_LIMIT: &str = "throughput_limit";
 const DEPOSIT: &str = "deposit";
 const WITHDRAW: &str = "withdraw";
+const REFUND_MASP_TX: &str = "refund_masp_tx";
 
 /// Mint IBC tokens. This function doesn't emit event (see
 /// `mint_tokens_and_emit_event` below)
@@ -667,4 +669,26 @@ pub fn inflight_packet_key(inflight_packet_key: &InFlightPacketKey) -> Key {
         .with_segment(inflight_packet_key.port.to_string())
         .with_segment(inflight_packet_key.channel.to_string())
         .with_segment(inflight_packet_key.sequence.to_string())
+}
+
+/// Returns a key prefix of the MASP transactions for the shielded refund
+pub fn refund_masp_tx_prefix(
+    port_id: &PortId,
+    channel_id: &ChannelId,
+    sequence: Sequence,
+) -> Key {
+    let path = format!("{REFUND_MASP_TX}/{port_id}/{channel_id}/{sequence}");
+    ibc_key(path)
+        .expect("Creating a key for the masp tx for refund shouldn't fail")
+}
+
+/// Returns a key of the MASP transaction for the shielded refund
+pub fn refund_masp_tx_key(
+    port_id: &PortId,
+    channel_id: &ChannelId,
+    sequence: Sequence,
+    epoch: MaspEpoch,
+) -> Key {
+    let prefix = refund_masp_tx_prefix(port_id, channel_id, sequence);
+    prefix.with_segment(epoch.0)
 }
