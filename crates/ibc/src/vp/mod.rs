@@ -129,11 +129,12 @@ where
     EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL> + Debug,
     CA: 'static + Clone + Debug,
     Gov: governance::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
-    Params: parameters::Read<VpValidationContext<'view, 'ctx, S, CA, EVAL>>,
+    Params:
+        parameters::Read<VpValidationContext<'view, 'ctx, S, CA, EVAL>> + Debug,
     ParamsPre: parameters::Keys
         + parameters::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
-    ParamsPseudo:
-        parameters::Read<PseudoExecutionStorage<'view, 'ctx, S, CA, EVAL>>,
+    ParamsPseudo: parameters::Read<PseudoExecutionStorage<'view, 'ctx, S, CA, EVAL>>
+        + Debug,
     Token: token::Keys
         + token::Write<PseudoExecutionStorage<'view, 'ctx, S, CA, EVAL>>
         + Debug,
@@ -210,11 +211,12 @@ where
     S: 'static + StateRead,
     EVAL: 'static + VpEvaluator<'ctx, S, CA, EVAL> + Debug,
     CA: 'static + Clone + Debug,
-    Params: parameters::Read<VpValidationContext<'view, 'ctx, S, CA, EVAL>>,
+    Params:
+        parameters::Read<VpValidationContext<'view, 'ctx, S, CA, EVAL>> + Debug,
     ParamsPre: parameters::Keys
         + parameters::Read<CtxPreStorageRead<'view, 'ctx, S, CA, EVAL>>,
-    ParamsPseudo:
-        parameters::Read<PseudoExecutionStorage<'view, 'ctx, S, CA, EVAL>>,
+    ParamsPseudo: parameters::Read<PseudoExecutionStorage<'view, 'ctx, S, CA, EVAL>>
+        + Debug,
     Token: token::Keys
         + token::Write<PseudoExecutionStorage<'view, 'ctx, S, CA, EVAL>>
         + Debug,
@@ -2358,6 +2360,7 @@ mod tests {
         let tx_data = MsgTransfer::<Transfer> {
             message: msg,
             transfer: None,
+            refund_masp_tx: None,
         }
         .serialize_to_vec();
 
@@ -3218,6 +3221,7 @@ mod tests {
         let tx_data = MsgNftTransfer::<Transfer> {
             message: msg,
             transfer: None,
+            refund_masp_tx: None,
         }
         .serialize_to_vec();
 

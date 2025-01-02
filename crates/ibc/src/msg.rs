@@ -16,6 +16,7 @@ use ibc::core::host::types::identifiers::PortId;
 use ibc::primitives::proto::Protobuf;
 use masp_primitives::transaction::Transaction as MaspTransaction;
 use namada_core::borsh::BorshSerializeExt;
+use namada_core::masp::MaspEpoch;
 
 /// The different variants of an Ibc message
 #[derive(Debug, Clone)]
@@ -36,6 +37,8 @@ pub struct MsgTransfer<Transfer> {
     pub message: IbcMsgTransfer,
     /// Shieleded transfer for MASP transaction
     pub transfer: Option<Transfer>,
+    /// MASP transaction for refund
+    pub refund_masp_tx: Option<(MaspEpoch, MaspTransaction)>,
 }
 
 impl<Transfer: BorshSerialize> BorshSerialize for MsgTransfer<Transfer> {
@@ -44,7 +47,7 @@ impl<Transfer: BorshSerialize> BorshSerialize for MsgTransfer<Transfer> {
         writer: &mut W,
     ) -> std::io::Result<()> {
         let encoded_msg = self.message.clone().encode_vec();
-        let members = (encoded_msg, &self.transfer);
+        let members = (encoded_msg, &self.transfer, &self.refund_masp_tx);
         BorshSerialize::serialize(&members, writer)
     }
 }
@@ -54,11 +57,18 @@ impl<Transfer: BorshDeserialize> BorshDeserialize for MsgTransfer<Transfer> {
         reader: &mut R,
     ) -> std::io::Result<Self> {
         use std::io::{Error, ErrorKind};
-        let (msg, transfer): (Vec<u8>, Option<Transfer>) =
-            BorshDeserialize::deserialize_reader(reader)?;
+        let (msg, transfer, refund_masp_tx): (
+            Vec<u8>,
+            Option<Transfer>,
+            Option<(MaspEpoch, MaspTransaction)>,
+        ) = BorshDeserialize::deserialize_reader(reader)?;
         let message = IbcMsgTransfer::decode_vec(&msg)
             .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
-        Ok(Self { message, transfer })
+        Ok(Self {
+            message,
+            transfer,
+            refund_masp_tx,
+        })
     }
 }
 
@@ -66,10 +76,12 @@ impl<Transfer: BorshSchema> BorshSchema for MsgTransfer<Transfer> {
     fn add_definitions_recursively(
         definitions: &mut BTreeMap<Declaration, Definition>,
     ) {
-        <(Vec<u8>, Option<Transfer>)>::add_definitions_recursively(definitions);
-        let fields = Fields::UnnamedFields(vec![
-            <(Vec<u8>, Option<Transfer>)>::declaration(),
-        ]);
+        <(Vec<u8>, Option<Transfer>, Option<MaspTransaction>)>::add_definitions_recursively(definitions);
+        let fields = Fields::UnnamedFields(vec![<(
+            Vec<u8>,
+            Option<Transfer>,
+            Option<(MaspEpoch, MaspTransaction)>,
+        )>::declaration()]);
         definitions.insert(Self::declaration(), Definition::Struct { fields });
     }
 
@@ -86,6 +98,8 @@ pub struct MsgNftTransfer<Transfer> {
     pub message: IbcMsgNftTransfer,
     /// Shieleded transfer for MASP transaction
     pub transfer: Option<Transfer>,
+    /// MASP transaction for refund
+    pub refund_masp_tx: Option<(MaspEpoch, MaspTransaction)>,
 }
 
 impl<Transfer: BorshSerialize> BorshSerialize for MsgNftTransfer<Transfer> {
@@ -94,7 +108,7 @@ impl<Transfer: BorshSerialize> BorshSerialize for MsgNftTransfer<Transfer> {
         writer: &mut W,
     ) -> std::io::Result<()> {
         let encoded_msg = self.message.clone().encode_vec();
-        let members = (encoded_msg, &self.transfer);
+        let members = (encoded_msg, &self.transfer, &self.refund_masp_tx);
         BorshSerialize::serialize(&members, writer)
     }
 }
@@ -104,11 +118,18 @@ impl<Transfer: BorshDeserialize> BorshDeserialize for MsgNftTransfer<Transfer> {
         reader: &mut R,
     ) -> std::io::Result<Self> {
         use std::io::{Error, ErrorKind};
-        let (msg, transfer): (Vec<u8>, Option<Transfer>) =
-            BorshDeserialize::deserialize_reader(reader)?;
+        let (msg, transfer, refund_masp_tx): (
+            Vec<u8>,
+            Option<Transfer>,
+            Option<(MaspEpoch, MaspTransaction)>,
+        ) = BorshDeserialize::deserialize_reader(reader)?;
         let message = IbcMsgNftTransfer::decode_vec(&msg)
             .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
-        Ok(Self { message, transfer })
+        Ok(Self {
+            message,
+            transfer,
+            refund_masp_tx,
+        })
     }
 }
 
@@ -116,10 +137,12 @@ impl<Transfer: BorshSchema> BorshSchema for MsgNftTransfer<Transfer> {
     fn add_definitions_recursively(
         definitions: &mut BTreeMap<Declaration, Definition>,
     ) {
-        <(Vec<u8>, Option<Transfer>)>::add_definitions_recursively(definitions);
-        let fields = Fields::UnnamedFields(vec![
-            <(Vec<u8>, Option<Transfer>)>::declaration(),
-        ]);
+        <(Vec<u8>, Option<Transfer>, Option<Transfer>)>::add_definitions_recursively(definitions);
+        let fields = Fields::UnnamedFields(vec![<(
+            Vec<u8>,
+            Option<Transfer>,
+            Option<(MaspEpoch, MaspTransaction)>,
+        )>::declaration()]);
         definitions.insert(Self::declaration(), Definition::Struct { fields });
     }
 

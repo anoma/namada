@@ -3,6 +3,7 @@
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::fmt::Debug;
+use std::marker::PhantomData;
 use std::rc::Rc;
 
 use ibc::apps::transfer::context::TokenTransferValidationContext;
@@ -18,8 +19,11 @@ use ibc::apps::transfer::module::{
     on_timeout_packet_validate,
 };
 use ibc::apps::transfer::types::error::TokenTransferError;
+use ibc::apps::transfer::types::packet::PacketData;
 use ibc::apps::transfer::types::MODULE_ID_STR;
-use ibc::core::channel::types::acknowledgement::Acknowledgement;
+use ibc::core::channel::types::acknowledgement::{
+    Acknowledgement, AcknowledgementStatus,
+};
 use ibc::core::channel::types::channel::{Counterparty, Order};
 use ibc::core::channel::types::error::{ChannelError, PacketError};
 use ibc::core::channel::types::packet::Packet;
@@ -28,10 +32,11 @@ use ibc::core::host::types::identifiers::{ChannelId, ConnectionId, PortId};
 use ibc::core::router::module::Module;
 use ibc::core::router::types::module::{ModuleExtras, ModuleId};
 use ibc::primitives::Signer;
-use namada_core::address::Address;
+use namada_core::address::{Address, MASP};
+use namada_core::masp::MaspEpoch;
+use namada_state::StorageRead;
 
-use super::common::IbcCommonContext;
-use super::token_transfer::TokenTransferContext;
+use crate::{IbcCommonContext, IbcStorageContext, TokenTransferContext};
 
 /// IBC module wrapper for getting the reference of the module
 pub trait ModuleWrapper: Module {
@@ -50,17 +55,19 @@ pub trait ModuleWrapper: Module {
 
 /// IBC module for token transfer
 #[derive(Debug)]
-pub struct TransferModule<C>
+pub struct TransferModule<C, Params>
 where
     C: IbcCommonContext,
 {
     /// IBC actions
     pub ctx: TokenTransferContext<C>,
+    _marker: PhantomData<Params>,
 }
 
-impl<C> TransferModule<C>
+impl<C, Params> TransferModule<C, Params>
 where
     C: IbcCommonContext,
+    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>,
 {
     /// Make a new module
     pub fn new(
@@ -69,13 +76,16 @@ where
     ) -> Self {
         Self {
             ctx: TokenTransferContext::new(ctx, verifiers),
+            _marker: PhantomData,
         }
     }
 }
 
-impl<C> ModuleWrapper for TransferModule<C>
+impl<C, Params> ModuleWrapper for TransferModule<C, Params>
 where
     C: IbcCommonContext + Debug,
+    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>
+        + Debug,
 {
     fn as_module(&self) -> &dyn Module {
         self
@@ -94,9 +104,11 @@ where
     }
 }
 
-impl<C> Module for TransferModule<C>
+impl<C, Params> Module for TransferModule<C, Params>
 where
     C: IbcCommonContext + Debug,
+    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>
+        + Debug,
 {
     #[allow(clippy::too_many_arguments)]
     fn on_chan_open_init_validate(
@@ -301,12 +313,53 @@ where
         acknowledgement: &Acknowledgement,
         relayer: &Signer,
     ) -> (ModuleExtras, Result<(), PacketError>) {
-        let (extras, result) = on_acknowledgement_packet_execute(
-            &mut self.ctx,
-            packet,
-            acknowledgement,
-            relayer,
-        );
+        let updated_packet = serde_json::from_slice::<AcknowledgementStatus>(
+            acknowledgement.as_ref(),
+        )
+        .ok()
+        .and_then(|ack| {
+            if ack.is_successful() {
+                return None;
+            }
+            let inner = self.ctx.inner.borrow();
+            let epoch = inner.storage().get_block_epoch().ok()?;
+            let masp_epoch_multiplier =
+                Params::masp_epoch_multiplier(inner.storage()).ok()?;
+            let masp_epoch =
+                MaspEpoch::try_from_epoch(epoch, masp_epoch_multiplier).ok()?;
+            self.ctx
+                .inner
+                .borrow()
+                .refund_masp_tx(
+                    &packet.port_id_on_a,
+                    &packet.chan_id_on_a,
+                    packet.seq_on_a,
+                    masp_epoch,
+                )
+                .ok()??;
+            let mut data: PacketData =
+                serde_json::from_slice(&packet.data).ok()?;
+            data.sender = Signer::from(MASP.to_string());
+            let mut packet = packet.clone();
+            packet.data = serde_json::to_vec(&data)
+                .expect("Packet data should be encoded");
+            Some(packet)
+        });
+
+        let (extras, result) = match updated_packet {
+            Some(packet) => on_acknowledgement_packet_execute(
+                &mut self.ctx,
+                &packet,
+                acknowledgement,
+                relayer,
+            ),
+            None => on_acknowledgement_packet_execute(
+                &mut self.ctx,
+                packet,
+                acknowledgement,
+                relayer,
+            ),
+        };
         (extras, result.map_err(into_packet_error))
     }
 
