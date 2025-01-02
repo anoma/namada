@@ -7173,6 +7173,7 @@ pub mod args {
                 query: self.query.to_sdk(ctx)?,
                 validator: ctx.borrow_chain_or_exit().get(&self.validator),
                 source: self.source.map(|x| ctx.borrow_chain_or_exit().get(&x)),
+                epoch: self.epoch,
             })
         }
     }
@@ -7182,10 +7183,12 @@ pub mod args {
             let query = Query::parse(matches);
             let source = SOURCE_OPT.parse(matches);
             let validator = VALIDATOR.parse(matches);
+            let epoch = EPOCH.parse(matches);
             Self {
                 query,
                 source,
                 validator,
+                epoch,
             }
         }
 
@@ -7200,6 +7203,10 @@ pub mod args {
                         "Validator address for the rewards query."
                     )),
                 )
+                .arg(EPOCH.def().help(wrap!(
+                    "The epoch at which to query (corresponding to the last \
+                     committed block, if not specified)."
+                )))
         }
     }
 
@@ -7403,6 +7410,7 @@ pub mod args {
         type Data = PathBuf;
         type DatedSpendingKey = WalletDatedSpendingKey;
         type DatedViewingKey = WalletDatedViewingKey;
+        type Epoch = Epoch;
         type EthereumAddress = String;
         type Keypair = WalletKeypair;
         type MaspIndexerAddress = String;

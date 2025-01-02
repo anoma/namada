@@ -13,6 +13,7 @@ use namada_proof_of_stake::parameters::PosParams;
 use namada_proof_of_stake::queries::{
     find_delegation_validators, find_delegations,
 };
+use namada_proof_of_stake::rewards::read_rewards_counter;
 use namada_proof_of_stake::slashing::{
     find_all_enqueued_slashes, find_all_slashes,
 };
@@ -34,12 +35,13 @@ use namada_proof_of_stake::types::{
     WeightedValidator,
 };
 use namada_proof_of_stake::{bond_amount, query_reward_tokens};
-use namada_state::{DBIter, KeySeg, StorageHasher, DB};
+use namada_state::{DBIter, KeySeg, StorageHasher, StorageRead, DB};
 use namada_storage::collections::lazy_map;
-use namada_storage::OptionExt;
+use namada_storage::{OptionExt, ResultExt};
 
 use crate::governance;
 use crate::queries::types::RequestCtx;
+use crate::queries::{shell, RequestQuery};
 
 // PoS validity predicate queries
 router! {POS,
@@ -103,7 +105,7 @@ router! {POS,
     ( "bond" / [source: Address] / [validator: Address] / [epoch: opt Epoch] )
         -> token::Amount = bond,
 
-    ( "rewards" / [validator: Address] / [source: opt Address] )
+    ( "rewards" / [validator: Address] / [source: opt Address] / [epoch: opt Epoch] )
         -> token::Amount = rewards,
 
     ( "bond_with_slashing" / [source: Address] / [validator: Address] / [epoch: opt Epoch] )
@@ -588,18 +590,86 @@ fn rewards<D, H, V, T>(
     ctx: RequestCtx<'_, D, H, V, T>,
     validator: Address,
     source: Option<Address>,
+    epoch: Option<Epoch>,
 ) -> namada_storage::Result<token::Amount>
 where
     D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
     H: 'static + StorageHasher + Sync,
 {
-    let current_epoch = ctx.state.in_mem().last_epoch;
-    query_reward_tokens::<_, governance::Store<_>>(
+    let reward_tokens = query_reward_tokens::<_, governance::Store<_>>(
         ctx.state,
         source.as_ref(),
         &validator,
-        current_epoch,
-    )
+        epoch.unwrap_or(ctx.state.in_mem().last_epoch),
+    )?;
+
+    match epoch {
+        None => Ok(reward_tokens),
+        Some(epoch) => {
+            // When querying by epoch, since query_reward_tokens includes
+            // rewards_counter not based on epoch, we need to
+            // subtract it and instead add the rewards_counter from
+            // the height of the epoch we are querying.
+            let source = source.unwrap_or_else(|| validator.clone());
+            let rewards_counter_last_epoch =
+                read_rewards_counter(ctx.state, &source, &validator)?;
+
+            let rewards_counter_at_epoch =
+                get_rewards_counter_at_epoch(ctx, &source, &validator, epoch)?;
+
+            // Add before subtracting because Amounts are unsigned
+            checked!(
+                reward_tokens + rewards_counter_at_epoch
+                    - rewards_counter_last_epoch
+            )
+            .into_storage_result()
+        }
+    }
+}
+
+fn get_rewards_counter_at_epoch<D, H, V, T>(
+    ctx: RequestCtx<'_, D, H, V, T>,
+    source: &Address,
+    validator: &Address,
+    epoch: Epoch,
+) -> namada_storage::Result<token::Amount>
+where
+    D: 'static + DB + for<'iter> DBIter<'iter> + Sync,
+    H: 'static + StorageHasher + Sync,
+{
+    // Do this first so that we return an error if an invalid epoch is requested
+    let queried_height = ctx
+        .state
+        .get_epoch_start_height(epoch)?
+        .ok_or(namada_storage::Error::new_const("Epoch not found"))?;
+
+    let storage_key = namada_proof_of_stake::storage_key::rewards_counter_key(
+        source, validator,
+    );
+
+    // Shortcut: avoid costly lookup of non-existent storage key in history
+    // by first checking to see if it currently exists in memory before
+    // querying by height.
+    // TODO: this might not be valid if rewards have been claimed in the current
+    // epoch? (because the rewards_counter would be removed from
+    // storage until the next epoch)
+    if !ctx.state.has_key(&storage_key)? {
+        return Ok(token::Amount::zero());
+    }
+
+    let query = RequestQuery {
+        height: queried_height.try_into().into_storage_result()?,
+        prove: false,
+        data: Default::default(),
+        path: Default::default(),
+    };
+
+    let value = shell::storage_value(ctx, &query, storage_key)?;
+    if value.data.is_empty() {
+        Ok(token::Amount::zero())
+    } else {
+        token::Amount::try_from_slice(&value.data).into_storage_result()
+    }
 }
 
 fn bonds_and_unbonds<D, H, V, T>(
