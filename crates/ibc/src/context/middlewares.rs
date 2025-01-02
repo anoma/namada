@@ -32,7 +32,8 @@ pub fn create_transfer_middlewares<C, Params>(
 ) -> TransferMiddlewares<C, Params>
 where
     C: IbcCommonContext + Debug,
-    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>,
+    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>
+        + Debug,
 {
     OverflowReceiveMiddleware::wrap(ShieldedRecvModule {
         next: PacketForwardMiddleware::wrap(PfmTransferModule {

@@ -104,7 +104,7 @@ impl Display for MaspTxId {
     Serialize,
     Deserialize,
 )]
-pub struct MaspEpoch(Epoch);
+pub struct MaspEpoch(pub Epoch);
 
 impl Display for MaspEpoch {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

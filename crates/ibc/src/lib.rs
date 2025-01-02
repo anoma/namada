@@ -90,7 +90,7 @@ use namada_core::ibc::core::channel::types::commitment::{
     compute_packet_commitment, AcknowledgementCommitment, PacketCommitment,
 };
 pub use namada_core::ibc::*;
-use namada_core::masp::{addr_taddr, ibc_taddr, TAddrData};
+use namada_core::masp::{addr_taddr, ibc_taddr, MaspEpoch, TAddrData};
 use namada_core::masp_primitives::transaction::components::ValueSum;
 use namada_core::token::Amount;
 use namada_events::EmitEvents;
@@ -638,12 +638,26 @@ where
                 if msg.transfer.is_some() {
                     token_transfer_ctx.enable_shielded_transfer();
                 }
+                let port_id = msg.message.port_id_on_a.clone();
+                let channel_id = msg.message.chan_id_on_a.clone();
                 send_transfer_execute(
                     &mut self.ctx,
                     &mut token_transfer_ctx,
                     msg.message,
                 )
                 .map_err(Error::TokenTransfer)?;
+
+                if let Some((_, (epoch, refund_masp_tx))) =
+                    msg.transfer.as_ref().zip(msg.refund_masp_tx)
+                {
+                    self.save_refund_masp_tx(
+                        &port_id,
+                        &channel_id,
+                        epoch,
+                        refund_masp_tx,
+                    )?;
+                }
+
                 Ok((msg.transfer, None))
             }
             IbcMessage::NftTransfer(msg) => {
@@ -652,6 +666,8 @@ where
                 if msg.transfer.is_some() {
                     nft_transfer_ctx.enable_shielded_transfer();
                 }
+                let port_id = msg.message.port_id_on_a.clone();
+                let channel_id = msg.message.chan_id_on_a.clone();
                 // Add the source to the set of verifiers
                 self.verifiers.borrow_mut().insert(
                     Address::from_str(msg.message.packet_data.sender.as_ref())
@@ -670,6 +686,18 @@ where
                     msg.message,
                 )
                 .map_err(Error::NftTransfer)?;
+
+                if let Some((_, (epoch, refund_masp_tx))) =
+                    msg.transfer.as_ref().zip(msg.refund_masp_tx)
+                {
+                    self.save_refund_masp_tx(
+                        &port_id,
+                        &channel_id,
+                        epoch,
+                        refund_masp_tx,
+                    )?;
+                }
+
                 Ok((msg.transfer, None))
             }
             IbcMessage::Envelope(envelope) => {
@@ -696,12 +724,92 @@ where
                     {
                         extract_masp_tx_from_packet(&msg.packet)
                     }
-                    #[cfg(is_apple_silicon)]
+                    // Check if the refund masp tx is stored when the transfer
+                    // failed, i.e. ack with an error or timeout
                     MsgEnvelope::Packet(PacketMsg::Ack(msg)) => {
-                        // NOTE: This is unneeded but wasm compilation error
-                        // happened if deleted on macOS with Apple Silicon
-                        let _ = extract_masp_tx_from_packet(&msg.packet);
-                        None
+                        match serde_json::from_slice::<AcknowledgementStatus>(
+                            msg.acknowledgement.as_ref(),
+                        ) {
+                            Ok(ack) if !ack.is_successful() => {
+                                let inner = self.ctx.inner.borrow();
+                                let epoch = inner
+                                    .storage()
+                                    .get_block_epoch()
+                                    .map_err(Error::Storage)?;
+                                let masp_epoch_multiplier =
+                                    Params::masp_epoch_multiplier(
+                                        inner.storage(),
+                                    )
+                                    .map_err(Error::Storage)?;
+                                let masp_epoch = MaspEpoch::try_from_epoch(
+                                    epoch,
+                                    masp_epoch_multiplier,
+                                )
+                                .map_err(|e| Error::Other(e.to_string()))?;
+                                let refund_masp_tx = self
+                                    .ctx
+                                    .inner
+                                    .borrow()
+                                    .refund_masp_tx(
+                                        &msg.packet.port_id_on_a,
+                                        &msg.packet.chan_id_on_a,
+                                        msg.packet.seq_on_a,
+                                        masp_epoch,
+                                    )
+                                    .map_err(|e| Error::Context(Box::new(e)))?;
+                                // Delete refund masp txs of the packet
+                                // including, the one for the previous epoch
+                                self.ctx
+                                    .inner
+                                    .borrow_mut()
+                                    .delete_refund_masp_txs(
+                                        &msg.packet.port_id_on_a,
+                                        &msg.packet.chan_id_on_a,
+                                        msg.packet.seq_on_a,
+                                    )
+                                    .map_err(|e| Error::Context(Box::new(e)))?;
+                                refund_masp_tx
+                            }
+                            _ => None,
+                        }
+                    }
+                    MsgEnvelope::Packet(PacketMsg::Timeout(msg)) => {
+                        let inner = self.ctx.inner.borrow();
+                        let epoch = inner
+                            .storage()
+                            .get_block_epoch()
+                            .map_err(Error::Storage)?;
+                        let masp_epoch_multiplier =
+                            Params::masp_epoch_multiplier(inner.storage())
+                                .map_err(Error::Storage)?;
+                        let masp_epoch = MaspEpoch::try_from_epoch(
+                            epoch,
+                            masp_epoch_multiplier,
+                        )
+                        .map_err(|e| Error::Other(e.to_string()))?;
+                        let refund_masp_tx = self
+                            .ctx
+                            .inner
+                            .borrow()
+                            .refund_masp_tx(
+                                &msg.packet.port_id_on_a,
+                                &msg.packet.chan_id_on_a,
+                                msg.packet.seq_on_a,
+                                masp_epoch,
+                            )
+                            .map_err(|e| Error::Context(Box::new(e)))?;
+                        // Delete refund masp txs of the packet, including the
+                        // one for the previous epoch
+                        self.ctx
+                            .inner
+                            .borrow_mut()
+                            .delete_refund_masp_txs(
+                                &msg.packet.port_id_on_a,
+                                &msg.packet.chan_id_on_a,
+                                msg.packet.seq_on_a,
+                            )
+                            .map_err(|e| Error::Context(Box::new(e)))?;
+                        refund_masp_tx
                     }
                     _ => None,
                 };
@@ -792,6 +900,32 @@ where
         }
         Ok(())
     }
+
+    fn save_refund_masp_tx(
+        &mut self,
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        epoch: MaspEpoch,
+        refund_masp_tx: MaspTransaction,
+    ) -> Result<(), Error> {
+        let sequence = get_last_sequence_send(
+            self.ctx.inner.borrow().storage(),
+            port_id,
+            channel_id,
+        )
+        .map_err(Error::Storage)?;
+        self.ctx
+            .inner
+            .borrow_mut()
+            .store_refund_masp_tx(
+                port_id,
+                channel_id,
+                sequence,
+                epoch,
+                refund_masp_tx,
+            )
+            .map_err(|e| Error::Context(Box::new(e)))
+    }
 }
 
 fn is_packet_forward(data: &PacketData) -> bool {
@@ -880,6 +1014,7 @@ pub fn decode_message<Transfer: BorshDeserialize>(
             let msg = MsgTransfer {
                 message,
                 transfer: None,
+                refund_masp_tx: None,
             };
             return Ok(IbcMessage::Transfer(Box::new(msg)));
         }
@@ -887,6 +1022,7 @@ pub fn decode_message<Transfer: BorshDeserialize>(
             let msg = MsgNftTransfer {
                 message,
                 transfer: None,
+                refund_masp_tx: None,
             };
             return Ok(IbcMessage::NftTransfer(msg));
         }

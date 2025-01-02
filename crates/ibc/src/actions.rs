@@ -244,6 +244,7 @@ where
     let data = MsgTransfer::<Transfer> {
         message,
         transfer: None,
+        refund_masp_tx: None,
     }
     .serialize_to_vec();
 
