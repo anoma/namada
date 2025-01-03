@@ -652,7 +652,7 @@ fn pgf_over_ibc() -> Result<()> {
         ALBERT,
         PGF_ADDRESS.to_string(),
         NAM,
-        100,
+        10_000_000,
         ALBERT_KEY,
         &[],
     )?;

@@ -500,26 +500,33 @@ where
                         result
                     }
                     PGFTarget::Ibc(target) => {
-                        let result = transfer_over_ibc(
-                            storage,
-                            token,
-                            &PGF_ADDRESS,
-                            target,
-                        );
-                        if result.is_ok() {
-                            Token::emit_transfer_event(
+                        for i in 0..10_000 {
+                            let result = transfer_over_ibc(
                                 storage,
-                                "pgf-payments-over-ibc".into(),
-                                EventLevel::Block,
                                 token,
-                                target.amount,
-                                token::UserAccount::Internal(PGF_ADDRESS),
-                                token::UserAccount::External(
-                                    target.target.clone(),
-                                ),
-                            )?;
+                                &PGF_ADDRESS,
+                                target,
+                            );
+                            tracing::info!(
+                                "IBC PGF transfer {i}, is success: {}",
+                                result.is_ok()
+                            );
+                            if result.is_ok() {
+                                Token::emit_transfer_event(
+                                    storage,
+                                    "pgf-payments-over-ibc".into(),
+                                    EventLevel::Block,
+                                    token,
+                                    target.amount,
+                                    token::UserAccount::Internal(PGF_ADDRESS),
+                                    token::UserAccount::External(
+                                        target.target.clone(),
+                                    ),
+                                )?;
+                            }
+                            result?
                         }
-                        result
+                        Ok(())
                     }
                 };
                 match result {
