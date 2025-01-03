@@ -652,7 +652,7 @@ fn pgf_over_ibc() -> Result<()> {
         ALBERT,
         PGF_ADDRESS.to_string(),
         NAM,
-        10_000_000,
+        1_000_000,
         ALBERT_KEY,
         &[],
     )?;
@@ -694,7 +694,7 @@ fn pgf_over_ibc() -> Result<()> {
     let token_addr = find_address(&test, NAM)?;
     let ibc_denom = format!("{port_id_gaia}/{channel_id_gaia}/{token_addr}");
     check_cosmos_balance(&test_gaia, COSMOS_RELAYER, &ibc_denom, 10_000_000)?;
-    check_cosmos_balance(&test_gaia, COSMOS_USER, &ibc_denom, 5_000_000)?;
+    check_cosmos_balance(&test_gaia, COSMOS_USER, &ibc_denom, 50_000_000_000)?;
 
     Ok(())
 }
