@@ -1037,8 +1037,8 @@ pub mod testing {
     }
 
     prop_compose! {
-        /// Generate an arbitrary wrapper transaction
-        pub fn arb_wrapper_tx()(
+        /// Generate an arbitrary wrapper transaction. Do not check fee validity
+        pub fn arb_unchecked_wrapper_tx()(
             fee in arb_fee(),
             pk in arb_common_pk(),
             gas_limit in arb_gas_limit(),
@@ -1048,6 +1048,18 @@ pub mod testing {
                 pk,
                 gas_limit,
             }
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary wrapper transaction with valid fees
+        pub fn arb_wrapper_tx()(
+            wrapper in arb_unchecked_wrapper_tx().prop_filter(
+                "wrapper fees overflow",
+                |x| x.get_tx_fee().is_ok(),
+            ),
+        ) -> WrapperTx {
+            wrapper
         }
     }
 
