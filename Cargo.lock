@@ -4252,7 +4252,7 @@ dependencies = [
 [[package]]
 name = "ledger-namada-rs"
 version = "0.0.1"
-source = "git+https://github.com/Zondax/ledger-namada?rev=f54b76adcc1430db0496e894ad72cd74cfb6eb88#f54b76adcc1430db0496e894ad72cd74cfb6eb88"
+source = "git+https://github.com/Zondax/ledger-namada?tag=v2.0.2#4eb39abc55b08a6a2b7ae0692913a469356d6642"
 dependencies = [
  "bincode",
  "byteorder",
@@ -4756,6 +4756,7 @@ dependencies = [
  "futures",
  "git2",
  "itertools 0.12.1",
+ "jubjub 0.10.0 (git+https://github.com/heliaxdev/jubjub.git?rev=a373686962f4e9d0edb3b4716f86ff6bbd9aa86c)",
  "kdam",
  "lazy_static",
  "ledger-lib",
