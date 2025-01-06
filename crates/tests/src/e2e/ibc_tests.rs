@@ -3885,11 +3885,10 @@ fn osmosis_bingbong() -> Result<()> {
     let mut osmosis_cmd = run_cosmos_cmd(&test_osmosis, args, Some(40))?;
     osmosis_cmd.assert_success();
     std::thread::sleep(Duration::from_secs(5));
-    panic!();
     // enable pfm on gaia and namada
     for (chain, token) in [
         ("namada", get_gaia_denom_hash(format!("transfer/{channel_from_osmosis_to_namada}/{nam_token_addr}"))),
-        //("gaia", get_gaia_denom_hash(format!("transfer/{channel_from_osmosis_to_gaia}/cosmo"))),
+        ("gaia", get_gaia_denom_hash(format!("transfer/{channel_from_osmosis_to_gaia}/{COSMOS_COIN}"))),
     ] {
         let msg = format!(r#"{{"propose_pfm": {{"chain": "{chain}"}}}}"#);
         let amount = format!("1{token}");
@@ -3919,20 +3918,16 @@ fn osmosis_bingbong() -> Result<()> {
         &channel_from_osmosis_to_namada,
         &test_osmosis
     )?;
-    /*wait_for_packet_relay(
+    wait_for_packet_relay(
         &hermes_gaia_osmosis,
         &PortId::transfer(),
         &channel_from_osmosis_to_gaia,
         &test_osmosis
-    )?;*/
+    )?;
 
     for chain in ["namada", "gaia"] {
         let msg = format!(r#"{{"has_packet_forwarding": {{"chain": "{chain}"}}}}"#);
-        let args = cosmos_common_args(
-            "5000000",
-            Some("0.01stake"),
-            test_osmosis.net.chain_id.as_str(),
-            &rpc_osmosis,
+        let args =
             vec![
                 "query",
                 "wasm",
@@ -3940,8 +3935,7 @@ fn osmosis_bingbong() -> Result<()> {
                 "smart",
                 &crosschain_registry_addr,
                 &msg
-            ],
-        );
+            ];
         let mut osmosis_cmd = run_cosmos_cmd(&test_osmosis, args, Some(40))?;
         osmosis_cmd.exp_string("data: true")?;
         std::thread::sleep(Duration::from_secs(5));
