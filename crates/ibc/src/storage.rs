@@ -677,9 +677,11 @@ pub fn refund_masp_tx_prefix(
     channel_id: &ChannelId,
     sequence: Sequence,
 ) -> Key {
-    let path = format!("{REFUND_MASP_TX}/{port_id}/{channel_id}/{sequence}");
-    ibc_key(path)
-        .expect("Creating a key for the masp tx for refund shouldn't fail")
+    let key: Key = namada_core::address::IBC.to_db_key().into();
+    key.with_segment(REFUND_MASP_TX.to_string())
+        .with_segment(port_id.to_string())
+        .with_segment(channel_id.to_string())
+        .with_segment(sequence.to_string())
 }
 
 /// Returns a key of the MASP transaction for the shielded refund

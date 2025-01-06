@@ -2796,7 +2796,7 @@ pub async fn build_ibc_transfer(
         .map_or(args.ibc_memo.clone(), |shielding_data| {
             Some(shielding_data.clone().into())
         });
-    // For transfer to the shielded refund target
+    // Shielded transfer to the shielded refund target
     let refund_masp_tx = match shielded_refund_target {
         Some(target) => {
             let masp_transfer_data = vec![MaspTransferData {
@@ -2815,7 +2815,7 @@ pub async fn build_ibc_transfer(
             )
             .await?
             .map(|(shielded_transfer, _)| {
-                (shielded_transfer.epoch.into(), shielded_transfer.masp_tx)
+                (shielded_transfer.epoch, shielded_transfer.masp_tx)
             })
         }
         None => None,
@@ -2886,7 +2886,12 @@ pub async fn build_ibc_transfer(
             timeout_height_on_b: timeout_height,
             timeout_timestamp_on_b: timeout_timestamp,
         };
-        MsgNftTransfer { message, transfer }.serialize_to_vec()
+        MsgNftTransfer {
+            message,
+            transfer,
+            refund_masp_tx,
+        }
+        .serialize_to_vec()
     } else {
         return Err(Error::Other(format!("Invalid IBC denom: {ibc_denom}")));
     };
@@ -4132,7 +4137,7 @@ async fn get_refund_target(
             TransferTarget::PaymentAddress(pa) => {
                 let fallback_target =
                     get_fallback_refund_target(context).await?;
-                Ok((Some(pa.clone()), Some(fallback_target)))
+                Ok((Some(*pa), Some(fallback_target)))
             }
             TransferTarget::Address(addr) => Ok((None, Some(addr.clone()))),
             TransferTarget::Ibc(_) => {
