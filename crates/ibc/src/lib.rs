@@ -734,7 +734,7 @@ where
                             msg.acknowledgement.as_ref(),
                         ) {
                             Ok(ack) if !ack.is_successful() => {
-                                let inner = self.ctx.inner.borrow();
+                                let mut inner = self.ctx.inner.borrow_mut();
                                 let epoch = inner
                                     .storage()
                                     .get_block_epoch()
@@ -749,10 +749,7 @@ where
                                     masp_epoch_multiplier,
                                 )
                                 .map_err(|e| Error::Other(e.to_string()))?;
-                                let refund_masp_tx = self
-                                    .ctx
-                                    .inner
-                                    .borrow()
+                                let refund_masp_tx = inner
                                     .refund_masp_tx(
                                         &msg.packet.port_id_on_a,
                                         &msg.packet.chan_id_on_a,
@@ -762,9 +759,7 @@ where
                                     .map_err(|e| Error::Context(Box::new(e)))?;
                                 // Delete refund masp txs of the packet
                                 // including, the one for the previous epoch
-                                self.ctx
-                                    .inner
-                                    .borrow_mut()
+                                inner
                                     .delete_refund_masp_txs(
                                         &msg.packet.port_id_on_a,
                                         &msg.packet.chan_id_on_a,
@@ -777,7 +772,7 @@ where
                         }
                     }
                     MsgEnvelope::Packet(PacketMsg::Timeout(msg)) => {
-                        let inner = self.ctx.inner.borrow();
+                        let mut inner = self.ctx.inner.borrow_mut();
                         let epoch = inner
                             .storage()
                             .get_block_epoch()
@@ -790,10 +785,7 @@ where
                             masp_epoch_multiplier,
                         )
                         .map_err(|e| Error::Other(e.to_string()))?;
-                        let refund_masp_tx = self
-                            .ctx
-                            .inner
-                            .borrow()
+                        let refund_masp_tx = inner
                             .refund_masp_tx(
                                 &msg.packet.port_id_on_a,
                                 &msg.packet.chan_id_on_a,
@@ -803,9 +795,7 @@ where
                             .map_err(|e| Error::Context(Box::new(e)))?;
                         // Delete refund masp txs of the packet, including the
                         // one for the previous epoch
-                        self.ctx
-                            .inner
-                            .borrow_mut()
+                        inner
                             .delete_refund_masp_txs(
                                 &msg.packet.port_id_on_a,
                                 &msg.packet.chan_id_on_a,

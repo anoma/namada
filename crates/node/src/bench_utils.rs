@@ -259,6 +259,7 @@ impl BenchShellInner {
         let msg = MsgTransfer::<token::Transfer> {
             message,
             transfer: None,
+            refund_masp_tx: None,
         };
 
         self.generate_ibc_tx(TX_IBC_WASM, msg.serialize_to_vec())
@@ -1369,6 +1370,7 @@ impl BenchShieldedCtx {
         let msg = MsgTransfer::<token::Transfer> {
             message: msg,
             transfer: Some(transfer),
+            refund_masp_tx: None,
         };
 
         let mut ibc_tx = ctx

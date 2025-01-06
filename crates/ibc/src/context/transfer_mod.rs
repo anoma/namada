@@ -327,9 +327,7 @@ where
                 Params::masp_epoch_multiplier(inner.storage()).ok()?;
             let masp_epoch =
                 MaspEpoch::try_from_epoch(epoch, masp_epoch_multiplier).ok()?;
-            self.ctx
-                .inner
-                .borrow()
+            inner
                 .refund_masp_tx(
                     &packet.port_id_on_a,
                     &packet.chan_id_on_a,
