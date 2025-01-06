@@ -1270,6 +1270,39 @@ pub mod testing {
     }
 
     prop_compose! {
+        /// Generate an arbitrary batched memoed transaction
+        pub fn arb_memoed_batch_tx()(
+            mut header in arb_header(0),
+            wrapper in arb_wrapper_tx(),
+            txs in collection::vec(arb_memoed_tx(), 0..=5),
+        ) -> (Tx, Vec<TxData>) {
+            header.tx_type = TxType::Wrapper(Box::new(wrapper));
+            let mut batched_tx = Tx { header, sections: vec![] };
+            let mut tx_datas = vec![];
+            for (tx, tx_data) in txs {
+                let cmt = tx.first_commitments().unwrap().to_owned();
+                batched_tx.add_inner_tx(tx, cmt);
+                tx_datas.push(tx_data);
+            }
+            (batched_tx, tx_datas)
+        }
+    }
+
+    prop_compose! {
+        /// Generate an arbitrary signed batched memoed transaction
+        pub fn arb_signed_batch_tx()(tx in arb_memoed_batch_tx())(
+            sigs in collection::vec(arb_signature(tx.0.sechashes()), 0..3),
+            mut tx in Just(tx),
+        ) -> (Tx, Vec<TxData>) {
+            for sig in sigs {
+                // Add all the generated signature sections
+                tx.0.add_section(Section::Authorization(sig));
+            }
+            (tx.0, tx.1)
+        }
+    }
+
+    prop_compose! {
         /// Generate an arbitrary vote proposal transaction
         pub fn arb_vote_proposal_tx()(
             mut header in arb_header(0),

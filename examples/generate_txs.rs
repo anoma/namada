@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use data_encoding::HEXLOWER;
 use namada_sdk::signing::to_ledger_vector;
-use namada_sdk::testing::arb_signed_tx;
+use namada_sdk::testing::arb_signed_batch_tx;
 use namada_sdk::wallet::fs::FsWalletUtils;
 use proptest::strategy::{Strategy, ValueTree};
 use proptest::test_runner::{Reason, TestRunner};
@@ -16,7 +16,8 @@ async fn main() -> Result<(), Reason> {
     let mut test_vectors = vec![];
     let mut serialized_txs = vec![];
     for i in 0..1000 {
-        let (tx, tx_data) = arb_signed_tx().new_tree(&mut runner)?.current();
+        let (tx, tx_data) =
+            arb_signed_batch_tx().new_tree(&mut runner)?.current();
         let mut ledger_vector = to_ledger_vector(&wallet, &tx)
             .await
             .expect("unable to construct test vector");
