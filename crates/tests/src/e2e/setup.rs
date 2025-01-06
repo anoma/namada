@@ -41,10 +41,7 @@ use rand::rngs::OsRng;
 use rand::Rng;
 use tempfile::{tempdir, tempdir_in, TempDir};
 
-use crate::e2e::helpers::{
-    find_cosmos_address, generate_bin_command, make_hermes_config,
-    update_cosmos_config,
-};
+use crate::e2e::helpers::{find_cosmos_address, generate_bin_command, get_cosmos_rpc_address, make_hermes_config, update_cosmos_config};
 
 /// For `color_eyre::install`, which fails if called more than once in the same
 /// process
@@ -1139,8 +1136,8 @@ where
 
     // Root cargo workspace manifest path
     let (bin_name, log_level) = match bin {
-        Bin::Namada => ("namada", "info"),
-        Bin::Node => ("namadan", "info"),
+        Bin::Namada => ("namada", "debug"),
+        Bin::Node => ("namadan", "debug"),
         Bin::Client => (
             "namadac",
             if is_shielded_sync {
@@ -1259,27 +1256,110 @@ pub fn setup_hermes(test_a: &Test, test_b: &Test) -> Result<TestDir> {
     let hermes_dir = TestDir::new();
 
     println!("\n{}", "Setting up Hermes".underline().green(),);
+    let chain_name_a = CosmosChainType::chain_type(test_a.net.chain_id.as_str())
+        .map(|c| c.chain_id()).ok();
+    let chain_name_b = CosmosChainType::chain_type(test_b.net.chain_id.as_str())
+        .map(|c| c.chain_id()).ok();
+    let relayer = chain_name_a.zip(chain_name_b)
+        .map(|(a, b)|  format!("{a}_{b}_relayer"));
+    make_hermes_config(&hermes_dir, test_a, test_b, relayer.as_ref().map(|s| s.as_ref()))?;
 
-    make_hermes_config(&hermes_dir, test_a, test_b)?;
 
     for test in [test_a, test_b] {
         let chain_id = test.net.chain_id.as_str();
         let chain_dir = test.test_dir.as_ref().join(chain_id);
-        let key_file_path = match CosmosChainType::chain_type(chain_id) {
-            Ok(_) => chain_dir
-                .join(format!("{}_seed.json", constants::COSMOS_RELAYER)),
-            Err(_) => wallet::wallet_file(chain_dir),
+        match CosmosChainType::chain_type(chain_id) {
+            Ok(_) => {
+                if let Some(relayer) = relayer.as_ref() {
+                    // we create a new relayer for each ibc connection between to non-Namada chains
+                    let key_file = chain_dir.join(format!("{relayer}_seed.json"));
+                    let args = [
+                        "keys",
+                        "add",
+                        &relayer,
+                        "--keyring-backend",
+                        "test",
+                        "--output",
+                        "json",
+                    ];
+                    let mut cosmos = run_cosmos_cmd(&test, args, Some(10))?;
+                    let result = cosmos.exp_string("\n")?;
+                    let mut file = File::create(&key_file).unwrap();
+                    file.write_all(result.as_bytes()).map_err(|e| {
+                        eyre!(format!("Writing a Cosmos key file failed: {}", e))
+                    })?;
+
+                    let account = find_cosmos_address(test, &relayer)?;
+                    // Add tokens to the new relayer account
+                    let args = [
+                        "tx",
+                        "bank",
+                        "send",
+                        constants::COSMOS_RELAYER,
+                        &account,
+                        "500000stake",
+                        "--from",
+                        constants::COSMOS_RELAYER,
+                        "--gas",
+                        "250000",
+                        "--gas-prices",
+                        "0.01stake",
+                        "--node",
+                        &format!("http://{}", get_cosmos_rpc_address(&test)),
+                        "--keyring-backend",
+                        "test",
+                        "--chain-id",
+                        chain_id,
+                        "--yes",
+                    ];
+
+                    let mut cosmos = run_cosmos_cmd(&test, args, Some(10))?;
+                    cosmos.assert_success();
+
+                    // add to hermes
+                    let args = [
+                        "keys",
+                        "add",
+                        "--chain",
+                        chain_id,
+                        "--key-file",
+                        &key_file.to_string_lossy(),
+                        "--key-name",
+                        relayer,
+                    ];
+                    let mut hermes = run_hermes_cmd(&hermes_dir, args, Some(20))?;
+                    hermes.assert_success();
+                } else {
+                    let key_file_path = chain_dir
+                        .join(format!("{}_seed.json", constants::COSMOS_RELAYER));
+                    let args = [
+                        "keys",
+                        "add",
+                        "--chain",
+                        chain_id,
+                        "--key-file",
+                        &key_file_path.to_string_lossy(),
+                    ];
+                    let mut hermes = run_hermes_cmd(&hermes_dir, args, Some(20))?;
+                    hermes.assert_success();
+                }
+            },
+            Err(_) => {
+                let key_file_path = wallet::wallet_file(&chain_dir);
+                let args = [
+                    "keys",
+                    "add",
+                    "--chain",
+                    chain_id,
+                    "--key-file",
+                    &key_file_path.to_string_lossy(),
+                ];
+                let mut hermes = run_hermes_cmd(&hermes_dir, args, Some(20))?;
+                hermes.assert_success();
+            },
+
         };
-        let args = [
-            "keys",
-            "add",
-            "--chain",
-            chain_id,
-            "--key-file",
-            &key_file_path.to_string_lossy(),
-        ];
-        let mut hermes = run_hermes_cmd(&hermes_dir, args, Some(20))?;
-        hermes.assert_success();
+
     }
 
     Ok(hermes_dir)

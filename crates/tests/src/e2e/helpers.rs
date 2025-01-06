@@ -497,6 +497,7 @@ pub fn make_hermes_config(
     hermes_dir: &TestDir,
     test_a: &Test,
     test_b: &Test,
+    relayer: Option<&str>,
 ) -> Result<()> {
     let mut config = toml::map::Map::new();
 
@@ -537,13 +538,13 @@ pub fn make_hermes_config(
     let chains = vec![
         match CosmosChainType::chain_type(test_a.net.chain_id.as_str()) {
             Ok(chain_type) => make_hermes_chain_config_for_cosmos(
-                hermes_dir, chain_type, test_a,
+                hermes_dir, chain_type, test_a, relayer,
             ),
             Err(_) => make_hermes_chain_config(hermes_dir, test_a),
         },
         match CosmosChainType::chain_type(test_b.net.chain_id.as_str()) {
             Ok(chain_type) => make_hermes_chain_config_for_cosmos(
-                hermes_dir, chain_type, test_b,
+                hermes_dir, chain_type, test_b, relayer,
             ),
             Err(_) => make_hermes_chain_config(hermes_dir, test_b),
         },
@@ -617,6 +618,7 @@ fn make_hermes_chain_config_for_cosmos(
     hermes_dir: &TestDir,
     chain_type: CosmosChainType,
     test: &Test,
+    relayer: Option<&str>,
 ) -> Value {
     let mut table = toml::map::Map::new();
     table.insert("mode".to_owned(), Value::String("push".to_owned()));
@@ -657,7 +659,7 @@ fn make_hermes_chain_config_for_cosmos(
     );
     chain.insert(
         "key_name".to_owned(),
-        Value::String(setup::constants::COSMOS_RELAYER.to_string()),
+        Value::String(relayer.unwrap_or_else(|| constants::COSMOS_RELAYER).to_string()),
     );
     let hermes_dir: &Path = hermes_dir.as_ref();
     let key_dir = hermes_dir.join("hermes/keys");
