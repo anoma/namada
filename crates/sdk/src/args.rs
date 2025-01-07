@@ -568,7 +568,7 @@ impl TxOsmosisSwap<SdkTypes> {
             on_failed_delivery: LocalRecoveryAddr,
             route: Vec<OsmosisPoolHop>,
             #[serde(skip_serializing_if = "Option::is_none")]
-            next_memo: Option<serde_json::Map<String, serde_json::Value>>,
+            final_memo: Option<serde_json::Map<String, serde_json::Value>>,
         }
 
         #[derive(Serialize)]
@@ -649,7 +649,7 @@ impl TxOsmosisSwap<SdkTypes> {
             })?
         };
 
-        let (receiver, slippage, next_memo) = match recipient {
+        let (receiver, slippage, final_memo) = match recipient {
             Either::Left(transparent_recipient) => {
                 (transparent_recipient.to_string(), slippage, None)
             }
@@ -722,7 +722,7 @@ impl TxOsmosisSwap<SdkTypes> {
                     osmosis_swap: OsmosisSwap {
                         output_denom,
                         slippage,
-                        next_memo,
+                        final_memo,
                         receiver,
                         on_failed_delivery: LocalRecoveryAddr {
                             local_recovery_addr,
