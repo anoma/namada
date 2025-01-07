@@ -28,7 +28,7 @@ use crate::ProposalVote;
 pub const ADDRESS: Address = Address::Internal(InternalAddress::Governance);
 
 /// The maximum number of item in a pgf proposal
-pub const MAX_PGF_ACTIONS: usize = 1000;
+pub const MAX_PGF_ACTIONS: usize = 10_000;
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
