@@ -3,9 +3,7 @@
 use eyre::{Context, Result};
 use namada_apps_lib::cli::cmds::TestGenesis;
 use namada_apps_lib::cli::{self, cmds};
-use namada_apps_lib::config::{
-    Action, ActionAtHeight, NodeLocalConfig, ValidatorLocalConfig,
-};
+use namada_apps_lib::config::{NodeLocalConfig, ValidatorLocalConfig};
 #[cfg(not(feature = "migrations"))]
 use namada_apps_lib::display_line;
 use namada_apps_lib::migrations::ScheduledMigration;
@@ -57,40 +55,6 @@ pub fn main() -> Result<()> {
                 let chain_ctx = ctx.take_chain_or_exit();
                 node::rollback(chain_ctx.config.ledger)
                     .wrap_err("Failed to rollback the Namada node")?;
-            }
-            cmds::Ledger::UpdateDB(cmds::LedgerUpdateDB(args)) => {
-                #[cfg(not(feature = "migrations"))]
-                {
-                    panic!(
-                        "This command is only available if built with the \
-                         \"migrations\" feature."
-                    )
-                }
-                let mut chain_ctx = ctx.take_chain_or_exit();
-                #[cfg(feature = "migrations")]
-                node::update_db_keys(
-                    chain_ctx.config.ledger.clone(),
-                    args.updates,
-                    args.dry_run,
-                );
-                if !args.dry_run {
-                    let wasm_dir = chain_ctx.wasm_dir();
-                    chain_ctx.config.ledger.shell.action_at_height =
-                        Some(ActionAtHeight {
-                            height: args.last_height.checked_add(2).unwrap(),
-                            action: Action::Halt,
-                        });
-                    std::env::set_var(
-                        "NAMADA_INITIAL_HEIGHT",
-                        args.last_height.to_string(),
-                    );
-                    // don't stop on panics
-                    let handle = std::thread::spawn(|| {
-                        node::run(chain_ctx.config.ledger, wasm_dir, None)
-                    });
-                    _ = handle.join();
-                    std::env::remove_var("NAMADA_INITIAL_HEIGHT");
-                }
             }
             cmds::Ledger::QueryDB(cmds::LedgerQueryDB(args)) => {
                 #[cfg(not(feature = "migrations"))]

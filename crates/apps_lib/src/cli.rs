@@ -892,7 +892,6 @@ pub mod cmds {
         RunUntil(LedgerRunUntil),
         Reset(LedgerReset),
         DumpDb(LedgerDumpDb),
-        UpdateDB(LedgerUpdateDB),
         QueryDB(LedgerQueryDB),
         RollBack(LedgerRollBack),
     }
@@ -905,13 +904,11 @@ pub mod cmds {
                 let run = SubCmd::parse(matches).map(Self::Run);
                 let reset = SubCmd::parse(matches).map(Self::Reset);
                 let dump_db = SubCmd::parse(matches).map(Self::DumpDb);
-                let update_db = SubCmd::parse(matches).map(Self::UpdateDB);
                 let query_db = SubCmd::parse(matches).map(Self::QueryDB);
                 let rollback = SubCmd::parse(matches).map(Self::RollBack);
                 let run_until = SubCmd::parse(matches).map(Self::RunUntil);
                 run.or(reset)
                     .or(dump_db)
-                    .or(update_db)
                     .or(query_db)
                     .or(rollback)
                     .or(run_until)
@@ -935,7 +932,6 @@ pub mod cmds {
                 .subcommand(LedgerRunUntil::def())
                 .subcommand(LedgerReset::def())
                 .subcommand(LedgerDumpDb::def())
-                .subcommand(LedgerUpdateDB::def())
                 .subcommand(LedgerQueryDB::def())
                 .subcommand(LedgerRollBack::def())
         }
@@ -1018,29 +1014,6 @@ pub mod cmds {
                     "Dump Namada ledger node's DB from a block into a file."
                 ))
                 .add_args::<args::LedgerDumpDb>()
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    pub struct LedgerUpdateDB(pub args::LedgerUpdateDb);
-
-    impl SubCmd for LedgerUpdateDB {
-        const CMD: &'static str = "update-db";
-
-        fn parse(matches: &ArgMatches) -> Option<Self> {
-            matches
-                .subcommand_matches(Self::CMD)
-                .map(|matches| Self(args::LedgerUpdateDb::parse(matches)))
-        }
-
-        fn def() -> App {
-            App::new(Self::CMD)
-                .about(wrap!(
-                    "Applies a set of updates to the DB for hard forking. The \
-                     input should be a path to a file dictating a set of keys \
-                     and their new values. Can be dry-run for testing."
-                ))
-                .add_args::<args::LedgerUpdateDb>()
         }
     }
 
@@ -3900,41 +3873,6 @@ pub mod args {
             .arg(HISTORIC.def().help(wrap!(
                 "If provided, dump also the diff of the last height"
             )))
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    pub struct LedgerUpdateDb {
-        pub updates: PathBuf,
-        pub dry_run: bool,
-        pub last_height: BlockHeight,
-    }
-
-    impl Args for LedgerUpdateDb {
-        fn parse(matches: &ArgMatches) -> Self {
-            let updates = PATH.parse(matches);
-            let dry_run = DRY_RUN_TX.parse(matches);
-            let last_height = BLOCK_HEIGHT.parse(matches);
-            Self {
-                updates,
-                dry_run,
-                last_height,
-            }
-        }
-
-        fn def(app: App) -> App {
-            app.arg(PATH.def().help(wrap!(
-                "The path to a json of key-value pairs to update the DB with."
-            )))
-            .arg(DRY_RUN_TX.def().help(wrap!(
-                "If set, applies the updates but does not persist them. Using \
-                 for testing and debugging."
-            )))
-            .arg(
-                BLOCK_HEIGHT.def().help(wrap!(
-                    "The height at which the hard fork is happening."
-                )),
-            )
         }
     }
 
