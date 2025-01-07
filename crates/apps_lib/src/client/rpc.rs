@@ -47,6 +47,7 @@ use namada_sdk::rpc::{
     self, enriched_bonds_and_unbonds, format_denominated_amount, query_epoch,
     TxResponse,
 };
+use namada_sdk::state::LastBlock;
 use namada_sdk::storage::BlockResults;
 use namada_sdk::tendermint_rpc::endpoint::status;
 use namada_sdk::time::DateTimeUtc;
@@ -92,7 +93,7 @@ pub async fn query_and_print_masp_epoch(context: &impl Namada) -> MaspEpoch {
 /// begin.
 pub async fn query_and_print_next_epoch_info(context: &impl Namada) {
     println!();
-    let current_time = query_block(context).await.unwrap();
+    query_block(context).await.unwrap();
 
     let current_epoch = query_epoch(context.client()).await.unwrap();
     let (this_epoch_first_height, epoch_duration) =
@@ -107,6 +108,8 @@ pub async fn query_and_print_next_epoch_info(context: &impl Namada) {
     let first_block_time = this_epoch_first_height_header.time;
     let next_epoch_time = first_block_time + epoch_duration.min_duration;
 
+    #[allow(clippy::disallowed_methods)]
+    let current_time = DateTimeUtc::now();
     let seconds_left = next_epoch_time.time_diff(current_time).0;
     let time_remaining_str = convert_to_hours(seconds_left);
 
@@ -168,7 +171,7 @@ pub async fn query_and_print_status(
 }
 
 /// Query the last committed block
-pub async fn query_block(context: &impl Namada) -> Option<DateTimeUtc> {
+pub async fn query_block(context: &impl Namada) -> Option<LastBlock> {
     let block = namada_sdk::rpc::query_block(context.client())
         .await
         .unwrap();
@@ -180,7 +183,7 @@ pub async fn query_block(context: &impl Namada) -> Option<DateTimeUtc> {
                 block.height,
                 block.time
             );
-            Some(block.time)
+            Some(block)
         }
         None => {
             display_line!(context.io(), "No block has been committed yet.");
