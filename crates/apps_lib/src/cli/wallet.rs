@@ -6,7 +6,10 @@ use std::str::FromStr;
 
 use color_eyre::eyre::Result;
 use itertools::sorted;
-use ledger_namada_rs::{BIP44Path, NamadaApp};
+use ledger_namada_rs::{BIP44Path, KeyResponse, NamadaApp, NamadaKeys};
+use ledger_transport_hid::hidapi::HidApi;
+use ledger_transport_hid::TransportNativeHID;
+use masp_primitives::zip32::ExtendedFullViewingKey;
 use namada_core::chain::BlockHeight;
 use namada_core::masp::{ExtendedSpendingKey, MaspValue, PaymentAddress};
 use namada_sdk::address::{Address, DecodeError};
@@ -233,12 +236,56 @@ async fn shielded_key_derive(
             })
             .0
     } else {
-        display_line!(
-            io,
-            "Shielded key derivation using hardware wallet not implemented."
+        let hidapi = HidApi::new().unwrap_or_else(|err| {
+            edisplay_line!(io, "Failed to create HidApi: {}", err);
+            cli::safe_exit(1)
+        });
+        let app = NamadaApp::new(
+            TransportNativeHID::new(&hidapi).unwrap_or_else(|err| {
+                edisplay_line!(io, "Unable to connect to Ledger: {}", err);
+                cli::safe_exit(1)
+            }),
         );
-        display_line!(io, "No changes are persisted. Exiting.");
-        cli::safe_exit(1)
+        let response = app
+            .retrieve_keys(
+                &BIP44Path {
+                    path: derivation_path.to_string(),
+                },
+                NamadaKeys::ViewKey,
+                true,
+            )
+            .await
+            .unwrap_or_else(|err| {
+                edisplay_line!(
+                    io,
+                    "Unable to connect to query address and public key from \
+                     Ledger: {}",
+                    err
+                );
+                cli::safe_exit(1)
+            });
+        let KeyResponse::ViewKey(response_key) = response else {
+            edisplay_line!(io, "Unexpected response from Ledger");
+            cli::safe_exit(1)
+        };
+        let xfvk = ExtendedFullViewingKey::try_from_slice(&response_key.xfvk)
+            .expect(
+                "unable to decode extended full viewing key from the hardware \
+                 wallet",
+            );
+
+        wallet
+            .insert_viewing_key(
+                alias,
+                xfvk.into(),
+                birthday,
+                alias_force,
+                Some(derivation_path),
+            )
+            .unwrap_or_else(|| {
+                display_line!(io, "No changes are persisted. Exiting.");
+                cli::safe_exit(1)
+            })
     };
     wallet
         .save()
