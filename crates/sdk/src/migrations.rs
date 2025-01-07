@@ -2,7 +2,6 @@
 
 use core::fmt::{Display, Formatter};
 use core::str::FromStr;
-use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -10,25 +9,20 @@ use data_encoding::HEXUPPER;
 use eyre::eyre;
 use namada_core::chain::BlockHeight;
 use namada_core::hash::Hash;
-use namada_core::storage::Key;
+use namada_core::storage;
 use namada_macros::{derive_borshdeserializer, typehash};
 use namada_migrations::{TypeHash, *};
-use namada_storage::{DbColFam, DbMigration, DB};
+use namada_state::merkle_tree::NO_DIFF_KEY_PREFIX;
+use namada_state::{DBIter, FullAccessState, KeySeg, StorageHasher};
+use namada_storage::{DBUpdateVisitor, DbColFam, DB};
 use regex::Regex;
-use serde::de::{DeserializeOwned, Error, Visitor};
+use serde::de::{Error, Visitor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::borsh::BorshSerializeExt;
 
 /// The maximum number of character printed per value.
 const PRINTLN_CUTOFF: usize = 300;
-
-pub trait DBUpdateVisitor {
-    fn read(&self, key: &Key, cf: &DbColFam) -> Option<Vec<u8>>;
-    fn write(&mut self, key: &Key, cf: &DbColFam, value: impl AsRef<[u8]>);
-    fn delete(&mut self, key: &Key, cf: &DbColFam);
-    fn get_pattern(&self, pattern: Regex) -> Vec<(String, Vec<u8>)>;
-}
 
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 enum UpdateBytes {
@@ -168,12 +162,12 @@ impl<'de> Deserialize<'de> for UpdateValue {
 /// An update to the database
 pub enum DbUpdateType {
     Add {
-        key: Key,
+        key: storage::Key,
         cf: DbColFam,
         value: UpdateValue,
         force: bool,
     },
-    Delete(Key, DbColFam),
+    Delete(storage::Key, DbColFam),
     RepeatAdd {
         pattern: String,
         cf: DbColFam,
@@ -182,8 +176,6 @@ pub enum DbUpdateType {
     },
     RepeatDelete(String, DbColFam),
 }
-
-impl DbMigration for DbUpdateType {}
 
 impl DbUpdateType {
     /// Get the key or pattern being modified as string
@@ -274,15 +266,20 @@ impl DbUpdateType {
 
     /// Validate a DB change and persist it if so. The debug representation of
     /// the new value is returned for logging purposes.
-    pub fn update<DB: DBUpdateVisitor>(
+    pub fn update<D, H>(
         &self,
-        db: &mut DB,
-    ) -> eyre::Result<UpdateStatus> {
-        match self {
+        state: &mut FullAccessState<D, H>,
+    ) -> eyre::Result<UpdateStatus>
+    where
+        D: 'static + DB + for<'iter> DBIter<'iter>,
+        H: 'static + StorageHasher,
+    {
+        let mut migrator = D::migrator();
+        let status = match self {
             Self::Add { key, cf, value, .. } => {
                 let (deserialized, deserializer) = self.validate()?;
                 if let (Some(prev), Some(des)) =
-                    (db.read(key, cf), deserializer)
+                    (migrator.read(state.db(), key, cf), deserializer)
                 {
                     des(prev).ok_or_else(|| {
                         eyre::eyre!(
@@ -293,11 +290,39 @@ impl DbUpdateType {
                         )
                     })?;
                 }
-                db.write(key, cf, value.to_write());
+                let value = value.bytes();
+                let persist_diffs = (state.diff_key_filter)(key);
+                if let DbColFam::SUBSPACE = cf {
+                    // Update the merkle tree
+                    let merk_key = if !persist_diffs {
+                        let prefix = storage::Key::from(
+                            NO_DIFF_KEY_PREFIX.to_string().to_db_key(),
+                        );
+                        &prefix.join(key)
+                    } else {
+                        key
+                    };
+                    state.in_mem_mut().block.tree.update(merk_key, value)?;
+                }
+
+                migrator.write(state.db(), key, cf, value, persist_diffs);
                 Ok(UpdateStatus::Add(vec![(key.to_string(), deserialized)]))
             }
             Self::Delete(key, cf) => {
-                db.delete(key, cf);
+                let persist_diffs = (state.diff_key_filter)(key);
+                migrator.delete(state.db(), key, cf, persist_diffs);
+                if let DbColFam::SUBSPACE = cf {
+                    // Update the merkle tree
+                    let merk_key = if !persist_diffs {
+                        let prefix = storage::Key::from(
+                            NO_DIFF_KEY_PREFIX.to_string().to_db_key(),
+                        );
+                        &prefix.join(key)
+                    } else {
+                        key
+                    };
+                    state.in_mem_mut().block.tree.delete(merk_key)?;
+                }
                 Ok(UpdateStatus::Deleted(vec![key.to_string()]))
             }
             DbUpdateType::RepeatAdd {
@@ -306,7 +331,9 @@ impl DbUpdateType {
                 let pattern = Regex::new(pattern).unwrap();
                 let mut pairs = vec![];
                 let (deserialized, deserializer) = self.validate()?;
-                for (key, prev) in db.get_pattern(pattern.clone()) {
+                for (key, prev) in
+                    migrator.get_pattern(state.db(), pattern.clone())
+                {
                     if let Some(des) = deserializer {
                         des(prev).ok_or_else(|| {
                             eyre::eyre!(
@@ -317,53 +344,91 @@ impl DbUpdateType {
                                 deserialized,
                             )
                         })?;
-                        pairs.push((key.to_string(), deserialized.clone()));
+                        pairs.push((key.clone(), deserialized.clone()));
                     } else {
-                        pairs.push((key.to_string(), deserialized.clone()));
+                        pairs.push((key.clone(), deserialized.clone()));
                     }
-                    db.write(
-                        &Key::from_str(&key).unwrap(),
-                        cf,
-                        value.to_write(),
-                    );
+                    let key = storage::Key::from_str(&key).unwrap();
+                    let value = value.bytes();
+                    let persist_diffs = (state.diff_key_filter)(&key);
+                    if let DbColFam::SUBSPACE = cf {
+                        // Update the merkle tree
+                        let merk_key = if !persist_diffs {
+                            let prefix = storage::Key::from(
+                                NO_DIFF_KEY_PREFIX.to_string().to_db_key(),
+                            );
+                            &prefix.join(&key)
+                        } else {
+                            &key
+                        };
+                        state
+                            .in_mem_mut()
+                            .block
+                            .tree
+                            .update(merk_key, value)?;
+                    }
+                    migrator.write(state.db(), &key, cf, value, persist_diffs);
                 }
-                Ok(UpdateStatus::Add(pairs))
+                Ok::<_, eyre::Error>(UpdateStatus::Add(pairs))
             }
             DbUpdateType::RepeatDelete(pattern, cf) => {
                 let pattern = Regex::new(pattern).unwrap();
                 Ok(UpdateStatus::Deleted(
-                    db.get_pattern(pattern.clone())
+                    migrator
+                        .get_pattern(state.db(), pattern.clone())
                         .into_iter()
-                        .map(|(key, _)| {
-                            db.delete(&Key::from_str(&key).unwrap(), cf);
-                            key
+                        .map(|(raw_key, _)| {
+                            let key = storage::Key::from_str(&raw_key).unwrap();
+                            let persist_diffs = (state.diff_key_filter)(&key);
+                            if let DbColFam::SUBSPACE = cf {
+                                // Update the merkle tree
+                                let merk_key = if !persist_diffs {
+                                    let prefix = storage::Key::from(
+                                        NO_DIFF_KEY_PREFIX
+                                            .to_string()
+                                            .to_db_key(),
+                                    );
+                                    &prefix.join(&key)
+                                } else {
+                                    &key
+                                };
+                                state
+                                    .in_mem_mut()
+                                    .block
+                                    .tree
+                                    .delete(merk_key)?;
+                            }
+
+                            migrator.delete(
+                                state.db(),
+                                &key,
+                                cf,
+                                persist_diffs,
+                            );
+                            Ok(raw_key)
                         })
-                        .collect(),
+                        .collect::<eyre::Result<Vec<_>>>()?,
                 ))
             }
-        }
+        }?;
+        migrator.commit(state.db())?;
+        Ok(status)
     }
 }
 
 /// A set of key-value changes to be applied to
 /// the db at a specified height.
 #[derive(Debug, Clone)]
-pub struct ScheduledMigration<D: DbMigration = DbUpdateType> {
+pub struct ScheduledMigration {
     /// The height at which to perform the changes
     pub height: BlockHeight,
     /// The actual set of changes
     pub path: PathBuf,
     /// A hash of the expected contents in the file
     pub hash: Hash,
-    /// For keeping track of what data type we deserialize the
-    /// contents of the file to.
-    phantom: PhantomData<D>,
 }
 
-impl<D> ScheduledMigration<D>
-where
-    D: DbMigration + DeserializeOwned,
-{
+impl ScheduledMigration {
     /// Read in a migrations json and a hash to verify the contents
     /// against. Also needs a height for which the changes are scheduled.
     pub fn from_path(
@@ -375,28 +440,23 @@ where
             height,
             path: path.as_ref().to_path_buf(),
             hash,
-            phantom: Default::default(),
         };
-        scheduled_migration.validate()?;
+        scheduled_migration.load_and_validate()?;
         Ok(scheduled_migration)
     }
 
-    fn load(&self) -> eyre::Result<DbChanges<D>> {
-        let update_json = self.validate()?;
-        serde_json::from_str(&update_json)
+    pub fn load_and_validate(&self) -> eyre::Result<DbChanges> {
+        let update_json = self.load_bytes_and_validate()?;
+        serde_json::from_slice(&update_json)
             .map_err(|_| eyre!("Could not parse the updates file as json"))
     }
 
-    fn validate(&self) -> eyre::Result<String> {
-        let update_json =
-            std::fs::read_to_string(&self.path).map_err(|_| {
-                eyre!(
-                    "Could not find or read updates file at the specified \
-                     path."
-                )
-            })?;
+    fn load_bytes_and_validate(&self) -> eyre::Result<Vec<u8>> {
+        let update_json = std::fs::read(&self.path).map_err(|_| {
+            eyre!("Could not find or read updates file at the specified path.")
+        })?;
         // validate contents against provided hash
-        if Hash::sha256(update_json.as_bytes()) != self.hash {
+        if Hash::sha256(&update_json) != self.hash {
             Err(eyre!(
                 "Provided hash did not match the contents at the specified \
                  path."
@@ -408,13 +468,13 @@ where
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct DbChanges<D: DbMigration = DbUpdateType> {
-    pub changes: Vec<D>,
+pub struct DbChanges {
+    pub changes: Vec<DbUpdateType>,
 }
 
-impl<D: DbMigration> IntoIterator for DbChanges<D> {
-    type IntoIter = std::vec::IntoIter<D>;
-    type Item = D;
+impl IntoIterator for DbChanges {
+    type IntoIter = std::vec::IntoIter<DbUpdateType>;
+    type Item = DbUpdateType;
 
     fn into_iter(self) -> Self::IntoIter {
         self.changes.into_iter()
@@ -494,37 +554,36 @@ impl Display for UpdateStatus {
 
 /// Check if a scheduled migration should take place at this block height.
 /// If so, apply it to the DB.
-pub fn commit<D: DB>(
-    db: &D,
-    height: BlockHeight,
-    migration: &mut Option<ScheduledMigration<D::Migrator>>,
+pub fn commit<D, H>(
+    state: &mut FullAccessState<D, H>,
+    migration: impl IntoIterator<Item = DbUpdateType>,
 ) where
-    D::Migrator: DeserializeOwned,
+    D: 'static + DB + for<'iter> DBIter<'iter>,
+    H: 'static + StorageHasher,
 {
-    let maybe_migration = migration;
-    let migration = match maybe_migration.as_ref() {
-        Some(migration) if height == migration.height => {
-            maybe_migration.take().unwrap().load().unwrap()
-        }
-        _ => return,
-    };
-
     tracing::info!(
         "A migration is scheduled to take place at this block height. \
          Starting..."
     );
 
-    match db.apply_migration_to_batch(migration) {
-        Ok(batch) => {
-            tracing::info!("Persisting DB changes...");
-            db.exec_batch(batch).expect("Failed to execute write batch");
-        }
-        Err(e) => {
-            panic!(
-                "Failed to execute migration, no changes persisted. \
-                 Encountered error: {}",
-                e
-            );
+    for change in migration.into_iter() {
+        match change.update(state) {
+            Ok(status) => {
+                tracing::info!("{status}");
+            }
+            Err(e) => {
+                let error = format!(
+                    "Attempt to write to key/pattern <{}> failed:\n{}.",
+                    change.pattern(),
+                    e
+                );
+                tracing::error!(error);
+                panic!(
+                    "Failed to execute migration, no changes persisted. \
+                     Encountered error: {}",
+                    e
+                );
+            }
         }
     }
 }
@@ -573,7 +632,7 @@ mod test_migrations {
     fn test_scheduled_migration_validate() {
         let file = tempfile::Builder::new().tempfile().expect("Test failed");
         let updates = [DbUpdateType::Add {
-            key: Key::parse("bing/fucking/bong").expect("Test failed"),
+            key: storage::Key::parse("bing/fucking/bong").expect("Test failed"),
             cf: DbColFam::SUBSPACE,
             value: Amount::native_whole(1337).into(),
             force: false,
@@ -584,7 +643,7 @@ mod test_migrations {
         let json = serde_json::to_string(&changes).expect("Test failed");
         let hash = Hash::sha256("derpy derp".as_bytes());
         std::fs::write(file.path(), json).expect("Test failed");
-        let migration = ScheduledMigration::<DbUpdateType>::from_path(
+        let migration = ScheduledMigration::from_path(
             file.path(),
             hash,
             Default::default(),

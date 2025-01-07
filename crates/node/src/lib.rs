@@ -354,13 +354,14 @@ pub fn query_db(
     type_hash: &[u8; 32],
     cf: &DbColFam,
 ) {
-    use namada_sdk::migrations::DBUpdateVisitor;
+    use namada_apps_lib::storage::DBUpdateVisitor;
+
     let chain_id = config.chain_id;
     let db_path = config.shell.db_dir(&chain_id);
 
     let db = storage::PersistentDB::open(db_path, None);
-    let db_visitor = storage::RocksDBUpdateVisitor::new(&db);
-    let bytes = db_visitor.read(key, cf).unwrap();
+    let db_visitor = storage::RocksDBUpdateVisitor::default();
+    let bytes = db_visitor.read(&db, key, cf).unwrap();
 
     let deserializer = namada_migrations::get_deserializer(type_hash)
         .unwrap_or_else(|| {
@@ -380,39 +381,6 @@ pub fn query_db(
         value,
         hex_bytes
     );
-}
-
-/// Change the funds of an account in-place. Use with
-/// caution, as this modifies state in storage without
-/// going through the consensus protocol.
-#[cfg(feature = "migrations")]
-pub fn update_db_keys(config: config::Ledger, updates: PathBuf, dry_run: bool) {
-    use std::io::Read;
-
-    let mut update_json = String::new();
-    let mut file = std::fs::File::open(updates)
-        .expect("Could not fine updates file at the specified path.");
-    file.read_to_string(&mut update_json)
-        .expect("Unable to read the updates json file");
-    let updates: namada_sdk::migrations::DbChanges =
-        serde_json::from_str(&update_json)
-            .expect("Could not parse the updates file as json");
-    let cometbft_path = config.cometbft_dir();
-    let chain_id = config.chain_id;
-    let db_path = config.shell.db_dir(&chain_id);
-
-    let db = storage::PersistentDB::open(db_path, None);
-    let batch = db.apply_migration_to_batch(updates.changes).unwrap();
-    if !dry_run {
-        tracing::info!("Persisting DB changes...");
-        db.exec_batch(batch).expect("Failed to execute write batch");
-        db.flush(true).expect("Failed to flush data to disk");
-
-        // reset CometBFT's state, such that we can resume with a different appq
-        // hash
-        tendermint_node::reset_state(cometbft_path)
-            .expect("Failed to reset CometBFT state");
-    }
 }
 
 /// Roll Namada state back to the previous height

@@ -370,42 +370,52 @@ fn test_db_migration() -> Result<()> {
         None,
     );
 
-    // 1. Run the ledger node, halting at height 2
+    // 1. Run the ledger node, halting at height 6
     let mut ledger = run_as!(
         test,
         Who::Validator(0),
         Bin::Node,
-        &["ledger", "run-until", "--block-height", "2", "--halt",],
+        &["ledger", "run-until", "--block-height", "6", "--halt",],
         Some(40)
     )?;
     // Wait to commit a block
-    ledger.exp_string("Reached block height 2, halting the chain.")?;
+    ledger.exp_string("Reached block height 6, halting the chain.")?;
     ledger.exp_string(LEDGER_SHUTDOWN)?;
     ledger.exp_eof()?;
     drop(ledger);
     let migrations_json_path = working_dir()
         .join("examples")
         .join("migration_example.json");
+    let migration_hash = namada_core::hash::Hash::sha256(
+        std::fs::read(&migrations_json_path).unwrap(),
+    )
+    .to_string();
     // 2. Update the db
-    let mut session = run_as!(
+    let mut ledger = run_as!(
         test,
         Who::Validator(0),
         Bin::Node,
         &[
             "ledger",
-            "update-db",
+            "run",
             "--path",
             migrations_json_path.to_string_lossy().as_ref(),
-            "--block-height",
-            "2",
+            "--height",
+            "6",
+            "--hash",
+            &migration_hash
         ],
         Some(30),
     )?;
-    session.exp_eof()?;
+
+    ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
+    ledger.interrupt()?;
+    ledger.exp_eof()?;
 
     let mut ledger =
         run_as!(test, Who::Validator(0), Bin::Node, &["ledger"], Some(40))?;
     ledger.exp_regex(r"Committed block hash.*, height: [0-9]+")?;
+
     // 5. Check that a key was changed successfully
     let mut query = run_as!(
         test,
