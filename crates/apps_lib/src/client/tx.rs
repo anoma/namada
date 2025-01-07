@@ -2,14 +2,18 @@ use std::fs::File;
 use std::io::Write;
 
 use color_eyre::owo_colors::OwoColorize;
-use ledger_namada_rs::{BIP44Path, NamadaApp};
-use masp_primitives::sapling::redjubjub;
+use ledger_namada_rs::{BIP44Path, KeyResponse, NamadaApp, NamadaKeys};
+use masp_primitives::sapling::redjubjub::PrivateKey;
+use masp_primitives::sapling::{redjubjub, ProofGenerationKey};
 use masp_primitives::transaction::components::sapling;
 use masp_primitives::transaction::components::sapling::builder::{
-    BuildParams, RngBuildParams,
+    BuildParams, ConvertBuildParams, OutputBuildParams, RngBuildParams,
+    SpendBuildParams, StoredBuildParams,
 };
 use masp_primitives::transaction::components::sapling::fees::InputView;
-use masp_primitives::zip32::{ExtendedFullViewingKey, PseudoExtendedKey};
+use masp_primitives::zip32::{
+    ExtendedFullViewingKey, ExtendedKey, PseudoExtendedKey,
+};
 use namada_core::masp::MaspTransaction;
 use namada_sdk::address::{Address, ImplicitAddress, MASP};
 use namada_sdk::args::TxBecomeValidator;
@@ -906,18 +910,110 @@ impl sapling::MapAuth<sapling::Authorized, sapling::Authorized>
 async fn augment_masp_hardware_keys(
     namada: &impl Namada,
     args: &args::Tx,
-    _sources: impl Iterator<Item = &mut PseudoExtendedKey>,
+    sources: impl Iterator<Item = &mut PseudoExtendedKey>,
 ) -> Result<HashMap<String, ExtendedViewingKey>, error::Error> {
+    // Records the shielded keys that are on the hardware wallet
+    let mut shielded_hw_keys = HashMap::new();
     // Construct the build parameters that parameterized the Transaction
     // authorizations
     if args.use_device {
-        display_line!(
-            namada.io(),
-            "Shielded transaction signing with hardware wallet not \
-             implemented."
-        );
-        display_line!(namada.io(), "No changes are persisted. Exiting.");
-        safe_exit(1)
+        let transport = WalletTransport::from_arg(args.device_transport);
+        let app = NamadaApp::new(transport);
+        let wallet = namada.wallet().await;
+        // Augment the pseudo spending key with a proof authorization key
+        for source in sources {
+            // Only attempt an augmentation if proof authorization is not there
+            if source.to_spending_key().is_none() {
+                // First find the derivation path corresponding to this viewing
+                // key
+                let viewing_key =
+                    ExtendedViewingKey::from(source.to_viewing_key());
+                let path = wallet
+                    .find_path_by_viewing_key(&viewing_key)
+                    .map_err(|err| {
+                        error::Error::Other(format!(
+                            "Unable to find derivation path from the wallet \
+                             for viewing key {}. Error: {}",
+                            viewing_key, err,
+                        ))
+                    })?;
+                let path = BIP44Path {
+                    path: path.to_string(),
+                };
+                // Then confirm that the viewing key at this path in the
+                // hardware wallet matches the viewing key in this pseudo
+                // spending key
+                let response = app
+                    .retrieve_keys(&path, NamadaKeys::ViewKey, true)
+                    .await
+                    .map_err(|err| {
+                        error::Error::Other(format!(
+                            "Unable to obtain viewing key from the hardware \
+                             wallet at path {}. Error: {}",
+                            path.path, err,
+                        ))
+                    })?;
+                let KeyResponse::ViewKey(response_key) = response else {
+                    return Err(error::Error::Other(
+                        "Unexpected response from Ledger".to_string(),
+                    ));
+                };
+                let xfvk =
+                    ExtendedFullViewingKey::try_from_slice(&response_key.xfvk)
+                        .expect(
+                            "unable to decode extended full viewing key from \
+                             the hardware wallet",
+                        );
+                if ExtendedFullViewingKey::from(viewing_key) != xfvk {
+                    return Err(error::Error::Other(format!(
+                        "Unexpected viewing key response from Ledger: {}",
+                        ExtendedViewingKey::from(xfvk),
+                    )));
+                }
+                // Then obtain the proof authorization key at this path in the
+                // hardware wallet
+                let response = app
+                    .retrieve_keys(&path, NamadaKeys::ProofGenerationKey, false)
+                    .await
+                    .map_err(|err| {
+                        error::Error::Other(format!(
+                            "Unable to obtain proof generation key from the \
+                             hardware wallet for viewing key {}. Error: {}",
+                            viewing_key, err,
+                        ))
+                    })?;
+                let KeyResponse::ProofGenKey(response_key) = response else {
+                    return Err(error::Error::Other(
+                        "Unexpected response from Ledger".to_string(),
+                    ));
+                };
+                let pgk = ProofGenerationKey::try_from_slice(
+                    &[response_key.ak, response_key.nsk].concat(),
+                )
+                .map_err(|err| {
+                    error::Error::Other(format!(
+                        "Unexpected proof generation key in response from the \
+                         hardware wallet: {}.",
+                        err,
+                    ))
+                })?;
+                // Augment the pseudo spending key
+                source.augment_proof_generation_key(pgk).map_err(|_| {
+                    error::Error::Other(
+                        "Proof generation key in response from the hardware \
+                         wallet does not correspond to stored viewing key."
+                            .to_string(),
+                    )
+                })?;
+                // Finally, augment an incorrect spend authorization key just to
+                // make sure that the Transaction is built.
+                source.augment_spend_authorizing_key_unchecked(PrivateKey(
+                    jubjub::Fr::default(),
+                ));
+                shielded_hw_keys.insert(path.path, viewing_key);
+            }
+        }
+        Ok(shielded_hw_keys)
     } else {
         Ok(HashMap::new())
     }
@@ -926,22 +1022,56 @@ async fn augment_masp_hardware_keys(
 // If the hardware wallet is beig used, use it to generate the random build
 // parameters for the spend, convert, and output descriptions.
 async fn generate_masp_build_params(
-    namada: &impl Namada,
-    _spend_len: usize,
-    _convert_len: usize,
-    _output_len: usize,
+    spend_len: usize,
+    convert_len: usize,
+    output_len: usize,
     args: &args::Tx,
 ) -> Result<Box<dyn BuildParams>, error::Error> {
     // Construct the build parameters that parameterized the Transaction
     // authorizations
     if args.use_device {
-        display_line!(
-            namada.io(),
-            "Generating randomness parameters using the hardware wallet not \
-             implemented."
-        );
-        display_line!(namada.io(), "No changes are persisted. Exiting.");
-        safe_exit(1)
+        let transport = WalletTransport::from_arg(args.device_transport);
+        let app = NamadaApp::new(transport);
+        // Clear hardware wallet randomness buffers
+        app.clean_randomness_buffers().await.map_err(|err| {
+            error::Error::Other(format!(
+                "Unable to clear randomness buffer. Error: {}",
+                err,
+            ))
+        })?;
+        // Get randomness to aid in construction of various descriptors
+        let mut bparams = StoredBuildParams::default();
+        for _ in 0..spend_len {
+            let spend_randomness = app
+                .get_spend_randomness()
+                .await
+                .map_err(|err| error::Error::Other(err.to_string()))?;
+            bparams.spend_params.push(SpendBuildParams {
+                rcv: jubjub::Fr::from_bytes(&spend_randomness.rcv).unwrap(),
+                alpha: jubjub::Fr::from_bytes(&spend_randomness.alpha).unwrap(),
+            });
+        }
+        for _ in 0..convert_len {
+            let convert_randomness = app
+                .get_convert_randomness()
+                .await
+                .map_err(|err| error::Error::Other(err.to_string()))?;
+            bparams.convert_params.push(ConvertBuildParams {
+                rcv: jubjub::Fr::from_bytes(&convert_randomness.rcv).unwrap(),
+            });
+        }
+        for _ in 0..output_len {
+            let output_randomness = app
+                .get_output_randomness()
+                .await
+                .map_err(|err| error::Error::Other(err.to_string()))?;
+            bparams.output_params.push(OutputBuildParams {
+                rcv: jubjub::Fr::from_bytes(&output_randomness.rcv).unwrap(),
+                rseed: output_randomness.rcm,
+                ..OutputBuildParams::default()
+            });
+        }
+        Ok(Box::new(bparams))
     } else {
         Ok(Box::new(RngBuildParams::new(OsRng)))
     }
@@ -1067,7 +1197,6 @@ pub async fn submit_shielded_transfer(
     let shielded_hw_keys =
         augment_masp_hardware_keys(namada, &args.tx, sources).await?;
     let mut bparams = generate_masp_build_params(
-        namada,
         MAX_HW_SPEND,
         MAX_HW_CONVERT,
         MAX_HW_OUTPUT,
@@ -1105,7 +1234,6 @@ pub async fn submit_shielding_transfer(
     // Repeat once if the tx fails on a crossover of an epoch
     for _ in 0..2 {
         let mut bparams = generate_masp_build_params(
-            namada,
             MAX_HW_SPEND,
             MAX_HW_CONVERT,
             MAX_HW_OUTPUT,
@@ -1200,7 +1328,6 @@ pub async fn submit_unshielding_transfer(
     let shielded_hw_keys =
         augment_masp_hardware_keys(namada, &args.tx, sources).await?;
     let mut bparams = generate_masp_build_params(
-        namada,
         MAX_HW_SPEND,
         MAX_HW_CONVERT,
         MAX_HW_OUTPUT,
@@ -1246,7 +1373,6 @@ where
     let shielded_hw_keys =
         augment_masp_hardware_keys(namada, &args.tx, sources).await?;
     let mut bparams = generate_masp_build_params(
-        namada,
         MAX_HW_SPEND,
         MAX_HW_CONVERT,
         MAX_HW_OUTPUT,
