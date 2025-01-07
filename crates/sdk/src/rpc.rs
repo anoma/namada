@@ -858,6 +858,17 @@ pub async fn get_validator_state<C: namada_io::Client + Sync>(
     )
 }
 
+/// Query and return the available reward tokens corresponding to the bond
+pub async fn query_rewards<C: namada_io::Client + Sync>(
+    client: &C,
+    source: &Option<Address>,
+    validator: &Address,
+) -> Result<token::Amount, error::Error> {
+    convert_response::<C, token::Amount>(
+        RPC.vp().pos().rewards(client, validator, source).await,
+    )
+}
+
 /// Get the validators to which a delegator is bonded at a certain epoch
 pub async fn get_delegation_validators<C: namada_io::Client + Sync>(
     client: &C,
