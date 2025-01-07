@@ -1088,8 +1088,6 @@ pub mod testing {
 
 #[cfg(test)]
 mod tests {
-    use std::u128;
-
     use assert_matches::assert_matches;
 
     use super::*;
@@ -1382,9 +1380,9 @@ mod tests {
         for val in [
             u128::MIN,
             u128::MIN + 1,
-            u64::MAX as u128 - 1,
-            u64::MAX as u128,
-            u64::MAX as u128 + 1,
+            u128::from(u64::MAX) - 1,
+            u128::from(u64::MAX),
+            u128::from(u64::MAX) + 1,
             u128::MAX - 1,
             u128::MAX,
         ] {
