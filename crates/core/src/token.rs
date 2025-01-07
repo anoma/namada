@@ -69,8 +69,14 @@ impl Amount {
     }
 
     /// Convert a [`u128`] to an [`Amount`].
-    pub fn from_u128(x: u128) -> Self {
-        Self { raw: Uint::from(x) }
+    pub const fn from_u128(value: u128) -> Self {
+        let mut ret = [0; 4];
+        #[allow(clippy::cast_possible_truncation)]
+        {
+            ret[0] = value as u64;
+        }
+        ret[1] = (value >> 64) as u64;
+        Self { raw: Uint(ret) }
     }
 
     /// Get the amount as a [`Change`]
@@ -1082,6 +1088,8 @@ pub mod testing {
 
 #[cfg(test)]
 mod tests {
+    use std::u128;
+
     use assert_matches::assert_matches;
 
     use super::*;
@@ -1367,5 +1375,23 @@ mod tests {
             denom_2.partial_cmp(&denom_1).expect("Test failed"),
             Ordering::Less
         );
+    }
+
+    #[test]
+    fn test_token_amount_from_u128() {
+        for val in [
+            u128::MIN,
+            u128::MIN + 1,
+            u64::MAX as u128 - 1,
+            u64::MAX as u128,
+            u64::MAX as u128 + 1,
+            u128::MAX - 1,
+            u128::MAX,
+        ] {
+            let raw = Uint::from(val);
+            let amount = Amount::from_u128(val);
+            assert_eq!(raw, amount.raw);
+            assert_eq!(amount.raw.as_u128(), val);
+        }
     }
 }
