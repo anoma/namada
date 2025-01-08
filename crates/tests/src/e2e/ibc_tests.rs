@@ -140,7 +140,7 @@ fn ibc_transfers() -> Result<()> {
         None,
         None,
         None,
-        false,
+        None,
     )?;
     wait_for_packet_relay(
         &hermes_dir,
@@ -217,7 +217,7 @@ fn ibc_transfers() -> Result<()> {
         None,
         None,
         None,
-        false,
+        None,
     )?;
     wait_for_packet_relay(
         &hermes_dir,
@@ -299,7 +299,7 @@ fn ibc_transfers() -> Result<()> {
         None,
         None,
         None,
-        true,
+        Some(BB_PAYMENT_ADDRESS),
     )?;
     wait_for_packet_relay(
         &hermes_dir,
@@ -353,7 +353,7 @@ fn ibc_transfers() -> Result<()> {
         None,
         None,
         None,
-        false,
+        None,
     )?;
     wait_for_packet_relay(
         &hermes_dir,
@@ -381,7 +381,7 @@ fn ibc_transfers() -> Result<()> {
         Some(Duration::new(10, 0)),
         None,
         None,
-        false,
+        None,
     )?;
     // wait for the timeout
     sleep(10);
@@ -400,7 +400,7 @@ fn ibc_transfers() -> Result<()> {
     check_balance(&test, ALBERT, &ibc_denom_on_namada, 100)?;
 
     // Unshielding transfer to Gaia's invalid account to check the refund for
-    // the burned IBC token
+    // the burned IBC token with a transparent refund target
     transfer(
         &test,
         A_SPENDING_KEY,
@@ -413,7 +413,7 @@ fn ibc_transfers() -> Result<()> {
         None,
         None,
         None,
-        true,
+        Some(IBC_REFUND_TARGET_ALIAS),
     )?;
     wait_for_packet_relay(
         &hermes_dir,
@@ -424,6 +424,31 @@ fn ibc_transfers() -> Result<()> {
     // Check the token has been refunded to the refund target
     check_shielded_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
     check_balance(&test, IBC_REFUND_TARGET_ALIAS, &ibc_denom_on_namada, 10)?;
+
+    // Unshielding transfer to Gaia's invalid account to check the refund for
+    // the burned IBC token with a shielded refund target
+    transfer(
+        &test,
+        A_SPENDING_KEY,
+        "invalid_receiver",
+        &ibc_denom_on_namada,
+        10,
+        Some(ALBERT_KEY),
+        &port_id_namada,
+        &channel_id_namada,
+        None,
+        None,
+        None,
+        Some(AA_PAYMENT_ADDRESS),
+    )?;
+    wait_for_packet_relay(
+        &hermes_dir,
+        &port_id_namada,
+        &channel_id_namada,
+        &test,
+    )?;
+    // Check the token has been refunded to the source
+    check_shielded_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
 
     // Stop Hermes for timeout test
     let mut hermes = bg_hermes.foreground();
@@ -443,7 +468,7 @@ fn ibc_transfers() -> Result<()> {
         Some(Duration::new(10, 0)),
         None,
         None,
-        true,
+        Some(IBC_REFUND_TARGET_ALIAS),
     )?;
     // wait for the timeout
     sleep(10);
@@ -605,7 +630,7 @@ fn ibc_nft_transfers() -> Result<()> {
         None,
         None,
         None,
-        false,
+        None,
     )?;
     clear_packet(&hermes_dir, &port_id_namada, &channel_id_namada, &test)?;
     check_balance(&test, &namada_receiver, &ibc_trace_on_namada, 0)?;
@@ -668,7 +693,7 @@ fn ibc_nft_transfers() -> Result<()> {
         None,
         None,
         None,
-        true,
+        Some(BB_PAYMENT_ADDRESS),
     )?;
     clear_packet(&hermes_dir, &port_id_namada, &channel_id_namada, &test)?;
     check_shielded_balance(&test, AB_VIEWING_KEY, &ibc_trace_on_namada, 0)?;
@@ -1110,7 +1135,7 @@ fn ibc_rate_limit() -> Result<()> {
         None,
         None,
         None,
-        false,
+        None,
     )?;
 
     // Transfer 1 NAM from Namada to Gaia again will fail
@@ -1129,7 +1154,7 @@ fn ibc_rate_limit() -> Result<()> {
         Some(
             "Transfer exceeding the per-epoch throughput limit is not allowed",
         ),
-        false,
+        None,
     )?;
 
     // wait for the next epoch
@@ -1152,7 +1177,7 @@ fn ibc_rate_limit() -> Result<()> {
         None,
         None,
         None,
-        false,
+        None,
     )?;
 
     // wait for the next epoch
@@ -1361,7 +1386,7 @@ fn ibc_pfm_happy_flows() -> Result<()> {
         None,
         None,
         None,
-        false,
+        None,
     )?;
 
     wait_for_packet_relay(
@@ -1652,7 +1677,7 @@ fn ibc_pfm_unhappy_flows() -> Result<()> {
         None,
         None,
         None,
-        false,
+        None,
     )?;
 
     wait_for_packet_relay(
@@ -2144,7 +2169,7 @@ fn try_invalid_transfers(
         None,
         // the IBC denom can't be parsed when using an invalid port
         Some(&format!("Invalid IBC denom: {nam_addr}")),
-        false,
+        None,
     )?;
 
     // invalid channel
@@ -2160,7 +2185,7 @@ fn try_invalid_transfers(
         None,
         None,
         Some("IBC token transfer error: context error: `ICS04 Channel error"),
-        false,
+        None,
     )?;
 
     Ok(())
@@ -2215,7 +2240,7 @@ fn transfer(
     timeout_sec: Option<Duration>,
     shielding_data_path: Option<PathBuf>,
     expected_err: Option<&str>,
-    gen_refund_target: bool,
+    refund_target: Option<&str>,
 ) -> Result<u32> {
     let rpc = get_actor_rpc(test, Who::Validator(0));
 
@@ -2263,22 +2288,12 @@ fn transfer(
         tx_args.push(&memo);
     }
 
-    if gen_refund_target {
-        let mut cmd = run!(
-            test,
-            Bin::Wallet,
-            &[
-                "gen",
-                "--alias",
-                IBC_REFUND_TARGET_ALIAS,
-                "--alias-force",
-                "--unsafe-dont-encrypt"
-            ],
-            Some(20),
-        )?;
-        cmd.assert_success();
+    if let Some(refund_target) = refund_target {
+        if !is_payment_address(test, refund_target)? {
+            gen_refund_target(test, refund_target)?;
+        }
         tx_args.push("--refund-target");
-        tx_args.push(IBC_REFUND_TARGET_ALIAS);
+        tx_args.push(refund_target);
     }
 
     let mut client = run!(test, Bin::Client, tx_args, Some(300))?;
@@ -3217,4 +3232,30 @@ fn packet_forward_memo(
         },
     })
     .expect("Test failed")
+}
+
+fn gen_refund_target(test: &Test, alias: &str) -> Result<()> {
+    let mut cmd = run!(
+        test,
+        Bin::Wallet,
+        &[
+            "gen",
+            "--alias",
+            alias,
+            "--alias-force",
+            "--unsafe-dont-encrypt"
+        ],
+        Some(20),
+    )?;
+    cmd.assert_success();
+    Ok(())
+}
+
+fn is_payment_address(test: &Test, alias: &str) -> Result<bool> {
+    let mut cmd =
+        run!(test, Bin::Wallet, &["find", "--alias", alias,], Some(20),)?;
+    let ret = cmd.exp_string("Found payment address:").is_ok();
+    cmd.assert_success();
+
+    Ok(ret)
 }
