@@ -11,12 +11,13 @@
 
 use core::str::FromStr;
 use core::time::Duration;
+use std::fs::File;
 use std::path::{Path, PathBuf};
 
 use color_eyre::eyre::Result;
 use eyre::eyre;
 use ibc_middleware_packet_forward::ForwardMetadata;
-use itertools::Either;
+use itertools::{Either, Itertools};
 use namada_apps_lib::client::rpc::query_storage_value_bytes;
 use namada_apps_lib::config::ethereum_bridge;
 use namada_apps_lib::config::genesis::templates;
@@ -56,12 +57,7 @@ use crate::e2e::helpers::{
 use crate::e2e::ledger_tests::{
     start_namada_ledger_node_wait_wasm, write_json_file,
 };
-use crate::e2e::setup::{
-    self, apply_use_device, osmosis_fixtures_dir, run_cosmos_cmd,
-    run_cosmos_cmd_homeless, run_hermes_cmd, set_ethereum_bridge_mode,
-    setup_cosmos, setup_hermes, sleep, working_dir, Bin, CosmosChainType,
-    NamadaCmd, Test, TestDir, Who, ENV_VAR_COSMWASM_CONTRACT_DIR,
-};
+use crate::e2e::setup::{self, apply_use_device, osmosis_fixtures_dir, run_cosmos_cmd, run_cosmos_cmd_homeless, run_hermes_cmd, set_ethereum_bridge_mode, setup_cosmos, setup_hermes, sleep, working_dir, Bin, CosmosChainType, NamadaCmd, Test, TestDir, Who, ENV_VAR_COSMWASM_CONTRACT_DIR, run_cmd};
 use crate::ibc::primitives::Signer;
 use crate::ibc::IbcShieldingData;
 use crate::strings::TX_APPLIED_SUCCESS;
@@ -3760,7 +3756,7 @@ fn osmosis_bingbong() -> Result<()> {
     let json = format!(
         r#"{{"governor":"{osmosis_jones}","swap_contract":"{swaprouter_addr}","registry_contract":"{crosschain_registry_addr}"}}"#
     );
-    let _crosschain_swaps_addr = build_contract_addr(
+    let crosschain_swaps_addr = build_contract_addr(
         &test_osmosis,
         CROSSCHAIN_SWAPS_SHA256_HASH,
         &osmosis_jones,
@@ -3940,6 +3936,76 @@ fn osmosis_bingbong() -> Result<()> {
         osmosis_cmd.exp_string("data: true")?;
         std::thread::sleep(Duration::from_secs(5));
     }
+    create_pool(
+        &test_osmosis,
+        &rpc_osmosis,
+        &[
+            (&get_gaia_denom_hash(format!("transfer/{channel_from_osmosis_to_namada}/{nam_token_addr}")), 100),
+            (&get_gaia_denom_hash(format!("transfer/{channel_from_osmosis_to_gaia}/{COSMOS_COIN}")), 100),
+        ]
+    )?;
+
+    run_cosmos_cmd(
+        &test_osmosis,
+        [
+            "query",
+            "poolmanager",
+            "pool",
+            "1"
+        ],
+        Some(40)
+    )?.assert_success();
+    let output_denom = get_gaia_denom_hash(format!("transfer/{channel_from_osmosis_to_gaia}/samoleans"));
+    run!(
+        &test_namada,
+        Bin::Client,
+        [
+            "osmosis-swap",
+            "--source",
+            BERTHA,
+            "--token",
+            NAM,
+            "--amount",
+            "64",
+            "--channel-id",
+            &channel_from_namada_to_osmosis.to_string(),
+            "--output-denom",
+            &format!("transfer/{channel_from_namada_to_gaia}/samoleans"),
+            "--local-recovery-addr",
+            &osmosis_jones,
+            "--swap-contract",
+            &crosschain_swaps_addr,
+            "--minimum-amount",
+            "0.000064",
+            "--target",
+            BERTHA,
+            "--pool-hop",
+            &format!("1:{output_denom}"),
+            "--node",
+            &rpc_namada,
+        ],
+        Some(40),
+    )?.assert_success();
+
+    wait_for_packet_relay(
+        &hermes_namada_osmosis,
+        &PortId::transfer(),
+        &channel_from_osmosis_to_namada,
+        &test_osmosis
+    )?;
+    wait_for_packet_relay(
+        &hermes_gaia_namada,
+        &PortId::transfer(),
+        &channel_from_gaia_to_namada,
+        &test_namada
+    )?;
+
+    check_balance(
+        &test_namada,
+        BERTHA,
+        &format!("transfer/{channel_from_namada_to_gaia}/samoleans"),
+        39
+    )?;
 
     Ok(())
 }
@@ -3991,6 +4057,58 @@ fn build_contract_addr(
     let mut parts = matched.split(':');
     parts.next().unwrap();
     Ok(parts.next().unwrap().trim().to_string())
+}
+
+/// Create a liquidity pool on osmosis.
+/// All tokens will be 1:1 swappable in the provided
+/// denoms.
+fn create_pool(
+    test: &Test,
+    rpc: &str,
+    denoms_and_deposits: &[(&str, u64)],
+) -> Result<()> {
+    use itertools::Itertools;
+    let json_path = test.test_dir.path().join("pool.json");
+    let mut weights = denoms_and_deposits
+        .iter()
+        .fold(String::new(), |mut acc, (d, _)| {
+            acc.push_str(&format!("1{d},"));
+            acc
+        });
+    weights.pop();
+    let mut init_deposits = denoms_and_deposits
+        .iter()
+        .fold(String::new(), |mut acc, (d, a)|{
+            acc.push_str(&format!("{a}{d},"));
+            acc
+        });
+    init_deposits.pop();
+    let pool_json = json!({
+        "weights": weights,
+        "initial-deposit": init_deposits,
+        "swap-fee": "0.001",
+        "exit-fee": "0.000"
+    });
+    let json_file = File::create(&json_path)?;
+    serde_json::to_writer(json_file, &pool_json)?;
+    let json_path = json_path.to_string_lossy();
+    let args = cosmos_common_args(
+        "2500000",
+        Some("0.01stake"),
+        "osmosis",
+        rpc,
+        vec![
+            "tx",
+            "poolmanager",
+            "create-pool",
+            "--pool-file",
+            &json_path,
+        ]
+    );
+    let mut osmosis_cmd = run_cosmos_cmd(&test, args, Some(40))?;
+    osmosis_cmd.assert_success();
+    std::thread::sleep(Duration::from_secs(5));
+    Ok(())
 }
 
 const CONTRACT_SALT_HEX: &str = "01020304";
