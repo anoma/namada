@@ -36,7 +36,6 @@ use std::str::FromStr;
 
 pub use actions::transfer_over_ibc;
 use apps::transfer::types::packet::PacketData;
-use apps::transfer::types::PORT_ID_STR;
 use borsh::BorshDeserialize;
 pub use context::common::IbcCommonContext;
 pub use context::nft_transfer::NftTransferContext;
@@ -242,15 +241,48 @@ where
             .into_storage_result()
             .ok();
         let tx = if let Some(IbcMessage::Envelope(ref envelope)) = msg {
-            Some(extract_masp_tx_from_envelope(envelope).ok_or_else(|| {
-                StorageError::new_const(
-                    "Missing MASP transaction in IBC message",
-                )
-            })?)
+            extract_masp_tx_from_envelope(envelope)
         } else {
             None
         };
         Ok(tx)
+    }
+
+    fn try_get_refund_masp_tx<Transfer: BorshDeserialize>(
+        storage: &S,
+        tx_data: &[u8],
+        masp_epoch: MaspEpoch,
+    ) -> StorageResult<Option<masp_primitives::transaction::Transaction>> {
+        let msg = decode_message::<Transfer>(tx_data)
+            .into_storage_result()
+            .ok();
+        // refund only when ack or timeout in an IBC envelope message
+        let Some(IbcMessage::Envelope(envelope)) = msg else {
+            return Ok(None);
+        };
+
+        let packet_info = match &*envelope {
+            MsgEnvelope::Packet(PacketMsg::Ack(msg)) => Some((
+                &msg.packet.port_id_on_a,
+                &msg.packet.chan_id_on_a,
+                msg.packet.seq_on_a,
+            )),
+            MsgEnvelope::Packet(PacketMsg::Timeout(msg)) => Some((
+                &msg.packet.port_id_on_a,
+                &msg.packet.chan_id_on_a,
+                msg.packet.seq_on_a,
+            )),
+            _ => None,
+        };
+
+        if let Some((port_id, channel_id, sequence)) = packet_info {
+            let key = storage::refund_masp_tx_key(
+                port_id, channel_id, sequence, masp_epoch,
+            );
+            storage.read(&key)
+        } else {
+            Ok(None)
+        }
     }
 
     fn apply_ibc_packet<Transfer: BorshDeserialize>(
@@ -293,62 +325,155 @@ where
                     keys_changed,
                 )?;
             }
-            // This event is emitted on the receiver
-            Some(IbcMessage::Envelope(envelope)) => {
-                if let MsgEnvelope::Packet(PacketMsg::Recv(msg)) = *envelope {
-                    if msg.packet.port_id_on_b.as_str() == PORT_ID_STR {
-                        let packet_data = serde_json::from_slice::<PacketData>(
-                            &msg.packet.data,
-                        )
-                        .map_err(StorageError::new)?;
-                        let receiver = packet_data.receiver.to_string();
-                        let addr = TAddrData::Ibc(receiver.clone());
-                        accum.decoder.insert(ibc_taddr(receiver), addr);
-                        let ibc_denom = packet_data.token.denom.to_string();
-                        let amount = packet_data
-                            .token
-                            .amount
-                            .try_into()
-                            .into_storage_result()?;
-                        accum = apply_recv_msg(
-                            storage,
-                            accum,
-                            &msg,
-                            vec![ibc_denom],
-                            amount,
-                            keys_changed,
-                        )?;
-                    } else {
-                        let packet_data =
-                            serde_json::from_slice::<NftPacketData>(
-                                &msg.packet.data,
-                            )
-                            .map_err(StorageError::new)?;
-                        let receiver = packet_data.receiver.to_string();
-                        let addr = TAddrData::Ibc(receiver.clone());
-                        accum.decoder.insert(ibc_taddr(receiver), addr);
-                        let ibc_traces = packet_data
-                            .token_ids
-                            .0
-                            .iter()
-                            .map(|token_id| {
-                                ibc_trace_for_nft(
-                                    &packet_data.class_id,
-                                    token_id,
+            Some(IbcMessage::Envelope(envelope)) => match *envelope {
+                MsgEnvelope::Packet(PacketMsg::Recv(msg)) => {
+                    let recv_info = match msg.packet.port_id_on_b.as_str() {
+                        FT_PORT_ID_STR => {
+                            let packet_data =
+                                serde_json::from_slice::<PacketData>(
+                                    &msg.packet.data,
                                 )
-                            })
-                            .collect();
+                                .map_err(StorageError::new)?;
+                            let receiver = packet_data.receiver.to_string();
+                            let ibc_denom = packet_data.token.denom.to_string();
+                            let amount = packet_data
+                                .token
+                                .amount
+                                .try_into()
+                                .into_storage_result()?;
+                            Some((receiver, vec![ibc_denom], amount))
+                        }
+                        NFT_PORT_ID_STR => {
+                            let packet_data =
+                                serde_json::from_slice::<NftPacketData>(
+                                    &msg.packet.data,
+                                )
+                                .map_err(StorageError::new)?;
+                            let receiver = packet_data.receiver.to_string();
+                            let ibc_traces = packet_data
+                                .token_ids
+                                .0
+                                .iter()
+                                .map(|token_id| {
+                                    ibc_trace_for_nft(
+                                        &packet_data.class_id,
+                                        token_id,
+                                    )
+                                })
+                                .collect();
+                            Some((receiver, ibc_traces, Amount::from_u64(1)))
+                        }
+                        _ => None,
+                    };
+                    if let Some((receiver, ibc_traces, amount)) = recv_info {
+                        let addr = TAddrData::Ibc(receiver.clone());
+                        accum.decoder.insert(ibc_taddr(receiver), addr);
                         accum = apply_recv_msg(
                             storage,
                             accum,
                             &msg,
                             ibc_traces,
-                            Amount::from_u64(1),
+                            amount,
                             keys_changed,
                         )?;
                     }
                 }
-            }
+                MsgEnvelope::Packet(PacketMsg::Ack(msg)) => {
+                    let refund_info = match msg.packet.port_id_on_a.as_str() {
+                        FT_PORT_ID_STR => {
+                            let packet_data =
+                                serde_json::from_slice::<PacketData>(
+                                    &msg.packet.data,
+                                )
+                                .map_err(StorageError::new)?;
+                            let ibc_denom = packet_data.token.denom.to_string();
+                            let amount = packet_data
+                                .token
+                                .amount
+                                .try_into()
+                                .into_storage_result()?;
+                            Some((vec![ibc_denom], amount))
+                        }
+                        NFT_PORT_ID_STR => {
+                            let packet_data =
+                                serde_json::from_slice::<NftPacketData>(
+                                    &msg.packet.data,
+                                )
+                                .map_err(StorageError::new)?;
+                            let ibc_traces = packet_data
+                                .token_ids
+                                .0
+                                .iter()
+                                .map(|token_id| {
+                                    ibc_trace_for_nft(
+                                        &packet_data.class_id,
+                                        token_id,
+                                    )
+                                })
+                                .collect();
+                            Some((ibc_traces, Amount::from_u64(1)))
+                        }
+                        _ => None,
+                    };
+                    if let Some((ibc_traces, amount)) = refund_info {
+                        accum = apply_refund_msg(
+                            accum,
+                            &msg.packet.port_id_on_a,
+                            &msg.packet.chan_id_on_a,
+                            ibc_traces,
+                            amount,
+                        )?;
+                    }
+                }
+                MsgEnvelope::Packet(PacketMsg::Timeout(msg)) => {
+                    let refund_info = match msg.packet.port_id_on_a.as_str() {
+                        FT_PORT_ID_STR => {
+                            let packet_data =
+                                serde_json::from_slice::<PacketData>(
+                                    &msg.packet.data,
+                                )
+                                .map_err(StorageError::new)?;
+                            let ibc_denom = packet_data.token.denom.to_string();
+                            let amount = packet_data
+                                .token
+                                .amount
+                                .try_into()
+                                .into_storage_result()?;
+                            Some((vec![ibc_denom], amount))
+                        }
+                        NFT_PORT_ID_STR => {
+                            let packet_data =
+                                serde_json::from_slice::<NftPacketData>(
+                                    &msg.packet.data,
+                                )
+                                .map_err(StorageError::new)?;
+                            let ibc_traces = packet_data
+                                .token_ids
+                                .0
+                                .iter()
+                                .map(|token_id| {
+                                    ibc_trace_for_nft(
+                                        &packet_data.class_id,
+                                        token_id,
+                                    )
+                                })
+                                .collect();
+                            Some((ibc_traces, Amount::from_u64(1)))
+                        }
+                        _ => None,
+                    };
+                    if let Some((ibc_traces, amount)) = refund_info {
+                        accum = apply_refund_msg(
+                            accum,
+                            &msg.packet.port_id_on_a,
+                            &msg.packet.chan_id_on_a,
+                            ibc_traces,
+                            amount,
+                        )?;
+                    }
+                }
+                _ => {}
+            },
         }
         Ok(accum)
     }
@@ -565,6 +690,40 @@ where
                     checked!(pre_entry + &delta).map_err(StorageError::new)?,
                 );
             }
+        }
+    }
+    Ok(accum)
+}
+
+// Apply a refund to the changed balances structure
+fn apply_refund_msg(
+    mut accum: ChangedBalances,
+    src_port_id: &PortId,
+    src_channel_id: &ChannelId,
+    ibc_traces: Vec<String>,
+    amount: Amount,
+) -> StorageResult<ChangedBalances> {
+    // Shielded refund only happens if MsgAcknowledgement or MsgTimeout is
+    // successful
+    for ibc_trace in &ibc_traces {
+        // If there is a transfer to the IBC account, then deduplicate the
+        // balance increase since we already account for it below
+        let token = convert_to_address(ibc_trace).into_storage_result()?;
+        let delta = ValueSum::from_pair(token, amount);
+        if !is_sender_chain_source(ibc_trace, src_port_id, src_channel_id) {
+            // Enable funds to be taken from the IBC internal address and be
+            // deposited elsewhere Required for the IBC internal
+            // Address to release funds
+            let ibc_taddr = addr_taddr(address::IBC);
+            let pre_entry = accum
+                .pre
+                .get(&ibc_taddr)
+                .cloned()
+                .unwrap_or(ValueSum::zero());
+            accum.pre.insert(
+                ibc_taddr,
+                checked!(pre_entry + &delta).map_err(StorageError::new)?,
+            );
         }
     }
     Ok(accum)
