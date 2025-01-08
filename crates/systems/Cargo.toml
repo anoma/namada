@@ -18,5 +18,5 @@ namada_events = { path = "../events" }
 namada_storage = { path = "../storage" }
 
 [dev-dependencies]
-cargo_metadata = "0.18.1"
+cargo_metadata.workspace = true
 lazy_static.workspace = true

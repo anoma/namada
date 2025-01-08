@@ -1,10 +1,11 @@
 use std::fs::File;
 use std::io::Write;
-use std::{env, str};
+use std::str;
 
+use cargo_metadata::MetadataCommand;
 use git2::{DescribeFormatOptions, DescribeOptions, Repository};
 
-/// Path to the .proto source files, relative to `apps` directory
+/// Path to the .proto source files, relative to `apps_lib` directory
 const PROTO_SRC: &str = "./proto";
 
 fn main() {
@@ -39,11 +40,29 @@ fn main() {
                 .expect("cannot write version");
         }
         None => {
+            // Get the version from the apps crate
+            let version = MetadataCommand::new()
+                .no_deps()
+                .other_options(vec![
+                    "--locked".to_string(),
+                    "--offline".to_string(),
+                ])
+                .manifest_path("../apps/Cargo.toml")
+                .exec()
+                .ok()
+                .and_then(|metadata| {
+                    metadata
+                        .packages
+                        .into_iter()
+                        .find(|package| package.name == "namada_apps")
+                })
+                .map(|package| format!("v{}", package.version))
+                .unwrap();
             version_rs
                 .write_all(pre.as_bytes())
                 .expect("cannot write version");
             version_rs
-                .write_all(env!("CARGO_PKG_VERSION").as_bytes())
+                .write_all(version.as_bytes())
                 .expect("cannot write version");
             version_rs
                 .write_all(post.as_bytes())
