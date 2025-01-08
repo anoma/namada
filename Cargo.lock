@@ -4743,6 +4743,7 @@ dependencies = [
  "base64 0.13.1",
  "bit-set",
  "borsh",
+ "cargo_metadata",
  "clap",
  "color-eyre",
  "config",
