@@ -3252,6 +3252,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3612,6 +3621,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5ce46fe64a9d73be07dcbe690a38ce1b293be448fd8ce1e6c1b8062c9f72c6a"
 
 [[package]]
+name = "nam-sparse-merkle-tree"
+version = "0.3.2-nam.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fae108a0f6aabf789e34d6d447c1184608d1c70c087f957b720042226a47ab63"
+dependencies = [
+ "borsh",
+ "cfg-if",
+ "ics23",
+ "itertools 0.14.0",
+ "sha2 0.10.8",
+]
+
+[[package]]
 name = "namada_account"
 version = "0.46.1"
 dependencies = [
@@ -3651,6 +3673,7 @@ dependencies = [
  "k256",
  "lazy_static",
  "masp_primitives",
+ "nam-sparse-merkle-tree",
  "namada_macros",
  "num-integer",
  "num-rational",
@@ -3668,7 +3691,6 @@ dependencies = [
  "serde_json",
  "sha2 0.9.9",
  "smooth-operator",
- "sparse-merkle-tree",
  "tendermint",
  "tendermint-proto",
  "thiserror",
@@ -3819,10 +3841,10 @@ dependencies = [
  "borsh",
  "eyre",
  "ics23",
+ "nam-sparse-merkle-tree",
  "namada_core",
  "namada_macros",
  "prost 0.13.1",
- "sparse-merkle-tree",
  "thiserror",
 ]
 
@@ -6083,18 +6105,6 @@ checksum = "7b5fac59a5cb5dd637972e5fca70daf0523c9067fcdc4842f053dae04a18f8e9"
 dependencies = [
  "libc",
  "windows-sys 0.48.0",
-]
-
-[[package]]
-name = "sparse-merkle-tree"
-version = "0.3.1-pre"
-source = "git+https://github.com/heliaxdev/sparse-merkle-tree?rev=a93c55ccd47840ee0967eee237e47d9245478594#a93c55ccd47840ee0967eee237e47d9245478594"
-dependencies = [
- "borsh",
- "cfg-if",
- "ics23",
- "itertools 0.12.1",
- "sha2 0.9.9",
 ]
 
 [[package]]
