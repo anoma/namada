@@ -712,8 +712,8 @@ fn apply_refund_msg(
         let delta = ValueSum::from_pair(token, amount);
         if !is_sender_chain_source(ibc_trace, src_port_id, src_channel_id) {
             // Enable funds to be taken from the IBC internal address and be
-            // deposited elsewhere Required for the IBC internal
-            // Address to release funds
+            // deposited elsewhere
+            // Required for the IBC internal address to release funds
             let ibc_taddr = addr_taddr(address::IBC);
             let pre_entry = accum
                 .pre
@@ -890,7 +890,7 @@ where
                             msg.acknowledgement.as_ref(),
                         ) {
                             Ok(ack) if !ack.is_successful() => {
-                                let mut inner = self.ctx.inner.borrow_mut();
+                                let inner = self.ctx.inner.borrow_mut();
                                 let epoch = inner
                                     .storage()
                                     .get_block_epoch()
@@ -905,30 +905,20 @@ where
                                     masp_epoch_multiplier,
                                 )
                                 .map_err(|e| Error::Other(e.to_string()))?;
-                                let refund_masp_tx = inner
+                                inner
                                     .refund_masp_tx(
                                         &msg.packet.port_id_on_a,
                                         &msg.packet.chan_id_on_a,
                                         msg.packet.seq_on_a,
                                         masp_epoch,
                                     )
-                                    .map_err(|e| Error::Context(Box::new(e)))?;
-                                // Delete refund masp txs of the packet
-                                // including, the one for the previous epoch
-                                inner
-                                    .delete_refund_masp_txs(
-                                        &msg.packet.port_id_on_a,
-                                        &msg.packet.chan_id_on_a,
-                                        msg.packet.seq_on_a,
-                                    )
-                                    .map_err(|e| Error::Context(Box::new(e)))?;
-                                refund_masp_tx
+                                    .map_err(|e| Error::Context(Box::new(e)))?
                             }
                             _ => None,
                         }
                     }
                     MsgEnvelope::Packet(PacketMsg::Timeout(msg)) => {
-                        let mut inner = self.ctx.inner.borrow_mut();
+                        let inner = self.ctx.inner.borrow_mut();
                         let epoch = inner
                             .storage()
                             .get_block_epoch()
@@ -941,24 +931,14 @@ where
                             masp_epoch_multiplier,
                         )
                         .map_err(|e| Error::Other(e.to_string()))?;
-                        let refund_masp_tx = inner
+                        inner
                             .refund_masp_tx(
                                 &msg.packet.port_id_on_a,
                                 &msg.packet.chan_id_on_a,
                                 msg.packet.seq_on_a,
                                 masp_epoch,
                             )
-                            .map_err(|e| Error::Context(Box::new(e)))?;
-                        // Delete refund masp txs of the packet, including the
-                        // one for the previous epoch
-                        inner
-                            .delete_refund_masp_txs(
-                                &msg.packet.port_id_on_a,
-                                &msg.packet.chan_id_on_a,
-                                msg.packet.seq_on_a,
-                            )
-                            .map_err(|e| Error::Context(Box::new(e)))?;
-                        refund_masp_tx
+                            .map_err(|e| Error::Context(Box::new(e)))?
                     }
                     _ => None,
                 };

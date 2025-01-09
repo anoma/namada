@@ -194,6 +194,25 @@ pub async fn query_epoch_at_height<C: namada_io::Client + Sync>(
     convert_response::<C, _>(RPC.shell().epoch_at_height(client, &height).await)
 }
 
+/// Query the MASP epoch of the given block height, if it exists.
+/// Will return none if the input block height is greater than
+/// the latest committed block height.
+pub async fn query_masp_epoch_at_height<C: namada_io::Client + Sync>(
+    client: &C,
+    height: BlockHeight,
+) -> Result<Option<MaspEpoch>, error::Error> {
+    let Some(epoch) = query_epoch_at_height(client, height).await? else {
+        return Ok(None);
+    };
+
+    let key = params_storage::get_masp_epoch_multiplier_key();
+    let multiplier: u64 = query_storage_value(client, &key).await?;
+
+    let masp_epoch = MaspEpoch::try_from_epoch(epoch, multiplier)
+        .map_err(|e| error::Error::Other(e.to_string()))?;
+    Ok(Some(masp_epoch))
+}
+
 /// Query the last committed block, if any.
 pub async fn query_block<C: namada_io::Client + Sync>(
     client: &C,
