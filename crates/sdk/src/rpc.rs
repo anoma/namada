@@ -1605,17 +1605,17 @@ pub async fn osmosis_denom_from_namada_denom(
 
     let chain_name_req = |prefix| {
         format!(
-            r#"'{{"get_chain_name_from_bech32_prefix":{{"prefix": "{prefix}" }}'"#
+            r#"{{"get_chain_name_from_bech32_prefix": {{"prefix": "{prefix}" }} }}"#
         )
     };
     let channel_pair_req = |src, dest| {
         format!(
-            r#"{{"get_channel_from_chain_pair": {{"source_chain": "{src}", "destinataion_chain": "{dest}" }} }}'"#
+            r#"{{"get_channel_from_chain_pair": {{"source_chain": "{src}", "destination_chain": "{dest}" }} }}"#
         )
     };
     let dest_chain_req = |on_chain, via_channel| {
         format!(
-            r#"'{{"get_destination_chain_from_source_chain_via_channel":{{"on_chain": "{on_chain}", "via_channel": "{via_channel}" }} }}'"#
+            r#"{{"get_destination_chain_from_source_chain_via_channel": {{"on_chain": "{on_chain}", "via_channel": "{via_channel}" }} }}"#
         )
     };
 
