@@ -30,7 +30,7 @@ use ibc_middleware_module::MiddlewareModule;
 use ibc_middleware_module_macros::from_middleware;
 use ibc_middleware_overflow_receive::OverflowRecvContext;
 use ibc_middleware_packet_forward::PacketForwardMiddleware;
-use namada_core::address::{Address, MASP};
+use namada_core::address::{Address, MASP, MULTITOKEN};
 use namada_core::token;
 use serde_json::{Map, Value};
 
@@ -56,6 +56,16 @@ where
     C: IbcCommonContext + Debug,
     Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>,
 {
+    fn insert_verifier(&self, address: Address) {
+        self.next
+            .next()
+            .transfer_module
+            .ctx
+            .verifiers
+            .borrow_mut()
+            .insert(address);
+    }
+
     fn get_ctx(&self) -> Rc<RefCell<C>> {
         self.next.next().transfer_module.ctx.inner.clone()
     }
@@ -126,9 +136,9 @@ where
             );
             return (ModuleExtras::empty(), Some(ack.into()));
         }
-        self.get_verifiers()
-            .borrow_mut()
-            .insert(memo.namada.osmosis_swap.overflow_receiver);
+
+        self.insert_verifier(memo.namada.osmosis_swap.overflow_receiver);
+        self.insert_verifier(MULTITOKEN);
 
         self.next.on_recv_packet_execute(packet, relayer)
     }
