@@ -3966,7 +3966,7 @@ fn osmosis_bingbong() -> Result<()> {
             "--token",
             NAM,
             "--amount",
-            "64",
+            "0.000064",
             "--channel-id",
             &channel_from_namada_to_osmosis.to_string(),
             "--output-denom",
@@ -3976,7 +3976,7 @@ fn osmosis_bingbong() -> Result<()> {
             "--swap-contract",
             &crosschain_swaps_addr,
             "--minimum-amount",
-            "0.000064",
+            "1",
             "--target",
             BERTHA,
             "--pool-hop",
@@ -4000,11 +4000,114 @@ fn osmosis_bingbong() -> Result<()> {
         &test_namada
     )?;
 
+    // 39 is derived from the uniswap formula:
+    // floor( 100 - (100*100/(100 + 64)) )
     check_balance(
         &test_namada,
         BERTHA,
         &format!("transfer/{channel_from_namada_to_gaia}/samoleans"),
         39
+    )?;
+
+    run!(
+        &test_namada,
+        Bin::Client,
+        [
+            "shield",
+            "--source",
+            BERTHA,
+            "--target",
+            AA_PAYMENT_ADDRESS,
+            "--amount",
+            "0.000056",
+            "--token",
+            NAM,
+            "--node",
+            &rpc_namada,
+        ],
+        Some(40)
+    )?.assert_success();
+
+
+    shielded_sync(&test_namada, AA_VIEWING_KEY)?;
+
+    let query_args = vec![
+        "balance",
+        "--owner",
+        AA_VIEWING_KEY,
+        "--token",
+        NAM,
+        "--node",
+        &rpc_namada,
+    ];
+    let mut client = run!(&test_namada, Bin::Client, query_args, Some(40))?;
+    client.exp_string("nam: 0.000056")?;
+    client.assert_success();
+
+    run!(
+        &test_namada,
+        Bin::Client,
+        [
+            "osmosis-swap",
+            "--source",
+            AA_VIEWING_KEY,
+            "--token",
+            NAM,
+            "--amount",
+            "0.000056",
+            "--channel-id",
+            &channel_from_namada_to_osmosis.to_string(),
+            "--output-denom",
+            &format!("transfer/{channel_from_osmosis_to_gaia}/samoleans"),
+            "--local-recovery-addr",
+            &osmosis_jones,
+            "--swap-contract",
+            &crosschain_swaps_addr,
+            "--minimum-amount",
+            "10",
+            "--target-pa",
+            AA_PAYMENT_ADDRESS,
+            "--overflow-addr",
+            ALBERT,
+            "--pool-hop",
+            &format!("1:{output_denom}"),
+            "--gas-payer",
+            ALBERT_KEY,
+            "--node",
+            &rpc_namada,
+        ],
+        Some(40),
+    )?.assert_success();
+
+    wait_for_packet_relay(
+        &hermes_namada_osmosis,
+        &PortId::transfer(),
+        &channel_from_osmosis_to_namada,
+        &test_osmosis
+    )?;
+    wait_for_packet_relay(
+        &hermes_gaia_namada,
+        &PortId::transfer(),
+        &channel_from_gaia_to_namada,
+        &test_namada
+    )?;
+
+    // Check that the minimum amount got shielded
+    shielded_sync(&test_namada, AA_VIEWING_KEY)?;
+    check_balance(
+        &test_namada,
+        AA_VIEWING_KEY,
+        &format!("transfer/{channel_from_namada_to_gaia}/samoleans"),
+        10
+    )?;
+    // 5 is derived from the uniswap formula:
+    // floor( 61 - ( 164 * 61 / (164 + 56) ) ) minus
+    // the minimum amount (10) which was shielded
+    check_balance(
+        &test_namada,
+       ALBERT,
+        &format!("transfer/{channel_from_namada_to_gaia}/samoleans"),
+        5
     )?;
 
     Ok(())

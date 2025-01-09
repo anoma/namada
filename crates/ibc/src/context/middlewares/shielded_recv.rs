@@ -109,14 +109,12 @@ where
             // NB: this isn't an ICS-20 packet
             return self.next.on_recv_packet_execute(packet, relayer);
         };
-        if serde_json::from_str::<NamadaMemo<OsmosisSwapMemoData>>(
+         let Ok(memo) =  serde_json::from_str::<NamadaMemo<OsmosisSwapMemoData>>(
             data.memo.as_ref(),
-        )
-        .is_err()
-        {
+        ) else {
             // NB: this isn't a shielded recv packet
             return self.next.on_recv_packet_execute(packet, relayer);
-        }
+        };
 
         if data.receiver.as_ref() != MASP.to_string() {
             let ack = AcknowledgementStatus::error(
@@ -128,6 +126,7 @@ where
             );
             return (ModuleExtras::empty(), Some(ack.into()));
         }
+        self.get_verifiers().borrow_mut().insert(memo.namada.osmosis_swap.overflow_receiver);
 
         self.next.on_recv_packet_execute(packet, relayer)
     }
