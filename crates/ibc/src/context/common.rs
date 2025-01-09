@@ -790,20 +790,6 @@ pub trait IbcCommonContext: IbcStorageContext {
             .write(&key, masp_tx)
             .map_err(ContextError::from)
     }
-
-    /// Delete MASP shielding transactions for the shielded refund
-    fn delete_refund_masp_txs(
-        &mut self,
-        port_id: &PortId,
-        channel_id: &ChannelId,
-        sequence: Sequence,
-    ) -> Result<()> {
-        let prefix =
-            storage::refund_masp_tx_prefix(port_id, channel_id, sequence);
-        self.storage_mut()
-            .delete_prefix(&prefix)
-            .map_err(ContextError::from)
-    }
 }
 
 /// Read and decode the IBC sequence
