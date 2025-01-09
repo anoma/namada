@@ -3597,7 +3597,7 @@ pub mod args {
     pub const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
     pub const NO_EXPIRATION: ArgFlag = flag("no-expiration");
     pub const NUT: ArgFlag = flag("nut");
-    pub const OSMOSIS_RPC: Arg<String> = arg("osmosis-rpc");
+    pub const OSMOSIS_REST_RPC: Arg<String> = arg("osmosis-rest-rpc");
     pub const OUT_FILE_PATH_OPT: ArgOpt<PathBuf> = arg_opt("out-file-path");
     pub const OUTPUT: ArgOpt<PathBuf> = arg_opt("output");
     pub const OUTPUT_DENOM: Arg<String> = arg("output-denom");
@@ -5169,7 +5169,7 @@ pub mod args {
                 slippage: self.slippage,
                 local_recovery_addr: self.local_recovery_addr,
                 route: self.route,
-                osmosis_rpc: self.osmosis_rpc,
+                osmosis_rest_rpc: self.osmosis_rest_rpc,
             })
         }
     }
@@ -5177,7 +5177,7 @@ pub mod args {
     impl Args for TxOsmosisSwap<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let transfer = TxIbcTransfer::parse(matches);
-            let osmosis_rpc = OSMOSIS_RPC.parse(matches);
+            let osmosis_rest_rpc = OSMOSIS_REST_RPC.parse(matches);
             let output_denom = OUTPUT_DENOM.parse(matches);
             let maybe_trans_recipient = TARGET_OPT.parse(matches);
             let maybe_shielded_recipient =
@@ -5230,16 +5230,16 @@ pub mod args {
                 slippage,
                 local_recovery_addr,
                 route,
-                osmosis_rpc,
+                osmosis_rest_rpc,
             }
         }
 
         fn def(app: App) -> App {
             app.add_args::<TxIbcTransfer<CliTypes>>()
                 .arg(
-                    OSMOSIS_RPC
+                    OSMOSIS_REST_RPC
                         .def()
-                        .help(wrap!("A url pointing to an Osmosis rpc.")),
+                        .help(wrap!("A url pointing to an Osmosis REST rpc.")),
                 )
                 .arg(OSMOSIS_POOL_HOP.def().help(wrap!(
                     "Individual hop of the route to take through Osmosis \
@@ -7183,11 +7183,22 @@ pub mod args {
                 query,
                 output_folder: self.output_folder,
                 target: chain_ctx.get(&self.target),
-                token: self.token,
                 amount: self.amount,
                 expiration: self.expiration,
-                port_id: self.port_id,
-                channel_id: self.channel_id,
+                asset: match self.asset {
+                    IbcShieldingTransferAsset::LookupNamadaAddress {
+                        port_id,
+                        channel_id,
+                        token,
+                    } => IbcShieldingTransferAsset::LookupNamadaAddress {
+                        port_id,
+                        channel_id,
+                        token,
+                    },
+                    IbcShieldingTransferAsset::Address(addr) => {
+                        IbcShieldingTransferAsset::Address(chain_ctx.get(&addr))
+                    }
+                },
             })
         }
     }
@@ -7216,11 +7227,13 @@ pub mod args {
                 query,
                 output_folder,
                 target,
-                token,
                 amount,
                 expiration,
-                port_id,
-                channel_id,
+                asset: IbcShieldingTransferAsset::LookupNamadaAddress {
+                    port_id,
+                    channel_id,
+                    token,
+                },
             }
         }
 

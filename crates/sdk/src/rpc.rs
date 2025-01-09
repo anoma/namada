@@ -38,7 +38,6 @@ use namada_governance::storage::proposal::StorageProposal;
 use namada_governance::utils::{
     compute_proposal_result, ProposalResult, ProposalVotes, Vote,
 };
-use namada_ibc::apps::transfer::types::TracePath;
 use namada_ibc::core::host::types::identifiers::PortId;
 use namada_ibc::storage::{
     ibc_trace_key, ibc_trace_key_prefix, is_ibc_trace_key,
@@ -1497,18 +1496,130 @@ pub async fn query_ibc_denom<N: Namada>(
     token.as_ref().to_string()
 }
 
-/// Given a Namada ibc asset returned from an Osmosis swap,
-/// find the corresponding asset denom on Osmosis. This is done
-/// by querying the crosschain swap contracts.
-pub async fn calc_osmosis_denom_from_namada_denom(
-    namada_denom: &str,
-    contract_addr: &str,
-    rpc_addr: &str,
+/// Query the registry contract embedded in the state of
+/// an input Crosschain Swaps Osmosis contract.
+pub async fn get_registry_from_xcs_osmosis_contract(
+    rest_rpc_addr: &str,
+    xcs_contract_addr: &str,
 ) -> Result<String, Error> {
-    #[derive(Serialize, Deserialize)]
+    #[derive(Deserialize)]
     struct RespData {
-        data: String,
+        models: Vec<Model>,
     }
+
+    #[derive(Deserialize)]
+    struct Model {
+        key: String,
+        value: String,
+    }
+
+    #[derive(Deserialize)]
+    struct XcsConfig {
+        registry_contract: String,
+    }
+
+    let request_url = format!(
+        "{rest_rpc_addr}/cosmwasm/wasm/v1/contract/{xcs_contract_addr}/state"
+    );
+    let RespData { models } = reqwest::get(&request_url)
+        .await
+        .map_err(|e| {
+            Error::Other(format!(
+                "Failed to fetch headers of request {request_url:?}: {e}"
+            ))
+        })?
+        .json()
+        .await
+        .map_err(|e| {
+            Error::Other(format!(
+                "Failed to fetch JSON body of request {request_url:?}: {e}"
+            ))
+        })?;
+
+    let Some(Model {
+        value: base64_encoded_config,
+        ..
+    }) = models.into_iter().find(|Model { key, .. }| {
+        const HEX_ENCODED_CONFIG_KEY: &str = "636F6E666967";
+        key == HEX_ENCODED_CONFIG_KEY
+    })
+    else {
+        return Err(Error::Other(format!(
+            "Could not find config of XCS contract {xcs_contract_addr}"
+        )));
+    };
+
+    let xcs_cfg_json = data_encoding::BASE64
+        .decode(base64_encoded_config.as_bytes())
+        .map_err(|e| Error::Other(e.to_string()))?;
+
+    let XcsConfig { registry_contract } = serde_json::from_slice(&xcs_cfg_json)
+        .map_err(|e| Error::Other(e.to_string()))?;
+
+    Ok(registry_contract)
+}
+
+/// Given a Namada asset returned from an Osmosis swap,
+/// find the corresponding asset denom on Osmosis.
+///
+/// This is done by querying the XCS registry contract. The Namada asset
+/// is also returned, parsed as an [`Address`].
+pub async fn osmosis_denom_from_namada_denom(
+    rest_rpc_addr: &str,
+    registry_contract_addr: &str,
+    namada_denom: &str,
+) -> Result<(String, Address), Error> {
+    async fn fetch_contract_data(
+        contract_addr: &str,
+        rest_rpc_addr: &str,
+        json_query: &str,
+    ) -> Result<String, Error> {
+        #[derive(Deserialize)]
+        struct RespData {
+            data: String,
+        }
+
+        let encoded_query = data_encoding::BASE64.encode(json_query.as_bytes());
+        let request_url = format!(
+            "{rest_rpc_addr}/cosmwasm/wasm/v1/contract/{contract_addr}/smart/\
+             {encoded_query}"
+        );
+
+        let RespData { data } = reqwest::get(&request_url)
+            .await
+            .map_err(|e| {
+                Error::Other(format!(
+                    "Failed to fetch headers of request {request_url:?}: {e}"
+                ))
+            })?
+            .json()
+            .await
+            .map_err(|e| {
+                Error::Other(format!(
+                    "Failed to fetch JSON body of request {request_url:?}: {e}"
+                ))
+            })?;
+
+        Ok(data)
+    }
+
+    let chain_name_req = |prefix| {
+        format!(
+            r#"'{{"get_chain_name_from_bech32_prefix":{{"prefix": "{prefix}" }}'"#
+        )
+    };
+    let channel_pair_req = |src, dest| {
+        format!(
+            r#"{{"get_channel_from_chain_pair": {{"source_chain": "{src}", "destinataion_chain": "{dest}" }} }}'"#
+        )
+    };
+    let dest_chain_req = |on_chain, via_channel| {
+        format!(
+            r#"'{{"get_destination_chain_from_source_chain_via_channel":{{"on_chain": "{on_chain}", "via_channel": "{via_channel}" }} }}'"#
+        )
+    };
+
+    ////////////////////////////////////////////////////////////////////////////
 
     let nam_denom = PrefixedDenom::from_str(namada_denom).map_err(|e| {
         Error::Other(format!(
@@ -1516,59 +1627,57 @@ pub async fn calc_osmosis_denom_from_namada_denom(
         ))
     })?;
 
-    let form_req = |query: &str| {
-        format!(
-            "{rpc_addr}/cosmwasm/wasm/v1/contract/{contract_addr}/smart/\
-             {query}"
-        )
-    };
-    let chain_name_req = |prefix| {
-        data_encoding::BASE64.encode(format!(r#"'{{"get_chain_name_from_bech32_prefix":{{"prefix":"{prefix}"}}'"#).as_bytes())
-    };
-    let channel_pair_req = |src: &str, dest: &str| {
-        data_encoding::BASE64.encode(
-            format!(r#"{{"get_channel_from_chain_pair": {{"source_chain": "{src}", "destinataion_chain": "{dest}"  }} }}'"#).as_bytes()
-        )
-    };
+    let namada_chain_name = fetch_contract_data(
+        registry_contract_addr,
+        rest_rpc_addr,
+        &chain_name_req("tnam"),
+    )
+    .await?;
+    let osmosis_chain_name = fetch_contract_data(
+        registry_contract_addr,
+        rest_rpc_addr,
+        &chain_name_req("osmo"),
+    )
+    .await?;
 
-    let RespData {
-        data: namada_chain_name,
-    } = reqwest::get(form_req(&chain_name_req("tnam")))
-        .await
-        .map_err(|e| Error::Other(e.to_string()))?
-        .json()
-        .await
-        .map_err(|e| Error::Other(e.to_string()))?;
-    let RespData {
-        data: osmosis_chain_name,
-    } = reqwest::get(form_req(&chain_name_req("osmo")))
-        .await
-        .map_err(|e| Error::Other(e.to_string()))?
-        .json()
-        .await
-        .map_err(|e| Error::Other(e.to_string()))?;
-
-    // Namada native asset
     if nam_denom.trace_path.is_empty() {
-        // validate that the base denom is an address
-        if Address::from_str(nam_denom.base_denom.as_str()).is_err() {
+        // Namada native asset
+
+        let address = nam_denom
+            .base_denom
+            .as_str()
+            .parse::<Address>()
+            .map_err(|err| {
+                Error::Encode(EncodingError::Decoding(format!(
+                    "Failed to parse base denom {} as Namada address: {err}",
+                    nam_denom.base_denom
+                )))
+            })?;
+
+        // validate that the base denom is not another ibc token
+        if matches!(&address, Address::Internal(InternalAddress::IbcToken(_))) {
             return Err(Error::Encode(EncodingError::Decoding(format!(
-                "Could not parse {} as a token address",
+                "Base denom {} cannot be an IBC token hash",
                 nam_denom.base_denom
             ))));
         }
-        // we get the channel-id from Osmosis to Namada
-        let RespData { data: channel_id } = reqwest::get(form_req(
+
+        let channel_from_osmosis_to_namada = fetch_contract_data(
+            registry_contract_addr,
+            rest_rpc_addr,
             &channel_pair_req(&osmosis_chain_name, &namada_chain_name),
+        )
+        .await?;
+
+        Ok((
+            format!(
+                "transfer/{channel_from_osmosis_to_namada}/{}",
+                nam_denom.base_denom
+            ),
+            address,
         ))
-        .await
-        .map_err(|e| Error::Other(e.to_string()))?
-        .json()
-        .await
-        .map_err(|e| Error::Other(e.to_string()))?;
-        Ok(format!("transfer/{channel_id}/{}", nam_denom.base_denom))
     } else {
-        let nam_channel_id = nam_denom
+        let channel_from_namada_to_src: ChannelId = nam_denom
             .trace_path
             .to_string()
             .strip_prefix("transfer/")
@@ -1578,34 +1687,48 @@ pub async fn calc_osmosis_denom_from_namada_denom(
                      port"
                         .to_string(),
                 )
+            })?
+            .parse()
+            .map_err(|_| {
+                Error::Other(format!(
+                    "Expected a single hop of the form `transfer/channel` in \
+                     {namada_denom}"
+                ))
             })?;
 
         // we get chain name from which the base denom originated
-        let RespData{ data: src_chain_name} =  reqwest::get(form_req(
-            &data_encoding::BASE64.encode(
-                 format!(
-                     r#"'{{"get_destination_chain_from_source_chain_via_channel":{{"on_chain": "{namada_chain_name}", "via_channel": "{nam_channel_id}"}} }}'"#
-                 ).as_bytes()
-             )
-        ))
-            .await
-            .map_err(|e| Error::Other(e.to_string()))?
-            .json()
-            .await
-            .map_err(|e| Error::Other(e.to_string()))?;
+        let src_chain_name = fetch_contract_data(
+            registry_contract_addr,
+            rest_rpc_addr,
+            &dest_chain_req(
+                &namada_chain_name,
+                channel_from_namada_to_src.as_str(),
+            ),
+        )
+        .await?;
 
         if src_chain_name == osmosis_chain_name {
-            Ok(nam_denom.base_denom.to_string())
-        } else {
-            let RespData { data: channel_id } = reqwest::get(form_req(
-                &channel_pair_req(&osmosis_chain_name, &src_chain_name),
+            // this is an osmosis native token
+            Ok((
+                nam_denom.base_denom.to_string(),
+                namada_ibc::trace::ibc_token(namada_denom),
             ))
-            .await
-            .map_err(|e| Error::Other(e.to_string()))?
-            .json()
-            .await
-            .map_err(|e| Error::Other(e.to_string()))?;
-            Ok(format!("transfer/{channel_id}/{}", nam_denom.base_denom))
+        } else {
+            // this asset is not native to osmosis
+            let channel_from_osmosis_to_src = fetch_contract_data(
+                registry_contract_addr,
+                rest_rpc_addr,
+                &channel_pair_req(&osmosis_chain_name, &src_chain_name),
+            )
+            .await?;
+
+            Ok((
+                format!(
+                    "transfer/{channel_from_osmosis_to_src}/{}",
+                    nam_denom.base_denom
+                ),
+                namada_ibc::trace::ibc_token(namada_denom),
+            ))
         }
     }
 }

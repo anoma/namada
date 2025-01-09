@@ -23,7 +23,6 @@ use namada_core::{storage, token};
 use namada_governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal,
 };
-use namada_ibc::apps::transfer::types::TracePath;
 use namada_ibc::IbcShieldingData;
 use namada_token::masp::utils::RetryStrategy;
 use namada_tx::data::GasLimit;
@@ -36,7 +35,8 @@ use crate::eth_bridge::bridge_pool;
 use crate::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use crate::ibc::{NamadaMemo, NamadaMemoData};
 use crate::rpc::{
-    calc_osmosis_denom_from_namada_denom, query_osmosis_pool_routes,
+    get_registry_from_xcs_osmosis_contract, osmosis_denom_from_namada_denom,
+    query_osmosis_pool_routes,
 };
 use crate::signing::SigningTxData;
 use crate::wallet::{DatedSpendingKey, DatedViewingKey};
@@ -539,8 +539,8 @@ pub struct TxOsmosisSwap<C: NamadaTypes = SdkTypes> {
     pub local_recovery_addr: String,
     /// The route to take through Osmosis pools
     pub route: Option<Vec<OsmosisPoolHop>>,
-    /// An rpc endpoint to Osmosis
-    pub osmosis_rpc: String,
+    /// A REST rpc endpoint to Osmosis
+    pub osmosis_rest_rpc: String,
 }
 
 impl TxOsmosisSwap<SdkTypes> {
@@ -595,13 +595,13 @@ impl TxOsmosisSwap<SdkTypes> {
 
         let Self {
             mut transfer,
-            output_denom,
             recipient,
             slippage,
             local_recovery_addr,
             route,
             overflow,
-            osmosis_rpc,
+            osmosis_rest_rpc,
+            output_denom: namada_output_denom,
         } = self;
 
         let recipient = recipient
@@ -633,6 +633,20 @@ impl TxOsmosisSwap<SdkTypes> {
             )));
         }
 
+        let registry_xcs_addr = get_registry_from_xcs_osmosis_contract(
+            &osmosis_rest_rpc,
+            &transfer.receiver,
+        )
+        .await?;
+
+        let (osmosis_output_denom, namada_output_addr) =
+            osmosis_denom_from_namada_denom(
+                &osmosis_rest_rpc,
+                &registry_xcs_addr,
+                &namada_output_denom,
+            )
+            .await?;
+
         let route = if let Some(route) = route {
             route
         } else {
@@ -641,22 +655,18 @@ impl TxOsmosisSwap<SdkTypes> {
                 &transfer.token,
                 transfer.amount,
                 transfer.channel_id.clone(),
-                &output_denom,
+                &osmosis_output_denom,
                 OSMOSIS_SQS_SERVER,
             )
             .await?
             .pop()
             .ok_or_else(|| {
                 Error::Other(format!(
-                    "No route found to swap {:?} of Namada's {} with Osmosis' \
-                     {}",
-                    transfer.amount, transfer.token, output_denom
+                    "No route found to swap {:?} of {} with {}",
+                    transfer.amount, transfer.token, namada_output_addr,
                 ))
             })?
         };
-
-        let osmosis_output_denom =
-            calc_osmosis_denom_from_namada_denom(&output_denom);
 
         let (receiver, slippage, final_memo) = match recipient {
             Either::Left(transparent_recipient) => {
@@ -684,7 +694,9 @@ impl TxOsmosisSwap<SdkTypes> {
                             namada_core::masp::TransferTarget::PaymentAddress(
                                 payment_addr,
                             ),
-                        token: output_denom.clone(),
+                        asset: IbcShieldingTransferAsset::Address(
+                            namada_output_addr,
+                        ),
                         amount: InputAmount::Validated(
                             token::DenominatedAmount::new(
                                 amount_to_shield,
@@ -692,8 +704,6 @@ impl TxOsmosisSwap<SdkTypes> {
                             ),
                         ),
                         expiration: transfer.tx.expiration.clone(),
-                        port_id: transfer.port_id.clone(),
-                        channel_id: transfer.channel_id.clone(),
                     },
                 )
                 .await?
@@ -729,7 +739,7 @@ impl TxOsmosisSwap<SdkTypes> {
                 contract: transfer.receiver.clone(),
                 msg: Message {
                     osmosis_swap: OsmosisSwap {
-                        output_denom,
+                        output_denom: osmosis_output_denom,
                         slippage,
                         final_memo,
                         receiver,
@@ -3218,14 +3228,26 @@ pub struct GenIbcShieldingTransfer<C: NamadaTypes = SdkTypes> {
     pub output_folder: Option<PathBuf>,
     /// The target address
     pub target: C::TransferTarget,
-    /// The token address which could be a non-namada address
-    pub token: String,
     /// Transferred token amount
     pub amount: InputAmount,
     /// The optional expiration of the masp shielding transaction
     pub expiration: TxExpiration,
-    /// Port ID via which the token is received
-    pub port_id: PortId,
-    /// Channel ID via which the token is received
-    pub channel_id: ChannelId,
+    /// Asset to shield over IBC to Namada
+    pub asset: IbcShieldingTransferAsset<C>,
+}
+
+/// IBC shielding transfer asset, to be used by [`GenIbcShieldingTransfer`]
+#[derive(Clone, Debug)]
+pub enum IbcShieldingTransferAsset<C: NamadaTypes = SdkTypes> {
+    /// Attempt to look-up the address of the asset to shield on Namada
+    LookupNamadaAddress {
+        /// The token address which could be a non-namada address
+        token: String,
+        /// Port ID via which the token is received
+        port_id: PortId,
+        /// Channel ID via which the token is received
+        channel_id: ChannelId,
+    },
+    /// Namada address of the token that will be received.
+    Address(C::Address),
 }
