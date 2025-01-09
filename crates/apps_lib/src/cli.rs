@@ -5236,9 +5236,11 @@ pub mod args {
 
         fn def(app: App) -> App {
             app.add_args::<TxIbcTransfer<CliTypes>>()
-                .arg(OSMOSIS_RPC.def().help(wrap!(
-                    "A url pointing to an Osmosis rpc."
-                )))
+                .arg(
+                    OSMOSIS_RPC
+                        .def()
+                        .help(wrap!("A url pointing to an Osmosis rpc.")),
+                )
                 .arg(OSMOSIS_POOL_HOP.def().help(wrap!(
                     "Individual hop of the route to take through Osmosis \
                      pools. This value takes the form \

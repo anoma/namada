@@ -38,6 +38,7 @@ use namada_governance::storage::proposal::StorageProposal;
 use namada_governance::utils::{
     compute_proposal_result, ProposalResult, ProposalVotes, Vote,
 };
+use namada_ibc::apps::transfer::types::TracePath;
 use namada_ibc::core::host::types::identifiers::PortId;
 use namada_ibc::storage::{
     ibc_trace_key, ibc_trace_key_prefix, is_ibc_trace_key,
@@ -56,7 +57,7 @@ use namada_token::masp::MaspTokenRewardData;
 use namada_tx::data::{BatchedTxResult, DryRunResult, ResultCode, TxResult};
 use namada_tx::event::{Batch as BatchAttr, Code as CodeAttr};
 use serde::{Deserialize, Serialize};
-use namada_ibc::apps::transfer::types::TracePath;
+
 use crate::args::{InputAmount, OsmosisPoolHop};
 use crate::control_flow::time;
 use crate::error::{EncodingError, Error, QueryError, TxSubmitError};
@@ -1506,15 +1507,20 @@ pub async fn calc_osmosis_denom_from_namada_denom(
 ) -> Result<String, Error> {
     #[derive(Serialize, Deserialize)]
     struct RespData {
-        data: String
+        data: String,
     }
 
-    let nam_denom = PrefixedDenom::from_str(namada_denom)
-        .map_err(|e| Error::Other(format!("Could not parse {namada_denom} as a trace path {e}")))?;
-
+    let nam_denom = PrefixedDenom::from_str(namada_denom).map_err(|e| {
+        Error::Other(format!(
+            "Could not parse {namada_denom} as a trace path {e}"
+        ))
+    })?;
 
     let form_req = |query: &str| {
-        format!("{rpc_addr}/cosmwasm/wasm/v1/contract/{contract_addr}/smart/{query}")
+        format!(
+            "{rpc_addr}/cosmwasm/wasm/v1/contract/{contract_addr}/smart/\
+             {query}"
+        )
     };
     let chain_name_req = |prefix| {
         data_encoding::BASE64.encode(format!(r#"'{{"get_chain_name_from_bech32_prefix":{{"prefix":"{prefix}"}}'"#).as_bytes())
@@ -1525,13 +1531,17 @@ pub async fn calc_osmosis_denom_from_namada_denom(
         )
     };
 
-    let RespData{data: namada_chain_name } =  reqwest::get(form_req(&chain_name_req("tnam")))
+    let RespData {
+        data: namada_chain_name,
+    } = reqwest::get(form_req(&chain_name_req("tnam")))
         .await
         .map_err(|e| Error::Other(e.to_string()))?
         .json()
         .await
         .map_err(|e| Error::Other(e.to_string()))?;
-    let RespData{ data: osmosis_chain_name} =  reqwest::get(form_req(&chain_name_req("osmo")))
+    let RespData {
+        data: osmosis_chain_name,
+    } = reqwest::get(form_req(&chain_name_req("osmo")))
         .await
         .map_err(|e| Error::Other(e.to_string()))?
         .json()
@@ -1542,21 +1552,33 @@ pub async fn calc_osmosis_denom_from_namada_denom(
     if nam_denom.trace_path.is_empty() {
         // validate that the base denom is an address
         if Address::from_str(nam_denom.base_denom.as_str()).is_err() {
-            return Err(Error::Encode(EncodingError::Decoding(format!("Could not parse {} as a token address", nam_denom.base_denom))));
+            return Err(Error::Encode(EncodingError::Decoding(format!(
+                "Could not parse {} as a token address",
+                nam_denom.base_denom
+            ))));
         }
         // we get the channel-id from Osmosis to Namada
-        let RespData{ data: channel_id} =  reqwest::get(form_req(
+        let RespData { data: channel_id } = reqwest::get(form_req(
             &channel_pair_req(&osmosis_chain_name, &namada_chain_name),
         ))
-            .await
-            .map_err(|e| Error::Other(e.to_string()))?
-            .json()
-            .await
-            .map_err(|e| Error::Other(e.to_string()))?;
+        .await
+        .map_err(|e| Error::Other(e.to_string()))?
+        .json()
+        .await
+        .map_err(|e| Error::Other(e.to_string()))?;
         Ok(format!("transfer/{channel_id}/{}", nam_denom.base_denom))
     } else {
-        let nam_channel_id = nam_denom.trace_path.to_string().strip_prefix("transfer/")
-            .ok_or_else(|| Error::Other("Expected the output denom to originate from the transfer port".to_string()))?;
+        let nam_channel_id = nam_denom
+            .trace_path
+            .to_string()
+            .strip_prefix("transfer/")
+            .ok_or_else(|| {
+                Error::Other(
+                    "Expected the output denom to originate from the transfer \
+                     port"
+                        .to_string(),
+                )
+            })?;
 
         // we get chain name from which the base denom originated
         let RespData{ data: src_chain_name} =  reqwest::get(form_req(
@@ -1575,14 +1597,14 @@ pub async fn calc_osmosis_denom_from_namada_denom(
         if src_chain_name == osmosis_chain_name {
             Ok(nam_denom.base_denom.to_string())
         } else {
-            let RespData{ data: channel_id} =  reqwest::get(form_req(
-                &channel_pair_req(&osmosis_chain_name, &src_chain_name)
+            let RespData { data: channel_id } = reqwest::get(form_req(
+                &channel_pair_req(&osmosis_chain_name, &src_chain_name),
             ))
-                .await
-                .map_err(|e| Error::Other(e.to_string()))?
-                .json()
-                .await
-                .map_err(|e| Error::Other(e.to_string()))?;
+            .await
+            .map_err(|e| Error::Other(e.to_string()))?
+            .json()
+            .await
+            .map_err(|e| Error::Other(e.to_string()))?;
             Ok(format!("transfer/{channel_id}/{}", nam_denom.base_denom))
         }
     }

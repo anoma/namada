@@ -659,7 +659,7 @@ fn make_hermes_chain_config_for_cosmos(
     );
     chain.insert(
         "key_name".to_owned(),
-        Value::String(relayer.unwrap_or_else(|| constants::COSMOS_RELAYER).to_string()),
+        Value::String(relayer.unwrap_or(constants::COSMOS_RELAYER).to_string()),
     );
     let hermes_dir: &Path = hermes_dir.as_ref();
     let key_dir = hermes_dir.join("hermes/keys");
@@ -794,14 +794,17 @@ pub fn update_cosmos_config(test: &Test) -> Result<()> {
         let Some(laddr) = values.get_mut("node") else {
             panic!("Test failed")
         };
-        *laddr =
-            format!("tcp://0.0.0.0:{}", chain_type.get_rpc_port_number()).into();
+        *laddr = format!("tcp://0.0.0.0:{}", chain_type.get_rpc_port_number())
+            .into();
         let mut file = OpenOptions::new()
             .write(true)
             .truncate(true)
             .open(&client_path)?;
         file.write_all(values.to_string().as_bytes()).map_err(|e| {
-            eyre!(format!("Writing a  Osmosis client config file failed: {}", e))
+            eyre!(format!(
+                "Writing a  Osmosis client config file failed: {}",
+                e
+            ))
         })?;
     }
 

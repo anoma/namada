@@ -23,18 +23,21 @@ use namada_core::{storage, token};
 use namada_governance::cli::onchain::{
     DefaultProposal, PgfFundingProposal, PgfStewardProposal,
 };
+use namada_ibc::apps::transfer::types::TracePath;
 use namada_ibc::IbcShieldingData;
 use namada_token::masp::utils::RetryStrategy;
 use namada_tx::data::GasLimit;
 use namada_tx::Memo;
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
-use namada_ibc::apps::transfer::types::TracePath;
+
 use crate::error::Error;
 use crate::eth_bridge::bridge_pool;
 use crate::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use crate::ibc::{NamadaMemo, NamadaMemoData};
-use crate::rpc::{calc_osmosis_denom_from_namada_denom, query_osmosis_pool_routes};
+use crate::rpc::{
+    calc_osmosis_denom_from_namada_denom, query_osmosis_pool_routes,
+};
 use crate::signing::SigningTxData;
 use crate::wallet::{DatedSpendingKey, DatedViewingKey};
 use crate::{rpc, tx, Namada};
@@ -652,8 +655,8 @@ impl TxOsmosisSwap<SdkTypes> {
             })?
         };
 
-
-        let osmosis_output_denom = calc_osmosis_denom_from_namada_denom(&output_denom, )
+        let osmosis_output_denom =
+            calc_osmosis_denom_from_namada_denom(&output_denom);
 
         let (receiver, slippage, final_memo) = match recipient {
             Either::Left(transparent_recipient) => {

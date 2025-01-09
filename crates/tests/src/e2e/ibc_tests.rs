@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use color_eyre::eyre::Result;
 use eyre::eyre;
 use ibc_middleware_packet_forward::ForwardMetadata;
-use itertools::{Either, Itertools};
+use itertools::Either;
 use namada_apps_lib::client::rpc::query_storage_value_bytes;
 use namada_apps_lib::config::ethereum_bridge;
 use namada_apps_lib::config::genesis::templates;
@@ -57,7 +57,12 @@ use crate::e2e::helpers::{
 use crate::e2e::ledger_tests::{
     start_namada_ledger_node_wait_wasm, write_json_file,
 };
-use crate::e2e::setup::{self, apply_use_device, osmosis_fixtures_dir, run_cosmos_cmd, run_cosmos_cmd_homeless, run_hermes_cmd, set_ethereum_bridge_mode, setup_cosmos, setup_hermes, sleep, working_dir, Bin, CosmosChainType, NamadaCmd, Test, TestDir, Who, ENV_VAR_COSMWASM_CONTRACT_DIR, run_cmd};
+use crate::e2e::setup::{
+    self, apply_use_device, osmosis_fixtures_dir, run_cosmos_cmd,
+    run_cosmos_cmd_homeless, run_hermes_cmd, set_ethereum_bridge_mode,
+    setup_cosmos, setup_hermes, sleep, working_dir, Bin, CosmosChainType,
+    NamadaCmd, Test, TestDir, Who, ENV_VAR_COSMWASM_CONTRACT_DIR,
+};
 use crate::ibc::primitives::Signer;
 use crate::ibc::IbcShieldingData;
 use crate::strings::TX_APPLIED_SUCCESS;
@@ -3507,6 +3512,12 @@ fn osmosis_basic() -> Result<()> {
 
 #[test]
 fn osmosis_bingbong() -> Result<()> {
+    // ==========================================================
+    // This test requires quite a long setup. Jump to the next
+    // occurrence of `SETUP DONE` in order to skip all of this
+    // nonsense.
+    // ==========================================================
+
     // Set up a big Cosmos party
     let update_genesis =
         |mut genesis: templates::All<templates::Unvalidated>, base_dir: &_| {
@@ -3544,58 +3555,44 @@ fn osmosis_bingbong() -> Result<()> {
     //  \_____________________/
 
     // Set up initial hermes configs
-    let hermes_gaia_namada = setup_hermes(&test_gaia, &test_namada).map_err(|_| {
-        eyre!("failed to join thread hermes_gaia_namada")
-    })?;
+    let hermes_gaia_namada = setup_hermes(&test_gaia, &test_namada)
+        .map_err(|_| eyre!("failed to join thread hermes_gaia_namada"))?;
     let hermes_gaia_osmosis = setup_hermes(&test_gaia, &test_osmosis)
-        .map_err(|_| {
-        eyre!("failed to join thread hermes_gaia_osmosis")
-    })?;
+        .map_err(|_| eyre!("failed to join thread hermes_gaia_osmosis"))?;
     let hermes_namada_osmosis = setup_hermes(&test_namada, &test_osmosis)
-        .map_err(|_| {
-        eyre!("failed to join thread hermes_namada_osmosis")
-    })?;
+        .map_err(|_| eyre!("failed to join thread hermes_namada_osmosis"))?;
     std::thread::sleep(Duration::from_secs(5));
     // Set up channels
-    let (
-        channel_from_gaia_to_namada,
-        channel_from_namada_to_gaia,
-    ) =  create_channel_with_hermes(
-        &hermes_gaia_namada,
-        &test_gaia,
-        &test_namada,
-        &PortId::transfer(),
-        &PortId::transfer(),
-    )?;
+    let (channel_from_gaia_to_namada, channel_from_namada_to_gaia) =
+        create_channel_with_hermes(
+            &hermes_gaia_namada,
+            &test_gaia,
+            &test_namada,
+            &PortId::transfer(),
+            &PortId::transfer(),
+        )?;
 
     // Osmosis currently uses an older version of the Cosmos SDK
     // that will error if txs are sent too close together. See
     // https://github.com/cosmos/cosmos-sdk/issues/13621
     std::thread::sleep(Duration::from_secs(5));
-    let  (
-        channel_from_gaia_to_osmosis,
-        channel_from_osmosis_to_gaia,
-    )  = create_channel_with_hermes(
-        &hermes_gaia_osmosis,
-        &test_gaia,
-        &test_osmosis,
-        &PortId::transfer(),
-        &PortId::transfer(),
-    )?;
+    let (channel_from_gaia_to_osmosis, channel_from_osmosis_to_gaia) =
+        create_channel_with_hermes(
+            &hermes_gaia_osmosis,
+            &test_gaia,
+            &test_osmosis,
+            &PortId::transfer(),
+            &PortId::transfer(),
+        )?;
 
-
-    let (
-
-        channel_from_namada_to_osmosis,
-        channel_from_osmosis_to_namada,
-    )  = create_channel_with_hermes(
-        &hermes_namada_osmosis,
-        &test_namada,
-        &test_osmosis,
-        &PortId::transfer(),
-        &PortId::transfer(),
-    )?;
-
+    let (channel_from_namada_to_osmosis, channel_from_osmosis_to_namada) =
+        create_channel_with_hermes(
+            &hermes_namada_osmosis,
+            &test_namada,
+            &test_osmosis,
+            &PortId::transfer(),
+            &PortId::transfer(),
+        )?;
 
     // Start relaying
     let hermes_1 = run_hermes(&hermes_gaia_namada)?;
@@ -3606,8 +3603,6 @@ fn osmosis_bingbong() -> Result<()> {
     let _bg_hermes_3 = hermes_3.background();
 
     // Transfer assets to Osmosis, in order to create pools
-    let rpc_namada = get_actor_rpc(&test_namada, Who::Validator(0));
-    let rpc_gaia = format!("tcp://{}", get_cosmos_rpc_address(&test_gaia));
 
     // Transfer NAM from Namada
     transfer(
@@ -3641,24 +3636,26 @@ fn osmosis_bingbong() -> Result<()> {
     // Related to the issue above. In general, it takes osmosis some time
     // to update state. Thus calls to it should be spaced out accordingly.
     std::thread::sleep(Duration::from_secs(5));
+
     // Check balance of transferred assets on Osmosis
     let nam_token_addr = find_address(&test_namada, NAM)?;
     check_cosmos_balance(
         &test_osmosis,
         COSMOS_USER,
-        &format!("transfer/{channel_from_osmosis_to_namada}/{nam_token_addr}"),
+        format!("transfer/{channel_from_osmosis_to_namada}/{nam_token_addr}"),
         500_000_000,
     )?;
 
     check_cosmos_balance(
         &test_osmosis,
         COSMOS_USER,
-        &format!("transfer/{channel_from_osmosis_to_gaia}/{COSMOS_COIN}"),
+        format!("transfer/{channel_from_osmosis_to_gaia}/{COSMOS_COIN}"),
         500,
     )?;
 
     // Set up contracts on Osmosis
-    let rpc_osmosis = format!("tcp://{}", get_cosmos_rpc_address(&test_osmosis));
+    let rpc_osmosis =
+        format!("tcp://{}", get_cosmos_rpc_address(&test_osmosis));
 
     const CROSSCHAIN_REGISTRY_CODE_ID: &str = "1";
     const SWAPROUTER_CODE_ID: &str = "2";
@@ -3784,40 +3781,36 @@ fn osmosis_bingbong() -> Result<()> {
     let mut osmosis_cmd = run_cosmos_cmd(&test_osmosis, args, Some(40))?;
     osmosis_cmd.assert_success();
     std::thread::sleep(Duration::from_secs(5));
+
     // Modify the bech32 prefixes
     let msg = serde_json::to_string(&json!({
-        "modify_bech32_prefixes": {
-            "operations": [
-                {
-                    "operation": "set",
-                    "chain_name": "namada",
-                    "prefix": "tnam"
-                },
-                {
-                    "operation": "set",
-                    "chain_name": "osmosis",
-                    "prefix": "osmo"
-                },
-                {
-                    "operation": "set",
-                    "chain_name": "gaia",
-                    "prefix": "cosmo"
-                }
-            ]
-        }})).unwrap();
+    "modify_bech32_prefixes": {
+        "operations": [
+            {
+                "operation": "set",
+                "chain_name": "namada",
+                "prefix": "tnam"
+            },
+            {
+                "operation": "set",
+                "chain_name": "osmosis",
+                "prefix": "osmo"
+            },
+            {
+                "operation": "set",
+                "chain_name": "gaia",
+                "prefix": "cosmo"
+            }
+        ]
+    }}))
+    .unwrap();
 
     let args = cosmos_common_args(
         "5000000",
         Some("0.01stake"),
         test_osmosis.net.chain_id.as_str(),
         &rpc_osmosis,
-        vec![
-            "tx",
-            "wasm",
-            "execute",
-            &crosschain_registry_addr,
-            &msg,
-        ],
+        vec!["tx", "wasm", "execute", &crosschain_registry_addr, &msg],
     );
     let mut osmosis_cmd = run_cosmos_cmd(&test_osmosis, args, Some(40))?;
     osmosis_cmd.assert_success();
@@ -3864,27 +3857,33 @@ fn osmosis_bingbong() -> Result<()> {
                 "channel_id": channel_from_osmosis_to_gaia
             }
         ]
-    }})).unwrap();
+    }}))
+    .unwrap();
     let args = cosmos_common_args(
         "5000000",
         Some("0.01stake"),
         test_osmosis.net.chain_id.as_str(),
         &rpc_osmosis,
-        vec![
-            "tx",
-            "wasm",
-            "execute",
-            &crosschain_registry_addr,
-            &msg
-        ],
+        vec!["tx", "wasm", "execute", &crosschain_registry_addr, &msg],
     );
     let mut osmosis_cmd = run_cosmos_cmd(&test_osmosis, args, Some(40))?;
     osmosis_cmd.assert_success();
     std::thread::sleep(Duration::from_secs(5));
-    // enable pfm on gaia and namada
+
+    // Enable PFM on gaia and namada
     for (chain, token) in [
-        ("namada", get_gaia_denom_hash(format!("transfer/{channel_from_osmosis_to_namada}/{nam_token_addr}"))),
-        ("gaia", get_gaia_denom_hash(format!("transfer/{channel_from_osmosis_to_gaia}/{COSMOS_COIN}"))),
+        (
+            "namada",
+            get_gaia_denom_hash(format!(
+                "transfer/{channel_from_osmosis_to_namada}/{nam_token_addr}"
+            )),
+        ),
+        (
+            "gaia",
+            get_gaia_denom_hash(format!(
+                "transfer/{channel_from_osmosis_to_gaia}/{COSMOS_COIN}"
+            )),
+        ),
     ] {
         let msg = format!(r#"{{"propose_pfm": {{"chain": "{chain}"}}}}"#);
         let amount = format!("1{token}");
@@ -3912,50 +3911,73 @@ fn osmosis_bingbong() -> Result<()> {
         &hermes_namada_osmosis,
         &PortId::transfer(),
         &channel_from_osmosis_to_namada,
-        &test_osmosis
+        &test_osmosis,
     )?;
     wait_for_packet_relay(
         &hermes_gaia_osmosis,
         &PortId::transfer(),
         &channel_from_osmosis_to_gaia,
-        &test_osmosis
+        &test_osmosis,
     )?;
 
+    // Check that the PFM was successfully enabled
+    // on the contract
     for chain in ["namada", "gaia"] {
-        let msg = format!(r#"{{"has_packet_forwarding": {{"chain": "{chain}"}}}}"#);
-        let args =
-            vec![
-                "query",
-                "wasm",
-                "contract-state",
-                "smart",
-                &crosschain_registry_addr,
-                &msg
-            ];
+        let msg =
+            format!(r#"{{"has_packet_forwarding": {{"chain": "{chain}"}}}}"#);
+        let args = vec![
+            "query",
+            "wasm",
+            "contract-state",
+            "smart",
+            &crosschain_registry_addr,
+            &msg,
+        ];
         let mut osmosis_cmd = run_cosmos_cmd(&test_osmosis, args, Some(40))?;
         osmosis_cmd.exp_string("data: true")?;
         std::thread::sleep(Duration::from_secs(5));
     }
+
+    // Create a LP on Osmosis with Samoleans and Nam
     create_pool(
         &test_osmosis,
         &rpc_osmosis,
         &[
-            (&get_gaia_denom_hash(format!("transfer/{channel_from_osmosis_to_namada}/{nam_token_addr}")), 100),
-            (&get_gaia_denom_hash(format!("transfer/{channel_from_osmosis_to_gaia}/{COSMOS_COIN}")), 100),
-        ]
+            (
+                &get_gaia_denom_hash(format!(
+                    "transfer/{channel_from_osmosis_to_namada}/\
+                     {nam_token_addr}"
+                )),
+                100,
+            ),
+            (
+                &get_gaia_denom_hash(format!(
+                    "transfer/{channel_from_osmosis_to_gaia}/{COSMOS_COIN}"
+                )),
+                100,
+            ),
+        ],
     )?;
-
     run_cosmos_cmd(
         &test_osmosis,
-        [
-            "query",
-            "poolmanager",
-            "pool",
-            "1"
-        ],
-        Some(40)
-    )?.assert_success();
-    let output_denom = get_gaia_denom_hash(format!("transfer/{channel_from_osmosis_to_gaia}/samoleans"));
+        ["query", "poolmanager", "pool", "1"],
+        Some(40),
+    )?
+    .assert_success();
+
+    // ==========================================================
+    // SETUP DONE
+    // ==========================================================
+    // At this point, we have IBC channels between Osmosis, Gaia
+    // and Namada. There is a LP with nam and samoleans, that we
+    // can use to swap between the two assets.
+    // ==========================================================
+
+    // Transparently swap samoleans with nam
+    let output_denom = get_gaia_denom_hash(format!(
+        "transfer/{channel_from_osmosis_to_gaia}/{COSMOS_COIN}"
+    ));
+    let rpc_namada = get_actor_rpc(&test_namada, Who::Validator(0));
     run!(
         &test_namada,
         Bin::Client,
@@ -3968,7 +3990,7 @@ fn osmosis_bingbong() -> Result<()> {
             "--amount",
             "0.000064",
             "--channel-id",
-            &channel_from_namada_to_osmosis.to_string(),
+            channel_from_namada_to_osmosis.as_ref(),
             "--output-denom",
             &output_denom,
             "--local-recovery-addr",
@@ -3985,30 +4007,33 @@ fn osmosis_bingbong() -> Result<()> {
             &rpc_namada,
         ],
         Some(40),
-    )?.assert_success();
+    )?
+    .assert_success();
 
     wait_for_packet_relay(
         &hermes_namada_osmosis,
         &PortId::transfer(),
         &channel_from_osmosis_to_namada,
-        &test_osmosis
+        &test_osmosis,
     )?;
     wait_for_packet_relay(
         &hermes_gaia_namada,
         &PortId::transfer(),
         &channel_from_gaia_to_namada,
-        &test_namada
+        &test_namada,
     )?;
 
+    // Check that the swap worked
     // 39 is derived from the uniswap formula:
     // floor( 100 - (100*100/(100 + 64)) )
     check_balance(
         &test_namada,
         BERTHA,
-        &format!("transfer/{channel_from_namada_to_gaia}/samoleans"),
-        39
+        format!("transfer/{channel_from_namada_to_gaia}/{COSMOS_COIN}"),
+        39,
     )?;
 
+    // Shield some nam
     run!(
         &test_namada,
         Bin::Client,
@@ -4026,8 +4051,8 @@ fn osmosis_bingbong() -> Result<()> {
             &rpc_namada,
         ],
         Some(40)
-    )?.assert_success();
-
+    )?
+    .assert_success();
 
     shielded_sync(&test_namada, AA_VIEWING_KEY)?;
 
@@ -4044,6 +4069,7 @@ fn osmosis_bingbong() -> Result<()> {
     client.exp_string("nam: 0.000056")?;
     client.assert_success();
 
+    // Perform a shielded swap of samoleans and nam
     run!(
         &test_namada,
         Bin::Client,
@@ -4056,7 +4082,7 @@ fn osmosis_bingbong() -> Result<()> {
             "--amount",
             "0.000056",
             "--channel-id",
-            &channel_from_namada_to_osmosis.to_string(),
+            channel_from_namada_to_osmosis.as_ref(),
             "--output-denom",
             &output_denom,
             "--local-recovery-addr",
@@ -4079,19 +4105,20 @@ fn osmosis_bingbong() -> Result<()> {
             "500000",
         ],
         Some(40),
-    )?.assert_success();
+    )?
+    .assert_success();
 
     wait_for_packet_relay(
         &hermes_namada_osmosis,
         &PortId::transfer(),
         &channel_from_osmosis_to_namada,
-        &test_osmosis
+        &test_osmosis,
     )?;
     wait_for_packet_relay(
         &hermes_gaia_namada,
         &PortId::transfer(),
         &channel_from_gaia_to_namada,
-        &test_namada
+        &test_namada,
     )?;
 
     // Check that the minimum amount got shielded
@@ -4099,17 +4126,17 @@ fn osmosis_bingbong() -> Result<()> {
     check_balance(
         &test_namada,
         AA_VIEWING_KEY,
-        &format!("transfer/{channel_from_namada_to_gaia}/samoleans"),
-        10
+        format!("transfer/{channel_from_namada_to_gaia}/{COSMOS_COIN}"),
+        10,
     )?;
     // 5 is derived from the uniswap formula:
     // floor( 61 - ( 164 * 61 / (164 + 56) ) ) minus
     // the minimum amount (10) which was shielded
     check_balance(
         &test_namada,
-       ALBERT,
-        &format!("transfer/{channel_from_namada_to_gaia}/samoleans"),
-        5
+        ALBERT,
+        format!("transfer/{channel_from_namada_to_gaia}/{COSMOS_COIN}"),
+        5,
     )?;
 
     Ok(())
@@ -4157,8 +4184,7 @@ fn build_contract_addr(
         CONTRACT_SALT_HEX,
     ];
     let mut cosmos = run_cosmos_cmd_homeless(test, args, Some(40))?;
-    let regex = format!("address: .*\n");
-    let (_, matched) = cosmos.exp_regex(&regex)?;
+    let (_, matched) = cosmos.exp_regex("address: .*\n")?;
     let mut parts = matched.split(':');
     parts.next().unwrap();
     Ok(parts.next().unwrap().trim().to_string())
@@ -4172,21 +4198,22 @@ fn create_pool(
     rpc: &str,
     denoms_and_deposits: &[(&str, u64)],
 ) -> Result<()> {
-    use itertools::Itertools;
     let json_path = test.test_dir.path().join("pool.json");
-    let mut weights = denoms_and_deposits
-        .iter()
-        .fold(String::new(), |mut acc, (d, _)| {
-            acc.push_str(&format!("1{d},"));
-            acc
-        });
+    let mut weights =
+        denoms_and_deposits
+            .iter()
+            .fold(String::new(), |mut acc, (d, _)| {
+                acc.push_str(&format!("1{d},"));
+                acc
+            });
     weights.pop();
-    let mut init_deposits = denoms_and_deposits
-        .iter()
-        .fold(String::new(), |mut acc, (d, a)|{
-            acc.push_str(&format!("{a}{d},"));
-            acc
-        });
+    let mut init_deposits =
+        denoms_and_deposits
+            .iter()
+            .fold(String::new(), |mut acc, (d, a)| {
+                acc.push_str(&format!("{a}{d},"));
+                acc
+            });
     init_deposits.pop();
     let pool_json = json!({
         "weights": weights,
@@ -4208,9 +4235,9 @@ fn create_pool(
             "create-pool",
             "--pool-file",
             &json_path,
-        ]
+        ],
     );
-    let mut osmosis_cmd = run_cosmos_cmd(&test, args, Some(40))?;
+    let mut osmosis_cmd = run_cosmos_cmd(test, args, Some(40))?;
     osmosis_cmd.assert_success();
     std::thread::sleep(Duration::from_secs(5));
     Ok(())
