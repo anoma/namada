@@ -3662,11 +3662,11 @@ fn osmosis_xcs() -> Result<()> {
     const CROSSCHAIN_SWAPS_CODE_ID: &str = "3";
 
     const CROSSCHAIN_REGISTRY_SHA256_HASH: &str =
-        "72a4edfebadbe25593ea06de790592b9a85ea80c2e5183e5c46113dc5208b962";
+        "3a90b1dc50ba2c63c40298b1645f3a56431d895857cab75f97c5b8266f64e4fa";
     const SWAPROUTER_CODE_SHA256_HASH: &str =
-        "01dd680a41099846dafb80935df2e03a60cc4d910cb258f7a014e98d3e70c3b7";
+        "bd579ce619c16d50118f4a14f98fa1b2724ce11c7de2f8c532a9b2587bd98bbd";
     const CROSSCHAIN_SWAPS_SHA256_HASH: &str =
-        "0107bae644b60f03be67bd135d488d05c4ade0b5ba15f9ab1dc2f70197c968b4";
+        "87c3c3422e876f117efc5cda6ae30b4c897054148d424815daeb2b3038ec6cfd";
 
     // Deploy each contract's wasm bytecode
     for wasm in [
@@ -3935,7 +3935,6 @@ fn osmosis_xcs() -> Result<()> {
         ];
         let mut osmosis_cmd = run_cosmos_cmd(&test_osmosis, args, Some(40))?;
         osmosis_cmd.exp_string("data: true")?;
-        std::thread::sleep(Duration::from_secs(5));
     }
 
     // Create a LP on Osmosis with Samoleans and Nam
@@ -4013,9 +4012,8 @@ fn osmosis_xcs() -> Result<()> {
     // ==========================================================
 
     // We wish to receive samoleans on namada
-    let output_denom_on_namada = get_gaia_denom_hash(format!(
-        "transfer/{channel_from_namada_to_gaia}/{COSMOS_COIN}"
-    ));
+    let output_denom_on_namada =
+        format!("transfer/{channel_from_namada_to_gaia}/{COSMOS_COIN}");
 
     // But on osmosis, we will end up with this token
     let output_denom_on_osmosis = get_gaia_denom_hash(format!(
@@ -4028,6 +4026,8 @@ fn osmosis_xcs() -> Result<()> {
         Bin::Client,
         [
             "osmosis-swap",
+            "--osmosis-rest-rpc",
+            "http://localhost:1317",
             "--source",
             BERTHA,
             "--token",
@@ -4084,6 +4084,8 @@ fn osmosis_xcs() -> Result<()> {
         Bin::Client,
         [
             "osmosis-swap",
+            "--osmosis-rest-rpc",
+            "http://localhost:1317",
             "--source",
             AA_VIEWING_KEY,
             "--token",
