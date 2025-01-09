@@ -56,7 +56,7 @@ use namada_token::masp::MaspTokenRewardData;
 use namada_tx::data::{BatchedTxResult, DryRunResult, ResultCode, TxResult};
 use namada_tx::event::{Batch as BatchAttr, Code as CodeAttr};
 use serde::{Deserialize, Serialize};
-
+use namada_ibc::apps::transfer::types::TracePath;
 use crate::args::{InputAmount, OsmosisPoolHop};
 use crate::control_flow::time;
 use crate::error::{EncodingError, Error, QueryError, TxSubmitError};
@@ -1494,6 +1494,98 @@ pub async fn query_ibc_denom<N: Namada>(
     }
 
     token.as_ref().to_string()
+}
+
+/// Given a Namada ibc asset returned from an Osmosis swap,
+/// find the corresponding asset denom on Osmosis. This is done
+/// by querying the crosschain swap contracts.
+pub async fn calc_osmosis_denom_from_namada_denom(
+    namada_denom: &str,
+    contract_addr: &str,
+    rpc_addr: &str,
+) -> Result<String, Error> {
+    #[derive(Serialize, Deserialize)]
+    struct RespData {
+        data: String
+    }
+
+    let nam_denom = PrefixedDenom::from_str(namada_denom)
+        .map_err(|e| Error::Other(format!("Could not parse {namada_denom} as a trace path {e}")))?;
+
+
+    let form_req = |query: &str| {
+        format!("{rpc_addr}/cosmwasm/wasm/v1/contract/{contract_addr}/smart/{query}")
+    };
+    let chain_name_req = |prefix| {
+        data_encoding::BASE64.encode(format!(r#"'{{"get_chain_name_from_bech32_prefix":{{"prefix":"{prefix}"}}'"#).as_bytes())
+    };
+    let channel_pair_req = |src: &str, dest: &str| {
+        data_encoding::BASE64.encode(
+            format!(r#"{{"get_channel_from_chain_pair": {{"source_chain": "{src}", "destinataion_chain": "{dest}"  }} }}'"#).as_bytes()
+        )
+    };
+
+    let RespData{data: namada_chain_name } =  reqwest::get(form_req(&chain_name_req("tnam")))
+        .await
+        .map_err(|e| Error::Other(e.to_string()))?
+        .json()
+        .await
+        .map_err(|e| Error::Other(e.to_string()))?;
+    let RespData{ data: osmosis_chain_name} =  reqwest::get(form_req(&chain_name_req("osmo")))
+        .await
+        .map_err(|e| Error::Other(e.to_string()))?
+        .json()
+        .await
+        .map_err(|e| Error::Other(e.to_string()))?;
+
+    // Namada native asset
+    if nam_denom.trace_path.is_empty() {
+        // validate that the base denom is an address
+        if Address::from_str(nam_denom.base_denom.as_str()).is_err() {
+            return Err(Error::Encode(EncodingError::Decoding(format!("Could not parse {} as a token address", nam_denom.base_denom))));
+        }
+        // we get the channel-id from Osmosis to Namada
+        let RespData{ data: channel_id} =  reqwest::get(form_req(
+            &channel_pair_req(&osmosis_chain_name, &namada_chain_name),
+        ))
+            .await
+            .map_err(|e| Error::Other(e.to_string()))?
+            .json()
+            .await
+            .map_err(|e| Error::Other(e.to_string()))?;
+        Ok(format!("transfer/{channel_id}/{}", nam_denom.base_denom))
+    } else {
+        let nam_channel_id = nam_denom.trace_path.to_string().strip_prefix("transfer/")
+            .ok_or_else(|| Error::Other("Expected the output denom to originate from the transfer port".to_string()))?;
+
+        // we get chain name from which the base denom originated
+        let RespData{ data: src_chain_name} =  reqwest::get(form_req(
+            &data_encoding::BASE64.encode(
+                 format!(
+                     r#"'{{"get_destination_chain_from_source_chain_via_channel":{{"on_chain": "{namada_chain_name}", "via_channel": "{nam_channel_id}"}} }}'"#
+                 ).as_bytes()
+             )
+        ))
+            .await
+            .map_err(|e| Error::Other(e.to_string()))?
+            .json()
+            .await
+            .map_err(|e| Error::Other(e.to_string()))?;
+
+        if src_chain_name == osmosis_chain_name {
+            Ok(nam_denom.base_denom.to_string())
+        } else {
+            let RespData{ data: channel_id} =  reqwest::get(form_req(
+                &channel_pair_req(&osmosis_chain_name, &src_chain_name)
+            ))
+                .await
+                .map_err(|e| Error::Other(e.to_string()))?
+                .json()
+                .await
+                .map_err(|e| Error::Other(e.to_string()))?;
+            Ok(format!("transfer/{channel_id}/{}", nam_denom.base_denom))
+        }
+    }
 }
 
 /// Query a route of Osmosis liquidity pools

@@ -29,12 +29,12 @@ use namada_tx::data::GasLimit;
 use namada_tx::Memo;
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
-
+use namada_ibc::apps::transfer::types::TracePath;
 use crate::error::Error;
 use crate::eth_bridge::bridge_pool;
 use crate::ibc::core::host::types::identifiers::{ChannelId, PortId};
 use crate::ibc::{NamadaMemo, NamadaMemoData};
-use crate::rpc::query_osmosis_pool_routes;
+use crate::rpc::{calc_osmosis_denom_from_namada_denom, query_osmosis_pool_routes};
 use crate::signing::SigningTxData;
 use crate::wallet::{DatedSpendingKey, DatedViewingKey};
 use crate::{rpc, tx, Namada};
@@ -524,7 +524,7 @@ pub enum Slippage {
 pub struct TxOsmosisSwap<C: NamadaTypes = SdkTypes> {
     /// The IBC transfer data
     pub transfer: TxIbcTransfer<C>,
-    /// The token we wish to receive (on Osmosis)
+    /// The token we wish to receive (on Namada)
     pub output_denom: String,
     /// Address of the recipient on Namada
     pub recipient: Either<C::Address, C::PaymentAddress>,
@@ -536,6 +536,8 @@ pub struct TxOsmosisSwap<C: NamadaTypes = SdkTypes> {
     pub local_recovery_addr: String,
     /// The route to take through Osmosis pools
     pub route: Option<Vec<OsmosisPoolHop>>,
+    /// An rpc endpoint to Osmosis
+    pub osmosis_rpc: String,
 }
 
 impl TxOsmosisSwap<SdkTypes> {
@@ -596,6 +598,7 @@ impl TxOsmosisSwap<SdkTypes> {
             local_recovery_addr,
             route,
             overflow,
+            osmosis_rpc,
         } = self;
 
         let recipient = recipient
@@ -648,6 +651,9 @@ impl TxOsmosisSwap<SdkTypes> {
                 ))
             })?
         };
+
+
+        let osmosis_output_denom = calc_osmosis_denom_from_namada_denom(&output_denom, )
 
         let (receiver, slippage, final_memo) = match recipient {
             Either::Left(transparent_recipient) => {

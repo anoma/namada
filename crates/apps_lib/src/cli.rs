@@ -3597,6 +3597,7 @@ pub mod args {
     pub const NO_CONVERSIONS: ArgFlag = flag("no-conversions");
     pub const NO_EXPIRATION: ArgFlag = flag("no-expiration");
     pub const NUT: ArgFlag = flag("nut");
+    pub const OSMOSIS_RPC: Arg<String> = arg("osmosis-rpc");
     pub const OUT_FILE_PATH_OPT: ArgOpt<PathBuf> = arg_opt("out-file-path");
     pub const OUTPUT: ArgOpt<PathBuf> = arg_opt("output");
     pub const OUTPUT_DENOM: Arg<String> = arg("output-denom");
@@ -5168,6 +5169,7 @@ pub mod args {
                 slippage: self.slippage,
                 local_recovery_addr: self.local_recovery_addr,
                 route: self.route,
+                osmosis_rpc: self.osmosis_rpc,
             })
         }
     }
@@ -5175,8 +5177,9 @@ pub mod args {
     impl Args for TxOsmosisSwap<CliTypes> {
         fn parse(matches: &ArgMatches) -> Self {
             let transfer = TxIbcTransfer::parse(matches);
+            let osmosis_rpc = OSMOSIS_RPC.parse(matches);
             let output_denom = OUTPUT_DENOM.parse(matches);
-            let maybe_traans_recipient = TARGET_OPT.parse(matches);
+            let maybe_trans_recipient = TARGET_OPT.parse(matches);
             let maybe_shielded_recipient =
                 PAYMENT_ADDRESS_TARGET_OPT.parse(matches);
             let maybe_overflow = OVERFLOW_OPT.parse(matches);
@@ -5218,7 +5221,7 @@ pub mod args {
             Self {
                 transfer,
                 output_denom,
-                recipient: if let Some(target) = maybe_traans_recipient {
+                recipient: if let Some(target) = maybe_trans_recipient {
                     Either::Left(target)
                 } else {
                     Either::Right(maybe_shielded_recipient.unwrap())
@@ -5227,11 +5230,15 @@ pub mod args {
                 slippage,
                 local_recovery_addr,
                 route,
+                osmosis_rpc,
             }
         }
 
         fn def(app: App) -> App {
             app.add_args::<TxIbcTransfer<CliTypes>>()
+                .arg(OSMOSIS_RPC.def().help(wrap!(
+                    "A url pointing to an Osmosis rpc."
+                )))
                 .arg(OSMOSIS_POOL_HOP.def().help(wrap!(
                     "Individual hop of the route to take through Osmosis \
                      pools. This value takes the form \
@@ -5239,7 +5246,7 @@ pub mod args {
                      the optimal route is queried on the fly."
                 )))
                 .arg(OUTPUT_DENOM.def().help(wrap!(
-                    "The IBC denomination (on Osmosis) of the desired asset."
+                    "The IBC denomination (on Namada) of the desired asset."
                 )))
                 .arg(TARGET_OPT.def().help(wrap!(
                     "The transparent Namada address that shall receive the \
