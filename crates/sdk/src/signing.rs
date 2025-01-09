@@ -2079,6 +2079,12 @@ pub async fn to_ledger_vector(
         if let Some(wrapper) = tx.header.wrapper() {
             let fee_amount_per_gas_unit =
                 to_ledger_decimal(&wrapper.fee.amount_per_gas_unit.to_string());
+            let fee_limit = to_ledger_decimal(
+                &wrapper
+                    .get_tx_fee()
+                    .map_err(|e| Error::Other(format!("{}", e)))?
+                    .to_string(),
+            );
             tv.output_expert.extend(vec![
                 format!(
                     "Timestamp : {}",
@@ -2088,12 +2094,21 @@ pub async fn to_ledger_vector(
                 format!("Gas limit : {}", u64::from(wrapper.gas_limit)),
             ]);
             if let Some(token) = tokens.get(&wrapper.fee.token) {
+                tv.output.push(format!(
+                    "Fee : {} {}",
+                    token.to_uppercase(),
+                    fee_limit
+                ));
                 tv.output_expert.push(format!(
                     "Fees/gas unit : {} {}",
                     token.to_uppercase(),
                     fee_amount_per_gas_unit,
                 ));
             } else {
+                tv.output.extend(vec![
+                    format!("Fee token : {}", wrapper.fee.token),
+                    format!("Fee : {}", fee_limit),
+                ]);
                 tv.output_expert.extend(vec![
                     format!("Fee token : {}", wrapper.fee.token),
                     format!("Fees/gas unit : {}", fee_amount_per_gas_unit),
