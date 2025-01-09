@@ -258,7 +258,7 @@ async fn batch_opt_reveal_pk_and_submit<N: Namada>(
     namada: &N,
     args: &args::Tx,
     owners: &[&Address],
-    tx_data: (Tx, SigningTxData),
+    mut tx_data: (Tx, SigningTxData),
 ) -> Result<ProcessTxResponse, error::Error>
 where
     <N::Client as namada_sdk::io::Client>::Error: std::fmt::Display,
@@ -272,15 +272,33 @@ where
             batched_tx_data.push(reveal_pk_tx_data);
         }
     }
-    batched_tx_data.push(tx_data);
 
-    let (mut batched_tx, batched_signing_data) =
-        namada_sdk::tx::build_batch(batched_tx_data)?;
-    for sig_data in batched_signing_data {
-        sign(namada, &mut batched_tx, args, sig_data).await?;
+    // Since hardware wallets do not yet support batched transactions, use a
+    // different logic in order to achieve compatibility
+    if args.use_device {
+        // Sign each transaction separately
+        for (tx, sig_data) in &mut batched_tx_data {
+            sign(namada, tx, args, sig_data.clone()).await?;
+        }
+        sign(namada, &mut tx_data.0, args, tx_data.1).await?;
+        // Then submit each transaction separately
+        for (tx, _sig_data) in batched_tx_data {
+            namada.submit(tx, args).await?;
+        }
+        // The result of submitting this function's argument is what is returned
+        namada.submit(tx_data.0, args).await
+    } else {
+        // Otherwise complete the batch with this function's argument
+        batched_tx_data.push(tx_data);
+        let (mut batched_tx, batched_signing_data) =
+            namada_sdk::tx::build_batch(batched_tx_data)?;
+        // Sign the batch with the union of the signers required for each part
+        for sig_data in batched_signing_data {
+            sign(namada, &mut batched_tx, args, sig_data).await?;
+        }
+        // Then finally submit everything in one go
+        namada.submit(batched_tx, args).await
     }
-
-    namada.submit(batched_tx, args).await
 }
 
 pub async fn submit_bridge_pool_tx<N: Namada>(
