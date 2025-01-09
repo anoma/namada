@@ -3511,7 +3511,7 @@ fn osmosis_basic() -> Result<()> {
 }
 
 #[test]
-fn osmosis_bingbong() -> Result<()> {
+fn osmosis_xcs() -> Result<()> {
     // ==========================================================
     // This test requires quite a long setup. Jump to the next
     // occurrence of `SETUP DONE` in order to skip all of this
@@ -3965,75 +3965,9 @@ fn osmosis_bingbong() -> Result<()> {
     )?
     .assert_success();
 
-    // ==========================================================
-    // SETUP DONE
-    // ==========================================================
-    // At this point, we have IBC channels between Osmosis, Gaia
-    // and Namada. There is a LP with nam and samoleans, that we
-    // can use to swap between the two assets.
-    // ==========================================================
-
-    // Transparently swap samoleans with nam
-    let output_denom = get_gaia_denom_hash(format!(
-        "transfer/{channel_from_osmosis_to_gaia}/{COSMOS_COIN}"
-    ));
-    let rpc_namada = get_actor_rpc(&test_namada, Who::Validator(0));
-    run!(
-        &test_namada,
-        Bin::Client,
-        [
-            "osmosis-swap",
-            "--source",
-            BERTHA,
-            "--token",
-            NAM,
-            "--amount",
-            "0.000064",
-            "--channel-id",
-            channel_from_namada_to_osmosis.as_ref(),
-            "--output-denom",
-            &output_denom,
-            "--local-recovery-addr",
-            &osmosis_jones,
-            "--swap-contract",
-            &crosschain_swaps_addr,
-            "--minimum-amount",
-            "1",
-            "--target",
-            BERTHA,
-            "--pool-hop",
-            &format!("1:{output_denom}"),
-            "--node",
-            &rpc_namada,
-        ],
-        Some(40),
-    )?
-    .assert_success();
-
-    wait_for_packet_relay(
-        &hermes_namada_osmosis,
-        &PortId::transfer(),
-        &channel_from_osmosis_to_namada,
-        &test_osmosis,
-    )?;
-    wait_for_packet_relay(
-        &hermes_gaia_namada,
-        &PortId::transfer(),
-        &channel_from_gaia_to_namada,
-        &test_namada,
-    )?;
-
-    // Check that the swap worked
-    // 39 is derived from the uniswap formula:
-    // floor( 100 - (100*100/(100 + 64)) )
-    check_balance(
-        &test_namada,
-        BERTHA,
-        format!("transfer/{channel_from_namada_to_gaia}/{COSMOS_COIN}"),
-        39,
-    )?;
-
     // Shield some nam
+    let rpc_namada = get_actor_rpc(&test_namada, Who::Validator(0));
+
     run!(
         &test_namada,
         Bin::Client,
@@ -4069,6 +4003,81 @@ fn osmosis_bingbong() -> Result<()> {
     client.exp_string("nam: 0.000056")?;
     client.assert_success();
 
+    // ==========================================================
+    // SETUP DONE
+    // ==========================================================
+    // At this point, we have IBC channels between Osmosis, Gaia
+    // and Namada. There is a LP with nam and samoleans, that we
+    // can use to swap between the two assets. Moreover, we have
+    // shielded some nam tokens.
+    // ==========================================================
+
+    // We wish to receive samoleans on namada
+    let output_denom_on_namada = get_gaia_denom_hash(format!(
+        "transfer/{channel_from_namada_to_gaia}/{COSMOS_COIN}"
+    ));
+
+    // But on osmosis, we will end up with this token
+    let output_denom_on_osmosis = get_gaia_denom_hash(format!(
+        "transfer/{channel_from_osmosis_to_gaia}/{COSMOS_COIN}"
+    ));
+
+    // Transparently swap samoleans with nam
+    run!(
+        &test_namada,
+        Bin::Client,
+        [
+            "osmosis-swap",
+            "--source",
+            BERTHA,
+            "--token",
+            NAM,
+            "--amount",
+            "0.000064",
+            "--channel-id",
+            channel_from_namada_to_osmosis.as_ref(),
+            "--output-denom",
+            &output_denom_on_namada,
+            "--local-recovery-addr",
+            &osmosis_jones,
+            "--swap-contract",
+            &crosschain_swaps_addr,
+            "--minimum-amount",
+            "1",
+            "--target",
+            BERTHA,
+            "--pool-hop",
+            &format!("1:{output_denom_on_osmosis}"),
+            "--node",
+            &rpc_namada,
+        ],
+        Some(40),
+    )?
+    .assert_success();
+
+    wait_for_packet_relay(
+        &hermes_namada_osmosis,
+        &PortId::transfer(),
+        &channel_from_osmosis_to_namada,
+        &test_osmosis,
+    )?;
+    wait_for_packet_relay(
+        &hermes_gaia_namada,
+        &PortId::transfer(),
+        &channel_from_gaia_to_namada,
+        &test_namada,
+    )?;
+
+    // Check that the swap worked
+    // 39 is derived from the uniswap formula:
+    // floor( 100 - (100*100/(100 + 64)) )
+    check_balance(
+        &test_namada,
+        BERTHA,
+        format!("transfer/{channel_from_namada_to_gaia}/{COSMOS_COIN}"),
+        39,
+    )?;
+
     // Perform a shielded swap of samoleans and nam
     run!(
         &test_namada,
@@ -4084,7 +4093,7 @@ fn osmosis_bingbong() -> Result<()> {
             "--channel-id",
             channel_from_namada_to_osmosis.as_ref(),
             "--output-denom",
-            &output_denom,
+            &output_denom_on_namada,
             "--local-recovery-addr",
             &osmosis_jones,
             "--swap-contract",
@@ -4096,7 +4105,7 @@ fn osmosis_bingbong() -> Result<()> {
             "--overflow-addr",
             ALBERT,
             "--pool-hop",
-            &format!("1:{output_denom}"),
+            &format!("1:{output_denom_on_osmosis}"),
             "--gas-payer",
             ALBERT_KEY,
             "--node",
@@ -4122,22 +4131,16 @@ fn osmosis_bingbong() -> Result<()> {
     )?;
 
     // Check that the minimum amount got shielded
-    shielded_sync(&test_namada, AA_VIEWING_KEY)?;
-    check_balance(
+    check_shielded_balance(
         &test_namada,
         AA_VIEWING_KEY,
-        format!("transfer/{channel_from_namada_to_gaia}/{COSMOS_COIN}"),
+        &output_denom_on_namada,
         10,
     )?;
     // 5 is derived from the uniswap formula:
     // floor( 61 - ( 164 * 61 / (164 + 56) ) ) minus
     // the minimum amount (10) which was shielded
-    check_balance(
-        &test_namada,
-        ALBERT,
-        format!("transfer/{channel_from_namada_to_gaia}/{COSMOS_COIN}"),
-        5,
-    )?;
+    check_balance(&test_namada, ALBERT, &output_denom_on_namada, 5)?;
 
     Ok(())
 }
