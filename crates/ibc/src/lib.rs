@@ -253,36 +253,25 @@ where
         tx_data: &[u8],
         masp_epoch: MaspEpoch,
     ) -> StorageResult<Option<masp_primitives::transaction::Transaction>> {
-        let msg = decode_message::<Transfer>(tx_data)
-            .into_storage_result()
-            .ok();
         // refund only when ack or timeout in an IBC envelope message
-        let Some(IbcMessage::Envelope(envelope)) = msg else {
+        let Some(IbcMessage::Envelope(envelope)) =
+            decode_message::<Transfer>(tx_data)
+                .into_storage_result()
+                .ok()
+        else {
             return Ok(None);
         };
 
-        let packet_info = match &*envelope {
-            MsgEnvelope::Packet(PacketMsg::Ack(msg)) => Some((
-                &msg.packet.port_id_on_a,
-                &msg.packet.chan_id_on_a,
-                msg.packet.seq_on_a,
-            )),
-            MsgEnvelope::Packet(PacketMsg::Timeout(msg)) => Some((
-                &msg.packet.port_id_on_a,
-                &msg.packet.chan_id_on_a,
-                msg.packet.seq_on_a,
-            )),
-            _ => None,
+        let Some((port_id, channel_id, sequence)) =
+            packet_info_from_envelope(&envelope)
+        else {
+            return Ok(None);
         };
 
-        if let Some((port_id, channel_id, sequence)) = packet_info {
-            let key = storage::refund_masp_tx_key(
-                port_id, channel_id, sequence, masp_epoch,
-            );
-            storage.read(&key)
-        } else {
-            Ok(None)
-        }
+        let key = storage::refund_masp_tx_key(
+            port_id, channel_id, sequence, masp_epoch,
+        );
+        storage.read(&key)
     }
 
     fn apply_ibc_packet<Transfer: BorshDeserialize>(
