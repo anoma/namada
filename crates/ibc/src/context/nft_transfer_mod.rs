@@ -2,6 +2,7 @@
 
 use std::cell::RefCell;
 use std::fmt::Debug;
+use std::marker::PhantomData;
 use std::rc::Rc;
 
 use ibc::apps::nft_transfer::context::NftTransferValidationContext;
@@ -17,8 +18,11 @@ use ibc::apps::nft_transfer::module::{
     on_timeout_packet_validate,
 };
 use ibc::apps::nft_transfer::types::error::NftTransferError;
+use ibc::apps::nft_transfer::types::packet::PacketData;
 use ibc::apps::nft_transfer::types::MODULE_ID_STR;
-use ibc::core::channel::types::acknowledgement::Acknowledgement;
+use ibc::core::channel::types::acknowledgement::{
+    Acknowledgement, AcknowledgementStatus,
+};
 use ibc::core::channel::types::channel::{Counterparty, Order};
 use ibc::core::channel::types::error::{ChannelError, PacketError};
 use ibc::core::channel::types::packet::Packet;
@@ -27,38 +31,43 @@ use ibc::core::host::types::identifiers::{ChannelId, ConnectionId, PortId};
 use ibc::core::router::module::Module;
 use ibc::core::router::types::module::{ModuleExtras, ModuleId};
 use ibc::primitives::Signer;
+use namada_core::address::MASP;
 use namada_systems::trans_token;
 
-use super::common::IbcCommonContext;
-use super::nft_transfer::NftTransferContext;
-use super::transfer_mod::ModuleWrapper;
+use crate::context::transfer_mod::ModuleWrapper;
+use crate::{IbcCommonContext, IbcStorageContext, NftTransferContext};
 
 /// IBC module for NFT transfer
 #[derive(Debug)]
-pub struct NftTransferModule<C, Token>
+pub struct NftTransferModule<C, Params, Token>
 where
     C: IbcCommonContext,
 {
     /// IBC actions
     pub ctx: NftTransferContext<C, Token>,
+    _marker: PhantomData<Params>,
 }
 
-impl<C, Token> NftTransferModule<C, Token>
+impl<C, Params, Token> NftTransferModule<C, Params, Token>
 where
     C: IbcCommonContext,
+    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>,
     Token: trans_token::Keys,
 {
     /// Make a new module
     pub fn new(ctx: Rc<RefCell<C>>) -> Self {
         Self {
             ctx: NftTransferContext::new(ctx),
+            _marker: PhantomData,
         }
     }
 }
 
-impl<C, Token> ModuleWrapper for NftTransferModule<C, Token>
+impl<C, Params, Token> ModuleWrapper for NftTransferModule<C, Params, Token>
 where
     C: IbcCommonContext + Debug,
+    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>
+        + Debug,
     Token: trans_token::Keys + Debug,
 {
     fn as_module(&self) -> &dyn Module {
@@ -78,9 +87,11 @@ where
     }
 }
 
-impl<C, Token> Module for NftTransferModule<C, Token>
+impl<C, Params, Token> Module for NftTransferModule<C, Params, Token>
 where
     C: IbcCommonContext + Debug,
+    Params: namada_systems::parameters::Read<<C as IbcStorageContext>::Storage>
+        + Debug,
     Token: trans_token::Keys + Debug,
 {
     #[allow(clippy::too_many_arguments)]
@@ -286,12 +297,52 @@ where
         acknowledgement: &Acknowledgement,
         relayer: &Signer,
     ) -> (ModuleExtras, Result<(), PacketError>) {
-        let (extras, result) = on_acknowledgement_packet_execute(
-            &mut self.ctx,
-            packet,
-            acknowledgement,
-            relayer,
-        );
+        let updated_packet = serde_json::from_slice::<AcknowledgementStatus>(
+            acknowledgement.as_ref(),
+        )
+        .ok()
+        .and_then(|ack| {
+            if ack.is_successful() {
+                return None;
+            }
+            let masp_epoch = crate::get_masp_epoch::<
+                <C as IbcStorageContext>::Storage,
+                Params,
+            >(self.ctx.inner.borrow().storage())
+            .ok()?;
+            self.ctx
+                .inner
+                .borrow()
+                .refund_masp_tx(
+                    &packet.port_id_on_a,
+                    &packet.chan_id_on_a,
+                    packet.seq_on_a,
+                    masp_epoch,
+                )
+                .ok()??;
+            let mut data: PacketData =
+                serde_json::from_slice(&packet.data).ok()?;
+            data.sender = Signer::from(MASP.to_string());
+            let mut packet = packet.clone();
+            packet.data = serde_json::to_vec(&data)
+                .expect("Packet data should be encoded");
+            Some(packet)
+        });
+
+        let (extras, result) = match updated_packet {
+            Some(packet) => on_acknowledgement_packet_execute(
+                &mut self.ctx,
+                &packet,
+                acknowledgement,
+                relayer,
+            ),
+            None => on_acknowledgement_packet_execute(
+                &mut self.ctx,
+                packet,
+                acknowledgement,
+                relayer,
+            ),
+        };
         (extras, result.map_err(into_packet_error))
     }
 

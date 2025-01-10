@@ -1732,7 +1732,11 @@ fn ibc_vp_validate_action(c: &mut Criterion) {
             verifiers,
         );
         actions.add_transfer_module(module);
-        let module = NftTransferModule::<_, token::Store<()>>::new(ctx);
+        let module = NftTransferModule::<
+            _,
+            parameters::Store<_>,
+            token::Store<()>,
+        >::new(ctx);
         actions.add_transfer_module(module);
 
         group.bench_function(bench_name, |b| {
@@ -1796,7 +1800,11 @@ fn ibc_vp_execute_action(c: &mut Criterion) {
             verifiers,
         );
         actions.add_transfer_module(module);
-        let module = NftTransferModule::<_, token::Store<()>>::new(ctx);
+        let module = NftTransferModule::<
+            _,
+            parameters::Store<_>,
+            token::Store<()>,
+        >::new(ctx);
         actions.add_transfer_module(module);
 
         group.bench_function(bench_name, |b| {
