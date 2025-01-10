@@ -146,6 +146,11 @@ where
         )));
     }
     // Get the Ledger to sign using our obtained derivation path
+    println!(
+        "Requesting that hardware wallet sign transaction with transparent \
+         key at {}...",
+        path.path
+    );
     let response = app
         .sign(&path, &tx.serialize_to_vec())
         .await
@@ -961,6 +966,10 @@ async fn augment_masp_hardware_keys(
                 // Then confirm that the viewing key at this path in the
                 // hardware wallet matches the viewing key in this pseudo
                 // spending key
+                println!(
+                    "Requesting viewing key at {} from hardware wallet...",
+                    path.path
+                );
                 let response = app
                     .retrieve_keys(&path, NamadaKeys::ViewKey, true)
                     .await
@@ -1138,6 +1147,11 @@ async fn masp_sign(
             let path = BIP44Path {
                 path: path.to_string(),
             };
+            println!(
+                "Requesting that hardware wallet sign shielded transfer with \
+                 spending key at {}...",
+                path.path
+            );
             app.sign_masp_spends(&path, &tx.serialize_to_vec())
                 .await
                 .map_err(|err| error::Error::Other(err.to_string()))?;
