@@ -36,7 +36,10 @@ pub fn ibc_actions(
         verifiers,
     );
     actions.add_transfer_module(module);
-    let module = NftTransferModule::<Ctx, token::Store<Ctx>>::new(ctx);
+    let module =
+        NftTransferModule::<_, parameters::Store<Ctx>, token::Store<Ctx>>::new(
+            ctx,
+        );
     actions.add_transfer_module(module);
     actions
 }

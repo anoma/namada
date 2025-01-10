@@ -254,7 +254,8 @@ where
             verifiers,
         );
         actions.add_transfer_module(module);
-        let module = NftTransferModule::<_, Token>::new(ctx.clone());
+        let module =
+            NftTransferModule::<_, ParamsPseudo, Token>::new(ctx.clone());
         actions.add_transfer_module(module);
         // Charge gas for the expensive execution
         self.ctx.charge_gas(IBC_ACTION_EXECUTE_GAS.into())?;
@@ -310,7 +311,7 @@ where
         let module =
             create_transfer_middlewares::<_, Params>(ctx.clone(), verifiers);
         actions.add_transfer_module(module);
-        let module = NftTransferModule::<_, Token>::new(ctx);
+        let module = NftTransferModule::<_, Params, Token>::new(ctx);
         actions.add_transfer_module(module);
         // Charge gas for the expensive validation
         self.ctx.charge_gas(IBC_ACTION_VALIDATE_GAS.into())?;

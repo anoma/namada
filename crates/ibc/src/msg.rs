@@ -173,8 +173,7 @@ pub fn extract_masp_tx_from_envelope(
     }
 }
 
-/// Get the port ID, channel ID and sequence of the packet in the envelope. The
-/// envelope doesn't have a packet, returns None.
+/// Get the port ID, channel ID and sequence of the packet in the envelope
 pub fn packet_info_from_envelope(
     envelope: &MsgEnvelope,
 ) -> Option<(&PortId, &ChannelId, Sequence)> {
