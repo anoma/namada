@@ -2381,12 +2381,7 @@ fn wrap_tx_by_elsewho() -> Result<()> {
         run(
             &node,
             Bin::Wallet,
-            apply_use_device(vec![
-                "gen",
-                "--alias",
-                key_alias,
-                "--unsafe-dont-encrypt",
-            ]),
+            vec!["gen", "--alias", key_alias, "--unsafe-dont-encrypt"],
         )
     });
     assert!(captured.result.is_ok());
@@ -2510,7 +2505,7 @@ fn wrap_tx_by_elsewho() -> Result<()> {
         run(
             &node,
             Bin::Client,
-            apply_use_device(vec![
+            vec![
                 "utils",
                 "sign-offline",
                 "--data-path",
@@ -2519,7 +2514,7 @@ fn wrap_tx_by_elsewho() -> Result<()> {
                 &key_alias,
                 "--output-folder-path",
                 &output_folder.to_str().unwrap(),
-            ]),
+            ],
         )
     });
     assert!(captured.result.is_ok());
@@ -2594,12 +2589,7 @@ fn offline_wrap_tx_by_elsewho() -> Result<()> {
         run(
             &node,
             Bin::Wallet,
-            apply_use_device(vec![
-                "gen",
-                "--alias",
-                key_alias,
-                "--unsafe-dont-encrypt",
-            ]),
+            vec!["gen", "--alias", key_alias, "--unsafe-dont-encrypt"],
         )
     });
     assert!(captured.result.is_ok());
@@ -2721,7 +2711,7 @@ fn offline_wrap_tx_by_elsewho() -> Result<()> {
         run(
             &node,
             Bin::Client,
-            apply_use_device(vec![
+            vec![
                 "utils",
                 "sign-offline",
                 "--data-path",
@@ -2730,7 +2720,7 @@ fn offline_wrap_tx_by_elsewho() -> Result<()> {
                 &key_alias,
                 "--output-folder-path",
                 &output_folder.to_str().unwrap(),
-            ]),
+            ],
         )
     });
     assert!(captured.result.is_ok());
@@ -2774,7 +2764,7 @@ fn offline_wrap_tx_by_elsewho() -> Result<()> {
         run(
             &node,
             Bin::Client,
-            apply_use_device(vec![
+            vec![
                 "utils",
                 "sign-offline",
                 "--data-path",
@@ -2783,7 +2773,7 @@ fn offline_wrap_tx_by_elsewho() -> Result<()> {
                 CHRISTEL_KEY,
                 "--output-folder-path",
                 &output_folder.to_str().unwrap(),
-            ]),
+            ],
         )
     });
     assert!(captured.result.is_ok());
@@ -2862,12 +2852,7 @@ fn offline_wrapper_tx() -> Result<()> {
         run(
             &node,
             Bin::Wallet,
-            apply_use_device(vec![
-                "gen",
-                "--alias",
-                key_alias,
-                "--unsafe-dont-encrypt",
-            ]),
+            vec!["gen", "--alias", key_alias, "--unsafe-dont-encrypt"],
         )
     });
     assert!(captured.result.is_ok());
@@ -2990,7 +2975,7 @@ fn offline_wrapper_tx() -> Result<()> {
         run(
             &node,
             Bin::Client,
-            apply_use_device(vec![
+            vec![
                 "utils",
                 "sign-offline",
                 "--data-path",
@@ -3001,7 +2986,7 @@ fn offline_wrapper_tx() -> Result<()> {
                 CHRISTEL_KEY,
                 "--output-folder-path",
                 &output_folder.to_str().unwrap(),
-            ]),
+            ],
         )
     });
     assert!(captured.result.is_ok());
@@ -3107,11 +3092,8 @@ fn pos_validator_metadata_validation() -> Result<()> {
     assert!(captured.contains(TX_APPLIED_SUCCESS));
 
     // 3. Check that the metadata has changed.
-    let query_args = apply_use_device(vec![
-        "validator-metadata",
-        "--validator",
-        "validator-0-validator",
-    ]);
+    let query_args =
+        vec!["validator-metadata", "--validator", "validator-0-validator"];
     let captured =
         CapturedOutput::of(|| run(&node, Bin::Client, query_args.clone()));
     println!("{:?}", captured.result);
