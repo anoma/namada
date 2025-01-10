@@ -14,7 +14,7 @@ use ibc::apps::transfer::types::PORT_ID_STR as FT_PORT_ID_STR;
 use ibc::core::channel::types::msgs::PacketMsg;
 use ibc::core::channel::types::packet::Packet;
 use ibc::core::handler::types::msgs::MsgEnvelope;
-use ibc::core::host::types::identifiers::PortId;
+use ibc::core::host::types::identifiers::{ChannelId, PortId, Sequence};
 use ibc::primitives::proto::Protobuf;
 use masp_primitives::transaction::Transaction as MaspTransaction;
 use namada_core::borsh::BorshSerializeExt;
@@ -296,6 +296,21 @@ pub fn extract_masp_tx_from_envelope(
         }
         _ => None,
     }
+}
+
+/// Get the port ID, channel ID and sequence of the packet in the envelope. The
+/// envelope doesn't have a packet, returns None.
+pub fn packet_info_from_envelope(
+    envelope: &MsgEnvelope,
+) -> Option<(&PortId, &ChannelId, Sequence)> {
+    let packet = match envelope {
+        MsgEnvelope::Packet(PacketMsg::Recv(msg)) => &msg.packet,
+        MsgEnvelope::Packet(PacketMsg::Ack(msg)) => &msg.packet,
+        MsgEnvelope::Packet(PacketMsg::Timeout(msg)) => &msg.packet,
+        MsgEnvelope::Packet(PacketMsg::TimeoutOnClose(msg)) => &msg.packet,
+        _ => return None,
+    };
+    Some((&packet.port_id_on_a, &packet.chan_id_on_a, packet.seq_on_a))
 }
 
 /// Decode IBC shielding data from the string

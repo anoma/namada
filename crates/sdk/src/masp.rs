@@ -16,10 +16,12 @@ use namada_events::extend::{
     IndexedMaspData, MaspDataRefs as MaspDataRefsAttr, MaspTxRef, MaspTxRefs,
     ReadFromEventAttributes,
 };
-use namada_ibc::core::channel::types::msgs::PacketMsg;
 use namada_ibc::core::handler::types::msgs::MsgEnvelope;
 use namada_ibc::storage::refund_masp_tx_key;
-use namada_ibc::{decode_message, extract_masp_tx_from_envelope, IbcMessage};
+use namada_ibc::{
+    decode_message, extract_masp_tx_from_envelope, packet_info_from_envelope,
+    IbcMessage,
+};
 use namada_io::client::Client;
 use namada_token::masp::shielded_wallet::ShieldedQueries;
 pub use namada_token::masp::{utils, *};
@@ -148,18 +150,10 @@ async fn get_refund_masp_tx<C: Client + Sync>(
         return Ok(None);
     };
 
-    let (port_id, channel_id, sequence) = match envelope {
-        MsgEnvelope::Packet(PacketMsg::Ack(msg)) => (
-            &msg.packet.port_id_on_a,
-            &msg.packet.chan_id_on_a,
-            msg.packet.seq_on_a,
-        ),
-        MsgEnvelope::Packet(PacketMsg::Timeout(msg)) => (
-            &msg.packet.port_id_on_a,
-            &msg.packet.chan_id_on_a,
-            msg.packet.seq_on_a,
-        ),
-        _ => return Ok(None),
+    let Some((port_id, channel_id, sequence)) =
+        packet_info_from_envelope(envelope)
+    else {
+        return Ok(None);
     };
 
     let key = refund_masp_tx_key(port_id, channel_id, sequence, masp_epoch);
