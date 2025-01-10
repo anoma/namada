@@ -69,6 +69,7 @@ use ibc::core::channel::types::commitment::compute_ack_commitment;
 use ibc::core::channel::types::msgs::{
     MsgRecvPacket as IbcMsgRecvPacket, PacketMsg,
 };
+use ibc::core::channel::types::packet::Packet;
 use ibc::core::channel::types::timeout::{TimeoutHeight, TimeoutTimestamp};
 use ibc::core::entrypoint::{execute, validate};
 use ibc::core::handler::types::error::ContextError;
@@ -252,7 +253,7 @@ where
         storage: &S,
         tx_data: &[u8],
         masp_epoch: MaspEpoch,
-    ) -> StorageResult<Option<masp_primitives::transaction::Transaction>> {
+    ) -> StorageResult<Option<MaspTransaction>> {
         // refund only when ack or timeout in an IBC envelope message
         let Some(IbcMessage::Envelope(envelope)) =
             decode_message::<Transfer>(tx_data)
@@ -1297,6 +1298,50 @@ fn retrieve_nft_data<S: StorageRead>(
         message.packet_data.token_data = Some(token_data);
     }
     Ok(message)
+}
+
+/// Replace the sender address with the MASP address for a shielded refund
+fn try_replace_sender_for_shielded_refund<S, Params>(
+    storage: &S,
+    packet: &Packet,
+) -> Option<Packet>
+where
+    S: StorageRead,
+    Params: namada_systems::parameters::Read<S>,
+{
+    // Check if the refund MASP transaction for the current MASP epoch exists
+    let masp_epoch = get_masp_epoch::<S, Params>(storage).ok()?;
+    let refund_masp_tx_key = storage::refund_masp_tx_key(
+        &packet.port_id_on_a,
+        &packet.chan_id_on_a,
+        packet.seq_on_a,
+        masp_epoch,
+    );
+    if !storage.has_key(&refund_masp_tx_key).ok()? {
+        // The refund target is a transparent address or the MASP epoch in the
+        // MASP transaction is stale. The refund target is the sender.
+        return None;
+    }
+
+    let mut packet = packet.clone();
+    match packet.port_id_on_a.as_str() {
+        FT_PORT_ID_STR => {
+            let mut data: PacketData =
+                serde_json::from_slice(&packet.data).ok()?;
+            data.sender = address::MASP.to_string().into();
+            packet.data = serde_json::to_vec(&data)
+                .expect("Packet data should be encoded");
+        }
+        NFT_PORT_ID_STR => {
+            let mut data: NftPacketData =
+                serde_json::from_slice(&packet.data).ok()?;
+            data.sender = address::MASP.to_string().into();
+            packet.data = serde_json::to_vec(&data)
+                .expect("Packet data should be encoded");
+        }
+        _ => return None,
+    }
+    Some(packet)
 }
 
 /// Initialize storage in the genesis block.
