@@ -335,6 +335,10 @@ where
         }
     }
 
+    // Before signing the wrapper tx prune all the possible duplicated sections
+    // (including duplicated raw signatures)
+    tx.prune_duplicated_sections();
+
     // Then try signing the wrapper header (fee payer). Check if there's a
     // provided wrapper signature, otherwise sign with the software wallet or
     // use the fallback
