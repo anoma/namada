@@ -27,6 +27,7 @@ use namada_vp::native_vp::{Ctx, CtxPreStorageRead, NativeVp, VpEvaluator};
 use namada_vp::VpEnv;
 use thiserror::Error;
 
+use crate::context::middlewares::create_transfer_middlewares;
 use crate::core::host::types::identifiers::ChainId as IbcChainId;
 use crate::core::host::types::path::UPGRADED_IBC_STATE;
 use crate::event::IbcEvent;
@@ -36,8 +37,8 @@ use crate::storage::{
 };
 use crate::trace::calc_hash;
 use crate::{
-    Error as ActionError, IbcActions, NftTransferModule, TransferModule,
-    ValidationParams, COMMITMENT_PREFIX,
+    Error as ActionError, IbcActions, NftTransferModule, ValidationParams,
+    COMMITMENT_PREFIX,
 };
 
 #[allow(missing_docs)]
@@ -246,7 +247,10 @@ where
             ctx.clone(),
             verifiers.clone(),
         );
-        let module = TransferModule::new(ctx.clone(), verifiers);
+        let module = create_transfer_middlewares::<_, ParamsPseudo>(
+            ctx.clone(),
+            verifiers,
+        );
         actions.add_transfer_module(module);
         let module = NftTransferModule::<_, Token>::new(ctx.clone());
         actions.add_transfer_module(module);
@@ -301,7 +305,8 @@ where
             IbcActions::<_, Params, Token>::new(ctx.clone(), verifiers.clone());
         actions.set_validation_params(self.validation_params()?);
 
-        let module = TransferModule::new(ctx.clone(), verifiers);
+        let module =
+            create_transfer_middlewares::<_, Params>(ctx.clone(), verifiers);
         actions.add_transfer_module(module);
         let module = NftTransferModule::<_, Token>::new(ctx);
         actions.add_transfer_module(module);
