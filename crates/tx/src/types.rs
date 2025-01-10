@@ -188,6 +188,17 @@ impl Tx {
         self.header.batch.insert(cmt)
     }
 
+    /// Remove duplicated sections from the transaction
+    pub fn prune_duplicated_sections(&mut self) {
+        let sections = std::mem::take(&mut self.sections);
+        let mut unique_sections = HashMap::with_capacity(sections.len());
+        for section in sections {
+            unique_sections.insert(section.get_hash(), section);
+        }
+
+        self.sections = unique_sections.into_values().collect();
+    }
+
     /// Get the transaction header
     pub fn header(&self) -> Header {
         self.header.clone()

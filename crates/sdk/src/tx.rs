@@ -201,6 +201,10 @@ pub fn dump_tx<IO: Io>(io: &IO, args: &args::Tx, mut tx: Tx) -> Result<()> {
         ));
     }
 
+    // Remove duplicated sections before dumping. This is useful in case the
+    // dumped tx needed to be signed offline
+    tx.prune_duplicated_sections();
+
     match args.output_folder.clone() {
         Some(path) => {
             let tx_path = path.join(format!(
