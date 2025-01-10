@@ -19,7 +19,6 @@ use ibc::apps::transfer::module::{
     on_timeout_packet_validate,
 };
 use ibc::apps::transfer::types::error::TokenTransferError;
-use ibc::apps::transfer::types::packet::PacketData;
 use ibc::apps::transfer::types::MODULE_ID_STR;
 use ibc::core::channel::types::acknowledgement::{
     Acknowledgement, AcknowledgementStatus,
@@ -32,9 +31,12 @@ use ibc::core::host::types::identifiers::{ChannelId, ConnectionId, PortId};
 use ibc::core::router::module::Module;
 use ibc::core::router::types::module::{ModuleExtras, ModuleId};
 use ibc::primitives::Signer;
-use namada_core::address::{Address, MASP};
+use namada_core::address::Address;
 
-use crate::{IbcCommonContext, IbcStorageContext, TokenTransferContext};
+use crate::{
+    try_replace_sender_for_shielded_refund, IbcCommonContext,
+    IbcStorageContext, TokenTransferContext,
+};
 
 /// IBC module wrapper for getting the reference of the module
 pub trait ModuleWrapper: Module {
@@ -319,28 +321,10 @@ where
             if ack.is_successful() {
                 return None;
             }
-            let masp_epoch = crate::get_masp_epoch::<
+            try_replace_sender_for_shielded_refund::<
                 <C as IbcStorageContext>::Storage,
                 Params,
-            >(self.ctx.inner.borrow().storage())
-            .ok()?;
-            self.ctx
-                .inner
-                .borrow()
-                .refund_masp_tx(
-                    &packet.port_id_on_a,
-                    &packet.chan_id_on_a,
-                    packet.seq_on_a,
-                    masp_epoch,
-                )
-                .ok()??;
-            let mut data: PacketData =
-                serde_json::from_slice(&packet.data).ok()?;
-            data.sender = Signer::from(MASP.to_string());
-            let mut packet = packet.clone();
-            packet.data = serde_json::to_vec(&data)
-                .expect("Packet data should be encoded");
-            Some(packet)
+            >(self.ctx.inner.borrow().storage(), packet)
         });
 
         let (extras, result) = match updated_packet {
@@ -374,8 +358,17 @@ where
         packet: &Packet,
         relayer: &Signer,
     ) -> (ModuleExtras, Result<(), PacketError>) {
-        let (extras, result) =
-            on_timeout_packet_execute(&mut self.ctx, packet, relayer);
+        let updated_packet =
+            try_replace_sender_for_shielded_refund::<
+                <C as IbcStorageContext>::Storage,
+                Params,
+            >(self.ctx.inner.borrow().storage(), packet);
+
+        let (extras, result) = if let Some(packet) = updated_packet {
+            on_timeout_packet_execute(&mut self.ctx, &packet, relayer)
+        } else {
+            on_timeout_packet_execute(&mut self.ctx, packet, relayer)
+        };
         (extras, result.map_err(into_packet_error))
     }
 }

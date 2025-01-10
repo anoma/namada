@@ -408,6 +408,31 @@ fn ibc_transfers() -> Result<()> {
     check_balance(&test, ALBERT, &ibc_denom_on_namada, 100)?;
 
     // Unshielding transfer to Gaia's invalid account to check the refund for
+    // the burned IBC token with a shielded refund target
+    transfer(
+        &test,
+        A_SPENDING_KEY,
+        "invalid_receiver",
+        &ibc_denom_on_namada,
+        10,
+        Some(ALBERT_KEY),
+        &port_id_namada,
+        &channel_id_namada,
+        None,
+        None,
+        None,
+        Some(AA_PAYMENT_ADDRESS),
+    )?;
+    wait_for_packet_relay(
+        &hermes_dir,
+        &port_id_namada,
+        &channel_id_namada,
+        &test,
+    )?;
+    // Check the token has been refunded to the source
+    check_shielded_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 50)?;
+
+    // Unshielding transfer to Gaia's invalid account to check the refund for
     // the burned IBC token with a transparent refund target
     transfer(
         &test,
@@ -434,37 +459,48 @@ fn ibc_transfers() -> Result<()> {
     check_shielded_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
     check_balance(&test, IBC_REFUND_TARGET_ALIAS, &ibc_denom_on_namada, 10)?;
 
-    // Unshielding transfer to Gaia's invalid account to check the refund for
-    // the burned IBC token with a shielded refund target
+    // Stop Hermes for timeout test
+    let mut hermes = bg_hermes.foreground();
+    hermes.interrupt()?;
+
+    // Unshielding transfer will be timed out to check the refund for the
+    // escrowed IBC token with a shielded refund target
     transfer(
         &test,
         A_SPENDING_KEY,
-        "invalid_receiver",
-        &ibc_denom_on_namada,
-        10,
+        &gaia_receiver,
+        APFEL,
+        1,
         Some(ALBERT_KEY),
         &port_id_namada,
         &channel_id_namada,
-        None,
+        Some(Duration::new(10, 0)),
         None,
         None,
         Some(AA_PAYMENT_ADDRESS),
     )?;
+    // wait for the timeout
+    sleep(10);
+
+    // Restart relaying
+    let hermes = run_hermes(&hermes_dir)?;
+    let bg_hermes = hermes.background();
+
     wait_for_packet_relay(
         &hermes_dir,
         &port_id_namada,
         &channel_id_namada,
         &test,
     )?;
-    // Check the token has been refunded to the source
-    check_shielded_balance(&test, AA_VIEWING_KEY, &ibc_denom_on_namada, 40)?;
+    // Check the token has been refunded to the refund target
+    check_shielded_balance(&test, AA_VIEWING_KEY, APFEL, 1)?;
 
     // Stop Hermes for timeout test
     let mut hermes = bg_hermes.foreground();
     hermes.interrupt()?;
 
     // Unshielding transfer will be timed out to check the refund for the
-    // escrowed IBC token
+    // escrowed IBC token with a transparent refund target
     transfer(
         &test,
         A_SPENDING_KEY,
@@ -691,11 +727,12 @@ fn ibc_nft_transfers() -> Result<()> {
     check_shielded_balance(&test, AA_VIEWING_KEY, &ibc_trace_on_namada, 0)?;
     check_shielded_balance(&test, AB_VIEWING_KEY, &ibc_trace_on_namada, 1)?;
 
-    // Unshielding transfer
+    // Unshielding transfer to an invalid receiver
+    // Refund the NFT to another shielded account
     transfer(
         &test,
         B_SPENDING_KEY,
-        &minter_addr,
+        "invalid_receiver",
         &ibc_trace_on_namada,
         1,
         Some(BERTHA_KEY),
@@ -705,10 +742,28 @@ fn ibc_nft_transfers() -> Result<()> {
         None,
         None,
         None,
-        Some(BB_PAYMENT_ADDRESS),
+        Some(AC_PAYMENT_ADDRESS),
     )?;
     clear_packet(&hermes_dir, &port_id_namada, &channel_id_namada, &test)?;
-    check_shielded_balance(&test, AB_VIEWING_KEY, &ibc_trace_on_namada, 0)?;
+    check_shielded_balance(&test, AC_VIEWING_KEY, &ibc_trace_on_namada, 1)?;
+
+    // Unshielding transfer
+    transfer(
+        &test,
+        C_SPENDING_KEY,
+        &minter_addr,
+        &ibc_trace_on_namada,
+        1,
+        Some(CHRISTEL_KEY),
+        &port_id_namada,
+        &channel_id_namada,
+        None,
+        None,
+        None,
+        Some(AC_PAYMENT_ADDRESS),
+    )?;
+    clear_packet(&hermes_dir, &port_id_namada, &channel_id_namada, &test)?;
+    check_shielded_balance(&test, AC_VIEWING_KEY, &ibc_trace_on_namada, 0)?;
 
     Ok(())
 }
