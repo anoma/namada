@@ -882,22 +882,16 @@ where
                             msg.acknowledgement.as_ref(),
                         ) {
                             Ok(ack) if !ack.is_successful() => {
-                                let inner = self.ctx.inner.borrow_mut();
-                                let epoch = inner
-                                    .storage()
-                                    .get_block_epoch()
-                                    .map_err(Error::Storage)?;
-                                let masp_epoch_multiplier =
-                                    Params::masp_epoch_multiplier(
-                                        inner.storage(),
-                                    )
-                                    .map_err(Error::Storage)?;
-                                let masp_epoch = MaspEpoch::try_from_epoch(
-                                    epoch,
-                                    masp_epoch_multiplier,
+                                let masp_epoch = get_masp_epoch::<
+                                    <C as IbcStorageContext>::Storage,
+                                    Params,
+                                >(
+                                    self.ctx.inner.borrow().storage(),
                                 )
-                                .map_err(|e| Error::Other(e.to_string()))?;
-                                inner
+                                .map_err(Error::Storage)?;
+                                self.ctx
+                                    .inner
+                                    .borrow()
                                     .refund_masp_tx(
                                         &msg.packet.port_id_on_a,
                                         &msg.packet.chan_id_on_a,
@@ -910,20 +904,16 @@ where
                         }
                     }
                     MsgEnvelope::Packet(PacketMsg::Timeout(msg)) => {
-                        let inner = self.ctx.inner.borrow_mut();
-                        let epoch = inner
-                            .storage()
-                            .get_block_epoch()
-                            .map_err(Error::Storage)?;
-                        let masp_epoch_multiplier =
-                            Params::masp_epoch_multiplier(inner.storage())
-                                .map_err(Error::Storage)?;
-                        let masp_epoch = MaspEpoch::try_from_epoch(
-                            epoch,
-                            masp_epoch_multiplier,
+                        let masp_epoch = get_masp_epoch::<
+                            <C as IbcStorageContext>::Storage,
+                            Params,
+                        >(
+                            self.ctx.inner.borrow().storage()
                         )
-                        .map_err(|e| Error::Other(e.to_string()))?;
-                        inner
+                        .map_err(Error::Storage)?;
+                        self.ctx
+                            .inner
+                            .borrow()
                             .refund_masp_tx(
                                 &msg.packet.port_id_on_a,
                                 &msg.packet.chan_id_on_a,
@@ -1176,6 +1166,17 @@ pub fn get_last_sequence_send<S: StorageRead>(
         )));
     }
     Ok(checked!(next_seq - 1)?.into())
+}
+
+fn get_masp_epoch<S, Params>(storage: &S) -> Result<MaspEpoch, StorageError>
+where
+    S: StorageRead,
+    Params: namada_systems::parameters::Read<S>,
+{
+    let epoch = storage.get_block_epoch()?;
+    let masp_epoch_multiplier = Params::masp_epoch_multiplier(storage)?;
+    MaspEpoch::try_from_epoch(epoch, masp_epoch_multiplier)
+        .map_err(StorageError::new_const)
 }
 
 fn received_ibc_trace(

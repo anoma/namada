@@ -33,8 +33,6 @@ use ibc::core::router::module::Module;
 use ibc::core::router::types::module::{ModuleExtras, ModuleId};
 use ibc::primitives::Signer;
 use namada_core::address::{Address, MASP};
-use namada_core::masp::MaspEpoch;
-use namada_state::StorageRead;
 
 use crate::{IbcCommonContext, IbcStorageContext, TokenTransferContext};
 
@@ -321,13 +319,14 @@ where
             if ack.is_successful() {
                 return None;
             }
-            let inner = self.ctx.inner.borrow();
-            let epoch = inner.storage().get_block_epoch().ok()?;
-            let masp_epoch_multiplier =
-                Params::masp_epoch_multiplier(inner.storage()).ok()?;
-            let masp_epoch =
-                MaspEpoch::try_from_epoch(epoch, masp_epoch_multiplier).ok()?;
-            inner
+            let masp_epoch = crate::get_masp_epoch::<
+                <C as IbcStorageContext>::Storage,
+                Params,
+            >(self.ctx.inner.borrow().storage())
+            .ok()?;
+            self.ctx
+                .inner
+                .borrow()
                 .refund_masp_tx(
                     &packet.port_id_on_a,
                     &packet.chan_id_on_a,
